@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync, readFileSync, readdirSync } from 'n
 import path from 'node:path';
 import os from 'node:os';
 import { deflateRawSync } from 'node:zlib';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { importClaudeDesignZip } from '../src/claude-design-import.js';
 
 function buildZip(
@@ -170,6 +170,193 @@ describe('importClaudeDesignZip', () => {
       expect(result.entryFile).toBe('index.html');
       expect(readdirSync(path.join(projectDir, 'assets')).length).toBe(600);
     } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('normalizes Claude Design canvas wheel handling so vertical scroll does not zoom', async () => {
+    const designCanvas = `
+function DCViewport() {
+  const tf = { current: { x: 0, y: 0, scale: 1 } };
+  const apply = () => {};
+  const zoomAt = () => {};
+  React.useEffect(() => {
+    // Mouse-wheel vs trackpad-scroll heuristic. A physical wheel sends
+    // line-mode deltas (Firefox) or large integer pixel deltas with no X
+    // component (Chrome/Safari, typically multiples of 100/120). Trackpad
+    // two-finger scroll sends small/fractional pixel deltas, often with
+    // non-zero deltaX. ctrlKey is set by the browser for trackpad pinch.
+    const isMouseWheel = (e) =>
+      e.deltaMode !== 0 ||
+      (e.deltaX === 0 && Number.isInteger(e.deltaY) && Math.abs(e.deltaY) >= 40);
+
+    const onWheel = (e) => {
+      e.preventDefault();
+      if (isGesturing) return; // Safari: gesture* owns the pinch — discard concurrent wheels
+      if ((e.ctrlKey || e.metaKey) && !isMouseWheel(e)) {
+        // trackpad pinch, or ctrl/cmd + smooth-scroll mouse. Notched
+        // wheels fall through to the fixed-step branch below.
+        zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.01));
+      } else if (isMouseWheel(e)) {
+        // notched mouse wheel — fixed-ratio step per click
+        zoomAt(e.clientX, e.clientY, Math.exp(-Math.sign(e.deltaY) * 0.18));
+      } else {
+        // trackpad two-finger scroll — pan
+        tf.current.x -= e.deltaX;
+        tf.current.y -= e.deltaY;
+        apply();
+      }
+    };
+
+    // Safari sends native gesture* events for trackpad pinch with a smooth
+    // e.scale; preferring these over the ctrl+wheel fallback gives a much
+    // better feel there. No-ops on other browsers. Safari also fires
+    // ctrlKey wheel events during the same pinch — isGesturing makes
+    // onWheel drop those entirely so they neither zoom nor pan.
+    let gsBase = 1;
+    let isGesturing = false;
+    const onGestureStart = (e) => { e.preventDefault(); isGesturing = true; gsBase = tf.current.scale; };
+    const onGestureChange = (e) => {
+      e.preventDefault();
+      zoomAt(e.clientX, e.clientY, (gsBase * e.scale) / tf.current.scale);
+    };
+    const onGestureEnd = (e) => { e.preventDefault(); isGesturing = false; };
+  });
+}
+`;
+    const zip = buildZip([
+      { name: 'index.html', body: Buffer.from('<html><script src="design-canvas.jsx"></script></html>') },
+      { name: 'design-canvas.jsx', body: Buffer.from(designCanvas) },
+    ]);
+    const tmp = mkdtempSync(path.join(os.tmpdir(), 'cd-import-'));
+    const zipPath = path.join(tmp, 'in.zip');
+    const projectDir = path.join(tmp, 'proj');
+    writeFileSync(zipPath, zip);
+    try {
+      const result = await importClaudeDesignZip(zipPath, projectDir);
+      expect(result.files).toContain('design-canvas.jsx');
+      const written = readFileSync(path.join(projectDir, 'design-canvas.jsx'), 'utf8');
+      expect(written).not.toContain('const isMouseWheel');
+      expect(written).not.toContain('(gsBase * e.scale) / tf.current.scale');
+      expect(written).toContain('const panByWheel = (e) =>');
+      // The Cmd-zoom gate accepts ctrlKey too because Chromium/Firefox
+      // synthesize wheel events with `ctrlKey: true` during a trackpad
+      // pinch; without that, smooth pinch would fall through to
+      // `panByWheel(e)` instead of zooming.
+      expect(written).toContain('if (e.ctrlKey || e.metaKey)');
+      // The rewritten Cmd-zoom path now keeps both ratios so a physical mouse
+      // wheel does not shrink the canvas by ~63% per notch: the notched
+      // detector matches deltaMode!==0 or large integer pixel deltas, and the
+      // notched factor (Math.sign * 0.18) gives ~17% per click while trackpad
+      // smooth scrolls keep the original deltaY * 0.01 ratio.
+      expect(written).toContain('const isNotchedWheel = (e) =>');
+      expect(written).toContain('Math.exp(-Math.sign(e.deltaY) * 0.18)');
+      expect(written).toContain('Math.exp(-e.deltaY * 0.01)');
+      expect(written).toContain("const limit = axis === 'y' ? 72 : 160;");
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('warns and preserves source when the design-canvas wheel-handler shape drifts', async () => {
+    // Same general layout as a real Claude Design canvas export, but with
+    // tab indentation and a rephrased comment so neither rewrite regex
+    // matches. The importer should leave the source untouched and emit a
+    // console.warn that operators can grep when the zoom-on-scroll bug
+    // reappears with a future canvas template.
+    const driftedCanvas = `
+function DCViewport() {
+\tReact.useEffect(() => {
+\t\t// Wheel routing: distinguish trackpad pan from notched mouse wheel zoom.
+\t\tconst onWheel = (e) => {
+\t\t\te.preventDefault();
+\t\t};
+\t});
+}
+`;
+    const zip = buildZip([
+      { name: 'index.html', body: Buffer.from('<html><script src="design-canvas.jsx"></script></html>') },
+      { name: 'design-canvas.jsx', body: Buffer.from(driftedCanvas) },
+    ]);
+    const tmp = mkdtempSync(path.join(os.tmpdir(), 'cd-import-drift-'));
+    const zipPath = path.join(tmp, 'in.zip');
+    const projectDir = path.join(tmp, 'proj');
+    writeFileSync(zipPath, zip);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const result = await importClaudeDesignZip(zipPath, projectDir);
+      expect(result.files).toContain('design-canvas.jsx');
+      const written = readFileSync(path.join(projectDir, 'design-canvas.jsx'), 'utf8');
+      // Source must be preserved verbatim — no partial rewrite, no crash.
+      expect(written).toBe(driftedCanvas);
+      // And the importer must have logged so the regression is greppable.
+      expect(warn).toHaveBeenCalledTimes(1);
+      const firstCall = warn.mock.calls[0]?.[0];
+      expect(typeof firstCall).toBe('string');
+      expect(firstCall).toContain('[claude-design-import]');
+      expect(firstCall).toContain('design-canvas.jsx');
+    } finally {
+      warn.mockRestore();
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('warns when only the gesture-handler regex drifts', async () => {
+    // Real-world drift case: Anthropic ships a fresh wheel-handler block
+    // (so `wheelBlock` still matches and gets normalized) but rewords the
+    // Safari `gesture*` comment so `gestureBlock` misses. Without per-regex
+    // tracking the previous warn() only fired when neither block matched,
+    // which let this half-rewrite ship silently with the old Safari pinch
+    // handlers still active over a normalized wheel path. Verify the warn
+    // still fires and identifies the gesture handler as the missing one.
+    const partialDriftCanvas = `
+function DCViewport() {
+  React.useEffect(() => {
+    // Mouse-wheel vs trackpad-scroll heuristic. Keep this on the host so
+    // an embedded export still routes Cmd+wheel through host zoom.
+    const onWheel = (e) => {
+      e.preventDefault();
+    };
+
+    // (Reworded) Safari trackpad pinch via native gesture* events.
+    let isGesturing = false;
+    const onGestureStart = (e) => { e.preventDefault(); isGesturing = true; };
+    const onGestureChange = (e) => { e.preventDefault(); };
+    const onGestureEnd = (e) => { e.preventDefault(); isGesturing = false; };
+  });
+}
+`;
+    const zip = buildZip([
+      { name: 'index.html', body: Buffer.from('<html><script src="design-canvas.jsx"></script></html>') },
+      { name: 'design-canvas.jsx', body: Buffer.from(partialDriftCanvas) },
+    ]);
+    const tmp = mkdtempSync(path.join(os.tmpdir(), 'cd-import-gesture-drift-'));
+    const zipPath = path.join(tmp, 'in.zip');
+    const projectDir = path.join(tmp, 'proj');
+    writeFileSync(zipPath, zip);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const result = await importClaudeDesignZip(zipPath, projectDir);
+      expect(result.files).toContain('design-canvas.jsx');
+      const written = readFileSync(path.join(projectDir, 'design-canvas.jsx'), 'utf8');
+      // Wheel block still matched, so the new pan/zoom handler is in place.
+      expect(written).toContain('const panByWheel = (e) =>');
+      expect(written).toContain('if (e.ctrlKey || e.metaKey)');
+      // Gesture block missed, so the original (reworded) gesture handlers
+      // are still present verbatim.
+      expect(written).toContain('(Reworded) Safari trackpad pinch');
+      // And the importer logged a warning naming the gesture handler as
+      // the missing one, so future regex tweaks have to confront the drift.
+      expect(warn).toHaveBeenCalled();
+      const warnedLines = warn.mock.calls
+        .map((args) => args[0])
+        .filter((s): s is string => typeof s === 'string');
+      const gestureWarn = warnedLines.find((line) =>
+        line.includes('[claude-design-import]') && line.includes('gesture-handler'),
+      );
+      expect(gestureWarn).toBeDefined();
+    } finally {
+      warn.mockRestore();
       rmSync(tmp, { recursive: true, force: true });
     }
   });

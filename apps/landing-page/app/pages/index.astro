@@ -5,13 +5,15 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { heroImage } from '../image-assets';
 import { getCatalogCounts } from '../_lib/catalog';
+import { getGithubRepoMeta } from '../_lib/github';
 
 const counts = await getCatalogCounts();
+const github = await getGithubRepoMeta();
 const title = 'Open Design — Design with the agent already on your laptop.';
 const description = `The open-source alternative to Claude Design. Your existing coding agent — Claude · Codex · Cursor · Gemini · OpenCode · Qwen — becomes the design engine, driven by ${counts.skills} composable skills and ${counts.systems} brand-grade design systems.`;
 const canonical = new URL(Astro.url.pathname, Astro.site).toString();
 const pageHtml = renderToStaticMarkup(
-  Page({ counts }) as ReturnType<typeof createElement>,
+  Page({ counts, github }) as ReturnType<typeof createElement>,
 );
 ---
 

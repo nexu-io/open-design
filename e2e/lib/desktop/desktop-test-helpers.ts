@@ -111,7 +111,7 @@ export function createDesktopHarness(name: string) {
         const ready = await this.eval<boolean>(`
           (() => Boolean(
             document.querySelector('[role="dialog"]') ||
-            document.querySelector('button[title="Configure execution mode"]') ||
+            document.querySelector('button[title="Execution mode"]') ||
             document.querySelector('.settings-icon-btn')
           ))()
         `);
@@ -121,7 +121,7 @@ export function createDesktopHarness(name: string) {
       const clicked = await this.eval(`
         (() => {
           if (document.querySelector('[role="dialog"]')) return true;
-          const homeButton = document.querySelector('button[title="Configure execution mode"]');
+          const homeButton = document.querySelector('button[title="Execution mode"]');
           if (homeButton instanceof HTMLElement) {
             homeButton.click();
             return true;

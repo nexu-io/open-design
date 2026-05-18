@@ -49,7 +49,82 @@ const hyperframesSkillBody = [
   hyperframesSkillMarkdown.replace(/^---[\s\S]*?---\n\n/, '').trim(),
 ].join('\n');
 
+describe('composeSystemPrompt — activeStageBlocks splice (spec §23.4)', () => {
+  it('inserts every active stage block after the plugin block when supplied', () => {
+    const stage1 = '\n\n## Active stage: discovery\n\n### discovery-question-form\n\nAsk audience.';
+    const stage2 = '\n\n## Active stage: plan\n\n### todo-write\n\nCommit a plan.';
+    const prompt = composeSystemPrompt({
+      pluginBlock: '\n\n## Active plugin\n\nThe user applied test-plugin.',
+      activeStageBlocks: [stage1, stage2],
+    });
+    expect(prompt).toContain('## Active plugin');
+    expect(prompt.indexOf('## Active stage: discovery')).toBeGreaterThan(prompt.indexOf('## Active plugin'));
+    expect(prompt.indexOf('## Active stage: plan')).toBeGreaterThan(prompt.indexOf('## Active stage: discovery'));
+  });
+
+  it('skips empty / whitespace-only blocks', () => {
+    const prompt = composeSystemPrompt({
+      activeStageBlocks: ['', '   ', '\n\n## Active stage: critique\n\n### critique-theater\n\nScore.'],
+    });
+    expect(prompt).toContain('## Active stage: critique');
+    // Only one stage block means just one heading.
+    expect((prompt.match(/## Active stage:/g) ?? []).length).toBe(1);
+  });
+
+  it('is a no-op when activeStageBlocks is undefined or empty', () => {
+    const baseline = composeSystemPrompt({});
+    const withUndefined = composeSystemPrompt({ activeStageBlocks: undefined });
+    const withEmpty = composeSystemPrompt({ activeStageBlocks: [] });
+    expect(withUndefined).toBe(baseline);
+    expect(withEmpty).toBe(baseline);
+  });
+});
+
 describe('composeSystemPrompt', () => {
+  it('treats an active design system as the visual direction', () => {
+    const prompt = composeSystemPrompt({
+      designSystemTitle: 'ComfyUI',
+      designSystemBody: '# ComfyUI\n\n--accent: #ffd500',
+      metadata: { kind: 'prototype' } as any,
+      activeStageBlocks: [
+        '\n\n## Active stage: plan\n\n### direction-picker\n\nAsk for 3-5 directions.',
+      ],
+    });
+
+    expect(prompt).toContain('## Active design system — ComfyUI');
+    expect(prompt).toContain('Active design system exception');
+    expect(prompt).toContain(
+      'the active design system is the visual direction for this project',
+    );
+    expect(prompt).toContain('Do not ask the user to pick a separate theme color');
+    expect(prompt).toContain('Do not emit a direction question-form');
+    expect(prompt).not.toContain('<question-form id="direction"');
+    expect(prompt).not.toContain('Pick a visual direction');
+    expect(prompt.indexOf('## Active design system visual direction')).toBeGreaterThan(
+      prompt.indexOf('### direction-picker'),
+    );
+  });
+
+  it('uses stable brand option values for discovery-form branching', () => {
+    const prompt = composeSystemPrompt({});
+    expect(prompt).toContain('{ "label": "Pick a direction for me", "value": "pick_direction" }');
+    expect(prompt).toContain('{ "label": "I have a brand spec — I\'ll share it", "value": "brand_spec" }');
+    expect(prompt).toContain('{ "label": "Match a reference site / screenshot — I\'ll attach it", "value": "reference_match" }');
+    expect(prompt).toContain('When the answer line includes `[value: ...]`, use that stable value instead of the visible label.');
+    expect(prompt).toContain('If you keep the `brand` question, its `id` must stay `"brand"`.');
+    expect(prompt).toContain('you may drop the `brand` question as already answered, but you must still treat that provided source as Branch A below');
+    expect(prompt).toContain('When skipping the form, do not skip brand-source handling');
+    expect(prompt).toContain('If the current message, attachments, prior brief, or URL already contains an actual brand spec / brand guide / reference site / screenshot source, use Branch A.');
+    expect(prompt).toContain('### Branch A — user provided a brand/reference source, or `brand` value is `"brand_spec"` / `"reference_match"`');
+    expect(prompt).toContain('ask them to paste/upload the brand spec or reference and stop');
+    expect(prompt).toContain('Do not guess a brand domain or invent tokens');
+    expect(prompt).toContain('An active design system does not suppress Branch A when the user provides a brand/reference source');
+    expect(prompt).toContain('### Branch B — no user-provided brand/reference source and no Branch A brand value');
+    expect(prompt).toContain('active-design-system cases where the user did not provide a new brand/reference source');
+    expect(prompt).toContain('Provided brand/reference source → run brand-spec extraction');
+    expect(prompt).toContain('`brand_spec` / `reference_match` without a provided source → ask for the source and stop; do not guess brand tokens.');
+  });
+
   it('injects live-artifact skill guidance and metadata intent', () => {
     const prompt = composeSystemPrompt({
       skillName: 'live-artifact',

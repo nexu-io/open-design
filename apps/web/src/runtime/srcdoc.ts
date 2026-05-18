@@ -27,6 +27,7 @@ export type SrcdocOptions = {
   initialSlideIndex?: number;
   commentBridge?: boolean;
   inspectBridge?: boolean;
+  selectionBridge?: boolean;
   editBridge?: boolean;
   paletteBridge?: boolean;
   initialPalette?: string | null;
@@ -48,7 +49,8 @@ export function buildSrcdoc(
   </head>
   <body>${html}</body>
 </html>`;
-  const withSourcePaths = options.editBridge ? annotateManualEditSourcePaths(wrapped) : wrapped;
+  const withOdIds = annotateMissingOdIds(wrapped);
+  const withSourcePaths = options.editBridge ? annotateManualEditSourcePaths(withOdIds) : withOdIds;
   const withBase = options.baseHref ? injectBaseHref(withSourcePaths, options.baseHref) : withSourcePaths;
   const withShim = injectSandboxShim(withBase);
   const withDeck = options.deck ? injectDeckBridge(withShim, options.initialSlideIndex) : withShim;
@@ -60,7 +62,7 @@ export function buildSrcdoc(
   // active — without that initial seed there is a window after each
   // srcdoc rebuild where the host's `od:*-mode` postMessage races the
   // bridge's own listener install and the iframe ignores clicks.
-  const withSelection = options.commentBridge || options.inspectBridge
+  const withSelection = options.selectionBridge || options.commentBridge || options.inspectBridge
     ? injectSelectionBridge(withDeck, {
         initialCommentMode: !!options.commentBridge,
         initialInspectMode: !!options.inspectBridge,
@@ -70,7 +72,40 @@ export function buildSrcdoc(
     ? injectPaletteBridge(withSelection, { initialPalette: options.initialPalette ?? null })
     : withSelection;
   const withEdit = options.editBridge ? injectManualEditBridge(withPalette) : withPalette;
-  return injectSnapshotBridge(withEdit);
+  return injectSrcdocTransportActivationBridge(injectSnapshotBridge(withEdit));
+}
+
+export function buildLazySrcdocTransport(): string {
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script data-od-lazy-srcdoc-transport>(function(){
+      window.addEventListener('message', function(ev){
+        var data = ev && ev.data;
+        if (!data || data.type !== 'od:srcdoc-transport-activate' || typeof data.html !== 'string') return;
+        document.open();
+        document.write(data.html);
+        document.close();
+      });
+    })();</script>
+  </head>
+  <body></body>
+</html>`;
+}
+
+function injectSrcdocTransportActivationBridge(doc: string): string {
+  const script = `<script data-od-srcdoc-transport-activation>(function(){
+  window.addEventListener('message', function(ev){
+    var data = ev && ev.data;
+    if (!data || data.type !== 'od:srcdoc-transport-activate' || typeof data.html !== 'string') return;
+    document.open();
+    document.write(data.html);
+    document.close();
+  });
+})();</script>`;
+  return injectBeforeBodyEnd(doc, script);
 }
 
 function injectSnapshotBridge(doc: string): string {
@@ -191,6 +226,10 @@ function injectPaletteBridge(
   var SAVED = '__odPaletteSaved__';
   var MIN_SAT = 0.08;
   var WALK_LIMIT = 12000;
+  var STYLE_RULE_LIMIT = 5000;
+  var ROOT_SELECTOR = /(^|,)\\s*(:root|html|body|:host)\\s*($|,)/;
+  var varApplied = Object.create(null);
+  var probeEl = null;
   function parseRgb(s){
     var str = String(s||'').trim();
     if (!str || str === 'transparent' || str === 'none') return null;
@@ -245,7 +284,65 @@ function injectPaletteBridge(
     var sat = Math.max(hsl.s, palette.satFloor * 0.7);
     return hslStr(palette.hue, sat, hsl.l);
   }
+  function normalizeColor(value){
+    var raw = String(value||'').trim();
+    if (!raw) return null;
+    var direct = parseRgb(raw);
+    if (direct) return direct;
+    if (raw.indexOf('var(') === 0 || raw.indexOf('--') === 0) return null;
+    if (!probeEl){
+      probeEl = document.createElement('div');
+      probeEl.style.display = 'none';
+      (document.body || document.documentElement).appendChild(probeEl);
+    }
+    probeEl.style.color = '';
+    try { probeEl.style.color = raw; } catch (_){ return null; }
+    if (!probeEl.style.color) return null;
+    return parseRgb(probeEl.style.color);
+  }
+  function isRootSelector(selector){
+    return !!selector && ROOT_SELECTOR.test(String(selector));
+  }
+  function forEachStyleRule(rules, visit, budget){
+    if (!rules || !budget.left) return;
+    for (var i=0; i<rules.length && budget.left>0; i++){
+      var rule = rules[i];
+      budget.left--;
+      if (rule.selectorText && rule.style && isRootSelector(rule.selectorText)) visit(rule);
+      if (rule.cssRules && rule.cssRules.length) forEachStyleRule(rule.cssRules, visit, budget);
+    }
+  }
+  function applyVarTint(palette){
+    var sheets = document.styleSheets;
+    if (!sheets || !sheets.length) return;
+    var budget = { left: STYLE_RULE_LIMIT };
+    for (var i=0; i<sheets.length; i++){
+      var sheet = sheets[i];
+      var rules = null;
+      try { rules = sheet.cssRules; } catch (_){ continue; }
+      forEachStyleRule(rules, function(rule){
+        var decl = rule.style;
+        for (var j=0; j<decl.length; j++){
+          var name = decl[j];
+          if (name.indexOf('--') !== 0) continue;
+          var raw = decl.getPropertyValue(name);
+          var color = normalizeColor(raw);
+          var hsl = chromatic(color);
+          if (!hsl) continue;
+          document.documentElement.style.setProperty(name, shift(hsl, palette));
+          varApplied[name] = true;
+        }
+      }, budget);
+    }
+  }
+  function restoreVars(){
+    for (var name in varApplied){
+      document.documentElement.style.setProperty(name, '');
+    }
+    varApplied = Object.create(null);
+  }
   function restoreAll(){
+    restoreVars();
     var nodes = document.querySelectorAll('['+ATTR+']');
     for (var i=0;i<nodes.length;i++){
       var el = nodes[i], saved = el[SAVED];
@@ -263,6 +360,7 @@ function injectPaletteBridge(
   function applyTint(id){
     var palette = PALETTES[id];
     if (!palette) return;
+    applyVarTint(palette);
     var all = document.body ? document.body.querySelectorAll('*') : [];
     for (var i=0; i<all.length && i<WALK_LIMIT; i++){
       var el = all[i], cs = getComputedStyle(el), saved = {}, changed = false;
@@ -308,7 +406,7 @@ function annotateManualEditSourcePaths(doc: string): string {
   try {
     const parsed = new DOMParser().parseFromString(doc, 'text/html');
     parsed.body.querySelectorAll(MANUAL_EDIT_DISCOVERY_SELECTOR).forEach((el) => {
-      if (el.hasAttribute('data-od-id')) return;
+      if (el.hasAttribute(MANUAL_EDIT_SOURCE_PATH_ATTR)) return;
       const path = sourcePathForElement(el);
       if (path) el.setAttribute(MANUAL_EDIT_SOURCE_PATH_ATTR, path);
     });
@@ -333,6 +431,49 @@ function sourcePathForElement(el: Element): string {
 function serializeHtmlDocument(doc: Document): string {
   const doctype = doc.doctype ? '<!doctype html>\n' : '';
   return `${doctype}${doc.documentElement.outerHTML}`;
+}
+
+/**
+ * Auto-annotate structural HTML elements that lack `data-od-id` or
+ * `data-screen-label` so that the selection bridge (Picker / Pods /
+ * Tweaks) can target them. This fixes imported designs whose HTML was
+ * generated outside of Open Design and therefore carries no OD-specific
+ * annotations.
+ */
+function annotateMissingOdIds(doc: string): string {
+  if (typeof DOMParser === 'undefined') return doc;
+  try {
+    const parsed = new DOMParser().parseFromString(doc, 'text/html');
+    // Only target divs that are direct children of semantic containers or body;
+    // deeply nested layout divs (e.g. flex/grid wrappers) create noise in the
+    // selection bridge without adding meaningful pickable targets.
+    const selector = [
+      'section', 'article', 'header', 'footer', 'nav', 'main', 'aside',
+      'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      'button', 'a', '[id]',
+      'body > div[class]', 'body > div[id]',
+      'section > div[class]', 'section > div[id]',
+      'article > div[class]', 'article > div[id]',
+      'main > div[class]', 'main > div[id]',
+      'header > div[class]', 'header > div[id]',
+      'footer > div[class]', 'footer > div[id]',
+      'nav > div[class]', 'nav > div[id]',
+      'aside > div[class]', 'aside > div[id]',
+      '[id] > div[class]', '[id] > div[id]',
+    ].join(', ');
+    const skipTags = new Set(['script', 'style', 'template', 'noscript', 'iframe', 'object', 'embed']);
+    let fallbackIndex = 0;
+    parsed.body.querySelectorAll(selector).forEach((el) => {
+      if (el.hasAttribute('data-od-id') || el.hasAttribute('data-screen-label')) return;
+      const tag = el.tagName.toLowerCase();
+      if (skipTags.has(tag)) return;
+      const path = sourcePathForElement(el);
+      el.setAttribute('data-od-id', path || `od-${tag}-${fallbackIndex++}`);
+    });
+    return serializeHtmlDocument(parsed);
+  } catch {
+    return doc;
+  }
 }
 
 function injectManualEditBridge(doc: string): string {
@@ -724,10 +865,54 @@ function injectSelectionBridge(
     }
     return true;
   }
+function meaningfulDomFallbackTarget(el) {
+  if (!visibleTarget(el)) return false;
+
+  var tag = el.tagName ? el.tagName.toLowerCase() : '';
+
+  if (/^(a|button|input|textarea|select|label|img|video|canvas|h1|h2|h3|h4|h5|h6|p|li|td|th|section|article|main|aside|nav)$/.test(tag)) {
+    return true;
+  }
+
+  if (
+    el.getAttribute &&
+    (
+      el.getAttribute('role') ||
+      el.getAttribute('aria-label') ||
+      el.getAttribute('title')
+    )
+  ) {
+    return true;
+  }
+
+  if (tag === 'svg') {
+    return !!(
+      el.getAttribute &&
+      (
+        el.getAttribute('role') ||
+        el.getAttribute('aria-label') ||
+        el.getAttribute('title')
+      )
+    );
+  }
+
+  var text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+  if (!text) return false;
+
+  var meaningfulChildren = 0;
+  for (var child = el.firstElementChild;child;child = child.nextElementSibling) {
+    if ((child.textContent || '').replace(/\s+/g, ' ').trim()) {
+      meaningfulChildren++;
+      if (meaningfulChildren > 1) return false;
+    }
+  }
+
+  return true;
+}
   function targetFrom(el, allowDomFallback){
     var id = el.getAttribute('data-od-id') || el.getAttribute('data-screen-label');
     var selector = annotatedSelectorFor(el);
-    if (!id && allowDomFallback && visibleTarget(el)) {
+    if (!id && allowDomFallback && meaningfulDomFallbackTarget(el)) {
       selector = domSelectorFor(el);
       if (selector) id = 'dom:' + selector;
     }
@@ -766,6 +951,33 @@ function injectSelectionBridge(
     return items;
   }
   var postTargetsPending = false;
+  var postPreviewScrollPending = false;
+  function previewScrollElement(){
+    return document.querySelector('.design-canvas') || document.scrollingElement || document.documentElement;
+  }
+  function postPreviewScroll(){
+    var el = previewScrollElement();
+    if (!el) return;
+    var frame = document.scrollingElement || document.documentElement;
+    window.parent.postMessage({
+      type: 'od:preview-scroll',
+      canvasLeft: Math.round(el.scrollLeft || 0),
+      canvasTop: Math.round(el.scrollTop || 0),
+      frameLeft: Math.round(frame.scrollLeft || 0),
+      frameTop: Math.round(frame.scrollTop || 0)
+    }, '*');
+  }
+  function schedulePostPreviewScroll(){
+    if (postPreviewScrollPending) return;
+    postPreviewScrollPending = true;
+    window.requestAnimationFrame(function(){
+      postPreviewScrollPending = false;
+      postPreviewScroll();
+    });
+  }
+  function requestPreviewScrollRestore(){
+    window.parent.postMessage({ type: 'od:preview-scroll-request' }, '*');
+  }
   function postTargets(){
     if (!active()) return;
     window.parent.postMessage({ type: 'od:comment-targets', targets: allTargets() }, '*');
@@ -797,7 +1009,7 @@ function injectSelectionBridge(
     var allowDomFallback = mode === 'picker' && canUseDomFallback();
     while (el && el !== document.documentElement) {
       if (el.getAttribute && (el.hasAttribute('data-od-id') || el.hasAttribute('data-screen-label'))) return el;
-      if (!fallback && allowDomFallback && visibleTarget(el)) fallback = el;
+if (!fallback && allowDomFallback && meaningfulDomFallbackTarget(el)) fallback = el;
       el = el.parentElement;
     }
     return fallback;
@@ -843,6 +1055,14 @@ function injectSelectionBridge(
         stroke = [];
         try { window.parent.postMessage({ type: 'od:pod-clear' }, '*'); } catch (_) {}
       }
+      return;
+    }
+    if (data.type === 'od:preview-scroll-restore') {
+      var frame = document.scrollingElement || document.documentElement;
+      var el = previewScrollElement();
+      if (frame) frame.scrollTo(Number(data.frameLeft || 0), Number(data.frameTop || 0));
+      if (el) el.scrollTo(Number(data.canvasLeft || 0), Number(data.canvasTop || 0));
+      setTimeout(postPreviewScroll, 0);
       return;
     }
     if (data.type === 'od:inspect-mode') {
@@ -999,7 +1219,10 @@ function injectSelectionBridge(
   document.addEventListener('pointerup', finishStroke, true);
   document.addEventListener('pointercancel', finishStroke, true);
   window.addEventListener('resize', schedulePostTargets);
-  document.addEventListener('scroll', schedulePostTargets, true);
+  document.addEventListener('scroll', function(){
+    schedulePostTargets();
+    schedulePostPreviewScroll();
+  }, true);
   var mo = new MutationObserver(schedulePostTargets);
   mo.observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
   // Reflect the host-requested initial modes on the documentElement so
@@ -1014,8 +1237,13 @@ function injectSelectionBridge(
   // as save input — it parses the artifact source itself — but emitting it
   // keeps the iframe → host channel symmetric across set/reset/extract.
   if (Object.keys(overrides).length) setTimeout(postOverrides, 0);
+  setTimeout(requestPreviewScrollRestore, 0);
+  setTimeout(requestPreviewScrollRestore, 80);
+  setTimeout(requestPreviewScrollRestore, 240);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', postTargets);
   else setTimeout(postTargets, 0);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', postPreviewScroll);
+  else setTimeout(postPreviewScroll, 0);
 })();</script>`;
   const style = `<style data-od-selection-bridge-style>
 html[data-od-comment-mode] body * { cursor: crosshair !important; }

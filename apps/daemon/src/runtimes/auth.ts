@@ -9,8 +9,15 @@ export type AgentAuthProbeResult = {
 const CURSOR_AUTH_GUIDANCE =
   'Cursor Agent is not authenticated. Run `cursor-agent login`, then `cursor-agent status`, and retry. For automation, ensure CURSOR_API_KEY is set in the Open Design process environment.';
 
+const DEEPSEEK_AUTH_GUIDANCE =
+  'DeepSeek TUI is installed but is not authenticated. Add or verify your API key in `~/.deepseek/config.toml` as `api_key = "..."`, or expose DEEPSEEK_API_KEY to the Open Design daemon process, then retry. If Open Design is launched outside an interactive shell, shell rc files such as ~/.zshrc may not be loaded.';
+
 export function cursorAuthGuidance(): string {
   return CURSOR_AUTH_GUIDANCE;
+}
+
+export function deepseekAuthGuidance(): string {
+  return DEEPSEEK_AUTH_GUIDANCE;
 }
 
 export function isCursorAuthFailureText(text: string): boolean {
@@ -26,16 +33,37 @@ export function isCursorAuthFailureText(text: string): boolean {
   );
 }
 
+export function isDeepSeekAuthFailureText(text: string): boolean {
+  const value = String(text || '');
+  if (!value.trim()) return false;
+  return (
+    /KEY=<your-key>/i.test(value) ||
+    /api_key\s*=\s*["']<your-key>["']/i.test(value) ||
+    (/~\/\.deepseek\/config\.toml/i.test(value) && /api[_ -]?key|KEY=/i.test(value)) ||
+    (/DEEPSEEK_API_KEY/i.test(value) &&
+      /auth|api[_ -]?key|missing|not set|required|unauthorized/i.test(value))
+  );
+}
+
 export function classifyAgentAuthFailure(
   agentId: string,
   text: string,
 ): AgentAuthProbeResult | null {
-  if (agentId !== 'cursor-agent') return null;
-  if (!isCursorAuthFailureText(text)) return null;
-  return {
-    status: 'missing',
-    message: cursorAuthGuidance(),
-  };
+  if (agentId === 'cursor-agent') {
+    if (!isCursorAuthFailureText(text)) return null;
+    return {
+      status: 'missing',
+      message: cursorAuthGuidance(),
+    };
+  }
+  if (agentId === 'deepseek') {
+    if (!isDeepSeekAuthFailureText(text)) return null;
+    return {
+      status: 'missing',
+      message: deepseekAuthGuidance(),
+    };
+  }
+  return null;
 }
 
 export async function probeAgentAuthStatus(

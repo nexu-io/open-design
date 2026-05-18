@@ -22,7 +22,6 @@ od:
   mode: prototype
   platform: mobile
   scenario: personal
-  featured: 12
   preview:
     type: html
     entry: index.html

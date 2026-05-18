@@ -57,7 +57,7 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
 
     expect(out).not.toContain('<question-form id="direction"');
     expect(out).not.toContain('Pick a visual direction');
-    expect(out).toContain('if a design system is active, use it as the visual direction without asking again');
+    expect(out).toContain('if a design system is active and no new brand/reference source was provided, use it as the visual direction without asking again');
   });
 
   it('inlines the prompt body, attribution, and reference-template label for image projects', () => {
@@ -326,6 +326,23 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(out).toContain('SFX duration is capped at 30 seconds');
     expect(out).toContain('MiniMax, FishAudio, and ElevenLabs audio renderers are production integrations');
     expect(out).not.toContain('fishaudio, …) are still stubs');
+  });
+
+  it('documents media generate handoffs as successful queued results', () => {
+    const out = composeSystemPrompt({
+      metadata: {
+        kind: 'video',
+        videoModel: 'seedance-2.0',
+        videoAspect: '16:9',
+        videoLength: 5,
+      },
+    });
+
+    expect(out).toContain('`media generate` treats the handoff as');
+    expect(out).toContain('exit `0` so the first dispatch does not look like a failed shell call');
+    expect(out).toContain('`"$OD_NODE_BIN" "$OD_BIN" media generate` exits `0`');
+    expect(out).toContain('either `file` or `taskId`');
+    expect(out).toContain('`2` from `media wait` is not a failure');
   });
 
   it('surfaces ElevenLabs voice options for project discovery when no voice was preselected', () => {

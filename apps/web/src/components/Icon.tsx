@@ -1,6 +1,6 @@
 import type { SVGProps } from 'react';
 
-type IconName =
+export type IconName =
   | 'arrow-left'
   | 'arrow-up'
   | 'attach'
@@ -22,10 +22,15 @@ type IconName =
   | 'file'
   | 'file-code'
   | 'folder'
+  | 'github'
   | 'grid'
+  | 'hammer'
+  | 'help-circle'
   | 'history'
+  | 'home'
   | 'image'
   | 'import'
+  | 'info'
   | 'kanban'
   | 'languages'
   | 'link'
@@ -33,8 +38,10 @@ type IconName =
   | 'minus'
   | 'more-horizontal'
   | 'orbit'
+  | 'palette'
   | 'pencil'
   | 'plus'
+  | 'star'
   | 'play'
   | 'present'
   | 'refresh'
@@ -47,6 +54,8 @@ type IconName =
   | 'spinner'
   | 'sparkles'
   | 'stop'
+  | 'sun'
+  | 'moon'
   | 'sun-moon'
   | 'thumbs-down'
   | 'thumbs-up'
@@ -134,10 +143,17 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
         </svg>
       );
     case 'close':
+      // Tighter X than the Lucide default (which uses coords 6→18 inside a
+      // 24-unit viewBox, so the visible glyph is only 50% of the icon box).
+      // Close buttons read as a small dot inside their container at typical
+      // 14-18px icon sizes. Extending the strokes to 4→20 lifts the visible
+      // extent to ~67% so the X feels balanced inside compact modal close
+      // buttons (PluginMediaDetail / NewProjectModal / PreviewModal) without
+      // overpowering chip-sized close icons (ChatComposer / SettingsDialog).
       return (
         <svg {...common}>
-          <path d="M18 6 6 18" />
-          <path d="m6 6 12 12" />
+          <path d="M20 4 4 20" />
+          <path d="m4 4 16 16" />
         </svg>
       );
     case 'copy':
@@ -227,6 +243,13 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
           <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
         </svg>
       );
+    case 'github':
+      return (
+        <svg {...common}>
+          <path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.4 5.4 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4" />
+          <path d="M9 18c-4.51 2-5-2-7-2" />
+        </svg>
+      );
     case 'grid':
       return (
         <svg {...common}>
@@ -236,12 +259,38 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
           <rect x="14" y="14" width="7" height="7" rx="1" />
         </svg>
       );
+    case 'hammer':
+      // Lucide-style hammer — a slanted head plus diagonal handle, used
+      // to signal "tool / functionality" affordances. Pairs with the
+      // entry topbar's Use everywhere chip where a chain link would
+      // misleadingly read as a hyperlink instead of a callable tool.
+      return (
+        <svg {...common}>
+          <path d="m15 12-8.373 8.373a1 1 0 1 1-3-3L12 9" />
+          <path d="m18 15 4-4" />
+          <path d="m21.5 11.5-1.914-1.914A2 2 0 0 1 19 8.172V7l-2.26-2.26a6 6 0 0 0-4.202-1.756L9 2.96l.92.82A6.18 6.18 0 0 1 12 8.4V10l2 2h1.172a2 2 0 0 1 1.414.586L18.5 14.5" />
+        </svg>
+      );
+    case 'help-circle':
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="10" />
+          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+          <path d="M12 17h.01" />
+        </svg>
+      );
     case 'history':
       return (
         <svg {...common}>
           <path d="M3 12a9 9 0 1 0 3-6.7" />
           <path d="M3 4v5h5" />
           <path d="M12 7v5l3 2" />
+        </svg>
+      );
+    case 'home':
+      return (
+        <svg {...common}>
+          <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2h-4v-7h-6v7H5a2 2 0 0 1-2-2z" />
         </svg>
       );
     case 'image':
@@ -258,6 +307,14 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
           <path d="m17 8-5-5-5 5" />
           <path d="M12 3v12" />
+        </svg>
+      );
+    case 'info':
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="16" x2="12" y2="12" />
+          <line x1="12" y1="8" x2="12.01" y2="8" />
         </svg>
       );
     case 'kanban':
@@ -324,6 +381,16 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
           />
           <circle cx="12" cy="12" r="2.25" fill="currentColor" stroke="none" />
           <circle cx="16" cy="6.8" r="1.5" fill="currentColor" stroke="none" />
+        </svg>
+      );
+    case 'palette':
+      return (
+        <svg {...common}>
+          <path d="M12 2a10 10 0 1 0 0 20 2 2 0 0 0 0-4 1.5 1.5 0 0 1-1.06-2.56l.78-.78A2 2 0 0 1 13.13 14H17a5 5 0 0 0 5-5c0-3.87-4.48-7-10-7Z" />
+          <circle cx="7.5" cy="10.5" r="1" fill="currentColor" stroke="none" />
+          <circle cx="9.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
+          <circle cx="14" cy="6" r="1" fill="currentColor" stroke="none" />
+          <circle cx="17.5" cy="9" r="1" fill="currentColor" stroke="none" />
         </svg>
       );
     case 'pencil':
@@ -429,10 +496,29 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
           <path d="M16 17h-1" />
         </svg>
       );
+    case 'star':
+      return (
+        <svg {...common}>
+          <path d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+        </svg>
+      );
     case 'stop':
       return (
         <svg {...common}>
           <rect x="6" y="6" width="12" height="12" rx="1.5" />
+        </svg>
+      );
+    case 'sun':
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="4" />
+          <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+        </svg>
+      );
+    case 'moon':
+      return (
+        <svg {...common}>
+          <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
         </svg>
       );
     case 'sun-moon':

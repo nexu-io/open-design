@@ -25,6 +25,7 @@ import {
 } from './EntryView';
 import { Icon } from './Icon';
 import { CenteredLoader } from './Loading';
+import { Toast } from './Toast';
 
 const CONNECTOR_CALLBACK_MESSAGE_TYPE = 'open-design:connector-connected';
 const CONNECTOR_AUTH_PENDING_STORAGE_KEY = 'od-connectors-authorization-pending';
@@ -556,6 +557,7 @@ export function ConnectorsBrowser({
   const [connectorAuthorizationPending, setConnectorAuthorizationPending] = useState<ConnectorAuthorizationPendingState>(() => loadConnectorAuthorizationPending());
   const [connectorAuthorizationCancelFailed, setConnectorAuthorizationCancelFailed] = useState<Record<string, boolean>>({});
   const [connectorAuthorizationError, setConnectorAuthorizationError] = useState<Record<string, string>>({});
+  const [connectErrorToast, setConnectErrorToast] = useState<string | null>(null);
   const [detailConnectorId, setDetailConnectorId] = useState<string | null>(null);
   const [toolPreviewLoadingIds, setToolPreviewLoadingIds] = useState<Record<string, boolean>>({});
   const [toolPreviewFetchedIds, setToolPreviewFetchedIds] = useState<Record<string, boolean>>({});
@@ -571,6 +573,53 @@ export function ConnectorsBrowser({
     setConnectors((curr) => applyConnectorStatuses(curr, statuses));
     setConnectorAuthorizationPending((curr) => updateConnectorAuthorizationPendingFromStatuses(curr, statuses));
     setConnectorAuthorizationError((curr) => clearConnectorAuthorizationErrorsForConnected(curr, statuses));
+    return statuses;
+  }, []);
+
+  const connectorAuthorizationPendingRef = useRef(connectorAuthorizationPending);
+  useEffect(() => {
+    connectorAuthorizationPendingRef.current = connectorAuthorizationPending;
+  }, [connectorAuthorizationPending]);
+
+  const cancelStaleAuthorizations = useCallback(async (
+    pendingBeforeReload: ConnectorAuthorizationPendingState,
+    statuses: ConnectorStatusResponse['statuses'],
+    nowMs = Date.now(),
+  ) => {
+    const stuck = Object.keys(pendingBeforeReload).filter((connectorId) => {
+      if (statuses[connectorId]?.status === 'connected') return false;
+      const expiresAt = pendingBeforeReload[connectorId]?.expiresAt;
+      if (!expiresAt) return false;
+      const expiresAtMs = Date.parse(expiresAt);
+      return Number.isFinite(expiresAtMs) && expiresAtMs <= nowMs;
+    });
+    if (stuck.length === 0) return;
+    await Promise.allSettled(stuck.map(async (connectorId) => {
+      let connector: ConnectorDetail | null = null;
+      try {
+        connector = await cancelConnectorAuthorizationRequest(connectorId);
+      } catch {
+        connector = null;
+      }
+      if (!connector) {
+        setConnectorAuthorizationCancelFailed((curr) => ({ ...curr, [connectorId]: true }));
+        return;
+      }
+      updateConnector(connector);
+      setConnectorAuthorizationCancelFailed((curr) => {
+        if (curr[connectorId] === undefined) return curr;
+        const next = { ...curr };
+        delete next[connectorId];
+        return next;
+      });
+      setConnectorAuthorizationError((curr) => {
+        if (curr[connectorId] === undefined) return curr;
+        const next = { ...curr };
+        delete next[connectorId];
+        return next;
+      });
+      setConnectorAuthorizationPending((curr) => clearConnectorAuthorizationPending(curr, connectorId));
+    }));
   }, []);
 
   useEffect(() => {
@@ -650,14 +699,19 @@ export function ConnectorsBrowser({
   }, [reloadConnectorStatuses]);
 
   // System-browser auth flows have no opener to post back to; refresh
-  // whenever the window regains focus so the UI catches up silently.
+  // whenever the window regains focus so the UI catches up silently. If a
+  // pending authorization is still not connected after the refresh, the
+  // user closed the auth flow without completing it — auto-cancel so the
+  // card recovers to its default state instead of staying stuck loading.
   useEffect(() => {
-    function onFocus() {
-      void reloadConnectorStatuses();
+    async function onFocus() {
+      const pendingBeforeReload = connectorAuthorizationPendingRef.current;
+      const statuses = await reloadConnectorStatuses();
+      await cancelStaleAuthorizations(pendingBeforeReload, statuses);
     }
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
-  }, [reloadConnectorStatuses]);
+  }, [reloadConnectorStatuses, cancelStaleAuthorizations]);
 
   // The local Composio API-key state is authoritative for masking. Cached
   // connector auth can be stale immediately after the user clears the key.
@@ -710,6 +764,7 @@ export function ConnectorsBrowser({
         const result = await connectConnector(connectorId);
         updateConnector(result.connector);
         if (result.connector && !result.error) {
+          setConnectErrorToast(null);
           setConnectorAuthorizationPending((curr) => updateConnectorAuthorizationPendingFromConnectResponse(curr, {
             connector: result.connector!,
             ...(result.auth === undefined ? {} : { auth: result.auth }),
@@ -717,7 +772,7 @@ export function ConnectorsBrowser({
         } else {
           setConnectorAuthorizationPending((curr) => clearConnectorAuthorizationPending(curr, connectorId));
           if (result.error) {
-            setConnectorAuthorizationError((curr) => ({ ...curr, [connectorId]: result.error! }));
+            setConnectErrorToast(result.error);
           }
         }
       } else {
@@ -815,6 +870,15 @@ export function ConnectorsBrowser({
 
   return (
     <div className="tab-panel connectors-panel connectors-panel-embedded">
+      {connectErrorToast ? (
+        <div className="connectors-toast-anchor">
+          <Toast
+            message={connectErrorToast}
+            role="alert"
+            onDismiss={() => setConnectErrorToast(null)}
+          />
+        </div>
+      ) : null}
       <div className="tab-panel-toolbar">
         <div className="toolbar-left connectors-heading">
           <div>
@@ -1173,11 +1237,6 @@ function ConnectorCard({
           ) : null}
         </div>
       </div>
-      {authorizationError ? (
-        <p className="connector-authorization-hint connector-authorization-error" role="alert">
-          {authorizationError}
-        </p>
-      ) : null}
       {authorizationCancelFailed ? (
         <p className="connector-authorization-hint connector-authorization-error" role="alert">
           {AUTHORIZATION_CANCEL_FAILED_MESSAGE}
@@ -1342,11 +1401,6 @@ function ConnectorDetailDrawer({
                 </p>
               ) : null}
             </section>
-          ) : null}
-          {authorizationError ? (
-            <p className="connector-authorization-hint connector-authorization-error" role="alert">
-              {authorizationError}
-            </p>
           ) : null}
           {authorizationCancelFailed ? (
             <p className="connector-authorization-hint connector-authorization-error" role="alert">

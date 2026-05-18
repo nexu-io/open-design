@@ -578,6 +578,10 @@ export function openSandboxedPreviewInNewTab(
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
+type DesktopPrintPdfOptions = {
+  deck?: boolean;
+};
+
 // Open the artifact in a new tab via a Blob URL with a self-printing
 // script injected. Going through a Blob URL (rather than `window.open('')`
 // + `document.write`) avoids two failure modes we hit before:
@@ -606,15 +610,24 @@ export async function exportAsPdf(
   if (opts?.deck) doc = injectDeckPrintStylesheet(doc);
   doc = injectPrintReadyHandshake(doc, nonce);
 
-  // Desktop native print bridge — uses Electron's webContents.print() API
-  // instead of window.open + window.print(). The sandboxed wrapper omits
-  // allow-modals here because the native flow doesn't call window.print();
-  // granting it would let untrusted artifact code call alert()/confirm()
-  // and stall the hidden Electron window indefinitely.
+  // Desktop native PDF bridge — the main process runs a direct
+  // Save-as-PDF flow: a native Save dialog, then Electron's
+  // webContents.printToPDF() straight to the chosen file (issue #1774;
+  // see apps/desktop/src/main/pdf-export.ts). The sandboxed wrapper
+  // omits allow-modals here because the native flow never calls
+  // window.print(); granting it would let untrusted artifact code call
+  // alert()/confirm() and stall the hidden Electron window indefinitely.
   const desktopApi =
     typeof window !== 'undefined'
       ? (window as unknown as Record<string, unknown>).__odDesktop as
-          | { printPdf?: (html: string, nonce?: string) => Promise<void>; isDesktop?: boolean }
+          | {
+              printPdf?: (
+                html: string,
+                nonce?: string,
+                options?: DesktopPrintPdfOptions,
+              ) => Promise<void>;
+              isDesktop?: boolean;
+            }
           | undefined
       : undefined;
   if (desktopApi?.printPdf) {
@@ -623,7 +636,7 @@ export async function exportAsPdf(
     }
     doc = injectParentPrintReadyCache(doc, nonce);
     try {
-      await desktopApi.printPdf(doc, nonce);
+      await desktopApi.printPdf(doc, nonce, opts?.deck ? { deck: true } : undefined);
     } catch {
       if (typeof alert !== 'undefined') {
         alert('Print failed. Please try Export PDF again or use the browser version.');

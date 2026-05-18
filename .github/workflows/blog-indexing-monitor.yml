@@ -1,0 +1,306 @@
+name: blog-indexing-monitor
+
+# Daily check: for every blog post that is 1, 3, 7, or 14 days old
+# (counting from the first commit that introduced the file on main),
+# call URL Inspection and refresh `docs/blog-indexing-status.md`.
+#
+# This is the monitoring half of the blog-indexing-automation skill.
+# We do NOT call any "request indexing" API for normal blog posts —
+# Google's Indexing API does not support that. When a URL stalls in
+# `Discovered - currently not indexed` past T+7 we open / refresh a
+# tracking issue so a human can fix the underlying SEO/content problem.
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      crosspost_url:
+        description: 'Optional canonical blog URL to dry-run or publish as a cross-post.'
+        required: false
+      crosspost_platform:
+        description: 'Cross-post platform: devto or hashnode.'
+        required: false
+        default: devto
+      publish_crosspost:
+        description: 'Set true to publish. Default false performs dry-run only.'
+        required: false
+        default: 'false'
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: blog-indexing-monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    name: Monitor recent blog URLs
+    if: github.repository == 'nexu-io/open-design'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies (landing-page only)
+        run: pnpm install --frozen-lockfile --filter @open-design/landing-page
+
+      - name: Check indexing configuration
+        id: config
+        env:
+          GSC_OAUTH_CLIENT_ID: ${{ secrets.GSC_OAUTH_CLIENT_ID }}
+          GSC_OAUTH_CLIENT_SECRET: ${{ secrets.GSC_OAUTH_CLIENT_SECRET }}
+          GSC_OAUTH_REFRESH_TOKEN: ${{ secrets.GSC_OAUTH_REFRESH_TOKEN }}
+          GSC_SERVICE_ACCOUNT_KEY: ${{ secrets.GSC_SERVICE_ACCOUNT_KEY }}
+          BOT_APP_ID: ${{ secrets.BOT_APP_ID }}
+          BOT_APP_PRIVATE_KEY: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+        run: |
+          gsc=false
+          bot=false
+          if { [ -n "$GSC_OAUTH_CLIENT_ID" ] && [ -n "$GSC_OAUTH_CLIENT_SECRET" ] && [ -n "$GSC_OAUTH_REFRESH_TOKEN" ]; } || [ -n "$GSC_SERVICE_ACCOUNT_KEY" ]; then
+            gsc=true
+          fi
+          if [ -n "$BOT_APP_ID" ] && [ -n "$BOT_APP_PRIVATE_KEY" ]; then
+            bot=true
+          fi
+          echo "gsc=$gsc" >> "$GITHUB_OUTPUT"
+          echo "bot=$bot" >> "$GITHUB_OUTPUT"
+          if [ "$gsc" != "true" ]; then
+            echo "::warning title=Blog indexing monitor not fully configured::GSC auth is missing; URL Inspection, Search Analytics, status refresh, and escalation checks will be skipped."
+          fi
+          if [ "$bot" != "true" ]; then
+            echo "::warning title=Blog indexing monitor writes disabled::Open Design bot secrets are missing; issue and status PR writes will be skipped."
+          fi
+          {
+            echo "### Blog indexing monitor configuration"
+            echo "- GSC auth configured: \`$gsc\`"
+            echo "- Open Design bot configured: \`$bot\`"
+            if [ "$gsc" != "true" ]; then
+              echo ""
+              echo "URL Inspection, Search Analytics, and status refresh steps will be skipped."
+            fi
+            if [ "$bot" != "true" ]; then
+              echo ""
+              echo "Issue and status PR writes will be skipped."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Restore pending indexing status state
+        run: |
+          if ! git fetch origin automation/blog-indexing-status:refs/remotes/origin/automation/blog-indexing-status; then
+            {
+              echo "### Blog indexing status restore"
+              echo "No pending \`automation/blog-indexing-status\` branch was found. Starting from the committed status files."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if git checkout refs/remotes/origin/automation/blog-indexing-status -- \
+            docs/blog-indexing-status.md \
+            docs/blog-indexing-status.json; then
+            {
+              echo "### Blog indexing status restore"
+              echo "Restored pending status files from \`automation/blog-indexing-status\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "### Blog indexing status restore"
+              echo "Failed to restore pending status files from \`automation/blog-indexing-status\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error title=Blog indexing status restore failed::Fetched automation/blog-indexing-status but could not checkout the status files."
+            exit 1
+          fi
+
+      - name: Compute today's inspection window
+        id: window
+        run: |
+          mkdir -p .blog-indexing
+          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/scheduled-window.ts \
+            --out ../../.blog-indexing/window.json
+          echo '--- window.json ---'
+          cat .blog-indexing/window.json
+          count=$(node -e "console.log(require('./.blog-indexing/window.json').urls.length)")
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
+      - name: Inspect URLs in window
+        if: steps.window.outputs.count != '0' && steps.config.outputs.gsc == 'true'
+        env:
+          GSC_OAUTH_CLIENT_ID: ${{ secrets.GSC_OAUTH_CLIENT_ID }}
+          GSC_OAUTH_CLIENT_SECRET: ${{ secrets.GSC_OAUTH_CLIENT_SECRET }}
+          GSC_OAUTH_REFRESH_TOKEN: ${{ secrets.GSC_OAUTH_REFRESH_TOKEN }}
+          GSC_SERVICE_ACCOUNT_KEY: ${{ secrets.GSC_SERVICE_ACCOUNT_KEY }}
+        run: |
+          node -e "const j=require('./.blog-indexing/window.json');require('fs').writeFileSync('./.blog-indexing/window-urls.json',JSON.stringify({urls:j.urls},null,2))"
+          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/inspect-urls.ts \
+            --urls ../../.blog-indexing/window-urls.json \
+            --out ../../.blog-indexing/inspections.json
+
+      - name: Query Search Console traffic
+        if: steps.window.outputs.count != '0' && steps.config.outputs.gsc == 'true'
+        env:
+          GSC_OAUTH_CLIENT_ID: ${{ secrets.GSC_OAUTH_CLIENT_ID }}
+          GSC_OAUTH_CLIENT_SECRET: ${{ secrets.GSC_OAUTH_CLIENT_SECRET }}
+          GSC_OAUTH_REFRESH_TOKEN: ${{ secrets.GSC_OAUTH_REFRESH_TOKEN }}
+          GSC_SERVICE_ACCOUNT_KEY: ${{ secrets.GSC_SERVICE_ACCOUNT_KEY }}
+        run: |
+          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/query-search-analytics.ts \
+            --urls ../../.blog-indexing/window-urls.json \
+            --out ../../.blog-indexing/analytics.json
+
+      - name: Render status report
+        if: steps.window.outputs.count != '0' && steps.config.outputs.gsc == 'true'
+        run: |
+          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/render-status.ts \
+            --inspections ../../.blog-indexing/inspections.json \
+            --analytics ../../.blog-indexing/analytics.json
+
+      - name: Compute stalls
+        if: steps.window.outputs.count != '0' && steps.config.outputs.gsc == 'true'
+        id: stalls
+        run: |
+          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/escalate-stalls.ts \
+            --out ../../.blog-indexing/stalls.json
+          should=$(node -e "console.log(require('./.blog-indexing/stalls.json').shouldEscalate)")
+          echo "should=$should" >> "$GITHUB_OUTPUT"
+
+      - name: Re-submit stalled URLs to IndexNow
+        if: steps.stalls.outputs.should == 'true' && steps.config.outputs.gsc == 'true'
+        run: |
+          node -e "const j=require('./.blog-indexing/stalls.json');require('fs').writeFileSync('./.blog-indexing/stalled-urls.json',JSON.stringify({urls:j.stalled.map(s=>s.url)},null,2))"
+          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/submit-indexnow.ts \
+            --urls ../../.blog-indexing/stalled-urls.json \
+            --out ../../.blog-indexing/stalled-indexnow.json
+
+      - name: Compute low-traffic posts
+        if: steps.window.outputs.count != '0' && steps.config.outputs.gsc == 'true'
+        id: lowtraffic
+        run: |
+          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/escalate-low-traffic.ts \
+            --out ../../.blog-indexing/low-traffic.json
+          should=$(node -e "console.log(require('./.blog-indexing/low-traffic.json').shouldEscalate)")
+          echo "should=$should" >> "$GITHUB_OUTPUT"
+
+      - name: Generate Open Design bot token
+        if: steps.window.outputs.count != '0' && steps.config.outputs.gsc == 'true' && steps.config.outputs.bot == 'true'
+        id: open-design-bot-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+          owner: nexu-io
+          repositories: open-design
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
+
+      - name: Open / refresh stall issue
+        if: steps.stalls.outputs.should == 'true' && steps.config.outputs.bot == 'true'
+        env:
+          GH_TOKEN: ${{ steps.open-design-bot-token.outputs.token }}
+        run: |
+          title=$(node -e "console.log(require('./.blog-indexing/stalls.json').issueTitle)")
+          body_file=.blog-indexing/issue-body.md
+          node -e "require('fs').writeFileSync('${body_file}',require('./.blog-indexing/stalls.json').issueBody)"
+          existing=$(gh issue list --repo nexu-io/open-design --state open --search "in:title \"${title}\"" --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            echo "Updating issue #$existing"
+            gh issue edit "$existing" --repo nexu-io/open-design --title "$title" --body-file "$body_file"
+            gh issue comment "$existing" --repo nexu-io/open-design --body-file "$body_file"
+          else
+            echo "Opening new issue"
+            gh issue create --repo nexu-io/open-design --title "$title" --body-file "$body_file"
+          fi
+
+      - name: Open / refresh low-traffic issue
+        if: steps.lowtraffic.outputs.should == 'true' && steps.config.outputs.bot == 'true'
+        env:
+          GH_TOKEN: ${{ steps.open-design-bot-token.outputs.token }}
+        run: |
+          title=$(node -e "console.log(require('./.blog-indexing/low-traffic.json').issueTitle)")
+          body_file=.blog-indexing/low-traffic-issue-body.md
+          node -e "require('fs').writeFileSync('${body_file}',require('./.blog-indexing/low-traffic.json').issueBody)"
+          existing=$(gh issue list --repo nexu-io/open-design --state open --search "in:title \"${title}\"" --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --repo nexu-io/open-design --title "$title" --body-file "$body_file"
+            gh issue comment "$existing" --repo nexu-io/open-design --body-file "$body_file"
+          else
+            gh issue create --repo nexu-io/open-design --title "$title" --body-file "$body_file"
+          fi
+
+      - name: Close stall issue if all clear
+        if: steps.stalls.outputs.should == 'false' && steps.window.outputs.count != '0' && steps.config.outputs.bot == 'true'
+        env:
+          GH_TOKEN: ${{ steps.open-design-bot-token.outputs.token }}
+        run: |
+          existing=$(gh issue list --repo nexu-io/open-design --state open --search 'in:title "Blog indexing — URLs stalled in Search Console"' --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo nexu-io/open-design --body 'All previously stalled URLs have reached `indexed` status. Closing automatically. — `blog-indexing-monitor`'
+            gh issue close "$existing" --repo nexu-io/open-design
+          fi
+
+      - name: Close low-traffic issue if all clear
+        if: steps.lowtraffic.outputs.should == 'false' && steps.window.outputs.count != '0' && steps.config.outputs.bot == 'true'
+        env:
+          GH_TOKEN: ${{ steps.open-design-bot-token.outputs.token }}
+        run: |
+          existing=$(gh issue list --repo nexu-io/open-design --state open --search 'in:title "Blog traffic — indexed posts with zero impressions"' --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo nexu-io/open-design --body 'All previously low-traffic tracked URLs now have impressions or no longer match the escalation window. Closing automatically. — `blog-indexing-monitor`'
+            gh issue close "$existing" --repo nexu-io/open-design
+          fi
+
+      - name: Open status PR
+        if: steps.window.outputs.count != '0' && steps.config.outputs.gsc == 'true' && steps.config.outputs.bot == 'true'
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ steps.open-design-bot-token.outputs.token }}
+          add-paths: |
+            docs/blog-indexing-status.md
+            docs/blog-indexing-status.json
+          branch: automation/blog-indexing-status
+          delete-branch: true
+          commit-message: 'docs(blog): refresh daily indexing status'
+          author: 'open-design-bot[bot] <282769551+open-design-bot[bot]@users.noreply.github.com>'
+          committer: 'open-design-bot[bot] <282769551+open-design-bot[bot]@users.noreply.github.com>'
+          title: 'docs(blog): refresh daily indexing status'
+          body: |
+            Daily refresh of `docs/blog-indexing-status.md` with URL
+            Inspection verdicts for posts in the T+1 / T+3 / T+7 / T+14
+            window today.
+
+            Generated by `.github/workflows/blog-indexing-monitor.yml`.
+            See [docs/blog-indexing-automation.md](../docs/blog-indexing-automation.md)
+            for the architecture.
+
+      - name: Optional cross-post scaffold
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.crosspost_url != ''
+        env:
+          DEVTO_API_KEY: ${{ secrets.DEVTO_API_KEY }}
+          HASHNODE_TOKEN: ${{ secrets.HASHNODE_TOKEN }}
+          HASHNODE_PUBLICATION_ID: ${{ secrets.HASHNODE_PUBLICATION_ID }}
+        run: |
+          publish_flag=""
+          if [ "${{ github.event.inputs.publish_crosspost }}" = "true" ]; then
+            publish_flag="--publish"
+          fi
+          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/crosspost.ts \
+            --url "${{ github.event.inputs.crosspost_url }}" \
+            --platform "${{ github.event.inputs.crosspost_platform }}" \
+            $publish_flag

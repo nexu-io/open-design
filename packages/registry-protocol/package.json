@@ -1,0 +1,31 @@
+{
+  "name": "@open-design/registry-protocol",
+  "version": "0.5.0",
+  "private": true,
+  "type": "module",
+  "description": "Pure TypeScript registry backend protocol for Open Design plugin sources.",
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    }
+  },
+  "scripts": {
+    "build": "node ./esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "esbuild": "0.27.7",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  }
+}

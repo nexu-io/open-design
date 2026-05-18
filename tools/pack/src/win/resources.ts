@@ -6,7 +6,7 @@ import type { ToolPackConfig } from "../config.js";
 import { copyBundledResourceTrees, winResources } from "../resources.js";
 import type { WinPaths, ResourceTreeCacheMetadata } from "./types.js";
 
-const RESOURCE_TREE_CACHE_SCHEMA_VERSION = 2;
+const RESOURCE_TREE_CACHE_SCHEMA_VERSION = 3;
 
 async function createResourceTreeCacheKey(config: ToolPackConfig): Promise<string> {
   return hashJson({
@@ -16,6 +16,8 @@ async function createResourceTreeCacheKey(config: ToolPackConfig): Promise<strin
     designSystems: await hashPath(join(config.workspaceRoot, "design-systems")),
     designTemplates: await hashPath(join(config.workspaceRoot, "design-templates")),
     node: "win.resource-tree",
+    pluginOfficial: await hashPath(join(config.workspaceRoot, "plugins", "_official")),
+    pluginRegistry: await hashPath(join(config.workspaceRoot, "plugins", "registry")),
     promptTemplates: await hashPath(join(config.workspaceRoot, "prompt-templates")),
     schemaVersion: RESOURCE_TREE_CACHE_SCHEMA_VERSION,
     skills: await hashPath(join(config.workspaceRoot, "skills")),

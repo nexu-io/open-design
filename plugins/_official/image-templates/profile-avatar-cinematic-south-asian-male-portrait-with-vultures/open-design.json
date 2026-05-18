@@ -1,0 +1,83 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-profile-avatar-cinematic-south-asian-male-portrait-with-vultures",
+  "title": "Profile / Avatar - Cinematic South Asian Male Portrait with Vultures",
+  "version": "0.1.0",
+  "description": "A detailed cinematic portrait of a young South Asian man in a moody, dark fantasy setting surrounded by vultures and ravens.",
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Jahan Zaib",
+    "url": "https://x.com/jzaib4269/status/2048949396222489081"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "profile-avatar",
+    "portrait",
+    "cinematic",
+    "fantasy"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://cms-assets.youmind.com/media/1777453132629_dmkonb_HG9Und1aYAAyo9g.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "A highly detailed cinematic portrait of a handsome {argument name=\"ethnicity\" default=\"South Asian\"} man in his late 20s or early 30s, sitting on a metal railing with a soccer goal net behind him. He has sharp facial features, dark styled hair, light stubble, and intense dark eyes. He is wearing a {argument name=\"clothing\" default=\"black zip-up hoodie, black sweatpants, and white speckled sneakers\"}. His hands are clasped together resting on his knees as he looks directly at the viewer with a confident, slightly brooding expression.\n\nHe is surrounded by a dramatic flock of large black vultures and ravens. Some vultures are flying with wings spread in a dark stormy sky, while others are perched on the railing and goalpost near him. The atmosphere is {argument name=\"atmosphere\" default=\"dark, moody, and cinematic\"} with heavy storm clouds, dramatic lighting, and a mysterious, powerful vibe. High contrast, moody color grading, ultra-realistic, photorealistic, epic composition, dark fantasy aesthetic.",
+        "zh-CN": "使用这个插件完成以下任务：A highly detailed cinematic portrait of a handsome {argument name=\"ethnicity\" default=\"South Asian\"} man in his late 20s or early 30s, sitting on a metal railing with a soccer goal net behind him. He has sharp facial features, dark styled hair, light stubble, and intense dark eyes. He is wearing a {argument name=\"clothing\" default=\"black zip-up hoodie, black sweatpants, and white speckled sneakers\"}. His hands are clasped together resting on his knees as he looks directly at the viewer with a confident, slightly brooding expression.\n\nHe is surrounded by a dramatic flock of large black vultures and ravens. Some vultures are flying with wings spread in a dark stormy sky, while others are perched on the railing and goalpost near him. The atmosphere is {argument name=\"atmosphere\" default=\"dark, moody, and cinematic\"} with heavy storm clouds, dramatic lighting, and a mysterious, powerful vibe. High contrast, moody color grading, ultra-realistic, photorealistic, epic composition, dark fantasy aesthetic."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "1:1"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

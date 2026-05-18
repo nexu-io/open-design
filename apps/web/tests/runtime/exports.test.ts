@@ -458,10 +458,25 @@ describe('sandboxed preview Blob exports', () => {
     // Verify the parent-wrapper cache script is present so the handshake is
     // never missed even if 'OD_PRINT_READY' fires before the listener attaches.
     expect(htmlArg).toContain('__odPrintReady');
-    // Verify the print script is NOT injected — Electron calls
-    // webContents.print() natively, so a self-printing document would
-    // trigger a second print dialog.
+    // Verify the print script is NOT injected — Electron renders via the
+    // native printToPDF path, so a self-printing document would trigger a
+    // second print dialog.
     expect(htmlArg).not.toContain('window.print()');
+  });
+
+  it('passes deck intent through the desktop native print bridge', async () => {
+    const printPdfMock = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('window', {
+      open: () => mockWin,
+      addEventListener: () => {},
+      __odDesktop: { printPdf: printPdfMock, isDesktop: true },
+    });
+
+    await exportAsPdf('<section class="slide">One</section>', 'Desktop Deck', { deck: true });
+
+    expect(printPdfMock).toHaveBeenCalledTimes(1);
+    expect(printPdfMock.mock.calls[0]![2]).toEqual({ deck: true });
+    expect(printPdfMock.mock.calls[0]![0]).toContain('data-deck-print=&quot;injected&quot;');
   });
 
   it('injects image-waiting logic into the print-ready handshake for the desktop bridge', async () => {

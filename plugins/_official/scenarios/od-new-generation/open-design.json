@@ -1,0 +1,109 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "od-new-generation",
+  "title": "New generation (default scenario)",
+  "version": "0.1.0",
+  "description": "Default reference pipeline for the new-generation taskKind.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/scenarios/od-new-generation",
+  "tags": [
+    "scenario",
+    "first-party",
+    "new-generation"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "scenario": "new-generation",
+    "mode": "scenario",
+    "pipeline": {
+      "stages": [
+        {
+          "id": "discovery",
+          "atoms": [
+            "discovery-question-form"
+          ]
+        },
+        {
+          "id": "plan",
+          "atoms": [
+            "direction-picker",
+            "todo-write"
+          ]
+        },
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        },
+        {
+          "id": "critique",
+          "atoms": [
+            "critique-theater"
+          ],
+          "repeat": true,
+          "until": "critique.score>=4 || iterations>=3"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ],
+    "useCase": {
+      "query": {
+        "en": "Generate a {{artifactKind}} for {{audience}} on {{topic}}. Use the discovery → plan → generate → critique loop and stop when the critique score converges or the iteration ceiling is hit.",
+        "zh-CN": "使用这个插件完成以下任务：Generate a {{artifactKind}} for {{audience}} on {{topic}}. Use the discovery → plan → generate → critique loop and stop when the critique score converges or the iteration ceiling is hit."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./examples/saas-landing.html",
+          "title": "SaaS launch landing page"
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "type": "string",
+        "required": true,
+        "label": "Artifact kind",
+        "placeholder": "landing page",
+        "options": [
+          "landing page",
+          "investor deck",
+          "blog post",
+          "internal tool",
+          "dashboard"
+        ]
+      },
+      {
+        "name": "audience",
+        "type": "string",
+        "required": true,
+        "label": "Audience",
+        "placeholder": "VC partners at a Series A SaaS round"
+      },
+      {
+        "name": "topic",
+        "type": "string",
+        "required": true,
+        "label": "Topic",
+        "placeholder": "shipping faster product pipelines"
+      }
+    ]
+  }
+}

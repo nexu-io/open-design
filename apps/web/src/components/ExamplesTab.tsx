@@ -438,17 +438,19 @@ export function ExamplesTab({ skills: rawSkills, onUsePrompt }: Props) {
       {filtered.length === 0 ? (
         <div className="tab-empty">{t('examples.emptyNoMatch')}</div>
       ) : (
-        filtered.map((skill) => (
-          <ExampleCard
-            key={skill.id}
-            skill={skill}
-            html={previews[skill.id]}
-            unavailableKind={previewUnavailable[skill.id]}
-            onLoad={() => void loadPreview(skill.id)}
-            onUsePrompt={() => onUsePrompt(skill)}
-            onOpenPreview={() => openPreview(skill.id)}
-          />
-        ))
+        <div className="examples-list">
+          {filtered.map((skill) => (
+            <ExampleCard
+              key={skill.id}
+              skill={skill}
+              html={previews[skill.id]}
+              unavailableKind={previewUnavailable[skill.id]}
+              onLoad={() => void loadPreview(skill.id)}
+              onUsePrompt={() => onUsePrompt(skill)}
+              onOpenPreview={() => openPreview(skill.id)}
+            />
+          ))}
+        </div>
       )}
       {(() => {
         if (!previewSkill) return null;

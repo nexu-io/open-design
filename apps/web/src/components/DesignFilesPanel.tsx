@@ -3,6 +3,8 @@ import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { projectFileUrl } from '../providers/registry';
 import type { LiveArtifactWorkspaceEntry, ProjectFile, ProjectFileKind } from '../types';
+import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
+import { getPluginFolderCandidates } from './design-files/pluginFolders';
 import { Icon } from './Icon';
 import { LiveArtifactBadges } from './LiveArtifactBadges';
 import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
@@ -25,6 +27,10 @@ interface Props {
   onNewSketch: () => void;
   uploadError?: string | null;
   onClearUploadError?: () => void;
+  onPluginFolderAgentAction?: (
+    relativePath: string,
+    action: PluginFolderAgentAction,
+  ) => Promise<void> | void;
 }
 
 type DesignFilesGroupMode = 'kind' | 'modified';
@@ -69,6 +75,7 @@ export function DesignFilesPanel({
   onNewSketch,
   uploadError = null,
   onClearUploadError,
+  onPluginFolderAgentAction,
 }: Props) {
   const t = useT();
   const [refreshing, setRefreshing] = useState(false);
@@ -84,22 +91,64 @@ export function DesignFilesPanel({
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const lastKeyPress = useRef<Map<string, number>>(new Map());
   const [deleting, setDeleting] = useState(false);
+  const [installingFolder, setInstallingFolder] = useState<string | null>(null);
+  const [sharingFolder, setSharingFolder] = useState<string | null>(null);
+  const [installNotice, setInstallNotice] = useState<string | null>(null);
   const [groupMode, setGroupMode] = useState<DesignFilesGroupMode>('kind');
   const [collapsedModifiedSections, setCollapsedModifiedSections] = useState<
     Set<ModifiedSection>
   >(new Set());
   const [renaming, setRenaming] = useState<{ name: string; draft: string; saving: boolean } | null>(null);
   const [dayBoundary, setDayBoundary] = useState(() => Date.now());
+  const [kindFilter, setKindFilter] = useState<Set<ProjectFileKind>>(() => new Set());
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+  const filterMenuRef = useRef<HTMLDivElement | null>(null);
+
+  const kindCounts = useMemo(() => {
+    const counts = new Map<ProjectFileKind, number>();
+    for (const f of files) counts.set(f.kind, (counts.get(f.kind) ?? 0) + 1);
+    return counts;
+  }, [files]);
+
+  const availableKinds = useMemo(
+    () =>
+      Array.from(kindCounts.keys()).sort(
+        (a, b) => kindSortPriority(a) - kindSortPriority(b),
+      ),
+    [kindCounts],
+  );
+
+  // Drop any selected-filter kinds that no longer appear in the file list
+  // (e.g. after a delete leaves the kind empty). Keeps the filter UI honest
+  // and prevents a stale filter from silently hiding everything.
+  useEffect(() => {
+    setKindFilter((prev) => {
+      if (prev.size === 0) return prev;
+      const present = new Set(availableKinds);
+      const next = new Set<ProjectFileKind>();
+      let changed = false;
+      for (const k of prev) {
+        if (present.has(k)) next.add(k);
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [availableKinds]);
+
+  const filteredFiles = useMemo(() => {
+    if (kindFilter.size === 0) return files;
+    return files.filter((f) => kindFilter.has(f.kind));
+  }, [files, kindFilter]);
 
   const sortedFiles = useMemo(() => {
-    return [...files].sort((a, b) => {
+    return [...filteredFiles].sort((a, b) => {
       let cmp: number;
       if (sortKey === 'name') cmp = a.name.localeCompare(b.name);
       else if (sortKey === 'kind') cmp = kindSortPriority(a.kind) - kindSortPriority(b.kind);
       else cmp = a.mtime - b.mtime;
       return sortDir === 'asc' ? cmp : -cmp;
     });
-  }, [files, sortKey, sortDir]);
+  }, [filteredFiles, sortKey, sortDir]);
 
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState<number | 'all'>(30);
@@ -141,6 +190,63 @@ export function DesignFilesPanel({
     setPage(0);
   }, [pageSize]);
 
+  // Reset to the first page when the filter changes — the previous page
+  // index may no longer exist (or may now sit past the new totalPages).
+  useEffect(() => {
+    setPage(0);
+  }, [kindFilter]);
+
+  // Drop any selected files that fall outside the active filter. Without
+  // this, bulk delete / download would silently operate on rows the user
+  // can no longer see — particularly dangerous for destructive deletes.
+  // We keep the empty-filter branch a no-op so clearing the filter
+  // doesn't disturb existing selections.
+  useEffect(() => {
+    if (kindFilter.size === 0) return;
+    setSelected((prev) => {
+      if (prev.size === 0) return prev;
+      const visible = new Set(filteredFiles.map((f) => f.name));
+      const next = new Set<string>();
+      let changed = false;
+      for (const name of prev) {
+        if (visible.has(name)) next.add(name);
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [filteredFiles, kindFilter]);
+
+  // Outside-click + escape to close the filter popover. Stops short of a
+  // full focus trap because the popover hosts only checkboxes plus a
+  // small clear button; the existing tab order through them is fine.
+  useEffect(() => {
+    if (!filterMenuOpen) return;
+    const onMouseDown = (event: MouseEvent) => {
+      const root = filterMenuRef.current;
+      if (root && event.target instanceof Node && !root.contains(event.target)) {
+        setFilterMenuOpen(false);
+      }
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFilterMenuOpen(false);
+    };
+    window.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [filterMenuOpen]);
+
+  function toggleKindFilter(kind: ProjectFileKind): void {
+    setKindFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(kind)) next.delete(kind);
+      else next.add(kind);
+      return next;
+    });
+  }
+
   useEffect(() => {
     if (Number.isFinite(totalPages)) setPage((p) => Math.min(p, totalPages - 1));
   }, [totalPages]);
@@ -155,6 +261,8 @@ export function DesignFilesPanel({
     );
     return () => window.clearTimeout(timer);
   }, [dayBoundary]);
+
+  const pluginFolders = useMemo(() => getPluginFolderCandidates(files), [files]);
 
   // Prune selections that no longer exist in the current file list
   // (e.g. after a refresh or delete within the same project).
@@ -501,6 +609,29 @@ export function DesignFilesPanel({
     });
   }
 
+  function renderKindSections() {
+    const grouped = new Map<ProjectFileKind, ProjectFile[]>();
+    for (const file of pageFiles) {
+      const next = grouped.get(file.kind) ?? [];
+      next.push(file);
+      grouped.set(file.kind, next);
+    }
+
+    return [...grouped.entries()]
+      .sort(([a], [b]) => kindSortPriority(a) - kindSortPriority(b))
+      .flatMap(([kind, kindFiles]) => [
+        <tr className="df-section-row" key={`${kind}-label`}>
+          <td colSpan={6}>
+            <div className="df-section-label">
+              <span>{kindLabel(kind, t)}</span>
+              <span className="df-section-count">{kindFiles.length}</span>
+            </div>
+          </td>
+        </tr>,
+        ...kindFiles.map(renderFileRow),
+      ]);
+  }
+
   async function handleBatchDownload() {
     const fileList = [...selected];
     if (fileList.length === 0) return;
@@ -544,6 +675,26 @@ export function DesignFilesPanel({
     setDraggingFiles(false);
     const dropped = Array.from(ev.dataTransfer.files ?? []);
     if (dropped.length > 0) onUploadFiles(dropped);
+  }
+
+  async function handlePluginFolderAgentAction(
+    relativePath: string,
+    action: PluginFolderAgentAction,
+  ) {
+    if (!onPluginFolderAgentAction || installingFolder || sharingFolder) return;
+    setInstallNotice(null);
+    if (action === 'install') {
+      setInstallingFolder(relativePath);
+    } else {
+      setSharingFolder(`${action}:${relativePath}`);
+    }
+    try {
+      await onPluginFolderAgentAction(relativePath, action);
+      setInstallNotice('Sent to the agent. The CLI run will continue in chat.');
+    } finally {
+      setInstallingFolder(null);
+      setSharingFolder(null);
+    }
   }
 
   return (
@@ -640,28 +791,105 @@ export function DesignFilesPanel({
           ) : (
             <>
               {files.length > 0 ? (
-                <div
-                  className="df-group-toggle"
-                  role="group"
-                  aria-label={t('designFiles.groupBy')}
-                >
-                  <span>{t('designFiles.groupBy')}</span>
-                  <button
-                    type="button"
-                    className={groupMode === 'kind' ? 'active' : ''}
-                    aria-pressed={groupMode === 'kind'}
-                    onClick={() => setGroupMode('kind')}
+                <div className="df-toolbar-row">
+                  <div
+                    className="df-group-toggle"
+                    role="group"
+                    aria-label={t('designFiles.groupBy')}
                   >
-                    {t('designFiles.groupByKind')}
-                  </button>
-                  <button
-                    type="button"
-                    className={groupMode === 'modified' ? 'active' : ''}
-                    aria-pressed={groupMode === 'modified'}
-                    onClick={() => setGroupMode('modified')}
-                  >
-                    {t('designFiles.groupByModified')}
-                  </button>
+                    <span>{t('designFiles.groupBy')}</span>
+                    <button
+                      type="button"
+                      className={groupMode === 'kind' ? 'active' : ''}
+                      aria-pressed={groupMode === 'kind'}
+                      onClick={() => setGroupMode('kind')}
+                    >
+                      {t('designFiles.groupByKind')}
+                    </button>
+                    <button
+                      type="button"
+                      className={groupMode === 'modified' ? 'active' : ''}
+                      aria-pressed={groupMode === 'modified'}
+                      onClick={() => setGroupMode('modified')}
+                    >
+                      {t('designFiles.groupByModified')}
+                    </button>
+                  </div>
+                  {availableKinds.length > 1 ? (
+                    <div className="df-kind-filter" ref={filterMenuRef}>
+                      <button
+                        type="button"
+                        className={`df-kind-filter-trigger${kindFilter.size > 0 ? ' active' : ''}`}
+                        aria-haspopup="dialog"
+                        aria-expanded={filterMenuOpen}
+                        aria-label={t('designFiles.filterBy')}
+                        onClick={() => setFilterMenuOpen((open) => !open)}
+                      >
+                        <Icon name="sliders" size={13} />
+                        <span className="df-kind-filter-trigger-label">
+                          {kindFilter.size === 0
+                            ? t('designFiles.filterBy')
+                            : kindFilter.size === 1
+                              ? kindLabel(Array.from(kindFilter)[0]!, t)
+                              : t('designFiles.filterCount', { n: kindFilter.size })}
+                        </span>
+                        {kindFilter.size > 0 ? (
+                          <span
+                            className="df-kind-filter-count"
+                            aria-hidden
+                          >
+                            {kindFilter.size}
+                          </span>
+                        ) : null}
+                      </button>
+                      {filterMenuOpen ? (
+                        <div
+                          className="df-kind-filter-popover"
+                          role="dialog"
+                          aria-label={t('designFiles.filterBy')}
+                        >
+                          <div className="df-kind-filter-header">
+                            <span>{t('designFiles.filterBy')}</span>
+                            {kindFilter.size > 0 ? (
+                              <button
+                                type="button"
+                                className="df-kind-filter-clear"
+                                onClick={() => setKindFilter(new Set())}
+                              >
+                                {t('designFiles.filterClear')}
+                              </button>
+                            ) : null}
+                          </div>
+                          <ul className="df-kind-filter-list">
+                            {availableKinds.map((kind) => {
+                              const checked = kindFilter.has(kind);
+                              const count = kindCounts.get(kind) ?? 0;
+                              return (
+                                <li key={kind}>
+                                  <label className="df-kind-filter-item">
+                                    <input
+                                      type="checkbox"
+                                      checked={checked}
+                                      onChange={() => toggleKindFilter(kind)}
+                                    />
+                                    <span className="df-kind-filter-glyph" aria-hidden>
+                                      {kindGlyph(kind)}
+                                    </span>
+                                    <span className="df-kind-filter-label">
+                                      {kindLabel(kind, t)}
+                                    </span>
+                                    <span className="df-kind-filter-itemcount">
+                                      {count}
+                                    </span>
+                                  </label>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
               {liveArtifacts.length > 0 ? (
@@ -694,6 +922,78 @@ export function DesignFilesPanel({
                         {relativeTime(Date.parse(artifact.updatedAt) || Date.now(), t)}
                       </span>
                     </button>
+                  ))}
+                </div>
+              ) : null}
+              {pluginFolders.length > 0 ? (
+                <div className="df-section" key="plugin-folders">
+                  <div className="df-section-label">
+                    Plugin folders
+                    <span className="df-section-count">{pluginFolders.length}</span>
+                  </div>
+                  {installNotice ? (
+                    <div className="df-inline-notice" role="status">{installNotice}</div>
+                  ) : null}
+                  {pluginFolders.map((folder) => (
+                    <div
+                      key={folder.path}
+                      className="df-row df-row-plugin-folder"
+                      data-testid={`design-plugin-folder-${folder.path}`}
+                    >
+                      <button
+                        type="button"
+                        className="df-row-folder-main"
+                        onClick={() => setPreview(folder.manifestPath)}
+                      >
+                        <span className="df-row-icon" data-kind="folder" aria-hidden>
+                          DIR
+                        </span>
+                        <span className="df-row-name-wrap">
+                          <span className="df-row-name">{folder.path}</span>
+                          <span className="df-row-sub">
+                            {folder.fileCount} files · ready to add to My plugins
+                          </span>
+                        </span>
+                      </button>
+                      <span className="df-row-time">{relativeTime(folder.updatedAt, t)}</span>
+                      {onPluginFolderAgentAction ? (
+                        <div className="df-plugin-actions">
+                          <button
+                            type="button"
+                            className="df-plugin-install"
+                            data-testid={`design-plugin-folder-install-${folder.path}`}
+                            disabled={installingFolder !== null || sharingFolder !== null}
+                            onClick={() =>
+                              void handlePluginFolderAgentAction(folder.path, 'install')
+                            }
+                          >
+                            {installingFolder === folder.path ? 'Sending…' : 'Add to My plugins'}
+                          </button>
+                          <button
+                            type="button"
+                            className="df-plugin-install"
+                            data-testid={`design-plugin-folder-publish-${folder.path}`}
+                            disabled={installingFolder !== null || sharingFolder !== null}
+                            onClick={() =>
+                              void handlePluginFolderAgentAction(folder.path, 'publish')
+                            }
+                          >
+                            {sharingFolder === `publish:${folder.path}` ? 'Sending…' : 'Publish repo'}
+                          </button>
+                          <button
+                            type="button"
+                            className="df-plugin-install"
+                            data-testid={`design-plugin-folder-contribute-${folder.path}`}
+                            disabled={installingFolder !== null || sharingFolder !== null}
+                            onClick={() =>
+                              void handlePluginFolderAgentAction(folder.path, 'contribute')
+                            }
+                          >
+                            {sharingFolder === `contribute:${folder.path}` ? 'Sending…' : 'Open Design PR'}
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
                   ))}
                 </div>
               ) : null}
@@ -807,7 +1107,9 @@ export function DesignFilesPanel({
                     <tbody>
                       {groupMode === 'modified'
                         ? renderModifiedSections()
-                        : pageFiles.map(renderFileRow)}
+                        : groupMode === 'kind'
+                          ? renderKindSections()
+                          : pageFiles.map(renderFileRow)}
                     </tbody>
                   </table>
                   <div className="df-pagination df-pagination-center">
