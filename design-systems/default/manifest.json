@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "od-design-system-project/v1",
+  "id": "default",
+  "name": "Neutral Modern",
+  "category": "Starter",
+  "description": "A clean, product-oriented default for B2B tools, dashboards, and utility pages.",
+  "source": {
+    "type": "bundled",
+    "origin": "hand-authored"
+  },
+  "files": {
+    "design": "DESIGN.md",
+    "tokens": "tokens.css",
+    "components": "components.html"
+  }
+}

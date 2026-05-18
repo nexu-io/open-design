@@ -4,6 +4,33 @@ import { describe, expect, it, vi } from 'vitest';
 import { createChatRunService } from '../src/runs.js';
 
 describe('chat run service shutdown', () => {
+  it('retains structured error details on failed run status bodies', async () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'project-1', conversationId: 'conv-1' });
+
+    const wait = runs.wait(run);
+    runs.emit(run, 'error', {
+      message: 'Agent stalled without emitting any new output for 1s.',
+      error: {
+        code: 'AGENT_EXECUTION_FAILED',
+        message: 'Agent stalled without emitting any new output for 1s.',
+        retryable: true,
+      },
+    });
+    runs.finish(run, 'failed', 1, null);
+
+    expect(runs.statusBody(run)).toMatchObject({
+      status: 'failed',
+      errorCode: 'AGENT_EXECUTION_FAILED',
+      error: 'Agent stalled without emitting any new output for 1s.',
+    });
+    await expect(wait).resolves.toMatchObject({
+      status: 'failed',
+      errorCode: 'AGENT_EXECUTION_FAILED',
+      error: 'Agent stalled without emitting any new output for 1s.',
+    });
+  });
+
   it('filters active runs by conversation within the same project', () => {
     const runs = createRuns();
     const runA = runs.create({ projectId: 'project-1', conversationId: 'conv-a' });

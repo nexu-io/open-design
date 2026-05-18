@@ -108,4 +108,51 @@ describe('SkillsSection', () => {
       });
     });
   });
+
+  it('warns before editing a built-in skill creates a user override', async () => {
+    const { fetchMock } = renderSkillsSection([
+      makeSkill({
+        id: 'builtin-skill',
+        name: 'Built-in skill',
+        source: 'built-in',
+      }),
+    ]);
+
+    const row = await screen.findByTestId('skill-row-builtin-skill');
+    fireEvent.click(within(row).getByTestId('skills-edit'));
+
+    const warning = await within(row).findByTestId('skills-edit-builtin-warning');
+    expect(warning.textContent).toMatch(/override/i);
+    expect(within(row).queryByTestId('skills-edit-form')).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      '/api/skills/builtin-skill',
+      expect.objectContaining({ method: 'PUT' }),
+    );
+
+    fireEvent.click(within(row).getByTestId('skills-edit-builtin-cancel'));
+    expect(within(row).queryByTestId('skills-edit-builtin-warning')).toBeNull();
+    expect(within(row).queryByTestId('skills-edit-form')).toBeNull();
+
+    fireEvent.click(within(row).getByTestId('skills-edit'));
+    fireEvent.click(
+      await within(row).findByTestId('skills-edit-builtin-confirm'),
+    );
+    expect(await within(row).findByTestId('skills-edit-form')).toBeTruthy();
+  });
+
+  it('skips the override warning when editing a user skill', async () => {
+    renderSkillsSection([
+      makeSkill({
+        id: 'user-skill',
+        name: 'User skill',
+        source: 'user',
+      }),
+    ]);
+
+    const row = await screen.findByTestId('skill-row-user-skill');
+    fireEvent.click(within(row).getByTestId('skills-edit'));
+
+    expect(within(row).queryByTestId('skills-edit-builtin-warning')).toBeNull();
+    expect(await within(row).findByTestId('skills-edit-form')).toBeTruthy();
+  });
 });

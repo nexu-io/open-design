@@ -10,6 +10,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { useState } from 'react';
 import { PluginInputsForm } from '../../src/components/PluginInputsForm';
 
 let onChange: ReturnType<typeof vi.fn>;
@@ -46,6 +47,23 @@ describe('PluginInputsForm', () => {
     expect(onValidityChange).toHaveBeenLastCalledWith(true);
   });
 
+  it('does not loop when validity updates parent state during render cycles', () => {
+    function ValidityMirror() {
+      const [, setValidityEmits] = useState(0);
+      return (
+        <PluginInputsForm
+          fields={[{ name: 'topic', label: 'Topic', type: 'string', required: true }]}
+          values={{ topic: 'design tools' }}
+          onChange={onChange}
+          onValidityChange={() => setValidityEmits((count) => count + 1)}
+        />
+      );
+    }
+
+    expect(() => render(<ValidityMirror />)).not.toThrow();
+    expect(screen.getByLabelText(/Topic/)).toBeTruthy();
+  });
+
   it('hydrates default values on mount', () => {
     render(
       <PluginInputsForm
@@ -73,6 +91,32 @@ describe('PluginInputsForm', () => {
     );
     expect(screen.getByText('VC')).toBeTruthy();
     expect(screen.getByText('Customer')).toBeTruthy();
+  });
+
+  it('renders select option labels while preserving submitted values', () => {
+    render(
+      <PluginInputsForm
+        fields={[
+          {
+            name: 'audioType',
+            label: 'Audio type',
+            type: 'select',
+            options: ['speech', 'music'],
+            optionLabels: { speech: 'Speech', music: 'Music' },
+          },
+        ]}
+        values={{ audioType: 'speech' }}
+        onChange={onChange}
+        onValidityChange={onValidityChange}
+      />,
+    );
+    const select = screen.getByLabelText(/Audio type/) as HTMLSelectElement;
+    expect(select.value).toBe('speech');
+    expect(screen.getByText('Speech')).toBeTruthy();
+
+    fireEvent.change(select, { target: { value: 'music' } });
+
+    expect(onChange).toHaveBeenCalledWith({ audioType: 'music' });
   });
 
   it('renders file inputs as upload slots with serializable metadata', () => {

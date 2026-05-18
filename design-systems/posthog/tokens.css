@@ -1,0 +1,272 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/posthog/tokens.css
+ *
+ * Structured token bindings for the PostHog design system — the
+ * open-source product analytics brand whose marketing surface reads
+ * like a startup's internal wiki that escaped into the wild. Warm
+ * sage-cream surfaces, olive-tinted text, IBM Plex Sans at bold
+ * weights for headings, and a single PostHog Orange (#F54E00) that
+ * lives almost entirely on hover — a hidden brand signature that
+ * surprises on interaction rather than shouting at rest.
+ *
+ * This file pre-compiles the values described in `DESIGN.md` into the
+ * shared schema. Agents should paste the `:root { … }` block verbatim
+ * into the first `<style>` of any artifact, then resolve every value
+ * via `var(--*)` from that point on.
+ *
+ * Schema notes (brand-specific bindings worth flagging — section
+ * references point into `DESIGN.md`):
+ *
+ *   #Bind 1  — --bg is Warm Parchment (#fdfdf8), never pure white.
+ *              DESIGN.md §7 forbids #ffffff outright; the warm
+ *              yellow-green undertone is foundational and the
+ *              "don't use pure white" rule is in the Don'ts list.
+ *              --surface steps once to Sage Cream (#eeefe9) for
+ *              input fields and secondary containers, then
+ *              --surface-warm steps once more to Light Sage
+ *              (#e5e7e0) for button surfaces and tertiary tiers
+ *              (§2 Surface & Background).
+ *
+ *   #Bind 2  — --fg ramp is olive, not neutral gray. Olive Ink
+ *              (#4d4f46) carries body text; Deep Olive (#23251d)
+ *              steps darker for headings and high-emphasis links;
+ *              Muted Olive (#65675e) is the standard subtext tier;
+ *              Sage Placeholder (#9ea096) is the disabled / meta
+ *              tier. DESIGN.md §7 mandates the olive family — pure
+ *              black or neutral gray reads as the wrong brand.
+ *
+ *   #Bind 3  — --accent is PostHog Orange (#F54E00) — a hidden
+ *              signature. DESIGN.md §1 describes it as "a vibrant
+ *              orange that surprises on hover" — the marketing
+ *              surface uses it almost exclusively as TEXT color on
+ *              hover, not as a CTA fill. The token still binds the
+ *              brand color so components can opt into orange fills
+ *              when truly appropriate; primary CTAs render dark
+ *              (--fg-2) per §4 Buttons. Accent-on/hover/active use
+ *              the schema's color-mix defaults — DESIGN.md does not
+ *              publish orange pressed-state hex values.
+ *
+ *   #Bind 4  — --warn binds to Amber Gold (#F7A501) — DESIGN.md §2
+ *              names this as the dark-button hover accent and the
+ *              warmth-signal sibling to PostHog Orange. Mapping it
+ *              to the warn slot keeps the gold reachable to
+ *              components without inventing a brand-specific token.
+ *              --success and --danger stay on schema defaults since
+ *              DESIGN.md publishes no greens or reds.
+ *
+ *   #Bind 5  — Radius scale stays deliberately tight per DESIGN.md
+ *              §5 / §7 — 4px is the workhorse for buttons and
+ *              inputs, 6px for cards (DESIGN.md §4 Cards), 8px
+ *              caps the lg tier. The Don'ts list explicitly
+ *              forbids 12px+ on cards; the system reads as
+ *              functional-scrappy, never plush. Pill stays 9999px
+ *              for badges and status dots.
+ *
+ *   #Bind 6  — --elev-raised is THE single sanctioned shadow per
+ *              DESIGN.md §6 ("only one shadow definition exists in
+ *              the entire system"). Reserved for floating elements
+ *              — modals, dropdowns, mega-menus. Every other depth
+ *              cue comes from sage borders and surface-color
+ *              shifts. Cards must not reach for this shadow.
+ *
+ *   #Bind 7  — --focus-ring is Focus Blue (#3b82f6) at 50% opacity,
+ *              the one cool color in the system. DESIGN.md §2 and
+ *              §4 mandate this Tailwind-derived ring as an
+ *              accessibility-only color; reserving it to focus
+ *              keeps the warm sage/olive identity uncompromised
+ *              while still passing keyboard-navigation contrast.
+ *
+ *   #Bind 8  — Type scale tops out modestly. DESIGN.md §3 publishes
+ *              30px as the display hero ceiling (--text-2xl) and
+ *              36px as the section heading (--text-3xl); --text-4xl
+ *              extrapolates to 44px for fixture-scale hero copy.
+ *              Tracking compresses on display sizes (-0.025em
+ *              normalizes -0.75px at 30px) and relaxes to 0 on
+ *              body. Leading is generous everywhere — 1.50 body,
+ *              1.20 tight — because the marketing surface is
+ *              content-heavy and optimized for long reading
+ *              sessions (§3 Principles).
+ *
+ *   #Bind 9  — --container-max is 1280px per DESIGN.md §5 ("content
+ *              containers likely 1200px–1280px"). Gutters tighten
+ *              progressively: 24/16/12 desktop/tablet/phone — tight
+ *              but not cramped, matching PostHog's content-dense
+ *              editorial pacing.
+ *
+ * Brand-specific extensions: none in this revision. The Warm Tan
+ * (#d4c9b8) featured-button background and Hover White (#f4f4f4)
+ * universal hover state stay inline at the components that need
+ * them; neither earns a shared slot.
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface (3 levels) ────────────────────────────────────────
+   * Warm Parchment is the page; Sage Cream is the secondary
+   * container (input backgrounds, hover/feature sections); Light
+   * Sage is the tertiary tier for button surfaces and quiet card
+   * fills. Three steps create depth WITHOUT shadows — DESIGN.md §6
+   * notes that "moving from #fdfdf8 to #eeefe9 to #e5e7e0 creates
+   * layered depth without shadows", and the whole brand depends on
+   * that surface-color rhythm rather than blur. */
+  --bg: #fdfdf8;
+  --surface: #eeefe9;
+  --surface-warm: #e5e7e0;
+
+  /* ─── Foreground ramp (4 levels) ────────────────────────────────
+   * Olive Ink anchors roughly every body paragraph, every nav
+   * label, every button text token on light surfaces. Deep Olive
+   * steps darker for headings and high-emphasis links — the
+   * near-black with green undertone that signals "click me". Muted
+   * Olive is the secondary subtext tier. Sage Placeholder is the
+   * disabled / meta tier and pulls double duty as input
+   * placeholder color. */
+  --fg: #4d4f46;
+  --fg-2: #23251d;
+  --muted: #65675e;
+  --meta: #9ea096;
+
+  /* ─── Border (2 levels) ─────────────────────────────────────────
+   * Sage Border (#bfc1b7) is the workhorse — every card edge,
+   * every input outline, every divider rule. The soft tier is a
+   * lighter sage tint used for inner row separators that should
+   * not visually compete with the primary card edge; derived as a
+   * 50% mix back toward --bg so it stays in the same warm-green
+   * family without inventing a new hex. */
+  --border: #bfc1b7;
+  --border-soft: color-mix(in oklab, var(--border), var(--bg) 50%);
+
+  /* ─── Accent ────────────────────────────────────────────────────
+   * PostHog Orange — the single signature color. Per DESIGN.md §1
+   * it lives almost exclusively on hover as text color, not as a
+   * CTA fill, but the token still binds the brand color so any
+   * component opting into orange surfaces can do so consistently.
+   * Primary CTAs render dark (#1e1f23 ≈ --fg-2 territory) with
+   * opacity-based hover states; that treatment lives inline at
+   * the button component, not as a shared accent. */
+  --accent: #F54E00;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+  /* ─── Semantic ──────────────────────────────────────────────────
+   * --warn binds to Amber Gold (DESIGN.md §2's "warmth signal")
+   * because the brand publishes that exact value as the secondary
+   * hover accent. --success and --danger stay on schema defaults
+   * — DESIGN.md does not specify brand greens or reds and the
+   * marketing surface almost never renders status. Keep semantic
+   * pixels well under 5% of any page. */
+  --success: #16a34a;
+  --warn: #F7A501;
+  --danger: #dc2626;
+
+  /* ─── Typography — fonts ────────────────────────────────────────
+   * IBM Plex Sans Variable is the single voice — display and body
+   * share the family (DESIGN.md §3). The fallback chain matches
+   * the brand's documented order: IBM Plex Sans static, then the
+   * platform fallbacks, then the broad sans-serif catch-all. Mono
+   * is Source Code Pro with the standard system fallbacks per
+   * DESIGN.md §3 Font Family. */
+  --font-display: "IBM Plex Sans Variable", "IBM Plex Sans", -apple-system, system-ui, "Avenir Next", Avenir, "Segoe UI", "Helvetica Neue", Helvetica, Ubuntu, Roboto, Noto, Arial, sans-serif;
+  --font-body: "IBM Plex Sans Variable", "IBM Plex Sans", -apple-system, system-ui, "Avenir Next", Avenir, "Segoe UI", "Helvetica Neue", Helvetica, Ubuntu, Roboto, Noto, Arial, sans-serif;
+  --font-mono: "Source Code Pro", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  /* ─── Typography — type scale (px) ──────────────────────────────
+   * Derived from DESIGN.md §3 Hierarchy table. The scale tops out
+   * modestly — 30px for the display hero, 36px for section
+   * headings — because PostHog's editorial pacing favors confident
+   * mid-weight headings over giant ones. --text-4xl extrapolates
+   * to 44px for fixture-scale hero copy; the production site
+   * rarely goes that big. */
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 20px;
+  --text-xl: 24px;
+  --text-2xl: 30px;
+  --text-3xl: 36px;
+  --text-4xl: 44px;
+
+  /* ─── Typography — leading & tracking ───────────────────────────
+   * Body leads 1.50 (DESIGN.md §3 — body sizes 1.50–1.71 for the
+   * content-heavy editorial layout); display compresses to 1.20
+   * for the 30px hero per the same table. Tracking compresses
+   * negatively on display sizes (-0.025em normalizes the brand's
+   * -0.75px at 30px) and relaxes to 0 on body. */
+  --leading-body: 1.5;
+  --leading-tight: 1.2;
+  --tracking-display: -0.025em;
+
+  /* ─── Spacing — base scale ──────────────────────────────────────
+   * 8px base unit per DESIGN.md §5. PostHog's published scale
+   * includes off-grid values (2, 6, 10, 18, 34) for fine-grained
+   * icon and padding adjustments; the shared scale stays on the
+   * standard 4px grid — off-grid spacing belongs inline at the
+   * component level, not in shared tokens. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* ─── Section rhythm ────────────────────────────────────────────
+   * Section padding 32–48px desktop per DESIGN.md §5 ("compact for
+   * a content-heavy site"). We bind the upper bound on desktop so
+   * the rhythm reads as deliberate spacing rather than crowding;
+   * tablet and phone step down to keep small screens tight. */
+  --section-y-desktop: 48px;
+  --section-y-tablet: 32px;
+  --section-y-phone: 24px;
+
+  /* ─── Radius ────────────────────────────────────────────────────
+   * Deliberately tight — DESIGN.md §7's Don'ts forbid 12px+ on
+   * cards. 4px is the workhorse (buttons, inputs, dropdowns,
+   * menus); 6px is the card tier (§4 Cards "4px–6px radius");
+   * 8px caps the lg tier for slightly larger containers; pill
+   * stays 9999px for badges and status dots. */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-pill: 9999px;
+
+  /* ─── Elevation ─────────────────────────────────────────────────
+   * THE single sanctioned shadow per DESIGN.md §6 — "only one
+   * shadow definition exists in the entire system". Reserved for
+   * floating elements (modals, dropdowns, mega-menus, popovers).
+   * Every other depth cue comes from sage borders and surface
+   * color shifts. Cards must NOT reach for this shadow — DESIGN.md
+   * §7 specifically forbids adding heavy shadows beyond this one. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0px 25px 50px -12px rgba(0, 0, 0, 0.25);
+
+  /* ─── Focus ring ────────────────────────────────────────────────
+   * Focus Blue (#3b82f6) at 50% opacity — the lone cool color in
+   * the system, reserved for accessibility per DESIGN.md §2 / §4.
+   * Implementing as a 3px box-shadow keeps focus indication
+   * outside the layout box; the warm sage/olive identity stays
+   * uncompromised at rest. */
+  --focus-ring: 0 0 0 3px rgba(59, 130, 246, 0.5);
+
+  /* ─── Motion ────────────────────────────────────────────────────
+   * Default schema timings. DESIGN.md does not publish transition
+   * specs (static extraction scope); we bind defaults consistent
+   * with the brand's tactile feel — 150ms for micro-states (the
+   * famous opacity flash on dark buttons) and 200ms for general
+   * state changes. Standard easing curve, no overshoot. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ────────────────────────────────────────────────────
+   * Container caps at 1280px per DESIGN.md §5 ("content containers
+   * likely 1200px–1280px"). Gutters tighten progressively: 24px
+   * desktop, 16px tablet, 12px phone — tight but not cramped,
+   * matching PostHog's content-dense editorial pacing. */
+  --container-max: 1280px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 16px;
+  --container-gutter-phone: 12px;
+}

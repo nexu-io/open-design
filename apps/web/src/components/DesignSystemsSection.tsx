@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { Dispatch, SetStateAction } from 'react';
+import type { Dispatch, FormEvent, SetStateAction } from 'react';
 import { useT } from '../i18n';
 import type { AppConfig } from '../types';
 import type { DesignSystemSummary } from '@open-design/contracts';
 import {
   fetchDesignSystem,
   fetchDesignSystems,
+  importGitHubDesignSystem,
+  importLocalDesignSystem,
 } from '../providers/registry';
 
 // Sibling Settings section that hosts the design-systems registry.
@@ -26,6 +28,11 @@ export function DesignSystemsSection({ cfg, setCfg }: Props) {
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [previewBody, setPreviewBody] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [importPath, setImportPath] = useState('');
+  const [importMode, setImportMode] = useState<'local' | 'github'>('local');
+  const [importing, setImporting] = useState(false);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchDesignSystems().then(setDesignSystems);
@@ -105,8 +112,72 @@ export function DesignSystemsSection({ cfg, setCfg }: Props) {
     });
   }
 
+  async function handleLocalImport(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const importTarget = importPath.trim();
+    if (!importTarget || importing) return;
+    setImporting(true);
+    setImportError(null);
+    setImportMessage(null);
+    const result =
+      importMode === 'github'
+        ? await importGitHubDesignSystem({ githubUrl: importTarget })
+        : await importLocalDesignSystem({ baseDir: importTarget });
+    setImporting(false);
+    if ('error' in result) {
+      setImportError(result.error.message);
+      return;
+    }
+    setDesignSystems((current) => {
+      const withoutDuplicate = current.filter((system) => system.id !== result.designSystem.id);
+      return [...withoutDuplicate, result.designSystem].sort((a, b) => a.title.localeCompare(b.title));
+    });
+    setCategoryFilter(result.designSystem.category);
+    setPreviewId(null);
+    setPreviewBody(null);
+    setImportPath('');
+    setImportMessage(`Imported ${result.designSystem.title}`);
+  }
+
   return (
     <section className="settings-section settings-design-systems">
+      <form className="library-install-form" onSubmit={handleLocalImport}>
+        <div className="seg-control">
+          <button
+            type="button"
+            className={importMode === 'local' ? 'active' : ''}
+            onClick={() => setImportMode('local')}
+          >
+            Local
+          </button>
+          <button
+            type="button"
+            className={importMode === 'github' ? 'active' : ''}
+            onClick={() => setImportMode('github')}
+          >
+            GitHub
+          </button>
+        </div>
+        <div className="library-install-row">
+          <input
+            type="text"
+            className="library-search"
+            placeholder={importMode === 'github' ? 'https://github.com/owner/repo' : '/path/to/project'}
+            value={importPath}
+            onChange={(e) => setImportPath(e.target.value)}
+          />
+          <button
+            type="submit"
+            className="library-install-submit"
+            disabled={importing || importPath.trim().length === 0}
+          >
+            {importing ? t('settings.libraryLoading') : 'Import from project'}
+          </button>
+        </div>
+        {importError ? <p className="library-install-error">{importError}</p> : null}
+        {importMessage ? <p className="library-install-status">{importMessage}</p> : null}
+      </form>
+
       <div className="library-toolbar">
         <input
           type="search"

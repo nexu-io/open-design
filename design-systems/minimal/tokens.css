@@ -1,0 +1,63 @@
+/* design-systems/minimal/tokens.css
+ * Structured token bindings for Minimal.
+ * minimal product language with white space, black text, hairline borders, and quiet interaction.
+ */
+
+:root {
+  --bg: #ffffff;
+  --surface: #fafafa;
+  --surface-warm: #f5f5f5;
+  --fg: #111111;
+  --fg-2: #3a3a3a;
+  --muted: #777777;
+  --meta: #111111;
+  --border: #e2e2e2;
+  --border-soft: #eeeeee;
+  --accent: #111111;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #168a46;
+  --warn: #b7791f;
+  --danger: #c53030;
+  --font-display: Inter, system-ui, sans-serif;
+  --font-body: Inter, system-ui, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 22px;
+  --text-2xl: 32px;
+  --text-3xl: 48px;
+  --text-4xl: 64px;
+  --leading-body: 1.55;
+  --leading-tight: 1.08;
+  --tracking-display: -0.02em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 112px;
+  --section-y-tablet: 80px;
+  --section-y-phone: 56px;
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 8px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 12px 30px rgba(0, 0, 0, 0.08);
+  --focus-ring: 0 0 0 3px rgba(17, 17, 17, 0.18);
+  --motion-fast: 140ms;
+  --motion-base: 220ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --container-max: 1120px;
+  --container-gutter-desktop: 36px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

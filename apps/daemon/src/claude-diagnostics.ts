@@ -62,6 +62,19 @@ export function diagnoseClaudeCliFailure(
   const hasCustomBaseUrl = envValue(input.env, 'ANTHROPIC_BASE_URL') !== null;
   const hasConfigDir = envValue(input.env, 'CLAUDE_CONFIG_DIR') !== null;
 
+  const customEndpointConnectionFailure =
+    hasCustomBaseUrl &&
+    (/connectionrefused/i.test(text) ||
+      /connection refused/i.test(text) ||
+      /econnrefused/i.test(text));
+  if (customEndpointConnectionFailure) {
+    return withContext(
+      'Claude Code could not reach the configured custom Anthropic endpoint.',
+      'ANTHROPIC_BASE_URL appears to point at a local or proxy endpoint that refused the connection. Start or fix that proxy, clear the stale endpoint, or remove the custom endpoint to retry with standard Claude Code auth.',
+      input,
+    );
+  }
+
   const authFailure =
     /\b401\b/.test(text) ||
     /apikeysource["'\s:]+none/i.test(text) ||

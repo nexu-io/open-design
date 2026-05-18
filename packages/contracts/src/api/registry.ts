@@ -13,6 +13,8 @@ export interface AgentInfo {
   path?: string;
   version?: string | null;
   models?: AgentModelOption[];
+  /** Whether models came from the installed CLI or Open Design's static fallback. */
+  modelsSource?: 'live' | 'fallback';
   reasoningOptions?: AgentModelOption[];
   /** HTTPS URL to install or download the CLI (vendor docs, GitHub README, npm). */
   installUrl?: string;
@@ -162,6 +164,30 @@ export interface DesignSystemsResponse {
 
 export interface DesignSystemResponse {
   designSystem: DesignSystemDetail;
+}
+
+export interface ImportLocalDesignSystemRequest {
+  /** Absolute local project directory selected by the user. */
+  baseDir: string;
+  /** Optional display name override for the generated design-system project. */
+  name?: string;
+}
+
+export interface ImportLocalDesignSystemResponse {
+  designSystem: DesignSystemSummary;
+}
+
+export interface ImportGitHubDesignSystemRequest {
+  /** Public GitHub repository URL, e.g. https://github.com/owner/repo. */
+  githubUrl: string;
+  /** Optional branch to clone. Defaults to the repository default branch. */
+  branch?: string;
+  /** Optional display name override for the generated design-system project. */
+  name?: string;
+}
+
+export interface ImportGitHubDesignSystemResponse {
+  designSystem: DesignSystemSummary;
 }
 
 export interface HealthResponse {

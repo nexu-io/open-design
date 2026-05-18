@@ -426,6 +426,85 @@ describe('RoutinesSection', () => {
     );
   });
 
+  it('shows persisted failure reasons in the last-run summary and history', async () => {
+    const failure = 'Agent stalled without emitting any new output for 1s.';
+    const routines: Routine[] = [{
+      id: 'routine-1',
+      name: 'Morning briefing',
+      prompt: 'Morning summary',
+      schedule: { kind: 'daily', time: '09:00', timezone: 'UTC' },
+      target: { mode: 'create_each_run' },
+      skillId: null,
+      agentId: null,
+      enabled: true,
+      nextRunAt: Date.now() + 3600_000,
+      lastRun: {
+        runId: 'run-failed-1',
+        status: 'failed',
+        trigger: 'scheduled',
+        startedAt: Date.now() - 1000,
+        completedAt: Date.now(),
+        projectId: 'proj-run',
+        conversationId: 'conv-run',
+        agentRunId: 'agent-run-1',
+        error: failure,
+        errorCode: 'AGENT_EXECUTION_FAILED',
+      },
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    }];
+
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/routines' && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ routines }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/projects' && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ projects: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/routines/routine-1/runs?limit=10') {
+        return new Response(JSON.stringify({
+          runs: [
+            {
+              id: 'run-failed-1',
+              routineId: 'routine-1',
+              trigger: 'scheduled',
+              status: 'failed',
+              projectId: 'proj-run',
+              conversationId: 'conv-run',
+              agentRunId: 'agent-run-1',
+              startedAt: Date.now() - 1000,
+              completedAt: Date.now(),
+              summary: null,
+              error: failure,
+              errorCode: 'AGENT_EXECUTION_FAILED',
+            },
+          ],
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    }) as typeof fetch;
+
+    render(<RoutinesSection />);
+
+    const row = (await screen.findByText('Morning briefing')).closest('li')!;
+    expect(within(row).getByText(failure)).toBeTruthy();
+
+    fireEvent.click(within(row).getByRole('button', { name: 'History' }));
+    await waitFor(() => {
+      expect(screen.getAllByText(failure)).toHaveLength(2);
+    });
+  });
+
   it('shows the empty history state when a routine has never run', async () => {
     const routines = [{
       id: 'routine-1',
@@ -676,6 +755,81 @@ describe('RoutinesSection', () => {
     expect((await screen.findByRole('alert')).textContent).toContain('scheduler unavailable');
     expect(within(card).getByRole('button', { name: 'Pause' })).toBeTruthy();
     expect(within(card).queryByRole('button', { name: 'Resume' })).toBeNull();
+  });
+
+  it('edits an existing routine and PATCHes the updated fields', async () => {
+    let routines: Routine[] = [{
+      id: 'routine-1',
+      name: 'Morning briefing',
+      prompt: 'Morning summary',
+      schedule: { kind: 'daily', time: '09:00', timezone: 'UTC' },
+      target: { mode: 'reuse', projectId: 'proj-1' },
+      skillId: null,
+      agentId: null,
+      enabled: true,
+      nextRunAt: Date.now() + 3600_000,
+      lastRun: null,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    }];
+    const patchBodies: unknown[] = [];
+
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/routines' && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ routines }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/projects' && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ projects: [{ id: 'proj-1', name: 'Routine Test Project' }] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/routines/routine-1' && init?.method === 'PATCH') {
+        const body = JSON.parse(String(init.body));
+        patchBodies.push(body);
+        const current = routines[0]!;
+        routines = [{
+          ...current,
+          name: body.name ?? current.name,
+          prompt: body.prompt ?? current.prompt,
+          schedule: body.schedule ?? current.schedule,
+          target: body.target ?? current.target,
+          updatedAt: Date.now(),
+        }];
+        return new Response(JSON.stringify({ routine: routines[0] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    }) as typeof fetch;
+
+    render(<RoutinesSection />);
+
+    const row = (await screen.findByText('Morning briefing')).closest('li')!;
+    fireEvent.click(within(row).getByRole('button', { name: 'Edit' }));
+
+    const nameInput = screen.getByLabelText('Name') as HTMLInputElement;
+    expect(nameInput.value).toBe('Morning briefing');
+    const promptInput = screen.getByLabelText('Prompt') as HTMLTextAreaElement;
+    expect(promptInput.value).toBe('Morning summary');
+
+    fireEvent.change(nameInput, { target: { value: 'Renamed briefing' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Renamed briefing')).toBeTruthy();
+    });
+    expect(patchBodies).toHaveLength(1);
+    const body = patchBodies[0] as Record<string, unknown>;
+    expect(body.name).toBe('Renamed briefing');
+    expect(body.prompt).toBe('Morning summary');
+    expect(body.schedule).toEqual({ kind: 'daily', time: '09:00', timezone: 'UTC' });
+    expect(body.target).toEqual({ mode: 'reuse', projectId: 'proj-1' });
   });
 
   it('shows an error alert when deleting a routine fails', async () => {

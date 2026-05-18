@@ -181,8 +181,10 @@ async function* installFromGithub(
           return;
         }
       }
-      if (lastError && isRetryableGithubCandidateError(lastError)) continue;
-      if (lastError) break;
+      if (lastError) {
+        if (shouldTryNextGithubRefCandidate(lastError)) continue;
+        if (!isRetryableGithubCandidateError(lastError)) break;
+      }
     }
 
     const tarballUrl = githubTarballUrl(parsed.owner, parsed.repo, candidate.ref);
@@ -199,13 +201,13 @@ async function* installFromGithub(
         return;
       }
     }
-    if (!lastError || !isRetryableGithubCandidateError(lastError)) break;
+    if (!lastError || !shouldTryNextGithubRefCandidate(lastError)) break;
   }
 
   yield {
     kind: 'error',
     message: lastError
-      ? `${lastError}. Tried GitHub archive URL(s): ${triedUrls.join(', ')}`
+      ? `GitHub install failed: ${lastError}. Tried GitHub fetch URL(s): ${triedUrls.join(', ')}`
       : `GitHub source ${opts.source} did not produce an installable archive`,
     warnings: [],
   };
@@ -264,7 +266,19 @@ function githubContentsUrl(owner: string, repo: string, subpath: string, ref: st
 }
 
 function isRetryableGithubCandidateError(message: string): boolean {
-  return /^Fetch failed: 404\b/.test(message) || /^Subpath .+ not found inside archive$/.test(message);
+  return /^Fetch failed: 404\b/.test(message)
+    || isGithubRateLimitError(message)
+    || /^Subpath .+ not found inside archive$/.test(message);
+}
+
+function shouldTryNextGithubRefCandidate(message: string): boolean {
+  return /^Fetch failed: 404\b/.test(message)
+    || /^Subpath .+ not found inside archive$/.test(message);
+}
+
+function isGithubRateLimitError(message: string): boolean {
+  return /^Fetch failed: 429\b/.test(message)
+    || /^Fetch failed: 403\b/.test(message);
 }
 
 async function* installFromGithubContents(

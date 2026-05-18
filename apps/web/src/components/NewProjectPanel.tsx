@@ -42,39 +42,10 @@ import {
   VIDEO_LENGTHS_SEC,
   VIDEO_MODELS,
 } from '../media/models';
+import { formatPickAndImportFailure } from '../utils/pickAndImportError';
 import { Icon } from './Icon';
 import { Skeleton } from './Loading';
 import { Toast } from './Toast';
-
-/**
- * Best-effort flattening of the `details` field that the
- * pickAndImport main-process handler attaches when the daemon returned
- * a structured error envelope (PR #974 round-4 mrcfps). Daemon errors
- * carry `error.message` and sometimes nested `error.details.reason`;
- * we surface the most operator-actionable string we can find without
- * over-coupling to any particular error code.
- */
-function formatPickAndImportErrorDetails(details: unknown): string | undefined {
-  if (typeof details === 'string' && details.length > 0) return details;
-  if (details == null || typeof details !== 'object') return undefined;
-  const record = details as Record<string, unknown>;
-  const error = record.error;
-  if (error != null && typeof error === 'object') {
-    const errRecord = error as Record<string, unknown>;
-    const message = errRecord.message;
-    const nestedDetails = errRecord.details;
-    if (typeof message === 'string' && message.length > 0) {
-      if (nestedDetails != null && typeof nestedDetails === 'object') {
-        const nestedReason = (nestedDetails as Record<string, unknown>).reason;
-        if (typeof nestedReason === 'string' && nestedReason.length > 0) {
-          return `${message} (${nestedReason})`;
-        }
-      }
-      return message;
-    }
-  }
-  return undefined;
-}
 
 // Snapshot of a curated prompt template, captured at New Project time and
 // folded into ProjectMetadata.promptTemplate. The user may have edited the
@@ -156,7 +127,7 @@ interface Props {
   // input and the renderer POSTs `/api/import/folder` itself. Browser
   // builds have no `shell.openPath` surface, so the renderer naming a
   // path here cannot escalate (PR #974 trust model).
-  onImportFolder?: (baseDir: string) => Promise<boolean> | boolean;
+  onImportFolder?: (baseDir: string) => Promise<void> | void;
   // Electron flow: the desktop main process owns the picker dialog and
   // the import call atomically (`pickAndImport` IPC). The renderer
   // never sees the path or the HMAC token; it only receives the
@@ -168,6 +139,7 @@ interface Props {
   connectorsLoading?: boolean;
   onOpenConnectorsTab?: () => void;
   loading?: boolean;
+  initialTab?: CreateTab;
 }
 
 const TAB_LABEL_KEYS: Record<CreateTab, keyof Dict> = {
@@ -224,6 +196,7 @@ export function NewProjectPanel({
   connectorsLoading = false,
   onOpenConnectorsTab,
   loading = false,
+  initialTab = 'prototype',
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
@@ -240,7 +213,7 @@ export function NewProjectPanel({
   const [importFolderError, setImportFolderError] = useState<
     { message: string; details?: string } | null
   >(null);
-  const [tab, setTab] = useState<CreateTab>('prototype');
+  const [tab, setTab] = useState<CreateTab>(initialTab);
   // Media tab consolidates image / video / audio. The active surface picks
   // which set of options + skill resolution applies; submission still maps
   // back to the existing image/video/audio ProjectKind branches so the
@@ -621,16 +594,7 @@ export function NewProjectPanel({
         // network errors). The pickAndImport handler already pre-shapes
         // these into a `{ ok: false, reason, details? }` envelope.
         if ('canceled' in result && result.canceled === true) return;
-        const reason = 'reason' in result && typeof result.reason === 'string'
-          ? result.reason
-          : 'unknown failure';
-        const details = 'details' in result && result.details != null
-          ? formatPickAndImportErrorDetails(result.details)
-          : undefined;
-        setImportFolderError({
-          message: `Open folder failed: ${reason}`,
-          ...(details ? { details } : {}),
-        });
+        setImportFolderError(formatPickAndImportFailure(result));
       } finally {
         setImportingFolder(false);
       }
@@ -638,19 +602,17 @@ export function NewProjectPanel({
     }
     if (!onImportFolder) return;
     const trimmed = baseDir.trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      setImportFolderError({ message: 'Path cannot be empty' });
+      return;
+    }
     setImportFolderError(null);
     setImportingFolder(true);
     try {
-      const opened = await onImportFolder(trimmed);
-      if (!opened) {
-        setImportFolderError({
-          message: `Open folder failed: ${trimmed}`,
-        });
-      }
+      await onImportFolder(trimmed);
     } catch (err) {
       setImportFolderError({
-        message: `Open folder failed: ${err instanceof Error ? err.message : 'unknown error'}`,
+        message: err instanceof Error ? err.message : 'Failed to import folder',
       });
     } finally {
       setImportingFolder(false);
