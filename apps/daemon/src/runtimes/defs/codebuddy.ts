@@ -32,7 +32,7 @@ export const codebuddyAgentDef = {
       if (dirs.length > 0 && caps.addDir !== false) {
         args.push('--add-dir', ...dirs);
       }
-      args.push('--permission-mode', 'bypassPermissions');
+      args.push('--permission-mode', 'bypassPermissions', '-y');
       return args;
     },
     // CodeBuddy Code auto-loads `.mcp.json` from the project cwd at spawn,

@@ -44,8 +44,8 @@ const CLAUDE_DIAGNOSTIC_CONFIG: AgentDiagnosticConfig = {
 const CODEBUDDY_DIAGNOSTIC_CONFIG: AgentDiagnosticConfig = {
   brandName: 'CodeBuddy Code',
   profileLabel: 'CodeBuddy',
-  runAndLogin: '`codebuddy login`',
-  runAndUseLogin: '`codebuddy login`',
+  runAndLogin: '`codebuddy` and `/login`',
+  runAndUseLogin: '`codebuddy`, use `/login`',
   configDirEnvKey: 'CODEBUDDY_CONFIG_DIR',
   baseUrlEnvKey: 'CODEBUDDY_BASE_URL',
   apiKeyEnvKey: 'CODEBUDDY_API_KEY',
@@ -112,9 +112,10 @@ function diagnoseCliFailure(
       /econnrefused/i.test(text));
   if (customEndpointConnectionFailure) {
     return withContext(
-      'Claude Code could not reach the configured custom Anthropic endpoint.',
-      'ANTHROPIC_BASE_URL appears to point at a local or proxy endpoint that refused the connection. Start or fix that proxy, clear the stale endpoint, or remove the custom endpoint to retry with standard Claude Code auth.',
+      `${config.brandName} could not reach the configured custom ${config.endpointLabel} endpoint.`,
+      `${config.baseUrlEnvKey} appears to point at a local or proxy endpoint that refused the connection. Start or fix that proxy, clear the stale endpoint, or remove the custom endpoint to retry with standard ${config.brandName} auth.`,
       input,
+      config,
     );
   }
 

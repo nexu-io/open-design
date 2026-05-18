@@ -109,7 +109,61 @@ describe('diagnoseClaudeCliFailure', () => {
     expect(diagnostic?.detail).toContain('Effective CLAUDE_CONFIG_DIR: /tmp/claude-alt');
   });
 
-  it('does not classify unrelated non-Claude failures', () => {
+  it('maps CodeBuddy auth failures to /login guidance', () => {
+    const diagnostic = diagnoseClaudeCliFailure({
+      agentId: 'codebuddy',
+      exitCode: 1,
+      stderrTail: '{"apiKeySource":"none","error_status":401}',
+      env: {},
+    });
+
+    expect(diagnostic?.message).toContain('CodeBuddy Code');
+    expect(diagnostic?.message).toContain('/login');
+    expect(diagnostic?.detail).toContain('CODEBUDDY_CONFIG_DIR');
+    expect(diagnostic?.detail).not.toContain('codebuddy login');
+  });
+
+  it('maps CodeBuddy custom endpoint auth failures to endpoint guidance', () => {
+    const diagnostic = diagnoseClaudeCliFailure({
+      agentId: 'codebuddy',
+      exitCode: 1,
+      stderrTail: '{"apiKeySource":"none","error_status":401}',
+      env: { CODEBUDDY_BASE_URL: 'https://proxy.example.com' },
+    });
+
+    expect(diagnostic?.message).toContain('custom CodeBuddy endpoint');
+    expect(diagnostic?.detail).toContain('CODEBUDDY_BASE_URL');
+    expect(diagnostic?.detail).not.toContain('/login');
+  });
+
+  it('maps CodeBuddy silent configured-profile exits to profile guidance', () => {
+    const diagnostic = diagnoseClaudeCliFailure({
+      agentId: 'codebuddy',
+      exitCode: 1,
+      stderrTail: '',
+      stdoutTail: '',
+      env: { CODEBUDDY_CONFIG_DIR: '/tmp/codebuddy-alt' },
+    });
+
+    expect(diagnostic?.message).toContain('configured CodeBuddy profile');
+    expect(diagnostic?.detail).toContain('Re-run `codebuddy` and `/login` for that profile');
+    expect(diagnostic?.detail).toContain('Effective CODEBUDDY_CONFIG_DIR: /tmp/codebuddy-alt');
+  });
+
+  it('maps CodeBuddy config state failures to /login guidance', () => {
+    const diagnostic = diagnoseClaudeCliFailure({
+      agentId: 'codebuddy',
+      exitCode: 1,
+      stderrTail: 'OAuth credential expired for session',
+      env: {},
+    });
+
+    expect(diagnostic?.message).toContain('CodeBuddy Code');
+    expect(diagnostic?.detail).toContain('/login');
+    expect(diagnostic?.detail).not.toContain('codebuddy login');
+  });
+
+  it('does not classify unrelated agent failures', () => {
     const diagnostic = diagnoseClaudeCliFailure({
       agentId: 'codex',
       exitCode: 1,
