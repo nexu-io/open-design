@@ -14,6 +14,7 @@ interface Props {
 const ICON_EXT: Record<string, 'svg' | 'png'> = {
   amr: 'svg',
   claude: 'svg',
+  codebuddy: 'svg',
   codex: 'svg',
   gemini: 'svg',
   opencode: 'svg',
