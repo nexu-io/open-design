@@ -539,15 +539,8 @@ export function wellKnownUserToolchainBins(
 
 function existingMiseNpmPackageBinDirs(root: string): string[] {
   const out: string[] = [];
-  let packageEntries: import("node:fs").Dirent<string>[];
-  try {
-    packageEntries = readdirSync(root, { encoding: "utf8", withFileTypes: true });
-  } catch {
-    return out;
-  }
-  for (const packageEntry of packageEntries.sort((left, right) => left.name.localeCompare(right.name))) {
-    if (!packageEntry.isDirectory() || !packageEntry.name.startsWith("npm-")) continue;
-    const packageRoot = join(root, packageEntry.name);
+  for (const packageName of ["npm-openai-codex"]) {
+    const packageRoot = join(root, packageName);
     out.push(...existingChildBinDirs(packageRoot, ["bin"]));
   }
   return out;
@@ -562,7 +555,7 @@ function existingChildBinDirs(root: string, segments: string[]): string[] {
     return out;
   }
   for (const entry of sortVersionedDirEntries(entries)) {
-    if (!entry.isDirectory()) continue;
+    if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
     const candidate = join(root, entry.name, ...segments);
     if (existsSync(candidate)) out.push(candidate);
   }

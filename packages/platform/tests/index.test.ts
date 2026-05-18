@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -516,11 +516,22 @@ describe("wellKnownUserToolchainBins", () => {
         "latest",
         "bin",
       );
+      const miseNpmCodexVersionBin = join(
+        home,
+        ".local",
+        "share",
+        "mise",
+        "installs",
+        "npm-openai-codex",
+        "0.1.0",
+        "bin",
+      );
       const newestNvmBin = join(home, ".nvm", "versions", "node", "v24.1.0", "bin");
       const olderNvmBin = join(home, ".nvm", "versions", "node", "v22.10.0", "bin");
       const fnmBin = join(home, ".local", "share", "fnm", "node-versions", "v20.11.1", "installation", "bin");
       mkdirSync(miseBin, { recursive: true });
-      mkdirSync(miseNpmCodexBin, { recursive: true });
+      mkdirSync(miseNpmCodexVersionBin, { recursive: true });
+      symlinkSync("0.1.0", join(home, ".local", "share", "mise", "installs", "npm-openai-codex", "latest"), "dir");
       mkdirSync(newestNvmBin, { recursive: true });
       mkdirSync(olderNvmBin, { recursive: true });
       mkdirSync(fnmBin, { recursive: true });
