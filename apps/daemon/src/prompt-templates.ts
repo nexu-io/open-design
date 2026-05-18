@@ -10,6 +10,7 @@
 
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { isSafeResourceId } from './resource-id.js';
 
 const SUPPORTED_SURFACES = ['image', 'video'];
 
@@ -52,6 +53,7 @@ export async function listPromptTemplates(root) {
 
 export async function readPromptTemplate(root, surface, id) {
   if (!SUPPORTED_SURFACES.includes(surface)) return null;
+  if (!isSafeResourceId(id)) return null;
   const filePath = path.join(root, surface, `${id}.json`);
   try {
     const raw = await readFile(filePath, 'utf8');

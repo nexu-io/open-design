@@ -6,6 +6,7 @@
 
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { isSafeResourceId } from './resource-id.js';
 
 export async function listDesignSystems(root) {
   const out = [];
@@ -41,9 +42,7 @@ export async function listDesignSystems(root) {
 }
 
 export async function readDesignSystem(root, id) {
-  if (!id || typeof id !== 'string' || /[/\\]/.test(id) || id === '..' || id === '.') {
-    return null;
-  }
+  if (!isSafeResourceId(id)) return null;
   const file = path.join(root, id, 'DESIGN.md');
   try {
     return await readFile(file, 'utf8');
