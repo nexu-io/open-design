@@ -413,6 +413,7 @@ async function spawnDaemonRuntime(
   const logHandle = await openAppLog(config, APP_KEYS.DAEMON);
 
   try {
+    await buildDaemon(config, logHandle);
     await logHandle.write(`\n[tools-dev] launching daemon at ${new Date().toISOString()}\n`);
     if (webPort != null) await logHandle.write(`[tools-dev] trusting web origin port ${webPort}\n`);
     if (spawnOptions.requireDesktopAuth) {
@@ -477,6 +478,19 @@ async function spawnWebRuntime(config: ToolDevConfig, options: CliOptions): Prom
   } finally {
     await logHandle.close();
   }
+}
+
+async function buildDaemon(config: ToolDevConfig, logHandle: FileHandle): Promise<void> {
+  await logHandle.write(`\n[tools-dev] building @open-design/daemon at ${new Date().toISOString()}\n`);
+  const invocation = createPackageManagerInvocation(["--filter", "@open-design/daemon", "build"], process.env);
+  await runLoggedCommand({
+    args: invocation.args,
+    command: invocation.command,
+    cwd: config.workspaceRoot,
+    env: process.env,
+    logFd: logHandle.fd,
+    windowsVerbatimArguments: invocation.windowsVerbatimArguments,
+  });
 }
 
 async function buildDesktop(config: ToolDevConfig, logHandle: FileHandle): Promise<void> {
