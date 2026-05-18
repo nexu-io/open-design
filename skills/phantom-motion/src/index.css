@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+@theme {
+	--font-sans: "Inter", sans-serif;
+}
+
+:root {
+	--foreground: #000000;
+}
+
+body {
+	background-color: #fafaf9;
+	margin: 0;
+	overflow: hidden;
+}
+
+.tabular-nums {
+	font-variant-numeric: tabular-nums;
+}
+
+/* Minimal Mono Shadows */
+.shadow-mono {
+	box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04), 0 8px 32px rgba(0, 0, 0, 0.06);
+}

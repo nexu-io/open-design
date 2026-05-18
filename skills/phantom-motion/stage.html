@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phantom Stage - Quantum Order</title>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
+        canvas { display: block; width: 100%; height: 100%; }
+        
+        /* Monocle Editorial Grid Overlay */
+        .editorial-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            padding: 40px;
+            box-sizing: border-box;
+            color: white;
+            font-family: 'Playfair Display', serif;
+            z-index: 10;
+        }
+
+        .kicker { grid-column: 1 / span 12; font-size: 14px; text-transform: uppercase; letter-spacing: 0.2em; opacity: 0.6; margin-bottom: 8px; }
+        .hero-title { grid-column: 1 / span 7; font-size: min(10vw, 80px); line-height: 0.9; margin: 0; font-weight: 400; }
+        .lead-text { grid-column: 9 / span 4; font-size: 16px; line-height: 1.6; opacity: 0.7; font-family: 'Inter', sans-serif; align-self: end; }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400&family=Playfair+Display:ital@0;1&family=IBM+Plex+Mono&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="app"></div>
+    <div class="editorial-overlay">
+        <div class="kicker">The Minimalist Director / v11.0</div>
+        <h1 class="hero-title" id="main-title">QUANTUM<br>ORDER.</h1>
+        <p class="lead-text">From chaos to crystalline structure. A study in waves, entanglement, and the poetic collapse of the wave function.</p>
+    </div>
+
+    <!-- WebGL & Animation Core -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.170.0/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <script src="https://unpkg.com/split-type"></script>
+    <script src="/engine.js" type="module"></script>
+</body>
+</html>

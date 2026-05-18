@@ -49,7 +49,7 @@ def main():
     print(f"🎬 启动 3D 物理级录制引擎 (v4.0)...")
 
     # 3. 准备 Node 脚本
-    recorder_js = Path(skill_dir) / "scripts" / "record.js"
+    recorder_js = Path(skill_dir) / "scripts" / "record.cjs"
     
     js_content = """
 const puppeteer = require('puppeteer');

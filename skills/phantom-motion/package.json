@@ -1,17 +1,39 @@
 {
-  "name": "phantom-motion",
-  "version": "8.0.0",
-  "description": "交互式动态视觉叙事生成器",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "dependencies": {
-    "gsap": "^3.12.5",
-    "puppeteer": "^24.4.0",
-    "three": "^0.160.0",
-    "split-type": "^0.3.4"
-  },
-  "author": "紫苏子ACG",
-  "license": "MIT"
+	"name": "phantom-motion",
+	"version": "11.0.0",
+	"description": "交互式动态视觉叙事生成器 v11 (Hybrid Drive)",
+	"type": "module",
+	"scripts": {
+		"dev": "vite",
+		"build": "vite build",
+		"preview": "vite preview",
+		"lint": "biome check ."
+	},
+	"dependencies": {
+		"gsap": "^3.12.5",
+		"three": "^0.170.0",
+		"split-type": "^0.3.4",
+		"react": "^19.1.0",
+		"react-dom": "^19.1.0",
+		"lucide-react": "^0.468.0",
+		"clsx": "^2.1.1",
+		"tailwind-merge": "^2.5.5",
+		"class-variance-authority": "^0.7.1",
+		"@radix-ui/react-popover": "^1.1.2",
+		"@radix-ui/react-tooltip": "^1.1.3",
+		"@radix-ui/react-separator": "^1.1.0"
+	},
+	"devDependencies": {
+		"vite": "^6.3.5",
+		"@vitejs/plugin-react": "^4.4.1",
+		"tailwindcss": "^4.2.4",
+		"@tailwindcss/vite": "^4.2.4",
+		"typescript": "^5.8.3",
+		"@types/react": "^19.1.2",
+		"@types/react-dom": "^19.1.2",
+		"vitest": "^3.2.4",
+		"@biomejs/biome": "^1.9.4"
+	},
+	"author": "紫苏子ACG",
+	"license": "MIT"
 }

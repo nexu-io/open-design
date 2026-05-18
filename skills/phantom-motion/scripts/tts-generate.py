@@ -57,8 +57,7 @@ SAMPLE_RATE = 24000  # Gemini TTS 输出采样率
 def get_api_key() -> str:
     key = os.environ.get("GEMINI_API_KEY", "")
     if not key:
-        print("❌ 未设置 GEMINI_API_KEY 环境变量")
-        sys.exit(1)
+        print("⚠️ 未设置 GEMINI_API_KEY 环境变量，将使用静默音频(Mock)进行渲染。")
     return key
 
 
@@ -75,6 +74,12 @@ def generate_single_tts(
     api_key: str,
 ) -> float:
     """生成单条 TTS 音频，返回时长（秒）。"""
+    if not api_key:
+        import subprocess
+        # Mock 2-second silent audio if no API key
+        subprocess.run(["ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=24000:cl=mono", "-t", "2.0", output_path], capture_output=True)
+        return get_wav_duration(output_path)
+
     cfg = VOICE_MAP[voice]
     style_hint = STYLE_PROMPTS.get(style, STYLE_PROMPTS["documentary"])
     prompt = f"{style_hint}{cfg['prompt_prefix']}{text}"

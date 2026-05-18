@@ -1,0 +1,21 @@
+{
+  "voice": "male",
+  "voice_name": "Charon",
+  "style": "documentary",
+  "speed": 1.0,
+  "total_tts_duration": 2.0,
+  "total_animation_duration": 8.0,
+  "fade_in_seconds": 3,
+  "fade_out_seconds": 3,
+  "entries": [
+    {
+      "index": 0,
+      "text_cn": "这是一段用于测试的最小化旁白文本。",
+      "text_en": "This is a minimal narration text for testing.",
+      "start": 3.0,
+      "end": 5.0,
+      "duration": 2.0,
+      "audio_file": "tts_000.wav"
+    }
+  ]
+}
