@@ -9,7 +9,7 @@
 // clicks the backdrop / Esc.
 
 import { useEffect, useRef } from 'react';
-import type { ConnectorDetail } from '@open-design/contracts';
+import type { ConnectorDetail, ProjectLocation } from '@open-design/contracts';
 import type {
   DesignSystemSummary,
   MediaProviderCredentials,
@@ -27,6 +27,7 @@ interface Props {
   defaultDesignSystemId: string | null;
   templates: ProjectTemplate[];
   promptTemplates: PromptTemplateSummary[];
+  projectLocations?: ProjectLocation[];
   mediaProviders?: Record<string, MediaProviderCredentials>;
   connectors?: ConnectorDetail[];
   connectorsLoading?: boolean;
@@ -45,6 +46,7 @@ export function NewProjectModal({
   defaultDesignSystemId,
   templates,
   promptTemplates,
+  projectLocations,
   mediaProviders,
   connectors,
   connectorsLoading,
@@ -114,6 +116,7 @@ export function NewProjectModal({
             defaultDesignSystemId={defaultDesignSystemId}
             templates={templates}
             promptTemplates={promptTemplates}
+            {...(projectLocations ? { projectLocations } : {})}
             {...(mediaProviders ? { mediaProviders } : {})}
             {...(connectors ? { connectors } : {})}
             {...(typeof connectorsLoading === 'boolean' ? { connectorsLoading } : {})}

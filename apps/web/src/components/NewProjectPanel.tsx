@@ -5,7 +5,7 @@ import {
 } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import { trackHomeClickCreateButton } from '../analytics/events';
-import type { ConnectorDetail, ImportFolderResponse } from '@open-design/contracts';
+import type { ConnectorDetail, ImportFolderResponse, ProjectLocation } from '@open-design/contracts';
 
 // Window.electronAPI is declared globally in apps/web/src/types/electron.d.ts
 // so the new openPath + pickAndImport methods (#451 / PR #974) and
@@ -127,11 +127,16 @@ const DESIGN_PLATFORMS: Array<{
   },
 ];
 
+function projectLocationLabel(location: ProjectLocation): string {
+  return location.name || location.path.split(/[\\/]/).filter(Boolean).pop() || location.path;
+}
+
 export type CreateTab = 'prototype' | 'live-artifact' | 'deck' | 'template' | 'media' | 'other';
 export type MediaSurface = 'image' | 'video' | 'audio';
 
 export interface CreateInput {
   name: string;
+  projectLocationId?: string;
   skillId: string | null;
   designSystemId: string | null;
   metadata: ProjectMetadata;
@@ -144,6 +149,7 @@ interface Props {
   templates: ProjectTemplate[];
   onDeleteTemplate?: (id: string) => Promise<boolean>;
   promptTemplates: PromptTemplateSummary[];
+  projectLocations?: ProjectLocation[];
   onCreate: (input: CreateInput & { requestId?: string }) => void;
   onImportClaudeDesign?: (file: File) => Promise<void> | void;
   // Web fallback: the user types an absolute baseDir into the manual
@@ -208,6 +214,7 @@ export function NewProjectPanel({
   templates,
   onDeleteTemplate,
   promptTemplates,
+  projectLocations = [],
   onCreate,
   onImportClaudeDesign,
   onImportFolder,
@@ -223,6 +230,7 @@ export function NewProjectPanel({
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const [importing, setImporting] = useState(false);
   const [baseDir, setBaseDir] = useState('');
+  const [projectLocationId, setProjectLocationId] = useState('default');
   const [importingFolder, setImportingFolder] = useState(false);
   // PR #974 round-4 (mrcfps): pickAndImport now returns structured
   // failure shapes (`desktop auth secret not registered`, `web sidecar
@@ -474,6 +482,16 @@ export function NewProjectPanel({
   }
 
   useEffect(() => {
+    if (projectLocations.length === 0) {
+      setProjectLocationId('default');
+      return;
+    }
+    if (!projectLocations.some((location) => location.id === projectLocationId)) {
+      setProjectLocationId('default');
+    }
+  }, [projectLocations, projectLocationId]);
+
+  useEffect(() => {
     const el = tabsRef.current;
     if (!el) return;
     updateTabScrollState();
@@ -552,6 +570,7 @@ export function NewProjectPanel({
     );
     onCreate({
       name: name.trim() || autoName(tab, mediaSurface, t),
+      ...(projectLocationId && projectLocationId !== 'default' ? { projectLocationId } : {}),
       skillId: skillIdForTab,
       designSystemId: primaryDs,
       metadata,
@@ -638,6 +657,9 @@ export function NewProjectPanel({
     }
   }
 
+  const selectedProjectLocation = projectLocations.find((location) => location.id === projectLocationId);
+  const usingExternalProjectLocation = Boolean(selectedProjectLocation && !selectedProjectLocation.builtIn);
+
   return (
     <div className="newproj" data-testid="new-project-panel">
       <div className={`newproj-tabs-shell${tabScroll.left ? ' can-left' : ''}${tabScroll.right ? ' can-right' : ''}`}>
@@ -685,13 +707,37 @@ export function NewProjectPanel({
           ) : null}
         </h3>
 
-        <input
-          className="newproj-name"
-          data-testid="new-project-name"
-          placeholder={t('newproj.namePlaceholder')}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
+        <div className="newproj-name-row">
+          <input
+            className="newproj-name"
+            data-testid="new-project-name"
+            placeholder={t('newproj.namePlaceholder')}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          {usingExternalProjectLocation ? (
+            <span className="newproj-location-tag">{t('newproj.locationExternalBase')}</span>
+          ) : null}
+        </div>
+
+        {projectLocations.length > 1 ? (
+          <label className="newproj-section">
+            <span className="newproj-label">{t('newproj.locationLabel')}</span>
+            <select
+              className="newproj-location-select"
+              value={projectLocationId}
+              onChange={(event) => setProjectLocationId(event.target.value)}
+            >
+              {projectLocations.map((location) => (
+                <option key={location.id} value={location.id}>
+                  {location.builtIn
+                    ? t('newproj.locationDefault')
+                    : projectLocationLabel(location)}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
 
         {showDesignSystemPicker ? (
           <DesignSystemPicker

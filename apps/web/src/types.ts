@@ -41,6 +41,7 @@ import type {
   ProviderModelsRequest,
   ProviderModelsResponse,
   Project,
+  ProjectLocationPrefs,
   ProjectPlatform,
   PreviewCommentMember,
   PreviewCommentSelectionKind,
@@ -76,6 +77,7 @@ export type {
   ChatCommentSelectionKind,
   OrbitRunSummary,
   OrbitStatusResponse,
+  ProjectLocation,
   PreviewCommentMember,
   PreviewCommentSelectionKind,
   PreviewVisualMarkKind,
@@ -338,6 +340,7 @@ export interface AppConfig {
   // user makes an explicit choice.
   telemetry?: TelemetryConfig;
   customInstructions?: string;
+  projectLocations?: ProjectLocationPrefs[];
 }
 
 export interface TelemetryConfig {

@@ -92,6 +92,7 @@ export type TrackingActiveSection =
   | 'integrations'
   | 'skills'
   | 'design_systems'
+  | 'project_locations'
   | 'memory'
   | 'privacy'
   | 'notifications';
@@ -513,6 +514,8 @@ export function settingsSectionToTracking(
       return 'skills';
     case 'designSystems':
       return 'design_systems';
+    case 'projectLocations':
+      return 'project_locations';
     case 'memory':
       return 'memory';
     case 'privacy':

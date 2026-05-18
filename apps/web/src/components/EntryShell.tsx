@@ -13,6 +13,7 @@ import {
   defaultScenarioPluginIdForKind,
   type ConnectorDetail,
   type InstalledPluginRecord,
+  type ProjectLocation,
 } from '@open-design/contracts';
 import { LOCALE_LABEL, LOCALES, useI18n, useT, type Locale } from '../i18n';
 import { navigate, useRoute } from '../router';
@@ -235,6 +236,7 @@ interface Props {
       | 'appearance'
       | 'notifications'
       | 'pet'
+      | 'projectLocations'
       | 'library'
       | 'about',
   ) => void;
@@ -299,6 +301,15 @@ export function EntryShell({
     () => describeModelChip(config, agents, t),
     [config, agents, t],
   );
+  const projectLocations = useMemo<ProjectLocation[]>(() => [
+    {
+      id: 'default',
+      name: t('newproj.locationDefault'),
+      path: '',
+      builtIn: true,
+    },
+    ...(config.projectLocations ?? []).map((location) => ({ ...location, builtIn: false })),
+  ], [config.projectLocations, t]);
 
   function changeView(next: EntryViewKind) {
     navigate({ kind: 'home', view: next });
@@ -801,6 +812,7 @@ export function EntryShell({
         defaultDesignSystemId={defaultDesignSystemId}
         templates={templates}
         promptTemplates={promptTemplates}
+        projectLocations={projectLocations}
         connectors={connectors}
         connectorsLoading={connectorsLoading}
         loading={skillsLoading}

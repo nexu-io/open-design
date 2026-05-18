@@ -3230,6 +3230,62 @@ a.avatar-item:visited {
 }
 
 .settings-section { display: flex; flex-direction: column; gap: 12px; }
+.project-locations-section { gap: 14px; }
+.project-location-card,
+.project-location-edit {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+.project-location-card code {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 11px;
+  word-break: break-all;
+}
+.project-location-card span {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 3px 8px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+.project-location-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.project-location-edit {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  background: var(--bg-panel);
+}
+.project-location-edit-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.project-location-edit-main code {
+  color: var(--text-muted);
+  font-size: 11px;
+  word-break: break-all;
+}
+.project-location-edit-main small {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.project-location-add { align-self: flex-start; }
+@media (max-width: 720px) {
+  .project-location-edit { grid-template-columns: 1fr; align-items: stretch; }
+}
 .settings-section-connectors { gap: 16px; }
 /* Credentials sit above the catalog now; the divider lives under the field
    so the eye reads "configure key → catalog unlocks below". */
@@ -5427,7 +5483,29 @@ a.avatar-item:visited {
   text-transform: uppercase;
   line-height: 1.4;
 }
+.newproj-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .newproj-name { width: 100%; height: 30px; padding: 0 10px; }
+.newproj-location-tag {
+  flex: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 4px 8px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.newproj-location-select {
+  width: 100%;
+  height: 30px;
+  padding: 0 10px;
+}
 .newproj-section { display: flex; flex-direction: column; gap: 6px; }
 .platform-picker-hint {
   margin: 0;
