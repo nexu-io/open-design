@@ -100,8 +100,14 @@ export function BoardComposerPopover({
               <span
                 key={member.elementId}
                 className="board-pod-chip"
-                onPointerEnter={() => onHoverMember?.(member.elementId)}
-                onPointerLeave={() => onHoverMember?.(null)}
+                onPointerEnter={(e) => {
+                  if (e.pointerType && e.pointerType !== 'mouse') return;
+                  onHoverMember?.(member.elementId);
+                }}
+                onPointerLeave={(e) => {
+                  if (e.pointerType && e.pointerType !== 'mouse') return;
+                  onHoverMember?.(null);
+                }}
               >
                 {summarizeMember(member)}
                 <button

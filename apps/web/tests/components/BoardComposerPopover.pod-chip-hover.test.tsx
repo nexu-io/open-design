@@ -98,6 +98,23 @@ describe('BoardComposerPopover captured-chip hover', () => {
     expect(onHoverMember).toHaveBeenLastCalledWith(null);
   });
 
+  it('ignores pointer events from touch and pen so a tap on a chip does not flicker the highlight', () => {
+    const onHoverMember = vi.fn();
+    renderPopover({
+      target: podTarget([member('alpha', 'Alpha')]),
+      onHoverMember,
+    });
+
+    fireEvent.pointerEnter(chipFor('Alpha'), { pointerType: 'touch' });
+    fireEvent.pointerLeave(chipFor('Alpha'), { pointerType: 'touch' });
+    fireEvent.pointerEnter(chipFor('Alpha'), { pointerType: 'pen' });
+    fireEvent.pointerLeave(chipFor('Alpha'), { pointerType: 'pen' });
+    expect(onHoverMember).not.toHaveBeenCalled();
+
+    fireEvent.pointerEnter(chipFor('Alpha'), { pointerType: 'mouse' });
+    expect(onHoverMember).toHaveBeenLastCalledWith('alpha');
+  });
+
   it('does not throw when onHoverMember is omitted', () => {
     expect(() =>
       renderPopover({

@@ -10872,10 +10872,13 @@ button.connector-action.is-loading {
 .comment-target-overlay.selected {
   border-width: 2px;
 }
+/* Per-member overlay highlight triggered by chip hover / remove-button focus.
+   Only fires from the member rendering branch in CommentTargetOverlay;
+   single-element snapshots use the non-member fallback and never get hovered. */
 .comment-target-overlay--member.is-hover-focused {
-  outline: 2px solid rgba(22, 119, 255, 0.95);
+  outline: 2px solid rgb(22, 119, 255);
   outline-offset: 2px;
-  z-index: 2;
+  z-index: 2; /* float above sibling overlays */
 }
 .comment-target-overlay-label {
   position: absolute;

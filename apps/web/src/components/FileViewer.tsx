@@ -2745,7 +2745,7 @@ function CommentPreviewOverlays({
   );
 }
 
-function CommentTargetOverlay({
+export function CommentTargetOverlay({
   snapshot,
   scale,
   selected,
@@ -2794,6 +2794,9 @@ function CommentTargetOverlay({
       </>
     );
   }
+  // Non-member fallback: single-element snapshots have no per-member chips,
+  // so the hover-focus channel never reaches this branch — no is-hover-focused
+  // class needed here.
   const bounds = overlayBoundsFromSnapshot(snapshot, scale);
   return (
     <div
