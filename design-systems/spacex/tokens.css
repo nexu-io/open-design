@@ -1,0 +1,154 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/spacex/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by SpaceX".
+ * Cinematic aerospace minimalism: pure black canvas, full-viewport
+ * photography, D-DIN industrial type, universal uppercase + positive
+ * tracking, zero shadows / cards / decoration. The interface disappears
+ * behind the imagery — only type, photography, and a single ghost button.
+ *
+ * Key brand decisions encoded here:
+ *   - Pure Space Black (#000000) — the void of space; never a soft black
+ *   - Spectral White (#f0f0fa) — slight blue-violet tint that mimics starlight
+ *   - --surface aliases to --bg — SpaceX has NO cards, panels, or containers
+ *   - Ghost border (rgba(240,240,250,0.35)) — only visible interactive edge
+ *   - D-DIN industrial typeface — DIN heritage, stenciled aerospace voice
+ *   - Display tracking 0.02em (= 0.96px at 48px) — DESIGN.md §3 verbatim
+ *   - Tight leading 1.0 — compressed mission-briefing rhythm
+ *   - --elev-raised: none — zero shadows; depth comes from photography
+ *   - --radius-pill: 32px — the ghost button is the SOLE rounded element
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ─────────────────────────────────────────────────────
+   * The void of space. There is no card tier, no warm tier — every
+   * SpaceX section is text-on-photograph, not text-on-surface. We
+   * still declare --surface so cross-brand components that paint a
+   * card still resolve, but it deliberately matches --bg. */
+  --bg: #000000;             /* Space Black — pure void, the foundation canvas */
+  --surface: #000000;        /* No card surfaces — content sits directly on the void */
+  --surface-warm: var(--surface); /* alias — no warm tier in an achromatic system */
+
+  /* ─── Foreground ──────────────────────────────────────────────────
+   * Spectral White, never pure white. The slight blue-violet tint
+   * mimics starlight on a spacecraft hull and prevents the clinical
+   * feel of #ffffff against pure black. */
+  --fg: #f0f0fa;             /* Spectral White — primary text, mission-critical signal */
+  --fg-2: var(--fg);         /* alias — single text weight throughout the system */
+  --muted: rgba(240, 240, 250, 0.7); /* Dimmed spectral — captions, secondary labels */
+  --meta: var(--muted);      /* alias — tertiary FG identical to muted on dark canvas */
+
+  /* ─── Border ──────────────────────────────────────────────────────
+   * The Ghost Border (35% spectral) is the only edge that ever
+   * appears — on the lone ghost CTA button. Inner separators borrow
+   * the 10% spectral surface tint so they barely register. */
+  --border: rgba(240, 240, 250, 0.35); /* Ghost Border — DESIGN.md §2 verbatim */
+  --border-soft: rgba(240, 240, 250, 0.1); /* Inner separators / barely-visible dividers */
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * SpaceX has no chromatic accent — Spectral White IS the accent.
+   * Hover lifts to pure white (Hover White / --white-100 in DESIGN.md);
+   * active gently dims. The full ghost-button affordance is
+   * implemented in components, not in the accent token. */
+  --accent: #f0f0fa;         /* Spectral White stands in for any brand accent */
+  --accent-on: #000000;      /* Black text when accent is the bg */
+  --accent-hover: #ffffff;   /* Hover White — pure white per DESIGN.md §2 */
+  --accent-active: #d8d8e6;  /* Dimmed spectral — pressed state */
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * Schema defaults preserved. SpaceX's homepage is purely
+   * presentational and almost never surfaces semantic state, but the
+   * tokens must resolve when shared components reference them. */
+  --success: #16a34a;
+  --warn: #eab308;
+  --danger: #dc2626;
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * D-DIN — industrial geometric, German DIN heritage. Two weights
+   * only: 700 (Bold) for display + nav emphasis, 400 for body.
+   * Fallbacks per DESIGN.md §3: Arial, Verdana. */
+  --font-display: "D-DIN-Bold", "D-DIN", "DIN Alternate", "Helvetica Neue", Arial, Verdana, sans-serif;
+  --font-body: "D-DIN", "DIN Alternate", "Helvetica Neue", Arial, Verdana, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale — DESIGN.md §3 anchors: 10px (Micro), 12px (Caption /
+   * Nav), 16px (Body), 48px (Display Hero). Intermediate tiers
+   * (20/24/32/40) are interpolated for the few moments a SpaceX-style
+   * layout needs them; the actual brand uses very few sizes. */
+  --text-xs: 10px;           /* Micro — uppercase ghost labels */
+  --text-sm: 12px;           /* Caption / Nav Link — uppercase */
+  --text-base: 16px;         /* Body — standard reading text */
+  --text-lg: 20px;
+  --text-xl: 24px;
+  --text-2xl: 32px;
+  --text-3xl: 40px;
+  --text-4xl: 48px;          /* Display Hero — D-DIN-Bold uppercase, "MISSION" weight */
+
+  --leading-body: 1.5;       /* DESIGN.md says 1.5–1.7 for reading body */
+  --leading-tight: 1.0;      /* Display / mission-briefing rhythm */
+  --tracking-display: 0.02em; /* = 0.96px at 48px — DESIGN.md §3 hero spec verbatim */
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * 8px base unit per DESIGN.md §5. Schema-default scale preserved —
+   * SpaceX's irregular published scale (3/5/12/15/18/20/24/30) is a
+   * brand-specific rhythm; cross-brand components paint at 4/8/12/16. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* ─── Section rhythm ──────────────────────────────────────────────
+   * DESIGN.md §5: each section is one full viewport. We can't bind
+   * "100vh" to padding (it would collapse on short content), so
+   * section-y is generous to evoke the cinematic single-viewport
+   * rhythm in fixture renderings. */
+  --section-y-desktop: 120px;
+  --section-y-tablet: 80px;
+  --section-y-phone: 56px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * Sharp 4px on dividers / utility — DESIGN.md §5 "Sharp (4px)".
+   * --radius-pill rebound to 32px because SpaceX's ghost button IS
+   * the only rounded element in the system, and "pill" semantically
+   * maps to that lone interactive surface. */
+  --radius-sm: 4px;
+  --radius-md: 4px;          /* No medium tier exists — same as sm */
+  --radius-lg: 4px;          /* No large tier exists — same as sm */
+  --radius-pill: 32px;       /* Ghost button radius — the only rounded element */
+
+  /* ─── Elevation (ZERO shadows) ────────────────────────────────────
+   * DESIGN.md §6: "SpaceX uses ZERO shadows." Every surface is
+   * already a photograph with natural lighting; CSS shadows would
+   * compete with the cinematic content. --elev-raised resolves to
+   * `none` so any shared component requesting a raised surface
+   * silently flattens instead of painting a synthetic drop shadow. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border); /* Hairline spectral ring — ghost-button edge */
+  --elev-raised: none;       /* Zero shadows — photography carries depth */
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * Solid 2px spectral ring — high contrast on black canvas. No
+   * blurred glow (consistent with the zero-shadow philosophy). */
+  --focus-ring: 0 0 0 2px var(--accent);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * Standard schema durations. SpaceX's drama is in the photography
+   * and type, not in animated state changes. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * 1440px container — wide-format layouts honour the cinematic
+   * full-bleed feel without letting hero copy stretch beyond
+   * readable on ultra-wide displays. Generous gutters keep the
+   * "edge-to-edge imagery" feel even at smaller breakpoints. */
+  --container-max: 1440px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 20px;
+  --container-gutter-phone: 18px;
+}
