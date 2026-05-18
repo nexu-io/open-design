@@ -28,7 +28,6 @@ od:
   mode: template
   platform: desktop
   scenario: live-artifacts
-  featured: 1
   preview:
     type: html
     entry: index.html

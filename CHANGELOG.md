@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- Fixed: desktop "Export PDF" now opens a direct "Save as PDF" file dialog and writes the PDF to disk, instead of opening the macOS system print dialog. Fixes [#1774](https://github.com/nexu-io/open-design/issues/1774).
 - Docs: clarify that packaged macOS support includes a verified Intel x64 ZIP path on Monterey, and document the Finder `PATH` caveat for packaged CLI detection. Fixes [#327](https://github.com/nexu-io/open-design/issues/327).
 
 ## [0.7.0] - 2026-05-12

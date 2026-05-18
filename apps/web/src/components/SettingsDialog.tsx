@@ -351,9 +351,18 @@ const AGENT_CLI_ENV_FIELDS = [
   },
   {
     agentId: 'codex',
+    envKey: 'CODEX_API_KEY',
+    labelKey: 'settings.cliEnvCodexApiKey',
+    labelSuffix: 'CODEX_API_KEY',
+    placeholder: 'Paste CODEX_API_KEY',
+    secret: true,
+  },
+  {
+    agentId: 'codex',
     envKey: 'OPENAI_API_KEY',
     labelKey: 'settings.cliEnvCodexApiKey',
-    placeholder: 'Paste proxy API key',
+    labelSuffix: 'OPENAI_API_KEY · proxy/legacy',
+    placeholder: 'Paste OPENAI_API_KEY',
     secret: true,
   },
 ] as const;
@@ -2174,6 +2183,15 @@ export function SettingsDialog({
                 const selectValue = customActive
                   ? CUSTOM_MODEL_SENTINEL
                   : modelValue;
+                const modelSource = selected.modelsSource ?? 'fallback';
+                const modelSourceLabel =
+                  modelSource === 'live'
+                    ? t('settings.modelSourceLive')
+                    : t('settings.modelSourceFallback');
+                const modelSourceHint =
+                  modelSource === 'live'
+                    ? t('settings.modelPickerLiveHint')
+                    : t('settings.modelPickerFallbackHint');
                 return (
                   <div className="agent-model-row">
                     <div className="agent-model-row-head">
@@ -2184,6 +2202,11 @@ export function SettingsDialog({
                         <label className="field">
                           <span className="field-label">
                             {t('settings.modelPicker')}
+                            <span
+                              className={`agent-model-source-badge ${modelSource}`}
+                            >
+                              {modelSourceLabel}
+                            </span>
                           </span>
                           <div className="agent-model-select-wrap">
                             <select
@@ -2220,7 +2243,7 @@ export function SettingsDialog({
                           </div>
                         </label>
                         <p className="hint agent-model-row-hint">
-                          {t('settings.modelPickerHint')}
+                          {modelSourceHint}
                         </p>
                       </>
                     ) : null}
@@ -2320,6 +2343,9 @@ export function SettingsDialog({
                           >
                             <span className="field-label">
                               {t(field.labelKey)}
+                              {'labelSuffix' in field
+                                ? ` (${field.labelSuffix})`
+                                : ''}
                             </span>
                             <input
                               type={

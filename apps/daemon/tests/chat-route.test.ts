@@ -348,6 +348,64 @@ process.exit(1);
     );
   });
 
+  it('classifies DeepSeek TUI config guidance as typed auth failures', async () => {
+    await withFakeAgent(
+      'deepseek',
+      `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('deepseek 0.3.0-test');
+  process.exit(0);
+}
+console.error('KEY=<your-key> deepseek --api-key <your-key>');
+console.error('api_key = "<your-key>" in ~/.deepseek/config.toml');
+process.exit(1);
+`,
+      async () => {
+        const deepseek = getAgentDef('deepseek');
+        expect(deepseek).toBeDefined();
+        const originalBudget = deepseek?.maxPromptArgBytes;
+        if (deepseek) deepseek.maxPromptArgBytes = 200_000;
+        try {
+          const createResponse = await fetch(`${baseUrl}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'deepseek',
+              message: 'hello',
+            }),
+          });
+          expect(createResponse.status).toBe(202);
+          const { runId } = await createResponse.json() as { runId: string };
+
+          const eventsController = new AbortController();
+          const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+            signal: eventsController.signal,
+          });
+          const eventsBody = await readSseUntil(eventsResponse, 'AGENT_AUTH_REQUIRED');
+          eventsController.abort();
+          const statusBody = await waitForRunStatus(baseUrl, runId);
+
+          expect(eventsBody).toContain('event: error');
+          expect(eventsBody).toContain('AGENT_AUTH_REQUIRED');
+          expect(eventsBody).toContain('~/.deepseek/config.toml');
+          expect(eventsBody).toContain('DEEPSEEK_API_KEY');
+          expect(eventsBody).not.toContain('cursor-agent login');
+          expect(eventsBody).not.toContain('AGENT_EXECUTION_FAILED');
+          expect(statusBody.status).toBe('failed');
+        } finally {
+          if (deepseek) {
+            if (originalBudget === undefined) {
+              delete deepseek.maxPromptArgBytes;
+            } else {
+              deepseek.maxPromptArgBytes = originalBudget;
+            }
+          }
+        }
+      },
+    );
+  });
+
   it('surfaces Qoder assistant error records through the SSE error channel', async () => {
     const qoderErrorLine = JSON.stringify({
       type: 'assistant',

@@ -1,6 +1,8 @@
 ---
 name: web-prototype-taste-brutalist
 description: Swiss industrial-print web prototype. Newsprint canvas, monolithic black grotesque, viewport-bleeding numerals, hairline grid dividers, hazard-red accent, ASCII syntax decoration. Distilled from Leonxlnx/taste-skill `brutalist-skill` (Swiss Industrial Print mode).
+od:
+  featured: 0.10
 ---
 
 # Web Prototype — Industrial Brutalist (Swiss Print)

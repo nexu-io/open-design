@@ -14,6 +14,7 @@ import type {
   McpServerConfig,
   InstalledPluginRecord,
   ProjectKind,
+  AudioVoiceOption,
 } from '@open-design/contracts';
 import { DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID } from '@open-design/contracts';
 import {
@@ -24,10 +25,18 @@ import {
 } from '../state/projects';
 import { fetchMcpServers } from '../state/mcp';
 import { useI18n } from '../i18n';
-import type { Project, SkillSummary } from '../types';
+import { fetchElevenLabsVoiceOptions } from '../providers/elevenlabs-voices';
+import type { Project, ProjectMetadata, PromptTemplateSummary, SkillSummary } from '../types';
 import { inlineMentionToken } from '../utils/inlineMentions';
 import { HomeHero } from './HomeHero';
 import { findChip, type HomeHeroChip } from './home-hero/chips';
+import {
+  buildHomeMediaComposer,
+  homeMediaSurfaceForChipId,
+  metadataForHomeMediaComposer,
+  normalizeHomeMediaInputs,
+  type HomeComposerMediaSurface,
+} from './home-hero/media-surfaces';
 import {
   buildPluginAuthoringInputs,
   buildPluginAuthoringPromptForInputs,
@@ -61,6 +70,10 @@ interface ActivePlugin {
   // kind defaults to the historical 'prototype' value.
   projectKind: ProjectKind | null;
   chipId: string | null;
+  mediaSurface: HomeComposerMediaSurface | null;
+  projectMetadata: ProjectMetadata | null;
+  editableInputNames: string[];
+  preserveInputFields: boolean;
 }
 
 interface SelectedPluginContext {
@@ -99,6 +112,7 @@ interface Props {
   promptHandoff?: HomePromptHandoff | null;
   skills?: SkillSummary[];
   skillsLoading?: boolean;
+  promptTemplates?: PromptTemplateSummary[];
 }
 
 export function HomeView({
@@ -113,6 +127,7 @@ export function HomeView({
   promptHandoff,
   skills = [],
   skillsLoading = false,
+  promptTemplates = [],
 }: Props) {
   const { locale } = useI18n();
   const [plugins, setPlugins] = useState<InstalledPluginRecord[]>([]);
@@ -135,11 +150,16 @@ export function HomeView({
   const [mcpLoading, setMcpLoading] = useState(true);
   const [prompt, setPrompt] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [elevenLabsVoices, setElevenLabsVoices] = useState<AudioVoiceOption[]>([]);
+  const [elevenLabsVoicesLoading, setElevenLabsVoicesLoading] = useState(false);
+  const [elevenLabsVoicesLoaded, setElevenLabsVoicesLoaded] = useState(false);
+  const [elevenLabsVoicesError, setElevenLabsVoicesError] = useState<string | null>(null);
   const [detailsRecord, setDetailsRecord] = useState<InstalledPluginRecord | null>(null);
   const [pendingReplacement, setPendingReplacement] = useState<PendingReplacement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const consumedHandoffIdRef = useRef<number | null>(null);
   const pendingPromptFocusEndRef = useRef(false);
+  const activePluginApplyRequestRef = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -169,6 +189,79 @@ export function HomeView({
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (active?.mediaSurface !== 'audio' || active.inputs.model !== 'elevenlabs-v3') return;
+    if (elevenLabsVoicesLoaded) return;
+    const controller = new AbortController();
+    setElevenLabsVoicesLoading(true);
+    setElevenLabsVoicesError(null);
+    void fetchElevenLabsVoiceOptions(controller.signal)
+      .then((voices) => {
+        if (controller.signal.aborted) return;
+        setElevenLabsVoices(voices);
+        setElevenLabsVoicesLoaded(true);
+      })
+      .catch((err) => {
+        if (controller.signal.aborted) return;
+        setElevenLabsVoices([]);
+        setElevenLabsVoicesLoaded(true);
+        setElevenLabsVoicesError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (controller.signal.aborted) return;
+        setElevenLabsVoicesLoading(false);
+      });
+    return () => controller.abort();
+  }, [active?.mediaSurface, active?.inputs.model, elevenLabsVoicesLoaded]);
+
+  const elevenLabsVoiceWarning = useMemo(() => {
+    if (active?.mediaSurface !== 'audio' || active.inputs.model !== 'elevenlabs-v3') return null;
+    if (elevenLabsVoicesError) return elevenLabsVoicesError;
+    if (elevenLabsVoicesLoaded && elevenLabsVoices.length === 0) {
+      return 'No configured ElevenLabs voices were returned. Using Rachel (default).';
+    }
+    return null;
+  }, [
+    active?.mediaSurface,
+    active?.inputs.model,
+    elevenLabsVoicesError,
+    elevenLabsVoicesLoaded,
+    elevenLabsVoices.length,
+  ]);
+
+  useEffect(() => {
+    if (!active?.mediaSurface) return;
+    const composer = buildHomeMediaComposer(
+      active.mediaSurface,
+      promptTemplates,
+      active.inputs,
+      elevenLabsVoices,
+      {
+        elevenLabsVoiceWarning,
+        elevenLabsVoicesLoading,
+      },
+    );
+    const nextRendered = renderPluginBriefTemplate(composer.queryTemplate, composer.inputs);
+    if (prompt === active.lastRenderedPrompt || prompt.trim().length === 0) {
+      setPrompt(nextRendered);
+    }
+    setActive((prev) => {
+      if (!prev?.mediaSurface) return prev;
+      return {
+        ...prev,
+        inputs: composer.inputs,
+        inputFields: composer.fields,
+        queryTemplate: composer.queryTemplate,
+        editableInputNames: composer.editableFieldNames,
+        inputsValid: pluginInputsAreValid(composer.fields, composer.inputs),
+        result: inputsEqual(prev.result?.appliedPlugin?.inputs, composer.inputs) ? prev.result : null,
+        lastRenderedPrompt: nextRendered,
+        projectMetadata: metadataForHomeMediaComposer(prev.mediaSurface, composer.inputs, promptTemplates),
+      };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [promptTemplates, elevenLabsVoices, elevenLabsVoiceWarning, elevenLabsVoicesLoading]);
 
   useEffect(() => {
     if (!pendingPromptFocusEndRef.current) return;
@@ -249,10 +342,18 @@ export function HomeView({
       projectKind?: ProjectKind;
       chipId?: string;
       inputs?: Record<string, unknown>;
+      inputFields?: InputFieldSpec[];
       queryTemplate?: string | null;
+      mediaSurface?: HomeComposerMediaSurface | null;
+      projectMetadata?: ProjectMetadata | null;
+      editableInputNames?: string[];
+      preserveInputFields?: boolean;
+      replaceWithoutConfirmation?: boolean;
     },
   ) {
-    const inputFields = record.manifest?.od?.inputs ?? [];
+    const applyRequestId = activePluginApplyRequestRef.current + 1;
+    activePluginApplyRequestRef.current = applyRequestId;
+    const inputFields = options?.inputFields ?? record.manifest?.od?.inputs ?? [];
     const optimisticInputs = hydratePluginInputs(inputFields, options?.inputs);
     const inputsValid = pluginInputsAreValid(inputFields, optimisticInputs);
     const queryTemplate =
@@ -287,6 +388,10 @@ export function HomeView({
       lastRenderedPrompt: optimisticPrompt,
       projectKind: options?.projectKind ?? null,
       chipId: options?.chipId ?? null,
+      mediaSurface: options?.mediaSurface ?? null,
+      projectMetadata: options?.projectMetadata ?? null,
+      editableInputNames: options?.editableInputNames ?? [],
+      preserveInputFields: options?.preserveInputFields === true,
     });
     setFallbackProjectKind(null);
     setDetailsRecord(null);
@@ -298,7 +403,8 @@ export function HomeView({
       return;
     }
 
-    const result = await resolveActivePlugin(record, optimisticInputs);
+    const result = await resolveActivePlugin(record, optimisticInputs, applyRequestId);
+    if (activePluginApplyRequestRef.current !== applyRequestId) return;
     if (!result) {
       // Roll back the optimistic active so submit can't fire against a
       // plugin that never bound. Only clear when the in-flight apply
@@ -320,8 +426,11 @@ export function HomeView({
             ...prev,
             result,
             inputs: reconciledInputs,
-            inputFields: result.inputs ?? inputFields,
-            inputsValid: pluginInputsAreValid(result.inputs ?? inputFields, reconciledInputs),
+            inputFields: options?.preserveInputFields ? inputFields : result.inputs ?? inputFields,
+            inputsValid: pluginInputsAreValid(
+              options?.preserveInputFields ? inputFields : result.inputs ?? inputFields,
+              reconciledInputs,
+            ),
           }
         : prev,
     );
@@ -334,8 +443,9 @@ export function HomeView({
     // no-op so their edits survive.
     if (nextPrompt === undefined || nextPrompt === null) {
       const reconciledQuery =
-        result.query ||
-        resolvePluginQueryFallback(record.manifest?.od?.useCase?.query, locale);
+        options?.queryTemplate !== undefined
+          ? options.queryTemplate
+          : result.query || resolvePluginQueryFallback(record.manifest?.od?.useCase?.query, locale);
       if (reconciledQuery) {
         const reconciledPrompt = renderPluginBriefTemplate(reconciledQuery, reconciledInputs);
         if (reconciledPrompt !== optimisticPrompt) {
@@ -353,11 +463,14 @@ export function HomeView({
   async function resolveActivePlugin(
     record: InstalledPluginRecord,
     inputs: Record<string, unknown>,
+    applyRequestId?: number,
   ): Promise<ApplyResult | null> {
     setPendingApplyId(record.id);
     const result = await applyPlugin(record.id, { locale, inputs });
-    setPendingApplyId(null);
-    setPendingChipId(null);
+    if (applyRequestId === undefined || activePluginApplyRequestRef.current === applyRequestId) {
+      setPendingApplyId(null);
+      setPendingChipId(null);
+    }
     return result;
   }
 
@@ -368,13 +481,28 @@ export function HomeView({
       projectKind?: ProjectKind;
       chipId?: string;
       inputs?: Record<string, unknown>;
+      inputFields?: InputFieldSpec[];
       queryTemplate?: string | null;
+      mediaSurface?: HomeComposerMediaSurface | null;
+      projectMetadata?: ProjectMetadata | null;
+      editableInputNames?: string[];
+      preserveInputFields?: boolean;
+      replaceWithoutConfirmation?: boolean;
     },
   ) {
-    const replacement = previewPluginReplacement(record, nextPrompt, options?.inputs);
-    runWithReplacementConfirmation(record.title, replacement, () => {
-      void usePlugin(record, nextPrompt, options);
+    const replacement = previewPluginReplacement(record, nextPrompt, {
+      inputs: options?.inputs,
+      inputFields: options?.inputFields,
+      queryTemplate: options?.queryTemplate,
     });
+    const confirm = () => {
+      void usePlugin(record, nextPrompt, options);
+    };
+    if (options?.replaceWithoutConfirmation) {
+      confirm();
+      return;
+    }
+    runWithReplacementConfirmation(record.title, replacement, confirm);
   }
 
   function requestPluginContextUse(
@@ -419,12 +547,20 @@ export function HomeView({
   function previewPluginReplacement(
     record: InstalledPluginRecord,
     nextPrompt?: string | null,
-    inputs?: Record<string, unknown>,
+    options?: {
+      inputs?: Record<string, unknown>;
+      inputFields?: InputFieldSpec[];
+      queryTemplate?: string | null;
+    },
   ): string | null {
     if (nextPrompt !== undefined && nextPrompt !== null) return nextPrompt;
-    const query = resolvePluginQueryFallback(record.manifest?.od?.useCase?.query, locale);
+    const query =
+      options?.queryTemplate !== undefined
+        ? options.queryTemplate
+        : resolvePluginQueryFallback(record.manifest?.od?.useCase?.query, locale);
     if (!query) return null;
-    return renderPluginBriefTemplate(query, hydratePluginInputs(record.manifest?.od?.inputs ?? [], inputs));
+    const fields = options?.inputFields ?? record.manifest?.od?.inputs ?? [];
+    return renderPluginBriefTemplate(query, hydratePluginInputs(fields, options?.inputs));
   }
 
   function renderPluginContextPrompt(
@@ -485,14 +621,20 @@ export function HomeView({
     );
     if (!extracted) return;
     const nextInputs = { ...active.inputs, ...extracted };
-    const inputsValid = pluginInputsAreValid(active.inputFields, nextInputs);
-    const inputsChanged = !inputsEqual(active.inputs, nextInputs);
+    const normalizedInputs = active.mediaSurface
+      ? normalizeHomeMediaInputs(active.mediaSurface, nextInputs, promptTemplates, elevenLabsVoices)
+      : nextInputs;
+    const inputsValid = pluginInputsAreValid(active.inputFields, normalizedInputs);
+    const inputsChanged = !inputsEqual(active.inputs, normalizedInputs);
     setActive({
       ...active,
-      inputs: nextInputs,
+      inputs: normalizedInputs,
       inputsValid,
+      projectMetadata: active.mediaSurface
+        ? metadataForHomeMediaComposer(active.mediaSurface, normalizedInputs, promptTemplates)
+        : active.projectMetadata,
       result:
-        inputsChanged && !inputsEqual(active.result?.appliedPlugin?.inputs, nextInputs)
+        inputsChanged && !inputsEqual(active.result?.appliedPlugin?.inputs, normalizedInputs)
           ? null
           : active.result,
       lastRenderedPrompt: nextPrompt,
@@ -512,13 +654,27 @@ export function HomeView({
 
   function updateActiveInputs(next: Record<string, unknown>) {
     if (!active) return;
-    const inputsValid = pluginInputsAreValid(active.inputFields, next);
+    const normalized = active.mediaSurface
+      ? normalizeHomeMediaInputs(active.mediaSurface, next, promptTemplates, elevenLabsVoices)
+      : next;
+    const mediaComposer = active.mediaSurface
+      ? buildHomeMediaComposer(active.mediaSurface, promptTemplates, normalized, elevenLabsVoices, {
+          elevenLabsVoiceWarning,
+          elevenLabsVoicesLoading,
+        })
+      : null;
+    const inputFields = mediaComposer?.fields ?? active.inputFields;
+    const queryTemplate = mediaComposer?.queryTemplate ?? active.queryTemplate;
+    const projectMetadata = active.mediaSurface
+      ? metadataForHomeMediaComposer(active.mediaSurface, normalized, promptTemplates)
+      : active.projectMetadata;
+    const inputsValid = pluginInputsAreValid(inputFields, normalized);
     const nextRendered =
-      active.queryTemplate !== null
-        ? renderPluginBriefTemplate(active.queryTemplate, next)
+      queryTemplate !== null
+        ? renderPluginBriefTemplate(queryTemplate, normalized)
         : active.lastRenderedPrompt;
     if (
-      active.queryTemplate !== null &&
+      queryTemplate !== null &&
       nextRendered !== null &&
       (prompt === active.lastRenderedPrompt || prompt.trim().length === 0)
     ) {
@@ -526,9 +682,13 @@ export function HomeView({
     }
     setActive({
       ...active,
-      inputs: next,
+      inputs: normalized,
+      inputFields,
+      queryTemplate,
+      projectMetadata,
+      editableInputNames: mediaComposer?.editableFieldNames ?? active.editableInputNames,
       inputsValid,
-      result: inputsEqual(active.result?.appliedPlugin?.inputs, next) ? active.result : null,
+      result: inputsEqual(active.result?.appliedPlugin?.inputs, normalized) ? active.result : null,
       lastRenderedPrompt: nextRendered,
     });
   }
@@ -609,6 +769,32 @@ export function HomeView({
           );
           return;
         }
+        const mediaSurface = homeMediaSurfaceForChipId(chip.id);
+        if (mediaSurface) {
+          const composer = buildHomeMediaComposer(
+            mediaSurface,
+            promptTemplates,
+            chip.action.inputs,
+            elevenLabsVoices,
+            {
+              elevenLabsVoiceWarning,
+              elevenLabsVoicesLoading,
+            },
+          );
+          requestActivePlugin(record, undefined, {
+            projectKind: composer.projectKind,
+            chipId: chip.id,
+            inputs: composer.inputs,
+            inputFields: composer.fields,
+            queryTemplate: composer.queryTemplate,
+            mediaSurface,
+            projectMetadata: metadataForHomeMediaComposer(mediaSurface, composer.inputs, promptTemplates),
+            editableInputNames: composer.editableFieldNames,
+            preserveInputFields: true,
+            replaceWithoutConfirmation: Boolean(active?.mediaSurface),
+          });
+          return;
+        }
         requestActivePlugin(record, undefined, {
           projectKind: chip.action.projectKind,
           chipId: chip.id,
@@ -664,6 +850,9 @@ export function HomeView({
         : {}),
     }));
     const defaultInputs = { prompt: trimmed };
+    const submittedProjectMetadata = submittedActive?.mediaSurface
+      ? metadataForHomeMediaComposer(submittedActive.mediaSurface, submittedActive.inputs, promptTemplates)
+      : submittedActive?.projectMetadata ?? null;
     onSubmit({
       prompt: trimmed,
       pluginId: submittedActive?.record.id ?? DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID,
@@ -673,6 +862,7 @@ export function HomeView({
       taskKind: submittedActive?.result?.appliedPlugin?.taskKind ?? null,
       pluginInputs: submittedActive ? submittedActive.inputs : defaultInputs,
       projectKind: submittedActive?.projectKind ?? fallbackProjectKind ?? projectKindForSkill(activeSkill) ?? 'other',
+      projectMetadata: submittedProjectMetadata,
       contextPlugins,
       attachments: stagedFiles,
     });
@@ -699,6 +889,8 @@ export function HomeView({
         pluginInputValues={active?.inputs ?? {}}
         pluginInputTemplate={active?.queryTemplate ?? null}
         onPluginInputValuesChange={updateActiveInputs}
+        inlineEditableInputNames={active?.editableInputNames ?? []}
+        showPluginInputsForm={!active?.mediaSurface}
         onPluginInputValidityChange={(valid) => {
           setActive((prev) => (
             prev && prev.inputsValid !== valid ? { ...prev, inputsValid: valid } : prev

@@ -1,4 +1,12 @@
 import { useT } from '../i18n';
+import { Icon } from './Icon';
+
+/**
+ * Canonical location of the full privacy policy. Kept as a single named
+ * constant so it can be repointed (e.g. to a hosted page) without touching
+ * markup. `PRIVACY.md` documents the same data handling the modal discloses.
+ */
+const PRIVACY_POLICY_URL = 'https://github.com/nexu-io/open-design/blob/main/PRIVACY.md';
 
 interface Props {
   /** Affirmative consent (Share usage data). */
@@ -12,11 +20,17 @@ interface Props {
  *
  * Anchored to the bottom-right of the viewport (cookie-consent style)
  * so it's prominently visible without blocking the underlying app —
- * the user can move around and read while deciding. The two action
- * buttons share equal visual prominence so the reject path is not
- * de-emphasised, matching the EDPB equal-prominence requirement
- * under GDPR. Neither button is rendered as selected before the user
- * chooses.
+ * the user can move around and read while deciding. On narrow viewports
+ * it stretches to a bottom-edge bar (see `.privacy-consent-banner` in
+ * index.css) so it doesn't crowd content on phones.
+ *
+ * The two action buttons share equal visual prominence so the reject
+ * path is not de-emphasised, matching the EDPB equal-prominence
+ * requirement under GDPR. Neither button is rendered as selected before
+ * the user chooses, and their labels name the action ("Share usage
+ * data" / "Don't share") rather than a vague outcome so the affirmative
+ * button reads as a consent choice. A link to the full privacy policy
+ * sits above the actions so the policy is reachable before deciding.
  *
  * Stays mounted until the user picks Share or Don't share — there is
  * no dismiss-without-choice button on purpose. Telemetry decisions
@@ -46,6 +60,16 @@ export function PrivacyConsentModal({ onShare, onDecline }: Props): JSX.Element 
       </dl>
 
       <p className="hint privacy-consent-banner-footer">{t('settings.privacyConsentFooter')}</p>
+
+      <a
+        className="privacy-consent-policy-link"
+        href={PRIVACY_POLICY_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        <Icon name="external-link" size={13} />
+        <span>{t('settings.privacyConsentPolicyLink')}</span>
+      </a>
 
       <div
         className="privacy-consent-actions"

@@ -32,6 +32,7 @@ import type {
   PluginManifest,
 } from '@open-design/contracts';
 import { Icon } from '../Icon';
+import { TrustBadge } from '../TrustBadge';
 import { authorInitials, derivePluginSourceLinks } from '../../runtime/plugin-source';
 import { resolvePluginQueryFallback } from '../../state/projects';
 
@@ -137,9 +138,7 @@ export function PluginMetaSections({ record, omit, compact, heading }: Props) {
           <span className="plugin-meta-sections__heading-meta">
             <span>v{record.version}</span>
             <span>·</span>
-            <span className={`plugin-meta-sections__trust trust-${record.trust}`}>
-              {record.trust}
-            </span>
+            <TrustBadge trust={record.trust} />
             {record.sourceKind ? (
               <>
                 <span>·</span>
@@ -526,9 +525,7 @@ export function PluginMetaSections({ record, omit, compact, heading }: Props) {
           <div>
             <dt>Trust</dt>
             <dd>
-              <span className={`plugin-details-modal__trust trust-${record.trust}`}>
-                {record.trust}
-              </span>
+              <TrustBadge trust={record.trust} />
             </dd>
           </div>
           {record.pinnedRef ? (

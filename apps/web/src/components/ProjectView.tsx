@@ -9,6 +9,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { createHtmlArtifactManifest, inferLegacyManifest } from '../artifacts/manifest';
+import { resolveHtmlPointerArtifactTarget } from '../artifacts/pointer';
 import { validateHtmlArtifact } from '../artifacts/validate';
 import { createArtifactParser } from '../artifacts/parser';
 import { useT } from '../i18n';
@@ -372,17 +373,26 @@ export function ProjectView({
   const [artifact, setArtifact] = useState<Artifact | null>(null);
   const [filesRefresh, setFilesRefresh] = useState(0);
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
+  const projectFilesRef = useRef<ProjectFile[]>([]);
   const [liveArtifacts, setLiveArtifacts] = useState<LiveArtifactSummary[]>([]);
   const [liveArtifactEvents, setLiveArtifactEvents] = useState<LiveArtifactEventItem[]>([]);
   const [workspaceFocused, setWorkspaceFocused] = useState(false);
-  const [instructionsOpen, setInstructionsOpen] = useState(false);
+  // `closed` → no surface; `review` → read-only saved-state panel with a
+  // preview + reopen-to-edit action (#1822); `edit` → the textarea editor.
+  const [instructionsMode, setInstructionsMode] = useState<'closed' | 'review' | 'edit'>('closed');
   const [instructionsDraft, setInstructionsDraft] = useState(project.customInstructions ?? '');
   const [instructionsSaving, setInstructionsSaving] = useState(false);
-  // Keep the draft in sync with the server value when the editor is closed
-  // (e.g. after an external update or project switch).
+  // Keep the draft in sync with the server value while the editor is not
+  // open (e.g. after an external update or project switch). If the saved
+  // value disappears while the review panel is showing, collapse the
+  // surface so it never renders a stale or empty read-back.
   useEffect(() => {
-    if (!instructionsOpen) setInstructionsDraft(project.customInstructions ?? '');
-  }, [project.customInstructions, instructionsOpen]);
+    if (instructionsMode === 'edit') return;
+    setInstructionsDraft(project.customInstructions ?? '');
+    if (instructionsMode === 'review' && !(project.customInstructions ?? '').trim()) {
+      setInstructionsMode('closed');
+    }
+  }, [project.customInstructions, instructionsMode]);
   // PR #974 round 7 (mrcfps @ useDesignMdState.ts:131): counter that
   // bumps on file-changed SSE events, live_artifact* events, and the
   // chat streaming-completion edge so the staleness chip stays in sync
@@ -804,9 +814,14 @@ export function ProjectView({
 
   const refreshProjectFiles = useCallback(async (): Promise<ProjectFile[]> => {
     const next = await fetchProjectFiles(project.id);
+    projectFilesRef.current = next;
     setProjectFiles(next);
     return next;
   }, [project.id]);
+
+  useEffect(() => {
+    projectFilesRef.current = projectFiles;
+  }, [projectFiles]);
 
   const refreshLiveArtifacts = useCallback(async (): Promise<LiveArtifactSummary[]> => {
     const next = await fetchLiveArtifacts(project.id);
@@ -1812,7 +1827,7 @@ export function ProjectView({
           // up as a real tab (not just the synthetic "live" stream).
           setArtifact((prev) => {
             if (!prev || !prev.html) return prev;
-            void persistArtifact(prev);
+            void refreshProjectFiles().then((nextFiles) => persistArtifact(prev, nextFiles));
             return prev;
           });
           // Refetch the file list directly (rather than just bumping the
@@ -2036,13 +2051,37 @@ export function ProjectView({
   );
 
   const persistArtifact = useCallback(
-    async (art: Artifact) => {
+    async (art: Artifact, projectFilesSnapshot?: ProjectFile[]) => {
       const baseName = (art.identifier || art.title || 'artifact')
         .toLowerCase()
         .replace(/[^a-z0-9_-]+/g, '-')
         .replace(/^-+|-+$/g, '')
         .slice(0, 60) || 'artifact';
       const ext = artifactExtensionFor(art);
+      // Pick a name that doesn't collide with an existing project file.
+      // The first run uses `<base>.<ext>`; subsequent runs append `-2`, `-3`…
+      // so prior artifacts aren't silently overwritten.
+      const currentProjectFiles = projectFilesSnapshot ?? projectFilesRef.current;
+      const existing = new Set(currentProjectFiles.map((f) => f.name));
+      let fileName = `${baseName}${ext}`;
+      let n = 2;
+      while (existing.has(fileName) && savedArtifactRef.current !== fileName) {
+        fileName = `${baseName}-${n}${ext}`;
+        n += 1;
+      }
+      if (ext === '.html') {
+        const pointerTarget = resolveHtmlPointerArtifactTarget({
+          content: art.html,
+          candidateFileName: fileName,
+          projectFiles: currentProjectFiles,
+        });
+        if (pointerTarget) {
+          if (savedArtifactRef.current === pointerTarget) return;
+          savedArtifactRef.current = pointerTarget;
+          requestOpenFile(pointerTarget);
+          return;
+        }
+      }
       // Pre-write structural gate for HTML artifacts (#50, #1143). Reject
       // bodies that obviously aren't a complete document — usually a one-line
       // prose summary the model emitted inside `<artifact type="text/html">`
@@ -2054,16 +2093,6 @@ export function ProjectView({
           setError(`Refused to save artifact "${art.identifier || art.title || 'untitled'}": ${validation.reason}`);
           return;
         }
-      }
-      // Pick a name that doesn't collide with an existing project file.
-      // The first run uses `<base>.<ext>`; subsequent runs append `-2`, `-3`…
-      // so prior artifacts aren't silently overwritten.
-      const existing = new Set(projectFiles.map((f) => f.name));
-      let fileName = `${baseName}${ext}`;
-      let n = 2;
-      while (existing.has(fileName) && savedArtifactRef.current !== fileName) {
-        fileName = `${baseName}-${n}${ext}`;
-        n += 1;
       }
       if (savedArtifactRef.current === fileName) return;
       savedArtifactRef.current = fileName;
@@ -2125,7 +2154,7 @@ export function ProjectView({
         );
       }
     },
-    [project.id, projectFiles, requestOpenFile],
+    [project.id, project.designSystemId, project.skillId, requestOpenFile],
   );
 
   const handleContinueRemainingTasks = useCallback(
@@ -2351,8 +2380,11 @@ export function ProjectView({
 
   const handleSaveInstructions = useCallback(async () => {
     const value = instructionsDraft.trim() || undefined;
+    // After a save, land on the review panel so the saved value is read
+    // back immediately (#1822); collapse only when it was cleared.
+    const settle = () => setInstructionsMode(value ? 'review' : 'closed');
     if (value === (project.customInstructions ?? undefined)) {
-      setInstructionsOpen(false);
+      settle();
       return;
     }
     setInstructionsSaving(true);
@@ -2360,7 +2392,7 @@ export function ProjectView({
     setInstructionsSaving(false);
     if (!result) return;
     onProjectChange(result);
-    setInstructionsOpen(false);
+    settle();
   }, [project, onProjectChange, instructionsDraft]);
 
   const projectMeta = useMemo(() => {
@@ -2604,11 +2636,16 @@ export function ProjectView({
   // shortcut wiring. Close to the JSX so the data flow is easy to
   // trace from the toolbar back to its sources.
   const handleFinalize = useCallback(() => {
+    const protocol = config.apiProtocol ?? 'anthropic';
     void finalize.trigger({
+      protocol,
       apiKey: config.apiKey,
       baseUrl: config.baseUrl,
       model: config.model,
       maxTokens: effectiveMaxTokens(config),
+      ...(protocol === 'azure' && config.apiVersion?.trim()
+        ? { apiVersion: config.apiVersion.trim() }
+        : {}),
     }).then((result) => {
       if (result) void designMdState.refresh();
     });
@@ -2845,25 +2882,76 @@ export function ProjectView({
               {project.name}
             </span>
             <span className="meta" data-testid="project-meta">{projectMeta}</span>
-            <button
-              type="button"
-              className="project-instructions-toggle"
-              title={t('project.customInstructions')}
-              onClick={() => {
-                if (instructionsOpen) setInstructionsDraft(project.customInstructions ?? '');
-                setInstructionsOpen((v) => !v);
-              }}
-            >
-              <Icon name="edit" size={13} />
-            </button>
+            {(project.customInstructions ?? '').trim() ? (
+              <button
+                type="button"
+                className={`project-instructions-chip${instructionsMode !== 'closed' ? ' is-open' : ''}`}
+                data-testid="project-instructions-chip"
+                title={t('project.customInstructions')}
+                aria-expanded={instructionsMode !== 'closed'}
+                onClick={() => setInstructionsMode((m) => (m === 'closed' ? 'review' : 'closed'))}
+              >
+                <Icon name="file" size={11} />
+                <span>{t('project.customInstructions')}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="project-instructions-toggle"
+                data-testid="project-instructions-add"
+                title={t('project.customInstructions')}
+                aria-expanded={instructionsMode !== 'closed'}
+                onClick={() => {
+                  setInstructionsDraft('');
+                  setInstructionsMode((m) => (m === 'closed' ? 'edit' : 'closed'));
+                }}
+              >
+                <Icon name="edit" size={13} />
+              </button>
+            )}
           </span>
         </div>
       </AppChromeHeader>
-      {instructionsOpen && (
+      {instructionsMode === 'review' && (
+        <div className="project-instructions-bar project-instructions-review">
+          <div className="project-instructions-bar-head">
+            <label className="project-instructions-label">{t('project.customInstructions')}</label>
+            <span className="project-instructions-status">
+              <Icon name="check" size={11} />
+              {t('project.instructionsActive')}
+            </span>
+          </div>
+          <div className="project-instructions-preview" data-testid="project-instructions-preview">
+            {project.customInstructions}
+          </div>
+          <div className="project-instructions-actions">
+            <button
+              type="button"
+              className="btn-sm"
+              onClick={() => setInstructionsMode('closed')}
+            >
+              {t('common.close')}
+            </button>
+            <button
+              type="button"
+              className="btn-sm btn-primary"
+              data-testid="project-instructions-edit"
+              onClick={() => {
+                setInstructionsDraft(project.customInstructions ?? '');
+                setInstructionsMode('edit');
+              }}
+            >
+              {t('common.edit')}
+            </button>
+          </div>
+        </div>
+      )}
+      {instructionsMode === 'edit' && (
         <div className="project-instructions-bar">
           <label className="project-instructions-label">{t('project.customInstructions')}</label>
           <textarea
             className="project-instructions-input"
+            data-testid="project-instructions-textarea"
             rows={3}
             maxLength={5000}
             placeholder={t('project.customInstructionsPlaceholder')}
@@ -2875,11 +2963,11 @@ export function ProjectView({
           <div className="project-instructions-actions">
             <button type="button" className="btn-sm" disabled={instructionsSaving} onClick={() => {
               setInstructionsDraft(project.customInstructions ?? '');
-              setInstructionsOpen(false);
+              setInstructionsMode((project.customInstructions ?? '').trim() ? 'review' : 'closed');
             }}>
               {t('common.cancel')}
             </button>
-            <button type="button" className="btn-sm btn-primary" disabled={instructionsSaving} onClick={handleSaveInstructions}>
+            <button type="button" className="btn-sm btn-primary" data-testid="project-instructions-save" disabled={instructionsSaving} onClick={handleSaveInstructions}>
               {t('common.save')}
             </button>
           </div>

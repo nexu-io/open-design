@@ -3,6 +3,7 @@ import {
   applyPlugin,
   contributeGeneratedPluginToOpenDesign,
   createPluginShareProject,
+  importFolderProject,
   installGeneratedPluginFolder,
   listPlugins,
   publishGeneratedPluginToGitHub,
@@ -276,5 +277,66 @@ describe('createPluginShareProject', () => {
       code: 'share-action-plugin-missing',
       message: 'Restart the daemon.',
     });
+  });
+});
+
+describe('importFolderProject', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('returns the project on success', async () => {
+    const response = {
+      project: { id: 'p-1', name: 'My Folder' },
+      conversationId: 'conv-1',
+      entryFile: 'index.html',
+    };
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(
+      JSON.stringify(response),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    )));
+
+    const result = await importFolderProject({ baseDir: '/home/user/project' });
+    expect(result).toMatchObject({ project: { id: 'p-1' }, entryFile: 'index.html' });
+  });
+
+  it('throws with daemon error message for filesystem root', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(
+      JSON.stringify({ error: { code: 'BAD_REQUEST', message: 'cannot import the filesystem root' } }),
+      { status: 400, headers: { 'content-type': 'application/json' } },
+    )));
+
+    await expect(importFolderProject({ baseDir: '/' }))
+      .rejects.toThrow('cannot import the filesystem root');
+  });
+
+  it('throws with daemon error message for non-existent folder', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(
+      JSON.stringify({ error: { code: 'BAD_REQUEST', message: 'folder not found' } }),
+      { status: 400, headers: { 'content-type': 'application/json' } },
+    )));
+
+    await expect(importFolderProject({ baseDir: '/abc/xyz/notexist' }))
+      .rejects.toThrow('folder not found');
+  });
+
+  it('throws with daemon error message for file path', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(
+      JSON.stringify({ error: { code: 'BAD_REQUEST', message: 'path must be a directory' } }),
+      { status: 400, headers: { 'content-type': 'application/json' } },
+    )));
+
+    await expect(importFolderProject({ baseDir: '/etc/hosts' }))
+      .rejects.toThrow('path must be a directory');
+  });
+
+  it('throws a fallback message when response body has no error detail', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(
+      'Internal Server Error',
+      { status: 500 },
+    )));
+
+    await expect(importFolderProject({ baseDir: '/some/path' }))
+      .rejects.toThrow('Failed to import folder');
   });
 });

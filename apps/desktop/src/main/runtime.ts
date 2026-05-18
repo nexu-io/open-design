@@ -6,7 +6,8 @@ import { fileURLToPath } from "node:url";
 import { BrowserWindow, dialog, ipcMain, shell } from "electron";
 import type { DesktopExportPdfInput, DesktopExportPdfResult } from "@open-design/sidecar-proto";
 
-import { exportPdfFromHtml, waitForPrintReadyHandshake } from "./pdf-export.js";
+import { createElectronPdfTarget, exportPdfFromHtml, savePrintReadyDocumentAsPdf } from "./pdf-export.js";
+import type { PrintReadyPdfOptions } from "./pdf-export.js";
 
 /**
  * Result of validating a candidate path before exposing it to a
@@ -716,6 +717,18 @@ function attachDownloadSaveAsDialog(window: BrowserWindow): void {
   });
 }
 
+function parsePrintReadyPdfOptions(value: unknown): PrintReadyPdfOptions {
+  if (value == null) return {};
+  if (typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Invalid print payload: expected options object");
+  }
+  const deck = (value as { deck?: unknown }).deck;
+  if (deck !== undefined && typeof deck !== "boolean") {
+    throw new Error("Invalid print payload: expected deck option to be boolean");
+  }
+  return deck === true ? { deck: true } : {};
+}
+
 export async function createDesktopRuntime(options: DesktopRuntimeOptions): Promise<DesktopRuntime> {
   const preloadPath = join(dirname(fileURLToPath(import.meta.url)), "preload.cjs");
 
@@ -871,40 +884,27 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   attachDownloadSaveAsDialog(window);
 
   ipcMain.removeHandler('od:print-pdf');
-  ipcMain.handle('od:print-pdf', async (_event, html: unknown, nonce: unknown): Promise<void> => {
+  ipcMain.handle('od:print-pdf', async (_event, html: unknown, nonce: unknown, options: unknown): Promise<void> => {
     if (typeof html !== 'string') {
       throw new Error('Invalid print payload: expected HTML string');
     }
     const printNonce = typeof nonce === 'string' ? nonce : '';
-
-    const printWindow = new BrowserWindow({
-      width: 800,
-      height: 600,
-      show: false,
-      webPreferences: {
-        contextIsolation: true,
-        nodeIntegration: false,
-        sandbox: true,
-      },
-    });
-
-    printWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-    printWindow.webContents.on('will-navigate', (e) => e.preventDefault());
-
-    try {
-      await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
-      await waitForPrintReadyHandshake(printWindow.webContents, printNonce);
-      printWindow.show();
-
-      await new Promise<void>((resolve, reject) => {
-        printWindow.webContents.print({ printBackground: true }, (success: boolean, failureReason?: string) => {
-          if (success) resolve();
-          else if (failureReason === 'Print job canceled') resolve();
-          else reject(new Error(failureReason ?? 'Print failed'));
-        });
-      });
-    } finally {
-      if (!printWindow.isDestroyed()) printWindow.close();
+    const printOptions = parsePrintReadyPdfOptions(options);
+    // Issue #1774: the renderer's `printPdf()` bridge runs the direct
+    // Save-as-PDF flow (showSaveDialog -> printToPDF -> write), never
+    // `webContents.print()` — the printer-first OS dialog. The renderer
+    // (apps/web/src/runtime/exports.ts#exportAsPdf) only reacts to a
+    // rejection: it shows a "Print failed" alert. A resolved call —
+    // including a user-canceled Save dialog — is silent, matching the
+    // pre-#1774 behavior where canceling the OS dialog was a no-op.
+    const result = await savePrintReadyDocumentAsPdf(
+      html,
+      printNonce,
+      createElectronPdfTarget(),
+      printOptions,
+    );
+    if (!result.ok) {
+      throw new Error(result.error ?? 'PDF export failed');
     }
   });
 

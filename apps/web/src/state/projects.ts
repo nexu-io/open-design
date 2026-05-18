@@ -90,18 +90,21 @@ export async function createProject(input: {
 
 export async function importFolderProject(
   input: ImportFolderRequest,
-): Promise<ImportFolderResponse | null> {
-  try {
-    const resp = await fetch('/api/import/folder', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(input),
-    });
-    if (!resp.ok) return null;
-    return (await resp.json()) as ImportFolderResponse;
-  } catch {
-    return null;
+): Promise<ImportFolderResponse> {
+  const resp = await fetch('/api/import/folder', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!resp.ok) {
+    let message = 'Failed to import folder';
+    try {
+      const body = await resp.json();
+      if (body?.error?.message) message = body.error.message;
+    } catch { /* use default message */ }
+    throw new Error(message);
   }
+  return (await resp.json()) as ImportFolderResponse;
 }
 
 export async function importClaudeDesignZip(
@@ -783,6 +786,7 @@ export interface PluginMarketplaceEntry {
   };
   homepage?: string;
   license?: string;
+  permissions?: string[];
   capabilitiesSummary?: string[];
   deprecated?: boolean | string;
   yanked?: boolean;

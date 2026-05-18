@@ -764,6 +764,50 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     );
   });
 
+  it('labels live CLI model metadata in the model picker', () => {
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      {
+        agents: [
+          {
+            ...availableAgents[0]!,
+            modelsSource: 'live',
+            models: [
+              { id: 'default', label: 'Default' },
+              { id: 'gpt-6-codex', label: 'GPT-6 Codex' },
+            ],
+          },
+        ],
+      },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI/i }));
+    expect(screen.getByText('Live from CLI')).toBeTruthy();
+    expect(
+      screen.getByText(/Models were refreshed from the installed CLI/i),
+    ).toBeTruthy();
+  });
+
+  it('labels fallback CLI model metadata in the model picker', () => {
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      {
+        agents: [
+          {
+            ...availableAgents[0]!,
+            modelsSource: 'fallback',
+          },
+        ],
+      },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI/i }));
+    expect(screen.getByText('Fallback list')).toBeTruthy();
+    expect(
+      screen.getByText(/installed CLI did not return live model metadata/i),
+    ).toBeTruthy();
+  });
+
   it('shows an empty state when no local CLI agents are detected', () => {
     renderSettingsDialog(
       { mode: 'daemon', agentId: null },
@@ -840,6 +884,13 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
       { mode: 'daemon', agentId: 'codex' },
       { agents: availableAgents },
     );
+
+    expect(
+      screen.getByLabelText('Codex/OpenAI proxy API key (CODEX_API_KEY)'),
+    ).toBeTruthy();
+    expect(
+      screen.getByLabelText('Codex/OpenAI proxy API key (OPENAI_API_KEY · proxy/legacy)'),
+    ).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText('Codex home'), {
       target: { value: ' ~/.codex-team ' },

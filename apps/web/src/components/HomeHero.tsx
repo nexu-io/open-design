@@ -52,6 +52,8 @@ interface Props {
   pluginInputTemplate?: string | null;
   onPluginInputValuesChange?: (values: Record<string, unknown>) => void;
   onPluginInputValidityChange?: (valid: boolean) => void;
+  inlineEditableInputNames?: string[];
+  showPluginInputsForm?: boolean;
   stagedFiles?: File[];
   onAddFiles?: (files: File[]) => void;
   onRemoveFile?: (index: number) => void;
@@ -110,6 +112,9 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
     pluginInputValues = {},
     pluginInputTemplate = null,
     onPluginInputValuesChange = () => undefined,
+    onPluginInputValidityChange = () => undefined,
+    inlineEditableInputNames = [],
+    showPluginInputsForm = true,
     stagedFiles = [],
     onAddFiles = () => undefined,
     onRemoveFile = () => undefined,
@@ -136,6 +141,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
   const [hoveredPlugin, setHoveredPlugin] = useState<InstalledPluginRecord | null>(null);
   const [promptScrollTop, setPromptScrollTop] = useState(0);
   const [dragActive, setDragActive] = useState(false);
+  const [openInlineInputName, setOpenInlineInputName] = useState<string | null>(null);
   const composingRef = useRef(false);
   const inputElementRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -270,14 +276,17 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
     () => new Map(pluginInputFields.map((field) => [field.name, field])),
     [pluginInputFields],
   );
-  const inlineInputNames = useMemo(
-    () => getTemplateInputNames(pluginInputTemplate),
-    [pluginInputTemplate],
+  const editableInputNames = useMemo(
+    () => new Set(inlineEditableInputNames),
+    [inlineEditableInputNames],
   );
-  const remainingInputFields = useMemo(
-    () => pluginInputFields.filter((field) => !inlineInputNames.has(field.name)),
-    [inlineInputNames, pluginInputFields],
-  );
+  const openInlineInputField = openInlineInputName
+    ? fieldByName.get(openInlineInputName) ?? null
+    : null;
+  // Surface every field, not just the ones the template references
+  // inline. The inline popover handles Home media slots; the form
+  // remains available for non-inline plugin inputs.
+  const remainingInputFields = pluginInputFields;
 
   useEffect(() => {
     if (selectedIndex >= visiblePickerOptions.length) setSelectedIndex(0);
@@ -286,6 +295,10 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
   useEffect(() => {
     if (!pickerOpen) setHoveredPlugin(null);
   }, [pickerOpen]);
+
+  useEffect(() => {
+    setOpenInlineInputName(null);
+  }, [activeChipId]);
 
   useEffect(() => {
     setPromptScrollTop(inputElementRef.current?.scrollTop ?? 0);
@@ -322,10 +335,6 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
         )
       : prompt;
     onPickMcp(server, nextPrompt);
-  }
-
-  function updatePluginInput(name: string, value: unknown) {
-    onPluginInputValuesChange({ ...pluginInputValues, [name]: value });
   }
 
   function handleFiles(files: File[]) {
@@ -491,9 +500,9 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
                         value={part.key ? pluginInputValues[part.key] : undefined}
                         fallbackText={part.text}
                         filled={part.filled === true}
-                        onChange={(value) => {
-                          if (part.key) updatePluginInput(part.key, value);
-                        }}
+                        editable={Boolean(part.key && editableInputNames.has(part.key))}
+                        open={part.key === openInlineInputName}
+                        onOpenChange={(open) => setOpenInlineInputName(open ? part.key ?? null : null)}
                       />
                     ) : (
                       part.kind === 'mention' ? (
@@ -578,11 +587,27 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
               aria-expanded={pickerOpen}
             />
           </div>
-          {remainingInputFields.length > 0 ? (
+          {openInlineInputField ? (
+            <InlinePromptOptionPopover
+              field={openInlineInputField}
+              value={pluginInputValues[openInlineInputField.name]}
+              onChange={(value) => {
+                onPluginInputValuesChange({
+                  ...pluginInputValues,
+                  [openInlineInputField.name]: value,
+                });
+                if (openInlineInputField.type !== 'string') {
+                  setOpenInlineInputName(null);
+                }
+              }}
+            />
+          ) : null}
+          {showPluginInputsForm && remainingInputFields.length > 0 ? (
             <PluginInputsForm
               fields={remainingInputFields}
               values={pluginInputValues}
               onChange={onPluginInputValuesChange}
+              onValidityChange={onPluginInputValidityChange}
             />
           ) : null}
         </div>
@@ -964,18 +989,6 @@ function stringifyTemplateValue(
   return { text: String(value), filled: true };
 }
 
-function getTemplateInputNames(template: string | null): Set<string> {
-  const names = new Set<string>();
-  if (!template) return names;
-  INPUT_PLACEHOLDER_PATTERN.lastIndex = 0;
-  let match: RegExpExecArray | null;
-  while ((match = INPUT_PLACEHOLDER_PATTERN.exec(template)) !== null) {
-    const key = match[1];
-    if (key) names.add(key);
-  }
-  return names;
-}
-
 function buildHomeMentionEntities({
   activePluginRecord,
   activeSkillId,
@@ -1110,155 +1123,169 @@ interface InlinePromptInputProps {
   value: unknown;
   fallbackText: string;
   filled: boolean;
-  onChange: (value: unknown) => void;
+  editable?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
+// Render plugin-input placeholders as read-only styled spans. Earlier
+// revisions used <input>/<select> here, but their CSS widths (min 8ch,
+// `displayValue.length + 1` in ch units, select dropdown padding) did
+// not match the proportional-font width of the corresponding substring
+// in the underlying textarea — so clicking on prose text in the overlay
+// landed the caret several characters off, and the misalignment grew
+// with every slot on the line. A span renders the exact same glyphs as
+// the textarea segment it sits on top of, so the two layouts stay in
+// lock-step and clicks land where the user expects. Editing happens in
+// the PluginInputsForm below.
 function InlinePromptInput({
   field,
   name,
   value,
   fallbackText,
   filled,
-  onChange,
+  editable = false,
+  open = false,
+  onOpenChange = () => undefined,
 }: InlinePromptInputProps) {
   const label = field?.label ?? name;
-  const type = field ? inlineFieldType(field) : 'string';
-  const displayValue = value === undefined || value === null || value === ''
-    ? fallbackText
-    : String(value);
-  const commonProps = {
-    className: 'home-hero__prompt-slot home-hero__prompt-slot-control',
-    'data-field-name': name,
-    'data-filled': filled ? 'true' : 'false',
-    'data-testid': `home-hero-prompt-slot-${name}`,
-    'aria-label': label,
-    title: label,
-  };
-
-  if (shouldRenderSlotAsText(name, displayValue)) {
+  const displayValue = formatPromptInputValue(field, value, fallbackText);
+  // No aria-label here: the editable control with this label lives in
+  // the PluginInputsForm below, and findByLabelText must resolve to one
+  // element. The span is decorative — it just highlights where the
+  // substituted value appears in the prompt the textarea already reads
+  // out.
+  const hint = filled ? `${label}: ${displayValue}` : label;
+  if (editable && field) {
     return (
-      <span
-        {...commonProps}
-        className={`${commonProps.className} home-hero__prompt-slot-text`}
-      >
-        {displayValue}
+      <span className="home-hero__prompt-option-shell">
+        <button
+          type="button"
+          className="home-hero__prompt-slot home-hero__prompt-slot--button"
+          data-field-name={name}
+          data-filled={filled ? 'true' : 'false'}
+          data-testid={`home-hero-prompt-slot-${name}`}
+          title={hint}
+          aria-label={`${label}: ${displayValue}`}
+          aria-expanded={open}
+          onPointerDown={(event) => {
+            event.preventDefault();
+            onOpenChange(!open);
+          }}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={(event) => {
+            if (event.detail === 0) onOpenChange(!open);
+          }}
+        >
+          {displayValue}
+        </button>
       </span>
     );
   }
+  return (
+    <span
+      className="home-hero__prompt-slot"
+      data-field-name={name}
+      data-filled={filled ? 'true' : 'false'}
+      data-testid={`home-hero-prompt-slot-${name}`}
+      title={hint}
+      aria-hidden
+    >
+      {displayValue}
+    </span>
+  );
+}
 
-  if (field && type === 'select' && Array.isArray(field.options)) {
+function InlinePromptOptionPopover({
+  field,
+  value,
+  onChange,
+}: {
+  field: InputFieldSpec;
+  value: unknown;
+  onChange: (value: unknown) => void;
+}) {
+  return (
+    <div
+      className="home-hero__prompt-option-popover"
+      data-testid={`home-hero-prompt-option-${field.name}`}
+      onMouseDown={(event) => event.stopPropagation()}
+    >
+      <span className="home-hero__prompt-option-label">{field.label ?? field.name}</span>
+      {renderInlinePromptEditor(field, value, onChange)}
+      {fieldPopoverNote(field) ? (
+        <span
+          className="home-hero__prompt-option-note"
+          data-tone={fieldPopoverNoteTone(field)}
+          data-testid={`home-hero-prompt-option-${field.name}-note`}
+        >
+          {fieldPopoverNote(field)}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function renderInlinePromptEditor(
+  field: InputFieldSpec,
+  value: unknown,
+  onChange: (value: unknown) => void,
+) {
+  if (field.type === 'select' && Array.isArray(field.options)) {
+    const optionLabels = optionLabelMap(field);
     return (
       <select
-        {...commonProps}
-        className={`${commonProps.className} home-hero__prompt-slot-select`}
-        value={value !== undefined && value !== null ? String(value) : ''}
+        className="home-hero__prompt-option-input"
+        value={value === undefined || value === null ? '' : String(value)}
         onChange={(event) => onChange(event.target.value)}
+        data-testid={`home-hero-prompt-option-${field.name}-select`}
+        aria-label={field.label ?? field.name}
       >
-        <option value="">{field.placeholder ?? 'Select...'}</option>
+        {field.placeholder ? <option value="">{field.placeholder}</option> : null}
         {field.options.map((option) => (
           <option key={option} value={option}>
-            {option}
+            {optionLabels[option] ?? option}
           </option>
         ))}
       </select>
     );
   }
-
-  if (field && type === 'number') {
-    return (
-      <input
-        {...commonProps}
-        className={`${commonProps.className} home-hero__prompt-slot-input`}
-        type="number"
-        value={value === undefined || value === null ? '' : String(value)}
-        placeholder={field.placeholder ?? fallbackText}
-        onChange={(event) => {
-          const raw = event.target.value;
-          if (raw === '') {
-            onChange(undefined);
-            return;
-          }
-          const parsed = Number(raw);
-          onChange(Number.isFinite(parsed) ? parsed : raw);
-        }}
-      />
-    );
-  }
-
-  if (field && type === 'boolean') {
-    const checked = Boolean(value);
-    return (
-      <button
-        {...commonProps}
-        type="button"
-        className={`${commonProps.className} home-hero__prompt-slot-toggle`}
-        aria-pressed={checked}
-        onClick={() => onChange(!checked)}
-      >
-        {checked ? 'true' : 'false'}
-      </button>
-    );
-  }
-
-  if (field && type === 'file') {
-    const fileLabel = fileInputLabel(value) ?? field.placeholder ?? fallbackText;
-    return (
-      <span
-        {...commonProps}
-        className={`${commonProps.className} home-hero__prompt-slot-file`}
-      >
-        <input
-          type="file"
-          aria-label={label}
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            onChange(file ? fileMetadata(file) : undefined);
-          }}
-          {...(typeof field.accept === 'string' ? { accept: field.accept } : {})}
-        />
-        <span>{fileLabel}</span>
-      </span>
-    );
-  }
-
-  const width = `${Math.min(Math.max(displayValue.length + 1, 10), 52)}ch`;
   return (
     <input
-      {...commonProps}
-      className={`${commonProps.className} home-hero__prompt-slot-input`}
-      type="text"
+      className="home-hero__prompt-option-input"
       value={value === undefined || value === null ? '' : String(value)}
-      placeholder={field?.placeholder ?? fallbackText}
       onChange={(event) => onChange(event.target.value)}
-      style={{ width }}
+      data-testid={`home-hero-prompt-option-${field.name}-input`}
+      aria-label={field.label ?? field.name}
     />
   );
 }
 
-function inlineFieldType(field: InputFieldSpec): string {
-  const rawType = (field as { type?: unknown }).type;
-  const raw = typeof rawType === 'string' ? rawType : 'string';
-  return raw === 'upload' ? 'file' : raw;
+function formatPromptInputValue(
+  field: InputFieldSpec | null,
+  value: unknown,
+  fallbackText: string,
+): string {
+  if (value === undefined || value === null || value === '') return fallbackText;
+  const raw = String(value);
+  return field ? optionLabelMap(field)[raw] ?? raw : raw;
 }
 
-function shouldRenderSlotAsText(name: string, value: string): boolean {
-  if (name === 'pluginGoal') return false;
-  return value.length > 18 || /\s/.test(value);
+function optionLabelMap(field: InputFieldSpec): Record<string, string> {
+  const labels = (field as { optionLabels?: unknown }).optionLabels;
+  return labels && typeof labels === 'object' && !Array.isArray(labels)
+    ? labels as Record<string, string>
+    : {};
 }
 
-function fileMetadata(file: File) {
-  return {
-    name: file.name,
-    size: file.size,
-    type: file.type,
-    lastModified: file.lastModified,
-  };
+function fieldPopoverNote(field: InputFieldSpec): string {
+  const note = (field as { popoverNote?: unknown }).popoverNote;
+  return typeof note === 'string' ? note : '';
 }
 
-function fileInputLabel(value: unknown): string | null {
-  if (!value || typeof value !== 'object') return null;
-  const name = (value as { name?: unknown }).name;
-  return typeof name === 'string' && name.length > 0 ? name : null;
+function fieldPopoverNoteTone(field: InputFieldSpec): string {
+  const tone = (field as { popoverNoteTone?: unknown }).popoverNoteTone;
+  return tone === 'warning' ? 'warning' : 'info';
 }
 
 function getContextMention(value: string): ContextMention | null {

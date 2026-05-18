@@ -476,7 +476,10 @@ describe('HomeView prompt handoff', () => {
     expect(screen.getByTestId('home-hero-prompt-slot-artifactKind')).toBeTruthy();
     expect(screen.getByTestId('home-hero-prompt-slot-designSystem')).toBeTruthy();
     expect(screen.getByTestId('home-hero-prompt-slot-template')).toBeTruthy();
-    expect(screen.queryByTestId('plugin-inputs-form')).toBeNull();
+    // Inline pills are read-only; the editable controls live in the
+    // PluginInputsForm below so caret positions in the textarea no
+    // longer drift away from where the user clicked in the overlay.
+    expect(screen.getByTestId('plugin-inputs-form')).toBeTruthy();
     expect(screen.queryByRole('alert')).toBeNull();
   });
 

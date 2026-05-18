@@ -104,6 +104,12 @@ export function SkillsSection({ cfg, setCfg }: Props) {
   // Only one skill can be in the 'confirm pending' state at a time; the
   // user clicks once to arm, twice to commit.
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  // Editing a built-in skill writes a user-owned shadow copy and hides
+  // the built-in entry from the list. Arm an inline confirmation first
+  // so the listing change doesn't feel like a silent conversion (#1378).
+  const [confirmBuiltInEditId, setConfirmBuiltInEditId] = useState<
+    string | null
+  >(null);
 
   const refresh = useCallback(async () => {
     const list = await fetchSkills();
@@ -199,6 +205,7 @@ export function SkillsSection({ cfg, setCfg }: Props) {
       // Switching rows aborts any in-flight edit on the previous row.
       setEditingId((cur) => (cur === id ? cur : null));
       setConfirmDeleteId(null);
+      setConfirmBuiltInEditId(null);
     },
     [ensureBody, ensureFiles],
   );
@@ -209,6 +216,7 @@ export function SkillsSection({ cfg, setCfg }: Props) {
     setDraftError(null);
     setEditingId(null);
     setConfirmDeleteId(null);
+    setConfirmBuiltInEditId(null);
   }, []);
 
   const startEdit = useCallback(
@@ -220,9 +228,26 @@ export function SkillsSection({ cfg, setCfg }: Props) {
       setExpandedId(skill.id);
       setCreating(false);
       setConfirmDeleteId(null);
+      setConfirmBuiltInEditId(null);
     },
     [ensureBody],
   );
+
+  const requestEdit = useCallback(
+    (skill: SkillSummary) => {
+      if (skill.source === 'built-in') {
+        setConfirmBuiltInEditId(skill.id);
+        setConfirmDeleteId(null);
+        return;
+      }
+      void startEdit(skill);
+    },
+    [startEdit],
+  );
+
+  const cancelBuiltInEdit = useCallback(() => {
+    setConfirmBuiltInEditId(null);
+  }, []);
 
   const cancelDraft = useCallback(() => {
     setDraft(EMPTY_DRAFT);
@@ -455,13 +480,16 @@ export function SkillsSection({ cfg, setCfg }: Props) {
                 files={filesById[skill.id] ?? null}
                 filesLoading={filesLoadingId === skill.id}
                 confirmDelete={confirmDeleteId === skill.id}
+                confirmBuiltInEdit={confirmBuiltInEditId === skill.id}
                 draft={isEditing ? draft : null}
                 draftError={isEditing ? draftError : null}
                 draftSaving={isEditing && draftSaving}
                 setDraft={setDraft}
                 onToggleExpanded={() => toggleExpanded(skill.id)}
                 onToggleEnabled={(e) => toggleEnabled(skill.id, e)}
-                onStartEdit={() => void startEdit(skill)}
+                onStartEdit={() => requestEdit(skill)}
+                onConfirmBuiltInEdit={() => void startEdit(skill)}
+                onCancelBuiltInEdit={cancelBuiltInEdit}
                 onArmDelete={() => armDelete(skill.id)}
                 onCancelDelete={cancelDelete}
                 onCommitDelete={() => void commitDelete(skill.id)}
@@ -486,6 +514,7 @@ interface SkillRowProps {
   files: SkillFileEntry[] | null;
   filesLoading: boolean;
   confirmDelete: boolean;
+  confirmBuiltInEdit: boolean;
   draft: DraftState | null;
   draftError: string | null;
   draftSaving: boolean;
@@ -493,6 +522,8 @@ interface SkillRowProps {
   onToggleExpanded: () => void;
   onToggleEnabled: (enabled: boolean) => void;
   onStartEdit: () => void;
+  onConfirmBuiltInEdit: () => void;
+  onCancelBuiltInEdit: () => void;
   onArmDelete: () => void;
   onCancelDelete: () => void;
   onCommitDelete: () => void;
@@ -510,6 +541,7 @@ function SkillRow({
   files,
   filesLoading,
   confirmDelete,
+  confirmBuiltInEdit,
   draft,
   draftError,
   draftSaving,
@@ -517,6 +549,8 @@ function SkillRow({
   onToggleExpanded,
   onToggleEnabled,
   onStartEdit,
+  onConfirmBuiltInEdit,
+  onCancelBuiltInEdit,
   onArmDelete,
   onCancelDelete,
   onCommitDelete,
@@ -630,6 +664,38 @@ function SkillRow({
           </label>
         </div>
       </div>
+
+      {confirmBuiltInEdit ? (
+        <div
+          className="skills-edit-builtin-warning"
+          role="alert"
+          data-testid="skills-edit-builtin-warning"
+        >
+          <p>
+            Editing this built-in skill creates a user override. The built-in
+            entry will be hidden from the list until you delete the override.
+            Continue?
+          </p>
+          <div className="skills-edit-builtin-actions">
+            <button
+              type="button"
+              className="btn ghost"
+              onClick={onCancelBuiltInEdit}
+              data-testid="skills-edit-builtin-cancel"
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              type="button"
+              className="btn primary"
+              onClick={onConfirmBuiltInEdit}
+              data-testid="skills-edit-builtin-confirm"
+            >
+              {t('settings.skillsEdit')}
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {expanded && !editing ? (
         <div className="skills-row-detail">

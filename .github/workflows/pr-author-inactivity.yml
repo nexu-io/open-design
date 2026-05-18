@@ -1,0 +1,242 @@
+name: PR author inactivity
+
+# Remind PR authors when reviewer / maintainer feedback has gone unanswered
+# for more than 3 days, and close after more than 5 days.
+#
+# Inactivity heuristic:
+# - We look for the latest trusted non-author feedback on an open PR via:
+#   1) issue comments,
+#   2) non-approval reviews, or
+#   3) inline review comments.
+# - We then check whether the PR author responded after that feedback via:
+#   1) an issue comment,
+#   2) a submitted pull-request review,
+#   3) an inline review comment reply, or
+#   4) a commit / force-push timeline event.
+# - If not, we remind once after 72h and close after 120h.
+#
+# Bot feedback note: trusted human reviewers / maintainers are the trigger for
+# this workflow. Bot-authored reviews and comments (e.g. CodeRabbit, Codex) are
+# intentionally excluded from the feedback signal so authors are not pressured
+# by automated nits alone. Trusted human review feedback — whether top-level or
+# inline — is what starts the inactivity clock.
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: pr-author-inactivity
+  cancel-in-progress: false
+
+jobs:
+  triage:
+    if: github.repository == 'nexu-io/open-design'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remind or close inactive PRs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const REMINDER_MARKER = '<!-- pr-author-inactivity:reminder -->';
+            const REMINDER_MS = 72 * 60 * 60 * 1000;
+            const CLOSE_MS = 120 * 60 * 60 * 1000;
+
+            function ts(value) {
+              return value ? new Date(value).getTime() : 0;
+            }
+
+            function isBot(login) {
+              return Boolean(login && login.endsWith('[bot]'));
+            }
+
+            const TRUSTED_ASSOCIATIONS = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
+
+            function isTrustedReviewer(actor) {
+              return Boolean(actor?.user?.login) && TRUSTED_ASSOCIATIONS.has(actor.author_association);
+            }
+
+            async function paginate(method, params) {
+              return github.paginate(method, { per_page: 100, ...params });
+            }
+
+            const pulls = await paginate(github.rest.pulls.list, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              sort: 'updated',
+              direction: 'asc',
+            });
+
+            const now = Date.now();
+            const summary = [];
+
+            for (const pr of pulls) {
+              const author = pr.user?.login;
+              if (!author || pr.draft || isBot(author)) {
+                continue;
+              }
+
+              const [comments, reviews, reviewComments, timeline] = await Promise.all([
+                paginate(github.rest.issues.listComments, {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                }),
+                paginate(github.rest.pulls.listReviews, {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: pr.number,
+                }),
+                paginate(github.rest.pulls.listReviewComments, {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: pr.number,
+                }),
+                paginate(github.rest.issues.listEventsForTimeline, {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                }),
+              ]);
+
+              let latestFeedbackAt = 0;
+
+              for (const comment of comments) {
+                const login = comment.user?.login;
+                if (login === author || isBot(login) || !isTrustedReviewer(comment)) {
+                  continue;
+                }
+                latestFeedbackAt = Math.max(latestFeedbackAt, ts(comment.created_at));
+              }
+
+              for (const review of reviews) {
+                const login = review.user?.login;
+                const state = review.state?.toUpperCase();
+                if (login === author || isBot(login) || !isTrustedReviewer(review)) {
+                  continue;
+                }
+                if (state === 'APPROVED' || state === 'DISMISSED' || state === 'PENDING') {
+                  continue;
+                }
+                latestFeedbackAt = Math.max(latestFeedbackAt, ts(review.submitted_at || review.created_at));
+              }
+
+              for (const reviewComment of reviewComments) {
+                const login = reviewComment.user?.login;
+                if (login === author || isBot(login) || !isTrustedReviewer(reviewComment)) {
+                  continue;
+                }
+                latestFeedbackAt = Math.max(latestFeedbackAt, ts(reviewComment.created_at));
+              }
+
+              if (!latestFeedbackAt) {
+                continue;
+              }
+
+              let latestAuthorResponseAt = 0;
+
+              for (const comment of comments) {
+                if (comment.user?.login !== author) {
+                  continue;
+                }
+                latestAuthorResponseAt = Math.max(latestAuthorResponseAt, ts(comment.created_at));
+              }
+
+              for (const review of reviews) {
+                if (review.user?.login !== author) {
+                  continue;
+                }
+                if (review.state?.toUpperCase() === 'PENDING') {
+                  continue;
+                }
+                latestAuthorResponseAt = Math.max(latestAuthorResponseAt, ts(review.submitted_at || review.created_at));
+              }
+
+              for (const reviewComment of reviewComments) {
+                if (reviewComment.user?.login !== author) {
+                  continue;
+                }
+                latestAuthorResponseAt = Math.max(latestAuthorResponseAt, ts(reviewComment.created_at));
+              }
+
+              for (const event of timeline) {
+                if (event.actor?.login !== author) {
+                  continue;
+                }
+                if (!['committed', 'head_ref_force_pushed'].includes(event.event)) {
+                  continue;
+                }
+                latestAuthorResponseAt = Math.max(latestAuthorResponseAt, ts(event.created_at));
+              }
+
+              if (latestAuthorResponseAt > latestFeedbackAt) {
+                continue;
+              }
+
+              const reminderSent = comments.some((comment) => {
+                return ts(comment.created_at) > latestFeedbackAt && comment.body?.includes(REMINDER_MARKER);
+              });
+
+              const inactiveFor = now - latestFeedbackAt;
+
+              if (inactiveFor >= CLOSE_MS) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  body: [
+                    'Closing this PR for now because it has been waiting on an author response for more than 5 days after reviewer or maintainer feedback.',
+                    '',
+                    'This is only a queue-management step, not a rejection of the work. If you would like to continue, please leave a comment or push an update and reopen the PR when ready.',
+                  ].join('\n'),
+                });
+
+                await github.rest.pulls.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: pr.number,
+                  state: 'closed',
+                });
+
+                summary.push(`#${pr.number}: closed after ${Math.floor(inactiveFor / 3600000)}h of author inactivity`);
+                continue;
+              }
+
+              if (inactiveFor >= REMINDER_MS && !reminderSent) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  body: [
+                    REMINDER_MARKER,
+                    '',
+                    `@${author} friendly reminder: this PR has been waiting on an author response for more than 3 days after reviewer or maintainer feedback.`,
+                    '',
+                    'When you have a chance, please reply here or push an update. To keep the queue manageable, PRs with no author activity for more than 5 days after feedback may be closed automatically, but they can be reopened when work resumes.',
+                  ].join('\n'),
+                });
+
+                summary.push(`#${pr.number}: reminded after ${Math.floor(inactiveFor / 3600000)}h of author inactivity`);
+              }
+            }
+
+            if (summary.length === 0) {
+              core.info('No inactive PRs needed action.');
+              await core.summary.addRaw('No inactive PRs needed action.').write();
+              return;
+            }
+
+            for (const line of summary) {
+              core.info(line);
+            }
+
+            await core.summary
+              .addHeading('PR author inactivity actions')
+              .addList(summary)
+              .write();

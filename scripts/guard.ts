@@ -1,7 +1,10 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
+import { checkDesignSystemManifests } from "./check-design-system-manifests.ts";
+import { checkDesignSystemComponentFixtureReport } from "./check-components-fixtures.ts";
 import { checkDesignSystemFlagParity } from "./check-design-system-flag-parity.ts";
+import { checkComponentsManifestExtraction } from "./check-components-manifest-extraction.ts";
 import {
   checkDesignSystemA1RequiredTokens,
   checkDesignSystemA2DefaultsParity,
@@ -704,6 +707,8 @@ const checks: GuardCheck[] = [
   { name: "web test layout", run: checkWebTestLayout },
   { name: "tools layout", run: checkToolsLayout },
   { name: "style policy", run: checkStylePolicy },
+  { name: "design system manifests", run: checkDesignSystemManifests },
+  { name: "design system component fixture report", run: checkDesignSystemComponentFixtureReport },
   { name: "design system token-fixture sync", run: checkDesignSystemTokenFixtureSync },
   { name: "design system A1 required tokens", run: checkDesignSystemA1RequiredTokens },
   { name: "design system A2 required tokens", run: checkDesignSystemA2RequiredTokens },
@@ -711,6 +716,7 @@ const checks: GuardCheck[] = [
   { name: "design system unknown token allowlist", run: checkDesignSystemUnknownTokens },
   { name: "design system A2 defaults parity", run: checkDesignSystemA2DefaultsParity },
   { name: "design system flag parity", run: checkDesignSystemFlagParity },
+  { name: "design system component manifest extraction", run: checkComponentsManifestExtraction },
 ];
 
 const results: boolean[] = [];

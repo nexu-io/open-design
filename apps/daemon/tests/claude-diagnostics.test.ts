@@ -41,6 +41,22 @@ describe('diagnoseClaudeCliFailure', () => {
     expect(diagnostic?.detail).not.toContain('use `/login`');
   });
 
+  it('maps custom endpoint connection refusals before generic auth guidance', () => {
+    const diagnostic = diagnoseClaudeCliFailure({
+      agentId: 'claude',
+      exitCode: 1,
+      stderrTail:
+        '{"apiKeySource":"none"} API Error: Unable to connect to API (ConnectionRefused)',
+      env: { ANTHROPIC_BASE_URL: 'http://127.0.0.1:1337' },
+    });
+
+    expect(diagnostic?.message).toContain('could not reach');
+    expect(diagnostic?.detail).toContain('ANTHROPIC_BASE_URL');
+    expect(diagnostic?.detail).toContain('refused the connection');
+    expect(diagnostic?.detail).not.toContain('could not authenticate');
+    expect(diagnostic?.detail).not.toContain('use `/login`');
+  });
+
   it('maps silent custom endpoint exits to endpoint guidance', () => {
     const diagnostic = diagnoseClaudeCliFailure({
       agentId: 'claude',

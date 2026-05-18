@@ -46,6 +46,9 @@ on:
       - .github/PULL_REQUEST_TEMPLATE.md
       - .github/CODEOWNERS
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest

@@ -1,0 +1,193 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/xiaohongshu/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by Xiaohongshu"
+ * (小红书 / RED) — the Chinese lifestyle UGC discovery platform.
+ *
+ * The visual baseline is *daily-ness*: a near-white masonry canvas that
+ * functions as a transparent picture frame for user-uploaded breakfasts,
+ * lipstick swatches, and hotel sofas. Brand red (`#FF2442`) is the
+ * single saturated voice the system permits — one accent per screen,
+ * never two. Neutrals are translucent overlays (`rgba(0,0,0, .05/.08/
+ * .27/.45/.62/.80)`) rather than discrete grey steps so the same fill
+ * lands believably on white card, photo, or sheet.
+ *
+ * Brand identity in three sentences:
+ *   1. Canvas is `#F5F5F5`; the white card (`#FFFFFF`) lifts above it
+ *      by color contrast, not by elevation. Shadows are essentially
+ *      absent — depth comes from rounding and spacing.
+ *   2. Type is PingFang SC throughout (no separate display face) with
+ *      the documented Hiragino Sans GB / Microsoft YaHei / Noto Sans SC
+ *      fallback chain so 标记我的生活 reads the same on macOS, Windows,
+ *      and Linux. Tracking is zero everywhere; the heading scale caps
+ *      at 32px per DESIGN.md §3 ("no 48/64 hero").
+ *   3. Brand red is the singular accent — used on CTAs, hearts, active
+ *      tabs, and tag-on-trending. Danger has no independent token in
+ *      RED's production system, so `--danger` aliases to the same red
+ *      (DESIGN.md §2: "danger reuses --primary"). Skill authors should
+ *      differentiate destructive intent via outline + leading icon when
+ *      the difference matters.
+ *
+ * Schema decisions:
+ *   - --bg: #f5f5f5 (canvas behind cards);  --surface: #ffffff (card).
+ *   - --surface-warm: #fafafa (info background, DESIGN.md --bg0-lighter).
+ *   - --fg: rgba(0, 0, 0, 0.8) (title — soft black, never #000);
+ *     --fg-2: rgba(0, 0, 0, 0.62) (paragraph); --muted: 0.45 (caption);
+ *     --meta:  rgba(0, 0, 0, 0.27) (disabled / placeholder).
+ *   - --border: rgba(0, 0, 0, 0.08) (hairline separator);
+ *     --border-soft: rgba(0, 0, 0, 0.05) (fill1 — group line).
+ *   - --accent: #ff2442 (token red, default); --accent-hover: #ff2e4d
+ *     (component-layer red — slightly pinker / lighter, doubles as the
+ *     natural hover state for solid-fill primary CTAs).
+ *   - --danger: #ff2442 (reuses brand red — DESIGN.md §2 explicit).
+ *   - Font stacks lead with PingFang SC then the CJK fallback chain —
+ *     RED is CJK-primary, so Latin fallbacks (`-apple-system`, etc.)
+ *     come after.
+ *   - Type scale ceiling at 32px (--text-4xl). DESIGN.md §3 forbids
+ *     48/64 hero type; --text-3xl bumps to 28px so the marketing
+ *     hero has a usable intermediate above section headings.
+ *   - --radius-md: 12px (feed card), --radius-lg: 16px (feature card),
+ *     --radius-pill: 9999px (buttons are pill, always).
+ *   - --elev-raised: 0 4px 12px rgba(0, 0, 0, 0.08) — DESIGN.md §6
+ *     "Subtle (1)", used only on PC card hover in the live system.
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ──────────────────────────────────────────────────────
+   * Canvas → Card → Subtle. The grey canvas IS the separation device
+   * for white cards; cards do not need shadows to feel lifted. */
+  --bg:           #f5f5f5;             /* Canvas — page background behind cards (DESIGN.md --bg0) */
+  --surface:      #ffffff;             /* Surface — the white card / modal (DESIGN.md --bg) */
+  --surface-warm: #fafafa;             /* Subtle — information background (DESIGN.md --bg0-lighter) */
+
+  /* ─── Foreground ───────────────────────────────────────────────────
+   * Four translucent black tiers. Pure #000 is never used for text;
+   * even the title sits at 0.8 alpha so it reads as "soft black"
+   * against the white card. */
+  --fg:    rgba(0, 0, 0, 0.8);         /* Title — DESIGN.md --title */
+  --fg-2:  rgba(0, 0, 0, 0.62);        /* Paragraph — DESIGN.md --paragraph */
+  --muted: rgba(0, 0, 0, 0.45);        /* Description — DESIGN.md --description */
+  --meta:  rgba(0, 0, 0, 0.27);        /* Disabled / placeholder — DESIGN.md --disabled */
+
+  /* ─── Border ───────────────────────────────────────────────────────
+   * Hairlines via alpha — the same line drops onto white card, onto
+   * photo, or onto a sheet without recoloring. No opaque grey borders
+   * by default. */
+  --border:      rgba(0, 0, 0, 0.08);  /* Separator hairline — DESIGN.md --separator */
+  --border-soft: rgba(0, 0, 0, 0.05);  /* Fill1 — group / row line that should not visually compete */
+
+  /* ─── Accent ───────────────────────────────────────────────────────
+   * One saturated voice for the whole system. The hover slot maps to
+   * the documented component-layer red (#FF2E4D, slightly pinker /
+   * lighter) — the same divergence that appears on .reds-button-new
+   * .primary in production, repurposed as the natural hover state for
+   * a token-driven primary CTA. */
+  --accent:        #ff2442;            /* RED brand red (DESIGN.md --primary / --color-red) */
+  --accent-on:     #ffffff;            /* White text on red CTA */
+  --accent-hover:  #ff2e4d;            /* Component-layer red — slightly pinker; reads as a lift on hover */
+  --accent-active: #e6203a;            /* Pressed — darker, more saturated red */
+
+  /* ─── Semantic ─────────────────────────────────────────────────────
+   * Success / warn lifted from DESIGN.md §2 (the platform's
+   * --success / --warning tokens; nearly invisible in the consumer
+   * flow but tokenized for B2B console contexts). Danger has no
+   * independent token in RED — it reuses --primary; aliasing here
+   * preserves that explicit DESIGN.md decision. */
+  --success: #02b940;                  /* DESIGN.md --success (#EAF8EF bg variant lives in components) */
+  --warn:    #ff7d03;                  /* DESIGN.md --warning */
+  --danger:  #ff2442;                  /* Reuses brand red — DESIGN.md §2 "danger reuses --primary" */
+
+  /* ─── Typography ───────────────────────────────────────────────────
+   * CJK-primary brand: PingFang SC leads, then the documented
+   * Hiragino Sans GB / Microsoft YaHei / Noto Sans SC chain, then
+   * the Apple/Helvetica Latin fallback. No separate display face —
+   * every Typography-FontFamily-* in production resolves to PingFang SC.
+   * --font-mono inherits the schema default (RED Number is intentionally
+   * NOT referenced here per DESIGN.md §3 — end users don't have it). */
+  --font-display: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-body:    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono:    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale — DESIGN.md §3 PC web tokens (h1=32 → c2=12).
+   * The ceiling is deliberately compact: DESIGN.md forbids 48/64 hero
+   * type, so --text-4xl tops out at 32px. --text-3xl interpolates at
+   * 28px so a marketing hero has visual lift above section headings. */
+  --text-xs:   12px;                   /* c2 — small caption */
+  --text-sm:   14px;                   /* b2 / t3 — body standard, secondary label */
+  --text-base: 16px;                   /* b1 / t2 — body large, the marketing reading size */
+  --text-lg:   18px;                   /* t1 — strong label */
+  --text-xl:   20px;                   /* h3 — card heading */
+  --text-2xl:  24px;                   /* h2 — section heading */
+  --text-3xl:  28px;                   /* intermediate display — between h1 and h2 */
+  --text-4xl:  32px;                   /* h1 — display ceiling (DESIGN.md "no 48/64 hero") */
+
+  /* Leading + tracking — DESIGN.md §3.
+   * Body rides on 1.5 (24px on 16px b1). Headings tighten to 1.25
+   * (40px on 32px h1). Tracking is 0 everywhere; only component-level
+   * Chinese overrides hand-tune -0.3 to -0.64px and that stays out
+   * of the token system. */
+  --leading-body:     1.5;
+  --leading-tight:    1.25;
+  --tracking-display: 0;               /* DESIGN.md: "Every --Typography-Spacing-* token is 0" */
+
+  /* ─── Spacing ──────────────────────────────────────────────────────
+   * 8pt grid, stops 4 / 8 / 12 / 16 / 20 / 24 / 32 / 48 per DESIGN.md
+   * §5. Section-level gaps (48 / 64) live in the rhythm tier below. */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-12: 48px;
+
+  /* ─── Section rhythm ───────────────────────────────────────────────
+   * The masonry feed itself is dense (cards 7–10px apart) but section
+   * gaps on marketing surfaces breathe at 48–64px desktop, stepping
+   * down to 32px on phone where vertical real estate is scarce. */
+  --section-y-desktop: 64px;
+  --section-y-tablet:  48px;
+  --section-y-phone:   32px;
+
+  /* ─── Radius ───────────────────────────────────────────────────────
+   * Generous everywhere: 8px on inputs and tags, 12px on feed cards,
+   * 16px on feature / hero cards, full pill on every button. The
+   * pill radius is functionally mandatory — a square-cornered CTA
+   * reads as wrong in this brand. */
+  --radius-sm:   8px;                  /* Inputs, tags, small chips */
+  --radius-md:   12px;                 /* Feed card (DESIGN.md §4 "Cards") */
+  --radius-lg:   16px;                 /* Larger feature card, bottom-sheet top corners */
+  --radius-pill: 9999px;               /* Buttons — always */
+
+  /* ─── Elevation ────────────────────────────────────────────────────
+   * Three sanctioned levels, used sparingly. Default is flat — depth
+   * comes from canvas color contrast and rounding. The raised tier
+   * lands on PC card hover only; modal shadow is one-off on .modal
+   * and stays in components. */
+  --elev-flat:   none;
+  --elev-ring:   0 0 0 1px var(--border);
+  --elev-raised: 0 4px 12px rgba(0, 0, 0, 0.08);   /* DESIGN.md §6 "Subtle (1)" — PC card hover */
+
+  /* ─── Focus ────────────────────────────────────────────────────────
+   * Brand red at 30% opacity. The schema default formula works for
+   * the RED accent without override. */
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+
+  /* ─── Motion ───────────────────────────────────────────────────────
+   * Standard durations. RED's interaction language is soft and quiet;
+   * no aggressive bouncing curves. Defaults are appropriate. */
+  --motion-fast:   150ms;
+  --motion-base:   200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ───────────────────────────────────────────────────────
+   * 1200px container width — comfortably wider than the note-detail
+   * two-pane (~1100px) for marketing surfaces. Phone gutter is tighter
+   * (12px) so the masonry feed runs nearly edge-to-edge per DESIGN.md
+   * §5 "Mobile Two-Column". */
+  --container-max:            1200px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet:  16px;
+  --container-gutter-phone:   12px;
+}

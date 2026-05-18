@@ -185,10 +185,13 @@ export interface ComposeInput {
   // - `designSystemTokensCss`    — verbatim `tokens.css` :root contract
   //                                that the agent pastes into the
   //                                artifact's <style>.
-  // - `designSystemFixtureHtml`  — verbatim `components.html` reference
-  //                                fixture demonstrating button / card /
-  //                                type-scale shapes wired to the tokens.
+  // - `designSystemComponentsManifest` — concise structured summary
+  //                                      derived from components.html.
+  // - `designSystemFixtureHtml`        — verbatim `components.html`
+  //                                      fallback when no manifest can
+  //                                      be derived.
   designSystemTokensCss?: string | undefined;
+  designSystemComponentsManifest?: string | undefined;
   designSystemFixtureHtml?: string | undefined;
   // Craft references the active skill opted into via `od.craft.requires`.
   // The daemon resolves the slug list to file contents and concatenates
@@ -271,6 +274,7 @@ export function composeSystemPrompt({
   designSystemBody,
   designSystemTitle,
   designSystemTokensCss,
+  designSystemComponentsManifest,
   designSystemFixtureHtml,
   craftBody,
   craftSections,
@@ -348,18 +352,23 @@ export function composeSystemPrompt({
   // sets voice and intent; the tokens.css block below is the SAME
   // contract in machine-readable form — names + values the agent pastes
   // verbatim instead of re-deriving from prose. The components.html
-  // fixture grounds the token vocabulary in worked component shapes
-  // (button / card / type roles) so the agent can copy fragments
-  // directly. Both blocks are individually gated: missing files (today,
-  // every brand except `default` and `kami`) skip silently, preserving
-  // the legacy DESIGN.md-only behaviour for the other ~138 brands.
+  // manifest grounds the token vocabulary in worked component shapes
+  // (button / card / type roles) without injecting the full HTML fixture.
+  // If manifest extraction fails or is unavailable, the composer falls
+  // back to the verbatim components.html fixture. Both blocks are
+  // individually gated: missing files skip silently, preserving the
+  // legacy DESIGN.md-only behaviour for prose-only brands.
   if (designSystemTokensCss && designSystemTokensCss.trim().length > 0) {
     parts.push(
       `\n\n## Active design system tokens${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nThe block below is this brand's tokens.css contract — every \`:root\` custom property and any scoped override (e.g. \`:root[lang=...]\`) the brand defines. **Paste the unscoped \`:root { ... }\` block verbatim into the artifact's first \`<style>\`** so every \`var(--*)\` reference resolves at runtime.\n\nDo not invent new tokens. Do not redefine these values. Do not write raw hex outside this :root block. The DESIGN.md above is prose; this is the binding contract.\n\n\`\`\`css\n${designSystemTokensCss.trim()}\n\`\`\``,
     );
   }
 
-  if (designSystemFixtureHtml && designSystemFixtureHtml.trim().length > 0) {
+  if (designSystemComponentsManifest && designSystemComponentsManifest.trim().length > 0) {
+    parts.push(
+      `\n\n## Reference component manifest${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nA compact structured summary derived from this brand's components.html fixture. Use it as the component inventory for generated artifacts: match the listed selectors, component groups, class names, token references, focus behavior, and spacing cadence. Prefer these manifest entries over inventing new component shapes.\n\n\`\`\`text\n${designSystemComponentsManifest.trim()}\n\`\`\``,
+    );
+  } else if (designSystemFixtureHtml && designSystemFixtureHtml.trim().length > 0) {
     parts.push(
       `\n\n## Reference fixture${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nA self-contained worked artifact in this design system. Match its component shapes (button structure, card structure, type-scale rhythm, focus ring, spacing cadence) when generating new artifacts. Copying fragments is encouraged as long as you keep the \`var(--*)\` references intact — they are already wired to the tokens above.\n\n\`\`\`html\n${designSystemFixtureHtml.trim()}\n\`\`\``,
     );

@@ -840,37 +840,6 @@
   color: var(--accent);
 }
 
-/* Trust pill — mirrors the project view styling. */
-.plugins-home__trust {
-  font-size: 10.5px;
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: var(--bg-subtle);
-  color: var(--text-muted);
-  text-transform: capitalize;
-  flex: 0 0 auto;
-}
-.plugins-home__trust.trust-bundled {
-  background: var(--blue-bg);
-  color: var(--blue);
-}
-.plugins-home__trust.trust-trusted {
-  background: var(--green-bg);
-  color: var(--green);
-}
-.plugins-home__trust.trust-restricted {
-  background: var(--amber-bg);
-  color: var(--amber);
-}
-/* Inside the overlay the trust pill needs glassy chrome to read
-   over the dark gradient. */
-.plugins-home__card-overlay .plugins-home__trust {
-  background: rgba(255, 255, 255, 0.18);
-  color: white;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-}
-
 /* Card action buttons — overlay variant */
 .plugins-home__action {
   appearance: none;
