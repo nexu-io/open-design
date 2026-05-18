@@ -5,6 +5,7 @@ import {
   isDesignSystemCreationProject,
   pickDesignSystemEntryFile,
   pickDesignSystemShowcaseFile,
+  pickUploadedDesignMdAttachment,
 } from '../../src/lib/design-system-project';
 
 describe('design-system-project helpers', () => {
@@ -29,6 +30,20 @@ describe('design-system-project helpers', () => {
   it('requires showcase.html in creation prompts', () => {
     const prompt = buildDesignSystemCreationPrompt({ questionnaireEnabled: false, advancedGeneration: false });
     expect(prompt).toContain('showcase.html');
+  });
+
+  it('picks uploaded DESIGN.md by daemon storage path, not project-root alias', () => {
+    expect(
+      pickUploadedDesignMdAttachment([
+        { path: '1740000000000-DESIGN.md', name: 'DESIGN.md', kind: 'file' },
+        { path: '1740000000001-design.fig', name: 'design.fig', kind: 'file' },
+      ]),
+    ).toEqual({
+      path: '1740000000000-DESIGN.md',
+      name: 'DESIGN.md',
+      kind: 'file',
+    });
+    expect(pickUploadedDesignMdAttachment([])).toBeNull();
   });
 
   it('filters agent attachments to practical package files', () => {

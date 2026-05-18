@@ -1,4 +1,5 @@
-import type { ProjectMetadata } from '../types';
+import { isDesignMdFileName } from './sanitize-design-md';
+import type { ChatAttachment, ProjectMetadata } from '../types';
 
 export function isDesignSystemCreationProject(
   metadata: ProjectMetadata | null | undefined,
@@ -32,6 +33,19 @@ export function filterDesignSystemAgentAttachments(paths: string[]): string[] {
   return paths.filter((file) =>
     AGENT_ATTACHMENT_SUFFIXES.some((suffix) => file.endsWith(suffix)),
   );
+}
+
+/** Uploaded DESIGN.md path from daemon storage (timestamp-prefixed), not project-root `DESIGN.md`. */
+export function pickUploadedDesignMdAttachment(
+  uploaded: ChatAttachment[],
+): ChatAttachment | null {
+  const hit = uploaded.find(
+    (item) =>
+      isDesignMdFileName(item.name)
+      || isDesignMdFileName(item.path.split('/').pop() ?? ''),
+  );
+  if (!hit) return null;
+  return { path: hit.path, name: hit.name, kind: 'file' };
 }
 
 export function buildDesignSystemCreationPrompt(

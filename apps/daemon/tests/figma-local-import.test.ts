@@ -83,6 +83,33 @@ describe('importLocalFigmaFile', () => {
     await expect(importLocalFigmaFile({ projectDir, sourcePath: 'design.fig' })).rejects.toBeInstanceOf(FigmaDecisionRequiredError);
   });
 
+  it('creates distinct v2 and v3 folders for repeated create_version imports', async () => {
+    await writeFile(path.join(projectDir, 'design.fig'), JSON.stringify({ fileKey: 'abc123456789' }), 'utf8');
+    const first = await importLocalFigmaFile({ projectDir, sourcePath: 'design.fig' });
+    const second = await importLocalFigmaFile({
+      projectDir,
+      sourcePath: 'design.fig',
+      decision: 'create_version',
+    });
+    const third = await importLocalFigmaFile({
+      projectDir,
+      sourcePath: 'design.fig',
+      decision: 'create_version',
+    });
+    expect(second.importId).not.toBe(first.importId);
+    expect(third.importId).not.toBe(second.importId);
+    expect(second.importVersion).toBe(2);
+    expect(third.importVersion).toBe(3);
+    const secondManifest = JSON.parse(
+      await readFile(path.join(projectDir, second.manifestPath), 'utf8'),
+    ) as { importVersion: number };
+    const thirdManifest = JSON.parse(
+      await readFile(path.join(projectDir, third.manifestPath), 'utf8'),
+    ) as { importVersion: number };
+    expect(secondManifest.importVersion).toBe(2);
+    expect(thirdManifest.importVersion).toBe(3);
+  });
+
   it('supports create_version and update_generated decisions', async () => {
     await writeFile(path.join(projectDir, 'design.fig'), JSON.stringify({ fileKey: 'abc123456789', document: { spacing: '8px' } }), 'utf8');
     const first = await importLocalFigmaFile({ projectDir, sourcePath: 'design.fig' });

@@ -11,6 +11,7 @@ import {
   designSystemEntryShowcaseKey,
   filterDesignSystemAgentAttachments,
   pickDesignSystemEntryFile,
+  pickUploadedDesignMdAttachment,
 } from './lib/design-system-project';
 import { EntryView } from './components/EntryView';
 import type { IntegrationTab } from './components/IntegrationsView';
@@ -978,15 +979,20 @@ export function App() {
       if ('error' in importResult) throw new Error(importResult.error);
     }
     if (input.designSystemIntent === 'create') {
-      const autoApplyAttachments: ChatAttachment[] = importResult
-        ? filterDesignSystemAgentAttachments(importResult.generatedFiles).map((path) => ({
+      const autoApplyAttachments: ChatAttachment[] = [];
+      if (importResult) {
+        autoApplyAttachments.push(
+          ...filterDesignSystemAgentAttachments(importResult.generatedFiles).map((path) => ({
             path,
             name: path.split('/').pop() || path,
             kind: 'file' as const,
-          }))
-        : input.designMdFile
-          ? [{ path: 'DESIGN.md', name: 'DESIGN.md', kind: 'file' as const }]
-          : [];
+          })),
+        );
+      }
+      const designMdAttachment = pickUploadedDesignMdAttachment(upload.uploaded);
+      if (designMdAttachment) {
+        autoApplyAttachments.push(designMdAttachment);
+      }
       try {
         window.sessionStorage.setItem(`od:auto-send-first:${result.project.id}`, '1');
         if (autoApplyAttachments.length > 0) {

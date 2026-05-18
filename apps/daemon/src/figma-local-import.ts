@@ -101,31 +101,40 @@ export async function importLocalFigmaFile(args: {
   const figmaRoot = path.join(args.projectDir, 'figma');
   await fsp.mkdir(figmaRoot, { recursive: true });
 
-  const existing = await findExistingImport(figmaRoot, detection);
   const baseImportId = embeddedFileId || `fig-${contentSha256.slice(0, 12)}`;
-  const targetImportId = resolveTargetImportId(baseImportId, existing?.manifest?.importVersion ?? 0, args.decision, Boolean(existing));
+  const matching = await listMatchingImports(figmaRoot, detection);
+  const baseImport = findBaseImport(matching, baseImportId);
+  const hasExisting = matching.length > 0;
+  const targetImportId = resolveTargetImportId(baseImportId, matching, args.decision);
 
-  if (existing && !args.decision) {
+  if (hasExisting && !args.decision) {
+    const anchor = baseImport ?? matching[0]!;
     throw new FigmaDecisionRequiredError({
       reason: 'reimport-detected',
-      existingImportId: existing.manifest.importId,
-      existingImportVersion: existing.manifest.importVersion,
+      existingImportId: anchor.manifest.importId,
+      existingImportVersion: anchor.manifest.importVersion,
     });
   }
 
-  const targetDir = args.decision === 'update_generated' && existing
-    ? existing.dir
+  const targetDir = args.decision === 'update_generated' && baseImport
+    ? baseImport.dir
     : path.join(figmaRoot, targetImportId);
-  await fsp.mkdir(targetDir, { recursive: true });
+  if (args.decision === 'create_version') {
+    await fsp.mkdir(targetDir, { recursive: false });
+  } else {
+    await fsp.mkdir(targetDir, { recursive: true });
+  }
 
   const parsed = parseFigmaPayload(file);
   const { tokens: extractedTokens, unmatched } = extractOpenDesignTokens(parsed);
   const overridesResult = await readOverrides(path.join(targetDir, 'overrides.tokens.json'));
   const tokens = applyOverrides(extractedTokens, overridesResult.overrides);
   const rawJson = parsed ?? { note: 'Unable to decode structured JSON from this .fig file.' };
-  const importVersion = args.decision === 'update_generated' && existing
-    ? existing.manifest.importVersion + 1
-    : 1;
+  const importVersion = args.decision === 'update_generated' && baseImport
+    ? baseImport.manifest.importVersion + 1
+    : args.decision === 'create_version' && hasExisting
+      ? nextCreateVersion(matching, baseImportId)
+      : 1;
 
   const manifest: FigmaImportManifest = {
     schemaVersion: FIGMA_IMPORT_SCHEMA_VERSION,
@@ -268,42 +277,72 @@ function escapeXml(value: string): string {
     .replaceAll("'", '&apos;');
 }
 
-function resolveTargetImportId(baseImportId: string, currentVersion: number, decision: FigmaReimportDecision | null | undefined, hasExisting: boolean): string {
-  if (!hasExisting) return baseImportId;
-  if (decision === 'update_generated') return baseImportId;
-  const next = Math.max(2, currentVersion + 1);
-  return `${baseImportId}-v${next}`;
+type ImportFolder = { dir: string; manifest: FigmaImportManifest };
+
+function importVersionFromId(importId: string, baseImportId: string): number {
+  if (importId === baseImportId) return 1;
+  const suffix = importId.slice(baseImportId.length);
+  const match = /^-v(\d+)$/.exec(suffix);
+  return match ? Number(match[1]) : 1;
 }
 
-async function findExistingImport(figmaRoot: string, detection: FigmaImportDetection): Promise<{ dir: string; manifest: FigmaImportManifest } | null> {
+function maxTrackedImportVersion(matching: ImportFolder[], baseImportId: string): number {
+  let max = 0;
+  for (const { manifest } of matching) {
+    const tracked = Math.max(
+      Number(manifest.importVersion || 0),
+      importVersionFromId(manifest.importId, baseImportId),
+    );
+    if (tracked > max) max = tracked;
+  }
+  return max;
+}
+
+function nextCreateVersion(matching: ImportFolder[], baseImportId: string): number {
+  return Math.max(2, maxTrackedImportVersion(matching, baseImportId) + 1);
+}
+
+function resolveTargetImportId(
+  baseImportId: string,
+  matching: ImportFolder[],
+  decision: FigmaReimportDecision | null | undefined,
+): string {
+  if (matching.length === 0) return baseImportId;
+  if (decision === 'update_generated') return baseImportId;
+  if (decision === 'create_version') {
+    return `${baseImportId}-v${nextCreateVersion(matching, baseImportId)}`;
+  }
+  return baseImportId;
+}
+
+function findBaseImport(matching: ImportFolder[], baseImportId: string): ImportFolder | null {
+  return matching.find(({ manifest }) => manifest.importId === baseImportId) ?? null;
+}
+
+async function listMatchingImports(figmaRoot: string, detection: FigmaImportDetection): Promise<ImportFolder[]> {
   let entries: string[] = [];
   try {
     entries = await fsp.readdir(figmaRoot);
   } catch {
-    return null;
+    return [];
   }
-  const manifests: Array<{ dir: string; manifest: FigmaImportManifest }> = [];
+  const manifests: ImportFolder[] = [];
   for (const entry of entries) {
     const manifestPath = path.join(figmaRoot, entry, 'manifest.json');
     try {
       const parsed = JSON.parse(await fsp.readFile(manifestPath, 'utf8')) as FigmaImportManifest;
       if (!parsed?.source) continue;
+      const matches = Boolean(
+        (detection.embeddedFileId && parsed.source.embeddedFileId && detection.embeddedFileId === parsed.source.embeddedFileId) ||
+        (detection.contentSha256 && parsed.source.contentSha256 === detection.contentSha256),
+      );
+      if (!matches) continue;
       manifests.push({ dir: path.join(figmaRoot, entry), manifest: parsed });
     } catch {
       // ignore malformed/non-import folders
     }
   }
-  manifests.sort((a, b) => {
-    const av = Number(a.manifest.importVersion || 0);
-    const bv = Number(b.manifest.importVersion || 0);
-    return bv - av;
-  });
-  return manifests.find(({ manifest }) =>
-    Boolean(
-      (detection.embeddedFileId && manifest.source.embeddedFileId && detection.embeddedFileId === manifest.source.embeddedFileId) ||
-      (detection.contentSha256 && manifest.source.contentSha256 === detection.contentSha256),
-    ),
-  ) ?? null;
+  return manifests;
 }
 
 function detectEmbeddedFileId(file: Buffer): string | null {
