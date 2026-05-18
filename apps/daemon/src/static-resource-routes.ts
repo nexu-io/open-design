@@ -18,6 +18,7 @@ import {
   LocalDesignSystemImportError,
   importLocalDesignSystemProject,
 } from './design-system-import.js';
+import { importGitHubDesignSystemProject } from './design-system-github-import.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
 import { listPromptTemplates, readPromptTemplate } from './prompt-templates.js';
@@ -31,6 +32,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
   const {
     RUNTIME_DATA_DIR,
     RUNTIME_DATA_DIR_CANONICAL,
+    PROJECT_ROOT,
     DESIGN_SYSTEMS_DIR,
     USER_DESIGN_SYSTEMS_DIR,
     DESIGN_TEMPLATES_DIR,
@@ -666,6 +668,46 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
           500,
           'INTERNAL_ERROR',
           `imported design system was not found in catalog: ${result.dir}`,
+        );
+      }
+      res.status(201).json({ designSystem });
+    } catch (err: any) {
+      if (err instanceof LocalDesignSystemImportError) {
+        return sendApiError(res, err.code === 'BAD_REQUEST' ? 400 : 500, err.code, err.message);
+      }
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err));
+    }
+  });
+
+  app.post('/api/design-systems/import/github', async (req, res) => {
+    if (!requireLocalOrigin(req, res)) return;
+    try {
+      const body = req.body && typeof req.body === 'object' ? req.body : {};
+      const githubUrl =
+        typeof body.githubUrl === 'string'
+          ? body.githubUrl
+          : typeof body.url === 'string'
+            ? body.url
+            : '';
+      const before = await listAllDesignSystems();
+      const result = await importGitHubDesignSystemProject(
+        githubUrl,
+        path.join(PROJECT_ROOT, '.tmp'),
+        USER_DESIGN_SYSTEMS_DIR,
+        {
+          name: typeof body.name === 'string' ? body.name : undefined,
+          branch: typeof body.branch === 'string' ? body.branch : undefined,
+          reservedIds: before.map((system) => system.id),
+        },
+      );
+      const systems = await listAllDesignSystems();
+      const designSystem = systems.find((system) => system.id === result.id);
+      if (!designSystem) {
+        return sendApiError(
+          res,
+          500,
+          'INTERNAL_ERROR',
+          `imported GitHub design system was not found in catalog: ${result.dir}`,
         );
       }
       res.status(201).json({ designSystem });

@@ -6,6 +6,7 @@ import type { DesignSystemSummary } from '@open-design/contracts';
 import {
   fetchDesignSystem,
   fetchDesignSystems,
+  importGitHubDesignSystem,
   importLocalDesignSystem,
 } from '../providers/registry';
 
@@ -28,6 +29,7 @@ export function DesignSystemsSection({ cfg, setCfg }: Props) {
   const [previewBody, setPreviewBody] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [importPath, setImportPath] = useState('');
+  const [importMode, setImportMode] = useState<'local' | 'github'>('local');
   const [importing, setImporting] = useState(false);
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
@@ -112,12 +114,15 @@ export function DesignSystemsSection({ cfg, setCfg }: Props) {
 
   async function handleLocalImport(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const baseDir = importPath.trim();
-    if (!baseDir || importing) return;
+    const importTarget = importPath.trim();
+    if (!importTarget || importing) return;
     setImporting(true);
     setImportError(null);
     setImportMessage(null);
-    const result = await importLocalDesignSystem({ baseDir });
+    const result =
+      importMode === 'github'
+        ? await importGitHubDesignSystem({ githubUrl: importTarget })
+        : await importLocalDesignSystem({ baseDir: importTarget });
     setImporting(false);
     if ('error' in result) {
       setImportError(result.error.message);
@@ -137,11 +142,27 @@ export function DesignSystemsSection({ cfg, setCfg }: Props) {
   return (
     <section className="settings-section settings-design-systems">
       <form className="library-install-form" onSubmit={handleLocalImport}>
+        <div className="seg-control">
+          <button
+            type="button"
+            className={importMode === 'local' ? 'active' : ''}
+            onClick={() => setImportMode('local')}
+          >
+            Local
+          </button>
+          <button
+            type="button"
+            className={importMode === 'github' ? 'active' : ''}
+            onClick={() => setImportMode('github')}
+          >
+            GitHub
+          </button>
+        </div>
         <div className="library-install-row">
           <input
             type="text"
             className="library-search"
-            placeholder="/path/to/project"
+            placeholder={importMode === 'github' ? 'https://github.com/owner/repo' : '/path/to/project'}
             value={importPath}
             onChange={(e) => setImportPath(e.target.value)}
           />

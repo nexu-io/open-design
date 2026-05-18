@@ -10,8 +10,24 @@ export type LocalDesignSystemImportResult = {
 export type LocalDesignSystemImportOptions = {
   now?: Date;
   name?: string;
+  fallbackName?: string;
   reservedIds?: Iterable<string>;
+  source?: DesignSystemProjectSource;
 };
+
+export type DesignSystemProjectSource =
+  | {
+      type: 'local';
+      path: string;
+      importedAt?: string;
+    }
+  | {
+      type: 'github';
+      url: string;
+      branch?: string;
+      commit?: string;
+      importedAt?: string;
+    };
 
 type ProjectScan = {
   sourceRoot: string;
@@ -96,7 +112,7 @@ export async function importLocalDesignSystemProject(
   }
 
   const scan = await scanProject(sourceRoot);
-  const displayName = cleanDisplayName(options.name ?? scan.packageName ?? path.basename(sourceRoot));
+  const displayName = cleanDisplayName(options.name ?? scan.packageName ?? options.fallbackName ?? path.basename(sourceRoot));
   const id = await nextAvailableSlug(userDesignSystemsRoot, slugify(displayName), options.reservedIds);
   const outDir = path.join(userDesignSystemsRoot, id);
   await mkdir(outDir, { recursive: true });
@@ -107,7 +123,7 @@ export async function importLocalDesignSystemProject(
   await writeFile(path.join(outDir, 'components.html'), renderComponentsHtml(displayName), 'utf8');
   await writeFile(
     path.join(outDir, 'manifest.json'),
-    `${JSON.stringify(renderManifest(id, displayName, scan, options.now ?? new Date()), null, 2)}\n`,
+    `${JSON.stringify(renderManifest(id, displayName, scan, options.now ?? new Date(), options.source), null, 2)}\n`,
     'utf8',
   );
 
@@ -324,7 +340,19 @@ async function nextAvailableSlug(
   throw new LocalDesignSystemImportError('INTERNAL_ERROR', 'could not allocate design system id');
 }
 
-function renderManifest(id: string, name: string, scan: ProjectScan, now: Date) {
+function renderManifest(
+  id: string,
+  name: string,
+  scan: ProjectScan,
+  now: Date,
+  sourceOverride: DesignSystemProjectSource | undefined,
+) {
+  const importedAt = now.toISOString();
+  const source = sourceOverride ?? {
+    type: 'local',
+    path: scan.sourceRoot,
+    importedAt,
+  };
   return {
     schemaVersion: 'od-design-system-project/v1',
     id,
@@ -332,9 +360,8 @@ function renderManifest(id: string, name: string, scan: ProjectScan, now: Date) 
     category: 'Imported',
     description: scan.packageDescription ?? `Extracted from local project ${path.basename(scan.sourceRoot)}.`,
     source: {
-      type: 'local',
-      path: scan.sourceRoot,
-      importedAt: now.toISOString(),
+      ...source,
+      importedAt: source.importedAt ?? importedAt,
     },
     files: {
       design: 'DESIGN.md',

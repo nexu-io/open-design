@@ -90,6 +90,7 @@ describe('static resource mutation routes', () => {
     ['DELETE', '/api/skills/demo-skill'],
     ['POST', '/api/design-systems/install'],
     ['POST', '/api/design-systems/import/local'],
+    ['POST', '/api/design-systems/import/github'],
     ['DELETE', '/api/design-systems/demo-system'],
   ])('rejects cross-origin %s %s before catalog or filesystem work', async (method, route) => {
     catalogReadCount = 0;
@@ -101,7 +102,12 @@ describe('static resource mutation routes', () => {
       },
     };
     if (method === 'POST') {
-      init.body = JSON.stringify({ source: 'local', path: tempRoot, baseDir: tempRoot });
+      init.body = JSON.stringify({
+        source: 'local',
+        path: tempRoot,
+        baseDir: tempRoot,
+        githubUrl: 'https://github.com/example/repo',
+      });
     }
     const res = await fetch(`${baseUrl}${route}`, init);
 

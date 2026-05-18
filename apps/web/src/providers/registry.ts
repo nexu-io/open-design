@@ -6,6 +6,8 @@ import type {
   ConnectorDetailResponse,
   ConnectorListResponse,
   ConnectorStatusResponse,
+  ImportGitHubDesignSystemRequest,
+  ImportGitHubDesignSystemResponse,
   ImportLocalDesignSystemRequest,
   ImportLocalDesignSystemResponse,
 } from '@open-design/contracts';
@@ -362,21 +364,7 @@ export async function importLocalDesignSystem(
       body: JSON.stringify(input),
     });
     if (!resp.ok) {
-      const payload = (await resp.json().catch(() => null)) as
-        | { error?: SkillImportError | string; message?: string }
-        | null;
-      const error = payload?.error;
-      return {
-        error:
-          typeof error === 'object' && error !== null
-            ? error
-            : {
-                message:
-                  typeof error === 'string'
-                    ? error
-                    : payload?.message ?? `Import failed (${resp.status}).`,
-              },
-      };
+      return { error: await readImportError(resp) };
     }
     return (await resp.json()) as ImportLocalDesignSystemResponse;
   } catch (err) {
@@ -386,6 +374,40 @@ export async function importLocalDesignSystem(
       },
     };
   }
+}
+
+export async function importGitHubDesignSystem(
+  input: ImportGitHubDesignSystemRequest,
+): Promise<ImportGitHubDesignSystemResponse | { error: SkillImportError }> {
+  try {
+    const resp = await fetch('/api/design-systems/import/github', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!resp.ok) return { error: await readImportError(resp) };
+    return (await resp.json()) as ImportGitHubDesignSystemResponse;
+  } catch (err) {
+    return {
+      error: {
+        message: err instanceof Error ? err.message : 'Import request failed.',
+      },
+    };
+  }
+}
+
+async function readImportError(resp: Response): Promise<SkillImportError> {
+  const payload = (await resp.json().catch(() => null)) as
+    | { error?: SkillImportError | string; message?: string }
+    | null;
+  const error = payload?.error;
+  if (typeof error === 'object' && error !== null) return error;
+  return {
+    message:
+      typeof error === 'string'
+        ? error
+        : payload?.message ?? `Import failed (${resp.status}).`,
+  };
 }
 
 export async function fetchPromptTemplates(): Promise<PromptTemplateSummary[]> {
