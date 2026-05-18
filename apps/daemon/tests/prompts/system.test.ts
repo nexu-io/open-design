@@ -305,6 +305,8 @@ describe('composeSystemPrompt', () => {
   describe('design-system token + fixture injection (#PR-C)', () => {
     const sampleTokensCss = ':root {\n  --bg: #ffffff;\n  --fg: #111111;\n  --accent: #0050d8;\n}';
     const sampleFixtureHtml = '<!doctype html>\n<html lang="en">\n  <body><button class="btn btn-primary">Subscribe</button></body>\n</html>';
+    const sampleComponentsManifest =
+      'components.manifest schema v1 for default\nAvailable component groups:\n- Buttons and calls to action: selectors .btn, .btn-primary; tokens --accent';
 
     it('appends BOTH a tokens block and a fixture block when both inputs are present', () => {
       const prompt = composeSystemPrompt({
@@ -323,6 +325,22 @@ describe('composeSystemPrompt', () => {
       expect(prompt).toContain('class="btn btn-primary"');
     });
 
+    it('prefers the component manifest over the full fixture when both are present', () => {
+      const prompt = composeSystemPrompt({
+        designSystemTitle: 'default',
+        designSystemBody: '# Neutral Modern\n\n> Category: Utility\n\nProse description.',
+        designSystemTokensCss: sampleTokensCss,
+        designSystemComponentsManifest: sampleComponentsManifest,
+        designSystemFixtureHtml: sampleFixtureHtml,
+      });
+
+      expect(prompt).toContain('## Reference component manifest — default');
+      expect(prompt).toContain('components.manifest schema v1 for default');
+      expect(prompt).toContain('Buttons and calls to action');
+      expect(prompt).not.toContain('## Reference fixture — default');
+      expect(prompt).not.toContain('class="btn btn-primary"');
+    });
+
     it('keeps the prompt byte-equivalent to the legacy path when both inputs are omitted', () => {
       const baseline = composeSystemPrompt({
         designSystemTitle: 'default',
@@ -332,11 +350,13 @@ describe('composeSystemPrompt', () => {
         designSystemTitle: 'default',
         designSystemBody: '# Neutral Modern\n\nProse only.',
         designSystemTokensCss: undefined,
+        designSystemComponentsManifest: undefined,
         designSystemFixtureHtml: undefined,
       });
 
       expect(withFlagOffEquivalent).toBe(baseline);
       expect(withFlagOffEquivalent).not.toContain('## Active design system tokens');
+      expect(withFlagOffEquivalent).not.toContain('## Reference component manifest');
       expect(withFlagOffEquivalent).not.toContain('## Reference fixture');
     });
 
@@ -356,18 +376,27 @@ describe('composeSystemPrompt', () => {
       });
       expect(fixtureOnly).not.toContain('## Active design system tokens');
       expect(fixtureOnly).toContain('## Reference fixture — default');
+
+      const manifestOnly = composeSystemPrompt({
+        designSystemTitle: 'default',
+        designSystemBody: '# x\n\nbody',
+        designSystemComponentsManifest: sampleComponentsManifest,
+      });
+      expect(manifestOnly).not.toContain('## Active design system tokens');
+      expect(manifestOnly).toContain('## Reference component manifest — default');
     });
 
-    it('places the tokens + fixture blocks AFTER the DESIGN.md prose block (prose sets voice, structured form binds names)', () => {
+    it('places the tokens + component manifest blocks AFTER the DESIGN.md prose block (prose sets voice, structured form binds names)', () => {
       const prompt = composeSystemPrompt({
         designSystemTitle: 'default',
         designSystemBody: 'PROSE_BODY_MARKER',
         designSystemTokensCss: sampleTokensCss,
+        designSystemComponentsManifest: sampleComponentsManifest,
         designSystemFixtureHtml: sampleFixtureHtml,
       });
       const proseAt = prompt.indexOf('PROSE_BODY_MARKER');
       const tokensAt = prompt.indexOf('## Active design system tokens');
-      const fixtureAt = prompt.indexOf('## Reference fixture');
+      const fixtureAt = prompt.indexOf('## Reference component manifest');
       expect(proseAt).toBeGreaterThan(0);
       expect(tokensAt).toBeGreaterThan(proseAt);
       expect(fixtureAt).toBeGreaterThan(tokensAt);
@@ -378,9 +407,11 @@ describe('composeSystemPrompt', () => {
         designSystemTitle: 'default',
         designSystemBody: '# x\n\nbody',
         designSystemTokensCss: '   \n  \t  ',
+        designSystemComponentsManifest: '\n\t',
         designSystemFixtureHtml: '\n\n',
       });
       expect(prompt).not.toContain('## Active design system tokens');
+      expect(prompt).not.toContain('## Reference component manifest');
       expect(prompt).not.toContain('## Reference fixture');
     });
   });

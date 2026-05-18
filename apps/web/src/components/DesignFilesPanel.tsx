@@ -100,16 +100,55 @@ export function DesignFilesPanel({
   >(new Set());
   const [renaming, setRenaming] = useState<{ name: string; draft: string; saving: boolean } | null>(null);
   const [dayBoundary, setDayBoundary] = useState(() => Date.now());
+  const [kindFilter, setKindFilter] = useState<Set<ProjectFileKind>>(() => new Set());
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+  const filterMenuRef = useRef<HTMLDivElement | null>(null);
+
+  const kindCounts = useMemo(() => {
+    const counts = new Map<ProjectFileKind, number>();
+    for (const f of files) counts.set(f.kind, (counts.get(f.kind) ?? 0) + 1);
+    return counts;
+  }, [files]);
+
+  const availableKinds = useMemo(
+    () =>
+      Array.from(kindCounts.keys()).sort(
+        (a, b) => kindSortPriority(a) - kindSortPriority(b),
+      ),
+    [kindCounts],
+  );
+
+  // Drop any selected-filter kinds that no longer appear in the file list
+  // (e.g. after a delete leaves the kind empty). Keeps the filter UI honest
+  // and prevents a stale filter from silently hiding everything.
+  useEffect(() => {
+    setKindFilter((prev) => {
+      if (prev.size === 0) return prev;
+      const present = new Set(availableKinds);
+      const next = new Set<ProjectFileKind>();
+      let changed = false;
+      for (const k of prev) {
+        if (present.has(k)) next.add(k);
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [availableKinds]);
+
+  const filteredFiles = useMemo(() => {
+    if (kindFilter.size === 0) return files;
+    return files.filter((f) => kindFilter.has(f.kind));
+  }, [files, kindFilter]);
 
   const sortedFiles = useMemo(() => {
-    return [...files].sort((a, b) => {
+    return [...filteredFiles].sort((a, b) => {
       let cmp: number;
       if (sortKey === 'name') cmp = a.name.localeCompare(b.name);
       else if (sortKey === 'kind') cmp = kindSortPriority(a.kind) - kindSortPriority(b.kind);
       else cmp = a.mtime - b.mtime;
       return sortDir === 'asc' ? cmp : -cmp;
     });
-  }, [files, sortKey, sortDir]);
+  }, [filteredFiles, sortKey, sortDir]);
 
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState<number | 'all'>(30);
@@ -150,6 +189,63 @@ export function DesignFilesPanel({
   useEffect(() => {
     setPage(0);
   }, [pageSize]);
+
+  // Reset to the first page when the filter changes — the previous page
+  // index may no longer exist (or may now sit past the new totalPages).
+  useEffect(() => {
+    setPage(0);
+  }, [kindFilter]);
+
+  // Drop any selected files that fall outside the active filter. Without
+  // this, bulk delete / download would silently operate on rows the user
+  // can no longer see — particularly dangerous for destructive deletes.
+  // We keep the empty-filter branch a no-op so clearing the filter
+  // doesn't disturb existing selections.
+  useEffect(() => {
+    if (kindFilter.size === 0) return;
+    setSelected((prev) => {
+      if (prev.size === 0) return prev;
+      const visible = new Set(filteredFiles.map((f) => f.name));
+      const next = new Set<string>();
+      let changed = false;
+      for (const name of prev) {
+        if (visible.has(name)) next.add(name);
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [filteredFiles, kindFilter]);
+
+  // Outside-click + escape to close the filter popover. Stops short of a
+  // full focus trap because the popover hosts only checkboxes plus a
+  // small clear button; the existing tab order through them is fine.
+  useEffect(() => {
+    if (!filterMenuOpen) return;
+    const onMouseDown = (event: MouseEvent) => {
+      const root = filterMenuRef.current;
+      if (root && event.target instanceof Node && !root.contains(event.target)) {
+        setFilterMenuOpen(false);
+      }
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFilterMenuOpen(false);
+    };
+    window.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [filterMenuOpen]);
+
+  function toggleKindFilter(kind: ProjectFileKind): void {
+    setKindFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(kind)) next.delete(kind);
+      else next.add(kind);
+      return next;
+    });
+  }
 
   useEffect(() => {
     if (Number.isFinite(totalPages)) setPage((p) => Math.min(p, totalPages - 1));
@@ -695,28 +791,105 @@ export function DesignFilesPanel({
           ) : (
             <>
               {files.length > 0 ? (
-                <div
-                  className="df-group-toggle"
-                  role="group"
-                  aria-label={t('designFiles.groupBy')}
-                >
-                  <span>{t('designFiles.groupBy')}</span>
-                  <button
-                    type="button"
-                    className={groupMode === 'kind' ? 'active' : ''}
-                    aria-pressed={groupMode === 'kind'}
-                    onClick={() => setGroupMode('kind')}
+                <div className="df-toolbar-row">
+                  <div
+                    className="df-group-toggle"
+                    role="group"
+                    aria-label={t('designFiles.groupBy')}
                   >
-                    {t('designFiles.groupByKind')}
-                  </button>
-                  <button
-                    type="button"
-                    className={groupMode === 'modified' ? 'active' : ''}
-                    aria-pressed={groupMode === 'modified'}
-                    onClick={() => setGroupMode('modified')}
-                  >
-                    {t('designFiles.groupByModified')}
-                  </button>
+                    <span>{t('designFiles.groupBy')}</span>
+                    <button
+                      type="button"
+                      className={groupMode === 'kind' ? 'active' : ''}
+                      aria-pressed={groupMode === 'kind'}
+                      onClick={() => setGroupMode('kind')}
+                    >
+                      {t('designFiles.groupByKind')}
+                    </button>
+                    <button
+                      type="button"
+                      className={groupMode === 'modified' ? 'active' : ''}
+                      aria-pressed={groupMode === 'modified'}
+                      onClick={() => setGroupMode('modified')}
+                    >
+                      {t('designFiles.groupByModified')}
+                    </button>
+                  </div>
+                  {availableKinds.length > 1 ? (
+                    <div className="df-kind-filter" ref={filterMenuRef}>
+                      <button
+                        type="button"
+                        className={`df-kind-filter-trigger${kindFilter.size > 0 ? ' active' : ''}`}
+                        aria-haspopup="dialog"
+                        aria-expanded={filterMenuOpen}
+                        aria-label={t('designFiles.filterBy')}
+                        onClick={() => setFilterMenuOpen((open) => !open)}
+                      >
+                        <Icon name="sliders" size={13} />
+                        <span className="df-kind-filter-trigger-label">
+                          {kindFilter.size === 0
+                            ? t('designFiles.filterBy')
+                            : kindFilter.size === 1
+                              ? kindLabel(Array.from(kindFilter)[0]!, t)
+                              : t('designFiles.filterCount', { n: kindFilter.size })}
+                        </span>
+                        {kindFilter.size > 0 ? (
+                          <span
+                            className="df-kind-filter-count"
+                            aria-hidden
+                          >
+                            {kindFilter.size}
+                          </span>
+                        ) : null}
+                      </button>
+                      {filterMenuOpen ? (
+                        <div
+                          className="df-kind-filter-popover"
+                          role="dialog"
+                          aria-label={t('designFiles.filterBy')}
+                        >
+                          <div className="df-kind-filter-header">
+                            <span>{t('designFiles.filterBy')}</span>
+                            {kindFilter.size > 0 ? (
+                              <button
+                                type="button"
+                                className="df-kind-filter-clear"
+                                onClick={() => setKindFilter(new Set())}
+                              >
+                                {t('designFiles.filterClear')}
+                              </button>
+                            ) : null}
+                          </div>
+                          <ul className="df-kind-filter-list">
+                            {availableKinds.map((kind) => {
+                              const checked = kindFilter.has(kind);
+                              const count = kindCounts.get(kind) ?? 0;
+                              return (
+                                <li key={kind}>
+                                  <label className="df-kind-filter-item">
+                                    <input
+                                      type="checkbox"
+                                      checked={checked}
+                                      onChange={() => toggleKindFilter(kind)}
+                                    />
+                                    <span className="df-kind-filter-glyph" aria-hidden>
+                                      {kindGlyph(kind)}
+                                    </span>
+                                    <span className="df-kind-filter-label">
+                                      {kindLabel(kind, t)}
+                                    </span>
+                                    <span className="df-kind-filter-itemcount">
+                                      {count}
+                                    </span>
+                                  </label>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
               {liveArtifacts.length > 0 ? (

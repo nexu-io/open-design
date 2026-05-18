@@ -8,6 +8,7 @@ export const hu: Dict = {
   'common.close': 'Bezárás',
   'common.delete': 'Törlés',
   'common.rename': 'Átnevezés',
+  'common.edit': 'Szerkesztés',
   'common.preview': 'Előnézet',
   'common.share': 'Megosztás',
   'common.search': 'Keresés',
@@ -135,9 +136,15 @@ export const hu: Dict = {
   'settings.themeDark': 'Sötét',
   'settings.agentModelHead': 'Modell ehhez:',
   'settings.modelPicker': 'Modell',
+  'settings.modelSourceLive': 'Live from CLI',
+  'settings.modelSourceFallback': 'Fallback list',
   'settings.reasoningPicker': 'Gondolkodási erőfeszítés',
   'settings.modelPickerHint':
     'A CLI-tól kérdezi le, ha az közzéteszi a `models` parancsot. Az „Alapértelmezett" a CLI saját konfigjára bízza a választást; az „Egyedi…" tetszőleges, a CLI által elfogadott modell-id-t enged megadni.',
+  'settings.modelPickerLiveHint':
+    'Models were refreshed from the installed CLI. Default still uses the CLI config.',
+  'settings.modelPickerFallbackHint':
+    'Using Open Design fallback models because the installed CLI did not return live model metadata. Rescan after updating or logging in to the CLI.',
   'settings.cliEnvTitle': 'CLI config locations',
   'settings.cliEnvHint':
     'Set non-secret config directories for packaged app runs and agent detection.',
@@ -590,6 +597,7 @@ export const hu: Dict = {
   'project.backToProjects': 'Vissza a projektekhez',
   'project.metaFreeform': 'szabad formátum',
   'project.resizeChatPanel': 'Csevegőpanel átméretezése',
+  'project.instructionsActive': 'Aktív – minden üzenethez hozzáadva',
   'chat.tabChat': 'Csevegés',
   'chat.tabComments': 'Megjegyzések',
   'chat.commentsSoon': 'Megjegyzések — hamarosan',
@@ -1138,7 +1146,7 @@ export const hu: Dict = {
   'pet.composerTitle': 'Háziállatok — ébresztés, elrejtés vagy választás',
   'pet.composerMenuTitle': 'Háziállatok',
   'pet.composerMenuHint': 'tipp: írd be /pet a váltáshoz',
-  'pet.composerOpenSettings': 'Testreszabás a Beállításokban',
+  'pet.composerOpenSettings': 'Háziállatok kezelése',
   'pet.welcomeTeaserTitle': 'Fogadj be egy háziállatot',
   'pet.welcomeTeaserBody': 'Egy apró lebegő társ, aki veled van.',
   'pet.welcomeTeaserCta': 'Választok egyet',

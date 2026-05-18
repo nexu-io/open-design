@@ -311,12 +311,135 @@ describe('PluginsView', () => {
     fireEvent.click(within(dialog).getByTestId('plugins-available-details-install-remote-plugin'));
 
     await waitFor(() =>
-      expect(mockedInstallPluginSource).toHaveBeenCalledWith('remote-plugin'),
+      expect(mockedInstallPluginSource).toHaveBeenCalledWith('remote-plugin@1.2.0'),
     );
     expect(await screen.findByText('Installed New Plugin.')).toBeTruthy();
     await waitFor(() =>
       expect(screen.queryByTestId('plugins-available-details-modal')).toBeNull(),
     );
+  });
+
+  it('shows registry provenance, permissions, versions, and copyable install command in available details', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    mockedListMarketplaces.mockResolvedValue([
+      {
+        id: 'official',
+        url: 'https://example.com/open-design-marketplace.json',
+        trust: 'official',
+        manifest: {
+          name: 'Official Registry',
+          version: '1.0.0',
+          plugins: [{
+            name: 'remote-plugin',
+            title: 'Remote Plugin',
+            source: 'github:owner/repo',
+            version: '1.2.0',
+            ref: 'v1.2.0',
+            integrity: 'sha256:latest',
+            description: 'Remote catalog plugin.',
+            permissions: ['prompt:inject', 'fs:read'],
+            capabilitiesSummary: ['Injects prompt context', 'Reads local design assets'],
+            versions: [
+              {
+                version: '1.2.0',
+                source: 'github:owner/repo',
+                ref: 'v1.2.0',
+                integrity: 'sha256:latest',
+              },
+              {
+                version: '1.1.0',
+                source: 'github:owner/repo',
+                ref: 'v1.1.0',
+                integrity: 'sha256:previous',
+              },
+            ],
+          }],
+        },
+      },
+    ]);
+    render(<PluginsView />);
+
+    fireEvent.click(await screen.findByTestId('plugins-tab-available'));
+    fireEvent.click(await screen.findByTestId('plugins-available-details-remote-plugin'));
+
+    const dialog = await screen.findByTestId('plugins-available-details-modal');
+    expect(within(dialog).getByTestId('plugins-available-provenance').textContent)
+      .toContain('from Official Registry · official · github:owner/repo@v1.2.0 · sha256:latest');
+    expect(within(dialog).getByText('Permissions')).toBeTruthy();
+    expect(within(dialog).getByText('prompt:inject')).toBeTruthy();
+    expect(within(dialog).getByText('fs:read')).toBeTruthy();
+    expect(within(dialog).getByText('Capability summary')).toBeTruthy();
+    expect(within(dialog).getByText('Injects prompt context')).toBeTruthy();
+
+    fireEvent.change(within(dialog).getByLabelText('Plugin version'), {
+      target: { value: '1.1.0' },
+    });
+    expect(within(dialog).getByTestId('plugins-available-install-command').textContent)
+      .toContain('od plugin install remote-plugin@1.1.0');
+    expect(within(dialog).getByTestId('plugins-available-provenance').textContent)
+      .toContain('github:owner/repo@v1.1.0 · sha256:previous');
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Copy install command' }));
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith('od plugin install remote-plugin@1.1.0'),
+    );
+
+    fireEvent.click(within(dialog).getByTestId('plugins-available-details-install-remote-plugin'));
+    await waitFor(() =>
+      expect(mockedInstallPluginSource).toHaveBeenCalledWith('remote-plugin@1.1.0'),
+    );
+  });
+
+  it('does not inherit latest ref and integrity for older sparse available versions', async () => {
+    mockedListMarketplaces.mockResolvedValue([
+      {
+        id: 'official',
+        url: 'https://example.com/open-design-marketplace.json',
+        trust: 'official',
+        manifest: {
+          name: 'Official Registry',
+          version: '1.0.0',
+          plugins: [{
+            name: 'remote-plugin',
+            title: 'Remote Plugin',
+            source: 'github:owner/repo',
+            version: '1.2.0',
+            ref: 'v1.2.0',
+            integrity: 'sha256:latest',
+            description: 'Remote catalog plugin.',
+            versions: [
+              { version: '1.2.0' },
+              { version: '1.1.0' },
+            ],
+          }],
+        },
+      },
+    ]);
+    render(<PluginsView />);
+
+    fireEvent.click(await screen.findByTestId('plugins-tab-available'));
+    fireEvent.click(await screen.findByTestId('plugins-available-details-remote-plugin'));
+
+    const dialog = await screen.findByTestId('plugins-available-details-modal');
+    expect(within(dialog).getByTestId('plugins-available-provenance').textContent)
+      .toContain('github:owner/repo@v1.2.0 · sha256:latest');
+
+    fireEvent.change(within(dialog).getByLabelText('Plugin version'), {
+      target: { value: '1.1.0' },
+    });
+
+    expect(within(dialog).getByTestId('plugins-available-provenance').textContent)
+      .toContain('from Official Registry · official · github:owner/repo');
+    expect(within(dialog).getByTestId('plugins-available-provenance').textContent)
+      .not.toContain('v1.2.0');
+    expect(within(dialog).getByTestId('plugins-available-provenance').textContent)
+      .not.toContain('sha256:latest');
+    expect(within(dialog).queryByText('Ref')).toBeNull();
+    expect(within(dialog).queryByText('Integrity')).toBeNull();
   });
 
   it('filters available marketplace entries by source and search', async () => {

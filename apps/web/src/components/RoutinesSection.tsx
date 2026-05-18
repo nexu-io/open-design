@@ -167,6 +167,16 @@ function formatRunTimestamp(ts: number): string {
   });
 }
 
+function runFailureReason(run: {
+  status: RoutineRun['status'];
+  error?: string | null;
+  summary?: string | null;
+} | null | undefined): string | null {
+  if (!run || run.status !== 'failed') return null;
+  const reason = (run.error || run.summary || '').trim();
+  return reason || null;
+}
+
 type FormState = {
   name: string;
   prompt: string;
@@ -367,38 +377,44 @@ function RunHistory({ routineId, refreshKey, onClose }: { routineId: string; ref
 
   return (
     <ul className="routines-history">
-      {runs.map((r) => (
-        <li key={r.id} className="routines-history-row">
-          <StatusPill status={r.status} />
-          <span className="routines-history-time">{formatRunTimestamp(r.startedAt)}</span>
-          <span className="routines-history-trigger">
-            {r.trigger === 'manual' ? 'manual' : 'scheduled'}
-          </span>
-          <button
-            type="button"
-            className="routines-history-link"
-            onClick={() => {
-              // Issue #1505: deep-link to this run's specific
-              // conversation, not just the project root. Without the
-              // conversation id, parallel runs that share a project
-              // (reuse mode) all resolve to the same default
-              // conversation in the project view, which made earlier
-              // runs look "absorbed" by the latest one.
-              navigate({
-                kind: 'project',
-                projectId: r.projectId,
-                conversationId: r.conversationId ?? null,
-                fileName: null,
-              });
-              onClose?.();
-            }}
-            title="Open the project this run wrote to"
-          >
-            Open project
-            <Icon name="chevron-right" size={12} />
-          </button>
-        </li>
-      ))}
+      {runs.map((r) => {
+        const failureReason = runFailureReason(r);
+        return (
+          <li key={r.id} className="routines-history-row">
+            <StatusPill status={r.status} />
+            <span className="routines-history-time">{formatRunTimestamp(r.startedAt)}</span>
+            <span className="routines-history-trigger">
+              {r.trigger === 'manual' ? 'manual' : 'scheduled'}
+            </span>
+            <button
+              type="button"
+              className="routines-history-link"
+              onClick={() => {
+                // Issue #1505: deep-link to this run's specific
+                // conversation, not just the project root. Without the
+                // conversation id, parallel runs that share a project
+                // (reuse mode) all resolve to the same default
+                // conversation in the project view, which made earlier
+                // runs look "absorbed" by the latest one.
+                navigate({
+                  kind: 'project',
+                  projectId: r.projectId,
+                  conversationId: r.conversationId ?? null,
+                  fileName: null,
+                });
+                onClose?.();
+              }}
+              title="Open the project this run wrote to"
+            >
+              Open project
+              <Icon name="chevron-right" size={12} />
+            </button>
+            {failureReason ? (
+              <div className="routines-history-error">{failureReason}</div>
+            ) : null}
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -695,6 +711,7 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
                 : '→ new project each run';
             const isBusy = busyId === r.id;
             const isExpanded = expandedId === r.id;
+            const failureReason = runFailureReason(r.lastRun);
             return (
               <li key={r.id} className={`routines-card routines-item${r.enabled ? '' : ' is-disabled'}`}>
                 <div className="routines-item-head">
@@ -720,6 +737,9 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
                         </>
                       ) : null}
                     </div>
+                    {failureReason ? (
+                      <div className="routines-item-error">{failureReason}</div>
+                    ) : null}
                   </div>
                   <div className="routines-item-actions">
                     <button

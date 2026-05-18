@@ -8,6 +8,7 @@ export const ru: Dict = {
   'common.close': 'Закрыть',
   'common.delete': 'Удалить',
   'common.rename': 'Переименовать',
+  'common.edit': 'Редактировать',
   'common.preview': 'Предпросмотр',
   'common.share': 'Поделиться',
   'common.search': 'Поиск',
@@ -135,9 +136,15 @@ export const ru: Dict = {
   'settings.themeDark': 'Тёмная',
   'settings.agentModelHead': 'Модель для:',
   'settings.modelPicker': 'Модель',
+  'settings.modelSourceLive': 'Live from CLI',
+  'settings.modelSourceFallback': 'Fallback list',
   'settings.reasoningPicker': 'Сложность рассуждений',
   'settings.modelPickerHint':
     'Получается из CLI, если он поддерживает команду `models`. «По умолчанию» оставляет выбор конфигурации CLI, а «Пользовательская…» позволяет ввести любой ID модели, который CLI принимает.',
+  'settings.modelPickerLiveHint':
+    'Models were refreshed from the installed CLI. Default still uses the CLI config.',
+  'settings.modelPickerFallbackHint':
+    'Using Open Design fallback models because the installed CLI did not return live model metadata. Rescan after updating or logging in to the CLI.',
   'settings.cliEnvTitle': 'CLI config locations',
   'settings.cliEnvHint':
     'Set non-secret config directories for packaged app runs and agent detection.',
@@ -611,6 +618,7 @@ export const ru: Dict = {
   'project.backToProjects': 'Назад к проектам',
   'project.metaFreeform': 'произвольная форма',
   'project.resizeChatPanel': 'Изменить размер панели чата',
+  'project.instructionsActive': 'Активно — добавляется в каждое сообщение',
   'chat.tabChat': 'Чат',
   'chat.tabComments': 'Комментарии',
   'chat.commentsSoon': 'Комментарии — скоро',
@@ -1179,7 +1187,7 @@ export const ru: Dict = {
   'pet.composerTitle': 'Питомцы — разбудить, спрятать или выбрать',
   'pet.composerMenuTitle': 'Питомцы',
   'pet.composerMenuHint': 'совет: введите /pet, чтобы переключить',
-  'pet.composerOpenSettings': 'Настроить в Настройках',
+  'pet.composerOpenSettings': 'Управление питомцами',
   'pet.welcomeTeaserTitle': 'Заведите питомца',
   'pet.welcomeTeaserBody': 'Маленький спутник, парящий над воркспейсом.',
   'pet.welcomeTeaserCta': 'Выбрать',

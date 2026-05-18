@@ -8,6 +8,7 @@ export const ar: Dict = {
   'common.close': 'إغلاق',
   'common.delete': 'حذف',
   'common.rename': 'إعادة تسمية',
+  'common.edit': 'تعديل',
   'common.preview': 'معاينة',
   'common.share': 'مشاركة',
   'common.search': 'بحث',
@@ -135,9 +136,15 @@ export const ar: Dict = {
   'settings.themeDark': 'داكن',
   'settings.agentModelHead': 'النموذج لـ:',
   'settings.modelPicker': 'النموذج',
+  'settings.modelSourceLive': 'Live from CLI',
+  'settings.modelSourceFallback': 'Fallback list',
   'settings.reasoningPicker': 'جهد التفكير',
   'settings.modelPickerHint':
     'يتم جلبه من CLI عندما يعرض أمر `models`. "الافتراضي" يترك الخيار لإعدادات CLI؛ "مخصص..." يسمح لك بكتابة أي معرف نموذج يقبله CLI.',
+  'settings.modelPickerLiveHint':
+    'Models were refreshed from the installed CLI. Default still uses the CLI config.',
+  'settings.modelPickerFallbackHint':
+    'Using Open Design fallback models because the installed CLI did not return live model metadata. Rescan after updating or logging in to the CLI.',
   'settings.cliEnvTitle': 'CLI config locations',
   'settings.cliEnvHint':
     'Set non-secret config directories for packaged app runs and agent detection.',
@@ -590,6 +597,7 @@ export const ar: Dict = {
   'project.backToProjects': 'العودة للمشاريع',
   'project.metaFreeform': 'شكل حر',
   'project.resizeChatPanel': 'تغيير حجم لوحة الدردشة',
+  'project.instructionsActive': 'نشط — مُضمَّن في كل رسالة',
   'chat.tabChat': 'دردشة',
   'chat.tabComments': 'تعليقات',
   'chat.commentsSoon': 'التعليقات - قريباً',
@@ -1138,7 +1146,7 @@ export const ar: Dict = {
   'pet.composerTitle': 'الحيوانات الأليفة - إيقاظ، إخفاء، أو اختيار واحد',
   'pet.composerMenuTitle': 'الحيوانات الأليفة',
   'pet.composerMenuHint': 'تلميح: اكتب /pet للتبديل',
-  'pet.composerOpenSettings': 'تخصيص في الإعدادات',
+  'pet.composerOpenSettings': 'إدارة الحيوانات الأليفة',
   'pet.welcomeTeaserTitle': 'تبنَّ حيواناً أليفاً',
   'pet.welcomeTeaserBody': 'رفيق عائم صغير يقضي الوقت معك.',
   'pet.welcomeTeaserCta': 'اختر واحداً',

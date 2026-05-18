@@ -8,6 +8,7 @@ export const zhTW: Dict = {
   'common.close': '關閉',
   'common.delete': '刪除',
   'common.rename': '重新命名',
+  'common.edit': '編輯',
   'common.preview': '預覽',
   'common.share': '分享',
   'common.search': '搜尋',
@@ -134,9 +135,15 @@ export const zhTW: Dict = {
   'settings.themeDark': '深色',
   'settings.agentModelHead': '模型：',
   'settings.modelPicker': '模型',
+  'settings.modelSourceLive': 'Live from CLI',
+  'settings.modelSourceFallback': 'Fallback list',
   'settings.reasoningPicker': '推理強度',
   'settings.modelPickerHint':
     '當 CLI 提供 `models` 命令時會自動拉取。選擇「預設」則沿用 CLI 自身的設定；選擇「自訂」可手動輸入任何 CLI 支援的模型 id。',
+  'settings.modelPickerLiveHint':
+    'Models were refreshed from the installed CLI. Default still uses the CLI config.',
+  'settings.modelPickerFallbackHint':
+    'Using Open Design fallback models because the installed CLI did not return live model metadata. Rescan after updating or logging in to the CLI.',
   'settings.cliEnvTitle': 'CLI 設定位置',
   'settings.cliEnvHint':
     '為打包版應用執行和 agent 偵測設定非敏感設定目錄。',
@@ -668,6 +675,7 @@ export const zhTW: Dict = {
   'project.backToProjects': '返回專案列表',
   'project.metaFreeform': '自由設計',
   'project.resizeChatPanel': '調整聊天面板大小',
+  'project.instructionsActive': '已生效 — 每則訊息都會附帶',
   'chat.tabChat': '對話',
   'chat.tabComments': '評論',
   'chat.commentsSoon': '評論 — 即將上線',
@@ -1277,7 +1285,7 @@ export const zhTW: Dict = {
   'pet.composerTitle': '寵物 — 喚醒、收起或挑一隻',
   'pet.composerMenuTitle': '寵物',
   'pet.composerMenuHint': '小提示：輸入 /pet 即可切換',
-  'pet.composerOpenSettings': '在設定中自訂',
+  'pet.composerOpenSettings': '管理寵物',
   'pet.welcomeTeaserTitle': '領養一隻寵物',
   'pet.welcomeTeaserBody': '一隻小小的浮窗夥伴，會陪你工作。',
   'pet.welcomeTeaserCta': '挑一隻',

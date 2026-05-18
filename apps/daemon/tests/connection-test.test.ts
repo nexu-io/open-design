@@ -1177,6 +1177,7 @@ describe('POST /api/test/connection agent mode', () => {
 const fs = require('node:fs');
 fs.writeFileSync(${JSON.stringify(envFile)}, JSON.stringify({
   CODEX_HOME: process.env.CODEX_HOME || null,
+  CODEX_API_KEY: process.env.CODEX_API_KEY || null,
   SHOULD_NOT_PASS: process.env.OD_CONNECTION_TEST_SHOULD_NOT_PASS || null,
 }));
 console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'ok' } }));
@@ -1191,6 +1192,7 @@ console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_messag
               agentCliEnv: {
                 codex: {
                   CODEX_HOME: codexHome,
+                  CODEX_API_KEY: 'codex-key',
                   OD_CONNECTION_TEST_SHOULD_NOT_PASS: 'leaked',
                 },
                 claude: {
@@ -1208,6 +1210,7 @@ console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_messag
           await expect(fsp.readFile(envFile, 'utf8')).resolves.toBe(
             JSON.stringify({
               CODEX_HOME: codexHome,
+              CODEX_API_KEY: 'codex-key',
               SHOULD_NOT_PASS: null,
             }),
           );

@@ -94,17 +94,30 @@ describe('fetchSkillExample', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/skills/blog-post/example');
   });
 
-  it('forwards the html fetch and returns a discriminated error on non-2xx', async () => {
+  it('treats missing html previews as unavailable instead of an error', async () => {
     const fetchMock = vi.fn(
       async () => new Response('not found', { status: 404 }),
     );
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(fetchSkillExample('design-brief', 'html')).resolves.toEqual({
-      error: 'HTTP 404',
+      unavailable: true,
+      kind: 'html',
     });
     // Confirm the dispatch did call through to the daemon for the html
     // path (i.e. the short-circuit above only catches non-html types).
+    expect(fetchMock).toHaveBeenCalledWith('/api/skills/design-brief/example');
+  });
+
+  it('forwards real html preview fetch failures as discriminated errors', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response('server error', { status: 500 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchSkillExample('design-brief', 'html')).resolves.toEqual({
+      error: 'HTTP 500',
+    });
     expect(fetchMock).toHaveBeenCalledWith('/api/skills/design-brief/example');
   });
 });

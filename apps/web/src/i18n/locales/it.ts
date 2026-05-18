@@ -8,6 +8,7 @@ export const it: Dict = {
   'common.close': 'Chiudi',
   'common.delete': 'Elimina',
   'common.rename': 'Rinomina',
+  'common.edit': 'Modifica',
   'common.preview': 'Anteprima',
   'common.share': 'Condividi',
   'common.search': 'Cerca',
@@ -131,9 +132,15 @@ export const it: Dict = {
   'settings.themeLight': 'Chiaro',
   'settings.themeDark': 'Scuro',
   'settings.modelPicker': 'Modello',
+  'settings.modelSourceLive': 'Live from CLI',
+  'settings.modelSourceFallback': 'Fallback list',
   'settings.reasoningPicker': 'Sforzo di ragionamento',
   'settings.modelPickerHint':
     'Recuperato dalla CLI quando espone un comando `models`. "Predefinito" lascia la scelta alla configurazione della CLI; "Personalizzato…" ti permette di inserire qualsiasi identificatore di modello accettato dalla CLI.',
+  'settings.modelPickerLiveHint':
+    'Models were refreshed from the installed CLI. Default still uses the CLI config.',
+  'settings.modelPickerFallbackHint':
+    'Using Open Design fallback models because the installed CLI did not return live model metadata. Rescan after updating or logging in to the CLI.',
   'settings.cliEnvTitle': 'Posizioni di configurazione CLI',
   'settings.cliEnvHint':
     'Imposta directory di configurazione non segrete per esecuzioni di app impacchettate e rilevamento agenti.',
@@ -524,6 +531,7 @@ export const it: Dict = {
   'project.backToProjects': 'Torna ai progetti',
   'project.metaFreeform': 'libero',
   'project.resizeChatPanel': 'Ridimensiona il pannello della chat',
+  'project.instructionsActive': 'Attivo — incluso in ogni messaggio',
   'chat.tabChat': 'Chat',
   'chat.tabComments': 'Commenti',
   'chat.commentsSoon': 'Commenti — presto disponibile',
@@ -1023,7 +1031,7 @@ export const it: Dict = {
   'pet.composerTitle': 'Compagni — sveglia, nascondi o scegli',
   'pet.composerMenuTitle': 'Compagni',
   'pet.composerMenuHint': 'suggerimento: digita /pet per alternare',
-  'pet.composerOpenSettings': 'Personalizza nelle impostazioni',
+  'pet.composerOpenSettings': 'Gestisci animali',
   'pet.welcomeTeaserTitle': 'Adotta un compagno',
   'pet.welcomeTeaserBody': 'Un piccolo compagno fluttuante che sta con te.',
   'pet.welcomeTeaserCta': 'Scegline uno',

@@ -161,6 +161,71 @@ test('codex model picker includes current OpenAI choices in priority order', asy
   }
 });
 
+test('codex parses live model catalog from debug models JSON', () => {
+  assert.ok(codex.listModels, 'codex must define live model discovery');
+  const parsed = codex.listModels.parse(JSON.stringify({
+    models: [
+      {
+        slug: 'gpt-6-codex',
+        display_name: 'GPT-6 Codex',
+        visibility: 'list',
+      },
+      {
+        slug: 'gpt-6-codex-mini',
+        display_name: 'GPT-6 Codex Mini',
+        visibility: 'list',
+      },
+      {
+        slug: 'gpt-hidden-internal',
+        display_name: 'Hidden internal',
+        visibility: 'hidden',
+      },
+    ],
+  }));
+
+  assert.deepEqual(parsed, [
+    { id: 'default', label: 'Default (CLI config)' },
+    { id: 'gpt-6-codex', label: 'GPT-6 Codex' },
+    { id: 'gpt-6-codex-mini', label: 'GPT-6 Codex Mini' },
+  ]);
+});
+
+test('codex detection surfaces live debug models separately from fallback models', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-agents-codex-live-models-'));
+  try {
+    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME'], async () => {
+      const codexBin = join(dir, 'codex');
+      writeFileSync(
+        codexBin,
+        `#!/bin/sh
+if [ "$1" = "--version" ]; then echo "codex-cli 9.9.9"; exit 0; fi
+if [ "$1" = "debug" ] && [ "$2" = "models" ]; then
+  printf '%s\\n' '{"models":[{"slug":"gpt-6-codex","display_name":"GPT-6 Codex","visibility":"list"}]}'
+  exit 0
+fi
+exit 2
+`,
+      );
+      chmodSync(codexBin, 0o755);
+      process.env.OD_AGENT_HOME = dir;
+      process.env.PATH = dir;
+
+      const agents = await detectAgents();
+      const detected = agents.find((agent) => agent.id === 'codex');
+
+      assert.ok(detected);
+      assert.equal(detected.available, true);
+      assert.equal(detected.modelsSource, 'live');
+      assert.deepEqual(detected.models.map((m: { id: string }) => m.id), [
+        'default',
+        'gpt-6-codex',
+      ]);
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('codex picker includes gpt-5.1 model family', () => {
   const pickerModels = new Set(codex.fallbackModels.map((model) => model.id));
 

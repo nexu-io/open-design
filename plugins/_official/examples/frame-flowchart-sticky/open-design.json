@@ -35,7 +35,6 @@
     "mode": "video",
     "scenario": "operations",
     "surface": "video",
-    "featured": 45,
     "preview": {
       "type": "html",
       "entry": "./example.html"

@@ -171,6 +171,31 @@ describe('selection bridge — empty annotation surface (#890)', () => {
       .filter((message) => message?.type === 'od:comment-target');
     expect(clickMessages).toHaveLength(1);
     expect(clickMessages[0].elementId).toBe('hero');
+    expect(clickMessages[0].clickedDescendant).toEqual({
+      label: 'h1',
+      text: 'Hero',
+    });
+  });
+
+  it('does not add clickedDescendant when the annotated target itself is clicked', async () => {
+    const { win, parentPostMessage } = setupBridgeDom(
+      '<main data-od-id="hero">Hero</main>',
+      'inspect',
+    );
+
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 10));
+    parentPostMessage.mockClear();
+
+    win.document.querySelector('[data-od-id="hero"]')!.dispatchEvent(
+      new win.MouseEvent('click', { bubbles: true, cancelable: true }),
+    );
+
+    const clickMessages = parentPostMessage.mock.calls
+      .map((call) => call[0])
+      .filter((message) => message?.type === 'od:comment-target');
+    expect(clickMessages).toHaveLength(1);
+    expect(clickMessages[0].elementId).toBe('hero');
+    expect(clickMessages[0].clickedDescendant).toBeUndefined();
   });
 
   it('does not invent fallback targets in Inspect mode for unannotated elements', async () => {

@@ -18,7 +18,6 @@ od:
   mode: deck
   surface: web
   scenario: marketing
-  featured: 19
   upstream: "https://github.com/nexu-io/html-anything"
   preview:
     type: html

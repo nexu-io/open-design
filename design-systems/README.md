@@ -46,7 +46,62 @@ will read it as part of its system prompt.
 Folders use ASCII slugs — dotted brands are normalized (`linear.app` →
 `linear-app`, `x.ai` → `x-ai`, etc.).
 
-## File shape
+## Design System Project Shape
+
+The current runtime still supports legacy folders that contain only
+`DESIGN.md`. New imported or packaged systems should use the project shape
+below so picker, daemon, agents, validators, and future importers can all
+discover the same files without guessing.
+
+```text
+design-systems/<slug>/
+├── manifest.json       ← machine-readable project entry
+├── DESIGN.md           ← canonical design prose for agents
+├── tokens.css          ← canonical compiled CSS custom properties
+├── components.html     ← optional standalone component fixture
+├── assets/             ← optional brand assets
+└── preview/            ← optional static preview pages
+```
+
+`manifest.json` is validated by `pnpm guard` when present. PR1 does not
+require every bundled system to ship a manifest; old `DESIGN.md` systems are
+skipped by the manifest guard and continue to work.
+
+Minimum v1 manifest:
+
+```json
+{
+  "schemaVersion": "od-design-system-project/v1",
+  "id": "default",
+  "name": "Neutral Modern",
+  "category": "Starter",
+  "description": "A clean, product-oriented default.",
+  "source": {
+    "type": "bundled",
+    "origin": "hand-authored"
+  },
+  "files": {
+    "design": "DESIGN.md",
+    "tokens": "tokens.css",
+    "components": "components.html"
+  }
+}
+```
+
+For v1, file locations are intentionally fixed:
+
+- `files.design` must be `DESIGN.md`.
+- `files.tokens` must be `tokens.css`.
+- `files.components` is optional and, when declared, must be
+  `components.html`.
+- `assetsDir` is optional and, when declared, must be `assets`.
+- `previewDir` is optional and, when declared, must be `preview`.
+
+The schema source of truth lives in
+[`_schema/manifest.schema.ts`](_schema/manifest.schema.ts). The guard lives in
+[`../scripts/check-design-system-manifests.ts`](../scripts/check-design-system-manifests.ts).
+
+## Legacy File Shape
 
 The first H1 is the title shown in the picker. The line immediately after
 the H1 is parsed for `> Category: <name>` and used to group the dropdown:

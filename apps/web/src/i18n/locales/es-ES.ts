@@ -8,6 +8,7 @@ export const esES: Dict = {
   'common.close': 'Cerrar',
   'common.delete': 'Eliminar',
   'common.rename': 'Renombrar',
+  'common.edit': 'Editar',
   'common.preview': 'Vista previa',
   'common.share': 'Compartir',
   'common.search': 'Buscar',
@@ -135,9 +136,15 @@ export const esES: Dict = {
   'settings.themeDark': 'Oscuro',
   'settings.agentModelHead': 'Modelo para:',
   'settings.modelPicker': 'Modelo',
+  'settings.modelSourceLive': 'Live from CLI',
+  'settings.modelSourceFallback': 'Fallback list',
   'settings.reasoningPicker': 'Esfuerzo de razonamiento',
   'settings.modelPickerHint':
     'Se obtiene de la CLI cuando expone un comando `models`. «Predeterminado» deja la elección a la propia configuración de la CLI; «Personalizado…» permite escribir cualquier id de modelo aceptado por la CLI.',
+  'settings.modelPickerLiveHint':
+    'Models were refreshed from the installed CLI. Default still uses the CLI config.',
+  'settings.modelPickerFallbackHint':
+    'Using Open Design fallback models because the installed CLI did not return live model metadata. Rescan after updating or logging in to the CLI.',
   'settings.cliEnvTitle': 'CLI config locations',
   'settings.cliEnvHint':
     'Set non-secret config directories for packaged app runs and agent detection.',
@@ -479,6 +486,7 @@ export const esES: Dict = {
   'project.backToProjects': 'Volver a los proyectos',
   'project.metaFreeform': 'estilo libre',
   'project.resizeChatPanel': 'Redimensionar panel de chat',
+  'project.instructionsActive': 'Activo: se incluye en cada mensaje',
   'chat.tabChat': 'Chat',
   'chat.tabComments': 'Comentarios',
   'chat.commentsSoon': 'Comentarios — próximamente',
@@ -1027,7 +1035,7 @@ export const esES: Dict = {
   'pet.composerTitle': 'Mascotas — despertar, esconder o elegir',
   'pet.composerMenuTitle': 'Mascotas',
   'pet.composerMenuHint': 'tip: escribe /pet para alternar',
-  'pet.composerOpenSettings': 'Personalizar en Ajustes',
+  'pet.composerOpenSettings': 'Administrar mascotas',
   'pet.welcomeTeaserTitle': 'Adopta una mascota',
   'pet.welcomeTeaserBody': 'Un compañerito que flota sobre tu workspace.',
   'pet.welcomeTeaserCta': 'Elegir',

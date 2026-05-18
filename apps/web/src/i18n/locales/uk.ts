@@ -8,6 +8,7 @@ export const uk: Dict = {
   'common.close': 'Закрити',
   'common.delete': 'Видалити',
   'common.rename': 'Перейменувати',
+  'common.edit': 'Редагувати',
   'common.preview': 'Переглянути',
   'common.share': 'Поділитися',
   'common.search': 'Пошук',
@@ -136,9 +137,15 @@ export const uk: Dict = {
   'settings.themeDark': 'Темна',
   'settings.agentModelHead': 'Модель для:',
   'settings.modelPicker': 'Модель',
+  'settings.modelSourceLive': 'Live from CLI',
+  'settings.modelSourceFallback': 'Fallback list',
   'settings.reasoningPicker': 'Інтенсивність міркувань',
   'settings.modelPickerHint':
     'Отримується з CLI, коли він виявляє команду `models`. «За замовчуванням» залишає вибір конфігурації CLI; «Власна…» дозволяє ввести будь-яке ID моделі, яке приймає CLI.',
+  'settings.modelPickerLiveHint':
+    'Models were refreshed from the installed CLI. Default still uses the CLI config.',
+  'settings.modelPickerFallbackHint':
+    'Using Open Design fallback models because the installed CLI did not return live model metadata. Rescan after updating or logging in to the CLI.',
   'settings.cliEnvTitle': 'CLI config locations',
   'settings.cliEnvHint':
     'Set non-secret config directories for packaged app runs and agent detection.',
@@ -612,6 +619,7 @@ export const uk: Dict = {
   'project.backToProjects': 'Назад до проектів',
   'project.metaFreeform': 'вільна форма',
   'project.resizeChatPanel': 'Змінити розмір панелі чату',
+  'project.instructionsActive': 'Активно — додається до кожного повідомлення',
   'chat.tabChat': 'Чат',
   'chat.tabComments': 'Коментарі',
   'chat.commentsSoon': 'Коментарі — скоро',
@@ -1180,7 +1188,7 @@ export const uk: Dict = {
   'pet.composerTitle': 'Маскоти — розбудити, Сховати або виберіть одну',
   'pet.composerMenuTitle': 'Маскоти',
   'pet.composerMenuHint': 'підказка: введіть /pet для перемикання',
-  'pet.composerOpenSettings': 'Налаштування в параметрах',
+  'pet.composerOpenSettings': 'Керувати вихованцями',
   'pet.welcomeTeaserTitle': 'Встановити маскота',
   'pet.welcomeTeaserBody': 'Крихітний плаваючий супутник, який зависає з вами.',
   'pet.welcomeTeaserCta': 'Виберіть один',

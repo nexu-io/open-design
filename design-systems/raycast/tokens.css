@@ -1,0 +1,143 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/raycast/tokens.css
+ *
+ * Structured token bindings for the "Raycast" brand — the macOS-native
+ * command palette / launcher's precision desktop-instrument voice.
+ *
+ * Brand identity in three sentences:
+ *   1. Near-black blue-tinted canvas (#07080a) — not pure black — with
+ *      semi-transparent white borders (0.06 opacity) and multi-layer
+ *      inset shadows that simulate physical glass-key depth.
+ *   2. Inter everywhere with OpenType "calt","kern","liga","ss03"; the
+ *      signature move is positive +0.2px letter-spacing on body for an
+ *      airy dark-mode rhythm, weight 500 as the readable body baseline.
+ *   3. Raycast Red (#FF6363) is punctuation, not pervasive — hero
+ *      stripes and danger states only. Raycast Blue (hsl(202,100%,67%))
+ *      carries interactive focus / links so red can stay scarce.
+ *
+ * Schema decisions:
+ *   - --bg #07080a (blue-cold near-black) / --surface #101111 (Surface 100).
+ *   - --surface-warm aliases --surface (cold-dark system, no warm tier).
+ *   - --fg #f9f9f9 near-white (avoids pure-white eye-strain on void).
+ *   - --fg-2 #cecece light-gray body / --meta #6a6b6c dim-gray metadata.
+ *   - --border rgba(255,255,255,0.06) — the "barely visible, structurally
+ *     essential" containment line called out in DESIGN.md §7.
+ *   - --accent #FF6363 (Raycast Red); hover/active shift tone, not opacity
+ *     (opacity 0.6 is a component-level interaction pattern, not a token).
+ *   - --focus-ring uses Raycast Blue, not accent red — separating brand
+ *     punctuation from interactive feedback is core to the system.
+ *   - --elev-ring is the macOS signature double-ring (outer #1b1c1e
+ *     + inset #07080a) that replaces traditional 1px borders on cards.
+ *   - --radius-sm 6px (workhorse: buttons / badges), --radius-md 12px
+ *     (standard cards), --radius-lg 16px (large feature containers).
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ──────────────────────────────────────────────────── */
+  --bg:           #07080a;              /* near-black blue tint — the void */
+  --surface:      #101111;              /* Surface 100 — elevated cards */
+  --surface-warm: var(--surface);       /* no warm tier in cold dark system */
+
+  /* ─── Foreground ───────────────────────────────────────────────── */
+  --fg:    #f9f9f9;                     /* near-white primary text */
+  --fg-2:  #cecece;                     /* light gray secondary body */
+  --muted: #9c9c9d;                     /* medium gray tertiary / nav links */
+  --meta:  #6a6b6c;                     /* dim gray placeholders / metadata */
+
+  /* ─── Border ───────────────────────────────────────────────────── */
+  --border:      rgba(255, 255, 255, 0.06);   /* card containment — barely visible */
+  --border-soft: rgba(255, 255, 255, 0.04);   /* inner row separator */
+
+  /* ─── Accent ───────────────────────────────────────────────────── */
+  --accent:        #FF6363;             /* Raycast Red — hero stripes, error states */
+  --accent-on:     #ffffff;
+  --accent-hover:  #ff7777;             /* lighter tone for hover */
+  --accent-active: #e85757;             /* darker tone for pressed */
+
+  /* ─── Semantic ─────────────────────────────────────────────────── */
+  --success: hsl(151, 59%, 59%);        /* Raycast Green */
+  --warn:    hsl(43, 100%, 60%);        /* Raycast Yellow */
+  --danger:  hsl(0, 100%, 69%);         /* Error Red (≈ #FF6363) */
+
+  /* ─── Typography ───────────────────────────────────────────────── */
+  --font-display: "Inter", "Inter Fallback", "SF Pro Display", -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-body:    "Inter", "Inter Fallback", "SF Pro Text", -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-mono:    "GeistMono", ui-monospace, "SF Mono", "Roboto Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale — DESIGN.md §3 Typography Hierarchy.
+   * Display Hero (64px) → text-4xl; Section Display (≈40–56px) → text-3xl;
+   * Section Heading (24px) → text-2xl; Sub-heading (20px) → text-xl;
+   * Body Large (18px) → text-lg; Body (16px) → text-base;
+   * Caption (14px) → text-sm; Small (12px) → text-xs. */
+  --text-xs:   12px;
+  --text-sm:   14px;
+  --text-base: 16px;
+  --text-lg:   18px;
+  --text-xl:   20px;
+  --text-2xl:  24px;
+  --text-3xl:  40px;
+  --text-4xl:  64px;
+
+  /* Leading + tracking.
+   * --leading-body 1.6: DESIGN.md "Body 16/500/1.60" — relaxed dark rhythm.
+   * --leading-tight 1.1: hero hugs its baseline.
+   * --tracking-display 0px: hero is zero-tracked; body inline adds +0.2px
+   * (the signature Raycast move noted in DESIGN.md §3 Principles). */
+  --leading-body:     1.6;
+  --leading-tight:    1.1;
+  --tracking-display: 0px;
+
+  /* ─── Spacing ──────────────────────────────────────────────────── */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-12: 48px;
+
+  /* Section rhythm — DESIGN.md §5 "80–120px vertical between sections".
+   * The dramatic negative space is the cinematic pacing of the system. */
+  --section-y-desktop: 96px;
+  --section-y-tablet:  64px;
+  --section-y-phone:   40px;
+
+  /* ─── Radius ───────────────────────────────────────────────────── */
+  /* 6px is the workhorse (buttons, badges); 12px standard cards;
+   * 16px large feature containers; pill (9999px) for primary CTAs
+   * — DESIGN.md uses 86px+ which is functionally pill at all sizes. */
+  --radius-sm:   6px;
+  --radius-md:   12px;
+  --radius-lg:   16px;
+  --radius-pill: 9999px;
+
+  /* ─── Elevation ────────────────────────────────────────────────── */
+  /* macOS-native shadow philosophy: outer rings replace borders, inset
+   * highlights simulate light from above, inset darks simulate shadow
+   * underneath. --elev-ring is the signature double-ring: outer card-
+   * surface tone + inset deep-bg tone, creating physical containment. */
+  --elev-flat:   none;
+  --elev-ring:   rgb(27, 28, 30) 0px 0px 0px 1px, rgb(7, 8, 10) 0px 0px 0px 1px inset;
+  --elev-raised:
+    rgba(255, 255, 255, 0.05) 0px 1px 0px 0px inset,
+    rgba(0, 0, 0, 0.28) 0px 1.189px 2.377px,
+    0 0 0 1px rgba(255, 255, 255, 0.06);
+
+  /* ─── Focus ────────────────────────────────────────────────────── */
+  /* Raycast Blue, not accent red — DESIGN.md §2 reserves red for hero
+   * stripes / danger and blue for interactive / focus / links. Keeping
+   * focus blue protects the scarcity of the red. */
+  --focus-ring: 0 0 0 3px hsla(202, 100%, 67%, 0.35);
+
+  /* ─── Motion ───────────────────────────────────────────────────── */
+  --motion-fast:   150ms;
+  --motion-base:   200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ───────────────────────────────────────────────────── */
+  --container-max:            1200px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet:  16px;
+  --container-gutter-phone:   12px;
+}

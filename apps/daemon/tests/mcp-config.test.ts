@@ -73,6 +73,26 @@ describe('mcp-config storage', () => {
     expect(written.servers[0]?.headers?.Authorization).toBe('Bearer abc');
   });
 
+  it('defaults loopback HTTP servers to no managed OAuth', () => {
+    const out = sanitizeMcpServer({
+      id: 'figma-use',
+      transport: 'http',
+      enabled: true,
+      url: 'http://localhost:38451/mcp',
+    });
+    expect(out?.authMode).toBe('none');
+  });
+
+  it('defaults remote HTTP servers to managed OAuth for backward compatibility', () => {
+    const out = sanitizeMcpServer({
+      id: 'higgsfield',
+      transport: 'http',
+      enabled: true,
+      url: 'https://mcp.higgsfield.ai/mcp',
+    });
+    expect(out?.authMode).toBe('oauth');
+  });
+
   it('drops invalid entries silently', async () => {
     const written = await writeMcpConfig(dataDir, {
       servers: [
@@ -208,6 +228,22 @@ describe('buildClaudeMcpJson', () => {
     expect(out.mcpServers.higgsfield?.headers).toEqual({
       Authorization: 'Bearer access-tok-xyz',
     });
+  });
+
+  it('does not inject a stored OAuth token into no-auth HTTP servers', () => {
+    const out = buildClaudeMcpJson(
+      [
+        {
+          id: 'figma-use',
+          transport: 'http',
+          enabled: true,
+          authMode: 'none',
+          url: 'http://localhost:38451/mcp',
+        },
+      ],
+      { 'figma-use': 'stale-token' },
+    ) as { mcpServers: Record<string, Record<string, unknown>> };
+    expect(out.mcpServers['figma-use']?.headers).toBeUndefined();
   });
 
   it("does NOT overwrite a user-pinned Authorization header even when a token exists", () => {
@@ -749,6 +785,7 @@ describe('MCP_TEMPLATES', () => {
     // remote-debugging port.
     expect(tpl?.transport).toBe('http');
     expect(tpl?.url).toBe('http://localhost:38451/mcp');
+    expect(tpl?.authMode).toBe('none');
     expect(tpl?.headerFields ?? []).toEqual([]);
   });
 

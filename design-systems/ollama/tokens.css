@@ -1,0 +1,242 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/ollama/tokens.css
+ *
+ * Structured token bindings for "Ollama" — radical minimalism for the
+ * local-LLM runtime. The brand strips every form of decoration away
+ * until only the essential tool remains: pure-white canvas, zero
+ * chromatic color anywhere on screen, no shadows ever, and a binary
+ * radius system that separates "container" (12px) from "interactive"
+ * (pill / 9999px). DESIGN.md is emphatic on every front — the absence
+ * of design IS the design.
+ *
+ * Agents are expected to paste the `:root { ... }` block verbatim
+ * into the first `<style>` of every artifact they generate against
+ * this design system, then reference tokens via `var(--name)` from
+ * then on. The corresponding `components.html` mirrors this block
+ * with comments stripped; keep the two in sync byte-for-byte after
+ * normalization, or the `tokens-fixture-sync` guard will fail.
+ *
+ * Brand notes (the values below intentionally invert several
+ * assumptions baked into the default brand):
+ *
+ *   #Decision 1 — `--bg` is pure white, `--surface` is the lift.
+ *     Default does the opposite (cream bg, white surface) because
+ *     it wants card-lift warmth; ollama wants paper-flat purity, so
+ *     #ffffff is the canvas and #fafafa (Snow) is the subtle lift.
+ *
+ *   #Decision 2 — `--accent` is pure black, not a chromatic CTA hue.
+ *     Per DESIGN.md §2 the entire interface is grayscale; the only
+ *     chromatic exception is the keyboard focus ring (#3b82f6 at
+ *     50% alpha). The "Download" / "Create account" pills that
+ *     occupy the accent role are black-on-white, so the accent
+ *     token binds to #000 and accent-on binds to #fff.
+ *
+ *   #Decision 3 — every interactive radius collapses to pill.
+ *     DESIGN.md §5 prescribes a strictly binary radius system with
+ *     no intermediate steps. `--radius-sm`, `--radius-pill` (and
+ *     `--radius-lg` for consistency) all resolve to 9999px so any
+ *     component reaching for `--radius-sm` (button, input, tag,
+ *     chip) inherits the brand stance instead of a stray 8px.
+ *
+ *   #Decision 4 — every elevation tier is the hairline border ring,
+ *     never a blur shadow. DESIGN.md §6 is explicit: "Ollama uses
+ *     zero shadows. This is not an oversight — it's a deliberate
+ *     design decision." `--elev-raised` therefore mirrors
+ *     `--elev-ring` instead of binding to a blur drop-shadow.
+ *
+ *   #Decision 5 — display font is SF Pro Rounded. The rounded
+ *     terminals ARE the brand expression — they soften a developer
+ *     CLI tool into something approachable without compromising the
+ *     monochrome / minimal philosophy. Falls back to system-ui on
+ *     non-Apple platforms (the duplicate `system-ui` in the stack is
+ *     copied verbatim from DESIGN.md §3 to keep the prose ↔ token
+ *     mapping audit-trivial).
+ *
+ * Schema slot collapse (see _schema/AGENTS.md for the layer model):
+ *
+ *   --surface-warm aliases --surface — the canvas is grayscale by
+ *     definition, so there is no warm tertiary surface tier.
+ *   --border-soft aliases --border — DESIGN.md §6 prescribes a single
+ *     1px hairline weight; row separators and card edges share it.
+ *   --fg-2 / --meta bind to real values — ollama is monochrome but
+ *     differentiates 4 text levels (black / near-black / Stone /
+ *     Silver) so the ramp earns independent slots.
+ *
+ * Keep this file additive: never invent token names not also
+ * documented in DESIGN.md or the craft contracts. Ollama is not in
+ * BRAND_EXTENSIONS, so any unknown token will fail the
+ * `unknown-token-allowlist` guard.
+ * ─────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface (3 levels) ────────────────────────────────────────
+   * Pure white IS the brand canvas — DESIGN.md §2 is emphatic:
+   * "not off-white, not cream, pure white." `--surface` lifts to
+   * Snow (#fafafa), the subtlest possible distinction from #fff,
+   * for sections and barely-elevated containers. No third tier:
+   * `--surface-warm` aliases to surface because the brand is
+   * grayscale by definition. */
+  --bg: #ffffff;
+  --surface: #fafafa;
+  --surface-warm: var(--surface);   /* alias — ollama is monochrome */
+
+  /* ─── Foreground ramp (4 levels) ────────────────────────────────
+   * The full grayscale text ramp from DESIGN.md §2:
+   *   Pure Black  (#000000) — primary headlines, demanding attention
+   *   Near Black  (#262626) — button text, secondary headline weight
+   *   Stone       (#737373) — body, footer links, de-emphasized copy
+   *   Silver      (#a3a3a3) — placeholders, tertiary metadata
+   * The contrast between black and Stone is wide enough that the
+   * brand can avoid font-weight ≥600 entirely. */
+  --fg: #000000;
+  --fg-2: #262626;                  /* Near Black */
+  --muted: #737373;                 /* Stone */
+  --meta: #a3a3a3;                  /* Silver */
+
+  /* ─── Border (2 levels) ─────────────────────────────────────────
+   * Light Gray (#e5e5e5) is the workhorse containment color and
+   * the only border weight ollama permits. DESIGN.md §7 forbids
+   * borders heavier than 1px; `--border-soft` aliases to keep that
+   * stance intact for components that reach for a softer divider. */
+  --border: #e5e5e5;
+  --border-soft: var(--border);     /* alias — single border weight */
+
+  /* ─── Accent ────────────────────────────────────────────────────
+   * Pure Black IS the accent here — the black-pill CTA ("Download",
+   * "Create account") is ollama's maximum-emphasis element. DESIGN.md
+   * §2 forbids chromatic color in normal flow, so the accent role
+   * is fulfilled by the darkest tone rather than a brand hue.
+   *
+   * Hover and active states LIGHTEN rather than darken (pure black
+   * cannot darken further). The values come from DESIGN.md §2's
+   * documented Near-Black (#262626) and Button-Text-Dark (#404040)
+   * stops on the gray ramp, so the hover stack stays on-brand
+   * instead of formula-derived. */
+  --accent: #000000;
+  --accent-on: #ffffff;
+  --accent-hover: #262626;          /* Near Black — subtle lift */
+  --accent-active: #404040;         /* Button Text Dark — pressed */
+
+  /* ─── Semantic ──────────────────────────────────────────────────
+   * DESIGN.md §2 explicitly says "no semantic red, no accent green"
+   * in normal flow — but the schema requires these tokens for error
+   * toasts and status indicators that the runtime will eventually
+   * surface (model download failures, daemon health checks). Bound
+   * to the schema fallbacks so the names resolve; components must
+   * use them sparingly and never as decoration. */
+  --success: #16a34a;
+  --warn: #eab308;
+  --danger: #dc2626;
+
+  /* ─── Typography — fonts ────────────────────────────────────────
+   * SF Pro Rounded is Apple's rounded system font — its softened
+   * letterforms ARE the brand expression. Renders rounded terminals
+   * on macOS/iOS, falls back to the platform system sans elsewhere
+   * (the duplicate `system-ui` in the stack mirrors DESIGN.md §3
+   * verbatim — redundant but documented).
+   *
+   * Body text uses ui-sans-serif so reading copy stays platform-
+   * native; the emoji fonts in the stack come straight from DESIGN.md
+   * §3's body fallback list. Monospace gets a deliberately broad
+   * stack so `ollama run …` snippets render consistently across
+   * macOS / Linux / Windows. */
+  --font-display: "SF Pro Rounded", system-ui, -apple-system, system-ui;
+  --font-body: ui-sans-serif, system-ui, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  /* Type scale (px) — direct copy of DESIGN.md §3 hierarchy table.
+   * Ollama's display tier tops out at 48px (versus default's 64px)
+   * because the homepage is intentionally short and uncluttered;
+   * even the hero stays restrained. */
+  --text-xs: 12px;                  /* Small */
+  --text-sm: 14px;                  /* Caption */
+  --text-base: 16px;                /* Body / Link */
+  --text-lg: 18px;                  /* Body Large */
+  --text-xl: 24px;                  /* Card Title */
+  --text-2xl: 30px;                 /* Sub-heading */
+  --text-3xl: 36px;                 /* Section Heading */
+  --text-4xl: 48px;                 /* Display / Hero */
+
+  /* Leading & tracking — DESIGN.md §3 prescribes tight (1.0) for
+   * display and comfortable (1.5) for body. Tracking is `normal`
+   * across every tier (no negative letter-spacing on display, no
+   * uppercase tightening). */
+  --leading-body: 1.5;
+  --leading-tight: 1;
+  --tracking-display: 0;
+
+  /* ─── Spacing ────────────────────────────────────────────────────
+   * 4px base unit. DESIGN.md §5 defines an extended scale up to
+   * 112px for section rhythm; the shared schema caps at --space-12
+   * so the wider tiers express themselves through the section-y
+   * tokens below. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* DESIGN.md §5 is direct — section vertical spacing is "very
+   * generous (88–112px)" because "the white space IS the brand."
+   * Desktop sits at the top of that range deliberately; tablet and
+   * phone collapse but stay roomy. */
+  --section-y-desktop: 112px;
+  --section-y-tablet: 88px;
+  --section-y-phone: 48px;
+
+  /* ─── Radius (binary system) ───────────────────────────────────
+   * DESIGN.md §5 prescribes a strictly binary radius system: 12px
+   * for containers, 9999px (pill) for everything interactive. No
+   * intermediate values exist on this brand. Every interactive
+   * radius — `--radius-sm`, `--radius-lg`, `--radius-pill` —
+   * resolves to the pill value so a component reaching for the
+   * small button radius inherits the brand stance. `--radius-md`
+   * holds the 12px container radius. */
+  --radius-sm: 9999px;
+  --radius-md: 12px;
+  --radius-lg: 9999px;
+  --radius-pill: 9999px;
+
+  /* ─── Elevation ────────────────────────────────────────────────
+   * "Ollama uses zero shadows. This is not an oversight — it's a
+   * deliberate design decision." (DESIGN.md §6) Every level of
+   * depth comes from a 1px hairline border ring instead of a blur
+   * shadow. `--elev-raised` mirrors `--elev-ring` so components
+   * targeting a raised tier still receive the only legitimate
+   * depth treatment ollama permits. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 0 0 1px var(--border);
+
+  /* ─── Focus ring ───────────────────────────────────────────────
+   * The single chromatic exception in the entire system — Tailwind's
+   * default ring (#3b82f6 at 50% transparency). DESIGN.md §2 explicitly
+   * carves this out for keyboard accessibility; never visible during
+   * normal interaction flow. The raw hex is documented inside the
+   * token expression so brand-aware components can stay grayscale
+   * elsewhere. */
+  --focus-ring: 0 0 0 3px color-mix(in oklab, #3b82f6, transparent 50%);
+
+  /* ─── Motion ───────────────────────────────────────────────────
+   * DESIGN.md §7 is direct: "interactions should feel instant and
+   * direct." Durations stay short enough that transitions register
+   * as responsiveness rather than animation. The easing curve stays
+   * on the standard ease-out so the snap still feels mechanical
+   * rather than abrupt. */
+  --motion-fast: 100ms;
+  --motion-base: 140ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ───────────────────────────────────────────────────
+   * Max container width sits at the upper end of DESIGN.md §5's
+   * "~1024–1280px" range; gutters scale down through the breakpoints
+   * but stay generous to preserve the "white space IS the brand"
+   * stance. */
+  --container-max: 1280px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 16px;
+  --container-gutter-phone: 12px;
+}
