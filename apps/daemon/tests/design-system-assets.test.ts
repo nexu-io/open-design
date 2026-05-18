@@ -43,6 +43,7 @@ describe('readDesignSystemAssets', () => {
     const assets = await readDesignSystemAssets(root, 'sample');
     expect(assets.tokensCss).toContain('--bg: #fff');
     expect(assets.fixtureHtml).toContain('fixture');
+    expect(assets.componentsManifest).toContain('components.manifest schema v1 for sample');
   });
 
   it('returns the single field that exists when its sibling is missing (per-file independence)', async () => {
@@ -60,6 +61,7 @@ describe('readDesignSystemAssets', () => {
     const fixtureOnly = await readDesignSystemAssets(root, 'fixture-only');
     expect(fixtureOnly.tokensCss).toBeUndefined();
     expect(fixtureOnly.fixtureHtml).toBe('<p>only</p>');
+    expect(fixtureOnly.componentsManifest).toContain('components.manifest schema v1 for fixture-only');
   });
 
   it('returns an empty object when the brand directory has neither file', async () => {
@@ -179,6 +181,7 @@ describe('resolveDesignSystemAssets (PR-D server-layer asset resolution)', () =>
     const assets = await resolveDesignSystemAssets('sample', builtInRoot, userRoot, {});
     expect(assets.tokensCss).toBe(':root { --bg: #fff; }');
     expect(assets.fixtureHtml).toBe('<button>btn</button>');
+    expect(assets.componentsManifest).toContain('Buttons and calls to action');
   });
 
   it('returns empty (kill switch) when OD_DESIGN_TOKEN_CHANNEL is `0`, even if files are on disk', async () => {
@@ -193,6 +196,7 @@ describe('resolveDesignSystemAssets (PR-D server-layer asset resolution)', () =>
     });
     expect(assets.tokensCss).toBeUndefined();
     expect(assets.fixtureHtml).toBeUndefined();
+    expect(assets.componentsManifest).toBeUndefined();
   });
 
   it('still returns the assets under the legacy explicit opt-in `OD_DESIGN_TOKEN_CHANNEL=1`', async () => {
@@ -207,6 +211,7 @@ describe('resolveDesignSystemAssets (PR-D server-layer asset resolution)', () =>
     });
     expect(assets.tokensCss).toContain('--bg: #fff');
     expect(assets.fixtureHtml).toContain('<button>');
+    expect(assets.componentsManifest).toContain('Buttons and calls to action');
   });
 
   it('falls back to user-installed root for files missing in built-in (per-file independence)', async () => {
@@ -220,6 +225,7 @@ describe('resolveDesignSystemAssets (PR-D server-layer asset resolution)', () =>
     const assets = await resolveDesignSystemAssets('split', builtInRoot, userRoot, {});
     expect(assets.tokensCss).toBe(':root { --bg: built-in; }');
     expect(assets.fixtureHtml).toBe('<from-user-installed/>');
+    expect(assets.componentsManifest).toContain('components.manifest schema v1 for split');
   });
 
   it('returns the built-in assets verbatim when both files are present built-in (skips the user-installed roundtrip)', async () => {
@@ -237,6 +243,7 @@ describe('resolveDesignSystemAssets (PR-D server-layer asset resolution)', () =>
     const assets = await resolveDesignSystemAssets('sample', builtInRoot, userRoot, {});
     expect(assets.tokensCss).toBe(':root { --bg: built-in; }');
     expect(assets.fixtureHtml).toBe('<from-built-in/>');
+    expect(assets.componentsManifest).toContain('components.manifest schema v1 for sample');
   });
 
   it('returns undefined for both fields when the brand ships neither file in either root (legacy ~138-brand fallback)', async () => {
@@ -247,6 +254,7 @@ describe('resolveDesignSystemAssets (PR-D server-layer asset resolution)', () =>
     const assets = await resolveDesignSystemAssets('prose-only', builtInRoot, userRoot, {});
     expect(assets.tokensCss).toBeUndefined();
     expect(assets.fixtureHtml).toBeUndefined();
+    expect(assets.componentsManifest).toBeUndefined();
   });
 
   it('returns undefined for both fields when the brand directory does not exist in either root', async () => {
@@ -256,5 +264,6 @@ describe('resolveDesignSystemAssets (PR-D server-layer asset resolution)', () =>
     const assets = await resolveDesignSystemAssets('nonexistent', builtInRoot, userRoot, {});
     expect(assets.tokensCss).toBeUndefined();
     expect(assets.fixtureHtml).toBeUndefined();
+    expect(assets.componentsManifest).toBeUndefined();
   });
 });

@@ -6,6 +6,11 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 
+import {
+  extractComponentsManifest,
+  summarizeComponentsManifestForPrompt,
+} from '@open-design/contracts';
+
 export type DesignSystemSurface = 'web' | 'image' | 'video' | 'audio';
 
 export type DesignSystemSummary = {
@@ -73,10 +78,14 @@ export async function readDesignSystem(root: string, id: string): Promise<string
  *
  * - `tokensCss`     — verbatim content of `<brand>/tokens.css`.
  * - `fixtureHtml`   — verbatim content of `<brand>/components.html`.
+ * - `componentsManifest` — concise summary derived from components.html
+ *                          for prompt injection; when absent, callers
+ *                          can fall back to `fixtureHtml`.
  */
 export type DesignSystemAssets = {
   tokensCss?: string | undefined;
   fixtureHtml?: string | undefined;
+  componentsManifest?: string | undefined;
 };
 
 export async function readDesignSystemAssets(
@@ -87,7 +96,7 @@ export async function readDesignSystemAssets(
     readFileOptional(path.join(root, id, 'tokens.css')),
     readFileOptional(path.join(root, id, 'components.html')),
   ]);
-  return { tokensCss, fixtureHtml };
+  return withComponentsManifest(id, { tokensCss, fixtureHtml });
 }
 
 /**
@@ -154,10 +163,42 @@ export async function resolveDesignSystemAssets(
   }
 
   const userInstalled = await readDesignSystemAssets(userInstalledRoot, designSystemId);
-  return {
+  return withComponentsManifest(designSystemId, {
     tokensCss: builtIn.tokensCss ?? userInstalled.tokensCss,
     fixtureHtml: builtIn.fixtureHtml ?? userInstalled.fixtureHtml,
-  };
+  });
+}
+
+function withComponentsManifest(
+  designSystemId: string,
+  assets: Pick<DesignSystemAssets, 'tokensCss' | 'fixtureHtml'>,
+): DesignSystemAssets {
+  const componentsManifest = buildComponentsManifestSummary(
+    designSystemId,
+    assets.fixtureHtml,
+    assets.tokensCss,
+  );
+  return { ...assets, componentsManifest };
+}
+
+function buildComponentsManifestSummary(
+  designSystemId: string,
+  fixtureHtml: string | undefined,
+  tokensCss: string | undefined,
+): string | undefined {
+  if (fixtureHtml === undefined || fixtureHtml.trim().length === 0) {
+    return undefined;
+  }
+
+  try {
+    const manifest =
+      tokensCss === undefined
+        ? extractComponentsManifest({ brandId: designSystemId, fixtureHtml })
+        : extractComponentsManifest({ brandId: designSystemId, fixtureHtml, tokensCss });
+    return summarizeComponentsManifestForPrompt(manifest);
+  } catch {
+    return undefined;
+  }
 }
 
 async function readFileOptional(file: string): Promise<string | undefined> {

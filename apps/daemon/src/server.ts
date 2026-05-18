@@ -7759,7 +7759,8 @@ export async function startServer({
 
     let designSystemBody;
     let designSystemTitle;
-    // Compiled (tokens.css + components.html) form of the active brand.
+    // Compiled (tokens.css + components manifest / components.html)
+    // form of the active brand.
     // Default-on as of PR-D — every chat that picks a brand with
     // `tokens.css` + `components.html` siblings (today: `default` and
     // `kami`; every other brand falls through silently because the
@@ -7772,6 +7773,7 @@ export async function startServer({
     // `true`, etc.) keeps the new default. Drift on prose-only brands
     // is pinned by `scripts/check-design-system-flag-parity.ts`.
     let designSystemTokensCss;
+    let designSystemComponentsManifest;
     let designSystemFixtureHtml;
     if (effectiveDesignSystemId) {
       const systems = await listAllDesignSystems();
@@ -7791,6 +7793,7 @@ export async function startServer({
         USER_DESIGN_SYSTEMS_DIR,
       );
       designSystemTokensCss = assets.tokensCss;
+      designSystemComponentsManifest = assets.componentsManifest;
       designSystemFixtureHtml = assets.fixtureHtml;
     }
 
@@ -7946,6 +7949,7 @@ export async function startServer({
       designSystemBody,
       designSystemTitle,
       designSystemTokensCss,
+      designSystemComponentsManifest,
       designSystemFixtureHtml,
       craftBody,
       craftSections,

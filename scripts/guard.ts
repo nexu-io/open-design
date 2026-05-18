@@ -2,6 +2,7 @@ import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
 import { checkDesignSystemFlagParity } from "./check-design-system-flag-parity.ts";
+import { checkComponentsManifestExtraction } from "./check-components-manifest-extraction.ts";
 import {
   checkDesignSystemA1RequiredTokens,
   checkDesignSystemA2DefaultsParity,
@@ -711,6 +712,7 @@ const checks: GuardCheck[] = [
   { name: "design system unknown token allowlist", run: checkDesignSystemUnknownTokens },
   { name: "design system A2 defaults parity", run: checkDesignSystemA2DefaultsParity },
   { name: "design system flag parity", run: checkDesignSystemFlagParity },
+  { name: "design system component manifest extraction", run: checkComponentsManifestExtraction },
 ];
 
 const results: boolean[] = [];
