@@ -246,6 +246,17 @@ export interface Dict {
   'settings.skillsBodyRequired': string;
   'settings.designSystems': string;
   'settings.designSystemsHint': string;
+  'settings.projectLocations': string;
+  'settings.projectLocationsHint': string;
+  'settings.projectLocationsDescription': string;
+  'settings.projectLocationsSaveError': string;
+  'settings.projectLocationsSaved': string;
+  'settings.projectLocationsScanError': string;
+  'settings.projectLocationsScanComplete': string;
+  'settings.projectLocationsNoFolderSelected': string;
+  'settings.projectLocationsDuplicate': string;
+  'settings.projectLocationsWorkBaseMeta': string;
+  'settings.projectLocationsAddFolder': string;
   'settings.librarySkills': string;
   'settings.libraryDesignSystems': string;
   'settings.librarySearch': string;
@@ -698,6 +709,9 @@ export interface Dict {
   'newproj.fileSingular': string;
   'newproj.filePlural': string;
   'newproj.create': string;
+  'newproj.locationLabel': string;
+  'newproj.locationDefault': string;
+  'newproj.locationExternalBase': string;
   'newproj.createLiveArtifact': string;
   'newproj.createFromTemplate': string;
   'newproj.createDisabledTitle': string;
