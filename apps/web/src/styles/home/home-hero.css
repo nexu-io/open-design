@@ -781,6 +781,7 @@
 }
 .home-hero-confirm__primary:hover {
   background: var(--accent-strong);
+  color: white;
 }
 
 /* ------------------------------------------------------------
