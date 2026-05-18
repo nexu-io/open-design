@@ -131,6 +131,40 @@ describe('listDesignSystems frontmatter parsing (issue #1857)', () => {
     expect(ds?.swatches).toEqual(['#fafafa', '#dddddd', '#111111', '#ff3366']);
   });
 
+  it('falls back to Markdown swatches when frontmatter colors use unrecognized token names (totality-festival regression)', async () => {
+    const root = fresh();
+    writeDesignMd(
+      root,
+      'totality-style',
+      [
+        '---',
+        'colors:',
+        '  surface: "#121318"',
+        '  on-surface: "#e3e1e9"',
+        '  on-surface-variant: "#d0c6ab"',
+        '  outline: "#999077"',
+        '  primary: "#fff6df"',
+        '  secondary: "#bdf4ff"',
+        '  background: "#121318"',
+        '---',
+        '',
+        '# Design System Inspired by Totality',
+        '',
+        '> Category: Themed & Unique',
+        '',
+        'Cosmic-premium dark system.',
+        '',
+        '- **Surface:** `#121318`',
+        '- **Text:** `#e3e1e9`',
+        '- **Text Muted:** `#d0c6ab`',
+        '- **Primary:** `#fff6df`',
+      ].join('\n'),
+    );
+
+    const [ds] = await listDesignSystems(root);
+    expect(ds?.swatches).toEqual(['#121318', '#d0c6ab', '#e3e1e9', '#fff6df']);
+  });
+
   it('prefers Markdown H1 and Markdown Category over frontmatter when a hybrid file has both', async () => {
     const root = fresh();
     writeDesignMd(
