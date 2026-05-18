@@ -4,7 +4,7 @@ name: PR author inactivity
 # for more than 3 days, and close after more than 5 days.
 #
 # Inactivity heuristic:
-# - We look for the latest non-author feedback on an open PR via:
+# - We look for the latest trusted non-author feedback on an open PR via:
 #   1) issue comments,
 #   2) non-approval reviews, or
 #   3) inline review comments.
@@ -14,11 +14,11 @@ name: PR author inactivity
 #   3) a commit / force-push timeline event.
 # - If not, we remind once after 72h and close after 120h.
 #
-# Bot feedback note: human reviewers are the trigger for this workflow.
-# Bot-authored reviews and comments (e.g. CodeRabbit, Codex) are intentionally
-# excluded from the feedback signal so authors are not pressured by automated
-# nits alone. Human review feedback — whether top-level or inline — is what
-# starts the inactivity clock.
+# Bot feedback note: trusted human reviewers / maintainers are the trigger for
+# this workflow. Bot-authored reviews and comments (e.g. CodeRabbit, Codex) are
+# intentionally excluded from the feedback signal so authors are not pressured
+# by automated nits alone. Trusted human review feedback — whether top-level or
+# inline — is what starts the inactivity clock.
 
 on:
   schedule:
@@ -52,6 +52,12 @@ jobs:
 
             function isBot(login) {
               return Boolean(login && login.endsWith('[bot]'));
+            }
+
+            const TRUSTED_ASSOCIATIONS = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
+
+            function isTrustedReviewer(actor) {
+              return Boolean(actor?.user?.login) && TRUSTED_ASSOCIATIONS.has(actor.author_association);
             }
 
             async function paginate(method, params) {
@@ -102,7 +108,7 @@ jobs:
 
               for (const comment of comments) {
                 const login = comment.user?.login;
-                if (!login || login === author || isBot(login)) {
+                if (login === author || isBot(login) || !isTrustedReviewer(comment)) {
                   continue;
                 }
                 latestFeedbackAt = Math.max(latestFeedbackAt, ts(comment.created_at));
@@ -111,7 +117,7 @@ jobs:
               for (const review of reviews) {
                 const login = review.user?.login;
                 const state = review.state?.toUpperCase();
-                if (!login || login === author || isBot(login)) {
+                if (login === author || isBot(login) || !isTrustedReviewer(review)) {
                   continue;
                 }
                 if (state === 'APPROVED' || state === 'DISMISSED' || state === 'PENDING') {
@@ -122,7 +128,7 @@ jobs:
 
               for (const reviewComment of reviewComments) {
                 const login = reviewComment.user?.login;
-                if (!login || login === author || isBot(login)) {
+                if (login === author || isBot(login) || !isTrustedReviewer(reviewComment)) {
                   continue;
                 }
                 latestFeedbackAt = Math.max(latestFeedbackAt, ts(reviewComment.created_at));
