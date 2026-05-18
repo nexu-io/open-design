@@ -378,6 +378,99 @@ test('cursor stream emits missing suffix from model_call_id replay when chunks a
   ]);
 });
 
+test('cursor stream emits missing suffix from model_call_id replay in second turn', () => {
+  const { events, handler } = collectEvents('cursor-agent');
+
+  // Turn 1: all chunks arrive, replay matches
+  handler.feed(
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 1,
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hello world' }] },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 2,
+      model_call_id: 'call-1',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hello world' }] },
+    }) +
+    '\n',
+  );
+
+  // Turn 2: "second" arrives but " turn" is dropped
+  handler.feed(
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 3,
+      message: { role: 'assistant', content: [{ type: 'text', text: 'second' }] },
+    }) +
+    '\n' +
+    // Replay contains "second turn" — should emit missing " turn"
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 4,
+      model_call_id: 'call-2',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'second turn' }] },
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    { type: 'text_delta', delta: 'hello world' },
+    { type: 'text_delta', delta: 'second' },
+    { type: 'text_delta', delta: ' turn' },
+  ]);
+});
+
+test('cursor stream recovers dropped chunk via model_call_id after fallback-terminated turn', () => {
+  const { events, handler } = collectEvents('cursor-agent');
+
+  // Turn 1 ends via the non-model_call_id fallback path (no timestamp)
+  handler.feed(
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 1,
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hello' }] },
+    }) +
+    '\n' +
+    // Final replay without model_call_id — fallback path
+    JSON.stringify({
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hello world' }] },
+    }) +
+    '\n',
+  );
+
+  // Turn 2: "second" arrives but " turn" is dropped, then model_call_id
+  // replay recovers the missing suffix. Without the cursorTurnStart
+  // advancement in the fallback path, turnLength would be computed from
+  // position 0 (including turn 1's text), making the replay length
+  // appear shorter than what was already emitted — losing " turn".
+  handler.feed(
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 2,
+      message: { role: 'assistant', content: [{ type: 'text', text: 'second' }] },
+    }) +
+    '\n' +
+    JSON.stringify({
+      type: 'assistant',
+      timestamp_ms: 3,
+      model_call_id: 'call-2',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'second turn' }] },
+    }) +
+    '\n',
+  );
+
+  assert.deepEqual(events, [
+    { type: 'text_delta', delta: 'hello' },
+    { type: 'text_delta', delta: ' world' },
+    { type: 'text_delta', delta: 'second' },
+    { type: 'text_delta', delta: ' turn' },
+  ]);
+});
+
 test('codex json stream emits status text and usage events', () => {
   const { events, handler } = collectEvents('codex');
 

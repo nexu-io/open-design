@@ -5,6 +5,7 @@ type ParserKind = string;
 
 type ParserState = {
   cursorTextSoFar: string;
+  cursorTurnStart: number;
   openCodeToolUses: Set<string>;
   codexToolUses: Set<string>;
   codexErrorEmitted: boolean;
@@ -236,24 +237,33 @@ function handleCursorEvent(obj: unknown, onEvent: StreamEventHandler, state: Par
 
   if (obj.type === 'assistant' && obj.message) {
     // Cursor sends a final assistant message with `model_call_id` that
-    // replays the full accumulated text for the turn. If all incremental
-    // deltas arrived, the replay content equals `cursorTextSoFar` and
-    // emitCursorTextDelta will deduplicate it. If a streamed chunk was
-    // dropped, the replay may contain a suffix that was never emitted —
-    // emit only that missing suffix to keep the persisted message complete
-    // without duplicating the content that was already sent.
+    // replays the full accumulated text for the current turn. Compare
+    // the replay against only the current turn's portion of
+    // `cursorTextSoFar` (starting from `cursorTurnStart`). If a
+    // streamed chunk was dropped, the replay may be longer than what
+    // we emitted for this turn — emit the missing suffix.
     if (typeof obj.model_call_id === 'string') {
       const text = extractCursorText(obj.message);
-      if (text && text.length > state.cursorTextSoFar.length && state.cursorTextSoFar.length > 0) {
-        const suffix = text.slice(state.cursorTextSoFar.length);
+      const turnLength = state.cursorTextSoFar.length - state.cursorTurnStart;
+      if (text && text.length > turnLength) {
+        const suffix = text.slice(turnLength);
         if (suffix) onEvent({ type: 'text_delta', delta: suffix });
-        state.cursorTextSoFar = text;
+        state.cursorTextSoFar += suffix;
       }
+      // Mark the next turn's start after processing the replay.
+      state.cursorTurnStart = state.cursorTextSoFar.length;
       return true;
     }
     const text = extractCursorText(obj.message);
     if (!text) return false;
     emitCursorTextDelta(text, onEvent, state);
+    // Non-timestamped assistant events are final replays that mark a turn
+    // boundary. Advance cursorTurnStart so the next model_call_id replay
+    // measures turnLength from the right offset. Timestamped events are
+    // incremental streaming chunks within a turn and must not advance it.
+    if (typeof obj.timestamp_ms !== 'number') {
+      state.cursorTurnStart = state.cursorTextSoFar.length;
+    }
     return true;
   }
 
@@ -405,6 +415,7 @@ export function createJsonEventStreamHandler(kind: ParserKind, onEvent: StreamEv
   let buffer = '';
   const state: ParserState = {
     cursorTextSoFar: '',
+    cursorTurnStart: 0,
     openCodeToolUses: new Set<string>(),
     codexToolUses: new Set<string>(),
     codexErrorEmitted: false,
