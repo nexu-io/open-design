@@ -1308,9 +1308,28 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
     if (structured.length) return structured;
     return document.querySelectorAll('.slide');
   }
+  function hasScrollableOverflow(el){
+    try {
+      // Check both inline style and computed style. Some environments
+      // do not resolve the overflow shorthand into overflow-x/overflow-y
+      // in getComputedStyle, so we read inline style as a first signal.
+      var inline = el.style;
+      var ox = (inline && (inline.overflowX || inline.overflow)) || '';
+      if (!ox) {
+        var s = window.getComputedStyle(el);
+        ox = s.overflowX || s.overflow || '';
+      }
+      // Reject only explicit clipping; visible/auto/scroll/overlay all
+      // permit content to overflow the container box.
+      return ox !== 'hidden' && ox !== 'clip';
+    } catch (_) { return true; }
+  }
   function scroller(){
-    if (document.body && document.body.scrollWidth > document.body.clientWidth + 1) return document.body;
-    return document.scrollingElement || document.documentElement;
+    if (document.body && document.body.scrollWidth > document.body.clientWidth + 1
+        && hasScrollableOverflow(document.body)) return document.body;
+    var se = document.scrollingElement || document.documentElement;
+    if (se && se.scrollWidth > se.clientWidth + 1 && hasScrollableOverflow(se)) return se;
+    return null;
   }
   function isScrollDeck(){
     var sc = scroller();
@@ -1335,8 +1354,9 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
   function activeIndex(list){
     if (!list || !list.length) return 0;
     if (isScrollDeck()) {
+      var sc = scroller();
       var w = Math.max(1, window.innerWidth);
-      return Math.max(0, Math.min(list.length - 1, Math.round(scroller().scrollLeft / w)));
+      return Math.max(0, Math.min(list.length - 1, Math.round((sc ? sc.scrollLeft : 0) / w)));
     }
     var byClass = findActiveByClass(list);
     if (byClass >= 0) return byClass;
@@ -1419,7 +1439,8 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
   function scrollGo(i){
     var list = slides();
     var next = Math.max(0, Math.min(list.length - 1, i));
-    scroller().scrollTo({ left: next * window.innerWidth, behavior: 'smooth' });
+    var sc = scroller();
+    if (sc) sc.scrollTo({ left: next * window.innerWidth, behavior: 'smooth' });
     setTimeout(report, 380);
   }
   function targetFor(action, list){
@@ -1438,11 +1459,17 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
       scrollGo(target);
       return;
     }
-    if (canSetActive(list) && setActive(target)) return;
+    // Try keyboard dispatch first — this lets the deck's own nav JS
+    // drive the full visual update (transform, animation, scroll, etc.)
+    // which class manipulation alone cannot replicate.
+    var beforeIdx = activeIndex(list);
     if (action === 'next') dispatchKey('ArrowRight');
     else if (action === 'prev') dispatchKey('ArrowLeft');
     else if (action === 'first') dispatchKey('Home');
     else if (action === 'last') dispatchKey('End');
+    if (activeIndex(slides()) !== beforeIdx) { report(); return; }
+    // Fallback: set active class directly for decks without keyboard nav.
+    if (canSetActive(list) && setActive(target)) return;
     setTimeout(report, 280);
   }
   function gotoIndex(i){
@@ -1450,13 +1477,17 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
     if (!list.length) return;
     var target = Math.max(0, Math.min(list.length - 1, i));
     if (isScrollDeck()) { scrollGo(target); return; }
-    if (canSetActive(list) && setActive(target)) return;
+    // Try keyboard dispatch first so the deck's own nav JS drives the
+    // full visual update (transform, animation, etc.).
     var current = activeIndex(list);
     var diff = target - current;
     if (!diff) { report(); return; }
     var key = diff > 0 ? 'ArrowRight' : 'ArrowLeft';
     var n = Math.abs(diff);
     for (var k = 0; k < n; k++) dispatchKey(key);
+    if (activeIndex(slides()) !== current) { report(); return; }
+    // Fallback: set active class directly for decks without keyboard nav.
+    if (canSetActive(list) && setActive(target)) return;
     setTimeout(report, 320);
   }
   function report(){
