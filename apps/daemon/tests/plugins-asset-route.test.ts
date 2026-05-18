@@ -79,17 +79,23 @@ beforeAll(async () => {
     }
   }
   const secretPath = path.join(pluginRoot, 'secret.txt');
+  const outsideDir = path.join(pluginRoot, 'outside');
+  await mkdir(outsideDir, { recursive: true });
   await writeFile(secretPath, 'outside secret');
+  await writeFile(path.join(outsideDir, 'nested-secret.txt'), 'nested outside secret');
+  const installedSurfacesDir = path.join(defaultRegistryRoots().userPluginsRoot, 'asset-plugin', 'surfaces');
   await symlink(
     secretPath,
-    path.join(defaultRegistryRoots().userPluginsRoot, 'asset-plugin', 'surfaces', 'leak.txt'),
+    path.join(installedSurfacesDir, 'leak.txt'),
   );
+  await symlink(outsideDir, path.join(installedSurfacesDir, 'linked-outside'), 'dir');
   void migratePlugins;
   void upsertInstalledPlugin;
   void Database;
 });
 
 afterAll(async () => {
+  await fetch(`${baseUrl}/api/plugins/asset-plugin/uninstall`, { method: 'POST' }).catch(() => undefined);
   await Promise.resolve(shutdown?.());
   await new Promise<void>((resolve) => server.close(() => resolve()));
   await rm(path.join(defaultRegistryRoots().userPluginsRoot, 'asset-plugin'), { recursive: true, force: true });
@@ -129,5 +135,11 @@ describe('GET /api/plugins/:id/asset/*', () => {
     const resp = await fetch(`${baseUrl}/api/plugins/asset-plugin/asset/surfaces/leak.txt`);
     expect(resp.status).toBe(404);
     expect(await resp.text()).not.toContain('outside secret');
+  });
+
+  it('rejects assets reached through a symlinked directory inside the plugin root', async () => {
+    const resp = await fetch(`${baseUrl}/api/plugins/asset-plugin/asset/surfaces/linked-outside/nested-secret.txt`);
+    expect(resp.status).toBe(400);
+    expect(await resp.text()).not.toContain('nested outside secret');
   });
 });
