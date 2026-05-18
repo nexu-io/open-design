@@ -211,7 +211,7 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
   {
     id: 'senseaudio',
     label: 'SenseAudio',
-    hint: 'Image · TTS · 70+ voices · clone',
+    hint: '',
     integrated: true,
     defaultBaseUrl: 'https://api.senseaudio.cn',
     docsUrl: 'https://docs.senseaudio.cn',
