@@ -511,6 +511,7 @@ export function wellKnownUserToolchainBins(
   // Per-version Node toolchains: scan the install root and surface every
   // version directory's bin folder. Best-effort — missing roots simply
   // contribute nothing.
+  dirs.push(...existingMiseNpmPackageBinDirs(join(home, ".local", "share", "mise", "installs")));
   for (const installRoot of [
     {
       root: join(home, ".local", "share", "mise", "installs", "node"),
@@ -534,6 +535,22 @@ export function wellKnownUserToolchainBins(
     }
   }
   return dirs;
+}
+
+function existingMiseNpmPackageBinDirs(root: string): string[] {
+  const out: string[] = [];
+  let packageEntries: import("node:fs").Dirent<string>[];
+  try {
+    packageEntries = readdirSync(root, { encoding: "utf8", withFileTypes: true });
+  } catch {
+    return out;
+  }
+  for (const packageEntry of packageEntries.sort((left, right) => left.name.localeCompare(right.name))) {
+    if (!packageEntry.isDirectory() || !packageEntry.name.startsWith("npm-")) continue;
+    const packageRoot = join(root, packageEntry.name);
+    out.push(...existingChildBinDirs(packageRoot, ["bin"]));
+  }
+  return out;
 }
 
 function existingChildBinDirs(root: string, segments: string[]): string[] {
