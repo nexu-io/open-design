@@ -257,6 +257,7 @@ export const de: Dict = {
   'newproj.titleVideo': 'Neues Video',
   'newproj.titleAudio': 'Neues Audio',
   'newproj.titleMedia': 'Neue Medien',
+    'newproj.titleDesignSystem': 'Designsystem einrichten',
   'newproj.titleOther': 'Neues Projekt',
   'newproj.namePlaceholder': 'Projektname',
   'newproj.fidelityLabel': 'Detailgrad',

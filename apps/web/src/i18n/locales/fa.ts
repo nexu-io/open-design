@@ -363,6 +363,7 @@ export const fa: Dict = {
   'newproj.titleVideo': 'ویدئوی جدید',
   'newproj.titleAudio': 'صدای جدید',
   'newproj.titleMedia': 'رسانه جدید',
+    'newproj.titleDesignSystem': 'سیستم طراحی خود را راه‌اندازی کنید',
   'newproj.titleOther': 'پروژه جدید',
   'newproj.namePlaceholder': 'نام پروژه',
   'newproj.fidelityLabel': 'دقت',

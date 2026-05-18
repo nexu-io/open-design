@@ -350,6 +350,7 @@ export const tr: Dict = {
   'newproj.titleVideo': 'Yeni video',
   'newproj.titleAudio': 'Yeni ses',
   'newproj.titleMedia': 'Yeni medya',
+    'newproj.titleDesignSystem': 'Tasarım sisteminizi kurun',
   'newproj.titleOther': 'Yeni proje',
   'newproj.namePlaceholder': 'Proje ismi',
   'newproj.fidelityLabel': 'Sadakat',

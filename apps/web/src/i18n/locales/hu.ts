@@ -360,6 +360,7 @@ export const hu: Dict = {
   'newproj.titleVideo': 'Új videó',
   'newproj.titleAudio': 'Új hang',
   'newproj.titleMedia': 'Új média',
+    'newproj.titleDesignSystem': 'Állítsd be a design rendszeredet',
   'newproj.titleOther': 'Új projekt',
   'newproj.namePlaceholder': 'Projekt neve',
   'newproj.fidelityLabel': 'Részletesség',

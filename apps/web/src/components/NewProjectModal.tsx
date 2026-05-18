@@ -33,6 +33,17 @@ interface Props {
   loading?: boolean;
   onCreate: (input: CreateInput) => void;
   onImportClaudeDesign?: (file: File) => Promise<void> | void;
+  onImportFigma?: (input: {
+    file?: File;
+    designMdFile?: File;
+    name: string;
+    designSystemId: string | null;
+    designSystemIntent: 'create' | 'none' | 'existing';
+    designSystemBrief?: {
+      questionnaireEnabled?: boolean;
+      advancedGeneration?: boolean;
+    };
+  }) => Promise<void> | void;
   onImportFolder?: (baseDir: string) => Promise<void> | void;
   onOpenConnectorsTab?: () => void;
   onClose: () => void;
@@ -51,6 +62,7 @@ export function NewProjectModal({
   loading,
   onCreate,
   onImportClaudeDesign,
+  onImportFigma,
   onImportFolder,
   onOpenConnectorsTab,
   onClose,
@@ -123,6 +135,7 @@ export function NewProjectModal({
               onClose();
             }}
             {...(onImportClaudeDesign ? { onImportClaudeDesign } : {})}
+            {...(onImportFigma ? { onImportFigma } : {})}
             {...(onImportFolder ? { onImportFolder } : {})}
             {...(onOpenConnectorsTab ? { onOpenConnectorsTab } : {})}
           />

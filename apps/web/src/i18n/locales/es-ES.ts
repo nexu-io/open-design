@@ -258,6 +258,7 @@ export const esES: Dict = {
   'newproj.titleVideo': 'Nuevo vídeo',
   'newproj.titleAudio': 'Nuevo audio',
   'newproj.titleMedia': 'Nuevo medio',
+    'newproj.titleDesignSystem': 'Configura tu sistema de diseño',
   'newproj.titleOther': 'Nuevo proyecto',
   'newproj.namePlaceholder': 'Nombre del proyecto',
   'newproj.fidelityLabel': 'Fidelidad',

@@ -415,6 +415,7 @@ export const en: Dict = {
   'newproj.titleAudio': 'New audio',
   'newproj.titleMedia': 'New media',
   'newproj.titleOther': 'New project',
+  'newproj.titleDesignSystem': 'Set up your design system',
   'newproj.namePlaceholder': 'Project name',
   'newproj.fidelityLabel': 'Fidelity',
   'newproj.fidelityWireframe': 'Wireframe',

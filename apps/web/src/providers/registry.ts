@@ -1298,6 +1298,28 @@ export interface UploadProjectFilesResult {
   error?: string;
 }
 
+export interface FigmaImportDetection {
+  embeddedFileId: string | null;
+  contentSha256: string;
+  fileName: string;
+  byteSize: number;
+}
+
+export interface FigmaImportResult {
+  ok: true;
+  manifestPath: string;
+  generatedFiles: string[];
+  detection: FigmaImportDetection;
+  importId: string;
+  importVersion: number;
+}
+
+export interface FigmaReimportDecisionRequired {
+  code: 'FIGMA_REIMPORT_DECISION_REQUIRED';
+  existingImportId: string;
+  existingImportVersion: number;
+}
+
 export async function uploadProjectFiles(
   projectId: string,
   files: File[],
@@ -1369,6 +1391,56 @@ export async function uploadProjectFiles(
   }
 
   return { uploaded, failed, error };
+}
+
+export async function importProjectFigmaFile(
+  projectId: string,
+  sourcePath: string,
+  decision?: 'create_version' | 'update_generated',
+): Promise<FigmaImportResult | { error: string; reimport?: FigmaReimportDecisionRequired }> {
+  try {
+    const resp = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/figma/import`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sourcePath,
+          ...(decision ? { decision } : {}),
+        }),
+      },
+    );
+    const payload = (await resp.json().catch(() => null)) as
+      | (FigmaImportResult & { ok: true })
+      | { error?: { message?: string; details?: { code?: string; existingImportId?: string; existingImportVersion?: number } } }
+      | null;
+    const payloadError =
+      payload && typeof payload === 'object' && 'error' in payload
+        ? (payload as { error?: { message?: string; details?: { code?: string; existingImportId?: string; existingImportVersion?: number } } }).error
+        : undefined;
+    if (!resp.ok) {
+      const details = payloadError?.details;
+      if (details?.code === 'FIGMA_REIMPORT_DECISION_REQUIRED') {
+        return {
+          error: payloadError?.message ?? 'reimport decision required',
+          reimport: {
+            code: 'FIGMA_REIMPORT_DECISION_REQUIRED',
+            existingImportId: typeof details.existingImportId === 'string' ? details.existingImportId : '',
+            existingImportVersion: typeof details.existingImportVersion === 'number' ? details.existingImportVersion : 1,
+          },
+        };
+      }
+      return {
+        error: payloadError?.message ?? `figma import failed (${resp.status})`,
+      };
+    }
+    if (!payload || typeof payload !== 'object') {
+      return { error: 'figma import returned an invalid response' };
+    }
+    return payload as FigmaImportResult;
+  } catch {
+    return { error: 'figma import request failed' };
+  }
 }
 
 // Stable URL that serves a project file with its original mime — for

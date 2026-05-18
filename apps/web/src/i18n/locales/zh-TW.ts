@@ -407,6 +407,7 @@ export const zhTW: Dict = {
   'newproj.titleVideo': '新建影片',
   'newproj.titleAudio': '新建音訊',
   'newproj.titleMedia': '新建媒體',
+    'newproj.titleDesignSystem': '設定你的設計系統',
   'newproj.titleOther': '新建專案',
   'newproj.namePlaceholder': '專案名稱',
   'newproj.fidelityLabel': '精細度',

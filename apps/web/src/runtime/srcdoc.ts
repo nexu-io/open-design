@@ -20,6 +20,7 @@ import {
   MANUAL_EDIT_DISCOVERY_SELECTOR,
   MANUAL_EDIT_SOURCE_PATH_ATTR,
 } from '../edit-mode/bridge';
+import { annotateShowcaseSwatches } from '../lib/design-system-inspect-sync';
 
 export type SrcdocOptions = {
   deck?: boolean;
@@ -48,7 +49,7 @@ export function buildSrcdoc(
   </head>
   <body>${html}</body>
 </html>`;
-  const withOdIds = annotateMissingOdIds(wrapped);
+  const withOdIds = annotateShowcaseSwatches(annotateMissingOdIds(wrapped));
   const withSourcePaths = options.editBridge ? annotateManualEditSourcePaths(withOdIds) : withOdIds;
   const withBase = options.baseHref ? injectBaseHref(withSourcePaths, options.baseHref) : withSourcePaths;
   const withShim = injectSandboxShim(withBase);
@@ -417,6 +418,8 @@ function annotateMissingOdIds(doc: string): string {
       'section', 'article', 'header', 'footer', 'nav', 'main', 'aside',
       'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
       'button', 'a', '[id]',
+      '.swatch', '.swatch-color', '[data-ds-swatch]',
+      '[class*="swatch-color"]',
       'body > div[class]', 'body > div[id]',
       'section > div[class]', 'section > div[id]',
       'article > div[class]', 'article > div[id]',
@@ -648,6 +651,7 @@ function injectSelectionBridge(
   // through od:inspect-set. Keep this in sync with the InspectPanel UI.
   var ALLOWED_PROPS = {
     'color': true,
+    'background': true,
     'background-color': true,
     'font-size': true,
     'font-weight': true,
@@ -996,6 +1000,7 @@ if (!fallback && allowDomFallback && meaningfulDomFallbackTarget(el)) fallback =
     }
     if (!v) delete entry.props[prop];
     else entry.props[prop] = v;
+    if (prop === 'background-color' && v) entry.props.background = v;
     if (Object.keys(entry.props).length === 0) delete overrides[elementId];
     rebuildStyleSheet();
     postOverrides();

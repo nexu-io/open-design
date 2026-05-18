@@ -360,6 +360,7 @@ export const ar: Dict = {
   'newproj.titleVideo': 'فيديو جديد',
   'newproj.titleAudio': 'صوت جديد',
   'newproj.titleMedia': 'وسائط جديدة',
+    'newproj.titleDesignSystem': 'إعداد نظام التصميم الخاص بك',
   'newproj.titleOther': 'مشروع جديد',
   'newproj.namePlaceholder': 'اسم المشروع',
   'newproj.fidelityLabel': 'الدقة',

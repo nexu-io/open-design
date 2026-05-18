@@ -217,6 +217,17 @@ interface Props {
     locale?: string,
   ) => Promise<PluginShareProjectOutcome>;
   onImportClaudeDesign: (file: File) => Promise<void> | void;
+  onImportFigma: (input: {
+    file?: File;
+    designMdFile?: File;
+    name: string;
+    designSystemId: string | null;
+    designSystemIntent: 'create' | 'none' | 'existing';
+    designSystemBrief?: {
+      questionnaireEnabled?: boolean;
+      advancedGeneration?: boolean;
+    };
+  }) => Promise<void> | void;
   onImportFolder?: (baseDir: string) => Promise<void> | void;
   onOpenProject: (id: string) => void;
   onOpenLiveArtifact: (projectId: string, artifactId: string) => void;
@@ -267,6 +278,7 @@ export function EntryShell({
   onCreateProject,
   onCreatePluginShareProject,
   onImportClaudeDesign,
+  onImportFigma,
   onImportFolder,
   onOpenProject,
   onOpenLiveArtifact,
@@ -809,6 +821,7 @@ export function EntryShell({
         loading={skillsLoading}
         onCreate={handleCreate}
         onImportClaudeDesign={onImportClaudeDesign}
+        onImportFigma={onImportFigma}
         {...(onImportFolder ? { onImportFolder } : {})}
         onOpenConnectorsTab={() => {
           setNewProjectOpen(false);

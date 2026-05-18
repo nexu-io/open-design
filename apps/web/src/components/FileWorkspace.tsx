@@ -66,6 +66,8 @@ interface Props {
     relativePath: string,
     action: PluginFolderAgentAction,
   ) => Promise<void> | void;
+  onApplyFigmaImport?: (folder: string) => Promise<void> | void;
+  suppressFigmaNextSteps?: boolean;
   focusMode?: boolean;
   onFocusModeChange?: (next: boolean) => void;
 }
@@ -103,6 +105,8 @@ export function FileWorkspace({
   onRemovePreviewComment,
   onSendBoardCommentAttachments,
   onPluginFolderAgentAction,
+  onApplyFigmaImport,
+  suppressFigmaNextSteps = false,
   focusMode = false,
   onFocusModeChange,
 }: Props) {
@@ -767,6 +771,8 @@ export function FileWorkspace({
             uploadError={uploadError}
             onClearUploadError={() => setUploadError(null)}
             onPluginFolderAgentAction={onPluginFolderAgentAction}
+            onApplyFigmaImport={onApplyFigmaImport}
+            suppressFigmaNextSteps={suppressFigmaNextSteps}
           />
         ) : isActiveSketch && activeSketch && activeFile ? (
           activeSketch.loaded ? (

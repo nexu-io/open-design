@@ -363,6 +363,7 @@ export const uk: Dict = {
   'newproj.titleVideo': 'Новий відеоролик',
   'newproj.titleAudio': 'Новий звуковий файл',
   'newproj.titleMedia': 'Новий медіафайл',
+    'newproj.titleDesignSystem': 'Налаштуйте свою дизайн-систему',
   'newproj.titleOther': 'Новий проект',
   'newproj.namePlaceholder': 'Назва проекту',
   'newproj.fidelityLabel': 'Деталізація',

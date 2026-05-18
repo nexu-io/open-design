@@ -414,6 +414,7 @@ export const zhCN: Dict = {
   'newproj.titleVideo': '新建视频',
   'newproj.titleAudio': '新建音频',
   'newproj.titleMedia': '新建媒体',
+    'newproj.titleDesignSystem': '设置你的设计系统',
   'newproj.titleOther': '新建项目',
   'newproj.namePlaceholder': '项目名称',
   'newproj.fidelityLabel': '精度',

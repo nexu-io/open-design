@@ -40,6 +40,11 @@ import {
   type ResearchOptions,
 } from '@open-design/contracts';
 import { projectKindToTracking } from '@open-design/contracts/analytics';
+import {
+  designSystemEntryShowcaseKey,
+  pickDesignSystemShowcaseFile,
+  isDesignSystemCreationProject,
+} from '../lib/design-system-project';
 import { navigate } from '../router';
 import { agentDisplayName, agentModelDisplayName } from '../utils/agentLabels';
 import { isMacPlatform } from '../utils/platform';
@@ -375,6 +380,7 @@ export function ProjectView({
   const [liveArtifacts, setLiveArtifacts] = useState<LiveArtifactSummary[]>([]);
   const [liveArtifactEvents, setLiveArtifactEvents] = useState<LiveArtifactEventItem[]>([]);
   const [workspaceFocused, setWorkspaceFocused] = useState(false);
+  const designSystemCreation = isDesignSystemCreationProject(project.metadata);
   const [instructionsOpen, setInstructionsOpen] = useState(false);
   const [instructionsDraft, setInstructionsDraft] = useState(project.customInstructions ?? '');
   const [instructionsSaving, setInstructionsSaving] = useState(false);
@@ -917,6 +923,26 @@ export function ProjectView({
     requestOpenFile(routeFileName);
   }, [routeFileName, requestOpenFile]);
 
+  // One-shot: open showcase.html after design-system creation (import sets session key).
+  const dsShowcaseOpenedRef = useRef(false);
+  useEffect(() => {
+    if (!designSystemCreation || projectFiles.length === 0 || dsShowcaseOpenedRef.current) return;
+    let pending: string | null = null;
+    try {
+      pending = window.sessionStorage.getItem(designSystemEntryShowcaseKey(project.id));
+      if (!pending) return;
+      window.sessionStorage.removeItem(designSystemEntryShowcaseKey(project.id));
+    } catch {
+      return;
+    }
+    const showcase = projectFiles.some((f) => f.name === pending)
+      ? pending
+      : pickDesignSystemShowcaseFile(projectFiles.map((f) => f.name));
+    if (!showcase) return;
+    dsShowcaseOpenedRef.current = true;
+    requestOpenFile(showcase);
+  }, [designSystemCreation, project.id, projectFiles, requestOpenFile]);
+
   // Sync the URL when the active tab changes, so reload + share-link both
   // land back on the same view. Replace (not push) on tab activation so the
   // history stack doesn't fill with every tab click.
@@ -937,7 +963,9 @@ export function ProjectView({
     )
       ? openTabsState.active
       : null;
-    const nextKey = `${activeConversationId ?? ''}:${target ?? ''}`;
+    // Preserve URL file deep links until workspace tabs hydrate (avoids null↔file ping-pong).
+    const fileName = target ?? (tabsLoadedRef.current ? null : routeFileName ?? null);
+    const nextKey = `${activeConversationId ?? ''}:${fileName ?? ''}`;
     if (nextKey === lastSyncedRouteKeyRef.current) return;
     lastSyncedRouteKeyRef.current = nextKey;
     lastSyncedConversationIdRef.current = activeConversationId;
@@ -954,11 +982,11 @@ export function ProjectView({
         kind: 'project',
         projectId: project.id,
         conversationId: activeConversationId,
-        fileName: target,
+        fileName,
       },
       { replace: true },
     );
-  }, [openTabsState.active, projectFileNames, project.id, activeConversationId]);
+  }, [openTabsState.active, projectFileNames, project.id, activeConversationId, routeFileName]);
 
   const handleEnsureProject = useCallback(async (): Promise<string | null> => {
     return project.id;
@@ -2035,6 +2063,33 @@ export function ProjectView({
     [handleSend, currentConversationActionDisabled],
   );
 
+  const handleApplyFigmaImport = useCallback(
+    async (folder: string) => {
+      if (currentConversationActionDisabled) return;
+      const attachments: ChatAttachment[] = projectFiles
+        .filter((file) =>
+          file.name.startsWith(`${folder}/`)
+          && (
+            file.name.endsWith('/tokens.dtcg.json')
+            || file.name.endsWith('/tailwind.preset.ts')
+            || file.name.endsWith('/tailwind-map.json')
+            || file.name.endsWith('/summary.md')
+            || file.name.endsWith('/manifest.json')
+          ),
+        )
+        .map((file) => ({
+          path: file.name,
+          name: file.name.split('/').pop() || file.name,
+          kind: 'file',
+          size: file.size,
+        }));
+      const prompt =
+        'Use these imported Figma design-system artifacts as the active baseline for this project. Create a practical, usable design system package now: semantic tokens, Tailwind mapping, and a concise apply plan. Do not ask a questionnaire; proceed with sensible defaults.';
+      await handleSend(prompt, attachments, []);
+    },
+    [projectFiles, handleSend, currentConversationActionDisabled],
+  );
+
   const persistArtifact = useCallback(
     async (art: Artifact) => {
       const baseName = (art.identifier || art.title || 'artifact')
@@ -3001,6 +3056,8 @@ export function ProjectView({
           onRemovePreviewComment={removePreviewComment}
           onSendBoardCommentAttachments={handleSendBoardCommentAttachments}
           onPluginFolderAgentAction={handlePluginFolderAgentAction}
+          onApplyFigmaImport={handleApplyFigmaImport}
+          suppressFigmaNextSteps={designSystemCreation}
           focusMode={workspaceFocused}
           onFocusModeChange={setWorkspaceFocused}
         />

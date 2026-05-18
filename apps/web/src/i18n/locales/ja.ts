@@ -257,6 +257,7 @@ export const ja: Dict = {
   'newproj.titleVideo': '新しい動画',
   'newproj.titleAudio': '新しい音声',
   'newproj.titleMedia': '新しいメディア',
+    'newproj.titleDesignSystem': 'デザインシステムをセットアップ',
   'newproj.titleOther': '新しいプロジェクト',
   'newproj.namePlaceholder': 'プロジェクト名',
   'newproj.fidelityLabel': '品質',

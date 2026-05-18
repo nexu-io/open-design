@@ -58,6 +58,9 @@ docs/superpowers/
 .envrc
 # Local secrets (PostHog keys, BYOK creds for local testing, etc.)
 .env.local
+
+# Vercel CLI project link (vercel link); never commit.
+**/.vercel/
 .env.*.local
 # Local design assistant context
 .impeccable.md

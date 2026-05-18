@@ -1,4 +1,5 @@
 import type { Express } from 'express';
+import path from 'node:path';
 import {
   defaultScenarioPluginIdForKind,
   type PluginManifest,
@@ -13,6 +14,10 @@ import {
 } from './plugins/index.js';
 import type { RouteDeps } from './server-context.js';
 import { listSkills } from './skills.js';
+import {
+  FigmaDecisionRequiredError,
+  importLocalFigmaFile,
+} from './figma-local-import.js';
 
 export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry'> {}
 
@@ -1116,12 +1121,13 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
 
 }
 
-export interface RegisterProjectUploadRoutesDeps extends RouteDeps<'http' | 'uploads' | 'node'> {}
+export interface RegisterProjectUploadRoutesDeps extends RouteDeps<'http' | 'uploads' | 'node' | 'paths'> {}
 
 export function registerProjectUploadRoutes(app: Express, ctx: RegisterProjectUploadRoutesDeps) {
   const { sendApiError } = ctx.http;
   const { handleProjectUpload } = ctx.uploads;
   const { fs } = ctx.node;
+  const { PROJECTS_DIR } = ctx.paths;
 
   app.post(
     '/api/projects/:id/upload',
@@ -1152,4 +1158,43 @@ export function registerProjectUploadRoutes(app: Express, ctx: RegisterProjectUp
       }
     },
   );
+
+  app.post('/api/projects/:id/figma/import', async (req, res) => {
+    try {
+      const sourcePath = typeof req.body?.sourcePath === 'string' ? req.body.sourcePath : '';
+      const decisionRaw = typeof req.body?.decision === 'string' ? req.body.decision : null;
+      const decision = decisionRaw === 'create_version' || decisionRaw === 'update_generated'
+        ? decisionRaw
+        : null;
+      if (!sourcePath) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'sourcePath is required');
+      }
+      const projectDir = path.resolve(PROJECTS_DIR, req.params.id);
+      const result = await importLocalFigmaFile({
+        projectDir,
+        sourcePath,
+        decision,
+      });
+      return res.json({
+        ok: true,
+        manifestPath: result.manifestPath,
+        generatedFiles: result.generatedFiles,
+        detection: result.detection,
+        importId: result.importId,
+        importVersion: result.importVersion,
+      });
+    } catch (err: any) {
+      if (err instanceof FigmaDecisionRequiredError) {
+        return sendApiError(
+          res,
+          409,
+          'CONFLICT',
+          'reimport decision required',
+          { details: { code: 'FIGMA_REIMPORT_DECISION_REQUIRED', ...err.details } },
+        );
+      }
+      const message = String(err?.message || err);
+      return sendApiError(res, 400, 'BAD_REQUEST', message);
+    }
+  });
 }

@@ -45,6 +45,11 @@ import {
 } from '../providers/registry';
 import type { ProjectFilePreview } from '../providers/registry';
 import {
+  isDesignSystemShowcaseFile,
+  materializeInspectOverridesToShowcaseHtml,
+  syncDesignMdFromShowcaseHtml,
+} from '../lib/design-system-inspect-sync';
+import {
   exportAsHtml,
   exportAsImage,
   exportAsJsx,
@@ -2268,6 +2273,7 @@ export type InspectOverrideMap = Record<string, InspectOverrideEntry>;
 // the bridge itself would reject.
 const HOST_ALLOWED_INSPECT_PROPS = new Set([
   'color',
+  'background',
   'background-color',
   'font-size',
   'font-weight',
@@ -2365,10 +2371,12 @@ export function updateInspectOverride(
   if (!trimmed) {
     if (!(propName in nextProps)) return map;
     delete nextProps[propName];
+    if (propName === 'background-color') delete nextProps.background;
   } else if (nextProps[propName] === trimmed && existing?.selector === selector) {
     return map;
   } else {
     nextProps[propName] = trimmed;
+    if (propName === 'background-color') nextProps.background = trimmed;
   }
   const nextMap: InspectOverrideMap = { ...map };
   if (Object.keys(nextProps).length === 0) {
@@ -4730,8 +4738,13 @@ function HtmlViewer({
     setSavingInspect(true);
     setInspectError(null);
     try {
-      const css = serializeInspectOverrides(inspectOverrides).trim();
-      const next = applyInspectOverridesToSource(source, css);
+      const showcaseSave = isDesignSystemShowcaseFile(file.name);
+      const next = showcaseSave
+        ? materializeInspectOverridesToShowcaseHtml(source, inspectOverrides)
+        : applyInspectOverridesToSource(
+          source,
+          serializeInspectOverrides(inspectOverrides).trim(),
+        );
       const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/files`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -4741,9 +4754,21 @@ function HtmlViewer({
         const payload = await resp.json().catch(() => null) as { error?: string; message?: string } | null;
         throw new Error(payload?.error || payload?.message || `Save failed (${resp.status})`);
       }
+      if (showcaseSave) {
+        const designMd = await fetchProjectFileText(projectId, 'DESIGN.md');
+        if (designMd) {
+          const synced = syncDesignMdFromShowcaseHtml(designMd, next);
+          if (synced !== designMd) {
+            await writeProjectTextFile(projectId, 'DESIGN.md', synced);
+          }
+        }
+      }
       setSource(next);
       setInspectSavedAt(Date.now());
       setReloadKey((k) => k + 1);
+      if (showcaseSave) {
+        void onFileSaved?.();
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Save failed';
       setInspectError(msg);

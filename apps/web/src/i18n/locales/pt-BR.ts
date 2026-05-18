@@ -361,6 +361,7 @@ export const ptBR: Dict = {
   'newproj.titleVideo': 'Novo vídeo',
   'newproj.titleAudio': 'Novo áudio',
   'newproj.titleMedia': 'Nova mídia',
+    'newproj.titleDesignSystem': 'Configure seu design system',
   'newproj.titleOther': 'Novo projeto',
   'newproj.namePlaceholder': 'Nome do projeto',
   'newproj.fidelityLabel': 'Fidelidade',

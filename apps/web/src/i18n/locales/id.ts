@@ -462,6 +462,7 @@ export const id: Dict = {
   'newproj.titleVideo': 'Video baru',
   'newproj.titleAudio': 'Audio baru',
   'newproj.titleMedia': 'Media baru',
+    'newproj.titleDesignSystem': 'Siapkan design system Anda',
   'newproj.titleOther': 'Proyek baru',
   'newproj.namePlaceholder': 'Nama proyek',
   'newproj.fidelityLabel': 'Fidelity',

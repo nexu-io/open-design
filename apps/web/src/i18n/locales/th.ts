@@ -330,6 +330,7 @@ export const th: Dict = {
   'newproj.titleVideo': 'วิดีโอใหม่',
   'newproj.titleAudio': 'เสียงใหม่',
   'newproj.titleMedia': 'สื่อใหม่',
+    'newproj.titleDesignSystem': 'ตั้งค่าระบบดีไซน์ของคุณ',
   'newproj.titleOther': 'โปรเจกต์ใหม่',
   'newproj.namePlaceholder': 'ชื่อโปรเจกต์',
   'newproj.fidelityLabel': 'ความละเอียด',

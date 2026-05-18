@@ -360,6 +360,7 @@ export const fr: Dict = {
   'newproj.titleVideo': 'Nouvelle vidéo',
   'newproj.titleAudio': 'Nouvel audio',
   'newproj.titleMedia': 'Nouveau média',
+    'newproj.titleDesignSystem': 'Configurez votre système de design',
   'newproj.titleOther': 'Nouveau projet',
   'newproj.namePlaceholder': 'Nom du projet',
   'newproj.fidelityLabel': 'Fidélité',

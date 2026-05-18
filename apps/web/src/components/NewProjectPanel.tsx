@@ -43,6 +43,7 @@ import {
   VIDEO_MODELS,
 } from '../media/models';
 import { Icon } from './Icon';
+import { DesignSystemImportPanel } from './DesignSystemImportPanel';
 import { Skeleton } from './Loading';
 import { Toast } from './Toast';
 
@@ -127,7 +128,7 @@ const DESIGN_PLATFORMS: Array<{
   },
 ];
 
-export type CreateTab = 'prototype' | 'live-artifact' | 'deck' | 'template' | 'media' | 'other';
+export type CreateTab = 'prototype' | 'live-artifact' | 'deck' | 'template' | 'media' | 'other' | 'import';
 export type MediaSurface = 'image' | 'video' | 'audio';
 
 export interface CreateInput {
@@ -157,6 +158,17 @@ interface Props {
   // daemon's import response and forwards it here so App-level state
   // can update without a second fetch.
   onImportFolderResponse?: (response: ImportFolderResponse) => Promise<void> | void;
+  onImportFigma?: (input: {
+    file?: File;
+    designMdFile?: File;
+    name: string;
+    designSystemId: string | null;
+    designSystemIntent: 'create' | 'none' | 'existing';
+    designSystemBrief?: {
+      questionnaireEnabled?: boolean;
+      advancedGeneration?: boolean;
+    };
+  }) => Promise<void> | void;
   mediaProviders?: Record<string, MediaProviderCredentials>;
   connectors?: ConnectorDetail[];
   connectorsLoading?: boolean;
@@ -171,6 +183,7 @@ const TAB_LABEL_KEYS: Record<CreateTab, keyof Dict> = {
   template: 'newproj.tabTemplate',
   media: 'newproj.tabMedia',
   other: 'newproj.tabOther',
+  import: 'newproj.tabOther',
 };
 
 const MEDIA_SURFACE_LABEL_KEYS: Record<MediaSurface, keyof Dict> = {
@@ -212,6 +225,7 @@ export function NewProjectPanel({
   onImportClaudeDesign,
   onImportFolder,
   onImportFolderResponse,
+  onImportFigma,
   mediaProviders,
   connectors,
   connectorsLoading = false,
@@ -222,6 +236,13 @@ export function NewProjectPanel({
   const analytics = useAnalytics();
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const [importing, setImporting] = useState(false);
+  const [importingFigma, setImportingFigma] = useState(false);
+  const [figmaFile, setFigmaFile] = useState<File | null>(null);
+  const [figmaImportError, setFigmaImportError] = useState<string | null>(null);
+  const [designMdFile, setDesignMdFile] = useState<File | null>(null);
+  const [designMdWarning, setDesignMdWarning] = useState<string | null>(null);
+  const [dsQuestionnaireEnabled, setDsQuestionnaireEnabled] = useState(false);
+  const [dsAdvancedGeneration, setDsAdvancedGeneration] = useState(true);
   const [baseDir, setBaseDir] = useState('');
   const [importingFolder, setImportingFolder] = useState(false);
   // PR #974 round-4 (mrcfps): pickAndImport now returns structured
@@ -448,6 +469,17 @@ export function NewProjectPanel({
 
   const canCreate =
     !loading && (tab !== 'template' || templateId != null);
+  const canImportFigma =
+    !loading && !importingFigma && (figmaFile != null || designMdFile != null);
+
+  const visibleTabs: CreateTab[] = [
+    'prototype',
+    'live-artifact',
+    'deck',
+    'template',
+    'media',
+    'import',
+  ];
 
   function updateTabScrollState() {
     const el = tabsRef.current;
@@ -571,6 +603,32 @@ export function NewProjectPanel({
     }
   }
 
+  async function handleImportFigma() {
+    if ((!figmaFile && !designMdFile) || !onImportFigma) return;
+    setFigmaImportError(null);
+    setImportingFigma(true);
+    try {
+      await onImportFigma({
+        ...(figmaFile ? { file: figmaFile } : {}),
+        ...(designMdFile ? { designMdFile } : {}),
+        name: name.trim() || autoName('import', mediaSurface, t),
+        designSystemId: null,
+        designSystemIntent: 'create',
+        designSystemBrief: {
+          questionnaireEnabled: dsQuestionnaireEnabled,
+          advancedGeneration: dsAdvancedGeneration,
+        },
+      });
+      setFigmaFile(null);
+      setDesignMdFile(null);
+      setDesignMdWarning(null);
+    } catch (err) {
+      setFigmaImportError(err instanceof Error ? err.message : 'Failed to import .fig file');
+    } finally {
+      setImportingFigma(false);
+    }
+  }
+
   // PR #974: the bridge no longer exposes `pickFolder` (raw path
   // crossing to the renderer). The Electron flow now uses
   // `pickAndImport`, which performs the picker + the HMAC-gated import
@@ -637,7 +695,10 @@ export function NewProjectPanel({
   }
 
   return (
-    <div className="newproj" data-testid="new-project-panel">
+    <div
+      className={`newproj${tab === 'import' ? ' newproj--design-system' : ''}`}
+      data-testid="new-project-panel"
+    >
       <div className={`newproj-tabs-shell${tabScroll.left ? ' can-left' : ''}${tabScroll.right ? ' can-right' : ''}`}>
         <button
           type="button"
@@ -649,7 +710,7 @@ export function NewProjectPanel({
           <Icon name="chevron-left" size={16} strokeWidth={2} />
         </button>
         <div className="newproj-tabs" role="tablist" ref={tabsRef}>
-          {(Object.keys(TAB_LABEL_KEYS) as CreateTab[]).map((entry) => (
+          {visibleTabs.map((entry) => (
             <button
               key={entry}
               role="tab"
@@ -658,7 +719,7 @@ export function NewProjectPanel({
               className={`newproj-tab ${tab === entry ? 'active' : ''}`}
               onClick={() => setTab(entry)}
             >
-              {t(TAB_LABEL_KEYS[entry])}
+              {entry === 'import' ? 'Design System' : t(TAB_LABEL_KEYS[entry])}
             </button>
           ))}
         </div>
@@ -674,15 +735,15 @@ export function NewProjectPanel({
       </div>
       <div className="newproj-body">
         <h3 className="newproj-title">
-          <span className="newproj-title-text">{titleForTab(tab, mediaSurface, t)}</span>
+          <span className="newproj-title-text">
+            {tab === 'import'
+              ? t('newproj.titleDesignSystem')
+              : titleForTab(tab, mediaSurface, t)}
+          </span>
           {tab === 'live-artifact' ? (
-            // "Beta" is an internationally adopted brand-style status marker;
-            // intentionally not run through t() (consistent with short product
-            // status pills that read the same across our supported locales).
             <span className="newproj-title-badge" aria-label="Beta feature">Beta</span>
           ) : null}
         </h3>
-
         <input
           className="newproj-name"
           data-testid="new-project-name"
@@ -841,27 +902,50 @@ export function NewProjectPanel({
           />
         ) : null}
 
-        <button
-          className="primary newproj-create"
-          data-testid="create-project"
-          onClick={handleCreate}
-          disabled={!canCreate}
-          title={
-            tab === 'template' && templateId == null
-              ? t('newproj.createDisabledTitle')
-              : undefined
-          }
-        >
-          <Icon name="plus" size={13} />
-          <span>
-            {tab === 'template'
-              ? t('newproj.createFromTemplate')
-              : tab === 'live-artifact'
-                ? t('newproj.createLiveArtifact')
-              : t('newproj.create')}
-          </span>
-        </button>
-        {onImportClaudeDesign ? (
+        {tab !== 'import' ? (
+          <button
+            className="primary newproj-create"
+            data-testid="create-project"
+            onClick={handleCreate}
+            disabled={!canCreate}
+            title={
+              tab === 'template' && templateId == null
+                ? t('newproj.createDisabledTitle')
+                : undefined
+            }
+          >
+            <Icon name="plus" size={13} />
+            <span>
+              {tab === 'template'
+                ? t('newproj.createFromTemplate')
+                : tab === 'live-artifact'
+                  ? t('newproj.createLiveArtifact')
+                  : t('newproj.create')}
+            </span>
+          </button>
+        ) : null}
+        {tab === 'import' ? (
+          <DesignSystemImportPanel
+            questionnaireEnabled={dsQuestionnaireEnabled}
+            advancedGeneration={dsAdvancedGeneration}
+            onBriefChange={(next) => {
+              setDsQuestionnaireEnabled(next.questionnaireEnabled);
+              setDsAdvancedGeneration(next.advancedGeneration);
+            }}
+            figmaFile={figmaFile}
+            onPickFigma={setFigmaFile}
+            designMdFile={designMdFile}
+            onPickDesignMd={setDesignMdFile}
+            designMdWarning={designMdWarning}
+            onDesignMdWarning={setDesignMdWarning}
+            figmaImportError={figmaImportError}
+            onFigmaValidationError={setFigmaImportError}
+            importingFigma={importingFigma}
+            canImport={canImportFigma}
+            onImport={() => void handleImportFigma()}
+          />
+        ) : null}
+        {tab !== 'import' && onImportClaudeDesign ? (
           <>
             <input
               ref={importInputRef}
@@ -886,7 +970,7 @@ export function NewProjectPanel({
             </button>
           </>
         ) : null}
-        {(hasElectronPickAndImport ? onImportFolderResponse : onImportFolder) ? (
+        {tab !== 'import' && (hasElectronPickAndImport ? onImportFolderResponse : onImportFolder) ? (
           <div className="newproj-open-folder">
             {!hasElectronPickAndImport ? (
               <input
@@ -2531,7 +2615,9 @@ function buildMetadata(input: {
       ? 'prototype'
       : input.tab === 'media'
         ? input.mediaSurface
-        : input.tab;
+        : input.tab === 'import'
+          ? 'other'
+          : input.tab;
   const selectedPlatforms = normalizeSelectedPlatforms(input.platformTargets);
   const concreteTargets = platformTargetsFor(selectedPlatforms);
   const canIncludeOsWidgets = platformTargetsSupportOsWidgets(concreteTargets);
@@ -2718,6 +2804,8 @@ function titleForTab(
     }
     case 'other':
       return t('newproj.titleOther');
+    case 'import':
+      return t('newproj.titleDesignSystem');
   }
 }
 
@@ -2729,6 +2817,7 @@ function autoName(
   const stamp = new Date().toLocaleDateString();
   // For the Media tab the auto name reads "Image · {date}" / "Video · …" /
   // "Audio · …" so the project list still surfaces the actual surface.
+  if (tab === 'import') return `Figma import · ${stamp}`;
   const labelKey: keyof Dict =
     tab === 'media' ? MEDIA_SURFACE_LABEL_KEYS[mediaSurface] : TAB_LABEL_KEYS[tab];
   return `${t(labelKey)} · ${stamp}`;

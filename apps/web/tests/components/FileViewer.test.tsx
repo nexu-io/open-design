@@ -1769,7 +1769,7 @@ describe('parseInspectOverridesFromSource', () => {
     const source =
       `<style data-od-inspect-overrides>` +
       `[data-od-id="hero"] { position: absolute !important; color: #fff !important }` +
-      `[data-od-id="bad"] { background: red } ` +
+      `[data-od-id="bad"] { outline: 1px solid red } ` +
       `</style>`;
     const map = parseInspectOverridesFromSource(source);
     expect(map.hero?.props).toEqual({ color: '#fff' });

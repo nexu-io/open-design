@@ -361,6 +361,7 @@ export const ru: Dict = {
   'newproj.titleVideo': 'Новое видео',
   'newproj.titleAudio': 'Новое аудио',
   'newproj.titleMedia': 'Новый медиафайл',
+    'newproj.titleDesignSystem': 'Настройте свою дизайн-систему',
   'newproj.titleOther': 'Новый проект',
   'newproj.namePlaceholder': 'Название проекта',
   'newproj.fidelityLabel': 'Детализация',

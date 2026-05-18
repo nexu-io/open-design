@@ -360,6 +360,7 @@ export const ko: Dict = {
   'newproj.titleVideo': '새 비디오',
   'newproj.titleAudio': '새 오디오',
   'newproj.titleMedia': '새 미디어',
+    'newproj.titleDesignSystem': '디자인 시스템 설정',
   'newproj.titleOther': '새 프로젝트',
   'newproj.namePlaceholder': '프로젝트 이름',
   'newproj.fidelityLabel': '피델리티 (Fidelity)',

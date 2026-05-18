@@ -333,6 +333,7 @@ export const it: Dict = {
   'newproj.titleImage': 'Nuova immagine',
   'newproj.titleVideo': 'Nuovo video',
   'newproj.titleAudio': 'Nuovo audio',
+    'newproj.titleDesignSystem': 'Configura il tuo design system',
   'newproj.titleOther': 'Nuovo progetto',
   'newproj.namePlaceholder': 'Nome del progetto',
   'newproj.fidelityLabel': 'Fedeltà',

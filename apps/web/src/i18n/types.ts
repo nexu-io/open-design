@@ -664,6 +664,7 @@ export interface Dict {
   'newproj.titleAudio': string;
   'newproj.titleMedia': string;
   'newproj.titleOther': string;
+  'newproj.titleDesignSystem': string;
   'newproj.namePlaceholder': string;
   'newproj.fidelityLabel': string;
   'newproj.fidelityWireframe': string;

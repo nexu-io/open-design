@@ -6,6 +6,12 @@ import {
   projectKindToTracking,
   fidelityToTracking,
 } from '@open-design/contracts/analytics';
+import {
+  buildDesignSystemCreationPrompt,
+  designSystemEntryShowcaseKey,
+  filterDesignSystemAgentAttachments,
+  pickDesignSystemEntryFile,
+} from './lib/design-system-project';
 import { EntryView } from './components/EntryView';
 import type { IntegrationTab } from './components/IntegrationsView';
 import { MarketplaceView } from './components/MarketplaceView';
@@ -31,6 +37,7 @@ import {
   fetchDesignTemplates,
   fetchPromptTemplates,
   fetchSkills,
+  importProjectFigmaFile,
   uploadProjectFiles,
 } from './providers/registry';
 import { navigate, useRoute } from './router';
@@ -914,6 +921,102 @@ export function App() {
     });
   }, []);
 
+  const handleImportFigma = useCallback(async (input: {
+    file?: File;
+    designMdFile?: File;
+    name: string;
+    designSystemId: string | null;
+    designSystemIntent: 'create' | 'none' | 'existing';
+    designSystemBrief?: {
+      questionnaireEnabled?: boolean;
+      advancedGeneration?: boolean;
+    };
+  }) => {
+    if (!input.file && !input.designMdFile) {
+      throw new Error('Choose a .fig file or DESIGN.md to import.');
+    }
+    const pendingPrompt =
+      input.designSystemIntent === 'create'
+        ? buildDesignSystemCreationPrompt(input.designSystemBrief)
+        : undefined;
+    const result = await createProject({
+      name: input.name,
+      skillId: null,
+      designSystemId: input.designSystemId,
+      pendingPrompt,
+      metadata: {
+        kind: 'prototype',
+        fidelity: 'high-fidelity',
+        creationFlow: input.designSystemIntent === 'create' ? 'design_system_from_sources' : undefined,
+        designSystemBrief: input.designSystemIntent === 'create'
+          ? {
+              ...input.designSystemBrief,
+              sourceKind: input.file && input.designMdFile
+                ? 'figma-local+design-md'
+                : input.designMdFile
+                  ? 'design-md'
+                  : 'figma-local',
+            }
+          : undefined,
+        skipDiscoveryBrief: input.designSystemIntent === 'create'
+          && !input.designSystemBrief?.questionnaireEnabled,
+      },
+    });
+    if (!result) throw new Error('Failed to create project for design system import');
+    const filesToUpload = [input.designMdFile, input.file].filter(
+      (file): file is File => file != null,
+    );
+    const upload = await uploadProjectFiles(result.project.id, filesToUpload);
+    if (upload.failed.length > 0) {
+      throw new Error(upload.failed[0]?.error ?? 'Failed to upload design system files');
+    }
+    let importResult: Awaited<ReturnType<typeof importProjectFigmaFile>> | null = null;
+    if (input.file) {
+      const figAttachment = upload.uploaded.find((item) => /\.fig$/i.test(item.name));
+      if (!figAttachment) throw new Error('Failed to upload .fig file');
+      importResult = await importProjectFigmaFile(result.project.id, figAttachment.path);
+      if ('error' in importResult) throw new Error(importResult.error);
+    }
+    if (input.designSystemIntent === 'create') {
+      const autoApplyAttachments: ChatAttachment[] = importResult
+        ? filterDesignSystemAgentAttachments(importResult.generatedFiles).map((path) => ({
+            path,
+            name: path.split('/').pop() || path,
+            kind: 'file' as const,
+          }))
+        : input.designMdFile
+          ? [{ path: 'DESIGN.md', name: 'DESIGN.md', kind: 'file' as const }]
+          : [];
+      try {
+        window.sessionStorage.setItem(`od:auto-send-first:${result.project.id}`, '1');
+        if (autoApplyAttachments.length > 0) {
+          window.sessionStorage.setItem(
+            `od:auto-send-attachments:${result.project.id}`,
+            JSON.stringify(autoApplyAttachments),
+          );
+        }
+      } catch {
+        // Ignore storage failures; user can still send manually.
+      }
+    }
+    const entryFile = importResult
+      ? pickDesignSystemEntryFile(importResult.generatedFiles)
+      : null;
+    if (entryFile) {
+      try {
+        window.sessionStorage.setItem(designSystemEntryShowcaseKey(result.project.id), entryFile);
+      } catch {
+        // Ignore storage failures.
+      }
+    }
+    setProjects((curr) => [result.project, ...curr.filter((p) => p.id !== result.project.id)]);
+    navigate({
+      kind: 'project',
+      projectId: result.project.id,
+      fileName: entryFile,
+    });
+  }, []);
+
   const handleOpenProject = useCallback((id: string) => {
     navigate({ kind: 'project', projectId: id, fileName: null });
   }, []);
@@ -1207,6 +1310,7 @@ export function App() {
         onCreateProject={handleCreateProject}
         onCreatePluginShareProject={handleCreatePluginShareProject}
         onImportClaudeDesign={handleImportClaudeDesign}
+        onImportFigma={handleImportFigma}
         onImportFolder={handleImportFolder}
         onImportFolderResponse={handleImportFolderResponse}
         onOpenProject={handleOpenProject}
