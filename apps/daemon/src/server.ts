@@ -9897,6 +9897,7 @@ export async function startServer({
     routines: { routineService },
     validation: validationDeps,
     finalize: finalizeDeps,
+    handoff: handoffDeps,
     chat: { startChatRun, submitToolResultToRun },
     agents: agentDeps,
     critique: critiqueDeps,
