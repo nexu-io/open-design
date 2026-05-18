@@ -1513,9 +1513,10 @@ describe('ProjectView daemon cleanup', () => {
     // Drain mount-time fetchLiveArtifacts calls so we observe only the
     // resolver produced by the live_artifact event handler.
     for (let i = 0; i < 5; i++) {
-      if (resolveLiveArtifacts) {
-        resolveLiveArtifacts();
-        resolveLiveArtifacts = null;
+      const resolver = liveArtifactsResolver.current;
+      if (resolver) {
+        liveArtifactsResolver.current = null;
+        resolver();
       }
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }
@@ -1541,10 +1542,11 @@ describe('ProjectView daemon cleanup', () => {
     await new Promise<void>((resolve) => setTimeout(resolve, 10));
     expect(onProjectsRefresh).not.toHaveBeenCalled();
 
-    if (!resolveLiveArtifacts) {
+    const eventResolver = liveArtifactsResolver.current;
+    if (!eventResolver) {
       throw new Error('Expected fetchLiveArtifacts to be invoked by the event handler');
     }
-    resolveLiveArtifacts();
+    eventResolver();
 
     await waitFor(() => expect(onProjectsRefresh).toHaveBeenCalledTimes(1));
 
