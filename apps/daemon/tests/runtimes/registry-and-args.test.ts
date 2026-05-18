@@ -2,11 +2,103 @@ import { test } from 'vitest';
 import {
   AGENT_DEFS, assert, chmodSync, codex, detectAgents, join, mkdtempSync, rmSync, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
 } from './helpers/test-helpers.js';
+import { readLocalAgentProfileDefs } from '../../src/runtimes/registry.js';
 
 test('AGENT_DEFS ids are unique', () => {
   const ids = AGENT_DEFS.map((a) => a.id);
   const dupes = ids.filter((id, i) => ids.indexOf(id) !== i);
   assert.deepEqual(dupes, [], `duplicate agent ids: ${JSON.stringify(dupes)}`);
+});
+
+test('local agent profiles inherit a base adapter and can pin the default model', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-local-agent-profiles-'));
+  try {
+    await withEnvSnapshot(['OD_AGENT_PROFILES_CONFIG'], async () => {
+      const config = join(dir, 'agents.local.json');
+      writeFileSync(
+        config,
+        JSON.stringify({
+          agents: [
+            {
+              id: 'zcode',
+              name: 'ZCode',
+              baseAgent: 'claude',
+              bin: 'zcode',
+              args: ['run'],
+              defaultModel: 'zyb-claude',
+              models: [
+                { id: 'zyb-claude', label: 'zyb-claude' },
+                { id: 'zyb-gpt', label: 'zyb-gpt' },
+              ],
+              env: {
+                ZCODE_ROUTE: 'design',
+                RETRIES: 2,
+                'BAD-NAME': 'ignored',
+              },
+            },
+          ],
+        }),
+      );
+      process.env.OD_AGENT_PROFILES_CONFIG = config;
+
+      const profiles = readLocalAgentProfileDefs();
+      assert.equal(profiles.length, 1);
+      const [profile] = profiles;
+      assert.ok(profile);
+      assert.equal(profile.id, 'zcode');
+      assert.equal(profile.name, 'ZCode');
+      assert.equal(profile.bin, 'zcode');
+      assert.equal(profile.promptViaStdin, true);
+      assert.equal(profile.streamFormat, 'claude-stream-json');
+      assert.deepEqual(profile.fallbackModels.map((model) => model.id), [
+        'default',
+        'zyb-claude',
+        'zyb-gpt',
+      ]);
+      assert.deepEqual(profile.env, {
+        ZCODE_ROUTE: 'design',
+        RETRIES: '2',
+      });
+
+      const defaultArgs = profile.buildArgs('', [], [], {});
+      assert.deepEqual(defaultArgs.slice(0, 2), ['run', '-p']);
+      assert.ok(defaultArgs.includes('--model'));
+      assert.equal(defaultArgs[defaultArgs.indexOf('--model') + 1], 'zyb-claude');
+
+      const explicitArgs = profile.buildArgs('', [], [], { model: 'zyb-gpt' });
+      assert.equal(explicitArgs[explicitArgs.indexOf('--model') + 1], 'zyb-gpt');
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('local agent profiles skip explicit unknown baseAgent without falling back', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-local-agent-profiles-invalid-'));
+  try {
+    await withEnvSnapshot(['OD_AGENT_PROFILES_CONFIG'], async () => {
+      const config = join(dir, 'agents.local.json');
+      writeFileSync(
+        config,
+        JSON.stringify({
+          agents: [
+            { id: 'claude', bin: 'duplicate' },
+            { id: 'bad id with spaces', bin: 'bad' },
+            { id: 'unknown-base', baseAgent: 'does-not-exist', bin: 'bad' },
+            { id: 'ok-wrapper', bin: 'ok-wrapper' },
+          ],
+        }),
+      );
+      process.env.OD_AGENT_PROFILES_CONFIG = config;
+
+      const profiles = readLocalAgentProfileDefs();
+
+      assert.deepEqual(profiles.map((profile) => profile.id), ['ok-wrapper']);
+      assert.equal(profiles[0]?.bin, 'ok-wrapper');
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('codex args disable plugins when OD_CODEX_DISABLE_PLUGINS is 1', () => {
