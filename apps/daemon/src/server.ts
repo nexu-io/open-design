@@ -118,6 +118,7 @@ import { stageActiveSkill } from './cwd-aliases.js';
 import { buildDesktopPdfExportInput } from './pdf-export.js';
 import { generateMedia } from './media.js';
 import { listElevenLabsVoiceOptions } from './elevenlabs-voices.js';
+import { listSenseAudioCatalogue } from './senseaudio-voices.js';
 import { searchResearch, ResearchError } from './research/index.js';
 import { renderResearchCommandContract } from './prompts/research-contract.js';
 import {
@@ -2944,6 +2945,7 @@ export async function startServer({
     mediaTaskSnapshot,
     listMediaTasksByProject,
     listElevenLabsVoiceOptions,
+    listSenseAudioCatalogue,
   };
   const appConfigDeps = { readAppConfig, writeAppConfig };
   const orbitDeps = { orbitService };
@@ -3258,6 +3260,21 @@ export async function startServer({
         console.warn('[elevenlabs] voice option lookup failed:', audioVoiceOptionsError);
       }
     }
+    let senseAudioCatalogue;
+    let senseAudioCatalogueError;
+    if (
+      metadata?.kind === 'audio' &&
+      metadata?.audioKind === 'speech' &&
+      metadata?.audioModel === 'senseaudio-tts' &&
+      !metadata?.voice
+    ) {
+      try {
+        senseAudioCatalogue = await listSenseAudioCatalogue(PROJECT_ROOT);
+      } catch (err) {
+        senseAudioCatalogueError = err && err.message ? err.message : String(err);
+        console.warn('[senseaudio] catalogue lookup failed:', senseAudioCatalogueError);
+      }
+    }
 
     // Thread the critique config plus the active design-system / skill data
     // into the composer when critique is enabled. Without this the spawned
@@ -3351,6 +3368,8 @@ export async function startServer({
       template,
       audioVoiceOptions,
       audioVoiceOptionsError,
+      senseAudioCatalogue,
+      senseAudioCatalogueError,
       // critiqueCfg.enabled is loaded from OD_CRITIQUE_ENABLED only, so a
       // run that the resolver enabled via phase / project / skill (env
       // unset) would have critiqueShouldRun = true while critiqueCfg.enabled

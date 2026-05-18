@@ -56,6 +56,11 @@ export interface FormOption {
   label: string;
   value: string;
   description?: string;
+  // Soft grouping for radio chips. When set, the picker renders a small
+  // section header per unique group and clusters chips beneath it; when
+  // every option leaves it blank the picker falls back to the existing
+  // flat chip layout for backwards compatibility.
+  group?: string;
 }
 
 export interface FormQuestion {

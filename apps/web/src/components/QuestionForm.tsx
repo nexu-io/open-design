@@ -100,26 +100,13 @@ export function QuestionFormView({ form, interactive, submittedAnswers, onSubmit
               </label>
               {q.help ? <div className="qf-help">{q.help}</div> : null}
               {q.type === 'radio' && q.options ? (
-                <div className="qf-options">
-                  {q.options.map((opt) => (
-                    <label
-                      key={opt.value}
-                      className={`qf-chip${value === opt.value ? ' qf-chip-on' : ''}`}
-                      title={opt.description}
-                    >
-                      <input
-                        type="radio"
-                        name={`${form.id}-${q.id}`}
-                        value={opt.value}
-                        checked={value === opt.value}
-                        disabled={locked}
-                        aria-label={opt.label}
-                        onChange={() => update(q.id, opt.value)}
-                      />
-                      <OptionCopy option={opt} />
-                    </label>
-                  ))}
-                </div>
+                renderRadioOptions({
+                  options: q.options,
+                  name: `${form.id}-${q.id}`,
+                  value: typeof value === 'string' ? value : '',
+                  locked,
+                  onSelect: (v) => update(q.id, v),
+                })
               ) : null}
               {q.type === 'checkbox' && q.options ? (
                 <div className="qf-options">
@@ -234,6 +221,108 @@ function OptionCopy({ option }: { option: FormOption }) {
       <span>{option.label}</span>
       {option.description ? <span className="qf-chip-desc">{option.description}</span> : null}
     </span>
+  );
+}
+
+// Radio chips can opt into per-`group` clustering by setting
+// `option.group`. When at least one option carries a group we render a
+// stack of `qf-options-group` blocks (each with a small heading), and
+// chips without a group fall into a leading "其他" cluster so they stay
+// visible. When no option declares a group we keep the legacy flat layout
+// — older forms (ElevenLabs voice select, discovery brief, etc.) emit no
+// group and must keep their existing visual exactly.
+function renderRadioOptions({
+  options,
+  name,
+  value,
+  locked,
+  onSelect,
+}: {
+  options: FormOption[];
+  name: string;
+  value: string;
+  locked: boolean;
+  onSelect: (value: string) => void;
+}) {
+  const hasGroups = options.some((opt) => typeof opt.group === 'string' && opt.group.trim().length > 0);
+  if (!hasGroups) {
+    return (
+      <div className="qf-options">
+        {options.map((opt) => (
+          <RadioChip
+            key={opt.value}
+            option={opt}
+            name={name}
+            checked={value === opt.value}
+            locked={locked}
+            onSelect={onSelect}
+          />
+        ))}
+      </div>
+    );
+  }
+  const order: string[] = [];
+  const buckets = new Map<string, FormOption[]>();
+  for (const opt of options) {
+    const key = opt.group && opt.group.trim().length > 0 ? opt.group : '其他';
+    if (!buckets.has(key)) {
+      buckets.set(key, []);
+      order.push(key);
+    }
+    buckets.get(key)!.push(opt);
+  }
+  return (
+    <div className="qf-options-grouped">
+      {order.map((group) => (
+        <div key={group} className="qf-options-group">
+          <div className="qf-options-group-label">{group}</div>
+          <div className="qf-options">
+            {buckets.get(group)!.map((opt) => (
+              <RadioChip
+                key={opt.value}
+                option={opt}
+                name={name}
+                checked={value === opt.value}
+                locked={locked}
+                onSelect={onSelect}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function RadioChip({
+  option,
+  name,
+  checked,
+  locked,
+  onSelect,
+}: {
+  option: FormOption;
+  name: string;
+  checked: boolean;
+  locked: boolean;
+  onSelect: (value: string) => void;
+}) {
+  return (
+    <label
+      className={`qf-chip${checked ? ' qf-chip-on' : ''}`}
+      title={option.description}
+    >
+      <input
+        type="radio"
+        name={name}
+        value={option.value}
+        checked={checked}
+        disabled={locked}
+        aria-label={option.label}
+        onChange={() => onSelect(option.value)}
+      />
+      <OptionCopy option={option} />
+    </label>
   );
 }
 

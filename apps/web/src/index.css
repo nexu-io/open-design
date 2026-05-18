@@ -12942,6 +12942,22 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   flex-wrap: wrap;
   gap: 6px;
 }
+.qf-options-grouped {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.qf-options-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.qf-options-group-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
 .qf-chip {
   display: inline-flex;
   align-items: center;

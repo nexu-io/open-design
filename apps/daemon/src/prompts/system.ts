@@ -131,6 +131,15 @@ type AudioVoiceOption = {
   labels?: Record<string, string> | null;
 };
 
+type SenseAudioPersonaEntry = {
+  name: string;
+  description: string;
+  variants: Record<string, string>;
+};
+type SenseAudioCatalogue = Record<string, SenseAudioPersonaEntry>;
+
+const SENSEAUDIO_VOICE_OPTIONS_PROMPT_PREFIX = 'SenseAudio voice list could not be loaded';
+
 export const BASE_SYSTEM_PROMPT = OFFICIAL_DESIGNER_PROMPT;
 
 export const SKIP_DISCOVERY_BRIEF_OVERRIDE = `# Automated project mode — skip discovery form
@@ -201,6 +210,11 @@ export interface ComposeInput {
   // can tell the user why the dropdown is unavailable instead of
   // pretending there were simply no voices.
   audioVoiceOptionsError?: string | undefined;
+  // SenseAudio persona catalogue fetched ahead of the prompt. Shape:
+  // `Record<prefix, { name, description, variants }>` derived at runtime
+  // from the /v1/get_voice response (see senseaudio-voices.ts).
+  senseAudioCatalogue?: SenseAudioCatalogue | undefined;
+  senseAudioCatalogueError?: string | undefined;
   // When present and enabled, the Critique Theater protocol addendum is
   // concatenated to the end of the composed prompt. Omitting this field
   // (or passing cfg.enabled === false) preserves legacy behavior unchanged.
@@ -247,6 +261,8 @@ export function composeSystemPrompt({
   template,
   audioVoiceOptions,
   audioVoiceOptionsError,
+  senseAudioCatalogue,
+  senseAudioCatalogueError,
   critique,
   critiqueBrand,
   critiqueSkill,
@@ -347,7 +363,14 @@ export function composeSystemPrompt({
     );
   }
 
-  const metaBlock = renderMetadataBlock(metadata, template, audioVoiceOptions, audioVoiceOptionsError);
+  const metaBlock = renderMetadataBlock(
+    metadata,
+    template,
+    audioVoiceOptions,
+    audioVoiceOptionsError,
+    senseAudioCatalogue,
+    senseAudioCatalogueError,
+  );
   if (metaBlock) parts.push(metaBlock);
 
   // Decks have a load-bearing framework (nav, counter, scroll JS, print
@@ -588,6 +611,8 @@ function renderMetadataBlock(
   template: ProjectTemplate | undefined,
   audioVoiceOptions: AudioVoiceOption[] | undefined,
   audioVoiceOptionsError: string | undefined,
+  senseAudioCatalogue: SenseAudioCatalogue | undefined,
+  senseAudioCatalogueError: string | undefined,
 ): string {
   if (!metadata) return '';
   const lines: string[] = [];
@@ -758,6 +783,17 @@ function renderMetadataBlock(
         );
       }
     }
+    const senseAudioActive = shouldRenderSenseAudioCatalogue(metadata, senseAudioCatalogue);
+    if (senseAudioActive && senseAudioCatalogue) {
+      lines.push(renderSenseAudioPickerInstructions(senseAudioCatalogue));
+    } else {
+      const senseAudioPromptError = formatSenseAudioCatalogueErrorForPrompt(senseAudioCatalogueError);
+      if (senseAudioPromptError) {
+        lines.push(
+          `- **SenseAudio voice options**: ${senseAudioPromptError}`,
+        );
+      }
+    }
     if (metadata.audioKind === 'sfx') {
       lines.push(
         '- **SFX discovery**: Ask about the sound source/action, materials, intensity, acoustic space, timing/tail, loop/non-loop, and "avoid" constraints. Do not ask for language or voice for SFX.',
@@ -909,6 +945,68 @@ function formatElevenLabsVoiceLabel(option: AudioVoiceOption): string {
   if (bits.length > 0) return `${option.name} — ${bits.join(' · ')}`;
   const category = typeof option.category === 'string' ? option.category.trim() : '';
   return category ? `${option.name} — ${category}` : option.name;
+}
+
+function shouldRenderSenseAudioCatalogue(
+  metadata: ProjectMetadata,
+  catalogue: SenseAudioCatalogue | undefined,
+): boolean {
+  return metadata.kind === 'audio'
+    && metadata.audioKind === 'speech'
+    && metadata.audioModel === 'senseaudio-tts'
+    && !metadata.voice
+    && catalogue !== undefined
+    && Object.keys(catalogue).length > 0;
+}
+
+function formatSenseAudioCatalogueErrorForPrompt(
+  error: string | undefined,
+): string | undefined {
+  const trimmed = normalizePromptText(error ?? '');
+  if (!trimmed) return undefined;
+  if (/no SenseAudio API key/i.test(trimmed)) {
+    return `${SENSEAUDIO_VOICE_OPTIONS_PROMPT_PREFIX} because the SenseAudio API key is missing. Tell the user to configure it in Settings or paste a voice id manually.`;
+  }
+  const statusMatch = trimmed.match(
+    /(?:\((\d{3})(?:\s+([^)]+))?\)|\b(\d{3})(?:\s+([A-Za-z][A-Za-z -]{0,40}))?\b)/,
+  );
+  if (statusMatch) {
+    const statusCode = statusMatch[1] ?? statusMatch[3];
+    const statusText = statusCode ? PROMPT_SAFE_HTTP_STATUS_LABELS[statusCode] ?? '' : '';
+    const suffix = statusText ? ` ${statusText}` : '';
+    return `${SENSEAUDIO_VOICE_OPTIONS_PROMPT_PREFIX} (${statusCode}${suffix}). Tell the user to retry the lookup or paste a voice id manually.`;
+  }
+  return `${SENSEAUDIO_VOICE_OPTIONS_PROMPT_PREFIX}. Tell the user to retry the lookup or paste a voice id manually.`;
+}
+
+function renderSenseAudioPickerInstructions(catalogue: SenseAudioCatalogue): string {
+  const lines: string[] = [];
+  lines.push(
+    '- **SenseAudio voice options**: Pick a voice via a `<question-form id="senseaudio-voice">` with a `select` dropdown — one option per catalogue entry below. SenseAudio is multilingual; do not propose switching to a different TTS model. Localise every user-facing string (form title, description, option labels) into the user\'s brief language while keeping `value` strings verbatim. Add other discovery fields (product name, duration, brand tone, pacing, etc.) on the same form when the brief calls for them.',
+  );
+  lines.push('');
+  lines.push('Form defaults (localise into the user\'s brief language; reuse these strings verbatim — do not rewrite or extend with extra prose):');
+  lines.push('  title:       "Pick a voice"');
+  lines.push('  description: "Pick a voice for the read."');
+  lines.push('  submitLabel: "Use voice"');
+  lines.push('');
+  lines.push('For each dropdown option:');
+  lines.push(
+    '- `value`: the FIRST key in that entry\'s `variants` map (the persona\'s default voice_id), passed verbatim to `--voice`',
+  );
+  lines.push(
+    '- `label`: a single localised line in the form `<persona name> — <short gist>` (compress the catalogue description to ≤12 chars; do not copy it verbatim)',
+  );
+  lines.push('');
+  lines.push(
+    'After the user submits: if they filled the `scenario` field, look up the chosen persona\'s `variants` map and swap `--voice` to whichever variant LABEL most closely matches the scenario (e.g. scenario "opening intro" → variant labelled `开场介绍`; "promo / 促销" → `广告中插` or `促销逼单`); otherwise pass the submitted voice_id through unchanged. Variant labels are zh-CN — they are internal anchors, not user-visible.',
+  );
+  lines.push('');
+  lines.push(
+    'Catalogue (data from SenseAudio /v1/get_voice + variant labels from SenseAudio docs; key is the voice_id prefix, or full voice_id when prefixes conflict across personas):',
+  );
+  lines.push(JSON.stringify(catalogue, null, 2));
+  return lines.join('\n');
 }
 
 /**

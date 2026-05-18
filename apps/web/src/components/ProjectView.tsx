@@ -20,6 +20,7 @@ import {
   streamViaDaemon,
 } from '../providers/daemon';
 import { fetchElevenLabsVoiceOptions } from '../providers/elevenlabs-voices';
+import { fetchSenseAudioCatalogue } from '../providers/senseaudio-voices';
 import {
   deletePreviewComment,
   fetchPreviewComments,
@@ -36,6 +37,7 @@ import { useProjectFileEvents, type ProjectEvent } from '../providers/project-ev
 import {
   composeSystemPrompt,
   type AudioVoiceOption,
+  type SenseAudioCatalogue,
   type MemorySystemPromptResponse,
   type ResearchOptions,
 } from '@open-design/contracts';
@@ -246,6 +248,14 @@ function shouldFetchElevenLabsVoiceOptions(project: Project): boolean {
     && !metadata.voice;
 }
 
+function shouldFetchSenseAudioCatalogue(project: Project): boolean {
+  const metadata = project.metadata;
+  return metadata?.kind === 'audio'
+    && metadata.audioKind === 'speech'
+    && metadata.audioModel === 'senseaudio-tts'
+    && !metadata.voice;
+}
+
 function projectEventToAgentEvent(evt: ProjectEvent): LiveArtifactEventItem['event'] | null {
   if (evt.type === 'file-changed') return null;
   if (evt.type === 'conversation-created') return null;
@@ -312,6 +322,7 @@ export function ProjectView({
   const [streamingConversationId, setStreamingConversationId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [audioVoiceOptionsError, setAudioVoiceOptionsError] = useState<string | null>(null);
+  const [senseAudioCatalogueError, setSenseAudioCatalogueError] = useState<string | null>(null);
   const [artifact, setArtifact] = useState<Artifact | null>(null);
   const [filesRefresh, setFilesRefresh] = useState(0);
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
@@ -464,6 +475,7 @@ export function ProjectView({
     setStreamingConversationId(null);
     setError(null);
     setAudioVoiceOptionsError(null);
+    setSenseAudioCatalogueError(null);
     setArtifact(null);
     savedArtifactRef.current = null;
     pendingWritesRef.current.clear();
@@ -986,6 +998,22 @@ export function ProjectView({
     } else {
       setAudioVoiceOptionsError(null);
     }
+    let senseAudioCatalogue: SenseAudioCatalogue | undefined;
+    let senseAudioCatalogueLookupError: string | undefined;
+    if (shouldFetchSenseAudioCatalogue(project)) {
+      try {
+        senseAudioCatalogue = await fetchSenseAudioCatalogue();
+        setSenseAudioCatalogueError(null);
+      } catch (err) {
+        const message = err instanceof Error
+          ? err.message
+          : 'SenseAudio voice list could not be loaded.';
+        senseAudioCatalogueLookupError = message;
+        setSenseAudioCatalogueError(message);
+      }
+    } else {
+      setSenseAudioCatalogueError(null);
+    }
     return composeSystemPrompt({
       skillBody,
       skillName,
@@ -997,6 +1025,8 @@ export function ProjectView({
       template,
       audioVoiceOptions,
       audioVoiceOptionsError: audioVoiceOptionsLookupError,
+      senseAudioCatalogue,
+      senseAudioCatalogueError: senseAudioCatalogueLookupError,
       streamFormat: config.mode === 'api' ? 'plain' : undefined,
       userInstructions: config.customInstructions,
       projectInstructions: project.customInstructions,
@@ -2676,7 +2706,7 @@ export function ProjectView({
               messages={messages}
               streaming={currentConversationStreaming}
               sendDisabled={currentConversationSendDisabled}
-              error={conversationLoadError ?? error ?? audioVoiceOptionsError}
+              error={conversationLoadError ?? error ?? audioVoiceOptionsError ?? senseAudioCatalogueError}
               projectId={project.id}
               projectFiles={projectFiles}
               projectFileNames={projectFileNames}
