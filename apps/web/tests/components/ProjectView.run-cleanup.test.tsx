@@ -31,6 +31,9 @@ const patchConversation = vi.fn();
 const patchProject = vi.fn();
 const saveTabs = vi.fn();
 const capturedChatPaneProps: { current: Record<string, unknown> | null } = { current: null };
+const capturedProjectEventHandler: {
+  current: ((evt: Record<string, unknown>) => void) | null;
+} = { current: null };
 
 vi.mock('../../src/i18n', () => ({
   useT: () => ((value: string) => value),
@@ -60,7 +63,13 @@ vi.mock('../../src/providers/registry', () => ({
 }));
 
 vi.mock('../../src/providers/project-events', () => ({
-  useProjectFileEvents: vi.fn(),
+  useProjectFileEvents: (
+    _projectId: string | null | undefined,
+    _enabled: boolean,
+    onChange: (evt: Record<string, unknown>) => void,
+  ) => {
+    capturedProjectEventHandler.current = onChange;
+  },
 }));
 
 vi.mock('../../src/router', () => ({
@@ -121,6 +130,7 @@ describe('ProjectView daemon cleanup', () => {
     cleanup();
     vi.clearAllMocks();
     capturedChatPaneProps.current = null;
+    capturedProjectEventHandler.current = null;
   });
 
   it('does not abort daemon cancel reattach controllers during unmount cleanup', async () => {
@@ -1442,6 +1452,101 @@ describe('ProjectView daemon cleanup', () => {
     for (const resolve of pendingResolvers.splice(0)) resolve();
 
     await waitFor(() => expect(onProjectsRefresh).toHaveBeenCalled());
+
+    view.unmount();
+  });
+
+  // Regression for issue #731: when a live_artifact ProjectEvent fires
+  // (chat-turn-emitted artifact), the detail view used to fire
+  // onProjectsRefresh synchronously while refreshLiveArtifacts was still
+  // resolving. listProjects then re-read a snapshot in which the
+  // project's live artifacts hadn't settled, so the Designs home card
+  // briefly showed "Completed" while the detail view still showed
+  // Working / error / timed out. The fix awaits refreshLiveArtifacts
+  // before invoking onProjectsRefresh on both success and failure.
+  it('delays projects refresh on live_artifact event until refreshLiveArtifacts resolves', async () => {
+    const onProjectsRefresh = vi.fn();
+
+    const liveArtifactsResolver: { current: (() => void) | null } = { current: null };
+    fetchLiveArtifacts.mockImplementation(
+      () =>
+        new Promise<unknown[]>((resolve) => {
+          liveArtifactsResolver.current = () => resolve([]);
+        }),
+    );
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+
+    const view = render(
+      <ProjectView
+        project={{ id: 'project-1', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={onProjectsRefresh}
+      />,
+    );
+
+    await waitFor(() => expect(capturedProjectEventHandler.current).not.toBeNull());
+
+    // Drain mount-time fetchLiveArtifacts calls so we observe only the
+    // resolver produced by the live_artifact event handler.
+    for (let i = 0; i < 5; i++) {
+      if (resolveLiveArtifacts) {
+        resolveLiveArtifacts();
+        resolveLiveArtifacts = null;
+      }
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    }
+    onProjectsRefresh.mockClear();
+    fetchLiveArtifacts.mockClear();
+
+    const handler = capturedProjectEventHandler.current;
+    if (!handler) throw new Error('Expected useProjectFileEvents handler to be captured');
+
+    handler({
+      type: 'live_artifact',
+      action: 'updated',
+      projectId: 'project-1',
+      artifactId: 'artifact-1',
+      title: 'Live Artifact',
+      refreshStatus: 'failed',
+    });
+
+    // refreshLiveArtifacts was invoked but is still pending — the home
+    // refresh must wait so the card status is computed against the same
+    // committed snapshot the detail view just refetched.
+    await waitFor(() => expect(fetchLiveArtifacts).toHaveBeenCalled());
+    await new Promise<void>((resolve) => setTimeout(resolve, 10));
+    expect(onProjectsRefresh).not.toHaveBeenCalled();
+
+    if (!resolveLiveArtifacts) {
+      throw new Error('Expected fetchLiveArtifacts to be invoked by the event handler');
+    }
+    resolveLiveArtifacts();
+
+    await waitFor(() => expect(onProjectsRefresh).toHaveBeenCalledTimes(1));
 
     view.unmount();
   });

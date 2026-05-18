@@ -908,8 +908,17 @@ export function ProjectView({
     const agentEvent = projectEventToAgentEvent(evt);
     if (!agentEvent) return;
     setLiveArtifactEvents((prev) => appendLiveArtifactEventItem(prev, agentEvent));
-    void refreshLiveArtifacts();
-    onProjectsRefresh();
+    // Issue #731: await the detail view's live-artifact refetch before
+    // re-reading the Designs home cards so listProjects sees the same
+    // committed snapshot the detail view just observed. Without this the
+    // home card briefly shows "Completed" while the detail view still
+    // shows Working / error / timed out. The catch path still fires the
+    // refresh so a transient fetchLiveArtifacts failure doesn't strand
+    // the home card on a stale status.
+    void refreshLiveArtifacts().then(
+      () => onProjectsRefresh(),
+      () => onProjectsRefresh(),
+    );
     // Live artifact events come from chat-turn-emitted artifacts; they
     // also imply the conversation transcript changed.
     setDesignMdRefreshKey((n) => n + 1);
