@@ -7,7 +7,8 @@
 // All paths flowing in from HTTP handlers are validated against the project
 // directory to prevent path traversal — see resolveSafe().
 
-import { lstat, mkdir, readdir, readFile, realpath, rm, stat, unlink, writeFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { lstat, mkdir, open, readdir, readFile, realpath, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import JSZip from 'jszip';
 import {
@@ -129,9 +130,9 @@ export async function buildProjectArchive(projectsRoot, projectId, root) {
 
   const zip = new JSZip();
   for (const entry of entries) {
-    const buf = await readFile(entry.fullPath);
+    const { buffer: buf, mtime } = await readArchiveEntry(entry.fullPath);
     zip.file(entry.relPath, buf, {
-      date: new Date(entry.mtime),
+      date: new Date(mtime),
       binary: true,
     });
   }
@@ -291,6 +292,27 @@ async function collectArchiveEntries(dir, relDir, out) {
     if (e.name.endsWith('.artifact.json')) continue;
     const st = await stat(full);
     out.push({ relPath: rel, fullPath: full, mtime: st.mtimeMs });
+  }
+}
+
+async function readArchiveEntry(filePath) {
+  const beforeOpen = await lstat(filePath);
+  if (beforeOpen.isSymbolicLink()) {
+    throw new Error('archive entry is a symlink');
+  }
+  if (!beforeOpen.isFile()) {
+    throw new Error('archive entry is not a regular file');
+  }
+  const noFollow = typeof constants.O_NOFOLLOW === 'number' ? constants.O_NOFOLLOW : 0;
+  const handle = await open(filePath, constants.O_RDONLY | noFollow);
+  try {
+    const opened = await handle.stat();
+    if (!opened.isFile()) {
+      throw new Error('archive entry is not a regular file');
+    }
+    return { buffer: await handle.readFile(), mtime: opened.mtimeMs };
+  } finally {
+    await handle.close();
   }
 }
 
