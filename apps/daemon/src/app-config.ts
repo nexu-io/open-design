@@ -152,6 +152,7 @@ const AGENT_CLI_ENV_KEYS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ])],
   ['aider', new Set(['AIDER_BIN'])],
   ['claude', new Set(['CLAUDE_CONFIG_DIR', 'CLAUDE_BIN', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_API_KEY'])],
+  ['codebuddy', new Set(['CODEBUDDY_CONFIG_DIR', 'CODEBUDDY_BASE_URL', 'CODEBUDDY_API_KEY'])],
   ['codex', new Set(['CODEX_HOME', 'CODEX_BIN', 'OPENAI_BASE_URL', 'CODEX_API_KEY', 'OPENAI_API_KEY'])],
   ['copilot', new Set(['COPILOT_BIN'])],
   ['cursor-agent', new Set(['CURSOR_AGENT_BIN'])],

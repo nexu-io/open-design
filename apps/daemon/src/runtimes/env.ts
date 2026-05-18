@@ -15,6 +15,11 @@ type RuntimeEnvMap = NodeJS.ProcessEnv | Record<string, string>;
 // launched from a shell that exported the key for SDK or scripting use.
 // See issue #398.
 //
+// The codebuddy adapter applies the same strategy for CODEBUDDY_API_KEY:
+// strip it by default so CodeBuddy Code's own auth resolution (codebuddy
+// login) wins, but preserve it when CODEBUDDY_BASE_URL is set because
+// the user is intentionally routing to a custom endpoint.
+//
 // However, when ANTHROPIC_BASE_URL is set the user is intentionally
 // routing Claude Code to a custom endpoint (e.g. a Kimi/Moonshot proxy).
 // In that case claude login is meaningless, so preserve the API key so
@@ -68,6 +73,12 @@ export function spawnEnvForAgent(
     stripUnlessCustomBaseUrl(env, 'OPENAI_BASE_URL', [
       'OPENAI_API_KEY',
       'CODEX_API_KEY',
+    ]);
+    return env;
+  }
+  if (agentId === 'codebuddy') {
+    stripUnlessCustomBaseUrl(env, 'CODEBUDDY_BASE_URL', [
+      'CODEBUDDY_API_KEY',
     ]);
     return env;
   }

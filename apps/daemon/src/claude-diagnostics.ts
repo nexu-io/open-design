@@ -15,6 +15,48 @@ export interface ClaudeCliDiagnostic {
   retryable: boolean;
 }
 
+interface AgentDiagnosticConfig {
+  brandName: string;
+  profileLabel: string;
+  // How to tell the user to authenticate. Used in different sentence shapes:
+  //   "Run <runAndLogin>, then retry..."
+  //   "Re-run <runAndLogin> for that profile, then retry..."
+  //   "Run <runAndUseLogin>, and retry..."
+  runAndLogin: string;
+  runAndUseLogin: string;
+  configDirEnvKey: string;
+  baseUrlEnvKey: string;
+  apiKeyEnvKey: string;
+  endpointLabel: string;
+}
+
+const CLAUDE_DIAGNOSTIC_CONFIG: AgentDiagnosticConfig = {
+  brandName: 'Claude Code',
+  profileLabel: 'Claude',
+  runAndLogin: '`claude` and `/login`',
+  runAndUseLogin: '`claude`, use `/login`',
+  configDirEnvKey: 'CLAUDE_CONFIG_DIR',
+  baseUrlEnvKey: 'ANTHROPIC_BASE_URL',
+  apiKeyEnvKey: 'ANTHROPIC_API_KEY',
+  endpointLabel: 'Anthropic',
+};
+
+const CODEBUDDY_DIAGNOSTIC_CONFIG: AgentDiagnosticConfig = {
+  brandName: 'CodeBuddy Code',
+  profileLabel: 'CodeBuddy',
+  runAndLogin: '`codebuddy login`',
+  runAndUseLogin: '`codebuddy login`',
+  configDirEnvKey: 'CODEBUDDY_CONFIG_DIR',
+  baseUrlEnvKey: 'CODEBUDDY_BASE_URL',
+  apiKeyEnvKey: 'CODEBUDDY_API_KEY',
+  endpointLabel: 'CodeBuddy',
+};
+
+const AGENT_DIAGNOSTIC_CONFIGS = new Map<string, AgentDiagnosticConfig>([
+  ['claude', CLAUDE_DIAGNOSTIC_CONFIG],
+  ['codebuddy', CODEBUDDY_DIAGNOSTIC_CONFIG],
+]);
+
 function envValue(
   env: Record<string, unknown> | null | undefined,
   key: string,
@@ -36,14 +78,15 @@ function withContext(
   message: string,
   detail: string,
   input: ClaudeCliDiagnosticInput,
+  config: AgentDiagnosticConfig,
 ): ClaudeCliDiagnostic {
-  const configDir = envValue(input.env, 'CLAUDE_CONFIG_DIR');
-  const baseUrl = envValue(input.env, 'ANTHROPIC_BASE_URL');
+  const configDir = envValue(input.env, config.configDirEnvKey);
+  const baseUrl = envValue(input.env, config.baseUrlEnvKey);
   const diagnosticTail = redactSecrets(body(input)).replace(/\s+/g, ' ').trim().slice(-240);
   const context: string[] = [message, detail];
-  if (diagnosticTail) context.push(`Claude output: ${diagnosticTail}`);
-  if (configDir) context.push(`Effective CLAUDE_CONFIG_DIR: ${configDir}.`);
-  if (baseUrl) context.push('ANTHROPIC_BASE_URL is set for this Claude Code process.');
+  if (diagnosticTail) context.push(`${config.brandName} output: ${diagnosticTail}`);
+  if (configDir) context.push(`Effective ${config.configDirEnvKey}: ${configDir}.`);
+  if (baseUrl) context.push(`${config.baseUrlEnvKey} is set for this ${config.brandName} process.`);
   return {
     message: redactSecrets(message),
     detail: redactSecrets(context.filter(Boolean).join(' ')),
@@ -51,16 +94,16 @@ function withContext(
   };
 }
 
-export function diagnoseClaudeCliFailure(
+function diagnoseCliFailure(
   input: ClaudeCliDiagnosticInput,
+  config: AgentDiagnosticConfig,
 ): ClaudeCliDiagnostic | null {
-  if (input.agentId !== 'claude') return null;
   if (input.exitCode === 0 && !input.signal) return null;
 
   const text = body(input);
   const normalized = text.toLowerCase();
-  const hasCustomBaseUrl = envValue(input.env, 'ANTHROPIC_BASE_URL') !== null;
-  const hasConfigDir = envValue(input.env, 'CLAUDE_CONFIG_DIR') !== null;
+  const hasCustomBaseUrl = envValue(input.env, config.baseUrlEnvKey) !== null;
+  const hasConfigDir = envValue(input.env, config.configDirEnvKey) !== null;
 
   const customEndpointConnectionFailure =
     hasCustomBaseUrl &&
@@ -84,19 +127,21 @@ export function diagnoseClaudeCliFailure(
     /(unauthorized|invalid api key|missing api key|could not authenticate|authentication failed)/i.test(text);
   if (authFailure && hasCustomBaseUrl) {
     return withContext(
-      'Claude Code could not authenticate with the configured custom Anthropic endpoint.',
-      'Check ANTHROPIC_BASE_URL, proxy credentials, endpoint authentication environment, and model access. Remove the custom endpoint only if you want to retry with standard Claude Code auth.',
+      `${config.brandName} could not authenticate with the configured custom ${config.endpointLabel} endpoint.`,
+      `Check ${config.baseUrlEnvKey}, proxy credentials, endpoint authentication environment, and model access. Remove the custom endpoint only if you want to retry with standard ${config.brandName} auth.`,
       input,
+      config,
     );
   }
   if (authFailure) {
     const configHint = hasConfigDir
-      ? 'The configured Claude config directory may contain stale or expired auth state.'
-      : 'If you use multiple Claude profiles, set CLAUDE_CONFIG_DIR in Settings so Open Design spawns the same profile that works in your terminal.';
+      ? `The configured ${config.profileLabel} config directory may contain stale or expired auth state.`
+      : `If you use multiple ${config.profileLabel} profiles, set ${config.configDirEnvKey} in Settings so Open Design spawns the same profile that works in your terminal.`;
     return withContext(
-      'Claude Code could not authenticate. Run `claude`, use `/login`, then retry the Open Design request.',
-      `The spawned Claude Code process exited before producing a response. ${configHint}`,
+      `${config.brandName} could not authenticate. Run ${config.runAndUseLogin}, then retry the Open Design request.`,
+      `The spawned ${config.brandName} process exited before producing a response. ${configHint}`,
       input,
+      config,
     );
   }
 
@@ -106,9 +151,10 @@ export function diagnoseClaudeCliFailure(
     /(model).*(not available|not supported|unsupported|not found|not have access|no access)/i.test(text);
   if (modelUnavailable && hasCustomBaseUrl) {
     return withContext(
-      'Claude Code could not access the selected model through the configured custom endpoint.',
-      'The custom ANTHROPIC_BASE_URL or proxy may not expose the model Claude Code selected. Change the model, fix the endpoint/proxy, or remove ANTHROPIC_BASE_URL and retry with standard Claude Code auth.',
+      `${config.brandName} could not access the selected model through the configured custom endpoint.`,
+      `The custom ${config.baseUrlEnvKey} or proxy may not expose the model ${config.brandName} selected. Change the model, fix the endpoint/proxy, or remove ${config.baseUrlEnvKey} and retry with standard ${config.brandName} auth.`,
       input,
+      config,
     );
   }
 
@@ -119,9 +165,10 @@ export function diagnoseClaudeCliFailure(
     /native windows/i.test(text);
   if (windowsCredentialMismatch) {
     return withContext(
-      'Claude Code appears to be using credentials from a different local environment.',
-      'Re-authenticate Claude Code in the same Windows, WSL, or shell environment that Open Design uses. On native Windows, check Windows Credential Manager if `/login` does not repair the session.',
+      `${config.brandName} appears to be using credentials from a different local environment.`,
+      `Re-authenticate ${config.brandName} in the same Windows, WSL, or shell environment that Open Design uses. On native Windows, check Windows Credential Manager if the login command does not repair the session.`,
       input,
+      config,
     );
   }
 
@@ -130,43 +177,54 @@ export function diagnoseClaudeCliFailure(
     /(stale|corrupt|expired|different|missing|not found|invalid)/i.test(text);
   if (configStateFailure) {
     const message = hasConfigDir
-      ? 'Claude Code failed while using the configured Claude profile.'
-      : 'Claude Code may be using a different or stale local profile than your terminal.';
+      ? `${config.brandName} failed while using the configured ${config.profileLabel} profile.`
+      : `${config.brandName} may be using a different or stale local profile than your terminal.`;
     const detail = hasConfigDir
-      ? 'Re-run `claude` and `/login` for that profile, then retry Open Design.'
-      : 'Run `claude` and `/login`, or set CLAUDE_CONFIG_DIR in Settings when you use multiple Claude profiles.';
-    return withContext(message, detail, input);
+      ? `Re-run ${config.runAndLogin} for that profile, then retry Open Design.`
+      : `Run ${config.runAndLogin}, or set ${config.configDirEnvKey} in Settings when you use multiple ${config.profileLabel} profiles.`;
+    return withContext(message, detail, input, config);
   }
 
   if (!text.trim() && input.exitCode === 1 && hasCustomBaseUrl) {
     return withContext(
-      'Claude Code exited before producing diagnostics while using a custom Anthropic endpoint.',
-      'Check ANTHROPIC_BASE_URL, proxy credentials, endpoint authentication environment, and model access. Remove the custom endpoint only if you want to retry with standard Claude Code auth.',
+      `${config.brandName} exited before producing diagnostics while using a custom ${config.endpointLabel} endpoint.`,
+      `Check ${config.baseUrlEnvKey}, proxy credentials, endpoint authentication environment, and model access. Remove the custom endpoint only if you want to retry with standard ${config.brandName} auth.`,
       input,
+      config,
     );
   }
 
   if (!text.trim() && input.exitCode === 1) {
     const message = hasConfigDir
-      ? 'Claude Code exited before producing diagnostics while using the configured Claude profile.'
-      : 'Claude Code exited before producing diagnostics.';
+      ? `${config.brandName} exited before producing diagnostics while using the configured ${config.profileLabel} profile.`
+      : `${config.brandName} exited before producing diagnostics.`;
     const detail = hasConfigDir
-      ? 'Re-run `claude` and `/login` for that profile, then retry Open Design.'
-      : 'Run `claude`, use `/login`, and retry. If you use multiple Claude profiles, set CLAUDE_CONFIG_DIR in Settings so Open Design uses the same profile as your terminal.';
+      ? `Re-run ${config.runAndLogin} for that profile, then retry Open Design.`
+      : `Run ${config.runAndUseLogin}, and retry. If you use multiple ${config.profileLabel} profiles, set ${config.configDirEnvKey} in Settings so Open Design uses the same profile as your terminal.`;
     return withContext(
       message,
       detail,
       input,
+      config,
     );
   }
 
-  if (normalized.includes('anthropic_base_url') && hasCustomBaseUrl) {
+  if (normalized.includes(config.baseUrlEnvKey.toLowerCase()) && hasCustomBaseUrl) {
     return withContext(
-      'Claude Code failed while using a custom Anthropic endpoint.',
-      'Check the ANTHROPIC_BASE_URL endpoint, proxy, model access, and authentication settings, then retry.',
+      `${config.brandName} failed while using a custom ${config.endpointLabel} endpoint.`,
+      `Check the ${config.baseUrlEnvKey} endpoint, proxy, model access, and authentication settings, then retry.`,
       input,
+      config,
     );
   }
 
   return null;
+}
+
+export function diagnoseClaudeCliFailure(
+  input: ClaudeCliDiagnosticInput,
+): ClaudeCliDiagnostic | null {
+  const config = AGENT_DIAGNOSTIC_CONFIGS.get(input.agentId);
+  if (!config) return null;
+  return diagnoseCliFailure(input, config);
 }

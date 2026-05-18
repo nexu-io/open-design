@@ -495,6 +495,25 @@ const AGENT_CLI_ENV_FIELDS = [
     secret: true,
   },
   {
+    agentId: 'codebuddy',
+    envKey: 'CODEBUDDY_CONFIG_DIR',
+    labelKey: 'settings.cliEnvCodebuddyConfigDir',
+    placeholder: '~/.codebuddy-2',
+  },
+  {
+    agentId: 'codebuddy',
+    envKey: 'CODEBUDDY_BASE_URL',
+    labelKey: 'settings.cliEnvCodebuddyBaseUrl',
+    placeholder: 'https://your-proxy.example.com',
+  },
+  {
+    agentId: 'codebuddy',
+    envKey: 'CODEBUDDY_API_KEY',
+    labelKey: 'settings.cliEnvCodebuddyApiKey',
+    placeholder: 'Paste proxy API key',
+    secret: true,
+  },
+  {
     agentId: 'codex',
     envKey: 'CODEX_HOME',
     labelKey: 'settings.cliEnvCodexHome',

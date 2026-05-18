@@ -11,6 +11,10 @@ const AGENT_INSTALL_LINKS: Record<
     installUrl: 'https://docs.anthropic.com/en/docs/claude-code/setup',
     docsUrl: 'https://docs.anthropic.com/en/docs/claude-code',
   },
+  codebuddy: {
+    installUrl: 'https://www.codebuddy.cn/docs/cli/overview',
+    docsUrl: 'https://www.codebuddy.cn/docs/cli/overview',
+  },
   codex: {
     installUrl: 'https://github.com/openai/codex',
     docsUrl: 'https://developers.openai.com/codex',

@@ -316,6 +316,17 @@ export const tr: Dict = {
   'settings.modelSourceLive': 'CLI\'dan canlı',
   'settings.modelSourceFallback': 'Yerleşik liste',
   'settings.reasoningPicker': 'Akıl yürütme eforu',
+  'settings.cliEnvTitle': 'Gelişmiş: vekil ve özel yollar',
+  'settings.cliEnvHint':
+    'Paketlenmiş uygulama çalıştırmaları ve aracı algılama için varsayılan olmayan yapılandırma dizinlerini ayarlayın.',
+  'settings.cliEnvClaudeConfigDir': 'Claude Code config directory',
+  'settings.cliEnvClaudeBaseUrl': 'Claude proxy base URL',
+  'settings.cliEnvClaudeApiKey': 'Claude proxy API key',
+  'settings.cliEnvCodebuddyConfigDir': 'CodeBuddy config directory',
+  'settings.cliEnvCodebuddyBaseUrl': 'CodeBuddy proxy base URL',
+  'settings.cliEnvCodebuddyApiKey': 'CodeBuddy proxy API key',
+  'settings.cliEnvCodexHome': 'Codex home',
+  'settings.cliEnvCodexBin': 'Codex executable path',
   'settings.modelPickerHint':
     'Bir `models` komutu açığa çıkaran CLI’lardan getirilir. "Varsayılan" seçimi CLI’ın kendi ayarına bırakır; "Özel…" CLI’ın kabul edeceği herhangi bir model kimliği seçmenize izin verir.',
   'settings.modelPickerLiveHint':

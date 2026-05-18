@@ -322,6 +322,11 @@ export const it: Dict = {
   'settings.cliEnvHint':
     'Imposta directory di configurazione non segrete per esecuzioni di app impacchettate e rilevamento agenti.',
   'settings.cliEnvClaudeConfigDir': 'Directory di configurazione Claude Code',
+  'settings.cliEnvClaudeBaseUrl': 'Base URL Claude',
+  'settings.cliEnvClaudeApiKey': 'Chiave API Claude',
+  'settings.cliEnvCodebuddyConfigDir': 'Directory di configurazione CodeBuddy',
+  'settings.cliEnvCodebuddyBaseUrl': 'Base URL CodeBuddy',
+  'settings.cliEnvCodebuddyApiKey': 'Chiave API CodeBuddy',
   'settings.cliEnvCodexHome': 'Home di Codex',
   'settings.cliEnvCodexBin': 'Percorso eseguibile Codex',
   'settings.modelCustom': 'Personalizzato (inserisci sotto)…',
