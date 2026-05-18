@@ -351,9 +351,18 @@ const AGENT_CLI_ENV_FIELDS = [
   },
   {
     agentId: 'codex',
+    envKey: 'CODEX_API_KEY',
+    labelKey: 'settings.cliEnvCodexApiKey',
+    labelSuffix: 'CODEX_API_KEY',
+    placeholder: 'Paste CODEX_API_KEY',
+    secret: true,
+  },
+  {
+    agentId: 'codex',
     envKey: 'OPENAI_API_KEY',
     labelKey: 'settings.cliEnvCodexApiKey',
-    placeholder: 'Paste proxy API key',
+    labelSuffix: 'OPENAI_API_KEY · proxy/legacy',
+    placeholder: 'Paste OPENAI_API_KEY',
     secret: true,
   },
 ] as const;
@@ -2320,6 +2329,9 @@ export function SettingsDialog({
                           >
                             <span className="field-label">
                               {t(field.labelKey)}
+                              {'labelSuffix' in field
+                                ? ` (${field.labelSuffix})`
+                                : ''}
                             </span>
                             <input
                               type={
