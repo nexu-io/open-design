@@ -5212,17 +5212,26 @@ export async function startServer({
       const fsp = await import('node:fs/promises');
       const resolved = path.resolve(plugin.fsPath, relpath);
       // Final containment check — `resolved` must stay under fsPath.
-      const root = path.resolve(plugin.fsPath) + path.sep;
-      if (!(resolved + path.sep).startsWith(root) && resolved !== path.resolve(plugin.fsPath)) {
+      const root = path.resolve(plugin.fsPath);
+      const rootWithSep = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
+      if (!(resolved + path.sep).startsWith(rootWithSep) && resolved !== root) {
         return res.status(400).json({ error: 'asset escape rejected' });
       }
-      let stat;
+      const relativeSegments = path.relative(root, resolved).split(path.sep).filter(Boolean);
+      let current = root;
       try {
-        stat = await fsp.lstat(resolved);
+        const rootStat = await fsp.lstat(current);
+        if (rootStat.isSymbolicLink()) {
+          return res.status(404).json({ error: 'asset not found' });
+        }
+        for (const segment of relativeSegments) {
+          current = path.join(current, segment);
+          const stat = await fsp.lstat(current);
+          if (stat.isSymbolicLink()) {
+            return res.status(404).json({ error: 'asset not found' });
+          }
+        }
       } catch {
-        return res.status(404).json({ error: 'asset not found' });
-      }
-      if (stat.isSymbolicLink()) {
         return res.status(404).json({ error: 'asset not found' });
       }
       try {

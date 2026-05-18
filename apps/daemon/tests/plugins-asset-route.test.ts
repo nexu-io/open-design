@@ -84,11 +84,15 @@ beforeAll(async () => {
   await writeFile(secretPath, 'outside secret');
   await writeFile(path.join(outsideDir, 'nested-secret.txt'), 'nested outside secret');
   const installedSurfacesDir = path.join(defaultRegistryRoots().userPluginsRoot, 'asset-plugin', 'surfaces');
+  const installedInternalDir = path.join(defaultRegistryRoots().userPluginsRoot, 'asset-plugin', 'internal-assets');
+  await mkdir(installedInternalDir, { recursive: true });
+  await writeFile(path.join(installedInternalDir, 'nested-internal.txt'), 'nested internal secret');
   await symlink(
     secretPath,
     path.join(installedSurfacesDir, 'leak.txt'),
   );
   await symlink(outsideDir, path.join(installedSurfacesDir, 'linked-outside'), 'dir');
+  await symlink(installedInternalDir, path.join(installedSurfacesDir, 'linked-internal'), 'dir');
   void migratePlugins;
   void upsertInstalledPlugin;
   void Database;
@@ -139,7 +143,13 @@ describe('GET /api/plugins/:id/asset/*', () => {
 
   it('rejects assets reached through a symlinked directory inside the plugin root', async () => {
     const resp = await fetch(`${baseUrl}/api/plugins/asset-plugin/asset/surfaces/linked-outside/nested-secret.txt`);
-    expect(resp.status).toBe(400);
+    expect(resp.status).toBe(404);
     expect(await resp.text()).not.toContain('nested outside secret');
+  });
+
+  it('rejects assets reached through an internal symlinked directory inside the plugin root', async () => {
+    const resp = await fetch(`${baseUrl}/api/plugins/asset-plugin/asset/surfaces/linked-internal/nested-internal.txt`);
+    expect(resp.status).toBe(404);
+    expect(await resp.text()).not.toContain('nested internal secret');
   });
 });
