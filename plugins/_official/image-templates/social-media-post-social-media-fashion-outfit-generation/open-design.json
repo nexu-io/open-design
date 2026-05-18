@@ -1,0 +1,81 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-social-media-post-social-media-fashion-outfit-generation",
+  "title": "Social Media Post - Social Media Fashion Outfit Generation",
+  "version": "0.1.0",
+  "description": "A prompt to generate a week's worth of fashion blogger-style outfit recommendations based on a character profile, complete with item labels and prices.",
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Rion Wu",
+    "url": "https://x.com/rionaifantasy/status/2049122261249204626"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "social-media-post",
+    "fantasy"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://cms-assets.youmind.com/media/1777453151822_tkaefc_HG_wnqGbAAAq416.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "Based on this character info card for a {argument name=\"subject\" default=\"girl\"}, generate a 7-day outfit recommendation guide suitable for her appearance, height, and weight. Use a {argument name=\"platform style\" default=\"Xiaohongshu\"} fashion blogger presentation style. Generate 7 images at once (one for each day), specifically labeling the styles and prices of accessories, shoes, hats, pendants, tops, pants, socks, and other items for easy reference.",
+        "zh-CN": "使用这个插件完成以下任务：Based on this character info card for a {argument name=\"subject\" default=\"girl\"}, generate a 7-day outfit recommendation guide suitable for her appearance, height, and weight. Use a {argument name=\"platform style\" default=\"Xiaohongshu\"} fashion blogger presentation style. Generate 7 images at once (one for each day), specifically labeling the styles and prices of accessories, shoes, hats, pendants, tops, pants, socks, and other items for easy reference."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "1:1"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

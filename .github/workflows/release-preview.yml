@@ -4,18 +4,736 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: write
   contents: read
 
 concurrency:
   group: open-design-release-preview
   cancel-in-progress: false
 
+env:
+  OPEN_DESIGN_TELEMETRY_RELAY_URL: ${{ vars.OPEN_DESIGN_TELEMETRY_RELAY_URL }}
+  # PostHog product-analytics ingest. Defined as repository secret + var
+  # so official builds ship with analytics enabled; PR builds and forks
+  # without these run the daemon in no-op analytics mode (events never
+  # leave the user's machine, /api/analytics/config returns enabled=false).
+  POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
+  POSTHOG_HOST: ${{ vars.POSTHOG_HOST }}
+
 jobs:
-  placeholder:
-    name: Preview release placeholder
+  metadata:
+    name: Prepare preview metadata
+    runs-on: ubuntu-latest
+    env:
+      OPEN_DESIGN_PREVIEW_METADATA_URL: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/preview/latest/metadata.json
+    outputs:
+      base_version: ${{ steps.preview.outputs.base_version }}
+      branch: ${{ steps.preview.outputs.branch }}
+      channel: ${{ steps.preview.outputs.channel }}
+      commit: ${{ steps.preview.outputs.commit }}
+      github_release_enabled: ${{ steps.preview.outputs.github_release_enabled }}
+      latest_stable: ${{ steps.preview.outputs.latest_stable }}
+      preview_number: ${{ steps.preview.outputs.preview_number }}
+      preview_version: ${{ steps.preview.outputs.preview_version }}
+      release_name: ${{ steps.preview.outputs.release_name }}
+      release_version: ${{ steps.preview.outputs.release_version }}
+      state_source: ${{ steps.preview.outputs.state_source }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Prepare preview release metadata
+        id: preview
+        run: node --experimental-strip-types ./scripts/release-preview.ts
+
+      - name: Validate R2 preview access
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          AWS_DEFAULT_REGION: auto
+          AWS_EC2_METADATA_DISABLED: "true"
+          CLOUDFLARE_R2_RELEASES_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          CLOUDFLARE_R2_RELEASES_URL: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          R2_ACCESS_PROBE_NAME: release-preview
+          RELEASE_CHANNEL: preview
+        run: bash .github/scripts/release/r2/check.sh
+
+  verify:
+    name: Verify build (typecheck + tests)
+    needs: metadata
     runs-on: ubuntu-latest
     steps:
-      - name: Explain placeholder
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build daemon and desktop (typecheck dependencies)
         run: |
-          echo "release-preview is reserved for the preview release channel."
-          echo "The full build and publish implementation will land in a follow-up change."
+          pnpm --filter @open-design/daemon build
+          pnpm --filter @open-design/desktop build
+
+      - name: Typecheck workspaces
+        run: pnpm -r --workspace-concurrency=1 --if-present run typecheck
+
+      - name: Check repository layout policies
+        run: pnpm guard
+
+  build_mac:
+    name: Build preview mac arm64
+    needs: [metadata, verify]
+    runs-on: macos-14
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify mac Electron framework symlinks
+        run: |
+          set -euo pipefail
+          electron_dist="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "apps/desktop/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist"));')"
+          framework="$electron_dist/Electron.app/Contents/Frameworks/Electron Framework.framework"
+          for link in \
+            "$framework/Electron Framework" \
+            "$framework/Helpers" \
+            "$framework/Libraries" \
+            "$framework/Resources" \
+            "$framework/Versions/Current"; do
+            if [ ! -L "$link" ]; then
+              echo "Expected Electron framework symlink, got non-symlink: $link" >&2
+              ls -la "$framework" >&2 || true
+              ls -la "$framework/Versions" >&2 || true
+              exit 1
+            fi
+          done
+
+      - name: Prepare Apple signing certificate
+        env:
+          APPLE_SIGNING_CERTIFICATE_BASE64: ${{ secrets.APPLE_SIGNING_CERTIFICATE_BASE64 }}
+          APPLE_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          cert_path="$RUNNER_TEMP/open-design-signing.p12"
+          if ! printf '%s' "$APPLE_SIGNING_CERTIFICATE_BASE64" | base64 --decode > "$cert_path" 2>/dev/null; then
+            printf '%s' "$APPLE_SIGNING_CERTIFICATE_BASE64" | base64 -D > "$cert_path"
+          fi
+          {
+            echo "CSC_LINK=$cert_path"
+            echo "CSC_KEY_PASSWORD=$APPLE_SIGNING_CERTIFICATE_PASSWORD"
+          } >> "$GITHUB_ENV"
+
+      - name: Build preview mac artifacts
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          tools_pack_dir="$RUNNER_TEMP/tools-pack"
+          build_json_path="$RUNNER_TEMP/mac-tools-pack-build.json"
+          build_log_path="$RUNNER_TEMP/mac-tools-pack-build.log"
+          rm -rf "$tools_pack_dir"
+          : > "$build_log_path"
+          build_args=(
+            exec tools-pack mac build
+            --dir "$tools_pack_dir"
+            --namespace release-preview
+            --portable
+            --app-version "${{ needs.metadata.outputs.release_version }}"
+            --mac-compression normal
+            --to all
+            --json
+            --signed
+          )
+          if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$build_log_path" >&2))"; then
+            printf '%s\n' "$build_output" | tee "$build_json_path"
+          else
+            build_status=$?
+            printf '%s\n' "$build_output"
+            exit "$build_status"
+          fi
+
+      - name: Capture mac framework diagnostics
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          output="$RUNNER_TEMP/mac-framework-diagnostics.txt"
+          source_resolve_log="$RUNNER_TEMP/mac-framework-source-resolve.err"
+          source_framework="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "apps/desktop/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist", "Electron.app", "Contents", "Frameworks", "Electron Framework.framework"));' 2>"$source_resolve_log" || true)"
+          built_framework="$RUNNER_TEMP/tools-pack/out/mac/namespaces/release-preview/builder/mac-arm64/Open Design Preview.app/Contents/Frameworks/Electron Framework.framework"
+
+          dump_framework() {
+            local label="$1"
+            local framework="$2"
+            echo "## $label"
+            echo "path=$framework"
+            if [ ! -e "$framework" ] && [ ! -L "$framework" ]; then
+              echo "missing"
+              return 0
+            fi
+            echo "### top-level"
+            ls -la "$framework" || true
+            echo "### symlinks"
+            find "$framework" -maxdepth 4 -type l -print0 | while IFS= read -r -d '' link; do
+              printf '%s -> %s\n' "$link" "$(readlink "$link")"
+            done || true
+            echo "### selected stat"
+            for path in \
+              "$framework" \
+              "$framework/Electron Framework" \
+              "$framework/Versions" \
+              "$framework/Versions/Current" \
+              "$framework/Versions/Current/Electron Framework" \
+              "$framework/Versions/A" \
+              "$framework/Versions/A/Electron Framework" \
+              "$framework/Resources" \
+              "$framework/Versions/A/Resources/Info.plist"; do
+              if [ -e "$path" ] || [ -L "$path" ]; then
+                stat -f '%Sp %HT %N' "$path" || true
+              else
+                echo "missing: $path"
+              fi
+            done
+            echo "### plist"
+            plutil -p "$framework/Versions/A/Resources/Info.plist" 2>&1 || true
+            echo "### codesign display"
+            codesign --display --verbose=4 "$framework/Electron Framework" 2>&1 || true
+            codesign --display --verbose=4 "$framework/Versions/Current/Electron Framework" 2>&1 || true
+            codesign --display --verbose=4 "$framework/Versions/A/Electron Framework" 2>&1 || true
+            codesign --display --verbose=4 "$framework" 2>&1 || true
+          }
+
+          {
+            date -u
+            if [ -n "$source_framework" ]; then
+              dump_framework "source Electron Framework" "$source_framework"
+            else
+              echo "## source Electron Framework"
+              echo "resolve failed"
+              cat "$source_resolve_log" || true
+            fi
+            dump_framework "built Electron Framework" "$built_framework"
+          } > "$output"
+          cat "$output"
+
+      - name: Upload mac build diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-preview-mac-build-diagnostics
+          path: |
+            ${{ runner.temp }}/mac-tools-pack-build.log
+            ${{ runner.temp }}/mac-tools-pack-build.json
+            ${{ runner.temp }}/mac-framework-diagnostics.txt
+          if-no-files-found: warn
+
+      - name: Smoke preview mac packaged runtime
+        working-directory: e2e
+        env:
+          OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/mac-tools-pack-build.json
+          OD_PACKAGED_E2E_BUILD_LOG_PATH: ${{ runner.temp }}/mac-tools-pack-build.log
+          OD_PACKAGED_E2E_MAC: "1"
+          OD_PACKAGED_E2E_NAMESPACE: release-preview
+          OD_PACKAGED_E2E_RELEASE_CHANNEL: preview
+          OD_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/mac
+          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+        run: |
+          set -euo pipefail
+          pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts
+
+      - name: Upload mac e2e spec report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-preview-mac-e2e-report
+          path: ${{ runner.temp }}/release-report/mac
+          if-no-files-found: warn
+
+      - name: Prepare mac preview assets
+        env:
+          CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_CHANNEL: preview
+          RELEASE_NOTES: Open Design Preview ${{ needs.metadata.outputs.release_version }}
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          TOOLS_PACK_NAMESPACE: release-preview
+        run: bash .github/scripts/release/assets/mac.sh
+
+      - name: Upload mac preview bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-preview-mac-release-assets
+          path: ${{ runner.temp }}/release-assets
+
+  build_mac_intel:
+    name: Build preview mac intel x64
+    needs: [metadata, verify]
+    runs-on: macos-15-intel
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare Apple signing certificate
+        env:
+          APPLE_SIGNING_CERTIFICATE_BASE64: ${{ secrets.APPLE_SIGNING_CERTIFICATE_BASE64 }}
+          APPLE_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          cert_path="$RUNNER_TEMP/open-design-signing.p12"
+          if ! printf '%s' "$APPLE_SIGNING_CERTIFICATE_BASE64" | base64 --decode > "$cert_path" 2>/dev/null; then
+            printf '%s' "$APPLE_SIGNING_CERTIFICATE_BASE64" | base64 -D > "$cert_path"
+          fi
+          {
+            echo "CSC_LINK=$cert_path"
+            echo "CSC_KEY_PASSWORD=$APPLE_SIGNING_CERTIFICATE_PASSWORD"
+          } >> "$GITHUB_ENV"
+
+      - name: Build preview mac intel artifacts
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          pnpm exec tools-pack mac build \
+            --dir "$RUNNER_TEMP/tools-pack" \
+            --namespace release-preview-intel \
+            --portable \
+            --app-version "${{ needs.metadata.outputs.release_version }}" \
+            --mac-compression normal \
+            --to all \
+            --json \
+            --signed
+
+      - name: Prepare mac intel preview assets
+        env:
+          RELEASE_CHANNEL: preview
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          TOOLS_PACK_NAMESPACE: release-preview-intel
+        run: bash .github/scripts/release/assets/mac-intel.sh
+
+      - name: Upload mac intel preview bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-preview-mac-intel-release-assets
+          path: ${{ runner.temp }}/release-assets
+
+  build_win:
+    name: Build preview win x64
+    needs: [metadata, verify]
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Compute Windows tools-pack cache key
+        id: win_tools_pack_cache_key
+        shell: pwsh
+        env:
+          WIN_TOOLS_PACK_ORIGIN_KEY: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'apps/desktop/**', 'apps/packaged/**', 'packages/agui-adapter/**', 'packages/contracts/**', 'packages/plugin-runtime/**', 'packages/sidecar-proto/**', 'packages/sidecar/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'prompt-templates/**', 'skills/**', '.github/workflows/release-preview.yml', '.github/scripts/release/cache/win.ps1') }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WIN_TOOLS_PACK_ORIGIN_KEY)) {
+            throw "Windows tools-pack cache origin key is empty"
+          }
+          $prefix = "tools-pack-win-v7-preview-$env:RUNNER_OS-"
+          "origin=$env:WIN_TOOLS_PACK_ORIGIN_KEY" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "prefix=$prefix" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "key=$prefix$env:WIN_TOOLS_PACK_ORIGIN_KEY" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Restore Windows tools-pack cache
+        id: win_tools_pack_cache_restore
+        uses: actions/cache/restore@v5
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/tools-pack-cache
+          key: ${{ steps.win_tools_pack_cache_key.outputs.key }}
+          restore-keys: |
+            ${{ steps.win_tools_pack_cache_key.outputs.prefix }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup NSIS
+        shell: pwsh
+        run: |
+          if ((Get-Command makensis.exe -ErrorAction SilentlyContinue) -or (Test-Path "C:\Program Files (x86)\NSIS\makensis.exe")) {
+            exit 0
+          }
+          choco install nsis -y --no-progress
+
+      - name: Build preview windows artifacts
+        id: win_tools_pack_build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $toolsPackDir = "${{ runner.temp }}/tools-pack"
+          $cacheDir = "${{ runner.temp }}/tools-pack-cache"
+          $buildJsonPath = Join-Path $env:RUNNER_TEMP "windows-tools-pack-build.json"
+          $buildArgs = @(
+            "exec", "tools-pack", "win", "build",
+            "--dir", $toolsPackDir,
+            "--cache-dir", $cacheDir,
+            "--namespace", "release-preview-win",
+            "--portable",
+            "--app-version", "${{ needs.metadata.outputs.release_version }}",
+            "--to", "nsis",
+            "--json"
+          )
+          "cache_failed=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          try {
+            $buildOutput = pnpm @buildArgs
+            if ($LASTEXITCODE -ne 0) {
+              throw "Windows tools-pack cached build exited with code $LASTEXITCODE"
+            }
+          } catch {
+            Write-Warning "Windows tools-pack cached build failed; removing restored cache and retrying without cache."
+            "cache_failed=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $cacheDir
+            $buildOutput = pnpm exec tools-pack win build `
+              --dir $toolsPackDir `
+              --namespace release-preview-win `
+              --portable `
+              --app-version "${{ needs.metadata.outputs.release_version }}" `
+              --to nsis `
+              --json
+            if ($LASTEXITCODE -ne 0) {
+              throw "Windows tools-pack uncached fallback build exited with code $LASTEXITCODE"
+            }
+          }
+          $buildOutput | Set-Content -Path $buildJsonPath
+          $buildOutput
+
+      - name: Delete failed Windows tools-pack cache
+        if: ${{ steps.win_tools_pack_build.outputs.cache_failed == 'true' && steps.win_tools_pack_cache_restore.outputs.cache-matched-key != '' }}
+        shell: pwsh
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $matchedKey = "${{ steps.win_tools_pack_cache_restore.outputs.cache-matched-key }}"
+          $caches = @(gh cache list --key $matchedKey --limit 100 --json id,key,ref | ConvertFrom-Json | Where-Object { $_.key -eq $matchedKey })
+          foreach ($cache in $caches) {
+            gh cache delete $cache.id
+          }
+          "deletedFailedCacheKey=$matchedKey count=$($caches.Count)"
+
+      - name: Smoke preview windows packaged runtime
+        working-directory: e2e
+        env:
+          OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/windows-tools-pack-build.json
+          OD_PACKAGED_E2E_WIN: "1"
+          OD_PACKAGED_E2E_NAMESPACE: release-preview-win
+          OD_PACKAGED_E2E_RELEASE_CHANNEL: preview
+          OD_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/win
+          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+        run: |
+          $ErrorActionPreference = "Stop"
+          pnpm exec tsx scripts/release-smoke.ts win specs/win.spec.ts
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+      - name: Upload windows e2e spec report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-preview-win-e2e-report
+          path: ${{ runner.temp }}/release-report/win
+          if-no-files-found: warn
+
+      - name: Prune Windows tools-pack cache
+        shell: pwsh
+        continue-on-error: true
+        run: ./.github/scripts/release/cache/win.ps1
+
+      - name: Save Windows tools-pack cache
+        if: ${{ success() && (steps.win_tools_pack_cache_restore.outputs.cache-hit != 'true' || steps.win_tools_pack_build.outputs.cache_failed == 'true') }}
+        uses: actions/cache/save@v5
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/tools-pack-cache
+          key: ${{ steps.win_tools_pack_cache_key.outputs.key }}
+
+      - name: Retain recent Windows tools-pack caches
+        if: ${{ success() }}
+        shell: pwsh
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $prefix = "${{ steps.win_tools_pack_cache_key.outputs.prefix }}"
+          $keep = 3
+          $caches = @(gh cache list --key $prefix --sort created_at --order desc --limit 100 --json id,key,createdAt | ConvertFrom-Json)
+          $stale = @($caches | Select-Object -Skip $keep)
+          foreach ($cache in $stale) {
+            gh cache delete $cache.id
+          }
+          "actionsCachePrefix=$prefix kept=$([Math]::Min($caches.Count, $keep)) deleted=$($stale.Count)"
+
+      - name: Prepare windows preview assets
+        shell: pwsh
+        env:
+          CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_CHANNEL: preview
+          RELEASE_NOTES: Open Design Preview ${{ needs.metadata.outputs.release_version }}
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          TOOLS_PACK_NAMESPACE: release-preview-win
+        run: ./.github/scripts/release/assets/win.ps1
+
+      - name: Upload windows preview bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-preview-win-release-assets
+          path: ${{ runner.temp }}/release-assets
+
+  build_linux:
+    name: Build preview linux x64
+    needs: [metadata, verify]
+    if: ${{ vars.ENABLE_STABLE_LINUX == 'true' }}
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build preview linux artifacts
+        run: |
+          set -euo pipefail
+          pnpm exec tools-pack linux build \
+            --dir "$RUNNER_TEMP/tools-pack" \
+            --namespace release-preview-linux \
+            --portable \
+            --app-version "${{ needs.metadata.outputs.release_version }}" \
+            --to appimage \
+            --containerized \
+            --json
+
+      - name: Prepare linux preview assets
+        env:
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          TOOLS_PACK_NAMESPACE: release-preview-linux
+        run: bash .github/scripts/release/assets/linux.sh
+
+      - name: Upload linux preview bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-preview-linux-release-assets
+          path: ${{ runner.temp }}/release-assets
+
+  publish:
+    name: Publish preview release
+    needs:
+      - metadata
+      - verify
+      - build_mac
+      - build_mac_intel
+      - build_win
+      - build_linux
+    if: >-
+      ${{
+        always() &&
+        !cancelled() &&
+        needs.metadata.result == 'success' &&
+        needs.verify.result == 'success' &&
+        needs.build_mac.result == 'success' &&
+        needs.build_mac_intel.result == 'success' &&
+        needs.build_win.result == 'success' &&
+        (needs.build_linux.result == 'success' || needs.build_linux.result == 'skipped')
+      }}
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+      AWS_DEFAULT_REGION: auto
+      AWS_EC2_METADATA_DISABLED: "true"
+      CLOUDFLARE_R2_RELEASES_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+      CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+      CLOUDFLARE_R2_RELEASES_URL: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+      BASE_VERSION: ${{ needs.metadata.outputs.base_version }}
+      BRANCH_NAME: ${{ needs.metadata.outputs.branch }}
+      ENABLE_LINUX: ${{ needs.build_linux.result == 'success' }}
+      ENABLE_MAC: "true"
+      ENABLE_MAC_INTEL: "true"
+      ENABLE_WIN: "true"
+      GITHUB_RELEASE_ENABLED: "false"
+      MAC_INTEL_SIGNED: "true"
+      RELEASE_CHANNEL: preview
+      RELEASE_NAME: ${{ needs.metadata.outputs.release_name }}
+      RELEASE_SIGNED: "true"
+      RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+      REPORT_MODE: zip
+      STATE_SOURCE: ${{ needs.metadata.outputs.state_source }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Download mac preview bundle
+        uses: actions/download-artifact@v8
+        with:
+          name: open-design-preview-mac-release-assets
+          path: ${{ runner.temp }}/release-assets/mac
+
+      - name: Download mac intel preview bundle
+        uses: actions/download-artifact@v8
+        with:
+          name: open-design-preview-mac-intel-release-assets
+          path: ${{ runner.temp }}/release-assets/mac-intel
+
+      - name: Download windows preview bundle
+        uses: actions/download-artifact@v8
+        with:
+          name: open-design-preview-win-release-assets
+          path: ${{ runner.temp }}/release-assets/win
+
+      - name: Download linux preview bundle
+        if: ${{ needs.build_linux.result == 'success' }}
+        uses: actions/download-artifact@v8
+        with:
+          name: open-design-preview-linux-release-assets
+          path: ${{ runner.temp }}/release-assets/linux
+
+      - name: Download mac e2e spec report
+        uses: actions/download-artifact@v8
+        with:
+          name: open-design-preview-mac-e2e-report
+          path: ${{ runner.temp }}/release-report/mac
+
+      - name: Download windows e2e spec report
+        uses: actions/download-artifact@v8
+        with:
+          name: open-design-preview-win-e2e-report
+          path: ${{ runner.temp }}/release-report/win
+
+      - name: Publish preview assets and metadata to R2
+        id: r2
+        run: bash .github/scripts/release/r2/publish.sh
+
+      - name: Verify R2 preview publish
+        env:
+          R2_LINUX_APPIMAGE_URL: ${{ steps.r2.outputs.linux_appimage_url }}
+          R2_MAC_DMG_URL: ${{ steps.r2.outputs.mac_dmg_url }}
+          R2_MAC_FEED_URL: ${{ steps.r2.outputs.mac_feed_url }}
+          R2_MAC_INTEL_DMG_URL: ${{ steps.r2.outputs.mac_intel_dmg_url }}
+          R2_MAC_INTEL_ZIP_URL: ${{ steps.r2.outputs.mac_intel_zip_url }}
+          R2_MAC_ZIP_URL: ${{ steps.r2.outputs.mac_zip_url }}
+          R2_METADATA_URL: ${{ steps.r2.outputs.metadata_url }}
+          R2_REPORT_ZIP_URL: ${{ steps.r2.outputs.report_zip_url }}
+          R2_WIN_FEED_URL: ${{ steps.r2.outputs.win_feed_url }}
+          R2_WIN_INSTALLER_URL: ${{ steps.r2.outputs.win_installer_url }}
+        run: bash .github/scripts/release/r2/verify.sh
+
+      - name: Publish summary
+        env:
+          R2_LINUX_APPIMAGE_URL: ${{ steps.r2.outputs.linux_appimage_url }}
+          R2_MAC_DMG_URL: ${{ steps.r2.outputs.mac_dmg_url }}
+          R2_MAC_FEED_URL: ${{ steps.r2.outputs.mac_feed_url }}
+          R2_MAC_INTEL_DMG_URL: ${{ steps.r2.outputs.mac_intel_dmg_url }}
+          R2_MAC_INTEL_ZIP_URL: ${{ steps.r2.outputs.mac_intel_zip_url }}
+          R2_MAC_ZIP_URL: ${{ steps.r2.outputs.mac_zip_url }}
+          R2_METADATA_URL: ${{ steps.r2.outputs.metadata_url }}
+          R2_REPORT_ZIP_URL: ${{ steps.r2.outputs.report_zip_url }}
+          R2_VERSION_METADATA_URL: ${{ steps.r2.outputs.version_metadata_url }}
+          R2_VERSION_PREFIX: ${{ steps.r2.outputs.version_prefix }}
+          R2_WIN_FEED_URL: ${{ steps.r2.outputs.win_feed_url }}
+          R2_WIN_INSTALLER_URL: ${{ steps.r2.outputs.win_installer_url }}
+        run: bash .github/scripts/release/r2/summary.sh
+
+      - name: Cleanup workflow artifacts
+        if: ${{ success() }}
+        run: bash .github/scripts/release/github/cleanup-artifacts.sh

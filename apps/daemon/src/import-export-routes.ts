@@ -534,9 +534,16 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
   const { PROJECTS_DIR, DESIGN_SYSTEMS_DIR } = ctx.paths;
   const { getProject } = ctx.projectStore;
   const { isSafeId, validateExternalApiBaseUrl } = ctx.validation;
-  const { finalizeDesignPackage, FinalizePackageLockedError, FinalizeUpstreamError, redactSecrets } = ctx.finalize;
-  app.post('/api/projects/:id/finalize/anthropic', async (req, res) => {
-    const { apiKey, baseUrl, model, maxTokens } = req.body || {};
+  const {
+    defaultBaseUrlForFinalizeProtocol,
+    finalizeDesignPackage,
+    FinalizePackageLockedError,
+    FinalizeUpstreamError,
+    isFinalizeProviderProtocol,
+    redactSecrets,
+  } = ctx.finalize;
+  app.post('/api/projects/:id/finalize/:provider', async (req, res) => {
+    const { apiKey, baseUrl, model, maxTokens, apiVersion, protocol: bodyProtocol } = req.body || {};
     try {
       // Centralized path-traversal guard. `isSafeId` (apps/daemon/src/projects.ts)
       // rejects pure-dot ids (`.`, `..`, etc.) which would otherwise pass
@@ -548,28 +555,49 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
         return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project id');
       }
 
+      const protocol = req.params.provider;
+      if (!isFinalizeProviderProtocol(protocol)) {
+        return sendApiError(
+          res,
+          400,
+          'BAD_REQUEST',
+          'provider must be one of anthropic|openai|azure|google|ollama',
+        );
+      }
+      if (bodyProtocol !== undefined && bodyProtocol !== protocol) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'body protocol must match route provider');
+      }
+
       if (typeof apiKey !== 'string' || !apiKey.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'apiKey is required');
       }
       if (typeof model !== 'string' || !model.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'model is required');
       }
+      let effectiveBaseUrl = defaultBaseUrlForFinalizeProtocol(protocol);
       if (baseUrl !== undefined) {
         if (typeof baseUrl !== 'string' || !baseUrl.trim()) {
           return sendApiError(res, 400, 'BAD_REQUEST', 'baseUrl must be a non-empty string when provided');
         }
-        const validated = validateExternalApiBaseUrl(baseUrl);
-        if (validated.error) {
-          return sendApiError(
-            res,
-            validated.forbidden ? 403 : 400,
-            validated.forbidden ? 'FORBIDDEN' : 'BAD_REQUEST',
-            validated.error,
-          );
-        }
+        effectiveBaseUrl = baseUrl.trim();
+      }
+      if (!effectiveBaseUrl) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'baseUrl is required for this provider');
+      }
+      const validated = await validateExternalApiBaseUrl(effectiveBaseUrl);
+      if (validated.error) {
+        return sendApiError(
+          res,
+          validated.forbidden ? 403 : 400,
+          validated.forbidden ? 'FORBIDDEN' : 'BAD_REQUEST',
+          validated.error,
+        );
       }
       if (maxTokens !== undefined && (typeof maxTokens !== 'number' || maxTokens <= 0)) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'maxTokens must be a positive number when provided');
+      }
+      if (apiVersion !== undefined && typeof apiVersion !== 'string') {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'apiVersion must be a string when provided');
       }
 
       const project = getProject(db, req.params.id);
@@ -590,7 +618,17 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
           PROJECTS_DIR,
           DESIGN_SYSTEMS_DIR,
           req.params.id,
-          { apiKey, baseUrl, model, maxTokens, signal: finalizeAbort.signal },
+          {
+            protocol,
+            apiKey,
+            baseUrl: effectiveBaseUrl,
+            model,
+            maxTokens,
+            ...(typeof apiVersion === 'string' && apiVersion.trim()
+              ? { apiVersion: apiVersion.trim() }
+              : {}),
+            signal: finalizeAbort.signal,
+          },
         );
       } finally {
         res.off('close', abortFromRequest);
@@ -604,9 +642,9 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
         return sendApiError(res, 409, 'CONFLICT', err.message);
       }
 
-      // Upstream Anthropic error - status-aware mapping using shared
+      // Upstream provider error - status-aware mapping using shared
       // ApiErrorCode values. Run the raw upstream body through
-      // redactSecrets so the API key cannot leak even if Anthropic
+      // redactSecrets so the API key cannot leak even if the provider
       // echoes the inbound headers. Codes per @lefarcen P2 on PR #832:
       // 401 -> UNAUTHORIZED, 429 -> RATE_LIMITED, others -> UPSTREAM_UNAVAILABLE.
       if (err instanceof FinalizeUpstreamError) {
@@ -635,7 +673,7 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
       // Log via console.error per the daemon convention; client sees a
       // generic 500 with the shared INTERNAL_ERROR code. Run the message
       // through redactSecrets defensively.
-      console.error('[finalize/anthropic]', err);
+      console.error('[finalize]', err);
       const safeMsg = redactSecrets(String(err?.message || err), [apiKey]);
       return sendApiError(res, 500, 'INTERNAL_ERROR', safeMsg);
     }

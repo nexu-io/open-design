@@ -4,6 +4,7 @@ import path from 'node:path';
 
 const ACP_PROTOCOL_VERSION = 1;
 const DEFAULT_TIMEOUT_MS = 15_000;
+const MAX_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 // Gap-between-chunks watchdog for an ACP session stage. The timer resets on
 // every line received from the agent, so this bounds *silent* periods, not
 // total runtime. Default kept in line with the outer chat-run inactivity
@@ -73,6 +74,12 @@ interface AttachAcpSessionOptions {
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+function resolveAcpTimeoutMs(env: NodeJS.ProcessEnv, fallbackMs: number): number {
+  const raw = Number(env.OD_ACP_TIMEOUT_MS);
+  if (!Number.isFinite(raw)) return fallbackMs;
+  return Math.min(MAX_TIMEOUT_MS, Math.max(0, Math.floor(raw)));
 }
 
 function asObject(value: unknown): JsonObject | null {
@@ -308,6 +315,7 @@ export async function detectAcpModels({
   clientVersion = 'runtime-adapter',
   defaultModelOption = { id: 'default', label: 'Default (CLI config)' },
 }: DetectAcpModelsOptions): Promise<ModelOption[]> {
+  const effectiveTimeoutMs = resolveAcpTimeoutMs(env, timeoutMs);
   return await new Promise<ModelOption[]>((resolve, reject) => {
     const child = spawn(bin, args, {
       cwd,
@@ -322,11 +330,11 @@ export async function detectAcpModels({
     let expectedId = 1;
     let nextId = 2;
 
-    let timer: TimerHandle;
+    let timer: TimerHandle | null = null;
     const finish = <T extends ModelOption[] | Error>(fn: (value: T) => void, value: T) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       try {
         child.stdin.end();
       } catch {}
@@ -394,9 +402,11 @@ export async function detectAcpModels({
       }
     });
 
-    timer = setTimeout(() => {
-      fail(`ACP model detection timed out after ${timeoutMs}ms`);
-    }, timeoutMs);
+    if (effectiveTimeoutMs > 0) {
+      timer = setTimeout(() => {
+        fail(`ACP model detection timed out after ${effectiveTimeoutMs}ms`);
+      }, effectiveTimeoutMs);
+    }
 
     writeRpc(1, 'initialize', {
       protocolVersion: ACP_PROTOCOL_VERSION,

@@ -510,6 +510,65 @@ describe('finalizeDesignPackage (pipeline integration)', () => {
     expect(dirEntries).not.toContain('.finalize.lock');
   });
 
+  it('uses Google Gemini generateContent when finalize protocol is google', async () => {
+    const { db, projectsRoot, designSystemsRoot } = setupPipeline({
+      designSystemId: 'shadcn',
+      designSystemBody: '# shadcn\n',
+    });
+    const fetchImpl = vi.fn(async (_url: string, _init: RequestInit) =>
+      new Response(
+        JSON.stringify({
+          candidates: [
+            {
+              content: {
+                parts: [
+                  { text: '# DESIGN.md\n' },
+                  { text: '## Summary\nGemini synthesis.\n' },
+                ],
+              },
+            },
+          ],
+          usageMetadata: {
+            promptTokenCount: 4321,
+            candidatesTokenCount: 876,
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+
+    const result = await finalizeDesignPackage(db, projectsRoot, designSystemsRoot, PROJECT_ID, {
+      protocol: 'google',
+      apiKey: 'AIza-test-key',
+      baseUrl: 'https://generativelanguage.googleapis.com',
+      model: 'gemini-2.0-flash',
+      fetchImpl: fetchImpl as any,
+    } as any);
+
+    expect(result.model).toBe('gemini-2.0-flash');
+    expect(result.inputTokens).toBe(4321);
+    expect(result.outputTokens).toBe(876);
+    expect(fs.readFileSync(result.designMdPath, 'utf8')).toBe(
+      '# DESIGN.md\n## Summary\nGemini synthesis.\n',
+    );
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(url).toBe(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
+    );
+    expect((init as RequestInit).headers).toMatchObject({
+      'content-type': 'application/json',
+      'x-goog-api-key': 'AIza-test-key',
+    });
+    const body = JSON.parse((init as RequestInit).body as string);
+    expect(body.systemInstruction.parts[0].text).toContain('# DESIGN.md');
+    expect(body.contents).toHaveLength(1);
+    expect(body.contents[0].role).toBe('user');
+    expect(body.contents[0].parts[0].text).toContain('Synthesize DESIGN.md');
+    expect(body.generationConfig.maxOutputTokens).toBe(16000);
+  });
+
   it('response carries every documented field with correct types', async () => {
     const { db, projectsRoot, designSystemsRoot } = setupPipeline({
       designSystemId: 'shadcn',

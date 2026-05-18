@@ -1,0 +1,83 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-profile-avatar-snowy-rabbit-spirit-portrait",
+  "title": "Profile / Avatar - Snowy Rabbit Spirit Portrait",
+  "version": "0.1.0",
+  "description": "This prompt generates a serene fantasy portrait of an anonymous rabbit-eared woman in winter, ideal for atmospheric character art and stylized profile illustrations.",
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "전자넹_특이점",
+    "url": "https://x.com/zeonzwane_spud/status/2049099351310692544#reversed-0"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "profile-avatar",
+    "portrait",
+    "fantasy",
+    "nature"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://cms-assets.youmind.com/media/1777453209807_szh7zz_HG_c_-ca4AAz43H.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "A soft, painterly portrait of a mysterious young woman with {argument name=\"hair color\" default=\"long white hair\"} and 2 tall rabbit ears rising above her head, centered in a vertical composition from chest up. Her face is completely obscured by a flat rectangular censor block in muted beige, creating an anonymous surreal effect. She wears a traditional kimono-inspired robe in warm ivory with bold black trim: 3 visible black sections total, including the wide crossover collar, 2 black sleeve bands, and a black waist sash tied in front. On the left chest is 1 embroidered white rabbit patch outlined in brown. On the right side of her hair hangs 1 red braided cord ornament tied into a bow, decorated with 2 tassels and 1 small rabbit-shaped charm. The hair is long, flowing, slightly windswept, and silky, framing the shoulders. Set her in a quiet snowy landscape with falling snow, pale gray winter atmosphere, bare trees, and a softly blurred traditional pagoda silhouette in the distance on the right. Use a delicate East Asian fantasy aesthetic, muted colors, gentle lighting, subtle texture like watercolor or gouache on paper, highly refined costume details, calm mood, and a centered symmetrical composition.",
+        "zh-CN": "使用这个插件完成以下任务：A soft, painterly portrait of a mysterious young woman with {argument name=\"hair color\" default=\"long white hair\"} and 2 tall rabbit ears rising above her head, centered in a vertical composition from chest up. Her face is completely obscured by a flat rectangular censor block in muted beige, creating an anonymous surreal effect. She wears a traditional kimono-inspired robe in warm ivory with bold black trim: 3 visible black sections total, including the wide crossover collar, 2 black sleeve bands, and a black waist sash tied in front. On the left chest is 1 embroidered white rabbit patch outlined in brown. On the right side of her hair hangs 1 red braided cord ornament tied into a bow, decorated with 2 tassels and 1 small rabbit-shaped charm. The hair is long, flowing, slightly windswept, and silky, framing the shoulders. Set her in a quiet snowy landscape with falling snow, pale gray winter atmosphere, bare trees, and a softly blurred traditional pagoda silhouette in the distance on the right. Use a delicate East Asian fantasy aesthetic, muted colors, gentle lighting, subtle texture like watercolor or gouache on paper, highly refined costume details, calm mood, and a centered symmetrical composition."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "1:1"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

@@ -1,0 +1,125 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "od-code-migration",
+  "title": "Code migration (default scenario)",
+  "version": "0.1.0",
+  "description": "Default reference pipeline for the code-migration taskKind, with patch-edit ↔ build-test devloop and diff-review handoff.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/scenarios/od-code-migration",
+  "tags": [
+    "scenario",
+    "first-party",
+    "code-migration",
+    "phase-7"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "code-migration",
+    "scenario": "code-migration",
+    "mode": "scenario",
+    "pipeline": {
+      "stages": [
+        {
+          "id": "import",
+          "atoms": [
+            "code-import"
+          ]
+        },
+        {
+          "id": "tokens",
+          "atoms": [
+            "design-extract",
+            "token-map"
+          ]
+        },
+        {
+          "id": "plan",
+          "atoms": [
+            "rewrite-plan"
+          ]
+        },
+        {
+          "id": "verify",
+          "atoms": [
+            "patch-edit",
+            "build-test"
+          ],
+          "repeat": true,
+          "until": "(build.passing && tests.passing) || iterations>=8"
+        },
+        {
+          "id": "review",
+          "atoms": [
+            "diff-review"
+          ]
+        },
+        {
+          "id": "handoff",
+          "atoms": [
+            "handoff"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:read",
+      "fs:write",
+      "subprocess"
+    ],
+    "useCase": {
+      "query": {
+        "en": "Migrate {{repoPath}} to {{targetStack}}. Iterate the patch-edit ↔ build-test devloop until the build passes and the existing tests stay green, then surface a diff-review for human accept.",
+        "zh-CN": "使用这个插件完成以下任务：Migrate {{repoPath}} to {{targetStack}}. Iterate the patch-edit ↔ build-test devloop until the build passes and the existing tests stay green, then surface a diff-review for human accept."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./examples/jquery-to-react.html",
+          "title": "jQuery → React 18 migration summary"
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "repoPath",
+        "type": "string",
+        "required": true,
+        "label": "Repository path",
+        "placeholder": "./apps/legacy-cart"
+      },
+      {
+        "name": "targetStack",
+        "type": "string",
+        "required": true,
+        "label": "Target stack",
+        "placeholder": "React 18 + TypeScript + Vite"
+      },
+      {
+        "name": "buildCommand",
+        "type": "string",
+        "required": false,
+        "label": "Build command",
+        "placeholder": "pnpm build"
+      },
+      {
+        "name": "testCommand",
+        "type": "string",
+        "required": false,
+        "label": "Test command",
+        "placeholder": "pnpm test"
+      }
+    ]
+  }
+}

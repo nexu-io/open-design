@@ -31,7 +31,27 @@ describe('composeSystemPrompt — API mode (#313)', () => {
       const prompt = composeSystemPrompt({});
       expect(prompt).not.toContain('<question-form id="direction"');
       expect(prompt).not.toContain('Pick a visual direction');
-      expect(prompt).toContain('if a design system is active, use it as the visual direction without asking again');
+      expect(prompt).toContain('if a design system is active and no new brand/reference source was provided, use it as the visual direction without asking again');
+    });
+
+    it('uses stable brand option values for discovery-form branching', () => {
+      const prompt = composeSystemPrompt({});
+      expect(prompt).toContain('{ "label": "Pick a direction for me", "value": "pick_direction" }');
+      expect(prompt).toContain('{ "label": "I have a brand spec — I\'ll share it", "value": "brand_spec" }');
+      expect(prompt).toContain('{ "label": "Match a reference site / screenshot — I\'ll attach it", "value": "reference_match" }');
+      expect(prompt).toContain('When the answer line includes `[value: ...]`, use that stable value instead of the visible label.');
+      expect(prompt).toContain('If you keep the `brand` question, its `id` must stay `"brand"`.');
+      expect(prompt).toContain('you may drop the `brand` question as already answered, but you must still treat that provided source as Branch A below');
+      expect(prompt).toContain('When skipping the form, do not skip brand-source handling');
+      expect(prompt).toContain('If the current message, attachments, prior brief, or URL already contains an actual brand spec / brand guide / reference site / screenshot source, use Branch A.');
+      expect(prompt).toContain('### Branch A — user provided a brand/reference source, or `brand` value is `"brand_spec"` / `"reference_match"`');
+      expect(prompt).toContain('ask them to paste/upload the brand spec or reference and stop');
+      expect(prompt).toContain('Do not guess a brand domain or invent tokens');
+      expect(prompt).toContain('An active design system does not suppress Branch A when the user provides a brand/reference source');
+      expect(prompt).toContain('### Branch B — no user-provided brand/reference source and no Branch A brand value');
+      expect(prompt).toContain('active-design-system cases where the user did not provide a new brand/reference source');
+      expect(prompt).toContain('Provided brand/reference source → run brand-spec extraction');
+      expect(prompt).toContain('`brand_spec` / `reference_match` without a provided source → ask for the source and stop; do not guess brand tokens.');
     });
 
     it('does not inject the API-mode preamble', () => {

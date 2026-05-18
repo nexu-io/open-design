@@ -1,0 +1,84 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-social-media-post-anime-pokemon-shop-outfit-teaser-poster",
+  "title": "Social Media Post - Anime Pokémon Shop Outfit Teaser Poster",
+  "version": "0.1.0",
+  "description": "This prompt generates a soft pastel anime fashion announcement poster featuring a blurred-face girl in a blue dress inside a Pokémon store, ideal for outfit reveal teasers and character promo visuals.",
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "ねずみ男(AIイラスト専用)",
+    "url": "https://x.com/ratman_aiillust/status/2049107740686204942#reversed-0"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "social-media-post",
+    "anime",
+    "fantasy",
+    "typography",
+    "action"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://cms-assets.youmind.com/media/1777453222738_l3artn_HG_koUwaAAAk7hW.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "A dreamy pastel anime fashion announcement poster set inside a bright Pokémon merchandise shop. The composition is vertical and split visually into two zones: a large translucent information panel on the left and a full-body character showcase on the right. The scene has a soft, elegant, airy atmosphere with diffused indoor lighting, creamy highlights, gentle reflections on the polished floor, and a refined shoujo illustration style. In the background, show a clearly recognizable Pokémon store interior with display shelves, the Pokémon logo sign, a large Poké Ball emblem on the wall, potted plants, plush toys, and figures; visible Pokémon merchandise includes exactly 3 prominent character plushies or mascots: Pikachu at the bottom right, plus 2 small shelf plushies resembling Piplup and another pastel blue-green character. The girl stands slightly right of center in a graceful fashion pose with one leg crossing in front of the other, one hand lightly raised near her chest, and the other relaxed outward. Her face is intentionally obscured by a soft rectangular blur block. She has long wavy {argument name=\"hair color\" default=\"platinum blonde\"} hair with loose curls and a delicate feminine look. She wears a refined pastel outfit: a frilled white high-neck blouse with layered ruffles, a light blue sleeveless pinafore-style dress with a fitted waist and a flowing mid-calf flared skirt, a small white crossbody purse with a flap, white ankle socks, and glossy black Mary Jane shoes. Add subtle pink earrings. The outfit should feel classy, fresh, and cute, with gentle fabric movement. On the left, place a frosted semi-transparent poster panel with elegant typography and decorative flourishes. Include exactly 5 text blocks or labeled areas on this panel: 1) a top banner with Japanese text \"次回衣装プロンプト公開\" above large cursive English text {argument name=\"headline text\" default=\"Next Outfit\"}; 2) a name block with Japanese text \"セラス・柳田・リリエンフェルト\" and smaller romanized text \"Ceras Yanagida Lilienfeld\"; 3) a teaser line reading \"次回の衣装も お楽しみに！\" with a small Poké Ball icon; 4) a bordered description box titled \"Next Coordinate\" followed by several lines of small Japanese body text; 5) a bottom ribbon reading {argument name=\"footer text\" default=\"Coming Soon...\"} and \"STAY TUNED!\" with a small Pikachu silhouette. Use pale blue, white, silver-gray, and blush pastel tones throughout. Add faint ornamental corner decorations and a polished promotional layout, like a boutique fashion teaser poster for a themed anime character outfit reveal.",
+        "zh-CN": "A dreamy pastel anime fashion announcement poster set inside a bright Pokémon merchandise shop. The composition is vertical and split visually into two zones: a large translucent information panel on the left and a full-body character showcase on the right. The scene has a soft, elegant, airy atmosphere with diffused indoor lighting, creamy highlights, gentle reflections on the polished floor, and a refined shoujo illustration style. In the background, show a clearly recognizable Pokémon store interior with display shelves, the Pokémon logo sign, a large Poké Ball emblem on the wall, potted plants, plush toys, and figures; visible Pokémon merchandise includes exactly 3 prominent character plushies or mascots: Pikachu at the bottom right, plus 2 small shelf plushies resembling Piplup and another pastel blue-green character. The girl stands slightly right of center in a graceful fashion pose with one leg crossing in front of the other, one hand lightly raised near her chest, and the other relaxed outward. Her face is intentionally obscured by a soft rectangular blur block. She has long wavy {argument name=\"hair color\" default=\"platinum blonde\"} hair with loose curls and a delicate feminine look. She wears a refined pastel outfit: a frilled white high-neck blouse with layered ruffles, a light blue sleeveless pinafore-style dress with a fitted waist and a flowing mid-calf flared skirt, a small white crossbody purse with a flap, white ankle socks, and glossy black Mary Jane shoes. Add subtle pink earrings. The outfit should feel classy, fresh, and cute, with gentle fabric movement. On the left, place a frosted semi-transparent poster panel with elegant typography and decorative flourishes. Include exactly 5 text blocks or labeled areas on this panel: 1) a top banner with Japanese text \"次回衣装プロンプト公開\" above large cursive English text {argument name=\"headline text\" default=\"Next Outfit\"}; 2) a name block with Japanese text \"セラス・柳田・リリエンフェルト\" and smaller romanized text \"Ceras Yanagida Lilienfeld\"; 3) a teaser line reading \"次回の衣装も お楽しみに！\" with a small Poké Ball icon; 4) a bordered description box titled \"Next Coordinate\" followed by several lines of small Japanese body text; 5) a bottom ribbon reading {argument name=\"footer text\" default=\"Coming Soon...\"} and \"STAY TUNED!\" with a small Pikachu silhouette. Use pale blue, white, silver-gray, and blush pastel tones throughout. Add faint ornamental corner decorations and a polished promotional layout, like a boutique fashion teaser poster for a themed anime character outfit reveal."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "1:1"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

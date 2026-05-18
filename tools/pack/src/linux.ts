@@ -45,9 +45,12 @@ const CONTAINER_TOOLS_PACK_CLI_PATH = "tools/pack/bin/tools-pack.mjs";
 
 const INTERNAL_PACKAGES = [
   { directory: "packages/contracts", name: "@open-design/contracts" },
+  { directory: "packages/registry-protocol", name: "@open-design/registry-protocol" },
   { directory: "packages/sidecar-proto", name: "@open-design/sidecar-proto" },
   { directory: "packages/sidecar", name: "@open-design/sidecar" },
   { directory: "packages/platform", name: "@open-design/platform" },
+  { directory: "packages/agui-adapter", name: "@open-design/agui-adapter" },
+  { directory: "packages/plugin-runtime", name: "@open-design/plugin-runtime" },
   { directory: "apps/daemon", name: "@open-design/daemon" },
   { directory: "apps/web", name: "@open-design/web" },
   { directory: "apps/desktop", name: "@open-design/desktop" },
@@ -367,9 +370,12 @@ async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
   const previousWebNextEnv = await readFile(webNextEnvPath, "utf8").catch(() => null);
 
   await runPnpm(config, ["--filter", "@open-design/contracts", "build"]);
+  await runPnpm(config, ["--filter", "@open-design/registry-protocol", "build"]);
   await runPnpm(config, ["--filter", "@open-design/sidecar-proto", "build"]);
   await runPnpm(config, ["--filter", "@open-design/sidecar", "build"]);
   await runPnpm(config, ["--filter", "@open-design/platform", "build"]);
+  await runPnpm(config, ["--filter", "@open-design/agui-adapter", "build"]);
+  await runPnpm(config, ["--filter", "@open-design/plugin-runtime", "build"]);
   await runPnpm(config, ["--filter", "@open-design/daemon", "build"]);
   try {
     await runPnpm(config, ["--filter", "@open-design/web", "build"], { OD_WEB_OUTPUT_MODE: "server" });
@@ -1379,7 +1385,7 @@ export async function installPackedLinuxHeadless(config: ToolPackConfig): Promis
   const script = [
     "#!/bin/sh",
     `# Open Design headless launcher — namespace: ${config.namespace}`,
-    `OD_NAMESPACE=${JSON.stringify(config.namespace)} OD_DATA_DIR=${JSON.stringify(dataDir)} OD_RESOURCE_ROOT=${JSON.stringify(paths.resourceRoot)} exec ${JSON.stringify(nodePath)} ${JSON.stringify(entryPath)} "$@"`,
+    `OD_PACKAGED_NAMESPACE=${JSON.stringify(config.namespace)} OD_DATA_DIR=${JSON.stringify(dataDir)} OD_RESOURCE_ROOT=${JSON.stringify(paths.resourceRoot)} exec ${JSON.stringify(nodePath)} ${JSON.stringify(entryPath)} "$@"`,
   ].join("\n") + "\n";
 
   await writeFile(launcherPath, script, { encoding: "utf8", mode: 0o755 });
@@ -1422,9 +1428,9 @@ export async function startPackedLinuxHeadless(config: ToolPackConfig): Promise<
       cwd: dirname(entryPath),
       env: {
         ...process.env,
-        // Bake in the namespace so headless uses the same namespace as the
-        // tools-pack config regardless of the caller's environment.
-        OD_NAMESPACE: config.namespace,
+        // Bake in the packaged namespace so headless uses the same namespace
+        // as the tools-pack config regardless of the caller's environment.
+        OD_PACKAGED_NAMESPACE: config.namespace,
         // Point the headless data root at the tools-pack runtime directory so
         // the identity marker is written to the path this function polls.
         // headless.ts computes: join(OD_DATA_DIR, "namespaces") which must

@@ -15,7 +15,7 @@ import {
 } from "@open-design/sidecar-proto";
 import { bootstrapSidecarRuntime, createJsonIpcServer, resolveAppIpcPath } from "@open-design/sidecar";
 
-import type { PackagedConfig } from "./config.js";
+import { PACKAGED_NAMESPACE_ENV, type PackagedConfig } from "./config.js";
 import { writePackagedDesktopIdentity, writePackagedWebIdentity } from "./identity.js";
 import { resolvePackagedNamespacePaths } from "./paths.js";
 import { startPackagedSidecars } from "./sidecars.js";
@@ -38,9 +38,7 @@ function resolveHeadlessNamespaceBaseRoot(): string {
 function resolveHeadlessConfig(): PackagedConfig {
   const namespace =
     OPEN_DESIGN_SIDECAR_CONTRACT.normalizeNamespace(
-      process.env.OD_NAMESPACE ??
-      process.env.OD_SIDECAR_NAMESPACE ??
-      SIDECAR_DEFAULTS.namespace,
+      process.env[PACKAGED_NAMESPACE_ENV] ?? SIDECAR_DEFAULTS.namespace,
     );
 
   const namespaceBaseRoot = resolveHeadlessNamespaceBaseRoot();

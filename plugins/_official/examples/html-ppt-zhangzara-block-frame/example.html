@@ -1,0 +1,1453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BlockFrame — Neobrutalist Presentation Template</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+    :root {
+      --pink: #FE90E8;
+      --blue: #C0F7FE;
+      --green: #99E885;
+      --yellow: #F7CB46;
+      --cream: #FFDC8B;
+      --black: #000000;
+      --white: #FFFFFF;
+      --offwhite: #FFFDF5;
+      --border: 4px solid var(--black);
+      --shadow: 8px 8px 0px var(--black);
+      --shadow-sm: 4px 4px 0px var(--black);
+      --radius: 0px;
+      --radius-sm: 4px;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Inter', sans-serif;
+      background: var(--offwhite);
+      color: var(--black);
+    }
+
+    /* Slide container */
+    .slides-container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    .slide {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      display: none;
+      padding: 60px;
+      overflow: hidden;
+    }
+
+    .slide.active {
+      display: flex;
+    }
+
+    /* Dot grid background pattern */
+    .dot-grid {
+      background-image: radial-gradient(circle, var(--black) 1.2px, transparent 1.2px);
+      background-size: 24px 24px;
+    }
+
+    /* Navigation */
+    .nav-controls {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      display: flex;
+      gap: 12px;
+      z-index: 1000;
+    }
+
+    .nav-btn {
+      width: 48px;
+      height: 48px;
+      border: 3px solid var(--black);
+      background: var(--white);
+      cursor: pointer;
+      font-family: 'Inter', sans-serif;
+      font-weight: 700;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .nav-btn:hover {
+      transform: translate(-2px, -2px);
+      box-shadow: 6px 6px 0px var(--black);
+    }
+
+    .nav-btn:active {
+      transform: translate(2px, 2px);
+      box-shadow: 2px 2px 0px var(--black);
+    }
+
+    .slide-counter {
+      position: fixed;
+      bottom: 24px;
+      left: 24px;
+      z-index: 1000;
+      font-family: 'Space Grotesk', monospace;
+      font-weight: 700;
+      font-size: 14px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      border: 3px solid var(--black);
+      background: var(--white);
+      padding: 10px 18px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    /* ============ UTILITY COMPONENTS ============ */
+
+    .nb-card {
+      border: var(--border);
+      background: var(--white);
+      box-shadow: var(--shadow);
+    }
+
+    .nb-card-flat {
+      border: var(--border);
+      background: var(--white);
+    }
+
+    .nb-label {
+      display: inline-block;
+      border: 3px solid var(--black);
+      padding: 6px 16px;
+      font-family: 'Space Grotesk', monospace;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      background: var(--white);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .nb-label-pink { background: var(--pink); }
+    .nb-label-blue { background: var(--blue); }
+    .nb-label-green { background: var(--green); }
+    .nb-label-yellow { background: var(--yellow); }
+    .nb-label-cream { background: var(--cream); }
+
+    .nb-btn {
+      display: inline-block;
+      border: 3px solid var(--black);
+      padding: 14px 32px;
+      font-family: 'Inter', sans-serif;
+      font-weight: 700;
+      font-size: 16px;
+      text-decoration: none;
+      color: var(--black);
+      background: var(--yellow);
+      box-shadow: var(--shadow-sm);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .nb-btn:hover {
+      transform: translate(-2px, -2px);
+      box-shadow: 6px 6px 0px var(--black);
+    }
+
+    .nb-heading-xl {
+      font-family: 'Inter', sans-serif;
+      font-weight: 900;
+      font-size: clamp(48px, 6vw, 96px);
+      line-height: 0.95;
+      letter-spacing: -0.03em;
+      text-transform: uppercase;
+    }
+
+    .nb-heading-lg {
+      font-family: 'Inter', sans-serif;
+      font-weight: 800;
+      font-size: clamp(32px, 4vw, 64px);
+      line-height: 1.0;
+      letter-spacing: -0.02em;
+      text-transform: uppercase;
+    }
+
+    .nb-heading-md {
+      font-family: 'Inter', sans-serif;
+      font-weight: 700;
+      font-size: clamp(24px, 2.5vw, 40px);
+      line-height: 1.1;
+      letter-spacing: -0.01em;
+    }
+
+    .nb-body {
+      font-family: 'Inter', sans-serif;
+      font-size: clamp(16px, 1.2vw, 20px);
+      line-height: 1.6;
+      font-weight: 500;
+    }
+
+    .nb-mono {
+      font-family: 'Space Grotesk', monospace;
+      font-weight: 500;
+      font-size: 15px;
+      letter-spacing: 0.02em;
+    }
+
+    /* Decorative elements */
+    .deco-circle {
+      border-radius: 50%;
+      border: var(--border);
+    }
+
+    .deco-square {
+      border: var(--border);
+    }
+
+    .tilt-left { transform: rotate(-8deg); }
+    .tilt-right { transform: rotate(8deg); }
+
+    .corner-bracket {
+      position: absolute;
+      width: 24px;
+      height: 24px;
+      border: 3px solid var(--black);
+    }
+    .corner-bracket.tl { border-right: none; border-bottom: none; top: 0; left: 0; }
+    .corner-bracket.tr { border-left: none; border-bottom: none; top: 0; right: 0; }
+    .corner-bracket.bl { border-right: none; border-top: none; bottom: 0; left: 0; }
+    .corner-bracket.br { border-left: none; border-top: none; bottom: 0; right: 0; }
+
+    /* ============ SLIDE 1: TITLE HERO ============ */
+    .slide-1 {
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: var(--cream);
+      position: relative;
+    }
+
+    .slide-1 .hero-frame {
+      position: relative;
+      width: 100%;
+      max-width: 900px;
+      border: var(--border);
+      background: var(--offwhite);
+      padding: 60px;
+      box-shadow: var(--shadow);
+    }
+
+    .slide-1 .hero-label {
+      margin-bottom: 24px;
+    }
+
+    .slide-1 .hero-title {
+      margin-bottom: 32px;
+    }
+
+    .slide-1 .hero-subtitle {
+      font-family: 'Space Grotesk', monospace;
+      font-size: 18px;
+      font-weight: 500;
+      max-width: 500px;
+    }
+
+    .slide-1 .deco-pink-rect {
+      position: absolute;
+      top: -30px;
+      right: 80px;
+      width: 100px;
+      height: 100px;
+      background: var(--pink);
+      border: var(--border);
+      box-shadow: var(--shadow-sm);
+      transform: rotate(12deg);
+    }
+
+    .slide-1 .deco-green-circle {
+      position: absolute;
+      bottom: 60px;
+      right: 120px;
+      width: 60px;
+      height: 60px;
+      background: var(--green);
+      border: var(--border);
+      border-radius: 50%;
+    }
+
+    .slide-1 .deco-yellow-bar {
+      /* Sits as a tab on the bottom edge of the hero-frame, OUTSIDE
+         the content area so it never collides with the subtitle. */
+      position: absolute;
+      bottom: -18px;
+      left: 80px;
+      width: 140px;
+      height: 36px;
+      background: var(--yellow);
+      border: var(--border);
+      box-shadow: var(--shadow-sm);
+      transform: rotate(-3deg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Space Grotesk', monospace;
+      font-size: 13px;
+      font-weight: 600;
+      z-index: 5;
+    }
+
+    .slide-1 .deco-dots {
+      position: absolute;
+      top: 60px;
+      left: 60px;
+      width: 120px;
+      height: 80px;
+      background-image: radial-gradient(circle, var(--black) 2px, transparent 2px);
+      background-size: 20px 20px;
+      opacity: 0.4;
+    }
+
+    /* ============ SLIDE 2: TWO COLUMN INTRO ============ */
+    .slide-2 {
+      background: var(--blue);
+      flex-direction: row;
+      gap: 48px;
+      align-items: center;
+    }
+
+    .slide-2 .col-left {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .slide-2 .col-right {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .slide-2 .intro-card {
+      border: var(--border);
+      background: var(--white);
+      padding: 28px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .slide-2 .intro-card h3 {
+      font-family: 'Inter', sans-serif;
+      font-weight: 700;
+      font-size: 20px;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+    }
+
+    .slide-2 .intro-card p {
+      font-size: 15px;
+      line-height: 1.6;
+      font-weight: 500;
+    }
+
+    .slide-2 .stat-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: 3px solid var(--black);
+      padding: 10px 20px;
+      background: var(--yellow);
+      font-family: 'Space Grotesk', monospace;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    /* ============ SLIDE 3: THREE FEATURE CARDS ============ */
+    .slide-3 {
+      background: var(--offwhite);
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .slide-3 .slide-header {
+      margin-bottom: 48px;
+    }
+
+    .slide-3 .cards-row {
+      display: flex;
+      gap: 32px;
+      width: 100%;
+    }
+
+    .slide-3 .feature-card {
+      flex: 1;
+      border: var(--border);
+      background: var(--white);
+      padding: 36px;
+      box-shadow: var(--shadow);
+      position: relative;
+    }
+
+    .slide-3 .feature-icon {
+      width: 64px;
+      height: 64px;
+      border: 3px solid var(--black);
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      font-weight: 700;
+    }
+
+    .slide-3 .icon-pink { background: var(--pink); }
+    .slide-3 .icon-blue { background: var(--blue); }
+    .slide-3 .icon-green { background: var(--green); }
+
+    .slide-3 .feature-card h3 {
+      font-family: 'Inter', sans-serif;
+      font-weight: 700;
+      font-size: 22px;
+      margin-bottom: 14px;
+      text-transform: uppercase;
+    }
+
+    .slide-3 .feature-card p {
+      font-size: 15px;
+      line-height: 1.6;
+      font-weight: 500;
+    }
+
+    .slide-3 .card-deco {
+      position: absolute;
+      top: -12px;
+      right: 24px;
+      width: 48px;
+      height: 48px;
+      border: 3px solid var(--black);
+      background: var(--yellow);
+    }
+
+    /* ============ SLIDE 4: CHART / DATA ============ */
+    .slide-4 {
+      background: var(--green);
+      flex-direction: column;
+      justify-content: center;
+      /* Reserve space for the shadow + the bottom-fixed nav chrome
+         so the chart-frame never butts up against the slide edge. */
+      padding-bottom: 110px;
+    }
+
+    .slide-4 .chart-frame {
+      border: var(--border);
+      background: var(--white);
+      box-shadow: var(--shadow);
+      padding: 32px 40px;
+      width: calc(100% - 16px);
+      max-width: 1200px;
+      margin: 0 auto;
+      /* Cap the frame so it always fits inside the slide content area
+         (slide is 100vh - 60 top - 110 bottom = ~70vh available). */
+      max-height: 70vh;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      overflow: hidden;
+    }
+
+    .slide-4 .chart-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      flex-shrink: 0;
+    }
+
+    .slide-4 .chart-legend {
+      display: flex;
+      gap: 16px;
+    }
+
+    .slide-4 .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: 'Space Grotesk', monospace;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .slide-4 .legend-swatch {
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--black);
+    }
+
+    /* Chart body — chart on the left, stat boxes stacked on the right.
+       This is a flex row that fills the remaining space below the header. */
+    .slide-4 .chart-body {
+      display: flex;
+      gap: 32px;
+      flex: 1 1 auto;
+      min-height: 0;
+      align-items: stretch;
+      width: 100%;
+    }
+
+    /* SVG Chart — fills the left side of chart-body. Width auto-derives
+       from viewBox aspect; flex-1 lets it claim available width. */
+    .chart-svg {
+      display: block;
+      flex: 1 1 auto;
+      min-width: 0;
+      min-height: 0;
+      width: 100%;
+      height: 100%;
+      max-width: 100%;
+      max-height: 100%;
+    }
+
+    /* Data column — vertical stack of stat boxes on the right. */
+    .slide-4 .data-column {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      flex: 0 0 240px;
+      width: 240px;
+      min-width: 0;
+    }
+
+    .slide-4 .data-box {
+      flex: 1 1 0;
+      min-height: 0;
+      border: 3px solid var(--black);
+      background: var(--cream);
+      padding: 18px 20px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .slide-4 .data-box .data-num {
+      font-family: 'Inter', sans-serif;
+      font-weight: 900;
+      font-size: 36px;
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .slide-4 .data-box .data-label {
+      font-family: 'Space Grotesk', monospace;
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    /* ============ SLIDE 5: BIG STATEMENT / QUOTE ============ */
+    .slide-5 {
+      background: var(--pink);
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      position: relative;
+    }
+
+    .slide-5 .quote-frame {
+      border: var(--border);
+      background: var(--white);
+      padding: 60px 80px;
+      box-shadow: var(--shadow);
+      max-width: 1000px;
+      position: relative;
+    }
+
+    .slide-5 .quote-text {
+      font-family: 'Inter', sans-serif;
+      font-weight: 900;
+      font-size: clamp(28px, 3.5vw, 52px);
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+      text-transform: uppercase;
+      margin-bottom: 32px;
+    }
+
+    .slide-5 .quote-author {
+      font-family: 'Space Grotesk', monospace;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .slide-5 .deco-quote-marks {
+      position: absolute;
+      top: -30px;
+      left: 40px;
+      font-size: 120px;
+      font-weight: 900;
+      line-height: 1;
+      color: var(--yellow);
+      -webkit-text-stroke: 3px var(--black);
+    }
+
+    .slide-5 .deco-stripes {
+      position: absolute;
+      bottom: 60px;
+      right: 60px;
+      width: 80px;
+      height: 80px;
+      background: repeating-linear-gradient(
+        45deg,
+        var(--black),
+        var(--black) 4px,
+        var(--green) 4px,
+        var(--green) 12px
+      );
+      border: 3px solid var(--black);
+    }
+
+    /* ============ SLIDE 6: SPLIT IMAGE + TEXT ============ */
+    .slide-6 {
+      background: var(--yellow);
+      flex-direction: row;
+      gap: 0;
+      padding: 0;
+    }
+
+    .slide-6 .split-visual {
+      flex: 1;
+      background: var(--black);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 60px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .slide-6 .split-visual .visual-box {
+      width: 100%;
+      max-width: 400px;
+      aspect-ratio: 1;
+      border: 4px solid var(--white);
+      background: var(--pink);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    .slide-6 .split-visual .visual-box::after {
+      content: '';
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      width: 100%;
+      height: 100%;
+      background: var(--blue);
+      border: 4px solid var(--white);
+      z-index: -1;
+    }
+
+    .slide-6 .split-visual .visual-label {
+      /* Top-right of the dark panel so it never collides with the
+         fixed slide-counter pill at bottom-left of the viewport. */
+      position: absolute;
+      top: 40px;
+      right: 40px;
+      border: 3px solid var(--white);
+      background: var(--green);
+      color: var(--black);
+      padding: 8px 16px;
+      font-family: 'Space Grotesk', monospace;
+      font-size: 13px;
+      font-weight: 600;
+      transform: rotate(-4deg);
+    }
+
+    .slide-6 .split-content {
+      flex: 1;
+      padding: 60px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 28px;
+      background: var(--offwhite);
+      border-left: var(--border);
+    }
+
+    .slide-6 .content-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .slide-6 .content-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      font-size: 16px;
+      line-height: 1.5;
+      font-weight: 500;
+    }
+
+    .slide-6 .content-list .list-num {
+      flex-shrink: 0;
+      width: 36px;
+      height: 36px;
+      border: 3px solid var(--black);
+      background: var(--yellow);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Space Grotesk', monospace;
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    /* ============ SLIDE 7: TIMELINE / PROCESS ============ */
+    .slide-7 {
+      background: var(--offwhite);
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .slide-7 .slide-header {
+      margin-bottom: 48px;
+    }
+
+    .slide-7 .timeline {
+      display: flex;
+      gap: 0;
+      width: 100%;
+    }
+
+    .slide-7 .timeline-step {
+      flex: 1;
+      border: var(--border);
+      background: var(--white);
+      padding: 32px;
+      box-shadow: var(--shadow-sm);
+      position: relative;
+      margin-right: -4px;
+    }
+
+    .slide-7 .timeline-step:first-child {
+      background: var(--blue);
+    }
+
+    .slide-7 .timeline-step:nth-child(2) {
+      background: var(--pink);
+    }
+
+    .slide-7 .timeline-step:nth-child(3) {
+      background: var(--green);
+    }
+
+    .slide-7 .timeline-step:nth-child(4) {
+      background: var(--yellow);
+      margin-right: 0;
+    }
+
+    .slide-7 .step-num {
+      font-family: 'Inter', sans-serif;
+      font-weight: 900;
+      font-size: 48px;
+      line-height: 1;
+      margin-bottom: 16px;
+      opacity: 0.6;
+    }
+
+    .slide-7 .step-title {
+      font-family: 'Inter', sans-serif;
+      font-weight: 700;
+      font-size: 20px;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .slide-7 .step-desc {
+      font-size: 14px;
+      line-height: 1.5;
+      font-weight: 500;
+    }
+
+    .slide-7 .step-connector {
+      position: absolute;
+      top: 50%;
+      right: -28px;
+      width: 28px;
+      height: 4px;
+      background: var(--black);
+      z-index: 10;
+      transform: translateY(-50%);
+    }
+
+    /* ============ SLIDE 8: STATISTICS / NUMBERS ============ */
+    .slide-8 {
+      background: var(--blue);
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .slide-8 .slide-header {
+      margin-bottom: 48px;
+    }
+
+    .slide-8 .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 24px;
+      width: 100%;
+    }
+
+    .slide-8 .stat-card {
+      border: var(--border);
+      background: var(--white);
+      padding: 32px;
+      box-shadow: var(--shadow-sm);
+      text-align: center;
+      position: relative;
+    }
+
+    .slide-8 .stat-card:nth-child(odd) {
+      transform: rotate(-2deg);
+    }
+
+    .slide-8 .stat-card:nth-child(even) {
+      transform: rotate(2deg);
+    }
+
+    .slide-8 .stat-number {
+      font-family: 'Inter', sans-serif;
+      font-weight: 900;
+      font-size: clamp(36px, 4vw, 64px);
+      line-height: 1;
+      margin-bottom: 12px;
+    }
+
+    .slide-8 .stat-label {
+      font-family: 'Space Grotesk', monospace;
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .slide-8 .stat-deco {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: 2px solid var(--black);
+    }
+
+    /* ============ SLIDE 9: TEAM / GRID ============ */
+    .slide-9 {
+      background: var(--cream);
+      flex-direction: column;
+      justify-content: center;
+      /* Extra bottom padding so the second card row clears the fixed
+         slide-counter (bottom-left) and nav-controls (bottom-right). */
+      padding-bottom: 110px;
+    }
+
+    .slide-9 .slide-header {
+      margin-bottom: 32px;
+    }
+
+    .slide-9 .team-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      width: 100%;
+    }
+
+    .slide-9 .team-card {
+      border: var(--border);
+      background: var(--white);
+      padding: 22px;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .slide-9 .team-avatar {
+      width: 72px;
+      height: 72px;
+      border: 3px solid var(--black);
+      background: var(--pink);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Inter', sans-serif;
+      font-weight: 900;
+      font-size: 28px;
+      text-transform: uppercase;
+    }
+
+    .slide-9 .team-card:nth-child(2) .team-avatar { background: var(--blue); }
+    .slide-9 .team-card:nth-child(3) .team-avatar { background: var(--green); }
+    .slide-9 .team-card:nth-child(4) .team-avatar { background: var(--yellow); }
+    .slide-9 .team-card:nth-child(5) .team-avatar { background: var(--pink); }
+    .slide-9 .team-card:nth-child(6) .team-avatar { background: var(--blue); }
+
+    .slide-9 .team-name {
+      font-family: 'Inter', sans-serif;
+      font-weight: 700;
+      font-size: 20px;
+      text-transform: uppercase;
+    }
+
+    .slide-9 .team-role {
+      font-family: 'Space Grotesk', monospace;
+      font-size: 14px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .slide-9 .team-bio {
+      font-size: 13px;
+      line-height: 1.45;
+      font-weight: 500;
+    }
+
+    /* ============ SLIDE 10: CLOSING ============ */
+    .slide-10 {
+      background: var(--black);
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      color: var(--white);
+    }
+
+    .slide-10 .close-frame {
+      border: 4px solid var(--white);
+      background: var(--black);
+      padding: 60px 80px;
+      box-shadow: 12px 12px 0px var(--yellow);
+      position: relative;
+    }
+
+    .slide-10 .close-title {
+      font-family: 'Inter', sans-serif;
+      font-weight: 900;
+      font-size: clamp(40px, 5vw, 80px);
+      line-height: 0.95;
+      letter-spacing: -0.03em;
+      text-transform: uppercase;
+      color: var(--white);
+      margin-bottom: 24px;
+    }
+
+    .slide-10 .close-subtitle {
+      font-family: 'Space Grotesk', monospace;
+      font-size: 18px;
+      font-weight: 500;
+      color: var(--cream);
+      margin-bottom: 40px;
+    }
+
+    .slide-10 .close-btn {
+      display: inline-block;
+      border: 3px solid var(--white);
+      padding: 16px 40px;
+      font-family: 'Inter', sans-serif;
+      font-weight: 700;
+      font-size: 16px;
+      text-decoration: none;
+      color: var(--black);
+      background: var(--yellow);
+      box-shadow: 6px 6px 0px var(--white);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .slide-10 .close-btn:hover {
+      transform: translate(-2px, -2px);
+      box-shadow: 8px 8px 0px var(--white);
+    }
+
+    .slide-10 .deco-star {
+      position: absolute;
+      top: -20px;
+      right: 60px;
+      width: 50px;
+      height: 50px;
+      background: var(--pink);
+      border: 3px solid var(--white);
+      clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+    }
+
+    .slide-10 .deco-dots-bottom {
+      position: absolute;
+      bottom: 40px;
+      left: 40px;
+      width: 100px;
+      height: 100px;
+      background-image: radial-gradient(circle, var(--white) 2px, transparent 2px);
+      background-size: 16px 16px;
+      opacity: 0.3;
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 1024px) {
+      .slide {
+        padding: 40px;
+      }
+      .slide-2 {
+        flex-direction: column;
+      }
+      .slide-6 {
+        flex-direction: column;
+      }
+      .slide-6 .split-content {
+        border-left: none;
+        border-top: var(--border);
+      }
+      .slide-3 .cards-row {
+        flex-direction: column;
+      }
+      .slide-7 .timeline {
+        flex-direction: column;
+      }
+      .slide-7 .timeline-step {
+        margin-right: 0;
+        margin-bottom: -4px;
+      }
+      .slide-7 .step-connector {
+        display: none;
+      }
+      .slide-8 .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .slide-9 .team-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 640px) {
+      .slide-8 .stats-grid {
+        grid-template-columns: 1fr;
+      }
+      .slide-9 .team-grid {
+        grid-template-columns: 1fr;
+      }
+      .slide-1 .hero-frame {
+        padding: 32px;
+      }
+      .slide-5 .quote-frame {
+        padding: 32px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="slide-counter" id="slideCounter">01 / 10</div>
+
+  <div class="nav-controls">
+    <button class="nav-btn" onclick="prevSlide()">&#8592;</button>
+    <button class="nav-btn" onclick="nextSlide()">&#8594;</button>
+  </div>
+
+  <div class="slides-container">
+
+    <!-- SLIDE 1: Title Hero -->
+    <section class="slide slide-1 active">
+      <div class="deco-dots"></div>
+      <div class="hero-frame">
+        <div class="corner-bracket tl"></div>
+        <div class="corner-bracket tr"></div>
+        <div class="corner-bracket bl"></div>
+        <div class="corner-bracket br"></div>
+        <div class="nb-label hero-label">Presentation Template</div>
+        <h1 class="nb-heading-xl hero-title">NEO-<br>BRUTALISM<br>STYLE</h1>
+        <p class="hero-subtitle">A bold, high-contrast template designed for maximum visual impact and uncompromising clarity.</p>
+        <div class="deco-pink-rect"></div>
+        <div class="deco-green-circle"></div>
+        <div class="deco-yellow-bar">Get Started</div>
+      </div>
+    </section>
+
+    <!-- SLIDE 2: Two Column Intro -->
+    <section class="slide slide-2">
+      <div class="col-left">
+        <div class="nb-label nb-label-yellow">Overview</div>
+        <h2 class="nb-heading-lg">What We<br>Deliver</h2>
+        <p class="nb-body" style="max-width: 480px;">Every project follows a rigorous process that balances creative exploration with systematic execution. The result is work that stands out while remaining fully functional.</p>
+        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+          <span class="stat-pill">12+ Years</span>
+          <span class="stat-pill">500+ Projects</span>
+        </div>
+      </div>
+      <div class="col-right">
+        <div class="intro-card">
+          <h3>Strategy First</h3>
+          <p>We begin with deep research and stakeholder alignment to ensure every decision is grounded in clear objectives.</p>
+        </div>
+        <div class="intro-card">
+          <h3>Design System</h3>
+          <p>A modular approach to visuals ensures consistency across all touchpoints while allowing room for expression.</p>
+        </div>
+        <div class="intro-card">
+          <h3>Launch Ready</h3>
+          <p>Final deliverables are production-tested, documented, and handed off with a comprehensive usage guide.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 3: Three Feature Cards -->
+    <section class="slide slide-3">
+      <div class="slide-header">
+        <div class="nb-label nb-label-pink">Core Features</div>
+      </div>
+      <div class="cards-row">
+        <div class="feature-card">
+          <div class="card-deco"></div>
+          <div class="feature-icon icon-pink">A</div>
+          <h3>Modular Layouts</h3>
+          <p>Mix and match components to build unique presentations without starting from scratch each time.</p>
+        </div>
+        <div class="feature-card">
+          <div class="card-deco"></div>
+          <div class="feature-icon icon-blue">B</div>
+          <h3>Responsive Ready</h3>
+          <p>Adapts seamlessly to different screen sizes while maintaining the bold visual character.</p>
+        </div>
+        <div class="feature-card">
+          <div class="card-deco"></div>
+          <div class="feature-icon icon-green">C</div>
+          <h3>Data Friendly</h3>
+          <p>Built-in styles for charts, statistics, and information-dense slides that remain readable.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 4: Chart / Data -->
+    <section class="slide slide-4">
+      <div class="slide-header">
+        <div class="nb-label nb-label-blue">Performance Data</div>
+      </div>
+      <div class="chart-frame">
+        <div class="chart-header">
+          <h2 class="nb-heading-md">Quarterly Growth Metrics</h2>
+          <div class="chart-legend">
+            <div class="legend-item"><div class="legend-swatch" style="background: var(--pink);"></div>Revenue</div>
+            <div class="legend-item"><div class="legend-swatch" style="background: var(--blue);"></div>Users</div>
+            <div class="legend-item"><div class="legend-swatch" style="background: var(--green);"></div>Retention</div>
+          </div>
+        </div>
+        <div class="chart-body">
+        <svg class="chart-svg" viewBox="0 0 800 360" xmlns="http://www.w3.org/2000/svg">
+          <!-- Axes (baseline at y=280, leaving room for X labels at y=320) -->
+          <line x1="60" y1="20" x2="60" y2="280" stroke="#000" stroke-width="3"/>
+          <line x1="60" y1="280" x2="780" y2="280" stroke="#000" stroke-width="3"/>
+
+          <!-- Horizontal grid (33 / 66 / 100) -->
+          <line x1="60" y1="80"  x2="780" y2="80"  stroke="#000" stroke-width="1" stroke-dasharray="4,4" opacity="0.3"/>
+          <line x1="60" y1="150" x2="780" y2="150" stroke="#000" stroke-width="1" stroke-dasharray="4,4" opacity="0.3"/>
+          <line x1="60" y1="215" x2="780" y2="215" stroke="#000" stroke-width="1" stroke-dasharray="4,4" opacity="0.3"/>
+
+          <!-- Y labels -->
+          <text x="48" y="285" text-anchor="end" font-family="Space Grotesk, monospace" font-size="14" font-weight="600">0</text>
+          <text x="48" y="220" text-anchor="end" font-family="Space Grotesk, monospace" font-size="14" font-weight="600">33</text>
+          <text x="48" y="155" text-anchor="end" font-family="Space Grotesk, monospace" font-size="14" font-weight="600">66</text>
+          <text x="48" y="85"  text-anchor="end" font-family="Space Grotesk, monospace" font-size="14" font-weight="600">100</text>
+
+          <!-- Bars: Revenue (pink) — three series per quarter, 5 quarters -->
+          <rect x="80"  y="200" width="32" height="80"  fill="#FE90E8" stroke="#000" stroke-width="2"/>
+          <rect x="224" y="160" width="32" height="120" fill="#FE90E8" stroke="#000" stroke-width="2"/>
+          <rect x="368" y="120" width="32" height="160" fill="#FE90E8" stroke="#000" stroke-width="2"/>
+          <rect x="512" y="80"  width="32" height="200" fill="#FE90E8" stroke="#000" stroke-width="2"/>
+          <rect x="656" y="60"  width="32" height="220" fill="#FE90E8" stroke="#000" stroke-width="2"/>
+
+          <!-- Bars: Users (blue) -->
+          <rect x="118" y="220" width="32" height="60"  fill="#C0F7FE" stroke="#000" stroke-width="2"/>
+          <rect x="262" y="190" width="32" height="90"  fill="#C0F7FE" stroke="#000" stroke-width="2"/>
+          <rect x="406" y="150" width="32" height="130" fill="#C0F7FE" stroke="#000" stroke-width="2"/>
+          <rect x="550" y="110" width="32" height="170" fill="#C0F7FE" stroke="#000" stroke-width="2"/>
+          <rect x="694" y="90"  width="32" height="190" fill="#C0F7FE" stroke="#000" stroke-width="2"/>
+
+          <!-- Bars: Retention (green) -->
+          <rect x="156" y="180" width="32" height="100" fill="#99E885" stroke="#000" stroke-width="2"/>
+          <rect x="300" y="160" width="32" height="120" fill="#99E885" stroke="#000" stroke-width="2"/>
+          <rect x="444" y="130" width="32" height="150" fill="#99E885" stroke="#000" stroke-width="2"/>
+          <rect x="588" y="110" width="32" height="170" fill="#99E885" stroke="#000" stroke-width="2"/>
+          <rect x="732" y="92"  width="32" height="188" fill="#99E885" stroke="#000" stroke-width="2"/>
+
+          <!-- X labels — bigger, sit comfortably below the baseline -->
+          <text x="134" y="320" text-anchor="middle" font-family="Space Grotesk, monospace" font-size="18" font-weight="700">Q1</text>
+          <text x="278" y="320" text-anchor="middle" font-family="Space Grotesk, monospace" font-size="18" font-weight="700">Q2</text>
+          <text x="422" y="320" text-anchor="middle" font-family="Space Grotesk, monospace" font-size="18" font-weight="700">Q3</text>
+          <text x="566" y="320" text-anchor="middle" font-family="Space Grotesk, monospace" font-size="18" font-weight="700">Q4</text>
+          <text x="710" y="320" text-anchor="middle" font-family="Space Grotesk, monospace" font-size="18" font-weight="700">Q5</text>
+        </svg>
+        <div class="data-column">
+          <div class="data-box">
+            <span class="data-num">+142%</span>
+            <span class="data-label">Revenue Growth</span>
+          </div>
+          <div class="data-box">
+            <span class="data-num">2.4M</span>
+            <span class="data-label">Active Users</span>
+          </div>
+          <div class="data-box">
+            <span class="data-num">94%</span>
+            <span class="data-label">Retention Rate</span>
+          </div>
+        </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 5: Big Statement / Quote -->
+    <section class="slide slide-5">
+      <div class="quote-frame">
+        <div class="deco-quote-marks">"</div>
+        <div class="corner-bracket tl"></div>
+        <div class="corner-bracket tr"></div>
+        <div class="corner-bracket bl"></div>
+        <div class="corner-bracket br"></div>
+        <p class="quote-text">Design is not just what it looks like. Design is how it works, how it feels, and how it lasts.</p>
+        <p class="quote-author">— Core Principle, Version 4.0</p>
+      </div>
+      <div class="deco-stripes"></div>
+    </section>
+
+    <!-- SLIDE 6: Split Image + Text -->
+    <section class="slide slide-6">
+      <div class="split-visual">
+        <div class="visual-box">
+          <span style="color: var(--black); font-family: Inter, sans-serif; font-weight: 700; font-size: 22px; text-transform: uppercase; letter-spacing: 0.06em; text-align: center; padding: 0 24px;">Image Placeholder</span>
+        </div>
+        <div class="visual-label">Visual System</div>
+      </div>
+      <div class="split-content">
+        <div class="nb-label nb-label-green">Methodology</div>
+        <h2 class="nb-heading-md">How We Structure<br>Every Project</h2>
+        <ul class="content-list">
+          <li>
+            <span class="list-num">01</span>
+            <span>Discovery phase to map stakeholder needs and technical constraints before any visual work begins.</span>
+          </li>
+          <li>
+            <span class="list-num">02</span>
+            <span>Iterative wireframing with rapid feedback loops to validate information architecture early.</span>
+          </li>
+          <li>
+            <span class="list-num">03</span>
+            <span>High-fidelity prototyping with real content to test readability and visual hierarchy.</span>
+          </li>
+          <li>
+            <span class="list-num">04</span>
+            <span>Production handoff with annotated specifications and a living style guide.</span>
+          </li>
+        </ul>
+        <div><a class="nb-btn" href="#">View Process</a></div>
+      </div>
+    </section>
+
+    <!-- SLIDE 7: Timeline / Process -->
+    <section class="slide slide-7">
+      <div class="slide-header">
+        <div class="nb-label nb-label-cream">Roadmap</div>
+        <h2 class="nb-heading-lg" style="margin-top: 16px;">Project Timeline</h2>
+      </div>
+      <div class="timeline">
+        <div class="timeline-step">
+          <div class="step-connector"></div>
+          <div class="step-num">01</div>
+          <div class="step-title">Research</div>
+          <div class="step-desc">Market analysis, user interviews, and competitive audits to establish a foundation.</div>
+        </div>
+        <div class="timeline-step">
+          <div class="step-connector"></div>
+          <div class="step-num">02</div>
+          <div class="step-title">Concept</div>
+          <div class="step-desc">Mood boards, sketches, and directional explorations to define the visual language.</div>
+        </div>
+        <div class="timeline-step">
+          <div class="step-connector"></div>
+          <div class="step-num">03</div>
+          <div class="step-title">Build</div>
+          <div class="step-desc">Detailed execution with weekly reviews and continuous stakeholder alignment.</div>
+        </div>
+        <div class="timeline-step">
+          <div class="step-num">04</div>
+          <div class="step-title">Launch</div>
+          <div class="step-desc">Deployment support, performance monitoring, and post-launch optimization.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 8: Statistics / Numbers -->
+    <section class="slide slide-8">
+      <div class="slide-header">
+        <div class="nb-label nb-label-green">By The Numbers</div>
+        <h2 class="nb-heading-lg" style="margin-top: 16px;">Impact at a Glance</h2>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-deco" style="background: var(--pink);"></div>
+          <div class="stat-number">98%</div>
+          <div class="stat-label">Client Satisfaction</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-deco" style="background: var(--blue);"></div>
+          <div class="stat-number">14</div>
+          <div class="stat-label">Industry Awards</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-deco" style="background: var(--green);"></div>
+          <div class="stat-number">3.2x</div>
+          <div class="stat-label">Avg. ROI Increase</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-deco" style="background: var(--yellow);"></div>
+          <div class="stat-number">50+</div>
+          <div class="stat-label">Team Members</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 9: Team / Grid -->
+    <section class="slide slide-9">
+      <div class="slide-header">
+        <div class="nb-label nb-label-pink">The Team</div>
+        <h2 class="nb-heading-lg" style="margin-top: 16px;">Meet the Crew</h2>
+      </div>
+      <div class="team-grid">
+        <div class="team-card">
+          <div class="team-avatar">JD</div>
+          <div class="team-name">J. Doe</div>
+          <div class="team-role">Creative Lead</div>
+          <div class="team-bio">Oversees visual direction and ensures every project maintains a coherent narrative.</div>
+        </div>
+        <div class="team-card">
+          <div class="team-avatar">AS</div>
+          <div class="team-name">A. Smith</div>
+          <div class="team-role">Tech Director</div>
+          <div class="team-bio">Translates design systems into scalable technical architectures and workflows.</div>
+        </div>
+        <div class="team-card">
+          <div class="team-avatar">MK</div>
+          <div class="team-name">M. Kim</div>
+          <div class="team-role">Strategist</div>
+          <div class="team-bio">Connects business objectives to user needs through research and analysis.</div>
+        </div>
+        <div class="team-card">
+          <div class="team-avatar">RL</div>
+          <div class="team-name">R. Lee</div>
+          <div class="team-role">Producer</div>
+          <div class="team-bio">Manages timelines, budgets, and cross-functional coordination for smooth delivery.</div>
+        </div>
+        <div class="team-card">
+          <div class="team-avatar">TP</div>
+          <div class="team-name">T. Patel</div>
+          <div class="team-role">Designer</div>
+          <div class="team-bio">Crafts interfaces and interactions with obsessive attention to detail.</div>
+        </div>
+        <div class="team-card">
+          <div class="team-avatar">SC</div>
+          <div class="team-name">S. Chen</div>
+          <div class="team-role">Developer</div>
+          <div class="team-bio">Builds robust front-end systems that bring static designs to life.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 10: Closing -->
+    <section class="slide slide-10">
+      <div class="deco-dots-bottom"></div>
+      <div class="close-frame">
+        <div class="deco-star"></div>
+        <h2 class="close-title">Let's Build<br>Something Bold</h2>
+        <p class="close-subtitle">Ready to start your next project?</p>
+        <a class="close-btn" href="#">Get In Touch</a>
+      </div>
+    </section>
+
+  </div>
+
+  <script>
+    let currentSlide = 0;
+    const slides = document.querySelectorAll('.slide');
+    const counter = document.getElementById('slideCounter');
+    const totalSlides = slides.length;
+
+    function updateSlide() {
+      slides.forEach((slide, index) => {
+        slide.classList.toggle('active', index === currentSlide);
+      });
+      counter.textContent = String(currentSlide + 1).padStart(2, '0') + ' / ' + String(totalSlides).padStart(2, '0');
+    }
+
+    function nextSlide() {
+      currentSlide = (currentSlide + 1) % totalSlides;
+      updateSlide();
+    }
+
+    function prevSlide() {
+      currentSlide = (currentSlide - 1 + totalSlides) % totalSlides;
+      updateSlide();
+    }
+
+    // Keyboard navigation
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ') {
+        e.preventDefault();
+        nextSlide();
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        prevSlide();
+      }
+    });
+
+    // Touch / swipe support
+    let touchStartX = 0;
+    let touchEndX = 0;
+
+    document.addEventListener('touchstart', (e) => {
+      touchStartX = e.changedTouches[0].screenX;
+    });
+
+    document.addEventListener('touchend', (e) => {
+      touchEndX = e.changedTouches[0].screenX;
+      if (touchStartX - touchEndX > 50) {
+        nextSlide();
+      } else if (touchEndX - touchStartX > 50) {
+        prevSlide();
+      }
+    });
+
+    updateSlide();
+  </script>
+
+</body>
+</html>

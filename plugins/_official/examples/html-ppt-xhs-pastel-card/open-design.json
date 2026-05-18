@@ -1,0 +1,81 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-html-ppt-xhs-pastel-card",
+  "title": "Html Ppt Xhs Pastel Card",
+  "version": "0.1.0",
+  "description": "柔和马卡龙慢生活 deck — 奶油 #fef8f1 底 + 三个柔光 blob、Playfair 斜体衬线 display 标题混 sans 正文、28px 圆角马卡龙卡片（桃 / 薄荷 / 天 / 紫 / 柠 / 玫）、Playfair 斜体 01-04 序号、SVG donut 图、chip+page 顶栏。适合生活方式 / 个人成长 / 慢生活 / 情绪类内容，\"杂志、手作、不太科技\"的感觉。",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/html-ppt-xhs-pastel-card",
+  "tags": [
+    "example",
+    "first-party",
+    "deck",
+    "personal",
+    "web",
+    "pastel",
+    "macaron",
+    "lifestyle",
+    "slow-living",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "personal",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Use the html-ppt-xhs-pastel-card template to create a slow-living themed carousel. Use a cream background, macaron rounded cards, Playfair italic numbering, and a donut chart. First ask me for the theme (rest, pause, self-care, etc.) and 5-7 points I want to say.",
+        "zh-CN": "用 html-ppt-xhs-pastel-card 模板做一份慢生活主题图文。奶油底 + 马卡龙圆角卡片 + Playfair 斜体序号 + donut 图。先告诉我主题（休息 / 暂停 / 自我照顾…）和 5-7 个想说的点。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Html Ppt Xhs Pastel Card"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

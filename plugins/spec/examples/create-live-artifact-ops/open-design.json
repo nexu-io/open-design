@@ -1,0 +1,60 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "create-live-artifact-ops",
+  "title": "Example Live Ops Artifact",
+  "version": "0.1.0",
+  "description": "Spec example plugin for a refreshable live operations artifact with seeded data fallback.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design Spec Examples",
+    "url": "https://github.com/nexu-io/open-design"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/spec/examples/create-live-artifact-ops",
+  "tags": ["create", "live-artifact", "operations", "dashboard"],
+  "compat": {
+    "agentSkills": [{ "path": "./SKILL.md" }]
+  },
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "operations",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create a live customer-success artifact that can refresh from a connector but ships with realistic seeded data.",
+        "zh-CN": "使用插件创建一个客户成功实时产物，可接入连接器刷新，同时自带真实感种子数据。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Example Live Ops Artifact"
+        }
+      ]
+    },
+    "context": {
+      "skills": [{ "path": "./SKILL.md" }],
+      "craft": ["state-coverage", "accessibility-baseline", "motion-discipline"],
+      "assets": ["./example.html"],
+      "atoms": ["todo-write", "live-artifact", "handoff"]
+    },
+    "pipeline": {
+      "stages": [
+        { "id": "plan", "atoms": ["todo-write"] },
+        { "id": "generate", "atoms": ["file-write", "live-artifact"] },
+        { "id": "handoff", "atoms": ["handoff"] }
+      ]
+    },
+    "inputs": [
+      { "name": "source", "type": "string", "values": ["mock", "notion", "linear", "stripe"], "default": "mock" },
+      { "name": "refresh_seconds", "type": "number", "default": 60 }
+    ],
+    "capabilities": ["prompt:inject", "fs:write"]
+  }
+}

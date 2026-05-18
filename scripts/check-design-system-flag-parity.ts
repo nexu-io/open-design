@@ -182,6 +182,7 @@ export async function checkDesignSystemFlagParity(): Promise<boolean> {
       designSystemBody: brand.designMd,
       designSystemTitle: brand.title,
       designSystemTokensCss: brand.assets.tokensCss,
+      designSystemComponentsManifest: brand.assets.componentsManifest,
       designSystemFixtureHtml: brand.assets.fixtureHtml,
     });
 

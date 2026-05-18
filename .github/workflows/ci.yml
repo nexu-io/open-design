@@ -70,7 +70,23 @@ jobs:
                   required=true
                 fi
               done
-              if [[ "$file" == "e2e/specs/mac.spec.ts" || "$file" == "e2e/specs/win.spec.ts" || "$file" == "e2e/specs/linux.spec.ts" || "$file" == "e2e/lib/linux-helpers.ts" || "$file" == "package.json" || "$file" == "pnpm-lock.yaml" || "$file" == "pnpm-workspace.yaml" || "$file" == ".github/workflows/ci.yml" || "$file" == ".github/workflows/release-beta.yml" || "$file" == ".github/workflows/release-stable.yml" ]]; then
+              if [[ "$file" == "apps/daemon/"* || "$file" == "packages/contracts/"* || "$file" == "packages/platform/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/sidecar-proto/"* ]]; then
+                daemon_tests_required=true
+              fi
+              if [[ "$file" == "apps/web/"* || "$file" == "packages/contracts/"* || "$file" == "packages/platform/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/sidecar-proto/"* ]]; then
+                web_tests_required=true
+              fi
+              if [[ "$file" == "scripts/"* || "$file" == "assets/"* || "$file" == "skills/"* || "$file" == "prompt-templates/"* || "$file" == "design-systems/"* || "$file" == "design-templates/"* || "$file" == "craft/"* ]]; then
+                daemon_tests_required=true
+                web_tests_required=true
+              fi
+              if [[ "$file" == "tools/dev/"* || "$file" == "packages/platform/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/sidecar-proto/"* ]]; then
+                tools_dev_tests_required=true
+              fi
+              if [[ "$file" == "tools/pack/"* || "$file" == "apps/packaged/"* || "$file" == "apps/desktop/"* || "$file" == "packages/platform/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/sidecar-proto/"* ]]; then
+                tools_pack_tests_required=true
+              fi
+              if [[ "$file" == "e2e/specs/mac.spec.ts" || "$file" == "e2e/specs/win.spec.ts" || "$file" == "e2e/specs/linux.spec.ts" || "$file" == "e2e/lib/linux-helpers.ts" || "$file" == "package.json" || "$file" == "pnpm-lock.yaml" || "$file" == "pnpm-workspace.yaml" || "$file" == ".github/workflows/ci.yml" || "$file" == ".github/workflows/release-beta.yml" || "$file" == ".github/workflows/release-preview.yml" || "$file" == ".github/workflows/release-stable.yml" ]]; then
                 required=true
                 daemon_tests_required=true
                 web_tests_required=true
@@ -92,11 +108,13 @@ jobs:
             tools_dev_tests_required=true
             tools_pack_tests_required=true
           fi
-          echo "required=$required" >> "$GITHUB_OUTPUT"
-          echo "daemon_tests_required=$daemon_tests_required" >> "$GITHUB_OUTPUT"
-          echo "web_tests_required=$web_tests_required" >> "$GITHUB_OUTPUT"
-          echo "tools_dev_tests_required=$tools_dev_tests_required" >> "$GITHUB_OUTPUT"
-          echo "tools_pack_tests_required=$tools_pack_tests_required" >> "$GITHUB_OUTPUT"
+          {
+            echo "required=$required"
+            echo "daemon_tests_required=$daemon_tests_required"
+            echo "web_tests_required=$web_tests_required"
+            echo "tools_dev_tests_required=$tools_dev_tests_required"
+            echo "tools_pack_tests_required=$tools_pack_tests_required"
+          } >> "$GITHUB_OUTPUT"
 
   validate:
     name: Validate workspace
@@ -514,6 +532,11 @@ jobs:
     if: ${{ needs.packaged_changes.outputs.required == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # v0.8.0 launch doc explicitly lists Linux as "coming soon" — the
+    # packaged Linux headless runtime is known-incomplete in this release.
+    # Keep the smoke job running so we keep collecting signal, but don't
+    # block PRs on it until the Linux client lands.
+    continue-on-error: true
 
     steps:
       - name: Checkout
@@ -581,6 +604,28 @@ jobs:
           report_dir="$RUNNER_TEMP/packaged-report/linux-headless"
           mkdir -p "$report_dir"
           pnpm test specs/linux.spec.ts 2>&1 | tee "$report_dir/vitest.log"
+
+      - name: Collect linux headless runtime logs
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          report_dir="$RUNNER_TEMP/packaged-report/linux-headless"
+          runtime_root="$RUNNER_TEMP/tools-pack/runtime/linux/namespaces/ci-pr-linux"
+          if [ -d "$runtime_root" ]; then
+            echo "--- $runtime_root tree ---"
+            find "$runtime_root" -maxdepth 4 -type f | head -40 || true
+            mkdir -p "$report_dir/runtime"
+            # Logs: per-app stdout/stderr captured by tools-pack
+            if [ -d "$runtime_root/logs" ]; then
+              cp -R "$runtime_root/logs" "$report_dir/runtime/logs" || true
+            fi
+            # Runtime state files (identity markers, sidecar JSON)
+            if [ -d "$runtime_root/runtime" ]; then
+              cp -R "$runtime_root/runtime" "$report_dir/runtime/state" || true
+            fi
+          else
+            echo "no runtime root found at $runtime_root"
+          fi
 
       - name: Upload linux headless e2e spec report
         if: ${{ always() }}

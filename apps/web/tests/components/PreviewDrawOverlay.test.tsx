@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { fireEvent, render, waitFor } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { PreviewDrawOverlay } from '../../src/components/PreviewDrawOverlay';
 
@@ -27,5 +27,31 @@ describe('PreviewDrawOverlay', () => {
     );
 
     await waitFor(() => expect(container.querySelector('canvas')).toBeNull());
+  });
+
+  it('forwards wheel scrolling to the preview iframe while drawing', () => {
+    const { container } = render(
+      <PreviewDrawOverlay active>
+        <iframe title="preview" />
+      </PreviewDrawOverlay>,
+    );
+
+    const canvas = container.querySelector('canvas');
+    const iframe = container.querySelector('iframe');
+    expect(canvas).toBeTruthy();
+    expect(iframe?.contentWindow).toBeTruthy();
+
+    const scrollBy = vi.fn();
+    Object.defineProperty(iframe!.contentWindow!, 'scrollBy', {
+      value: scrollBy,
+      configurable: true,
+    });
+
+    fireEvent.wheel(canvas!, {
+      deltaX: 12,
+      deltaY: 180,
+    });
+
+    expect(scrollBy).toHaveBeenCalledWith({ left: 12, top: 180, behavior: 'auto' });
   });
 });

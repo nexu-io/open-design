@@ -19,7 +19,6 @@ export const MAC_PREBUNDLE_RUNTIME_DEPENDENCIES = {
 } as const;
 
 export const MAC_STANDALONE_PREBUNDLE_EXCLUDED_INTERNAL_PACKAGES = [
-  "@open-design/contracts",
   "@open-design/daemon",
   "@open-design/desktop",
   "@open-design/packaged",

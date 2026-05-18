@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Claude (Anthropic) — reference components</title>
+    <meta
+      name="description"
+      content="Reference fixture for design-systems/claude. Literary salon aesthetic:
+        warm parchment canvas, terracotta accent, Anthropic Serif headings.
+        Every visible value comes from tokens.css via var(--*)."
+    />
+
+    <style>
+      /* :root paste — sourced verbatim from
+         design-systems/claude/tokens.css. Keep in sync when tokens change. */
+      :root {
+        --bg: #f5f4ed;
+        --surface: #faf9f5;
+        --surface-warm: #e8e6dc;
+
+        --fg: #141413;
+        --fg-2: #3d3d3a;
+        --muted: #5e5d59;
+        --meta: #87867f;
+
+        --border: #f0eee6;
+        --border-soft: #e8e6dc;
+
+        --accent: #c96442;
+        --accent-on: #faf9f5;
+        --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+        --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+        --success: #17a34a;
+        --warn: #eab308;
+        --danger: #b53333;
+
+        --font-display: "Anthropic Serif", Georgia, "Times New Roman", serif;
+        --font-body: "Anthropic Sans", "Arial", system-ui, -apple-system, sans-serif;
+        --font-mono: "Anthropic Mono", ui-monospace, "JetBrains Mono", Menlo, monospace;
+
+        --text-xs: 10px;
+        --text-sm: 14px;
+        --text-base: 16px;
+        --text-lg: 20px;
+        --text-xl: 25px;
+        --text-2xl: 32px;
+        --text-3xl: 52px;
+        --text-4xl: 64px;
+
+        --leading-body: 1.6;
+        --leading-tight: 1.1;
+        --tracking-display: 0em;
+
+        --space-1: 4px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-5: 20px;
+        --space-6: 24px;
+        --space-8: 32px;
+        --space-12: 48px;
+
+        --section-y-desktop: 96px;
+        --section-y-tablet: 64px;
+        --section-y-phone: 48px;
+
+        --radius-sm: 8px;
+        --radius-md: 12px;
+        --radius-lg: 16px;
+        --radius-pill: 9999px;
+
+        --elev-flat: none;
+        --elev-ring: 0 0 0 1px var(--border);
+        --elev-raised: rgba(0, 0, 0, 0.05) 0px 4px 24px;
+
+        --focus-ring: 0 0 0 3px rgba(56, 152, 236, 0.3);
+
+        --motion-fast: 150ms;
+        --motion-base: 200ms;
+        --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+        --container-max: 1200px;
+        --container-gutter-desktop: 24px;
+        --container-gutter-tablet: 16px;
+        --container-gutter-phone: 12px;
+      }
+
+      /* ─── Reset (minimal) ───────────────────────────────────── */
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ─── Layout primitives ─────────────────────────────────── */
+      .container {
+        max-width: var(--container-max);
+        margin-inline: auto;
+        padding-inline: var(--container-gutter-desktop);
+      }
+      section { padding-block: var(--section-y-desktop); }
+      section + section { border-top: 1px solid var(--border); }
+      @media (max-width: 1023px) {
+        .container { padding-inline: var(--container-gutter-tablet); }
+        section { padding-block: var(--section-y-tablet); }
+      }
+      @media (max-width: 639px) {
+        .container { padding-inline: var(--container-gutter-phone); }
+        section { padding-block: var(--section-y-phone); }
+      }
+
+      /* ─── Typography — Anthropic Serif for all headings ─────── */
+      h1, h2, h3 {
+        font-family: var(--font-display);
+        font-weight: 500; /* Claude uses weight 500 for all serif headings */
+        line-height: var(--leading-tight);
+        margin: 0;
+        letter-spacing: var(--tracking-display);
+      }
+      h1 { font-size: var(--text-4xl); }
+      h2 { font-size: var(--text-2xl); }
+      h3 { font-size: var(--text-xl); }
+      p { margin: 0; }
+      .lead {
+        font-size: var(--text-lg);
+        color: var(--muted);
+        line-height: var(--leading-body);
+      }
+      .body-muted { color: var(--muted); }
+      .body-sm { font-size: var(--text-sm); }
+      .eyebrow {
+        font-family: var(--font-body);
+        font-size: var(--text-xs);
+        color: var(--meta);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-weight: 500;
+      }
+      .stack-3 > * + * { margin-block-start: var(--space-3); }
+      .stack-4 > * + * { margin-block-start: var(--space-4); }
+      .stack-6 > * + * { margin-block-start: var(--space-6); }
+
+      /* ─── Buttons ───────────────────────────────────────────── */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: 9px 16px 9px 12px;
+        border-radius: var(--radius-sm);
+        font-family: var(--font-body);
+        font-size: var(--text-sm);
+        font-weight: 500;
+        line-height: 1;
+        cursor: pointer;
+        border: none;
+        transition:
+          box-shadow var(--motion-fast) var(--ease-standard),
+          background-color var(--motion-fast) var(--ease-standard);
+        text-decoration: none;
+      }
+      .btn:active { transform: translateY(1px); }
+      .btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+      /* Primary: Terracotta Brand — the only button with chromatic color */
+      .btn-primary {
+        background: var(--accent);
+        color: var(--accent-on);
+        box-shadow: var(--accent) 0px 0px 0px 0px, var(--accent) 0px 0px 0px 1px;
+      }
+      .btn-primary:hover { background: var(--accent-hover); }
+      .btn-primary:active { background: var(--accent-active); }
+      /* Secondary: Warm Sand — workhorse button */
+      .btn-secondary {
+        background: var(--surface-warm);
+        color: var(--fg-2);
+        box-shadow: var(--surface-warm) 0px 0px 0px 0px, #d1cfc5 0px 0px 0px 1px;
+      }
+      .btn-secondary:hover {
+        background: color-mix(in oklab, var(--surface-warm), black 4%);
+      }
+
+      /* ─── Inputs ────────────────────────────────────────────── */
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+      }
+      .field label {
+        font-size: var(--text-sm);
+        font-weight: 500;
+        color: var(--fg-2);
+      }
+      .field input {
+        padding: 10px 12px;
+        border-radius: var(--radius-md);
+        border: 1px solid var(--border-soft);
+        background: var(--surface);
+        color: var(--fg);
+        font-family: var(--font-body);
+        font-size: var(--text-sm);
+        outline: none;
+        transition:
+          border-color var(--motion-fast) var(--ease-standard),
+          box-shadow var(--motion-fast) var(--ease-standard);
+      }
+      .field input:focus-visible {
+        border-color: #3898ec; /* Focus Blue — the only cool color in Claude */
+        box-shadow: var(--focus-ring);
+      }
+      .field input::placeholder { color: var(--meta); }
+      .field-help {
+        font-size: var(--text-xs);
+        color: var(--meta);
+      }
+
+      /* ─── Cards — ivory surface, whisper shadow ─────────────── */
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: var(--space-6);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+        box-shadow: var(--elev-raised);
+      }
+
+      /* ─── Badges ────────────────────────────────────────────── */
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: 3px var(--space-3);
+        border-radius: var(--radius-pill);
+        font-family: var(--font-body);
+        font-size: var(--text-xs);
+        font-weight: 500;
+        line-height: 1.6;
+        text-transform: uppercase;
+        letter-spacing: 0.12px;
+      }
+      .badge-success {
+        color: var(--success);
+        background: color-mix(in oklab, var(--success), transparent 90%);
+      }
+      .badge-muted {
+        color: var(--muted);
+        background: color-mix(in oklab, var(--muted), transparent 88%);
+      }
+      .badge-dot {
+        width: 6px; height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+      }
+
+      /* ─── Links ─────────────────────────────────────────────── */
+      a {
+        color: var(--fg-2);
+        text-decoration: none;
+      }
+      a:hover {
+        color: var(--accent);
+        text-decoration: none;
+      }
+
+      /* ─── Kbd ───────────────────────────────────────────────── */
+      kbd {
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+        padding: 2px 6px;
+        border-radius: 4px;
+        border: 1px solid var(--border-soft);
+        background: var(--surface-warm);
+        color: var(--muted);
+      }
+
+      /* ─── Section layouts ───────────────────────────────────── */
+      .hero-grid {
+        display: grid;
+        grid-template-columns: 1.4fr 1fr;
+        gap: var(--space-12);
+        align-items: end;
+      }
+      @media (max-width: 1023px) {
+        .hero-grid { grid-template-columns: 1fr; gap: var(--space-8); }
+      }
+      .hero-actions {
+        display: flex;
+        gap: var(--space-3);
+        margin-block-start: var(--space-6);
+        flex-wrap: wrap;
+      }
+      .hero-meta {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+        padding: var(--space-5);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        box-shadow: var(--elev-raised);
+      }
+      .features-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: var(--space-5);
+      }
+      @media (max-width: 1023px) {
+        .features-grid { grid-template-columns: 1fr 1fr; }
+      }
+      @media (max-width: 639px) {
+        .features-grid { grid-template-columns: 1fr; }
+      }
+      .form-row {
+        display: grid;
+        grid-template-columns: 1.4fr 1fr;
+        gap: var(--space-12);
+        align-items: start;
+      }
+      @media (max-width: 1023px) {
+        .form-row { grid-template-columns: 1fr; }
+      }
+      .form {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-4);
+        max-width: 420px;
+      }
+      .form-actions {
+        display: flex;
+        gap: var(--space-3);
+        margin-block-start: var(--space-2);
+      }
+      .icon { width: 16px; height: 16px; flex-shrink: 0; }
+      .row-between {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-3);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <!-- ════════════════════════════════════════════════════════
+           HERO — exercises: h1 (Anthropic Serif 500), .lead,
+           .eyebrow, .btn-primary (terracotta), .btn-secondary
+           (warm sand), kbd, .badge-success, hero-grid.
+      ════════════════════════════════════════════════════════════ -->
+      <section data-od-id="hero">
+        <div class="hero-grid">
+          <div class="stack-4">
+            <p class="eyebrow">Reference fixture · claude</p>
+            <h1>Thoughtful conversations, made tangible.</h1>
+            <p class="lead" style="max-width: 52ch">
+              A warm, literary design system built on parchment — where
+              every interaction carries the weight of a considered reply.
+            </p>
+            <div class="hero-actions">
+              <a href="./tokens.css" class="btn btn-primary">
+                View tokens
+                <svg class="icon" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" stroke-width="1.75"
+                  stroke-linecap="round" stroke-linejoin="round"
+                  aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+              </a>
+              <a href="./DESIGN.md" class="btn btn-secondary">Read the spec</a>
+            </div>
+          </div>
+
+          <aside class="hero-meta" aria-label="System status">
+            <div class="row-between">
+              <span class="body-sm" style="color: var(--muted)">Model status</span>
+              <span class="badge badge-success">
+                <span class="badge-dot" aria-hidden="true"></span>
+                Available
+              </span>
+            </div>
+            <p class="body-sm body-muted">
+              Last reviewed
+              <time datetime="2026-05-15">2026-05-15</time> · v1.0
+            </p>
+            <p class="body-sm body-muted">
+              Press <kbd>⌘</kbd> <kbd>K</kbd> to search tokens.
+            </p>
+          </aside>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════
+           FEATURES — exercises: h2, h3, .card (ivory + whisper
+           shadow), .body-muted, link, .features-grid.
+      ════════════════════════════════════════════════════════════ -->
+      <section data-od-id="features">
+        <div class="stack-3">
+          <p class="eyebrow">What this fixture exercises</p>
+          <h2 style="max-width: 30ch">
+            Warm parchment, terracotta, and the gentlest possible containment.
+          </h2>
+        </div>
+
+        <div class="features-grid" style="margin-block-start: var(--space-8)">
+          <article class="card">
+            <h3>Parchment surface tokens</h3>
+            <p class="body-muted body-sm">
+              --bg (#f5f4ed) → --surface (#faf9f5) → --surface-warm (#e8e6dc).
+              Three warm tiers with yellow-brown undertones — no cool grays anywhere.
+            </p>
+            <a href="./tokens.css" class="body-sm">Inspect tokens →</a>
+          </article>
+
+          <article class="card">
+            <h3>Terracotta discipline</h3>
+            <p class="body-muted body-sm">
+              --accent (#c96442) appears only on the primary CTA and brand
+              moments. The warm sand secondary button keeps the screen
+              from feeling mono-terracotta.
+            </p>
+            <a href="./DESIGN.md" class="body-sm">Read the rule →</a>
+          </article>
+
+          <article class="card">
+            <h3>Serif/sans hierarchy</h3>
+            <p class="body-muted body-sm">
+              Anthropic Serif weight 500 for all headings — the single weight
+              gives every title the gravitas of a published title. Anthropic
+              Sans handles UI text with quiet efficiency.
+            </p>
+            <a href="./tokens.css" class="body-sm">Inspect typography →</a>
+          </article>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════
+           FORM — exercises: .field, input :focus-visible (Focus
+           Blue), .btn-primary, .btn-secondary, .field-help.
+      ════════════════════════════════════════════════════════════ -->
+      <section data-od-id="form">
+        <div class="form-row">
+          <div class="stack-4">
+            <p class="eyebrow">Form components</p>
+            <h2>Inputs in the same warm context.</h2>
+            <p class="body-muted" style="max-width: 48ch">
+              Focus rings use Focus Blue (#3898ec) — the ONLY cool color in
+              the entire Claude system. It exists purely for accessibility.
+              Everything else stays warm.
+            </p>
+          </div>
+
+          <form class="form" onsubmit="event.preventDefault();">
+            <div class="field">
+              <label for="email">Work email</label>
+              <input
+                id="email"
+                type="email"
+                placeholder="you@team.dev"
+                autocomplete="email"
+                required
+              />
+              <p class="field-help">
+                We'll send a copy of the spec and nothing else.
+              </p>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">
+                Send the spec
+              </button>
+              <button type="button" class="btn btn-secondary">
+                Skip for now
+              </button>
+            </div>
+          </form>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

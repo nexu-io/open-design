@@ -6,6 +6,8 @@ on:
       # Workflow files
       - .github/workflows/landing-page-ci.yml
       - .github/workflows/landing-page-deploy.yml
+      - .github/workflows/blog-indexing-on-deploy.yml
+      - .github/workflows/blog-indexing-monitor.yml
       # Landing page sources
       - apps/landing-page/**
       # Content sources globbed by Astro content collections — without
@@ -25,6 +27,8 @@ on:
     paths:
       - .github/workflows/landing-page-ci.yml
       - .github/workflows/landing-page-deploy.yml
+      - .github/workflows/blog-indexing-on-deploy.yml
+      - .github/workflows/blog-indexing-monitor.yml
       - apps/landing-page/**
       - skills/**
       - design-systems/**
@@ -51,6 +55,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v5
@@ -98,6 +104,27 @@ jobs:
 
       - name: Build landing page
         run: pnpm --filter @open-design/landing-page build
+
+      - name: Lint changed blog SEO
+        run: |
+          BASE="${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}"
+          if [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            BASE="HEAD^"
+          fi
+          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/lint-blog-seo.ts \
+            --base "$BASE" \
+            --head HEAD \
+            --rendered-out apps/landing-page/out
+
+      - name: Guard blog URL changes
+        run: |
+          BASE="${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}"
+          if [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            BASE="HEAD^"
+          fi
+          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/check-blog-url-changes.ts \
+            --base "$BASE" \
+            --head HEAD
 
       - name: Verify zero external JavaScript
         run: |

@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { migrateCritique } from './critique/persistence.js';
 import { migrateMediaTasks } from './media-tasks.js';
+import { migratePlugins } from './plugins/persistence.js';
 
 type SqliteDb = Database.Database;
 type DbRow = Record<string, any>;
@@ -188,6 +189,7 @@ function migrate(db: SqliteDb): void {
       completed_at INTEGER,
       summary TEXT,
       error TEXT,
+      error_code TEXT,
       FOREIGN KEY(routine_id) REFERENCES routines(id) ON DELETE CASCADE
     );
 
@@ -225,6 +227,10 @@ function migrate(db: SqliteDb): void {
   if (!messageCols.some((c: DbRow) => c.name === 'feedback_json')) {
     db.exec(`ALTER TABLE messages ADD COLUMN feedback_json TEXT`);
   }
+  const routineRunCols = db.prepare(`PRAGMA table_info(routine_runs)`).all() as DbRow[];
+  if (!routineRunCols.some((c: DbRow) => c.name === 'error_code')) {
+    db.exec(`ALTER TABLE routine_runs ADD COLUMN error_code TEXT`);
+  }
 
   const previewCommentCols = db.prepare(`PRAGMA table_info(preview_comments)`).all() as DbRow[];
   if (!previewCommentCols.some((c: DbRow) => c.name === 'selection_kind')) {
@@ -260,6 +266,7 @@ function migrate(db: SqliteDb): void {
   }
   migrateCritique(db);
   migrateMediaTasks(db);
+  migratePlugins(db);
 }
 
 // ---------- deployments ----------
@@ -422,6 +429,7 @@ const PROJECT_COLS = `id, name, skill_id AS skillId,
   design_system_id AS designSystemId,
   pending_prompt AS pendingPrompt,
   metadata_json AS metadataJson,
+  applied_plugin_snapshot_id AS appliedPluginSnapshotId,
   custom_instructions AS customInstructions,
   created_at AS createdAt,
   updated_at AS updatedAt`;
@@ -575,6 +583,7 @@ function normalizeProject(row: DbRow) {
     designSystemId: row.designSystemId,
     pendingPrompt: row.pendingPrompt ?? undefined,
     metadata,
+    appliedPluginSnapshotId: row.appliedPluginSnapshotId ?? undefined,
     customInstructions: row.customInstructions ?? undefined,
     createdAt: Number(row.createdAt),
     updatedAt: Number(row.updatedAt),
@@ -963,6 +972,29 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
   return row ? normalizeMessage(row) : null;
 }
 
+export function appendMessageStatusEvent(db: SqliteDb, messageId: string, event: DbRow) {
+  const label = typeof event?.label === 'string' ? event.label.trim() : '';
+  const detail = typeof event?.detail === 'string' ? event.detail.trim() : '';
+  if (!label) return null;
+  const row = db
+    .prepare(`SELECT events_json AS eventsJson FROM messages WHERE id = ?`)
+    .get(messageId) as DbRow | undefined;
+  if (!row) return null;
+  const parsed = parseJsonOrUndef(row.eventsJson);
+  const events = Array.isArray(parsed) ? parsed : [];
+  const last = events[events.length - 1];
+  if (last?.kind === 'status' && last.label === label && (last.detail ?? '') === detail) {
+    return events;
+  }
+  const nextEvent = detail
+    ? { kind: 'status', label, detail }
+    : { kind: 'status', label };
+  const next = [...events, nextEvent];
+  db.prepare(`UPDATE messages SET events_json = ? WHERE id = ?`)
+    .run(JSON.stringify(next), messageId);
+  return next;
+}
+
 export function deleteMessage(db: SqliteDb, id: string) {
   db.prepare(`DELETE FROM messages WHERE id = ?`).run(id);
 }
@@ -1226,7 +1258,7 @@ const ROUTINE_COLS = `id, name, prompt,
 const ROUTINE_RUN_COLS = `id, routine_id AS routineId, trigger, status,
   project_id AS projectId, conversation_id AS conversationId,
   agent_run_id AS agentRunId, started_at AS startedAt,
-  completed_at AS completedAt, summary, error`;
+  completed_at AS completedAt, summary, error, error_code AS errorCode`;
 
 export function listRoutines(db: SqliteDb) {
   return (db
@@ -1360,8 +1392,8 @@ export function insertRoutineRun(db: SqliteDb, r: DbRow) {
   db.prepare(
     `INSERT INTO routine_runs
        (id, routine_id, trigger, status, project_id, conversation_id,
-        agent_run_id, started_at, completed_at, summary, error)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        agent_run_id, started_at, completed_at, summary, error, error_code)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     r.id,
     r.routineId,
@@ -1374,6 +1406,7 @@ export function insertRoutineRun(db: SqliteDb, r: DbRow) {
     r.completedAt ?? null,
     r.summary ?? null,
     r.error ?? null,
+    r.errorCode ?? null,
   );
   return getRoutineRun(db, r.id);
 }
@@ -1387,13 +1420,14 @@ export function updateRoutineRun(db: SqliteDb, id: string, patch: DbRow) {
   };
   db.prepare(
     `UPDATE routine_runs
-        SET status = ?, completed_at = ?, summary = ?, error = ?
+        SET status = ?, completed_at = ?, summary = ?, error = ?, error_code = ?
       WHERE id = ?`,
   ).run(
     merged.status,
     merged.completedAt ?? null,
     merged.summary ?? null,
     merged.error ?? null,
+    merged.errorCode ?? null,
     id,
   );
   return getRoutineRun(db, id);
@@ -1412,6 +1446,7 @@ function normalizeRoutineRun(row: DbRow) {
     completedAt: row.completedAt == null ? null : Number(row.completedAt),
     summary: row.summary ?? null,
     error: row.error ?? null,
+    errorCode: row.errorCode ?? null,
   };
 }
 

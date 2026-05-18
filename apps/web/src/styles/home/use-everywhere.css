@@ -1,0 +1,364 @@
+/* ============================================================
+   Use Open Design Everywhere — modal that documents Open Design's
+   non-UI surfaces (CLI, MCP, HTTP, Skills) and lets the user copy
+   a one-shot guide into their agent (Claude Code, Codex, openclaw,
+   hermes, etc.).
+
+   Block names follow the same BEM convention as `.plugin-details-modal`
+   so the visual language stays consistent inside the entry shell.
+   ============================================================ */
+
+.use-everywhere-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 920;
+  background: rgba(28, 27, 26, 0.42);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+}
+
+.use-everywhere-modal {
+  width: 100%;
+  max-width: 860px;
+  max-height: calc(100vh - 64px);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.use-everywhere-modal__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+.use-everywhere-modal__head-titles {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.use-everywhere-modal__kicker {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent-strong, var(--accent));
+  font-weight: 600;
+}
+.use-everywhere-modal__title {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-strong);
+}
+.use-everywhere-modal__subtitle {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+.use-everywhere-modal__close {
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm, 6px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+}
+.use-everywhere-modal__close svg {
+  display: block;
+  width: 14px !important;
+  height: 14px !important;
+  stroke-width: 1.9;
+}
+.use-everywhere-modal__close:hover,
+.use-everywhere-modal__close:focus-visible {
+  background: var(--bg-subtle);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+/* Tab strip — one row of pill buttons for the five surfaces. */
+.use-everywhere-modal__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 22px 0;
+  border-bottom: 1px dashed var(--border);
+  background: var(--bg-panel);
+}
+.use-everywhere-modal__tab {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 12px 8px;
+  margin-bottom: -1px;
+  border-radius: 8px 8px 0 0;
+  cursor: pointer;
+  transition: color 120ms ease, background-color 120ms ease,
+    border-color 120ms ease;
+}
+.use-everywhere-modal__tab:hover {
+  color: var(--text);
+  background: var(--bg-subtle);
+}
+.use-everywhere-modal__tab.is-active {
+  color: var(--text-strong);
+  background: var(--bg);
+  border-color: var(--border);
+  border-bottom-color: var(--bg);
+}
+
+.use-everywhere-modal__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 18px 22px 6px;
+  background: var(--bg);
+}
+
+.use-everywhere-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.use-everywhere-section__head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.use-everywhere-section__heading {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.005em;
+}
+.use-everywhere-section__intro {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+.use-everywhere-section__bullets {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text);
+}
+.use-everywhere-section__bullets li::marker {
+  color: var(--text-faint);
+}
+.use-everywhere-section__snippets {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.use-everywhere-section__footer {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm, 6px);
+  padding: 8px 10px;
+}
+
+.use-everywhere-snippet {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-panel);
+  overflow: hidden;
+}
+.use-everywhere-snippet__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-subtle);
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.use-everywhere-snippet__label {
+  font-weight: 500;
+  color: var(--text);
+}
+.use-everywhere-snippet__copy {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-muted);
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+.use-everywhere-snippet__copy:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.use-everywhere-snippet__pre {
+  margin: 0;
+  padding: 12px 14px;
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text);
+  overflow-x: auto;
+  white-space: pre;
+  background: var(--bg-panel);
+}
+.use-everywhere-snippet__pre code {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  padding: 0;
+}
+
+.use-everywhere-modal__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 22px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+.use-everywhere-modal__foot-info {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  flex: 1;
+  min-width: 0;
+}
+.use-everywhere-modal__foot-info strong {
+  color: var(--text-strong);
+}
+.use-everywhere-modal__foot-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.use-everywhere-modal__primary,
+.use-everywhere-modal__secondary {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease,
+    border-color 120ms ease;
+}
+.use-everywhere-modal__secondary {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.use-everywhere-modal__secondary:hover {
+  background: var(--bg-subtle);
+}
+.use-everywhere-modal__primary {
+  background: var(--accent);
+  color: var(--accent-on, #fff);
+  border: 1px solid var(--accent);
+}
+.use-everywhere-modal__primary:hover {
+  background: var(--accent-strong, var(--accent));
+  border-color: var(--accent-strong, var(--accent));
+}
+
+/* Top-bar entry chip — sibling of the existing settings cog avatar.
+   The chip wraps an icon + label so the affordance reads like an
+   intentional doc/help entry rather than a generic icon button. On
+   tight viewports the label collapses and the chip acts as an icon. */
+.use-everywhere-chip {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: var(--shadow-xs);
+  transition: background-color 120ms ease, border-color 120ms ease,
+    color 120ms ease;
+}
+.use-everywhere-chip:hover {
+  background: var(--bg-subtle);
+  border-color: var(--border-strong);
+}
+.use-everywhere-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.use-everywhere-chip__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  flex: 0 0 auto;
+}
+.use-everywhere-chip__label {
+  white-space: nowrap;
+}
+
+@media (max-width: 700px) {
+  .use-everywhere-chip__label {
+    display: none;
+  }
+  .use-everywhere-chip {
+    padding: 0 8px;
+  }
+  .use-everywhere-modal__foot {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .use-everywhere-modal__foot-actions {
+    justify-content: flex-end;
+  }
+}

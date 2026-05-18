@@ -1,0 +1,87 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-critique",
+  "title": "Critique",
+  "version": "0.1.0",
+  "description": "Run a 5-dimension expert design review on any HTML artifact in the\nproject — Philosophy / Visual hierarchy / Detail / Functionality /\nInnovation, each scored 0–10. Outputs a single self-contained HTML\nreport with a radar chart, evidence-backed scores, and three lists:\nKeep / Fix / Quick-wins. Use when the brief asks for a \"design\nreview\", \"design critique\", \"5 维度评审\", \"design audit\", or \"what's\nwrong with my design\".",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/critique",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "design",
+    "web",
+    "desktop",
+    "critique",
+    "design-review",
+    "design-audit",
+    "5",
+    "5-dim-review",
+    "audit-my-design",
+    "review-my-deck",
+    "review-my-landing-page",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Run a 5-dimension critique on the magazine-web-ppt deck I just generated — score philosophy / hierarchy / detail / function / innovation, give me Keep / Fix / Quick-wins.",
+        "zh-CN": "使用这个插件完成以下任务：Run a 5-dimension critique on the magazine-web-ppt deck I just generated — score philosophy / hierarchy / detail / function / innovation, give me Keep / Fix / Quick-wins."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Critique"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

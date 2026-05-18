@@ -1,0 +1,82 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-notion-team-dashboard-live-artifact",
+  "title": "Notion-style Team Dashboard (Live Artifact)",
+  "version": "0.1.0",
+  "description": "Single-screen Notion-native team dashboard mockup — KPI grid, 7-day sparkline, activity feed, and linked-database task table. Visual companion to the live-artifact skill; pair with it for refreshable / connector-backed runs, or use standalone as a still mockup.",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "joeylee12629-star",
+    "url": "https://github.com/joeylee12629-star/open-design"
+  },
+  "homepage": "https://github.com/joeylee12629-star/open-design",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "live-artifact",
+    "app-showcase",
+    "chart"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://raw.githubusercontent.com/joeylee12629-star/open-design/feat/prompt-template-live-artifact-dashboard/prompt-templates/image/notion-team-dashboard-live-artifact.preview.png"
+    },
+    "useCase": {
+      "query": {
+        "en": "{\n  \"type\": \"team productivity dashboard screenshot (prompt-only design preview, no live connector data)\",\n  \"ui_aesthetic\": \"Notion native — off-white background #FFFFFF with #F7F6F3 sidebar, 14px SF Pro / Inter body, charcoal ink #37352F, hairline grid #ECECEA, accent blue #2EAADC used sparingly. No gradients, no card shadows, no rounded inner cards, no glassmorphism, no purple→pink hero, no emoji icon strip across the top.\",\n  \"top_banner\": {\n    \"color\": \"soft amber #FDECC8 with #E6CF94 hairline\",\n    \"text\": \"Sample data — design preview. This page is a prompt-only Notion-style dashboard mockup; every number, name, and timestamp below is seeded, not pulled from a real Notion workspace or Composio connector. For real refreshable / connector-backed artifacts, see the live-artifact skill.\"\n  },\n  \"topbar\": {\n    \"breadcrumb\": \"{argument name=\\\"workspace name\\\" default=\\\"Acme Studio\\\"} / Workspace / {argument name=\\\"page title\\\" default=\\\"Team Dashboard\\\"}\",\n    \"preview_pill\": \"pill on the right reading 'Sample · design preview' with a small neutral-grey dot — do NOT render a 'Live · synced', 'Online', or any live/sync pill\"\n  },\n  \"page_header\": {\n    \"page_emoji\": \"📊 (a single semantically relevant Notion-style emoji, not 🚀 / ✨ / 🔥)\",\n    \"title\": \"{argument name=\\\"page title\\\" default=\\\"Team Dashboard\\\"} rendered at 40px weight 700, letter-spacing -0.01em\",\n    \"meta_row\": \"Last edited by {argument name=\\\"editor name\\\" default=\\\"Sarah Chen\\\"} · Seeded sample data — for real refreshable / connector-backed runs use the live-artifact skill. Do NOT render a 'Last refreshed just now' label, an 'Auto' toggle, or a 'Refresh from Notion' button anywhere in this row.\"\n  },\n  \"callout\": \"💡 This is a prompt-only design preview. The numbers, names, and timestamps below are seeded sample data — they are not pulled from a real Notion workspace and not refreshed via the Composio connector. For real refreshable / connector-backed Live Artifacts, use the live-artifact skill.\",\n  \"kpi_grid\": {\n    \"count\": \"{argument name=\\\"kpi count\\\" default=\\\"4\\\"}\",\n    \"items\": [\n      {\n        \"label\": \"Total tasks\",\n        \"value\": \"143\",\n        \"delta\": \"↑ 6 vs last week (green)\"\n      },\n      {\n        \"label\": \"Done this week\",\n        \"value\": \"24\",\n        \"delta\": \"↑ 4 vs last week (green)\"\n      },\n      {\n        \"label\": \"Active members\",\n        \"value\": \"11 / 14\",\n        \"delta\": \"· Stable (grey)\"\n      },\n      {\n        \"label\": \"Docs awaiting review\",\n        \"value\": \"7\",\n        \"delta\": \"↓ 2 vs last week (red)\"\n      }\n    ],\n    \"style\": \"1px hairline grid; no shadows; tabular-nums weight 600 numbers; small grey delta line under each KPI; uppercase 12px label-grey labels. All values are seeded sample data.\"\n  },\n  \"sparkline_card\": {\n    \"title\": \"Tasks created · last 7 days (sample)\",\n    \"total\": \"100 total (sample)\",\n    \"shape\": \"hand-rolled SVG, 7 days Wed→Tue, 2px stroke accent blue, 10% alpha fill below the curve, very light dotted baseline grid\"\n  },\n  \"activity_feed_card\": {\n    \"title\": \"Recent activity (sample)\",\n    \"subtitle\": \"Notion-style seeded activity for design preview — not from a real Notion workspace\",\n    \"rows\": \"5 rows shaped '<18px round colored avatar with 2-letter initials> <name> <action> <target> · <time ago>' (e.g. 'SC Sarah Chen edited Q4 Roadmap · 2m ago'). All names and times are seeded sample values.\"\n  },\n  \"linked_database\": {\n    \"title\": \"📋 Tasks · Active sprint (sample)\",\n    \"subtitle\": \"Linked-database-style table · seeded sample rows · no live connector binding\",\n    \"columns\": [\n      \"Name\",\n      \"Status\",\n      \"Assignee\",\n      \"Due\",\n      \"Priority\"\n    ],\n    \"row_styles\": \"Notion five-color status pills — Done #DBEDDB/#2B593F · In progress #FDECC8/#976D23 · Blocked #FFE2DD/#B13B2C · In review #D3E5EF/#1F5B78 · To do #E9E5E3/#5A534F. Person chips: 18px round colored avatars with 2-letter initials. Charcoal text. Do NOT render an 'Updated ↻' refresh badge or any other refresh affordance on any row.\"\n  },\n  \"footer\": \"Source: Notion-style sample data · seeded design preview, not bound to any Notion workspace or Composio connector · for real refreshable runs see the live-artifact skill\",\n  \"honesty_rule\": \"Render the top amber banner unobstructed. Every number, name, timestamp, status, and label in the generated screenshot must be presented as seeded sample data. NEVER render any 'Live · synced' pill, 'Last refreshed' label, 'Auto' toggle, 'Refresh from Notion' button, 'pulled from your workspace' / 'via the Composio connector' callout, or any other UI affordance that suggests the data is connected to a real Notion workspace or Composio connector. For real refreshable / connector-backed runs the user should follow the live-artifact skill instead.\",\n  \"layout\": \"Optional 240px Notion sidebar on the left when the canvas is wide enough; main content occupies the remaining width with 32px outer padding.\"\n}",
+        "zh-CN": "使用这个插件完成以下任务：{\n  \"type\": \"team productivity dashboard screenshot (prompt-only design preview, no live connector data)\",\n  \"ui_aesthetic\": \"Notion native — off-white background #FFFFFF with #F7F6F3 sidebar, 14px SF Pro / Inter body, charcoal ink #37352F, hairline grid #ECECEA, accent blue #2EAADC used sparingly. No gradients, no card shadows, no rounded inner cards, no glassmorphism, no purple→pink hero, no emoji icon strip across the top.\",\n  \"top_banner\": {\n    \"color\": \"soft amber #FDECC8 with #E6CF94 hairline\",\n    \"text\": \"Sample data — design preview. This page is a prompt-only Notion-style dashboard mockup; every number, name, and timestamp below is seeded, not pulled from a real Notion workspace or Composio connector. For real refreshable / connector-backed artifacts, see the live-artifact skill.\"\n  },\n  \"topbar\": {\n    \"breadcrumb\": \"{argument name=\\\"workspace name\\\" default=\\\"Acme Studio\\\"} / Workspace / {argument name=\\\"page title\\\" default=\\\"Team Dashboard\\\"}\",\n    \"preview_pill\": \"pill on the right reading 'Sample · design preview' with a small neutral-grey dot — do NOT render a 'Live · synced', 'Online', or any live/sync pill\"\n  },\n  \"page_header\": {\n    \"page_emoji\": \"📊 (a single semantically relevant Notion-style emoji, not 🚀 / ✨ / 🔥)\",\n    \"title\": \"{argument name=\\\"page title\\\" default=\\\"Team Dashboard\\\"} rendered at 40px weight 700, letter-spacing -0.01em\",\n    \"meta_row\": \"Last edited by {argument name=\\\"editor name\\\" default=\\\"Sarah Chen\\\"} · Seeded sample data — for real refreshable / connector-backed runs use the live-artifact skill. Do NOT render a 'Last refreshed just now' label, an 'Auto' toggle, or a 'Refresh from Notion' button anywhere in this row.\"\n  },\n  \"callout\": \"💡 This is a prompt-only design preview. The numbers, names, and timestamps below are seeded sample data — they are not pulled from a real Notion workspace and not refreshed via the Composio connector. For real refreshable / connector-backed Live Artifacts, use the live-artifact skill.\",\n  \"kpi_grid\": {\n    \"count\": \"{argument name=\\\"kpi count\\\" default=\\\"4\\\"}\",\n    \"items\": [\n      {\n        \"label\": \"Total tasks\",\n        \"value\": \"143\",\n        \"delta\": \"↑ 6 vs last week (green)\"\n      },\n      {\n        \"label\": \"Done this week\",\n        \"value\": \"24\",\n        \"delta\": \"↑ 4 vs last week (green)\"\n      },\n      {\n        \"label\": \"Active members\",\n        \"value\": \"11 / 14\",\n        \"delta\": \"· Stable (grey)\"\n      },\n      {\n        \"label\": \"Docs awaiting review\",\n        \"value\": \"7\",\n        \"delta\": \"↓ 2 vs last week (red)\"\n      }\n    ],\n    \"style\": \"1px hairline grid; no shadows; tabular-nums weight 600 numbers; small grey delta line under each KPI; uppercase 12px label-grey labels. All values are seeded sample data.\"\n  },\n  \"sparkline_card\": {\n    \"title\": \"Tasks created · last 7 days (sample)\",\n    \"total\": \"100 total (sample)\",\n    \"shape\": \"hand-rolled SVG, 7 days Wed→Tue, 2px stroke accent blue, 10% alpha fill below the curve, very light dotted baseline grid\"\n  },\n  \"activity_feed_card\": {\n    \"title\": \"Recent activity (sample)\",\n    \"subtitle\": \"Notion-style seeded activity for design preview — not from a real Notion workspace\",\n    \"rows\": \"5 rows shaped '<18px round colored avatar with 2-letter initials> <name> <action> <target> · <time ago>' (e.g. 'SC Sarah Chen edited Q4 Roadmap · 2m ago'). All names and times are seeded sample values.\"\n  },\n  \"linked_database\": {\n    \"title\": \"📋 Tasks · Active sprint (sample)\",\n    \"subtitle\": \"Linked-database-style table · seeded sample rows · no live connector binding\",\n    \"columns\": [\n      \"Name\",\n      \"Status\",\n      \"Assignee\",\n      \"Due\",\n      \"Priority\"\n    ],\n    \"row_styles\": \"Notion five-color status pills — Done #DBEDDB/#2B593F · In progress #FDECC8/#976D23 · Blocked #FFE2DD/#B13B2C · In review #D3E5EF/#1F5B78 · To do #E9E5E3/#5A534F. Person chips: 18px round colored avatars with 2-letter initials. Charcoal text. Do NOT render an 'Updated ↻' refresh badge or any other refresh affordance on any row.\"\n  },\n  \"footer\": \"Source: Notion-style sample data · seeded design preview, not bound to any Notion workspace or Composio connector · for real refreshable runs see the live-artifact skill\",\n  \"honesty_rule\": \"Render the top amber banner unobstructed. Every number, name, timestamp, status, and label in the generated screenshot must be presented as seeded sample data. NEVER render any 'Live · synced' pill, 'Last refreshed' label, 'Auto' toggle, 'Refresh from Notion' button, 'pulled from your workspace' / 'via the Composio connector' callout, or any other UI affordance that suggests the data is connected to a real Notion workspace or Composio connector. For real refreshable / connector-backed runs the user should follow the live-artifact skill instead.\",\n  \"layout\": \"Optional 240px Notion sidebar on the left when the canvas is wide enough; main content occupies the remaining width with 32px outer padding.\"\n}"
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "4:3"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

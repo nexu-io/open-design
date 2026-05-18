@@ -1,0 +1,5 @@
+{
+  "name": "community-import-smoke-test",
+  "description": "A portable community plugin for validating Open Design plugin import flows.",
+  "version": "0.1.0"
+}
