@@ -50,7 +50,7 @@ export async function importClaudeDesignZip(zipPath: string, projectDir: string)
     totalBytes += body.length;
     if (totalBytes > MAX_TOTAL_BYTES) throw new Error('zip is too large');
 
-    files.push({ path: relPath, body });
+    files.push({ path: relPath, body: normalizeImportedClaudeDesignFile(relPath, body) });
   }
 
   if (files.length === 0) throw new Error('zip contains no files');
@@ -78,6 +78,106 @@ export async function importClaudeDesignZip(zipPath: string, projectDir: string)
     entryFile,
     files: files.map((f) => f.path),
   };
+}
+
+function normalizeImportedClaudeDesignFile(relPath: string, body: Buffer): Buffer {
+  if (path.basename(relPath) !== 'design-canvas.jsx') return body;
+  const source = body.toString('utf8');
+  const { result, wheelMatched, gestureMatched } = normalizeDesignCanvasWheelHandling(source);
+  // Warn whenever any rewrite regex missed. Either one drifting silently
+  // is enough to ship a half-rewritten canvas: a missed `wheelBlock`
+  // reproduces the original zoom-on-scroll bug, and a missed
+  // `gestureBlock` lets Safari's native gesture* handlers re-introduce
+  // their own pinch zoom on top of the normalized wheel path. Operators
+  // grep for `[claude-design-import]` to find these before the bug
+  // report comes back in.
+  if (!wheelMatched || !gestureMatched) {
+    const missing: string[] = [];
+    if (!wheelMatched) missing.push('wheel-handler');
+    if (!gestureMatched) missing.push('gesture-handler');
+    console.warn(
+      `[claude-design-import] design-canvas.jsx found but ${missing.join(' + ')} rewrite regex(es) did not match; imported canvas may zoom on scroll or behave unexpectedly. Update normalizeDesignCanvasWheelHandling to match the new template.`,
+    );
+  }
+  return result === source ? body : Buffer.from(result, 'utf8');
+}
+
+function normalizeDesignCanvasWheelHandling(source: string): {
+  result: string;
+  wheelMatched: boolean;
+  gestureMatched: boolean;
+} {
+  const wheelBlock = /    \/\/ Mouse-wheel vs trackpad-scroll heuristic\.[\s\S]*?    const onWheel = \(e\) => \{\n[\s\S]*?    \};\n/;
+  const gestureBlock = /    \/\/ Safari sends native gesture\* events for trackpad pinch with a smooth\n[\s\S]*?    const onGestureEnd = \(e\) => \{ e\.preventDefault\(\); isGesturing = false; \};/;
+  // Check both regexes against the original source so callers can tell
+  // wheel-only drift from gesture-only drift. If `wheelBlock` does not
+  // match we leave the source untouched and skip the gesture rewrite —
+  // a partial rewrite that swapped the gesture handler against an
+  // unchanged wheel handler would be worse than no rewrite at all.
+  const wheelMatched = wheelBlock.test(source);
+  const gestureMatched = gestureBlock.test(source);
+  if (!wheelMatched) {
+    return { result: source, wheelMatched, gestureMatched };
+  }
+  const normalizedWheel = source.replace(wheelBlock, `    // Plain wheel input should pan the infinite canvas. Claude Design exports
+    // previously guessed that large integer vertical deltas were mouse-wheel
+    // zoom clicks, but macOS trackpads can emit the same shape during ordinary
+    // two-finger scrolling. Keep zoom explicit via Cmd+wheel or the host
+    // toolbar so vertical navigation cannot accidentally scale the canvas.
+    const wheelDeltaToPixels = (delta, mode, axis) => {
+      const px = mode === 1 ? delta * 16 : mode === 2 ? delta * 160 : delta;
+      const limit = axis === 'y' ? 72 : 160;
+      return Math.max(-limit, Math.min(limit, px));
+    };
+    const panByWheel = (e) => {
+      const dx = wheelDeltaToPixels(e.deltaX || 0, e.deltaMode || 0, 'x');
+      const dy = wheelDeltaToPixels(e.deltaY || 0, e.deltaMode || 0, 'y');
+      tf.current.x -= dx;
+      tf.current.y -= dy;
+      apply();
+    };
+
+    // Cmd+wheel still zooms, but we have to split notched mouse wheels from
+    // smooth trackpad pinch deltas inside the Cmd branch: a single mouse
+    // notch arrives as deltaY≈100, and Math.exp(-100*0.01)≈0.367 would shrink
+    // the canvas by ~63% per click. The notched ratio Math.exp(-sign*0.18)
+    // gives ~17% per click — the same feel the original Claude export had
+    // before this normalizer collapsed both paths. We also accept ctrlKey
+    // here because Chromium/Firefox synthesize wheel events with
+    // \`ctrlKey: true\` during a trackpad pinch — without that, smooth pinch
+    // would silently fall through to panByWheel(e) and the canvas would
+    // pan instead of zoom on those browsers.
+    const isNotchedWheel = (e) =>
+      e.deltaMode !== 0 ||
+      (e.deltaX === 0 && Number.isInteger(e.deltaY) && Math.abs(e.deltaY) >= 40);
+    const onWheel = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (isGesturing) return;
+      if (e.ctrlKey || e.metaKey) {
+        const factor = isNotchedWheel(e)
+          ? Math.exp(-Math.sign(e.deltaY) * 0.18)
+          : Math.exp(-e.deltaY * 0.01);
+        zoomAt(e.clientX, e.clientY, factor);
+        return;
+      }
+      panByWheel(e);
+    };
+`);
+  if (!gestureMatched) {
+    return { result: normalizedWheel, wheelMatched, gestureMatched };
+  }
+  const result = normalizedWheel.replace(gestureBlock, `    // Safari can emit native gesture* events while a user scrolls on a
+    // trackpad. Ignore those here; explicit zoom is Cmd+wheel or the host
+    // toolbar.
+    let isGesturing = false;
+    const onGestureStart = (e) => { e.preventDefault(); e.stopPropagation(); isGesturing = true; };
+    const onGestureChange = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    const onGestureEnd = (e) => { e.preventDefault(); e.stopPropagation(); isGesturing = false; };`);
+  return { result, wheelMatched, gestureMatched };
 }
 
 function readCentralDirectory(zip: Buffer): ZipEntry[] {

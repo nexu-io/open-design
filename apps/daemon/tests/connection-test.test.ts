@@ -2,6 +2,7 @@
 // provider protocol and uses fake CLI bins for deterministic agent outcomes.
 
 import type http from 'node:http';
+import { promises as dnsPromises } from 'node:dns';
 import { promises as fsp } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -13,6 +14,8 @@ import {
   resolveConnectionTestTimeoutMs,
   testAgentConnection,
   testProviderConnection,
+  validateBaseUrlResolved,
+  type DnsLookupAddress,
 } from '../src/connectionTest.js';
 import { listProviderModels } from '../src/providerModels.js';
 import { startServer } from '../src/server.js';
@@ -93,6 +96,10 @@ async function withFakeOpenCode<T>(script: string, run: () => Promise<T>): Promi
 
 async function withFakeCursorAgent<T>(script: string, run: () => Promise<T>): Promise<T> {
   return withFakeAgent('cursor-agent', script, run);
+}
+
+async function withFakeDeepSeek<T>(script: string, run: () => Promise<T>): Promise<T> {
+  return withFakeAgent('deepseek', script, run);
 }
 
 async function waitForFile(file: string, timeoutMs = 5_000): Promise<void> {
@@ -358,7 +365,53 @@ describe('POST /api/provider/models', () => {
     ).toBe(false);
   });
 
+  // Regression for the DNS-bypass SSRF gap flagged on PR #1176: the route
+  // must resolve the hostname and reject when *any* resolved address is in
+  // a blocked range, not just when the literal hostname is a private IP.
+  it('rejects hostnames that resolve to a private IP without calling upstream fetch', async () => {
+    const fetchMock = passThroughOrUpstream(() => jsonResponse({}));
+    vi.stubGlobal('fetch', fetchMock);
+    const dnsSpy = vi
+      .spyOn(dnsPromises, 'lookup')
+      .mockImplementation((async (hostname: string) => {
+        if (hostname === 'rebind.example.test') {
+          return [{ address: '10.0.0.5', family: 4 }];
+        }
+        const err: NodeJS.ErrnoException = new Error('ENOTFOUND');
+        err.code = 'ENOTFOUND';
+        throw err;
+      }) as unknown as typeof dnsPromises.lookup);
+    try {
+      const res = await realFetch(`${baseUrl}/api/provider/models`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          protocol: 'openai',
+          baseUrl: 'https://rebind.example.test/v1',
+          apiKey: 'sk-good',
+        }),
+      });
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body).toMatchObject({ ok: false, kind: 'forbidden' });
+      expect(
+        fetchMock.mock.calls.some(
+          ([input]) => !String(input).startsWith(baseUrl),
+        ),
+      ).toBe(false);
+    } finally {
+      dnsSpy.mockRestore();
+    }
+  });
+
   it('reports timeout when model listing is aborted by the probe timer', async () => {
+    // The DNS-aware validator runs before the probe timer is installed; stub
+    // the resolver so the test doesn't race against real DNS while fake
+    // timers are active.
+    const dnsSpy = vi
+      .spyOn(dnsPromises, 'lookup')
+      .mockImplementation((async () => [
+        { address: '203.0.113.10', family: 4 },
+      ]) as unknown as typeof dnsPromises.lookup);
     vi.useFakeTimers();
     vi.stubGlobal(
       'fetch',
@@ -371,17 +424,21 @@ describe('POST /api/provider/models', () => {
       ),
     );
 
-    const pending = listProviderModels({
-      protocol: 'openai',
-      baseUrl: 'https://api.openai.com/v1',
-      apiKey: 'sk-timeout',
-    });
+    try {
+      const pending = listProviderModels({
+        protocol: 'openai',
+        baseUrl: 'https://api.openai.com/v1',
+        apiKey: 'sk-timeout',
+      });
 
-    await vi.advanceTimersByTimeAsync(12_000);
-    await expect(pending).resolves.toMatchObject({
-      ok: false,
-      kind: 'timeout',
-    });
+      await vi.advanceTimersByTimeAsync(12_000);
+      await expect(pending).resolves.toMatchObject({
+        ok: false,
+        kind: 'timeout',
+      });
+    } finally {
+      dnsSpy.mockRestore();
+    }
   });
 });
 
@@ -771,6 +828,47 @@ describe('POST /api/test/connection provider mode', () => {
     ).toBe(false);
   });
 
+  // Regression for the DNS-bypass SSRF gap flagged on PR #1176: provider
+  // mode must run the same resolved-IP check as the proxy/finalize paths
+  // so a public hostname pointing at a private address can't be fetched.
+  it('reports forbidden for hostnames that resolve to a private IP without calling fetch', async () => {
+    const fetchMock = passThroughOrUpstream(() => jsonResponse({}));
+    vi.stubGlobal('fetch', fetchMock);
+    const dnsSpy = vi
+      .spyOn(dnsPromises, 'lookup')
+      .mockImplementation((async (hostname: string) => {
+        if (hostname === 'rebind.example.test') {
+          return [{ address: '10.0.0.5', family: 4 }];
+        }
+        const err: NodeJS.ErrnoException = new Error('ENOTFOUND');
+        err.code = 'ENOTFOUND';
+        throw err;
+      }) as unknown as typeof dnsPromises.lookup);
+    try {
+      const res = await realFetch(`${baseUrl}/api/test/connection`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'provider',
+          protocol: 'openai',
+          baseUrl: 'https://rebind.example.test/v1',
+          apiKey: 'sk-good',
+          model: 'gpt-4o',
+        }),
+      });
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body.ok).toBe(false);
+      expect(body.kind).toBe('forbidden');
+      expect(
+        fetchMock.mock.calls.some(
+          ([input]) => !String(input).startsWith(baseUrl),
+        ),
+      ).toBe(false);
+    } finally {
+      dnsSpy.mockRestore();
+    }
+  });
+
   it('allows IPv6 loopback base URLs for local OpenAI-compatible providers', async () => {
     for (const loopbackBaseUrl of [
       'http://[::1]:1234/v1',
@@ -1079,6 +1177,7 @@ describe('POST /api/test/connection agent mode', () => {
 const fs = require('node:fs');
 fs.writeFileSync(${JSON.stringify(envFile)}, JSON.stringify({
   CODEX_HOME: process.env.CODEX_HOME || null,
+  CODEX_API_KEY: process.env.CODEX_API_KEY || null,
   SHOULD_NOT_PASS: process.env.OD_CONNECTION_TEST_SHOULD_NOT_PASS || null,
 }));
 console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'ok' } }));
@@ -1093,6 +1192,7 @@ console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_messag
               agentCliEnv: {
                 codex: {
                   CODEX_HOME: codexHome,
+                  CODEX_API_KEY: 'codex-key',
                   OD_CONNECTION_TEST_SHOULD_NOT_PASS: 'leaked',
                 },
                 claude: {
@@ -1110,6 +1210,7 @@ console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_messag
           await expect(fsp.readFile(envFile, 'utf8')).resolves.toBe(
             JSON.stringify({
               CODEX_HOME: codexHome,
+              CODEX_API_KEY: 'codex-key',
               SHOULD_NOT_PASS: null,
             }),
           );
@@ -1178,6 +1279,54 @@ console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_messag
           agentName: 'Codex CLI',
         });
         expect(result.detail).toContain('requires a newer version');
+      },
+    );
+  });
+
+  it('wraps Claude connection smoke prompts as stream-json stdin', async () => {
+    await withFakeClaude(
+      `
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { input += chunk; });
+process.stdin.on('end', () => {
+  try {
+    const line = input.trim();
+    const parsed = JSON.parse(line);
+    const content = parsed?.message?.content;
+    if (
+      parsed.type !== 'user' ||
+      parsed.message?.role !== 'user' ||
+      !Array.isArray(content) ||
+      content[0]?.type !== 'text' ||
+      content[0]?.text !== 'Reply with only: ok'
+    ) {
+      console.error('unexpected stdin payload: ' + line);
+      process.exit(1);
+    }
+    console.log(JSON.stringify({
+      type: 'assistant',
+      message: {
+        id: 'msg_1',
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+      },
+    }));
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  }
+});
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'claude' });
+
+        expect(result).toMatchObject({
+          ok: true,
+          kind: 'success',
+          agentName: 'Claude Code',
+          sample: 'ok',
+        });
       },
     );
   });
@@ -1608,6 +1757,31 @@ process.exit(1);
     );
   });
 
+  it('classifies DeepSeek TUI config guidance from stderr as missing auth', async () => {
+    await withFakeDeepSeek(
+      `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('deepseek 0.3.0-test');
+  process.exit(0);
+}
+console.error('KEY=<your-key> deepseek --api-key <your-key>');
+console.error('api_key = "<your-key>" in ~/.deepseek/config.toml');
+process.exit(0);
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'deepseek' });
+        expect(result).toMatchObject({
+          ok: false,
+          kind: 'agent_auth_required',
+          agentName: 'DeepSeek TUI',
+          detail: expect.stringContaining('~/.deepseek/config.toml'),
+        });
+        expect(result.detail).toContain('DEEPSEEK_API_KEY');
+      },
+    );
+  });
+
   it('keeps non-auth Cursor Agent runtime failures on the generic spawn path', async () => {
     await withFakeCursorAgent(
       `
@@ -1943,5 +2117,129 @@ describe('connection test timeout overrides', () => {
     } finally {
       warn.mockRestore();
     }
+  });
+});
+
+describe('validateBaseUrlResolved (DNS-aware base URL validation)', () => {
+  function lookupReturning(addresses: DnsLookupAddress[]) {
+    return vi.fn(async () => addresses);
+  }
+
+  it('passes through the contracts-level error for invalid input', async () => {
+    expect(await validateBaseUrlResolved('not-a-url', lookupReturning([]))).toMatchObject({
+      error: 'Invalid baseUrl',
+    });
+  });
+
+  it('rejects the literal-IP cases the sync check already catches', async () => {
+    for (const baseUrl of [
+      'http://10.0.0.5:11434/v1',
+      'http://169.254.169.254/latest/meta-data',
+      'http://[fd00::1]:11434/v1',
+      'http://[fe80::1]:11434/v1',
+    ]) {
+      expect(await validateBaseUrlResolved(baseUrl, lookupReturning([]))).toMatchObject({
+        error: 'Internal IPs blocked',
+        forbidden: true,
+      });
+    }
+  });
+
+  it('skips DNS for loopback hostnames so local LLMs (Ollama, *.localhost) still work', async () => {
+    const lookup = lookupReturning([{ address: '127.0.0.1', family: 4 }]);
+    for (const baseUrl of [
+      'http://localhost:11434/v1',
+      'http://127.0.0.1:11434/v1',
+      'http://[::1]:11434/v1',
+    ]) {
+      const result = await validateBaseUrlResolved(baseUrl, lookup);
+      expect(result.error).toBeUndefined();
+    }
+    expect(lookup).not.toHaveBeenCalled();
+  });
+
+  it('skips DNS for IP-literal hostnames the sync check already vetted', async () => {
+    const lookup = lookupReturning([]);
+    expect((await validateBaseUrlResolved('https://1.2.3.4/v1', lookup)).error).toBeUndefined();
+    expect((await validateBaseUrlResolved('https://[2606:4700::]/v1', lookup)).error).toBeUndefined();
+    expect(lookup).not.toHaveBeenCalled();
+  });
+
+  it('rejects public hostnames that resolve to private IPv4 ranges', async () => {
+    const cases: Array<{ resolved: string; family: number }> = [
+      { resolved: '10.0.0.5', family: 4 },
+      { resolved: '172.16.0.5', family: 4 },
+      { resolved: '192.168.1.5', family: 4 },
+      { resolved: '100.64.0.1', family: 4 },
+      { resolved: '169.254.169.254', family: 4 },
+      { resolved: '0.0.0.0', family: 4 },
+      { resolved: '224.0.0.1', family: 4 },
+    ];
+    for (const { resolved, family } of cases) {
+      const result = await validateBaseUrlResolved(
+        'https://internal.example.com/v1',
+        lookupReturning([{ address: resolved, family }]),
+      );
+      expect(result).toMatchObject({
+        error: 'Internal IPs blocked',
+        forbidden: true,
+      });
+    }
+  });
+
+  it('rejects public hostnames that resolve to private IPv6 ranges', async () => {
+    for (const resolved of ['fd00::1', 'fe80::1', '::']) {
+      const result = await validateBaseUrlResolved(
+        'https://internal.example.com/v1',
+        lookupReturning([{ address: resolved, family: 6 }]),
+      );
+      expect(result).toMatchObject({
+        error: 'Internal IPs blocked',
+        forbidden: true,
+      });
+    }
+  });
+
+  it('rejects when ANY resolved record (round-robin / dual-stack) is internal', async () => {
+    const result = await validateBaseUrlResolved(
+      'https://mixed.example.com/v1',
+      lookupReturning([
+        { address: '52.84.10.1', family: 4 },
+        { address: '10.0.0.5', family: 4 },
+      ]),
+    );
+    expect(result).toMatchObject({
+      error: 'Internal IPs blocked',
+      forbidden: true,
+    });
+  });
+
+  it('allows public hostnames that resolve to public addresses (the api.openai.com case)', async () => {
+    const result = await validateBaseUrlResolved(
+      'https://api.openai.com/v1',
+      lookupReturning([
+        { address: '104.18.7.192', family: 4 },
+        { address: '2606:4700::6812:7c0', family: 6 },
+      ]),
+    );
+    expect(result.error).toBeUndefined();
+    expect(result.parsed?.hostname).toBe('api.openai.com');
+  });
+
+  it('allows hostnames that resolve to loopback (e.g. *.localhost / lvh.me)', async () => {
+    const result = await validateBaseUrlResolved(
+      'http://app.localhost:11434/v1',
+      lookupReturning([{ address: '127.0.0.1', family: 4 }]),
+    );
+    expect(result.error).toBeUndefined();
+  });
+
+  it('falls back to allow-through on DNS resolver errors so transient failures are not 403s', async () => {
+    const failingLookup = vi.fn(async () => {
+      throw new Error('ENOTFOUND');
+    });
+    const result = await validateBaseUrlResolved('https://offline.example.com/v1', failingLookup);
+    expect(result.error).toBeUndefined();
+    expect(failingLookup).toHaveBeenCalledOnce();
   });
 });

@@ -54,6 +54,8 @@ export function routineDbRowToContract(row: any, latestRun: any) {
         conversationId: latestRun.conversationId,
         agentRunId: latestRun.agentRunId,
         ...(latestRun.summary ? { summary: latestRun.summary } : {}),
+        ...(latestRun.error ? { error: latestRun.error } : {}),
+        ...(latestRun.errorCode ? { errorCode: latestRun.errorCode } : {}),
       }
     : null;
   return {

@@ -1,0 +1,19 @@
+---
+import { getPluginPreviewHtml, getPublicPlugins } from '../../../plugin-registry';
+
+export function getStaticPaths() {
+  return getPublicPlugins()
+    .filter((plugin) => plugin.preview?.type === 'html' && plugin.preview.frameHref)
+    .map((plugin) => ({
+      params: { slug: plugin.slug },
+      props: {
+        html: getPluginPreviewHtml(plugin),
+      },
+    }))
+    .filter((entry) => Boolean(entry.props.html));
+}
+
+const { html } = Astro.props as { html: string };
+---
+
+<Fragment set:html={html} />

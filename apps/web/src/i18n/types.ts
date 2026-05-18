@@ -1,8 +1,8 @@
 // Supported UI locales. Adding a new locale requires creating a new
 // dictionary in `./locales/` and registering it in `./index.tsx`.
-export type Locale = 'en' | 'id' | 'de' | 'zh-CN' | 'zh-TW' | 'pt-BR' | 'es-ES' | 'ru' | 'fa' | 'ar' | 'ja' | 'ko' | 'pl' | 'hu' | 'fr' | 'uk' | 'tr' | 'th';
+export type Locale = 'en' | 'id' | 'de' | 'zh-CN' | 'zh-TW' | 'pt-BR' | 'es-ES' | 'ru' | 'fa' | 'ar' | 'ja' | 'ko' | 'pl' | 'hu' | 'fr' | 'uk' | 'tr' | 'th' | 'it';
 
-export const LOCALES: Locale[] = ['en', 'id', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ar', 'ja', 'ko', 'pl', 'hu', 'fr', 'uk', 'tr', 'th'];
+export const LOCALES: Locale[] = ['en', 'id', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ar', 'ja', 'ko', 'pl', 'hu', 'fr', 'uk', 'tr', 'th', 'it'];
 
 export const LOCALE_LABEL: Record<Locale, string> = {
   'en': 'English',
@@ -22,7 +22,8 @@ export const LOCALE_LABEL: Record<Locale, string> = {
   'fr': 'Français',
   'uk': 'Українська',
   'tr': 'Türkçe',
-  'th': 'ภาษาไทย'
+  'th': 'ภาษาไทย',
+  'it': 'Italiano'
 };
 
 // Translation dictionary shape — flat keys, dot-namespaced. We keep it
@@ -35,6 +36,7 @@ export interface Dict {
   'common.close': string;
   'common.delete': string;
   'common.rename': string;
+  'common.edit': string;
   'common.preview': string;
   'common.share': string;
   'common.search': string;
@@ -203,6 +205,7 @@ export interface Dict {
   'settings.privacyConsentFooter': string;
   'settings.privacyConsentShare': string;
   'settings.privacyConsentDecline': string;
+  'settings.privacyConsentPolicyLink': string;
   'settings.privacyMetrics': string;
   'settings.privacyMetricsHint': string;
   'settings.privacyContent': string;
@@ -241,6 +244,8 @@ export interface Dict {
   'settings.skillsSaving': string;
   'settings.skillsFiles': string;
   'settings.skillsNoFiles': string;
+  'settings.skillsNameRequired': string;
+  'settings.skillsBodyRequired': string;
   'settings.designSystems': string;
   'settings.designSystemsHint': string;
   'settings.librarySkills': string;
@@ -522,6 +527,24 @@ export interface Dict {
   'entry.openSettingsAria': string;
   'entry.resizeAria': string;
   'entry.loadingWorkspace': string;
+  'entry.useEverywhereTitle': string;
+  'entry.useEverywhereAria': string;
+  // Left nav rail (icon-only) — surface labels also serve as tooltips
+  'entry.navNewProject': string;
+  'entry.navHome': string;
+  'entry.navProjects': string;
+  'entry.navDesignSystems': string;
+  // Bottom-of-rail help menu
+  'entry.helpAria': string;
+  'entry.helpMenuAria': string;
+  'entry.helpGetHelp': string;
+  'entry.helpSubmitFeature': string;
+  'entry.helpWhatsNew': string;
+  'entry.helpDownloadDesktop': string;
+  // GitHub star pill in the top bar
+  'entry.githubStarLabel': string;
+  'entry.githubStarTitle': string;
+  'entry.githubStarAria': string;
 
   // Connectors tab
   'connectors.title': string;
@@ -904,11 +927,31 @@ export interface Dict {
   'avatar.reasoningLabel': string;
   'avatar.customSuffix': string;
 
+  // Inline CLI / model switcher (entry topbar)
+  'inlineSwitcher.chipTitle': string;
+  'inlineSwitcher.chipCli': string;
+  'inlineSwitcher.chipByok': string;
+  'inlineSwitcher.modelDefault': string;
+  'inlineSwitcher.noAgent': string;
+  'inlineSwitcher.modeLabel': string;
+  'inlineSwitcher.agentLabel': string;
+  'inlineSwitcher.providerLabel': string;
+  'inlineSwitcher.modelLabel': string;
+  'inlineSwitcher.useCli': string;
+  'inlineSwitcher.useByok': string;
+  'inlineSwitcher.daemonOffline': string;
+  'inlineSwitcher.noAgentsDetected': string;
+  'inlineSwitcher.openSettingsForModel': string;
+  'inlineSwitcher.missingApiKey': string;
+  'inlineSwitcher.openFullSettings': string;
+  'inlineSwitcher.customSuffix': string;
+
   // Project view / chat pane / composer
   'project.backToProjects': string;
   'project.metaFreeform': string;
   'project.customInstructions': string;
   'project.customInstructionsPlaceholder': string;
+  'project.instructionsActive': string;
   'project.resizeChatPanel': string;
   'chat.tabChat': string;
   'chat.tabComments': string;
@@ -1059,6 +1102,9 @@ export interface Dict {
   'designFiles.groupBy': string;
   'designFiles.groupByKind': string;
   'designFiles.groupByModified': string;
+  'designFiles.filterBy': string;
+  'designFiles.filterClear': string;
+  'designFiles.filterCount': string;
   'designFiles.expandGroup': string;
   'designFiles.collapseGroup': string;
   'designFiles.sectionPages': string;
@@ -1513,16 +1559,6 @@ export interface Dict {
   'pet.overlayAria': string;
   'pet.spriteAria': string;
   'pet.spriteTitle': string;
-  // Right-side rail (entry view)
-  'pet.railAria': string;
-  'pet.railTitle': string;
-  'pet.railHint': string;
-  'pet.railExpand': string;
-  'pet.railCollapse': string;
-  'pet.railHide': string;
-  'pet.railShow': string;
-  'pet.railCustomFlavor': string;
-  'pet.railCustomize': string;
   // Composer pet menu
   'pet.composerTitle': string;
   'pet.composerMenuTitle': string;

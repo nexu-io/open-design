@@ -1,0 +1,770 @@
+<!doctype html>
+<html lang="en">
+<head><script>(function(){
+  function makeStore(){
+    var data = {};
+    var api = {
+      getItem: function(k){ return Object.prototype.hasOwnProperty.call(data, k) ? data[k] : null; },
+      setItem: function(k, v){ data[k] = String(v); },
+      removeItem: function(k){ delete data[k]; },
+      clear: function(){ data = {}; },
+      key: function(i){ return Object.keys(data)[i] || null; }
+    };
+    Object.defineProperty(api, 'length', { get: function(){ return Object.keys(data).length; } });
+    return api;
+  }
+  function tryShim(name){
+    var works = false;
+    try { works = !!window[name] && typeof window[name].getItem === 'function'; void window[name].length; }
+    catch (_) { works = false; }
+    if (works) return;
+    try { Object.defineProperty(window, name, { configurable: true, value: makeStore() }); }
+    catch (_) { try { window[name] = makeStore(); } catch (__) {} }
+  }
+  tryShim('localStorage');
+  tryShim('sessionStorage');
+})();</script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Orbit · GitHub Briefing — 2026-05-06</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      color: #1f2328;
+      background: #f6f8fa;
+    }
+
+    /* ── GitHub Top Nav ── */
+    .gh-header {
+      background: #24292f;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .gh-header svg { fill: #ffffff; }
+    .gh-header-logo { flex-shrink: 0; }
+    .gh-header-logo svg { width: 32px; height: 32px; }
+    .gh-header-logo svg:hover { fill: rgba(255,255,255,0.7); }
+
+    .gh-header-search {
+      margin-left: 16px;
+      flex: 1;
+      max-width: 540px;
+    }
+    .gh-header-search input {
+      width: 100%;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 6px;
+      padding: 5px 12px;
+      font-size: 14px;
+      color: #ffffff;
+      outline: none;
+      font-family: inherit;
+    }
+    .gh-header-search input::placeholder { color: rgba(255,255,255,0.4); }
+    .gh-header-search input:focus {
+      background: rgba(255,255,255,0.12);
+      border-color: rgba(255,255,255,0.4);
+    }
+    .gh-header-search-slash {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 4px;
+      padding: 0 5px;
+      font-size: 11px;
+      color: rgba(255,255,255,0.4);
+      line-height: 18px;
+    }
+
+    .gh-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: auto;
+    }
+    .gh-avatar-header {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 600;
+      color: #ffffff;
+      cursor: pointer;
+    }
+
+    /* ── Page Layout ── */
+    .page-container {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 24px 32px;
+      display: flex;
+      gap: 24px;
+    }
+
+    /* ── Left Sidebar Nav ── */
+    .sidebar {
+      width: 256px;
+      flex-shrink: 0;
+    }
+    .sidebar-nav {
+      list-style: none;
+    }
+    .sidebar-nav li button {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-radius: 6px;
+      color: #1f2328;
+      font-size: 14px;
+      font-weight: 400;
+      font-family: inherit;
+      background: none;
+      border: none;
+      width: 100%;
+      cursor: pointer;
+      text-align: left;
+    }
+    .sidebar-nav li button:hover {
+      background: rgba(208,215,222,0.32);
+    }
+    .sidebar-nav li button.active {
+      background: rgba(208,215,222,0.48);
+      font-weight: 600;
+    }
+    .sidebar-nav li button svg {
+      fill: #656d76;
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+    }
+    .sidebar-nav li button.active svg { fill: #1f2328; }
+    .sidebar-count {
+      margin-left: auto;
+      background: rgba(208,215,222,0.48);
+      padding: 0 6px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 500;
+      color: #1f2328;
+      line-height: 20px;
+    }
+
+    /* ── Main Content ── */
+    .main-content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    /* ── Section Groups ── */
+    .event-group {
+      margin-bottom: 16px;
+    }
+    .event-group-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      font-size: 14px;
+      font-weight: 600;
+      border: 1px solid #d0d7de;
+      border-radius: 6px 6px 0 0;
+      background: #f6f8fa;
+    }
+    .event-group-header.warning {
+      background: #fff8c5;
+      border-color: #d4a72c;
+    }
+    .event-group-header.ci-fail {
+      background: #ffebe9;
+      border-color: #cf222e;
+    }
+    .event-group-header .count {
+      background: rgba(208,215,222,0.48);
+      padding: 0 6px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 20px;
+    }
+    .event-group-header.warning .count {
+      background: rgba(154,103,0,0.12);
+      color: #9a6700;
+    }
+    .event-group-header.ci-fail .count {
+      background: rgba(207,34,46,0.12);
+      color: #cf222e;
+    }
+
+    /* ── Event Rows ── */
+    .event-list {
+      border: 1px solid #d0d7de;
+      border-top: none;
+      border-radius: 0 0 6px 6px;
+      background: #ffffff;
+    }
+    .event-row {
+      padding: 12px 16px;
+      border-bottom: 1px solid #d0d7de;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .event-row:last-child { border-bottom: none; }
+
+    .event-icon {
+      flex-shrink: 0;
+      width: 16px;
+      height: 16px;
+      margin-top: 3px;
+    }
+    .event-icon svg { width: 16px; height: 16px; }
+
+    .event-body {
+      flex: 1;
+      min-width: 0;
+    }
+    .event-title-line {
+      display: flex;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 4px;
+      font-size: 14px;
+    }
+    .event-repo {
+      color: #656d76;
+      font-weight: 400;
+    }
+    .event-sep { color: #656d76; }
+    .event-pr-label {
+      color: #656d76;
+    }
+    .event-title-text {
+      font-weight: 600;
+      color: #1f2328;
+    }
+    .event-title-text a {
+      color: #0969da;
+      text-decoration: none;
+    }
+    .event-title-text a:hover { text-decoration: underline; }
+    .event-timestamp {
+      margin-left: auto;
+      color: #656d76;
+      font-size: 12px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .event-meta {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 4px;
+      font-size: 12px;
+      color: #656d76;
+    }
+
+    /* ── Status Pills ── */
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 18px;
+      white-space: nowrap;
+    }
+    .pill-open { background: #1a7f37; color: #ffffff; }
+    .pill-merged { background: #8250df; color: #ffffff; }
+    .pill-closed { background: #cf222e; color: #ffffff; }
+    .pill-draft { background: #6e7781; color: #ffffff; }
+    .pill svg { width: 12px; height: 12px; fill: currentColor; }
+
+    /* ── Labels ── */
+    .gh-label {
+      display: inline-block;
+      padding: 0 7px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 20px;
+      border: 1px solid transparent;
+    }
+    .label-backend { background: #ddf4ff; color: #0550ae; border-color: rgba(5,80,174,0.2); }
+    .label-p1 { background: #ffebe9; color: #a40e26; border-color: rgba(164,14,38,0.2); }
+
+    /* ── Reviewer Avatars ── */
+    .reviewer-stack {
+      display: flex;
+      align-items: center;
+      gap: 0;
+    }
+    .reviewer-avatar {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 2px solid #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+      font-weight: 600;
+      color: #ffffff;
+      margin-left: -4px;
+      position: relative;
+    }
+    .reviewer-avatar:first-child { margin-left: 0; }
+
+    .reviewer-status {
+      position: absolute;
+      bottom: -2px;
+      right: -2px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      border: 1.5px solid #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .reviewer-status.approved { background: #1a7f37; }
+    .reviewer-status.pending { background: #bf8700; }
+    .reviewer-status.none { background: #d0d7de; }
+    .reviewer-status svg { width: 6px; height: 6px; fill: #ffffff; }
+
+    /* ── Diff Preview ── */
+    .diff-preview {
+      margin-top: 8px;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+      line-height: 20px;
+      overflow: hidden;
+    }
+    .diff-header {
+      background: #f6f8fa;
+      padding: 4px 12px;
+      color: #656d76;
+      font-size: 12px;
+      border-bottom: 1px solid #d0d7de;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .diff-header svg { width: 12px; height: 12px; fill: #656d76; }
+    .diff-line {
+      padding: 0 12px;
+      white-space: pre;
+    }
+    .diff-line.add {
+      background: #dafbe1;
+      color: #116329;
+    }
+    .diff-line.remove {
+      background: #ffebe9;
+      color: #82071e;
+    }
+    .diff-line.context {
+      background: #ffffff;
+      color: #656d76;
+    }
+    .diff-line-number {
+      display: inline-block;
+      width: 32px;
+      text-align: right;
+      color: rgba(31,35,40,0.3);
+      user-select: none;
+      padding-right: 8px;
+    }
+
+    /* ── CI Fail Card ── */
+    .ci-fail-card .event-row {
+      border-left: 3px solid #cf222e;
+    }
+
+    /* ── Conversation Indicator ── */
+    .convo-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 500;
+      background: #fff8c5;
+      color: #9a6700;
+    }
+    .convo-badge svg { width: 12px; height: 12px; fill: currentColor; }
+
+    /* ── Footer ── */
+    .orbit-footer {
+      text-align: center;
+      padding: 24px 16px 32px;
+      font-size: 12px;
+      color: #656d76;
+    }
+    .orbit-footer strong {
+      color: #1f2328;
+      font-weight: 600;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+      .page-container {
+        flex-direction: column;
+        padding: 16px;
+      }
+      .sidebar { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ════════ GitHub Header ════════ -->
+<header class="gh-header">
+  <!-- Octocat Logo -->
+  <a class="gh-header-logo" href="#">
+    <svg viewBox="0 0 16 16" width="32" height="32">
+      <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/>
+    </svg>
+  </a>
+
+  <!-- Search -->
+  <div class="gh-header-search" style="position:relative;">
+    <input type="text" placeholder="Type / to search" />
+    <span class="gh-header-search-slash">/</span>
+  </div>
+
+  <!-- Action buttons -->
+  <div class="gh-header-actions">
+    <div class="gh-avatar-header">E</div>
+  </div>
+</header>
+
+<!-- ════════ Page ════════ -->
+<div class="page-container">
+
+  <!-- ── Sidebar ── -->
+  <nav class="sidebar" data-od-id="sidebar">
+    <ul class="sidebar-nav" id="sidebarNav">
+      <li>
+        <button class="active" data-filter="all">
+          <svg viewBox="0 0 16 16"><path d="M1.75 1h12.5c.966 0 1.75.784 1.75 1.75v10.5A1.75 1.75 0 0 1 14.25 15H1.75A1.75 1.75 0 0 1 0 13.25V2.75C0 1.784.784 1 1.75 1ZM1.5 2.75v10.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25V2.75a.25.25 0 0 0-.25-.25H1.75a.25.25 0 0 0-.25.25Z"/></svg>
+          All
+          <span class="sidebar-count">5</span>
+        </button>
+      </li>
+      <li>
+        <button data-filter="participating">
+          <svg viewBox="0 0 16 16"><path d="M1.5 14.25c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25V1.75a.25.25 0 0 0-.25-.25H1.75a.25.25 0 0 0-.25.25v12.5ZM0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v12.5A1.75 1.75 0 0 1 14.25 16H1.75A1.75 1.75 0 0 1 0 14.25Zm9.22 3.72a.749.749 0 0 1 1.06 0l3.5 3.5a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L10 7.31 7.28 10.03a.749.749 0 0 1-1.275-.326.749.749 0 0 1 .215-.734Z"/></svg>
+          Participating
+        </button>
+      </li>
+      <li>
+        <button data-filter="mentions">
+          <svg viewBox="0 0 16 16"><path d="M4.75 7.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm3.25.75a.75.75 0 1 1 1.5 0 .75.75 0 0 1-1.5 0Zm4 0a.75.75 0 1 1 1.5 0 .75.75 0 0 1-1.5 0Z"/><path d="M0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v10.5A1.75 1.75 0 0 1 14.25 15H1.75A1.75 1.75 0 0 1 0 13.25Zm1.75-.25a.25.25 0 0 0-.25.25v10.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25V2.75a.25.25 0 0 0-.25-.25Z"/></svg>
+          Mentions
+        </button>
+      </li>
+      <li>
+        <button data-filter="reviews">
+          <svg viewBox="0 0 16 16"><path d="M3.5 9.5a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm5-1a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm4 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"/><path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Z"/></svg>
+          Review requests
+          <span class="sidebar-count">2</span>
+        </button>
+      </li>
+    </ul>
+  </nav>
+
+  <!-- ── Main Content ── -->
+  <main class="main-content" data-od-id="main-content">
+
+    <!-- ═══ Review Requests ═══ -->
+    <div class="event-group" data-od-id="review-requests" data-category="reviews">
+      <div class="event-group-header warning">
+        <svg viewBox="0 0 16 16" width="16" height="16" fill="#9a6700"><path d="M8 2c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6 2.69-6 6-6Zm.25 3a.75.75 0 0 0-1.5 0v3c0 .199.079.39.22.53l2 2a.749.749 0 0 0 1.275-.326.749.749 0 0 0-.215-.734L8.25 7.69Z"/></svg>
+        Review requests waiting on you
+        <span class="count">2</span>
+      </div>
+      <div class="event-list">
+
+        <!-- PR #2371 -->
+        <div class="event-row">
+          <div class="event-icon">
+            <svg viewBox="0 0 16 16" fill="#1a7f37"><path d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25Zm5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354ZM3.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm0 9.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm8.25.75a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Z"/></svg>
+          </div>
+          <div class="event-body">
+            <div class="event-title-line">
+              <span class="event-repo">open-design/web</span>
+              <span class="event-sep">·</span>
+              <span class="event-pr-label">PR #2371</span>
+              <span class="event-sep">·</span>
+              <span class="pill pill-open">
+                <svg viewBox="0 0 16 16"><path d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25Zm5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354Z"/></svg>
+                Open
+              </span>
+              <span class="event-title-text"><a href="#">feat: orbit briefing card</a></span>
+              <span class="event-timestamp">opened 2d ago by marie</span>
+            </div>
+            <div class="event-meta">
+              <!-- Reviewer Avatars -->
+              <div class="reviewer-stack">
+                <div class="reviewer-avatar" style="background:#2da44e;" title="alex — approved">A
+                  <span class="reviewer-status approved"><svg viewBox="0 0 16 16"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></span>
+                </div>
+                <div class="reviewer-avatar" style="background:#0969da;" title="sam — approved">S
+                  <span class="reviewer-status approved"><svg viewBox="0 0 16 16"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></span>
+                </div>
+                <div class="reviewer-avatar" style="background:#cf222e;" title="jess — approved">J
+                  <span class="reviewer-status approved"><svg viewBox="0 0 16 16"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg></span>
+                </div>
+                <div class="reviewer-avatar" style="background:#8250df;" title="eli — pending">E
+                  <span class="reviewer-status pending"></span>
+                </div>
+                <div class="reviewer-avatar" style="background:#bf3989;" title="cody — pending">C
+                  <span class="reviewer-status pending"></span>
+                </div>
+              </div>
+              <span style="color:#656d76;">✓ 3 of 5 reviewers approved · waiting on <strong style="color:#1f2328;">you</strong> + <strong style="color:#1f2328;">cody</strong></span>
+            </div>
+
+            <!-- Diff Preview -->
+            <div class="diff-preview">
+              <div class="diff-header">
+                <svg viewBox="0 0 16 16"><path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0 1 13.25 16h-9.5A1.75 1.75 0 0 1 2 14.25Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .138.112.25.25.25h9.5a.25.25 0 0 0 .25-.25V6h-2.75A1.75 1.75 0 0 1 9 4.25V1.5Zm6.75.062V4.25c0 .138.112.25.25.25h2.688l-.011-.013-2.914-2.914Z"/></svg>
+                src/components/OrbitBriefingCard.tsx
+              </div>
+              <div class="diff-line context"><span class="diff-line-number">42</span>  return (</div>
+              <div class="diff-line remove"><span class="diff-line-number">43</span>-   &lt;div className="briefing-legacy"&gt;</div>
+              <div class="diff-line add"><span class="diff-line-number">43</span>+   &lt;Card variant="orbit" density="compact"&gt;</div>
+              <div class="diff-line add"><span class="diff-line-number">44</span>+     &lt;BriefingHeader provider={provider} /&gt;</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PR #2389 -->
+        <div class="event-row">
+          <div class="event-icon">
+            <svg viewBox="0 0 16 16" fill="#1a7f37"><path d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25Zm5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354ZM3.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm0 9.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm8.25.75a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Z"/></svg>
+          </div>
+          <div class="event-body">
+            <div class="event-title-line">
+              <span class="event-repo">open-design/web</span>
+              <span class="event-sep">·</span>
+              <span class="event-pr-label">PR #2389</span>
+              <span class="event-sep">·</span>
+              <span class="pill pill-open">
+                <svg viewBox="0 0 16 16"><path d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25Zm5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354Z"/></svg>
+                Open
+              </span>
+              <span class="event-title-text"><a href="#">refactor: skill loader</a></span>
+              <span class="event-timestamp">1d ago</span>
+            </div>
+            <div class="event-meta">
+              <span class="convo-badge">
+                <svg viewBox="0 0 16 16"><path d="M1 2.75C1 1.784 1.784 1 2.75 1h10.5c.966 0 1.75.784 1.75 1.75v7.5A1.75 1.75 0 0 1 13.25 12H9.06l-2.573 2.573A1.458 1.458 0 0 1 4 13.543V12H2.75A1.75 1.75 0 0 1 1 10.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h4.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg>
+                Conversation needs your reply
+              </span>
+              <span style="color:#656d76;">@cody asked a question</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ═══ CI / Checks ═══ -->
+    <div class="event-group ci-fail-card" data-od-id="ci-checks" data-category="ci">
+      <div class="event-group-header ci-fail">
+        <svg viewBox="0 0 16 16" width="16" height="16" fill="#cf222e"><path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Zm9.78-2.22-5.5 5.5a.749.749 0 0 1-1.275-.326.749.749 0 0 1 .215-.734l5.5-5.5a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042Z"/></svg>
+        CI / Checks
+        <span class="count">1</span>
+      </div>
+      <div class="event-list">
+        <div class="event-row">
+          <div class="event-icon">
+            <svg viewBox="0 0 16 16" fill="#cf222e"><path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"/></svg>
+          </div>
+          <div class="event-body">
+            <div class="event-title-line">
+              <span class="event-repo">open-design/web</span>
+              <span class="event-sep">·</span>
+              <span style="color:#1f2328;font-weight:600;">main</span>
+              <span class="event-sep">·</span>
+              <span style="color:#cf222e;font-weight:600;">✗ test (e2e) failed</span>
+              <span class="event-timestamp">2h ago</span>
+            </div>
+            <div class="event-meta">
+              <svg viewBox="0 0 16 16" width="12" height="12" fill="#656d76"><path d="M11.93 8.5a4.002 4.002 0 0 1-7.86 0H.75a.75.75 0 0 1 0-1.5h3.32a4.002 4.002 0 0 1 7.86 0h3.32a.75.75 0 0 1 0 1.5Zm-1.43-.25a2.5 2.5 0 1 0-5 0 2.5 2.5 0 0 0 5 0Z"/></svg>
+              <span>Last commit: <code style="font-family:ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace;background:#f6f8fa;border:1px solid #d0d7de;padding:1px 5px;border-radius:4px;font-size:0.85em;">chore(deps): bump cheerio to 1.0.2</code></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ Issues assigned to you ═══ -->
+    <div class="event-group" data-od-id="issues" data-category="issues" data-mentions>
+      <div class="event-group-header">
+        <svg viewBox="0 0 16 16" width="16" height="16" fill="#1a7f37"><path d="M8 9.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/><path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Z"/></svg>
+        Issues assigned to you
+        <span class="count">1</span>
+      </div>
+      <div class="event-list">
+        <div class="event-row">
+          <div class="event-icon">
+            <svg viewBox="0 0 16 16" fill="#1a7f37"><path d="M8 9.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/><path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Z"/></svg>
+          </div>
+          <div class="event-body">
+            <div class="event-title-line">
+              <span class="event-repo">open-design/web</span>
+              <span class="event-sep">·</span>
+              <span class="event-pr-label">ENG-148</span>
+              <span class="event-sep">·</span>
+              <span class="pill pill-open">
+                <svg viewBox="0 0 16 16"><path d="M8 9.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/><path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Z"/></svg>
+                Open
+              </span>
+              <span class="event-title-text"><a href="#">Auth middleware refactor</a></span>
+              <span class="event-timestamp">no activity 5d</span>
+            </div>
+            <div class="event-meta">
+              <span class="gh-label label-backend">backend</span>
+              <span class="gh-label label-p1">p1</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ Activity ═══ -->
+    <div class="event-group" data-od-id="activity" data-category="activity">
+      <div class="event-group-header">
+        <svg viewBox="0 0 16 16" width="16" height="16" fill="#656d76"><path d="M11.93 8.5a4.002 4.002 0 0 1-7.86 0H.75a.75.75 0 0 1 0-1.5h3.32a4.002 4.002 0 0 1 7.86 0h3.32a.75.75 0 0 1 0 1.5Zm-1.43-.25a2.5 2.5 0 1 0-5 0 2.5 2.5 0 0 0 5 0Z"/></svg>
+        Activity
+        <span class="count">1</span>
+      </div>
+      <div class="event-list">
+        <div class="event-row">
+          <div class="event-icon">
+            <svg viewBox="0 0 16 16" fill="#8250df"><path d="M5.45 5.154A4.25 4.25 0 0 0 9.25 7.5h1.378a2.251 2.251 0 1 1 0 1.5H9.25A5.734 5.734 0 0 1 5 7.123v3.505a2.25 2.25 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.95-.218ZM4.25 13.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm8.5-4.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5ZM5 3.25a.75.75 0 1 0 0 .005V3.25Z"/></svg>
+          </div>
+          <div class="event-body">
+            <div class="event-title-line">
+              <span class="event-repo">open-design/web</span>
+              <span class="event-sep">·</span>
+              <span class="event-pr-label">PR #2401</span>
+              <span class="event-sep">·</span>
+              <span class="pill pill-merged">
+                <svg viewBox="0 0 16 16"><path d="M5.45 5.154A4.25 4.25 0 0 0 9.25 7.5h1.378a2.251 2.251 0 1 1 0 1.5H9.25A5.734 5.734 0 0 1 5 7.123v3.505a2.25 2.25 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.95-.218ZM4.25 13.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Zm8.5-4.5a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5ZM5 3.25a.75.75 0 1 0 0 .005V3.25Z"/></svg>
+                Merged
+              </span>
+              <span class="event-title-text">merged into main by <strong>bob</strong></span>
+              <span class="event-timestamp">18h ago</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ════════ Footer ════════ -->
+<footer class="orbit-footer">
+  <strong>Open Orbit</strong> · auto-generated 06:42 · 2026-05-06
+</footer>
+
+<script>
+(function() {
+  var nav = document.getElementById('sidebarNav');
+  var groups = document.querySelectorAll('.event-group');
+
+  nav.addEventListener('click', function(e) {
+    var btn = e.target.closest('button');
+    if (!btn) return;
+
+    // Toggle active
+    nav.querySelectorAll('button').forEach(function(b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+
+    var filter = btn.getAttribute('data-filter');
+
+    groups.forEach(function(g) {
+      if (filter === 'all') {
+        g.style.display = '';
+      } else if (filter === 'participating') {
+        // User participates in reviews + issues assigned
+        g.style.display = (g.hasAttribute('data-category') &&
+          (g.dataset.category === 'reviews' || g.dataset.category === 'issues')) ? '' : 'none';
+      } else if (filter === 'mentions') {
+        g.style.display = g.hasAttribute('data-mentions') ? '' : 'none';
+      } else if (filter === 'reviews') {
+        g.style.display = g.dataset.category === 'reviews' ? '' : 'none';
+      }
+    });
+  });
+
+  // Row hover highlight + click-to-open-on-GitHub
+  const REPO = 'https://github.com/nexu-io/open-design';
+  function buildUrl(label) {
+    const t = (label || '').trim();
+    const prMatch = t.match(/PR\s*#(\d+)/i);
+    if (prMatch) return REPO + '/pull/' + prMatch[1];
+    const issueIdMatch = t.match(/^[A-Z]+-(\d+)/);
+    if (issueIdMatch) return REPO + '/issues?q=' + encodeURIComponent(t);
+    const hashMatch = t.match(/#(\d+)/);
+    if (hashMatch) return REPO + '/issues/' + hashMatch[1];
+    return REPO;
+  }
+  document.querySelectorAll('.event-row').forEach(function(row) {
+    const label = row.querySelector('.event-pr-label')?.textContent;
+    const url = buildUrl(label);
+    row.style.cursor = 'pointer';
+    row.style.transition = 'background 80ms ease-out';
+    row.addEventListener('mouseenter', function() { row.style.background = '#f6f8fa'; });
+    row.addEventListener('mouseleave', function() { row.style.background = ''; });
+    row.addEventListener('click', function(e) {
+      // Don't override clicks on inner real anchors
+      if (e.target.closest('a')) return;
+      window.open(url, '_blank', 'noopener,noreferrer');
+    });
+    // Upgrade the title placeholder anchor to a real URL
+    const titleAnchor = row.querySelector('.event-title-text a');
+    if (titleAnchor) {
+      titleAnchor.href = url;
+      titleAnchor.target = '_blank';
+      titleAnchor.rel = 'noopener noreferrer';
+    }
+  });
+  // Top logo also points to the repo
+  const headerLogo = document.querySelector('.gh-header-logo');
+  if (headerLogo) {
+    headerLogo.href = REPO;
+    headerLogo.target = '_blank';
+    headerLogo.rel = 'noopener noreferrer';
+  }
+})();
+</script>
+</body>
+</html>

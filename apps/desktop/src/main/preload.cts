@@ -1,5 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+type PrintPdfOptions = {
+  deck?: boolean;
+};
+
 // PR #974 trust boundary. The renderer no longer receives a raw
 // filesystem path from the main process: `pickFolder` was deleted from
 // this bridge and replaced with `pickAndImport`, which shows the
@@ -30,6 +34,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 });
 
 contextBridge.exposeInMainWorld('__odDesktop', {
-  printPdf: (html: string, nonce?: string) => ipcRenderer.invoke('od:print-pdf', html, nonce),
+  printPdf: (html: string, nonce?: string, options?: PrintPdfOptions) =>
+    ipcRenderer.invoke('od:print-pdf', html, nonce, options ?? null),
   isDesktop: true,
 });

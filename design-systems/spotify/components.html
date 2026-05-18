@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Spotify — reference components</title>
+    <meta
+      name="description"
+      content="Reference fixture for design-systems/spotify. Every visible
+        value comes from tokens.css. Spotify's signature moves: near-black
+        immersive surfaces, Spotify Green (#1ed760) for play/active/CTA only,
+        full-pill and circular geometry, uppercase button labels with wide tracking."
+    />
+
+    <style>
+      :root {
+        --bg:           #121212;
+        --surface:      #181818;
+        --surface-warm: #1f1f1f;
+
+        --fg:   #ffffff;
+        --fg-2: #fdfdfd;
+        --muted: #b3b3b3;
+        --meta:  #cbcbcb;
+
+        --border:      #4d4d4d;
+        --border-soft: rgba(255, 255, 255, 0.1);
+
+        --accent:        #1ed760;
+        --accent-on:     #000000;
+        --accent-hover:  #1db954;
+        --accent-active: color-mix(in oklab, var(--accent), black 10%);
+
+        --success: #1ed760;
+        --warn:    #ffa42b;
+        --danger:  #f3727f;
+
+        --font-display: "SpotifyMixUITitle", "CircularSp", "Helvetica Neue", Helvetica, Arial, sans-serif;
+        --font-body:    "SpotifyMixUI", "CircularSp", "Helvetica Neue", Helvetica, Arial, sans-serif;
+        --font-mono:    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+        --text-xs:   10px;
+        --text-sm:   12px;
+        --text-base: 16px;
+        --text-lg:   18px;
+        --text-xl:   20px;
+        --text-2xl:  24px;
+        --text-3xl:  24px;
+        --text-4xl:  24px;
+
+        --leading-body:     1.50;
+        --leading-tight:    1.00;
+        --tracking-display: normal;
+
+        --space-1:  4px;
+        --space-2:  8px;
+        --space-3:  12px;
+        --space-4:  16px;
+        --space-5:  20px;
+        --space-6:  24px;
+        --space-8:  32px;
+        --space-12: 48px;
+
+        --section-y-desktop: 64px;
+        --section-y-tablet:  40px;
+        --section-y-phone:   24px;
+
+        --radius-sm:   9999px;
+        --radius-md:   6px;
+        --radius-lg:   8px;
+        --radius-pill: 9999px;
+
+        --elev-flat:   none;
+        --elev-ring:   0 0 0 1px var(--border);
+        --elev-raised: rgba(0, 0, 0, 0.3) 0px 8px 8px;
+
+        --focus-ring: 0 0 0 3px rgba(30, 215, 96, 0.4);
+
+        --motion-fast:   150ms;
+        --motion-base:   200ms;
+        --ease-standard: ease;
+
+        --container-max:            1280px;
+        --container-gutter-desktop: 24px;
+        --container-gutter-tablet:  16px;
+        --container-gutter-phone:   16px;
+      }
+
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .container {
+        max-width: var(--container-max);
+        margin-inline: auto;
+        padding-inline: var(--container-gutter-desktop);
+      }
+      section { padding-block: var(--section-y-desktop); }
+      section + section { border-top: 1px solid var(--border-soft); }
+      @media (max-width: 1023px) {
+        .container { padding-inline: var(--container-gutter-tablet); }
+        section { padding-block: var(--section-y-tablet); }
+      }
+      @media (max-width: 639px) {
+        .container { padding-inline: var(--container-gutter-phone); }
+        section { padding-block: var(--section-y-phone); }
+      }
+
+      /* ─── Typography ─────────────────────────── */
+      h1, h2 {
+        font-family: var(--font-display);
+        font-weight: 700;
+        margin: 0;
+        color: var(--fg);
+        line-height: var(--leading-tight);
+      }
+      h1 { font-size: var(--text-2xl); }
+      h2 { font-size: var(--text-2xl); }
+      h3 {
+        font-family: var(--font-body);
+        font-size: var(--text-lg);
+        font-weight: 600;
+        line-height: 1.30;
+        margin: 0;
+        color: var(--fg);
+      }
+      p { margin: 0; }
+      .body-muted { color: var(--muted); }
+      .body-sm { font-size: var(--text-sm); color: var(--muted); }
+      .stack-3 > * + * { margin-block-start: var(--space-3); }
+      .stack-4 > * + * { margin-block-start: var(--space-4); }
+
+      /* ─── Buttons — full pill; uppercase + wide tracking on labels. */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: 8px 16px;
+        border-radius: var(--radius-sm);   /* 9999px full pill */
+        font-family: var(--font-body);
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1;
+        cursor: pointer;
+        border: none;
+        transition: background-color var(--motion-fast) var(--ease-standard),
+                    opacity var(--motion-fast) var(--ease-standard);
+        text-decoration: none;
+      }
+      .btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+      /* Standard dark pill. */
+      .btn-dark {
+        background: var(--surface-warm);
+        color: var(--fg);
+      }
+      .btn-dark:hover { background: #2a2a2a; }
+      /* Outlined pill. */
+      .btn-outline {
+        background: transparent;
+        color: var(--fg);
+        border: 1px solid var(--border);
+        padding: 4px 16px 4px 36px;
+      }
+      /* Uppercase CTA label variant. */
+      .btn-upper {
+        text-transform: uppercase;
+        letter-spacing: 1.4px;
+        font-size: 12px;
+      }
+      /* Green circular play button. */
+      .btn-play {
+        background: var(--accent);
+        color: var(--accent-on);
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        padding: 0;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+      .btn-play:hover { background: var(--accent-hover); transform: scale(1.04); }
+
+      /* ─── Nav pill ───────────────────────────── */
+      .nav-pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 8px 16px;
+        border-radius: var(--radius-sm);
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--fg);
+        background: var(--surface);
+        text-decoration: none;
+        transition: background-color var(--motion-fast) var(--ease-standard);
+      }
+      .nav-pill.active { background: var(--surface-warm); }
+      .nav-pill:hover { background: #2a2a2a; }
+
+      /* ─── Track row ──────────────────────────── */
+      .track-row {
+        display: flex;
+        align-items: center;
+        gap: var(--space-4);
+        padding: var(--space-2) var(--space-3);
+        border-radius: var(--radius-md);
+        transition: background-color var(--motion-fast) var(--ease-standard);
+        cursor: pointer;
+      }
+      .track-row:hover { background: rgba(255, 255, 255, 0.1); }
+      .track-thumb {
+        width: 40px;
+        height: 40px;
+        border-radius: var(--radius-md);
+        background: var(--surface-warm);
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+      }
+      .track-info { flex: 1; min-width: 0; }
+      .track-name { font-size: var(--text-base); font-weight: 400; color: var(--fg); }
+      .track-artist { font-size: var(--text-sm); color: var(--muted); }
+      .track-duration { font-size: var(--text-sm); color: var(--muted); font-tabular-nums: tabular-nums; }
+
+      /* ─── Card ───────────────────────────────── */
+      .card {
+        background: var(--surface);
+        border-radius: var(--radius-md);
+        padding: var(--space-4);
+        transition: background-color var(--motion-base) var(--ease-standard);
+      }
+      .card:hover { background: #202020; box-shadow: var(--elev-raised); }
+
+      /* ─── Layout ─────────────────────────────── */
+      .hero-grid {
+        display: grid;
+        grid-template-columns: 1.3fr 1fr;
+        gap: var(--space-8);
+        align-items: center;
+      }
+      @media (max-width: 1023px) { .hero-grid { grid-template-columns: 1fr; } }
+      .album-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: var(--space-4);
+      }
+      @media (max-width: 1023px) { .album-grid { grid-template-columns: repeat(2, 1fr); } }
+      @media (max-width: 639px)  { .album-grid { grid-template-columns: 1fr 1fr; } }
+      .hero-actions { display: flex; gap: var(--space-3); margin-block-start: var(--space-6); flex-wrap: wrap; align-items: center; }
+      .icon { width: 16px; height: 16px; flex-shrink: 0; }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <!-- HERO -->
+      <section data-od-id="hero">
+        <div class="hero-grid">
+          <div class="stack-4">
+            <h1>Music for everyone.</h1>
+            <p class="body-muted" style="font-size:var(--text-base);margin-top:var(--space-3)">
+              Millions of songs and podcasts. No credit card needed.
+              Dark immersion — the UI recedes so content can glow.
+            </p>
+            <div class="hero-actions">
+              <a href="./tokens.css" class="btn btn-play" aria-label="Play">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+              </a>
+              <a href="./tokens.css" class="btn btn-dark btn-upper">Get Spotify free</a>
+              <a href="./DESIGN.md" class="btn btn-outline">Read the spec</a>
+            </div>
+          </div>
+
+          <aside>
+            <div class="card stack-4">
+              <p style="font-size:var(--text-sm);font-weight:700;color:var(--fg)">Now playing</p>
+              <div class="track-row" style="padding:0">
+                <div class="track-thumb" style="background:var(--accent);color:#000;font-size:24px">♪</div>
+                <div class="track-info">
+                  <p class="track-name">design-systems/tokens</p>
+                  <p class="track-artist">Open Design · 2026</p>
+                </div>
+                <span class="track-duration">3:22</span>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <!-- FEATURES / PLAYLIST -->
+      <section data-od-id="features">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-5)">
+          <h2>Recent picks</h2>
+          <a href="#" style="font-size:var(--text-sm);font-weight:700;color:var(--muted);text-decoration:none;text-transform:uppercase;letter-spacing:1.4px">Show all</a>
+        </div>
+
+        <div class="album-grid">
+          <div class="card stack-3">
+            <div style="width:100%;aspect-ratio:1;background:linear-gradient(135deg,#5e6ad2,#1ed760);border-radius:var(--radius-md);margin-bottom:var(--space-3)"></div>
+            <p style="font-weight:700;font-size:var(--text-base)">Token Fixtures</p>
+            <p class="body-sm">Brand oracle collection</p>
+          </div>
+          <div class="card stack-3">
+            <div style="width:100%;aspect-ratio:1;background:linear-gradient(135deg,#f54e00,#cf2d56);border-radius:var(--radius-md);margin-bottom:var(--space-3)"></div>
+            <p style="font-weight:700;font-size:var(--text-base)">Cursor Sessions</p>
+            <p class="body-sm">Warm cream meets code</p>
+          </div>
+          <div class="card stack-3">
+            <div style="width:100%;aspect-ratio:1;background:linear-gradient(135deg,#10a37f,#0d0d0d);border-radius:var(--radius-md);margin-bottom:var(--space-3)"></div>
+            <p style="font-weight:700;font-size:var(--text-base)">OpenAI Calm</p>
+            <p class="body-sm">Research lab dressed public</p>
+          </div>
+          <div class="card stack-3">
+            <div style="width:100%;aspect-ratio:1;background:linear-gradient(135deg,#0969da,#1a7f37);border-radius:var(--radius-md);margin-bottom:var(--space-3)"></div>
+            <p style="font-weight:700;font-size:var(--text-base)">GitHub Primer</p>
+            <p class="body-sm">Density over decoration</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- TRACKS -->
+      <section data-od-id="tracks">
+        <h2 style="margin-bottom:var(--space-5)">Track list</h2>
+        <div style="display:flex;flex-direction:column;gap:var(--space-1)">
+          <div class="track-row">
+            <span style="color:var(--muted);font-size:var(--text-sm);width:16px;text-align:right">1</span>
+            <div class="track-thumb">🎵</div>
+            <div class="track-info">
+              <p class="track-name">tokens.css</p>
+              <p class="track-artist">notion · design-systems</p>
+            </div>
+            <span class="track-duration">4:12</span>
+          </div>
+          <div class="track-row">
+            <span style="color:var(--accent);font-size:var(--text-sm);width:16px;text-align:right">▶</span>
+            <div class="track-thumb" style="background:linear-gradient(135deg,#5e6ad2,#191a1b)">🎸</div>
+            <div class="track-info">
+              <p class="track-name" style="color:var(--accent)">components.html</p>
+              <p class="track-artist">linear-app · design-systems</p>
+            </div>
+            <span class="track-duration">3:55</span>
+          </div>
+          <div class="track-row">
+            <span style="color:var(--muted);font-size:var(--text-sm);width:16px;text-align:right">3</span>
+            <div class="track-thumb">🎹</div>
+            <div class="track-info">
+              <p class="track-name">DESIGN.md</p>
+              <p class="track-artist">github · design-systems</p>
+            </div>
+            <span class="track-duration">2:48</span>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

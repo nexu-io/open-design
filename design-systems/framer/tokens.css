@@ -1,0 +1,238 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/framer/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by Framer".
+ * Pure black void canvas, Framer Blue accent, GT Walsheim display with
+ * extreme negative letter-spacing, Inter body with OpenType features,
+ * and a blue-tinted ring-shadow elevation system.
+ *
+ * Brand-specific schema decisions (each one bends a schema convention
+ * to match Framer's voice rather than the cross-brand default):
+ *
+ *   1. `--bg` is `#000000` (Void Black). DESIGN.md §1 names this as
+ *      "absolute void, not warm or gray-tinted" — Framer's identity
+ *      hinges on pure black. `#0a0a0a` or any near-black tint reads
+ *      as a generic dark theme; the void IS the brand. `--surface`
+ *      sits at `#090909` (Near Black) for elevated dark surfaces.
+ *
+ *   2. `--border` is `rgba(0, 153, 255, 0.15)` — the literal Framer
+ *      Blue ring-shadow alpha. DESIGN.md §6 Level 1 names this single
+ *      value as the "Framer Blue glow ring" used for card containment.
+ *      Binding `--border` to the blue alpha lets `--elev-ring`
+ *      (`0 0 0 1px var(--border)`) reproduce Framer's signature blue
+ *      hairline by default. `--border-soft` drops to a translucent
+ *      white for inner row separators that should not light up.
+ *
+ *   3. `--accent` is Framer Blue (`#0099ff`), the one-and-only chromatic
+ *      move. DESIGN.md §2 forbids decorative use ("one-accent-color
+ *      system"). Primary CTAs in Framer are SOLID WHITE, not blue —
+ *      the components.html encodes that by using `#ffffff` as the
+ *      primary button background, so `--accent` stays reserved for
+ *      links, borders, focus rings, and the chromatic moments where
+ *      blue actually appears.
+ *
+ *   4. Type scale climbs to 110px (`--text-4xl`) — the GT Walsheim
+ *      display hero size from DESIGN.md §3. `--leading-tight` drops
+ *      to `0.95` (the section-display tier) so headings across the
+ *      scale read compressed-but-not-overlapping; the most extreme
+ *      0.85 line-height is reserved for the display hero h1 inline.
+ *      `--tracking-display` is `-0.05em`, the em-relative form of
+ *      "-5.5px at 110px" that scales proportionally with size.
+ *
+ *   5. Section rhythm is generous: `120px` desktop, `80px` tablet,
+ *      `60px` phone. DESIGN.md §5 describes "80–120px between sections"
+ *      with whitespace manifesting as "void" — the black background
+ *      means generous padding reads as dramatic pause, not as wasted
+ *      space. Container caps at `1200px` per DESIGN.md §5.
+ *
+ *   6. `--radius-sm: 8px` (DESIGN.md §5: standard component radius
+ *      for code blocks / buttons / interactive elements). Pill
+ *      buttons go via `--radius-pill` and override locally — the
+ *      40px–100px pill range from DESIGN.md is button-specific and
+ *      not part of the shared schema.
+ *
+ *   7. `--elev-raised` reproduces the multi-layer Framer card stack
+ *      from DESIGN.md §6 Level 3 verbatim: a 0.5px white top-edge
+ *      highlight (simulating light hitting the top surface) plus a
+ *      deep ambient 30px shadow (true floating depth). Never drop
+ *      either layer when overriding — both are required for the
+ *      "built-not-pasted-onto-page" quality DESIGN.md describes.
+ *
+ *   8. Foreground ramp binds all four tiers (#ffffff →
+ *      rgba(255,255,255,0.6) → rgba(255,255,255,0.4)) so cross-brand
+ *      components targeting `--fg-2`, `--muted`, or `--meta` resolve
+ *      to Framer's actual ghost-white tiers instead of collapsing.
+ *      `--fg-2` binds to Muted Silver (#a6a6a6), the documented
+ *      secondary text color from DESIGN.md §2.
+ *
+ * Source contracts:
+ *   - Standard token names: design-systems/_schema/tokens.schema.ts
+ *   - A2 fallback parity:   design-systems/_schema/defaults.css
+ *   - Lint enforcement:     apps/daemon/src/lint-artifact.ts
+ *
+ * Keep this file additive: never invent token names not also
+ * documented in DESIGN.md or the schema. GT Walsheim / Inter / Azeret
+ * Mono are not bundled — the font stacks list system fallbacks so
+ * artifacts render acceptably even when the custom faces are not
+ * loaded, and any host that wants the real faces links them externally.
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ─────────────────────────────────────────────────────
+   * The void: pure black canvas with a near-black elevated surface.
+   * No warm tier — `--surface-warm` aliases to surface because the
+   * brand explicitly forbids tinted backgrounds (DESIGN.md §7 don't:
+   * "no warm dark backgrounds, no charcoal, no brownish blacks"). */
+  --bg: #000000;                       /* Void Black — the foundation canvas */
+  --surface: #090909;                  /* Near Black — elevated dark surface */
+  --surface-warm: var(--surface);      /* alias — Framer has no warm tier */
+
+  /* ─── Foreground ramp (4 levels) ──────────────────────────────────
+   * Pure white headings, muted silver body, ghost white tertiary,
+   * fainter placeholder/disabled. `--fg-2` and `--muted` and `--meta`
+   * are independently bound (not aliased) because Framer genuinely
+   * uses distinct text tiers across heading, body, caption, and
+   * placeholder per DESIGN.md §2. */
+  --fg: #ffffff;                       /* Pure White — headings, primary text */
+  --fg-2: #a6a6a6;                     /* Muted Silver — body description */
+  --muted: rgba(255, 255, 255, 0.6);   /* Ghost White — captions, tertiary */
+  --meta: rgba(255, 255, 255, 0.4);    /* Faint White — placeholders, disabled */
+
+  /* ─── Border ──────────────────────────────────────────────────────
+   * Blue ring-shadow as border is THE signature: `rgba(0, 153, 255,
+   * 0.15)` at 1px spread is the literal Framer Blue glow ring from
+   * DESIGN.md §6 Level 1. Binding `--border` to the blue alpha (not
+   * a solid hex) lets `--elev-ring` reproduce Framer's hairline by
+   * default. `--border-soft` drops to a translucent white for inner
+   * row separators that should not light up the section. */
+  --border: rgba(0, 153, 255, 0.15);   /* signature Framer Blue ring alpha */
+  --border-soft: rgba(255, 255, 255, 0.06); /* inner separator on dark */
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * Framer Blue — the cold, electric one-accent-color of the system.
+   * DESIGN.md §2 forbids decorative use ("one-accent-color system").
+   * Used in links, ring borders, focus rings, and badge tints.
+   *
+   * Primary CTAs in Framer are SOLID WHITE PILL on black, not blue.
+   * components.html encodes that pattern via `background: #ffffff`
+   * on the primary button, so `--accent` stays reserved for the
+   * chromatic moments where blue actually appears. */
+  --accent: #0099ff;                   /* Framer Blue */
+  --accent-on: #ffffff;                /* white label when --accent is bg */
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * Framer's marketing surface rarely renders state. Inherit schema
+   * defaults — the brand has no defined success/warn/danger palette
+   * of its own; the only declared color is Framer Blue. */
+  --success: #16a34a;
+  --warn: #eab308;
+  --danger: #dc2626;
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * GT Walsheim Medium for display, Inter for body, Azeret Mono for
+   * code. All three lead with the custom faces and fall back to
+   * system sans/mono so artifacts render legibly even when the
+   * Framer-licensed fonts are not loaded. */
+  --font-display: "GT Walsheim Framer Medium", "GT Walsheim Medium", "GT Walsheim", -apple-system, "Segoe UI", Inter, sans-serif;
+  --font-body: "Inter Variable", "Inter", -apple-system, "Segoe UI", Arial, sans-serif;
+  --font-mono: "Azeret Mono", ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  /* Type scale (px) — DESIGN.md §3. Tops out at 110px display hero;
+   * Framer reads HUGE because GT Walsheim at extreme negative tracking
+   * compresses the headline into a spring-loaded block. */
+  --text-xs: 12px;                     /* Small Caption */
+  --text-sm: 14px;                     /* Caption / Label */
+  --text-base: 15px;                   /* Body / Nav / UI */
+  --text-lg: 18px;                     /* Body Large */
+  --text-xl: 22px;                     /* Feature Title */
+  --text-2xl: 32px;                    /* Feature Heading */
+  --text-3xl: 62px;                    /* Section Heading */
+  --text-4xl: 110px;                   /* Display Hero — spring-loaded */
+
+  /* `--leading-tight: 0.95` sits at the Section-Display tier from
+   * DESIGN.md §3. The most extreme 0.85 line-height is reserved for
+   * the display hero h1 (applied inline in components.html).
+   * `--tracking-display: -0.05em` is the em-relative form of
+   * "-5.5px at 110px" — letter-spacing in em scales proportionally
+   * with size, matching DESIGN.md §3's principle that tracking
+   * scales with font size. */
+  --leading-body: 1.3;
+  --leading-tight: 0.95;
+  --tracking-display: -0.05em;
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * 4/8-grid base scale per DESIGN.md §5. The 1/2/3/5/6/10/15/20/30/
+   * 35px sub-tier increments from DESIGN.md are inlined per-component
+   * because they are too fine to belong in the shared schema. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* Section rhythm — DESIGN.md §5: "80–120px between sections" desktop,
+   * "120px desktop → 60px mobile" per §8 collapsing strategy. We sit
+   * at the upper end of the desktop range (120px) so whitespace reads
+   * as dramatic void, drop to 80px on tablet, and 60px on phone (the
+   * documented mobile floor). */
+  --section-y-desktop: 120px;
+  --section-y-tablet: 80px;
+  --section-y-phone: 60px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * DESIGN.md §5 radius scale: 1/5–7/8/10–12/15–20/30–40/100. We bind
+   * the four schema tiers to: 8 (button/input/code-block), 12 (cards
+   * and product screenshots), 20 (large containers), 9999 (full pill).
+   * The 40px–100px pill-button range from DESIGN.md is button-specific
+   * and is reached via `--radius-pill` with a local override. */
+  --radius-sm: 8px;                    /* buttons, inputs, code blocks */
+  --radius-md: 12px;                   /* cards, product screenshots */
+  --radius-lg: 20px;                   /* large containers, feature cards */
+  --radius-pill: 9999px;               /* full pill — CTAs, tag elements */
+
+  /* ─── Elevation (3 levels) ────────────────────────────────────────
+   * Framer's depth system is shadow-led, not blur-led. Three levels:
+   *
+   *   --elev-flat    no shadow (page background, void areas)
+   *   --elev-ring    the signature Framer Blue 1px ring (most cards)
+   *   --elev-raised  the multi-layer floating stack (DESIGN.md §6 L3)
+   *
+   * `--elev-raised` is reproduced VERBATIM from DESIGN.md §6 Level 3:
+   *   0.5px white top-edge highlight (light hitting the top surface)
+   *   30px deep ambient shadow at 0.25 alpha (true floating depth)
+   * Never drop either layer when overriding — both are required for
+   * the "floating not pasted-on" quality of Framer's elevated cards. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised:
+    0 0.5px 0 0.5px rgba(255, 255, 255, 0.1),
+    0 10px 30px rgba(0, 0, 0, 0.25);
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * Blue glow halo — `rgba(0, 153, 255, 0.15)` (Blue Glow) is the
+   * Framer focus tint per DESIGN.md §2. We reproduce it as a 3px
+   * alpha ring at `var(--accent)` so the halo softens around inputs
+   * without overpowering the void canvas. */
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * Standard durations + standard easing. Framer's boldness is in
+   * type, color, and product polish — never in long-form animation. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * ~1200px max content width per DESIGN.md §5. Gutters narrow on
+   * mobile so the void surrounding content stays generous on phones
+   * without crushing the dramatic margin. */
+  --container-max: 1200px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 16px;
+  --container-gutter-phone: 12px;
+}

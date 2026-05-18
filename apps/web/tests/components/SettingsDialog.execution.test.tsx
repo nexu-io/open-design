@@ -841,6 +841,13 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
       { agents: availableAgents },
     );
 
+    expect(
+      screen.getByLabelText('Codex/OpenAI proxy API key (CODEX_API_KEY)'),
+    ).toBeTruthy();
+    expect(
+      screen.getByLabelText('Codex/OpenAI proxy API key (OPENAI_API_KEY · proxy/legacy)'),
+    ).toBeTruthy();
+
     fireEvent.change(screen.getByLabelText('Codex home'), {
       target: { value: ' ~/.codex-team ' },
     });

@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Audio jingle — example</title>
+    <style>
+      :root {
+        --bg: #f5efe5;
+        --panel: #ffffff;
+        --ink: #1c1b1a;
+        --muted: #8b8579;
+        --accent: #c96442;
+        --grid: #e6dfd1;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+        font-family: 'Iowan Old Style', 'Charter', Georgia, serif; }
+      body { min-height: 100dvh; display: grid; place-items: center; padding: 32px; }
+      .card {
+        width: min(640px, 92vw);
+        background: var(--panel);
+        border-radius: 8px;
+        padding: 26px 28px 22px;
+        box-shadow: 0 16px 40px rgba(28,27,26,0.10), 0 1px 2px rgba(28,27,26,0.05);
+        border: 1px solid rgba(28,27,26,0.06);
+      }
+      .row1 { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+      .icon {
+        width: 44px; height: 44px; border-radius: 50%;
+        background: var(--accent); color: #fff;
+        display: grid; place-items: center;
+        box-shadow: 0 6px 18px rgba(201, 100, 66, 0.35);
+      }
+      .icon svg { width: 22px; height: 22px; }
+      .title { margin: 0; font-size: 20px; line-height: 1.2; }
+      .sub { font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+        font-size: 11px; color: var(--muted); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 2px; }
+
+      .wave {
+        display: flex; align-items: end; gap: 3px;
+        height: 96px; padding: 0 4px;
+        border-top: 1px dashed var(--grid);
+        border-bottom: 1px dashed var(--grid);
+      }
+      .wave span {
+        flex: 1; background: linear-gradient(180deg, var(--accent), #a4502f);
+        border-radius: 2px;
+        animation: bob 2s ease-in-out infinite;
+        animation-delay: var(--d, 0s);
+      }
+      @keyframes bob {
+        0%, 100% { height: var(--h, 30%); }
+        50% { height: calc(var(--h, 30%) * 1.6); }
+      }
+
+      .transport {
+        margin-top: 14px;
+        display: grid; grid-template-columns: auto 1fr auto auto; gap: 12px;
+        align-items: center;
+      }
+      .play {
+        width: 36px; height: 36px; border-radius: 50%;
+        background: var(--ink); color: #fff;
+        display: grid; place-items: center;
+      }
+      .timeline {
+        height: 4px; border-radius: 2px;
+        background: linear-gradient(90deg, var(--accent) 0 32%, var(--grid) 32% 100%);
+      }
+      .time {
+        font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+        font-size: 11px; color: var(--muted);
+        letter-spacing: 0.08em;
+      }
+      .badge {
+        font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+        font-size: 10px; color: var(--accent);
+        letter-spacing: 0.18em; text-transform: uppercase;
+        padding: 4px 8px; border-radius: 999px;
+        background: rgba(201, 100, 66, 0.1);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="row1">
+        <div class="icon" aria-hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+        </div>
+        <div>
+          <h1 class="title">A 30s coffee-shop launch jingle.</h1>
+          <div class="sub">suno-v5 · 92 BPM · loop-friendly tail</div>
+        </div>
+      </div>
+      <div class="wave" aria-hidden>
+        <span style="--h:24%;--d:0s"></span>
+        <span style="--h:38%;--d:.05s"></span>
+        <span style="--h:52%;--d:.1s"></span>
+        <span style="--h:64%;--d:.15s"></span>
+        <span style="--h:48%;--d:.2s"></span>
+        <span style="--h:70%;--d:.25s"></span>
+        <span style="--h:42%;--d:.3s"></span>
+        <span style="--h:58%;--d:.35s"></span>
+        <span style="--h:36%;--d:.4s"></span>
+        <span style="--h:62%;--d:.45s"></span>
+        <span style="--h:26%;--d:.5s"></span>
+        <span style="--h:50%;--d:.55s"></span>
+        <span style="--h:34%;--d:.6s"></span>
+        <span style="--h:46%;--d:.65s"></span>
+        <span style="--h:58%;--d:.7s"></span>
+        <span style="--h:30%;--d:.75s"></span>
+        <span style="--h:44%;--d:.8s"></span>
+        <span style="--h:54%;--d:.85s"></span>
+        <span style="--h:28%;--d:.9s"></span>
+        <span style="--h:48%;--d:.95s"></span>
+      </div>
+      <div class="transport">
+        <div class="play" aria-hidden>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M6 4v16l14-8z"/></svg>
+        </div>
+        <div class="timeline" aria-hidden></div>
+        <span class="time">00:09 / 00:30</span>
+        <span class="badge">MP3</span>
+      </div>
+    </div>
+  </body>
+</html>

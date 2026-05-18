@@ -1,0 +1,89 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "od-plugin-publish-github",
+  "title": "Publish Plugin to GitHub",
+  "version": "0.1.0",
+  "description": "Creates a public GitHub repository for a local Open Design plugin using the GitHub CLI.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/od-plugin-publish-github",
+  "tags": [
+    "share",
+    "publish",
+    "github",
+    "github-repo",
+    "open-source",
+    "plugin-authoring",
+    "community-plugin",
+    "first-party"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "utility",
+    "platform": "desktop",
+    "scenario": "plugin-sharing",
+    "surface": "github",
+    "useCase": {
+      "query": {
+        "en": "Publish the staged Open Design plugin to a new public GitHub repository with gh CLI.",
+        "zh-CN": "使用 gh CLI 把已暂存的 Open Design 插件发布成一个新的公开 GitHub 仓库。"
+      }
+    },
+    "inputs": [
+      {
+        "name": "source_plugin_id",
+        "label": "Source plugin id",
+        "type": "string",
+        "required": true
+      },
+      {
+        "name": "source_plugin_title",
+        "label": "Source plugin title",
+        "type": "string",
+        "required": true
+      },
+      {
+        "name": "source_plugin_version",
+        "label": "Source plugin version",
+        "type": "string"
+      },
+      {
+        "name": "plugin_context_path",
+        "label": "Copied plugin folder",
+        "type": "string",
+        "required": true
+      },
+      {
+        "name": "source_plugin_path",
+        "label": "Original plugin folder",
+        "type": "string"
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "fs:read",
+      "fs:write",
+      "bash",
+      "subprocess",
+      "network"
+    ]
+  }
+}

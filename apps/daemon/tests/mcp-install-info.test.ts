@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import express from 'express';
-import { SIDECAR_DEFAULTS, SIDECAR_ENV } from '@open-design/sidecar-proto';
+import { SIDECAR_ENV } from '@open-design/sidecar-proto';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { isLocalSameOrigin } from '../src/origin-validation.js';
 import { buildMcpInstallPayload } from '../src/mcp-install-info.js';
@@ -20,7 +20,7 @@ interface InstallInfoOpts {
   cliPath: string;
   port: number;
   /** Stand-in for `process.env`. Lets each test simulate sidecar vs
-   *  non-sidecar daemon launches and custom namespaces without
+   *  non-sidecar daemon launches and custom transport endpoints without
    *  mutating the real process env. */
   env?: NodeJS.ProcessEnv;
   /** Stand-in for the daemon's resolved RUNTIME_DATA_DIR (issue #848).
@@ -72,14 +72,7 @@ function makeInstallInfoApp({ cliPath, port, env = {}, dataDir }: InstallInfoOpt
     const isSidecarMode = sidecarIpcPath != null && sidecarIpcPath.length > 0;
     const sidecarEnv: Record<string, string> = {};
     if (isSidecarMode) {
-      const ns = env[SIDECAR_ENV.NAMESPACE];
-      if (ns != null && ns !== SIDECAR_DEFAULTS.namespace) {
-        sidecarEnv[SIDECAR_ENV.NAMESPACE] = ns;
-      }
-      const ipcBase = env[SIDECAR_ENV.IPC_BASE];
-      if (ipcBase != null && ipcBase.length > 0) {
-        sidecarEnv[SIDECAR_ENV.IPC_BASE] = ipcBase;
-      }
+      sidecarEnv[SIDECAR_ENV.IPC_PATH] = sidecarIpcPath;
     }
     const payload = buildMcpInstallPayload({
       cliPath,
@@ -249,12 +242,11 @@ describe('GET /api/mcp/install-info', () => {
     expect(after - before).toBeLessThanOrEqual(1);
   });
 
-  it('sidecar default namespace omits --daemon-url and emits only OD_DATA_DIR', async () => {
+  it('sidecar launch omits --daemon-url and emits the concrete IPC path with OD_DATA_DIR', async () => {
     const { port, server } = await startHarness(
       cliPath,
       {
         [SIDECAR_ENV.IPC_PATH]: '/tmp/open-design/ipc/default/daemon.sock',
-        [SIDECAR_ENV.NAMESPACE]: SIDECAR_DEFAULTS.namespace,
       },
       dataDir,
     );
@@ -262,41 +254,37 @@ describe('GET /api/mcp/install-info', () => {
       const res = await fetch(`http://127.0.0.1:${port}/api/mcp/install-info`);
       const body = await readInstallInfo(res);
       expect(body.args).toEqual([cliPath, 'mcp']);
-      // Default namespace + default IPC base means the spawned `od mcp`
-      // can derive the right socket without any sidecar env hints. The
-      // OD_DATA_DIR pin still rides along so the data dir is correct.
-      expect(body.env).toEqual({ OD_DATA_DIR: dataDir });
-    } finally {
-      await new Promise<void>((done) => server?.close(() => done()));
-    }
-  });
-
-  it('sidecar non-default namespace propagates OD_SIDECAR_NAMESPACE alongside OD_DATA_DIR', async () => {
-    const { port, server } = await startHarness(
-      cliPath,
-      {
-        [SIDECAR_ENV.IPC_PATH]: '/tmp/open-design/ipc/foo/daemon.sock',
-        [SIDECAR_ENV.NAMESPACE]: 'foo',
-      },
-      dataDir,
-    );
-    try {
-      const res = await fetch(`http://127.0.0.1:${port}/api/mcp/install-info`);
-      const body = await readInstallInfo(res);
-      expect(body.args).toEqual([cliPath, 'mcp']);
-      // Without this propagation the MCP client would launch `od mcp`
-      // with no namespace env, fall back to "default", and miss the
-      // foo daemon entirely.
       expect(body.env).toEqual({
         OD_DATA_DIR: dataDir,
-        [SIDECAR_ENV.NAMESPACE]: 'foo',
+        [SIDECAR_ENV.IPC_PATH]: '/tmp/open-design/ipc/default/daemon.sock',
       });
     } finally {
       await new Promise<void>((done) => server?.close(() => done()));
     }
   });
 
-  it('sidecar with custom IPC base propagates OD_SIDECAR_IPC_BASE alongside OD_DATA_DIR', async () => {
+  it('sidecar non-default endpoint still propagates only the concrete IPC path', async () => {
+    const { port, server } = await startHarness(
+      cliPath,
+      {
+        [SIDECAR_ENV.IPC_PATH]: '/tmp/open-design/ipc/foo/daemon.sock',
+      },
+      dataDir,
+    );
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/api/mcp/install-info`);
+      const body = await readInstallInfo(res);
+      expect(body.args).toEqual([cliPath, 'mcp']);
+      expect(body.env).toEqual({
+        OD_DATA_DIR: dataDir,
+        [SIDECAR_ENV.IPC_PATH]: '/tmp/open-design/ipc/foo/daemon.sock',
+      });
+    } finally {
+      await new Promise<void>((done) => server?.close(() => done()));
+    }
+  });
+
+  it('sidecar with custom IPC base does not propagate namespace or base hints', async () => {
     const { port, server } = await startHarness(
       cliPath,
       {
@@ -311,8 +299,7 @@ describe('GET /api/mcp/install-info', () => {
       const body = await readInstallInfo(res);
       expect(body.env).toEqual({
         OD_DATA_DIR: dataDir,
-        [SIDECAR_ENV.NAMESPACE]: 'foo',
-        [SIDECAR_ENV.IPC_BASE]: '/var/run/open-design',
+        [SIDECAR_ENV.IPC_PATH]: '/var/run/open-design/foo/daemon.sock',
       });
     } finally {
       await new Promise<void>((done) => server?.close(() => done()));

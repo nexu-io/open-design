@@ -28,6 +28,41 @@ afterEach(() => {
 });
 
 describe('ChatComposer /search command', () => {
+  it('sends staged file attachments even when the text draft is empty', async () => {
+    const onSend = vi.fn();
+    mockedUploadProjectFiles.mockResolvedValue({
+      uploaded: [{ path: 'brief.pdf', name: 'brief.pdf', kind: 'file', size: 5 }],
+      failed: [],
+    });
+
+    render(
+      <ChatComposer
+        projectId="project-1"
+        projectFiles={[]}
+        streaming={false}
+        onEnsureProject={async () => 'project-1'}
+        onSend={onSend}
+        onStop={vi.fn()}
+      />,
+    );
+
+    const file = new File(['brief'], 'brief.pdf', { type: 'application/pdf' });
+    fireEvent.change(screen.getByTestId('chat-file-input'), {
+      target: { files: [file] },
+    });
+
+    await waitFor(() => expect(screen.getByText('brief.pdf')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('chat-send'));
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+    expect(onSend).toHaveBeenCalledWith(
+      '',
+      [{ path: 'brief.pdf', name: 'brief.pdf', kind: 'file', size: 5 }],
+      [],
+      undefined,
+    );
+  });
+
   it('keeps concurrent queued visual annotations distinct after uploads resolve', async () => {
     const onSend = vi.fn();
     const firstUpload = deferred<Awaited<ReturnType<typeof uploadProjectFiles>>>();

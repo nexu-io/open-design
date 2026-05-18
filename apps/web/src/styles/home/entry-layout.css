@@ -1,0 +1,777 @@
+/* ============================================================
+   Entry layout — header-less variant
+   - Single-row shell (`entry-shell--no-header`)
+   - Left icon-only nav rail (`entry-nav-rail`)
+   - Center scroll container (`entry-main--scroll`)
+   ============================================================ */
+
+/* Header-less shell variant. The rail's logo replaces the chrome
+   brand and a floating top-right control replaces the chrome
+   actions, so the entry view does not render `AppChromeHeader`. */
+.entry-shell--no-header {
+  grid-template-rows: 1fr;
+  --entry-rail-width: 56px;
+}
+
+/* Left rail */
+.entry-nav-rail {
+  width: var(--entry-rail-width, 64px);
+  border-right: 1px solid var(--border);
+  background: var(--bg-panel);
+  padding: 8px 0 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  /* The rail intentionally lets its descendants escape horizontally so
+     the hover tooltips and the bottom help popover can render to the
+     right of the icon column without being clipped. Vertical overflow
+     is still controlled by the parent `.entry` shell. */
+  overflow: visible;
+  /* `.entry-main--scroll` is `position: relative` with its own
+     background, which would otherwise paint *on top of* any absolutely
+     positioned descendant of the rail that escapes the 64px column
+     (hover tooltips, help popover). Elevating the rail above the main
+     area lets those floats appear over the scroll surface. */
+  position: relative;
+  z-index: 30;
+}
+.entry-nav-rail__group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+}
+.entry-nav-rail__footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding-bottom: 4px;
+}
+
+/* ---------- Right-side hover tooltip (rail items only) ----------
+   The rail is icon-only, so each button advertises its label via a
+   `data-tooltip` attribute. The label slides in from the right on
+   hover/focus-visible (matching the Lovart-style affordance the user
+   requested) and sits above siblings via z-index. We deliberately
+   block tooltips while the help popover is open so the floating
+   menu does not collide with the tooltip bubble. */
+.entry-nav-rail [data-tooltip] {
+  position: relative;
+}
+.entry-nav-rail [data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%) translateX(-4px);
+  padding: 5px 9px;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--bg-panel);
+  background: var(--text-strong, #111);
+  border-radius: 6px;
+  box-shadow: var(--shadow-sm, 0 4px 12px rgba(0, 0, 0, 0.12));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease, transform 120ms ease;
+  z-index: 60;
+}
+.entry-nav-rail [data-tooltip]:hover::after,
+.entry-nav-rail [data-tooltip]:focus-visible::after {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
+}
+.entry-nav-rail [data-tooltip][aria-expanded='true']::after {
+  display: none;
+}
+/* RTL: the rail still lives on the left so the tooltip remains on
+   the right of the button — but using `left: calc(100% + 10px)` in
+   RTL would flip incorrectly via the parent's `dir="rtl"`. Pin the
+   anchor explicitly so the bubble stays where the user expects. */
+[dir='rtl'] .entry-nav-rail [data-tooltip]::after {
+  left: auto;
+  right: calc(100% + 10px);
+  transform: translateY(-50%) translateX(4px);
+}
+[dir='rtl'] .entry-nav-rail [data-tooltip]:hover::after,
+[dir='rtl'] .entry-nav-rail [data-tooltip]:focus-visible::after {
+  transform: translateY(-50%) translateX(0);
+}
+
+/* ---------- Help launcher + flyout popover ----------
+   Lives in `.entry-nav-rail__footer` and floats to the right of the
+   rail so the menu stays inside the viewport even when the rail is
+   anchored at the bottom-left of the window. */
+.entry-help-menu {
+  position: relative;
+  display: inline-flex;
+}
+.entry-help-popover {
+  position: absolute;
+  left: calc(100% + 12px);
+  bottom: 0;
+  z-index: 70;
+  min-width: 220px;
+  padding: 6px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg, 0 14px 36px rgba(0, 0, 0, 0.14));
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.entry-help-popover__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  font-size: 12.5px;
+  color: var(--text);
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.entry-help-popover__item:hover {
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+}
+.entry-help-popover__icon {
+  width: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.entry-help-popover__divider {
+  height: 1px;
+  background: var(--border-soft);
+  margin: 4px 6px;
+}
+[dir='rtl'] .entry-help-popover {
+  left: auto;
+  right: calc(100% + 12px);
+}
+[dir='rtl'] .entry-help-popover__item {
+  flex-direction: row-reverse;
+  text-align: right;
+}
+.entry-nav-rail__logo {
+  appearance: none;
+  width: 36px;
+  height: 36px;
+  padding: 3px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  margin-bottom: 2px;
+  transition: background-color 120ms ease, border-color 120ms ease,
+    transform 120ms ease;
+}
+.entry-nav-rail__logo:hover {
+  background: var(--bg-subtle);
+}
+.entry-nav-rail__logo:active {
+  transform: scale(0.96);
+}
+.entry-nav-rail__logo:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.entry-nav-rail__logo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  user-select: none;
+  -webkit-user-drag: none;
+  pointer-events: none;
+}
+.entry-nav-rail__btn {
+  appearance: none;
+  width: 38px;
+  height: 38px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.entry-nav-rail__btn:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.entry-nav-rail__btn.is-active {
+  background: var(--accent-tint);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.entry-nav-rail__btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Avatar / settings dropdown — language picker section.
+   The cog in the top-right corner opens an `avatar-popover` (shared
+   with the project view) and now hosts an inline collapsible
+   language list, so users can switch locales without opening the
+   full Settings dialog. The base popover styles live in
+   `index.css`; this block adds only the redesign-specific bits. */
+.avatar-item-chevron {
+  margin-left: 4px;
+  color: var(--text-faint);
+}
+.avatar-language-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 2px 4px;
+  padding: 3px;
+  background: var(--bg-subtle);
+  border-radius: var(--radius-sm);
+  scrollbar-width: thin;
+}
+.avatar-item--lang {
+  padding-left: 14px;
+}
+.avatar-item--lang.is-active {
+  color: var(--accent);
+}
+.avatar-item--lang.is-active .avatar-item-meta {
+  color: var(--accent);
+  opacity: 0.8;
+}
+
+/* Center scroll column */
+.entry-main--scroll {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--bg);
+  padding: 0;
+  /* Used by descendants (e.g. the plugins-home Scenario row) to
+     pin themselves directly below the sticky topbar. Mirrors the
+     topbar's vertical footprint (12px top + 32px chip). */
+  --entry-topbar-h: 44px;
+}
+.entry-main__inner {
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 40px 32px 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+/* Wider variant retained for the Projects / Design systems
+   sub-views that historically opted into a wider canvas. The
+   home view now also breathes out to ~1440px so the plugins
+   gallery can fit 4-5 preview tiles per row on desktop displays
+   while the hero card self-constrains to a readable column. */
+.entry-main__inner--wide {
+  max-width: 1440px;
+}
+
+/* Sticky top-right control strip inside the main scroll area.
+   Stays visually pinned regardless of scroll position so the
+   avatar / settings menu and the chip cluster are always
+   reachable. The strip is fully opaque so any content scrolling
+   underneath (plugin tiles, project cards, hero card) stays
+   clipped behind it instead of bleeding through the chip
+   gutter. The strip's height is mirrored by --entry-topbar-h on
+   .entry-main--scroll so descendants like the plugins-home
+   Scenario row can pin themselves immediately below it. */
+.entry-main__topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px 0;
+  background: var(--bg);
+  isolation: isolate;
+}
+.entry-main__topbar::before {
+  content: '';
+  position: absolute;
+  inset: -1px 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--bg);
+}
+/* Chip group — the GitHub star, inline model switcher, and Use
+   everywhere chip live inside this wrapper so the responsive
+   media query can flip the whole row's visibility in one place. */
+.entry-main__topbar-chips {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Stacked menu-item layout — the collapsed model-switcher row
+   shows two lines of text inside a single `.avatar-item` so the
+   active mode + agent reads as a header with the active model
+   underneath. Mirrors the chip's two-tier hierarchy. */
+.avatar-item .avatar-item-stack {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.avatar-item-stack__top {
+  font-weight: 600;
+  color: var(--text-strong);
+  font-size: 12.5px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.avatar-item-stack__sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Compact-only menu rows live inside `.avatar-popover` and mirror
+   the topbar chips when those chips are hidden by the responsive
+   breakpoint below. Default display is `none` so wide viewports
+   never show them; the matching @media block flips them on. */
+.avatar-item--compact-only,
+.avatar-popover__divider--compact-only {
+  display: none;
+}
+.avatar-popover__divider {
+  height: 1px;
+  background: var(--border-soft);
+  margin: 4px 6px;
+}
+
+/* ============================================================
+   Inline CLI / model switcher — sticky-top chip + popover.
+
+   Lives in `.entry-main__topbar` next to the settings cog and
+   exposes the active execution mode (Local CLI / BYOK), the
+   active agent or provider, and the active model. The chip is
+   intentionally low-chrome so it reads as status, not a primary
+   action; the popover is where the actual switching happens.
+   ============================================================ */
+.inline-switcher {
+  position: relative;
+  display: inline-flex;
+}
+.inline-switcher__chip {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 10px 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: var(--shadow-xs);
+  transition: background-color 120ms ease, border-color 120ms ease,
+    color 120ms ease;
+  max-width: 360px;
+}
+.inline-switcher__chip:hover {
+  background: var(--bg-subtle);
+  border-color: var(--border-strong);
+}
+.inline-switcher__chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.inline-switcher__chip[aria-expanded='true'] {
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--border));
+  background: var(--bg-panel);
+}
+.inline-switcher__chip-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+.inline-switcher__byok-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
+  color: var(--accent-tint);
+}
+.inline-switcher__chip-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inline-switcher__chip-mode {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.inline-switcher__chip-sep {
+  color: var(--text-faint);
+}
+.inline-switcher__chip-primary {
+  color: var(--text);
+}
+.inline-switcher__chip-model {
+  color: var(--text-muted);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inline-switcher__chip-chevron {
+  color: var(--text-faint);
+  flex: 0 0 auto;
+}
+
+/* Popover */
+.inline-switcher__popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 320px;
+  max-width: calc(100vw - 24px);
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-md, 0 10px 30px rgba(0, 0, 0, 0.08));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 20;
+}
+.inline-switcher__row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.inline-switcher__label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.inline-switcher__hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Mode segmented control */
+.inline-switcher__seg {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 3px;
+  background: var(--bg-subtle);
+  border-radius: 8px;
+  border: 1px solid var(--border-soft);
+}
+.inline-switcher__seg-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.inline-switcher__seg-btn:hover:not(:disabled) {
+  color: var(--text);
+}
+.inline-switcher__seg-btn.is-active {
+  background: var(--bg-panel);
+  color: var(--text-strong);
+  box-shadow: var(--shadow-xs);
+}
+.inline-switcher__seg-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* Agent grid (CLI mode) */
+.inline-switcher__agent-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.inline-switcher__agent {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+  min-width: 0;
+}
+.inline-switcher__agent:hover {
+  background: var(--bg-subtle);
+}
+.inline-switcher__agent.is-active {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+  background: var(--accent-tint);
+  color: var(--text-strong);
+}
+.inline-switcher__agent-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+/* Provider chips (BYOK mode) */
+.inline-switcher__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.inline-switcher__chip-tab {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease,
+    border-color 120ms ease;
+}
+.inline-switcher__chip-tab:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.inline-switcher__chip-tab.is-active {
+  background: var(--accent-tint);
+  color: var(--accent-strong);
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+}
+
+/* Shared select inside the popover */
+.inline-switcher__select {
+  appearance: none;
+  width: 100%;
+  height: 32px;
+  padding: 0 28px 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel)
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2374716b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>")
+    no-repeat right 10px center;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+}
+.inline-switcher__select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+
+.inline-switcher__warn {
+  font-size: 12px;
+  color: var(--amber, #b26200);
+  background: var(--amber-bg, #fff3e0);
+  border: 1px solid color-mix(in srgb, var(--amber, #b26200) 22%, transparent);
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+
+.inline-switcher__more {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  border-top: 1px solid var(--border-soft);
+  margin-top: 2px;
+  padding: 8px 4px 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+.inline-switcher__more:hover {
+  color: var(--text-strong);
+}
+
+@media (max-width: 700px) {
+  .inline-switcher__chip-mode,
+  .inline-switcher__chip-sep:first-of-type {
+    display: none;
+  }
+  .inline-switcher__chip-model {
+    max-width: 96px;
+  }
+}
+
+/* Section wrapper for the Projects / Design systems views */
+.entry-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.entry-section__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.entry-section__title {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text-strong);
+  letter-spacing: -0.01em;
+}
+
+/* ============================================================
+   GitHub star pill — sticky top-bar CTA.
+
+   Mirrors the marketing landing-page "Star · <count>" affordance:
+   small chrome, low-emphasis, sits next to the model switcher and
+   settings cog. Hover swaps to the panel-strong palette so the call-
+   to-action still reads as clickable when the topbar is otherwise
+   sparse. The count slot animates in via `data-loading` so the
+   pill never visibly jumps when the API response arrives.
+   ============================================================ */
+.entry-star-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: var(--shadow-xs);
+  transition: background-color 120ms ease, border-color 120ms ease,
+    color 120ms ease, transform 120ms ease;
+  white-space: nowrap;
+}
+.entry-star-badge:hover {
+  background: var(--bg-subtle);
+  border-color: var(--border-strong);
+  color: var(--text-strong);
+}
+.entry-star-badge:active {
+  transform: scale(0.98);
+}
+.entry-star-badge:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.entry-star-badge__icon {
+  color: var(--text-muted);
+  flex: 0 0 auto;
+}
+.entry-star-badge:hover .entry-star-badge__icon {
+  color: var(--text-strong);
+}
+.entry-star-badge__label {
+  color: var(--text-strong);
+  font-weight: 600;
+}
+.entry-star-badge__sep {
+  color: var(--text-faint);
+}
+.entry-star-badge__count {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  transition: opacity 160ms ease;
+}
+.entry-star-badge__count[data-loading='true'] {
+  opacity: 0.55;
+}
+
+@media (max-width: 700px) {
+  .entry-star-badge__label {
+    display: none;
+  }
+  .entry-star-badge__sep {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .entry-nav-rail {
+    width: 56px;
+  }
+  .entry-main__inner {
+    padding: 24px 16px 56px;
+  }
+  .entry-main__inner--wide {
+    max-width: 100%;
+  }
+  /* Collapse the three topbar chips into the settings dropdown.
+     The chips' container disappears and the matching menu rows
+     inside `.avatar-popover` are unhidden so every action stays
+     one click away from the lone settings cog. */
+  .entry-main__topbar-chips {
+    display: none;
+  }
+  .avatar-item--compact-only {
+    display: flex;
+  }
+  .avatar-popover__divider--compact-only {
+    display: block;
+  }
+}

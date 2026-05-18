@@ -1,0 +1,156 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/warp/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by Warp".
+ * Warm dark canvas, near-black like charred wood. Almost monochromatic
+ * warm grays. Matter Regular (weight 400) carries every tier — even
+ * the 80px hero. Restraint through warmth.
+ *
+ * Key brand decisions encoded here:
+ *   - Warm near-black canvas (#161412) — never cold/blue dark
+ *   - Warm Parchment (#faf9f6) text — barely-cream, never pure white
+ *   - Earth Gray (#353534) as the brand "accent" — the dark pill CTA
+ *     IS the brand signal; no chromatic accent (DESIGN.md §2 forbids)
+ *   - Four-tier text system: parchment → ash → stone → muted-purple
+ *   - Mist Border (rgba(226, 226, 226, 0.35)) for ghostly containment
+ *   - Pill radius reserved for primary CTA; cards stay at 12–14px
+ *   - Almost-flat elevation — depth via borders + opacity, not shadow
+ *   - Focus ring uses the FG (parchment), not a colored glow — DESIGN.md
+ *     "Border brightness increase, no colored rings"
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ─────────────────────────────────────────────────────
+   * Deep warm void. Pure black would feel cold; the reddish-earthen
+   * undertone (R>G>B, all near 20) makes the canvas feel like charred
+   * wood. Surface is bg + a perceptual ~4% lift, matching the
+   * "Frosted Veil" rgba(255,255,255,0.04) overlay DESIGN.md describes. */
+  --bg: #161412;             /* Deep Void — warm near-black, earth-toned */
+  --surface: #1f1d1b;        /* Frosted Veil resolved over bg */
+  --surface-warm: var(--surface); /* alias — already warm; no separate tier */
+
+  /* ─── Foreground ──────────────────────────────────────────────────
+   * Four warm tiers, no cool grays. Parchment is the headline tone —
+   * its barely-cream undertone is what makes the dark canvas feel
+   * inviting rather than austere. Meta carries Purple-Tint Gray, the
+   * underlined-link tone DESIGN.md §2 calls out. */
+  --fg: #faf9f6;             /* Warm Parchment — primary headlines */
+  --fg-2: #afaeac;           /* Ash Gray — body paragraphs, button text */
+  --muted: #868584;          /* Stone Gray — secondary descriptions */
+  --meta: #666469;           /* Purple-Tint Gray — links, tertiary content */
+
+  /* ─── Border ──────────────────────────────────────────────────────
+   * Semi-transparent borders create the "ghostly containment" Warp
+   * uses instead of shadows. 35% opacity is the canonical value;
+   * inner separators alias to the same line — the brand never uses
+   * a stronger or weaker tier (monochromatic restraint). */
+  --border: rgba(226, 226, 226, 0.35); /* Mist Border */
+  --border-soft: var(--border);        /* alias — single border tier */
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * Warp's "accent" is restrained: Earth Gray, the dark pill CTA bg.
+   * DESIGN.md §2 explicitly forbids bold accent colors — interactive
+   * states are communicated through opacity and underline, never hue.
+   * accent-on is Ash Gray (#afaeac), the muted button-text color
+   * DESIGN.md §4 specifies for the dark pill. */
+  --accent: #353534;
+  --accent-on: #afaeac;
+  --accent-hover: #454545;   /* Dark Charcoal — slightly lighter pill */
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * Warp's marketing site has no surfaced semantic colors — these
+   * exist only for component-level state messaging. Schema defaults
+   * are accepted as-is to keep the warm palette unburdened. */
+  --success: #16a34a;
+  --warn: #eab308;
+  --danger: #dc2626;
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * Matter is the entire system: geometric sans with soft character,
+   * approachable in a way most developer-tool fonts are not. Inter
+   * appears in DESIGN.md §3 as the "UI supplement" fallback before
+   * generic system sans. Geist Mono is the code/terminal display
+   * face; Matter Mono is the prose-aligned mono companion. */
+  --font-display: "Matter Regular", "Matter", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Matter Regular", "Matter", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", "Matter Mono Regular", ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale — DESIGN.md §3 hierarchy. Body baseline is 18px (not
+   * the more conventional 16); Warp's editorial pacing wants more
+   * breathing room per line. Display hero at 80px with -0.03em
+   * tracking (≈ -2.4px) is the billboard moment. */
+  --text-xs: 12px;           /* Small Label — uppercase 2.4px tracking */
+  --text-sm: 14px;           /* Caption — uppercase 1.4px tracking */
+  --text-base: 18px;         /* Body — DESIGN.md body baseline */
+  --text-lg: 24px;           /* Body Heading */
+  --text-xl: 32px;           /* Sub-heading */
+  --text-2xl: 48px;          /* Section Heading */
+  --text-3xl: 56px;          /* Section Display */
+  --text-4xl: 80px;          /* Display Hero — billboard scale */
+
+  --leading-body: 1.4;       /* Body Large lh — relaxed editorial */
+  --leading-tight: 1.0;      /* Display Hero lh — maximum compression */
+  --tracking-display: -0.03em; /* ≈ -2.4px at 80px — hero compression */
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * 8px base unit (DESIGN.md §5). Schema defaults match Warp's scale
+   * exactly — no override needed. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* ─── Section rhythm ──────────────────────────────────────────────
+   * Generous, contemplative pacing. DESIGN.md §5: "80px–120px vertical
+   * between major sections." Desktop uses the upper bound — Warp's
+   * marketing site reads like a magazine, each section a page-turn. */
+  --section-y-desktop: 120px;
+  --section-y-tablet: 80px;
+  --section-y-phone: 56px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * Warp's radius scale (DESIGN.md §5) ranges 4–14px for content,
+   * 50px+ for pills. Standard components live in the soft 6–14px tier;
+   * the primary CTA reaches for --radius-pill. */
+  --radius-sm: 6px;          /* Inputs, tags, small containers */
+  --radius-md: 12px;         /* Feature cards */
+  --radius-lg: 14px;         /* Large prominent containers */
+  --radius-pill: 9999px;     /* Dark pill button — primary CTA */
+
+  /* ─── Elevation ───────────────────────────────────────────────────
+   * Almost-flat. DESIGN.md §6: "remarkably flat — almost zero shadow
+   * usage." Depth comes from semi-transparent borders (the ring tier)
+   * and the rare ambient shadow lifted directly from DESIGN.md's
+   * inferred Level 3 treatment. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 5px 15px rgba(0, 0, 0, 0.2);
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * NO colored ring. DESIGN.md §4: "Border brightness increase, no
+   * colored rings (consistent with the monochromatic palette)." A
+   * 50%-opacity warm parchment glow is the brightest legal indicator. */
+  --focus-ring: 0 0 0 2px rgba(250, 249, 246, 0.5);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * Standard cadence — DESIGN.md doesn't specify timing, and the
+   * brand's calm character is carried by typography and color rather
+   * than animation choreography. Schema defaults preserved. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * 1500px container — DESIGN.md §5 calls out the breakpoint exactly.
+   * Wide cinematic compositions let nature photography breathe; phone
+   * gutter steps down through the responsive scale (32 → 24 → 16). */
+  --container-max: 1500px;
+  --container-gutter-desktop: 32px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

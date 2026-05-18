@@ -1,0 +1,94 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-mobile-onboarding",
+  "title": "Mobile Onboarding",
+  "version": "0.1.0",
+  "description": "A multi-screen mobile onboarding flow rendered as three phone frames\nside by side — splash, value-prop, sign-in. Status bar, swipe dots,\nprimary CTA. Use when the brief mentions \"mobile onboarding\", \"iOS\nonboarding\", \"phone signup\", or \"移动端引导\".",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/mobile-onboarding",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "design",
+    "web",
+    "mobile",
+    "mobile-onboarding",
+    "ios-onboarding",
+    "android-onboarding",
+    "phone-signup",
+    "app-onboarding",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "mobile",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Design a 3-screen mobile onboarding flow for a meditation app — welcome, value props, sign-in.",
+        "zh-CN": "使用这个插件完成以下任务：Design a 3-screen mobile onboarding flow for a meditation app — welcome, value props, sign-in."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Mobile Onboarding"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "craft": [
+        "state-coverage",
+        "animation-discipline",
+        "accessibility-baseline",
+        "form-validation",
+        "laws-of-ux"
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

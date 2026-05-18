@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useAnalytics } from './analytics/provider';
 import { trackAppLaunch, trackProjectCreateResult } from './analytics/events';
 import { detectClientType, detectLaunchSource } from './analytics/identity';
@@ -7,13 +7,19 @@ import {
   fidelityToTracking,
 } from '@open-design/contracts/analytics';
 import { EntryView } from './components/EntryView';
+import type { IntegrationTab } from './components/IntegrationsView';
+import { MarketplaceView } from './components/MarketplaceView';
+import { PluginDetailView } from './components/PluginDetailView';
 import type { CreateInput } from './components/NewProjectPanel';
 import { MemoryToast } from './components/MemoryToast';
 import { PetOverlay } from './components/pet/PetOverlay';
 import { migrateCustomPetAtlas } from './components/pet/pets';
 import { ProjectView } from './components/ProjectView';
+import { WorkspaceTabsBar } from './components/WorkspaceTabsBar';
 import {
   SettingsDialog,
+  switchApiProtocolConfig,
+  updateCurrentApiProtocolConfig,
   type SettingsSection,
 } from './components/SettingsDialog';
 import { PrivacyConsentModal } from './components/PrivacyConsentModal';
@@ -25,6 +31,7 @@ import {
   fetchDesignTemplates,
   fetchPromptTemplates,
   fetchSkills,
+  uploadProjectFiles,
 } from './providers/registry';
 import { navigate, useRoute } from './router';
 import {
@@ -46,6 +53,7 @@ import { applyAppearanceToDocument } from './state/appearance';
 import { isMacPlatform } from './utils/platform';
 import {
   createProject,
+  createPluginShareProject,
   deleteProject as deleteProjectApi,
   importClaudeDesignZip,
   importFolderProject,
@@ -54,12 +62,18 @@ import {
   deleteTemplate,
   patchProject,
 } from './state/projects';
+import type {
+  PluginShareAction,
+  PluginShareProjectOutcome,
+} from './state/projects';
 import { useI18n } from './i18n';
 import { liveArtifactTabId } from './types';
 import type {
   AgentInfo,
+  ApiProtocol,
   AppConfig,
   AppVersionInfo,
+  ChatAttachment,
   DesignSystemSummary,
   Project,
   ProjectTemplate,
@@ -144,6 +158,7 @@ export function resolveSettingsCloseConfig(
 
 export function App() {
   const { t } = useI18n();
+  const clientType = useMemo(() => detectClientType(), []);
   const [config, setConfig] = useState<AppConfig>(() => loadConfig());
   const configRef = useRef(config);
   configRef.current = config;
@@ -152,6 +167,7 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsWelcome, setSettingsWelcome] = useState(false);
   const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSection>('execution');
+  const [integrationInitialTab, setIntegrationInitialTab] = useState<IntegrationTab>('mcp');
   const [daemonLive, setDaemonLive] = useState(false);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   // Functional skills (capabilities the agent invokes mid-task) — stays
@@ -602,6 +618,22 @@ export function App() {
     [config],
   );
 
+  // Quick theme switch from the settings dropdown in the entry view.
+  // Skips the full SettingsDialog round-trip so the appearance flip
+  // feels instantaneous; the live preview comes for free because the
+  // `useLayoutEffect` above re-runs `applyAppearanceToDocument` the
+  // moment `config.theme` changes. We still persist to localStorage
+  // and the daemon so the choice survives reloads.
+  const handleThemeChange = useCallback(
+    (theme: AppConfig['theme']) => {
+      const next = { ...config, theme };
+      saveConfig(next);
+      void syncConfigToDaemon(next);
+      setConfig(next);
+    },
+    [config],
+  );
+
   const handleAgentChange = useCallback(
     (agentId: string) => {
       const next = { ...config, agentId };
@@ -621,6 +653,33 @@ export function App() {
         [agentId]: merged,
       };
       const next = { ...config, agentModels: nextAgentModels };
+      saveConfig(next);
+      void syncConfigToDaemon(next);
+      setConfig(next);
+    },
+    [config],
+  );
+
+  // BYOK protocol switch — also flips `mode` to 'api' so the user does
+  // not have to take a second step after picking a provider from the
+  // inline switcher. The helper preserves any per-protocol fields the
+  // user had previously configured for the target protocol.
+  const handleApiProtocolChange = useCallback(
+    (protocol: ApiProtocol) => {
+      const next = switchApiProtocolConfig(config, protocol);
+      saveConfig(next);
+      void syncConfigToDaemon(next);
+      setConfig(next);
+    },
+    [config],
+  );
+
+  // BYOK model picker — patches `model` (and the per-protocol shadow
+  // copy) without touching apiKey/baseUrl so the user can swap models
+  // mid-session without retyping their key.
+  const handleApiModelChange = useCallback(
+    (model: string) => {
+      const next = updateCurrentApiProtocolConfig(config, { model });
       saveConfig(next);
       void syncConfigToDaemon(next);
       setConfig(next);
@@ -655,7 +714,15 @@ export function App() {
 
   const handleCreateProject = useCallback(
     async (
-      input: CreateInput & { pendingPrompt?: string; requestId?: string },
+      input: CreateInput & {
+        pendingPrompt?: string;
+        pluginId?: string;
+        appliedPluginSnapshotId?: string;
+        pluginInputs?: Record<string, unknown>;
+        autoSendFirstMessage?: boolean;
+        requestId?: string;
+        pendingFiles?: File[];
+      },
     ) => {
       // Honor an explicit `null` design system — the create panel defaults
       // to "None" for every kind now, and the user expects that to land
@@ -675,6 +742,11 @@ export function App() {
         designSystemId: input.designSystemId,
         pendingPrompt: derivedPendingPrompt,
         metadata: input.metadata,
+        ...(input.pluginId ? { pluginId: input.pluginId } : {}),
+        ...(input.appliedPluginSnapshotId
+          ? { appliedPluginSnapshotId: input.appliedPluginSnapshotId }
+          : {}),
+        ...(input.pluginInputs ? { pluginInputs: input.pluginInputs } : {}),
       });
       if (!result) {
         trackProjectCreateResult(
@@ -694,6 +766,17 @@ export function App() {
         );
         return;
       }
+      const pendingFiles = Array.isArray(input.pendingFiles)
+        ? input.pendingFiles.filter((file): file is File => file instanceof File)
+        : [];
+      let firstMessageAttachments: ChatAttachment[] = [];
+      if (pendingFiles.length > 0) {
+        const uploadResult = await uploadProjectFiles(result.project.id, pendingFiles);
+        firstMessageAttachments = uploadResult.uploaded;
+        if (uploadResult.failed.length > 0) {
+          console.warn('Some Home attachments failed to upload', uploadResult.failed);
+        }
+      }
       trackProjectCreateResult(
         analytics.track,
         {
@@ -708,17 +791,89 @@ export function App() {
         },
         { requestId: input.requestId },
       );
+      // PluginLoopHome flow: the user already typed (or accepted) the
+      // first message on Home. Mark this project so ProjectView fires
+      // sendMessage(pendingPrompt) once on mount instead of just
+      // pre-filling the composer. Scoped to sessionStorage so a page
+      // reload after the run has started does not refire.
+      if (
+        input.autoSendFirstMessage &&
+        (derivedPendingPrompt !== undefined || firstMessageAttachments.length > 0)
+      ) {
+        try {
+          window.sessionStorage.setItem(
+            `od:auto-send-first:${result.project.id}`,
+            '1',
+          );
+          if (firstMessageAttachments.length > 0) {
+            window.sessionStorage.setItem(
+              `od:auto-send-attachments:${result.project.id}`,
+              JSON.stringify(firstMessageAttachments),
+            );
+          } else {
+            window.sessionStorage.removeItem(
+              `od:auto-send-attachments:${result.project.id}`,
+            );
+          }
+        } catch {
+          /* sessionStorage may be unavailable (e.g. SSR / private mode); fall
+             back to manual send. */
+        }
+      }
+      const project = result.appliedPluginSnapshotId
+        ? {
+            ...result.project,
+            appliedPluginSnapshotId: result.appliedPluginSnapshotId,
+          }
+        : result.project;
       setProjects((curr) => [
-        result.project,
-        ...curr.filter((p) => p.id !== result.project.id),
+        project,
+        ...curr.filter((p) => p.id !== project.id),
       ]);
       navigate({
         kind: 'project',
-        projectId: result.project.id,
+        projectId: project.id,
         fileName: null,
       });
     },
     [analytics.track],
+  );
+
+  const handleCreatePluginShareProject = useCallback(
+    async (
+      pluginId: string,
+      action: PluginShareAction,
+      locale?: string,
+    ): Promise<PluginShareProjectOutcome> => {
+      const outcome = await createPluginShareProject(pluginId, action, locale);
+      if (!outcome.ok) return outcome;
+      try {
+        window.sessionStorage.setItem(
+          `od:auto-send-first:${outcome.project.id}`,
+          '1',
+        );
+      } catch {
+        // If sessionStorage is unavailable, the project still opens with
+        // the prepared prompt in the composer.
+      }
+      const project = outcome.appliedPluginSnapshotId
+        ? {
+            ...outcome.project,
+            appliedPluginSnapshotId: outcome.appliedPluginSnapshotId,
+          }
+        : outcome.project;
+      setProjects((curr) => [
+        project,
+        ...curr.filter((p) => p.id !== project.id),
+      ]);
+      navigate({
+        kind: 'project',
+        projectId: project.id,
+        fileName: null,
+      });
+      return outcome;
+    },
+    [],
   );
 
   const handleImportClaudeDesign = useCallback(async (file: File) => {
@@ -737,7 +892,6 @@ export function App() {
 
   const handleImportFolder = useCallback(async (baseDir: string) => {
     const result = await importFolderProject({ baseDir });
-    if (!result) return;
     setProjects((curr) => [result.project, ...curr.filter((p) => p.id !== result.project.id)]);
     navigate({
       kind: 'project',
@@ -773,7 +927,7 @@ export function App() {
     if (!ok) return;
     setProjects((curr) => curr.filter((p) => p.id !== id));
     if (route.kind === 'project' && route.projectId === id) {
-      navigate({ kind: 'home' });
+      navigate({ kind: 'home', view: 'home' });
     }
   }, [route]);
 
@@ -787,7 +941,7 @@ export function App() {
   }, []);
 
   const handleBack = useCallback(() => {
-    navigate({ kind: 'home' });
+    navigate({ kind: 'home', view: 'home' });
   }, []);
 
   const handleClearPendingPrompt = useCallback(() => {
@@ -834,7 +988,7 @@ export function App() {
       if (cancelled) return;
       setProjects(list);
       if (!list.find((p) => p.id === route.projectId)) {
-        navigate({ kind: 'home' }, { replace: true });
+        navigate({ kind: 'home', view: 'home' }, { replace: true });
       }
     })();
     return () => {
@@ -843,6 +997,17 @@ export function App() {
   }, [route, activeProject, projects, daemonLive]);
 
   const openSettings = useCallback((section: SettingsSection = 'execution') => {
+    if (section === 'composio' || section === 'mcpClient' || section === 'integrations') {
+      setIntegrationInitialTab(
+        section === 'composio'
+          ? 'connectors'
+          : section === 'mcpClient'
+            ? 'mcp'
+            : 'use-everywhere',
+      );
+      navigate({ kind: 'home', view: 'integrations' });
+      return;
+    }
     setSettingsWelcome(false);
     setSettingsInitialSection(section);
     setSettingsOpen(true);
@@ -855,9 +1020,8 @@ export function App() {
   }, []);
 
   const openMcpSettings = useCallback(() => {
-    setSettingsWelcome(false);
-    setSettingsInitialSection('mcpClient');
-    setSettingsOpen(true);
+    setIntegrationInitialTab('mcp');
+    navigate({ kind: 'home', view: 'integrations' });
   }, []);
 
   // Cmd+, (mac) / Ctrl+, (win/linux) opens Settings. Capture phase so we
@@ -976,66 +1140,97 @@ export function App() {
     [designSystems, config.disabledDesignSystems],
   );
 
+  // Phase 2B / spec §11.6 — marketplace deep UI dispatch. The
+  // /marketplace and /marketplace/:id routes render outside the
+  // EntryView / ProjectView split so the discovery surface stays
+  // independent of any active project.
+  let appMain: ReactNode;
+  if (route.kind === 'marketplace') {
+    appMain = <MarketplaceView />;
+  } else if (route.kind === 'marketplace-detail') {
+    appMain = <PluginDetailView pluginId={route.pluginId} />;
+  } else if (activeProject) {
+    appMain = (
+      <ProjectView
+        key={activeProject.id}
+        project={activeProject}
+        routeFileName={route.kind === 'project' ? route.fileName : null}
+        routeConversationId={route.kind === 'project' ? route.conversationId : null}
+        config={config}
+        agents={agents}
+        skills={enabledFunctionalSkills}
+        designTemplates={designTemplates}
+        designSystems={designSystems}
+        daemonLive={daemonLive}
+        onModeChange={handleModeChange}
+        onAgentChange={handleAgentChange}
+        onAgentModelChange={handleAgentModelChange}
+        onRefreshAgents={refreshAgents}
+        onOpenSettings={openSettings}
+        onOpenMcpSettings={openMcpSettings}
+        onAdoptPetInline={handleAdoptPet}
+        onTogglePet={handleTogglePet}
+        onOpenPetSettings={openPetSettings}
+        onBack={handleBack}
+        onClearPendingPrompt={handleClearPendingPrompt}
+        onTouchProject={handleTouchProject}
+        onProjectChange={handleProjectChange}
+        onProjectsRefresh={refreshProjects}
+      />
+    );
+  } else {
+    appMain = (
+      <EntryView
+        skills={enabledSkills}
+        designTemplates={enabledDesignTemplates}
+        designSystems={enabledDS}
+        projects={projects}
+        templates={templates}
+        onDeleteTemplate={handleDeleteTemplate}
+        promptTemplates={promptTemplates}
+        defaultDesignSystemId={config.designSystemId}
+        agents={agents}
+        config={config}
+        integrationInitialTab={integrationInitialTab}
+        composioConfigLoading={composioConfigLoading}
+        daemonLive={daemonLive}
+        onModeChange={handleModeChange}
+        onAgentChange={handleAgentChange}
+        onAgentModelChange={handleAgentModelChange}
+        onApiProtocolChange={handleApiProtocolChange}
+        onApiModelChange={handleApiModelChange}
+        onThemeChange={handleThemeChange}
+        skillsLoading={skillsLoading}
+        designSystemsLoading={dsLoading}
+        projectsLoading={projectsLoading}
+        promptTemplatesLoading={promptTemplatesLoading}
+        onCreateProject={handleCreateProject}
+        onCreatePluginShareProject={handleCreatePluginShareProject}
+        onImportClaudeDesign={handleImportClaudeDesign}
+        onImportFolder={handleImportFolder}
+        onImportFolderResponse={handleImportFolderResponse}
+        onOpenProject={handleOpenProject}
+        onOpenLiveArtifact={handleOpenLiveArtifact}
+        onDeleteProject={handleDeleteProject}
+        onRenameProject={handleRenameProject}
+        onChangeDefaultDesignSystem={handleChangeDefaultDesignSystem}
+        onPersistComposioKey={handleConfigPersistComposioKey}
+        onOpenSettings={openSettings}
+      />
+    );
+  }
   return (
     <>
-      {activeProject ? (
-        <ProjectView
-          key={activeProject.id}
-          project={activeProject}
-          routeFileName={route.kind === 'project' ? route.fileName : null}
-          routeConversationId={route.kind === 'project' ? route.conversationId : null}
-          config={config}
-          agents={agents}
-          skills={enabledFunctionalSkills}
-          designTemplates={designTemplates}
-          designSystems={designSystems}
-          daemonLive={daemonLive}
-          onModeChange={handleModeChange}
-          onAgentChange={handleAgentChange}
-          onAgentModelChange={handleAgentModelChange}
-          onRefreshAgents={refreshAgents}
-          onOpenSettings={openSettings}
-          onOpenMcpSettings={openMcpSettings}
-          onAdoptPetInline={handleAdoptPet}
-          onTogglePet={handleTogglePet}
-          onOpenPetSettings={openPetSettings}
-          onBack={handleBack}
-          onClearPendingPrompt={handleClearPendingPrompt}
-          onTouchProject={handleTouchProject}
-          onProjectChange={handleProjectChange}
-          onProjectsRefresh={refreshProjects}
-        />
-      ) : (
-        <EntryView
-          skills={enabledSkills}
-          designTemplates={enabledDesignTemplates}
-          designSystems={enabledDS}
+      <div
+        className={`workspace-shell workspace-shell--${clientType}`}
+        data-client-type={clientType}
+      >
+        <WorkspaceTabsBar
+          route={route}
           projects={projects}
-          templates={templates}
-          onDeleteTemplate={handleDeleteTemplate}
-          promptTemplates={promptTemplates}
-          defaultDesignSystemId={config.designSystemId}
-          config={config}
-          agents={agents}
-          skillsLoading={skillsLoading}
-          designSystemsLoading={dsLoading}
-          projectsLoading={projectsLoading}
-          promptTemplatesLoading={promptTemplatesLoading}
-          onCreateProject={handleCreateProject}
-          onImportClaudeDesign={handleImportClaudeDesign}
-          onImportFolder={handleImportFolder}
-          onImportFolderResponse={handleImportFolderResponse}
-          onOpenProject={handleOpenProject}
-          onOpenLiveArtifact={handleOpenLiveArtifact}
-          onDeleteProject={handleDeleteProject}
-          onRenameProject={handleRenameProject}
-          onChangeDefaultDesignSystem={handleChangeDefaultDesignSystem}
-          onOpenSettings={openSettings}
-          onAdoptPet={openPetSettings}
-          onAdoptPetInline={handleAdoptPet}
-          onTogglePet={handleTogglePet}
         />
-      )}
+        <div className="workspace-shell__body">{appMain}</div>
+      </div>
       <PetOverlay
         pet={config.pet?.enabled ? config.pet : undefined}
         onTuck={handleTuckPet}

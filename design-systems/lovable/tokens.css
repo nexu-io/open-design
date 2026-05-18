@@ -1,0 +1,258 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/lovable/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by Lovable".
+ * Warm parchment canvas, opacity-driven gray ramp, humanist Camera Plain
+ * Variable display type, borders-not-shadows for cards, inset-shadow
+ * tactility on dark CTAs.
+ *
+ * This file pre-compiles the values described in `DESIGN.md` into the
+ * shared schema. Agents generating an artifact for Lovable should paste
+ * the `:root` block verbatim into the first `<style>` of the artifact,
+ * then reference everything via `var(--*)`.
+ *
+ * Brand-specific schema decisions (each one bends a schema convention
+ * to match Lovable's voice rather than the cross-brand default):
+ *
+ *   1. `--bg` and `--surface` BOTH bind to `#f7f4ed` (Cream). DESIGN.md
+ *      §4 is explicit: "Cards… background: #f7f4ed (matches page) — for
+ *      seamless integration." Lovable's depth model is borders, not
+ *      surface tinting, so a card and the page are the same color and
+ *      `#eceae4` border carries the containment. `--surface-warm`
+ *      collapses to `var(--surface)` because there is no second warm
+ *      tier in the system.
+ *
+ *   2. `--fg` is `#1c1c1c` (Charcoal), not `#000000`. DESIGN.md §1 names
+ *      the warmth as deliberate: "Not pure black — organic warmth." The
+ *      gray ramp is opacity-driven — every "gray" in the system is the
+ *      same charcoal hue at a different alpha — so `--fg-2` binds to
+ *      `rgba(28, 28, 28, 0.83)` (the documented "strong secondary text"
+ *      tier from §2) and `--meta` binds to `rgba(28, 28, 28, 0.4)`
+ *      (the documented "interactive borders / placeholders" tier).
+ *      `--muted` keeps the named gray `#5f5f5d` for body descriptions
+ *      because that one tier is bound to a hex in DESIGN.md, not to an
+ *      opacity stop.
+ *
+ *   3. `--border` is the warm `#eceae4` (Light Cream) divider line.
+ *      `--border-soft` aliases to `var(--border)` because Lovable does
+ *      not differentiate inner / outer border tiers — DESIGN.md §1 names
+ *      a SECOND interactive border at `rgba(28, 28, 28, 0.4)`, but that
+ *      is the foreground-meta token (already bound above) used as a
+ *      button outline, not a separator-tier border.
+ *
+ *   4. `--accent` is Lovable Pink (`#ff4d8d`), even though primary CTAs
+ *      in Lovable are Charcoal (`var(--fg)`). DESIGN.md §6 calls out a
+ *      "soft, warm multi-color gradient wash (pinks, oranges, blues)
+ *      behind hero" and §4 Links references `hsl(var(--primary))` for
+ *      hover — the brand mark itself is a pink → coral gradient. The
+ *      accent slot is therefore reserved for the chromatic moments
+ *      where the brand pink actually appears (link hover, badge tints,
+ *      focus moments on warm controls). components.html encodes the
+ *      "primary CTA = Charcoal" pattern via `background: var(--fg)`,
+ *      so `--accent` does not get burned on every button.
+ *
+ *   5. `--focus-ring` is the Tailwind ring blue at 50% alpha
+ *      (`rgba(59, 130, 246, 0.5)`), NOT a pink/charcoal-derived ring.
+ *      DESIGN.md §6 names this verbatim as "Ring (Accessibility):
+ *      `rgba(59,130,246,0.5)` 2px ring" — it is the one cool moment in
+ *      an otherwise warm palette, justified by accessibility (the warm
+ *      pink at low alpha would not pass contrast on the cream canvas).
+ *      A 2px sharp ring, not the schema's 3px alpha glow.
+ *
+ *   6. `--elev-raised` is the soft warm focus shadow
+ *      (`0 4px 12px rgba(0, 0, 0, 0.1)`) — the same value DESIGN.md §6
+ *      lists as "Focus (Level 3)". The signature multi-layer inset
+ *      shadow on dark buttons (`rgba(255,255,255,0.2) 0 0.5px 0 inset,
+ *      rgba(0,0,0,0.2) 0 0 0 0.5px inset, rgba(0,0,0,0.05) 0 1px 2px`)
+ *      is component-specific and lives in components.html — it only
+ *      reads on a dark surface, so generalizing it to a token would
+ *      mis-paint cards on the cream canvas.
+ *
+ *   7. The type scale tops out at 60px (`--text-4xl`) per DESIGN.md §3
+ *      "Display Hero, 60px Camera Plain weight 600". `--leading-tight`
+ *      is `1.10` (the documented hero range 1.00–1.10) and
+ *      `--tracking-display` is `-0.025em`, the em-relative form of
+ *      "-1.5px at 60px" so compression scales proportionally with size.
+ *      Body text stays at `normal` tracking — Camera Plain Variable's
+ *      humanist warmth wants comfortable reading at 16px.
+ *
+ *   8. Section rhythm is generous: `128px` desktop, `80px` tablet,
+ *      `64px` phone (`--section-y-*`). DESIGN.md §5 describes
+ *      "lavish at section boundaries (80px–208px)"; we sit in the
+ *      mid-range so the cream canvas feels cozy rather than empty.
+ *      Container caps at `1200px` (DESIGN.md §5 documented max width).
+ *
+ * Source contracts:
+ *   - Standard token names: design-systems/_schema/tokens.schema.ts
+ *   - A2 fallback parity:   design-systems/_schema/defaults.css
+ *   - Lint enforcement:     apps/daemon/src/lint-artifact.ts
+ *
+ * Keep this file additive: never invent token names not also documented
+ * in DESIGN.md or the schema. Camera Plain Variable does not need a CDN
+ * reference here — the font stack lists ui-sans-serif / system-ui
+ * fallbacks so artifacts render acceptably even when Camera Plain is
+ * not loaded, and any host that wants the real face links it externally.
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ─────────────────────────────────────────────────────
+   * Cream is BOTH page and card background — DESIGN.md §4: "Cards…
+   * background: #f7f4ed (matches page) — for seamless integration".
+   * The warm divider line (#eceae4 border) is what separates a card
+   * from the page, not a different surface color. */
+  --bg: #f7f4ed;                       /* Cream — warm parchment foundation */
+  --surface: #f7f4ed;                  /* Cards reuse the canvas — borders contain */
+  --surface-warm: var(--surface);      /* alias — Lovable has no second warm tier */
+
+  /* ─── Foreground ──────────────────────────────────────────────────
+   * Charcoal #1c1c1c, never pure black. The gray ramp is opacity-driven:
+   * every "gray" in the system is the same charcoal hue at a different
+   * alpha. --fg-2 binds independently to charcoal-83% (the documented
+   * strong-secondary tier). --muted is the named gray #5f5f5d for
+   * body descriptions / captions. --meta drops to charcoal-40% — the
+   * documented "interactive borders / placeholders" alpha. */
+  --fg: #1c1c1c;                       /* Charcoal — primary text, dark CTA bg */
+  --fg-2: rgba(28, 28, 28, 0.83);      /* Charcoal 83% — strong secondary text */
+  --muted: #5f5f5d;                    /* Muted Gray — descriptions, captions */
+  --meta: rgba(28, 28, 28, 0.4);       /* Charcoal 40% — placeholders, faded UI */
+
+  /* ─── Border ──────────────────────────────────────────────────────
+   * Light Cream #eceae4 is the canonical "warm divider line" — DESIGN.md
+   * §1 names it as the passive border used everywhere cards / images /
+   * sections need containment. --border-soft aliases because Lovable
+   * does not differentiate inner / outer separator tiers; depth comes
+   * from the inset-shadow signature on dark buttons (component-level),
+   * not from border weight. */
+  --border: #eceae4;                   /* Light Cream — card / image edge */
+  --border-soft: var(--border);        /* alias — single border tier */
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * Lovable Pink — the brand mark color. DESIGN.md §6 calls out a
+   * "soft, warm multi-color gradient wash (pinks, oranges, blues)"
+   * behind hero, and §4 Links references hsl(var(--primary)) for hover.
+   * Primary CTAs are CHARCOAL (var(--fg)), not pink — components.html
+   * encodes that pattern. --accent is reserved for the chromatic
+   * moments where the brand pink actually appears (link hover, badge
+   * tints, brand mark, soft gradient washes). */
+  --accent: #ff4d8d;                   /* Lovable Pink — brand mark / chromatic */
+  --accent-on: #ffffff;                /* white label on saturated pink */
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * Schema defaults — Lovable's marketing surface rarely renders state
+   * and DESIGN.md does not specify warm-shift overrides. Success / warn
+   * / danger remain tonally distinct from the warm-neutral palette so
+   * they read as semantic (not decorative) when they appear. */
+  --success: #16a34a;
+  --warn: #eab308;
+  --danger: #dc2626;
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * Camera Plain Variable carries the humanist personality — slightly
+   * rounded terminals and organic curves, distinct from the geometric
+   * sans-serifs typical of dev tools. The variable axis enables weight
+   * 480 for special display moments; standard weights are 400 (body /
+   * UI / links / buttons) and 600 (headings / emphasis). The
+   * ui-sans-serif / system-ui fallbacks ensure artifacts render
+   * acceptably even when Camera Plain is not loaded. */
+  --font-display: "Camera Plain Variable", "Camera Plain", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Camera Plain Variable", "Camera Plain", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale (px) — DESIGN.md §3 hierarchy table. Lovable reads BIG
+   * because of -0.025em (≈ -1.5px @ 60px) tracking compression on
+   * display, not because of an extreme px ceiling. The 18 / 20 / 36 /
+   * 48 / 60 ladder mirrors the documented Body Large → Card Title →
+   * Sub-heading → Section Heading → Display Hero progression. */
+  --text-xs: 12px;                     /* tiny metadata */
+  --text-sm: 14px;                     /* caption, link small, button small */
+  --text-base: 16px;                   /* body, button, link */
+  --text-lg: 18px;                     /* body large, introductions */
+  --text-xl: 20px;                     /* card title */
+  --text-2xl: 36px;                    /* sub-heading */
+  --text-3xl: 48px;                    /* section heading */
+  --text-4xl: 60px;                    /* display hero */
+
+  /* `--leading-tight` is 1.10 (the documented hero 1.00–1.10 range);
+   * `--leading-body` is 1.5 (the documented 16px body rhythm).
+   * `--tracking-display` is -0.025em — the em-relative form of
+   * Lovable's "-1.5px at 60px" so the compression scales proportionally
+   * with size. Body stays at normal tracking — Camera Plain's humanist
+   * warmth wants comfortable reading. */
+  --leading-body: 1.5;
+  --leading-tight: 1.10;
+  --tracking-display: -0.025em;
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * 8px base. DESIGN.md §5 names the full scale extending to 208px at
+   * the top end for editorial breathing room — those large tiers are
+   * inlined per-section in components.html (section-y-* below carries
+   * the structural rhythm). The shared schema covers the 4 → 48px
+   * structural ladder. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* Section rhythm — DESIGN.md §5: "lavish at section boundaries
+   * (80px–208px)". Sit at 128px desktop (the documented mid-range),
+   * collapse to 80 on tablet and 64 on phone. The cream background
+   * makes these expanses feel cozy rather than empty. */
+  --section-y-desktop: 128px;
+  --section-y-tablet: 80px;
+  --section-y-phone: 64px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * DESIGN.md §5 radius scale: 4 / 6 / 8 / 12 / 16 / 9999. We bind the
+   * four schema tiers to: 6 (button / input / functional), 12 (card /
+   * image container), 16 (large container / footer), 9999 (action pill,
+   * icon toggle). The 4px and 8px tiers are component-specific and not
+   * part of the shared schema. */
+  --radius-sm: 6px;                    /* buttons, inputs, functional */
+  --radius-md: 12px;                   /* cards, image containers */
+  --radius-lg: 16px;                   /* large containers, footer sections */
+  --radius-pill: 9999px;               /* action pills, icon toggles */
+
+  /* ─── Elevation ───────────────────────────────────────────────────
+   * Lovable's depth is intentionally shallow — DESIGN.md §6: "borders
+   * are the containment mechanism, not shadows". Three levels:
+   *
+   *   --elev-flat    no shadow (page surface, most cards)
+   *   --elev-ring    the warm 1px border-as-ring (cards, images)
+   *   --elev-raised  the soft warm focus shadow (active / focused moments)
+   *
+   * The signature multi-layer inset shadow on dark buttons (white-line
+   * highlight at 0.5px inset + dark ring + soft drop) is component-
+   * specific and lives in components.html — it only reads on a dark
+   * surface, so generalizing it would mis-paint cards on cream. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 4px 12px rgba(0, 0, 0, 0.1); /* soft warm focus float */
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * The Tailwind ring blue at 50% — DESIGN.md §6 lists this verbatim
+   * as the keyboard accessibility ring. The one cool moment in an
+   * otherwise warm palette, justified by accessibility (the warm pink
+   * accent at low alpha would not pass contrast on cream). 2px sharp
+   * ring, not the schema's 3px alpha glow. */
+  --focus-ring: 0 0 0 2px rgba(59, 130, 246, 0.5);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * Standard durations — Lovable's tactility is in opacity-on-active
+   * (0.8) and the inset-shadow press, not in timed choreography. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * 1200px max content width per DESIGN.md §5. */
+  --container-max: 1200px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 16px;
+  --container-gutter-phone: 12px;
+}

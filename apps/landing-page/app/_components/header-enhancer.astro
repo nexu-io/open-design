@@ -1,0 +1,72 @@
+<script is:inline>
+  (() => {
+    const REPO_API = 'https://api.github.com/repos/nexu-io/open-design';
+
+    const formatStars = (count) => {
+      if (!Number.isFinite(count) || count <= 0) return null;
+      if (count < 1000) return String(count);
+      return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}K`;
+    };
+
+    const formatVersion = (release) => {
+      const fromTag = (tag) => {
+        if (typeof tag !== 'string') return null;
+        const cleaned = tag.replace(/^open-design[-_]?v?/i, '').trim();
+        return cleaned ? `v${cleaned.replace(/^v/, '')}` : null;
+      };
+      const fromName = (name) => {
+        if (typeof name !== 'string') return null;
+        const m = name.match(/(\d+\.\d+\.\d+(?:[-+][\w.]+)?)/);
+        return m ? `v${m[1]}` : null;
+      };
+      return fromName(release?.name) ?? fromTag(release?.tag_name) ?? null;
+    };
+
+    const nav = document.querySelector('[data-nav-headroom]');
+    if (nav) {
+      let lastY = window.scrollY;
+      const showTopThreshold = 100;
+      const scrollDelta = 6;
+      window.addEventListener(
+        'scroll',
+        () => {
+          const y = window.scrollY;
+          const delta = y - lastY;
+          if (y <= showTopThreshold) nav.classList.remove('is-hidden');
+          else if (delta > scrollDelta) nav.classList.add('is-hidden');
+          else if (delta < -scrollDelta) nav.classList.remove('is-hidden');
+          lastY = y;
+        },
+        { passive: true },
+      );
+    }
+
+    const starSlots = document.querySelectorAll('[data-github-stars]');
+    if (starSlots.length > 0) {
+      fetch(REPO_API, {
+        headers: { Accept: 'application/vnd.github+json' },
+      })
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http error'))))
+        .then((data) => {
+          const label = formatStars(data?.stargazers_count);
+          if (!label) return;
+          for (const slot of starSlots) slot.textContent = label;
+        })
+        .catch(() => {});
+    }
+
+    const versionSlots = document.querySelectorAll('[data-github-version]');
+    if (versionSlots.length > 0) {
+      fetch(`${REPO_API}/releases/latest`, {
+        headers: { Accept: 'application/vnd.github+json' },
+      })
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http error'))))
+        .then((data) => {
+          const label = formatVersion(data);
+          if (!label) return;
+          for (const slot of versionSlots) slot.textContent = label;
+        })
+        .catch(() => {});
+    }
+  })();
+</script>

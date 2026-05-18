@@ -1,0 +1,82 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-social-media-post-confused-elf-girl-at-pastel-desk",
+  "title": "Social Media Post - Confused Elf Girl at Pastel Desk",
+  "version": "0.1.0",
+  "description": "This prompt generates a soft pastel anime illustration of an elf girl typing at her computer in a cozy kawaii workspace, ideal for social posts, wallpapers, or streamer-themed art.",
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "える",
+    "url": "https://x.com/el_el_san/status/2049164203542679602#reversed-0"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "social-media-post",
+    "anime",
+    "fantasy"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://cms-assets.youmind.com/media/1777453203838_2bzdt9_HHAXnBlbwAA5Ke4.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "A cute pastel anime illustration of a young elf girl streamer or office worker sitting at a desk and typing on a mechanical keyboard in a cozy bedroom workspace, shown from a front three-quarter view with a large black computer monitor in the left foreground partially blocking her body. She has long wavy {argument name=\"hair color\" default=\"orange\"} hair with glossy highlights, pointed elf ears, and a small red flower hair clip on the right side, wearing a light blue pajama-style blouse covered in red heart prints with a very frilly white lace collar and a shiny red ribbon bow at the neck. Her hands are on the keyboard, nails painted soft pink, and she sits in a rounded pink desk chair. Above her head is a speech bubble containing a large question mark, suggesting confusion while working at the computer. The room is soft, bright, and feminine, with a pale pink and cream color palette, shallow depth of field, and delicate line art. In the background, include 1 framed wall picture with a pink animal and heart motif, 1 small potted plant near the center-left, 1 plush toy on a shelf behind her, 2 sticky notes on the upper right wall, one with a plus sign and one reading {argument name=\"note text\" default=\"がんばろう!\"}, 1 blue cat figurine or plush on the right shelf, 1 small potted plant on the right, 4 pastel binders or books on the lower right shelf, and 1 white mug with a pink heart on the desk in the lower right corner. The computer monitor should have a subtle glowing blue heart icon on its back, and the keyboard should have RGB lighting. Clean polished cel-shaded anime style, high detail, soft ambient lighting, cozy gamer desk atmosphere, pastel kawaii decor, 4k illustration.",
+        "zh-CN": "使用这个插件完成以下任务：A cute pastel anime illustration of a young elf girl streamer or office worker sitting at a desk and typing on a mechanical keyboard in a cozy bedroom workspace, shown from a front three-quarter view with a large black computer monitor in the left foreground partially blocking her body. She has long wavy {argument name=\"hair color\" default=\"orange\"} hair with glossy highlights, pointed elf ears, and a small red flower hair clip on the right side, wearing a light blue pajama-style blouse covered in red heart prints with a very frilly white lace collar and a shiny red ribbon bow at the neck. Her hands are on the keyboard, nails painted soft pink, and she sits in a rounded pink desk chair. Above her head is a speech bubble containing a large question mark, suggesting confusion while working at the computer. The room is soft, bright, and feminine, with a pale pink and cream color palette, shallow depth of field, and delicate line art. In the background, include 1 framed wall picture with a pink animal and heart motif, 1 small potted plant near the center-left, 1 plush toy on a shelf behind her, 2 sticky notes on the upper right wall, one with a plus sign and one reading {argument name=\"note text\" default=\"がんばろう!\"}, 1 blue cat figurine or plush on the right shelf, 1 small potted plant on the right, 4 pastel binders or books on the lower right shelf, and 1 white mug with a pink heart on the desk in the lower right corner. The computer monitor should have a subtle glowing blue heart icon on its back, and the keyboard should have RGB lighting. Clean polished cel-shaded anime style, high detail, soft ambient lighting, cozy gamer desk atmosphere, pastel kawaii decor, 4k illustration."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "1:1"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

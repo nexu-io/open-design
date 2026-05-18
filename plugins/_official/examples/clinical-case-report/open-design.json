@@ -1,0 +1,91 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-clinical-case-report",
+  "title": "Clinical Case Report",
+  "version": "0.1.0",
+  "description": "Structured medical case presentation for clinical rounds, conferences,\nand documentation. Generates SOAP-format or narrative case reports\nwith physiologically accurate vitals, labs, and evidence-based plans.\nUse when the brief mentions \"case report\", \"case presentation\", \"SOAP note\",\n\"clinical case\", \"ward rounds\", \"case summary\", or \"patient presentation\".",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/clinical-case-report",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "healthcare",
+    "web",
+    "desktop",
+    "case-report",
+    "case-presentation",
+    "soap-note",
+    "clinical-case",
+    "ward-rounds",
+    "patient-presentation",
+    "case-summary",
+    "medical-case"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "healthcare",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "58-year-old male with 2 hours of substernal chest pain radiating to the left arm, diaphoresis, and ST elevation in leads II, III, aVF. Generate a full emergency cardiology case presentation.",
+        "zh-CN": "使用这个插件完成以下任务：58-year-old male with 2 hours of substernal chest pain radiating to the left arm, diaphoresis, and ST elevation in leads II, III, aVF. Generate a full emergency cardiology case presentation."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Clinical Case Report"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html",
+        "./references/case-formats.md",
+        "./references/checklist.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

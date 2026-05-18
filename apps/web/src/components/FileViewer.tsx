@@ -58,8 +58,9 @@ import {
   requestPreviewSnapshot,
 } from '../runtime/exports';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
-import { buildSrcdoc } from '../runtime/srcdoc';
+import { buildLazySrcdocTransport, buildSrcdoc } from '../runtime/srcdoc';
 import {
+  hasUrlModeBridge,
   htmlNeedsSandboxShim,
   parseForceInline,
   shouldUrlLoadHtmlPreview,
@@ -86,6 +87,8 @@ import {
   targetFromSnapshot,
   type PreviewCommentSnapshot,
 } from '../comments';
+import { applyPodMemberRemoval } from '../lib/pod-members';
+import { BoardComposerPopover } from './BoardComposerPopover';
 import type {
   ChatCommentAttachment,
   PreviewComment,
@@ -582,6 +585,7 @@ interface Props {
   projectKind: TrackingProjectKind;
   file: ProjectFile;
   liveHtml?: string;
+  filesRefreshKey?: number;
   isDeck?: boolean;
   onExportAsPptx?: ((fileName: string) => void) | undefined;
   streaming?: boolean;
@@ -597,6 +601,7 @@ export function FileViewer({
   projectKind,
   file,
   liveHtml,
+  filesRefreshKey = 0,
   isDeck,
   onExportAsPptx,
   streaming,
@@ -643,6 +648,7 @@ export function FileViewer({
         projectKind={projectKind}
         file={file}
         liveHtml={liveHtml}
+        filesRefreshKey={filesRefreshKey}
         isDeck={rendererMatch.renderer.id === 'deck-html'}
         onExportAsPptx={onExportAsPptx}
         streaming={Boolean(streaming)}
@@ -1822,157 +1828,6 @@ function FileActions({
   );
 }
 
-function BoardComposerPopover({
-  target,
-  existing,
-  draft,
-  notes,
-  onDraft,
-  onAddDraft,
-  onRemoveQueuedNote,
-  onClose,
-  onSaveComment,
-  onSendBatch,
-  onRemove,
-  sending,
-  t,
-}: {
-  target: PreviewCommentSnapshot;
-  existing: PreviewComment | null;
-  draft: string;
-  notes: string[];
-  onDraft: (value: string) => void;
-  onAddDraft: () => void;
-  onRemoveQueuedNote: (index: number) => void;
-  onClose: () => void;
-  onSaveComment: () => void | Promise<void>;
-  onSendBatch: () => void | Promise<void>;
-  onRemove: (commentId: string) => void | Promise<void>;
-  sending: boolean;
-  t: TranslateFn;
-}) {
-  const pendingCount = notes.length + (draft.trim() ? 1 : 0);
-  const podMembers = target.podMembers ?? [];
-  const titleId = useId();
-  const isFreePin = target.elementId.startsWith('pin-');
-  return (
-    <div
-      className="comment-popover"
-      data-testid="comment-popover"
-      role="dialog"
-      aria-modal="false"
-      aria-labelledby={titleId}
-      onKeyDown={(event) => {
-        if (event.key === 'Escape') {
-          event.preventDefault();
-          onClose();
-        }
-      }}
-    >
-      <div className="comment-popover-head">
-        <div title={target.elementId}>
-          {isFreePin ? (
-            <>
-              <strong id={titleId}>{t('chat.comments.pin')}</strong>
-              <span>{t('chat.comments.pinAtCoords', { x: target.position.x + 12, y: target.position.y + 12 })}</span>
-            </>
-          ) : (
-            <>
-              <strong id={titleId}>{target.label || target.elementId}</strong>
-              <span>{selectionKindLabel(target.selectionKind, target.memberCount)}</span>
-            </>
-          )}
-        </div>
-        <button
-          type="button"
-          className="comment-popover-close"
-          onClick={onClose}
-          title={t('common.close')}
-          aria-label={t('common.close')}
-        >
-          <Icon name="close" size={12} />
-        </button>
-      </div>
-      {podMembers.length > 0 ? (
-        <div className="board-pod-summary">
-          <strong>{t('chat.comments.capturedItems', { n: target.memberCount || podMembers.length })}</strong>
-          <div className="board-pod-members">
-            {podMembers.slice(0, 6).map((member) => (
-              <span key={member.elementId} className="board-pod-chip">
-                {summarizeMember(member)}
-              </span>
-            ))}
-          </div>
-        </div>
-      ) : null}
-      {notes.length > 0 ? (
-        <div className="board-note-list">
-          {notes.map((note, index) => (
-            <div key={`${target.elementId}-${index}`} className="board-note-item">
-              <span>{note}</span>
-              <button type="button" className="ghost" onClick={() => onRemoveQueuedNote(index)}>
-                {t('chat.comments.remove')}
-              </button>
-            </div>
-          ))}
-        </div>
-      ) : null}
-      <textarea
-        data-testid="comment-popover-input"
-        value={draft}
-        autoFocus
-        aria-label={t('chat.comments.placeholder')}
-        placeholder={t('chat.comments.placeholder')}
-        onChange={(event) => onDraft(event.target.value)}
-      />
-      <div className="comment-popover-actions">
-        {existing ? (
-          <button
-            type="button"
-            className="comment-popover-remove"
-            onClick={() => onRemove(existing.id)}
-            title={t('chat.comments.remove')}
-          >
-            {t('chat.comments.remove')}
-          </button>
-        ) : null}
-        <div className="comment-popover-actions-end">
-          {target.selectionKind === 'pod' ? (
-            <button
-              type="button"
-              className="ghost"
-              data-testid="comment-popover-add-note"
-              disabled={!draft.trim()}
-              onClick={onAddDraft}
-            >
-              {t('chat.comments.addNote')}
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="ghost"
-              data-testid="comment-popover-save"
-              disabled={!draft.trim()}
-              onClick={() => void onSaveComment()}
-            >
-              {t('chat.comments.comment')}
-            </button>
-          )}
-          <button
-            type="button"
-            className="primary"
-            data-testid="comment-add-send"
-            disabled={pendingCount === 0 || sending}
-            onClick={() => void onSendBatch()}
-          >
-            {sending ? t('chat.comments.sending') : t('chat.comments.sendToChat')}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function formatCommentTime(ts: number, t: TranslateFn): string {
   const diff = Date.now() - ts;
   if (diff < 60_000) return t('common.justNow');
@@ -2811,15 +2666,6 @@ export function applyInspectOverridesToSource(source: string, css: string): stri
   return block + out;
 }
 
-function summarizeMember(member: PreviewCommentMember): string {
-  const text = String(member.text || '').trim();
-  if (text) {
-    const trimmed = text.length > 24 ? `${text.slice(0, 21)}...` : text;
-    return `${member.label || member.elementId} · ${trimmed}`;
-  }
-  return member.label || member.elementId;
-}
-
 function CommentPreviewOverlays({
   comments,
   liveTargets,
@@ -3507,6 +3353,7 @@ function HtmlViewer({
   projectKind,
   file,
   liveHtml,
+  filesRefreshKey = 0,
   isDeck,
   onExportAsPptx,
   streaming,
@@ -3520,6 +3367,7 @@ function HtmlViewer({
   projectKind: TrackingProjectKind;
   file: ProjectFile;
   liveHtml?: string;
+  filesRefreshKey?: number;
   isDeck: boolean;
   onExportAsPptx?: ((fileName: string) => void) | undefined;
   streaming: boolean;
@@ -3650,6 +3498,44 @@ function HtmlViewer({
   const [manualEditMode, setManualEditModeRaw] = useState(false);
   const [manualEditFrozenSource, setManualEditFrozenSource] = useState<string | null>(null);
   const [manualEditViewportWidth, setManualEditViewportWidth] = useState<number | null>(null);
+  const [previewBodyRef, previewBodySize] = usePreviewCanvasSize<HTMLDivElement>();
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const urlPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);
+  const srcDocPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);
+  const activatedSrcDocTransportHtmlRef = useRef<string | null>(null);
+  const isActivePreviewIframeSource = useCallback((source: MessageEventSource | null) => {
+    return !!source && source === iframeRef.current?.contentWindow;
+  }, []);
+  const isOurPreviewIframeSource = useCallback((source: MessageEventSource | null) => {
+    if (!source) return false;
+    return (
+      source === iframeRef.current?.contentWindow ||
+      source === urlPreviewIframeRef.current?.contentWindow ||
+      source === srcDocPreviewIframeRef.current?.contentWindow
+    );
+  }, []);
+  const previewScrollRestoreRef = useRef<{
+    hostLeft: number;
+    hostTop: number;
+    frameLeft: number;
+    frameTop: number;
+    canvasLeft: number;
+    canvasTop: number;
+    expiresAt: number;
+  } | null>(null);
+  const previewScrollPositionRef = useRef({
+    frameLeft: 0,
+    frameTop: 0,
+    canvasLeft: 0,
+    canvasTop: 0,
+  });
+  const previewScrollRequestAtRef = useRef(0);
+  const dcViewportRef = useRef({
+    x: 0,
+    y: 0,
+    scale: 1,
+  });
+  const dcViewportRestoreAtRef = useRef(0);
   const setManualEditMode = useCallback((next: boolean | ((prev: boolean) => boolean)) => {
     setManualEditModeRaw((prev) => {
       const value = typeof next === 'function' ? (next as (p: boolean) => boolean)(prev) : next;
@@ -3658,6 +3544,73 @@ function HtmlViewer({
         setManualEditViewportWidth(null);
       }
       return value;
+    });
+  }, []);
+  const capturePreviewScrollPosition = useCallback(() => {
+    const host = previewBodyRef.current;
+    let frameLeft = 0;
+    let frameTop = 0;
+    let canvasLeft = 0;
+    let canvasTop = 0;
+    try {
+      const frameDocument = iframeRef.current?.contentWindow?.document;
+      const frameScroll = frameDocument?.scrollingElement;
+      const canvasScroll = frameDocument?.querySelector<HTMLElement>('.design-canvas');
+      frameLeft = frameScroll?.scrollLeft ?? 0;
+      frameTop = frameScroll?.scrollTop ?? 0;
+      canvasLeft = canvasScroll?.scrollLeft ?? 0;
+      canvasTop = canvasScroll?.scrollTop ?? 0;
+    } catch {
+      frameLeft = 0;
+      frameTop = 0;
+      canvasLeft = 0;
+      canvasTop = 0;
+    }
+    previewScrollRestoreRef.current = {
+      hostLeft: host?.scrollLeft ?? 0,
+      hostTop: host?.scrollTop ?? 0,
+      frameLeft: frameLeft || previewScrollPositionRef.current.frameLeft,
+      frameTop: frameTop || previewScrollPositionRef.current.frameTop,
+      canvasLeft: canvasLeft || previewScrollPositionRef.current.canvasLeft,
+      canvasTop: canvasTop || previewScrollPositionRef.current.canvasTop,
+      expiresAt: Date.now() + 5000,
+    };
+  }, []);
+  const restorePreviewScrollPosition = useCallback(() => {
+    const snapshot = previewScrollRestoreRef.current;
+    if (!snapshot) return;
+    if (Date.now() > snapshot.expiresAt) {
+      previewScrollRestoreRef.current = null;
+      return;
+    }
+    const apply = () => {
+      const previewBody = previewBodyRef.current;
+      if (typeof previewBody?.scrollTo === 'function') {
+        previewBody.scrollTo(snapshot.hostLeft, snapshot.hostTop);
+      }
+      try {
+        const frameDocument = iframeRef.current?.contentWindow?.document;
+        frameDocument?.scrollingElement?.scrollTo(snapshot.frameLeft, snapshot.frameTop);
+        frameDocument?.querySelector<HTMLElement>('.design-canvas')?.scrollTo(snapshot.canvasLeft, snapshot.canvasTop);
+        iframeRef.current?.contentWindow?.postMessage({
+          type: 'od:preview-scroll-restore',
+          frameLeft: snapshot.frameLeft,
+          frameTop: snapshot.frameTop,
+          canvasLeft: snapshot.canvasLeft,
+          canvasTop: snapshot.canvasTop,
+        }, '*');
+      } catch {}
+    };
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        apply();
+        window.setTimeout(apply, 80);
+        window.setTimeout(() => {
+          if (previewScrollRestoreRef.current === snapshot) {
+            apply();
+          }
+        }, 260);
+      });
     });
   }, []);
   const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([]);
@@ -3842,9 +3795,7 @@ function HtmlViewer({
   const [slideState, setSlideState] = useState<SlideState | null>(
     () => htmlPreviewSlideState.get(previewStateKey) ?? null,
   );
-  const [previewBodyRef, previewBodySize] = usePreviewCanvasSize<HTMLDivElement>();
   const overlayPreviewScale = effectivePreviewScale(previewViewport, previewScale, previewBodySize);
-  const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const shareRef = useRef<HTMLDivElement | null>(null);
   const [chromeActionsHost, setChromeActionsHost] = useState<HTMLElement | null>(null);
   useEffect(() => {
@@ -3880,7 +3831,7 @@ function HtmlViewer({
     return () => {
       cancelled = true;
     };
-  }, [projectId, file.name, file.mtime, liveHtml, reloadKey]);
+  }, [projectId, file.name, file.mtime, liveHtml, reloadKey, filesRefreshKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -3925,6 +3876,7 @@ function HtmlViewer({
     : livePreviewSource;
   const manualEditPageStylesEnabled = typeof source === 'string' && isManualEditFullHtmlDocument(source);
   const drawClickSelectionMode = drawOverlayOpen && drawOverlayMode === 'click' && !manualEditMode;
+  const urlModeBridge = hasUrlModeBridge(source);
   // When we URL-load the iframe directly, skip every in-host inlining /
   // srcDoc-rebuilding step. The browser does the asset resolution itself,
   // which is the whole point of the URL-load path.
@@ -3942,16 +3894,44 @@ function HtmlViewer({
   const useUrlLoadPreview = shouldUrlLoadHtmlPreview({
     mode,
     isDeck: effectiveDeck,
-    commentMode: boardMode || manualEditMode,
+    commentMode: boardMode || drawClickSelectionMode,
+    editMode: manualEditMode,
+    urlModeBridge,
     inspectMode,
     paletteActive: palettePopoverOpen || selectedPalette !== null,
     drawMode: drawOverlayOpen,
     forceInline: forceInline || needsSandboxShim,
   });
-  const previewSrcUrl = useMemo(
+  const basePreviewSrcUrl = useMemo(
     () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}`,
     [projectId, file.name, file.mtime, reloadKey],
   );
+  const [previewSrcUrl, setPreviewSrcUrl] = useState(basePreviewSrcUrl);
+  const activePreviewSrcUrl = (
+    previewSrcUrl === basePreviewSrcUrl ||
+    previewSrcUrl.startsWith(`${basePreviewSrcUrl}&`)
+  )
+    ? previewSrcUrl
+    : basePreviewSrcUrl;
+  useEffect(() => {
+    setPreviewSrcUrl(basePreviewSrcUrl);
+  }, [basePreviewSrcUrl]);
+  useEffect(() => {
+    iframeRef.current = useUrlLoadPreview ? urlPreviewIframeRef.current : srcDocPreviewIframeRef.current;
+  }, [useUrlLoadPreview]);
+
+  useEffect(() => {
+    if (filesRefreshKey === 0) return;
+    const nextSrc = `${basePreviewSrcUrl}&fr=${filesRefreshKey}`;
+    const timeout = window.setTimeout(() => {
+      if (useUrlLoadPreview && urlPreviewIframeRef.current?.contentWindow) {
+        urlPreviewIframeRef.current.contentWindow.location.replace(nextSrc);
+      } else {
+        setPreviewSrcUrl(nextSrc);
+      }
+    }, 180);
+    return () => window.clearTimeout(timeout);
+  }, [basePreviewSrcUrl, filesRefreshKey, useUrlLoadPreview]);
 
   useEffect(() => {
     setInlinedSource(null);
@@ -3971,14 +3951,136 @@ function HtmlViewer({
       deck: effectiveDeck,
       baseHref: projectRawUrl(projectId, baseDirFor(file.name)),
       initialSlideIndex: htmlPreviewSlideState.get(previewStateKey)?.active ?? 0,
-      commentBridge: (boardMode && !manualEditMode) || drawClickSelectionMode,
-      inspectBridge: inspectMode,
+      selectionBridge: true,
       editBridge: manualEditMode,
       paletteBridge: true,
       initialPalette: selectedPalette,
     }) : ''),
-    [previewSource, effectiveDeck, projectId, file.name, previewStateKey, boardMode, manualEditMode, drawClickSelectionMode, inspectMode, selectedPalette],
+    [previewSource, effectiveDeck, projectId, file.name, previewStateKey, manualEditMode, selectedPalette],
   );
+  const lazySrcDocTransport = useMemo(() => buildLazySrcdocTransport(), []);
+  const [hasLazySrcDocTransport, setHasLazySrcDocTransport] = useState(useUrlLoadPreview);
+  const [srcDocTransportResetKey, setSrcDocTransportResetKey] = useState(0);
+  const wasUrlLoadPreviewRef = useRef(useUrlLoadPreview);
+  useEffect(() => {
+    if (useUrlLoadPreview) setHasLazySrcDocTransport(true);
+  }, [useUrlLoadPreview]);
+  const useLazySrcDocTransport = useUrlLoadPreview || hasLazySrcDocTransport;
+  const srcDocTransportContent = useLazySrcDocTransport ? lazySrcDocTransport : srcDoc;
+  const urlTransportSrc = useUrlLoadPreview ? activePreviewSrcUrl : 'about:blank';
+  const activateSrcDocTransport = useCallback((target: HTMLIFrameElement | null = srcDocPreviewIframeRef.current) => {
+    const win = target?.contentWindow;
+    if (!win || !srcDoc || useUrlLoadPreview || !useLazySrcDocTransport) return false;
+    if (activatedSrcDocTransportHtmlRef.current === srcDoc) return false;
+    win.postMessage({ type: 'od:srcdoc-transport-activate', html: srcDoc }, '*');
+    activatedSrcDocTransportHtmlRef.current = srcDoc;
+    return true;
+  }, [srcDoc, useLazySrcDocTransport, useUrlLoadPreview]);
+  useEffect(() => {
+    if (useUrlLoadPreview) {
+      activatedSrcDocTransportHtmlRef.current = null;
+      if (!wasUrlLoadPreviewRef.current) {
+        setSrcDocTransportResetKey((key) => key + 1);
+      }
+      wasUrlLoadPreviewRef.current = true;
+      return;
+    }
+    wasUrlLoadPreviewRef.current = false;
+    activateSrcDocTransport();
+  }, [activateSrcDocTransport, useUrlLoadPreview]);
+  useEffect(() => {
+    restorePreviewScrollPosition();
+  }, [boardMode, manualEditMode, srcDoc, restorePreviewScrollPosition]);
+
+  useEffect(() => {
+    function onMessage(ev: MessageEvent) {
+      if (!isOurPreviewIframeSource(ev.source)) return;
+      if (!isActivePreviewIframeSource(ev.source)) return;
+      const data = ev.data as {
+        type?: string;
+        frameLeft?: number;
+        frameTop?: number;
+        canvasLeft?: number;
+        canvasTop?: number;
+      } | null;
+      if (!data || data.type !== 'od:preview-scroll') return;
+      if (previewScrollRestoreRef.current && Number(data.canvasLeft || 0) === 0 && Number(data.canvasTop || 0) === 0) return;
+      if (
+        previewScrollPositionRef.current.canvasLeft !== 0 ||
+        previewScrollPositionRef.current.canvasTop !== 0
+      ) {
+        const isInitialZeroReport = Number(data.canvasLeft || 0) === 0 && Number(data.canvasTop || 0) === 0;
+        if (isInitialZeroReport && Date.now() - previewScrollRequestAtRef.current < 1200) return;
+      }
+      previewScrollPositionRef.current = {
+        frameLeft: Number(data.frameLeft || 0),
+        frameTop: Number(data.frameTop || 0),
+        canvasLeft: Number(data.canvasLeft || 0),
+        canvasTop: Number(data.canvasTop || 0),
+      };
+    }
+    function onRestoreRequest(ev: MessageEvent) {
+      if (!isOurPreviewIframeSource(ev.source)) return;
+      if (!isActivePreviewIframeSource(ev.source)) return;
+      const data = ev.data as { type?: string } | null;
+      if (!data || data.type !== 'od:preview-scroll-request') return;
+      previewScrollRequestAtRef.current = Date.now();
+      const snapshot = previewScrollRestoreRef.current;
+      const scroll = snapshot ?? {
+        frameLeft: previewScrollPositionRef.current.frameLeft,
+        frameTop: previewScrollPositionRef.current.frameTop,
+        canvasLeft: previewScrollPositionRef.current.canvasLeft,
+        canvasTop: previewScrollPositionRef.current.canvasTop,
+      };
+      iframeRef.current?.contentWindow?.postMessage({
+        type: 'od:preview-scroll-restore',
+        frameLeft: scroll.frameLeft,
+        frameTop: scroll.frameTop,
+        canvasLeft: scroll.canvasLeft,
+        canvasTop: scroll.canvasTop,
+      }, '*');
+    }
+    function onDcViewportMessage(ev: MessageEvent) {
+      if (!isOurPreviewIframeSource(ev.source)) return;
+      if (!isActivePreviewIframeSource(ev.source)) return;
+      const data = ev.data as {
+        type?: string;
+        x?: number;
+        y?: number;
+        scale?: number;
+      } | null;
+      if (!data || !data.type) return;
+      if (data.type === '__dc_viewport') {
+        const x = Number(data.x || 0);
+        const y = Number(data.y || 0);
+        const scale = Number(data.scale || 1);
+        const hasExistingPosition = dcViewportRef.current.x !== 0 || dcViewportRef.current.y !== 0;
+        const isInitialZeroReport = x === 0 && y === 0 && scale === 1;
+        if (hasExistingPosition && isInitialZeroReport && Date.now() - dcViewportRestoreAtRef.current < 1500) return;
+        dcViewportRef.current = {
+          x: Number.isFinite(x) ? x : 0,
+          y: Number.isFinite(y) ? y : 0,
+          scale: Number.isFinite(scale) && scale > 0 ? scale : 1,
+        };
+        return;
+      }
+      if (data.type === '__dc_viewport_request') {
+        dcViewportRestoreAtRef.current = Date.now();
+        iframeRef.current?.contentWindow?.postMessage({
+          type: '__dc_set_viewport',
+          ...dcViewportRef.current,
+        }, '*');
+      }
+    }
+    window.addEventListener('message', onMessage);
+    window.addEventListener('message', onRestoreRequest);
+    window.addEventListener('message', onDcViewportMessage);
+    return () => {
+      window.removeEventListener('message', onMessage);
+      window.removeEventListener('message', onRestoreRequest);
+      window.removeEventListener('message', onDcViewportMessage);
+    };
+  }, [isActivePreviewIframeSource, isOurPreviewIframeSource]);
 
   useEffect(() => {
     if (!effectiveDeck) {
@@ -3987,7 +4089,8 @@ function HtmlViewer({
     }
     setSlideState(htmlPreviewSlideState.get(previewStateKey) ?? null);
     function onMessage(ev: MessageEvent) {
-      if (ev.source !== iframeRef.current?.contentWindow) return;
+      if (!isOurPreviewIframeSource(ev.source)) return;
+      if (!isActivePreviewIframeSource(ev.source)) return;
       const data = ev?.data as
         | { type?: string; active?: number; count?: number }
         | null;
@@ -3999,7 +4102,7 @@ function HtmlViewer({
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [effectiveDeck, previewStateKey]);
+  }, [effectiveDeck, isActivePreviewIframeSource, isOurPreviewIframeSource, previewStateKey]);
 
   useEffect(() => {
     const win = iframeRef.current?.contentWindow;
@@ -4025,14 +4128,14 @@ function HtmlViewer({
     return true;
   }, []);
 
-  function postSelectedManualEditTargetToIframe(id: string | null) {
-    const win = iframeRef.current?.contentWindow;
+  function postSelectedManualEditTargetToIframe(id: string | null, target: HTMLIFrameElement | null = iframeRef.current) {
+    const win = target?.contentWindow;
     if (!win) return;
     win.postMessage({ type: 'od-edit-selected-target', id }, '*');
   }
 
-  function syncBridgeModes() {
-    const win = iframeRef.current?.contentWindow;
+  function syncBridgeModes(target: HTMLIFrameElement | null = iframeRef.current) {
+    const win = target?.contentWindow;
     if (!win) return;
     win.postMessage({
       type: 'od:comment-mode',
@@ -4040,7 +4143,10 @@ function HtmlViewer({
       mode: drawClickSelectionMode ? 'picker' : boardTool,
     }, '*');
     win.postMessage({ type: 'od-edit-mode', enabled: manualEditMode }, '*');
-    postSelectedManualEditTargetToIframe(manualEditMode ? selectedManualEditTarget?.id ?? null : null);
+    postSelectedManualEditTargetToIframe(manualEditMode ? selectedManualEditTarget?.id ?? null : null, target);
+    win.postMessage({ type: 'od:inspect-mode', enabled: inspectMode }, '*');
+    const palette = previewPalette ?? selectedPalette;
+    win.postMessage({ type: 'od:palette', palette }, '*');
   }
 
   useEffect(() => {
@@ -4073,7 +4179,7 @@ function HtmlViewer({
       return;
     }
     function onMessage(ev: MessageEvent) {
-      if (ev.source !== iframeRef.current?.contentWindow) return;
+      if (!isOurPreviewIframeSource(ev.source)) return;
       const data = ev.data as
         | {
             type?: string;
@@ -4106,7 +4212,7 @@ function HtmlViewer({
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [inspectMode, boardMode, drawClickSelectionMode, file.name]);
+  }, [inspectMode, boardMode, drawClickSelectionMode, file.name, isOurPreviewIframeSource]);
 
   useEffect(() => {
     setActiveCommentTarget(null);
@@ -4203,7 +4309,7 @@ function HtmlViewer({
       podMembers: Array.isArray(data.podMembers) ? data.podMembers : undefined,
     });
     function onMessage(ev: MessageEvent) {
-      if (ev.source !== iframeRef.current?.contentWindow) return;
+      if (!isOurPreviewIframeSource(ev.source)) return;
       const data = ev.data as (Partial<PreviewCommentSnapshot> & {
         type?: string;
         targets?: Array<Partial<PreviewCommentSnapshot>>;
@@ -4300,7 +4406,7 @@ function HtmlViewer({
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [boardMode, drawClickSelectionMode, file.name, previewComments]);
+  }, [boardMode, drawClickSelectionMode, file.name, isOurPreviewIframeSource, previewComments]);
 
   useEffect(() => {
     if (!manualEditMode) {
@@ -4315,7 +4421,7 @@ function HtmlViewer({
       return;
     }
     function onMessage(ev: MessageEvent) {
-      if (ev.source !== iframeRef.current?.contentWindow) return;
+      if (!isOurPreviewIframeSource(ev.source)) return;
       const data = ev.data as ManualEditBridgeMessage | null;
       if (!data?.type) return;
       if (data.type === 'od-edit-targets' && Array.isArray(data.targets)) {
@@ -4337,7 +4443,7 @@ function HtmlViewer({
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [manualEditMode, source]);
+  }, [isOurPreviewIframeSource, manualEditMode, source]);
 
   function nextManualEditPreviewVersion(): number {
     manualEditPreviewVersionRef.current += 1;
@@ -4597,7 +4703,7 @@ function HtmlViewer({
   useEffect(() => {
     if (!inspectMode) return;
     function onMessage(ev: MessageEvent) {
-      if (ev.source !== iframeRef.current?.contentWindow) return;
+      if (!isOurPreviewIframeSource(ev.source)) return;
       const data = ev.data as
         | { type?: string; elementId?: string; selector?: string; label?: string; text?: string; style?: InspectStyleSnapshot }
         | null;
@@ -4615,7 +4721,7 @@ function HtmlViewer({
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [inspectMode]);
+  }, [inspectMode, isOurPreviewIframeSource]);
 
   function postSlide(action: 'next' | 'prev' | 'first' | 'last') {
     const win = iframeRef.current?.contentWindow;
@@ -4658,8 +4764,8 @@ function HtmlViewer({
   // the bridge's DOM-hydrated one and silently strip the persisted styles
   // from preview. Re-derive synchronously from `source` whenever the
   // hydration ref disagrees so onLoad never sends a stale snapshot.
-  function replayInspectOverridesToIframe() {
-    const win = iframeRef.current?.contentWindow;
+  function replayInspectOverridesToIframe(target: HTMLIFrameElement | null = iframeRef.current) {
+    const win = target?.contentWindow;
     if (!win) return;
     const overrides = inspectHydratedSourceRef.current === source
       ? inspectOverrides
@@ -5093,7 +5199,9 @@ function HtmlViewer({
   const exportTitle = file.name.replace(/\.html?$/i, '') || file.name;
   const canPptx = canShare && Boolean(onExportAsPptx) && !streaming;
   const visibleSideComments = useMemo(
-    () => previewComments.filter((comment) => comment.filePath === file.name && comment.status === 'open'),
+    () => previewComments
+      .filter((comment) => comment.filePath === file.name && comment.status === 'open')
+      .sort((a, b) => b.createdAt - a.createdAt),
     [file.name, previewComments],
   );
   useEffect(() => {
@@ -5348,15 +5456,26 @@ function HtmlViewer({
             title={t('fileViewer.comment')}
             aria-pressed={boardMode}
             onClick={() => {
+              capturePreviewScrollPosition();
               if (boardMode) {
                 setBoardMode(false);
                 clearBoardComposer();
                 return;
               }
-              setManualEditMode(false);
-              setInspectMode(false);
-              setDrawOverlayOpen(false);
-              activateBoard(boardTool);
+              const activateComment = () => {
+                clearBoardComposer();
+                setInspectMode(false);
+                setDrawOverlayOpen(false);
+                setMode('preview');
+                activateBoard(boardTool);
+              };
+              if (manualEditMode) {
+                void exitManualEditModeAfterFlush().then((ok) => {
+                  if (ok) activateComment();
+                });
+                return;
+              }
+              activateComment();
             }}
           >
             <Icon name="comment" size={13} />
@@ -5420,6 +5539,7 @@ function HtmlViewer({
             title={t('fileViewer.edit')}
             aria-pressed={manualEditMode}
             onClick={() => {
+              capturePreviewScrollPosition();
               if (!manualEditMode) {
                 setBoardMode(false);
                 clearBoardComposer();
@@ -5782,32 +5902,55 @@ function HtmlViewer({
                   sendDisabled={streaming}
                   sendDisabledReason="当前正有任务在执行"
                 >
-                  {useUrlLoadPreview ? (
+                  <div className="artifact-preview-transport-stack">
                     <iframe
-                      ref={iframeRef}
-                      data-testid="artifact-preview-frame"
+                      ref={urlPreviewIframeRef}
+                      data-testid={useUrlLoadPreview ? 'artifact-preview-frame' : 'artifact-preview-frame-url-load'}
                       data-od-render-mode="url-load"
+                      data-od-active={useUrlLoadPreview ? 'true' : 'false'}
+                      aria-hidden={useUrlLoadPreview ? undefined : true}
+                      tabIndex={useUrlLoadPreview ? 0 : -1}
                       title={file.name}
                       sandbox="allow-scripts allow-downloads"
-                      src={previewSrcUrl}
-                      onLoad={syncBridgeModes}
-                      style={{ width: '100%', height: '100%', border: 0 }}
-                    />
-                  ) : (
-                    <iframe
-                      ref={iframeRef}
-                      data-testid="artifact-preview-frame"
-                      data-od-render-mode="srcdoc"
-                      title={file.name}
-                      sandbox="allow-scripts allow-downloads"
-                      srcDoc={srcDoc}
+                      src={urlTransportSrc}
                       onLoad={() => {
-                        replayInspectOverridesToIframe();
-                        syncBridgeModes();
+                        const frame = urlPreviewIframeRef.current;
+                        if (useUrlLoadPreview) iframeRef.current = frame;
+                        dcViewportRestoreAtRef.current = Date.now();
+                        frame?.contentWindow?.postMessage({
+                          type: '__dc_set_viewport',
+                          ...dcViewportRef.current,
+                        }, '*');
+                        syncBridgeModes(frame);
+                        if (useUrlLoadPreview) restorePreviewScrollPosition();
                       }}
-                      style={{ width: '100%', height: '100%', border: 0 }}
                     />
-                  )}
+                    <iframe
+                      key={srcDocTransportResetKey}
+                      ref={srcDocPreviewIframeRef}
+                      data-testid={useUrlLoadPreview ? 'artifact-preview-frame-srcdoc' : 'artifact-preview-frame'}
+                      data-od-render-mode="srcdoc"
+                      data-od-active={useUrlLoadPreview ? 'false' : 'true'}
+                      aria-hidden={useUrlLoadPreview ? true : undefined}
+                      tabIndex={useUrlLoadPreview ? -1 : 0}
+                      title={file.name}
+                      sandbox="allow-scripts allow-downloads"
+                      srcDoc={srcDocTransportContent}
+                      onLoad={() => {
+                        const frame = srcDocPreviewIframeRef.current;
+                        if (!useUrlLoadPreview) iframeRef.current = frame;
+                        activateSrcDocTransport(frame);
+                        dcViewportRestoreAtRef.current = Date.now();
+                        frame?.contentWindow?.postMessage({
+                          type: '__dc_set_viewport',
+                          ...dcViewportRef.current,
+                        }, '*');
+                        replayInspectOverridesToIframe(frame);
+                        syncBridgeModes(frame);
+                        if (!useUrlLoadPreview) restorePreviewScrollPosition();
+                      }}
+                    />
+                  </div>
                 </PreviewDrawOverlay>
               </div>
             </div>
@@ -5865,6 +6008,13 @@ function HtmlViewer({
                   if (!onRemovePreviewComment) return;
                   await onRemovePreviewComment(commentId);
                   clearBoardComposer();
+                }}
+                onRemoveMember={(elementId) => {
+                  setActiveCommentTarget((current) => {
+                    const { next, shouldClose } = applyPodMemberRemoval(current, elementId);
+                    if (shouldClose) clearBoardComposer();
+                    return next;
+                  });
                 }}
                 sending={sendingBoardBatch || streaming}
                 t={t}
@@ -5982,7 +6132,12 @@ function HtmlViewer({
               && openHintBox
               && !activeInspectTarget
               && !activeCommentTarget ? (
-              <div className="inspect-empty-hint-container">
+              <div
+                className={`inspect-empty-hint-container${
+                  boardMode && !commentSidePanelCollapsed ? ' comment-side-panel-open' : ''
+                }`}
+                data-testid="inspect-empty-hint-container"
+              >
                 {liveCommentTargets.size === 0 ? (
                   <div
                     className="inspect-empty-hint"
@@ -6036,7 +6191,7 @@ function HtmlViewer({
               title="present"
               sandbox="allow-scripts allow-downloads"
               data-od-render-mode="url-load"
-              src={previewSrcUrl}
+              src={activePreviewSrcUrl}
             />
           ) : (
             <iframe

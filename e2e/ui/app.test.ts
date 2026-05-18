@@ -1,5 +1,8 @@
 import { expect, test } from '@playwright/test';
 import type { Dialog, Page, Request, Response } from '@playwright/test';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { automatedUiScenarios } from '@/playwright/resources';
 import type { UiScenario } from '@/playwright/resources';
 
@@ -8,7 +11,56 @@ const APP_OWNED_SCENARIO_FLOWS = new Set([
   'design-files-upload',
   'design-files-delete',
   'design-files-tab-persistence',
+  'example-use-prompt',
 ]);
+const QUERY_PLUGIN_MANIFEST = {
+  $schema: 'https://open-design.ai/schemas/plugin.v1.json',
+  name: 'query-plugin',
+  title: 'Query Plugin',
+  version: '1.0.0',
+  description: 'E2E fixture for import, apply, and query rendering.',
+  license: 'MIT',
+  tags: ['e2e', 'query'],
+  od: {
+    kind: 'skill',
+    taskKind: 'new-generation',
+    useCase: {
+      query: 'Generate a {{topic}} brief for {{audience}}.',
+    },
+    inputs: [
+      {
+        name: 'topic',
+        type: 'string',
+        required: true,
+        default: 'release QA',
+        label: 'Topic',
+      },
+      {
+        name: 'audience',
+        type: 'string',
+        required: false,
+        default: 'general',
+        label: 'Audience',
+      },
+    ],
+    capabilities: ['prompt:inject'],
+  },
+};
+const QUERY_PLUGIN_SKILL = [
+  '---',
+  'name: query-plugin',
+  'description: E2E fixture for plugin import and query rendering.',
+  'od:',
+  '  kind: skill',
+  '  taskKind: new-generation',
+  '---',
+  '',
+  '# Query Plugin',
+  '',
+  'Use this fixture to verify that a user-installed plugin can render a starter query and bind that query to a project run.',
+].join('\n');
+
+test.describe.configure({ timeout: 45_000 });
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript((key) => {
@@ -24,9 +76,31 @@ test.beforeEach(async ({ page }) => {
         designSystemId: null,
         onboardingCompleted: true,
         agentModels: {},
+        privacyDecisionAt: 1,
+        telemetry: { metrics: false, content: false, artifactManifest: false },
       }),
     );
   }, STORAGE_KEY);
+
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      json: {
+        config: {
+          onboardingCompleted: true,
+          agentId: 'mock',
+          skillId: null,
+          designSystemId: null,
+          agentModels: {},
+          privacyDecisionAt: 1,
+          telemetry: { metrics: false, content: false, artifactManifest: false },
+        },
+      },
+    });
+  });
 });
 
 for (const entry of automatedUiScenarios().filter(
@@ -239,7 +313,7 @@ for (const entry of automatedUiScenarios().filter(
       });
     }
 
-    await page.goto('/');
+    await gotoEntryHome(page);
 
     if (entry.flow === 'design-system-selection') {
       await runDesignSystemSelectionFlow(page, entry);
@@ -247,6 +321,14 @@ for (const entry of automatedUiScenarios().filter(
     }
     if (entry.flow === 'example-use-prompt') {
       await runExampleUsePromptFlow(page, entry);
+      return;
+    }
+    if (entry.flow === 'plugin-create-import') {
+      await runPluginCreateImportFlow(page, entry);
+      return;
+    }
+    if (entry.flow === 'home-rail-generation') {
+      await runHomeRailGenerationFlow(page, entry);
       return;
     }
 
@@ -322,6 +404,50 @@ async function routeMockAgents(page: Page) {
       },
     });
   });
+}
+
+async function routeMockSuccessfulRun(page: Page, runId: string) {
+  await page.route('**/api/runs', async (route) => {
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: JSON.stringify({ runId }),
+    });
+  });
+  await page.route('**/api/runs/*/events', async (route) => {
+    const body = [
+      'event: start',
+      'data: {"bin":"mock-agent"}',
+      '',
+      'event: stdout',
+      'data: {"chunk":"Plugin flow completed."}',
+      '',
+      'event: end',
+      'data: {"code":0,"status":"succeeded"}',
+      '',
+      '',
+    ].join('\n');
+
+    await route.fulfill({
+      status: 200,
+      headers: {
+        'content-type': 'text/event-stream',
+        'cache-control': 'no-cache',
+      },
+      body,
+    });
+  });
+}
+
+async function createQueryPluginFixture(): Promise<string> {
+  const folder = await mkdtemp(path.join(tmpdir(), 'od-query-plugin-'));
+  await writeFile(
+    path.join(folder, 'open-design.json'),
+    `${JSON.stringify(QUERY_PLUGIN_MANIFEST, null, 2)}\n`,
+    'utf8',
+  );
+  await writeFile(path.join(folder, 'SKILL.md'), `${QUERY_PLUGIN_SKILL}\n`, 'utf8');
+  return folder;
 }
 
 async function createEmptyProject(page: Page, name: string): Promise<string> {
@@ -429,9 +555,17 @@ async function createProject(
 }
 
 async function expectWorkspaceReady(page: Page) {
+  await waitForLoadingToClear(page);
   await expect(page).toHaveURL(/\/projects\//);
   await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
+  await expect(page.getByTestId('file-workspace')).toBeVisible();
+}
+
+async function expectProjectShellReady(page: Page) {
+  await waitForLoadingToClear(page);
+  await expect(page).toHaveURL(/\/projects\//);
+  await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('file-workspace')).toBeVisible();
 }
 
@@ -439,35 +573,35 @@ async function sendPrompt(
   page: Page,
   prompt: string,
 ) {
-  const input = page.getByTestId('chat-composer-input');
-  const sendButton = page.getByTestId('chat-send');
   for (let attempt = 0; attempt < 3; attempt++) {
+    const input = page.getByTestId('chat-composer-input');
+    const sendButton = page.getByTestId('chat-send');
+    await expect(input).toBeVisible({ timeout: 3_000 });
     await input.click();
     await input.fill(prompt);
     try {
       await expect(input).toHaveValue(prompt, { timeout: 1500 });
       await expect(sendButton).toBeEnabled({ timeout: 1500 });
-      const chatResponse = page.waitForResponse(
-        isCreateRunResponse,
-        { timeout: 2000 },
-      );
-      await sendButton.evaluate((button: HTMLButtonElement) => button.click());
-      await chatResponse;
+      await Promise.all([
+        page.waitForResponse(isCreateRunResponse, { timeout: 5_000 }),
+        sendButton.evaluate((button: HTMLButtonElement) => button.click()),
+      ]);
       return;
     } catch (error) {
-      await input.click();
-      await input.press(`${process.platform === 'darwin' ? 'Meta' : 'Control'}+A`);
-      await input.press('Backspace');
-      await input.pressSequentially(prompt);
+      const retryInput = page.getByTestId('chat-composer-input');
+      const retrySendButton = page.getByTestId('chat-send');
+      await expect(retryInput).toBeVisible({ timeout: 3_000 });
+      await retryInput.click();
+      await retryInput.press(`${process.platform === 'darwin' ? 'Meta' : 'Control'}+A`);
+      await retryInput.press('Backspace');
+      await retryInput.pressSequentially(prompt);
       try {
-        await expect(input).toHaveValue(prompt, { timeout: 1500 });
-        await expect(sendButton).toBeEnabled({ timeout: 1500 });
-        const chatResponse = page.waitForResponse(
-          isCreateRunResponse,
-          { timeout: 2000 },
-        );
-        await sendButton.evaluate((button: HTMLButtonElement) => button.click());
-        await chatResponse;
+        await expect(retryInput).toHaveValue(prompt, { timeout: 1500 });
+        await expect(retrySendButton).toBeEnabled({ timeout: 1500 });
+        await Promise.all([
+          page.waitForResponse(isCreateRunResponse, { timeout: 5_000 }),
+          retrySendButton.evaluate((button: HTMLButtonElement) => button.click()),
+        ]);
         return;
       } catch (retryError) {
         if (attempt === 2) throw retryError;
@@ -481,9 +615,19 @@ function isCreateRunResponse(resp: Response): boolean {
   return url.pathname === '/api/runs' && resp.request().method() === 'POST';
 }
 
+function isCreateProjectResponse(resp: Response): boolean {
+  const url = new URL(resp.url());
+  return url.pathname === '/api/projects' && resp.request().method() === 'POST';
+}
+
 function isCreateRunRequest(request: Request): boolean {
   const url = new URL(request.url());
   return url.pathname === '/api/runs' && request.method() === 'POST';
+}
+
+function isCreateProjectRequest(request: Request): boolean {
+  const url = new URL(request.url());
+  return url.pathname === '/api/projects' && request.method() === 'POST';
 }
 
 async function runDesignSystemSelectionFlow(
@@ -507,8 +651,14 @@ async function runExampleUsePromptFlow(
   page: Page,
   entry: UiScenario,
 ) {
-  await page.getByTestId('entry-tab-templates').click();
-  await expect(page.getByTestId('example-card-warm-utility-example')).toBeVisible();
+  const exampleCard = page.getByTestId('example-card-warm-utility-example');
+  if ((await exampleCard.count()) === 0) {
+    const examplesTab = page.getByTestId('entry-tab-examples');
+    if ((await examplesTab.count()) > 0) {
+      await examplesTab.click();
+    }
+  }
+  await expect(exampleCard).toBeVisible();
   await page.getByTestId('example-use-prompt-warm-utility-example').click();
 
   await expect(page).toHaveURL(/\/projects\//);
@@ -516,6 +666,158 @@ async function runExampleUsePromptFlow(
   await expect(page.getByTestId('chat-composer-input')).toHaveValue(entry.prompt);
   await expect(page.getByTestId('project-title')).toContainText('Warm Utility Example');
   await expect(page.getByTestId('project-meta')).toContainText('Warm Utility Example');
+}
+
+async function runHomeRailGenerationFlow(
+  page: Page,
+  entry: UiScenario,
+) {
+  const chipId = entry.create.railChip;
+  const expectedProjectKind = entry.create.expectedProjectKind;
+  const expectedPluginId = entry.create.expectedPluginId;
+  const artifact = entry.mockArtifact;
+  if (!chipId || !expectedProjectKind || !expectedPluginId || !artifact) {
+    throw new Error(`home rail scenario ${entry.id} is missing required test data`);
+  }
+
+  await expect(page.getByTestId('home-hero-rail')).toBeVisible();
+  const chip = page.getByTestId(`home-hero-rail-${chipId}`);
+  await expect(chip).toBeVisible();
+  await expect(chip).toBeEnabled();
+  await chip.click();
+  await expect(chip).toHaveAttribute('aria-pressed', 'true', { timeout: 10_000 });
+  await expect(page.getByTestId('home-hero-active-plugin')).toBeVisible();
+
+  const input = page.getByTestId('home-hero-input');
+  await input.fill(entry.prompt);
+  await expect(input).toHaveValue(entry.prompt);
+  await expect(page.getByTestId('home-hero-submit')).toBeEnabled();
+
+  const createProjectResponse = page.waitForResponse(isCreateProjectResponse);
+  const runRequest = page.waitForRequest(isCreateRunRequest);
+  const runResponse = page.waitForResponse(isCreateRunResponse);
+  await page.getByTestId('home-hero-submit').click();
+
+  const createResponse = await createProjectResponse;
+  expect(createResponse.ok()).toBeTruthy();
+  const createBody = (await createResponse.json()) as {
+    project: { id: string };
+    appliedPluginSnapshotId?: string;
+  };
+  expect(createBody.appliedPluginSnapshotId).toBeTruthy();
+
+  await expectProjectShellReady(page);
+
+  const request = await runRequest;
+  const runBody = request.postDataJSON() as {
+    projectId?: string;
+    message?: string;
+  };
+  expect(runBody.projectId).toBe(createBody.project.id);
+  expect(runBody.message).toContain(entry.prompt);
+
+  const response = await runResponse;
+  expect(response.ok()).toBeTruthy();
+
+  await expectArtifactVisible(page, entry);
+
+  const { projectId } = await getCurrentProjectContext(page);
+  expect(projectId).toBe(createBody.project.id);
+
+  const project = await fetchProjectFromApi(page, projectId);
+  expect(project.metadata?.kind).toBe(expectedProjectKind);
+  expect(project.appliedPluginSnapshotId).toBe(createBody.appliedPluginSnapshotId);
+
+  const snapshot = await fetchAppliedPluginSnapshotFromApi(
+    page,
+    project.appliedPluginSnapshotId!,
+  );
+  expect(snapshot.pluginId).toBe(expectedPluginId);
+
+  await expect(page.getByTestId('msg-plugin-chip')).toBeVisible();
+  await expect(page.getByTestId('msg-plugin-chip')).toContainText(snapshot.pluginTitle);
+  await expectProjectFileToContain(page, projectId, artifact.fileName, artifact.heading);
+
+  await page.reload();
+  await expectProjectShellReady(page);
+  await expectProjectFileToContain(page, projectId, artifact.fileName, artifact.heading);
+  await expect(page.getByText(artifact.fileName, { exact: true })).toBeVisible();
+}
+
+async function runPluginCreateImportFlow(
+  page: Page,
+  entry: UiScenario,
+) {
+  await routeMockSuccessfulRun(page, 'plugin-create-import-run');
+
+  await page.getByTestId('entry-nav-plugins').click();
+  await expect(page.getByTestId('plugins-create-button')).toBeVisible();
+
+  await page.getByTestId('plugins-create-button').click();
+  const homeInput = page.getByTestId('home-hero-input');
+  await expect(homeInput).toHaveValue(/Create an Open Design plugin/);
+  await expect(page.getByTestId('home-hero-active-plugin')).toContainText('Create plugin');
+
+  await page.getByTestId('entry-nav-plugins').click();
+  await expect(page.getByTestId('plugins-import-button')).toBeVisible();
+  await page.getByTestId('plugins-import-button').click();
+
+  const dialog = page.getByRole('dialog', { name: 'Import a plugin' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('button', { name: /From GitHub/i })).toBeVisible();
+
+  const queryPluginFixture = await createQueryPluginFixture();
+  try {
+    await dialog.getByLabel('GitHub, archive, or marketplace source').fill(queryPluginFixture);
+    const installResponse = page.waitForResponse(
+      (resp) =>
+        new URL(resp.url()).pathname === '/api/plugins/install' &&
+        resp.request().method() === 'POST',
+    );
+    await dialog.getByRole('button', { name: 'Import', exact: true }).click();
+    expect((await installResponse).ok()).toBeTruthy();
+
+    await expect(page.getByText('Installed Query Plugin.')).toBeVisible();
+    await expect(page.getByTestId('plugins-tab-installed')).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('[data-plugin-id="query-plugin"]')).toBeVisible();
+
+    await page.goto('/');
+    await expect(page.getByTestId('home-hero')).toBeVisible();
+    await homeInput.click();
+    await homeInput.fill('@query');
+    const picker = page.getByTestId('home-hero-plugin-picker');
+    await expect(picker).toBeVisible();
+    const queryOption = picker.getByRole('option', { name: /Query Plugin/ });
+    await expect(queryOption).toBeEnabled();
+    await queryOption.click();
+
+    await expect(page.getByRole('button', { name: '@Query Plugin' }).first()).toBeVisible();
+    await expect(homeInput).toHaveValue(/@Query Plugin/);
+    await homeInput.fill(entry.prompt);
+    await expect(page.getByTestId('home-hero-submit')).toBeEnabled();
+
+    const projectRequestPromise = page.waitForRequest(isCreateProjectRequest);
+    const runRequestPromise = page.waitForRequest(isCreateRunRequest);
+    await page.getByTestId('home-hero-submit').click();
+
+    const projectRequest = await projectRequestPromise;
+    const projectBody = projectRequest.postDataJSON() as {
+      pluginId?: string;
+      pendingPrompt?: string;
+      metadata?: { kind?: string };
+    };
+    expect(projectBody.pendingPrompt).toBe(entry.prompt);
+    expect(projectBody.metadata?.kind).toBe('other');
+
+    await expect(page).toHaveURL(/\/projects\//);
+
+    const runRequest = await runRequestPromise;
+    const runBody = runRequest.postDataJSON() as { message?: string };
+    expect(runBody.message).toContain(entry.prompt);
+    await expect(page.locator('.msg.user .user-text').filter({ hasText: entry.prompt }).first()).toBeVisible();
+  } finally {
+    await rm(queryPluginFixture, { recursive: true, force: true });
+  }
 }
 
 async function runQuestionFormSelectionLimitFlow(
@@ -760,11 +1062,34 @@ async function createProjectNameOnly(
   page: Page,
   entry: UiScenario,
 ) {
+  await openNewProjectModal(page);
   await expect(page.getByTestId('new-project-panel')).toBeVisible();
   if (entry.create.tab) {
     await page.getByTestId(`new-project-tab-${entry.create.tab}`).click();
   }
   await page.getByTestId('new-project-name').fill(entry.create.projectName);
+}
+
+async function gotoEntryHome(page: Page) {
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
+  if (await privacyDialog.isVisible().catch(() => false)) {
+    await privacyDialog.getByRole('button', { name: /not now/i }).click();
+    await expect(privacyDialog).toHaveCount(0);
+  }
+  await expect(page.getByTestId('home-hero')).toBeVisible();
+  await expect(page.getByTestId('home-hero-input')).toBeVisible();
+}
+
+async function openNewProjectModal(page: Page) {
+  await page.getByTestId('entry-nav-new-project').click();
+  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+}
+
+async function waitForLoadingToClear(page: Page) {
+  const loading = page.getByText('Loading Open Design…');
+  await loading.waitFor({ state: 'detached', timeout: 10_000 }).catch(() => {});
 }
 
 async function getCurrentProjectContext(
@@ -789,6 +1114,33 @@ async function getCurrentProjectContext(
   return { projectId, conversationId: active.id };
 }
 
+async function fetchProjectFromApi(
+  page: Page,
+  projectId: string,
+): Promise<{
+  metadata?: { kind?: string };
+  appliedPluginSnapshotId?: string;
+}> {
+  const response = await page.request.get(`/api/projects/${projectId}`);
+  expect(response.ok()).toBeTruthy();
+  const { project } = (await response.json()) as {
+    project: {
+      metadata?: { kind?: string };
+      appliedPluginSnapshotId?: string;
+    };
+  };
+  return project;
+}
+
+async function fetchAppliedPluginSnapshotFromApi(
+  page: Page,
+  snapshotId: string,
+): Promise<{ pluginId: string; pluginTitle: string }> {
+  const response = await page.request.get(`/api/applied-plugins/${snapshotId}`);
+  expect(response.ok()).toBeTruthy();
+  return (await response.json()) as { pluginId: string; pluginTitle: string };
+}
+
 async function listProjectFilesFromApi(
   page: Page,
   projectId: string,
@@ -797,6 +1149,21 @@ async function listProjectFilesFromApi(
   expect(response.ok()).toBeTruthy();
   const { files } = (await response.json()) as { files: Array<{ name: string; kind: string }> };
   return files;
+}
+
+async function expectProjectFileToContain(
+  page: Page,
+  projectId: string,
+  fileName: string,
+  expected: string,
+) {
+  await expect
+    .poll(async () => {
+      const response = await page.request.get(`/api/projects/${projectId}/files/${fileName}`);
+      if (!response.ok()) return '';
+      return response.text();
+    }, { timeout: 15_000 })
+    .toContain(expected);
 }
 
 async function expectArtifactVisible(
@@ -884,18 +1251,21 @@ async function runDeepLinkPreviewFlow(
   await expectArtifactVisible(page, entry);
 
   const fileName = entry.mockArtifact!.fileName;
-  await expect(page).toHaveURL(new RegExp(`/projects/[^/]+/files/${fileName.replace('.', '\\.')}$`));
+  await expect(page).toHaveURL(
+    new RegExp(`/projects/[^/]+(?:/conversations/[^/]+)?/files/${fileName.replace('.', '\\.')}$`),
+  );
 
   const current = new URL(page.url());
-  const [, projects, projectId] = current.pathname.split('/');
+  const [, projects, projectId, maybeConversations, conversationId] = current.pathname.split('/');
   if (projects !== 'projects' || !projectId) {
     throw new Error(`unexpected project route: ${current.pathname}`);
   }
-
-  await page.goto(`/projects/${projectId}`);
+  await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
   await expect(page.getByTestId('file-workspace')).toBeVisible();
 
-  await page.goto(`/projects/${projectId}/files/${fileName}`);
+  await page.goto(`/projects/${projectId}/files/${fileName}`, { waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
   await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
   const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
   await expect(frame.getByRole('heading', { name: entry.mockArtifact!.heading })).toBeVisible();

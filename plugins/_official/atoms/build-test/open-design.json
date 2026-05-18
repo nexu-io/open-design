@@ -1,0 +1,38 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "build-test",
+  "title": "Build test",
+  "version": "0.1.0",
+  "description": "Run the project's build / typecheck / lint / test commands and emit build.passing + tests.passing signals.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/atoms/build-test",
+  "tags": [
+    "atom",
+    "first-party",
+    "code-migration",
+    "tune-collab",
+    "phase-7"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "atom",
+    "scenario": "code-migration",
+    "mode": "critique",
+    "capabilities": [
+      "prompt:inject",
+      "subprocess",
+      "fs:read"
+    ]
+  }
+}

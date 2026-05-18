@@ -1,0 +1,80 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-social-media-post-editorial-fashion-photography",
+  "title": "Social Media Post - Editorial Fashion Photography",
+  "version": "0.1.0",
+  "description": "A moody, fashion-focused prompt for a minimalist studio scene with soft lighting and warm tones.",
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Miz",
+    "url": "https://x.com/mizq06/status/2049189070732157408"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "social-media-post"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://cms-assets.youmind.com/media/1777453137877_aqjk7l_HHAumFda4AAVbjJ.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "A woman with {argument name=\"hair color\" default=\"long red hair\"} crouching in a minimalist studio setting with a {argument name=\"background color\" default=\"soft pink background\"}. She is wearing a {argument name=\"dress style\" default=\"fitted black dress\"} and black high heels. She holds a lit match in one hand, looking at it thoughtfully, while a small decorated cake with a single lit candle sits on the floor in front of her. The lighting is soft and warm, casting gentle highlights and subtle shadows, creating a moody, editorial atmosphere.",
+        "zh-CN": "使用这个插件完成以下任务：A woman with {argument name=\"hair color\" default=\"long red hair\"} crouching in a minimalist studio setting with a {argument name=\"background color\" default=\"soft pink background\"}. She is wearing a {argument name=\"dress style\" default=\"fitted black dress\"} and black high heels. She holds a lit match in one hand, looking at it thoughtfully, while a small decorated cake with a single lit candle sits on the floor in front of her. The lighting is soft and warm, casting gentle highlights and subtle shadows, creating a moody, editorial atmosphere."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "1:1"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

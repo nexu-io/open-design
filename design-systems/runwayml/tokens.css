@@ -1,0 +1,204 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/runwayml/tokens.css
+ *
+ * Structured token bindings for the "Runway" brand — a cinematic,
+ * editorial-cinema dark canvas where photography (and AI-generated
+ * video) is the design and the chrome is intentionally invisible.
+ *
+ * Brand identity in three sentences:
+ *   1. Pure-black canvas (#000000) under bright pure-white type
+ *      (#ffffff), with cool blue-gray neutrals (#767d88 / #7d848e)
+ *      for the entire supporting text ramp — never warm gray.
+ *   2. Single typeface system: abcNormal at 400 / 450 / 500 / 600
+ *      (no bold) handles everything from 48px display down to 11px
+ *      uppercase tags. Hierarchy comes from size + case + tracking,
+ *      not weight.
+ *   3. Zero shadows, near-invisible borders (#27272a hairline), and
+ *      sharp 4–8px corners — depth comes from photographic content
+ *      and dark-vs-light section alternation, never from CSS blur.
+ *
+ * Schema decisions:
+ *   - --bg: #000000; --surface: #1a1a1a (dark card surface);
+ *     --surface-warm: #030303 (the rarely-used third-tier dark, an
+ *     "even darker" panel surface — this brand does not have a warm
+ *     temperature, so the B-slot reads as a parallel cool tier).
+ *   - --fg: #ffffff; --fg-2: #e9ecf2 (Cool Cloud — alt heading tone);
+ *     --muted: #767d88 (Cool Slate); --meta: #7d848e (Mid Slate).
+ *   - --border: #27272a (Border Dark); --border-soft: #1a1a1a (row
+ *     separator that blends into the dark surface — "barely visible
+ *     containment", per DESIGN.md §4).
+ *   - --accent: #ffffff. Runway has no decorative accent color; the
+ *     highest-signal surface in the system is pure white against
+ *     black. Hover/active states dim toward Cool Cloud / Cool Silver
+ *     rather than mixing in a hue.
+ *   - --font-display / --font-body bind to abcNormal — DESIGN.md §3
+ *     mandates a single typeface; Inter / DM Sans are documented
+ *     external substitutes for the custom face.
+ *   - --tracking-display: -0.025em (-1.2px at 48px hero per
+ *     DESIGN.md §3 hierarchy table).
+ *   - --leading-tight: 1.0 (film-title compression on display sizes);
+ *     --leading-body: 1.4 (mid-range of the documented 1.30–1.50
+ *     band — body text stays editorial-tight, never magazine-loose).
+ *   - --section-y-desktop: 78px ("cinema-grade breathing" — the
+ *     largest discrete step on the documented spacing scale).
+ *   - --radius-sm: 4px (sharp / button); --radius-md: 8px (card,
+ *     image); --radius-lg: 16px (alert containers only — DESIGN.md §4).
+ *   - --elev-raised: none. The brand do/don't is explicit: zero
+ *     shadows. We override the schema's blur fallback so any
+ *     component that reaches for `var(--elev-raised)` produces no
+ *     shadow, preserving the cinematic flat-vs-photographic depth
+ *     model. --elev-ring stays available for the "alert container"
+ *     case where a hairline ring substitutes for a border.
+ *   - --container-max: 1600px (cinema-wide, per DESIGN.md §5 grid).
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface (3 levels) ──────────────────────────────────────────
+   * Dark-dominant. The canvas is true black; cards lift onto Dark
+   * Surface (#1a1a1a) without a shadow or border. --surface-warm is
+   * the schema's B-slot for a tertiary tier; runway has no warm
+   * temperature, so we bind it to Deep Black (#030303) — a parallel
+   * "even darker" panel used for layered dark containers. */
+  --bg:           #000000;             /* Runway Black — primary canvas */
+  --surface:      #1a1a1a;             /* Dark Surface — card / lifted container */
+  --surface-warm: #030303;             /* Deep Black — third-tier layered panel */
+
+  /* ─── Foreground (4 levels) ───────────────────────────────────────
+   * Pure white anchors the ramp; Cool Cloud is a near-imperceptible
+   * alt for headings; the muted / meta tiers are the brand's
+   * signature cool-blue grays (never warm). */
+  --fg:    #ffffff;                    /* Pure White — primary type, brand mark */
+  --fg-2:  #e9ecf2;                    /* Cool Cloud — alt heading tone */
+  --muted: #767d88;                    /* Cool Slate — secondary body text */
+  --meta:  #7d848e;                    /* Mid Slate — tertiary, metadata */
+
+  /* ─── Border (2 levels) ───────────────────────────────────────────
+   * Per DESIGN.md §4: "barely visible containment". --border is the
+   * single dark-mode border value; --border-soft blends almost into
+   * the card surface so row separators do not visually compete. */
+  --border:      #27272a;              /* Border Dark — alert / standard edge */
+  --border-soft: #1a1a1a;              /* matches surface — inner row separator */
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * Runway has no decorative color — DESIGN.md §2 is explicit ("None
+   * in the interface. Visual richness comes entirely from
+   * photographic content"). Pure white IS the brand's high-signal
+   * accent, used on CTA fills and the focus ring. Hover/active dim
+   * toward the cool-silver neutrals rather than mixing in any hue. */
+  --accent:        #ffffff;            /* Pure White — sole interface accent */
+  --accent-on:     #000000;            /* black type on white CTA fill */
+  --accent-hover:  #e9ecf2;            /* Cool Cloud — hover dim */
+  --accent-active: #c9ccd1;            /* Cool Silver — pressed dim */
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * Runway's UI does not surface state colors in its public surface;
+   * we inherit the schema defaults so any utility/admin chrome the
+   * fixture spawns still resolves. Keep semantic coverage <5% of any
+   * surface — this is not a brand color tier. */
+  --success: #16a34a;
+  --warn:    #eab308;
+  --danger:  #dc2626;
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * Single typeface commitment. DESIGN.md §3: "abcNormal handles
+   * every text role." We list the documented external substitutes
+   * (Inter, DM Sans) as the next layer of the fallback chain so the
+   * fixture renders predictably on machines without the custom face. */
+  --font-display: "abcNormal", "abcNormal Fallback", "Inter", "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-body:    "abcNormal", "abcNormal Fallback", "Inter", "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono:    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale — direct map of DESIGN.md §3 hierarchy table.
+   *   11px micro/tag (uppercase, weight 450) → --text-xs
+   *   13px small description                 → --text-sm
+   *   16px body / button                     → --text-base
+   *   20px feature title                     → --text-lg
+   *   24px card title                        → --text-xl
+   *   36px sub-heading                       → --text-2xl
+   *   40px section heading                   → --text-3xl
+   *   48px display / hero                    → --text-4xl */
+  --text-xs:   11px;
+  --text-sm:   13px;
+  --text-base: 16px;
+  --text-lg:   20px;
+  --text-xl:   24px;
+  --text-2xl:  36px;
+  --text-3xl:  40px;
+  --text-4xl:  48px;
+
+  /* Leading + tracking.
+   *   --leading-tight: 1.0 → film-title compression on display sizes.
+   *   --leading-body: 1.4 → mid-range of DESIGN.md's documented
+   *     1.30–1.50 body band; intentionally editorial-tight.
+   *   --tracking-display: -0.025em → -1.2px at 48px hero per
+   *     DESIGN.md §3 hierarchy table. */
+  --leading-body:     1.4;
+  --leading-tight:    1.0;
+  --tracking-display: -0.025em;
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * 8px base unit per DESIGN.md §5 — the schema's 4px-grid scale
+   * maps cleanly. Runway's documented scale (4/6/8/12/16/20/24/28/
+   * 32/48/64/78) lands on every required step except 6/28/64/78,
+   * which live inline in components (no token name needed). */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-12: 48px;
+
+  /* Section rhythm — "cinema-grade breathing". 78px on desktop is
+   * the largest discrete step on the documented scale, creating the
+   * scrolling-between-scenes pacing called out in DESIGN.md §5. */
+  --section-y-desktop: 78px;
+  --section-y-tablet:  48px;
+  --section-y-phone:   32px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * DESIGN.md §5 documents four tiers: 4px sharp (buttons), 6–8px
+   * comfortable (containers/images), 16px generous (alerts). The
+   * pill tier is preserved at the schema default — Runway forbids
+   * pill-shaped UI ("Don't use pill-shaped radius"), so the token
+   * exists purely so cross-brand components resolve cleanly. */
+  --radius-sm:   4px;
+  --radius-md:   8px;
+  --radius-lg:   16px;
+  --radius-pill: 9999px;
+
+  /* ─── Elevation ───────────────────────────────────────────────────
+   * DESIGN.md §6 is explicit: "Runway uses zero shadows." We honor
+   * that by overriding --elev-raised to `none` (depth comes from
+   * dark/light section alternation and photographic depth of field,
+   * never from CSS blur). --elev-ring remains as a hairline ring so
+   * the documented "alert container" case still has a treatment. */
+  --elev-flat:   none;
+  --elev-ring:   0 0 0 1px var(--border);
+  --elev-raised: none;
+
+  /* ─── Focus ───────────────────────────────────────────────────────
+   * White ring on dark canvas — the only chromatic affordance the
+   * brand permits. 60% transparency keeps the ring readable without
+   * looking like a fill. */
+  --focus-ring: 0 0 0 2px color-mix(in oklab, var(--accent), transparent 60%);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * Slightly slower base than the schema default — cinematic pacing
+   * favors deliberate state changes over instant snap. Easing stays
+   * on the standard curve so micro-interactions still feel
+   * mechanical-precise rather than springy. */
+  --motion-fast:   150ms;
+  --motion-base:   220ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * Cinema-wide container — DESIGN.md §5: "up to 1600px". Gutters
+   * progressively shrink from 48px desktop → 16px phone so the
+   * full-bleed photography hero can stay edge-to-edge. */
+  --container-max:            1600px;
+  --container-gutter-desktop: 48px;
+  --container-gutter-tablet:  24px;
+  --container-gutter-phone:   16px;
+}
