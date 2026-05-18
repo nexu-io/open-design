@@ -316,6 +316,23 @@ export async function buildDeployFilePlan(projectsRoot: string, projectId: strin
         pending.push({ ref, base: cssBase });
       }
     }
+
+    if (/\.html?$/i.test(safePath)) {
+      // Transitively walk references inside a sibling HTML page.
+      // Without this, multi-page designs would deploy the sub-page
+      // markup but miss its CSS / JS / image dependencies (which may
+      // differ from the entry page's references). `visited` guards
+      // against cycles, and the deeper sibling-of-sibling links keep
+      // resolving through this same loop.
+      const htmlBase = path.posix.dirname(safePath);
+      const htmlSource = projectFile.buffer.toString('utf8');
+      for (const ref of extractHtmlReferences(htmlSource)) {
+        pending.push({ ref, base: htmlBase });
+      }
+      for (const ref of extractInlineCssReferences(htmlSource)) {
+        pending.push({ ref, base: htmlBase });
+      }
+    }
   }
 
   return {
@@ -1563,18 +1580,41 @@ function rewriteHtmlAttributes(rawAttrs: string, tagName: string, attrs: Map<str
 }
 
 function shouldCollectHref(tagName: string, attrs: Map<string, string>) {
-  if (tagName !== 'link') return false;
-  const rel = String(attrs.get('rel') || '').toLowerCase();
-  if (!rel) return false;
-  return rel.split(/\s+/).some((item) => (
-    item === 'stylesheet' ||
-    item === 'icon' ||
-    item === 'apple-touch-icon' ||
-    item === 'manifest' ||
-    item === 'preload' ||
-    item === 'modulepreload' ||
-    item === 'prefetch'
-  ));
+  if (tagName === 'link') {
+    const rel = String(attrs.get('rel') || '').toLowerCase();
+    if (!rel) return false;
+    return rel.split(/\s+/).some((item) => (
+      item === 'stylesheet' ||
+      item === 'icon' ||
+      item === 'apple-touch-icon' ||
+      item === 'manifest' ||
+      item === 'preload' ||
+      item === 'modulepreload' ||
+      item === 'prefetch'
+    ));
+  }
+  if (tagName === 'a') {
+    // Follow same-origin relative navigation to a sibling HTML page.
+    // Multi-page designs (admin consoles, decks with separate
+    // sub-pages, knowledge bases) declare their pages via these
+    // links, and without following them the deploy plan ships only
+    // the entry page — Cloudflare Pages then serves index.html as a
+    // SPA fallback for every other path, so every sidebar click looks
+    // like a no-op even though the link is correct.
+    //
+    // Strictly local references only: skip protocol URLs (`https:`,
+    // `mailto:`, `tel:`, `javascript:`), scheme-relative URLs (`//cdn`),
+    // hash anchors (`#section`), and non-HTML targets so external
+    // resources and SPA fragments don't get pulled into the deploy
+    // plan.
+    const href = String(attrs.get('href') || '');
+    if (!href) return false;
+    if (/^[a-z][a-z0-9+.-]*:/i.test(href)) return false;
+    if (href.startsWith('//')) return false;
+    if (href.startsWith('#')) return false;
+    return /\.html?(?:[?#]|$)/i.test(href);
+  }
+  return false;
 }
 
 function rewriteHtmlReference(raw: string, baseDir: string) {

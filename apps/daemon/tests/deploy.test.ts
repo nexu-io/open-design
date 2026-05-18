@@ -647,6 +647,66 @@ describe('deploy plan and analyzer', () => {
     expect(plan.invalid).toEqual([]);
   });
 
+  it('follows sidebar anchor links to sibling .html pages so multi-page admin designs ship complete', async () => {
+    // Reproduces the upstream user report: a generated admin console
+    // with a sidebar of <a href="dashboard.html">…</a> links deployed
+    // only the entry page. Every other sidebar click resolved to the
+    // host's SPA fallback (index.html) so the UI looked frozen.
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await writeFile(
+      path.join(dir, 'index.html'),
+      [
+        '<!doctype html><meta name="viewport" content="width=device-width">',
+        '<aside class="sidebar">',
+        '  <a href="index.html">Overview</a>',
+        '  <a href="dashboard.html">Dashboard</a>',
+        '  <a href="users.html">Users</a>',
+        '  <a href="https://example.com/external">External</a>',  // not collected
+        '  <a href="mailto:hi@example.com">Mail</a>',              // not collected
+        '  <a href="#section">In-page</a>',                        // not collected
+        '</aside>',
+      ].join('\n'),
+    );
+    await writeFile(path.join(dir, 'dashboard.html'), '<!doctype html><h1>Dashboard</h1>');
+    await writeFile(path.join(dir, 'users.html'), '<!doctype html><h1>Users</h1>');
+
+    const plan = await buildDeployFilePlan(projectsRoot, projectId, 'index.html');
+    const filenames = plan.files.map((f) => f.file).sort();
+    expect(filenames).toContain('dashboard.html');
+    expect(filenames).toContain('users.html');
+    expect(plan.missing).toEqual([]);
+    expect(plan.invalid).toEqual([]);
+  });
+
+  it('transitively follows references inside sibling .html pages', async () => {
+    // A sibling page can pull in its own CSS / image / further sibling
+    // pages; those should land in the deploy plan too, otherwise the
+    // sibling renders unstyled or missing assets.
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await writeFile(
+      path.join(dir, 'index.html'),
+      '<!doctype html><a href="dashboard.html">D</a>',
+    );
+    await writeFile(
+      path.join(dir, 'dashboard.html'),
+      '<!doctype html><link rel="stylesheet" href="assets/dashboard.css"><img src="assets/logo.png"><a href="reports.html">R</a>',
+    );
+    await writeFile(path.join(dir, 'reports.html'), '<!doctype html><h1>Reports</h1>');
+    await writeFile(path.join(dir, 'assets'), '');
+    // overwrite the placeholder with a real directory
+    await import('node:fs/promises').then((m) => m.rm(path.join(dir, 'assets')));
+    await import('node:fs/promises').then((m) => m.mkdir(path.join(dir, 'assets')));
+    await writeFile(path.join(dir, 'assets/dashboard.css'), 'body { background: #fff }');
+    await writeFile(path.join(dir, 'assets/logo.png'), 'fake-png');
+
+    const plan = await buildDeployFilePlan(projectsRoot, projectId, 'index.html');
+    const filenames = plan.files.map((f) => f.file).sort();
+    expect(filenames).toContain('dashboard.html');
+    expect(filenames).toContain('reports.html');
+    expect(filenames).toContain('assets/dashboard.css');
+    expect(filenames).toContain('assets/logo.png');
+  });
+
   it('flags missing assets as broken-reference warnings', () => {
     const { warnings } = analyzeDeployPlan({
       entryPath: 'index.html',
