@@ -5216,6 +5216,25 @@ export async function startServer({
       if (!(resolved + path.sep).startsWith(root) && resolved !== path.resolve(plugin.fsPath)) {
         return res.status(400).json({ error: 'asset escape rejected' });
       }
+      let stat;
+      try {
+        stat = await fsp.lstat(resolved);
+      } catch {
+        return res.status(404).json({ error: 'asset not found' });
+      }
+      if (stat.isSymbolicLink()) {
+        return res.status(404).json({ error: 'asset not found' });
+      }
+      try {
+        const rootReal = await fsp.realpath(plugin.fsPath);
+        const resolvedReal = await fsp.realpath(resolved);
+        const rootRealWithSep = rootReal.endsWith(path.sep) ? rootReal : `${rootReal}${path.sep}`;
+        if (resolvedReal !== rootReal && !resolvedReal.startsWith(rootRealWithSep)) {
+          return res.status(400).json({ error: 'asset escape rejected' });
+        }
+      } catch {
+        return res.status(404).json({ error: 'asset not found' });
+      }
       let buf;
       try {
         buf = await fsp.readFile(resolved);
