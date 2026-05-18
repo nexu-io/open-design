@@ -9,7 +9,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
   const { PROJECTS_DIR } = ctx.paths;
   const { randomUUID } = ctx.ids;
   const { getProject } = ctx.projectStore;
-  const { VERCEL_PROVIDER_ID, CLOUDFLARE_PAGES_PROVIDER_ID, isDeployProviderId, publicDeployConfigForProvider, readDeployConfig, writeDeployConfig, listCloudflarePagesZones, DeployError, listDeployments, publicDeployments, getDeployment, buildDeployFileSet, cloudflarePagesProjectNameForDeploy, deployToCloudflarePages, deployToVercel, upsertDeployment, publicDeployment, cloudflarePagesDeploymentMetadata, prepareDeployPreflight } = ctx.deploy;
+  const { VERCEL_PROVIDER_ID, CLOUDFLARE_PAGES_PROVIDER_ID, COOLIFY_PROVIDER_ID, isDeployProviderId, publicDeployConfigForProvider, readDeployConfig, writeDeployConfig, listCloudflarePagesZones, DeployError, listDeployments, publicDeployments, getDeployment, buildDeployFileSet, cloudflarePagesProjectNameForDeploy, deployToCloudflarePages, deployToVercel, deployCoolify, upsertDeployment, publicDeployment, cloudflarePagesDeploymentMetadata, prepareDeployPreflight } = ctx.deploy;
   // ---- Deploy --------------------------------------------------------------
 
   app.get('/api/deploy/config', async (req, res) => {
@@ -96,22 +96,32 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         providerId === CLOUDFLARE_PAGES_PROVIDER_ID
           ? cloudflarePagesProjectNameForDeploy(db, req.params.id, project?.name, prior)
           : '';
-      const result = providerId === CLOUDFLARE_PAGES_PROVIDER_ID
-        ? await deployToCloudflarePages({
-            config: {
-              ...await readDeployConfig(CLOUDFLARE_PAGES_PROVIDER_ID),
-              projectName: cloudflarePagesProjectName,
-            },
-            files,
-            projectId: req.params.id,
-            cloudflarePages,
-            priorMetadata: prior?.providerMetadata,
-          })
-        : await deployToVercel({
-            config: await readDeployConfig(VERCEL_PROVIDER_ID),
-            files,
-            projectId: req.params.id,
-          });
+      let result: { url: string; deploymentId?: string; status?: string; statusMessage?: string; reachableAt?: number; cloudflarePages?: unknown; providerMetadata?: unknown };
+      if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) {
+        result = await deployToCloudflarePages({
+          config: {
+            ...await readDeployConfig(CLOUDFLARE_PAGES_PROVIDER_ID),
+            projectName: cloudflarePagesProjectName,
+          },
+          files,
+          projectId: req.params.id,
+          cloudflarePages,
+          priorMetadata: prior?.providerMetadata,
+        });
+      } else if (providerId === COOLIFY_PROVIDER_ID) {
+        result = await deployCoolify({
+          config: await readDeployConfig(COOLIFY_PROVIDER_ID),
+          files,
+          projectId: req.params.id,
+          projectTitle: project?.name ?? req.params.id,
+        });
+      } else {
+        result = await deployToVercel({
+          config: await readDeployConfig(VERCEL_PROVIDER_ID),
+          files,
+          projectId: req.params.id,
+        });
+      }
       const now = Date.now();
       /** @type {import('@open-design/contracts').DeployProjectFileResponse} */
       const body = upsertDeployment(db, {

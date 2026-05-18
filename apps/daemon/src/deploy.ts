@@ -1,19 +1,34 @@
 import fs from 'node:fs';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { execFile as execFileCb } from 'node:child_process';
+import { promisify } from 'node:util';
 import { randomUUID } from 'node:crypto';
 import { hash as blake3Hash } from 'blake3-wasm';
 import { readProjectFile, validateProjectPath } from './projects.js';
 
 export const VERCEL_PROVIDER_ID = 'vercel-self';
 export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
+export const COOLIFY_PROVIDER_ID = 'coolify';
 export const SAVED_TOKEN_MASK = 'saved-vercel-token';
 export const SAVED_CLOUDFLARE_TOKEN_MASK = 'saved-cloudflare-token';
+export const SAVED_COOLIFY_TOKEN_MASK = 'saved-coolify-token';
+
+const execFile = promisify(execFileCb);
 
 type JsonObject = Record<string, any>;
-type DeployProviderId = typeof VERCEL_PROVIDER_ID | typeof CLOUDFLARE_PAGES_PROVIDER_ID;
+type DeployProviderId = typeof VERCEL_PROVIDER_ID | typeof CLOUDFLARE_PAGES_PROVIDER_ID | typeof COOLIFY_PROVIDER_ID;
 type DeployErrorDetails = JsonObject | string | undefined;
+type CoolifyInternalConfig = {
+  instanceUrl: string;
+  appUuid: string;
+  serverUuid: string;
+  projectUuid: string;
+  githubRepo: string;
+  branch: string;
+  publicRepo: boolean;
+};
 type DeployConfig = {
   token: string;
   teamId?: string | undefined;
@@ -21,6 +36,7 @@ type DeployConfig = {
   accountId?: string | undefined;
   projectName?: string | undefined;
   cloudflarePages?: CloudflarePagesConfigHints | undefined;
+  coolify?: CoolifyInternalConfig | undefined;
 };
 type CloudflarePagesConfigHints = {
   lastZoneId?: string;
@@ -70,7 +86,9 @@ export class DeployError extends Error {
 
 export function deployConfigPath(providerId: DeployProviderId = VERCEL_PROVIDER_ID) {
   const base = process.env.OD_USER_STATE_DIR || path.join(os.homedir(), '.open-design');
-  return path.join(base, providerId === CLOUDFLARE_PAGES_PROVIDER_ID ? 'cloudflare-pages.json' : 'vercel.json');
+  if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return path.join(base, 'cloudflare-pages.json');
+  if (providerId === COOLIFY_PROVIDER_ID) return path.join(base, 'coolify.json');
+  return path.join(base, 'vercel.json');
 }
 
 export async function readVercelConfig(): Promise<DeployConfig> {
@@ -180,23 +198,97 @@ export function publicCloudflarePagesConfig(config: Partial<DeployConfig>) {
   return body;
 }
 
+export async function readCoolifyConfig(): Promise<DeployConfig> {
+  try {
+    const raw = await readFile(deployConfigPath(COOLIFY_PROVIDER_ID), 'utf8');
+    const parsed = JSON.parse(raw);
+    const c = parsed.coolify && typeof parsed.coolify === 'object' ? parsed.coolify : {};
+    return {
+      token: typeof parsed.token === 'string' ? parsed.token : '',
+      coolify: {
+        instanceUrl: typeof c.instanceUrl === 'string' ? c.instanceUrl : '',
+        appUuid: typeof c.appUuid === 'string' ? c.appUuid : '',
+        serverUuid: typeof c.serverUuid === 'string' ? c.serverUuid : '',
+        projectUuid: typeof c.projectUuid === 'string' ? c.projectUuid : '',
+        githubRepo: typeof c.githubRepo === 'string' ? c.githubRepo : '',
+        branch: typeof c.branch === 'string' ? c.branch : 'main',
+        publicRepo: typeof c.publicRepo === 'boolean' ? c.publicRepo : false,
+      },
+    };
+  } catch (err) {
+    if (isErrnoException(err) && err.code === 'ENOENT') {
+      return {
+        token: '',
+        coolify: { instanceUrl: '', appUuid: '', serverUuid: '', projectUuid: '', githubRepo: '', branch: 'main', publicRepo: false },
+      };
+    }
+    throw err;
+  }
+}
+
+export async function writeCoolifyConfig(input: Partial<DeployConfig>) {
+  const current = await readCoolifyConfig();
+  const tokenInput = typeof input?.token === 'string' ? input.token.trim() : '';
+  const ci = input.coolify;
+  const cc = current.coolify!;
+  const next: DeployConfig = {
+    token: tokenInput && tokenInput !== SAVED_COOLIFY_TOKEN_MASK ? tokenInput : current.token,
+    coolify: {
+      instanceUrl: ci?.instanceUrl !== undefined ? ci.instanceUrl.trim() : cc.instanceUrl,
+      appUuid: ci?.appUuid !== undefined ? ci.appUuid.trim() : cc.appUuid,
+      serverUuid: ci?.serverUuid !== undefined ? ci.serverUuid.trim() : cc.serverUuid,
+      projectUuid: ci?.projectUuid !== undefined ? ci.projectUuid.trim() : cc.projectUuid,
+      githubRepo: ci?.githubRepo !== undefined ? ci.githubRepo.trim() : cc.githubRepo,
+      branch: ci?.branch !== undefined ? (ci.branch.trim() || 'main') : cc.branch,
+      publicRepo: ci?.publicRepo !== undefined ? ci.publicRepo : cc.publicRepo,
+    },
+  };
+  if (!next.token) throw new DeployError('Coolify API token is required.', 400);
+  await writeDeployConfigFile(deployConfigPath(COOLIFY_PROVIDER_ID), next);
+  return publicCoolifyConfig(next);
+}
+
+export function publicCoolifyConfig(config: Partial<DeployConfig>) {
+  const c = config.coolify;
+  return {
+    providerId: COOLIFY_PROVIDER_ID,
+    configured: Boolean(config.token && c?.instanceUrl && c?.serverUuid && c?.projectUuid),
+    tokenMask: config.token ? SAVED_COOLIFY_TOKEN_MASK : '',
+    teamId: '',
+    teamSlug: '',
+    target: 'preview' as const,
+    coolify: {
+      instanceUrl: c?.instanceUrl ?? '',
+      appUuid: c?.appUuid ?? '',
+      serverUuid: c?.serverUuid ?? '',
+      projectUuid: c?.projectUuid ?? '',
+      githubRepo: c?.githubRepo ?? '',
+      branch: c?.branch ?? 'main',
+      publicRepo: c?.publicRepo ?? false,
+    },
+  };
+}
+
 export async function readDeployConfig(providerId: DeployProviderId = VERCEL_PROVIDER_ID) {
   if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return readCloudflarePagesConfig();
+  if (providerId === COOLIFY_PROVIDER_ID) return readCoolifyConfig();
   return readVercelConfig();
 }
 
 export async function writeDeployConfig(providerId: DeployProviderId = VERCEL_PROVIDER_ID, input: Partial<DeployConfig> = {}) {
   if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return writeCloudflarePagesConfig(input);
+  if (providerId === COOLIFY_PROVIDER_ID) return writeCoolifyConfig(input);
   return writeVercelConfig(input);
 }
 
 export function publicDeployConfigForProvider(providerId: DeployProviderId = VERCEL_PROVIDER_ID, config: Partial<DeployConfig> = {}) {
   if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return publicCloudflarePagesConfig(config);
+  if (providerId === COOLIFY_PROVIDER_ID) return publicCoolifyConfig(config);
   return publicDeployConfig(config);
 }
 
 export function isDeployProviderId(value: unknown): value is DeployProviderId {
-  return value === VERCEL_PROVIDER_ID || value === CLOUDFLARE_PAGES_PROVIDER_ID;
+  return value === VERCEL_PROVIDER_ID || value === CLOUDFLARE_PAGES_PROVIDER_ID || value === COOLIFY_PROVIDER_ID;
 }
 
 function normalizeCloudflarePagesConfigHints(input: unknown, fallback: CloudflarePagesConfigHints = {}): CloudflarePagesConfigHints {
@@ -1955,4 +2047,219 @@ function safeProjectLabel(raw: unknown, maxLength: number) {
     .replace(/^-+|-+$/g, '')
     .slice(0, maxLength)
     .replace(/-+$/g, '');
+}
+
+// ---- Coolify ----------------------------------------------------------------
+
+async function checkGhAuth(): Promise<void> {
+  try {
+    await execFile('gh', ['auth', 'status', '--hostname', 'github.com'], { timeout: 10_000 });
+  } catch {
+    throw new DeployError('GitHub CLI (gh) is not authenticated. Run: gh auth login', 400);
+  }
+}
+
+function generateGithubRepoName(projectTitle: string): string {
+  const base = projectTitle
+    .normalize('NFKD')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  const named = `od-${base}`.slice(0, 40).replace(/-+$/g, '');
+  return named.length > 3 ? named : 'od-project';
+}
+
+async function ensureGithubRepo(repoName: string, publicRepo: boolean): Promise<string> {
+  try {
+    await execFile('gh', ['repo', 'view', repoName, '--json', 'name'], { timeout: 30_000 });
+    return repoName;
+  } catch {
+    // Repo does not exist — create it.
+  }
+  const visibility = publicRepo ? '--public' : '--private';
+  let created: string;
+  try {
+    const { stdout } = await execFile(
+      'gh',
+      ['repo', 'create', repoName, visibility, '--description', 'Open Design deployment repo'],
+      { timeout: 30_000 },
+    );
+    // gh repo create outputs the full URL, e.g. https://github.com/owner/repo
+    const match = stdout.trim().match(/github\.com\/([^/\s]+\/[^/\s]+)/);
+    created = match?.[1] ?? repoName;
+  } catch (err) {
+    throw new DeployError(`Failed to create GitHub repository: ${errorMessage(err, 'unknown error')}`, 502);
+  }
+  return created;
+}
+
+async function pushFilesToGithub(
+  repo: string,
+  branch: string,
+  files: DeployFile[],
+  tmpDir: string,
+): Promise<void> {
+  let isNewRepo = false;
+  try {
+    await execFile(
+      'gh',
+      ['repo', 'clone', repo, tmpDir, '--', '--depth=1', `--branch=${branch}`],
+      { timeout: 60_000 },
+    );
+  } catch {
+    isNewRepo = true;
+    await execFile('git', ['init', tmpDir], { timeout: 10_000 });
+    await execFile('git', ['-C', tmpDir, 'remote', 'add', 'origin', `https://github.com/${repo}.git`], { timeout: 10_000 });
+  }
+
+  // Clear existing files, preserving .git
+  const entries = await readdir(tmpDir);
+  for (const entry of entries) {
+    if (entry === '.git') continue;
+    await rm(path.join(tmpDir, entry), { recursive: true, force: true });
+  }
+
+  // Write deploy files
+  for (const file of files) {
+    const dest = path.join(tmpDir, file.file);
+    await mkdir(path.dirname(dest), { recursive: true });
+    await writeFile(dest, Buffer.from(file.data as Buffer));
+  }
+
+  await execFile('git', ['-C', tmpDir, 'add', '-A'], { timeout: 30_000 });
+  await execFile('git', ['-C', tmpDir, 'commit', '-m', `od: deploy ${new Date().toISOString()}`], { timeout: 30_000 });
+
+  if (isNewRepo) {
+    await execFile('git', ['-C', tmpDir, 'push', '--set-upstream', 'origin', branch], { timeout: 60_000 });
+  } else {
+    await execFile('git', ['-C', tmpDir, 'push', 'origin', branch], { timeout: 60_000 });
+  }
+}
+
+async function createCoolifyApplication(coolify: CoolifyInternalConfig, token: string): Promise<string> {
+  const repoShortName = coolify.githubRepo.split('/').pop() || coolify.githubRepo;
+  const resp = await fetch(`${coolify.instanceUrl}/api/v1/applications/public`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      project_uuid: coolify.projectUuid,
+      server_uuid: coolify.serverUuid,
+      environment_name: 'production',
+      name: `od-${repoShortName}`,
+      git_repository: `https://github.com/${coolify.githubRepo}.git`,
+      git_branch: coolify.branch || 'main',
+      build_pack: 'nixpacks',
+      ports_exposes: '80',
+      publish_directory: '/',
+      instant_deploy: false,
+    }),
+  });
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '');
+    throw new DeployError(`Coolify application creation failed: ${text || resp.statusText}`, resp.status);
+  }
+  const json = await resp.json() as { uuid?: string };
+  if (!json.uuid) throw new DeployError('Coolify application creation did not return a UUID.', 502);
+  return json.uuid;
+}
+
+async function triggerCoolifyDeploy(instanceUrl: string, token: string, appUuid: string): Promise<string> {
+  const resp = await fetch(`${instanceUrl}/api/v1/applications/${encodeURIComponent(appUuid)}/start`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '');
+    throw new DeployError(`Coolify deploy trigger failed: ${text || resp.statusText}`, resp.status);
+  }
+  const json = await resp.json() as { deployment_uuid?: string };
+  if (!json.deployment_uuid) throw new DeployError('Coolify deploy did not return a deployment UUID.', 502);
+  return json.deployment_uuid;
+}
+
+async function pollCoolifyDeployment(instanceUrl: string, token: string, deploymentUuid: string): Promise<void> {
+  const MAX_RETRIES = 60;
+  const POLL_INTERVAL = 3_000;
+  for (let i = 0; i < MAX_RETRIES; i++) {
+    if (i > 0) await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL));
+    let json: { status?: string };
+    try {
+      const resp = await fetch(`${instanceUrl}/api/v1/deployments/${encodeURIComponent(deploymentUuid)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) continue;
+      json = await resp.json() as { status?: string };
+    } catch {
+      continue;
+    }
+    const status = json.status;
+    if (status === 'finished') return;
+    if (status === 'failed') throw new DeployError('Coolify deployment failed.', 502);
+    if (status === 'cancelled') throw new DeployError('Coolify deployment was cancelled.', 502);
+  }
+  throw new DeployError('Coolify deployment timed out after 3 minutes.', 504);
+}
+
+async function resolveCoolifyUrl(instanceUrl: string, token: string, appUuid: string): Promise<string> {
+  try {
+    const resp = await fetch(`${instanceUrl}/api/v1/applications/${encodeURIComponent(appUuid)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!resp.ok) return `${instanceUrl}/dashboard`;
+    const json = await resp.json() as { fqdn?: string };
+    const fqdn = typeof json.fqdn === 'string' ? json.fqdn.trim() : '';
+    if (!fqdn) return `${instanceUrl}/dashboard`;
+    return /^https?:\/\//i.test(fqdn) ? fqdn : `https://${fqdn}`;
+  } catch {
+    return `${instanceUrl}/dashboard`;
+  }
+}
+
+export async function deployCoolify({
+  config,
+  files,
+  projectId,
+  projectTitle,
+}: {
+  config: DeployConfig;
+  files: DeployFile[];
+  projectId: string;
+  projectTitle: string;
+}): Promise<{ url: string; deploymentId: string; status: 'ready'; statusMessage: string }> {
+  if (!config.token) throw new DeployError('Coolify API token is required.', 400);
+  const coolify = config.coolify;
+  if (!coolify?.instanceUrl) throw new DeployError('Coolify instance URL is required.', 400);
+  if (!coolify.serverUuid) throw new DeployError('Coolify server UUID is required.', 400);
+  if (!coolify.projectUuid) throw new DeployError('Coolify project UUID is required.', 400);
+
+  await checkGhAuth();
+
+  // Resolve GitHub repo — auto-create on first deploy
+  let githubRepo = coolify.githubRepo?.trim() || '';
+  if (!githubRepo) {
+    const repoName = generateGithubRepoName(projectTitle || projectId);
+    githubRepo = await ensureGithubRepo(repoName, coolify.publicRepo ?? false);
+    await writeCoolifyConfig({ coolify: { ...coolify, githubRepo } });
+  }
+
+  // Push static files to GitHub
+  const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'od-coolify-'));
+  try {
+    await pushFilesToGithub(githubRepo, coolify.branch || 'main', files, tmpDir);
+  } finally {
+    await rm(tmpDir, { recursive: true, force: true });
+  }
+
+  // Resolve Coolify application — auto-create on first deploy
+  let appUuid = coolify.appUuid?.trim() || '';
+  if (!appUuid) {
+    appUuid = await createCoolifyApplication({ ...coolify, githubRepo }, config.token);
+    await writeCoolifyConfig({ coolify: { ...coolify, githubRepo, appUuid } });
+  }
+
+  const deploymentUuid = await triggerCoolifyDeploy(coolify.instanceUrl, config.token, appUuid);
+  await pollCoolifyDeployment(coolify.instanceUrl, config.token, deploymentUuid);
+  const url = await resolveCoolifyUrl(coolify.instanceUrl, config.token, appUuid);
+
+  return { url, deploymentId: deploymentUuid, status: 'ready', statusMessage: 'Deployed to Coolify.' };
 }

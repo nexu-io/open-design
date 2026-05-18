@@ -46,12 +46,24 @@ import type { ArtifactManifest } from '../artifacts/types';
 
 export const DEFAULT_DEPLOY_PROVIDER_ID = 'vercel-self';
 export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
+export const COOLIFY_PROVIDER_ID = 'coolify';
 export const DEPLOY_PROVIDER_IDS = [
   DEFAULT_DEPLOY_PROVIDER_ID,
   CLOUDFLARE_PAGES_PROVIDER_ID,
+  COOLIFY_PROVIDER_ID,
 ] as const;
 
 export type WebDeployProviderId = (typeof DEPLOY_PROVIDER_IDS)[number];
+
+export type WebCoolifyConfigHints = {
+  instanceUrl?: string;
+  appUuid?: string;
+  serverUuid?: string;
+  projectUuid?: string;
+  githubRepo?: string;
+  branch?: string;
+  publicRepo?: boolean;
+};
 
 export type WebDeployConfigResponse = DeployConfigResponse;
 export type WebUpdateDeployConfigRequest = UpdateDeployConfigRequest;

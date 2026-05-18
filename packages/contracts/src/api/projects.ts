@@ -248,7 +248,7 @@ export interface MessagesResponse {
   messages: ChatMessage[];
 }
 
-export type DeployProviderId = 'vercel-self' | 'cloudflare-pages';
+export type DeployProviderId = 'vercel-self' | 'cloudflare-pages' | 'coolify';
 export type DeploymentStatus =
   | 'deploying'
   | 'preparing-link'
@@ -256,6 +256,16 @@ export type DeploymentStatus =
   | 'link-delayed'
   | 'protected'
   | 'failed';
+
+export interface CoolifyConfigHints {
+  instanceUrl?: string;
+  appUuid?: string;
+  serverUuid?: string;
+  projectUuid?: string;
+  githubRepo?: string;
+  branch?: string;
+  publicRepo?: boolean;
+}
 
 export interface CloudflarePagesConfigHints {
   lastZoneId?: string;
@@ -352,6 +362,7 @@ export interface DeployConfigResponse {
   accountId?: string;
   projectName?: string;
   cloudflarePages?: CloudflarePagesConfigHints;
+  coolify?: CoolifyConfigHints;
   target: 'preview';
 }
 
@@ -363,6 +374,7 @@ export interface UpdateDeployConfigRequest {
   accountId?: string;
   projectName?: string;
   cloudflarePages?: CloudflarePagesConfigHints;
+  coolify?: CoolifyConfigHints;
 }
 
 export interface DeploymentInfo {

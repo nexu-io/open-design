@@ -1403,6 +1403,27 @@ export interface Dict {
   'fileViewer.deployLinkProtectedLabel': string;
   'fileViewer.deployLinkProtected': string;
   'fileViewer.retryLink': string;
+  'fileViewer.coolifyProvider': string;
+  'fileViewer.coolifyToken': string;
+  'fileViewer.coolifyTokenGetLink': string;
+  'fileViewer.coolifyTokenPlaceholder': string;
+  'fileViewer.coolifyTokenReuseHint': string;
+  'fileViewer.coolifyTokenRequired': string;
+  'fileViewer.coolifyPreviewHint': string;
+  'fileViewer.coolifyInstanceUrl': string;
+  'fileViewer.coolifyInstanceUrlRequired': string;
+  'fileViewer.coolifyServerUuid': string;
+  'fileViewer.coolifyServerUuidHint': string;
+  'fileViewer.coolifyServerUuidRequired': string;
+  'fileViewer.coolifyProjectUuid': string;
+  'fileViewer.coolifyProjectUuidHint': string;
+  'fileViewer.coolifyProjectUuidRequired': string;
+  'fileViewer.coolifyGithubRepo': string;
+  'fileViewer.coolifyGithubRepoHint': string;
+  'fileViewer.coolifyGithubRepoLocked': string;
+  'fileViewer.coolifyBranch': string;
+  'fileViewer.coolifyPublicRepo': string;
+  'fileViewer.coolifyAppUuid': string;
 
   // Question form (assistant question UX)
   'questionForm.submit': string;

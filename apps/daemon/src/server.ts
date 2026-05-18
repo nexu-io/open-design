@@ -316,8 +316,10 @@ import {
   buildDeployFileSet,
   checkDeploymentUrl,
   CLOUDFLARE_PAGES_PROVIDER_ID,
+  COOLIFY_PROVIDER_ID,
   cloudflarePagesProjectNameForProject,
   DeployError,
+  deployCoolify,
   deployToCloudflarePages,
   deployToVercel,
   isDeployProviderId,
@@ -3599,6 +3601,7 @@ export async function startServer({
   const deployDeps = {
     VERCEL_PROVIDER_ID,
     CLOUDFLARE_PAGES_PROVIDER_ID,
+    COOLIFY_PROVIDER_ID,
     isDeployProviderId,
     publicDeployConfigForProvider,
     readDeployConfig,
@@ -3616,6 +3619,7 @@ export async function startServer({
     checkDeploymentUrl,
     deployToCloudflarePages,
     deployToVercel,
+    deployCoolify,
     upsertDeployment,
     publicDeployment,
     cloudflarePagesDeploymentMetadata,
@@ -6477,22 +6481,32 @@ export async function startServer({
         providerId === CLOUDFLARE_PAGES_PROVIDER_ID
           ? cloudflarePagesProjectNameForDeploy(db, req.params.id, project?.name, prior)
           : '';
-      const result = providerId === CLOUDFLARE_PAGES_PROVIDER_ID
-        ? await deployToCloudflarePages({
-            config: {
-              ...await readDeployConfig(CLOUDFLARE_PAGES_PROVIDER_ID),
-              projectName: cloudflarePagesProjectName,
-            },
-            files,
-            projectId: req.params.id,
-            cloudflarePages,
-            priorMetadata: prior?.providerMetadata,
-          })
-        : await deployToVercel({
-            config: await readDeployConfig(VERCEL_PROVIDER_ID),
-            files,
-            projectId: req.params.id,
-          });
+      let result: { url: string; deploymentId?: string; status?: string; statusMessage?: string; reachableAt?: number; cloudflarePages?: unknown; providerMetadata?: unknown };
+      if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) {
+        result = await deployToCloudflarePages({
+          config: {
+            ...await readDeployConfig(CLOUDFLARE_PAGES_PROVIDER_ID),
+            projectName: cloudflarePagesProjectName,
+          },
+          files,
+          projectId: req.params.id,
+          cloudflarePages,
+          priorMetadata: prior?.providerMetadata,
+        });
+      } else if (providerId === COOLIFY_PROVIDER_ID) {
+        result = await deployCoolify({
+          config: await readDeployConfig(COOLIFY_PROVIDER_ID),
+          files,
+          projectId: req.params.id,
+          projectTitle: project?.name ?? req.params.id,
+        });
+      } else {
+        result = await deployToVercel({
+          config: await readDeployConfig(VERCEL_PROVIDER_ID),
+          files,
+          projectId: req.params.id,
+        });
+      }
       const now = Date.now();
       /** @type {import('@open-design/contracts').DeployProjectFileResponse} */
       const body = upsertDeployment(db, {

@@ -22,6 +22,7 @@ import {
   fetchLiveArtifactRefreshes,
   checkDeploymentLink,
   CLOUDFLARE_PAGES_PROVIDER_ID,
+  COOLIFY_PROVIDER_ID,
   DEFAULT_DEPLOY_PROVIDER_ID,
   deployProjectFile,
   fetchCloudflarePagesZones,
@@ -37,6 +38,7 @@ import {
   updateDeployConfig,
   type WebDeployConfigResponse,
   type WebCloudflarePagesDeploySelection,
+  type WebCoolifyConfigHints,
   type WebDeploymentInfo,
   type WebDeployProjectFileResponse,
   type WebDeployProviderId,
@@ -128,18 +130,20 @@ type PreviewViewportPreset = {
 };
 type DeployProviderOption = {
   id: WebDeployProviderId;
-  labelKey: 'fileViewer.vercelProvider' | 'fileViewer.cloudflarePagesProvider';
+  labelKey: 'fileViewer.vercelProvider' | 'fileViewer.cloudflarePagesProvider' | 'fileViewer.coolifyProvider';
   tokenLink: string;
-  tokenLinkKey: 'fileViewer.vercelTokenGetLink' | 'fileViewer.cloudflareApiTokenGetLink';
+  tokenLinkKey: 'fileViewer.vercelTokenGetLink' | 'fileViewer.cloudflareApiTokenGetLink' | 'fileViewer.coolifyTokenGetLink';
   tokenPlaceholderKey:
     | 'fileViewer.vercelTokenPlaceholder'
-    | 'fileViewer.cloudflareApiTokenPlaceholder';
-  tokenReuseHintKey: 'fileViewer.vercelTokenReuseHint' | 'fileViewer.cloudflareApiTokenReuseHint';
-  tokenRequiredKey: 'fileViewer.vercelTokenRequired' | 'fileViewer.cloudflareApiTokenRequired';
-  previewHintKey: 'fileViewer.vercelPreviewOnly' | 'fileViewer.cloudflarePagesPreviewHint';
+    | 'fileViewer.cloudflareApiTokenPlaceholder'
+    | 'fileViewer.coolifyTokenPlaceholder';
+  tokenReuseHintKey: 'fileViewer.vercelTokenReuseHint' | 'fileViewer.cloudflareApiTokenReuseHint' | 'fileViewer.coolifyTokenReuseHint';
+  tokenRequiredKey: 'fileViewer.vercelTokenRequired' | 'fileViewer.cloudflareApiTokenRequired' | 'fileViewer.coolifyTokenRequired';
+  previewHintKey: 'fileViewer.vercelPreviewOnly' | 'fileViewer.cloudflarePagesPreviewHint' | 'fileViewer.coolifyPreviewHint';
   tokenLabelKey:
     | 'fileViewer.vercelToken'
-    | 'fileViewer.cloudflareApiToken';
+    | 'fileViewer.cloudflareApiToken'
+    | 'fileViewer.coolifyToken';
   accountIdLabelKey?: 'fileViewer.cloudflareAccountId';
   accountIdHintKey?: 'fileViewer.cloudflareAccountIdHint';
 };
@@ -245,6 +249,17 @@ const DEPLOY_PROVIDER_OPTIONS: DeployProviderOption[] = [
     tokenLabelKey: 'fileViewer.cloudflareApiToken',
     accountIdLabelKey: 'fileViewer.cloudflareAccountId',
     accountIdHintKey: 'fileViewer.cloudflareAccountIdHint',
+  },
+  {
+    id: COOLIFY_PROVIDER_ID,
+    labelKey: 'fileViewer.coolifyProvider',
+    tokenLink: '#',
+    tokenLinkKey: 'fileViewer.coolifyTokenGetLink',
+    tokenPlaceholderKey: 'fileViewer.coolifyTokenPlaceholder',
+    tokenReuseHintKey: 'fileViewer.coolifyTokenReuseHint',
+    tokenRequiredKey: 'fileViewer.coolifyTokenRequired',
+    previewHintKey: 'fileViewer.coolifyPreviewHint',
+    tokenLabelKey: 'fileViewer.coolifyToken',
   },
 ];
 
@@ -3513,6 +3528,13 @@ function HtmlViewer({
   const [cloudflareZonesError, setCloudflareZonesError] = useState<string | null>(null);
   const [cloudflareZoneId, setCloudflareZoneId] = useState('');
   const [cloudflareDomainPrefix, setCloudflareDomainPrefix] = useState('');
+  const [coolifyInstanceUrl, setCoolifyInstanceUrl] = useState('');
+  const [coolifyAppUuid, setCoolifyAppUuid] = useState('');
+  const [coolifyServerUuid, setCoolifyServerUuid] = useState('');
+  const [coolifyProjectUuid, setCoolifyProjectUuid] = useState('');
+  const [coolifyGithubRepo, setCoolifyGithubRepo] = useState('');
+  const [coolifyBranch, setCoolifyBranch] = useState('main');
+  const [coolifyPublicRepo, setCoolifyPublicRepo] = useState(false);
   const deployProviderLoadSeqRef = useRef(0);
   const [inTabPresent, setInTabPresent] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -3729,6 +3751,14 @@ function HtmlViewer({
     setCloudflareAccountId(matchingConfig?.accountId || '');
     setCloudflareZoneId(matchingConfig?.cloudflarePages?.lastZoneId || '');
     setCloudflareDomainPrefix(matchingConfig?.cloudflarePages?.lastDomainPrefix || '');
+    const cc = (matchingConfig as { coolify?: WebCoolifyConfigHints } | null)?.coolify;
+    setCoolifyInstanceUrl(cc?.instanceUrl ?? '');
+    setCoolifyAppUuid(cc?.appUuid ?? '');
+    setCoolifyServerUuid(cc?.serverUuid ?? '');
+    setCoolifyProjectUuid(cc?.projectUuid ?? '');
+    setCoolifyGithubRepo(cc?.githubRepo ?? '');
+    setCoolifyBranch(cc?.branch ?? 'main');
+    setCoolifyPublicRepo(cc?.publicRepo ?? false);
   }
 
   function cloudflareConfigHintsFromForm() {
@@ -3753,6 +3783,21 @@ function HtmlViewer({
         token,
         accountId: cloudflareAccountId.trim(),
         cloudflarePages: cloudflareConfigHintsFromForm(),
+      };
+    }
+    if (providerId === COOLIFY_PROVIDER_ID) {
+      return {
+        providerId,
+        token,
+        coolify: {
+          instanceUrl: coolifyInstanceUrl.trim(),
+          appUuid: coolifyAppUuid.trim(),
+          serverUuid: coolifyServerUuid.trim(),
+          projectUuid: coolifyProjectUuid.trim(),
+          githubRepo: coolifyGithubRepo.trim(),
+          branch: coolifyBranch.trim() || 'main',
+          publicRepo: coolifyPublicRepo,
+        },
       };
     }
     return {
@@ -5036,6 +5081,12 @@ function HtmlViewer({
         if (!cloudflareAccountId.trim()) {
           throw new Error(t('fileViewer.cloudflareAccountIdRequired'));
         }
+      }
+      if (deployProviderId === COOLIFY_PROVIDER_ID) {
+        if (!deployToken.trim()) throw new Error(t('fileViewer.coolifyTokenRequired'));
+        if (!coolifyInstanceUrl.trim()) throw new Error(t('fileViewer.coolifyInstanceUrlRequired'));
+        if (!coolifyServerUuid.trim()) throw new Error(t('fileViewer.coolifyServerUuidRequired'));
+        if (!coolifyProjectUuid.trim()) throw new Error(t('fileViewer.coolifyProjectUuidRequired'));
       }
       const config = await updateDeployConfig(buildDeployConfigRequest(deployProviderId));
       if (!config || config.providerId !== deployProviderId) {
@@ -6441,6 +6492,79 @@ function HtmlViewer({
                       {t('fileViewer.cloudflareHostnamePreview', { hostname: cloudflareHostnamePreview })}
                     </p>
                   ) : null}
+                </>
+              ) : deployProviderId === COOLIFY_PROVIDER_ID ? (
+                <>
+                  <div className="deploy-field-grid single-field">
+                    <label>
+                      <span>{t('fileViewer.coolifyInstanceUrl')}</span>
+                      <input
+                        value={coolifyInstanceUrl}
+                        placeholder="https://coolify.example.com"
+                        onChange={(e) => setCoolifyInstanceUrl(e.target.value)}
+                      />
+                    </label>
+                  </div>
+                  <div className="deploy-field-grid">
+                    <label>
+                      <span>{t('fileViewer.coolifyServerUuid')}</span>
+                      <input
+                        value={coolifyServerUuid}
+                        onChange={(e) => setCoolifyServerUuid(e.target.value)}
+                      />
+                      <span className="field-hint">{t('fileViewer.coolifyServerUuidHint')}</span>
+                    </label>
+                    <label>
+                      <span>{t('fileViewer.coolifyProjectUuid')}</span>
+                      <input
+                        value={coolifyProjectUuid}
+                        onChange={(e) => setCoolifyProjectUuid(e.target.value)}
+                      />
+                      <span className="field-hint">{t('fileViewer.coolifyProjectUuidHint')}</span>
+                    </label>
+                  </div>
+                  <div className="deploy-field-grid">
+                    <label>
+                      <span>{t('fileViewer.coolifyGithubRepo')}</span>
+                      <input
+                        value={coolifyGithubRepo}
+                        placeholder="owner/repo"
+                        disabled={Boolean(coolifyAppUuid)}
+                        onChange={(e) => setCoolifyGithubRepo(e.target.value)}
+                      />
+                      <span className="field-hint">
+                        {coolifyAppUuid
+                          ? t('fileViewer.coolifyGithubRepoLocked')
+                          : t('fileViewer.coolifyGithubRepoHint')}
+                      </span>
+                    </label>
+                    <label>
+                      <span>{t('fileViewer.coolifyBranch')}</span>
+                      <input
+                        value={coolifyBranch}
+                        onChange={(e) => setCoolifyBranch(e.target.value)}
+                      />
+                    </label>
+                  </div>
+                  {coolifyAppUuid ? (
+                    <div className="deploy-field-grid single-field">
+                      <label>
+                        <span>{t('fileViewer.coolifyAppUuid')}</span>
+                        <input value={coolifyAppUuid} readOnly />
+                      </label>
+                    </div>
+                  ) : (
+                    <div className="deploy-config-actions secondary">
+                      <label className="checkbox-label">
+                        <input
+                          type="checkbox"
+                          checked={coolifyPublicRepo}
+                          onChange={(e) => setCoolifyPublicRepo(e.target.checked)}
+                        />
+                        <span>{t('fileViewer.coolifyPublicRepo')}</span>
+                      </label>
+                    </div>
+                  )}
                 </>
               ) : (
                 <div className="deploy-field-grid">
