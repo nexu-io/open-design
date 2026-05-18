@@ -64,6 +64,8 @@ interface Props {
   onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[]) => Promise<void> | void;
   onAttachFilesToChat?: (paths: string[]) => void;
   projectDisplayName?: string;
+  onApplyFigmaImport?: (folder: string) => Promise<void> | void;
+  suppressFigmaNextSteps?: boolean;
   onPluginFolderAgentAction?: (
     relativePath: string,
     action: PluginFolderAgentAction,
@@ -106,6 +108,8 @@ export function FileWorkspace({
   onSendBoardCommentAttachments,
   onAttachFilesToChat,
   projectDisplayName,
+  onApplyFigmaImport: _onApplyFigmaImport,
+  suppressFigmaNextSteps: _suppressFigmaNextSteps,
   onPluginFolderAgentAction,
   focusMode = false,
   onFocusModeChange,

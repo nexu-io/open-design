@@ -1,9 +1,10 @@
+'use client';
+
 /**
  * Materialize inspect color tweaks on design-system showcase.html into real
- * inline styles (and optional :root vars), then mirror swatch hexes into DESIGN.md.
+ * inline styles, then mirror swatch hexes into DESIGN.md.
+ * Browser-only DOM APIs — must not import jsdom or other Node built-ins.
  */
-
-import { JSDOM } from 'jsdom';
 
 export type InspectOverrideEntry = {
   selector: string;
@@ -23,17 +24,23 @@ function parseHtmlDocument(html: string): Document | null {
     if (typeof DOMParser !== 'undefined') {
       return new DOMParser().parseFromString(html, 'text/html');
     }
-    return new JSDOM(html).window.document;
+    if (typeof document !== 'undefined') {
+      const doc = document.implementation.createHTMLDocument('');
+      doc.documentElement.innerHTML = html;
+      return doc;
+    }
   } catch {
-    return null;
+    // fall through
   }
+  return null;
 }
 
 export function normalizeHex(value: string): string | null {
   const raw = String(value || '').trim();
   const m = /^#?([0-9a-fA-F]{3,8})$/.exec(raw);
-  if (!m) return null;
-  let hex = m[1].toLowerCase();
+  const captured = m?.[1];
+  if (!captured) return null;
+  let hex = captured.toLowerCase();
   if (hex.length === 3) {
     hex = hex.split('').map((c) => c + c).join('');
   }
@@ -61,29 +68,6 @@ function pickFillColor(props: Record<string, string>): string | null {
   const bg = props['background-color'] ?? props.background;
   const color = props.color;
   return normalizeHex(bg ?? '') ?? normalizeHex(color ?? '');
-}
-
-/** Stable ids on palette swatches so inspect can target them in srcdoc. */
-export function annotateShowcaseSwatches(html: string): string {
-  try {
-    const doc = parseHtmlDocument(html);
-    if (!doc) return html;
-    const swatches = doc.querySelectorAll(SWATCH_SELECTOR);
-    let index = 0;
-    swatches.forEach((el) => {
-      if (el.hasAttribute('data-od-id')) return;
-      const id = `ds-color-${index}`;
-      el.setAttribute('data-od-id', id);
-      el.setAttribute('data-ds-swatch', '');
-      if (!el.hasAttribute('data-ds-color-index')) {
-        el.setAttribute('data-ds-color-index', String(index));
-      }
-      index += 1;
-    });
-    return serializeHtmlDocument(doc);
-  } catch {
-    return html;
-  }
 }
 
 function serializeHtmlDocument(doc: Document): string {
@@ -119,6 +103,33 @@ function applyPropsToInlineStyle(el: Element, props: Record<string, string>): vo
   if (fill) el.setAttribute('data-ds-color-hex', fill);
 }
 
+function cssEscapeAttr(value: string): string {
+  return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+/** Stable ids on palette swatches so inspect can target them in srcdoc. */
+export function annotateShowcaseSwatches(html: string): string {
+  try {
+    const doc = parseHtmlDocument(html);
+    if (!doc) return html;
+    const swatches = doc.querySelectorAll(SWATCH_SELECTOR);
+    let index = 0;
+    swatches.forEach((el) => {
+      if (el.hasAttribute('data-od-id')) return;
+      const id = `ds-color-${index}`;
+      el.setAttribute('data-od-id', id);
+      el.setAttribute('data-ds-swatch', '');
+      if (!el.hasAttribute('data-ds-color-index')) {
+        el.setAttribute('data-ds-color-index', String(index));
+      }
+      index += 1;
+    });
+    return serializeHtmlDocument(doc);
+  } catch {
+    return html;
+  }
+}
+
 /**
  * Apply inspect overrides as inline styles on matching nodes and remove the
  * transient <style data-od-inspect-overrides> block so saved HTML is portable.
@@ -128,7 +139,7 @@ export function materializeInspectOverridesToShowcaseHtml(
   overrides: InspectOverrideMap,
 ): string {
   try {
-    let html = annotateShowcaseSwatches(source);
+    const html = annotateShowcaseSwatches(source);
     const doc = parseHtmlDocument(html);
     if (!doc) return source;
     stripInspectOverrideBlocks(doc);
@@ -146,10 +157,6 @@ export function materializeInspectOverridesToShowcaseHtml(
   } catch {
     return source;
   }
-}
-
-function cssEscapeAttr(value: string): string {
-  return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
 export type ShowcaseSwatchColor = {
@@ -216,8 +223,11 @@ export function syncDesignMdFromShowcaseHtml(designMd: string, showcaseHtml: str
   const lines = designMd.split(/\r?\n/);
   const count = Math.min(swatches.length, colorLines.length);
   for (let i = 0; i < count; i++) {
-    const { lineIndex, hex: oldHex } = colorLines[i];
-    const newHex = swatches[i].hex;
+    const colorLine = colorLines[i];
+    const swatch = swatches[i];
+    if (!colorLine || !swatch) continue;
+    const { lineIndex, hex: oldHex } = colorLine;
+    const newHex = swatch.hex;
     if (normalizeHex(oldHex) === newHex) continue;
     const line = lines[lineIndex] ?? '';
     lines[lineIndex] = line.replace(
@@ -230,4 +240,14 @@ export function syncDesignMdFromShowcaseHtml(designMd: string, showcaseHtml: str
 
 export function isDesignSystemShowcaseFile(name: string): boolean {
   return name === 'showcase.html' || name.endsWith('/showcase.html');
+}
+
+export function isDesignMdFile(name: string): boolean {
+  return name === 'DESIGN.md' || name.endsWith('/DESIGN.md');
+}
+
+export function projectTitleFromShowcaseHtml(html: string): string {
+  const doc = parseHtmlDocument(html);
+  const h1 = doc?.querySelector('main h1, .wrap h1, body h1')?.textContent?.trim();
+  return h1 || 'Design system';
 }
