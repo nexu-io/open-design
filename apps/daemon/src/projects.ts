@@ -7,7 +7,7 @@
 // All paths flowing in from HTTP handlers are validated against the project
 // directory to prevent path traversal — see resolveSafe().
 
-import { lstat, mkdir, readdir, readFile, rm, stat, unlink, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readdir, readFile, realpath, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import JSZip from 'jszip';
 import {
@@ -56,8 +56,9 @@ async function collectFiles(dir, relDir, out) {
     try {
       const ls = await lstat(full);
       if (ls.isSymbolicLink()) continue;
-    } catch {
-      continue;
+    } catch (err) {
+      if (err && err.code === 'ENOENT') continue;
+      throw err;
     }
     const rel = relDir ? `${relDir}/${e.name}` : e.name;
     if (e.isDirectory()) {
@@ -93,7 +94,7 @@ export async function buildProjectArchive(projectsRoot, projectId, root) {
   let archiveRoot = projectRoot;
   let archiveBaseName = '';
   if (typeof root === 'string' && root.trim().length > 0) {
-    archiveRoot = resolveSafe(projectRoot, root);
+    archiveRoot = await resolveSafeReal(projectRoot, root);
     archiveBaseName = path.basename(archiveRoot);
   }
 
@@ -278,8 +279,9 @@ async function collectArchiveEntries(dir, relDir, out) {
     try {
       const ls = await lstat(full);
       if (ls.isSymbolicLink()) continue;
-    } catch {
-      continue;
+    } catch (err) {
+      if (err && err.code === 'ENOENT') continue;
+      throw err;
     }
     const rel = relDir ? `${relDir}/${e.name}` : e.name;
     if (e.isDirectory()) {
@@ -294,10 +296,11 @@ async function collectArchiveEntries(dir, relDir, out) {
 
 export async function readProjectFile(projectsRoot, projectId, name) {
   const dir = projectDir(projectsRoot, projectId);
-  const file = resolveSafe(dir, name);
+  const rootReal = await realpath(dir).catch(() => dir);
+  const file = await resolveSafeReal(dir, name);
   const buf = await readFile(file);
   const st = await stat(file);
-  const rel = toProjectPath(path.relative(dir, file));
+  const rel = toProjectPath(path.relative(rootReal, file));
   const manifest = await readManifestForPath(dir, rel);
   return {
     buffer: buf,
@@ -395,6 +398,22 @@ function resolveSafe(dir, name) {
     throw new Error('path escapes project dir');
   }
   return target;
+}
+
+async function resolveSafeReal(dir, name) {
+  const target = resolveSafe(dir, name);
+  const rootReal = await realpath(dir).catch(() => dir);
+  let targetReal;
+  try {
+    targetReal = await realpath(target);
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return target;
+    throw err;
+  }
+  if (!targetReal.startsWith(rootReal + path.sep) && targetReal !== rootReal) {
+    throw new Error('path escapes project dir via symlink');
+  }
+  return targetReal;
 }
 
 export function sanitizePath(raw) {

@@ -1,11 +1,11 @@
 import { mkdtempSync, rmSync } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import JSZip from 'jszip';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { buildProjectArchive } from '../src/projects.js';
+import { buildProjectArchive, readProjectFile } from '../src/projects.js';
 
 describe('buildProjectArchive', () => {
   let projectsRoot = '';
@@ -85,5 +85,53 @@ describe('buildProjectArchive', () => {
     expect(baseName).toBe(dirName);
     const zip = await JSZip.loadAsync(buffer);
     expect(Object.keys(zip.files)).toContain('index.html');
+  });
+
+  it('omits symlinks from full project archives', async () => {
+    const outside = path.join(projectsRoot, 'outside');
+    await mkdir(outside);
+    await writeFile(path.join(outside, 'secret.txt'), 'secret');
+    try {
+      await symlink(outside, path.join(projectsRoot, projectId, 'leak'), 'dir');
+    } catch {
+      return;
+    }
+
+    const { buffer } = await buildProjectArchive(projectsRoot, projectId, '');
+    const zip = await JSZip.loadAsync(buffer);
+    const fileEntries = Object.values(zip.files)
+      .filter((entry) => !entry.dir)
+      .map((entry) => entry.name);
+
+    expect(fileEntries.some((name) => name.includes('secret.txt'))).toBe(false);
+  });
+
+  it('rejects an archive root that escapes through a symlink', async () => {
+    const outside = path.join(projectsRoot, 'outside-root');
+    await mkdir(outside);
+    await writeFile(path.join(outside, 'secret.txt'), 'secret');
+    try {
+      await symlink(outside, path.join(projectsRoot, projectId, 'root-link'), 'dir');
+    } catch {
+      return;
+    }
+
+    await expect(buildProjectArchive(projectsRoot, projectId, 'root-link')).rejects.toThrow(
+      /symlink/,
+    );
+  });
+
+  it('rejects direct file reads that escape through a symlink', async () => {
+    const outside = path.join(projectsRoot, 'outside-file.txt');
+    await writeFile(outside, 'secret');
+    try {
+      await symlink(outside, path.join(projectsRoot, projectId, 'leak.txt'));
+    } catch {
+      return;
+    }
+
+    await expect(readProjectFile(projectsRoot, projectId, 'leak.txt')).rejects.toThrow(
+      /symlink/,
+    );
   });
 });
