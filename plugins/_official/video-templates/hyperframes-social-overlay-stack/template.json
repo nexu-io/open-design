@@ -1,0 +1,19 @@
+{
+  "id": "hyperframes-social-overlay-stack",
+  "surface": "video",
+  "title": "HyperFrames: 9:16 Social Overlay Stack (X · Reddit · Spotify · Instagram)",
+  "summary": "A 15-second vertical 1080×1920 HyperFrames composition that stacks four animated social cards over a face-cam loop — an X post, a Reddit reaction, a Spotify now-playing card, and an Instagram-follow CTA at the end. Each card is a HyperFrames catalog block; the choreography is the value-add.",
+  "category": "Short Form",
+  "tags": ["hyperframes", "vertical", "social", "overlay", "tiktok"],
+  "model": "hyperframes-html",
+  "aspect": "9:16",
+  "prompt": "Build a 15-second vertical HyperFrames composition (1080×1920, 30fps) that lays four animated social cards in sequence over a muted face-cam loop. Pull all four catalog blocks first: `npx hyperframes add x-post`, `npx hyperframes add reddit-post`, `npx hyperframes add spotify-card`, `npx hyperframes add instagram-follow`.\n\nVisual identity: warm canvas #1a1410, off-white #fff8f1 for chrome, single hot accent #ff5e3a on glow rings around incoming cards. Display: \"Inter\" 26px tracked normal, the social cards keep their authentic in-platform typefaces (x-post → system, reddit-post → IBM Plex Sans / equivalent, spotify-card → Circular fallback, instagram-follow → SF Pro fallback).\n\nLayer structure:\n• Track 0: <video> face-cam.mp4 (muted playsinline) full-bleed background, slightly desaturated via CSS filter.\n• Track 1: solid #1a1410 at 38% opacity scrim across the bottom 32% of canvas, full duration, to keep cards readable.\n• Track 2: x-post card, data-start=0.4, data-duration=3.2, slides in from x=-340 → 0 ease expo.out 0.6s, holds 2.2s, no exit (transitions handle).\n• Track 3: reddit-post card, data-start=3.6, data-duration=3.4, slides in from y=80 → 0 ease power3.out 0.5s, holds.\n• Track 4: spotify-card, data-start=7.0, data-duration=4.0, slides in from x=+340 → 0 ease expo.out 0.6s, with the album-art rotating gently inside its built-in pose.\n• Track 5: instagram-follow card, data-start=11.0, data-duration=4.0, scales 0.9 → 1 + opacity 0 → 1 ease back.out(1.4) 0.7s, holds to 15s end with the follow button pulsing once at 13.5s.\n\nBetween consecutive cards (3.6s, 7.0s, 11.0s) drop a 0.18s flash-through-white shader (`npx hyperframes add flash-through-white`) for a snappy beat. Each card's landing frame should align with a beat (assume 90 BPM = 666ms grid).\n\nNon-negotiables: each social card's text content should be specific to the user's brief — feed real example handles / posts (or the user's own brand) into the slot data on each block. No animating video element dimensions — wrap face-cam in a non-timed div if you need to scale. All timelines paused:true. Deterministic only. Root data-duration=15, data-width=1080, data-height=1920. Run `npx hyperframes inspect --samples 15` and confirm no card spills off the 1080-wide canvas.\n\nOutput: `social-overlay-stack-15s.mp4`.",
+  "previewImageUrl": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/instagram-follow.png",
+  "previewVideoUrl": "https://static.heygen.ai/hyperframes-oss/docs/images/catalog/blocks/instagram-follow.mp4",
+  "source": {
+    "repo": "heygen-com/hyperframes",
+    "license": "Apache-2.0",
+    "author": "HeyGen",
+    "url": "https://hyperframes.heygen.com/catalog/instagram-follow"
+  }
+}

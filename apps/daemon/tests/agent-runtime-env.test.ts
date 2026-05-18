@@ -32,6 +32,17 @@ describe('agent runtime tool environment', () => {
     expect(env.OD_TOOL_TOKEN).toBeUndefined();
   });
 
+  it('pins the daemon runtime data dir into agent sessions', () => {
+    const env = createAgentRuntimeEnv(
+      { PATH: '/bin' },
+      'http://127.0.0.1:7456',
+      null,
+      '/opt/open-design/bin/node',
+    );
+
+    expect(env.OD_DATA_DIR).toBe(process.env.OD_DATA_DIR);
+  });
+
   it('describes daemon URL and token availability without exposing the token', () => {
     const prompt = createAgentRuntimeToolPrompt('http://127.0.0.1:7456', {
       token: 'secret-run-token',

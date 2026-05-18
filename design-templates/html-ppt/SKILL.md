@@ -19,7 +19,6 @@ triggers:
 od:
   mode: deck
   scenario: marketing
-  featured: 19
   upstream: "https://github.com/lewislulu/html-ppt-skill"
   preview:
     type: html

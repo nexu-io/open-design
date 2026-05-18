@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Community Import Smoke Test</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        background: #f7f4ef;
+        color: #181512;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 32px;
+      }
+
+      main {
+        width: min(720px, 100%);
+        border: 1px solid #ded5ca;
+        border-radius: 8px;
+        background: #fffdf9;
+        box-shadow: 0 24px 80px rgb(44 30 20 / 12%);
+        padding: 28px;
+      }
+
+      p,
+      h1 {
+        margin: 0;
+      }
+
+      h1 {
+        font-size: 28px;
+        line-height: 1.12;
+      }
+
+      .eyebrow {
+        margin-bottom: 10px;
+        color: #a5543f;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .summary {
+        margin-top: 12px;
+        color: #625a51;
+        font-size: 15px;
+        line-height: 1.55;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 24px;
+      }
+
+      .cell {
+        border: 1px solid #e6ddd3;
+        border-radius: 6px;
+        padding: 12px;
+        background: #fbf8f3;
+      }
+
+      .label {
+        color: #81776d;
+        font-size: 12px;
+      }
+
+      .value {
+        margin-top: 8px;
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      @media (max-width: 640px) {
+        body {
+          padding: 18px;
+        }
+
+        main {
+          padding: 22px;
+        }
+
+        .grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">Open Design community plugin</p>
+      <h1>Import receipt generated successfully</h1>
+      <p class="summary">
+        This preview exists to make folder, zip, GitHub subpath, and marketplace
+        imports easy to verify in the Plugins UI.
+      </p>
+      <section class="grid" aria-label="Import checks">
+        <div class="cell">
+          <p class="label">Skill</p>
+          <p class="value">SKILL.md</p>
+        </div>
+        <div class="cell">
+          <p class="label">Sidecar</p>
+          <p class="value">open-design.json</p>
+        </div>
+        <div class="cell">
+          <p class="label">Compat</p>
+          <p class="value">Claude plugin</p>
+        </div>
+        <div class="cell">
+          <p class="label">Trust</p>
+          <p class="value">Restricted</p>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

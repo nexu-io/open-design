@@ -23,7 +23,6 @@ od:
   mode: prototype
   platform: desktop
   scenario: orbit
-  featured: 1
   preview:
     type: html
     entry: index.html

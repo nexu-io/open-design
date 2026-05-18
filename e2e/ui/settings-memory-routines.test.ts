@@ -2,6 +2,10 @@ import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
+const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定/i;
+const SETTINGS_MENU_LABEL = /^Settings$|^设置$|^設定$/i;
+
+test.describe.configure({ timeout: 30_000 });
 
 function baseConfig(): Record<string, unknown> {
   return {
@@ -53,9 +57,26 @@ async function seedSettingsBase(page: Page) {
   });
 }
 
+async function waitForLoadingToClear(page: Page) {
+  await expect(page.getByText('Loading Open Design…')).toHaveCount(0, { timeout: 15_000 });
+}
+
+async function gotoEntryHome(page: Page) {
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
+  if (await privacyDialog.isVisible().catch(() => false)) {
+    await privacyDialog.getByRole('button', { name: /not now/i }).click();
+  }
+  await expect(page.getByRole('button', { name: OPEN_SETTINGS_LABEL })).toBeVisible();
+}
+
 async function openSettings(page: Page) {
-  await page.goto('/');
-  await page.getByTitle('Execution mode').click();
+  await gotoEntryHome(page);
+  await page.getByRole('button', { name: OPEN_SETTINGS_LABEL }).click();
+  const menu = page.getByRole('menu');
+  await expect(menu).toBeVisible();
+  await menu.getByRole('button', { name: SETTINGS_MENU_LABEL }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   return dialog;

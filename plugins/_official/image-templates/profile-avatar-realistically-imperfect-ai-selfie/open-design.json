@@ -1,0 +1,82 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-profile-avatar-realistically-imperfect-ai-selfie",
+  "title": "Profile / Avatar - Realistically Imperfect AI Selfie",
+  "version": "0.1.0",
+  "description": "A creative prompt used with GPT Image 2 to generate a 'failed' selfie that looks like an accidental, low-quality smartphone snapshot.",
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Tz",
+    "url": "https://x.com/Tz_2022/status/2049178230762934731"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "profile-avatar",
+    "portrait",
+    "fantasy"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://cms-assets.youmind.com/media/1777453151202_3usbgm_HHAkoXnaMAAFvsx.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "ChatGPT, you've been with me for a while now, and I want to see what you look like. Please generate a photo similar to an {argument name=\"shooting method\" default=\"accidental selfie\"} taken with an {argument name=\"phone model\" default=\"iPhone\"}: no clear subject, no intentional composition, just a very ordinary, even slightly failed snapshot. The photo should have slight motion blur, uneven lighting, light overexposure, an awkward angle, and chaotic composition, presenting an 'overly realistic candid' feeling, as if it were a selfie accidentally triggered while taking the phone out of a pocket.",
+        "zh-CN": "使用这个插件完成以下任务：ChatGPT, you've been with me for a while now, and I want to see what you look like. Please generate a photo similar to an {argument name=\"shooting method\" default=\"accidental selfie\"} taken with an {argument name=\"phone model\" default=\"iPhone\"}: no clear subject, no intentional composition, just a very ordinary, even slightly failed snapshot. The photo should have slight motion blur, uneven lighting, light overexposure, an awkward angle, and chaotic composition, presenting an 'overly realistic candid' feeling, as if it were a selfie accidentally triggered while taking the phone out of a pocket."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "1:1"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

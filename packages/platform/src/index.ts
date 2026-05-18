@@ -511,6 +511,7 @@ export function wellKnownUserToolchainBins(
   // Per-version Node toolchains: scan the install root and surface every
   // version directory's bin folder. Best-effort — missing roots simply
   // contribute nothing.
+  dirs.push(...existingMiseNpmPackageBinDirs(join(home, ".local", "share", "mise", "installs")));
   for (const installRoot of [
     {
       root: join(home, ".local", "share", "mise", "installs", "node"),
@@ -536,6 +537,15 @@ export function wellKnownUserToolchainBins(
   return dirs;
 }
 
+function existingMiseNpmPackageBinDirs(root: string): string[] {
+  const out: string[] = [];
+  for (const packageName of ["npm-openai-codex"]) {
+    const packageRoot = join(root, packageName);
+    out.push(...existingChildBinDirs(packageRoot, ["bin"]));
+  }
+  return out;
+}
+
 function existingChildBinDirs(root: string, segments: string[]): string[] {
   const out: string[] = [];
   let entries: import("node:fs").Dirent<string>[];
@@ -545,7 +555,7 @@ function existingChildBinDirs(root: string, segments: string[]): string[] {
     return out;
   }
   for (const entry of sortVersionedDirEntries(entries)) {
-    if (!entry.isDirectory()) continue;
+    if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
     const candidate = join(root, entry.name, ...segments);
     if (existsSync(candidate)) out.push(candidate);
   }

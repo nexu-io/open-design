@@ -1,0 +1,64 @@
+/* design-systems/bugatti/tokens.css
+ *
+ * Structured token bindings for Bugatti.
+ * hyper-luxury automotive calm with deep blue, chrome edges, and gallery spacing.
+ */
+
+:root {
+  --bg: #07111f;
+  --surface: #101d2f;
+  --surface-warm: #16283f;
+  --fg: #f7fbff;
+  --fg-2: #d6e0ee;
+  --muted: #8fa1b7;
+  --meta: #b7c7d9;
+  --border: #2c405c;
+  --border-soft: #1c2d44;
+  --accent: #1b4d8f;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #2fbf71;
+  --warn: #d9b45f;
+  --danger: #c1121f;
+  --font-display: "Bugatti Display", "Didot", Georgia, serif;
+  --font-body: "Avenir Next", Inter, Arial, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 19px;
+  --text-xl: 26px;
+  --text-2xl: 42px;
+  --text-3xl: 64px;
+  --text-4xl: 88px;
+  --leading-body: 1.58;
+  --leading-tight: 1;
+  --tracking-display: -0.015em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 120px;
+  --section-y-tablet: 84px;
+  --section-y-phone: 60px;
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 22px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 28px 86px rgba(0, 0, 0, 0.46);
+  --focus-ring: 0 0 0 4px rgba(183, 199, 217, 0.28);
+  --motion-fast: 170ms;
+  --motion-base: 280ms;
+  --ease-standard: cubic-bezier(0.16, 1, 0.3, 1);
+  --container-max: 1200px;
+  --container-gutter-desktop: 42px;
+  --container-gutter-tablet: 30px;
+  --container-gutter-phone: 20px;
+}

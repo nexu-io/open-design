@@ -1,0 +1,80 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "od-nextjs-export",
+  "title": "Export to Next.js",
+  "version": "0.1.0",
+  "description": "Starter downstream export plugin for turning an accepted Open Design artifact into a Next.js App Router handoff.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/scenarios/od-nextjs-export",
+  "tags": [
+    "scenario",
+    "first-party",
+    "export",
+    "downstream",
+    "handoff",
+    "next",
+    "nextjs",
+    "react"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "tune-collab",
+    "scenario": "downstream-export",
+    "mode": "export",
+    "pipeline": {
+      "stages": [
+        {
+          "id": "handoff",
+          "atoms": [
+            "handoff"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:read",
+      "fs:write"
+    ],
+    "useCase": {
+      "query": {
+        "en": "Export the accepted Open Design artifact to a Next.js App Router route or component. Preserve the visual system, split server/client boundaries intentionally, and finish with integration notes.",
+        "zh-CN": "将已确认的 Open Design 产物导出为 Next.js App Router 路由或组件。保持视觉系统一致，合理拆分 server/client 边界，并在最后给出集成说明。"
+      },
+      "exampleOutputs": []
+    },
+    "inputs": [
+      {
+        "name": "routePath",
+        "type": "string",
+        "required": false,
+        "label": "Route path",
+        "placeholder": "app/(marketing)/page.tsx"
+      },
+      {
+        "name": "styling",
+        "type": "select",
+        "required": false,
+        "label": "Styling",
+        "options": [
+          "Tailwind CSS",
+          "CSS module",
+          "global CSS"
+        ],
+        "default": "Tailwind CSS"
+      }
+    ]
+  }
+}

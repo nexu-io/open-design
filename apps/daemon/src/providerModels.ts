@@ -7,8 +7,8 @@ import type {
   ProviderModelsRequest,
   ProviderModelsResponse,
 } from '@open-design/contracts/api/providerModels';
-import { isLoopbackApiHost, validateBaseUrl } from '@open-design/contracts/api/connectionTest';
-import { redactSecrets } from './connectionTest.js';
+import { isLoopbackApiHost } from '@open-design/contracts/api/connectionTest';
+import { redactSecrets, validateBaseUrlResolved } from './connectionTest.js';
 
 type ProviderModelsInput = ProviderModelsRequest & { signal?: AbortSignal };
 
@@ -197,7 +197,7 @@ export async function listProviderModels(
     };
   }
 
-  const validated = validateBaseUrl(input.baseUrl);
+  const validated = await validateBaseUrlResolved(input.baseUrl);
   if (validated.error || !validated.parsed) {
     return {
       ok: false,

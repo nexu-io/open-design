@@ -284,6 +284,7 @@ describe('routine routes', () => {
         completedAt: Date.now(),
         summary: 'Connector auth failed',
         error: 'provider rejected credentials',
+        errorCode: 'AGENT_AUTH_REQUIRED',
       });
 
       const getRes = await fetch(`http://127.0.0.1:${port}/api/routines/${created.routine.id}`);
@@ -298,6 +299,8 @@ describe('routine routes', () => {
             conversationId: string;
             agentRunId: string;
             summary: string;
+            error: string;
+            errorCode: string;
             completedAt: number;
           } | null;
         };
@@ -310,6 +313,8 @@ describe('routine routes', () => {
         conversationId: 'conv-failed',
         agentRunId: 'agent-run-failed',
         summary: 'Connector auth failed',
+        error: 'provider rejected credentials',
+        errorCode: 'AGENT_AUTH_REQUIRED',
       });
       expect(json.routine.lastRun?.completedAt).toBeTypeOf('number');
     } finally {

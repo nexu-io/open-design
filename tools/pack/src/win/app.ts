@@ -116,9 +116,12 @@ async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
   const previousWebNextEnv = await readFile(webNextEnvPath, "utf8").catch(() => null);
 
   await runPnpm(config, ["--filter", "@open-design/contracts", "build"]);
+  await runPnpm(config, ["--filter", "@open-design/registry-protocol", "build"]);
   await runPnpm(config, ["--filter", "@open-design/sidecar-proto", "build"]);
   await runPnpm(config, ["--filter", "@open-design/sidecar", "build"]);
   await runPnpm(config, ["--filter", "@open-design/platform", "build"]);
+  await runPnpm(config, ["--filter", "@open-design/agui-adapter", "build"]);
+  await runPnpm(config, ["--filter", "@open-design/plugin-runtime", "build"]);
   await runPnpm(config, ["--filter", "@open-design/daemon", "build"]);
   try {
     await runPnpm(config, ["--filter", "@open-design/web", "build"], { OD_WEB_OUTPUT_MODE: config.webOutputMode });
@@ -152,7 +155,7 @@ export async function createWorkspaceTarballsCacheKey(config: ToolPackConfig): P
     packageManager: rootPackageJson.packageManager,
     pnpmLock: await hashPath(join(config.workspaceRoot, "pnpm-lock.yaml")),
     prebundle: shouldUseWinStandalonePrebundle(config.webOutputMode),
-    schemaVersion: 5,
+    schemaVersion: 6,
     webOutputMode: config.webOutputMode,
   });
 }

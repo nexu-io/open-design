@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>林清禾 · 简历</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  body { background:#e9e6df; font-family:'Inter','Noto Sans SC',sans-serif; color:#1a1a1a; padding:32px 0; -webkit-font-smoothing:antialiased; }
+  .page { width:210mm; min-height:297mm; margin:0 auto; background:#fff; padding:18mm 16mm; box-shadow:0 30px 60px -20px rgba(0,0,0,0.18); }
+  .accent { color:#1f4d8f; }
+  .accent-bar { display:inline-block; width:24px; height:2px; background:#1f4d8f; vertical-align:middle; margin-right:10px; }
+  .section h2 { font-size:11px; font-weight:700; letter-spacing:0.18em; text-transform:uppercase; color:#1f4d8f; margin:0 0 14px; }
+  .role { display:flex; justify-content:space-between; align-items:baseline; gap:12px; }
+  .role .meta { font-size:11px; color:#6b6760; font-family:'Inter',sans-serif; white-space:nowrap; tabular-nums:auto; }
+  ul.bullets { list-style:none; padding:0; margin:8px 0 16px; }
+  ul.bullets li { position:relative; padding-left:14px; font-size:13px; line-height:1.65; color:#262421; margin-bottom:4px; }
+  ul.bullets li::before { content:""; position:absolute; left:0; top:9px; width:5px; height:5px; background:#1f4d8f; border-radius:1px; }
+  @media print { body { background:#fff; padding:0; } .page { box-shadow:none; } }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="pb-7 mb-7" style="border-bottom:1px solid #e7e5e0">
+    <h1 class="text-[42px] font-bold tracking-tight leading-none mb-3">林清禾</h1>
+    <div class="text-[12.5px] text-[#1f4d8f] font-medium tracking-wide mb-3">高级前端工程师 · Senior Frontend Engineer</div>
+    <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11.5px] text-[#5a564e]">
+      <span>📍 上海</span><span class="opacity-30">|</span>
+      <span>✉ qinghe.lin@example.com</span><span class="opacity-30">|</span>
+      <span>github.com/qinghelin</span><span class="opacity-30">|</span>
+      <span>linkedin.com/in/qinghe</span>
+    </div>
+  </header>
+
+  <section class="section mb-6">
+    <h2><span class="accent-bar"></span>个人简介</h2>
+    <p class="text-[13.5px] leading-[1.75] text-[#262421]">8 年前端经验, 主导过 50M+ MAU 产品的设计系统重构, 目前专注于 AI-assisted 开发工具链的产品化。</p>
+  </section>
+
+  <div class="grid grid-cols-12 gap-8">
+    <div class="col-span-8">
+      <section class="section mb-7">
+        <h2><span class="accent-bar"></span>工作经历</h2>
+
+        <div class="mb-5">
+          <div class="role">
+            <div><span class="font-semibold text-[14.5px]">Acme AI</span> <span class="text-[#5a564e] text-[13px]">— 高级前端工程师</span></div>
+            <div class="meta">2023.06 - 至今</div>
+          </div>
+          <ul class="bullets">
+            <li>设计并主导了内部 AI 编辑器产品 (从 0 到 1), 6 个月内 DAU 达到 <span class="font-semibold accent">12k</span>, 内部 NPS <span class="font-semibold accent">68</span></li>
+            <li>把团队 React 16 全量升级到 React 19, <span class="font-semibold accent">0 线上回归</span>, 编译速度提升 <span class="font-semibold accent">3.2 倍</span></li>
+            <li>抽象组件库, 在 7 个业务线被采用, NPM 月下载 <span class="font-semibold accent">80k+</span></li>
+          </ul>
+        </div>
+
+        <div class="mb-5">
+          <div class="role">
+            <div><span class="font-semibold text-[14.5px]">字节跳动</span> <span class="text-[#5a564e] text-[13px]">— 前端工程师</span></div>
+            <div class="meta">2020.07 - 2023.05</div>
+          </div>
+          <ul class="bullets">
+            <li>主导抖音 PC 后台从 webpack → vite 的迁移, 冷启动从 <span class="font-semibold accent">18s</span> 降到 <span class="font-semibold accent">2.4s</span></li>
+            <li>设计了一套低代码表单引擎, 服务公司 30+ 后台业务, 累计节省人天 <span class="font-semibold accent">800+</span></li>
+            <li>带 4 人小队, 推动团队 TypeScript 强类型覆盖率 <span class="font-semibold accent">53% → 92%</span></li>
+          </ul>
+        </div>
+
+        <div class="mb-2">
+          <div class="role">
+            <div><span class="font-semibold text-[14.5px]">美团</span> <span class="text-[#5a564e] text-[13px]">— 实习前端</span></div>
+            <div class="meta">2019.06 - 2019.09</div>
+          </div>
+          <ul class="bullets">
+            <li>完成外卖商家端两个核心页面的 Vue 2 → Vue 3 迁移</li>
+            <li>写了一篇内部分享《组件设计的 5 个气味》, 被收藏 200+</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2><span class="accent-bar"></span>公开项目</h2>
+        <ul class="bullets">
+          <li><span class="font-semibold">html-anything</span> <span class="text-[#5a564e]">(1.2k ★)</span> — 把任何文档用本地 AI agent 转成漂亮 HTML</li>
+          <li><span class="font-semibold">lite-form</span> <span class="text-[#5a564e]">(450 ★)</span> — 9KB 的 React 表单库, 性能比 react-hook-form 快 1.7x</li>
+        </ul>
+      </section>
+    </div>
+
+    <div class="col-span-4">
+      <section class="section mb-6">
+        <h2><span class="accent-bar"></span>教育</h2>
+        <div class="text-[13.5px] font-semibold mb-1">复旦大学</div>
+        <div class="text-[12px] text-[#5a564e]">计算机科学 · 学士</div>
+        <div class="text-[11.5px] text-[#5a564e] mt-1">2016 - 2020 · GPA 3.85 / 4.00</div>
+      </section>
+
+      <section class="section mb-6">
+        <h2><span class="accent-bar"></span>核心技能</h2>
+        <div class="flex flex-wrap gap-1.5">
+          <span class="px-2 py-0.5 rounded text-[11px]" style="background:#eef2f8; color:#1f4d8f">TypeScript</span><span class="px-2 py-0.5 rounded text-[11px]" style="background:#eef2f8; color:#1f4d8f">React</span><span class="px-2 py-0.5 rounded text-[11px]" style="background:#eef2f8; color:#1f4d8f">Next.js</span><span class="px-2 py-0.5 rounded text-[11px]" style="background:#eef2f8; color:#1f4d8f">Tailwind</span><span class="px-2 py-0.5 rounded text-[11px]" style="background:#eef2f8; color:#1f4d8f">Node.js</span><span class="px-2 py-0.5 rounded text-[11px]" style="background:#eef2f8; color:#1f4d8f">Vite</span><span class="px-2 py-0.5 rounded text-[11px]" style="background:#eef2f8; color:#1f4d8f">设计系统</span><span class="px-2 py-0.5 rounded text-[11px]" style="background:#eef2f8; color:#1f4d8f">性能优化</span><span class="px-2 py-0.5 rounded text-[11px]" style="background:#eef2f8; color:#1f4d8f">团队协作</span>
+        </div>
+      </section>
+
+      <section class="section mb-6">
+        <h2><span class="accent-bar"></span>语言</h2>
+        <ul class="text-[12px] text-[#262421] space-y-1.5">
+          <li class="flex justify-between"><span>中文</span><span class="text-[#5a564e]">母语</span></li>
+          <li class="flex justify-between"><span>英语</span><span class="text-[#5a564e]">CET-6 615</span></li>
+          <li class="flex justify-between"><span>日语</span><span class="text-[#5a564e]">N3</span></li>
+        </ul>
+      </section>
+
+      <section class="section">
+        <h2><span class="accent-bar"></span>兴趣</h2>
+        <p class="text-[12px] text-[#262421] leading-[1.7]">长跑 (上海半马 1:42) · 摄影 · 街角咖啡馆侦探</p>
+      </section>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,151 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/perplexity/tokens.css
+ *
+ * Structured token bindings for the "Perplexity" brand — the research-
+ * terminal voice of a conversational AI search engine.
+ *
+ * Brand identity in three sentences:
+ *   1. Dark canvas as the native medium — a flat near-black (#0f0f10)
+ *      that recedes so citations, sources, and the answer column lead;
+ *      depth is three luminance steps (base → surface → elevated), never
+ *      shadow.
+ *   2. Inter for all UI and reading, JetBrains Mono for code and
+ *      citations; weight 600 is the cap for display (700 reads too
+ *      thin against #0f0f10), generous 1.65 body leading for dense
+ *      research paragraphs.
+ *   3. A single chromatic accent — Perplexity Purple (#a855f7) —
+ *      reserved for the primary CTA and active focus state; everything
+ *      else is grayscale. Color appears once per view, never twice.
+ *
+ * Schema decisions:
+ *   - --bg: #0f0f10 (page background, anti-gradient flat).
+ *   - --surface: #19191a (card / sidebar surface).
+ *   - --surface-warm aliases --surface — dark achromatic system, no warm
+ *     tier; the third luminance step (#232325) lives in --border-soft so
+ *     hover/elevated states can borrow it without inventing a token.
+ *   - --fg: #f0f0f0 (near-white, not pure white — prevents eye strain).
+ *   - --fg-2 aliases --fg — DESIGN.md §2 lists a single primary text
+ *     color; secondary lives in --muted, tertiary in --meta.
+ *   - --border: #2e2e30; --border-soft: #232325 (also the elevated tier).
+ *   - --accent: #a855f7 (purple); --accent-hover: #c084fc;
+ *     --accent-active: #9333ea (darker pressed — one step down the
+ *     violet scale, since DESIGN.md does not name an active value).
+ *   - --tracking-display: -0.01em (Inter at 32px tightens slightly).
+ *   - --radius-sm: 4px; --radius-md: 8px; --radius-lg: 12px (DESIGN.md §4).
+ *   - --elev-raised: hairline ring only — DESIGN.md §6 §9 forbids
+ *     drop shadows; elevation is communicated through border contrast.
+ *   - --motion-fast: 120ms (DESIGN.md §7 hover), --motion-base: 200ms
+ *     (modal); ease-out flavored cubic-bezier per DESIGN.md guidance.
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ──────────────────────────────────────────────────── */
+  --bg:           #0f0f10;              /* flat near-black canvas — no gradient */
+  --surface:      #19191a;              /* card / sidebar / search bar fill */
+  --surface-warm: var(--surface);       /* no warm tier in dark achromatic system */
+
+  /* ─── Foreground ───────────────────────────────────────────────── */
+  --fg:   #f0f0f0;                      /* near-white — body copy, headings */
+  --fg-2: var(--fg);                    /* DESIGN.md §2 has a single primary tier */
+  --muted: #9b9b9b;                     /* secondary — meta, captions, labels */
+  --meta:  #5c5c5e;                     /* tertiary — placeholder, disabled */
+
+  /* ─── Border ───────────────────────────────────────────────────── */
+  --border:      #2e2e30;               /* divider, input border, card edge */
+  --border-soft: #232325;               /* inner row separator + elevated tier */
+
+  /* ─── Accent ───────────────────────────────────────────────────── */
+  --accent:        #a855f7;             /* Perplexity purple — sole chromatic color */
+  --accent-on:     #ffffff;             /* white on accent for buttons / badges */
+  --accent-hover:  #c084fc;             /* lighter violet hover */
+  --accent-active: #9333ea;             /* darker pressed — derived, DESIGN.md silent */
+
+  /* ─── Semantic ─────────────────────────────────────────────────── */
+  --success: #22c55e;                   /* verified source badge */
+  --warn:    #f59e0b;                   /* caution */
+  --danger:  #ef4444;                   /* error state */
+
+  /* ─── Typography ───────────────────────────────────────────────── */
+  /* Inter for UI/body/display (weight 600 cap at display sizes).
+     JetBrains Mono for code, citations, inline tags. */
+  --font-display: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-body:    "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono:    "JetBrains Mono", ui-monospace, "Cascadia Code", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale — DESIGN.md §3.
+   * 4xl=32 display, 3xl=22 heading-l, 2xl=18 heading-m, lg=16 reading-large,
+   * base=15 body, sm=13 body-sm, xs=11 caption. The 3xl/2xl→xl gap (16) is
+   * the natural reading-large bridge for source-card titles. */
+  --text-xs:   11px;                    /* caption — source labels, timestamps */
+  --text-sm:   13px;                    /* body-sm — secondary, meta */
+  --text-base: 15px;                    /* body — primary reading copy */
+  --text-lg:   16px;                    /* reading-large — source card titles */
+  --text-xl:   18px;                    /* heading-m — sub-section heading */
+  --text-2xl:  22px;                    /* heading-l — section heading */
+  --text-3xl:  28px;                    /* sub-display — intermediate hero step */
+  --text-4xl:  32px;                    /* display — page title, hero answer */
+
+  /* Leading + tracking.
+   * --leading-body=1.65: dense research paragraphs (DESIGN.md §3 body).
+   * --leading-tight=1.2: display compression (DESIGN.md display row).
+   * --tracking-display=-0.01em: Inter at 32px tightens subtly; never stretch. */
+  --leading-body:     1.65;
+  --leading-tight:    1.2;
+  --tracking-display: -0.01em;
+
+  /* ─── Spacing ──────────────────────────────────────────────────── */
+  /* 8px base unit (DESIGN.md §4). Schema spine maps the key stops;
+     DESIGN.md's 48/64 page/above-fold tiers ride --space-12 and the
+     section-y tokens below. */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-12: 48px;
+
+  /* Section rhythm — DESIGN.md §4: 48px page-level, 64px above-fold. */
+  --section-y-desktop: 64px;
+  --section-y-tablet:  48px;
+  --section-y-phone:   32px;
+
+  /* ─── Radius ───────────────────────────────────────────────────── */
+  /* DESIGN.md §4: 4 tag, 8 input/card, 12 modal/popover. Pill for
+     avatars/tags only — never on cards (DESIGN.md §9 anti-pattern). */
+  --radius-sm:   4px;
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-pill: 9999px;
+
+  /* ─── Elevation ────────────────────────────────────────────────── */
+  /* DESIGN.md §6 §9: no drop shadows. Elevation = border contrast.
+     --elev-raised intentionally collapses to a hairline ring — the
+     visual lift comes from the background stepping to #232325 in
+     the consuming rule, not from a cast shadow. */
+  --elev-flat:   none;
+  --elev-ring:   0 0 0 1px var(--border);
+  --elev-raised: 0 0 0 1px var(--border);
+
+  /* ─── Focus ────────────────────────────────────────────────────── */
+  /* DESIGN.md §5 search bar: --accent 2px outline, no box-shadow halo. */
+  --focus-ring: 0 0 0 2px var(--accent);
+
+  /* ─── Motion ───────────────────────────────────────────────────── */
+  /* DESIGN.md §7: hover 120ms, modal 200ms; anti-animation brand.
+     Easing reads as "ease-out-like" (cubic-bezier(0.2, 0, 0, 1)) since
+     DESIGN.md prescribes ease-out for panel/modal openers. */
+  --motion-fast:   120ms;
+  --motion-base:   200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ───────────────────────────────────────────────────── */
+  /* DESIGN.md §4: 1100px full-page shell (answer column 720px lives
+     inline in components that want the reading width). Gutter 16px
+     on phone matches DESIGN.md's stated side margin. */
+  --container-max:            1100px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet:  16px;
+  --container-gutter-phone:   16px;
+}

@@ -23,7 +23,6 @@ triggers:
 od:
   mode: deck
   scenario: finance
-  featured: 15
   upstream: "https://github.com/anthropics/financial-services/tree/main/plugins/agent-plugins/pitch-agent"
   preview:
     type: html

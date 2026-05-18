@@ -1,0 +1,124 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "community-import-smoke-test",
+  "title": "Community Import Smoke Test",
+  "version": "0.1.0",
+  "description": "A portable community plugin used to verify folder, zip, GitHub subpath, and marketplace import flows.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design Community",
+    "url": "https://open-design.ai/marketplace/community"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/community/import-smoke-test",
+  "plugin": {
+    "repo": "https://github.com/nexu-io/open-design/tree/main/plugins/community/import-smoke-test"
+  },
+  "tags": [
+    "community",
+    "import",
+    "smoke-test",
+    "marketplace"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ],
+    "claudePlugins": [
+      {
+        "path": "./.claude-plugin/plugin.json"
+      }
+    ]
+  },
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "plugin-authoring",
+    "preview": {
+      "type": "html",
+      "entry": "./preview/index.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create a compact import receipt for {{plugin_name}} installed from {{source_kind}}.",
+        "zh-CN": "为从 {{source_kind}} 导入的 {{plugin_name}} 创建一个紧凑的插件导入回执。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./preview/index.html",
+          "title": "Import Receipt Preview"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./assets/import-checklist.md"
+      ],
+      "claudePlugins": [
+        {
+          "path": "./.claude-plugin/plugin.json"
+        }
+      ],
+      "atoms": [
+        "todo-write",
+        "handoff"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "plan",
+          "atoms": [
+            "todo-write"
+          ]
+        },
+        {
+          "id": "handoff",
+          "atoms": [
+            "handoff"
+          ]
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "plugin_name",
+        "type": "string",
+        "required": true,
+        "label": "Plugin name",
+        "default": "community-import-smoke-test"
+      },
+      {
+        "name": "source_kind",
+        "type": "select",
+        "required": true,
+        "label": "Import source",
+        "options": [
+          "folder",
+          "zip",
+          "github",
+          "marketplace"
+        ],
+        "default": "folder"
+      },
+      {
+        "name": "note",
+        "type": "text",
+        "label": "Test note",
+        "placeholder": "Optional detail about the import test."
+      }
+    ],
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}

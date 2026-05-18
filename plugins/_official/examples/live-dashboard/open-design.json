@@ -1,0 +1,159 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-live-dashboard",
+  "title": "Live Dashboard",
+  "version": "0.1.0",
+  "description": "Notion-style team dashboard rendered as a Live Artifact. A single-page,\nself-contained HTML dashboard with KPIs, a 7-day sparkline, a real-time\nactivity feed and a linked-database task table — wired to Notion via the\nComposio connector catalog. Refreshes on demand and when the artifact\nis opened. Falls back to seeded mock data when no connector is bound,\nso it works offline / in screenshots / in the picker preview.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/live-dashboard",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "operation",
+    "web",
+    "desktop",
+    "team-dashboard",
+    "notion-dashboard",
+    "live-dashboard",
+    "ops-dashboard",
+    "team-workspace-dashboard",
+    "untitled",
+    "notion",
+    "live-artifact-dashboard"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "operation",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build me a Notion-style team dashboard for Acme Studio. KPIs: total tasks, done this week, active members, docs in review. Wire it to the Notion connector and let it refresh on demand.",
+        "zh-CN": "使用这个插件完成以下任务：Build me a Notion-style team dashboard for Acme Studio. KPIs: total tasks, done this week, active members, docs in review. Wire it to the Notion connector and let it refresh on demand."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Live Dashboard"
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "workspace_name",
+        "type": "string",
+        "required": true
+      },
+      {
+        "name": "page_title",
+        "type": "string",
+        "default": "Team Dashboard"
+      },
+      {
+        "name": "connector",
+        "type": "string",
+        "values": [
+          "notion",
+          "linear",
+          "stripe",
+          "posthog",
+          "mock"
+        ],
+        "default": "notion"
+      },
+      {
+        "name": "refresh_seconds",
+        "type": "number",
+        "default": 30,
+        "min": 10,
+        "max": 300
+      },
+      {
+        "name": "stale_after_seconds",
+        "type": "number",
+        "default": 90,
+        "min": 30,
+        "max": 600
+      },
+      {
+        "name": "kpi_count",
+        "type": "string",
+        "values": [
+          2,
+          4,
+          6
+        ],
+        "default": 4
+      },
+      {
+        "name": "include_activity_feed",
+        "type": "boolean",
+        "default": true
+      },
+      {
+        "name": "include_task_table",
+        "type": "boolean",
+        "default": true
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "craft": [
+        "typography",
+        "color",
+        "anti-ai-slop",
+        "motion-discipline",
+        "state-coverage"
+      ],
+      "assets": [
+        "./example.html",
+        "./assets/template.html",
+        "./references/checklist.md",
+        "./references/components.md",
+        "./references/connectors.md",
+        "./references/layouts.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

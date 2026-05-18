@@ -12,7 +12,6 @@ triggers:
 od:
   mode: deck
   scenario: finance
-  featured: 20
   upstream: "https://github.com/lewislulu/html-ppt-skill"
   preview:
     type: html

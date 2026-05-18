@@ -1,0 +1,95 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "od-tune-collab",
+  "title": "Tune & collaborate (default scenario)",
+  "version": "0.1.0",
+  "description": "Default reference pipeline for the tune-collab taskKind.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/scenarios/od-tune-collab",
+  "tags": [
+    "scenario",
+    "first-party",
+    "tune-collab"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "tune-collab",
+    "scenario": "tune-collab",
+    "mode": "scenario",
+    "pipeline": {
+      "stages": [
+        {
+          "id": "direction",
+          "atoms": [
+            "direction-picker"
+          ]
+        },
+        {
+          "id": "patch",
+          "atoms": [
+            "patch-edit"
+          ]
+        },
+        {
+          "id": "critique",
+          "atoms": [
+            "critique-theater"
+          ],
+          "repeat": true,
+          "until": "critique.score>=4 || iterations>=3"
+        },
+        {
+          "id": "handoff",
+          "atoms": [
+            "handoff"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:read",
+      "fs:write"
+    ],
+    "useCase": {
+      "query": {
+        "en": "Tune the existing artifact: {{tuneInstruction}}. Pick a direction, apply a small reviewable patch, critique until the score converges, then hand off as a patch (or deployable-app when build-test ran upstream).",
+        "zh-CN": "使用这个插件完成以下任务：Tune the existing artifact: {{tuneInstruction}}. Pick a direction, apply a small reviewable patch, critique until the score converges, then hand off as a patch (or deployable-app when build-test ran upstream)."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./examples/hero-tune.html",
+          "title": "Hero copy tune cycle (before/after)"
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "tuneInstruction",
+        "type": "string",
+        "required": true,
+        "label": "What to change",
+        "placeholder": "Sharpen the hero copy and name the audience."
+      },
+      {
+        "name": "direction",
+        "type": "string",
+        "required": false,
+        "label": "Preferred direction",
+        "placeholder": "shorter / sharper / more playful"
+      }
+    ]
+  }
+}

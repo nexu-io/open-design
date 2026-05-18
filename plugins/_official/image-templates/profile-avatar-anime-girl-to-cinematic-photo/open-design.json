@@ -1,0 +1,83 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-profile-avatar-anime-girl-to-cinematic-photo",
+  "title": "Profile / Avatar - Anime Girl to Cinematic Photo",
+  "version": "0.1.0",
+  "description": "This prompt turns a character reference illustration into a realistic, warm-toned vintage interior portrait while preserving the original outfit, pose, and cat.",
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "maku",
+    "url": "https://x.com/maku67879787/status/2049040029612486845#reversed-0"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "profile-avatar",
+    "anime",
+    "cinematic",
+    "fantasy"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://cms-assets.youmind.com/media/1777453169843_ceq758_HG-nC89aQAApDXC.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "Using the provided reference image, recreate the same girl and black cat in the same seated pose, but transform the flat anime drawing into a realistic cinematic photo. Keep the orange-and-black gothic dress, white frills, lightning armband, headpiece, black cat lying across her knees, white socks, and black Mary Jane shoes consistent with the reference. Place her in a moody vintage interior with a worn wooden floor, aged plaster walls, and 1 tall softly glowing window with sheer curtains on the left casting warm late-afternoon light. Use a nostalgic sepia-orange color grade, subtle film grain, soft shadows, and shallow depth of field for a photoreal editorial look.",
+        "zh-CN": "使用这个插件完成以下任务：Using the provided reference image, recreate the same girl and black cat in the same seated pose, but transform the flat anime drawing into a realistic cinematic photo. Keep the orange-and-black gothic dress, white frills, lightning armband, headpiece, black cat lying across her knees, white socks, and black Mary Jane shoes consistent with the reference. Place her in a moody vintage interior with a worn wooden floor, aged plaster walls, and 1 tall softly glowing window with sheer curtains on the left casting warm late-afternoon light. Use a nostalgic sepia-orange color grade, subtle film grain, soft shadows, and shallow depth of field for a photoreal editorial look."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "1:1"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "create-video-storyboard",
+  "title": "Video Storyboard",
+  "version": "0.1.0",
+  "description": "Create a video storyboard, shot list, and render-ready prompt pack.",
+  "license": "MIT",
+  "tags": ["create", "video", "storyboard", "marketing"],
+  "compat": {
+    "agentSkills": [{ "path": "./SKILL.md" }]
+  },
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "marketing",
+    "useCase": {
+      "query": "Create a {{duration}} video storyboard for {{product}} aimed at {{audience}} on {{platform}}."
+    },
+    "context": {
+      "skills": [{ "path": "./SKILL.md" }],
+      "atoms": ["discovery-question-form", "todo-write", "media-video", "file-write", "critique-theater"]
+    },
+    "pipeline": {
+      "stages": [
+        { "id": "discovery", "atoms": ["discovery-question-form"] },
+        { "id": "plan", "atoms": ["todo-write"] },
+        { "id": "generate", "atoms": ["media-video", "file-write"] },
+        {
+          "id": "critique",
+          "atoms": ["critique-theater"],
+          "repeat": true,
+          "until": "critique.score>=4 || iterations>=2"
+        }
+      ]
+    },
+    "inputs": [
+      { "name": "product", "type": "string", "required": true, "label": "Product" },
+      { "name": "audience", "type": "string", "required": true, "label": "Audience" },
+      { "name": "platform", "type": "select", "required": false, "label": "Platform", "options": ["website", "YouTube", "TikTok", "LinkedIn"], "default": "website" },
+      { "name": "duration", "type": "string", "required": false, "label": "Duration", "default": "15 seconds" }
+    ],
+    "capabilities": ["prompt:inject", "fs:write"]
+  }
+}
+

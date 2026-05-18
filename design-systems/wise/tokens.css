@@ -1,0 +1,141 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/wise/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by Wise".
+ * Money without borders: bright spring-green CTAs on warm-neutral canvas,
+ * billboard Wise Sans at weight 900 with 0.85 line-height, pill buttons,
+ * ring-only shadows, and "calt" everywhere.
+ *
+ * Key brand decisions encoded here:
+ *   - Wise Green (#9fe870) as the only accent; Dark Green (#163300) as
+ *     --accent-on — green-on-green CTA is THE Wise signature, not white.
+ *   - Pastel Green (#cdffad) for hover — lighter, contrast-up, not darker.
+ *   - Near-Black with warm green undertone (#0e0f0c), never pure #000.
+ *   - Inter weight 600 as body default — confident, not light. Wise Sans
+ *     weight 900 for display, line-height 0.85, letter-spacing normal.
+ *   - Ring-only elevation: rgba(14,15,12,0.12) 1px ring; no traditional
+ *     drop shadows anywhere. Depth comes from green-on-neutral contrast.
+ *   - Pill buttons (9999px); cards span 16px → 30px → 40px radius tiers.
+ *   - 18px body baseline (not 16px) — Wise reads bigger than typical UI.
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ─────────────────────────────────────────────────────
+   * White canvas with a barely-tinted green-gray surface tier. The
+   * background is pure white because the green accent must read as
+   * the only colored element on the page. */
+  --bg: #ffffff;                  /* Pure white canvas — green pops as the sole accent */
+  --surface: #e8ebe6;             /* Light Surface — subtle green-tinted neutral */
+  --surface-warm: var(--surface); /* alias — no warm tier; Wise is cool-green, not warm */
+
+  /* ─── Foreground ──────────────────────────────────────────────────
+   * Near-black with a warm green undertone (#0e0f0c) — never #000.
+   * The faint green in the black ties text to the brand accent. */
+  --fg: #0e0f0c;             /* Near Black — primary text, headlines */
+  --fg-2: var(--fg);         /* alias — single confident text color */
+  --muted: #868685;          /* Gray — captions, tertiary text */
+  --meta: var(--muted);      /* alias — same gray for metadata */
+
+  /* ─── Border ──────────────────────────────────────────────────────
+   * Matches the ring-shadow color from DESIGN.md §6 — borders and
+   * ring elevation share the same hairline so cards read as one
+   * unified material. */
+  --border: rgba(14, 15, 12, 0.12); /* Ring hairline — also used by --elev-ring */
+  --border-soft: var(--border);     /* alias — no inner separator distinction */
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * Wise Green — the brand's most recognizable element. Reserved for
+   * primary CTAs and brand moments; never used as a large surface.
+   * Hover lightens to Pastel Green (Wise's contrast-up convention),
+   * active darkens via color-mix. */
+  --accent: #9fe870;         /* Wise Green — primary CTA, brand signal */
+  --accent-on: #163300;      /* Dark Green text on Wise Green — THE signature */
+  --accent-hover: #cdffad;   /* Pastel Green — lighter on hover, not darker */
+  --accent-active: color-mix(in oklab, var(--accent), black 12%);
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * Pulled from Wise's semantic palette in DESIGN.md §2. Positive
+   * is deep green (#054d28) to stay in the brand family rather than
+   * jumping to a generic emerald. */
+  --success: #054d28;        /* Positive Green — success state, in-brand */
+  --warn: #ffd11a;           /* Warning Yellow — Wise's hover-warn yellow */
+  --danger: #d03238;         /* Danger Red — destructive / error */
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * Wise Sans for display (weight 900 in components), Inter for body
+   * (weight 600 as default). Both stacks enable "calt" at the
+   * component layer. Helvetica/Arial fall back to keep the system
+   * usable when proprietary Wise Sans is unavailable. */
+  --font-display: "Wise Sans", Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-body: Inter, Helvetica, Arial, ui-sans-serif, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale — DESIGN.md §3. 18px body baseline, 96px hero display.
+   * Wise reads bigger than typical UI; --text-base = 18px is intentional. */
+  --text-xs: 12px;           /* Small */
+  --text-sm: 14px;           /* Caption */
+  --text-base: 18px;         /* Body — confident, larger than typical UI */
+  --text-lg: 22px;           /* Feature Title */
+  --text-xl: 26px;           /* Card Title */
+  --text-2xl: 40px;          /* Sub-heading */
+  --text-3xl: 64px;          /* Section Heading */
+  --text-4xl: 96px;          /* Display Hero — billboard Wise Sans 900 */
+
+  --leading-body: 1.44;      /* Inter body rhythm per DESIGN.md */
+  --leading-tight: 0.85;     /* Wise Sans display — letters overlap vertically */
+  --tracking-display: normal; /* DESIGN.md: normal tracking on all Wise Sans display sizes */
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * 8px base unit. Section vertical spacing 80px desktop. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  --section-y-desktop: 80px;
+  --section-y-tablet: 48px;
+  --section-y-phone: 32px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * Wise's radius vocabulary spans pill buttons to deeply-rounded
+   * cards. Per DESIGN.md §5: 16px (small cards), 30px (medium
+   * features), 40px (large containers/tables), 9999px (all buttons). */
+  --radius-sm: 16px;         /* Small cards, inputs — Wise's "card" tier */
+  --radius-md: 30px;         /* Medium feature cards */
+  --radius-lg: 40px;         /* Large containers, tables — Wise's signature deep round */
+  --radius-pill: 9999px;     /* All buttons, badges */
+
+  /* ─── Elevation ───────────────────────────────────────────────────
+   * Ring-only philosophy per DESIGN.md §6. No drop shadows; depth
+   * lives in the green-on-neutral contrast. --elev-raised is kept
+   * extremely subtle (1px ring + whisper of lift) for components
+   * that genuinely need to read as elevated. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 0 0 1px var(--border), 0 2px 8px rgba(14, 15, 12, 0.04);
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * Green-tinted focus ring — keeps the accent visible without
+   * introducing a competing color. */
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 60%);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * Standard 150/200ms. Note: the scale(1.05) hover and scale(0.95)
+   * active that DESIGN.md §4 calls out live in component CSS — they
+   * are interaction grammar, not token grammar. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * 1280px container — generous for billboard typography while still
+   * comfortable on standard laptop displays. */
+  --container-max: 1280px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 16px;
+  --container-gutter-phone: 12px;
+}

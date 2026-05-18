@@ -118,6 +118,12 @@ export type SettingsSection =
   | 'designSystems'
   | 'memory'
   | 'privacy'
+  // 'library' is consumed by the EntryShell library route — App opens it
+  // via this same openSettings entry point, so SettingsSection must
+  // accept the token even though SettingsDialog itself has no Library
+  // section. Reconcile follow-up: route library through a dedicated
+  // navigate() call so openSettings only owns dialog-bound sections.
+  | 'library'
   | 'about';
 
 interface Props {
@@ -345,9 +351,18 @@ const AGENT_CLI_ENV_FIELDS = [
   },
   {
     agentId: 'codex',
+    envKey: 'CODEX_API_KEY',
+    labelKey: 'settings.cliEnvCodexApiKey',
+    labelSuffix: 'CODEX_API_KEY',
+    placeholder: 'Paste CODEX_API_KEY',
+    secret: true,
+  },
+  {
+    agentId: 'codex',
     envKey: 'OPENAI_API_KEY',
     labelKey: 'settings.cliEnvCodexApiKey',
-    placeholder: 'Paste proxy API key',
+    labelSuffix: 'OPENAI_API_KEY · proxy/legacy',
+    placeholder: 'Paste OPENAI_API_KEY',
     secret: true,
   },
 ] as const;
@@ -1479,6 +1494,9 @@ export function SettingsDialog({
       subtitle: t('settings.designSystemsHint'),
     },
     memory: { title: t('settings.memory'), subtitle: t('settings.memoryHint') },
+    // 'library' is opened via EntryShell route — SettingsDialog doesn't
+    // render it but SettingsSection must accept the token (see type def).
+    library: { title: '', subtitle: '' },
     about: { title: t('settings.about'), subtitle: t('settings.aboutHint') },
   };
   const activeHeader = sectionHeader[activeSection];
@@ -2165,6 +2183,15 @@ export function SettingsDialog({
                 const selectValue = customActive
                   ? CUSTOM_MODEL_SENTINEL
                   : modelValue;
+                const modelSource = selected.modelsSource ?? 'fallback';
+                const modelSourceLabel =
+                  modelSource === 'live'
+                    ? t('settings.modelSourceLive')
+                    : t('settings.modelSourceFallback');
+                const modelSourceHint =
+                  modelSource === 'live'
+                    ? t('settings.modelPickerLiveHint')
+                    : t('settings.modelPickerFallbackHint');
                 return (
                   <div className="agent-model-row">
                     <div className="agent-model-row-head">
@@ -2175,50 +2202,48 @@ export function SettingsDialog({
                         <label className="field">
                           <span className="field-label">
                             {t('settings.modelPicker')}
+                            <span
+                              className={`agent-model-source-badge ${modelSource}`}
+                            >
+                              {modelSourceLabel}
+                            </span>
                           </span>
-                          <select
-                            value={selectValue}
-                            onChange={(e) => {
-                              if (e.target.value === CUSTOM_MODEL_SENTINEL) {
-                                // Switching to "Custom…" should clear the
-                                // value so the input below opens empty for
-                                // typing. Keep an explicit edit-mode flag so
-                                // intermediate values like `gpt-5` do not
-                                // collapse the custom input while typing
-                                // `gpt-5.5`.
-                                setAgentCustomModelIds((prev) => {
-                                  const next = new Set(prev);
-                                  next.add(selected.id);
-                                  return next;
-                                });
-                                setChoice({ model: '' });
-                              } else {
-                                setAgentCustomModelIds((prev) => {
-                                  if (!prev.has(selected.id)) return prev;
-                                  const next = new Set(prev);
-                                  next.delete(selected.id);
-                                  return next;
-                                });
-                                setChoice({ model: e.target.value });
-                              }
-                            }}
-                          >
-                            {renderModelOptions(selected.models!)}
-                            <option value={CUSTOM_MODEL_SENTINEL}>
-                              {t('settings.modelCustom')}
-                            </option>
-                          </select>
+                          <div className="agent-model-select-wrap">
+                            <select
+                              value={selectValue}
+                              onChange={(e) => {
+                                if (e.target.value === CUSTOM_MODEL_SENTINEL) {
+                                  setAgentCustomModelIds((prev) => {
+                                    const next = new Set(prev);
+                                    next.add(selected.id);
+                                    return next;
+                                  });
+                                  setChoice({ model: '' });
+                                } else {
+                                  setAgentCustomModelIds((prev) => {
+                                    if (!prev.has(selected.id)) return prev;
+                                    const next = new Set(prev);
+                                    next.delete(selected.id);
+                                    return next;
+                                  });
+                                  setChoice({ model: e.target.value });
+                                }
+                              }}
+                            >
+                              {renderModelOptions(selected.models!)}
+                              <option value={CUSTOM_MODEL_SENTINEL}>
+                                {t('settings.modelCustom')}
+                              </option>
+                            </select>
+                            <Icon
+                              name="chevron-down"
+                              size={12}
+                              className="agent-model-select-chevron"
+                            />
+                          </div>
                         </label>
-                        {/*
-                          Hint sits with its own field so the user reads
-                          "Default vs Custom…" right next to the dropdown
-                          that exposes those options. Older layouts parked
-                          this paragraph at the bottom of the section, past
-                          the Memory picker, where it got mistaken for
-                          memory documentation.
-                        */}
                         <p className="hint agent-model-row-hint">
-                          {t('settings.modelPickerHint')}
+                          {modelSourceHint}
                         </p>
                       </>
                     ) : null}
@@ -2242,18 +2267,25 @@ export function SettingsDialog({
                         <span className="field-label">
                           {t('settings.reasoningPicker')}
                         </span>
-                        <select
-                          value={reasoningValue}
-                          onChange={(e) =>
-                            setChoice({ reasoning: e.target.value })
-                          }
-                        >
-                          {selected.reasoningOptions!.map((r) => (
-                            <option key={r.id} value={r.id}>
-                              {r.label}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="agent-model-select-wrap">
+                          <select
+                            value={reasoningValue}
+                            onChange={(e) =>
+                              setChoice({ reasoning: e.target.value })
+                            }
+                          >
+                            {selected.reasoningOptions!.map((r) => (
+                              <option key={r.id} value={r.id}>
+                                {r.label}
+                              </option>
+                            ))}
+                          </select>
+                          <Icon
+                            name="chevron-down"
+                            size={12}
+                            className="agent-model-select-chevron"
+                          />
+                        </div>
                       </label>
                     ) : null}
                     <MemoryModelInline
@@ -2311,6 +2343,9 @@ export function SettingsDialog({
                           >
                             <span className="field-label">
                               {t(field.labelKey)}
+                              {'labelSuffix' in field
+                                ? ` (${field.labelSuffix})`
+                                : ''}
                             </span>
                             <input
                               type={
@@ -2858,7 +2893,7 @@ export function deriveComposioCredentialState(
   return 'empty';
 }
 
-function ConnectorSection({
+export function ConnectorSection({
   cfg,
   setCfg,
   composioConfigLoading = false,

@@ -1,0 +1,865 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>小红书 / Xiaohongshu — reference components</title>
+    <meta
+      name="description"
+      content="Reference fixture for design-systems/xiaohongshu. Every visible
+        value comes from tokens.css. 小红书 / RED signature moves: grey
+        canvas + white card masonry, PingFang SC throughout, brand red
+        used exactly once per screen as accent, full-pill CTAs, soft
+        black text (rgba 0,0,0,.8), no shadow until hover."
+    />
+
+    <style>
+      :root {
+        --bg:           #f5f5f5;
+        --surface:      #ffffff;
+        --surface-warm: #fafafa;
+
+        --fg:    rgba(0, 0, 0, 0.8);
+        --fg-2:  rgba(0, 0, 0, 0.62);
+        --muted: rgba(0, 0, 0, 0.45);
+        --meta:  rgba(0, 0, 0, 0.27);
+
+        --border:      rgba(0, 0, 0, 0.08);
+        --border-soft: rgba(0, 0, 0, 0.05);
+
+        --accent:        #ff2442;
+        --accent-on:     #ffffff;
+        --accent-hover:  #ff2e4d;
+        --accent-active: #e6203a;
+
+        --success: #02b940;
+        --warn:    #ff7d03;
+        --danger:  #ff2442;
+
+        --font-display: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
+        --font-body:    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif;
+        --font-mono:    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+        --text-xs:   12px;
+        --text-sm:   14px;
+        --text-base: 16px;
+        --text-lg:   18px;
+        --text-xl:   20px;
+        --text-2xl:  24px;
+        --text-3xl:  28px;
+        --text-4xl:  32px;
+
+        --leading-body:     1.5;
+        --leading-tight:    1.25;
+        --tracking-display: 0;
+
+        --space-1:  4px;
+        --space-2:  8px;
+        --space-3:  12px;
+        --space-4:  16px;
+        --space-5:  20px;
+        --space-6:  24px;
+        --space-8:  32px;
+        --space-12: 48px;
+
+        --section-y-desktop: 64px;
+        --section-y-tablet:  48px;
+        --section-y-phone:   32px;
+
+        --radius-sm:   8px;
+        --radius-md:   12px;
+        --radius-lg:   16px;
+        --radius-pill: 9999px;
+
+        --elev-flat:   none;
+        --elev-ring:   0 0 0 1px var(--border);
+        --elev-raised: 0 4px 12px rgba(0, 0, 0, 0.08);
+
+        --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+
+        --motion-fast:   150ms;
+        --motion-base:   200ms;
+        --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+        --container-max:            1200px;
+        --container-gutter-desktop: 24px;
+        --container-gutter-tablet:  16px;
+        --container-gutter-phone:   12px;
+      }
+
+      /* ─── Reset ─────────────────────────────────────────────── */
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+
+      /* ─── Layout primitives ─────────────────────────────────── */
+      .container {
+        max-width: var(--container-max);
+        margin-inline: auto;
+        padding-inline: var(--container-gutter-desktop);
+      }
+      section { padding-block: var(--section-y-desktop); }
+      section + section { border-top: 1px solid var(--border-soft); }
+      @media (max-width: 1023px) {
+        .container { padding-inline: var(--container-gutter-tablet); }
+        section { padding-block: var(--section-y-tablet); }
+      }
+      @media (max-width: 639px) {
+        .container { padding-inline: var(--container-gutter-phone); }
+        section { padding-block: var(--section-y-phone); }
+      }
+
+      /* ─── Typography — PingFang SC throughout, tracking 0 ───── */
+      h1, h2, h3 {
+        margin: 0;
+        color: var(--fg);
+        font-family: var(--font-display);
+        line-height: var(--leading-tight);
+        letter-spacing: var(--tracking-display);
+      }
+      h1 { font-size: var(--text-4xl); font-weight: 600; }
+      h2 { font-size: var(--text-2xl); font-weight: 600; }
+      h3 { font-size: var(--text-xl); font-weight: 600; }
+      p { margin: 0; }
+      .lead {
+        font-size: var(--text-lg);
+        color: var(--fg-2);
+        line-height: var(--leading-body);
+        font-weight: 400;
+      }
+      .body-muted { color: var(--fg-2); }
+      .body-sm { font-size: var(--text-sm); }
+      /* Eyebrow stays sentence-case (not uppercase) — Chinese voice */
+      .eyebrow {
+        font-size: var(--text-xs);
+        color: var(--accent);
+        font-weight: 500;
+        font-family: var(--font-body);
+      }
+      .stack-2 > * + * { margin-block-start: var(--space-2); }
+      .stack-3 > * + * { margin-block-start: var(--space-3); }
+      .stack-4 > * + * { margin-block-start: var(--space-4); }
+      .stack-6 > * + * { margin-block-start: var(--space-6); }
+
+      /* ─── Top nav — soft pill segmented ─────────────────────── */
+      .topnav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding-block: var(--space-4);
+        gap: var(--space-4);
+      }
+      .topnav-brand {
+        font-family: var(--font-display);
+        font-weight: 600;
+        font-size: var(--text-lg);
+        color: var(--fg);
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+      }
+      .topnav-brand-mark {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: var(--radius-pill);
+        background: var(--accent);
+        color: var(--accent-on);
+        font-size: var(--text-xs);
+        font-weight: 600;
+        letter-spacing: 0.04em;
+      }
+      .topnav-tabs {
+        display: flex;
+        align-items: center;
+        gap: var(--space-1);
+      }
+      .topnav-tabs a {
+        position: relative;
+        padding: var(--space-2) var(--space-3);
+        font-size: var(--text-sm);
+        font-weight: 400;
+        color: var(--muted);
+        text-decoration: none;
+        transition: color var(--motion-fast) var(--ease-standard);
+      }
+      .topnav-tabs a:hover { color: var(--fg-2); }
+      .topnav-tabs a[aria-current="page"] {
+        color: var(--fg);
+        font-weight: 600;
+      }
+      /* DESIGN.md §4: tab indicator is a 2px underline at component-layer red, matched to text width */
+      .topnav-tabs a[aria-current="page"]::after {
+        content: "";
+        position: absolute;
+        left: var(--space-3);
+        right: var(--space-3);
+        bottom: 0;
+        height: 2px;
+        background: var(--accent-hover);
+        border-radius: var(--radius-pill);
+      }
+      .topnav-right { display: flex; align-items: center; gap: var(--space-3); }
+
+      /* ─── Buttons — full pill, no shadow ────────────────────── */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: 10px 20px;
+        border-radius: var(--radius-pill);
+        font-family: var(--font-body);
+        font-size: var(--text-sm);
+        font-weight: 500;
+        line-height: 1;
+        cursor: pointer;
+        border: 1px solid transparent;
+        text-decoration: none;
+        transition: background-color var(--motion-fast) var(--ease-standard),
+                    color var(--motion-fast) var(--ease-standard),
+                    border-color var(--motion-fast) var(--ease-standard);
+      }
+      .btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+      .btn-primary {
+        background: var(--accent);
+        color: var(--accent-on);
+      }
+      .btn-primary:hover  { background: var(--accent-hover); }
+      .btn-primary:active { background: var(--accent-active); }
+      .btn-secondary {
+        background: var(--border);
+        color: var(--fg);
+      }
+      .btn-secondary:hover { background: rgba(0, 0, 0, 0.12); }
+      .btn-ghost {
+        background: transparent;
+        color: var(--fg);
+        border-color: var(--border);
+      }
+      .btn-ghost:hover { background: var(--border-soft); }
+      /* Follow CTA: feed-card variant per DESIGN.md §4 "Follow Button — three-state" */
+      .btn-follow {
+        padding: 6px 14px;
+        font-size: var(--text-xs);
+        font-weight: 500;
+        border-radius: var(--radius-pill);
+        border: none;
+        cursor: pointer;
+        background: var(--accent);
+        color: var(--accent-on);
+      }
+      .btn-follow[aria-pressed="true"] {
+        background: rgba(0, 0, 0, 0.05);
+        color: var(--muted);
+      }
+
+      /* ─── Chips / tags — pill rectangle ─────────────────────── */
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: 4px 12px;
+        border-radius: var(--radius-pill);
+        font-size: var(--text-xs);
+        font-weight: 400;
+        background: rgba(0, 0, 0, 0.05);
+        color: var(--fg-2);
+      }
+      .chip-trending {
+        background: var(--accent);
+        color: var(--accent-on);
+        font-weight: 500;
+      }
+      .chip-success {
+        background: color-mix(in oklab, var(--success), transparent 88%);
+        color: var(--success);
+      }
+      .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+      }
+
+      /* ─── Cards — 12px radius, flat by default ──────────────── */
+      .card {
+        background: var(--surface);
+        border-radius: var(--radius-md);
+        padding: var(--space-6);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+        transition: box-shadow var(--motion-base) var(--ease-standard),
+                    transform var(--motion-base) var(--ease-standard);
+      }
+      /* DESIGN.md §6 "Subtle (1)" — PC card hover only */
+      .card:hover {
+        box-shadow: var(--elev-raised);
+        transform: translateY(-2px);
+      }
+
+      /* ─── Feed card — image flush, footer with heart + count ─ */
+      .feed-card {
+        background: var(--surface);
+        border-radius: var(--radius-md);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        transition: box-shadow var(--motion-base) var(--ease-standard),
+                    transform var(--motion-base) var(--ease-standard);
+      }
+      .feed-card:hover {
+        box-shadow: var(--elev-raised);
+        transform: translateY(-2px);
+      }
+      .feed-card-cover {
+        width: 100%;
+        aspect-ratio: 3 / 4;
+        display: block;
+        background:
+          linear-gradient(135deg,
+            color-mix(in oklab, var(--accent), white 80%),
+            color-mix(in oklab, var(--accent), white 50%));
+        position: relative;
+      }
+      .feed-card-cover-tag {
+        position: absolute;
+        top: var(--space-3);
+        left: var(--space-3);
+        padding: 4px 10px;
+        border-radius: var(--radius-pill);
+        background: rgba(0, 0, 0, 0.45);
+        color: #ffffff;
+        font-size: var(--text-xs);
+        font-weight: 500;
+        backdrop-filter: blur(4px);
+      }
+      .feed-card-body {
+        padding: var(--space-3);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+      }
+      .feed-card-title {
+        font-size: var(--text-sm);
+        font-weight: 500;
+        color: var(--fg);
+        line-height: 1.43;
+        margin: 0;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .feed-card-foot {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        font-size: var(--text-xs);
+        color: var(--muted);
+      }
+      .feed-card-avatar {
+        width: 24px;
+        height: 24px;
+        border-radius: var(--radius-pill);
+        background: color-mix(in oklab, var(--accent), white 70%);
+        flex-shrink: 0;
+      }
+      .feed-card-author {
+        flex: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        color: var(--fg-2);
+      }
+      .feed-card-likes {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      .feed-card-likes .icon { color: var(--muted); }
+      .feed-card-likes[data-liked="true"] .icon { color: var(--accent); fill: var(--accent); }
+
+      /* ─── Inputs — F5F5F5 fill, pill, no border ─────────────── */
+      .field { display: flex; flex-direction: column; gap: var(--space-2); }
+      .field label {
+        font-size: var(--text-sm);
+        font-weight: 500;
+        color: var(--fg);
+      }
+      .field input, .field textarea {
+        background: var(--bg);
+        color: var(--fg);
+        border: 1px solid transparent;
+        border-radius: var(--radius-pill);
+        padding: 10px 16px;
+        font-family: var(--font-body);
+        font-size: var(--text-sm);
+        outline: none;
+        transition: border-color var(--motion-fast) var(--ease-standard),
+                    box-shadow var(--motion-fast) var(--ease-standard),
+                    background-color var(--motion-fast) var(--ease-standard);
+      }
+      .field textarea {
+        border-radius: var(--radius-md);
+        padding: var(--space-3) var(--space-4);
+        resize: vertical;
+        min-height: 88px;
+        font-family: var(--font-body);
+      }
+      .field input::placeholder, .field textarea::placeholder { color: var(--meta); }
+      .field input:focus, .field textarea:focus {
+        background: var(--surface);
+        border-color: var(--border);
+        box-shadow: var(--focus-ring);
+      }
+      .field-help { font-size: var(--text-xs); color: var(--muted); }
+
+      /* ─── Hero meta sidecar (soft pink-tinted card) ─────────── */
+      .hero-meta {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-4);
+        padding: var(--space-6);
+        border-radius: var(--radius-lg);
+        /* Soft pink-tinted surface — derived from accent at low alpha,
+           a brand-friendly tint without introducing a new token. */
+        background: color-mix(in oklab, var(--accent), white 92%);
+      }
+      .hero-meta-title {
+        font-size: var(--text-sm);
+        font-weight: 600;
+        color: var(--fg);
+        margin: 0;
+      }
+      .hero-meta-stats {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: var(--space-3);
+      }
+      .hero-meta-stat {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .hero-meta-stat-num {
+        font-size: var(--text-xl);
+        font-weight: 600;
+        color: var(--fg);
+        font-variant-numeric: tabular-nums;
+        line-height: 1.2;
+      }
+      .hero-meta-stat-label {
+        font-size: var(--text-xs);
+        color: var(--muted);
+      }
+      .hero-meta-foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-3);
+        padding-block-start: var(--space-3);
+        border-top: 1px solid rgba(0, 0, 0, 0.06);
+      }
+
+      /* ─── Section layouts ───────────────────────────────────── */
+      .hero-grid {
+        display: grid;
+        grid-template-columns: 1.3fr 1fr;
+        gap: var(--space-12);
+        align-items: center;
+      }
+      @media (max-width: 1023px) {
+        .hero-grid { grid-template-columns: 1fr; gap: var(--space-8); }
+      }
+      .hero-actions {
+        display: flex;
+        gap: var(--space-3);
+        margin-block-start: var(--space-6);
+        flex-wrap: wrap;
+      }
+      .features-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: var(--space-5);
+        margin-block-start: var(--space-8);
+      }
+      @media (max-width: 1023px) { .features-grid { grid-template-columns: 1fr 1fr; } }
+      @media (max-width: 639px)  { .features-grid { grid-template-columns: 1fr; } }
+      .feed-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: var(--space-3);
+        margin-block-start: var(--space-6);
+      }
+      @media (max-width: 1023px) { .feed-grid { grid-template-columns: repeat(3, 1fr); } }
+      @media (max-width: 639px)  { .feed-grid { grid-template-columns: repeat(2, 1fr); } }
+      .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--space-12);
+        align-items: start;
+      }
+      @media (max-width: 1023px) { .form-row { grid-template-columns: 1fr; } }
+      .form {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-4);
+        padding: var(--space-6);
+        background: var(--surface);
+        border-radius: var(--radius-lg);
+        max-width: 480px;
+      }
+      .form-actions {
+        display: flex;
+        gap: var(--space-3);
+        margin-block-start: var(--space-2);
+      }
+      .icon { width: 16px; height: 16px; flex-shrink: 0; }
+      .icon-lg { width: 18px; height: 18px; flex-shrink: 0; }
+      .row-between {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-3);
+      }
+      kbd {
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+        padding: 2px 6px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--muted);
+      }
+      code {
+        font-family: var(--font-mono);
+        font-size: 0.875em;
+        background: rgba(0, 0, 0, 0.05);
+        border-radius: var(--radius-sm);
+        padding: 1px 6px;
+        color: var(--fg);
+      }
+    </style>
+  </head>
+  <body>
+    <header class="container">
+      <nav class="topnav" aria-label="Primary">
+        <a class="topnav-brand" href="./DESIGN.md">
+          <span class="topnav-brand-mark" aria-hidden="true">RED</span>
+          <span>灵感参考</span>
+        </a>
+        <div class="topnav-tabs" role="tablist">
+          <a href="#" role="tab" aria-current="page">发现</a>
+          <a href="#" role="tab">关注</a>
+          <a href="#" role="tab">附近</a>
+          <a href="#" role="tab">购物</a>
+        </div>
+        <div class="topnav-right">
+          <a href="#" class="body-sm" style="color: var(--fg-2); text-decoration: none; font-weight: 500;">登录</a>
+          <a href="#" class="btn btn-primary">发布笔记</a>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container">
+      <!-- HERO — 种草 voice, pill CTA, soft pink-tinted sidecar. -->
+      <section data-od-id="hero">
+        <div class="hero-grid">
+          <div class="stack-4">
+            <p class="eyebrow">灵感参考 · xiaohongshu</p>
+            <h1>标记你的生活，<br />让世界被你种草。</h1>
+            <p class="lead" style="max-width: 30ch;">
+              你今天的早餐、出差住的酒店、买了三支才挑对的口红 —
+              都是别人正在寻找的灵感。Show up. 被看见。被收藏。
+            </p>
+            <div class="hero-actions">
+              <a href="./tokens.css" class="btn btn-primary">
+                开始记录
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M5 12h14M13 6l6 6-6 6"/>
+                </svg>
+              </a>
+              <a href="./DESIGN.md" class="btn btn-ghost">阅读设计语言</a>
+            </div>
+            <p class="body-sm body-muted" style="margin-block-start: var(--space-3);">
+              按 <kbd>⌘</kbd> <kbd>K</kbd> 搜索笔记 · Press <kbd>⌘</kbd> <kbd>K</kbd> to search.
+            </p>
+          </div>
+
+          <aside class="hero-meta" aria-label="今日数据 · Today on RED">
+            <div class="row-between">
+              <p class="hero-meta-title">今日小红书 · Today on RED</p>
+              <span class="chip chip-trending">
+                <span class="dot" aria-hidden="true"></span>
+                热门
+              </span>
+            </div>
+            <div class="hero-meta-stats">
+              <div class="hero-meta-stat">
+                <span class="hero-meta-stat-num">3.2亿</span>
+                <span class="hero-meta-stat-label">月活用户</span>
+              </div>
+              <div class="hero-meta-stat">
+                <span class="hero-meta-stat-num">8,400万</span>
+                <span class="hero-meta-stat-label">日均笔记</span>
+              </div>
+              <div class="hero-meta-stat">
+                <span class="hero-meta-stat-num">72%</span>
+                <span class="hero-meta-stat-label">女性用户</span>
+              </div>
+            </div>
+            <div class="hero-meta-foot">
+              <span class="body-sm" style="color: var(--muted);">
+                Source · xiaohongshu.com · <time datetime="2026-05-18">2026.05</time>
+              </span>
+              <a href="#" class="body-sm" style="color: var(--accent); text-decoration: none; font-weight: 500;">查看 →</a>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <!-- DISCOVER — masonry-style feed mock with bilingual titles. -->
+      <section data-od-id="discover">
+        <div class="row-between" style="flex-wrap: wrap; gap: var(--space-3);">
+          <div class="stack-2">
+            <p class="eyebrow">今日发现 · Discover</p>
+            <h2>看看大家正在种草什么</h2>
+          </div>
+          <div style="display: flex; gap: var(--space-2); flex-wrap: wrap;">
+            <span class="chip chip-trending">穿搭</span>
+            <span class="chip">咖啡</span>
+            <span class="chip">旅行</span>
+            <span class="chip">护肤</span>
+            <span class="chip">家居</span>
+          </div>
+        </div>
+        <div class="feed-grid">
+          <article class="feed-card">
+            <div class="feed-card-cover" aria-hidden="true">
+              <span class="feed-card-cover-tag">视频</span>
+            </div>
+            <div class="feed-card-body">
+              <h3 class="feed-card-title" style="font-family: var(--font-body);">
+                周末和朋友的 brunch 小记 · A slow Saturday in Shanghai
+              </h3>
+              <div class="feed-card-foot">
+                <span class="feed-card-avatar" aria-hidden="true"></span>
+                <span class="feed-card-author">小满 · xiaoman</span>
+                <span class="feed-card-likes" data-liked="true" aria-label="2.3 万 likes">
+                  <svg class="icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M12 21s-7-4.5-9.5-9C.9 8.8 2.7 5 6 5c2 0 3.3 1 4 2.3C10.7 6 12 5 14 5c3.3 0 5.1 3.8 3.5 7-2.5 4.5-9.5 9-9.5 9z"/>
+                  </svg>
+                  2.3w
+                </span>
+              </div>
+            </div>
+          </article>
+          <article class="feed-card">
+            <div class="feed-card-cover" aria-hidden="true" style="aspect-ratio: 1 / 1;"></div>
+            <div class="feed-card-body">
+              <h3 class="feed-card-title" style="font-family: var(--font-body);">
+                租房 50㎡ 的暖色客厅改造 — before / after 全记录
+              </h3>
+              <div class="feed-card-foot">
+                <span class="feed-card-avatar" aria-hidden="true" style="background: color-mix(in oklab, var(--success), white 70%);"></span>
+                <span class="feed-card-author">桃子家的小屋</span>
+                <span class="feed-card-likes" aria-label="8,712 likes">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 21s-7-4.5-9.5-9C.9 8.8 2.7 5 6 5c2 0 3.3 1 4 2.3C10.7 6 12 5 14 5c3.3 0 5.1 3.8 3.5 7-2.5 4.5-9.5 9-9.5 9z"/>
+                  </svg>
+                  8,712
+                </span>
+              </div>
+            </div>
+          </article>
+          <article class="feed-card">
+            <div class="feed-card-cover" aria-hidden="true" style="aspect-ratio: 4 / 5; background: linear-gradient(160deg, color-mix(in oklab, var(--accent), white 60%), color-mix(in oklab, var(--warn), white 70%));"></div>
+            <div class="feed-card-body">
+              <h3 class="feed-card-title" style="font-family: var(--font-body);">
+                第三支才挑对 · 显白程度十级的口红种草清单
+              </h3>
+              <div class="feed-card-foot">
+                <span class="feed-card-avatar" aria-hidden="true" style="background: color-mix(in oklab, var(--warn), white 60%);"></span>
+                <span class="feed-card-author">林深 · lin.shen</span>
+                <span class="feed-card-likes" data-liked="true" aria-label="1.1 万 likes">
+                  <svg class="icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M12 21s-7-4.5-9.5-9C.9 8.8 2.7 5 6 5c2 0 3.3 1 4 2.3C10.7 6 12 5 14 5c3.3 0 5.1 3.8 3.5 7-2.5 4.5-9.5 9-9.5 9z"/>
+                  </svg>
+                  1.1w
+                </span>
+              </div>
+            </div>
+          </article>
+          <article class="feed-card">
+            <div class="feed-card-cover" aria-hidden="true" style="aspect-ratio: 3 / 4; background: linear-gradient(200deg, color-mix(in oklab, var(--success), white 60%), color-mix(in oklab, var(--success), white 88%));">
+              <span class="feed-card-cover-tag">长图</span>
+            </div>
+            <div class="feed-card-body">
+              <h3 class="feed-card-title" style="font-family: var(--font-body);">
+                京都早春三日 · 在小巷里慢慢迷路也很好
+              </h3>
+              <div class="feed-card-foot">
+                <span class="feed-card-avatar" aria-hidden="true" style="background: color-mix(in oklab, var(--success), white 50%);"></span>
+                <span class="feed-card-author">远野日记 · tono</span>
+                <span class="feed-card-likes" aria-label="6,304 likes">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 21s-7-4.5-9.5-9C.9 8.8 2.7 5 6 5c2 0 3.3 1 4 2.3C10.7 6 12 5 14 5c3.3 0 5.1 3.8 3.5 7-2.5 4.5-9.5 9-9.5 9z"/>
+                  </svg>
+                  6,304
+                </span>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- FEATURES — three guiding principles, flat cards, hover lift. -->
+      <section data-od-id="features">
+        <div class="stack-3">
+          <p class="eyebrow">为什么这样设计 · Why it looks like this</p>
+          <h2 style="max-width: 22ch;">
+            克制做底色，内容才是主角。
+          </h2>
+          <p class="lead" style="max-width: 56ch;">
+            一个 <code>--accent</code>，一种 <code>PingFang SC</code>，
+            一套 <code>rgba(0,0,0,*)</code> 的浮层灰阶 —
+            其余空间，全部交给图片本身。
+          </p>
+        </div>
+
+        <div class="features-grid">
+          <article class="card">
+            <span class="chip chip-trending" style="align-self: flex-start;">
+              <span class="dot" aria-hidden="true"></span>
+              品牌唯一红
+            </span>
+            <h3>一屏只用一次的红</h3>
+            <p class="body-muted body-sm">
+              <code>#ff2442</code> 只出现在主要 CTA、心形高亮、
+              热门标签上。同一个页面里出现两次饱和红，画面就立刻
+              "降级"成了打折海报，而不是一张笔记。
+            </p>
+            <a href="./tokens.css" class="body-sm" style="color: var(--accent); text-decoration: none; font-weight: 500;">查看 token →</a>
+          </article>
+
+          <article class="card">
+            <span class="chip" style="align-self: flex-start;">柔黑文字</span>
+            <h3>从不使用纯黑</h3>
+            <p class="body-muted body-sm">
+              标题 <code>rgba(0,0,0,.8)</code>、正文 <code>.62</code>、
+              描述 <code>.45</code>、占位 <code>.27</code> —
+              四级透明黑替代离散灰阶，同一个浮层落在白卡、照片、
+              抽屉上都成立。
+            </p>
+            <a href="./DESIGN.md" class="body-sm" style="color: var(--accent); text-decoration: none; font-weight: 500;">阅读规则 →</a>
+          </article>
+
+          <article class="card">
+            <span class="chip" style="align-self: flex-start;">圆得彻底</span>
+            <h3>能按的，一定是 pill</h3>
+            <p class="body-muted body-sm">
+              卡片 <code>12px</code>、按钮 <code>9999px</code>。
+              一个直角按钮在这套系统里立刻显得不对 —
+              层次靠间距和圆角，不靠投影。Shadow stays
+              off until hover earns it.
+            </p>
+            <a href="./tokens.css" class="body-sm" style="color: var(--accent); text-decoration: none; font-weight: 500;">检查圆角 →</a>
+          </article>
+        </div>
+      </section>
+
+      <!-- FORM — pill input on F5F5F5, primary red CTA, follow CTA demo. -->
+      <section data-od-id="form">
+        <div class="form-row">
+          <div class="stack-4">
+            <p class="eyebrow">订阅每日灵感 · Daily inspo digest</p>
+            <h2>每天一封 · 100 张被收藏最多的笔记。</h2>
+            <p class="lead" style="max-width: 44ch;">
+              No spam，no third-party，no enterprise tone.
+              一个邮箱，一个发布频率，仅此而已 —
+              我们用 <code>--focus-ring</code> 的 RED 红圈
+              提示你正在专注的输入框。
+            </p>
+            <ul style="margin: 0; padding-inline-start: var(--space-5); color: var(--fg-2); font-size: var(--text-sm);" class="stack-3">
+              <li>输入框背景使用 <code>--bg</code>（#F5F5F5），focus 时升到 <code>--surface</code>。</li>
+              <li>提交按钮即 <code>.btn-primary</code> — 系统里只有一种红 CTA。</li>
+              <li>占位符使用 <code>--meta</code>，0.27 透明度的最弱一档。</li>
+            </ul>
+            <div class="row-between" style="margin-block-start: var(--space-4); max-width: 360px;">
+              <div class="stack-2" style="display: flex; flex-direction: column;">
+                <span class="body-sm" style="color: var(--fg); font-weight: 500;">关注按钮三态</span>
+                <span class="body-sm" style="color: var(--muted);">DESIGN.md §4 · Follow Button</span>
+              </div>
+              <div style="display: flex; gap: var(--space-2);">
+                <button type="button" class="btn-follow">+ 关注</button>
+                <button type="button" class="btn-follow" aria-pressed="true">已关注</button>
+              </div>
+            </div>
+          </div>
+
+          <form class="form" onsubmit="event.preventDefault();" aria-label="订阅每日灵感">
+            <div class="row-between">
+              <p style="font-size: var(--text-sm); font-weight: 600; color: var(--fg); margin: 0;">订阅每日灵感</p>
+              <span class="chip chip-success">
+                <span class="dot" aria-hidden="true"></span>
+                Free · 免费
+              </span>
+            </div>
+            <div class="field">
+              <label for="nickname">你的昵称 · Nickname</label>
+              <input
+                id="nickname"
+                type="text"
+                placeholder="给未来的自己留个名字"
+                autocomplete="nickname"
+              />
+            </div>
+            <div class="field">
+              <label for="email">邮箱 · Email</label>
+              <input
+                id="email"
+                type="email"
+                placeholder="you@example.com"
+                autocomplete="email"
+                required
+              />
+              <p class="field-help">仅用于发送每日灵感清单，可随时退订。</p>
+            </div>
+            <div class="field">
+              <label for="topic">最想被种草的主题 · What to be inspired by</label>
+              <textarea
+                id="topic"
+                placeholder="例如：周末 brunch、出租屋改造、本子文具、晨跑路线…"
+              ></textarea>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">
+                立即订阅
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M5 12h14M13 6l6 6-6 6"/>
+                </svg>
+              </button>
+              <button type="button" class="btn btn-ghost">看示例</button>
+            </div>
+          </form>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
