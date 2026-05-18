@@ -44,8 +44,8 @@ For a Figma-to-code workflow, the surfaces usually look like this:
 | Agent behavior | `SKILL.md` |
 | Open Design metadata | `open-design.json` |
 | Brand or visual contract | `design-systems/{brand}/DESIGN.md` |
-| Example output | `examples/marketing-page/index.html` |
-| Preview media | `preview/poster.png` or `preview/index.html` |
+| Example output | `example.html` or `examples/{plugin-id}/example.html` inside the plugin folder |
+| Preview media | `preview/poster.png` or `preview/index.html` inside the plugin folder |
 
 The result is not a screenshot generator. It is a reusable agent workflow with a visible contract.
 
