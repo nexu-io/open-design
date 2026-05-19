@@ -283,6 +283,56 @@ test("tauri-migration-status rejects packaged handoff archives without tracked w
   assert.match(parsed.handoffArchive.problems.join("\n"), /command script is missing tracked worktree guard/);
 });
 
+test("tauri-migration-status rejects packaged handoff archives without bundle SHA validation", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+  const { archivePath } = await writeHandoffArchive(handoffDir);
+  const commandScriptPath = `${archivePath}.commands.sh`;
+  const commandScript = await readFile(commandScriptPath, "utf8");
+  await writeFile(
+    commandScriptPath,
+    commandScript.replace("bundle_sha=\n", "").replace('actual_bundle_sha="$(hash_file "$bundle")"\n', ""),
+    "utf8",
+  );
+  await writeCommandScriptChecksum(commandScriptPath);
+
+  const result = await runStatus(fixture, "--handoff-dir", handoffDir);
+  const parsed = JSON.parse(result.stdout) as { handoffArchive: { current: boolean; problems: string[] } };
+
+  assert.equal(parsed.handoffArchive.current, false);
+  assert.match(parsed.handoffArchive.problems.join("\n"), /command script is missing extracted bundle SHA-256 validation/);
+});
+
+test("tauri-migration-status rejects packaged handoff archives without manifest field validation", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+  const { archivePath } = await writeHandoffArchive(handoffDir);
+  const commandScriptPath = `${archivePath}.commands.sh`;
+  const commandScript = await readFile(commandScriptPath, "utf8");
+  await writeFile(
+    commandScriptPath,
+    commandScript.replace("handoff manifest bundlePath must be relative and relocatable\n", ""),
+    "utf8",
+  );
+  await writeCommandScriptChecksum(commandScriptPath);
+
+  const result = await runStatus(fixture, "--handoff-dir", handoffDir);
+  const parsed = JSON.parse(result.stdout) as { handoffArchive: { current: boolean; problems: string[] } };
+
+  assert.equal(parsed.handoffArchive.current, false);
+  assert.match(parsed.handoffArchive.problems.join("\n"), /command script is missing handoff manifest field validation/);
+});
+
 test("tauri-migration-status reports stale handoff artifacts", async (t) => {
   const fixture = await createFixtureRoot(t, {
     checked: [],
@@ -870,6 +920,12 @@ async function writeHandoffArchive(handoffDir: string): Promise<{ archivePath: s
       'git fetch "$bundle" "$branch:$temp_ref"',
       'gh workflow run "$workflow" --ref "$branch"',
       "download-tauri-m4-reports.ts",
+      "bundle_sha=",
+      'actual_bundle_sha="$(hash_file "$bundle")"',
+      "bundle SHA-256 mismatch",
+      "handoff manifest branchHead must be a 40-character SHA-1",
+      "handoff manifest bundlePath must be relative and relocatable",
+      "handoff manifest bundleSha256 must be a 64-character SHA-256",
       '--run-id "$GITHUB_RUN_ID"',
       '--branch "$branch"',
       '--expected-head "$expected_head"',

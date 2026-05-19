@@ -675,6 +675,20 @@ async function readHandoffArchiveStatus(archivePath: string, handoff?: HandoffSt
     if (!commandScriptSource.includes("download-tauri-m4-reports.ts") || !commandScriptSource.includes("GITHUB_RUN_ID")) {
       problems.push(`command script is missing post-CI report advance guidance: ${commandScriptPath}`);
     }
+    if (
+      !commandScriptSource.includes("bundle_sha=") ||
+      !commandScriptSource.includes('actual_bundle_sha="$(hash_file "$bundle")"') ||
+      !commandScriptSource.includes("bundle SHA-256 mismatch")
+    ) {
+      problems.push(`command script is missing extracted bundle SHA-256 validation: ${commandScriptPath}`);
+    }
+    if (
+      !commandScriptSource.includes("handoff manifest branchHead must be a 40-character SHA-1") ||
+      !commandScriptSource.includes("handoff manifest bundlePath must be relative and relocatable") ||
+      !commandScriptSource.includes("handoff manifest bundleSha256 must be a 64-character SHA-256")
+    ) {
+      problems.push(`command script is missing handoff manifest field validation: ${commandScriptPath}`);
+    }
     if (!commandScriptSource.includes("--expected-head") || !commandScriptSource.includes("--wait")) {
       problems.push(`command script is missing branch-head CI wait guidance: ${commandScriptPath}`);
     }
