@@ -17059,6 +17059,12 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   --pet-accent: var(--accent);
 }
 .pet-overlay > * { pointer-events: auto; }
+/* Left-anchored corners: align bubble to the left so it stays visually
+   attached to the sprite rather than floating off to the right. */
+.pet-overlay[data-corner='top-left'],
+.pet-overlay[data-corner='bottom-left'] {
+  align-items: flex-start;
+}
 
 .pet-sprite {
   position: relative;
@@ -17176,6 +17182,12 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   border-right: 1px solid var(--pet-accent);
   border-bottom: 1px solid var(--pet-accent);
   transform: rotate(45deg);
+}
+/* Left-anchored corners: move the tail to the left side of the bubble. */
+.pet-overlay[data-corner='top-left'] .pet-bubble::after,
+.pet-overlay[data-corner='bottom-left'] .pet-bubble::after {
+  right: auto;
+  left: 18px;
 }
 .pet-bubble-name {
   font-weight: 600;

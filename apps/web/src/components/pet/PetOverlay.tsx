@@ -459,6 +459,7 @@ export function PetOverlay({
       className="pet-overlay"
       role="complementary"
       aria-label={t('pet.overlayAria')}
+      data-corner={activeCorner}
       style={{
         ...cornerStyle(activeCorner, position),
         // The accent drives the halo, the bubble border, and the focus
