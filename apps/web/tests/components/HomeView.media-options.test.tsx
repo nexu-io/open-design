@@ -3,6 +3,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HomeView } from '../../src/components/HomeView';
+import { I18nProvider } from '../../src/i18n';
 import type { DesignSystemSummary, PromptTemplateSummary } from '../../src/types';
 
 const MEDIA_PLUGIN = pluginRecord('od-media-generation', 'Media generation');
@@ -34,6 +35,39 @@ const PROMPT_TEMPLATES: PromptTemplateSummary[] = [
     id: 'hyperframes-caption',
     surface: 'video',
     title: 'HyperFrames captions',
+    summary: 'A caption-led HyperFrames prompt.',
+    category: 'motion',
+    model: 'hyperframes-html',
+    aspect: '16:9',
+    source: { repo: 'heygen-com/hyperframes', license: 'MIT' },
+  },
+];
+
+const ZH_MEDIA_PROMPT_TEMPLATES: PromptTemplateSummary[] = [
+  {
+    id: '3d-stone-staircase-evolution-infographic',
+    surface: 'image',
+    title: '3D Stone Staircase Evolution Infographic',
+    summary: 'A polished product image prompt.',
+    category: 'product',
+    model: 'gpt-image-2',
+    aspect: '16:9',
+    source: { repo: 'open-design/image-prompts', license: 'MIT' },
+  },
+  {
+    id: '3d-animated-boy-building-lego',
+    surface: 'video',
+    title: '3D Animated Boy Building Lego',
+    summary: 'A short reveal video prompt.',
+    category: 'product',
+    model: 'doubao-seedance-2-0-260128',
+    aspect: '16:9',
+    source: { repo: 'open-design/video-prompts', license: 'MIT' },
+  },
+  {
+    id: 'hyperframes-html-in-canvas-iphone-device',
+    surface: 'video',
+    title: 'HyperFrames HTML-in-Canvas: 3D iPhone + MacBook Product Demo',
     summary: 'A caption-led HyperFrames prompt.',
     category: 'motion',
     model: 'hyperframes-html',
@@ -129,6 +163,40 @@ describe('HomeView media composer options', () => {
     await clickHomeRailChip('video');
     await waitFor(() => expect(screen.getByTestId('home-hero-footer-option-duration')).toBeTruthy());
     expect(screen.queryByRole('dialog', { name: /replace current prompt/i })).toBeNull();
+  });
+
+  it('localizes media composer prompt slots in Simplified Chinese', async () => {
+    stubFetch();
+    renderHomeZh({ promptTemplates: ZH_MEDIA_PROMPT_TEMPLATES });
+    const input = screen.getByTestId('home-hero-input') as HTMLTextAreaElement;
+
+    await clickHomeRailChip('image');
+    await waitFor(() => expect(input.value).toContain(
+      '使用 自动 创建高级产品工作室图片',
+    ));
+    expect(input.value).toContain(
+      '使用 gpt-image-2，以 16:9、2K 分辨率渲染。',
+    );
+
+    await clickHomeRailChip('video');
+    await waitFor(() => expect(input.value).toContain(
+      '使用 自动 创建高级产品工作室视频',
+    ));
+    expect(input.value).toContain(
+      '使用 seedance-2.0，以 16:9、时长 5 秒、2K 分辨率渲染。',
+    );
+
+    await clickHomeRailChip('hyperframes');
+    await waitFor(() => expect(input.value).toContain(
+      '创建 16:9、时长 10 秒 的高级产品工作室 HyperFrames 视频',
+    ));
+
+    await clickHomeRailChip('audio');
+    await waitFor(() => expect(screen.getByTestId('home-hero-prompt-slot-text').textContent).toBe('用户的需求说明'));
+    expect(input.value).toContain(
+      '把 用户的需求说明 转成时长 10 秒的高级产品工作室音频',
+    );
+    expect(input.value).not.toContain('seconds');
   });
 
   it('exposes only Speech and Sound effect in the Home Audio workflow', async () => {
@@ -359,6 +427,48 @@ describe('HomeView media composer options', () => {
     });
   });
 
+  it('round-trips localized Audio option labels after textarea edits in Simplified Chinese', async () => {
+    stubFetch({
+      elevenLabsVoices: [
+        { voiceId: 'voice-rachel', name: 'Rachel', category: 'premade' },
+        { voiceId: 'voice-adam', name: 'Adam', category: 'premade' },
+      ],
+    });
+    const onSubmit = vi.fn();
+    renderHomeZh({ onSubmit });
+
+    await clickHomeRailChip('audio');
+    await chooseOption('model', 'elevenlabs-v3');
+    await waitFor(() => expect(screen.getByTestId('home-hero-prompt-slot-voice').textContent).toBe('Rachel'));
+
+    await chooseOption('duration', '30');
+    await chooseOption('voice', 'voice-adam', 'Adam');
+
+    const input = screen.getByTestId('home-hero-input') as HTMLTextAreaElement;
+    await waitFor(() => {
+      expect(input.value).toContain('Adam');
+      expect(input.value).toContain('30 秒');
+    });
+    fireEvent.change(input, {
+      target: { value: input.value.replace('用户的需求说明', '欢迎来到 Open Design') },
+    });
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+        pluginInputs: expect.objectContaining({
+          duration: 30,
+          voice: 'voice-adam',
+          text: '欢迎来到 Open Design',
+        }),
+        projectMetadata: expect.objectContaining({
+          audioDuration: 30,
+          voice: 'voice-adam',
+        }),
+      }));
+    });
+  });
+
   it('uses the Audio text input as the audio source and plugin subject', async () => {
     stubFetch();
     const onSubmit = vi.fn();
@@ -413,6 +523,14 @@ describe('HomeView media composer options', () => {
 
 function renderHome(overrides: Partial<React.ComponentProps<typeof HomeView>> = {}) {
   return render(<HomeView {...homeProps(overrides)} />);
+}
+
+function renderHomeZh(overrides: Partial<React.ComponentProps<typeof HomeView>> = {}) {
+  return render(
+    <I18nProvider initial="zh-CN">
+      <HomeView {...homeProps(overrides)} />
+    </I18nProvider>,
+  );
 }
 
 function homeProps(overrides: Partial<React.ComponentProps<typeof HomeView>> = {}): React.ComponentProps<typeof HomeView> {

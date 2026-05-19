@@ -1294,7 +1294,7 @@ export function DesignFilesPanel({
                         <span className="df-row-name-wrap">
                           <span className="df-row-name">{folder.path}</span>
                           <span className="df-row-sub">
-                            {folder.fileCount} files · ready to add to My plugins
+                            {t('designFiles.pluginFilesReady', { count: folder.fileCount })}
                           </span>
                         </span>
                       </button>
@@ -1310,7 +1310,9 @@ export function DesignFilesPanel({
                               void handlePluginFolderAgentAction(folder.path, 'install')
                             }
                           >
-                            {installingFolder === folder.path ? 'Sending…' : 'Add to My plugins'}
+                            {installingFolder === folder.path
+                              ? t('designFiles.pluginSending')
+                              : t('designFiles.addToMyPlugins')}
                           </button>
                           <button
                             type="button"
@@ -1321,7 +1323,9 @@ export function DesignFilesPanel({
                               void handlePluginFolderAgentAction(folder.path, 'publish')
                             }
                           >
-                            {sharingFolder === `publish:${folder.path}` ? 'Sending…' : 'Publish repo'}
+                            {sharingFolder === `publish:${folder.path}`
+                              ? t('designFiles.pluginSending')
+                              : t('designFiles.publishRepo')}
                           </button>
                           <button
                             type="button"
@@ -1332,7 +1336,9 @@ export function DesignFilesPanel({
                               void handlePluginFolderAgentAction(folder.path, 'contribute')
                             }
                           >
-                            {sharingFolder === `contribute:${folder.path}` ? 'Sending…' : 'Open Design PR'}
+                            {sharingFolder === `contribute:${folder.path}`
+                              ? t('designFiles.pluginSending')
+                              : t('designFiles.openDesignPr')}
                           </button>
                         </div>
                       ) : null}

@@ -44,7 +44,7 @@ interface Props {
 }
 
 export function InlinePluginsRail(props: Props) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const [plugins, setPlugins] = useState<InstalledPluginRecord[]>([]);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -74,9 +74,7 @@ export function InlinePluginsRail(props: Props) {
     });
     setPendingId(null);
     if (!result) {
-      setError(
-        `Failed to apply ${record.title}. Make sure the daemon is reachable.`,
-      );
+      setError(t('home.error.applyFailed', { title: record.title }));
       return;
     }
     props.onApplied(record, result);

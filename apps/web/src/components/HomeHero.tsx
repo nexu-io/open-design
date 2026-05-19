@@ -31,6 +31,14 @@ import type {
   InstalledPluginRecord,
   McpServerConfig,
 } from '@open-design/contracts';
+import { useI18n, useT } from '../i18n';
+import {
+  localizePluginBriefTemplate,
+  localizePluginDisplayValue,
+  localizePluginInputLabel,
+  localizePluginInputValues,
+  localizePluginPlaceholder,
+} from '../i18n/plugin-content';
 import type { SkillSummary } from '../types';
 import { isImeComposing } from '../utils/imeComposing';
 import { Icon, type IconName } from './Icon';
@@ -47,7 +55,6 @@ import {
   inlineMentionToken,
   type InlineMentionEntity,
 } from '../utils/inlineMentions';
-import { useI18n, useT } from '../i18n';
 import type { Locale } from '../i18n/types';
 import {
   localizeSkillDescription,
@@ -250,7 +257,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
     { id: 'plugins', label: t('entry.navPlugins'), count: pluginMatches.length },
     { id: 'skills', label: t('homeHero.skills'), count: skillMatches.length },
     { id: 'mcp', label: 'MCP', count: mcpMatches.length },
-    { id: 'connectors', label: 'Connectors', count: connectorMatches.length },
+    { id: 'connectors', label: t('entry.tabConnectors'), count: connectorMatches.length },
   ];
   const showPlugins = mentionTab === 'all' || mentionTab === 'plugins';
   const showSkills = mentionTab === 'all' || mentionTab === 'skills';
@@ -266,7 +273,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
             icon: 'sparkles',
             title: plugin.title,
             description: plugin.manifest?.description ?? plugin.id,
-            meta: pendingPluginId === plugin.id ? t('homeHero.applying') : getPluginSourceLabel(plugin),
+            meta: pendingPluginId === plugin.id ? t('homeHero.applying') : getPluginSourceLabel(plugin, t),
             pluginRecord: plugin,
             disabled: pendingPluginId !== null,
             onPick: () => pickPlugin(plugin),
@@ -304,7 +311,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
     showConnectors
       ? {
           id: 'connectors',
-          label: 'Connectors',
+          label: t('entry.tabConnectors'),
           options: connectorMatches.map((connector) => ({
             id: `connector-${connector.id}`,
             icon: 'link',
@@ -333,6 +340,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
         connectorOptions,
         selectedPluginContexts,
         skillOptions,
+        t,
       }),
     [
       activePluginRecord,
@@ -343,6 +351,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
       connectorOptions,
       selectedPluginContexts,
       skillOptions,
+      t,
     ],
   );
   const pluginByMentionId = useMemo(() => {
@@ -352,14 +361,22 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
     if (activePluginRecord) map.set(activePluginRecord.id, activePluginRecord);
     return map;
   }, [activePluginRecord, pluginOptions, selectedPluginContexts]);
+  const localizedPluginInputTemplate = useMemo(
+    () => localizePluginBriefTemplate(locale, pluginInputTemplate),
+    [locale, pluginInputTemplate],
+  );
+  const localizedPluginInputValues = useMemo(
+    () => localizePluginInputValues(locale, pluginInputValues, pluginInputFields),
+    [locale, pluginInputFields, pluginInputValues],
+  );
   const promptOverlayParts = useMemo(
     () => buildPromptOverlayParts(
-      pluginInputTemplate,
-      pluginInputValues,
+      localizedPluginInputTemplate,
+      localizedPluginInputValues,
       prompt,
       promptMentionEntities,
     ),
-    [pluginInputTemplate, pluginInputValues, prompt, promptMentionEntities],
+    [localizedPluginInputTemplate, localizedPluginInputValues, prompt, promptMentionEntities],
   );
   const promptMentionRanges = useMemo(
     () => buildPromptMentionRanges(promptOverlayParts),
@@ -782,7 +799,13 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
                     part.kind === 'slot' ? (
                       part.key && footerInputNameSet.has(part.key) ? (
                         <span key={`footer-slot-${part.key}-${index}`} aria-hidden>
-                          {formatPromptInputValue(fieldByName.get(part.key) ?? null, pluginInputValues[part.key], part.text, t)}
+                          {formatPromptInputValue(
+                            locale,
+                            fieldByName.get(part.key) ?? null,
+                            pluginInputValues[part.key],
+                            part.text,
+                            t,
+                          )}
                         </span>
                       ) : (
                         <InlinePromptInput
@@ -794,6 +817,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
                           filled={part.filled === true}
                           editable={Boolean(part.key && editableInputNames.has(part.key))}
                           open={part.key === openInlineInputName}
+                          locale={locale}
                           onOpenChange={(open) => setOpenInlineInputName(open ? part.key ?? null : null)}
                         />
                       )
@@ -891,6 +915,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
             <InlinePromptOptionPopover
               field={openInlineInputField}
               value={pluginInputValues[openInlineInputField.name]}
+              locale={locale}
               onChange={(value) => {
                 onPluginInputValuesChange({
                   ...pluginInputValues,
@@ -1025,7 +1050,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
               >
                 <div>
                   <span className="home-hero__plugin-hover-kicker">
-                    {getPluginSourceLabel(hoveredPlugin)}
+                    {getPluginSourceLabel(hoveredPlugin, t)}
                   </span>
                   <strong>{hoveredPlugin.title}</strong>
                   <p>{hoveredPlugin.manifest?.description ?? hoveredPlugin.id}</p>
@@ -1507,6 +1532,7 @@ function buildHomeMentionEntities({
   pluginOptions,
   selectedPluginContexts,
   skillOptions,
+  t,
 }: {
   activePluginRecord: InstalledPluginRecord | null;
   activeSkillId: string | null;
@@ -1516,6 +1542,7 @@ function buildHomeMentionEntities({
   pluginOptions: InstalledPluginRecord[];
   selectedPluginContexts: InstalledPluginRecord[];
   skillOptions: SkillSummary[];
+  t: ReturnType<typeof useT>;
 }): InlineMentionEntity[] {
   const entities: InlineMentionEntity[] = [];
   const pluginSeen = new Set<string>();
@@ -1527,7 +1554,7 @@ function buildHomeMentionEntities({
       kind: 'plugin',
       label: plugin.title,
       token: pluginMentionText(plugin),
-      title: `Plugin: ${plugin.title}`,
+      title: t('homeHero.pluginPrefix', { title: plugin.title }),
     });
   }
   if (activePluginRecord && !pluginSeen.has(activePluginRecord.id)) {
@@ -1536,7 +1563,7 @@ function buildHomeMentionEntities({
       kind: 'plugin',
       label: activePluginRecord.title,
       token: pluginMentionText(activePluginRecord),
-      title: `Plugin: ${activePluginRecord.title}`,
+      title: t('homeHero.pluginPrefix', { title: activePluginRecord.title }),
     });
   }
   const skillSeen = new Set<string>();
@@ -1548,7 +1575,7 @@ function buildHomeMentionEntities({
       kind: 'skill',
       label: skill.name,
       token: inlineMentionToken(skill.name),
-      title: `Skill: ${skill.name}`,
+      title: t('homeHero.skillPrefix', { title: skill.name }),
     });
     if (skill.id !== skill.name) {
       entities.push({
@@ -1556,7 +1583,7 @@ function buildHomeMentionEntities({
         kind: 'skill',
         label: skill.id,
         token: inlineMentionToken(skill.id),
-        title: `Skill: ${skill.name}`,
+        title: t('homeHero.skillPrefix', { title: skill.name }),
       });
     }
   }
@@ -1566,7 +1593,7 @@ function buildHomeMentionEntities({
       kind: 'skill',
       label: activeSkillTitle,
       token: inlineMentionToken(activeSkillTitle),
-      title: `Skill: ${activeSkillTitle}`,
+      title: t('homeHero.skillPrefix', { title: activeSkillTitle }),
     });
   }
   for (const server of mcpOptions) {
@@ -1620,6 +1647,7 @@ function InlineMentionToken({
   text: string;
   onOpenPluginDetails: (record: InstalledPluginRecord) => void;
 }) {
+  const t = useT();
   if (entity.kind === 'plugin' && pluginRecord) {
     return (
       <button
@@ -1629,7 +1657,7 @@ function InlineMentionToken({
         data-testid={`home-hero-prompt-plugin-${pluginRecord.id}`}
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => onOpenPluginDetails(pluginRecord)}
-        title={entity.title ?? `Plugin: ${pluginRecord.title}`}
+        title={entity.title ?? t('homeHero.pluginPrefix', { title: pluginRecord.title })}
       >
         {text}
       </button>
@@ -1655,6 +1683,7 @@ interface InlinePromptInputProps {
   editable?: boolean;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  locale: ReturnType<typeof useI18n>['locale'];
 }
 
 // Render plugin-input placeholders as read-only styled spans. Earlier
@@ -1676,9 +1705,10 @@ function InlinePromptInput({
   editable = false,
   open = false,
   onOpenChange = () => undefined,
+  locale,
 }: InlinePromptInputProps) {
-  const label = field?.label ?? name;
-  const displayValue = formatPromptInputValue(field, value, fallbackText);
+  const label = field ? localizePluginInputLabel(locale, field) : name;
+  const displayValue = formatPromptInputValue(locale, field, value, fallbackText);
   // No aria-label here: the editable control with this label lives in
   // the PluginInputsForm below, and findByLabelText must resolve to one
   // element. The span is decorative — it just highlights where the
@@ -1729,26 +1759,30 @@ function InlinePromptOptionPopover({
   field,
   value,
   onChange,
+  locale,
 }: {
   field: InputFieldSpec;
   value: unknown;
   onChange: (value: unknown) => void;
+  locale: ReturnType<typeof useI18n>['locale'];
 }) {
+  const label = localizePluginInputLabel(locale, field);
+  const note = fieldPopoverNote(field);
   return (
     <div
       className="home-hero__prompt-option-popover"
       data-testid={`home-hero-prompt-option-${field.name}`}
       onMouseDown={(event) => event.stopPropagation()}
     >
-      <span className="home-hero__prompt-option-label">{field.label ?? field.name}</span>
-      {renderInlinePromptEditor(field, value, onChange)}
-      {fieldPopoverNote(field) ? (
+      <span className="home-hero__prompt-option-label">{label}</span>
+      {renderInlinePromptEditor(field, value, onChange, locale)}
+      {note ? (
         <span
           className="home-hero__prompt-option-note"
           data-tone={fieldPopoverNoteTone(field)}
           data-testid={`home-hero-prompt-option-${field.name}-note`}
         >
-          {fieldPopoverNote(field)}
+          {localizePluginPlaceholder(locale, note)}
         </span>
       ) : null}
     </div>
@@ -2259,7 +2293,9 @@ function renderInlinePromptEditor(
   field: InputFieldSpec,
   value: unknown,
   onChange: (value: unknown) => void,
+  locale: ReturnType<typeof useI18n>['locale'],
 ) {
+  const label = localizePluginInputLabel(locale, field);
   if (field.type === 'select' && Array.isArray(field.options)) {
     const optionLabels = optionLabelMap(field);
     return (
@@ -2268,12 +2304,14 @@ function renderInlinePromptEditor(
         value={value === undefined || value === null ? '' : String(value)}
         onChange={(event) => onChange(event.target.value)}
         data-testid={`home-hero-prompt-option-${field.name}-select`}
-        aria-label={field.label ?? field.name}
+        aria-label={label}
       >
-        {field.placeholder ? <option value="">{field.placeholder}</option> : null}
+        {field.placeholder ? (
+          <option value="">{localizePluginPlaceholder(locale, field.placeholder)}</option>
+        ) : null}
         {field.options.map((option) => (
           <option key={option} value={option}>
-            {optionLabels[option] ?? option}
+            {localizePluginDisplayValue(locale, optionLabels[option] ?? option)}
           </option>
         ))}
       </select>
@@ -2285,21 +2323,26 @@ function renderInlinePromptEditor(
       value={value === undefined || value === null ? '' : String(value)}
       onChange={(event) => onChange(event.target.value)}
       data-testid={`home-hero-prompt-option-${field.name}-input`}
-      aria-label={field.label ?? field.name}
+      aria-label={label}
+      placeholder={localizePluginPlaceholder(locale, field.placeholder)}
     />
   );
 }
 
 function formatPromptInputValue(
+  locale: ReturnType<typeof useI18n>['locale'],
   field: InputFieldSpec | null,
   value: unknown,
   fallbackText: string,
   t?: ReturnType<typeof useT>,
 ): string {
-  if (value === undefined || value === null || value === '') return fallbackText;
+  if (value === undefined || value === null || value === '') {
+    return field ? localizePluginPlaceholder(locale, field.placeholder, fallbackText) : fallbackText;
+  }
   const raw = String(value);
-  if (!field) return raw;
-  return t ? footerInputValueLabel(field, raw, t) : optionLabelMap(field)[raw] ?? raw;
+  const optionLabel = field ? optionLabelMap(field)[raw] : undefined;
+  const label = field && t ? footerInputValueLabel(field, raw, t) : optionLabel ?? raw;
+  return localizePluginDisplayValue(locale, label);
 }
 
 function optionLabelMap(field: InputFieldSpec): Record<string, string> {
@@ -2404,8 +2447,8 @@ function connectorMatchesQuery(connector: ConnectorDetail, query: string): boole
     .includes(q);
 }
 
-function getPluginSourceLabel(plugin: InstalledPluginRecord): string {
-  return plugin.sourceKind === 'bundled' ? 'Official' : 'My plugin';
+function getPluginSourceLabel(plugin: InstalledPluginRecord, t: ReturnType<typeof useT>): string {
+  return plugin.sourceKind === 'bundled' ? t('homeHero.official') : t('homeHero.myPlugin');
 }
 
 function getPluginQueryPreview(plugin: InstalledPluginRecord): string {
@@ -2464,6 +2507,7 @@ function RailGroup({
         const cls = isTabs
           ? ['home-hero__type-tab', `home-hero__type-tab--${group}`]
           : ['home-hero__rail-chip', `home-hero__rail-chip--${group}`];
+        const label = homeHeroChipLabel(chip.id, t);
         if (isActive) cls.push('is-active');
         if (isPending) cls.push('is-pending');
         return (
@@ -2486,7 +2530,7 @@ function RailGroup({
               className={isTabs ? 'home-hero__type-tab-icon' : 'home-hero__rail-chip-icon'}
             />
             <span className={isTabs ? 'home-hero__type-tab-label' : 'home-hero__rail-chip-label'}>
-              {homeHeroChipLabel(chip.id, t)}
+              {label}
             </span>
           </button>
         );

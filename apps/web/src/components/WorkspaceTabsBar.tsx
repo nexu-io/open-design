@@ -539,12 +539,12 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
   }
 
   return (
-    <header className="app-chrome-header workspace-tabs-chrome" aria-label="Workspace tabs">
+    <header className="app-chrome-header workspace-tabs-chrome" aria-label={t('entry.workspaceTabsAria')}>
       <div className="app-chrome-traffic-space workspace-tabs-traffic" aria-hidden />
       <div
         className="workspace-tabs-strip"
         role="tablist"
-        aria-label="Open workspaces"
+        aria-label={t('entry.openWorkspacesAria')}
         ref={stripRef}
       >
         {/* Render every open tab — the strip itself scrolls horizontally
@@ -596,8 +596,8 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
           type="button"
           className="workspace-tabs-new-btn"
           onClick={createNewTab}
-          title="New tab"
-          aria-label="New tab"
+          title={t('entry.newTab')}
+          aria-label={t('entry.newTab')}
         >
           <Icon name="plus" size={14} />
         </button>
@@ -605,8 +605,8 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
           type="button"
           className={`workspace-tabs-icon-btn${tabsMenuOpen ? ' is-active' : ''}`}
           onClick={() => setTabsMenuOpen((open) => !open)}
-          title="Search tabs"
-          aria-label="Search tabs"
+          title={t('entry.searchTabs')}
+          aria-label={t('entry.searchTabs')}
           aria-haspopup="dialog"
           aria-expanded={tabsMenuOpen}
         >
@@ -617,7 +617,7 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
               <div
                 className="workspace-tabs-popover"
                 role="dialog"
-                aria-label="Search tabs"
+                aria-label={t('entry.searchTabs')}
                 ref={popoverRef}
               >
                 <div className="workspace-tabs-search">
@@ -626,15 +626,15 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
                     ref={searchInputRef}
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Search tabs"
-                    aria-label="Search tabs"
+                    placeholder={t('entry.searchTabs')}
+                    aria-label={t('entry.searchTabs')}
                   />
                 </div>
                 <div className="workspace-tabs-popover__section">
-                  <span>Open tabs</span>
+                  <span>{t('entry.openTabs')}</span>
                   <span>{state.tabs.length}</span>
                 </div>
-                <div className="workspace-tabs-list" role="listbox" aria-label="Open tabs">
+                <div className="workspace-tabs-list" role="listbox" aria-label={t('entry.openTabs')}>
                   {filteredTabs.length > 0 ? (
                     filteredTabs.map((display) => {
                       const active = display.id === state.activeTabId;
@@ -671,7 +671,7 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
                       );
                     })
                   ) : (
-                    <div className="workspace-tabs-empty">No tabs found</div>
+                    <div className="workspace-tabs-empty">{t('entry.noTabsFound')}</div>
                   )}
                 </div>
               </div>,
@@ -785,7 +785,7 @@ function displayTabFor(
   return {
     id: tab.id,
     title: entryTitle[tab.view],
-    meta: tab.view === 'home' ? 'Start a new project' : 'Workspace',
+    meta: tab.view === 'home' ? t('entry.metaStartProject') : t('entry.metaWorkspace'),
     icon: entryIcon[tab.view],
     tab,
   };

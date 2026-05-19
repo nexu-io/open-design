@@ -7,10 +7,10 @@ import type {
 import {
   applyPlugin,
   listPlugins,
-  renderPluginBriefTemplate,
   resolvePluginQueryFallback,
 } from '../state/projects';
 import { useI18n } from '../i18n';
+import { renderLocalizedPluginBriefTemplate } from '../i18n/plugin-content';
 import { Icon } from './Icon';
 import { PluginDetailsModal } from './PluginDetailsModal';
 import { TrustBadge } from './TrustBadge';
@@ -57,7 +57,7 @@ interface ActivePlugin {
 }
 
 export function PluginLoopHome({ onSubmit }: Props) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const analytics = useAnalytics();
   const [plugins, setPlugins] = useState<InstalledPluginRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -99,7 +99,7 @@ export function PluginLoopHome({ onSubmit }: Props) {
     const result = await applyPlugin(record.id, { locale });
     setPendingApplyId(null);
     if (!result) {
-      setError(`Failed to apply ${record.title}. Make sure the daemon is reachable.`);
+      setError(t('home.error.applyFailed', { title: record.title }));
       return;
     }
     const inputs: Record<string, unknown> = {};
@@ -109,7 +109,7 @@ export function PluginLoopHome({ onSubmit }: Props) {
     setActive({ record, result, inputs });
     const query = result.query || resolvePluginQueryFallback(record.manifest?.od?.useCase?.query, locale);
     if (query) {
-      setPrompt(renderPluginBriefTemplate(query, inputs));
+      setPrompt(renderLocalizedPluginBriefTemplate(locale, query, inputs));
     }
     setDetailsRecord(null);
     requestAnimationFrame(() => textareaRef.current?.focus());

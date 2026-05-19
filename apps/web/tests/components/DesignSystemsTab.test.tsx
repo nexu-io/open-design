@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DesignSystemSummary } from '@open-design/contracts';
 
 import { DesignSystemsTab } from '../../src/components/DesignSystemsTab';
+import { I18nProvider } from '../../src/i18n';
 
 vi.mock('../../src/providers/registry', async () => {
   const actual = await vi.importActual<typeof import('../../src/providers/registry')>(
@@ -127,6 +128,29 @@ describe('DesignSystemsTab', () => {
 
     expect(onPreview).toHaveBeenCalledWith('linear');
     expect(onOpenSystem).not.toHaveBeenCalledWith('linear');
+  });
+
+  it('localizes the design systems manager chrome in Simplified Chinese', () => {
+    render(
+      <I18nProvider initial="zh-CN">
+        <DesignSystemsTab
+          systems={systems}
+          selectedId={null}
+          onSelect={() => {}}
+          onPreview={() => {}}
+          onCreate={() => {}}
+          onOpenSystem={() => {}}
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByRole('heading', { name: '你的设计体系' })).toBeTruthy();
+    expect(screen.getByText('创建新设计体系')).toBeTruthy();
+    expect(screen.getByText('内置库')).toBeTruthy();
+    expect(screen.getByText('只有你可以查看这些设置。')).toBeTruthy();
+    expect(screen.getByText('编辑')).toBeTruthy();
+    expect(screen.queryByText('Your systems')).toBeNull();
+    expect(screen.queryByText('Built-in library')).toBeNull();
   });
 });
 

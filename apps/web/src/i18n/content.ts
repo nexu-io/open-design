@@ -365,6 +365,34 @@ const DE_DESIGN_SYSTEM_CATEGORIES: Record<string, string> = {
   Uncategorized: 'Nicht kategorisiert',
 };
 
+const ZH_CN_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {};
+
+const ZH_CN_DESIGN_SYSTEM_CATEGORIES: Record<string, string> = {
+  Starter: '入门',
+  'AI & LLM': 'AI 与大模型',
+  'Bold & Expressive': '大胆表现',
+  'Creative & Artistic': '创意与艺术',
+  'Developer Tools': '开发者工具',
+  'Layout & Structure': '布局与结构',
+  'Modern & Minimal': '现代极简',
+  'Morphism & Effects': '拟态与特效',
+  'Productivity & SaaS': '效率与 SaaS',
+  'Professional & Corporate': '专业与企业',
+  'Backend & Data': '后端与数据',
+  'Design & Creative': '设计与创意',
+  'Fintech & Crypto': '金融科技与加密',
+  'E-Commerce & Retail': '电商与零售',
+  'Media & Consumer': '媒体与消费',
+  'Social & Messaging': '社交与消息',
+  Automotive: '汽车',
+  'Editorial & Print': '编辑与印刷',
+  'Editorial · Studio': '编辑 · 工作室',
+  'Retro & Nostalgic': '复古怀旧',
+  'Themed & Unique': '主题与特色',
+  'Editorial / Personal / Publication': '编辑 / 个人 / 出版',
+  Uncategorized: '未分类',
+};
+
 const DE_PROMPT_TEMPLATE_CATEGORIES: Record<string, string> = {
   Infographic: 'Infografik',
   'Anime / Manga': 'Anime / Manga',
@@ -957,6 +985,14 @@ const DE_PROMPT_TEMPLATE_COPY: Record<string, LocalizedPromptTemplateCopy> = {
 };
 
 const LOCALIZED_CONTENT: Partial<Record<Locale, LocalizedContentBundle>> = {
+  'zh-CN': {
+    skillCopy: {},
+    designSystemSummaries: ZH_CN_DESIGN_SYSTEM_SUMMARIES,
+    designSystemCategories: ZH_CN_DESIGN_SYSTEM_CATEGORIES,
+    promptTemplateCategories: {},
+    promptTemplateTags: {},
+    promptTemplateCopy: {},
+  },
   de: {
     skillCopy: DE_SKILL_COPY,
     designSystemSummaries: DE_DESIGN_SYSTEM_SUMMARIES,
@@ -995,11 +1031,13 @@ function buildLocalizedContentIds(content: LocalizedContentBundle): LocalizedCon
 }
 
 export const LOCALIZED_CONTENT_IDS = {
+  'zh-CN': buildLocalizedContentIds(LOCALIZED_CONTENT['zh-CN']!),
   de: buildLocalizedContentIds(LOCALIZED_CONTENT.de!),
   ru: buildLocalizedContentIds(LOCALIZED_CONTENT.ru!),
   fr: buildLocalizedContentIds(LOCALIZED_CONTENT.fr!),
-} satisfies Record<'de' | 'ru' | 'fr', LocalizedContentIds>;
+} satisfies Record<'zh-CN' | 'de' | 'ru' | 'fr', LocalizedContentIds>;
 
+export const SIMPLIFIED_CHINESE_CONTENT_IDS = LOCALIZED_CONTENT_IDS['zh-CN'];
 export const GERMAN_CONTENT_IDS = LOCALIZED_CONTENT_IDS.de;
 export const RUSSIAN_CONTENT_IDS = LOCALIZED_CONTENT_IDS.ru;
 export const FRENCH_CONTENT_IDS = LOCALIZED_CONTENT_IDS.fr;
@@ -1059,6 +1097,13 @@ export function localizeDesignSystemSummary(
 ): string {
   const translated = getLocalizedContent(locale)?.designSystemSummaries[system.id];
   if (translated) return translated;
+  if (locale === 'zh-CN') {
+    const category = localizeDesignSystemCategory(
+      locale,
+      system.category || 'Uncategorized',
+    );
+    return `${system.title} 风格设计体系，适合${category}相关界面。`;
+  }
   return system.summary || system.category || '';
 }
 

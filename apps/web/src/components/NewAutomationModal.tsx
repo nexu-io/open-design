@@ -15,6 +15,9 @@ import type {
 } from '@open-design/contracts';
 
 import { Icon, type IconName } from './Icon';
+import { useI18n } from '../i18n';
+import { zhCN } from '../i18n/inline';
+import type { Locale } from '../i18n/types';
 import type { SkillSummary } from '../types';
 import { listPlugins } from '../state/projects';
 import { fetchMcpServers, type McpServerConfig } from '../state/mcp';
@@ -91,8 +94,20 @@ function listSupportedTimezones(): string[] {
   return FALLBACK_TIMEZONES;
 }
 
-function tzCityLabel(timezone: string): string {
+function tzCityLabel(timezone: string, locale: Locale = 'en'): string {
   if (timezone === 'UTC') return 'UTC';
+  if (locale === 'zh-CN') {
+    const zhTimezoneLabels: Record<string, string> = {
+      'Asia/Shanghai': '上海',
+      'Asia/Tokyo': '东京',
+      'Asia/Singapore': '新加坡',
+      'Europe/London': '伦敦',
+      'Europe/Berlin': '柏林',
+      'America/New_York': '纽约',
+      'America/Los_Angeles': '洛杉矶',
+    };
+    if (zhTimezoneLabels[timezone]) return zhTimezoneLabels[timezone];
+  }
   const last = timezone.split('/').pop() ?? timezone;
   return last.replace(/_/g, ' ');
 }
@@ -114,37 +129,66 @@ function formatTime12h(time: string): string {
  * weekday names only needs to happen here.
  */
 type ScheduleParts =
-  | { kind: 'hourly'; minute: string }
+  | { kind: 'hourly'; minute: string; freq: string }
   | { kind: 'timed'; freq: string; time: string; tz: string };
 
-function decomposeSchedule(schedule: RoutineSchedule): ScheduleParts {
+function formatScheduleTime(time: string, locale: Locale): string {
+  return locale === 'zh-CN' ? time : formatTime12h(time);
+}
+
+function weekdayLongLabel(locale: Locale, weekday: Weekday): string {
+  const fallback = WEEKDAY_LABELS.find((w) => w.value === weekday)?.long ?? 'Sunday';
+  if (locale !== 'zh-CN') return fallback;
+  return ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][weekday] ?? fallback;
+}
+
+function weekdayShortLabel(locale: Locale, weekday: Weekday): string {
+  const fallback = WEEKDAY_LABELS.find((w) => w.value === weekday)?.short ?? 'Sun';
+  if (locale !== 'zh-CN') return fallback;
+  return ['日', '一', '二', '三', '四', '五', '六'][weekday] ?? fallback;
+}
+
+function scheduleKindLabel(locale: Locale, kind: ScheduleKind, fallback: string): string {
+  if (kind === 'hourly') return zhCN(locale, fallback, '每小时');
+  if (kind === 'daily') return zhCN(locale, fallback, '每天');
+  if (kind === 'weekdays') return zhCN(locale, fallback, '工作日');
+  return zhCN(locale, fallback, '每周');
+}
+
+function decomposeSchedule(schedule: RoutineSchedule, locale: Locale = 'en'): ScheduleParts {
   if (schedule.kind === 'hourly') {
-    return { kind: 'hourly', minute: String(schedule.minute).padStart(2, '0') };
+    return {
+      kind: 'hourly',
+      minute: String(schedule.minute).padStart(2, '0'),
+      freq: scheduleKindLabel(locale, 'hourly', 'Hourly'),
+    };
   }
-  const tz = tzCityLabel(schedule.timezone);
-  const time = formatTime12h(schedule.time);
+  const tz = tzCityLabel(schedule.timezone, locale);
+  const time = formatScheduleTime(schedule.time, locale);
   const freq =
     schedule.kind === 'daily'
-      ? 'Daily'
+      ? scheduleKindLabel(locale, 'daily', 'Daily')
       : schedule.kind === 'weekdays'
-        ? 'Weekdays'
-        : WEEKDAY_LABELS.find((w) => w.value === schedule.weekday)?.long ?? 'Sunday';
+        ? scheduleKindLabel(locale, 'weekdays', 'Weekdays')
+        : weekdayLongLabel(locale, schedule.weekday);
   return { kind: 'timed', freq, time, tz };
 }
 
-export function describeScheduleSummary(schedule: RoutineSchedule): string {
-  const parts = decomposeSchedule(schedule);
-  if (parts.kind === 'hourly') return `Hourly at :${parts.minute}`;
-  return `${parts.freq} at ${parts.time} · ${parts.tz}`;
+export function describeScheduleSummary(schedule: RoutineSchedule, locale: Locale = 'en'): string {
+  const parts = decomposeSchedule(schedule, locale);
+  if (parts.kind === 'hourly') {
+    return zhCN(locale, `Hourly at :${parts.minute}`, `每小时 :${parts.minute}`);
+  }
+  return zhCN(locale, `${parts.freq} at ${parts.time} · ${parts.tz}`, `${parts.freq} ${parts.time} · ${parts.tz}`);
 }
 
 /** Renders the schedule summary as structured pill segments for better visual hierarchy. */
-function buildScheduleSummaryNode(schedule: RoutineSchedule): ReactNode {
-  const parts = decomposeSchedule(schedule);
+function buildScheduleSummaryNode(schedule: RoutineSchedule, locale: Locale = 'en'): ReactNode {
+  const parts = decomposeSchedule(schedule, locale);
   if (parts.kind === 'hourly') {
     return (
       <span className="automation-pill__segments">
-        <span className="automation-pill__freq">Hourly</span>
+        <span className="automation-pill__freq">{parts.freq}</span>
         <span className="automation-pill__sep">·</span>
         <span className="automation-pill__time">:{parts.minute}</span>
       </span>
@@ -255,6 +299,7 @@ export function NewAutomationModal({
   onClose,
   onSaved,
 }: Props) {
+  const { locale } = useI18n();
   const editingId = initial?.routine?.id ?? null;
   const [form, setForm] = useState<FormState>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
@@ -449,12 +494,12 @@ export function NewAutomationModal({
     e.preventDefault();
     setError(null);
     if (!form.name.trim()) {
-      setError('Add a title for this automation.');
+      setError(zhCN(locale, 'Add a title for this automation.', '请为这个自动化添加标题。'));
       titleRef.current?.focus();
       return;
     }
     if (!form.prompt.trim()) {
-      setError('Add a prompt for the scheduled conversation.');
+      setError(zhCN(locale, 'Add a prompt for the scheduled conversation.', '请为计划对话添加提示词。'));
       return;
     }
     setSubmitting(true);
@@ -496,7 +541,7 @@ export function NewAutomationModal({
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        throw new Error(j.error || `${isEdit ? 'update' : 'create'} failed: ${res.status}`);
+        throw new Error(j.error || zhCN(locale, `${isEdit ? 'update' : 'create'} failed: ${res.status}`, `${isEdit ? '更新' : '创建'}失败：${res.status}`));
       }
       const json = await res.json();
       onSaved(json.routine);
@@ -509,10 +554,11 @@ export function NewAutomationModal({
   };
 
   const projectName = projects.find((p) => p.id === form.projectId)?.name ?? null;
+  const currentSchedule = buildSchedule(form);
   const projectLabel =
-    form.mode === 'reuse' && projectName ? projectName : 'New project each run';
-  const scheduleLabel = describeScheduleSummary(buildSchedule(form));
-  const scheduleLabelNode = buildScheduleSummaryNode(buildSchedule(form));
+    form.mode === 'reuse' && projectName ? projectName : zhCN(locale, 'New project each run', '每次运行新建项目');
+  const scheduleLabel = describeScheduleSummary(currentSchedule, locale);
+  const scheduleLabelNode = buildScheduleSummaryNode(currentSchedule, locale);
   const mentionQueryNorm = (mention?.query ?? '').trim().toLowerCase();
   const filteredSkills = filterCapabilities(
     skills,
@@ -551,7 +597,7 @@ export function NewAutomationModal({
         kind: 'skills' as const,
         id,
         label: skill?.name ?? id,
-        meta: 'Skill',
+        meta: zhCN(locale, 'Skill', '技能'),
         icon: 'file' as IconName,
       };
     }),
@@ -561,7 +607,7 @@ export function NewAutomationModal({
         kind: 'plugins' as const,
         id,
         label: plugin?.title ?? id,
-        meta: 'Plugin',
+        meta: zhCN(locale, 'Plugin', '插件'),
         icon: 'sparkles' as IconName,
       };
     }),
@@ -581,7 +627,9 @@ export function NewAutomationModal({
         kind: 'connectors' as const,
         id,
         label: connector?.name ?? id,
-        meta: connector?.accountLabel ? `Connector · ${connector.accountLabel}` : 'Connector',
+        meta: connector?.accountLabel
+          ? `${zhCN(locale, 'Connector', '连接器')} · ${connector.accountLabel}`
+          : zhCN(locale, 'Connector', '连接器'),
         icon: 'link' as IconName,
       };
     }),
@@ -592,7 +640,7 @@ export function NewAutomationModal({
       className="automation-modal-backdrop"
       role="dialog"
       aria-modal="true"
-      aria-label={editingId ? 'Edit automation' : 'New automation'}
+      aria-label={editingId ? zhCN(locale, 'Edit automation', '编辑自动化') : zhCN(locale, 'New automation', '新建自动化')}
       data-testid="automation-modal"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
@@ -609,10 +657,10 @@ export function NewAutomationModal({
             ref={titleRef}
             type="text"
             className="automation-modal__title-input"
-            placeholder="Automation title"
+            placeholder={zhCN(locale, 'Automation title', '自动化标题')}
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
-            aria-label="Automation title"
+            aria-label={zhCN(locale, 'Automation title', '自动化标题')}
             data-testid="automation-modal-title"
           />
           <div className="automation-modal__head-actions">
@@ -623,7 +671,7 @@ export function NewAutomationModal({
                 onClick={() => setPopover((p) => (p === 'template' ? null : 'template'))}
               >
                 <Icon name="sparkles" size={13} />
-                <span>{selectedTemplate?.defaultName ?? selectedTemplate?.title ?? 'Use template'}</span>
+                <span>{selectedTemplate?.defaultName ?? selectedTemplate?.title ?? zhCN(locale, 'Use template', '使用模板')}</span>
                 <Icon name="chevron-down" size={11} />
               </button>
               {popover === 'template' ? (
@@ -631,6 +679,7 @@ export function NewAutomationModal({
                   templates={templates}
                   selectedId={selectedTemplateId}
                   onSelect={(template) => applyTemplate(template, { closePopover: true })}
+                  locale={locale}
                 />
               ) : null}
             </div>
@@ -638,7 +687,7 @@ export function NewAutomationModal({
               type="button"
               className="automation-modal__close"
               onClick={onClose}
-              aria-label="Close (Esc)"
+              aria-label={zhCN(locale, 'Close (Esc)', '关闭（Esc）')}
             >
               <Icon name="close" size={14} />
             </button>
@@ -650,7 +699,7 @@ export function NewAutomationModal({
             <textarea
               ref={promptRef}
               className="automation-modal__prompt"
-              placeholder="Ask the agent what to run on this schedule, or @mention context..."
+              placeholder={zhCN(locale, 'Ask the agent what to run on this schedule, or @mention context...', '告诉代理在这个计划中要运行什么，或用 @ 提及上下文...')}
               value={form.prompt}
               onChange={(e) => updatePrompt(e.target.value, e.target.selectionStart ?? e.target.value.length)}
               onClick={refreshMentionFromPrompt}
@@ -669,17 +718,17 @@ export function NewAutomationModal({
               id="automation-context-picker"
               className="automation-mention-popover"
               role="listbox"
-              aria-label="Automation context results"
+              aria-label={zhCN(locale, 'Automation context results', '自动化上下文结果')}
               data-testid="automation-mention-popover"
               onMouseDown={(e) => e.preventDefault()}
             >
-              <div className="automation-mention-tabs" role="tablist" aria-label="Context type">
+              <div className="automation-mention-tabs" role="tablist" aria-label={zhCN(locale, 'Context type', '上下文类型')}>
                 {[
-                  ['all', 'All'],
-                  ['skills', 'Skills'],
-                  ['plugins', 'Plugins'],
+                  ['all', zhCN(locale, 'All', '全部')],
+                  ['skills', zhCN(locale, 'Skills', '技能')],
+                  ['plugins', zhCN(locale, 'Plugins', '插件')],
                   ['mcp', 'MCP'],
-                  ['connectors', 'Connectors'],
+                  ['connectors', zhCN(locale, 'Connectors', '连接器')],
                 ].map(([id, label]) => (
                   <button
                     key={id}
@@ -699,11 +748,13 @@ export function NewAutomationModal({
               <div className="automation-mention-results">
                 {!hasMentionResults ? (
                   <div className="automation-mention-empty">
-                    {mention.query ? `No results for "${mention.query}".` : 'Search skills, plugins, MCP servers, and connectors.'}
+                    {mention.query
+                      ? zhCN(locale, `No results for "${mention.query}".`, `没有找到“${mention.query}”的结果。`)
+                      : zhCN(locale, 'Search skills, plugins, MCP servers, and connectors.', '搜索技能、插件、MCP 服务器和连接器。')}
                   </div>
                 ) : null}
                 {showSkills && filteredSkills.length > 0 ? (
-                  <MentionSection label="Skills">
+                  <MentionSection label={zhCN(locale, 'Skills', '技能')}>
                     {filteredSkills.map((skill) => (
                       <MentionItem
                         key={`skill-${skill.id}`}
@@ -717,7 +768,7 @@ export function NewAutomationModal({
                   </MentionSection>
                 ) : null}
                 {showPlugins && filteredPlugins.length > 0 ? (
-                  <MentionSection label="Plugins">
+                  <MentionSection label={zhCN(locale, 'Plugins', '插件')}>
                     {filteredPlugins.map((plugin) => (
                       <MentionItem
                         key={`plugin-${plugin.id}`}
@@ -745,7 +796,7 @@ export function NewAutomationModal({
                   </MentionSection>
                 ) : null}
                 {showConnectors && filteredConnectors.length > 0 ? (
-                  <MentionSection label="Connectors">
+                  <MentionSection label={zhCN(locale, 'Connectors', '连接器')}>
                     {filteredConnectors.map((connector) => (
                       <MentionItem
                         key={`connector-${connector.id}`}
@@ -763,14 +814,14 @@ export function NewAutomationModal({
           ) : null}
 
           {selectedContextItems.length > 0 ? (
-            <div className="automation-selected-context" aria-label="Selected automation context">
+            <div className="automation-selected-context" aria-label={zhCN(locale, 'Selected automation context', '已选择的自动化上下文')}>
               {selectedContextItems.map((item) => (
                 <button
                   key={`${item.kind}-${item.id}`}
                   type="button"
                   className={`automation-selected-context__chip is-${item.kind}`}
                   onClick={() => removeSelectedContext(item.kind, item.id)}
-                  title={`Remove ${item.label}`}
+                  title={zhCN(locale, `Remove ${item.label}`, `移除 ${item.label}`)}
                 >
                   <Icon name={item.icon} size={11} />
                   <span>{item.label}</span>
@@ -803,12 +854,12 @@ export function NewAutomationModal({
                       setForm({ ...form, mode: 'create_each_run', projectId: '' });
                       setPopover(null);
                     }}
-                    label="New project each run"
-                    hint="Each run starts a fresh project and conversation."
+                    label={zhCN(locale, 'New project each run', '每次运行新建项目')}
+                    hint={zhCN(locale, 'Each run starts a fresh project and conversation.', '每次运行都会启动一个全新的项目和对话。')}
                   />
                   {projects.length > 0 ? (
                     <>
-                      <div className="automation-popover__section-label">Existing projects</div>
+                      <div className="automation-popover__section-label">{zhCN(locale, 'Existing projects', '已有项目')}</div>
                       {projects.map((p) => (
                         <PopoverItem
                           key={p.id}
@@ -842,6 +893,7 @@ export function NewAutomationModal({
                   setForm={setForm}
                   timezones={timezones}
                   onDone={() => setPopover(null)}
+                  locale={locale}
                 />
               ) : null}
             </PillButton>
@@ -853,7 +905,7 @@ export function NewAutomationModal({
               className="automation-modal__cancel"
               onClick={onClose}
             >
-              Cancel
+              {zhCN(locale, 'Cancel', '取消')}
             </button>
             <button
               type="submit"
@@ -862,11 +914,11 @@ export function NewAutomationModal({
             >
               {editingId
                 ? submitting
-                  ? 'Saving...'
-                  : 'Save'
+                  ? zhCN(locale, 'Saving...', '保存中...')
+                  : zhCN(locale, 'Save', '保存')
                 : submitting
-                  ? 'Creating...'
-                  : 'Create'}
+                  ? zhCN(locale, 'Creating...', '创建中...')
+                  : zhCN(locale, 'Create', '创建')}
             </button>
           </div>
         </footer>
@@ -900,10 +952,12 @@ function TemplatePopover({
   templates,
   selectedId,
   onSelect,
+  locale,
 }: {
   templates: AutomationTemplate[];
   selectedId: string | null;
   onSelect: (template: AutomationTemplate) => void;
+  locale: Locale;
 }) {
   return (
     <div className="automation-popover automation-popover--templates">
@@ -919,7 +973,7 @@ function TemplatePopover({
           </span>
           <span className="automation-template-option__body">
             <span className="automation-template-option__title">{template.defaultName ?? template.title}</span>
-            <span className="automation-template-option__meta">{kindLabel(template.kind)}</span>
+            <span className="automation-template-option__meta">{kindLabel(template.kind, locale)}</span>
           </span>
           {selectedId === template.id ? <Icon name="check" size={13} /> : null}
         </button>
@@ -1054,11 +1108,13 @@ function SchedulePopover({
   setForm,
   timezones,
   onDone,
+  locale,
 }: {
   form: FormState;
   setForm: (next: FormState) => void;
   timezones: string[];
   onDone: () => void;
+  locale: Locale;
 }) {
   return (
     <div className="automation-popover automation-popover--schedule">
@@ -1072,14 +1128,14 @@ function SchedulePopover({
             className={`automation-popover__kind${form.kind === k.kind ? ' is-active' : ''}`}
             onClick={() => setForm({ ...form, kind: k.kind })}
           >
-            {k.label}
+            {scheduleKindLabel(locale, k.kind, k.label)}
           </button>
         ))}
       </div>
 
       {form.kind === 'hourly' ? (
         <label className="automation-popover__field">
-          <span>Minute of every hour</span>
+          <span>{zhCN(locale, 'Minute of every hour', '每小时的第几分钟')}</span>
           <input
             type="number"
             min={0}
@@ -1097,23 +1153,23 @@ function SchedulePopover({
       ) : (
         <>
           {form.kind === 'weekly' ? (
-            <div className="automation-popover__weekdays" aria-label="Weekday">
+            <div className="automation-popover__weekdays" aria-label={zhCN(locale, 'Weekday', '星期')}>
               {WEEKDAY_LABELS.map((d) => (
                 <button
                   key={d.value}
                   type="button"
                   className={`automation-popover__weekday${form.weekday === d.value ? ' is-active' : ''}`}
                   onClick={() => setForm({ ...form, weekday: d.value })}
-                  title={d.long}
+                  title={weekdayLongLabel(locale, d.value)}
                 >
-                  {d.short}
+                  {weekdayShortLabel(locale, d.value)}
                 </button>
               ))}
             </div>
           ) : null}
           <div className="automation-popover__row">
             <label className="automation-popover__field">
-              <span>Time</span>
+              <span>{zhCN(locale, 'Time', '时间')}</span>
               <input
                 type="time"
                 value={form.time}
@@ -1121,14 +1177,14 @@ function SchedulePopover({
               />
             </label>
             <label className="automation-popover__field">
-              <span>Timezone</span>
+              <span>{zhCN(locale, 'Timezone', '时区')}</span>
               <select
                 value={form.timezone}
                 onChange={(e) => setForm({ ...form, timezone: e.target.value })}
               >
                 {timezones.map((tz) => (
                   <option key={tz} value={tz}>
-                    {tzCityLabel(tz)}
+                    {tzCityLabel(tz, locale)}
                   </option>
                 ))}
               </select>
@@ -1143,7 +1199,7 @@ function SchedulePopover({
           className="automation-popover__done-btn"
           onClick={onDone}
         >
-          Done
+          {zhCN(locale, 'Done', '完成')}
         </button>
       </div>
     </div>
@@ -1155,8 +1211,8 @@ function clampMinute(value: number): number {
   return Math.max(0, Math.min(59, Math.round(value)));
 }
 
-function kindLabel(kind: AutomationTemplateKind): string {
+function kindLabel(kind: AutomationTemplateKind, locale: Locale): string {
   if (kind === 'orbit') return 'Orbit';
-  if (kind === 'live-artifact') return 'Live artifact';
-  return 'Automation';
+  if (kind === 'live-artifact') return zhCN(locale, 'Live artifact', '实时制品');
+  return zhCN(locale, 'Automation', '自动化');
 }

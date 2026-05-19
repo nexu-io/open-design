@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import { useAnalytics } from '../analytics/provider';
 import { trackChatPanelClick } from '../analytics/events';
-import { useT } from '../i18n';
+import { useI18n } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { projectRawUrl } from '../providers/registry';
@@ -45,9 +45,8 @@ type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => 
 // generic prototype trio. The default (prototype/deck/template/other/
 // live-artifact) set stays i18n-translated via existing chat.example*
 // keys so the user-facing copy keeps its localizations. The new media
-// sets are inline English literals — they are technical agent prompts
-// that work well across locales without translation, and going through
-// i18n for each of them would balloon every Dict entry by 12+ keys.
+// media sets carry Simplified Chinese mirrors inline so project-kind
+// starter cards stay localized without ballooning the global Dict.
 type StarterPrompt = {
   icon: string;
   title: string;
@@ -190,18 +189,116 @@ const AUDIO_STARTERS: StarterPrompt[] = [
   },
 ];
 
+const IMAGE_STARTERS_ZH: StarterPrompt[] = [
+  {
+    icon: '◯',
+    title: '编辑肖像',
+    tag: '人像',
+    prompt:
+      '一张年轻创意总监的近景编辑肖像，柔和自然光从高挑工作室窗户照入，暖中性色调，85mm f/1.8 浅景深，直视镜头，轻微胶片颗粒，自然妆感。',
+  },
+  {
+    icon: '▭',
+    title: '产品主视觉',
+    tag: '电商',
+    prompt:
+      '一张高级产品主视觉：单只哑光陶瓷咖啡杯置于暖奶油纸面背景上。左上方硬边轮廓光，柔和长阴影延伸到右下，杯口有细微蒸汽。正方形裁切，居中构图。',
+  },
+  {
+    icon: '◐',
+    title: '扁平插画',
+    tag: '插画',
+    prompt:
+      '一张雨窗旁舒适阅读角的扁平矢量插画：几何形状、克制的 5 色调色板、1.5px 细线点缀，不使用渐变和纹理，只保留柔和投影。',
+  },
+];
+
+const VIDEO_SEEDANCE_STARTERS_ZH: StarterPrompt[] = [
+  {
+    icon: '◉',
+    title: '产品揭幕',
+    tag: '电影感',
+    prompt:
+      '一支 5 秒产品揭幕短片：一瓶极简高端护肤品放在干净的奶油色石面上，镜头左侧柔和侧光，缓慢推近，焦点从瓶盖轻微转移到标签，动作克制，不要文字叠加和人物入镜。',
+  },
+  {
+    icon: '▣',
+    title: '灯笼近景',
+    tag: '氛围',
+    prompt:
+      '一支 6 秒电影感近景：一位年轻女性在金色时刻的薄雾松林里手持发光纸灯笼。焦点落在眼睛上，镜头轻柔推近，暖色光束中漂浮细微粒子，无对白。',
+  },
+  {
+    icon: '⌘',
+    title: '霓虹街头漂移',
+    tag: '动作',
+    prompt:
+      '一支 5 秒夜间街头赛车跟拍：霓虹照亮的赛博朋克香港巷道里，低机位跟随一辆哑黑跑车高速过弯漂移，雨后柏油路反射灯光，画面不要屏幕文字。',
+  },
+];
+
+const VIDEO_HYPERFRAMES_STARTERS_ZH: StarterPrompt[] = [
+  {
+    icon: '◉',
+    title: '放大镜揭示',
+    tag: 'HTML 画布',
+    prompt:
+      '制作一段 5 秒 HyperFrames 作品：干净画布上只有一行加粗展示文字。让圆形放大镜从左到右掠过文字，用轻微玻璃折射扭曲下方字形，并通过 html-in-canvas 捕获文字 DOM。',
+  },
+  {
+    icon: '▦',
+    title: 'CRT 终端场景',
+    tag: '复古特效',
+    prompt:
+      '制作一个 CRT 屏幕构图：深色画布，等宽终端文字依次输入命令，并在实时 DOM 上叠加轻微凸面曲率、扫描线、色差和柔和荧光效果。',
+  },
+  {
+    icon: '◈',
+    title: '故障分解',
+    tag: '故障风',
+    prompt:
+      '制作一段 6 秒构图：深色画布上展示主标题和一句副标题，随后进入强烈数字故障分解：RGB 通道分离、横向位移带、短暂掉帧，最后恢复干净画面。',
+  },
+];
+
+const AUDIO_STARTERS_ZH: StarterPrompt[] = [
+  {
+    icon: '♪',
+    title: '品牌旁白',
+    tag: '语音',
+    prompt:
+      '一段 30 秒产品发布视频旁白：温暖、有信心但像日常交谈，中速节奏，在品牌名后稍作停顿。中文普通话，清晰自然。',
+  },
+  {
+    icon: '♫',
+    title: '新手引导旁白',
+    tag: '语音',
+    prompt:
+      '一段 20 秒移动 App 首次启动页旁白：友好、让人安心、带微笑感，语速慢到显得贴心但不生硬。',
+  },
+  {
+    icon: '♬',
+    title: '故事开篇朗读',
+    tag: '语音',
+    prompt:
+      '一段 45 秒电影感开篇朗读：低沉、克制，每句之间有呼吸，近距离收音质感稍亲密，适合悬疑或都市故事开场。',
+  },
+];
+
 function pickStarters(
   metadata: ProjectMetadata | undefined,
   t: TranslateFn,
+  locale: ReturnType<typeof useI18n>['locale'],
 ): StarterPrompt[] {
   const kind = metadata?.kind;
-  if (kind === 'image') return IMAGE_STARTERS;
+  if (kind === 'image') return locale === 'zh-CN' ? IMAGE_STARTERS_ZH : IMAGE_STARTERS;
   if (kind === 'video') {
-    return metadata?.videoModel === 'hyperframes-html'
-      ? VIDEO_HYPERFRAMES_STARTERS
-      : VIDEO_SEEDANCE_STARTERS;
+    if (metadata?.videoModel === 'hyperframes-html') {
+      return locale === 'zh-CN' ? VIDEO_HYPERFRAMES_STARTERS_ZH : VIDEO_HYPERFRAMES_STARTERS;
+    }
+    return locale === 'zh-CN' ? VIDEO_SEEDANCE_STARTERS_ZH : VIDEO_SEEDANCE_STARTERS;
   }
-  if (kind === 'audio') return AUDIO_STARTERS;
+  if (kind === 'audio') return locale === 'zh-CN' ? AUDIO_STARTERS_ZH : AUDIO_STARTERS;
   return DEFAULT_STARTER_KEYS.map((entry) => ({
     icon: entry.icon,
     title: t(entry.titleKey),
@@ -406,8 +503,8 @@ export function ChatPane({
   onChangeByokImageModel,
   composerFooterAccessory,
 }: Props) {
-  const t = useT();
   const analytics = useAnalytics();
+  const { locale, t } = useI18n();
   const logRef = useRef<HTMLDivElement | null>(null);
   const historyWrapRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<ChatComposerHandle | null>(null);
@@ -1054,7 +1151,7 @@ export function ChatPane({
                     </span>
                   </div>
                   <div className="chat-examples" role="list">
-                    {pickStarters(projectMetadata, t).map((ex, i) => (
+                    {pickStarters(projectMetadata, t, locale).map((ex, i) => (
                       <button
                         key={`${ex.title}-${i}`}
                         type="button"

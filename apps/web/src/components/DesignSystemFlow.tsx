@@ -31,6 +31,7 @@ import {
   saveTabs,
 } from '../state/projects';
 import { appendErrorStatusEvent } from '../runtime/chat-events';
+import { useT } from '../i18n';
 import {
   buildDesignSystemPackageAuditRepairPrompt,
   summarizeDesignSystemPackageAudit,
@@ -297,6 +298,7 @@ export function DesignSystemCreationFlow({
   onBeforeGenerate,
   onGenerateSettled,
 }: CreationProps) {
+  const t = useT();
   const [step, setStep] = useState<SetupStep>('setup');
   const [state, setState] = useState<SetupState>(EMPTY_SETUP);
   const [error, setError] = useState<string | null>(null);
@@ -311,6 +313,7 @@ export function DesignSystemCreationFlow({
   const [githubAuthorizationUrl, setGithubAuthorizationUrl] = useState<string | null>(null);
   const githubConnectorRefreshId = useRef(0);
   const githubConnectorRequestInFlight = useRef(false);
+  const tRef = useRef(t);
   const embedded = chrome === 'embedded';
 
   // DS create page_view (v2 doc). Only fires for the standalone
@@ -358,6 +361,10 @@ export function DesignSystemCreationFlow({
     });
   }
 
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
+
   const refreshGithubConnector = useCallback(async () => {
     if (!composioConfigured) {
       githubConnectorRefreshId.current += 1;
@@ -387,13 +394,13 @@ export function DesignSystemCreationFlow({
       }
       if (timedOut) {
         setGithubConnectorError(
-          'Could not finish checking GitHub connector. You can still add repository URLs or connect GitHub manually.',
+          tRef.current('ds.githubStatusCheckTimeout'),
         );
       }
     } catch (err) {
       if (githubConnectorRefreshId.current !== refreshId) return;
       setGithubConnector(null);
-      setGithubConnectorError(err instanceof Error ? err.message : 'Could not check the GitHub connector.');
+      setGithubConnectorError(err instanceof Error ? err.message : tRef.current('ds.githubStatusCheckError'));
     } finally {
       if (githubConnectorRefreshId.current === refreshId) {
         githubConnectorRequestInFlight.current = false;
@@ -444,7 +451,7 @@ export function DesignSystemCreationFlow({
         setGithubAuthorizationUrl(null);
       }
     } catch (err) {
-      setGithubConnectorError(err instanceof Error ? err.message : 'Could not start GitHub authorization.');
+      setGithubConnectorError(err instanceof Error ? err.message : t('ds.githubAuthorizationStartError'));
     } finally {
       setGithubConnectorAction(null);
     }
@@ -460,7 +467,7 @@ export function DesignSystemCreationFlow({
       setGithubAuthorizationPending(false);
       setGithubAuthorizationUrl(null);
     } catch (err) {
-      setGithubConnectorError(err instanceof Error ? err.message : 'Could not disconnect GitHub.');
+      setGithubConnectorError(err instanceof Error ? err.message : t('ds.githubDisconnectError'));
     } finally {
       setGithubConnectorAction(null);
     }
@@ -592,7 +599,7 @@ export function DesignSystemCreationFlow({
         provenance: buildProvenance(state),
       });
       if (!created) {
-        setError('Could not generate this design system.');
+        setError(t('ds.setupGenerateError'));
         setStep('setup');
         emitCreateResult('failed', undefined, 'DS_DRAFT_CREATE_FAILED', undefined);
         onGenerateSettled?.(snapshot, {
@@ -603,7 +610,7 @@ export function DesignSystemCreationFlow({
       }
       const workspace = await ensureDesignSystemWorkspace(created.id);
       if (!workspace) {
-        setError('Could not open the design system workspace.');
+        setError(t('ds.setupWorkspaceError'));
         setStep('setup');
         emitCreateResult('failed', created.id, 'DS_WORKSPACE_OPEN_FAILED', undefined);
         onGenerateSettled?.(snapshot, {
@@ -632,7 +639,7 @@ export function DesignSystemCreationFlow({
         });
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not prepare the design system project.');
+      setError(err instanceof Error ? err.message : t('ds.setupPrepareError'));
       setStep('setup');
       const errorCode = err instanceof Error
         ? `DS_GENERATE_THREW:${err.message.slice(0, 80)}`
@@ -648,12 +655,12 @@ export function DesignSystemCreationFlow({
     return (
       <div className="ds-setup-shell ds-setup-shell--center">
         <div className="ds-setup-center-card">
-          <h1>It will take about 5 minutes to generate your design system.</h1>
-          <p>You can step away. Keep the tab open in the background.</p>
+          <h1>{t('ds.setupConfirmTitle')}</h1>
+          <p>{t('ds.setupConfirmBody')}</p>
           <div className="ds-setup-actions">
             <button type="button" className="ghost" onClick={() => setStep('setup')}>
               <Icon name="arrow-left" />
-              Back
+              {t('ds.setupBack')}
             </button>
             <button
               type="button"
@@ -662,7 +669,7 @@ export function DesignSystemCreationFlow({
               onClick={() => void generate()}
             >
               <Icon name="sparkles" />
-              {generationStarting ? 'Opening project...' : 'Generate'}
+              {generationStarting ? t('ds.setupOpeningProject') : t('ds.setupGenerate')}
             </button>
           </div>
         </div>
@@ -689,7 +696,7 @@ export function DesignSystemCreationFlow({
         <header className="ds-setup-topbar">
           <button type="button" className="ghost" onClick={onBack}>
             <Icon name="arrow-left" />
-            Back
+            {t('ds.setupBack')}
           </button>
           <span className="ds-setup-mark">
             <Icon name="blocks" />
@@ -700,38 +707,38 @@ export function DesignSystemCreationFlow({
             disabled={!state.company.trim()}
             onClick={() => {
               if (!state.company.trim()) {
-                setError('Tell Open Design about the company or design system first.');
+                setError(t('ds.setupRequiredError'));
                 return;
               }
               setStep('confirm');
             }}
           >
-            Continue to generation
+            {t('ds.setupContinue')}
             <Icon name="chevron-right" />
           </button>
         </header>
       )}
 
       <main className="ds-setup-form">
-        <h1>Generate from your material</h1>
-        <p>Start with a short description, then add any source files you already have.</p>
+        <h1>{t('ds.setupTitle')}</h1>
+        <p>{t('ds.setupBody')}</p>
 
         <label className="ds-setup-field">
-          <span>Describe your brand or product</span>
+          <span>{t('ds.setupCompanyLabel')}</span>
           <textarea
             rows={4}
             value={state.company}
             onChange={(event) => setState((curr) => ({ ...curr, company: event.target.value }))}
-            placeholder="e.g. Mission Impastabowl: fast-casual pasta restaurant with in-store touchscreen kiosk, mobile app and website"
+            placeholder={t('ds.setupCompanyPlaceholder')}
           />
         </label>
 
         <section className="ds-resource-section">
-          <h2>Add source material <span>(optional)</span></h2>
-          <p>Use anything that shows your current style.</p>
+          <h2>{t('ds.setupExamplesTitle')} <span>{t('ds.setupExamplesOptional')}</span></h2>
+          <p>{t('ds.setupExamplesBody')}</p>
           <div className="ds-resource-card">
             <div className="ds-resource-row">
-              <strong>GitHub repo</strong>
+              <strong>{t('ds.setupGithubLabel')}</strong>
               <div className="ds-resource-inline">
                 <input
                   value={state.githubUrl}
@@ -744,18 +751,18 @@ export function DesignSystemCreationFlow({
                   disabled={!state.githubUrl.trim()}
                   onClick={handleAddGithubUrl}
                 >
-                  Add
+                  {t('ds.setupGithubAdd')}
                 </button>
               </div>
               {state.githubUrls.length > 0 ? (
-                <div className="ds-github-url-list" aria-label="Added GitHub repositories">
+                <div className="ds-github-url-list" aria-label={t('ds.setupAddedGithubReposAria')}>
                   {state.githubUrls.map((url) => (
                     <span key={url}>
                       <Icon name="github" />
                       {githubRepoLabel(url)}
                       <button
                         type="button"
-                        aria-label={`Remove ${githubRepoLabel(url)}`}
+                        aria-label={t('ds.setupRemoveGithubRepo', { repo: githubRepoLabel(url) })}
                         onClick={() => handleRemoveGithubUrl(url)}
                       >
                         x
@@ -779,9 +786,9 @@ export function DesignSystemCreationFlow({
               />
             </div>
             <DropZone
-              label="Link local code"
-              helper="Use a folder or selected files from this computer."
-              prompt="Drag a folder here or browse"
+              label={t('ds.setupLinkLocalLabel')}
+              helper={t('ds.setupLinkLocalHelper')}
+              prompt={t('ds.setupLinkLocalPrompt')}
               names={localCodeSourceLabels(state)}
               directory
               onBrowseFolder={() => void handlePickCodeFolder()}
@@ -800,9 +807,9 @@ export function DesignSystemCreationFlow({
               }}
             />
             <DropZone
-              label="Upload .fig"
-              helper="Parsed locally; only a summary is added."
-              prompt="Drop .fig here or browse"
+              label={t('ds.setupUploadFigLabel')}
+              helper={t('ds.setupUploadFigHelper')}
+              prompt={t('ds.setupUploadFigPrompt')}
               accept=".fig"
               names={state.figFiles}
               onError={setError}
@@ -819,8 +826,8 @@ export function DesignSystemCreationFlow({
               }}
             />
             <DropZone
-              label="Add assets"
-              prompt="Drag files here or browse"
+              label={t('ds.setupAssetsLabel')}
+              prompt={t('ds.setupAssetsPrompt')}
               names={state.assetFiles}
               onRemoveName={handleRemoveAssetFile}
               onError={setError}
@@ -841,13 +848,13 @@ export function DesignSystemCreationFlow({
 
         {embedded ? null : (
           <label className="ds-setup-field">
-            <span>Notes</span>
-            <textarea
-              rows={4}
-              value={state.notes}
-              onChange={(event) => setState((curr) => ({ ...curr, notes: event.target.value }))}
-              placeholder="e.g. We use a warm, earthy color palette with rounded corners. Our brand voice is playful but professional..."
-            />
+          <span>{t('ds.setupNotesLabel')}</span>
+          <textarea
+            rows={4}
+            value={state.notes}
+            onChange={(event) => setState((curr) => ({ ...curr, notes: event.target.value }))}
+            placeholder={t('ds.setupNotesPlaceholder')}
+          />
           </label>
         )}
         {error ? <div className="ds-editor-error">{error}</div> : null}
@@ -855,7 +862,7 @@ export function DesignSystemCreationFlow({
           <div className="ds-setup-actions ds-setup-actions--embedded">
             <button type="button" className="ghost" onClick={onBack}>
               <Icon name="arrow-left" />
-              Back
+              {t('ds.setupBack')}
             </button>
             <button
               type="button"
@@ -863,13 +870,13 @@ export function DesignSystemCreationFlow({
               disabled={!state.company.trim()}
               onClick={() => {
                 if (!state.company.trim()) {
-                  setError('Tell Open Design about the company or design system first.');
+                  setError(t('ds.setupRequiredError'));
                   return;
                 }
                 setStep('confirm');
               }}
             >
-              Generate
+              {t('ds.setupContinue')}
               <Icon name="chevron-right" />
             </button>
           </div>
@@ -2584,6 +2591,7 @@ function DropZone({
   onProcessingStart,
   onFiles,
 }: DropZoneProps) {
+  const t = useT();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const fileDialogPendingRef = useRef(false);
   const fileDialogCanShowLoadingRef = useRef(false);
@@ -2735,16 +2743,16 @@ function DropZone({
         </label>
         {onBrowseFolder ? (
           <button type="button" className="ghost" onClick={onBrowseFolder}>
-            Browse folder
+            {t('ds.dropZoneBrowseFolder')}
           </button>
         ) : null}
       </div>
       {names.length > 0 && onRemoveName ? (
-        <div className="ds-local-code-list" aria-label={`${label} selections`}>
+        <div className="ds-local-code-list" aria-label={t('ds.dropZoneSelectionsAria', { label })}>
           {names.map((name) => (
             <span key={name}>
               {name}
-              <button type="button" aria-label={`Remove ${name}`} onClick={() => onRemoveName(name)}>
+              <button type="button" aria-label={t('ds.dropZoneRemoveSelection', { name })} onClick={() => onRemoveName(name)}>
                 x
               </button>
             </span>
@@ -2884,62 +2892,63 @@ function GitHubRepositoryAccessPanel({
   onOpenAuthorization: () => void;
   onDisconnect: () => void;
 }) {
+  const t = useT();
   const [methodsExpanded, setMethodsExpanded] = useState(false);
   const connected = isGithubConnectorConnected(connector);
   const account = getDisplayableGithubAccountLabel(connector);
   const busy = action !== null;
-  let composioBadge = 'Optional';
+  let composioBadge = t('ds.githubAccessBadgeOptional');
   let composioTone: AccessBadgeTone = 'muted';
-  let composioDescription = 'Composio GitHub connector access for agent tools; repo URLs still work with local git or GitHub CLI.';
+  let composioDescription = t('ds.githubAccessDescOptional');
   let composioIcon: IconName = 'settings';
 
   if (!composioConfigured) {
-    composioBadge = 'Not configured';
-    composioDescription = 'Add a Composio API key only if this project needs connector-backed GitHub tools.';
+    composioBadge = t('ds.githubAccessBadgeNotConfigured');
+    composioDescription = t('ds.githubAccessDescNotConfigured');
   } else if (connected) {
-    composioBadge = 'Connected';
+    composioBadge = t('ds.githubAccessBadgeConnected');
     composioTone = 'success';
     composioIcon = 'github';
     composioDescription = account
-      ? `Composio GitHub connector connected as ${account}; it is available as fallback when this device cannot read the repository.`
-      : 'Composio GitHub connector is available as fallback when this device cannot read the repository.';
+      ? t('ds.githubAccessDescConnectedAs', { account })
+      : t('ds.githubAccessDescConnected');
   } else if (authorizationPending) {
-    composioBadge = 'Pending';
+    composioBadge = t('ds.githubAccessBadgePending');
     composioTone = 'warning';
     composioIcon = 'external-link';
-    composioDescription = 'Finish the Composio authorization window; local GitHub intake remains available.';
+    composioDescription = t('ds.githubAccessDescPending');
   } else if (loading) {
-    composioBadge = 'Checking';
+    composioBadge = t('ds.githubAccessBadgeChecking');
     composioTone = 'loading';
     composioIcon = 'spinner';
-    composioDescription = 'Checking connector status in the background; URL intake is not blocked.';
+    composioDescription = t('ds.githubAccessDescChecking');
   } else if (error) {
-    composioBadge = 'Needs attention';
+    composioBadge = t('ds.githubAccessBadgeNeedsAttention');
     composioTone = 'warning';
   } else if (connector?.status === 'error') {
-    composioBadge = 'Needs attention';
+    composioBadge = t('ds.githubAccessBadgeNeedsAttention');
     composioTone = 'danger';
-    composioDescription = 'Reconnect the Composio GitHub connector, or continue with local git/GitHub CLI.';
+    composioDescription = t('ds.githubAccessDescReconnect');
   }
 
   const composioAction = !composioConfigured ? (
     <button type="button" className="ghost" onClick={onOpenConnectorsTab}>
-      Configure Composio
+      {t('ds.githubAccessConfigureComposio')}
     </button>
   ) : connected || authorizationPending ? (
     <>
       {authorizationPending && authorizationUrl ? (
         <button type="button" className="ghost" disabled={busy} onClick={onOpenAuthorization}>
-          Open authorization
+          {t('ds.githubAccessOpenAuthorization')}
         </button>
       ) : null}
       <button type="button" className="ghost" disabled={busy} onClick={onDisconnect}>
-        {action === 'disconnect' ? 'Disconnecting...' : 'Disconnect'}
+        {action === 'disconnect' ? t('ds.githubAccessDisconnecting') : t('ds.githubAccessDisconnect')}
       </button>
     </>
   ) : (
     <button type="button" className="ghost" disabled={busy} onClick={onConnect}>
-      {action === 'connect' ? 'Connecting...' : 'Connect via Composio'}
+      {action === 'connect' ? t('ds.githubAccessConnecting') : t('ds.githubAccessConnectComposio')}
     </button>
   );
 
@@ -2947,23 +2956,23 @@ function GitHubRepositoryAccessPanel({
     {
       id: 'local',
       icon: 'github',
-      title: 'This device',
-      badge: 'Automatic',
+      title: t('ds.githubAccessLocalTitle'),
+      badge: t('ds.githubAccessLocalBadge'),
       tone: 'success',
-      description: 'Uses public git clone, local git credentials, or GitHub CLI auth available on this machine.',
+      description: t('ds.githubAccessLocalDesc'),
     },
     {
       id: 'native-oauth',
       icon: 'link',
-      title: 'Open Design account',
-      badge: 'Coming soon',
+      title: t('ds.githubAccessNativeTitle'),
+      badge: t('ds.githubAccessNativeBadge'),
       tone: 'muted',
-      description: 'Native GitHub sign-in managed by Open Design; this build does not use an OD-managed GitHub token yet.',
+      description: t('ds.githubAccessNativeDesc'),
     },
     {
       id: 'composio',
       icon: composioIcon,
-      title: 'Connector platform',
+      title: t('ds.githubAccessConnectorTitle'),
       badge: composioBadge,
       tone: composioTone,
       description: composioDescription,
@@ -2981,8 +2990,8 @@ function GitHubRepositoryAccessPanel({
     >
       <div className="ds-github-access-header">
         <span>
-          <strong>Repository access: Auto</strong>
-          <p>Paste a GitHub URL. Open Design will use the first working access method.</p>
+          <strong>{t('ds.githubAccessHeaderTitle')}</strong>
+          <p>{t('ds.githubAccessHeaderBody')}</p>
         </span>
         <button
           type="button"
@@ -2992,7 +3001,7 @@ function GitHubRepositoryAccessPanel({
           onClick={() => setMethodsExpanded((current) => !current)}
         >
           <Icon name={methodsExpanded ? 'chevron-down' : 'chevron-right'} />
-          {methodsExpanded ? 'Hide access methods' : 'Show access methods'}
+          {methodsExpanded ? t('ds.githubAccessHideMethods') : t('ds.githubAccessShowMethods')}
         </button>
       </div>
       <div
@@ -3002,7 +3011,7 @@ function GitHubRepositoryAccessPanel({
         aria-hidden={!methodsExpanded}
       >
         <div className="accordion-collapsible-inner">
-          <div className="ds-github-access-methods" aria-label="GitHub repository access methods">
+          <div className="ds-github-access-methods" aria-label={t('ds.githubAccessMethodsAria')}>
             {methods.map((method) => (
               <div key={method.id} className="ds-github-access-method">
                 <Icon name={method.icon} />

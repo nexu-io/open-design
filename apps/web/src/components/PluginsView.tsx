@@ -38,6 +38,7 @@ import { PluginDetailsModal } from './PluginDetailsModal';
 import { PluginsHomeSection } from './PluginsHomeSection';
 import { TrustBadge } from './TrustBadge';
 import { useI18n } from '../i18n';
+import { zhCN } from '../i18n/inline';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import type { PluginUseAction } from './plugins-home/useActions';
 
@@ -63,33 +64,58 @@ const PLUGINS_TABS: ReadonlyArray<{
 
 const PLUGIN_SHARE_DETAILS: Record<PluginShareAction, {
   eyebrow: string;
+  eyebrowZh: string;
   fallbackTitle: string;
+  fallbackTitleZh: string;
   fallbackDescription: string;
+  fallbackDescriptionZh: string;
   confirmLabel: string;
+  confirmLabelZh: string;
   steps: string[];
+  stepsZh: string[];
 }> = {
   'publish-github': {
     eyebrow: 'GitHub repository',
+    eyebrowZh: 'GitHub 仓库',
     fallbackTitle: 'Publish Plugin to GitHub',
+    fallbackTitleZh: '发布插件到 GitHub',
     fallbackDescription:
       'Creates a public GitHub repository for this local Open Design plugin.',
+    fallbackDescriptionZh:
+      '为这个本地 Open Design 插件创建一个公开 GitHub 仓库。',
     confirmLabel: 'Start publishing',
+    confirmLabelZh: '开始发布',
     steps: [
       'Create a new Open Design project for the publish workflow.',
       'Copy this plugin into that project as isolated source context.',
       'Run the official publish action plugin against the local daemon.',
     ],
+    stepsZh: [
+      '为发布流程创建一个新的 Open Design 项目。',
+      '把这个插件复制到该项目中，作为隔离的源码上下文。',
+      '通过本地守护进程运行官方发布动作插件。',
+    ],
   },
   'contribute-open-design': {
     eyebrow: 'Open Design pull request',
+    eyebrowZh: 'Open Design Pull Request',
     fallbackTitle: 'Contribute Plugin to Open Design',
+    fallbackTitleZh: '向 Open Design 贡献插件',
     fallbackDescription:
       'Opens a pull request that adds this plugin to the Open Design community catalog.',
+    fallbackDescriptionZh:
+      '打开一个 Pull Request，把这个插件加入 Open Design 社区目录。',
     confirmLabel: 'Start contribution',
+    confirmLabelZh: '开始贡献',
     steps: [
       'Create a new Open Design project for the contribution workflow.',
       'Copy this plugin into that project as isolated source context.',
       'Run the official contribution action plugin against the local daemon.',
+    ],
+    stepsZh: [
+      '为贡献流程创建一个新的 Open Design 项目。',
+      '把这个插件复制到该项目中，作为隔离的源码上下文。',
+      '通过本地守护进程运行官方贡献动作插件。',
     ],
   },
 };
@@ -202,7 +228,7 @@ export function PluginsView({
     if (!result) {
       setNotice({
         ok: false,
-        message: `Failed to apply ${record.title}. Make sure the daemon is reachable.`,
+        message: t('home.error.applyFailed', { title: record.title }),
       });
       return;
     }
@@ -210,7 +236,11 @@ export function PluginsView({
     setDetailsRecord(null);
     setNotice({
       ok: true,
-      message: `${record.title} is ready. Use it from Home with @ search or pick it from the gallery.`,
+      message: zhCN(
+        locale,
+        `${record.title} is ready. Use it from Home with @ search or pick it from the gallery.`,
+        `${record.title} 已准备好。你可以在主页用 @ 搜索使用，也可以从插件库中选择。`,
+      ),
     });
   }
 
@@ -221,7 +251,11 @@ export function PluginsView({
     if (!onCreatePluginShareProject) {
       setNotice({
         ok: false,
-        message: 'Plugin sharing is not available in this shell.',
+        message: zhCN(
+          locale,
+          'Plugin sharing is not available in this shell.',
+          '当前外壳不支持插件分享。',
+        ),
       });
       setShareConfirm(null);
       return;
@@ -588,12 +622,14 @@ function PluginShareConfirmModal({
   onClose: () => void;
   onConfirm: () => void;
 }) {
+  const { locale } = useI18n();
   const details = PLUGIN_SHARE_DETAILS[action];
-  const actionTitle = actionRecord?.title ?? details.fallbackTitle;
+  const actionTitle = actionRecord?.title ?? zhCN(locale, details.fallbackTitle, details.fallbackTitleZh);
   const actionDescription =
-    actionRecord?.manifest?.description ?? details.fallbackDescription;
+    actionRecord?.manifest?.description ?? zhCN(locale, details.fallbackDescription, details.fallbackDescriptionZh);
   const actionQuery = readLocalizedUseCaseQuery(actionRecord);
   const stagedPath = `plugin-source/${pluginShareSlug(sourceRecord.id)}`;
+  const steps = locale === 'zh-CN' ? details.stepsZh : details.steps;
 
   return (
     <div
@@ -611,11 +647,13 @@ function PluginShareConfirmModal({
           <div className="plugin-details-modal__head-titles">
             <div className="plugin-details-modal__head-row">
               <h2 className="plugin-details-modal__title">{actionTitle}</h2>
-              <TrustBadge trust="official" label="Action plugin" />
+              <TrustBadge trust="official" label={zhCN(locale, 'Action plugin', '动作插件')} />
             </div>
             <div className="plugin-details-modal__meta">
-              <span>{details.eyebrow}</span>
-              <span>· for {sourceRecord.title}</span>
+              <span>{zhCN(locale, details.eyebrow, details.eyebrowZh)}</span>
+              <span>
+                {zhCN(locale, `· for ${sourceRecord.title}`, `· 用于 ${sourceRecord.title}`)}
+              </span>
               {actionRecord ? <span>· v{actionRecord.version}</span> : null}
             </div>
           </div>
@@ -624,8 +662,8 @@ function PluginShareConfirmModal({
             className="plugin-details-modal__close"
             onClick={onClose}
             disabled={pending}
-            aria-label="Close share confirmation"
-            title="Close"
+            aria-label={zhCN(locale, 'Close share confirmation', '关闭分享确认')}
+            title={zhCN(locale, 'Close', '关闭')}
           >
             <Icon name="close" size={18} />
           </button>
@@ -635,14 +673,14 @@ function PluginShareConfirmModal({
           <section className="plugin-details-modal__section">
             <div className="plugin-details-modal__section-head">
               <h3 className="plugin-details-modal__section-title">
-                What this starts
+                {zhCN(locale, 'What this starts', '将会启动什么')}
               </h3>
             </div>
             <p className="plugin-details-modal__description">
               {actionDescription}
             </p>
             <ol className="plugin-share-confirm__steps">
-              {details.steps.map((step) => (
+              {steps.map((step) => (
                 <li key={step}>{step}</li>
               ))}
             </ol>
@@ -651,12 +689,12 @@ function PluginShareConfirmModal({
           <section className="plugin-details-modal__section">
             <div className="plugin-details-modal__section-head">
               <h3 className="plugin-details-modal__section-title">
-                Source plugin
+                {zhCN(locale, 'Source plugin', '源插件')}
               </h3>
             </div>
             <dl className="plugin-share-confirm__facts">
               <div>
-                <dt>Plugin</dt>
+                <dt>{zhCN(locale, 'Plugin', '插件')}</dt>
                 <dd>{sourceRecord.title}</dd>
               </div>
               <div>
@@ -666,13 +704,13 @@ function PluginShareConfirmModal({
                 </dd>
               </div>
               <div>
-                <dt>Copied to</dt>
+                <dt>{zhCN(locale, 'Copied to', '复制到')}</dt>
                 <dd>
                   <code>{stagedPath}</code>
                 </dd>
               </div>
               <div>
-                <dt>Trust</dt>
+                <dt>{zhCN(locale, 'Trust', '可信级别')}</dt>
                 <dd>
                   <TrustBadge trust={sourceRecord.trust} />
                 </dd>
@@ -684,7 +722,7 @@ function PluginShareConfirmModal({
             <section className="plugin-details-modal__section">
               <div className="plugin-details-modal__section-head">
                 <h3 className="plugin-details-modal__section-title">
-                  Action prompt
+                  {zhCN(locale, 'Action prompt', '动作提示词')}
                 </h3>
               </div>
               <pre className="plugin-details-modal__query">{actionQuery}</pre>
@@ -699,7 +737,7 @@ function PluginShareConfirmModal({
             onClick={onClose}
             disabled={pending}
           >
-            Cancel
+            {zhCN(locale, 'Cancel', '取消')}
           </button>
           <button
             type="button"
@@ -709,7 +747,9 @@ function PluginShareConfirmModal({
             aria-busy={pending ? 'true' : undefined}
             data-testid="plugin-share-confirm-start"
           >
-            {pending ? 'Starting…' : details.confirmLabel}
+            {pending
+              ? zhCN(locale, 'Starting…', '启动中…')
+              : zhCN(locale, details.confirmLabel, details.confirmLabelZh)}
           </button>
         </footer>
       </div>
@@ -767,6 +807,7 @@ function Notice({
 }: {
   outcome: PluginInstallOutcome | { ok: boolean; message: string };
 }) {
+  const { locale } = useI18n();
   const warnings = 'warnings' in outcome ? outcome.warnings : [];
   const log = 'log' in outcome ? outcome.log : [];
   return (
@@ -774,12 +815,16 @@ function Notice({
       <div>{outcome.message}</div>
       {warnings.length > 0 ? (
         <div className="plugins-view__notice-sub">
-          {warnings.length} warning{warnings.length === 1 ? '' : 's'}
+          {zhCN(
+            locale,
+            `${warnings.length} warning${warnings.length === 1 ? '' : 's'}`,
+            `${warnings.length} 条警告`,
+          )}
         </div>
       ) : null}
       {log.length > 0 ? (
         <details className="plugins-view__notice-log">
-          <summary>Install log</summary>
+          <summary>{zhCN(locale, 'Install log', '安装日志')}</summary>
           <ul>
             {log.map((line, idx) => (
               <li key={`${line}-${idx}`}>{line}</li>
@@ -833,6 +878,7 @@ function AvailablePluginsPanel({
   onSourceDropdown?: () => void;
   t: ReturnType<typeof useI18n>['t'];
 }) {
+  const { locale } = useI18n();
   const [query, setQuery] = useState('');
   const [sourceFilter, setSourceFilter] = useState('all');
   const searchTrackedRef = useRef(false);
@@ -854,7 +900,11 @@ function AvailablePluginsPanel({
         <span className="plugins-view__section-count">
           {filteredPlugins.length === plugins.length
             ? plugins.length
-            : `${filteredPlugins.length} of ${plugins.length}`}
+            : zhCN(
+              locale,
+              `${filteredPlugins.length} of ${plugins.length}`,
+              `${filteredPlugins.length} / ${plugins.length}`,
+            )}
         </span>
       </div>
       {plugins.length > 0 ? (
@@ -978,7 +1028,7 @@ function AvailablePluginDetailsModal({
   onClose: () => void;
   onInstall: (plugin: AvailableMarketplacePlugin) => void;
 }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const versions = useMemo(() => availablePluginVersions(plugin.entry), [plugin.entry]);
   const [selectedVersion, setSelectedVersion] = useState(
     () => versions[0]?.version ?? plugin.entry.version ?? 'latest',
@@ -1057,8 +1107,8 @@ function AvailablePluginDetailsModal({
             className="plugin-details-modal__close"
             onClick={onClose}
             disabled={pending}
-            aria-label="Close available plugin details"
-            title="Close"
+            aria-label={zhCN(locale, 'Close available plugin details', '关闭可用插件详情')}
+            title={zhCN(locale, 'Close', '关闭')}
           >
             <Icon name="close" size={18} />
           </button>
@@ -1081,10 +1131,13 @@ function AvailablePluginDetailsModal({
 
           <section className="plugin-details-modal__section">
             <div className="plugin-details-modal__section-head">
-              <h3 className="plugin-details-modal__section-title">About</h3>
+              <h3 className="plugin-details-modal__section-title">
+                {zhCN(locale, 'About', '关于')}
+              </h3>
             </div>
             <p className="plugin-details-modal__description">
-              {plugin.entry.description ?? 'No description provided.'}
+              {plugin.entry.description
+                ?? zhCN(locale, 'No description provided.', '暂无描述。')}
             </p>
           </section>
 
@@ -1160,11 +1213,13 @@ function AvailablePluginDetailsModal({
 
           <section className="plugin-details-modal__section">
             <div className="plugin-details-modal__section-head">
-              <h3 className="plugin-details-modal__section-title">Catalog</h3>
+              <h3 className="plugin-details-modal__section-title">
+                {zhCN(locale, 'Catalog', '目录')}
+              </h3>
             </div>
             <dl className="plugin-details-modal__source">
               <div>
-                <dt>Source</dt>
+                <dt>{zhCN(locale, 'Source', '来源')}</dt>
                 <dd>
                   <code>{selectedVersionInfo?.source ?? plugin.entry.source}</code>
                 </dd>
@@ -1186,11 +1241,11 @@ function AvailablePluginDetailsModal({
                 </div>
               ) : null}
               <div>
-                <dt>Catalog</dt>
+                <dt>{zhCN(locale, 'Catalog', '目录')}</dt>
                 <dd>{sourceName}</dd>
               </div>
               <div>
-                <dt>Catalog URL</dt>
+                <dt>{zhCN(locale, 'Catalog URL', '目录 URL')}</dt>
                 <dd>
                   <a href={plugin.marketplace.url} target="_blank" rel="noreferrer">
                     {plugin.marketplace.url}
@@ -1199,13 +1254,13 @@ function AvailablePluginDetailsModal({
               </div>
               {plugin.entry.license ? (
                 <div>
-                  <dt>License</dt>
+                  <dt>{zhCN(locale, 'License', '许可证')}</dt>
                   <dd>{plugin.entry.license}</dd>
                 </div>
               ) : null}
               {publisherLabel ? (
                 <div>
-                  <dt>Publisher</dt>
+                  <dt>{zhCN(locale, 'Publisher', '发布者')}</dt>
                   <dd>
                     {publisher?.url ? (
                       <a href={publisher.url} target="_blank" rel="noreferrer">
@@ -1219,7 +1274,7 @@ function AvailablePluginDetailsModal({
               ) : null}
               {plugin.entry.homepage ? (
                 <div>
-                  <dt>Homepage</dt>
+                  <dt>{zhCN(locale, 'Homepage', '主页')}</dt>
                   <dd>
                     <a href={plugin.entry.homepage} target="_blank" rel="noreferrer">
                       {plugin.entry.homepage}
@@ -1233,7 +1288,9 @@ function AvailablePluginDetailsModal({
           {permissions.length > 0 || tags.length > 0 || capabilitySummary.length > 0 ? (
             <section className="plugin-details-modal__section">
               <div className="plugin-details-modal__section-head">
-                <h3 className="plugin-details-modal__section-title">Metadata</h3>
+                <h3 className="plugin-details-modal__section-title">
+                  {zhCN(locale, 'Metadata', '元数据')}
+                </h3>
               </div>
               <div className="plugin-details-modal__context">
                 {permissions.length > 0 ? (
@@ -1255,7 +1312,9 @@ function AvailablePluginDetailsModal({
                 ) : null}
                 {tags.length > 0 ? (
                   <div className="plugin-details-modal__ctx-group">
-                    <div className="plugin-details-modal__ctx-label">Tags</div>
+                    <div className="plugin-details-modal__ctx-label">
+                      {zhCN(locale, 'Tags', '标签')}
+                    </div>
                     <div className="plugin-details-modal__chips">
                       {tags.map((tag) => (
                         <span key={tag} className="plugin-details-modal__chip">
@@ -1294,7 +1353,7 @@ function AvailablePluginDetailsModal({
             onClick={onClose}
             disabled={pending}
           >
-            Close
+            {zhCN(locale, 'Close', '关闭')}
           </button>
           <button
             type="button"
@@ -1304,7 +1363,9 @@ function AvailablePluginDetailsModal({
             aria-busy={pending ? 'true' : undefined}
             data-testid={`plugins-available-details-install-${plugin.entry.name}`}
           >
-            {pending ? 'Installing...' : 'Install'}
+            {pending
+              ? zhCN(locale, 'Installing...', '安装中...')
+              : zhCN(locale, 'Install', '安装')}
           </button>
         </footer>
       </div>
@@ -1331,6 +1392,7 @@ function SourcesPanel({
   onTrust: (marketplace: PluginMarketplace, trust: PluginMarketplaceTrust) => void;
   t: ReturnType<typeof useI18n>['t'];
 }) {
+  const { locale } = useI18n();
   const [url, setUrl] = useState('');
   const [trust, setTrust] = useState<PluginMarketplaceTrust>('restricted');
   const trimmedUrl = url.trim();
@@ -1458,6 +1520,7 @@ function PluginImportModal({
   onUploadZip: (file: File) => Promise<PluginInstallOutcome>;
   onUploadFolder: (files: File[]) => Promise<PluginInstallOutcome>;
 }) {
+  const { locale } = useI18n();
   const [kind, setKind] = useState<ImportKind>('github');
   const [source, setSource] = useState('');
   const [zipFile, setZipFile] = useState<File | null>(null);
@@ -1496,39 +1559,46 @@ function PluginImportModal({
       >
         <header className="plugins-import-modal__head">
           <div>
-            <p className="plugins-view__kicker">User plugins</p>
-            <h2 id="plugins-import-title">Import a plugin</h2>
+            <p className="plugins-view__kicker">
+              {zhCN(locale, 'User plugins', '用户插件')}
+            </p>
+            <h2 id="plugins-import-title">
+              {zhCN(locale, 'Import a plugin', '导入插件')}
+            </h2>
           </div>
           <button
             type="button"
             className="plugins-import-modal__close"
             onClick={onClose}
-            aria-label="Close import dialog"
+            aria-label={zhCN(locale, 'Close import dialog', '关闭导入弹窗')}
           >
             <Icon name="close" size={16} />
           </button>
         </header>
 
-        <nav className="plugins-import-modal__tabs" aria-label="Import source">
+        <nav
+          className="plugins-import-modal__tabs"
+          aria-label={zhCN(locale, 'Import source', '导入来源')}
+        >
           <ImportChoice
             active={kind === 'github'}
             icon="github"
-            title="From GitHub"
-            body="Install github:owner/repo paths."
+            title={zhCN(locale, 'From GitHub', '从 GitHub')}
+            body={zhCN(locale, 'Install github:owner/repo paths.', '安装 github:owner/repo 路径。')}
             onClick={() => setKind('github')}
           />
           <ImportChoice
             active={kind === 'zip'}
             icon="upload"
-            title="Upload zip"
-            body="Upload a plugin archive."
+            title={zhCN(locale, 'Upload zip', '上传 zip')}
+            body={zhCN(locale, 'Upload a plugin archive.', '上传插件压缩包。')}
             onClick={() => setKind('zip')}
           />
           <ImportChoice
             active={kind === 'folder'}
             icon="folder"
-            title="Upload folder"
-            body="Upload a plugin directory."
+            title={zhCN(locale, 'Upload folder', '上传文件夹')}
+            body={zhCN(locale, 'Upload a plugin directory.', '上传插件目录。')}
             onClick={() => setKind('folder')}
           />
         </nav>
@@ -1536,7 +1606,9 @@ function PluginImportModal({
         <div className="plugins-import-modal__body">
           {kind === 'github' ? (
             <div className="plugins-view__install-card">
-              <label htmlFor="plugin-source">GitHub, archive, or marketplace source</label>
+              <label htmlFor="plugin-source">
+                {zhCN(locale, 'GitHub, archive, or marketplace source', 'GitHub、压缩包或插件市场来源')}
+              </label>
               <div className="plugins-view__source-row">
                 <input
                   id="plugin-source"
@@ -1551,23 +1623,31 @@ function PluginImportModal({
                   onClick={runImport}
                   disabled={working || !canSubmit}
                 >
-                  {working ? 'Importing…' : 'Import'}
+                  {working
+                    ? zhCN(locale, 'Importing…', '导入中…')
+                    : zhCN(locale, 'Import', '导入')}
                 </button>
               </div>
               <div className="plugins-view__source-help">
-                Supports <code>github:owner/repo[@ref][/subpath]</code>, HTTPS{' '}
-                <code>.tar.gz</code>/<code>.tgz</code> archives, or marketplace plugin names.
+                {zhCN(locale, 'Supports', '支持')}{' '}
+                <code>github:owner/repo[@ref][/subpath]</code>, HTTPS{' '}
+                <code>.tar.gz</code>/<code>.tgz</code>{' '}
+                {zhCN(locale, 'archives, or marketplace plugin names.', '压缩包，或插件市场中的插件名。')}
               </div>
             </div>
           ) : null}
 
           {kind === 'zip' ? (
             <FileImportPanel
-              title="Upload zip"
-              body="Choose a .zip archive containing open-design.json, SKILL.md, or .claude-plugin/plugin.json."
+              title={zhCN(locale, 'Upload zip', '上传 zip')}
+              body={zhCN(
+                locale,
+                'Choose a .zip archive containing open-design.json, SKILL.md, or .claude-plugin/plugin.json.',
+                '选择一个包含 open-design.json、SKILL.md 或 .claude-plugin/plugin.json 的 .zip 压缩包。',
+              )}
               accept=".zip,application/zip"
               working={working}
-              fileLabel={zipFile?.name ?? 'No zip selected'}
+              fileLabel={zipFile?.name ?? zhCN(locale, 'No zip selected', '尚未选择 zip')}
               onChange={(files) => setZipFile(files[0] ?? null)}
               onImport={runImport}
               canSubmit={canSubmit}
@@ -1576,13 +1656,21 @@ function PluginImportModal({
 
           {kind === 'folder' ? (
             <FileImportPanel
-              title="Upload folder"
-              body="Choose a plugin folder. Relative paths are preserved and installed into your user plugin registry."
+              title={zhCN(locale, 'Upload folder', '上传文件夹')}
+              body={zhCN(
+                locale,
+                'Choose a plugin folder. Relative paths are preserved and installed into your user plugin registry.',
+                '选择一个插件文件夹。相对路径会保留，并安装到你的用户插件注册表中。',
+              )}
               working={working}
               fileLabel={
                 folderFiles.length > 0
-                  ? `${folderFiles.length} file${folderFiles.length === 1 ? '' : 's'} selected`
-                  : 'No folder selected'
+                  ? zhCN(
+                    locale,
+                    `${folderFiles.length} file${folderFiles.length === 1 ? '' : 's'} selected`,
+                    `已选择 ${folderFiles.length} 个文件`,
+                  )
+                  : zhCN(locale, 'No folder selected', '尚未选择文件夹')
               }
               folder
               onChange={setFolderFiles}
@@ -1595,15 +1683,18 @@ function PluginImportModal({
 
         <footer className="plugins-import-modal__foot">
           <p>
-            Imported plugins are user plugins and are stored separately from
-            bundled official plugins.
+            {zhCN(
+              locale,
+              'Imported plugins are user plugins and are stored separately from bundled official plugins.',
+              '导入的插件会作为用户插件保存，并与内置官方插件分开存放。',
+            )}
           </p>
           <button
             type="button"
             className="plugins-view__secondary"
             onClick={onClose}
           >
-            Cancel
+            {zhCN(locale, 'Cancel', '取消')}
           </button>
         </footer>
       </section>
@@ -1624,6 +1715,7 @@ function ImportChoice({
   body: string;
   onClick: () => void;
 }) {
+  const { locale } = useI18n();
   return (
     <button
       type="button"
@@ -1662,6 +1754,7 @@ function FileImportPanel({
   onChange: (files: File[]) => void;
   onImport: () => void;
 }) {
+  const { locale } = useI18n();
   return (
     <section className="plugins-view__install-card">
       <div>
@@ -1686,7 +1779,9 @@ function FileImportPanel({
         onClick={onImport}
         disabled={working || !canSubmit}
       >
-        {working ? 'Importing…' : 'Import'}
+        {working
+          ? zhCN(locale, 'Importing…', '导入中…')
+          : zhCN(locale, 'Import', '导入')}
       </button>
     </section>
   );

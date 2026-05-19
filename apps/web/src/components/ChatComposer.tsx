@@ -2583,6 +2583,7 @@ function ToolsPluginsPanel({
   onApply: (record: InstalledPluginRecord) => void | Promise<void>;
   onShowDetails: (record: InstalledPluginRecord) => void;
 }) {
+  const t = useT();
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [source, setSource] = useState<'community' | 'mine'>('community');
   const [query, setQuery] = useState('');
@@ -2603,16 +2604,16 @@ function ToolsPluginsPanel({
   return (
     <>
       <div className="composer-tools-filter">
-        <div className="composer-tools-segments" role="tablist" aria-label="Plugin source">
+        <div className="composer-tools-segments" role="tablist" aria-label={t('chat.tools.pluginSourceAria')}>
           <button
             type="button"
             role="tab"
             aria-selected={source === 'community'}
             className={`composer-tools-segment${source === 'community' ? ' active' : ''}`}
             onClick={() => setSource('community')}
-            title={`${communityPlugins.length} installed official plugins`}
+            title={t('chat.tools.officialTitle', { count: communityPlugins.length })}
           >
-            Official
+            {t('chat.tools.official')}
           </button>
           <button
             type="button"
@@ -2620,30 +2621,39 @@ function ToolsPluginsPanel({
             aria-selected={source === 'mine'}
             className={`composer-tools-segment${source === 'mine' ? ' active' : ''}`}
             onClick={() => setSource('mine')}
-            title={`${userPlugins.length} installed user plugins`}
+            title={t('chat.tools.myPluginsTitle', { count: userPlugins.length })}
           >
-            My plugins
+            {t('chat.tools.myPlugins')}
           </button>
         </div>
         <input
           className="composer-tools-search"
           value={query}
           onChange={(e) => setQuery(e.currentTarget.value)}
-          placeholder="Search plugins…"
-          aria-label="Search plugins"
+          placeholder={t('chat.tools.searchPlugins')}
+          aria-label={t('pluginsHome.searchAria')}
         />
       </div>
       {visiblePlugins.length === 0 ? (
         <div className="composer-tools-empty">
           {plugins.length === 0 ? (
             <>
-              No plugins installed yet. Browse Official or add your own with{' '}
+              {t('chat.tools.noPluginsInstalled')}{' '}
               <code>od plugin install &lt;source&gt;</code>.
             </>
           ) : query ? (
-            <>No {source === 'community' ? 'Official' : 'My plugins'} results for “{query}”.</>
+            <>
+              {t('chat.tools.noPluginResults', {
+                source: source === 'community' ? t('chat.tools.official') : t('chat.tools.myPlugins'),
+                query,
+              })}
+            </>
           ) : (
-            <>No {source === 'community' ? 'Official' : 'My plugins'} plugins available.</>
+            <>
+              {t('chat.tools.noPluginsAvailable', {
+                source: source === 'community' ? t('chat.tools.official') : t('chat.tools.myPlugins'),
+              })}
+            </>
           )}
         </div>
       ) : (
@@ -2687,15 +2697,15 @@ function ToolsPluginsPanel({
                   )}
                 </span>
                 {pendingId === p.id ? (
-                  <span className="composer-tools-row-pending">Applying…</span>
+                  <span className="composer-tools-row-pending">{t('chat.tools.applying')}</span>
                 ) : null}
               </button>
               <button
                 type="button"
                 className="composer-tools-row-side"
                 onClick={() => onShowDetails(p)}
-                title={`View details for ${p.title}`}
-                aria-label={`View details for ${p.title}`}
+                title={t('chat.tools.viewDetails', { title: p.title })}
+                aria-label={t('chat.tools.viewDetails', { title: p.title })}
               >
                 <Icon name="eye" size={12} />
               </button>
@@ -2718,6 +2728,7 @@ function ToolsMcpPanel({
   onInsert: (serverId: string) => void;
   onManage: () => void;
 }) {
+  const t = useT();
   const [query, setQuery] = useState('');
   const visibleServers = useMemo(
     () => servers.filter((s) => mcpServerMatchesQuery(s, query)),
@@ -2735,19 +2746,19 @@ function ToolsMcpPanel({
           className="composer-tools-search"
           value={query}
           onChange={(e) => setQuery(e.currentTarget.value)}
-          placeholder="Search MCP…"
-          aria-label="Search MCP servers and templates"
+          placeholder={t('chat.tools.searchMcp')}
+          aria-label={t('chat.tools.searchMcpAria')}
         />
       </div>
       {visibleServers.length === 0 ? (
         <div className="composer-tools-empty">
           {servers.length === 0
-            ? 'No enabled MCP servers configured yet.'
-            : `No configured MCP results for “${query}”.`}
+            ? t('chat.tools.noMcpServers')
+            : t('chat.tools.noMcpResults', { query })}
         </div>
       ) : (
         <div className="composer-tools-list">
-          <div className="composer-tools-section-label">Configured</div>
+          <div className="composer-tools-section-label">{t('chat.tools.configured')}</div>
           {visibleServers.map((s) => (
             <button
               key={s.id}
@@ -2759,7 +2770,7 @@ function ToolsMcpPanel({
               // selectionStart isn't reset to 0 (#3195).
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => onInsert(s.id)}
-              title={`Insert a hint that nudges the model to use ${s.label || s.id}`}
+              title={t('chat.tools.insertMcpHint', { name: s.label || s.id })}
             >
               <Icon name="link" size={12} />
               <span className="composer-tools-row-body">
@@ -2772,7 +2783,7 @@ function ToolsMcpPanel({
       )}
       {visibleTemplates.length > 0 ? (
         <div className="composer-tools-list">
-          <div className="composer-tools-section-label">Templates</div>
+          <div className="composer-tools-section-label">{t('chat.tools.templates')}</div>
           {visibleTemplates.map((tpl) => (
             <button
               key={tpl.id}
@@ -2780,7 +2791,7 @@ function ToolsMcpPanel({
               role="menuitem"
               className="composer-tools-row"
               onClick={onManage}
-              title={`Add ${tpl.label} from Settings`}
+              title={t('chat.tools.addMcpTemplate', { name: tpl.label })}
             >
               <Icon name="plus" size={12} />
               <span className="composer-tools-row-body">
@@ -2801,7 +2812,7 @@ function ToolsMcpPanel({
         onClick={onManage}
       >
         <Icon name="settings" size={12} />
-        <span>Manage MCP servers…</span>
+        <span>{t('chat.tools.manageMcp')}</span>
       </button>
     </>
   );
@@ -2817,6 +2828,7 @@ function ToolsSkillsPanel({
   onPick: (skill: SkillSummary) => void | Promise<void>;
 }) {
   const { locale } = useI18n();
+  const t = useT();
   const [query, setQuery] = useState('');
   const [pendingId, setPendingId] = useState<string | null>(null);
   const visibleSkills = useMemo(
@@ -2830,13 +2842,13 @@ function ToolsSkillsPanel({
           className="composer-tools-search"
           value={query}
           onChange={(e) => setQuery(e.currentTarget.value)}
-          placeholder="Search skills…"
-          aria-label="Search skills"
+          placeholder={t('chat.tools.searchSkills')}
+          aria-label={t('homeHero.mentionSkills')}
         />
       </div>
       {visibleSkills.length === 0 ? (
         <div className="composer-tools-empty">
-          {skills.length === 0 ? 'No skills available yet.' : `No skills found for “${query}”.`}
+          {skills.length === 0 ? t('chat.tools.noSkills') : t('chat.tools.noSkillResults', { query })}
         </div>
       ) : (
         <div className="composer-tools-list">
@@ -2872,7 +2884,7 @@ function ToolsSkillsPanel({
                   </span>
                 </span>
                 {pendingId === skill.id ? (
-                  <span className="composer-tools-row-pending">Applying…</span>
+                  <span className="composer-tools-row-pending">{t('chat.tools.applying')}</span>
                 ) : null}
               </button>
             );
@@ -2957,7 +2969,7 @@ function mcpTemplateMatchesQuery(tpl: McpTemplate, query: string): boolean {
 }
 
 function pluginSourceLabel(plugin: InstalledPluginRecord, t: TranslateFn): string {
-  return plugin.sourceKind === 'bundled' ? t('chat.mentionPluginOfficial') : t('chat.mentionPluginMine');
+  return plugin.sourceKind === 'bundled' ? t('chat.tools.official') : t('chat.tools.myPlugins');
 }
 
 function ToolsImportPanel({
@@ -3104,16 +3116,17 @@ function MentionPopover({
   onPickMcp: (server: McpServerConfig) => void;
   onPickConnector: (connector: ConnectorDetail) => void;
 }) {
-  const { locale, t } = useI18n();
+  const { locale } = useI18n();
+  const t = useT();
   const ref = useRef<HTMLDivElement | null>(null);
   const [tab, setTab] = useState<MentionTab>('all');
   const tabs: Array<{ id: MentionTab; label: string }> = [
-    { id: 'all', label: t('chat.mentionTabAll') },
-    { id: 'plugins', label: t('chat.mentionTabPlugins') },
-    { id: 'skills', label: t('chat.mentionTabSkills') },
-    { id: 'mcp', label: t('chat.mentionTabMcp') },
-    { id: 'connectors', label: t('chat.mentionTabConnectors') },
-    { id: 'files', label: t('chat.mentionTabFiles') },
+    { id: 'all', label: t('chat.mention.all') },
+    { id: 'plugins', label: t('chat.mention.plugins') },
+    { id: 'skills', label: t('chat.mention.skills') },
+    { id: 'mcp', label: t('chat.mention.mcp') },
+    { id: 'connectors', label: t('chat.mention.connectors') },
+    { id: 'files', label: t('chat.mention.files') },
   ];
   const showPlugins = tab === 'all' || tab === 'plugins';
   const showSkills = tab === 'all' || tab === 'skills';
@@ -3131,7 +3144,7 @@ function MentionPopover({
   }, [connectors, files, plugins, skills, mcpServers, tab]);
   return (
     <div className="mention-popover" data-testid="mention-popover">
-      <div className="mention-tabs" role="tablist" aria-label={t('chat.mentionTabsAria')}>
+      <div className="mention-tabs" role="tablist" aria-label={t('chat.mention.surfacesAria')}>
         {tabs.map((item) => (
           <button
             key={item.id}
@@ -3148,17 +3161,17 @@ function MentionPopover({
       </div>
       <div className="mention-results" ref={ref}>
         {!hasVisibleResults ? (
-          <div className="mention-empty">
-            {query ? (
-              <>{t('chat.mentionNoResults', { query })}</>
-            ) : (
-              <>{t('chat.mentionSearchPrompt')}</>
-            )}
-          </div>
+            <div className="mention-empty">
+              {query ? (
+                <>{t('chat.mention.noResults', { query })}</>
+              ) : (
+                <>{t('chat.mention.emptyHint')}</>
+              )}
+            </div>
         ) : null}
         {showPlugins && plugins.length > 0 ? (
         <>
-          <div className="mention-section-label">{t('chat.mentionSectionPlugins')}</div>
+          <div className="mention-section-label">{t('chat.mention.plugins')}</div>
           {plugins.map((p) => (
             <button
               key={`plugin-${p.id}`}
@@ -3182,7 +3195,7 @@ function MentionPopover({
       ) : null}
         {showSkills && skills.length > 0 ? (
           <>
-            <div className="mention-section-label">{t('chat.mentionSectionSkills')}</div>
+            <div className="mention-section-label">{t('chat.mention.skills')}</div>
             {skills.map((skill) => {
               const active = skill.id === currentSkillId;
               return (
@@ -3201,7 +3214,7 @@ function MentionPopover({
                       {localizeSkillDescription(locale, skill) || skill.id}
                     </span>
                   </span>
-                  <span className="mention-meta">{active ? t('chat.mentionActiveSkill') : skill.mode}</span>
+                  <span className="mention-meta">{active ? t('chat.mention.active') : skill.mode}</span>
                 </button>
               );
             })}
@@ -3209,7 +3222,7 @@ function MentionPopover({
         ) : null}
         {showMcp && mcpServers.length > 0 ? (
           <>
-            <div className="mention-section-label">{t('chat.mentionSectionMcp')}</div>
+            <div className="mention-section-label">{t('chat.mention.mcp')}</div>
             {mcpServers.map((server) => (
               <button
                 key={`mcp-${server.id}`}
@@ -3217,7 +3230,7 @@ function MentionPopover({
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => onPickMcp(server)}
-                title={t('chat.mentionUseMcpTitle', { name: server.label || server.id })}
+                title={t('chat.mention.useMcp', { name: server.label || server.id })}
               >
                 <Icon name="link" size={12} />
                 <span className="mention-item-body">
@@ -3233,7 +3246,7 @@ function MentionPopover({
         ) : null}
         {showConnectors && connectors.length > 0 ? (
           <>
-            <div className="mention-section-label">{t('chat.mentionSectionConnectors')}</div>
+            <div className="mention-section-label">{t('chat.mention.connectors')}</div>
             {connectors.map((connector) => (
               <button
                 key={`connector-${connector.id}`}
@@ -3241,7 +3254,7 @@ function MentionPopover({
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => onPickConnector(connector)}
-                title={t('chat.mentionUseConnectorTitle', { name: connector.name })}
+                title={t('chat.mention.useConnector', { name: connector.name })}
               >
                 <Icon name="link" size={12} />
                 <span className="mention-item-body">
@@ -3257,7 +3270,7 @@ function MentionPopover({
         ) : null}
         {showFiles && files.length > 0 ? (
         <>
-          <div className="mention-section-label">{t('chat.mentionSectionFiles')}</div>
+          <div className="mention-section-label">{t('chat.mention.files')}</div>
           {files.map((f) => {
             const key = f.path ?? f.name;
             return (

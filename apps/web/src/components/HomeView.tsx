@@ -31,7 +31,6 @@ import {
 import {
   applyPlugin,
   listPlugins,
-  renderPluginBriefTemplate,
   resolvePluginQueryFallback,
 } from '../state/projects';
 import { fetchMcpServers } from '../state/mcp';
@@ -42,6 +41,11 @@ import {
 } from '../i18n/content';
 import { fetchElevenLabsVoiceOptions } from '../providers/elevenlabs-voices';
 import { fetchProjectFiles, projectFileUrl } from '../providers/registry';
+import {
+  localizePluginBriefTemplate,
+  rawPluginValueFromLocalizedDisplay,
+  renderLocalizedPluginBriefTemplate,
+} from '../i18n/plugin-content';
 import type {
   DesignSystemSummary,
   Project,
@@ -51,7 +55,7 @@ import type {
   SkillSummary,
 } from '../types';
 import { inlineMentionToken } from '../utils/inlineMentions';
-import { HomeHero } from './HomeHero';
+import { HomeHero, type ExampleSuggestion } from './HomeHero';
 import { findChip, HOME_HERO_CHIPS, type HomeHeroChip } from './home-hero/chips';
 import {
   buildHomeMediaComposer,
@@ -70,8 +74,13 @@ import {
 import { PluginDetailsModal } from './PluginDetailsModal';
 import { PluginsHomeSection } from './PluginsHomeSection';
 import type { PluginLoopSubmit } from './PluginLoopHome';
-import type { FacetSelection } from './plugins-home/facets';
+import {
+  applyFacetSelection,
+  isFeaturedPlugin,
+  type FacetSelection,
+} from './plugins-home/facets';
 import type { PluginUseAction } from './plugins-home/useActions';
+import { sortByVisualAppeal } from './plugins-home/visualScore';
 import { RecentProjectsStrip } from './RecentProjectsStrip';
 
 interface ActivePlugin {
@@ -177,6 +186,7 @@ interface Props {
   // Stage B: optional callbacks the rail's migration chips need.
   // HomeView itself never imports them; EntryShell threads them
   // through so the dispatcher can stay declarative.
+  onImportFolder?: () => Promise<void> | void;
   onOpenNewProject?: (tab: 'template') => void;
   promptHandoff?: HomePromptHandoff | null;
   skills?: SkillSummary[];
@@ -199,6 +209,7 @@ export function HomeView({
   onOpenProject,
   onViewAllProjects,
   onBrowseRegistry,
+  onImportFolder,
   onOpenNewProject,
   promptHandoff,
   skills = EMPTY_SKILLS,
@@ -351,7 +362,12 @@ export function HomeView({
         elevenLabsVoicesLoading,
       },
     );
-    const nextRendered = renderPluginBriefTemplate(composer.queryTemplate, composer.inputs);
+    const nextRendered = renderLocalizedPluginBriefTemplate(
+      locale,
+      composer.queryTemplate,
+      composer.inputs,
+      composer.fields,
+    );
     // When the plugin was bound through a type chip the user owns the
     // textarea; never back-fill from this effect even if external
     // lists (ElevenLabs voices, prompt templates) reload after the
@@ -464,6 +480,61 @@ export function HomeView({
     if (!chipId) return null;
     return facetSelectionForChip(chipId);
   }, [pendingChipId, active?.chipId]);
+
+  const rankedExamplePlugins = useMemo(() => {
+    if (plugins.length === 0) return [];
+    const visible = plugins.filter(
+      (plugin) =>
+        plugin.manifest?.od?.kind !== 'atom' && Boolean(plugin.manifest?.od?.useCase?.query),
+    );
+    return sortByVisualAppeal(visible);
+  }, [plugins]);
+
+  // Manus-style example-prompt suggestions for the panel that appears
+  // below the composer after a type chip is picked. We surface the
+  // top-N visually-strong plugins from the matching facet slice (e.g.
+  // picking "Slide deck" shows four polished deck templates) and
+  // pre-render each plugin's useCase.query through the same renderer
+  // submit uses, so the card body is the actual sentence that hits
+  // the textarea on click. Sparse slices are topped up with featured
+  // picks so the row never collapses to a single dim example.
+  const exampleSuggestions = useMemo<ExampleSuggestion[]>(() => {
+    if (rankedExamplePlugins.length === 0) return [];
+    const sliceFor = (selection: FacetSelection | null) => {
+      if (!selection) return rankedExamplePlugins;
+      return applyFacetSelection(rankedExamplePlugins, selection);
+    };
+    const primary = sliceFor(presetStartersSelection);
+    const featuredBackfill = rankedExamplePlugins.filter(
+      (plugin) => isFeaturedPlugin(plugin) && !primary.some((p) => p.id === plugin.id),
+    );
+    const records = [...primary, ...featuredBackfill].slice(0, EXAMPLE_PROMPT_LIMIT);
+    return records
+      .map((plugin) => {
+        const template = resolvePluginQueryFallback(plugin.manifest?.od?.useCase?.query, locale);
+        if (!template) return null;
+        const fields = plugin.manifest?.od?.inputs ?? [];
+        const preview = renderLocalizedPluginBriefTemplate(
+          locale,
+          template,
+          hydratePluginInputs(fields, undefined),
+          fields,
+        );
+        return { plugin, preview };
+      })
+      .filter((entry): entry is ExampleSuggestion => entry !== null);
+  }, [rankedExamplePlugins, presetStartersSelection, locale]);
+
+  // Per-chip dismissal: once the user closes the panel for a given
+  // chip, we keep it hidden until they pick a different chip (which
+  // makes dismissedExampleChipId stale and lets the panel open
+  // again). This matches Manus' close-once-then-quiet behavior.
+  const [dismissedExampleChipId, setDismissedExampleChipId] = useState<string | null>(null);
+  const currentExampleChipId = pendingChipId ?? active?.chipId ?? null;
+  const showExamples =
+    Boolean(currentExampleChipId) &&
+    exampleSuggestions.length > 0 &&
+    dismissedExampleChipId !== currentExampleChipId;
 
   // When the active plugin was bound through a chip, the badge shows
   // the chip label (e.g. "Prototype") instead of the underlying plugin
@@ -598,7 +669,7 @@ export function HomeView({
       nextPrompt !== undefined && nextPrompt !== null
         ? nextPrompt
         : queryTemplate
-          ? renderPluginBriefTemplate(queryTemplate, optimisticInputs)
+          ? renderLocalizedPluginBriefTemplate(locale, queryTemplate, optimisticInputs, inputFields)
           : null;
     if (options?.chipId && shouldResolveImmediately) setPendingChipId(options.chipId);
     setError(null);
@@ -656,7 +727,7 @@ export function HomeView({
       // still matches the visible active state — concurrent clicks
       // would otherwise stomp a successful later apply.
       setActive((prev) => (prev?.record.id === record.id ? { ...prev, inputsValid: false } : prev));
-      setError(`Failed to apply ${record.title}. Make sure the daemon is reachable.`);
+      setError(t('home.error.applyFailed', { title: record.title }));
       return;
     }
     const reconciledInputs: Record<string, unknown> = { ...optimisticInputs };
@@ -665,17 +736,15 @@ export function HomeView({
         reconciledInputs[field.name] = field.default;
       }
     }
+    const reconciledFields = options?.preserveInputFields ? inputFields : result.inputs ?? inputFields;
     setActive((prev) =>
       prev && prev.record.id === record.id
         ? {
             ...prev,
             result,
             inputs: reconciledInputs,
-            inputFields: options?.preserveInputFields ? inputFields : result.inputs ?? inputFields,
-            inputsValid: pluginInputsAreValid(
-              options?.preserveInputFields ? inputFields : result.inputs ?? inputFields,
-              reconciledInputs,
-            ),
+            inputFields: reconciledFields,
+            inputsValid: pluginInputsAreValid(reconciledFields, reconciledInputs),
             projectMetadata: homeCreateProjectMetadata(
               prev.projectKind,
               reconciledInputs,
@@ -697,7 +766,12 @@ export function HomeView({
           ? options.queryTemplate
           : result.query || resolvePluginQueryFallback(record.manifest?.od?.useCase?.query, locale);
       if (reconciledQuery) {
-        const reconciledPrompt = renderPluginBriefTemplate(reconciledQuery, reconciledInputs);
+        const reconciledPrompt = renderLocalizedPluginBriefTemplate(
+          locale,
+          reconciledQuery,
+          reconciledInputs,
+          reconciledFields,
+        );
         if (reconciledPrompt !== optimisticPrompt) {
           setPrompt((current) => {
             if (current !== optimisticPrompt) return current;
@@ -825,7 +899,12 @@ export function HomeView({
         : resolvePluginQueryFallback(record.manifest?.od?.useCase?.query, locale);
     if (!query) return null;
     const fields = options?.inputFields ?? record.manifest?.od?.inputs ?? [];
-    return renderPluginBriefTemplate(query, hydratePluginInputs(fields, options?.inputs));
+    return renderLocalizedPluginBriefTemplate(
+      locale,
+      query,
+      hydratePluginInputs(fields, options?.inputs),
+      fields,
+    );
   }
 
   function renderPluginContextPrompt(
@@ -834,9 +913,11 @@ export function HomeView({
   ): string | null {
     const query = resolvePluginQueryFallback(record.manifest?.od?.useCase?.query, locale);
     if (!query) return null;
-    return renderPluginBriefTemplate(
+    return renderLocalizedPluginBriefTemplate(
+      locale,
       query,
       hydratePluginInputs(record.manifest?.od?.inputs ?? [], inputs),
+      record.manifest?.od?.inputs ?? [],
     );
   }
 
@@ -846,7 +927,7 @@ export function HomeView({
     setPendingPluginUseHandoff(null);
     if (!record) {
       setError(
-        `Plugin "${pendingPluginUseHandoff.pluginId}" is not installed. Refresh Plugins and try again.`,
+        t('home.error.pluginNotInstalled', { id: pendingPluginUseHandoff.pluginId }),
       );
       return;
     }
@@ -892,6 +973,7 @@ export function HomeView({
       active.queryTemplate,
       nextPrompt,
       active.inputFields,
+      locale,
     );
     if (!extracted) return;
     const nextInputs = { ...active.inputs, ...extracted };
@@ -945,7 +1027,7 @@ export function HomeView({
     const inputsValid = pluginInputsAreValid(inputFields, normalized);
     const nextRendered =
       queryTemplate !== null
-        ? renderPluginBriefTemplate(queryTemplate, normalized)
+        ? renderLocalizedPluginBriefTemplate(locale, queryTemplate, normalized, inputFields)
         : active.lastRenderedPrompt;
     if (
       !active.suppressPromptSync &&
@@ -1106,7 +1188,7 @@ export function HomeView({
         const record = plugins.find((p) => p.id === targetId);
         if (!record) {
           setError(
-            `Bundled scenario "${targetId}" is not installed. Reinstall the daemon to restore the default plugin set.`,
+            t('home.error.bundledScenarioMissing', { id: targetId }),
           );
           return;
         }
@@ -1169,9 +1251,17 @@ export function HomeView({
         queuePluginAuthoring(chip.id);
         return;
       }
+      case 'import-folder': {
+        if (!onImportFolder) {
+          setError(t('home.error.folderImportUnavailable'));
+          return;
+        }
+        void onImportFolder();
+        return;
+      }
       case 'open-template-picker': {
         if (!onOpenNewProject) {
-          setError('Template picker is not available in this shell.');
+          setError(t('home.error.templatePickerUnavailable'));
           return;
         }
         onOpenNewProject('template');
@@ -1194,7 +1284,7 @@ export function HomeView({
     });
     let submittedActive = active;
     if (submittedActive && !submittedActive.inputsValid) {
-      setError('Fill the required plugin parameters before running.');
+      setError(t('home.error.fillRequiredParams'));
       return;
     }
     const defaultInputs = { prompt: trimmed };
@@ -1216,7 +1306,7 @@ export function HomeView({
     if (submittedActive && (!submittedActive.result || activeInputsChangedForSubmit)) {
       const result = await resolveActivePlugin(submittedActive.record, submittedPluginInputs);
       if (!result) {
-        setError(`Failed to apply ${submittedActive.record.title}. Check the plugin parameters and try again.`);
+        setError(t('home.error.applyFailedWithParams', { title: submittedActive.record.title }));
         return;
       }
       submittedActive = { ...submittedActive, result, inputs: submittedPluginInputs };
@@ -1839,24 +1929,26 @@ function extractPluginInputsFromPrompt(
   template: string,
   prompt: string,
   fields: InputFieldSpec[],
+  locale: ReturnType<typeof useI18n>['locale'],
 ): Record<string, unknown> | null {
+  const localizedTemplate = localizePluginBriefTemplate(locale, template) ?? template;
   TEMPLATE_INPUT_PATTERN.lastIndex = 0;
   const fieldByName = new Map(fields.map((field) => [field.name, field]));
   const keys: string[] = [];
   let pattern = '^';
   let lastIndex = 0;
   let match: RegExpExecArray | null;
-  while ((match = TEMPLATE_INPUT_PATTERN.exec(template)) !== null) {
+  while ((match = TEMPLATE_INPUT_PATTERN.exec(localizedTemplate)) !== null) {
     const placeholder = match[0];
     const key = match[1];
     if (!key) continue;
-    pattern += escapeRegExp(template.slice(lastIndex, match.index));
+    pattern += escapeRegExp(localizedTemplate.slice(lastIndex, match.index));
     pattern += '([\\s\\S]*?)';
     keys.push(key);
     lastIndex = match.index + placeholder.length;
   }
   if (keys.length === 0) return null;
-  pattern += escapeRegExp(template.slice(lastIndex));
+  pattern += escapeRegExp(localizedTemplate.slice(lastIndex));
   const renderedMatch = new RegExp(pattern + '$').exec(prompt);
   if (!renderedMatch) return null;
   const next: Record<string, unknown> = {};
@@ -1864,28 +1956,47 @@ function extractPluginInputsFromPrompt(
     const field = fieldByName.get(key);
     if (!field) return;
     const raw = renderedMatch[index + 1] ?? '';
-    next[key] = coercePromptInputValue(raw, field);
+    next[key] = coercePromptInputValue(raw, field, locale);
   });
   return next;
 }
 
-function coercePromptInputValue(raw: string, field: InputFieldSpec): unknown {
+function coercePromptInputValue(
+  raw: string,
+  field: InputFieldSpec,
+  locale: ReturnType<typeof useI18n>['locale'],
+): unknown {
   const rawType = (field as { type?: unknown }).type;
   const type = typeof rawType === 'string' ? rawType : 'string';
   const trimmed = raw.trim();
   if (type === 'number') {
     if (trimmed.length === 0) return undefined;
-    const parsed = Number(trimmed);
+    const parsed = parsePromptNumberInput(trimmed, locale);
     return Number.isFinite(parsed) ? parsed : raw;
   }
   if (type === 'boolean') {
     if (trimmed.toLowerCase() === 'true') return true;
     if (trimmed.toLowerCase() === 'false') return false;
   }
-  if (type === 'select' && Array.isArray(field.options) && field.options.includes(trimmed)) {
-    return trimmed;
+  if (type === 'select' && Array.isArray(field.options)) {
+    if (field.options.includes(trimmed)) return trimmed;
+    return rawPluginValueFromLocalizedDisplay(locale, field, trimmed) ?? raw;
   }
   return raw;
+}
+
+function parsePromptNumberInput(
+  value: string,
+  locale: ReturnType<typeof useI18n>['locale'],
+): number {
+  const parsed = Number(value);
+  if (Number.isFinite(parsed)) return parsed;
+  if (locale !== 'zh-CN') return Number.NaN;
+  const normalized = value.replace(/,/g, '');
+  const localizedMatch = /^([+-]?(?:\d+(?:\.\d+)?|\.\d+))\s*(?:秒|秒钟|分钟|分|小时|时|页|张|个|轮|次)?$/.exec(normalized);
+  if (!localizedMatch?.[1]) return Number.NaN;
+  const localizedParsed = Number(localizedMatch[1]);
+  return Number.isFinite(localizedParsed) ? localizedParsed : Number.NaN;
 }
 
 function escapeRegExp(value: string): string {

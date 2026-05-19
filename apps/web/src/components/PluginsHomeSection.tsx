@@ -140,11 +140,14 @@ export function PluginsHomeSection({
     }
   }
 
+  const sectionTitle = title ?? t('pluginsHome.title');
+  const resolvedEmptyMessage = emptyMessage ?? t('pluginsHome.emptyCatalog');
+
   return (
     <section className="plugins-home" data-testid="plugins-home-section">
       <header className="plugins-home__head">
         <div className="plugins-home__heading">
-          <h2 className="plugins-home__title">{title ?? t('pluginsHome.title')}</h2>
+          <h2 className="plugins-home__title">{sectionTitle}</h2>
           {subtitle ? (
             <p className="plugins-home__subtitle">{subtitle}</p>
           ) : null}
@@ -167,14 +170,14 @@ export function PluginsHomeSection({
         <div className="plugins-home__empty">{t('pluginsHome.loadingCatalog')}</div>
       ) : visiblePlugins.length === 0 ? (
         <div className="plugins-home__empty">
-          {emptyMessage ?? t('pluginsHome.emptyCatalog')}
+          {resolvedEmptyMessage}
         </div>
       ) : (
         <>
           <div
             className="plugins-home__facets"
             role="group"
-            aria-label="Plugin filters"
+            aria-label={t('pluginsHome.filtersAria')}
           >
             <CategoryRow
               options={catalog.category}
@@ -319,7 +322,7 @@ function CategoryRow({
           <CategoryPill
             key={opt.slug}
             slug={opt.slug}
-            label={opt.label}
+            label={localizedFacetLabel(opt, t)}
             count={opt.count}
             active={selectedSlug === opt.slug}
             onPick={onPick}
@@ -366,7 +369,7 @@ function SubcategoryRow({ parent, options, selectedSlug, onPick }: SubcategoryRo
           <CategoryPill
             key={opt.slug}
             slug={opt.slug}
-            label={opt.label}
+            label={localizedFacetLabel(opt, t)}
             count={opt.count}
             active={selectedSlug === opt.slug}
             onPick={onPick}
@@ -490,4 +493,8 @@ function SearchInput({ value, onChange }: SearchInputProps) {
       ) : null}
     </div>
   );
+}
+
+function localizedFacetLabel(option: FacetOption, t: ReturnType<typeof useT>): string {
+  return pluginFacetLabel(option.slug, option.label, t);
 }

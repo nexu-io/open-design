@@ -1421,19 +1421,20 @@ function PluginActionPanel({
   ) => Promise<{ message?: string; url?: string } | void> | { message?: string; url?: string } | void;
   activePluginActionPaths?: Set<string>;
 }) {
+  const t = useT();
   const noticeByFolder = notices;
   const runAction = onRunAction;
 
   return (
-    <div className="plugin-action-panel" aria-label="Plugin next actions">
+    <div className="plugin-action-panel" aria-label={t("assistant.pluginAction.aria")}>
       <div className="plugin-action-panel__head">
         <span className="plugin-action-panel__icon" aria-hidden>
           <Icon name="sparkles" size={15} />
         </span>
         <div>
-          <div className="plugin-action-panel__title">Plugin ready</div>
+          <div className="plugin-action-panel__title">{t("assistant.pluginAction.title")}</div>
           <div className="plugin-action-panel__subtitle">
-            Send the next step to the agent so it can run the od CLI.
+            {t("assistant.pluginAction.subtitle")}
           </div>
         </div>
       </div>
@@ -1441,20 +1442,20 @@ function PluginActionPanel({
         {folders.map((folder) => {
           const actionBusy = activePluginActionPaths.has(folder.path);
           return (
-          <div
-            key={folder.path}
-            className="plugin-action-card"
-            data-testid={`assistant-plugin-actions-${folder.path}`}
-          >
-            <div className="plugin-action-card__main">
-              <span className="plugin-action-card__folder-icon" aria-hidden>
-                <Icon name="folder" size={14} />
-              </span>
-              <div className="plugin-action-card__copy">
-                <code className="plugin-action-card__path">{folder.path}</code>
-                <span>{folder.fileCount} files ready for My plugins</span>
+            <div
+              key={folder.path}
+              className="plugin-action-card"
+              data-testid={`assistant-plugin-actions-${folder.path}`}
+            >
+              <div className="plugin-action-card__main">
+                <span className="plugin-action-card__folder-icon" aria-hidden>
+                  <Icon name="folder" size={14} />
+                </span>
+                <div className="plugin-action-card__copy">
+                  <code className="plugin-action-card__path">{folder.path}</code>
+                  <span>{t("assistant.pluginAction.filesReady", { count: folder.fileCount })}</span>
+                </div>
               </div>
-            </div>
               <div className="plugin-action-card__actions">
                 <button
                   type="button"
@@ -1468,7 +1469,9 @@ function PluginActionPanel({
                     size={13}
                   />
                   <span>
-                    {actionBusy && busyKey === `install:${folder.path}` ? "Sending..." : "Add to My plugins"}
+                    {actionBusy && busyKey === `install:${folder.path}`
+                      ? t("assistant.pluginAction.sending")
+                      : t("assistant.pluginAction.addToMyPlugins")}
                   </span>
                 </button>
                 <button
@@ -1483,7 +1486,9 @@ function PluginActionPanel({
                     size={13}
                   />
                   <span>
-                    {actionBusy && busyKey === `publish:${folder.path}` ? "Sending..." : "Publish repo"}
+                    {actionBusy && busyKey === `publish:${folder.path}`
+                      ? t("assistant.pluginAction.sending")
+                      : t("assistant.pluginAction.publishRepo")}
                   </span>
                 </button>
                 <button
@@ -1499,8 +1504,8 @@ function PluginActionPanel({
                   />
                   <span>
                     {actionBusy && busyKey === `contribute:${folder.path}`
-                      ? "Sending..."
-                      : "Open Design PR"}
+                      ? t("assistant.pluginAction.sending")
+                      : t("assistant.pluginAction.openDesignPr")}
                   </span>
                 </button>
                 {onRequestOpenFile ? (
@@ -1511,17 +1516,18 @@ function PluginActionPanel({
                     onClick={() => onRequestOpenFile(folder.manifestPath)}
                   >
                     <Icon name="file-code" size={13} />
-                    <span>Open manifest</span>
+                    <span>{t("assistant.pluginAction.openManifest")}</span>
                   </button>
                 ) : null}
               </div>
-            {noticeByFolder[folder.path] ? (
-              <div className="plugin-action-card__notice" role="status">
-                <ActionNoticeView notice={noticeByFolder[folder.path] ?? null} />
-              </div>
-            ) : null}
-          </div>
-        )})}
+              {noticeByFolder[folder.path] ? (
+                <div className="plugin-action-card__notice" role="status">
+                  <ActionNoticeView notice={noticeByFolder[folder.path] ?? null} />
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

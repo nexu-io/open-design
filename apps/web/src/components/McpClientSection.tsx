@@ -30,6 +30,8 @@ import type {
 } from '../state/mcp';
 import { fetchAgents } from '../providers/registry';
 import type { AgentInfo } from '../types';
+import { useI18n } from '../i18n';
+import { zhCN } from '../i18n/inline';
 import { Icon } from './Icon';
 import { useT } from '../i18n';
 
@@ -216,47 +218,65 @@ const ID_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
 const CATEGORY_ORDER: ReadonlyArray<{
   id: NonNullable<McpTemplate['category']>;
   label: string;
+  labelZh: string;
   hint: string;
+  hintZh: string;
 }> = [
   {
     id: 'image-generation',
     label: 'Image generation',
+    labelZh: '图片生成',
     hint: 'Models that produce raster, vector or video assets.',
+    hintZh: '生成位图、矢量或视频素材的模型。',
   },
   {
     id: 'image-editing',
     label: 'Image editing',
+    labelZh: '图片编辑',
     hint: 'Local post-processing, OCR and CV-driven edits.',
+    hintZh: '本地后处理、OCR 和计算机视觉编辑。',
   },
   {
     id: 'web-capture',
     label: 'Web capture',
+    labelZh: '网页捕获',
     hint: 'Render a URL into an image so the agent can see what it built.',
+    hintZh: '把 URL 渲染成图片，让代理能看到自己构建的内容。',
   },
   {
     id: 'design-systems',
     label: 'Design systems',
+    labelZh: '设计体系',
     hint: 'Figma read/write, design-token translation, brand inspiration.',
+    hintZh: 'Figma 读写、设计 Token 转换和品牌灵感。',
   },
   {
     id: 'ui-components',
     label: 'UI components',
+    labelZh: 'UI 组件',
     hint: 'Designer-grade components, blocks and landing-page material.',
+    hintZh: '设计师级组件、区块和落地页素材。',
   },
   {
     id: 'data-viz',
     label: 'Data viz',
+    labelZh: '数据可视化',
     hint: 'Charts and diagrams as proper image artifacts.',
+    hintZh: '把图表和图示生成为正式图片产物。',
   },
   {
     id: 'publishing',
     label: 'Publishing',
+    labelZh: '发布',
     hint: 'Push generated artifacts to a public URL.',
+    hintZh: '把生成的产物发布到公开 URL。',
   },
   {
     id: 'utilities',
     label: 'Utilities',
+    labelZh: '实用工具',
     hint: 'Filesystem, fetch, GitHub and similar generic tools.',
+    hintZh: '文件系统、fetch、GitHub 等通用工具。',
   },
 ];
 
@@ -271,21 +291,32 @@ function templateMatchesQuery(tpl: McpTemplate, q: string): boolean {
   );
 }
 
-function validateRow(r: DraftRow): string | null {
+function validateRow(
+  r: DraftRow,
+  locale: ReturnType<typeof useI18n>['locale'],
+): string | null {
   if (!ID_PATTERN.test(r.id)) {
-    return 'ID must start with a letter or digit and only contain letters, digits, dash, or underscore (max 64 chars).';
+    return zhCN(
+      locale,
+      'ID must start with a letter or digit and only contain letters, digits, dash, or underscore (max 64 chars).',
+      'ID 必须以字母或数字开头，只能包含字母、数字、短横线或下划线（最多 64 个字符）。',
+    );
   }
   if (r.transport === 'stdio') {
-    if (!r.command || !r.command.trim()) return 'Command is required for stdio transport.';
+    if (!r.command || !r.command.trim()) {
+      return zhCN(locale, 'Command is required for stdio transport.', 'stdio 传输需要填写命令。');
+    }
   } else {
-    if (!r.url || !r.url.trim()) return 'URL is required for SSE / HTTP transport.';
+    if (!r.url || !r.url.trim()) {
+      return zhCN(locale, 'URL is required for SSE / HTTP transport.', 'SSE / HTTP 传输需要填写 URL。');
+    }
     try {
       const parsed = new URL(r.url);
       if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-        return 'URL must use http:// or https://.';
+        return zhCN(locale, 'URL must use http:// or https://.', 'URL 必须使用 http:// 或 https://。');
       }
     } catch {
-      return 'URL is malformed.';
+      return zhCN(locale, 'URL is malformed.', 'URL 格式不正确。');
     }
   }
   return null;
@@ -301,6 +332,7 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
   function McpClientSection({ onServersChanged, onDirtyChange }, ref) {
   const t = useT();
   const analytics = useAnalytics();
+  const { locale } = useI18n();
   const [rows, setRows] = useState<DraftRow[]>([]);
   const [savedSig, setSavedSig] = useState<string>('[]');
   const [templates, setTemplates] = useState<McpTemplate[]>([]);
@@ -338,7 +370,7 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -388,7 +420,7 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
 
   const save = async (): Promise<boolean> => {
     for (const r of rows) {
-      const err = validateRow(r);
+      const err = validateRow(r, locale);
       if (err) {
         setError(`${r.label || r.id}: ${err}`);
         return false;
@@ -465,6 +497,7 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
           onPick={addFromTemplate}
           onPickBlank={addBlank}
           onClose={() => setPickerOpen(false)}
+          locale={locale}
         />
       ) : null}
 
@@ -496,6 +529,7 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
               onRemove={() => removeRow(idx)}
               onMoveUp={idx > 0 ? () => moveRow(idx, -1) : undefined}
               onMoveDown={idx < rows.length - 1 ? () => moveRow(idx, 1) : undefined}
+              locale={locale}
             />
           ))}
         </div>
@@ -536,6 +570,7 @@ interface PickerPanelProps {
   onPick: (tpl: McpTemplate) => void;
   onPickBlank: () => void;
   onClose: () => void;
+  locale: ReturnType<typeof useI18n>['locale'];
 }
 
 /**
@@ -558,6 +593,7 @@ function PickerPanel({
   onPick,
   onPickBlank,
   onClose,
+  locale,
 }: PickerPanelProps) {
   const grouped = useMemo(() => {
     const buckets = new Map<McpTemplate['category'], McpTemplate[]>();
@@ -597,15 +633,19 @@ function PickerPanel({
         open={defaultOpen}
       >
         <summary className="mcp-picker-group-summary">
-          <span className="mcp-picker-group-summary-title">{cat.label}</span>
+          <span className="mcp-picker-group-summary-title">
+            {zhCN(locale, cat.label, cat.labelZh)}
+          </span>
           <span className="mcp-picker-group-summary-count">
             {hasQuery ? `${matched.length}/${all.length}` : all.length}
           </span>
-          <span className="mcp-picker-group-summary-hint">{cat.hint}</span>
+          <span className="mcp-picker-group-summary-hint">
+            {zhCN(locale, cat.hint, cat.hintZh)}
+          </span>
         </summary>
         <div className="mcp-picker-grid">
           {matched.map((tpl) => (
-            <PickerCard key={tpl.id} tpl={tpl} onPick={() => onPick(tpl)} />
+            <PickerCard key={tpl.id} tpl={tpl} onPick={() => onPick(tpl)} locale={locale} />
           ))}
         </div>
       </details>
@@ -616,24 +656,32 @@ function PickerPanel({
     <div className="mcp-picker">
       <div className="mcp-picker-head">
         <div className="mcp-picker-head-row">
-          <strong>Pick a template</strong>
+          <strong>{zhCN(locale, 'Pick a template', '选择模板')}</strong>
           <button
             type="button"
             className="icon-btn mcp-picker-close"
             onClick={onClose}
-            title="Close picker"
-            aria-label="Close picker"
+            title={zhCN(locale, 'Close picker', '关闭模板选择器')}
+            aria-label={zhCN(locale, 'Close picker', '关闭模板选择器')}
           >
             ×
           </button>
         </div>
         <span className="hint">
-          Pre-fills the form. You can still edit any field after.
+          {zhCN(
+            locale,
+            'Pre-fills the form. You can still edit any field after.',
+            '选择后会自动填充表单，之后仍可编辑任何字段。',
+          )}
         </span>
         <input
           type="search"
           className="mcp-picker-search"
-          placeholder="Filter by name, transport, capability…"
+          placeholder={zhCN(
+            locale,
+            'Filter by name, transport, capability…',
+            '按名称、传输方式或能力筛选…',
+          )}
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
           spellCheck={false}
@@ -645,8 +693,11 @@ function PickerPanel({
         {renderGroups}
         {hasQuery && visibleTotal === 0 ? (
           <div className="mcp-picker-empty hint">
-            No templates match &ldquo;{trimmed}&rdquo;. Try clearing the filter
-            or use the custom server option below.
+            {zhCN(
+              locale,
+              `No templates match “${trimmed}”. Try clearing the filter or use the custom server option below.`,
+              `没有模板匹配“${trimmed}”。可以清除筛选，或使用下方的自定义服务器选项。`,
+            )}
           </div>
         ) : null}
       </div>
@@ -659,10 +710,14 @@ function PickerPanel({
         >
           <span className="mcp-picker-item-head">
             <Icon name="settings" size={13} />
-            <strong>Custom server</strong>
+            <strong>{zhCN(locale, 'Custom server', '自定义服务器')}</strong>
           </span>
           <span className="mcp-picker-desc">
-            Empty form. Pick stdio or SSE / HTTP and fill the fields yourself.
+            {zhCN(
+              locale,
+              'Empty form. Pick stdio or SSE / HTTP and fill the fields yourself.',
+              '空表单。选择 stdio 或 SSE / HTTP 后自行填写字段。',
+            )}
           </span>
         </button>
       </div>
@@ -673,9 +728,11 @@ function PickerPanel({
 function PickerCard({
   tpl,
   onPick,
+  locale,
 }: {
   tpl: McpTemplate;
   onPick: () => void;
+  locale: ReturnType<typeof useI18n>['locale'];
 }) {
   return (
     <div className="mcp-picker-item">
@@ -693,7 +750,9 @@ function PickerCard({
         <span className="mcp-picker-desc">{tpl.description}</span>
         {tpl.example ? (
           <span className="mcp-picker-example">
-            <span className="mcp-picker-example-label">Try:</span>
+            <span className="mcp-picker-example-label">
+              {zhCN(locale, 'Try:', '试试：')}
+            </span>
             <span className="mcp-picker-example-text">"{tpl.example}"</span>
           </span>
         ) : null}
@@ -707,7 +766,7 @@ function PickerCard({
           title={tpl.homepage}
         >
           <Icon name="external-link" size={11} />
-          <span>Homepage</span>
+          <span>{zhCN(locale, 'Homepage', '主页')}</span>
         </a>
       ) : null}
     </div>
@@ -726,13 +785,24 @@ interface RowProps {
   onRemove: () => void;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
+  locale: ReturnType<typeof useI18n>['locale'];
 }
 
-function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMoveDown }: RowProps) {
+function McpRow({
+  row,
+  idx,
+  total,
+  template,
+  onChange,
+  onRemove,
+  onMoveUp,
+  onMoveDown,
+  locale,
+}: RowProps) {
   const isHttpLike = row.transport === 'http' || row.transport === 'sse';
   const usesManagedOAuth = isHttpLike && effectiveMcpAuthMode(row) === 'oauth';
   const [expanded, setExpanded] = useState<boolean>(false);
-  const summaryTitle = row.label?.trim() || row.id || 'Unnamed MCP server';
+  const summaryTitle = row.label?.trim() || row.id || zhCN(locale, 'Unnamed MCP server', '未命名 MCP 服务器');
   const [showMcpExample, setShowMcpExample] = useState<boolean>(false);
   const helperId = `mcp-json-helper-panel-${row._localId}`;
 
@@ -743,12 +813,15 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
       }`}
     >
       <div className="mcp-row-head">
-        <label className="mcp-row-toggle" title={row.enabled ? 'Enabled' : 'Disabled'}>
+        <label
+          className="mcp-row-toggle"
+          title={row.enabled ? zhCN(locale, 'Enabled', '已启用') : zhCN(locale, 'Disabled', '已禁用')}
+        >
           <input
             type="checkbox"
             checked={row.enabled}
             onChange={(e) => onChange({ enabled: e.target.checked })}
-            aria-label="Enable this MCP server"
+            aria-label={zhCN(locale, 'Enable this MCP server', '启用这个 MCP 服务器')}
           />
         </label>
         {expanded ? (
@@ -756,7 +829,7 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
             type="text"
             className="mcp-row-label"
             value={row.label ?? ''}
-            placeholder="Display name (optional)"
+            placeholder={zhCN(locale, 'Display name (optional)', '显示名称（可选）')}
             onChange={(e) => onChange({ label: e.target.value })}
           />
         ) : (
@@ -764,12 +837,16 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
             type="button"
             className="mcp-row-summary-title"
             onClick={() => setExpanded(true)}
-            title="Expand to edit"
+            title={zhCN(locale, 'Expand to edit', '展开编辑')}
           >
             <span className="mcp-row-summary-name">{summaryTitle}</span>
             <span
               className="mcp-row-summary-transport"
-              aria-label={`Transport: ${row.transport}`}
+              aria-label={zhCN(
+                locale,
+                `Transport: ${row.transport}`,
+                `传输方式：${row.transport}`,
+              )}
             >
               {row.transport}
             </span>
@@ -780,12 +857,22 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
         </span>
         <div className="mcp-row-actions">
           {onMoveUp ? (
-            <button type="button" className="icon-btn" onClick={onMoveUp} title="Move up">
+            <button
+              type="button"
+              className="icon-btn"
+              onClick={onMoveUp}
+              title={zhCN(locale, 'Move up', '上移')}
+            >
               ↑
             </button>
           ) : null}
           {onMoveDown ? (
-            <button type="button" className="icon-btn" onClick={onMoveDown} title="Move down">
+            <button
+              type="button"
+              className="icon-btn"
+              onClick={onMoveDown}
+              title={zhCN(locale, 'Move down', '下移')}
+            >
               ↓
             </button>
           ) : null}
@@ -793,7 +880,7 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
             type="button"
             className="icon-btn"
             onClick={onRemove}
-            title="Remove this MCP server"
+            title={zhCN(locale, 'Remove this MCP server', '移除这个 MCP 服务器')}
           >
             ×
           </button>
@@ -802,8 +889,10 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
             className="icon-btn mcp-row-toggle-btn"
             onClick={() => setExpanded((v) => !v)}
             aria-expanded={expanded}
-            aria-label={expanded ? 'Collapse this MCP server' : 'Expand this MCP server'}
-            title={expanded ? 'Collapse' : 'Expand'}
+            aria-label={expanded
+              ? zhCN(locale, 'Collapse this MCP server', '折叠这个 MCP 服务器')
+              : zhCN(locale, 'Expand this MCP server', '展开这个 MCP 服务器')}
+            title={expanded ? zhCN(locale, 'Collapse', '折叠') : zhCN(locale, 'Expand', '展开')}
           >
             <Icon name="chevron-down" size={13} />
           </button>
@@ -816,7 +905,7 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
             <details className="mcp-row-info">
               <summary className="mcp-row-info-summary">
                 <span className="mcp-row-info-summary-label">
-                  About {template.label}
+                  {zhCN(locale, `About ${template.label}`, `关于 ${template.label}`)}
                 </span>
                 {template.homepage ? (
                   <a
@@ -828,7 +917,7 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
                     onClick={(e) => e.stopPropagation()}
                   >
                     <Icon name="external-link" size={11} />
-                    <span>Homepage</span>
+                    <span>{zhCN(locale, 'Homepage', '主页')}</span>
                   </a>
                 ) : null}
               </summary>
@@ -839,9 +928,15 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
                 {template.example ? (
                   <p
                     className="mcp-row-info-example"
-                    title="Paste this prompt into the chat composer to try the server end-to-end"
+                    title={zhCN(
+                      locale,
+                      'Paste this prompt into the chat composer to try the server end-to-end',
+                      '把这个提示词粘贴到聊天输入框，可以端到端测试这个服务器',
+                    )}
                   >
-                    <span className="mcp-row-info-example-label">Try:</span>{' '}
+                    <span className="mcp-row-info-example-label">
+                      {zhCN(locale, 'Try:', '试试：')}
+                    </span>{' '}
                     <span className="mcp-row-info-example-text">"{template.example}"</span>
                   </p>
                 ) : null}
@@ -854,22 +949,38 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
               <McpOAuthControl serverId={row.id} />
             ) : (
               <div className="mcp-oauth-hint hint">
-                <strong>No managed OAuth.</strong> Open Design will use this
-                server as configured. Add headers below if the server needs a
-                token.
+                <strong>
+                  {zhCN(locale, 'No managed OAuth.', '无托管 OAuth。')}
+                </strong>{' '}
+                {zhCN(
+                  locale,
+                  'Open Design will use this server as configured. Add headers below if the server needs a token.',
+                  'Open Design 会按当前配置使用这个服务器。如果服务器需要 token，请在下方添加请求头。',
+                )}
               </div>
             )
           ) : null}
           {isHttpLike && row._isNew && usesManagedOAuth ? (
             <div className="mcp-oauth-hint hint">
-              Save first, then click <strong>Connect</strong> to grant Open Design
-              access via the provider's OAuth flow.
+              {zhCN(locale, 'Save first, then click', '先保存，然后点击')}{' '}
+              <strong>{zhCN(locale, 'Connect', '连接')}</strong>{' '}
+              {zhCN(
+                locale,
+                "to grant Open Design access via the provider's OAuth flow.",
+                '通过提供方的 OAuth 流程授予 Open Design 访问权限。',
+              )}
             </div>
           ) : null}
           {isHttpLike && row._isNew && !usesManagedOAuth ? (
             <div className="mcp-oauth-hint hint">
-              <strong>No managed OAuth.</strong> Save this server and Open Design
-              will use it directly.
+              <strong>
+                {zhCN(locale, 'No managed OAuth.', '无托管 OAuth。')}
+              </strong>{' '}
+              {zhCN(
+                locale,
+                'Save this server and Open Design will use it directly.',
+                '保存这个服务器后，Open Design 会直接使用它。',
+              )}
             </div>
           ) : null}
 
@@ -884,7 +995,9 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
               />
             </label>
             <label className="mcp-row-field">
-              <span className="mcp-row-field-label">Transport</span>
+              <span className="mcp-row-field-label">
+                {zhCN(locale, 'Transport', '传输方式')}
+              </span>
               <select
                 value={row.transport}
                 onChange={(e) => {
@@ -907,21 +1020,25 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
           {row.transport === 'stdio' ? (
             <>
               <label className="mcp-row-field mcp-row-field-stack">
-                <span className="mcp-row-field-label">Command</span>
+                <span className="mcp-row-field-label">
+                  {zhCN(locale, 'Command', '命令')}
+                </span>
                 <input
                   type="text"
                   value={row.command ?? ''}
-                  placeholder="e.g. npx, node, /path/to/binary"
+                  placeholder={zhCN(locale, 'e.g. npx, node, /path/to/binary', '例如 npx、node、/path/to/binary')}
                   onChange={(e) => onChange({ command: e.target.value })}
                   spellCheck={false}
                 />
               </label>
               <label className="mcp-row-field mcp-row-field-stack">
-                <span className="mcp-row-field-label">Args</span>
+                <span className="mcp-row-field-label">
+                  {zhCN(locale, 'Args', '参数')}
+                </span>
                 <input
                   type="text"
                   value={(row.args ?? []).join(' ')}
-                  placeholder="space-separated"
+                  placeholder={zhCN(locale, 'space-separated', '用空格分隔')}
                   onChange={(e) =>
                     onChange({
                       args: e.target.value
@@ -934,7 +1051,9 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
                 />
               </label>
               <label className="mcp-row-field mcp-row-field-stack">
-                <span className="mcp-row-field-label">Env (KEY=VALUE)</span>
+                <span className="mcp-row-field-label">
+                  {zhCN(locale, 'Env (KEY=VALUE)', '环境变量（KEY=VALUE）')}
+                </span>
                 <textarea
                   rows={Math.max(2, (row._envText ?? '').split('\n').length)}
                   value={row._envText ?? ''}
@@ -947,7 +1066,9 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
           ) : (
             <>
               <label className="mcp-row-field mcp-row-field-stack">
-                <span className="mcp-row-field-label">OAuth mode</span>
+                <span className="mcp-row-field-label">
+                  {zhCN(locale, 'OAuth mode', 'OAuth 模式')}
+                </span>
                 <select
                   value={effectiveMcpAuthMode(row)}
                   onChange={(e) =>
@@ -956,8 +1077,8 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
                     })
                   }
                 >
-                  <option value="none">No managed OAuth</option>
-                  <option value="oauth">Managed OAuth</option>
+                  <option value="none">{zhCN(locale, 'No managed OAuth', '无托管 OAuth')}</option>
+                  <option value="oauth">{zhCN(locale, 'Managed OAuth', '托管 OAuth')}</option>
                 </select>
               </label>
               <label className="mcp-row-field mcp-row-field-stack">
@@ -974,7 +1095,9 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
                 />
               </label>
               <label className="mcp-row-field mcp-row-field-stack">
-                <span className="mcp-row-field-label">Headers (KEY=VALUE)</span>
+                <span className="mcp-row-field-label">
+                  {zhCN(locale, 'Headers (KEY=VALUE)', '请求头（KEY=VALUE）')}
+                </span>
                 <textarea
                   rows={Math.max(2, (row._headersText ?? '').split('\n').length)}
                   value={row._headersText ?? ''}
@@ -999,7 +1122,11 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
                   <Icon name="eye" />
                 </span>
                 <span className="mcp-json-helper-toggle-text">
-                  Need help? Map your MCP server's JSON config using the example below.
+                  {zhCN(
+                    locale,
+                    "Need help? Map your MCP server's JSON config using the example below.",
+                    '需要帮助？可以参考下方示例，把 MCP 服务器的 JSON 配置映射到表单字段。',
+                  )}
                 </span>
               </span>
               <span className="mcp-json-helper-toggle-icon">
@@ -1014,7 +1141,7 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
             {showMcpExample && (
               <div className="mcp-json-helper-example" id={helperId}>
                 <div className="mcp-json-helper-example-head">
-                  Example MCP JSON
+                  {zhCN(locale, 'Example MCP JSON', 'MCP JSON 示例')}
                 </div>
                 <pre className="mcp-json-helper-code">
                   <code>
@@ -1056,20 +1183,26 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
                 </pre>
                 <div className="mcp-json-helper-conversion">
                   <div>
-                    <strong>Command</strong>
+                    <strong>{zhCN(locale, 'Command', '命令')}</strong>
                     <code>npx</code>
                   </div>
                   <div>
-                    <strong>Args</strong>
+                    <strong>{zhCN(locale, 'Args', '参数')}</strong>
                     <code>-y tdesign-mcp-server@latest</code>
                   </div>
                   <div>
-                    <strong>Env</strong>
+                    <strong>{zhCN(locale, 'Env', '环境变量')}</strong>
                     <code>API_KEY = your-key-here</code>
                   </div>
                   <div>
                     <strong>HTTP / SSE</strong>
-                    <code>use url + headers instead of command / args</code>
+                    <code>
+                      {zhCN(
+                        locale,
+                        'use url + headers instead of command / args',
+                        '使用 URL + 请求头，而不是命令 / 参数',
+                      )}
+                    </code>
                   </div>
                 </div>
               </div>
@@ -1092,6 +1225,7 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
  * reach back via postMessage (cross-origin tab opener edge cases).
  */
 function McpOAuthControl({ serverId }: { serverId: string }) {
+  const { locale } = useI18n();
   const [status, setStatus] = useState<McpOAuthStatusResponse | null>(null);
   const [busy, setBusy] = useState<'idle' | 'starting' | 'awaiting' | 'disconnecting' | 'refreshing'>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -1239,7 +1373,7 @@ function McpOAuthControl({ serverId }: { serverId: string }) {
       setPendingAuthUrl(null);
       setStatus({ connected: false });
     } else {
-      setError('Disconnect failed. Check daemon logs.');
+      setError(zhCN(locale, 'Disconnect failed. Check daemon logs.', '断开失败。请检查守护进程日志。'));
     }
   };
 
@@ -1257,11 +1391,15 @@ function McpOAuthControl({ serverId }: { serverId: string }) {
           <>
             <span className="mcp-oauth-dot mcp-oauth-dot-ok" aria-hidden />
             <span>
-              <strong>Connected.</strong>{' '}
+              <strong>{zhCN(locale, 'Connected.', '已连接。')}</strong>{' '}
               {expiresLabel ? (
-                <span className="hint">Token expires {expiresLabel}.</span>
+                <span className="hint">
+                  {zhCN(locale, `Token expires ${expiresLabel}.`, `Token 到期时间：${expiresLabel}。`)}
+                </span>
               ) : (
-                <span className="hint">Non-expiring token.</span>
+                <span className="hint">
+                  {zhCN(locale, 'Non-expiring token.', 'Token 不会过期。')}
+                </span>
               )}
             </span>
           </>
@@ -1269,11 +1407,15 @@ function McpOAuthControl({ serverId }: { serverId: string }) {
           <>
             <span className="mcp-oauth-dot mcp-oauth-dot-pending" aria-hidden />
             <span>
-              <strong>Waiting for authorization…</strong>{' '}
+              <strong>
+                {zhCN(locale, 'Waiting for authorization…', '等待授权…')}
+              </strong>{' '}
               <span className="hint">
-                Approve in the browser tab that opened. We'll catch the callback
-                automatically — or click Refresh below if you completed it
-                already.
+                {zhCN(
+                  locale,
+                  "Approve in the browser tab that opened. We'll catch the callback automatically — or click Refresh below if you completed it already.",
+                  '请在打开的浏览器标签页中授权。Open Design 会自动接收回调；如果你已经完成，也可以点击下方“刷新”。',
+                )}
               </span>
             </span>
           </>
@@ -1281,9 +1423,13 @@ function McpOAuthControl({ serverId }: { serverId: string }) {
           <>
             <span className="mcp-oauth-dot" aria-hidden />
             <span>
-              <strong>Not connected.</strong>{' '}
+              <strong>{zhCN(locale, 'Not connected.', '未连接。')}</strong>{' '}
               <span className="hint">
-                Click Connect to grant Open Design access via the provider's OAuth flow.
+                {zhCN(
+                  locale,
+                  "Click Connect to grant Open Design access via the provider's OAuth flow.",
+                  '点击“连接”，通过提供方的 OAuth 流程授予 Open Design 访问权限。',
+                )}
               </span>
             </span>
           </>
@@ -1298,24 +1444,30 @@ function McpOAuthControl({ serverId }: { serverId: string }) {
               className="primary"
               onClick={onConnect}
               disabled={busy !== 'idle' && busy !== 'refreshing'}
-              title="Reauthenticate (replaces the existing token)"
+              title={zhCN(locale, 'Reauthenticate (replaces the existing token)', '重新授权（替换现有 token）')}
             >
-              {busy === 'starting' || busy === 'awaiting' ? 'Connecting…' : 'Reconnect'}
+              {busy === 'starting' || busy === 'awaiting'
+                ? zhCN(locale, 'Connecting…', '连接中…')
+                : zhCN(locale, 'Reconnect', '重新连接')}
             </button>
             <button
               type="button"
               onClick={onRefreshStatus}
               disabled={busy !== 'idle' && busy !== 'refreshing'}
-              title="Re-check token status against the daemon"
+              title={zhCN(locale, 'Re-check token status against the daemon', '通过守护进程重新检查 token 状态')}
             >
-              {busy === 'refreshing' ? 'Checking…' : 'Refresh'}
+              {busy === 'refreshing'
+                ? zhCN(locale, 'Checking…', '检查中…')
+                : zhCN(locale, 'Refresh', '刷新')}
             </button>
             <button
               type="button"
               onClick={onDisconnect}
               disabled={busy !== 'idle' && busy !== 'refreshing'}
             >
-              {busy === 'disconnecting' ? 'Disconnecting…' : 'Disconnect'}
+              {busy === 'disconnecting'
+                ? zhCN(locale, 'Disconnecting…', '断开中…')
+                : zhCN(locale, 'Disconnect', '断开')}
             </button>
           </>
         ) : isAwaiting ? (
@@ -1325,12 +1477,14 @@ function McpOAuthControl({ serverId }: { serverId: string }) {
               className="primary"
               onClick={onRefreshStatus}
               disabled={busy === 'refreshing'}
-              title="I've completed authorization — check connection status now"
+              title={zhCN(locale, "I've completed authorization — check connection status now", '我已完成授权，现在检查连接状态')}
             >
-              {busy === 'refreshing' ? 'Checking…' : 'I\u2019ve approved — Refresh'}
+              {busy === 'refreshing'
+                ? zhCN(locale, 'Checking…', '检查中…')
+                : zhCN(locale, 'I\u2019ve approved — Refresh', '我已授权，刷新')}
             </button>
             <button type="button" onClick={onCancelPending}>
-              Cancel
+              {zhCN(locale, 'Cancel', '取消')}
             </button>
           </>
         ) : (
@@ -1340,7 +1494,9 @@ function McpOAuthControl({ serverId }: { serverId: string }) {
             onClick={onConnect}
             disabled={busy !== 'idle'}
           >
-            {busy === 'starting' ? 'Starting…' : 'Connect'}
+            {busy === 'starting'
+              ? zhCN(locale, 'Starting…', '启动中…')
+              : zhCN(locale, 'Connect', '连接')}
           </button>
         )}
       </div>
@@ -1348,14 +1504,14 @@ function McpOAuthControl({ serverId }: { serverId: string }) {
       {pendingAuthUrl && !connected ? (
         <div className="mcp-oauth-fallback">
           <span className="hint">
-            Browser didn't open?{' '}
+            {zhCN(locale, "Browser didn't open?", '浏览器没有打开？')}{' '}
             <a
               href={pendingAuthUrl}
               target="_blank"
               rel="noreferrer noopener"
               className="md-link"
             >
-              Open authorization page
+              {zhCN(locale, 'Open authorization page', '打开授权页面')}
             </a>
             .
           </span>

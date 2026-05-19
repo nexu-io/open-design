@@ -88,11 +88,15 @@ function mapStatusToTracking(
   }
 }
 
-function formatShortDate(value: number | string | undefined): string {
-  if (!value) return 'just now';
+function formatShortDate(
+  value: number | string | undefined,
+  locale?: string,
+  emptyLabel = 'just now',
+): string {
+  if (!value) return emptyLabel;
   const time = typeof value === 'number' ? value : Date.parse(value);
   if (!Number.isFinite(time)) return String(value);
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(locale, {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
@@ -298,7 +302,7 @@ export function DesignSystemsTab({
   }
 
   async function deleteSystem(system: DesignSystemSummary) {
-    const ok = window.confirm(`Delete "${system.title}"? This removes the draft design system from this device.`);
+    const ok = window.confirm(t('ds.deleteConfirm', { title: system.title }));
     if (!ok) {
       trackDesignSystemStatusResult(analytics.track, {
         page_name: 'design_systems',
@@ -458,36 +462,36 @@ export function DesignSystemsTab({
       )}
 
       {primaryCollection === 'design-system' && designSystemCollection === 'mine' ? (
-        <section className="ds-settings-card" aria-label="Your design systems">
+        <section className="ds-settings-card" aria-label={t('ds.userSystemsAria')}>
         <div className="ds-settings-card__head">
           <div>
-            <span className="ds-manager-eyebrow">Design Systems</span>
-            <h2>Your systems</h2>
+            <span className="ds-manager-eyebrow">{t('ds.userSystemsEyebrow')}</span>
+            <h2>{t('ds.userSystemsTitle')}</h2>
           </div>
           <select
-            aria-label="Filter design systems"
+            aria-label={t('ds.userFilterAria')}
             value={userFilter}
             onChange={(event) => setUserFilter(event.target.value as UserListFilter)}
           >
-            <option value="all">All</option>
-            <option value="published">Published</option>
-            <option value="draft">Draft</option>
+            <option value="all">{t('ds.categoryAll')}</option>
+            <option value="published">{t('ds.statusPublished')}</option>
+            <option value="draft">{t('ds.statusDraft')}</option>
           </select>
         </div>
 
         {onCreate ? (
           <button type="button" className="ds-create-row" onClick={onCreate}>
             <span>
-              <strong>Create new design system</strong>
-              <small>Teach Open Design your brand, product, code, assets, and design references.</small>
+              <strong>{t('ds.createTitle')}</strong>
+              <small>{t('ds.createDescription')}</small>
             </span>
-            <span className="ds-create-row__action">Create</span>
+            <span className="ds-create-row__action">{t('ds.createAction')}</span>
           </button>
         ) : null}
 
         {userSystems.length === 0 ? (
           <div className="ds-user-empty">
-            No design systems yet. Create one from real product context, review the draft, then publish it for future projects.
+            {t('ds.userEmpty')}
           </div>
         ) : (
           <div className="ds-user-list">
@@ -505,10 +509,12 @@ export function DesignSystemsTab({
                   >
                     <span className="ds-user-row__title">
                       <span>{system.title}</span>
-                      {selected ? <span className="ds-card-badge">Default</span> : null}
+                      {selected ? <span className="ds-card-badge">{t('ds.badgeDefaultInline')}</span> : null}
                     </span>
                     <span className="ds-user-row__meta">
-                      You · updated {formatShortDate(system.updatedAt)}
+                      {t('ds.userUpdatedMeta', {
+                        date: formatShortDate(system.updatedAt, locale, t('ds.dateJustNow')),
+                      })}
                     </span>
                   </button>
                   <div className="ds-user-row__actions">
@@ -519,7 +525,7 @@ export function DesignSystemsTab({
                         onClick={() => onOpenSystem(system.id)}
                         disabled={busy}
                       >
-                        Edit
+                        {t('ds.actionEdit')}
                       </button>
                     ) : null}
                     {!selected && canUseInProjects ? (
@@ -529,7 +535,7 @@ export function DesignSystemsTab({
                         onClick={() => handleMakeDefaultClick(system)}
                         disabled={busy}
                       >
-                        Make default
+                        {t('ds.actionMakeDefault')}
                       </button>
                     ) : null}
                     <button
@@ -539,14 +545,14 @@ export function DesignSystemsTab({
                       onClick={() => void togglePublished(system)}
                       disabled={busy}
                     >
-                      <span>{status === 'published' ? 'Published' : 'Draft'}</span>
+                      <span>{status === 'published' ? t('ds.statusPublished') : t('ds.statusDraft')}</span>
                       <i aria-hidden />
                     </button>
                     {onOpenSystem ? (
                       <button
                         type="button"
                         className="icon-btn"
-                        aria-label={`Open ${system.title}`}
+                        aria-label={t('ds.actionOpenNamed', { title: system.title })}
                         onClick={() => onOpenSystem(system.id)}
                       >
                         <Icon name="external-link" />
@@ -555,7 +561,7 @@ export function DesignSystemsTab({
                     <button
                       type="button"
                       className="icon-btn danger"
-                      aria-label={`Delete ${system.title}`}
+                      aria-label={t('ds.actionDeleteNamed', { title: system.title })}
                       onClick={() => void deleteSystem(system)}
                       disabled={busy}
                     >
@@ -571,11 +577,11 @@ export function DesignSystemsTab({
       ) : null}
 
       {primaryCollection === 'design-system' && designSystemCollection === 'official' ? (
-        <section className="ds-settings-card" aria-label="Official design system presets">
+        <section className="ds-settings-card" aria-label={t('ds.libraryAria')}>
         <div className="ds-settings-card__head">
           <div>
-            <span className="ds-manager-eyebrow">Library</span>
-            <h2>Official presets</h2>
+            <span className="ds-manager-eyebrow">{t('ds.libraryEyebrow')}</span>
+            <h2>{t('ds.libraryTitle')}</h2>
           </div>
         </div>
         <div className="tab-panel-toolbar ds-manager-toolbar">
@@ -846,7 +852,7 @@ function DesignSystemCard({
       >
         {thumbHtml ? (
           <iframe
-            title={`${system.title} preview`}
+            title={t('ds.previewFrameTitle', { title: system.title })}
             sandbox="allow-scripts"
             srcDoc={buildSrcdoc(thumbHtml)}
             tabIndex={-1}

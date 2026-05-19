@@ -252,6 +252,28 @@ describe('design system package audit helpers', () => {
 });
 
 describe('DesignSystemCreationFlow', () => {
+  it('localizes the setup form in Simplified Chinese', () => {
+    render(
+      <I18nProvider initial="zh-CN">
+        <DesignSystemCreationFlow
+          onBack={() => {}}
+          onCreated={() => {}}
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByRole('heading', { name: '设置你的设计体系' })).toBeTruthy();
+    expect(screen.getByText('公司名称和简介（或设计体系名称）')).toBeTruthy();
+    expect(screen.getByText('从 GitHub 链接代码')).toBeTruthy();
+    expect(screen.getByText('仓库访问：自动')).toBeTruthy();
+    expect(screen.getByText('从你的电脑链接代码')).toBeTruthy();
+    expect(screen.getByText('浏览文件夹')).toBeTruthy();
+    expect(screen.getByText('上传 .fig 文件')).toBeTruthy();
+    expect(screen.getByText('还有其他备注吗？')).toBeTruthy();
+    expect(screen.queryByText('Set up your design system')).toBeNull();
+    expect(screen.queryByText('Repository access: Auto')).toBeNull();
+  });
+
   it('opens the project as soon as the workspace exists and prepares the first chat task afterward', async () => {
     const system: DesignSystemDetail = {
       id: 'user:acme-design-system',

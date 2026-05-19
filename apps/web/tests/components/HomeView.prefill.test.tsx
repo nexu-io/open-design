@@ -3,6 +3,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HomeView } from '../../src/components/HomeView';
+import { I18nProvider } from '../../src/i18n';
 import {
   createPluginAuthoringHandoff,
   createPluginUseHandoff,
@@ -375,6 +376,66 @@ function stubAnimationFrame() {
     window.clearTimeout(id);
   });
 }
+
+const NUMBER_DURATION_PLUGIN = {
+  ...DEFAULT_PLUGIN,
+  id: 'example-simple-deck',
+  title: 'Duration parser test',
+  source: '/tmp/duration-parser',
+  fsPath: '/tmp/duration-parser',
+  manifest: {
+    ...DEFAULT_PLUGIN.manifest,
+    name: 'example-simple-deck',
+    title: 'Duration parser test',
+    description: 'Exercise localized number parsing.',
+    od: {
+      kind: 'scenario',
+      taskKind: 'new-generation',
+      useCase: {
+        query: 'Create a {{duration}} HyperFrames launch composition for {{product}} with {{motionStyle}} motion.',
+      },
+      inputs: [
+        {
+          name: 'duration',
+          label: 'Duration',
+          type: 'number',
+          required: true,
+          default: 10,
+        },
+        {
+          name: 'product',
+          label: 'Product',
+          type: 'string',
+          required: true,
+          default: 'AI note app',
+        },
+        {
+          name: 'motionStyle',
+          label: 'Motion style',
+          type: 'string',
+          required: true,
+          default: 'minimal reveal',
+        },
+      ],
+    },
+  },
+};
+
+const NUMBER_DURATION_APPLY_RESULT = {
+  ...AUTHORING_APPLY_RESULT,
+  query: NUMBER_DURATION_PLUGIN.manifest.od.useCase.query,
+  inputs: NUMBER_DURATION_PLUGIN.manifest.od.inputs,
+  appliedPlugin: {
+    ...AUTHORING_APPLY_RESULT.appliedPlugin,
+    snapshotId: 'snap-duration-parser',
+    pluginId: 'example-simple-deck',
+    inputs: {
+      duration: 10,
+      product: 'AI note app',
+      motionStyle: 'minimal reveal',
+    },
+  },
+};
 
 describe('HomeView prompt handoff', () => {
   afterEach(() => {
@@ -1004,6 +1065,72 @@ describe('HomeView prompt handoff', () => {
         speakerNotes: true,
       }),
     })));
+  });
+
+  it('keeps localized number inputs numeric when a zh-CN prompt is edited', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [NUMBER_DURATION_PLUGIN] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url === '/api/mcp/servers') {
+        return new Response(JSON.stringify({ servers: [], templates: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/apply')) {
+        return new Response(JSON.stringify(NUMBER_DURATION_APPLY_RESULT), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    stubAnimationFrame();
+    const onSubmit = vi.fn();
+
+    render(
+      <I18nProvider initial="zh-CN">
+        <HomeView
+          projects={[]}
+          onSubmit={onSubmit}
+          onOpenProject={() => undefined}
+          onViewAllProjects={() => undefined}
+        />
+      </I18nProvider>,
+    );
+
+    fireEvent.click(await screen.findByTestId('home-hero-rail-deck'));
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-active-type-chip').textContent).toContain('幻灯片');
+    });
+    const input = screen.getByTestId('home-hero-input') as HTMLTextAreaElement;
+    fireEvent.change(input, {
+      target: {
+        value: '为 AI 客服平台 创建一个 10 秒 的 HyperFrames 发布动效，运动风格为 minimal reveal。',
+      },
+    });
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/plugins/example-simple-deck/apply',
+        expect.anything(),
+      );
+      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+        pluginId: 'example-simple-deck',
+        pluginInputs: expect.objectContaining({
+          duration: 10,
+          product: 'AI 客服平台',
+        }),
+      }));
+    });
+    const submitted = onSubmit.mock.calls[0]?.[0] as { pluginInputs?: Record<string, unknown> } | undefined;
+    expect(typeof submitted?.pluginInputs?.duration).toBe('number');
   });
 
   it('switches output-type chips without replacing an existing prompt', async () => {
