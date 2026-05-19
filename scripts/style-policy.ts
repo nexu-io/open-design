@@ -1,3 +1,337 @@
+// ---------------------------------------------------------------------------
+// i18n / en.ts text-quality helpers
+// ---------------------------------------------------------------------------
+//
+// Each helper below targets a specific style rule from the visual text audit
+// (docs/visual-text-audit.md § "Style Rules I Inferred"). They all accept the
+// raw source text of `apps/web/src/i18n/locales/en.ts` and return an array of
+// Match objects describing violations.
+//
+// Scope is intentionally limited to en.ts. Other locale files are exempt
+// because translator-judgment differs per language.
+
+export type EnMatch = {
+  /** 1-based line number in the source file where the violation was found. */
+  line: number;
+  /** The matching text that triggered the rule. */
+  value: string;
+  /** Short rule identifier for error messages. */
+  rule: string;
+};
+
+// ---------------------------------------------------------------------------
+// Internal: extract key-value pairs from en.ts source
+// ---------------------------------------------------------------------------
+// The file follows the pattern:
+//   'key': 'value'                — single-line
+//   'key':                        — value on the next line (possibly multi-line
+//       'value continues here'      using string concatenation)
+// We use a regex that matches the VALUE string (single or double quoted) so we
+// can report the line number of the value, not the key.
+
+type EnEntry = {
+  key: string;
+  value: string;
+  /** 1-based line number of the value string's opening quote. */
+  valueLine: number;
+};
+
+export function parseEnEntries(source: string): EnEntry[] {
+  const lines = source.split('\n');
+  const entries: EnEntry[] = [];
+
+  // Regex matches: optional leading whitespace, a quoted key, a colon,
+  // optional whitespace, then optionally a quoted value on the same line.
+  const keyValueSameLine = /^\s*(['"])((?:[^'"\\]|\\.)*)\1\s*:\s*(['"])((?:[^'"\\]|\\.)*)\3\s*,?\s*$/;
+  const keyOnly = /^\s*(['"])((?:[^'"\\]|\\.)*)\1\s*:\s*$/;
+  const valueOnly = /^\s*(['"])((?:[^'"\\]|\\.)*)\1\s*[+,]?\s*$/;
+
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i] ?? '';
+
+    const sameLine = keyValueSameLine.exec(line);
+    if (sameLine) {
+      const key = sameLine[2] ?? '';
+      const value = sameLine[4] ?? '';
+      entries.push({ key, value, valueLine: i + 1 });
+      i += 1;
+      continue;
+    }
+
+    const keyMatch = keyOnly.exec(line);
+    if (keyMatch) {
+      const key = keyMatch[2] ?? '';
+      // Collect all following value lines (strings that start with a quote)
+      let value = '';
+      let valueLine = -1;
+      let j = i + 1;
+      while (j < lines.length) {
+        const nextLine = lines[j] ?? '';
+        const valMatch = valueOnly.exec(nextLine);
+        if (valMatch) {
+          if (valueLine === -1) valueLine = j + 1;
+          value += valMatch[2] ?? '';
+          j += 1;
+          // Stop after first segment if next line is not a continuation
+          const afterLine = lines[j] ?? '';
+          if (!/^\s*\+/.test(afterLine) && !/^\s*['"]/.test(afterLine)) break;
+          // If next line starts with '+', skip the '+' line (it's a concat op)
+          // and continue to the next string segment
+          if (/^\s*\+\s*['"]/.test(afterLine)) {
+            // the '+' and opening quote are on the same line as value
+            j += 1; // skip to the string line
+          }
+        } else {
+          break;
+        }
+      }
+      if (valueLine !== -1) {
+        entries.push({ key, value, valueLine });
+      }
+      i = j;
+      continue;
+    }
+
+    i += 1;
+  }
+
+  return entries;
+}
+
+// ---------------------------------------------------------------------------
+// Rule 1: No ASCII ellipsis `...` in string values
+// ---------------------------------------------------------------------------
+// Audit reference: Style Rule 7 — "Ellipsis in loading / search placeholders:
+// Unicode `…` (U+2026), not ASCII `...`."
+//
+// Exceptions:
+// - `...` inside template variable placeholders like `{...}` is allowed.
+// - Keys matching `tasks.sample.*` are editorial markdown content and are
+//   excluded per the sample-data exception noted in the audit.
+// - `...` used as a literal UI text glyph referring to a "..." menu button
+//   (the only such case is the Antigravity instruction string which wraps the
+//   three dots in double-quotes: `"..."`). This appears inside a larger
+//   single-quoted value as `"..."` and is excluded by checking that the `...`
+//   is surrounded by double-quote characters.
+export function collectAsciiEllipsisInEn(source: string): EnMatch[] {
+  const entries = parseEnEntries(source);
+  const matches: EnMatch[] = [];
+
+  for (const entry of entries) {
+    // Skip sample-data editorial content
+    if (entry.key.startsWith('tasks.sample.')) continue;
+
+    // Find all `...` occurrences in the value
+    let idx = 0;
+    while (idx < entry.value.length) {
+      const pos = entry.value.indexOf('...', idx);
+      if (pos === -1) break;
+
+      // Allow `{...}` — ASCII ellipsis inside a template placeholder
+      const before = entry.value[pos - 1];
+      const after = entry.value[pos + 3];
+      if (before === '{' && after === '}') {
+        idx = pos + 3;
+        continue;
+      }
+
+      // Allow `"..."` — literal menu-button glyph wrapped in double quotes
+      if (before === '"' && after === '"') {
+        idx = pos + 3;
+        continue;
+      }
+
+      // Allow `...` inside backtick code spans (CLI syntax like `od run ...`)
+      // Walk backwards to check if we are between backticks on the same value
+      const valueUpToPos = entry.value.slice(0, pos);
+      const backticksBefore = (valueUpToPos.match(/`/g) ?? []).length;
+      if (backticksBefore % 2 === 1) {
+        // Inside a backtick span
+        idx = pos + 3;
+        continue;
+      }
+
+      matches.push({ line: entry.valueLine, value: entry.value, rule: 'ascii-ellipsis' });
+      break; // one match per value is enough
+    }
+  }
+
+  return matches;
+}
+
+// ---------------------------------------------------------------------------
+// Rule 2: No Unicode escape sequences for `…` (…) or `—` (—)
+// ---------------------------------------------------------------------------
+// Audit reference: Batch 4 — "Unicode escape normalisation (ellipsis and
+// em-dash only)." Also covers apostrophe escapes (’) since Batch 10
+// normalised those in en.ts too.
+//
+// We scan the RAW source text for these escape sequences inside string values.
+// Using raw source is necessary because the escapes appear as literal text in
+// the .ts source (e.g. `…`), not as the actual Unicode character.
+export function collectUnicodeEscapeInEn(source: string): EnMatch[] {
+  const lines = source.split('\n');
+  const matches: EnMatch[] = [];
+
+  // These escapes are forbidden in en.ts values; use the literal character.
+  // … = …  — = —  ’ = '  ‘ = '
+  const escapePattern = /\\u(2026|2014|2019|2018)/gi;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] ?? '';
+    let m: RegExpExecArray | null;
+    escapePattern.lastIndex = 0;
+    while ((m = escapePattern.exec(line)) !== null) {
+      matches.push({ line: i + 1, value: m[0], rule: 'unicode-escape' });
+    }
+  }
+
+  return matches;
+}
+
+// ---------------------------------------------------------------------------
+// Rule 3: No curly apostrophe (U+2019) in string values
+// ---------------------------------------------------------------------------
+// Audit reference: Style Rule 8 and Batch 10 — "Apostrophes in running text:
+// straight ASCII apostrophe (`'`) is the majority style."
+//
+// This rule applies to en.ts only. Other locale files are exempt.
+export function collectCurlyApostropheInEn(source: string): EnMatch[] {
+  const lines = source.split('\n');
+  const matches: EnMatch[] = [];
+  const CURLY_APOS = '’';
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] ?? '';
+    if (line.includes(CURLY_APOS)) {
+      matches.push({ line: i + 1, value: line.trim(), rule: 'curly-apostrophe' });
+    }
+  }
+
+  return matches;
+}
+
+// ---------------------------------------------------------------------------
+// Rule 4: Acronyms must be uppercase in string values
+// ---------------------------------------------------------------------------
+// Audit reference: Style Rule 10 — "Acronyms: always all-caps: HTML, CSS,
+// API, URL, MCP, CLI, ID, PDF, PPTX, SSE, IPC, TTS, SFX."
+//
+// Strategy: match the canonical acronyms case-insensitively and flag any
+// occurrence whose casing is NOT the required uppercase form.
+//
+// Special case for `id`: it is a common English word stem. We only flag
+// standalone `id` when it follows one of the specific noun phrases from the
+// audit (model|project|run|task|asset|file|user|client|trace|span).
+export function collectMiscasedAcronymInEn(source: string): EnMatch[] {
+  const entries = parseEnEntries(source);
+  const matches: EnMatch[] = [];
+
+  // Acronyms with simple whole-word matching (flag if not already uppercase)
+  const simpleAcronyms = ['HTML', 'CSS', 'JS', 'API', 'URL', 'PDF', 'PPTX', 'MCP', 'CLI', 'SSE', 'IPC', 'TTS', 'SFX'];
+
+  // For each acronym, build a pattern that matches any casing variant
+  // that is NOT the correct uppercase form.
+  // We use word boundaries (\b) to avoid false positives inside other words.
+  const simplePatterns: Array<{ acronym: string; pattern: RegExp }> = simpleAcronyms.map((a) => ({
+    acronym: a,
+    // Matches the acronym case-insensitively (will catch correct and wrong cases)
+    pattern: new RegExp(`\\b${a}\\b`, 'gi'),
+  }));
+
+  // `ID` special: only flag `id` when preceded by a specific noun phrase
+  const idContextPattern = /\b(model|project|run|task|asset|file|user|client|trace|span)\s+(id)\b/gi;
+
+  for (const entry of entries) {
+    const value = entry.value;
+
+    // Skip sample-data editorial content (consistent with rule 1)
+    if (entry.key.startsWith('tasks.sample.')) continue;
+
+    for (const { acronym, pattern } of simplePatterns) {
+      pattern.lastIndex = 0;
+      let m: RegExpExecArray | null;
+      while ((m = pattern.exec(value)) !== null) {
+        if (m[0] !== acronym) {
+          // Skip if inside a backtick span (CLI syntax)
+          const valueUpToPos = value.slice(0, m.index);
+          const backticksBefore = (valueUpToPos.match(/`/g) ?? []).length;
+          if (backticksBefore % 2 === 1) continue;
+          // Skip filename / dotted-identifier matches like `cli.js`,
+          // `orbit_daily.html`, `Next.js`. Detected by a preceding `.`
+          // or `/` (path/filename context).
+          const charBefore = value[m.index - 1];
+          if (charBefore === '.' || charBefore === '/') continue;
+          matches.push({ line: entry.valueLine, value: m[0], rule: `miscased-acronym:${acronym}` });
+        }
+      }
+    }
+
+    // Check `id` only in noun-phrase context
+    idContextPattern.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = idContextPattern.exec(value)) !== null) {
+      const idPart = m[2]; // the `id` capture group
+      if (idPart !== undefined && idPart !== 'ID') {
+        matches.push({ line: entry.valueLine, value: m[0], rule: 'miscased-acronym:ID' });
+      }
+    }
+  }
+
+  return matches;
+}
+
+// ---------------------------------------------------------------------------
+// Rule 5: Hint strings should end with a period
+// ---------------------------------------------------------------------------
+// Audit reference: Style Rule 5 — "Hint / sub-label strings (longer
+// descriptive text below a heading): Sentence case, ending with a period."
+//
+// A string value qualifies for this check when:
+//   1. Its key ends with `Hint` or matches `*Hint` pattern.
+//   2. The value starts with an uppercase letter (sentence-case indicator).
+//   3. The value has more than 4 words (short noun-phrase hints are exempt).
+//
+// The value must end with `.` (period). Strings ending with `…`, `!`, `?`,
+// or other terminal punctuation are also considered acceptable.
+export function collectUnpunctuatedHintInEn(source: string): EnMatch[] {
+  const entries = parseEnEntries(source);
+  const matches: EnMatch[] = [];
+
+  // Terminal punctuation that is acceptable. The colon is accepted because
+  // hint strings sometimes introduce UI-rendered content (chip list,
+  // inline starters) shown below the hint, and `:` is the grammatical
+  // separator for that pattern.
+  const acceptableEndings = new Set(['.', '…', '!', '?', ':']);
+
+  for (const entry of entries) {
+    // Only apply to keys ending with `Hint` (case-sensitive suffix)
+    if (!entry.key.endsWith('Hint')) continue;
+
+    const value = entry.value.trim();
+
+    // Must start with an uppercase letter
+    if (!/^[A-Z]/.test(value)) continue;
+
+    // Count words — skip short noun-phrase hints (<= 4 words)
+    const wordCount = value.split(/\s+/).filter(Boolean).length;
+    if (wordCount <= 4) continue;
+
+    // Check the last character
+    const lastChar = value.at(-1);
+    if (lastChar !== undefined && !acceptableEndings.has(lastChar)) {
+      matches.push({ line: entry.valueLine, value, rule: 'hint-missing-period' });
+    }
+  }
+
+  return matches;
+}
+
+// ---------------------------------------------------------------------------
+// CSS color helpers (original content follows)
+// ---------------------------------------------------------------------------
+
 export const cssWideAndSpecialColorKeywords = new Set([
   "transparent",
   "currentcolor",

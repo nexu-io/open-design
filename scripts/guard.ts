@@ -14,7 +14,16 @@ import {
   checkDesignSystemTokenFixtureSync,
   checkDesignSystemUnknownTokens,
 } from "./check-tokens-fixture-sync.ts";
-import { collectCssHardcodedColorMatches, cssWideAndSpecialColorKeywords, realNamedColors } from "./style-policy.ts";
+import {
+  collectAsciiEllipsisInEn,
+  collectCurlyApostropheInEn,
+  collectCssHardcodedColorMatches,
+  collectMiscasedAcronymInEn,
+  collectUnicodeEscapeInEn,
+  collectUnpunctuatedHintInEn,
+  cssWideAndSpecialColorKeywords,
+  realNamedColors,
+} from "./style-policy.ts";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const allowedE2eScripts = new Set([
@@ -899,6 +908,33 @@ async function checkStylePolicy(): Promise<boolean> {
   return true;
 }
 
+const enLocaleFilePath = "apps/web/src/i18n/locales/en.ts";
+
+async function checkEnLocaleTextQuality(): Promise<boolean> {
+  const source = await readFile(path.join(repoRoot, enLocaleFilePath), "utf8");
+
+  type EnMatchWithFile = { line: number; value: string; rule: string };
+  const violations: EnMatchWithFile[] = [];
+
+  for (const m of collectAsciiEllipsisInEn(source)) violations.push(m);
+  for (const m of collectUnicodeEscapeInEn(source)) violations.push(m);
+  for (const m of collectCurlyApostropheInEn(source)) violations.push(m);
+  for (const m of collectMiscasedAcronymInEn(source)) violations.push(m);
+  for (const m of collectUnpunctuatedHintInEn(source)) violations.push(m);
+
+  if (violations.length > 0) {
+    console.error("en.ts text-quality violations found:");
+    for (const v of violations) {
+      console.error(`- ${enLocaleFilePath}:${v.line} [${v.rule}] ${JSON.stringify(v.value)}`);
+    }
+    console.error("See docs/visual-text-audit.md § Style Rules for remediation guidance.");
+    return false;
+  }
+
+  console.log("en.ts text-quality check passed: ellipsis, escape, apostrophe, acronym, and hint-period rules clean.");
+  return true;
+}
+
 const checks: GuardCheck[] = [
   { name: "residual JavaScript", run: checkResidualJavaScript },
   { name: "package dependency specs", run: checkPackageDependencySpecs },
@@ -907,6 +943,7 @@ const checks: GuardCheck[] = [
   { name: "web test layout", run: checkWebTestLayout },
   { name: "tools layout", run: checkToolsLayout },
   { name: "style policy", run: checkStylePolicy },
+  { name: "en.ts text quality", run: checkEnLocaleTextQuality },
   { name: "design system manifests", run: checkDesignSystemManifests },
   { name: "design system package quality", run: checkDesignSystemPackageQuality },
   { name: "design system component fixture report", run: checkDesignSystemComponentFixtureReport },
