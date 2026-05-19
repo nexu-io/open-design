@@ -15,6 +15,10 @@ export const API_ERROR_CODES = [
   'AGENT_EXECUTION_FAILED',
   'AGENT_PROMPT_TOO_LARGE',
   'PROJECT_NOT_FOUND',
+  // Handoff (`POST /api/projects/:id/handoff`): the requested conversation
+  // is not in the project, or has no messages to synthesize a handoff from.
+  'CONVERSATION_NOT_FOUND',
+  'EMPTY_TRANSCRIPT',
   'FILE_NOT_FOUND',
   'ARTIFACT_NOT_FOUND',
   // The agent emitted a new artifact whose body is dramatically smaller than
