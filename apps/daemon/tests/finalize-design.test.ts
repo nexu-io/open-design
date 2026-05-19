@@ -320,6 +320,56 @@ describe('resolveCurrentArtifact', () => {
     expect(fs.statSync(sidecarPath).mtimeMs).toBe(beforeMtime);
   });
 
+  it('does not reconcile preview-chrome wrapper HTML in the fallback path', async () => {
+    const { db, projectsRoot } = setupResolverFixture();
+    const projectDir = path.join(projectsRoot, PROJECT_ID);
+    fs.mkdirSync(path.join(projectDir, 'frames'), { recursive: true });
+    fs.writeFileSync(path.join(projectDir, 'frames', 'browser-chrome.html'), '<iframe/>');
+    fs.writeFileSync(path.join(projectDir, 'browser-chrome.html'), '<iframe/>');
+
+    const out = await resolveCurrentArtifact(db, projectsRoot, PROJECT_ID);
+
+    expect(out).toBeNull();
+    expect(fs.existsSync(path.join(projectDir, 'frames', 'browser-chrome.html.artifact.json'))).toBe(false);
+    expect(fs.existsSync(path.join(projectDir, 'browser-chrome.html.artifact.json'))).toBe(false);
+  });
+
+  it('rebuilds a corrupt sidecar on the fallback path so the newest HTML can outrank older artifacts', async () => {
+    const { db, projectsRoot } = setupResolverFixture();
+    const projectDir = path.join(projectsRoot, PROJECT_ID);
+
+    await writeProjectFile(projectsRoot, PROJECT_ID, 'older.html', '<p>older</p>');
+    fs.writeFileSync(
+      path.join(projectDir, 'older.html.artifact.json'),
+      JSON.stringify({
+        version: 1,
+        kind: 'html',
+        title: 'Older',
+        entry: 'older.html',
+        renderer: 'html',
+        status: 'complete',
+        exports: ['html'],
+        updatedAt: '2026-05-01T00:00:00.000Z',
+      }),
+    );
+    await writeProjectFile(projectsRoot, PROJECT_ID, 'newest.html', '<p>newest</p>');
+    const newestSidecar = path.join(projectDir, 'newest.html.artifact.json');
+    fs.writeFileSync(newestSidecar, '{not valid json');
+    const newestMtime = new Date('2026-05-09T00:00:00.000Z');
+    fs.utimesSync(path.join(projectDir, 'newest.html'), newestMtime, newestMtime);
+
+    const out = await resolveCurrentArtifact(db, projectsRoot, PROJECT_ID);
+
+    expect(out).not.toBeNull();
+    expect(out!.name).toBe('newest.html');
+    const rebuilt = JSON.parse(fs.readFileSync(newestSidecar, 'utf8')) as {
+      metadata?: { reconciled?: boolean };
+      updatedAt?: string;
+    };
+    expect(rebuilt.metadata?.reconciled).toBe(true);
+    expect(rebuilt.updatedAt).toBe(newestMtime.toISOString());
+  });
+
   it('returns null when no active tab and no .artifact.json sidecars exist', async () => {
     const { db, projectsRoot } = setupResolverFixture();
 

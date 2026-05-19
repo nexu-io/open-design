@@ -370,7 +370,7 @@ function addDesignManifest(zip, entries, projectLabel) {
 // deliverables and must not be dropped from manifest screens.
 const FRAME_WRAPPER_FILE_RE = /(^|\/)(frames?\/|device-frames?\/)|(^|\/)(browser-chrome|device-frame)\.html?$/i;
 
-function isFrameWrapperHtmlFile(file: string): boolean {
+export function isFrameWrapperHtmlFile(file: string): boolean {
   return FRAME_WRAPPER_FILE_RE.test(file);
 }
 
@@ -711,6 +711,7 @@ export async function ensureArtifactSidecarFor(projectsRoot, projectId, name, me
   const safeName = validateProjectPath(name);
   const ext = path.extname(safeName).toLowerCase();
   if (!RECONCILABLE_EXTENSIONS.has(ext)) return null;
+  if (isFrameWrapperHtmlFile(safeName)) return null;
 
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   let target;

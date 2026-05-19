@@ -209,19 +209,17 @@ export async function resolveCurrentArtifact(
   }
 
   const filesBeforeReconcile = await listFiles(projectsRoot, projectId, { metadata: metadata ?? undefined });
-  const reconcileTargets = filesBeforeReconcile.filter(
-    (f) => !fs.existsSync(path.join(dir, `${f.name}.artifact.json`)),
-  );
-  if (reconcileTargets.length > 0) {
+  const htmlCandidates = filesBeforeReconcile.filter((f) => /\.html?$/i.test(f.name));
+  if (htmlCandidates.length > 0) {
     await Promise.all(
-      reconcileTargets.map((f) =>
+      htmlCandidates.map((f) =>
         ensureArtifactSidecarFor(projectsRoot, projectId, f.name, metadata ?? undefined),
       ),
     );
   }
   // Re-list after reconcile so candidates pick up the recovered manifests' updatedAt for ranking.
   const files =
-    reconcileTargets.length > 0
+    htmlCandidates.length > 0
       ? await listFiles(projectsRoot, projectId, { metadata: metadata ?? undefined })
       : filesBeforeReconcile;
   const candidates = files
