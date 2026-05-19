@@ -304,6 +304,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Added a post-M4 execution runbook that maps M5 and M6 checklist items to the concrete files and verification commands required after native Windows/Linux evidence lands. This keeps default flip and Electron removal execution tied to the guard policy instead of relying on checklist memory. `pnpm guard` passed.
 - 2026-05-20: Added a git-bundle fallback to the remote CI handoff so the branch can be transferred to a write-capable machine even when the configured local GitHub credential cannot push. This keeps native Windows/Linux evidence collection unblocked by the current `sunseol` 403. `pnpm guard` passed.
 - 2026-05-20: Added `scripts/create-tauri-migration-bundle.ts` to make the branch handoff repeatable. The script rejects tracked dirty worktrees, creates the bundle from the migration branch against `origin/main`, verifies it, and prints the bundled heads plus bundle size and SHA-256 for the receiving machine. `node --import tsx --test scripts/create-tauri-migration-bundle.test.ts` and `pnpm guard` passed.
+- 2026-05-20: Added `scripts/tauri-migration-status.ts` so maintainers can print the current phase, default runtime values, open M4/M5/M6 checklist items, git head/base, and next action list before each handoff or phase transition. `node --import tsx --test scripts/tauri-migration-status.test.ts` and `pnpm guard` passed.
 
 ### Platform Gate Runners
 
@@ -347,6 +348,12 @@ The local branch `codex/electron-to-tauri-migration` contains the current migrat
 
 ```bash
 git rev-parse codex/electron-to-tauri-migration
+```
+
+Before handing off or changing phases, print the current migration status:
+
+```bash
+pnpm exec tsx scripts/tauri-migration-status.ts
 ```
 
 To collect native M4 evidence, push that branch with a credential that can write to `nexu-io/open-design`, open a draft PR against `main`, and wait for these CI jobs:
