@@ -17189,6 +17189,23 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   right: auto;
   left: 18px;
 }
+/* Top-anchored corners: reverse column so sprite stays pinned at the top edge
+   and bubble grows downward (column-reverse makes sprite the visual bottom child,
+   which in a top-pinned container means sprite stays at pos.y). */
+.pet-overlay[data-corner='top-left'],
+.pet-overlay[data-corner='top-right'] {
+  flex-direction: column-reverse;
+}
+/* Top-anchored corners: move the tail to the top of the bubble. */
+.pet-overlay[data-corner='top-left'] .pet-bubble::after,
+.pet-overlay[data-corner='top-right'] .pet-bubble::after {
+  bottom: auto;
+  top: -6px;
+  border-bottom: 0;
+  border-right: 0;
+  border-top: 1px solid var(--pet-accent);
+  border-left: 1px solid var(--pet-accent);
+}
 .pet-bubble-name {
   font-weight: 600;
   font-size: 12px;

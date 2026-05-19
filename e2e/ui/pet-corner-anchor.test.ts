@@ -170,6 +170,14 @@ test.describe('pet corner anchor: quadrant positioning', () => {
     expect(box!.y).toBeLessThan(QUAD_THRESHOLD);
 
     expect(await getOverlayCorner(page)).toBe('top-left');
+
+    // The sprite must stay pinned near the top edge — not pushed down by the
+    // bubble. Without flex-direction: column-reverse the sprite would be the
+    // first child and the bubble would push it ~80-200px below pos.y.
+    const sprite = page.locator('.pet-sprite');
+    const spriteBox = await sprite.boundingBox();
+    expect(spriteBox).not.toBeNull();
+    expect(spriteBox!.y).toBeLessThan(QUAD_THRESHOLD);
   });
 
   test('top-right: overlay is in top-right viewport quadrant', async ({ page }) => {
@@ -187,6 +195,14 @@ test.describe('pet corner anchor: quadrant positioning', () => {
     expect(box!.y).toBeLessThan(QUAD_THRESHOLD);
 
     expect(await getOverlayCorner(page)).toBe('top-right');
+
+    // The sprite must stay pinned near the top edge — not pushed down by the
+    // bubble. Without flex-direction: column-reverse the sprite would be the
+    // first child and the bubble would push it ~80-200px below pos.y.
+    const sprite = page.locator('.pet-sprite');
+    const spriteBox = await sprite.boundingBox();
+    expect(spriteBox).not.toBeNull();
+    expect(spriteBox!.y).toBeLessThan(QUAD_THRESHOLD);
   });
 
   test('bottom-left: overlay is in bottom-left viewport quadrant', async ({ page }) => {
