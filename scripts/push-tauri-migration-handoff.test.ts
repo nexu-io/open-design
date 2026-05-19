@@ -36,12 +36,12 @@ test("push-tauri-migration-handoff imports, pushes, and verifies a handoff manif
 });
 
 test("push-tauri-migration-handoff can verify and push a packaged handoff archive", async (t) => {
-  const { handoffDir, remotePath, sourceHead, targetRepo } = await createHandoffFixture(
+  const { handoffDir, remotePath, sourceHead, sourceRepo, targetRepo } = await createHandoffFixture(
     t,
     "open-design-tauri-push-handoff-archive-",
   );
   const archivePath = join(dirname(handoffDir), "open-design-tauri-migration-handoff.tar.gz");
-  await runPackageHandoffScript("--handoff-dir", handoffDir, "--output", archivePath);
+  await runPackageHandoffScript("--root", sourceRepo, "--handoff-dir", handoffDir, "--output", archivePath);
   await rm(handoffDir, { force: true, recursive: true });
 
   const result = await runPushHandoffScript(targetRepo, "--archive", archivePath, "--remote", remotePath);
@@ -90,9 +90,12 @@ test("push-tauri-migration-handoff requires a manifest", async (t) => {
 });
 
 test("push-tauri-migration-handoff rejects archive checksum mismatches", async (t) => {
-  const { handoffDir, targetRepo } = await createHandoffFixture(t, "open-design-tauri-push-handoff-bad-archive-");
+  const { handoffDir, sourceRepo, targetRepo } = await createHandoffFixture(
+    t,
+    "open-design-tauri-push-handoff-bad-archive-",
+  );
   const archivePath = join(dirname(handoffDir), "open-design-tauri-migration-handoff.tar.gz");
-  await runPackageHandoffScript("--handoff-dir", handoffDir, "--output", archivePath);
+  await runPackageHandoffScript("--root", sourceRepo, "--handoff-dir", handoffDir, "--output", archivePath);
   await writeFile(`${archivePath}.sha256`, `${"0".repeat(64)}  ${archivePath.split(/[\\/]/).at(-1)}\n`, "utf8");
 
   await assert.rejects(runPushHandoffScript(targetRepo, "--archive", archivePath), /archive SHA-256 mismatch/);
@@ -107,6 +110,7 @@ async function createHandoffFixture(
   manifestPath: string;
   remotePath: string;
   sourceHead: string;
+  sourceRepo: string;
   targetRepo: string;
 }> {
   const root = await mkdtemp(join(tmpdir(), prefix));
@@ -153,7 +157,7 @@ async function createHandoffFixture(
   );
   await writeFile(join(handoffDir, "open-design-tauri-migration-handoff.md"), "# Tauri Migration Handoff\n", "utf8");
 
-  return { bundlePath, handoffDir, manifestPath, remotePath, sourceHead, targetRepo };
+  return { bundlePath, handoffDir, manifestPath, remotePath, sourceHead, sourceRepo, targetRepo };
 }
 
 async function runCreateBundleScript(cwd: string, ...args: string[]): Promise<{ stderr: string; stdout: string }> {

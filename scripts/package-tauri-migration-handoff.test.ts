@@ -107,6 +107,58 @@ test("package-tauri-migration-handoff creates a tarball and checksum sidecar", a
   assert.match(listing.stdout, /handoff\/open-design-tauri-migration-handoff\.md/);
 });
 
+test("package-tauri-migration-handoff verifies the handoff branch head before packaging", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "open-design-tauri-package-handoff-current-"));
+  t.after(() => void rm(root, { force: true, recursive: true }));
+  const gitRoot = join(root, "repo");
+  await initGitFixture(gitRoot);
+  const head = (await git(gitRoot, "rev-parse", "HEAD")).stdout.trim();
+  const handoffDir = join(root, "handoff");
+  const output = join(root, "open-design-tauri-migration-handoff.tar.gz");
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+
+  const result = await runPackageHandoffScriptWithCurrentHead("--root", gitRoot, "--handoff-dir", handoffDir, "--output", output);
+
+  assert.match(result.stdout, /Packaged Tauri migration handoff/);
+  assert.match(result.stdout, new RegExp(`Branch: ${migrationBranch.replaceAll("/", "\\/")} @ ${head}`));
+  await access(output);
+});
+
+test("package-tauri-migration-handoff rejects stale branch heads before packaging", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "open-design-tauri-package-handoff-stale-head-"));
+  t.after(() => void rm(root, { force: true, recursive: true }));
+  const gitRoot = join(root, "repo");
+  await initGitFixture(gitRoot);
+  const head = (await git(gitRoot, "rev-parse", "HEAD")).stdout.trim();
+  const handoffDir = join(root, "handoff");
+  const output = join(root, "open-design-tauri-migration-handoff.tar.gz");
+  await writeHandoffFixture(handoffDir, { branchHead: "0".repeat(40) });
+
+  await assert.rejects(
+    runPackageHandoffScriptWithCurrentHead("--root", gitRoot, "--handoff-dir", handoffDir, "--output", output),
+    new RegExp(`handoff branchHead is stale: expected current ${escapeRegExp(migrationBranch)} ${head}, got ${"0".repeat(40)}`),
+  );
+  await assert.rejects(access(output), /ENOENT/);
+});
+
+test("package-tauri-migration-handoff rejects tracked changes before packaging", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "open-design-tauri-package-handoff-dirty-source-"));
+  t.after(() => void rm(root, { force: true, recursive: true }));
+  const gitRoot = join(root, "repo");
+  await initGitFixture(gitRoot);
+  const head = (await git(gitRoot, "rev-parse", "HEAD")).stdout.trim();
+  const handoffDir = join(root, "handoff");
+  const output = join(root, "open-design-tauri-migration-handoff.tar.gz");
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+  await writeFile(join(gitRoot, "tracked.txt"), "dirty\n", "utf8");
+
+  await assert.rejects(
+    runPackageHandoffScriptWithCurrentHead("--root", gitRoot, "--handoff-dir", handoffDir, "--output", output),
+    /tracked worktree changes are present; commit or stash them before packaging the migration handoff/,
+  );
+  await assert.rejects(access(output), /ENOENT/);
+});
+
 test("package-tauri-migration-handoff command sidecar verifies its checksum sidecar", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "open-design-tauri-package-handoff-command-checksum-"));
   t.after(() => void rm(root, { force: true, recursive: true }));
@@ -285,7 +337,7 @@ test("package-tauri-migration-handoff rejects archives inside the handoff direct
 
 async function writeHandoffFixture(
   handoffDir: string,
-  options: { bundlePath?: string; bundleSha256?: string } = {},
+  options: { branchHead?: string; bundlePath?: string; bundleSha256?: string } = {},
 ): Promise<string> {
   const bundlePath = join(handoffDir, "open-design-tauri-migration.bundle");
   const bundle = Buffer.from("bundle\n", "utf8");
@@ -298,7 +350,7 @@ async function writeHandoffFixture(
       {
         schemaVersion: 1,
         branch: migrationBranch,
-        branchHead,
+        branchHead: options.branchHead ?? branchHead,
         bundlePath: options.bundlePath ?? "open-design-tauri-migration.bundle",
         bundleSha256: options.bundleSha256 ?? bundleSha256,
       },
@@ -312,10 +364,28 @@ async function writeHandoffFixture(
 }
 
 async function runPackageHandoffScript(...args: string[]): Promise<{ stderr: string; stdout: string }> {
+  return execFileAsync(process.execPath, ["--import", "tsx", packageHandoffScript, "--skip-current-head-check", ...args], {
+    cwd: repoRoot,
+    maxBuffer: 1024 * 1024,
+  });
+}
+
+async function runPackageHandoffScriptWithCurrentHead(...args: string[]): Promise<{ stderr: string; stdout: string }> {
   return execFileAsync(process.execPath, ["--import", "tsx", packageHandoffScript, ...args], {
     cwd: repoRoot,
     maxBuffer: 1024 * 1024,
   });
+}
+
+async function initGitFixture(root: string): Promise<void> {
+  await mkdir(root, { recursive: true });
+  await git(root, "init", "--initial-branch=main");
+  await git(root, "config", "user.email", "codex@example.test");
+  await git(root, "config", "user.name", "Codex Test");
+  await writeFile(join(root, "tracked.txt"), "clean\n", "utf8");
+  await git(root, "add", "tracked.txt");
+  await git(root, "commit", "-m", "fixture");
+  await git(root, "checkout", "-b", migrationBranch);
 }
 
 async function git(cwd: string, ...args: string[]): Promise<{ stderr: string; stdout: string }> {

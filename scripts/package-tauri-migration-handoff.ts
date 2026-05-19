@@ -6,6 +6,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from "node:pat
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
+const defaultRoot = resolve(import.meta.dirname, "..");
 const defaultHandoffDir = "/tmp/open-design-tauri-migration-handoff";
 const manifestName = "open-design-tauri-migration-handoff.json";
 const noteName = "open-design-tauri-migration-handoff.md";
@@ -13,6 +14,8 @@ const noteName = "open-design-tauri-migration-handoff.md";
 type Args = {
   handoffDir: string;
   output?: string;
+  root: string;
+  verifyCurrentHead: boolean;
 };
 
 type HandoffManifest = {
@@ -29,6 +32,9 @@ async function main(): Promise<void> {
   ensureOutputOutsideHandoff(args.handoffDir, archivePath);
 
   const handoff = await validateHandoff(args.handoffDir);
+  if (args.verifyCurrentHead) {
+    await assertHandoffMatchesCurrentGitState(args.root, handoff.manifest);
+  }
   await mkdir(dirname(archivePath), { recursive: true });
   await execFileAsync("tar", ["-czf", archivePath, "-C", dirname(args.handoffDir), basename(args.handoffDir)], {
     maxBuffer: 1024 * 1024,
@@ -117,11 +123,11 @@ async function main(): Promise<void> {
 }
 
 function parseArgs(argv: string[]): Args {
-  const parsed: Args = { handoffDir: defaultHandoffDir };
+  const parsed: Args = { handoffDir: defaultHandoffDir, root: defaultRoot, verifyCurrentHead: true };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const value = argv[index + 1];
-    if ((arg === "--handoff-dir" || arg === "--output") && value == null) {
+    if ((arg === "--handoff-dir" || arg === "--output" || arg === "--root") && value == null) {
       throw new Error(`${arg} requires a value`);
     }
     if (arg === "--handoff-dir") {
@@ -134,12 +140,23 @@ function parseArgs(argv: string[]): Args {
       index += 1;
       continue;
     }
+    if (arg === "--root") {
+      parsed.root = resolve(value!);
+      index += 1;
+      continue;
+    }
+    if (arg === "--skip-current-head-check") {
+      parsed.verifyCurrentHead = false;
+      continue;
+    }
     if (arg === "--help" || arg === "-h") {
       process.stdout.write(
         [
-          "usage: tsx scripts/package-tauri-migration-handoff.ts [--handoff-dir <dir>] [--output <tar.gz>]",
+          "usage: tsx scripts/package-tauri-migration-handoff.ts [--handoff-dir <dir>] [--output <tar.gz>] [--root <repo>] [--skip-current-head-check]",
           "",
-          `defaults: --handoff-dir ${defaultHandoffDir} --output <handoff-dir>.tar.gz`,
+          "Packages a verified Tauri migration handoff directory for a write-capable receiver.",
+          "By default, refuses to package when the handoff branch head is stale or tracked worktree changes are present.",
+          `defaults: --root ${defaultRoot} --handoff-dir ${defaultHandoffDir} --output <handoff-dir>.tar.gz`,
           "",
         ].join("\n"),
       );
@@ -148,6 +165,33 @@ function parseArgs(argv: string[]): Args {
     throw new Error(`unsupported argument: ${arg}`);
   }
   return parsed;
+}
+
+async function assertHandoffMatchesCurrentGitState(root: string, manifest: HandoffManifest): Promise<void> {
+  const trackedStatus = await git(root, ["status", "--porcelain", "--untracked-files=no"]);
+  if (trackedStatus.stdout.trim().length > 0) {
+    throw new Error("tracked worktree changes are present; commit or stash them before packaging the migration handoff");
+  }
+  const localHead = await git(root, ["rev-parse", "--verify", `refs/heads/${manifest.branch}^{commit}`]);
+  const head = localHead.stdout.trim();
+  if (head !== manifest.branchHead) {
+    throw new Error(`handoff branchHead is stale: expected current ${manifest.branch} ${head}, got ${manifest.branchHead}`);
+  }
+}
+
+async function git(root: string, args: string[]): Promise<{ stderr: string; stdout: string }> {
+  try {
+    return await execFileAsync("git", args, {
+      cwd: root,
+      maxBuffer: 1024 * 1024,
+    });
+  } catch (error) {
+    if (error instanceof Error && "stderr" in error) {
+      const detail = error as Error & { stderr?: string };
+      throw new Error(`git ${args.join(" ")} failed under ${root}: ${detail.stderr?.trim() ?? error.message}`);
+    }
+    throw error;
+  }
 }
 
 async function validateHandoff(handoffDir: string): Promise<{
