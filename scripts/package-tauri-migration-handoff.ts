@@ -367,7 +367,7 @@ function commandScript(archivePath: string): string {
     'echo "Verified remote $remote $branch at $remote_head."',
     "",
     'if [[ -n "${GITHUB_RUN_ID:-}" ]]; then',
-    '  pnpm exec tsx scripts/download-tauri-m4-reports.ts --run-id "$GITHUB_RUN_ID" --expected-head "$expected_head" --output-dir "$report_dir" --advance',
+    '  pnpm exec tsx scripts/download-tauri-m4-reports.ts --run-id "$GITHUB_RUN_ID" --branch "$branch" --expected-head "$expected_head" --output-dir "$report_dir" --advance',
     "else",
     '  workflow_dispatched=false',
     '  if [[ "${TAURI_NATIVE_CI_TRIGGER:-1}" != "0" ]] && command -v gh >/dev/null 2>&1; then',

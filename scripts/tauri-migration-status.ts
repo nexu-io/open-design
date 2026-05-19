@@ -495,6 +495,13 @@ async function readHandoffArchiveStatus(archivePath: string, handoff?: HandoffSt
     if (!commandScriptSource.includes("--expected-head") || !commandScriptSource.includes("--wait")) {
       problems.push(`command script is missing branch-head CI wait guidance: ${commandScriptPath}`);
     }
+    if (
+      !commandScriptSource.includes('--run-id "$GITHUB_RUN_ID"') ||
+      !commandScriptSource.includes('--branch "$branch"') ||
+      !commandScriptSource.includes('--expected-head "$expected_head"')
+    ) {
+      problems.push(`command script is missing branch-bound explicit run guidance: ${commandScriptPath}`);
+    }
     if (!commandScriptSource.includes("gh workflow run") && !commandScriptSource.includes("gh pr create")) {
       problems.push(`command script is missing native CI trigger guidance: ${commandScriptPath}`);
     }
