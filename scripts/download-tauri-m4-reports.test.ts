@@ -142,6 +142,17 @@ test("download-tauri-m4-reports rejects explicit run ids from another branch", a
   assert.doesNotMatch(calls, /run download 777/);
 });
 
+test("download-tauri-m4-reports requires expected head when advancing", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "open-design-tauri-download-advance-head-"));
+  t.after(() => void rm(root, { force: true, recursive: true }));
+  const fakeGh = await writeFakeGh(root);
+
+  await assert.rejects(
+    runDownload(fakeGh, "--run-id", "777", "--output-dir", join(root, "reports"), "--advance"),
+    /--advance requires --expected-head/,
+  );
+});
+
 test("download-tauri-m4-reports explains missing gh", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "open-design-tauri-download-missing-gh-"));
   t.after(() => void rm(root, { force: true, recursive: true }));
@@ -212,6 +223,8 @@ test("download-tauri-m4-reports can advance M4 and M5 after verified downloads",
     fakeGh,
     "--run-id",
     "777",
+    "--expected-head",
+    "a".repeat(40),
     "--output-dir",
     join(root, "reports"),
     "--advance",

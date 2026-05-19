@@ -202,10 +202,10 @@ function parseArgs(argv: string[]): Args {
     if (arg === "--help" || arg === "-h") {
       process.stdout.write(
         [
-          "usage: tsx scripts/download-tauri-m4-reports.ts [--run-id <id>] [--repo <owner/repo>] [--branch <ref>] [--output-dir <dir>] [--advance] [--root <repo>]",
+          "usage: tsx scripts/download-tauri-m4-reports.ts [--run-id <id>] [--repo <owner/repo>] [--branch <ref>] [--expected-head <sha>] [--output-dir <dir>] [--advance] [--root <repo>]",
           "",
           "Downloads the Windows/Linux Tauri CI report artifacts with gh, verifies them with scripts/verify-tauri-platform-gates.ts, and optionally applies the guarded M4→M5 advance.",
-          "Use --expected-head <sha> to avoid stale branch runs, and --wait to poll until a matching completed run exists.",
+          "Use --expected-head <sha> to avoid stale branch runs, and --wait to poll until a matching completed run exists. --advance requires --expected-head.",
           "",
           `defaults: --repo ${defaultRepo} --branch ${defaultBranch} --workflow ${defaultWorkflow} --output-dir ${defaultOutputDir}`,
           "",
@@ -214,6 +214,10 @@ function parseArgs(argv: string[]): Args {
       process.exit(0);
     }
     throw new Error(`unsupported argument: ${arg}`);
+  }
+
+  if (parsed.advance && parsed.expectedHead == null) {
+    throw new Error("--advance requires --expected-head so M4 evidence is tied to the migration branch head");
   }
 
   return parsed;
