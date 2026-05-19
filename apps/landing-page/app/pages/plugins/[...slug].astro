@@ -2,6 +2,7 @@
 import '../../globals.css';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import FontStylesheet from '../../_components/font-stylesheet.astro';
 import { Header } from '../../_components/header';
 import LazyImg from '../../_components/lazy-img.astro';
 import PreciseLazyload from '../../_components/precise-lazyload.astro';
@@ -122,6 +123,7 @@ const breadcrumbJsonLd = {
     <meta name='description' content={description} />
     <meta name='robots' content={plugin.yanked ? 'noindex,follow' : 'index,follow'} />
     <link rel='canonical' href={canonical} />
+    <FontStylesheet />
     <meta property='og:type' content='article' />
     <meta property='og:site_name' content='Open Design' />
     <meta property='og:title' content={title} />

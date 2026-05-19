@@ -55,7 +55,7 @@
   Cache-Control: public, max-age=86400, stale-while-revalidate=604800
 /apple-touch-icon.png
   Cache-Control: public, max-age=86400, stale-while-revalidate=604800
-/logo.png
+/logo.webp
   Cache-Control: public, max-age=86400, stale-while-revalidate=604800
 
 # Share function records a click and 302s — must not be cached.

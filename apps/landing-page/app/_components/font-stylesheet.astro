@@ -1,0 +1,31 @@
+---
+/*
+ * Google Fonts stylesheet — single source of truth for the four families
+ * the site uses (Inter Tight, Inter, Playfair Display, JetBrains Mono).
+ *
+ * Why a component instead of `@import` in globals.css:
+ *   Previously globals.css did `@import url('https://fonts.googleapis.com/css2?...')`.
+ *   That gets the request fired only AFTER the browser parses the CSS file,
+ *   serializing the chain:
+ *
+ *     HTML  →  globals.css  →  fonts.googleapis.com/css2  →  fonts.gstatic.com/woff2
+ *
+ *   Live HAR from `127.0.0.1:17574/` measured 953ms for the fonts CSS plus
+ *   400–800ms per woff2 (4 of them) — ~3s end-to-end before text could
+ *   render with the intended family, even with `display=swap`.
+ *
+ *   Moving to `<link>` in the document head lets the browser kick off the
+ *   fonts CSS request alongside the HTML body parse, and `preconnect` hints
+ *   warm up TLS to fonts.gstatic.com so the woff2 fetches don't pay DNS+TLS.
+ *
+ *   `display=swap` stays in the URL so paragraph copy can render in a
+ *   system fallback while the woff2 is in flight — never blocks paint.
+ */
+---
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,500;0,600;1,400;1,500;1,600;1,700&family=JetBrains+Mono:wght@400;500&display=swap"
+/>

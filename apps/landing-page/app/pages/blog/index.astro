@@ -13,6 +13,7 @@
 import { getCollection } from 'astro:content';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import FontStylesheet from '../../_components/font-stylesheet.astro';
 import HeaderEnhancer from '../../_components/header-enhancer.astro';
 import { Header, type HeaderProps } from '../../_components/header';
 import LazyImg from '../../_components/lazy-img.astro';
@@ -97,6 +98,7 @@ const getPostImage = (id: string) => postImages[id];
       description={seoDescription}
       pathname={Astro.url.pathname}
     />
+    <FontStylesheet />
   </head>
   <body>
     <div class='shell'>

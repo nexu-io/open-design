@@ -3,6 +3,7 @@ import Page from '../page';
 import '../globals.css';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import FontStylesheet from '../_components/font-stylesheet.astro';
 import PreciseLazyload from '../_components/precise-lazyload.astro';
 import { heroImage, heroImageSrcset } from '../image-assets';
 import { getCatalogCounts } from '../_lib/catalog';
@@ -30,6 +31,8 @@ const pageHtml = renderToStaticMarkup(
 
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <FontStylesheet />
 
     {/*
      * Hero LCP preload. Cloudflare Pages turns this <link rel="preload"> into
