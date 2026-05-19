@@ -1,0 +1,50 @@
+name: seo-funnel-snapshot
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  collect:
+    name: Collect SEO funnel snapshot
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Pull GitHub funnel metrics
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm --filter @open-design/landing-page funnel:pull
+
+      - name: Plan content experiments
+        run: pnpm --filter @open-design/landing-page funnel:plan-content
+
+      - name: Render SEO funnel dashboard
+        run: pnpm --filter @open-design/landing-page seo:scan:dashboard
+
+      - name: Upload funnel snapshot
+        uses: actions/upload-artifact@v5
+        with:
+          name: seo-funnel-snapshot
+          path: apps/landing-page/out/seo-funnel/

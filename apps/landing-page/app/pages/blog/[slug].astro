@@ -11,11 +11,13 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import HeaderEnhancer from '../../_components/header-enhancer.astro';
 import { Header, type HeaderProps } from '../../_components/header';
+import OutboundTelemetry from '../../_components/outbound-telemetry.astro';
 import SeoHead from '../../_components/seo-head.astro';
 import SiteFooter from '../../_components/site-footer.astro';
 import Topbar from '../../_components/topbar.astro';
 import { getCatalogCounts } from '../../_lib/catalog';
 import { getGithubRepoMeta } from '../../_lib/github';
+import { githubPath } from '../../_lib/github-links';
 import '../../globals.css';
 import '../../sub-pages.css';
 
@@ -30,14 +32,19 @@ export async function getStaticPaths() {
 const { post } = Astro.props;
 const { Content } = await render(post);
 const DISCORD = 'https://discord.gg/9ptkbbqRu';
-const sourceUrl = `https://github.com/nexu-io/open-design/blob/main/apps/landing-page/app/content/blog/${post.id}.md`;
+const blogMedium = `blog-${post.data.category.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+const sourceUrl = githubPath(`/blob/main/apps/landing-page/app/content/blog/${post.id}.md`, {
+  medium: blogMedium,
+  campaign: 'source',
+  content: post.id,
+});
 const category = post.data.category.toLowerCase();
 const bottomCta =
   category.includes('announcement') || category.includes('product')
     ? {
         title: 'Download the desktop build',
         body: 'Take the open-source design workspace for a spin, inspect the release notes on GitHub, or join our Discord for live community feedback.',
-        href: 'https://github.com/nexu-io/open-design/releases',
+        href: githubPath('/releases', { medium: blogMedium, campaign: 'bottom-download', content: post.id }),
         label: 'Download desktop ↗',
         external: true,
       }
@@ -52,7 +59,7 @@ const bottomCta =
       : {
           title: 'See the implementation on GitHub',
           body: 'Open the repository to inspect the source, star the project, fork the workflow, or join our Discord to discuss what should land next.',
-          href: 'https://github.com/nexu-io/open-design',
+          href: githubPath('', { medium: blogMedium, campaign: 'bottom-repo', content: post.id }),
           label: 'Open repository ↗',
           external: true,
         };
@@ -157,6 +164,7 @@ const fmtDate = (d: Date) =>
     </div>
 
     <HeaderEnhancer />
+    <OutboundTelemetry />
 
     <style>
       .post-shell {
@@ -366,6 +374,9 @@ const fmtDate = (d: Date) =>
         flex-wrap: wrap;
         gap: 10px;
         justify-content: flex-end;
+      }
+      .post-conversion-actions .btn {
+        justify-content: center;
       }
 
       .post-foot {

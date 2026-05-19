@@ -1,0 +1,46 @@
+<script is:inline>
+  (() => {
+    const endpoint = '/t/outbound';
+    const repoOrigin = 'https://github.com';
+    const repoPath = '/nexu-io/open-design';
+    const send = (payload) => {
+      const body = JSON.stringify(payload);
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon(endpoint, new Blob([body], { type: 'application/json' }));
+      } else {
+        fetch(endpoint, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body,
+          keepalive: true,
+        }).catch(() => {});
+      }
+    };
+    document.addEventListener(
+      'click',
+      (event) => {
+        const link = event.target?.closest?.('a[href]');
+        if (!link) return;
+        let url;
+        try {
+          url = new URL(link.href);
+        } catch {
+          return;
+        }
+        if (url.origin !== repoOrigin || !url.pathname.startsWith(repoPath)) return;
+        send({
+          from_path: window.location.pathname,
+          to_url: url.toString(),
+          utm: {
+            source: url.searchParams.get('utm_source'),
+            medium: url.searchParams.get('utm_medium'),
+            campaign: url.searchParams.get('utm_campaign'),
+            content: url.searchParams.get('utm_content'),
+          },
+          ts: new Date().toISOString(),
+        });
+      },
+      { capture: true },
+    );
+  })();
+</script>

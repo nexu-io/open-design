@@ -8,6 +8,12 @@
     "build": "astro check && astro build",
     "preview": "astro preview --host 127.0.0.1 --port 17574",
     "previews": "tsx scripts/generate-previews.ts",
+    "funnel:pull": "tsx scripts/funnel-pull/pull-github.ts",
+    "funnel:plan-content": "tsx scripts/funnel-pull/plan-content-experiments.ts",
+    "seo:scan": "tsx scripts/seo-scan/scan.ts",
+    "seo:scan:dashboard": "tsx scripts/seo-scan/render-dashboard.ts",
+    "seo:scan:enrich": "tsx scripts/seo-scan/enrich.ts",
+    "seo:scan:live": "tsx scripts/seo-scan/scan-live.ts",
     "typecheck": "astro check"
   },
   "dependencies": {

@@ -11,6 +11,7 @@
 
 import { Header, type HeaderProps } from './_components/header';
 import { Wire } from './_components/wire';
+import { githubPath } from './_lib/github-links';
 import { heroImage, imageAsset } from './image-assets';
 
 const arrowOut = (
@@ -34,14 +35,17 @@ const NBSP = '\u00A0';
 // string (e.g. `v0.3.0`), never any surrounding label or punctuation. The
 // inline enhancement script in `app/pages/index.astro` assigns `textContent`
 // on each slot, so any extra text inside the wrapper would be clobbered.
-const REPO = 'https://github.com/nexu-io/open-design';
-const REPO_RELEASES = `${REPO}/releases`;
-const REPO_ISSUES = `${REPO}/issues`;
-const REPO_CONTRIBUTORS = `${REPO}/graphs/contributors`;
-const REPO_DAEMON = `${REPO}/tree/main/apps/daemon`;
-const REPO_SKILLS = `${REPO}/tree/main/skills`;
-const REPO_DESIGN_SYSTEMS = `${REPO}/tree/main/design-systems`;
-const REPO_DOCS = (file: string) => `${REPO}/blob/main/${file}`;
+const gh = (pathname: string, campaign: string, content?: string) =>
+  githubPath(pathname, { medium: 'landing', campaign, content });
+const REPO = gh('', 'repo');
+const REPO_RELEASES = gh('/releases', 'download');
+const REPO_ISSUES = gh('/issues', 'issue');
+const REPO_CONTRIBUTORS = gh('/graphs/contributors', 'contributors');
+const REPO_DAEMON = gh('/tree/main/apps/daemon', 'daemon');
+const REPO_SKILLS = gh('/tree/main/skills', 'skills');
+const REPO_DESIGN_SYSTEMS = gh('/tree/main/design-systems', 'design-systems');
+const REPO_SKILL = (slug: string) => gh(`/tree/main/skills/${slug}`, 'skill-source', slug);
+const REPO_DOCS = (file: string) => gh(`/blob/main/${file}`, 'docs', file);
 const DISCORD = 'https://discord.gg/9ptkbbqRu';
 
 // Lineage / inspiration projects — make every brand mention clickable.
@@ -616,7 +620,7 @@ export default function Page({ counts, github }: PageProps) {
                     </>
                   ),
                   src: imageAsset('lab-1.png', { width: 768, quality: 82 }),
-                  href: `${REPO_SKILLS}/guizang-ppt`,
+                  href: REPO_SKILL('guizang-ppt'),
                 },
                 {
                   badge: 'Media',
@@ -624,7 +628,7 @@ export default function Page({ counts, github }: PageProps) {
                   title: 'Synthetic Matter',
                   body: 'Gpt-image-2 + Seedance + HyperFrames. Image, video, audio — same chat surface as code.',
                   src: imageAsset('lab-2.png', { width: 768, quality: 82 }),
-                  href: `${REPO_SKILLS}/hyperframes`,
+                  href: REPO_SKILL('hyperframes'),
                 },
                 {
                   badge: 'Loop',
@@ -632,7 +636,7 @@ export default function Page({ counts, github }: PageProps) {
                   title: 'Prompt Choreography',
                   body: 'The interactive question form pops before a single pixel is improvised. 30s of radios beats 30min of redirects.',
                   src: imageAsset('lab-3.png', { width: 768, quality: 82 }),
-                  href: `${REPO_SKILLS}/design-brief`,
+                  href: REPO_SKILL('design-brief'),
                 },
                 {
                   badge: 'Critique',
@@ -640,7 +644,7 @@ export default function Page({ counts, github }: PageProps) {
                   title: 'Visual Reasoning',
                   body: '5-dim self-critique gates every artifact: philosophy · hierarchy · execution · specificity · restraint.',
                   src: imageAsset('lab-4.png', { width: 768, quality: 82 }),
-                  href: `${REPO_SKILLS}/critique`,
+                  href: REPO_SKILL('critique'),
                 },
                 {
                   badge: 'Runtime',
@@ -808,7 +812,7 @@ export default function Page({ counts, github }: PageProps) {
               <a
                 className='work-card'
                 data-reveal
-                href={`${REPO_SKILLS}/guizang-ppt`}
+                href={REPO_SKILL('guizang-ppt')}
                 {...ext}
               >
                 <div className='label-row'>

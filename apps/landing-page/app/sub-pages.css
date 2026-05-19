@@ -770,6 +770,27 @@ body.sub-page {
   color: var(--ink);
 }
 
+.install-block {
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--paper-warm) 70%, white);
+  padding: 24px;
+}
+.install-command {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid var(--line-soft);
+  background: var(--bone);
+  padding: 14px;
+}
+.install-command code {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
 .atmosphere {
   font-family: var(--serif);
   font-style: italic;
@@ -855,6 +876,7 @@ body.sub-page {
   .detail-meta { grid-template-columns: 1fr; gap: 6px 0; }
   .detail-meta dt { padding-top: 8px; }
   .detail-meta dd { padding-bottom: 8px; border-bottom: 1px solid var(--line-soft); }
+  .install-command { align-items: stretch; flex-direction: column; }
 }
 
 /* ---------- sub-page footer ---------- */
