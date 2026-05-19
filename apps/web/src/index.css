@@ -1215,6 +1215,11 @@ code {
   text-overflow: ellipsis;
   flex: 0 1 auto;
   min-width: 0;
+  /* Display-layer fix: project names are stored as typed (often all-lowercase when
+     auto-generated), so capitalize the first letter of each word for readability.
+     Trade-off: brand names with intentional mid-word capitalisation (e.g. "iPhone")
+     will render incorrectly as "IPhone". A storage-layer fix (preserving input casing
+     on create/rename) would make this rule redundant and should remove it when landed. */
   text-transform: capitalize;
 }
 .app-project-title .meta {
