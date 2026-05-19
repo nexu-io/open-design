@@ -359,6 +359,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Extended the `.commands.sh` sidecar so a write-capable receiver automatically attempts `gh workflow run ci.yml --ref codex/electron-to-tauri-migration` after the verified branch push when `gh` is available. If dispatch is disabled with `TAURI_NATIVE_CI_TRIGGER=0` or `gh` is unavailable, the same script prints the manual workflow dispatch and draft PR commands.
 - 2026-05-20: Added branch-head-aware CI report waiting to `scripts/download-tauri-m4-reports.ts`. Receivers can now pass `--expected-head <sha> --wait` so post-dispatch report download waits for the matching migration commit instead of accidentally consuming an older completed branch run.
 - 2026-05-20: Updated the draft PR fallback in the handoff command sidecar to write and reference a template-complete `.tmp/tauri-migration-pr-body.md`, so using PR creation to trigger native CI still follows the repository PR body requirements.
+- 2026-05-20: Aligned the generated handoff Markdown note and this runbook with the executable `.commands.sh` receiver flow: checksum verification, import, push, remote-head verification, optional workflow dispatch, template PR body generation, branch-head-aware report waiting, and guarded M4→M5 advance.
 
 ### Platform Gate Runners
 
@@ -474,21 +475,23 @@ gh pr create --draft \
   --body-file .tmp/tauri-migration-pr-body.md
 ```
 
-The command script writes `.tmp/tauri-migration-pr-body.md` before printing that fallback. Set `TAURI_PR_BODY_PATH=<path>` if the receiving checkout should write the template-complete draft PR body somewhere else.
+The command script writes `.tmp/tauri-migration-pr-body.md` before printing that fallback. Set `TAURI_PR_BODY_PATH=<path>` if the receiving checkout should write the template-complete draft PR body somewhere else. Set `TAURI_NATIVE_CI_TRIGGER=0` to skip automatic workflow dispatch, or `TAURI_NATIVE_CI_WAIT=1` to let the command script wait for matching native CI reports and run the guarded M4→M5 advance after dispatch.
 
 If the bundle is copied outside the extracted handoff directory, use the manifest form instead and add `--bundle /path/to/open-design-tauri-migration.bundle` to override only the file location.
 
 Do not wait on platform CI until the remote verifier prints the same branch head recorded in the manifest. If it fails, re-push or regenerate the handoff before treating CI results as M4 evidence.
 
-If both pass, download and verify their `open-design-ci-win-tauri-e2e-report` and `open-design-ci-linux-tauri-e2e-report` artifacts:
+If both pass, download and verify their `open-design-ci-win-tauri-e2e-report` and `open-design-ci-linux-tauri-e2e-report` artifacts. Prefer the branch-head-aware wait path after dispatch:
 
 ```bash
 pnpm exec tsx scripts/download-tauri-m4-reports.ts \
-  --run-id <github-run-id> \
+  --branch codex/electron-to-tauri-migration \
+  --expected-head <migration-commit-sha> \
+  --wait \
   --output-dir /tmp/open-design-tauri-m4-reports
 ```
 
-When `--run-id` is omitted, the script uses `gh run list` to select the latest completed `ci.yml` run for `codex/electron-to-tauri-migration`. Prefer adding `--expected-head <migration-commit-sha> --wait` after a manual dispatch so the downloader waits for the run that matches the pushed handoff commit instead of consuming stale branch evidence. The Windows report must prove NSIS build/install/start/eval/screenshot/stop/uninstall. The Linux report must prove AppImage build/install/start/eval/screenshot/stop/uninstall plus headless install/start/stop. If you are ready to mutate the migration branch immediately after verified downloads, add `--advance`; the script will run `scripts/advance-tauri-migration-m4-m5.ts` against the downloaded reports and apply the guarded M5 default flip.
+When `--run-id` is omitted, the script uses `gh run list` to select a completed `ci.yml` run for `codex/electron-to-tauri-migration`; `--expected-head <migration-commit-sha> --wait` keeps it from consuming stale branch evidence. If you already know the completed run id, either set `GITHUB_RUN_ID=<github-run-id>` before rerunning the packaged command sidecar or pass `--run-id <github-run-id>` directly to `scripts/download-tauri-m4-reports.ts`. The Windows report must prove NSIS build/install/start/eval/screenshot/stop/uninstall. The Linux report must prove AppImage build/install/start/eval/screenshot/stop/uninstall plus headless install/start/stop. If you are ready to mutate the migration branch immediately after verified downloads, add `--advance`; the script will run `scripts/advance-tauri-migration-m4-m5.ts` against the downloaded reports and apply the guarded M5 default flip.
 
 After extracting the report artifacts, verify the required evidence mechanically:
 
