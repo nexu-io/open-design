@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -42,6 +42,7 @@ async function main(): Promise<void> {
       bundlePath,
     ]);
     const bundleSha256 = readSha256(createOutput.stdout);
+    const manifestBundlePath = args.manifest == null ? bundlePath : bundlePathForManifest(args.manifest, bundlePath);
     const importCommand = receivingImportCommand({
       branch: args.branch,
       bundlePath,
@@ -54,7 +55,7 @@ async function main(): Promise<void> {
         baseHead,
         branch: args.branch,
         branchHead,
-        bundlePath,
+        bundlePath: manifestBundlePath,
         bundleSha256,
         importCommand,
         source: args.cwd,
@@ -280,6 +281,11 @@ function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
+function bundlePathForManifest(manifestPath: string, bundlePath: string): string {
+  const manifestRelativePath = relative(dirname(manifestPath), bundlePath);
+  return manifestRelativePath.length === 0 ? bundlePath : manifestRelativePath;
+}
+
 async function writeManifest(
   path: string,
   manifest: {
@@ -346,6 +352,8 @@ async function writeNote(
       note.importCommand,
       "git push -u origin " + shellWord(note.branch),
       "```",
+      "",
+      "If this handoff directory is copied elsewhere, replace only the manifest path in the command above. The manifest records the bundle path relative to itself, so keep the bundle and manifest in the same copied directory.",
       "",
       "Confirm the remote branch matches this handoff:",
       "",

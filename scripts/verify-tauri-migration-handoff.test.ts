@@ -57,7 +57,7 @@ test("verify-tauri-migration-handoff round-trips a bundle through a receiving ch
   assert.equal(manifest.schemaVersion, 1);
   assert.equal(manifest.branch, migrationBranch);
   assert.equal(manifest.branchHead, sourceHead);
-  assert.equal(manifest.bundlePath, bundlePath);
+  assert.equal(manifest.bundlePath, "handoff.bundle");
   assert.match(manifest.bundleSha256, /^[0-9a-f]{64}$/);
   assert.match(manifest.importCommand, /import-tauri-migration-bundle/);
   assert.match(manifest.importCommand, new RegExp(`--manifest '${escapeRegExp(manifestPath)}'`));
@@ -65,6 +65,7 @@ test("verify-tauri-migration-handoff round-trips a bundle through a receiving ch
   assert.match(note, /# Tauri Migration Handoff/);
   assert.match(note, new RegExp(`Branch: \`${migrationBranch.replaceAll("/", "\\/")}\` @ \`${sourceHead}\``));
   assert.match(note, new RegExp(`--manifest '${escapeRegExp(manifestPath)}' \\\\`));
+  assert.match(note, /manifest records the bundle path relative to itself/);
   assert.match(note, /verify-tauri-migration-remote/);
   assert.match(note, /advance-tauri-migration-m4-m5/);
 });
@@ -97,7 +98,7 @@ test("verify-tauri-migration-handoff can derive standard artifact paths from out
     bundlePath: string;
   };
   assert.equal(manifest.branchHead, sourceHead);
-  assert.equal(manifest.bundlePath, bundlePath);
+  assert.equal(manifest.bundlePath, "open-design-tauri-migration.bundle");
   assert.match(await readFile(notePath, "utf8"), new RegExp(`Bundle: \`${escapeRegExp(bundlePath)}\``));
 });
 

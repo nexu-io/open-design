@@ -60,6 +60,35 @@ test("import-tauri-migration-bundle can import from the handoff manifest", async
   assert.equal(targetHead, sourceHead);
 });
 
+test("import-tauri-migration-bundle resolves manifest bundle paths relative to the manifest", async (t) => {
+  const { bundlePath, sourceRepo, targetRepo } = await createBundleFixture(t, "open-design-tauri-import-relative-");
+  const sourceHead = (await git(sourceRepo, "rev-parse", migrationBranch)).stdout.trim();
+  const sha256 = await sha256File(bundlePath);
+  const manifestPath = join(dirname(bundlePath), "handoff.json");
+  await writeFile(
+    manifestPath,
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        branch: migrationBranch,
+        branchHead: sourceHead,
+        bundlePath: "handoff.bundle",
+        bundleSha256: sha256,
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+
+  const result = await runImportScript(targetRepo, "--manifest", manifestPath);
+
+  assert.match(result.stdout, new RegExp(`Imported Tauri migration bundle: ${escapeRegExp(bundlePath)}`));
+  assert.match(result.stdout, new RegExp(`Branch: ${migrationBranch.replaceAll("/", "\\/")} @ ${sourceHead}`));
+  const targetHead = (await git(targetRepo, "rev-parse", migrationBranch)).stdout.trim();
+  assert.equal(targetHead, sourceHead);
+});
+
 test("import-tauri-migration-bundle rejects checksum mismatches before fetch", async (t) => {
   const { bundlePath, targetRepo } = await createBundleFixture(t, "open-design-tauri-import-sha-");
 
