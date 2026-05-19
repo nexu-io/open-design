@@ -29,6 +29,13 @@ test("package-tauri-migration-handoff creates a tarball and checksum sidecar", a
   assert.match(result.stdout, new RegExp(`Bundle SHA-256: ${bundleSha256}`));
   assert.match(result.stdout, new RegExp(`Archive: ${escapeRegExp(output)}`));
   assert.match(result.stdout, /Archive SHA-256: [0-9a-f]{64}/);
+  assert.match(result.stdout, /Receiver push command:/);
+  assert.match(result.stdout, /push-tauri-migration-handoff/);
+  assert.match(result.stdout, new RegExp(`--archive '${escapeRegExp(output)}'`));
+  assert.match(result.stdout, /download-tauri-m4-reports/);
+  assert.match(result.stdout, /--advance/);
+  assert.match(result.stdout, /tauri-migration-status/);
+  assert.match(result.stdout, new RegExp(`--handoff-dir '${escapeRegExp(handoffDir)}'`));
   await access(output);
   const checksum = await readFile(`${output}.sha256`, "utf8");
   assert.match(checksum, new RegExp(`^[0-9a-f]{64}  ${escapeRegExp(basename(output))}\\n$`));

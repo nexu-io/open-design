@@ -50,6 +50,31 @@ async function main(): Promise<void> {
       `Archive: ${archivePath}`,
       `Archive SHA-256: ${archiveSha256}`,
       `Checksum: ${checksumPath}`,
+      "Receiver push command:",
+      indent(
+        [
+          "pnpm exec tsx scripts/push-tauri-migration-handoff.ts \\",
+          `  --archive ${shellQuote(archivePath)} \\`,
+          "  --remote origin",
+        ].join("\n"),
+      ),
+      "After native CI reports are available:",
+      indent(
+        [
+          "pnpm exec tsx scripts/download-tauri-m4-reports.ts \\",
+          "  --run-id <github-run-id> \\",
+          "  --output-dir /tmp/open-design-tauri-m4-reports \\",
+          "  --advance",
+        ].join("\n"),
+      ),
+      "Status check:",
+      indent(
+        [
+          "pnpm exec tsx scripts/tauri-migration-status.ts \\",
+          `  --handoff-dir ${shellQuote(args.handoffDir)} \\`,
+          "  --remote origin",
+        ].join("\n"),
+      ),
       "",
     ].join("\n"),
   );
@@ -178,6 +203,17 @@ async function sha256File(path: string): Promise<string> {
     hash.update(chunk);
   }
   return hash.digest("hex");
+}
+
+function indent(value: string): string {
+  return value
+    .split(/\r?\n/)
+    .map((line) => `  ${line}`)
+    .join("\n");
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 try {
