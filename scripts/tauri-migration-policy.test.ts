@@ -121,6 +121,34 @@ test("evaluateTauriMigrationOrder rejects checked dependency cleanup with stale 
   assertContains(violations, "pnpm-lock.yaml importers still include");
 });
 
+test("evaluateTauriMigrationOrder accepts the final post-M6 cleanup state", () => {
+  const violations = evaluateTauriMigrationOrder(
+    postM5Input({
+      migrationDoc: postM5MigrationDoc({
+        m6Checked: [
+          m6ElectronDepsLabel,
+          m6ElectronRuntimeLabel,
+          m6ElectronResourcesLabel,
+          m6ElectronTestsLabel,
+          m6ElectronGuidanceLabel,
+        ],
+      }),
+      desktopPackageJson: packageJsonWithoutElectronDeps(),
+      packagedPackageJson: packageJsonWithoutElectronDeps(),
+      toolsDevConfig: tauriOnlyToolsConfig(),
+      toolsPackConfig: tauriOnlyToolsConfig(),
+      toolsPackPackageJson: packageJsonWithoutElectronDeps(),
+      pnpmLock: lockfileWithoutElectronDeps(),
+      remainingElectronRuntimeFiles: [],
+      remainingElectronResourceFiles: [],
+      electronTestReferenceFiles: [],
+      electronGuidanceReferenceFiles: [],
+    }),
+  );
+
+  assert.deepEqual(violations, []);
+});
+
 function assertContains(violations: string[], expected: string): void {
   assert.ok(
     violations.some((violation) => violation.includes(expected)),
@@ -204,6 +232,13 @@ function toolsConfig(defaultRuntime: Runtime): string {
   return [
     'export const DESKTOP_RUNTIME_KINDS = ["electron", "tauri"] as const;',
     `export const DEFAULT_DESKTOP_RUNTIME = "${defaultRuntime}";`,
+  ].join("\n");
+}
+
+function tauriOnlyToolsConfig(): string {
+  return [
+    'export const DESKTOP_RUNTIME_KINDS = ["tauri"] as const;',
+    'export const DEFAULT_DESKTOP_RUNTIME = "tauri";',
   ].join("\n");
 }
 
