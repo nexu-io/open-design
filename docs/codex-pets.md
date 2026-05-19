@@ -82,11 +82,30 @@ Notes:
   back to a sensible default (folder name → display name, empty
   description, etc.).
 
+## Corner anchor
+
+The pet overlay anchors to one of four screen corners. Pet Settings exposes a
+four-way picker (`top-left`, `top-right`, `bottom-left`, `bottom-right`);
+default is `bottom-right`. The choice is persisted in localStorage as
+`PetConfig.corner` and is web-only — there is no daemon or CLI surface for
+pet configuration today, consistent with the other web-local prefs (`theme`,
+`accentColor`). Legacy configs without the field hydrate to `bottom-right`
+through `normalizePet`.
+
+The chosen corner drives inline positioning in `PetOverlay`:
+`cornerStyle()` returns only the two relevant CSS edges (`top`/`bottom`
+plus `left`/`right`) so the other axes are left undefined and the existing
+drag math still works. The speech-bubble alignment and tail position are
+overridden via `[data-corner='top-left']` / `[data-corner='bottom-left']`
+CSS rules in `apps/web/src/index.css` so the bubble and its tail render on
+the correct side of the sprite for left-anchored corners.
+
 ## Related code
 
 - Daemon registry + manifest validation: `apps/daemon/src/codex-pets.ts`
 - HTTP routes (list + spritesheet): `apps/daemon/src/server.ts`
 - Web list / adopt UI: `apps/web/src/components/pet/PetSettings.tsx`
+- Pet overlay positioning: `apps/web/src/components/pet/PetOverlay.tsx`
 - Shared response types: `packages/contracts/src/api/registry.ts`
 - Vendored skill source: `skills/hatch-pet/`
 - Community catalog sync script: `scripts/sync-community-pets.ts`
