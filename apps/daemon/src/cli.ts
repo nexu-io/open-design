@@ -201,6 +201,7 @@ const PLUGIN_LIST_BOOLEAN_FLAGS = new Set([
 ]);
 
 const SUBCOMMAND_MAP = {
+  agent: runAgent,
   artifacts: runArtifacts,
   media: runMedia,
   mcp: runMcp,
@@ -3657,6 +3658,85 @@ and bare marketplace names resolved through configured registry sources.`);
 
 async function projectDaemonUrl(flags) {
   return cliDaemonUrl(flags);
+}
+
+const AGENT_STRING_FLAGS = new Set(['daemon-url', 'model', 'reasoning']);
+const AGENT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
+
+async function runAgent(args) {
+  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage:
+  od agent test <agentId> [--model <id>] [--reasoning <effort>] [--json]
+
+Runs the same /api/test/connection probe the Settings dialog drives, against
+the named local agent. The full response (including structured diagnostics:
+phase, binaryPath, sanitized stderr excerpt, and recovery hints) is printed
+to stdout. With --json the whole envelope is emitted as one JSON object so
+external agents and pipelines can \`jq .diagnostics.recoveryHints\`.
+
+Common options:
+  --daemon-url <url>   Open Design daemon HTTP base.
+  --json               Emit raw JSON envelope.`);
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+  const sub = args[0];
+  if (sub !== 'test') {
+    console.error(`unknown subcommand: od agent ${sub}. Try \`od agent --help\`.`);
+    process.exit(2);
+  }
+  const rest = args.slice(1);
+  const flags = parseFlags(rest, { string: AGENT_STRING_FLAGS, boolean: AGENT_BOOLEAN_FLAGS });
+  const agentId = rest.find((a) => !a.startsWith('-'));
+  if (!agentId) {
+    console.error('Usage: od agent test <agentId> [--model <id>] [--reasoning <effort>] [--json]');
+    process.exit(2);
+  }
+  const base = (await cliDaemonBaseUrl(flags));
+  const body = { mode: 'agent', agentId };
+  if (typeof flags.model === 'string' && flags.model.length > 0) body.model = flags.model;
+  if (typeof flags.reasoning === 'string' && flags.reasoning.length > 0) body.reasoning = flags.reasoning;
+  let resp;
+  try {
+    resp = await fetch(`${base}/api/test/connection`, {
+      method:  'POST',
+      headers: { 'content-type': 'application/json' },
+      body:    JSON.stringify(body),
+    });
+  } catch (err) {
+    return exitWithStructuredError({
+      code:    'daemon-not-running',
+      message: `Cannot reach daemon at ${base}: ${err?.message ?? err}`,
+    });
+  }
+  if (!resp.ok) return structuredHttpFailure(resp);
+  const data = await resp.json();
+  if (flags.json) {
+    process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+    if (data?.ok === false) process.exit(1);
+    return;
+  }
+  const okLabel = data?.ok ? 'OK' : 'FAIL';
+  const kind = data?.kind ?? 'unknown';
+  const agentName = data?.agentName ?? agentId;
+  console.log(`${okLabel}  ${agentName} (${agentId}) → ${kind}`);
+  if (typeof data?.detail === 'string' && data.detail.length > 0) {
+    console.log(`  detail: ${data.detail}`);
+  }
+  const diag = data?.diagnostics;
+  if (diag && typeof diag === 'object') {
+    console.log(`  phase: ${diag.phase}`);
+    if (diag.binaryPath) console.log(`  binaryPath: ${diag.binaryPath}`);
+    if (diag.binaryVersion) console.log(`  binaryVersion: ${diag.binaryVersion}`);
+    if (typeof diag.stderrExcerpt === 'string' && diag.stderrExcerpt.length > 0) {
+      console.log('  stderr:');
+      for (const line of diag.stderrExcerpt.split('\n')) console.log(`    ${line}`);
+    }
+    if (Array.isArray(diag.recoveryHints) && diag.recoveryHints.length > 0) {
+      console.log('  next steps:');
+      for (const hint of diag.recoveryHints) console.log(`    - ${hint}`);
+    }
+  }
+  if (!data?.ok) process.exit(1);
 }
 
 function safeReadJsonFile(p) {

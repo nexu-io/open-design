@@ -48,7 +48,9 @@ import {
   validateBaseUrl,
   type AgentTestRequest,
   type BaseUrlValidationResult,
+  type ConnectionTestDiagnostics,
   type ConnectionTestKind,
+  type ConnectionTestPhase,
   type ConnectionTestProtocol,
   type ConnectionTestResponse,
   type ParsedBaseUrl,
@@ -301,6 +303,128 @@ export function redactSecrets(
     redacted = redacted.replace(new RegExp(escapeRegExp(secret), 'g'), '[REDACTED]');
   }
   return redacted;
+}
+
+// Diagnostics envelope helpers. Pure functions: no I/O, no
+// process.env reads, safe to exercise as plain unit tests. The agent
+// connection test attaches the result to every agent-mode response so the
+// Settings dialog and `od agent test` CLI can render an actionable error
+// without parsing the free-form `detail` string.
+
+export const STDERR_EXCERPT_MAX_CHARS = 500;
+
+// CSI (`\x1b[…<final>`) and a few private-mode sequences common in CLI
+// output (`\x1b[?25l` cursor toggles, `\x1b[?1049h` alternate screen).
+const ANSI_ESCAPE_RE = /\x1b\[[0-9;?]*[A-Za-z]/g;
+
+export function sanitizeStderrExcerpt(
+  raw: string | null | undefined,
+): string | null {
+  if (typeof raw !== 'string') return null;
+  const stripped = raw.replace(ANSI_ESCAPE_RE, '').replace(/\r/g, '');
+  const redacted = redactSecrets(stripped).trim();
+  if (redacted.length === 0) return null;
+  if (redacted.length <= STDERR_EXCERPT_MAX_CHARS) return redacted;
+  return redacted.slice(redacted.length - STDERR_EXCERPT_MAX_CHARS);
+}
+
+interface RecoveryHintInput {
+  phase: ConnectionTestPhase;
+  kind: ConnectionTestKind;
+  agentId: string;
+}
+
+const AGENT_INSTALL_URL = 'https://github.com/nexu-io/open-design#local-agents';
+
+function claudeAuthHints(): string[] {
+  return [
+    'Run `claude /login` to refresh your Anthropic credentials, then retry.',
+    'If you keep multiple Anthropic profiles, point CLAUDE_CONFIG_DIR at the correct directory before retesting.',
+  ];
+}
+
+function codexAuthHints(): string[] {
+  return [
+    'Run `codex login` to refresh your Codex credentials, or set CODEX_API_KEY in Settings → CLI environment.',
+  ];
+}
+
+function authHintsFor(agentId: string): string[] {
+  if (agentId === 'claude') return claudeAuthHints();
+  if (agentId === 'codex') return codexAuthHints();
+  return [
+    `Re-authenticate your ${agentId} CLI (run its login subcommand or refresh its credentials) and retry the test.`,
+  ];
+}
+
+function spawnFailureHints(agentId: string): string[] {
+  const hints = [
+    `Your ${agentId} CLI may be outdated; reinstall or upgrade it from your package manager (for example, \`brew upgrade ${agentId}\` or \`npm install -g ${agentId}\`).`,
+    `Inspect the captured stderr for the exit reason, then rerun \`${agentId} --version\` from the same terminal Open Design was launched from.`,
+  ];
+  if (agentId === 'codex') {
+    hints.push('If you set a custom CODEX_BIN, verify the file exists and is executable, or clear the override in Settings.');
+  }
+  return hints;
+}
+
+export function recoveryHintsFor(args: RecoveryHintInput): string[] {
+  const { phase, kind, agentId } = args;
+  if (kind === 'success') return [];
+  let hints: string[];
+  if (phase === 'binary_resolution' || kind === 'agent_not_installed') {
+    hints = [
+      `Install the ${agentId} CLI and make sure it is on your PATH, then click Test again.`,
+      `See the local-agents setup guide: ${AGENT_INSTALL_URL}`,
+    ];
+  } else if (phase === 'auth_probe' || kind === 'agent_auth_required') {
+    hints = authHintsFor(agentId);
+  } else if (kind === 'not_found_model' || phase === 'model_listing') {
+    hints = [
+      `The requested model is not advertised by the ${agentId} CLI. Pick a different model in Settings, or upgrade the CLI to a build that exposes it.`,
+      `Run \`${agentId} --version\` and compare with the model's release notes before retrying.`,
+    ];
+  } else if (kind === 'timeout') {
+    hints = [
+      `The ${agentId} CLI did not produce output within the test budget. Cold-starting heavy adapters can take 5–10 s — try again, or set OD_CONNECTION_TEST_AGENT_TIMEOUT_MS to extend the wait.`,
+    ];
+  } else if (phase === 'version_probe' || phase === 'spawn') {
+    hints = spawnFailureHints(agentId);
+  } else {
+    hints = [
+      `The ${agentId} CLI failed during the ${phase} phase. Inspect the captured stderr below for the exact error, then retry.`,
+      `Run \`${agentId} --version\` directly from a terminal to confirm the CLI is healthy.`,
+    ];
+  }
+  return hints.slice(0, 5).map((h) => (h.length > 200 ? `${h.slice(0, 199)}…` : h));
+}
+
+interface BuildAgentDiagnosticsInput {
+  agentId: string;
+  agentName: string;
+  kind: ConnectionTestKind;
+  phase: ConnectionTestPhase;
+  binaryPath: string | null;
+  binaryVersion: string | null;
+  stderrRaw: string | null;
+}
+
+export function buildAgentDiagnostics(
+  input: BuildAgentDiagnosticsInput,
+): ConnectionTestDiagnostics {
+  return {
+    agentId: input.agentId,
+    agentName: input.agentName || input.agentId,
+    phase: input.phase,
+    binaryPath: input.binaryPath,
+    binaryVersion: input.binaryVersion,
+    stderrExcerpt: sanitizeStderrExcerpt(input.stderrRaw),
+    recoveryHints: recoveryHintsFor({
+      phase: input.phase,
+      kind: input.kind,
+      agentId: input.agentId,
+    }),
+  };
 }
 
 type ProviderConnectionInput = ProviderTestRequest & { signal?: AbortSignal };
@@ -994,7 +1118,10 @@ export function createAgentSink(): AgentSink {
     if (event === 'stderr') {
       const chunk = data.chunk;
       if (typeof chunk === 'string') {
-        stderrTail = (stderrTail + chunk).slice(-400);
+        // Keep more headroom than the sanitizer's truncation budget so an
+        // ANSI escape sequence straddling the previous chunk boundary still
+        // arrives intact for `sanitizeStderrExcerpt` to strip cleanly.
+        stderrTail = (stderrTail + chunk).slice(-(STDERR_EXCERPT_MAX_CHARS + 100));
       }
       return;
     }
@@ -1109,8 +1236,17 @@ function delay(ms: number): Promise<void> {
   });
 }
 
+interface AgentDiagState {
+  phase: ConnectionTestPhase;
+  binaryPath: string | null;
+  binaryVersion: string | null;
+  agentName: string;
+  stderrRaw: string | null;
+}
+
 async function testAgentConnectionInternal(
   input: AgentConnectionInput,
+  diagState?: AgentDiagState,
 ): Promise<ConnectionTestResponse> {
   const start = Date.now();
   const model =
@@ -1119,6 +1255,11 @@ async function testAgentConnectionInternal(
       : 'default';
   const def = getAgentDef(input.agentId);
   if (!def) {
+    if (diagState) {
+      diagState.phase = 'binary_resolution';
+      diagState.binaryPath = null;
+      diagState.agentName = input.agentId;
+    }
     return {
       ok: false,
       kind: 'agent_not_installed',
@@ -1134,7 +1275,15 @@ async function testAgentConnectionInternal(
   );
   const executableResolution = resolveAgentLaunch(def, configuredAgentEnv);
   const resolvedBin = executableResolution.selectedPath;
+  if (diagState) {
+    diagState.agentName = def.name;
+    diagState.binaryPath = executableResolution.launchPath ?? null;
+  }
   if (!resolvedBin || !executableResolution.launchPath) {
+    if (diagState) {
+      diagState.phase = 'binary_resolution';
+      diagState.binaryPath = null;
+    }
     return {
       ok: false,
       kind: 'agent_not_installed',
@@ -1151,12 +1300,22 @@ async function testAgentConnectionInternal(
   let timer: ReturnType<typeof setTimeout> | null = null;
   let abortHandler: (() => void) | null = null;
   const sink = createAgentSink();
+  const recordStderr = () => {
+    if (!diagState) return;
+    const tail = sink.getStderrTail();
+    diagState.stderrRaw = tail.length > 0 ? tail : null;
+  };
+  const recordPhase = (phase: ConnectionTestPhase) => {
+    if (diagState) diagState.phase = phase;
+  };
 
   const resultFromAgentText = (text: string): ConnectionTestResponse => {
     const latencyMs = Date.now() - start;
     const rawSample = truncateSample(text);
     const sample = redactSecrets(rawSample);
+    recordStderr();
     if (rawSample && isLikelyModelErrorText(rawSample)) {
+      recordPhase('model_listing');
       const detail = redactSecrets(smokeFailureDetail(rawSample));
       console.warn(
         `[test:agent] ${def.name} → not_found_model: ${detail}`,
@@ -1170,6 +1329,7 @@ async function testAgentConnectionInternal(
         detail,
       };
     }
+    recordPhase('stream');
     if (!isSmokeOkReply(text)) {
       console.warn(
         `[test:agent] ${def.name} → connected_unexpected_sample: ${sample}`,
@@ -1191,8 +1351,10 @@ async function testAgentConnectionInternal(
     const detail = redactSecrets(
       error instanceof Error ? error.message : String(error),
     );
+    recordStderr();
     const auth = classifyAgentAuthFailure(input.agentId, detail);
     if (auth?.status === 'missing') {
+      recordPhase('auth_probe');
       console.warn(`[test:agent] ${def.name} → auth_required: ${detail}`);
       return {
         ok: false,
@@ -1204,6 +1366,7 @@ async function testAgentConnectionInternal(
       };
     }
     if (detail && isLikelyModelErrorText(detail)) {
+      recordPhase('model_listing');
       console.warn(
         `[test:agent] ${def.name} → not_found_model: ${detail}`,
       );
@@ -1216,6 +1379,7 @@ async function testAgentConnectionInternal(
         detail,
       };
     }
+    recordPhase('stream');
     console.warn(
       `[test:agent] ${def.name} → stream_error: ${detail}`,
     );
@@ -1233,6 +1397,9 @@ async function testAgentConnectionInternal(
     kind: 'timeout' | 'aborted',
   ): ConnectionTestResponse => {
     const latencyMs = Date.now() - start;
+    recordStderr();
+    const hasStreamOutput = sink.getText().trim().length > 0;
+    recordPhase(hasStreamOutput ? 'stream' : 'spawn');
     console.warn(`[test:agent] ${def.name} → ${kind} in ${(latencyMs / 1000).toFixed(1)}s`);
     return {
       ok: false,
@@ -1255,6 +1422,8 @@ async function testAgentConnectionInternal(
       );
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
+      recordPhase('spawn');
+      recordStderr();
       return {
         ok: false,
         kind: 'agent_spawn_failed',
@@ -1277,6 +1446,8 @@ async function testAgentConnectionInternal(
     const env = applyAgentLaunchEnv(baseEnv, executableResolution);
     const auth = await probeAgentAuthStatus(input.agentId, executableResolution.launchPath, env);
     if (auth?.status === 'missing') {
+      recordPhase('auth_probe');
+      recordStderr();
       return {
         ok: false,
         kind: 'agent_auth_required',
@@ -1334,6 +1505,8 @@ async function testAgentConnectionInternal(
         );
         const errnoCode = (winner.error as NodeJS.ErrnoException).code;
         const isMissing = errnoCode === 'ENOENT';
+        recordPhase(isMissing ? 'binary_resolution' : 'spawn');
+        recordStderr();
         console.warn(
           `[test:agent] ${def.name} → spawn_failed: ${detail}${guidance}`,
         );
@@ -1393,6 +1566,8 @@ async function testAgentConnectionInternal(
         .join(' · ');
       const auth = classifyAgentAuthFailure(input.agentId, rawDetail);
       if (auth?.status === 'missing') {
+        recordPhase('auth_probe');
+        recordStderr();
         console.warn(`[test:agent] ${def.name} → auth_required: ${redactSecrets(rawDetail)}`);
         return {
           ok: false,
@@ -1412,6 +1587,8 @@ async function testAgentConnectionInternal(
         env,
       });
       if (claudeDiagnostic) {
+        recordPhase(buffered ? 'stream' : 'spawn');
+        recordStderr();
         console.warn(
           `[test:agent] ${def.name} → claude_diagnostic: ${claudeDiagnostic.detail}`,
         );
@@ -1435,6 +1612,8 @@ async function testAgentConnectionInternal(
         )}${executableResolution.diagnostic ? ` ${executableResolution.diagnostic}` : ''}`,
       );
       const label = buffered ? 'exit_failed' : 'no_text';
+      recordPhase(buffered ? 'stream' : 'spawn');
+      recordStderr();
       console.warn(
         `[test:agent] ${def.name} → ${label} (${detail || 'no detail'}${guidance})`,
       );
@@ -1502,6 +1681,8 @@ async function testAgentConnectionInternal(
     return resultFromChildExit(winner);
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
+    recordPhase('spawn');
+    recordStderr();
     return {
       ok: false,
       kind: 'agent_spawn_failed',
@@ -1550,10 +1731,28 @@ async function testAgentConnectionInternal(
   }
 }
 
+function freshDiagState(agentId: string): AgentDiagState {
+  return {
+    phase: 'binary_resolution',
+    binaryPath: null,
+    binaryVersion: null,
+    agentName: agentId,
+    stderrRaw: null,
+  };
+}
+
+function attachDiagnostics(
+  response: ConnectionTestResponse,
+  envelope: ConnectionTestDiagnostics,
+): ConnectionTestResponse {
+  return { ...response, diagnostics: envelope };
+}
+
 export async function testAgentConnection(
   input: AgentConnectionInput,
 ): Promise<ConnectionTestResponse> {
-  const primaryResult = await testAgentConnectionInternal(input);
+  const primaryDiag = freshDiagState(input.agentId);
+  const primaryResult = await testAgentConnectionInternal(input, primaryDiag);
   const validatedPrefs = validateAgentCliEnv(input.agentCliEnv);
   const configuredCodexBin = validatedPrefs?.codex?.CODEX_BIN?.trim() || '';
   const configuredAgentEnv = agentCliEnvForAgent(validatedPrefs, input.agentId);
@@ -1569,16 +1768,37 @@ export async function testAgentConnection(
         childPathPrepend: [],
         diagnostic: null,
       };
+
+  const buildEnvelope = (
+    finalKind: ConnectionTestKind,
+    diag: AgentDiagState,
+    overrideBinaryPath?: string | null,
+  ): ConnectionTestDiagnostics => {
+    const binaryPath = overrideBinaryPath !== undefined ? overrideBinaryPath : diag.binaryPath;
+    return buildAgentDiagnostics({
+      agentId: input.agentId,
+      agentName: diag.agentName,
+      kind: finalKind,
+      phase: diag.phase,
+      binaryPath,
+      binaryVersion: diag.binaryVersion,
+      stderrRaw: diag.stderrRaw,
+    });
+  };
+
   if (
     input.agentId === 'codex' &&
     primaryResult.ok &&
     configuredCodexBin
   ) {
     if (executableResolution.configuredOverridePath) {
-      return {
+      const usedPath =
+        executableResolution.launchPath ?? executableResolution.configuredOverridePath;
+      const envelope = buildEnvelope(primaryResult.kind, primaryDiag, usedPath);
+      return attachDiagnostics({
         ...primaryResult,
         configuredExecutablePath: executableResolution.configuredOverridePath,
-        usedExecutablePath: executableResolution.launchPath ?? executableResolution.configuredOverridePath,
+        usedExecutablePath: usedPath,
         usedExecutableSource: 'configured',
         ...(executableResolution.pathResolvedPath
           ? { detectedExecutablePath: executableResolution.pathResolvedPath }
@@ -1588,14 +1808,17 @@ export async function testAgentConnection(
             executableResolution.configuredOverridePath,
           ),
         ),
-      };
+      }, envelope);
     }
     if (executableResolution.pathResolvedPath) {
-      return {
+      const usedPath =
+        executableResolution.launchPath ?? executableResolution.pathResolvedPath;
+      const envelope = buildEnvelope(primaryResult.kind, primaryDiag, usedPath);
+      return attachDiagnostics({
         ...primaryResult,
         configuredExecutablePath: configuredCodexBin,
         detectedExecutablePath: executableResolution.pathResolvedPath,
-        usedExecutablePath: executableResolution.launchPath ?? executableResolution.pathResolvedPath,
+        usedExecutablePath: usedPath,
         usedExecutableSource: 'fallback_invalid',
         detail: redactSecrets(
           codexInvalidConfiguredPathFallbackDetail(
@@ -1603,7 +1826,7 @@ export async function testAgentConnection(
             executableResolution.pathResolvedPath,
           ),
         ),
-      };
+      }, envelope);
     }
   }
   if (
@@ -1614,22 +1837,29 @@ export async function testAgentConnection(
     !executableResolution.pathResolvedPath ||
     executableResolution.configuredOverridePath === executableResolution.pathResolvedPath
   ) {
-    return primaryResult;
+    const envelope = buildEnvelope(primaryResult.kind, primaryDiag);
+    return attachDiagnostics(primaryResult, envelope);
   }
+  const fallbackDiag = freshDiagState(input.agentId);
   const fallbackResult = await testAgentConnectionInternal(
     {
       ...input,
       agentCliEnv: stripCodexBinOverride(validatedPrefs),
     },
+    fallbackDiag,
   );
   if (!fallbackResult.ok) {
-    return primaryResult;
+    const envelope = buildEnvelope(primaryResult.kind, primaryDiag);
+    return attachDiagnostics(primaryResult, envelope);
   }
-  return {
+  const usedPath =
+    executableResolution.launchPath ?? executableResolution.pathResolvedPath;
+  const envelope = buildEnvelope(fallbackResult.kind, fallbackDiag, usedPath);
+  return attachDiagnostics({
     ...fallbackResult,
     configuredExecutablePath: executableResolution.configuredOverridePath,
     detectedExecutablePath: executableResolution.pathResolvedPath,
-    usedExecutablePath: executableResolution.launchPath ?? executableResolution.pathResolvedPath,
+    usedExecutablePath: usedPath,
     usedExecutableSource: 'fallback_failed',
     detail: redactSecrets(
       codexExecutableFallbackSuccessDetail(
@@ -1637,5 +1867,5 @@ export async function testAgentConnection(
         executableResolution.pathResolvedPath,
       ),
     ),
-  };
+  }, envelope);
 }
