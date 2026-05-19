@@ -586,6 +586,7 @@ export const th: Dict = {
   'chat.conversationsAria': 'ประวัติ',
   'chat.newConversation': 'สนทนาใหม่',
   'chat.newConversationsTitle': 'เริ่มใหม่',
+  'chat.resumeConversation': 'ดำเนินการต่อในการสนทนาใหม่',
   'chat.conversationsHeading': 'บทสนทนาทั้งหมด',
   'chat.new': 'ใหม่',
   'chat.emptyConversations': 'ยังไม่มีบทสนทนา',

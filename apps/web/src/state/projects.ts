@@ -9,6 +9,8 @@ import type {
   AppliedPluginSnapshot,
   ApplyResult,
   CreatePluginShareProjectResponse,
+  HandoffRequest,
+  HandoffResponse,
   ImportFolderRequest,
   ImportFolderResponse,
   InstalledPluginRecord,
@@ -249,6 +251,30 @@ export async function createConversation(
     if (!resp.ok) return null;
     const json = (await resp.json()) as { conversation: Conversation };
     return json.conversation;
+  } catch {
+    return null;
+  }
+}
+
+// Synthesizes a self-contained "first user message" from the project's
+// chat transcript so a fresh conversation can resume work without the
+// user replaying context by hand. Fails soft (null) like the other
+// wrappers so a transport error surfaces as a toast, not a crash.
+export async function synthesizeHandoff(
+  projectId: string,
+  body: HandoffRequest,
+): Promise<HandoffResponse | null> {
+  try {
+    const resp = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/handoff`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+    );
+    if (!resp.ok) return null;
+    return (await resp.json()) as HandoffResponse;
   } catch {
     return null;
   }

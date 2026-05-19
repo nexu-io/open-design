@@ -66,6 +66,7 @@ import {
   patchProject,
   saveMessage,
   saveTabs,
+  synthesizeHandoff,
   type SaveMessageOptions,
 } from '../state/projects';
 import type { AppliedPluginSnapshot } from '@open-design/contracts';
@@ -468,6 +469,13 @@ export function ProjectView({
   // correctly gate new-conversation creation even during async loads.
   const messagesConversationIdRef = useRef<string | null>(null);
   const creatingConversationRef = useRef(false);
+  // Resume-conversation handoff (#462): once the new conversation is
+  // created we cannot call `handleSend` synchronously — its guards
+  // reject until that conversation's message DB read settles. We stash
+  // the synthesized prompt + target conversation id here and let a
+  // dedicated effect fire the auto-send once the conversation is ready,
+  // mirroring the PluginLoopHome auto-send pattern below.
+  const pendingResumeRef = useRef<{ conversationId: string; prompt: string } | null>(null);
   // Last conversation id this view pushed into the URL. Lets the
   // route -> active-conversation sync tell a genuine external navigation
   // apart from the URL merely lagging a local conversation switch.
@@ -491,6 +499,7 @@ export function ProjectView({
   // allowed to apply its result.
   const conversationsRefreshTokenRef = useRef(0);
   const [creatingConversation, setCreatingConversation] = useState(false);
+  const [resumingConversation, setResumingConversation] = useState(false);
   const currentConversationHasActiveRun = useMemo(
     () => messages.some((m) => m.role === 'assistant' && isActiveRunStatus(m.runStatus)),
     [messages],
@@ -508,7 +517,17 @@ export function ProjectView({
     || currentConversationHasActiveRun
     || failedMessagesConversationId === activeConversationId;
   const currentConversationActionDisabled = currentConversationBusy || currentConversationSendDisabled;
-  const newConversationDisabled = creatingConversation;
+  // Disabled during a resume too: an in-flight handoff synthesis ends in
+  // its own createConversation, so a concurrent "New conversation" click
+  // would spawn a second conversation behind the resumed one.
+  const newConversationDisabled = creatingConversation || resumingConversation;
+  // Resume needs a transcript to summarize, and must not race a busy
+  // conversation or a synthesis already in flight.
+  const resumeConversationDisabled =
+    resumingConversation
+    || creatingConversation
+    || currentConversationBusy
+    || messages.length === 0;
   const activeCompletionNotificationRunsRef = useRef<Set<string>>(new Set());
   const completedNotificationRunsRef = useRef<Set<string>>(new Set());
 
@@ -2293,6 +2312,61 @@ export function ProjectView({
     }
   }, [project.id, activeConversationId, messages.length]);
 
+  // #462 — "Resume conversation in new chat". Synthesizes a handoff
+  // prompt from the current transcript via the daemon, opens a fresh
+  // conversation in the same project, and auto-sends the prompt as that
+  // conversation's first user message. The old conversation is kept.
+  const handleResumeConversation = useCallback(async () => {
+    if (resumingConversation || creatingConversationRef.current) return;
+    if (currentConversationBusy) return;
+    // Nothing to hand off from an empty conversation.
+    if (messages.length === 0) return;
+    setResumingConversation(true);
+    setConversationLoadError(null);
+    try {
+      const result = await synthesizeHandoff(project.id, {
+        apiKey: config.apiKey,
+        baseUrl: config.baseUrl,
+        model: config.model,
+        maxTokens: effectiveMaxTokens(config),
+      });
+      if (!result) {
+        setProjectActionsToast({
+          message:
+            'Could not synthesize a handoff prompt. Check your API key and model in Settings, then try again.',
+          details: null,
+        });
+        return;
+      }
+      const fresh = await createConversation(project.id);
+      if (!fresh) {
+        setProjectActionsToast({
+          message: 'Could not create a conversation to resume into.',
+          details: null,
+        });
+        return;
+      }
+      // Hand the prompt to the auto-send effect, then switch to the new
+      // conversation — mirrors handleNewConversation's eager state reset
+      // so rapid clicks cannot double-create.
+      pendingResumeRef.current = { conversationId: fresh.id, prompt: result.prompt };
+      setMessages([]);
+      setStreaming(false);
+      streamingConversationIdRef.current = null;
+      setStreamingConversationId(null);
+      setMessagesConversationId(null);
+      messagesConversationIdRef.current = fresh.id;
+      setConversations((curr) => [fresh, ...curr]);
+      setActiveConversationId(fresh.id);
+      setError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not resume this conversation.';
+      setProjectActionsToast({ message, details: null });
+    } finally {
+      setResumingConversation(false);
+    }
+  }, [resumingConversation, currentConversationBusy, messages.length, project.id, config]);
+
   const handleSelectConversation = useCallback((id: string) => {
     if (id === activeConversationId && failedMessagesConversationId !== id) return;
     setMessages([]);
@@ -2824,6 +2898,28 @@ export function ProjectView({
     handleSend,
   ]);
 
+  // Resume-conversation auto-send (#462). When handleResumeConversation
+  // has stashed a pending prompt, fire it as the first user message of
+  // the freshly created conversation — but only once that conversation's
+  // message DB read has settled (`messagesConversationId` matches its
+  // id). Gating on the settled id rather than `messagesInitialized`
+  // matters here: resuming switches away from an already-loaded
+  // conversation, so `messagesInitialized` has a stale-true window the
+  // PluginLoopHome auto-send (fresh project mount) never sees. The ref
+  // is cleared before dispatch so React 18 strict-mode's double-invoke
+  // cannot fire the send twice.
+  useEffect(() => {
+    const pending = pendingResumeRef.current;
+    if (!pending) return;
+    if (activeConversationId !== pending.conversationId) return;
+    if (messagesConversationId !== pending.conversationId) return;
+    if (messages.length > 0) return;
+    if (streaming) return;
+    const prompt = pending.prompt;
+    pendingResumeRef.current = null;
+    void handleSend(prompt, [], []);
+  }, [activeConversationId, messagesConversationId, messages.length, streaming, handleSend]);
+
   // Wire the Critique Theater drop-in mount into the project workspace.
   // The hook reads the M1 Settings toggle out of the existing
   // `open-design:config` localStorage blob and stays in sync with the
@@ -3023,6 +3119,8 @@ export function ProjectView({
               onAssistantFeedback={handleAssistantFeedback}
               onNewConversation={handleNewConversation}
               newConversationDisabled={newConversationDisabled}
+              onResumeConversation={handleResumeConversation}
+              resumeConversationDisabled={resumeConversationDisabled}
               conversations={conversations}
               activeConversationId={activeConversationId}
               onSelectConversation={handleSelectConversation}

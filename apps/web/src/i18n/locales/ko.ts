@@ -631,6 +631,7 @@ export const ko: Dict = {
   'chat.conversationsAria': '대화 내역',
   'chat.newConversation': '새 대화 시작',
   'chat.newConversationsTitle': '새 대화',
+  'chat.resumeConversation': '새 대화에서 이어가기',
   'chat.conversationsHeading': '대화 목록',
   'chat.new': '새로 만들기',
   'chat.emptyConversations': '아직 대화가 없습니다.',

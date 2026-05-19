@@ -653,6 +653,7 @@ export const uk: Dict = {
   'chat.conversationsAria': 'Історія розмов',
   'chat.newConversation': 'Нова розмова',
   'chat.newConversationsTitle': 'Нова розмова',
+  'chat.resumeConversation': 'Продовжити в новій розмові',
   'chat.conversationsHeading': 'Розмови',
   'chat.new': 'Нова',
   'chat.emptyConversations': 'Розмов ще немає.',

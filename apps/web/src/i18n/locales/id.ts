@@ -748,6 +748,7 @@ export const id: Dict = {
   'chat.conversationsAria': 'Buka percakapan',
   'chat.newConversation': 'Percakapan baru',
   'chat.newConversationsTitle': 'Mulai percakapan baru',
+  'chat.resumeConversation': 'Lanjutkan di percakapan baru',
   'chat.conversationsHeading': 'Percakapan',
   'chat.new': 'Baru',
   'chat.emptyConversations': 'Belum ada percakapan.',

@@ -518,6 +518,7 @@ export const ja: Dict = {
   'chat.conversationsAria': '会話履歴',
   'chat.newConversation': '新しい会話',
   'chat.newConversationsTitle': '新しい会話',
+  'chat.resumeConversation': '新しい会話で再開',
   'chat.conversationsHeading': '会話',
   'chat.new': '新規',
   'chat.emptyConversations': 'まだ会話がありません。',

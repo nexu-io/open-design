@@ -631,6 +631,7 @@ export const fr: Dict = {
   'chat.conversationsAria': 'Historique des conversations',
   'chat.newConversation': 'Nouvelle conversation',
   'chat.newConversationsTitle': 'Nouvelle conversation',
+  'chat.resumeConversation': 'Reprendre dans une nouvelle conversation',
   'chat.conversationsHeading': 'Conversations',
   'chat.new': 'Nouvelle',
   'chat.emptyConversations': 'Aucune conversation pour l\'instant.',

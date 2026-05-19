@@ -737,6 +737,7 @@ export const zhCN: Dict = {
   'chat.conversationsAria': '对话历史',
   'chat.newConversation': '新建对话',
   'chat.newConversationsTitle': '新建对话',
+  'chat.resumeConversation': '在新对话中继续',
   'chat.conversationsHeading': '对话',
   'chat.new': '新建',
   'chat.emptyConversations': '还没有对话。',

@@ -520,6 +520,7 @@ export const esES: Dict = {
   'chat.conversationsAria': 'Historial de conversaciones',
   'chat.newConversation': 'Nueva conversación',
   'chat.newConversationsTitle': 'Nueva conversación',
+  'chat.resumeConversation': 'Reanudar en una conversación nueva',
   'chat.conversationsHeading': 'Conversaciones',
   'chat.new': 'Nueva',
   'chat.emptyConversations': 'Aún no hay conversaciones.',
