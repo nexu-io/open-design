@@ -13,12 +13,15 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import { PluginInputsForm } from '../../src/components/PluginInputsForm';
 
-let onChange: ReturnType<typeof vi.fn>;
-let onValidityChange: ReturnType<typeof vi.fn>;
+type OnChange = (values: Record<string, unknown>) => void;
+type OnValidityChange = (valid: boolean) => void;
+
+let onChange: ReturnType<typeof vi.fn<OnChange>>;
+let onValidityChange: ReturnType<typeof vi.fn<OnValidityChange>>;
 
 beforeEach(() => {
-  onChange = vi.fn();
-  onValidityChange = vi.fn();
+  onChange = vi.fn<OnChange>();
+  onValidityChange = vi.fn<OnValidityChange>();
 });
 
 afterEach(() => cleanup());

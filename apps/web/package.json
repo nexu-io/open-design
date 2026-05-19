@@ -28,30 +28,30 @@
     "test": "vitest run -c vitest.config.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.32.1",
+    "@anthropic-ai/sdk": "0.32.1",
     "@open-design/contracts": "workspace:*",
     "@open-design/platform": "workspace:*",
     "@open-design/sidecar": "workspace:*",
     "@open-design/sidecar-proto": "workspace:*",
-    "lucide-react": "^1.14.0",
-    "next": "^16.2.5",
-    "openai": "^6.36.0",
-    "posthog-js": "^1.205.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "lucide-react": "1.16.0",
+    "next": "16.2.6",
+    "openai": "6.38.0",
+    "posthog-js": "1.374.2",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.1.17",
-    "@testing-library/react": "^16.3.2",
-    "@types/jsdom": "^28.0.1",
-    "@types/node": "^20.17.10",
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
-    "jsdom": "29.1.0",
-    "postcss": "^8.5.6",
-    "tailwindcss": "^4.1.17",
-    "typescript": "^5.6.3",
-    "vitest": "^2.1.8"
+    "@tailwindcss/postcss": "4.3.0",
+    "@testing-library/react": "16.3.2",
+    "@types/jsdom": "28.0.3",
+    "@types/node": "20.19.39",
+    "@types/react": "18.3.28",
+    "@types/react-dom": "18.3.7",
+    "jsdom": "29.1.1",
+    "postcss": "8.5.14",
+    "tailwindcss": "4.3.0",
+    "typescript": "5.9.3",
+    "vitest": "4.1.6"
   },
   "engines": {
     "node": "~24"

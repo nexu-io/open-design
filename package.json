@@ -29,15 +29,24 @@
     "@open-design/tools-pack": "workspace:*",
     "@open-design/tools-pr": "workspace:*",
     "@open-design/tools-serve": "workspace:*",
-    "@types/node": "^20.17.10",
-    "tsx": "4.21.0",
-    "typescript": "^5.6.3"
+    "@types/node": "20.19.39",
+    "tsx": "4.22.2",
+    "typescript": "5.9.3"
   },
   "engines": {
     "node": "~24",
     "pnpm": ">=10.33.2 <11"
   },
   "pnpm": {
+    "overrides": {
+      "brace-expansion": "5.0.6",
+      "devalue": "5.8.1",
+      "fast-uri": "3.1.2",
+      "hono": "4.12.19",
+      "ip-address": "10.2.0",
+      "postcss": "8.5.14",
+      "yaml": "2.9.0"
+    },
     "onlyBuiltDependencies": [
       "better-sqlite3",
       "electron",
