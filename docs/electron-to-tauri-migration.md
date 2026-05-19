@@ -306,6 +306,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Added `scripts/create-tauri-migration-bundle.ts` to make the branch handoff repeatable. The script rejects tracked dirty worktrees, creates the bundle from the migration branch against `origin/main`, verifies it, and prints the bundled heads plus bundle size and SHA-256 for the receiving machine. `node --import tsx --test scripts/create-tauri-migration-bundle.test.ts` and `pnpm guard` passed.
 - 2026-05-20: Added `scripts/tauri-migration-status.ts` so maintainers can print the current phase, default runtime values, open M4/M5/M6 checklist items, git head/base, and next action list before each handoff or phase transition. `node --import tsx --test scripts/tauri-migration-status.test.ts` and `pnpm guard` passed.
 - 2026-05-20: Added `scripts/import-tauri-migration-bundle.ts` so the receiving machine verifies bundle SHA-256, `git bundle verify`, and bundled heads before fetching the migration branch. `node --import tsx --test scripts/import-tauri-migration-bundle.test.ts` and `pnpm guard` passed.
+- 2026-05-20: Added `scripts/verify-tauri-migration-handoff.ts` to locally prove the bundle handoff round-trip before asking a write-capable machine to push. It creates the bundle, seeds a temporary receiving checkout with the base commit, imports the bundle through the receiving-side script, and verifies the imported branch head. `node --import tsx --test scripts/verify-tauri-migration-handoff.test.ts` and `pnpm guard` passed.
 
 ### Platform Gate Runners
 
@@ -362,10 +363,11 @@ To collect native M4 evidence, push that branch with a credential that can write
 - `Packaged windows Tauri smoke`
 - `Packaged linux Tauri smoke`
 
-If direct push is blocked by credentials, create a verified git bundle from this machine and import it on a machine or account that can push to the repository:
+If direct push is blocked by credentials, create a verified git bundle from this machine, prove the bundle imports into a clean receiving checkout, and then import it on a machine or account that can push to the repository:
 
 ```bash
-pnpm exec tsx scripts/create-tauri-migration-bundle.ts --output /tmp/open-design-tauri-migration.bundle
+pnpm exec tsx scripts/verify-tauri-migration-handoff.ts \
+  --output /tmp/open-design-tauri-migration.bundle
 ```
 
 Keep the script output with the handoff notes. It records the migration branch head, `origin/main` base, bundle byte size, SHA-256, `git bundle verify` result, and bundled heads.

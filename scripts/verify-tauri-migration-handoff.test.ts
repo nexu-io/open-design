@@ -1,0 +1,79 @@
+import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
+import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import test from "node:test";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
+const scriptsRoot = dirname(fileURLToPath(import.meta.url));
+const repoRoot = resolve(scriptsRoot, "..");
+const handoffScript = join(scriptsRoot, "verify-tauri-migration-handoff.ts");
+const migrationBranch = "codex/electron-to-tauri-migration";
+
+test("verify-tauri-migration-handoff round-trips a bundle through a receiving checkout", async (t) => {
+  const sourceRepo = await createFixtureRepo(t, "open-design-tauri-handoff-pass-");
+  const sourceHead = (await git(sourceRepo, "rev-parse", migrationBranch)).stdout.trim();
+  const bundlePath = join(sourceRepo, "handoff.bundle");
+
+  const result = await runHandoffScript(
+    "--cwd",
+    sourceRepo,
+    "--branch",
+    migrationBranch,
+    "--base",
+    "main",
+    "--output",
+    bundlePath,
+  );
+
+  assert.match(result.stdout, /Verified Tauri migration bundle handoff round-trip/);
+  assert.match(result.stdout, new RegExp(`Branch: ${migrationBranch.replaceAll("/", "\\/")} @ ${sourceHead}`));
+  assert.match(result.stdout, /SHA-256: [0-9a-f]{64}/);
+  assert.match(result.stdout, /Temp retained: false/);
+  await access(bundlePath);
+});
+
+test("verify-tauri-migration-handoff rejects dirty source worktrees", async (t) => {
+  const sourceRepo = await createFixtureRepo(t, "open-design-tauri-handoff-dirty-");
+  await writeFile(join(sourceRepo, "feature.txt"), "dirty\n", "utf8");
+
+  await assert.rejects(
+    runHandoffScript("--cwd", sourceRepo, "--branch", migrationBranch, "--base", "main"),
+    /tracked worktree changes are present/,
+  );
+});
+
+async function createFixtureRepo(t: test.TestContext, prefix: string): Promise<string> {
+  const repo = await mkdtemp(join(tmpdir(), prefix));
+  t.after(() => void rm(repo, { force: true, recursive: true }));
+
+  await git(repo, "init", "--initial-branch=main");
+  await git(repo, "config", "user.email", "codex@example.test");
+  await git(repo, "config", "user.name", "Codex Test");
+  await writeFile(join(repo, "base.txt"), "base\n", "utf8");
+  await git(repo, "add", "base.txt");
+  await git(repo, "commit", "-m", "base");
+  await git(repo, "checkout", "-b", migrationBranch);
+  await writeFile(join(repo, "feature.txt"), "feature\n", "utf8");
+  await git(repo, "add", "feature.txt");
+  await git(repo, "commit", "-m", "feature");
+
+  return repo;
+}
+
+async function runHandoffScript(...args: string[]): Promise<{ stderr: string; stdout: string }> {
+  return execFileAsync(process.execPath, ["--import", "tsx", handoffScript, ...args], {
+    cwd: repoRoot,
+    maxBuffer: 1024 * 1024 * 4,
+  });
+}
+
+async function git(cwd: string, ...args: string[]): Promise<{ stderr: string; stdout: string }> {
+  return execFileAsync("git", args, {
+    cwd,
+    maxBuffer: 1024 * 1024,
+  });
+}
