@@ -57,6 +57,7 @@ import {
   findProvider,
   modelsForSurface,
 } from './media-models.js';
+import { assertExternalAssetUrl } from './connectionTest.js';
 import { resolveModelAlias, resolveProviderConfig } from './media-config.js';
 import {
   ensureProject,
@@ -2348,7 +2349,16 @@ async function renderSenseAudioImage(ctx: MediaContext, credentials: ProviderCon
   if (!url) {
     throw new Error('senseaudio image response missing url');
   }
-  const imgResp = await fetch(url);
+  // Mirror the chat-tool SSRF guard (byok-tools.ts): the gateway-returned
+  // `url` is attacker-controllable inside a successful response, so DNS-
+  // resolve it through validateBaseUrlResolved and refuse loopback /
+  // RFC1918 / metadata-service hosts. Pair with `redirect: 'error'` so a
+  // 3xx hop into private space is also blocked.
+  const urlCheck = await assertExternalAssetUrl(url);
+  if (!urlCheck.ok) {
+    throw new Error(`senseaudio image ${urlCheck.error}`);
+  }
+  const imgResp = await fetch(url, { redirect: 'error' });
   if (!imgResp.ok) {
     throw new Error(`senseaudio image fetch ${imgResp.status}`);
   }

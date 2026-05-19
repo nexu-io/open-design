@@ -17,32 +17,10 @@
 import path from 'node:path';
 import { writeFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
-import { validateBaseUrlResolved } from './connectionTest.js';
+import { assertExternalAssetUrl } from './connectionTest.js';
 import { resolveProviderConfig } from './media-config.js';
 import { IMAGE_MODELS } from './media-models.js';
 import { ensureProject } from './projects.js';
-
-// SSRF guard for URLs the SenseAudio gateway hands back. The primary
-// /v1/image/sync and /v1/video/create calls go through the user's
-// configured base URL which is already validated upstream, but the
-// returned `url` / `video_url` is attacker-controllable: a malicious
-// gateway could point us at http://169.254.169.254/... (AWS metadata)
-// or RFC1918 hosts to exfiltrate creds via secondary fetch. Resolve
-// the host through validateBaseUrlResolved and refuse non-loopback
-// internal addresses before downloading bytes.
-async function assertExternalAssetUrl(rawUrl: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  if (!rawUrl) return { ok: false, error: 'empty download url' };
-  const validated = await validateBaseUrlResolved(rawUrl);
-  if (validated.error || !validated.parsed) {
-    return {
-      ok: false,
-      error: validated.forbidden
-        ? `senseaudio returned a blocked download url (${validated.error ?? 'internal address'})`
-        : `senseaudio returned an invalid download url: ${validated.error ?? 'unknown reason'}`,
-    };
-  }
-  return { ok: true };
-}
 
 // SenseAudio image model allowlist — derived from the shared media-models
 // registry so adding a new SenseAudio image model in one place (media-models)
