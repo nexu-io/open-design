@@ -32,7 +32,7 @@ The migration stays parallel until parity is proven. Electron remains the defaul
 | M2 Bridge hardening | 2026-06-01 to 2026-06-03 | Prove renderer bridge parity. | `openExternal`, `pickAndImport`, `openProjectPath`, analytics desktop detection, and browser print fallback are covered by web + runtime smoke. |
 | M3 Packaging parallel path | 2026-06-04 to 2026-06-10 | Add Tauri as an opt-in `tools-pack` runtime. | `tools-pack mac|win|linux build --desktop-runtime tauri` produces namespace-mapped artifacts and keeps existing install/start/stop/logs/inspect command shape. |
 | M4 Platform package smoke | 2026-06-11 to 2026-06-17 | Validate installable Tauri artifacts. | mac `.app/.dmg`, Windows NSIS, and Linux AppImage/headless flows start daemon/web/desktop and pass inspect status/eval/screenshot. MSI is tracked as a post-flip release follow-up unless release ownership makes it mandatory. |
-| M5 Default flip | 2026-06-18 to 2026-06-19 | Make Tauri the default desktop runtime. | `tools-dev` and `tools-pack` default to Tauri; Electron remains available behind an explicit fallback flag for one release window. |
+| M5 Default flip | 2026-06-18 to 2026-06-19 | Make Tauri the default desktop runtime. | `tools-dev`, `tools-pack`, and `release-beta` default to Tauri; Electron remains available behind an explicit fallback flag for one release window. |
 | M6 Electron removal | 2026-06-22 to 2026-06-24 | Remove Electron-only runtime code and dependencies. | Electron deps, builder hooks, packaged Electron entry glue, and Electron-only docs/tests are removed or replaced. |
 
 ## Work Breakdown
@@ -94,6 +94,7 @@ The migration stays parallel until parity is proven. Electron remains the defaul
 
 - [ ] Change `tools-dev` default desktop runtime to Tauri.
 - [ ] Change `tools-pack` default desktop runtime to Tauri.
+- [ ] Change `release-beta` desktop runtime workflow default to Tauri.
 - [ ] Keep Electron fallback explicit during the transition window.
 - [ ] Update README, architecture docs, and directory guidance to describe Tauri as the primary runtime.
 
@@ -237,6 +238,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Added a guarded `--update-migration-doc` mode to `scripts/verify-tauri-platform-gates.ts`. It requires both Windows and Linux reports to pass, then marks the three remaining M4 platform checkboxes complete and appends an execution-log entry. `node --import tsx --test scripts/verify-tauri-platform-gates.test.ts` and `tsc -p scripts/tsconfig.json --noEmit` passed.
 - 2026-05-20: Centralized the current Electron default desktop runtime for `tools-dev` and `tools-pack` behind `DEFAULT_DESKTOP_RUNTIME` constants without flipping behavior. This keeps M5 as an explicit constant change after M4 evidence lands and keeps CLI help/tests tied to the same value. `pnpm --filter @open-design/tools-dev test`, `pnpm --filter @open-design/tools-dev typecheck`, `pnpm --filter @open-design/tools-pack test -- config tauri-targets`, `pnpm --filter @open-design/tools-pack typecheck`, and `pnpm guard` passed.
 - 2026-05-20: Added a `pnpm guard` migration-order check that blocks `DEFAULT_DESKTOP_RUNTIME=tauri` until all three M4 Windows/Linux platform checkboxes are complete, and requires the M5 checklist lines to move with the tools-dev/tools-pack constants. `tsc -p scripts/tsconfig.json --noEmit` and `pnpm guard` passed.
+- 2026-05-20: Extended the migration-order guard to include the `release-beta` `desktop_runtime` workflow default. The beta workflow default now has to stay on Electron until M4 is complete, then move with the `tools-dev` and `tools-pack` M5 default flip. `tsc -p scripts/tsconfig.json --noEmit` and `pnpm guard` passed.
 
 ### Platform Gate Runners
 

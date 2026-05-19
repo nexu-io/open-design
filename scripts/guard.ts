@@ -16,6 +16,7 @@ const repoRoot = path.resolve(import.meta.dirname, "..");
 const migrationDocPath = path.join(repoRoot, "docs", "electron-to-tauri-migration.md");
 const toolsDevConfigPath = path.join(repoRoot, "tools", "dev", "src", "config.ts");
 const toolsPackConfigPath = path.join(repoRoot, "tools", "pack", "src", "config.ts");
+const releaseBetaWorkflowPath = path.join(repoRoot, ".github", "workflows", "release-beta.yml");
 
 const m4PlatformGateLabels = [
   "Windows NSIS: build, install, start, inspect status/eval/screenshot, stop.",
@@ -24,6 +25,7 @@ const m4PlatformGateLabels = [
 ] as const;
 const m5ToolsDevDefaultLabel = "Change `tools-dev` default desktop runtime to Tauri.";
 const m5ToolsPackDefaultLabel = "Change `tools-pack` default desktop runtime to Tauri.";
+const m5ReleaseBetaDefaultLabel = "Change `release-beta` desktop runtime workflow default to Tauri.";
 const m5ElectronFallbackLabel = "Keep Electron fallback explicit during the transition window.";
 
 const allowedE2eScripts = new Set([
@@ -722,26 +724,60 @@ function readDefaultDesktopRuntime(source: string, label: string): "electron" | 
   throw new Error(`${label} must export DEFAULT_DESKTOP_RUNTIME as "electron" or "tauri"`);
 }
 
+function leadingWhitespaceLength(line: string): number {
+  return line.match(/^(\s*)/)?.[1]?.length ?? 0;
+}
+
+function readReleaseBetaDesktopRuntimeDefault(source: string): "electron" | "tauri" {
+  const lines = source.split(/\r?\n/);
+  const desktopRuntimeIndex = lines.findIndex((line) => /^\s+desktop_runtime:\s*$/.test(line));
+  if (desktopRuntimeIndex < 0) {
+    throw new Error('release-beta workflow must define a "desktop_runtime" input');
+  }
+
+  const desktopRuntimeIndent = leadingWhitespaceLength(lines[desktopRuntimeIndex] ?? "");
+  for (const line of lines.slice(desktopRuntimeIndex + 1)) {
+    if (line.trim() === "" || line.trimStart().startsWith("#")) {
+      continue;
+    }
+
+    const indent = leadingWhitespaceLength(line);
+    if (indent <= desktopRuntimeIndent) {
+      break;
+    }
+
+    const match = line.match(/^\s+default:\s*(electron|tauri)\s*$/);
+    if (match?.[1] === "electron" || match?.[1] === "tauri") {
+      return match[1];
+    }
+  }
+
+  throw new Error('release-beta desktop_runtime input must default to "electron" or "tauri"');
+}
+
 function sourceAllowsElectronFallback(source: string): boolean {
   return /DESKTOP_RUNTIME_KINDS = \["electron", "tauri"\] as const/.test(source);
 }
 
 async function checkTauriMigrationOrder(): Promise<boolean> {
-  const [migrationDoc, toolsDevConfig, toolsPackConfig] = await Promise.all([
+  const [migrationDoc, toolsDevConfig, toolsPackConfig, releaseBetaWorkflow] = await Promise.all([
     readFile(migrationDocPath, "utf8"),
     readFile(toolsDevConfigPath, "utf8"),
     readFile(toolsPackConfigPath, "utf8"),
+    readFile(releaseBetaWorkflowPath, "utf8"),
   ]);
   const toolsDevDefault = readDefaultDesktopRuntime(toolsDevConfig, "tools-dev");
   const toolsPackDefault = readDefaultDesktopRuntime(toolsPackConfig, "tools-pack");
+  const releaseBetaDefault = readReleaseBetaDesktopRuntimeDefault(releaseBetaWorkflow);
   const m4Complete = m4PlatformGateLabels.every((label) => isChecklistLineChecked(migrationDoc, label));
   const toolsDevDefaultFlipped = isChecklistLineChecked(migrationDoc, m5ToolsDevDefaultLabel);
   const toolsPackDefaultFlipped = isChecklistLineChecked(migrationDoc, m5ToolsPackDefaultLabel);
+  const releaseBetaDefaultFlipped = isChecklistLineChecked(migrationDoc, m5ReleaseBetaDefaultLabel);
   const fallbackMarked = isChecklistLineChecked(migrationDoc, m5ElectronFallbackLabel);
 
   const violations: string[] = [];
-  if (!m4Complete && (toolsDevDefault === "tauri" || toolsPackDefault === "tauri")) {
-    violations.push("DEFAULT_DESKTOP_RUNTIME cannot flip to Tauri before all M4 Windows/Linux platform gates are checked.");
+  if (!m4Complete && (toolsDevDefault === "tauri" || toolsPackDefault === "tauri" || releaseBetaDefault === "tauri")) {
+    violations.push("desktop runtime defaults cannot flip to Tauri before all M4 Windows/Linux platform gates are checked.");
   }
   if ((toolsDevDefault === "tauri") !== toolsDevDefaultFlipped) {
     violations.push("tools-dev DEFAULT_DESKTOP_RUNTIME and the M5 tools-dev checklist line must be updated together.");
@@ -749,7 +785,13 @@ async function checkTauriMigrationOrder(): Promise<boolean> {
   if ((toolsPackDefault === "tauri") !== toolsPackDefaultFlipped) {
     violations.push("tools-pack DEFAULT_DESKTOP_RUNTIME and the M5 tools-pack checklist line must be updated together.");
   }
+  if ((releaseBetaDefault === "tauri") !== releaseBetaDefaultFlipped) {
+    violations.push("release-beta desktop_runtime default and the M5 release-beta checklist line must be updated together.");
+  }
   const bothDefaultsTauri = toolsDevDefault === "tauri" && toolsPackDefault === "tauri";
+  if ((releaseBetaDefault === "tauri") !== bothDefaultsTauri) {
+    violations.push("release-beta desktop_runtime default must move with the tools-dev/tools-pack Tauri default flip.");
+  }
   if (bothDefaultsTauri !== fallbackMarked) {
     violations.push("the M5 Electron fallback checklist line must reflect the post-flip runtime state.");
   }
