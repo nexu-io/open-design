@@ -7,12 +7,28 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
+import {
+  m4PlatformGateLabels,
+  m5ElectronFallbackLabel,
+  m5PrimaryDocsLabel,
+  m5ReleaseBetaDefaultLabel,
+  m5ToolsDevDefaultLabel,
+  m5ToolsPackDefaultLabel,
+} from "./tauri-migration-policy.ts";
+
 const execFileAsync = promisify(execFile);
 const scriptsRoot = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsRoot, "..");
 const downloadScript = join(scriptsRoot, "download-tauri-m4-reports.ts");
 const linuxArtifactName = "open-design-ci-linux-tauri-e2e-report";
 const winArtifactName = "open-design-ci-win-tauri-e2e-report";
+const m5Labels = [
+  m5ToolsDevDefaultLabel,
+  m5ToolsPackDefaultLabel,
+  m5ReleaseBetaDefaultLabel,
+  m5ElectronFallbackLabel,
+  m5PrimaryDocsLabel,
+] as const;
 
 test("download-tauri-m4-reports downloads latest completed artifacts and verifies them", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "open-design-tauri-download-reports-"));
@@ -45,6 +61,40 @@ test("download-tauri-m4-reports can use an explicit run id without listing runs"
   const calls = await readFile(join(root, "gh-calls.log"), "utf8");
   assert.doesNotMatch(calls, /run list/);
   assert.match(calls, /run download 777/);
+});
+
+test("download-tauri-m4-reports can advance M4 and M5 after verified downloads", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "open-design-tauri-download-advance-"));
+  t.after(() => void rm(root, { force: true, recursive: true }));
+  const fakeGh = await writeFakeGh(root);
+  const fixtureRoot = await writeM5Fixture(root);
+
+  const result = await runDownload(
+    fakeGh,
+    "--run-id",
+    "777",
+    "--output-dir",
+    join(root, "reports"),
+    "--advance",
+    "--root",
+    fixtureRoot,
+  );
+
+  assert.match(result.stdout, /M4\/M5 advancement/);
+  assert.match(result.stdout, /Advanced Tauri migration from verified M4 platform evidence through M5 default flip/);
+  const migrationDoc = await readFile(join(fixtureRoot, "docs", "electron-to-tauri-migration.md"), "utf8");
+  for (const label of [...m4PlatformGateLabels, ...m5Labels]) {
+    assert.match(migrationDoc, new RegExp(`- \\[x\\] ${escapeRegExp(label)}`));
+  }
+  assert.match(
+    await readFile(join(fixtureRoot, "tools", "dev", "src", "config.ts"), "utf8"),
+    /DEFAULT_DESKTOP_RUNTIME = "tauri"/,
+  );
+  assert.match(
+    await readFile(join(fixtureRoot, "tools", "pack", "src", "config.ts"), "utf8"),
+    /DEFAULT_DESKTOP_RUNTIME = "tauri"/,
+  );
+  assert.match(await readFile(join(fixtureRoot, ".github", "workflows", "release-beta.yml"), "utf8"), /default: tauri/);
 });
 
 async function writeFakeGh(root: string): Promise<string> {
@@ -84,6 +134,90 @@ async function writeFakeGh(root: string): Promise<string> {
   return fakeGh;
 }
 
+async function writeM5Fixture(root: string): Promise<string> {
+  const fixtureRoot = join(root, "repo");
+  await mkdir(join(fixtureRoot, ".github", "workflows"), { recursive: true });
+  await mkdir(join(fixtureRoot, "apps"), { recursive: true });
+  await mkdir(join(fixtureRoot, "docs"), { recursive: true });
+  await mkdir(join(fixtureRoot, "tools", "dev", "src"), { recursive: true });
+  await mkdir(join(fixtureRoot, "tools", "pack", "src"), { recursive: true });
+  await writeFile(join(fixtureRoot, "docs", "electron-to-tauri-migration.md"), migrationDocFixture(), "utf8");
+  await writeFile(
+    join(fixtureRoot, "tools", "dev", "src", "config.ts"),
+    [
+      'export const DESKTOP_RUNTIME_KINDS = ["electron", "tauri"] as const;',
+      'export const DEFAULT_DESKTOP_RUNTIME = "electron" satisfies DesktopRuntimeKind;',
+    ].join("\n"),
+    "utf8",
+  );
+  await writeFile(
+    join(fixtureRoot, "tools", "pack", "src", "config.ts"),
+    [
+      'export const DESKTOP_RUNTIME_KINDS = ["electron", "tauri"] as const;',
+      'export const DEFAULT_DESKTOP_RUNTIME = "electron" satisfies ToolPackDesktopRuntimeKind;',
+    ].join("\n"),
+    "utf8",
+  );
+  await writeFile(
+    join(fixtureRoot, ".github", "workflows", "release-beta.yml"),
+    [
+      "on:",
+      "  workflow_dispatch:",
+      "    inputs:",
+      "      desktop_runtime:",
+      '        description: "Desktop runtime to package. Keep electron for public beta; use tauri for migration smoke."',
+      "        required: true",
+      "        type: choice",
+      "        default: electron",
+    ].join("\n"),
+    "utf8",
+  );
+  await writeFile(join(fixtureRoot, "README.md"), readmeFixture(), "utf8");
+  await writeFile(
+    join(fixtureRoot, "apps", "AGENTS.md"),
+    "- `apps/desktop`: Desktop host runtime. Electron remains the default during the Tauri migration, and `src-tauri/` is the opt-in Tauri runtime. Desktop does not guess the web port; it reads runtime status through sidecar IPC and opens the reported web URL.\n",
+    "utf8",
+  );
+  await writeFile(
+    join(fixtureRoot, "docs", "architecture.md"),
+    "  Packaged Electron and packaged headless modes are unaffected\n",
+    "utf8",
+  );
+  return fixtureRoot;
+}
+
+function migrationDocFixture(): string {
+  return [
+    "Last updated: 2026-05-20",
+    "",
+    "### M4 Platform package smoke",
+    "",
+    ...m4PlatformGateLabels.map((label) => `- [ ] ${label}`),
+    "",
+    "### M5 Default flip",
+    "",
+    ...m5Labels.map((label) => `- [ ] ${label}`),
+    "",
+    "## Execution Log",
+    "",
+    "- 2026-05-20: Existing entry.",
+    "",
+    "### Platform Gate Runners",
+    "",
+  ].join("\n");
+}
+
+function readmeFixture(): string {
+  return [
+    "| **Desktop** | Optional desktop shell with sidecar IPC (STATUS / EVAL / SCREENSHOT / CONSOLE / CLICK / SHUTDOWN). Electron is the current default; Tauri is available behind explicit migration flags. |",
+    "| **Deployable to** | Local (`pnpm tools-dev`) \u00b7 Vercel web layer \u00b7 packaged desktop app. Public downloads are still Electron artifacts while Tauri packaging parity is being gated. |",
+    "| Desktop (optional) | Desktop shell \u2014 discovers the web URL through sidecar IPC, no port guessing; Electron is the default and Tauri is the explicit migration runtime. The same `STATUS`/`EVAL`/`SCREENSHOT`/`CONSOLE`/`CLICK`/`SHUTDOWN` channel powers `tools-dev inspect desktop \u2026` for E2E |",
+    "Open Design can run as a web app in your browser or as a desktop shell. Electron remains the default desktop runtime while the Tauri path is validated behind explicit flags; both modes share the same local daemon + web architecture.",
+    "The desktop app discovers the web URL automatically via sidecar IPC \u2014 no port guessing required. During the Electron-to-Tauri migration, `--desktop-runtime tauri` selects the opt-in Tauri path where supported.",
+    "- [x] Packaged desktop build out of `apps/packaged/` \u2014 public macOS (Apple Silicon) and Windows (x64) downloads remain Electron while the Tauri package path is validated.",
+  ].join("\n");
+}
+
 async function runDownload(gh: string, ...args: string[]): Promise<{ stderr: string; stdout: string }> {
   return execFileAsync(process.execPath, ["--import", "tsx", downloadScript, "--gh", gh, ...args], {
     cwd: repoRoot,
@@ -93,4 +227,8 @@ async function runDownload(gh: string, ...args: string[]): Promise<{ stderr: str
 
 async function readJson(path: string): Promise<{ platform: string }> {
   return JSON.parse(await readFile(path, "utf8")) as { platform: string };
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

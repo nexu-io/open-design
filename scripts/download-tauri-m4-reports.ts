@@ -14,10 +14,12 @@ const linuxArtifactName = "open-design-ci-linux-tauri-e2e-report";
 const winArtifactName = "open-design-ci-win-tauri-e2e-report";
 
 type Args = {
+  advance: boolean;
   branch: string;
   ghBin: string;
   outputDir: string;
   repo: string;
+  root: string;
   runId?: string;
   workflow: string;
 };
@@ -47,6 +49,16 @@ async function main(): Promise<void> {
     "--linux-report",
     linuxReport,
   ]);
+  const advanceOutput = args.advance
+    ? await runScript("advance-tauri-migration-m4-m5.ts", [
+        "--root",
+        args.root,
+        "--win-report",
+        winReport,
+        "--linux-report",
+        linuxReport,
+      ])
+    : undefined;
 
   process.stdout.write(
     [
@@ -60,14 +72,18 @@ async function main(): Promise<void> {
       `Linux report: ${linuxReport}`,
       "Verification:",
       indent(verifyOutput.stdout.trim()),
-      "Next:",
-      indent(
-        [
-          "pnpm exec tsx scripts/advance-tauri-migration-m4-m5.ts \\",
-          `  --win-report ${shellQuote(winReport)} \\`,
-          `  --linux-report ${shellQuote(linuxReport)}`,
-        ].join("\n"),
-      ),
+      ...(advanceOutput == null
+        ? [
+            "Next:",
+            indent(
+              [
+                "pnpm exec tsx scripts/advance-tauri-migration-m4-m5.ts \\",
+                `  --win-report ${shellQuote(winReport)} \\`,
+                `  --linux-report ${shellQuote(linuxReport)}`,
+              ].join("\n"),
+            ),
+          ]
+        : ["M4/M5 advancement:", indent(advanceOutput.stdout.trim())]),
       "",
     ].join("\n"),
   );
@@ -75,21 +91,28 @@ async function main(): Promise<void> {
 
 function parseArgs(argv: string[]): Args {
   const parsed: Args = {
+    advance: false,
     branch: defaultBranch,
     ghBin: process.env.GH_BIN ?? "gh",
     outputDir: defaultOutputDir,
     repo: defaultRepo,
+    root: workspaceRoot,
     workflow: defaultWorkflow,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const value = argv[index + 1];
+    if (arg === "--advance") {
+      parsed.advance = true;
+      continue;
+    }
     if (
       (arg === "--branch" ||
         arg === "--gh" ||
         arg === "--output-dir" ||
         arg === "--repo" ||
+        arg === "--root" ||
         arg === "--run-id" ||
         arg === "--workflow") &&
       value == null
@@ -116,6 +139,11 @@ function parseArgs(argv: string[]): Args {
       index += 1;
       continue;
     }
+    if (arg === "--root") {
+      parsed.root = resolve(value!);
+      index += 1;
+      continue;
+    }
     if (arg === "--run-id") {
       parsed.runId = value!;
       index += 1;
@@ -129,9 +157,9 @@ function parseArgs(argv: string[]): Args {
     if (arg === "--help" || arg === "-h") {
       process.stdout.write(
         [
-          "usage: tsx scripts/download-tauri-m4-reports.ts [--run-id <id>] [--repo <owner/repo>] [--branch <ref>] [--output-dir <dir>]",
+          "usage: tsx scripts/download-tauri-m4-reports.ts [--run-id <id>] [--repo <owner/repo>] [--branch <ref>] [--output-dir <dir>] [--advance] [--root <repo>]",
           "",
-          "Downloads the Windows/Linux Tauri CI report artifacts with gh, then verifies them with scripts/verify-tauri-platform-gates.ts.",
+          "Downloads the Windows/Linux Tauri CI report artifacts with gh, verifies them with scripts/verify-tauri-platform-gates.ts, and optionally applies the guarded M4→M5 advance.",
           "",
           `defaults: --repo ${defaultRepo} --branch ${defaultBranch} --workflow ${defaultWorkflow} --output-dir ${defaultOutputDir}`,
           "",

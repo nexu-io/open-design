@@ -76,6 +76,7 @@ test("verify-tauri-migration-handoff round-trips a bundle through a receiving ch
   assert.match(note, /--bundle \/path\/to\/open-design-tauri-migration\.bundle/);
   assert.match(note, /verify-tauri-migration-remote/);
   assert.match(note, /download-tauri-m4-reports/);
+  assert.match(note, /--advance/);
   assert.match(note, /advance-tauri-migration-m4-m5/);
   assert.match(note, /\/tmp\/open-design-tauri-m4-reports\/open-design-ci-win-tauri-e2e-report/);
 });

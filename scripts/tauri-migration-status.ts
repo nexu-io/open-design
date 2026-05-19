@@ -296,7 +296,7 @@ function nextActionsForPhase(
       platformReports?.current === true
         ? "Advance M4 evidence and M5 defaults with scripts/advance-tauri-migration-m4-m5.ts using the verified report paths shown above."
         : remote?.current === true
-          ? "Download and verify native CI artifacts with scripts/download-tauri-m4-reports.ts --run-id <github-run-id> --output-dir /tmp/open-design-tauri-m4-reports."
+          ? "Download and verify native CI artifacts with scripts/download-tauri-m4-reports.ts --run-id <github-run-id> --output-dir /tmp/open-design-tauri-m4-reports, or add --advance to apply M4 evidence and M5 defaults immediately after verification."
           : "Run the Windows and Linux Tauri package smoke jobs.",
       ...(platformReports?.current === true
         ? []
