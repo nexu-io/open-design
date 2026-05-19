@@ -425,7 +425,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
 
     useEffect(() => {
       setComposerScrollTop(textareaRef.current?.scrollTop ?? 0);
-    }, [composerMentionParts, draft]);
+    }, [composerMentionParts]);
 
     // Resolve which tabs to surface in the consolidated tools popover.
     // Plugins is always visible while a project is active so users can
