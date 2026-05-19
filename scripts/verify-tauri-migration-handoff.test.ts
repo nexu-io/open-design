@@ -68,8 +68,9 @@ test("verify-tauri-migration-handoff round-trips a bundle through a receiving ch
   assert.match(note, new RegExp(`Branch: \`${migrationBranch.replaceAll("/", "\\/")}\` @ \`${sourceHead}\``));
   assert.match(note, /package-tauri-migration-handoff/);
   assert.match(note, new RegExp(`--handoff-dir '${escapeRegExp(dirname(manifestPath))}'`));
-  assert.match(note, /Preferred path when you copied the tarball plus its `.sha256` and `.commands.sh` sidecars/);
+  assert.match(note, /Preferred path when you copied the tarball plus its `.sha256`, `.commands.sh`, and `.commands.sh.sha256` sidecars/);
   assert.match(note, new RegExp(escapeRegExp(`${dirname(manifestPath)}.tar.gz.commands.sh`)));
+  assert.match(note, /verifies its own checksum sidecar and the archive checksum/);
   assert.match(note, /Use an explicit archive argument/);
   assert.match(note, /TAURI_NATIVE_CI_TRIGGER=0/);
   assert.match(note, /TAURI_NATIVE_CI_WAIT=1/);

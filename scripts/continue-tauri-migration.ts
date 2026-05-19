@@ -236,6 +236,7 @@ async function continueM4(args: Args, status: MigrationStatus, log: string[]): P
             `  ${archive}`,
             `  ${archive}.sha256`,
             `  ${archive}.commands.sh`,
+            `  ${archive}.commands.sh.sha256`,
             "",
             "Then run the command sidecar from that checkout, or run:",
             `  ${formatScriptCommand("push-tauri-migration-handoff.ts", ["--archive", archive, "--remote", args.remote])}`,
@@ -251,7 +252,9 @@ async function continueM4(args: Args, status: MigrationStatus, log: string[]): P
         }
       }
     } else {
-      log.push(`Push skipped. Transfer ${archive}, ${archive}.sha256, and ${archive}.commands.sh to a write-capable checkout.`);
+      log.push(
+        `Push skipped. Transfer ${archive}, ${archive}.sha256, ${archive}.commands.sh, and ${archive}.commands.sh.sha256 to a write-capable checkout.`,
+      );
       remoteCurrent = false;
     }
   }
