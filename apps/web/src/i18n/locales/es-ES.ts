@@ -1188,6 +1188,11 @@ export const esES: Dict = {
   'pet.communitySyncFailed': 'Error al sincronizar: {error}',
   'pet.codexBundled': 'Incluida',
   'pet.codexBundledTitle': 'Viene con Open Design — sin descarga.',
+  'pet.fieldCorner': 'Esquina',
+  'pet.corner.top-left': 'Arriba izquierda',
+  'pet.corner.top-right': 'Arriba derecha',
+  'pet.corner.bottom-left': 'Abajo izquierda',
+  'pet.corner.bottom-right': 'Abajo derecha',
 
   'settings.notifications': 'Notificaciones',
   'settings.notificationsHint': 'Sonido y notificación al completar la tarea',

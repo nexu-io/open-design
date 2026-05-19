@@ -10,6 +10,7 @@ const pet: PetConfig = {
   adopted: true,
   enabled: true,
   petId: 'custom',
+  corner: 'bottom-right',
   custom: {
     name: 'YoRHa Sit-2B',
     glyph: 'N',

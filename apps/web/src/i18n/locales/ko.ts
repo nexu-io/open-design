@@ -1349,6 +1349,11 @@ export const ko: Dict = {
   'pet.communitySyncFailed': '동기화 실패: {error}',
   'pet.codexBundled': '내장',
   'pet.codexBundledTitle': 'Open Design 에 내장 — 다운로드 불필요.',
+  'pet.fieldCorner': '모서리',
+  'pet.corner.top-left': '왼쪽 상단',
+  'pet.corner.top-right': '오른쪽 상단',
+  'pet.corner.bottom-left': '왼쪽 하단',
+  'pet.corner.bottom-right': '오른쪽 하단',
 
   'settings.notifications': '알림',
   'settings.notificationsHint': '작업 완료 시 효과음 및 데스크톱 알림',

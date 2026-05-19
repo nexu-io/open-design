@@ -1309,6 +1309,11 @@ export const hu: Dict = {
   'pet.communitySyncFailed': 'A szinkronizálás sikertelen: {error}',
   'pet.codexBundled': 'Beépített',
   'pet.codexBundledTitle': 'Az Open Designgal érkezik — letöltés nem szükséges.',
+  'pet.fieldCorner': 'Sarok',
+  'pet.corner.top-left': 'Bal felső',
+  'pet.corner.top-right': 'Jobb felső',
+  'pet.corner.bottom-left': 'Bal alsó',
+  'pet.corner.bottom-right': 'Jobb alsó',
 
   'settings.notifications': 'Értesítések',
   'settings.notificationsHint': 'Hang és asztali értesítés a feladat befejezésekor',

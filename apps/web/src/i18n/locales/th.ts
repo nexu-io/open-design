@@ -1260,6 +1260,11 @@ export const th: Dict = {
   'pet.communitySyncFailed': 'ซิงค์เข้าล้มซะแล้ว มีเออเร่อแบบนี้ขึ้นเลย: {error}',
   'pet.codexBundled': 'รวมมามัดชุดใหญ่',
   'pet.codexBundledTitle': 'เตรียมมาให้กับ Open Design แล้ว — ไม่ต้องดาวน์โหลดใหม่',
+  'pet.fieldCorner': 'มุม',
+  'pet.corner.top-left': 'บนซ้าย',
+  'pet.corner.top-right': 'บนขวา',
+  'pet.corner.bottom-left': 'ล่างซ้าย',
+  'pet.corner.bottom-right': 'ล่างขวา',
 
   'settings.notifications': 'การรับส่งข้อมูลการแจ้งเตือน',
   'settings.notificationsHint': 'มีระบบใช้บอกทั้งส่งเตือนเดสก์ท็อป และเปิดเสียงที่รันรับใช้เข้าแบบทำงานลุล่วง',

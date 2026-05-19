@@ -1459,6 +1459,11 @@ export const zhTW: Dict = {
   'pet.communitySyncFailed': '同步失敗：{error}',
   'pet.codexBundled': '內建',
   'pet.codexBundledTitle': 'Open Design 內建寵物，無需下載。',
+  'pet.fieldCorner': '角落',
+  'pet.corner.top-left': '左上',
+  'pet.corner.top-right': '右上',
+  'pet.corner.bottom-left': '左下',
+  'pet.corner.bottom-right': '右下',
 
   'settings.notifications': '通知',
   'settings.notificationsHint': '任務完成時的音效和桌面通知',

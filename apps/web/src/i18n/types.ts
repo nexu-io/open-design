@@ -2128,6 +2128,12 @@ export interface Dict {
   'pet.communitySyncFailed': string;
   'pet.codexBundled': string;
   'pet.codexBundledTitle': string;
+  // Corner anchor picker
+  'pet.fieldCorner': string;
+  'pet.corner.top-left': string;
+  'pet.corner.top-right': string;
+  'pet.corner.bottom-left': string;
+  'pet.corner.bottom-right': string;
 
   // Sketch editor
   'sketch.toolSelect': string;

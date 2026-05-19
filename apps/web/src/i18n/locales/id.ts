@@ -1450,6 +1450,11 @@ export const id: Dict = {
   'pet.communitySyncFailed': 'Sinkronisasi gagal: {error}',
   'pet.codexBundled': 'Bawaan',
   'pet.codexBundledTitle': 'Disertakan dengan Open Design - tidak perlu diunduh.',
+  'pet.fieldCorner': 'Sudut',
+  'pet.corner.top-left': 'Kiri atas',
+  'pet.corner.top-right': 'Kanan atas',
+  'pet.corner.bottom-left': 'Kiri bawah',
+  'pet.corner.bottom-right': 'Kanan bawah',
 
   'settings.notifications': 'Notifikasi',
   'settings.notificationsHint': 'Atur suara dan notifikasi desktop.',

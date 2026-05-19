@@ -1342,6 +1342,11 @@ export const fa: Dict = {
   'pet.communitySyncFailed': 'خطا در همگام‌سازی: {error}',
   'pet.codexBundled': 'همراه',
   'pet.codexBundledTitle': 'همراه Open Design ارائه می‌شود — نیازی به دانلود نیست.',
+  'pet.fieldCorner': 'گوشه',
+  'pet.corner.top-left': 'بالا چپ',
+  'pet.corner.top-right': 'بالا راست',
+  'pet.corner.bottom-left': 'پایین چپ',
+  'pet.corner.bottom-right': 'پایین راست',
 
   'settings.notifications': 'اعلان‌ها',
   'settings.notificationsHint': 'صدا و اعلان دسکتاپ هنگام تکمیل وظیفه',

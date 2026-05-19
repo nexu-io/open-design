@@ -292,6 +292,9 @@ export interface PetConfig {
   // Free-form custom pet definition. Always present so the customize panel
   // has stable state to bind against, even when a built-in is active.
   custom: PetCustom;
+  // Which viewport corner the pet is anchored to. Older persisted configs
+  // without this field are normalised to 'bottom-right' at read time.
+  corner: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 }
 
 export interface AppConfig {

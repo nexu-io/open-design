@@ -1340,6 +1340,11 @@ export const ru: Dict = {
   'pet.communitySyncFailed': 'Ошибка синхронизации: {error}',
   'pet.codexBundled': 'Встроен',
   'pet.codexBundledTitle': 'Поставляется с Open Design — загрузка не нужна.',
+  'pet.fieldCorner': 'Угол',
+  'pet.corner.top-left': 'Верхний левый',
+  'pet.corner.top-right': 'Верхний правый',
+  'pet.corner.bottom-left': 'Нижний левый',
+  'pet.corner.bottom-right': 'Нижний правый',
 
   'settings.notifications': 'Уведомления',
   'settings.notificationsHint': 'Звук и уведомление при завершении задачи',

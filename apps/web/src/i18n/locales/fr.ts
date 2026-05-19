@@ -1299,6 +1299,11 @@ export const fr: Dict = {
   'pet.communitySyncFailed': 'Échec de la synchronisation : {error}',
   'pet.codexBundled': 'Fourni',
   'pet.codexBundledTitle': 'Livré avec Open Design — aucun téléchargement nécessaire.',
+  'pet.fieldCorner': 'Coin',
+  'pet.corner.top-left': 'Haut gauche',
+  'pet.corner.top-right': 'Haut droite',
+  'pet.corner.bottom-left': 'Bas gauche',
+  'pet.corner.bottom-right': 'Bas droite',
 
   'settings.notifications': 'Notifications',
   'settings.notificationsHint': 'Son et notification bureau à la fin d\'une tâche',

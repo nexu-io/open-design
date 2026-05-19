@@ -1888,6 +1888,11 @@ export const zhCN: Dict = {
   'pet.communitySyncFailed': '同步失败：{error}',
   'pet.codexBundled': '内置',
   'pet.codexBundledTitle': 'Open Design 内置宠物，无需下载。',
+  'pet.fieldCorner': '角落',
+  'pet.corner.top-left': '左上',
+  'pet.corner.top-right': '右上',
+  'pet.corner.bottom-left': '左下',
+  'pet.corner.bottom-right': '右下',
 
   'settings.notifications': '通知',
   'settings.notificationsHint': '任务完成时的声音和桌面通知',

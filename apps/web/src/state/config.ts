@@ -38,6 +38,7 @@ export const DEFAULT_PET: PetConfig = {
   adopted: false,
   enabled: false,
   petId: 'mochi',
+  corner: 'bottom-right',
   custom: {
     name: 'Buddy',
     glyph: '🦄',
@@ -267,13 +268,25 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
   },
 ];
 
+const VALID_CORNERS: ReadonlySet<string> = new Set([
+  'top-left',
+  'top-right',
+  'bottom-left',
+  'bottom-right',
+]);
+
 function normalizePet(input: Partial<PetConfig> | undefined): PetConfig {
   if (!input) return { ...DEFAULT_PET, custom: { ...DEFAULT_PET.custom } };
   // Merge stored values onto defaults so newly-added fields land safely
   // when an older config is rehydrated.
+  const corner =
+    typeof input.corner === 'string' && VALID_CORNERS.has(input.corner)
+      ? (input.corner as PetConfig['corner'])
+      : DEFAULT_PET.corner;
   return {
     ...DEFAULT_PET,
     ...input,
+    corner,
     custom: { ...DEFAULT_PET.custom, ...(input.custom ?? {}) },
   };
 }

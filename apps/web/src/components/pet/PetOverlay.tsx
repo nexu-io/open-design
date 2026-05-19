@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useT } from '../../i18n';
 import type { PetConfig } from '../../types';
 import {
@@ -45,13 +45,33 @@ const EMPTY_TASK_CENTER: PetTaskCenter = {
 };
 
 interface Position {
-  // Distances from the right/bottom of the viewport so the overlay
-  // sticks to the corner across resizes. Saved in localStorage.
-  right: number;
-  bottom: number;
+  // Distance from the horizontal edge of the anchor corner (left for
+  // left-anchored corners, right for right-anchored corners).
+  x: number;
+  // Distance from the vertical edge of the anchor corner (top for
+  // top-anchored corners, bottom for bottom-anchored corners).
+  y: number;
 }
 
-const DEFAULT_POSITION: Position = { right: 24, bottom: 24 };
+const DEFAULT_POSITION: Position = { x: 24, y: 24 };
+
+type Corner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+
+// Converts (corner, position) into a React CSS style object with exactly two
+// positional properties set and the other two undefined so the browser ignores
+// them. The overlay is position:fixed so any unset axis property resolves to
+// 'auto' rather than a pixel value, which is what the tests assert for the
+// "empty string" checks (jsdom reports '' for unset inline styles).
+function cornerStyle(corner: Corner, pos: Position): React.CSSProperties {
+  const isTop = corner === 'top-left' || corner === 'top-right';
+  const isLeft = corner === 'top-left' || corner === 'bottom-left';
+  return {
+    top: isTop ? pos.y : undefined,
+    bottom: isTop ? undefined : pos.y,
+    left: isLeft ? pos.x : undefined,
+    right: isLeft ? undefined : pos.x,
+  };
+}
 
 // How long the pet has to sit untouched before the overlay flips to
 // the "waiting" animation row. Sized to sit comfortably past a few
@@ -93,11 +113,15 @@ function loadPosition(): Position {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_POSITION;
-    const parsed = JSON.parse(raw) as Partial<Position>;
-    return {
-      right: typeof parsed.right === 'number' ? parsed.right : DEFAULT_POSITION.right,
-      bottom: typeof parsed.bottom === 'number' ? parsed.bottom : DEFAULT_POSITION.bottom,
-    };
+    const parsed = JSON.parse(raw) as Partial<Position & { right?: number; bottom?: number }>;
+    // Migrate legacy { right, bottom } shape to { x, y }.
+    const x = typeof parsed.x === 'number' ? parsed.x
+      : typeof parsed.right === 'number' ? parsed.right
+      : DEFAULT_POSITION.x;
+    const y = typeof parsed.y === 'number' ? parsed.y
+      : typeof parsed.bottom === 'number' ? parsed.bottom
+      : DEFAULT_POSITION.y;
+    return { x, y };
   } catch {
     return DEFAULT_POSITION;
   }
@@ -139,8 +163,8 @@ export function PetOverlay({
   const dragRef = useRef<{
     startX: number;
     startY: number;
-    startRight: number;
-    startBottom: number;
+    startPosX: number;
+    startPosY: number;
     moved: boolean;
     // Last classified gesture direction. Kept on the ref so we don't
     // trigger a state update + render on every pointermove tick.
@@ -319,6 +343,10 @@ export function PetOverlay({
 
   if (!active) return null;
 
+  const activeCorner: Corner = pet?.corner ?? 'bottom-right';
+  const isLeftAnchored = activeCorner === 'top-left' || activeCorner === 'bottom-left';
+  const isTopAnchored = activeCorner === 'top-left' || activeCorner === 'top-right';
+
   const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
     const target = event.currentTarget;
@@ -326,8 +354,8 @@ export function PetOverlay({
     dragRef.current = {
       startX: event.clientX,
       startY: event.clientY,
-      startRight: position.right,
-      startBottom: position.bottom,
+      startPosX: position.x,
+      startPosY: position.y,
       moved: false,
       direction: null,
     };
@@ -341,13 +369,15 @@ export function PetOverlay({
     const dy = event.clientY - drag.startY;
     if (!drag.moved && Math.abs(dx) + Math.abs(dy) < 4) return;
     drag.moved = true;
-    // Convert pointer movement into right/bottom offsets so the sprite
-    // tracks the cursor while staying anchored to the corner system.
-    // The clamp budget (~120px) keeps the 96px sprite plus its drop
-    // shadow on-screen even when dragged toward the opposite edge.
-    const nextRight = Math.max(8, Math.min(window.innerWidth - 120, drag.startRight - dx));
-    const nextBottom = Math.max(8, Math.min(window.innerHeight - 120, drag.startBottom - dy));
-    setPosition({ right: nextRight, bottom: nextBottom });
+    // For left-anchored corners, moving right increases x offset.
+    // For right-anchored corners, moving right decreases x offset.
+    // For top-anchored corners, moving down increases y offset.
+    // For bottom-anchored corners, moving down decreases y offset.
+    const nextX = Math.max(8, Math.min(window.innerWidth - 120,
+      isLeftAnchored ? drag.startPosX + dx : drag.startPosX - dx));
+    const nextY = Math.max(8, Math.min(window.innerHeight - 120,
+      isTopAnchored ? drag.startPosY + dy : drag.startPosY - dy));
+    setPosition({ x: nextX, y: nextY });
 
     // Classify the gesture direction once it clears the jitter floor
     // and one axis clearly dominates the other. The animation then
@@ -430,8 +460,7 @@ export function PetOverlay({
       role="complementary"
       aria-label={t('pet.overlayAria')}
       style={{
-        right: position.right,
-        bottom: position.bottom,
+        ...cornerStyle(activeCorner, position),
         // The accent drives the halo, the bubble border, and the focus
         // ring on the action buttons via CSS custom property cascade.
         ['--pet-accent' as string]: active.accent,

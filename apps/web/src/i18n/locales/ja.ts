@@ -1236,6 +1236,11 @@ export const ja: Dict = {
   'pet.communitySyncFailed': '同期に失敗しました: {error}',
   'pet.codexBundled': '同梱',
   'pet.codexBundledTitle': 'Open Design に同梱 — ダウンロード不要。',
+  'pet.fieldCorner': 'コーナー',
+  'pet.corner.top-left': '左上',
+  'pet.corner.top-right': '右上',
+  'pet.corner.bottom-left': '左下',
+  'pet.corner.bottom-right': '右下',
 
   'settings.notifications': '通知',
   'settings.notificationsHint': 'タスク完了時の効果音とデスクトップ通知',

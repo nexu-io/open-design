@@ -1341,6 +1341,11 @@ export const uk: Dict = {
   'pet.communitySyncFailed': 'Синхронізація не вдалася: {error}',
   'pet.codexBundled': 'Упаковано',
   'pet.codexBundledTitle': 'Поставляється з Open Design — завантаження не потрібне.',
+  'pet.fieldCorner': 'Кут',
+  'pet.corner.top-left': 'Верхній лівий',
+  'pet.corner.top-right': 'Верхній правий',
+  'pet.corner.bottom-left': 'Нижній лівий',
+  'pet.corner.bottom-right': 'Нижній правий',
 
   'settings.notifications': 'Сповіщення',
   'settings.notificationsHint': 'Звук та сповіщення робочого столу при завершенні завдання',

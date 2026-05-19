@@ -1340,6 +1340,11 @@ export const ptBR: Dict = {
   'pet.communitySyncFailed': 'Falha na sincronização: {error}',
   'pet.codexBundled': 'Incluído',
   'pet.codexBundledTitle': 'Já vem com o Open Design — sem download.',
+  'pet.fieldCorner': 'Canto',
+  'pet.corner.top-left': 'Superior esquerdo',
+  'pet.corner.top-right': 'Superior direito',
+  'pet.corner.bottom-left': 'Inferior esquerdo',
+  'pet.corner.bottom-right': 'Inferior direito',
 
   'settings.notifications': 'Notificações',
   'settings.notificationsHint': 'Som e notificação na conclusão da tarefa',

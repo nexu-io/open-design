@@ -1299,6 +1299,11 @@ export const ar: Dict = {
   'pet.communitySyncFailed': 'فشلت المزامنة: {error}',
   'pet.codexBundled': 'مدمج',
   'pet.codexBundledTitle': 'يأتي مع Open Design - لا حاجة للتحميل.',
+  'pet.fieldCorner': 'الزاوية',
+  'pet.corner.top-left': 'أعلى يسار',
+  'pet.corner.top-right': 'أعلى يمين',
+  'pet.corner.bottom-left': 'أسفل يسار',
+  'pet.corner.bottom-right': 'أسفل يمين',
 
   'settings.notifications': 'الإشعارات',
   'settings.notificationsHint': 'صوت وإشعار سطح المكتب عند اكتمال المهمة',

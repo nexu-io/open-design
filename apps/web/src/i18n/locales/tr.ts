@@ -1286,6 +1286,11 @@ export const tr: Dict = {
   'pet.communitySyncFailed': 'Eşitleme başarısız: {error}',
   'pet.codexBundled': 'Yerleşik',
   'pet.codexBundledTitle': 'Open Design ile birlikte gelir — indirme gerekmez.',
+  'pet.fieldCorner': 'Köşe',
+  'pet.corner.top-left': 'Sol üst',
+  'pet.corner.top-right': 'Sağ üst',
+  'pet.corner.bottom-left': 'Sol alt',
+  'pet.corner.bottom-right': 'Sağ alt',
 
   'settings.notifications': 'Bildirimler',
   'settings.notificationsHint': 'Görev tamamlandığında ses ve masaüstü bildirimi',

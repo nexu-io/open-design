@@ -1999,6 +1999,7 @@ describe('SettingsDialog pets interactions', () => {
           adopted: true,
           enabled: true,
           petId: 'custom',
+          corner: 'bottom-right' as const,
           custom: {
             name: 'Buddy',
             glyph: '🦄',

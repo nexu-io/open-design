@@ -1184,6 +1184,11 @@ export const it: Dict = {
   'pet.communitySyncFailed': 'Sincronizzazione fallita: {error}',
   'pet.codexBundled': 'Fornito',
   'pet.codexBundledTitle': 'Fornito con Open Design — nessun download necessario.',
+  'pet.fieldCorner': 'Angolo',
+  'pet.corner.top-left': 'In alto a sinistra',
+  'pet.corner.top-right': 'In alto a destra',
+  'pet.corner.bottom-left': 'In basso a sinistra',
+  'pet.corner.bottom-right': 'In basso a destra',
 
   'settings.notifications': 'Notifiche',
   'settings.notificationsHint': 'Suono e notifica desktop alla fine di un\'attività',

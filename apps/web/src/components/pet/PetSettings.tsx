@@ -603,6 +603,28 @@ export function PetSettings({ cfg, setCfg }: Props) {
         </p>
       </div>
 
+      <div className="field pet-corner-field">
+        <span className="field-label">{t('pet.fieldCorner')}</span>
+        <div
+          className="pet-corner-picker"
+          role="radiogroup"
+          aria-label={t('pet.fieldCorner')}
+        >
+          {(['top-left', 'top-right', 'bottom-left', 'bottom-right'] as const).map((c) => (
+            <button
+              key={c}
+              type="button"
+              role="radio"
+              aria-checked={pet.corner === c}
+              className={`seg-btn small${pet.corner === c ? ' active' : ''}`}
+              onClick={() => update({ corner: c })}
+            >
+              {t(`pet.corner.${c}` as const)}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {activeTab === 'builtIn' ? (
         <div className="pet-built-in">
           {bundledPets.length === 0 ? (

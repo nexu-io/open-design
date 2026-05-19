@@ -1237,6 +1237,11 @@ export const de: Dict = {
   'pet.communitySyncFailed': 'Sync fehlgeschlagen: {error}',
   'pet.codexBundled': 'Mitgeliefert',
   'pet.codexBundledTitle': 'Wird mit Open Design ausgeliefert — kein Download nötig.',
+  'pet.fieldCorner': 'Ecke',
+  'pet.corner.top-left': 'Oben links',
+  'pet.corner.top-right': 'Oben rechts',
+  'pet.corner.bottom-left': 'Unten links',
+  'pet.corner.bottom-right': 'Unten rechts',
 
   'settings.notifications': 'Benachrichtigungen',
   'settings.notificationsHint': 'Ton und Desktop-Benachrichtigung beim Abschluss von Aufgaben',
