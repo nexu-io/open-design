@@ -20,6 +20,8 @@ describe("packaged smoke workflow", () => {
   it("reruns Tauri package smoke when migration handoff scripts change", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
     const expectedPaths = [
+      "scripts/apply-tauri-migration-m5.ts",
+      "scripts/apply-tauri-migration-m5.test.ts",
       "scripts/create-tauri-migration-bundle.ts",
       "scripts/create-tauri-migration-bundle.test.ts",
       "scripts/import-tauri-migration-bundle.ts",

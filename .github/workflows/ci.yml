@@ -65,6 +65,8 @@ jobs:
               "e2e/lib/desktop/"
               "e2e/lib/vitest/packaged-report.ts"
               "e2e/scripts/release-smoke.ts"
+              "scripts/apply-tauri-migration-m5.ts"
+              "scripts/apply-tauri-migration-m5.test.ts"
               "scripts/create-tauri-migration-bundle.ts"
               "scripts/create-tauri-migration-bundle.test.ts"
               "scripts/import-tauri-migration-bundle.ts"
@@ -102,7 +104,7 @@ jobs:
               if [[ "$file" == "tools/pack/"* || "$file" == "apps/packaged/"* || "$file" == "apps/desktop/"* || "$file" == "packages/platform/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/sidecar-proto/"* ]]; then
                 tools_pack_tests_required=true
               fi
-              if [[ "$file" == "e2e/lib/vitest/packaged-report.ts" || "$file" == "e2e/scripts/release-smoke.ts" || "$file" == "e2e/specs/win-tauri.spec.ts" || "$file" == "e2e/specs/linux.spec.ts" || "$file" == "scripts/create-tauri-migration-bundle.ts" || "$file" == "scripts/create-tauri-migration-bundle.test.ts" || "$file" == "scripts/import-tauri-migration-bundle.ts" || "$file" == "scripts/import-tauri-migration-bundle.test.ts" || "$file" == "scripts/tauri-migration-policy.ts" || "$file" == "scripts/tauri-migration-policy.test.ts" || "$file" == "scripts/tauri-migration-status.ts" || "$file" == "scripts/tauri-migration-status.test.ts" || "$file" == "scripts/verify-tauri-migration-handoff.ts" || "$file" == "scripts/verify-tauri-migration-handoff.test.ts" || "$file" == "scripts/verify-tauri-migration-remote.ts" || "$file" == "scripts/verify-tauri-migration-remote.test.ts" || "$file" == "scripts/verify-tauri-platform-gates.ts" || "$file" == "scripts/verify-tauri-platform-gates.test.ts" ]]; then
+              if [[ "$file" == "e2e/lib/vitest/packaged-report.ts" || "$file" == "e2e/scripts/release-smoke.ts" || "$file" == "e2e/specs/win-tauri.spec.ts" || "$file" == "e2e/specs/linux.spec.ts" || "$file" == "scripts/apply-tauri-migration-m5.ts" || "$file" == "scripts/apply-tauri-migration-m5.test.ts" || "$file" == "scripts/create-tauri-migration-bundle.ts" || "$file" == "scripts/create-tauri-migration-bundle.test.ts" || "$file" == "scripts/import-tauri-migration-bundle.ts" || "$file" == "scripts/import-tauri-migration-bundle.test.ts" || "$file" == "scripts/tauri-migration-policy.ts" || "$file" == "scripts/tauri-migration-policy.test.ts" || "$file" == "scripts/tauri-migration-status.ts" || "$file" == "scripts/tauri-migration-status.test.ts" || "$file" == "scripts/verify-tauri-migration-handoff.ts" || "$file" == "scripts/verify-tauri-migration-handoff.test.ts" || "$file" == "scripts/verify-tauri-migration-remote.ts" || "$file" == "scripts/verify-tauri-migration-remote.test.ts" || "$file" == "scripts/verify-tauri-platform-gates.ts" || "$file" == "scripts/verify-tauri-platform-gates.test.ts" ]]; then
                 tools_pack_tests_required=true
               fi
               if [[ "$file" == "e2e/specs/mac.spec.ts" || "$file" == "e2e/specs/win.spec.ts" || "$file" == "e2e/specs/win-tauri.spec.ts" || "$file" == "e2e/specs/linux.spec.ts" || "$file" == "package.json" || "$file" == "pnpm-lock.yaml" || "$file" == "pnpm-workspace.yaml" || "$file" == ".github/workflows/ci.yml" || "$file" == ".github/workflows/release-beta.yml" ]]; then

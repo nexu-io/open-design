@@ -112,12 +112,16 @@ Do not start this runbook until `scripts/verify-tauri-platform-gates.ts --update
 
 ### M5 default flip procedure
 
-1. Change `DEFAULT_DESKTOP_RUNTIME` from `electron` to `tauri` in both `tools/dev/src/config.ts` and `tools/pack/src/config.ts`.
-2. Keep `DESKTOP_RUNTIME_KINDS` accepting both `electron` and `tauri` during this transition window. This is the explicit Electron fallback required before M6.
-3. Change `.github/workflows/release-beta.yml` `desktop_runtime.default` from `electron` to `tauri`; update the adjacent input description so it no longer says public beta should keep Electron.
-4. Update Tauri-primary wording in `README.md`, `apps/AGENTS.md`, and `docs/architecture.md`. These files must stop describing Electron as the current/default desktop runtime.
-5. Mark all five M5 checklist items together. `pnpm guard` intentionally rejects partial M5 default flips.
-6. Run:
+1. Run the guarded M5 applicator:
+
+```bash
+pnpm exec tsx scripts/apply-tauri-migration-m5.ts
+```
+
+The script refuses to run until the M4 Windows/Linux checkboxes and native evidence marker have been written by `scripts/verify-tauri-platform-gates.ts --update-migration-doc`. When allowed, it changes `DEFAULT_DESKTOP_RUNTIME` from `electron` to `tauri` in both `tools/dev/src/config.ts` and `tools/pack/src/config.ts`, keeps `DESKTOP_RUNTIME_KINDS` accepting both runtimes for the explicit Electron fallback, flips `.github/workflows/release-beta.yml` `desktop_runtime.default`, updates Tauri-primary wording in `README.md`, `apps/AGENTS.md`, and `docs/architecture.md`, and marks all five M5 checklist items together.
+
+2. Review the applicator diff. If any surrounding docs have changed enough that an exact replacement fails, update the script and its fixture test rather than manually checking partial M5 lines.
+3. Run:
 
 ```bash
 pnpm guard
@@ -313,6 +317,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Added `--manifest` support to `scripts/verify-tauri-migration-handoff.ts`, producing a JSON sidecar with schema version, branch/base heads, bundle path, bundle SHA-256, and the receiving-side import command. `node --import tsx --test scripts/verify-tauri-migration-handoff.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `pnpm guard` passed.
 - 2026-05-20: Added `--manifest` support to `scripts/import-tauri-migration-bundle.ts` so the receiving machine can import the handoff JSON directly instead of manually copying the branch and SHA-256 arguments. The handoff verifier now round-trips through the same manifest import command it prints, while CLI `--bundle`, `--branch`, and `--expected-sha256` still override the manifest for copied bundle paths. `node --import tsx --test scripts/import-tauri-migration-bundle.test.ts scripts/verify-tauri-migration-handoff.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `pnpm guard` passed.
 - 2026-05-20: Added `scripts/verify-tauri-migration-remote.ts` so the write-capable receiving machine can confirm the pushed remote branch exactly matches the handoff manifest `branchHead` before waiting on native Windows/Linux CI. The remote verifier and test are part of root `pnpm guard` and CI packaging scope detection. `node --import tsx --test scripts/verify-tauri-migration-remote.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, `cd e2e && pnpm test tests/packaged-smoke-workflow.test.ts`, and `pnpm guard` passed.
+- 2026-05-20: Added `scripts/apply-tauri-migration-m5.ts` so the default flip after native M4 evidence is a guarded one-command edit instead of a manual multi-file checklist update. The script refuses to run before the verifier-applied M4 marker, then flips the tools-dev/tools-pack/release-beta defaults, preserves explicit Electron fallback support, updates Tauri-primary docs, and checks all M5 lines together. `node --import tsx --test scripts/apply-tauri-migration-m5.test.ts scripts/tauri-ci-scope.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, `cd e2e && pnpm test tests/packaged-smoke-workflow.test.ts`, `pnpm guard`, `pnpm install`, and a current-state `--dry-run` rejection check passed.
 
 ### Platform Gate Runners
 
