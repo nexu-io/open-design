@@ -2351,6 +2351,52 @@ function getPluginQueryPreview(plugin: InstalledPluginRecord): string {
   return trimmed.length > 96 ? `${trimmed.slice(0, 96)}…` : trimmed;
 }
 
+interface TypeTabBarProps {
+  activeChipId: string | null;
+  pendingChipId: string | null;
+  pendingPluginId: string | null;
+  pluginsLoading: boolean;
+  onPickChip: (chip: HomeHeroChip) => void;
+}
+
+function TypeTabBar({
+  activeChipId,
+  pendingChipId,
+  pendingPluginId,
+  pluginsLoading,
+  onPickChip,
+}: TypeTabBarProps) {
+  const chips = useMemo(() => chipsForGroup('create'), []);
+  const t = useT();
+  return (
+    <div className="home-hero__type-tabs" role="tablist" aria-label="Output type">
+      {chips.map((chip) => {
+        const isActive = activeChipId === chip.id;
+        const isPending = pendingChipId === chip.id;
+        const cls = ['home-hero__type-tab'];
+        if (isActive) cls.push('is-active');
+        if (isPending) cls.push('is-pending');
+        return (
+          <button
+            key={chip.id}
+            type="button"
+            role="tab"
+            className={cls.join(' ')}
+            data-chip-id={chip.id}
+            data-testid={`home-hero-rail-${chip.id}`}
+            onClick={() => onPickChip(chip)}
+            disabled={pluginsLoading || isPending || pendingPluginId !== null}
+            aria-selected={isActive}
+            title={chip.hint ?? t(chip.labelKey as any)}
+          >
+            <span>{t(chip.labelKey as any)}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 interface RailGroupProps {
   group: ChipGroup;
   activeChipId: string | null;

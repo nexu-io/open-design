@@ -498,7 +498,8 @@ export const zhCN: Dict = {
   'recentProjects.title': '最近项目',
   'recentProjects.viewAll': '查看全部',
   'recentProjects.empty': '还没有项目 — 输入 Prompt 即可开始。',
-  'pluginsHome.title': 'Community',
+  
+  'pluginsHome.title': '官方入门',
   'pluginsHome.subtitle': '当前运行环境内置的 Open Design 工作流。选择一个加载 starter prompt，或浏览插件市场查看更多。',
   'pluginsHome.browseRegistry': '浏览插件市场',
   'pluginsHome.count': '{filtered} / {total}',
