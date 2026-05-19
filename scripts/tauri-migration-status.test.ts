@@ -362,6 +362,8 @@ async function writeHandoffArchive(handoffDir: string): Promise<{ archivePath: s
       "download-tauri-m4-reports.ts",
       "--expected-head",
       "--wait",
+      "TAURI_PR_BODY_PATH",
+      "--body-file",
       "GITHUB_RUN_ID",
       "",
     ].join("\n"),

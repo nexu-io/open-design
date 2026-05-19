@@ -37,7 +37,9 @@ test("package-tauri-migration-handoff creates a tarball and checksum sidecar", a
   assert.match(result.stdout, /attempts this automatically when gh is available/);
   assert.match(result.stdout, /gh workflow run ci\.yml --ref 'codex\/electron-to-tauri-migration'/);
   assert.match(result.stdout, /Fallback:/);
+  assert.match(result.stdout, /template-complete PR body/);
   assert.match(result.stdout, /gh pr create --draft/);
+  assert.match(result.stdout, /--body-file \.tmp\/tauri-migration-pr-body\.md/);
   assert.match(result.stdout, /download-tauri-m4-reports/);
   assert.match(result.stdout, /--expected-head <migration-branch-head>/);
   assert.match(result.stdout, /--wait/);
@@ -54,6 +56,12 @@ test("package-tauri-migration-handoff creates a tarball and checksum sidecar", a
   assert.match(commandScript, /Requested native CI dispatch/);
   assert.match(commandScript, /TAURI_NATIVE_CI_TRIGGER/);
   assert.match(commandScript, /gh pr create --draft/);
+  assert.match(commandScript, /TAURI_PR_BODY_PATH/);
+  assert.match(commandScript, /<<'PR_BODY'/);
+  assert.match(commandScript, /--body-file \$pr_body_path/);
+  assert.match(commandScript, /## Why/);
+  assert.match(commandScript, /## Surface area/);
+  assert.match(commandScript, /## Validation/);
   assert.match(commandScript, /GITHUB_RUN_ID/);
   assert.match(commandScript, /download-tauri-m4-reports/);
   assert.match(commandScript, /--expected-head "\$expected_head"/);

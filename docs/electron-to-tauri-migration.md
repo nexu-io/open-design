@@ -358,6 +358,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Tightened the remote CI handoff instructions so the receiving machine explicitly triggers native CI after the verified branch push. `ci.yml` does not run on arbitrary feature-branch pushes, so the generated handoff output and `.commands.sh` sidecar now point at `gh workflow run ci.yml --ref codex/electron-to-tauri-migration` or opening a draft PR before downloading Windows/Linux M4 reports.
 - 2026-05-20: Extended the `.commands.sh` sidecar so a write-capable receiver automatically attempts `gh workflow run ci.yml --ref codex/electron-to-tauri-migration` after the verified branch push when `gh` is available. If dispatch is disabled with `TAURI_NATIVE_CI_TRIGGER=0` or `gh` is unavailable, the same script prints the manual workflow dispatch and draft PR commands.
 - 2026-05-20: Added branch-head-aware CI report waiting to `scripts/download-tauri-m4-reports.ts`. Receivers can now pass `--expected-head <sha> --wait` so post-dispatch report download waits for the matching migration commit instead of accidentally consuming an older completed branch run.
+- 2026-05-20: Updated the draft PR fallback in the handoff command sidecar to write and reference a template-complete `.tmp/tauri-migration-pr-body.md`, so using PR creation to trigger native CI still follows the repository PR body requirements.
 
 ### Platform Gate Runners
 
@@ -470,8 +471,10 @@ gh pr create --draft \
   --base main \
   --head codex/electron-to-tauri-migration \
   --title "Migrate desktop runtime to Tauri" \
-  --body "Tauri migration branch for native Windows/Linux package smoke."
+  --body-file .tmp/tauri-migration-pr-body.md
 ```
+
+The command script writes `.tmp/tauri-migration-pr-body.md` before printing that fallback. Set `TAURI_PR_BODY_PATH=<path>` if the receiving checkout should write the template-complete draft PR body somewhere else.
 
 If the bundle is copied outside the extracted handoff directory, use the manifest form instead and add `--bundle /path/to/open-design-tauri-migration.bundle` to override only the file location.
 

@@ -497,6 +497,9 @@ async function readHandoffArchiveStatus(archivePath: string, handoff?: HandoffSt
     if (!commandScriptSource.includes("gh workflow run") && !commandScriptSource.includes("gh pr create")) {
       problems.push(`command script is missing native CI trigger guidance: ${commandScriptPath}`);
     }
+    if (!commandScriptSource.includes("TAURI_PR_BODY_PATH") || !commandScriptSource.includes("--body-file")) {
+      problems.push(`command script is missing template-complete draft PR guidance: ${commandScriptPath}`);
+    }
   } catch (error) {
     problems.push(`command script unavailable: ${error instanceof Error ? error.message : String(error)}`);
   }
