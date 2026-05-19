@@ -66,6 +66,12 @@ pnpm exec tsx scripts/continue-tauri-migration.ts \
 
 If the push is still blocked, keep the archive, `.sha256`, and `.commands.sh` sidecars current and retry the remote handoff on the next continuation pass.
 
+### Sustained follow-up
+
+The Codex thread should keep exactly one active heartbeat for this migration, named `Tauri migration follow-up` with id `tauri-migration-follow-up`, scheduled daily at 09:00 local thread time. The heartbeat prompt must start from this document and the current `tauri-migration-status` output, then use `scripts/continue-tauri-migration.ts --dry-run` before taking mutating action.
+
+Do not create duplicate reminders for the same work. If the continuation sequence changes, update that heartbeat prompt instead. The heartbeat must keep the goal active until M4 native evidence, M5 default flip, and M6 Electron cleanup are all complete and verified.
+
 ## Work Breakdown
 
 ### M0 Runtime parity
@@ -403,6 +409,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Tightened M4 CI report downloads to require the native Tauri smoke jobs themselves to pass before artifacts are consumed. `scripts/download-tauri-m4-reports.ts` now checks `gh run view --json jobs` and rejects runs missing `Packaged windows Tauri smoke` or `Packaged linux Tauri smoke`, or where either job is not `completed/success`. The report verifier still validates the downloaded artifacts afterward. `node --import tsx --test scripts/download-tauri-m4-reports.test.ts scripts/package-tauri-migration-handoff.test.ts scripts/tauri-migration-status.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, `pnpm guard`, and `pnpm typecheck` passed.
 - 2026-05-20: Required `--expected-head` whenever `scripts/download-tauri-m4-reports.ts --advance` is used. Verify-only downloads can still inspect a known run, but the mutating M4→M5 path now refuses to run unless the selected CI evidence is tied to the exact migration branch head. `node --import tsx --test scripts/download-tauri-m4-reports.test.ts` and `tsc -p scripts/tsconfig.json --noEmit` passed.
 - 2026-05-20: Bound the packaged handoff `GITHUB_RUN_ID=<id>` fast path to the manifest branch as well as the manifest head. The generated `.commands.sh` now calls `scripts/download-tauri-m4-reports.ts --run-id "$GITHUB_RUN_ID" --branch "$branch" --expected-head "$expected_head" ... --advance`, and `scripts/tauri-migration-status.ts` rejects stale command sidecars that omit the branch-bound explicit run guidance. `node --import tsx --test scripts/package-tauri-migration-handoff.test.ts scripts/tauri-migration-status.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, `pnpm guard`, and `pnpm typecheck` passed.
+- 2026-05-20: Reconfirmed the continuation state after the branch-bound handoff change. `scripts/tauri-migration-status.ts --handoff-dir /tmp/open-design-tauri-migration-handoff --remote origin --json` reports phase M4, current handoff/archive artifacts for the local branch head, and no matching `origin/codex/electron-to-tauri-migration` branch. `git ls-remote --heads origin codex/electron-to-tauri-migration` returned no branch, `git push -u origin codex/electron-to-tauri-migration` still failed with HTTP 403 for the configured credential, and `scripts/continue-tauri-migration.ts --dry-run` printed the expected push, CI dispatch, and branch-head-aware report download sequence. Updated the single active Codex heartbeat `tauri-migration-follow-up` to keep retrying from this document and the status runner without flipping M5 or starting M6 before verified M4 native evidence.
 
 ### Platform Gate Runners
 
