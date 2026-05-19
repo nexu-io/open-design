@@ -1022,7 +1022,7 @@ test('home hero attachment-only submit uploads the file and sends it with the fi
 async function gotoEntryHome(page: Page) {
   await page.goto('/');
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
-  if (await privacyDialog.isVisible().catch(() => false)) {
+  if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /not now/i }).click();
     await expect(privacyDialog).toHaveCount(0);
   }

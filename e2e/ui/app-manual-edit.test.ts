@@ -238,7 +238,7 @@ async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
-  if (await privacyDialog.isVisible().catch(() => false)) {
+  if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /not now/i }).click();
     await expect(privacyDialog).toHaveCount(0);
   }
@@ -307,13 +307,11 @@ async function seedDeckArtifact(
 
 async function openDesignFile(page: Page, fileName: string) {
   const preview = page.getByTestId('artifact-preview-frame');
-  if (
-    await preview
-      .waitFor({ state: 'visible', timeout: 5_000 })
-      .then(() => true)
-      .catch(() => false)
-  ) {
+  try {
+    await preview.waitFor({ state: 'visible', timeout: 5_000 });
     return;
+  } catch {
+    // Not yet visible; try opening via tab or file list
   }
 
   const filePattern = new RegExp(fileName.replace('.', '\\.'), 'i');
@@ -322,15 +320,13 @@ async function openDesignFile(page: Page, fileName: string) {
     .filter({ hasText: filePattern })
     .locator('.workspace-tab__main')
     .first();
-  if (
-    await fileTabButton
-      .waitFor({ state: 'visible', timeout: 2_000 })
-      .then(() => true)
-      .catch(() => false)
-  ) {
+  try {
+    await fileTabButton.waitFor({ state: 'visible', timeout: 2_000 });
     await fileTabButton.click();
     await expect(preview).toBeVisible();
     return;
+  } catch {
+    // Tab not visible; open from the file list instead
   }
 
   const fileButton = page.getByRole('button', { name: filePattern });
@@ -340,8 +336,7 @@ async function openDesignFile(page: Page, fileName: string) {
 }
 
 async function waitForLoadingToClear(page: Page) {
-  const loading = page.getByText('Loading Open Design…');
-  await loading.waitFor({ state: 'detached', timeout: 10_000 }).catch(() => {});
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: 10_000 });
 }
 
 async function expectFileSource(page: Page, projectId: string, fileName: string, snippets: string[]) {
