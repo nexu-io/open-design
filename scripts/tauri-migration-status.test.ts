@@ -178,6 +178,7 @@ test("tauri-migration-status reports a remote branch matching the handoff", asyn
   assert.equal(parsed.remote.expectedHead, head);
   assert.deepEqual(parsed.remote.problems, []);
   assert.match(parsed.nextActions.join("\n"), /already matches/);
+  assert.match(parsed.nextActions.join("\n"), /download-tauri-m4-reports/);
 });
 
 test("tauri-migration-status reports a missing remote branch", async (t) => {

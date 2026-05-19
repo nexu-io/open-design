@@ -346,6 +346,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Added `scripts/verify-tauri-migration-remote.ts` so the write-capable receiving machine can confirm the pushed remote branch exactly matches the handoff manifest `branchHead` before waiting on native Windows/Linux CI. The remote verifier and test are part of root `pnpm guard` and CI packaging scope detection. `node --import tsx --test scripts/verify-tauri-migration-remote.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, `cd e2e && pnpm test tests/packaged-smoke-workflow.test.ts`, and `pnpm guard` passed.
 - 2026-05-20: Added `scripts/apply-tauri-migration-m5.ts` so the default flip after native M4 evidence is a guarded one-command edit instead of a manual multi-file checklist update. The script refuses to run before the verifier-applied M4 marker, then flips the tools-dev/tools-pack/release-beta defaults, preserves explicit Electron fallback support, updates Tauri-primary docs, and checks all M5 lines together. `node --import tsx --test scripts/apply-tauri-migration-m5.test.ts scripts/tauri-ci-scope.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, `cd e2e && pnpm test tests/packaged-smoke-workflow.test.ts`, `pnpm guard`, `pnpm install`, and a current-state `--dry-run` rejection check passed.
 - 2026-05-20: Added `scripts/advance-tauri-migration-m4-m5.ts` so extracted native platform reports can move the migration through M4 evidence recording and M5 default flip in one guarded command. It runs the platform verifier with `--update-migration-doc`, then invokes the M5 applicator; if platform verification fails, M5 defaults remain untouched. `node --import tsx --test scripts/advance-tauri-migration-m4-m5.test.ts scripts/tauri-ci-scope.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, `cd e2e && pnpm test tests/packaged-smoke-workflow.test.ts`, `pnpm guard`, and `pnpm install` passed.
+- 2026-05-20: Added `scripts/download-tauri-m4-reports.ts` so the post-push CI handoff can download the Windows/Linux Tauri report artifacts through `gh`, verify them with `scripts/verify-tauri-platform-gates.ts`, and print the exact M4→M5 advance command. `node --import tsx --test scripts/download-tauri-m4-reports.test.ts scripts/tauri-ci-scope.test.ts` and `tsc -p scripts/tsconfig.json --noEmit` passed.
 - 2026-05-20: Added `scripts/tauri-migration-inventory.ts` so M6 Electron cleanup starts from a machine-readable inventory of remaining Electron dependencies, lockfile importers, runtime files, pack resources, tests, and guidance references. Current inventory reports 3 package manifests, 3 lockfile importers, 3 runtime files, 1 pack resource, 18 test files, and 6 guidance files still blocking M6. `node --import tsx --test scripts/tauri-migration-inventory.test.ts scripts/tauri-migration-status.test.ts scripts/tauri-ci-scope.test.ts`, `pnpm exec tsx scripts/tauri-migration-inventory.ts --json`, `tsc -p scripts/tsconfig.json --noEmit`, `cd e2e && pnpm test tests/packaged-smoke-workflow.test.ts`, `pnpm guard`, and `pnpm install` passed.
 - 2026-05-20: Updated `scripts/tauri-migration-status.ts` next actions so M4 points at the current verified handoff, remote verification, native smoke, and M4→M5 advance commands, while M5 points at the guarded applicator instead of stale manual default-flip prose. `node --import tsx --test scripts/tauri-migration-status.test.ts`, `pnpm exec tsx scripts/tauri-migration-status.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `pnpm guard` passed.
 - 2026-05-20: Added `scripts/package-tauri-migration-handoff.ts` so a verified handoff directory is revalidated and packaged as a tarball with a `.sha256` sidecar before transfer. The status output now points at this packaging step before asking a write-capable machine to extract and run `scripts/push-tauri-migration-handoff.ts`. `node --import tsx --test scripts/package-tauri-migration-handoff.test.ts scripts/tauri-ci-scope.test.ts scripts/tauri-migration-status.test.ts` and `tsc -p scripts/tsconfig.json --noEmit` passed.
@@ -440,22 +441,30 @@ If the bundle is copied outside the extracted handoff directory, use the manifes
 
 Do not wait on platform CI until the remote verifier prints the same branch head recorded in the manifest. If it fails, re-push or regenerate the handoff before treating CI results as M4 evidence.
 
-If both pass, download or inspect their `open-design-ci-win-tauri-e2e-report` and `open-design-ci-linux-tauri-e2e-report` artifacts. The Windows report must prove NSIS build/install/start/eval/screenshot/stop/uninstall. The Linux report must prove AppImage build/install/start/eval/screenshot/stop/uninstall plus headless install/start/stop. Only then mark the three remaining M4 platform checkboxes complete and proceed to M5.
+If both pass, download and verify their `open-design-ci-win-tauri-e2e-report` and `open-design-ci-linux-tauri-e2e-report` artifacts:
+
+```bash
+pnpm exec tsx scripts/download-tauri-m4-reports.ts \
+  --run-id <github-run-id> \
+  --output-dir /tmp/open-design-tauri-m4-reports
+```
+
+When `--run-id` is omitted, the script uses `gh run list` to select the latest completed `ci.yml` run for `codex/electron-to-tauri-migration`. The Windows report must prove NSIS build/install/start/eval/screenshot/stop/uninstall. The Linux report must prove AppImage build/install/start/eval/screenshot/stop/uninstall plus headless install/start/stop. Only then mark the three remaining M4 platform checkboxes complete and proceed to M5.
 
 After extracting the report artifacts, verify the required evidence mechanically:
 
 ```bash
 pnpm exec tsx scripts/verify-tauri-platform-gates.ts \
-  --win-report /path/to/open-design-ci-win-tauri-e2e-report \
-  --linux-report /path/to/open-design-ci-linux-tauri-e2e-report
+  --win-report /tmp/open-design-tauri-m4-reports/open-design-ci-win-tauri-e2e-report \
+  --linux-report /tmp/open-design-tauri-m4-reports/open-design-ci-linux-tauri-e2e-report
 ```
 
 To apply the verified M4 evidence to this document in the same step, pass the document path:
 
 ```bash
 pnpm exec tsx scripts/verify-tauri-platform-gates.ts \
-  --win-report /path/to/open-design-ci-win-tauri-e2e-report \
-  --linux-report /path/to/open-design-ci-linux-tauri-e2e-report \
+  --win-report /tmp/open-design-tauri-m4-reports/open-design-ci-win-tauri-e2e-report \
+  --linux-report /tmp/open-design-tauri-m4-reports/open-design-ci-linux-tauri-e2e-report \
   --update-migration-doc docs/electron-to-tauri-migration.md
 ```
 
@@ -463,8 +472,8 @@ To verify the reports, update M4, and immediately apply the guarded M5 default f
 
 ```bash
 pnpm exec tsx scripts/advance-tauri-migration-m4-m5.ts \
-  --win-report /path/to/open-design-ci-win-tauri-e2e-report \
-  --linux-report /path/to/open-design-ci-linux-tauri-e2e-report
+  --win-report /tmp/open-design-tauri-m4-reports/open-design-ci-win-tauri-e2e-report \
+  --linux-report /tmp/open-design-tauri-m4-reports/open-design-ci-linux-tauri-e2e-report
 ```
 
 The verifier rejects skipped reports, missing screenshots, non-success suite results, wrong specs, missing health eval output, missing executable paths, non-empty `remainingPids`, Windows uninstall residue, and Linux headless regressions. Treat a passing verifier as the minimum evidence needed before editing the M4 checkboxes. Keep the verifier's printed `Windows NSIS M4 evidence` and `Linux AppImage/headless M4 evidence` sections with the PR or execution log when closing the M4 checkboxes.

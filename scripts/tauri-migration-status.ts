@@ -295,7 +295,9 @@ function nextActionsForPhase(
           : "Copy the packaged handoff archive and .sha256 sidecar to a write-capable machine, then run scripts/push-tauri-migration-handoff.ts --archive /path/to/open-design-tauri-migration-handoff.tar.gz --remote origin.",
       platformReports?.current === true
         ? "Advance M4 evidence and M5 defaults with scripts/advance-tauri-migration-m4-m5.ts using the verified report paths shown above."
-        : "Run the Windows and Linux Tauri package smoke jobs.",
+        : remote?.current === true
+          ? "Download and verify native CI artifacts with scripts/download-tauri-m4-reports.ts --run-id <github-run-id> --output-dir /tmp/open-design-tauri-m4-reports."
+          : "Run the Windows and Linux Tauri package smoke jobs.",
       ...(platformReports?.current === true
         ? []
         : ["Advance M4 evidence and M5 defaults with scripts/advance-tauri-migration-m4-m5.ts --win-report <dir> --linux-report <dir>."]),
