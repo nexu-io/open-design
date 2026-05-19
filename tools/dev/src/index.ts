@@ -33,6 +33,7 @@ import {
 
 import {
   ALL_APPS,
+  DEFAULT_DESKTOP_RUNTIME,
   DEFAULT_START_APPS,
   DEFAULT_STOP_APPS,
   parsePortOption,
@@ -1010,7 +1011,7 @@ function addPortOptions(command: ReturnType<typeof cli.command>) {
   return command
     .option("--daemon-port <port>", "force daemon port; conflict quick-fails")
     .option("--web-port <port>", "force web port; conflict quick-fails")
-    .option("--desktop-runtime <runtime>", "desktop runtime: electron|tauri (default: electron)")
+    .option("--desktop-runtime <runtime>", `desktop runtime: electron|tauri (default: ${DEFAULT_DESKTOP_RUNTIME})`)
     .option("--prod", "use production build (requires pnpm --filter @open-design/web build first)");
 }
 

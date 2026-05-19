@@ -28,6 +28,7 @@ export const DEFAULT_START_APPS = [APP_KEYS.DAEMON, APP_KEYS.WEB, APP_KEYS.DESKT
 export const DEFAULT_RUN_APPS = [APP_KEYS.DAEMON, APP_KEYS.WEB] as const;
 export const DEFAULT_STOP_APPS = [APP_KEYS.DESKTOP, APP_KEYS.WEB, APP_KEYS.DAEMON] as const;
 export const DESKTOP_RUNTIME_KINDS = ["electron", "tauri"] as const;
+export const DEFAULT_DESKTOP_RUNTIME = "electron" satisfies DesktopRuntimeKind;
 
 export type ToolDevAppName = (typeof ALL_APPS)[number];
 export type DesktopRuntimeKind = (typeof DESKTOP_RUNTIME_KINDS)[number];
@@ -150,7 +151,7 @@ export function parsePortOption(value: number | string | null | undefined, optio
 }
 
 export function resolveDesktopRuntimeKind(value: DesktopRuntimeKind | string | null | undefined): DesktopRuntimeKind {
-  if (value == null || value === "") return "electron";
+  if (value == null || value === "") return DEFAULT_DESKTOP_RUNTIME;
   if (DESKTOP_RUNTIME_KINDS.includes(value as DesktopRuntimeKind)) {
     return value as DesktopRuntimeKind;
   }

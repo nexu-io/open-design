@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { resolveToolPackConfig } from "../src/config.js";
+import { DEFAULT_DESKTOP_RUNTIME, resolveToolPackConfig } from "../src/config.js";
 
 const savedTelemetryRelayUrl = process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
 const savedPosthogKey = process.env.POSTHOG_KEY;
@@ -27,7 +27,8 @@ afterEach(() => {
 describe("resolveToolPackConfig telemetry relay", () => {
   it("defaults to the Electron desktop runtime during the parallel packaging phase", () => {
     const config = resolveToolPackConfig("mac", { namespace: "runtime-default-test" });
-    expect(config.desktopRuntime).toBe("electron");
+    expect(DEFAULT_DESKTOP_RUNTIME).toBe("electron");
+    expect(config.desktopRuntime).toBe(DEFAULT_DESKTOP_RUNTIME);
   });
 
   it("accepts the Tauri desktop runtime without changing namespace-scoped roots", () => {

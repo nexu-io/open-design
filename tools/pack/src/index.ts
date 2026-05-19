@@ -1,7 +1,7 @@
 import { cac } from "cac";
 import type { CAC } from "cac";
 
-import { resolveToolPackConfig, type ToolPackCliOptions, type ToolPackPlatform } from "./config.js";
+import { DEFAULT_DESKTOP_RUNTIME, resolveToolPackConfig, type ToolPackCliOptions, type ToolPackPlatform } from "./config.js";
 import {
   cleanupPackedMacNamespace,
   installPackedMacDmg,
@@ -61,7 +61,7 @@ type CacCommand = ReturnType<CAC["command"]>;
 function addSharedOptions(command: CacCommand) {
   return command
     .option("--cache-dir <path>", "tools-pack cache directory")
-    .option("--desktop-runtime <runtime>", "desktop runtime: electron|tauri (default: electron)")
+    .option("--desktop-runtime <runtime>", `desktop runtime: electron|tauri (default: ${DEFAULT_DESKTOP_RUNTIME})`)
     .option("--dir <path>", "tools-pack root directory")
     .option("--json", "print JSON")
     .option("--namespace <name>", "runtime namespace")

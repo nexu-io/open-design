@@ -2,13 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  DEFAULT_DESKTOP_RUNTIME,
   resolveDesktopRuntimeKind,
   resolveToolDevConfig,
 } from "../src/config.js";
 
 test("resolveDesktopRuntimeKind defaults to Electron during parallel migration", () => {
-  assert.equal(resolveDesktopRuntimeKind(undefined), "electron");
-  assert.equal(resolveDesktopRuntimeKind(""), "electron");
+  assert.equal(DEFAULT_DESKTOP_RUNTIME, "electron");
+  assert.equal(resolveDesktopRuntimeKind(undefined), DEFAULT_DESKTOP_RUNTIME);
+  assert.equal(resolveDesktopRuntimeKind(""), DEFAULT_DESKTOP_RUNTIME);
 });
 
 test("resolveDesktopRuntimeKind accepts the opt-in Tauri runtime", () => {

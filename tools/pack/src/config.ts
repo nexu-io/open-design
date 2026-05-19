@@ -21,6 +21,7 @@ export type ToolPackMacCompression = "store" | "normal" | "maximum";
 export type ToolPackWebOutputMode = "server" | "standalone";
 
 export const DESKTOP_RUNTIME_KINDS = ["electron", "tauri"] as const;
+export const DEFAULT_DESKTOP_RUNTIME = "electron" satisfies ToolPackDesktopRuntimeKind;
 
 export type ToolPackCliOptions = {
   appVersion?: string;
@@ -108,7 +109,7 @@ function resolveToolPackBuildOutput(platform: ToolPackPlatform, value: string | 
 export function resolveToolPackDesktopRuntimeKind(
   value: string | undefined,
 ): ToolPackDesktopRuntimeKind {
-  if (value == null || value.length === 0) return "electron";
+  if (value == null || value.length === 0) return DEFAULT_DESKTOP_RUNTIME;
   if ((DESKTOP_RUNTIME_KINDS as readonly string[]).includes(value)) {
     return value as ToolPackDesktopRuntimeKind;
   }
