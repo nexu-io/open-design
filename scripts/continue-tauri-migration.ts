@@ -325,15 +325,15 @@ async function requestNativeCiDispatch(args: Args): Promise<
   | { status: "unavailable"; message: string }
 > {
   const commandArgs = ["workflow", "run", "ci.yml", "--ref", args.branch];
+  if (!(await commandExists(args.ghBin))) {
+    return { status: "unavailable", message: `${args.ghBin} is not available on PATH` };
+  }
   if (args.dryRun) {
     await run(args.ghBin, commandArgs, {
       cwd: args.root,
       dryRun: true,
     });
     return { status: "dry-run" };
-  }
-  if (!(await commandExists(args.ghBin))) {
-    return { status: "unavailable", message: `${args.ghBin} is not available on PATH` };
   }
   try {
     await run(args.ghBin, commandArgs, {
