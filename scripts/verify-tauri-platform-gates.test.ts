@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
@@ -71,6 +71,54 @@ test("verify-tauri-platform-gates rejects missing installed executable evidence"
   await writeWindowsReport(winReport, { omitExecutablePath: true });
 
   await assert.rejects(runVerifier("--win-report", winReport), /win start\.executablePath must be a non-empty string/);
+});
+
+test("verify-tauri-platform-gates can apply verified M4 evidence to the migration doc", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "open-design-tauri-gates-doc-"));
+  t.after(() => void rm(root, { force: true, recursive: true }));
+
+  const winReport = join(root, "win");
+  const linuxReport = join(root, "linux");
+  const migrationDoc = join(root, "electron-to-tauri-migration.md");
+  await writeWindowsReport(winReport);
+  await writeLinuxReport(linuxReport);
+  await writeFile(
+    migrationDoc,
+    [
+      "Last updated: 2026-05-20",
+      "",
+      "### M4 Platform package smoke",
+      "",
+      "- [ ] Windows NSIS: build, install, start, inspect status/eval/screenshot, stop.",
+      "- [ ] Linux: build AppImage, install, start, inspect status/eval/screenshot, stop.",
+      "- [ ] Linux headless platform smoke remains supported and unaffected.",
+      "",
+      "## Execution Log",
+      "",
+      "- 2026-05-20: Existing entry.",
+      "",
+      "### Platform Gate Runners",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+
+  const result = await runVerifier(
+    "--win-report",
+    winReport,
+    "--linux-report",
+    linuxReport,
+    "--update-migration-doc",
+    migrationDoc,
+  );
+  const updated = await readFile(migrationDoc, "utf8");
+
+  assert.match(result.stdout, /Updated migration document:/);
+  assert.match(updated, /- \[x\] Windows NSIS: build, install, start, inspect status\/eval\/screenshot, stop\./);
+  assert.match(updated, /- \[x\] Linux: build AppImage, install, start, inspect status\/eval\/screenshot, stop\./);
+  assert.match(updated, /- \[x\] Linux headless platform smoke remains supported and unaffected\./);
+  assert.match(updated, /Verified native Windows\/Linux M4 package smoke/);
+  assert.match(updated, /### Platform Gate Runners/);
 });
 
 async function runVerifier(...args: string[]): Promise<{ stderr: string; stdout: string }> {

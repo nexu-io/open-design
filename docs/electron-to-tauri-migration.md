@@ -234,6 +234,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Resolved the Windows/Linux Tauri `--to dir` command-shape decision by making CLI help label `dir` as Electron-only and locking the Tauri path to fail fast with installer-target guidance. `pnpm --filter @open-design/tools-pack test -- tauri-targets`, `pnpm --filter @open-design/tools-pack typecheck`, and `pnpm guard` passed.
 - 2026-05-20: Added the Tauri platform report verifier and verifier test files to CI packaging scope detection. PRs that change `scripts/verify-tauri-platform-gates.ts` or its test now rerun the Windows/Linux Tauri smoke jobs instead of only validating the script locally.
 - 2026-05-20: Strengthened `scripts/verify-tauri-platform-gates.ts` success output so passing native reports print the exact M4 evidence summary: installer/AppImage paths, installed executable path, loopback URL, health URL, screenshot, stop residue, uninstall residue, and Linux headless launcher/start/stop evidence. The verifier now also rejects missing `start.executablePath`. `node --import tsx --test scripts/verify-tauri-platform-gates.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `pnpm guard` passed.
+- 2026-05-20: Added a guarded `--update-migration-doc` mode to `scripts/verify-tauri-platform-gates.ts`. It requires both Windows and Linux reports to pass, then marks the three remaining M4 platform checkboxes complete and appends an execution-log entry. `node --import tsx --test scripts/verify-tauri-platform-gates.test.ts` and `tsc -p scripts/tsconfig.json --noEmit` passed.
 
 ### Platform Gate Runners
 
@@ -292,6 +293,15 @@ After extracting the report artifacts, verify the required evidence mechanically
 pnpm exec tsx scripts/verify-tauri-platform-gates.ts \
   --win-report /path/to/open-design-ci-win-tauri-e2e-report \
   --linux-report /path/to/open-design-ci-linux-tauri-e2e-report
+```
+
+To apply the verified M4 evidence to this document in the same step, pass the document path:
+
+```bash
+pnpm exec tsx scripts/verify-tauri-platform-gates.ts \
+  --win-report /path/to/open-design-ci-win-tauri-e2e-report \
+  --linux-report /path/to/open-design-ci-linux-tauri-e2e-report \
+  --update-migration-doc docs/electron-to-tauri-migration.md
 ```
 
 The verifier rejects skipped reports, missing screenshots, non-success suite results, wrong specs, missing health eval output, missing executable paths, non-empty `remainingPids`, Windows uninstall residue, and Linux headless regressions. Treat a passing verifier as the minimum evidence needed before editing the M4 checkboxes. Keep the verifier's printed `Windows NSIS M4 evidence` and `Linux AppImage/headless M4 evidence` sections with the PR or execution log when closing the M4 checkboxes.

@@ -1,4 +1,4 @@
-import { access, readFile, stat } from "node:fs/promises";
+import { access, readFile, stat, writeFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 
 type Platform = "linux" | "win";
@@ -28,15 +28,24 @@ type PlatformEvidence = {
   lines: string[];
 };
 
+type ParsedArgs = {
+  linuxReport?: string;
+  migrationDoc?: string;
+  winReport?: string;
+};
+
 const workspaceRoot = resolve(import.meta.dirname, "..");
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
+  if (args.migrationDoc != null && (args.winReport == null || args.linuxReport == null)) {
+    throw new Error("--update-migration-doc requires both --win-report and --linux-report");
+  }
   const checks: Array<Promise<PlatformEvidence>> = [];
   if (args.winReport != null) checks.push(verifyReport("win", args.winReport));
   if (args.linuxReport != null) checks.push(verifyReport("linux", args.linuxReport));
   if (checks.length === 0) {
-    throw new Error("usage: tsx scripts/verify-tauri-platform-gates.ts --win-report <dir> --linux-report <dir>");
+    throw new Error("usage: tsx scripts/verify-tauri-platform-gates.ts --win-report <dir> --linux-report <dir> [--update-migration-doc <path>]");
   }
   const evidence = (await Promise.all(checks)).sort((left, right) => left.platform.localeCompare(right.platform));
   console.log("Tauri platform gate reports passed verification.");
@@ -46,10 +55,14 @@ async function main(): Promise<void> {
       console.log(`  - ${line}`);
     }
   }
+  if (args.migrationDoc != null) {
+    await updateMigrationDoc(args.migrationDoc, evidence);
+    console.log(`Updated migration document: ${args.migrationDoc}`);
+  }
 }
 
-function parseArgs(args: string[]): { linuxReport?: string; winReport?: string } {
-  const parsed: { linuxReport?: string; winReport?: string } = {};
+function parseArgs(args: string[]): ParsedArgs {
+  const parsed: ParsedArgs = {};
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     const value = args[index + 1];
@@ -63,6 +76,14 @@ function parseArgs(args: string[]): { linuxReport?: string; winReport?: string }
     }
     if (arg === "--win-report") {
       parsed.winReport = resolveFromWorkspace(value!);
+      index += 1;
+      continue;
+    }
+    if (arg === "--update-migration-doc") {
+      if (value == null) {
+        throw new Error("--update-migration-doc requires a path");
+      }
+      parsed.migrationDoc = resolveFromWorkspace(value);
       index += 1;
       continue;
     }
@@ -218,6 +239,52 @@ function linuxEvidence({ summary }: VerificationContext, manifest: Manifest): Pl
       `uninstall.removed=${JSON.stringify(removed)}`,
     ],
   };
+}
+
+async function updateMigrationDoc(path: string, evidence: PlatformEvidence[]): Promise<void> {
+  if (!evidence.some((entry) => entry.platform === "win") || !evidence.some((entry) => entry.platform === "linux")) {
+    throw new Error("updating the migration document requires verified Windows and Linux evidence");
+  }
+  const date = new Date().toISOString().slice(0, 10);
+  let content = await readFile(path, "utf8");
+  content = content.replace(/^Last updated: .+$/m, `Last updated: ${date}`);
+  content = replaceChecklistLine(
+    content,
+    "Windows NSIS: build, install, start, inspect status/eval/screenshot, stop.",
+  );
+  content = replaceChecklistLine(
+    content,
+    "Linux: build AppImage, install, start, inspect status/eval/screenshot, stop.",
+  );
+  content = replaceChecklistLine(
+    content,
+    "Linux headless platform smoke remains supported and unaffected.",
+  );
+  const summary = [
+    `- ${date}: Verified native Windows/Linux M4 package smoke with \`scripts/verify-tauri-platform-gates.ts --update-migration-doc\`.`,
+    "  The verifier output contains the `Windows NSIS M4 evidence` and `Linux AppImage/headless M4 evidence` sections required to close M4 and proceed to M5.",
+  ].join("\n");
+  if (!content.includes(summary)) {
+    const marker = "\n### Platform Gate Runners";
+    if (!content.includes(marker)) {
+      throw new Error(`could not find Platform Gate Runners marker in ${path}`);
+    }
+    content = content.replace(marker, `\n${summary}\n${marker}`);
+  }
+  await writeFile(path, content, "utf8");
+}
+
+function replaceChecklistLine(content: string, label: string): string {
+  const escapedLabel = escapeRegExp(label);
+  const pattern = new RegExp(`^- \\[[ x]\\] ${escapedLabel}$`, "m");
+  if (!pattern.test(content)) {
+    throw new Error(`could not find migration checklist line: ${label}`);
+  }
+  return content.replace(pattern, `- [x] ${label}`);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 async function verifyScreenshot({ platform, reportRoot, summary }: VerificationContext, manifest: Manifest): Promise<void> {
