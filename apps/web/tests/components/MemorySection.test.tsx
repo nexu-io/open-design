@@ -415,6 +415,7 @@ describe('MemorySection', () => {
   it('clears extraction history after clicking Clear', async () => {
     globalThis.EventSource = StubEventSource as unknown as typeof EventSource;
     const deletedUrls: string[] = [];
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
 
     globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = input.toString();
@@ -464,6 +465,63 @@ describe('MemorySection', () => {
       expect(screen.getByText('No extractions yet. The next chat turn will populate this list.')).toBeTruthy();
     });
     expect(deletedUrls).toEqual(['/api/memory/extractions']);
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    confirmSpy.mockRestore();
+  });
+
+  it('does not clear extraction history when Clear is cancelled', async () => {
+    globalThis.EventSource = StubEventSource as unknown as typeof EventSource;
+    const deletedUrls: string[] = [];
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(JSON.stringify({
+          enabled: true,
+          rootDir: '/tmp/memory',
+          index: '# Memory\n',
+          entries: [],
+          extraction: null,
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url === '/api/memory/extractions' && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({
+          extractions: [
+            {
+              id: 'ex-1',
+              phase: 'success',
+              kind: 'llm',
+              startedAt: Date.now(),
+              finishedAt: Date.now() + 1200,
+              userMessagePreview: 'Remember I prefer dark mode',
+              proposedCount: 1,
+              writtenCount: 1,
+            },
+          ],
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url === '/api/memory/extractions' && init?.method === 'DELETE') {
+        deletedUrls.push(url);
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    }) as typeof fetch;
+
+    renderMemorySection();
+
+    fireEvent.click(await screen.findByText('Extraction history'));
+    expect(await screen.findByText('Remember I prefer dark mode')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+
+    expect(deletedUrls).toEqual([]);
+    expect(screen.getByText('Remember I prefer dark mode')).toBeTruthy();
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    confirmSpy.mockRestore();
   });
 
   it('loads preview, edits an entry, and refreshes the saved content', async () => {
