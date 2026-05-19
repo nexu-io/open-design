@@ -360,6 +360,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Added branch-head-aware CI report waiting to `scripts/download-tauri-m4-reports.ts`. Receivers can now pass `--expected-head <sha> --wait` so post-dispatch report download waits for the matching migration commit instead of accidentally consuming an older completed branch run.
 - 2026-05-20: Updated the draft PR fallback in the handoff command sidecar to write and reference a template-complete `.tmp/tauri-migration-pr-body.md`, so using PR creation to trigger native CI still follows the repository PR body requirements.
 - 2026-05-20: Aligned the generated handoff Markdown note and this runbook with the executable `.commands.sh` receiver flow: checksum verification, import, push, remote-head verification, optional workflow dispatch, template PR body generation, branch-head-aware report waiting, and guarded M4→M5 advance.
+- 2026-05-20: Added `scripts/continue-tauri-migration.ts` as the repo-local continuation runner. It reads `scripts/tauri-migration-status.ts`, refreshes stale handoff artifacts, pushes/verifies the migration branch when credentials allow, optionally waits for matching native M4 reports, and only advances through the existing guarded scripts.
 
 ### Platform Gate Runners
 
@@ -416,6 +417,18 @@ pnpm exec tsx scripts/tauri-migration-status.ts \
 ```
 
 When `--handoff-dir` is provided, status also checks the default handoff archive at `<handoff-dir>.tar.gz`, its `.sha256` sidecar, and its `.commands.sh` sidecar. If the archive was written elsewhere, add `--handoff-archive /path/to/open-design-tauri-migration-handoff.tar.gz` so the next-action list reflects the actual transferable artifact. Status also auto-detects verified platform reports in `/tmp/open-design-tauri-m4-reports` when that default download directory exists. If reports were downloaded elsewhere with `scripts/download-tauri-m4-reports.ts --output-dir <dir>`, pass `--report-dir <dir>` instead of spelling out both report artifact paths.
+
+For the current machine, use the continuation runner to print or execute the next safe step without bypassing the M4/M5/M6 guards:
+
+```bash
+pnpm exec tsx scripts/continue-tauri-migration.ts --dry-run
+```
+
+When the branch can be pushed and the native CI artifacts are expected to become available, the same runner can wait for the matching branch-head reports and apply the guarded M4→M5 advance:
+
+```bash
+pnpm exec tsx scripts/continue-tauri-migration.ts --wait-reports --advance
+```
 
 To collect native M4 evidence, push that branch with a credential that can write to `nexu-io/open-design`, open a draft PR against `main`, and wait for these CI jobs:
 

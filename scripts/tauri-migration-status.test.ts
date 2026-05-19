@@ -26,6 +26,7 @@ import {
 const execFileAsync = promisify(execFile);
 const scriptsRoot = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsRoot, "..");
+const continueScript = join(scriptsRoot, "continue-tauri-migration.ts");
 const statusScript = join(scriptsRoot, "tauri-migration-status.ts");
 const linuxArtifactName = "open-design-ci-linux-tauri-e2e-report";
 const winArtifactName = "open-design-ci-win-tauri-e2e-report";
@@ -297,6 +298,71 @@ test("tauri-migration-status reports incomplete platform report inputs", async (
   assert.deepEqual(parsed.platformReports.problems, ["Linux report not provided"]);
 });
 
+test("continue-tauri-migration dry-run refreshes handoff and plans a branch push", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  const remotePath = join(fixture, "empty.git");
+  await git(fixture, "init", "--bare", remotePath);
+
+  const result = await runContinue(
+    fixture,
+    "--handoff-dir",
+    handoffDir,
+    "--remote",
+    remotePath,
+    "--dry-run",
+    "--skip-dispatch",
+  );
+
+  assert.match(result.stdout, /Continuing Tauri migration/);
+  assert.match(result.stdout, /verify-tauri-migration-handoff\.ts/);
+  assert.match(result.stdout, new RegExp(`--cwd ${escapeRegExp(fixture)}`));
+  assert.match(result.stdout, /package-tauri-migration-handoff\.ts/);
+  assert.match(result.stdout, /push-tauri-migration-handoff\.ts/);
+  assert.match(result.stdout, /Would push codex\/electron-to-tauri-migration/);
+  assert.match(result.stdout, /download-tauri-m4-reports\.ts/);
+  assert.match(result.stdout, new RegExp(`--expected-head ${head}`));
+  assert.match(result.stdout, /--advance/);
+});
+
+test("continue-tauri-migration dry-run waits for reports when the remote already matches", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+  await writeHandoffArchive(handoffDir);
+  const remotePath = await createRemoteFixture(fixture, head);
+  const reportDir = join(fixture, "reports");
+
+  const result = await runContinue(
+    fixture,
+    "--handoff-dir",
+    handoffDir,
+    "--remote",
+    remotePath,
+    "--report-dir",
+    reportDir,
+    "--wait-reports",
+    "--advance",
+    "--dry-run",
+    "--skip-dispatch",
+  );
+
+  assert.doesNotMatch(result.stdout, /push-tauri-migration-handoff\.ts/);
+  assert.match(result.stdout, /download-tauri-m4-reports\.ts/);
+  assert.match(result.stdout, new RegExp(`--expected-head ${head}`));
+  assert.match(result.stdout, new RegExp(`--output-dir ${escapeRegExp(reportDir)}`));
+  assert.match(result.stdout, /--advance/);
+  assert.match(result.stdout, /Would wait for native M4 reports and advance M4→M5/);
+});
+
 async function createFixtureRoot(
   t: test.TestContext,
   options: { checked: readonly string[]; defaults: "electron" | "tauri"; extraDocLines?: readonly string[] },
@@ -561,9 +627,20 @@ async function runStatus(root: string, ...args: string[]): Promise<{ stderr: str
   });
 }
 
+async function runContinue(root: string, ...args: string[]): Promise<{ stderr: string; stdout: string }> {
+  return execFileAsync(process.execPath, ["--import", "tsx", continueScript, "--root", root, ...args], {
+    cwd: repoRoot,
+    maxBuffer: 1024 * 1024,
+  });
+}
+
 async function git(cwd: string, ...args: string[]): Promise<{ stderr: string; stdout: string }> {
   return execFileAsync("git", args, {
     cwd,
     maxBuffer: 1024 * 1024,
   });
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

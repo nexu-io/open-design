@@ -313,6 +313,7 @@ function nextActionsForPhase(
     const handoffReady = handoff?.current === true;
     const archiveReady = handoffArchive?.current === true;
     return [
+      "Run scripts/continue-tauri-migration.ts --dry-run to print the next executable handoff/push/report sequence; add --wait-reports --advance after the remote branch and native CI are available.",
       archiveReady
         ? `Copy the current packaged handoff archive ${handoffArchive.archive}, checksum ${handoffArchive.checksum}, and command script ${handoffArchive.commandScript} to a write-capable machine.`
         : handoffReady
