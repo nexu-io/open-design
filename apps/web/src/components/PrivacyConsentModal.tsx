@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import { useAnalytics } from '../analytics/provider';
 import { trackPrivacyModalClick } from '../analytics/events';
 import { useT } from '../i18n';

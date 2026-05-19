@@ -1685,7 +1685,7 @@ function UserMessage({
   const attachments = message.attachments ?? [];
   const commentAttachments = message.commentAttachments ?? [];
   const [copied, setCopied] = useState(false);
-  const copyTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     return () => {

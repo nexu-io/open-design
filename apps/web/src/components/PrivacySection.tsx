@@ -1,4 +1,4 @@
-import type { Dispatch, SetStateAction } from 'react';
+import type { Dispatch, JSX, SetStateAction } from 'react';
 import { useAnalytics } from '../analytics/provider';
 import { trackSettingsPrivacyClick } from '../analytics/events';
 import { useT } from '../i18n';
