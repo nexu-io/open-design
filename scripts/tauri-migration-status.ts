@@ -154,16 +154,17 @@ function currentPhase(groups: ChecklistGroupStatus[]): MigrationStatus["phase"] 
 function nextActionsForPhase(phase: MigrationStatus["phase"]): string[] {
   if (phase === "M4") {
     return [
-      "Push or import the migration branch on a write-capable machine.",
+      "Regenerate the verified handoff bundle with scripts/verify-tauri-migration-handoff.ts --output /tmp/open-design-tauri-migration.bundle --manifest /tmp/open-design-tauri-migration-handoff.json.",
+      "Import and push the manifest on a write-capable machine, then run scripts/verify-tauri-migration-remote.ts --manifest /tmp/open-design-tauri-migration-handoff.json --remote origin.",
       "Run the Windows and Linux Tauri package smoke jobs.",
-      "Verify reports with scripts/verify-tauri-platform-gates.ts --update-migration-doc docs/electron-to-tauri-migration.md.",
+      "Advance M4 evidence and M5 defaults with scripts/advance-tauri-migration-m4-m5.ts --win-report <dir> --linux-report <dir>.",
     ];
   }
   if (phase === "M5") {
     return [
-      "Flip tools-dev, tools-pack, and release-beta defaults to Tauri together.",
+      "Run scripts/apply-tauri-migration-m5.ts if M4 evidence is already recorded but M5 is still open.",
       "Keep electron in DESKTOP_RUNTIME_KINDS for the fallback window.",
-      "Update README, architecture docs, and directory guidance to Tauri-primary wording.",
+      "Run pnpm guard, pnpm typecheck, and the tools-dev/tools-pack tests after the M5 applicator diff.",
     ];
   }
   if (phase === "M6") {

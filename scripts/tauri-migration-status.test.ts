@@ -51,7 +51,9 @@ test("tauri-migration-status reports the current M4 blocker state", async (t) =>
       { checked: 0, name: "M6", total: 5 },
     ],
   );
-  assert.match(parsed.nextActions.join("\n"), /verify-tauri-platform-gates/);
+  assert.match(parsed.nextActions.join("\n"), /verify-tauri-migration-handoff/);
+  assert.match(parsed.nextActions.join("\n"), /verify-tauri-migration-remote/);
+  assert.match(parsed.nextActions.join("\n"), /advance-tauri-migration-m4-m5/);
 });
 
 test("tauri-migration-status advances to M5 after verified M4 checkboxes", async (t) => {
@@ -65,7 +67,7 @@ test("tauri-migration-status advances to M5 after verified M4 checkboxes", async
   const parsed = JSON.parse(result.stdout) as { phase: string; nextActions: string[] };
 
   assert.equal(parsed.phase, "M5");
-  assert.match(parsed.nextActions.join("\n"), /Flip tools-dev, tools-pack, and release-beta defaults/);
+  assert.match(parsed.nextActions.join("\n"), /apply-tauri-migration-m5/);
 });
 
 async function createFixtureRoot(
