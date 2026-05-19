@@ -18,7 +18,10 @@ function file(name: string, mtime = Date.now(), kind: ProjectFileKind = 'html'):
   };
 }
 
-function renderPanel(files: ProjectFile[]) {
+function renderPanel(
+  files: ProjectFile[],
+  overrides?: Partial<Parameters<typeof DesignFilesPanel>[0]>,
+) {
   const result = render(
     <DesignFilesPanel
       projectId="test-project"
@@ -34,6 +37,7 @@ function renderPanel(files: ProjectFile[]) {
       onUploadFiles={vi.fn()}
       onPaste={vi.fn()}
       onNewSketch={vi.fn()}
+      {...overrides}
     />,
   );
   return result;
@@ -251,7 +255,12 @@ describe('DesignFilesPanel shift-click range selection', () => {
     // The fix makes visiblePageOrder skip collapsed sections, so shift-clicking
     // from today.html to week.html produces range [today.html, week.html] with no
     // files from the collapsed yesterday section.
+    //
+    // We verify this through the batch-delete payload: after the shift-select,
+    // clicking the batch-delete control must invoke onDeleteFiles with exactly
+    // ['today.html', 'week.html'] — not 'yesterday.html'.
 
+    const onDeleteFiles = vi.fn();
     const now = Date.now();
     const startOfToday = new Date(now);
     startOfToday.setHours(0, 0, 0, 0);
@@ -267,7 +276,7 @@ describe('DesignFilesPanel shift-click range selection', () => {
       file('yesterday.html', yesterdayTs, 'html'),
       file('week.html',      weekTs,      'html'),
     ];
-    const { container } = renderPanel(files);
+    const { container } = renderPanel(files, { onDeleteFiles });
 
     // Switch to groupMode === 'modified'. The group-toggle area contains two
     // buttons: "Kind" (active/pressed) and "Modified" (not yet active).
@@ -296,8 +305,16 @@ describe('DesignFilesPanel shift-click range selection', () => {
 
     expect(isSelected(container, 'today.html')).toBe(true);
     expect(isSelected(container, 'week.html')).toBe(true);
-    // yesterday.html must NOT be selected — it lives in a collapsed section
-    expect(isSelected(container, 'yesterday.html')).toBe(false);
+
+    // Verify the internal selected set through the batch-delete consumer.
+    // If yesterday.html were still in the selection, onDeleteFiles would be called
+    // with it and this assertion would catch the data-loss regression.
+    const batchDeleteBtn = container.querySelector<HTMLElement>('[data-testid="design-files-batch-delete"]');
+    expect(batchDeleteBtn).not.toBeNull();
+    fireEvent.click(batchDeleteBtn!);
+    const deletedNames: string[] = onDeleteFiles.mock.calls[0]?.[0] ?? [];
+    expect(deletedNames.sort()).toEqual(['today.html', 'week.html']);
+    expect(deletedNames).not.toContain('yesterday.html');
 
     vi.useRealTimers();
   });
