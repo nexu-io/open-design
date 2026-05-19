@@ -383,7 +383,7 @@ export function SkillsSection({ cfg, setCfg }: Props) {
         {/* Row 2: filter dropdowns */}
         <div className="library-filter-selects">
           <label className="library-filter-select">
-            <span className="library-filter-select-label">Source</span>
+            <span className="library-filter-select-label">{t('settings.skillsFilterSource')}</span>
             <select
               value={sourceFilter}
               data-active={sourceFilter !== 'all' ? 'true' : undefined}
@@ -396,14 +396,14 @@ export function SkillsSection({ cfg, setCfg }: Props) {
                 const count = skills.filter((sk) => sk.source === s).length;
                 return (
                   <option key={s} value={s}>
-                    {s} ({count})
+                    {t(s === 'user' ? 'settings.skillsSourceUser' : 'settings.skillsSourceBuiltIn')} ({count})
                   </option>
                 );
               })}
             </select>
           </label>
           <label className="library-filter-select">
-            <span className="library-filter-select-label">Type</span>
+            <span className="library-filter-select-label">{t('settings.skillsFilterType')}</span>
             <select
               value={modeFilter}
               data-active={modeFilter !== 'all' ? 'true' : undefined}
@@ -424,7 +424,7 @@ export function SkillsSection({ cfg, setCfg }: Props) {
               className="library-filter-select"
               data-testid="skills-category-filters"
             >
-              <span className="library-filter-select-label">Category</span>
+              <span className="library-filter-select-label">{t('settings.skillsFilterCategory')}</span>
               <select
                 value={categoryFilter}
                 data-active={categoryFilter !== 'all' ? 'true' : undefined}
@@ -573,7 +573,7 @@ function SkillRow({
           className="skills-row-summary-btn"
           onClick={onToggleExpanded}
           aria-expanded={expanded}
-          title={expanded ? 'Collapse' : 'Expand'}
+          title={expanded ? t('settings.skillsCollapse') : t('settings.skillsExpand')}
         >
           <span className="skills-row-icon" aria-hidden>
             <Icon name="grid" size={14} />
@@ -585,7 +585,7 @@ function SkillRow({
               {skill.category ? (
                 <span
                   className="skills-row-summary-category"
-                  title={`Category: ${humanizeCategory(skill.category)}`}
+                  title={t('settings.skillsCategoryTitle', { category: humanizeCategory(skill.category) })}
                 >
                   {humanizeCategory(skill.category)}
                 </span>
@@ -593,9 +593,9 @@ function SkillRow({
               {skill.source === 'user' ? (
                 <span
                   className="skills-row-summary-source"
-                  title="User-imported skill"
+                  title={t('settings.skillsUserImported')}
                 >
-                  user
+                  {t('settings.skillsSourceUser')}
                 </span>
               ) : null}
             </span>
@@ -672,9 +672,7 @@ function SkillRow({
           data-testid="skills-edit-builtin-warning"
         >
           <p>
-            Editing this built-in skill creates a user override. The built-in
-            entry will be hidden from the list until you delete the override.
-            Continue?
+            {t('settings.skillsBuiltinEditWarning')}
           </p>
           <div className="skills-edit-builtin-actions">
             <button
@@ -798,7 +796,7 @@ function SkillDraftForm({
             type="text"
             value={draft.name}
             onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
-            placeholder="my-skill"
+            placeholder={t('settings.skillsNamePlaceholder')}
             disabled={isEdit}
           />
         </label>
@@ -810,7 +808,7 @@ function SkillDraftForm({
             onChange={(e) =>
               setDraft((d) => ({ ...d, triggers: e.target.value }))
             }
-            placeholder="search the web, summarize"
+            placeholder={t('settings.skillsTriggersPlaceholder')}
           />
         </label>
       </div>
@@ -822,7 +820,7 @@ function SkillDraftForm({
           onChange={(e) =>
             setDraft((d) => ({ ...d, description: e.target.value }))
           }
-          placeholder="What does this skill do? When should the agent reach for it?"
+          placeholder={t('settings.skillsDescriptionPlaceholder')}
         />
       </label>
       <label className="library-import-block">
@@ -831,7 +829,7 @@ function SkillDraftForm({
           rows={14}
           value={draft.body}
           onChange={(e) => setDraft((d) => ({ ...d, body: e.target.value }))}
-          placeholder={'# My skill\n\n1. Explain the workflow.\n2. Describe the inputs and outputs.'}
+          placeholder={t('settings.skillsBodyPlaceholder')}
         />
       </label>
       {error ? (

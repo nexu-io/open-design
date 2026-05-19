@@ -7,6 +7,7 @@
 // POST /api/projects/:projectId/genui/:surfaceId/revoke.
 
 import { useCallback, useEffect, useState } from 'react';
+import { useT } from '../i18n';
 
 interface SurfaceRow {
   id: string;
@@ -30,6 +31,7 @@ interface Props {
 }
 
 export function GenUIInbox(props: Props) {
+  const t = useT();
   const fetchSurfaces = props.fetchSurfaces ?? defaultFetchSurfaces;
   const revokeSurface = props.revokeSurface ?? defaultRevokeSurface;
   const [surfaces, setSurfaces] = useState<SurfaceRow[]>([]);
@@ -65,19 +67,19 @@ export function GenUIInbox(props: Props) {
   return (
     <div className="genui-inbox" data-testid="genui-inbox">
       <header className="genui-inbox__header">
-        <h2>Plugin memory</h2>
+        <h2>{t('genuiInbox.title')}</h2>
         <button
           type="button"
           className="genui-inbox__refresh"
           onClick={refresh}
-          aria-label="Refresh"
+          aria-label={t('genuiInbox.refresh')}
         >
-          Refresh
+          {t('genuiInbox.refresh')}
         </button>
       </header>
       {error ? <div role="alert" className="genui-inbox__error">{error}</div> : null}
       {surfaces.length === 0 ? (
-        <div className="genui-inbox__empty">No persisted plugin answers.</div>
+        <div className="genui-inbox__empty">{t('genuiInbox.empty')}</div>
       ) : (
         <ul className="genui-inbox__list">
           {surfaces.map((s) => (
@@ -87,8 +89,8 @@ export function GenUIInbox(props: Props) {
                 <span className="genui-inbox__kind">({s.kind} / {s.persist})</span>
               </div>
               <div className="genui-inbox__status">
-                {s.status}
-                {s.respondedBy ? ` by ${s.respondedBy}` : ''}
+                {t(statusLabelKey(s.status))}
+                {s.respondedBy ? t('genuiInbox.respondedBy', { name: s.respondedBy }) : ''}
               </div>
               {s.status === 'resolved' ? (
                 <button
@@ -97,7 +99,7 @@ export function GenUIInbox(props: Props) {
                   onClick={() => onRevoke(s.surfaceId)}
                   disabled={pendingRevoke === s.surfaceId}
                 >
-                  Revoke
+                  {t('genuiInbox.revoke')}
                 </button>
               ) : null}
             </li>
@@ -106,6 +108,10 @@ export function GenUIInbox(props: Props) {
       )}
     </div>
   );
+}
+
+function statusLabelKey(status: SurfaceRow['status']) {
+  return `genuiInbox.status.${status}` as const;
 }
 
 async function defaultFetchSurfaces(projectId: string): Promise<SurfaceRow[]> {

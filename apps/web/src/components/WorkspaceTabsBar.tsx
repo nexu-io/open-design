@@ -396,12 +396,12 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
   }
 
   return (
-    <header className="app-chrome-header workspace-tabs-chrome" aria-label="Workspace tabs">
+    <header className="app-chrome-header workspace-tabs-chrome" aria-label={t('workspaceTabs.aria')}>
       <div className="app-chrome-traffic-space workspace-tabs-traffic" aria-hidden />
       <div
         className="workspace-tabs-strip"
         role="tablist"
-        aria-label="Open workspaces"
+        aria-label={t('workspaceTabs.openWorkspaces')}
         ref={stripRef}
       >
         {visibleTabs.map((tab) => {
@@ -443,9 +443,9 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
             type="button"
             className="workspace-tab workspace-tab--overflow"
             onClick={() => setTabsMenuOpen(true)}
-            title="Show hidden tabs"
+            title={t('workspaceTabs.showHiddenTabs')}
           >
-            {hiddenTabCount} more
+            {t('workspaceTabs.more', { count: hiddenTabCount })}
           </button>
         ) : null}
         <div className="workspace-tabs-actions" ref={menuRef}>
@@ -453,8 +453,8 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
             type="button"
             className="workspace-tabs-new-btn"
             onClick={createNewTab}
-            title="New tab"
-            aria-label="New tab"
+            title={t('workspaceTabs.newTab')}
+            aria-label={t('workspaceTabs.newTab')}
           >
             <Icon name="plus" size={14} />
           </button>
@@ -462,30 +462,30 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
             type="button"
             className={`workspace-tabs-icon-btn${tabsMenuOpen ? ' is-active' : ''}`}
             onClick={() => setTabsMenuOpen((open) => !open)}
-            title="Search tabs"
-            aria-label="Search tabs"
+            title={t('workspaceTabs.searchTabs')}
+            aria-label={t('workspaceTabs.searchTabs')}
             aria-haspopup="dialog"
             aria-expanded={tabsMenuOpen}
           >
             <Icon name="search" size={15} />
           </button>
           {tabsMenuOpen ? (
-            <div className="workspace-tabs-popover" role="dialog" aria-label="Search tabs">
+            <div className="workspace-tabs-popover" role="dialog" aria-label={t('workspaceTabs.searchTabs')}>
               <div className="workspace-tabs-search">
                 <Icon name="search" size={14} />
                 <input
                   ref={searchInputRef}
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search tabs"
-                  aria-label="Search tabs"
+                  placeholder={t('workspaceTabs.searchTabs')}
+                  aria-label={t('workspaceTabs.searchTabs')}
                 />
               </div>
               <div className="workspace-tabs-popover__section">
-                <span>Open tabs</span>
+                <span>{t('workspaceTabs.openTabs')}</span>
                 <span>{state.tabs.length}</span>
               </div>
-              <div className="workspace-tabs-list" role="listbox" aria-label="Open tabs">
+              <div className="workspace-tabs-list" role="listbox" aria-label={t('workspaceTabs.openTabs')}>
                 {filteredTabs.length > 0 ? (
                   filteredTabs.map((display) => {
                     const active = display.id === state.activeTabId;
@@ -522,7 +522,7 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
                     );
                   })
                 ) : (
-                  <div className="workspace-tabs-empty">No tabs found</div>
+                  <div className="workspace-tabs-empty">{t('workspaceTabs.noTabsFound')}</div>
                 )}
               </div>
             </div>

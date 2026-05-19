@@ -584,7 +584,7 @@ export function NewProjectPanel({
     if (!onImportFolder) return;
     const trimmed = baseDir.trim();
     if (!trimmed) {
-      setImportFolderError({ message: 'Path cannot be empty' });
+      setImportFolderError({ message: t('newproj.importFolderPathEmpty') });
       return;
     }
     setImportFolderError(null);
@@ -593,7 +593,7 @@ export function NewProjectPanel({
       await onImportFolder(trimmed);
     } catch (err) {
       setImportFolderError({
-        message: err instanceof Error ? err.message : 'Failed to import folder',
+        message: err instanceof Error ? err.message : t('newproj.importFolderFailed'),
       });
     } finally {
       setImportingFolder(false);
@@ -607,7 +607,7 @@ export function NewProjectPanel({
           type="button"
           className={`newproj-tabs-arrow left${tabScroll.left ? '' : ' hidden'}`}
           onClick={() => scrollTabs(-1)}
-          aria-label="Scroll project types left"
+          aria-label={t('newproj.scrollTypesLeft')}
           tabIndex={tabScroll.left ? 0 : -1}
         >
           <Icon name="chevron-left" size={16} strokeWidth={2} />
@@ -630,7 +630,7 @@ export function NewProjectPanel({
           type="button"
           className={`newproj-tabs-arrow right${tabScroll.right ? '' : ' hidden'}`}
           onClick={() => scrollTabs(1)}
-          aria-label="Scroll project types right"
+          aria-label={t('newproj.scrollTypesRight')}
           tabIndex={tabScroll.right ? 0 : -1}
         >
           <Icon name="chevron-right" size={16} strokeWidth={2} />
@@ -643,7 +643,7 @@ export function NewProjectPanel({
             // "Beta" is an internationally adopted brand-style status marker;
             // intentionally not run through t() (consistent with short product
             // status pills that read the same across our supported locales).
-            <span className="newproj-title-badge" aria-label="Beta feature">Beta</span>
+            <span className="newproj-title-badge" aria-label={t('newproj.betaFeature')}>Beta</span>
           ) : null}
         </h3>
 
@@ -939,7 +939,7 @@ function PlatformPicker({
       className="newproj-section ds-picker platform-picker"
       ref={wrapRef}
     >
-      <label className="newproj-label">Target platforms</label>
+      <label className="newproj-label">{t('newproj.targetPlatformsLabel')}</label>
       <button
         type="button"
         className={`ds-picker-trigger${open ? ' open' : ''}${primary ? '' : ' empty'}`}
@@ -950,7 +950,7 @@ function PlatformPicker({
       >
         <span className="ds-picker-meta">
           <span className="ds-picker-title">
-            {primary ? t(primary.labelKey) : 'Pick a platform'}
+            {primary ? t(primary.labelKey) : t('newproj.pickPlatform')}
             {extraCount > 0 ? (
               <span className="ds-picker-extra-pill">+{extraCount}</span>
             ) : null}
@@ -968,7 +968,7 @@ function PlatformPicker({
           className="ds-picker-popover"
           id={listboxId}
           role="listbox"
-          aria-label="Target platforms"
+          aria-label={t('newproj.targetPlatformsLabel')}
           aria-multiselectable="true"
         >
           <div className="ds-picker-list">
@@ -1052,6 +1052,7 @@ function CompactToggle({
   disabled?: boolean;
   onChange: (v: boolean) => void;
 }) {
+  const t = useT();
   return (
     <button
       type="button"
@@ -1209,6 +1210,7 @@ function FidelityCard({
   label: string;
   variant: 'wireframe' | 'high-fidelity';
 }) {
+  const t = useT();
   return (
     <button
       type="button"
@@ -1647,6 +1649,7 @@ function TemplateOption({
   name: string;
   description: string;
 }) {
+  const t = useT();
   return (
     <div className={`template-option${active ? ' active' : ''}`}>
       <button
@@ -1665,8 +1668,8 @@ function TemplateOption({
         type="button"
         className="template-option-delete"
         onClick={(e) => { e.stopPropagation(); onDelete(); }}
-        title="Delete template"
-        aria-label={`Delete template ${name}`}
+        title={t('newproj.deleteTemplate')}
+        aria-label={t('newproj.deleteTemplateNamed', { name })}
       >
         ✕
       </button>

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
+import { useT } from '../i18n';
+import type { Dict } from '../i18n/types';
 
 export type PaletteId =
   | 'coral'
@@ -8,14 +10,14 @@ export type PaletteId =
   | 'risograph'
   | 'mono-noir';
 
-type Swatch = { id: PaletteId; label: string; stripe: string[] };
+type Swatch = { id: PaletteId; labelKey: keyof Dict; stripe: string[] };
 
 const PALETTES: Swatch[] = [
-  { id: 'coral',       label: 'Coral - default', stripe: ['#ff5a3c', '#ff7a5c', '#fde2d6', '#171717'] },
-  { id: 'electric',    label: 'Electric',        stripe: ['#7c3aed', '#a855f7', '#e9d5ff', '#171717'] },
-  { id: 'acid-forest', label: 'Acid forest',     stripe: ['#16a34a', '#22c55e', '#bbf7d0', '#0f1d14'] },
-  { id: 'risograph',   label: 'Risograph',       stripe: ['#e11d48', '#2563eb', '#fde68a', '#171717'] },
-  { id: 'mono-noir',   label: 'Mono noir',       stripe: ['#0a0a0a', '#262626', '#e5e5e5', '#fafafa'] },
+  { id: 'coral',       labelKey: 'paletteTweaks.coral', stripe: ['#ff5a3c', '#ff7a5c', '#fde2d6', '#171717'] },
+  { id: 'electric',    labelKey: 'paletteTweaks.electric', stripe: ['#7c3aed', '#a855f7', '#e9d5ff', '#171717'] },
+  { id: 'acid-forest', labelKey: 'paletteTweaks.acidForest', stripe: ['#16a34a', '#22c55e', '#bbf7d0', '#0f1d14'] },
+  { id: 'risograph',   labelKey: 'paletteTweaks.risograph', stripe: ['#e11d48', '#2563eb', '#fde68a', '#171717'] },
+  { id: 'mono-noir',   labelKey: 'paletteTweaks.monoNoir', stripe: ['#0a0a0a', '#262626', '#e5e5e5', '#fafafa'] },
 ];
 
 type Props = {
@@ -27,6 +29,7 @@ type Props = {
 };
 
 export function PaletteTweaks({ open, selected, onChange, onPreview, onClose }: Props) {
+  const t = useT();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [hovered, setHovered] = useState<PaletteId | 'original' | null>(null);
 
@@ -69,10 +72,10 @@ export function PaletteTweaks({ open, selected, onChange, onPreview, onClose }: 
   const isOriginal = selected === null;
 
   return (
-    <div className="palette-tweaks" ref={rootRef} role="dialog" aria-label="Tweaks">
+    <div className="palette-tweaks" ref={rootRef} role="dialog" aria-label={t('paletteTweaks.aria')}>
       <div className="palette-tweaks-header">
-        <span className="palette-tweaks-title">Tweaks panel</span>
-        <span className="palette-tweaks-sub">5 curated theme palettes</span>
+        <span className="palette-tweaks-title">{t('paletteTweaks.title')}</span>
+        <span className="palette-tweaks-sub">{t('paletteTweaks.subtitle')}</span>
       </div>
       <ul className="palette-tweaks-list" role="listbox">
         <li
@@ -86,7 +89,7 @@ export function PaletteTweaks({ open, selected, onChange, onPreview, onClose }: 
           <span className="palette-tweaks-stripe palette-tweaks-stripe-original" aria-hidden>
             <span className="palette-tweaks-chip palette-tweaks-chip-original" />
           </span>
-          <span className="palette-tweaks-label">Original</span>
+          <span className="palette-tweaks-label">{t('paletteTweaks.original')}</span>
           {isOriginal ? (
             <span className="palette-tweaks-check" aria-hidden>
               <Icon name="check" size={12} />
@@ -114,7 +117,7 @@ export function PaletteTweaks({ open, selected, onChange, onPreview, onClose }: 
                   <span key={i} className="palette-tweaks-chip" style={{ backgroundColor: c }} />
                 ))}
               </span>
-              <span className="palette-tweaks-label">{p.label}</span>
+              <span className="palette-tweaks-label">{t(p.labelKey)}</span>
               {isSelected ? (
                 <span className="palette-tweaks-check" aria-hidden>
                   <Icon name="check" size={12} />

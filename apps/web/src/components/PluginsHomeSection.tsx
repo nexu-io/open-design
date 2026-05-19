@@ -16,6 +16,8 @@
 // owns layout only.
 
 import type { InstalledPluginRecord } from '@open-design/contracts';
+import { useT } from '../i18n';
+import type { Dict } from '../i18n/types';
 import type { PluginShareAction } from '../state/projects';
 import { Icon } from './Icon';
 import { PluginCard } from './plugins-home/PluginCard';
@@ -60,10 +62,11 @@ export function PluginsHomeSection({
   onCreatePlugin,
   onBrowseRegistry,
   preferDefaultFacet = true,
-  title = 'Official starters',
-  subtitle = 'Ready-to-use Open Design workflows bundled with this runtime. Pick one to load a starter prompt, or browse the registry for more.',
-  emptyMessage = 'Catalog is empty. Bundled plugins ship with Open Design and should appear here automatically — try restarting the daemon if this persists.',
+  title,
+  subtitle,
+  emptyMessage,
 }: Props) {
+  const t = useT();
   const {
     visiblePlugins,
     featuredList,
@@ -86,14 +89,17 @@ export function PluginsHomeSection({
   const showContributionCard =
     contributionTarget !== null &&
     shouldShowContributionCard(filtered.length, selection.category);
+  const resolvedTitle = title ?? t('plugins.home.title');
+  const resolvedSubtitle = subtitle ?? t('plugins.home.subtitle');
+  const resolvedEmptyMessage = emptyMessage ?? t('plugins.home.empty');
 
   return (
     <section className="plugins-home" data-testid="plugins-home-section">
       <header className="plugins-home__head">
         <div className="plugins-home__heading">
-          <h2 className="plugins-home__title">{title}</h2>
+          <h2 className="plugins-home__title">{resolvedTitle}</h2>
           <p className="plugins-home__subtitle">
-            {subtitle}
+            {resolvedSubtitle}
           </p>
         </div>
         <div className="plugins-home__head-tools">
@@ -104,21 +110,21 @@ export function PluginsHomeSection({
               onClick={onBrowseRegistry}
               data-testid="plugins-home-browse-registry"
             >
-              Browse registry
+              {t('plugins.home.browseRegistry')}
             </button>
           ) : null}
           <SearchInput value={query} onChange={setQuery} />
           <span className="plugins-home__count">
-            {loading ? '…' : `${filtered.length} of ${totalVisible}`}
+            {loading ? '…' : t('plugins.home.count', { filtered: filtered.length, total: totalVisible })}
           </span>
         </div>
       </header>
 
       {loading ? (
-        <div className="plugins-home__empty">Loading catalog…</div>
+        <div className="plugins-home__empty">{t('plugins.home.loading')}</div>
       ) : visiblePlugins.length === 0 ? (
         <div className="plugins-home__empty">
-          {emptyMessage}
+          {resolvedEmptyMessage}
         </div>
       ) : (
         <>
@@ -133,7 +139,7 @@ export function PluginsHomeSection({
           <div
             className="plugins-home__facets"
             role="group"
-            aria-label="Plugin filters"
+            aria-label={t('plugins.home.filtersAria')}
           >
             <CategoryRow
               options={catalog.category}
@@ -153,13 +159,13 @@ export function PluginsHomeSection({
 
           {filtered.length === 0 && !showContributionCard ? (
             <div className="plugins-home__empty plugins-home__empty--filtered">
-              No plugins match the current filters.{' '}
+              {t('plugins.home.noFilterMatches')}{' '}
               <button
                 type="button"
                 className="plugins-home__linkbtn"
                 onClick={clearFacets}
               >
-                Clear filters
+                {t('plugins.home.clearFilters')}
               </button>
             </div>
           ) : (
@@ -180,8 +186,8 @@ export function PluginsHomeSection({
               ))}
               {showContributionCard && contributionTarget ? (
                 <ContributionCard
-                  label={contributionTarget.label}
-                  starterPrompt={contributionTarget.starterPrompt}
+                  label={localizeFacetLabel(t, contributionTarget)}
+                  starterPrompt={localizeFacetStarterPrompt(t, contributionTarget)}
                   onCreatePlugin={() => onCreatePlugin?.(contributionTarget.starterPrompt)}
                 />
               ) : null}
@@ -191,6 +197,55 @@ export function PluginsHomeSection({
       )}
     </section>
   );
+}
+
+type DictKey = keyof Dict;
+type Translate = (key: DictKey, vars?: Record<string, string | number>) => string;
+
+const FACET_LABEL_KEYS: Record<string, DictKey> = {
+  import: 'plugins.home.facet.import',
+  create: 'plugins.home.facet.create',
+  export: 'plugins.home.facet.export',
+  share: 'plugins.home.facet.share',
+  deploy: 'plugins.home.facet.deploy',
+  refine: 'plugins.home.facet.refine',
+  extend: 'plugins.home.facet.extend',
+  'from-figma': 'plugins.home.facet.fromFigma',
+  'from-github': 'plugins.home.facet.fromGithub',
+  'from-code': 'plugins.home.facet.fromCode',
+  'from-url': 'plugins.home.facet.fromUrl',
+  'from-screenshot': 'plugins.home.facet.fromScreenshot',
+  'from-pdf': 'plugins.home.facet.fromPdf',
+  'from-pptx': 'plugins.home.facet.fromPptx',
+  prototype: 'plugins.home.facet.prototype',
+  deck: 'plugins.home.facet.deck',
+  'design-system': 'plugins.home.facet.designSystem',
+  image: 'plugins.home.facet.image',
+  video: 'plugins.home.facet.video',
+  audio: 'plugins.home.facet.audio',
+  'public-link': 'plugins.home.facet.publicLink',
+  'github-pr': 'plugins.home.facet.githubPr',
+  'plugin-authoring': 'plugins.home.facet.pluginAuthoring',
+};
+
+const FACET_STARTER_KEYS: Record<string, DictKey> = {
+  import: 'plugins.home.starter.import',
+  create: 'plugins.home.starter.create',
+  export: 'plugins.home.starter.export',
+  share: 'plugins.home.starter.share',
+  deploy: 'plugins.home.starter.deploy',
+  refine: 'plugins.home.starter.refine',
+  extend: 'plugins.home.starter.extend',
+};
+
+function localizeFacetLabel(t: Translate, option: FacetOption): string {
+  const key = FACET_LABEL_KEYS[option.slug];
+  return key ? t(key) : option.label;
+}
+
+function localizeFacetStarterPrompt(t: Translate, option: FacetOption): string {
+  const key = FACET_STARTER_KEYS[option.slug];
+  return key ? t(key) : option.starterPrompt;
 }
 
 function shouldShowContributionCard(count: number, category: string | null): boolean {
@@ -220,6 +275,7 @@ function ContributionCard({
   starterPrompt: string;
   onCreatePlugin: () => void;
 }) {
+  const t = useT();
   return (
     <article
       role="listitem"
@@ -231,13 +287,12 @@ function ContributionCard({
           <Icon name="plus" size={18} />
         </span>
         <div>
-          <h3>Contribute a {label} plugin</h3>
+          <h3>{t('plugins.home.contributeTitle', { label })}</h3>
           <p>
-            This area is still sparse. Turn your workflow into a reusable
-            plugin, add it to My plugins, then share it with the community.
+            {t('plugins.home.contributeBody')}
           </p>
           <p className="plugins-home__contribute-template">
-            Starter: {starterPrompt}
+            {t('plugins.home.starterPrefix', { starterPrompt })}
           </p>
         </div>
         <button
@@ -246,7 +301,7 @@ function ContributionCard({
           onClick={onCreatePlugin}
           data-testid="plugins-home-contribution-create"
         >
-          Create plugin
+          {t('plugins.home.createPlugin')}
         </button>
       </div>
     </article>
@@ -273,8 +328,9 @@ function ModeRow({
   onModeChange,
   onClearFacets,
 }: ModeRowProps) {
+  const t = useT();
   return (
-    <div className="plugins-home__mode" role="group" aria-label="Plugin mode">
+    <div className="plugins-home__mode" role="group" aria-label={t('plugins.home.modeAria')}>
       {featuredCount > 0 ? (
         <button
           type="button"
@@ -290,12 +346,12 @@ function ModeRow({
           data-testid="plugins-home-chip-featured"
         >
           <Icon name="star" size={11} />
-          <span>Featured</span>
+          <span>{t('plugins.home.featured')}</span>
           <span className="plugins-home__chip-count">{featuredCount}</span>
         </button>
       ) : null}
       <span className="plugins-home__mode-total">
-        {totalVisible} in catalog
+        {t('plugins.home.catalogCount', { total: totalVisible })}
       </span>
       {hasActiveFacet ? (
         <button
@@ -304,7 +360,7 @@ function ModeRow({
           onClick={onClearFacets}
           data-testid="plugins-home-clear"
         >
-          Clear filters
+          {t('plugins.home.clearFilters')}
         </button>
       ) : null}
     </div>
@@ -319,6 +375,7 @@ interface CategoryRowProps {
 }
 
 function CategoryRow({ options, selectedSlug, totalVisible, onPick }: CategoryRowProps) {
+  const t = useT();
   if (options.length === 0) return null;
   return (
     <div
@@ -328,11 +385,11 @@ function CategoryRow({ options, selectedSlug, totalVisible, onPick }: CategoryRo
       <div
         className="plugins-home__facet-pills"
         role="tablist"
-        aria-label="Category filter"
+        aria-label={t('plugins.home.categoryFilterAria')}
       >
         <CategoryPill
           slug={null}
-          label="All"
+          label={t('common.all')}
           count={totalVisible}
           active={selectedSlug === null}
           onPick={onPick}
@@ -342,7 +399,7 @@ function CategoryRow({ options, selectedSlug, totalVisible, onPick }: CategoryRo
           <CategoryPill
             key={opt.slug}
             slug={opt.slug}
-            label={opt.label}
+            label={localizeFacetLabel(t, opt)}
             count={opt.count}
             active={selectedSlug === opt.slug}
             onPick={onPick}
@@ -361,7 +418,9 @@ interface SubcategoryRowProps {
 }
 
 function SubcategoryRow({ parent, options, selectedSlug, onPick }: SubcategoryRowProps) {
+  const t = useT();
   if (!parent || options.length === 0) return null;
+  const parentLabel = localizeFacetLabel(t, parent);
   return (
     <div
       className="plugins-home__facet-row plugins-home__facet-row--inline plugins-home__facet-row--sub"
@@ -370,11 +429,11 @@ function SubcategoryRow({ parent, options, selectedSlug, onPick }: SubcategoryRo
       <div
         className="plugins-home__facet-pills"
         role="tablist"
-        aria-label={`${parent.label} subcategory filter`}
+        aria-label={t('plugins.home.subcategoryFilterAria', { label: parentLabel })}
       >
         <CategoryPill
           slug={null}
-          label={`All ${parent.label}`}
+          label={t('plugins.home.allInFacet', { label: parentLabel })}
           count={parent.count}
           active={selectedSlug === null}
           onPick={onPick}
@@ -385,7 +444,7 @@ function SubcategoryRow({ parent, options, selectedSlug, onPick }: SubcategoryRo
           <CategoryPill
             key={opt.slug}
             slug={opt.slug}
-            label={opt.label}
+            label={localizeFacetLabel(t, opt)}
             count={opt.count}
             active={selectedSlug === opt.slug}
             onPick={onPick}
@@ -442,6 +501,7 @@ interface SearchInputProps {
 // with an optional clear button so it sits inside the existing head
 // row without a heavyweight toolbar.
 function SearchInput({ value, onChange }: SearchInputProps) {
+  const t = useT();
   return (
     <div className="plugins-home__search">
       <Icon name="search" size={12} className="plugins-home__search-icon" />
@@ -450,8 +510,8 @@ function SearchInput({ value, onChange }: SearchInputProps) {
         className="plugins-home__search-input"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Search plugins…"
-        aria-label="Search plugins"
+        placeholder={t('plugins.home.searchPlaceholder')}
+        aria-label={t('plugins.home.searchAria')}
         data-testid="plugins-home-search"
         spellCheck={false}
         autoComplete="off"
@@ -461,7 +521,7 @@ function SearchInput({ value, onChange }: SearchInputProps) {
           type="button"
           className="plugins-home__search-clear"
           onClick={() => onChange('')}
-          aria-label="Clear search"
+          aria-label={t('plugins.home.clearSearchAria')}
           data-testid="plugins-home-search-clear"
         >
           <Icon name="close" size={12} />

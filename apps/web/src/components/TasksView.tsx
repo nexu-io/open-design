@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { AppConfig } from '../types';
 import { Icon } from './Icon';
+import { useT } from '../i18n';
 
 type TaskFilter = 'all' | 'scheduled' | 'running' | 'done';
 type TaskStatus = 'running' | 'scheduled' | 'idle' | 'done' | 'failed';
@@ -27,11 +28,11 @@ interface Props {
   onOpenOrbitSettings: () => void;
 }
 
-const FILTERS: ReadonlyArray<{ id: TaskFilter; label: string }> = [
-  { id: 'all', label: 'All' },
-  { id: 'scheduled', label: 'Scheduled' },
-  { id: 'running', label: 'Running' },
-  { id: 'done', label: 'Done' },
+const FILTERS: ReadonlyArray<{ id: TaskFilter; labelKey: 'tasks.filter.all' | 'tasks.filter.scheduled' | 'tasks.filter.running' | 'tasks.filter.done' }> = [
+  { id: 'all', labelKey: 'tasks.filter.all' },
+  { id: 'scheduled', labelKey: 'tasks.filter.scheduled' },
+  { id: 'running', labelKey: 'tasks.filter.running' },
+  { id: 'done', labelKey: 'tasks.filter.done' },
 ];
 
 const BASE_TASKS: ReadonlyArray<TaskCard> = [
@@ -143,6 +144,7 @@ const BASE_TASKS: ReadonlyArray<TaskCard> = [
 ];
 
 export function TasksView({ config, onOpenOrbitSettings }: Props) {
+  const t = useT();
   const [activeFilter, setActiveFilter] = useState<TaskFilter>('all');
   const [selectedId, setSelectedId] = useState('mcp-research');
   const orbitEnabled = config.orbit?.enabled ?? false;
@@ -151,26 +153,26 @@ export function TasksView({ config, onOpenOrbitSettings }: Props) {
   const tasks = useMemo<ReadonlyArray<TaskCard>>(() => {
     const orbitTask: TaskCard = {
       id: 'orbit-daily',
-      title: 'Orbit Daily connector summary',
+      title: t('tasks.orbit.title'),
       icon: 'orbit',
       status: orbitEnabled ? 'scheduled' : 'idle',
-      statusLabel: orbitEnabled ? `Daily · ${orbitTime}` : 'Paused · manual only',
-      meta: orbitEnabled ? 'Connector digest is scheduled' : 'Open Orbit settings to enable',
-      preview: orbitEnabled ? 'orbit_daily.html · live artifact' : 'No run scheduled',
-      trigger: orbitEnabled ? `Schedule · daily at ${orbitTime}` : 'Manual · run on demand',
-      pattern: 'Routine · connector digest',
-      runtime: 'Orbit · daemon scheduled',
-      output: 'Live artifact · refreshable report',
+      statusLabel: orbitEnabled ? t('tasks.orbit.statusDaily', { time: orbitTime }) : t('tasks.orbit.statusPaused'),
+      meta: orbitEnabled ? t('tasks.orbit.metaScheduled') : t('tasks.orbit.metaEnable'),
+      preview: orbitEnabled ? t('tasks.orbit.previewLive') : t('tasks.orbit.previewNone'),
+      trigger: orbitEnabled ? t('tasks.orbit.triggerDaily', { time: orbitTime }) : t('tasks.orbit.triggerManual'),
+      pattern: t('tasks.orbit.pattern'),
+      runtime: t('tasks.orbit.runtime'),
+      output: t('tasks.orbit.output'),
       artifactTitle: 'orbit_daily.html',
-      artifactMeta: orbitEnabled ? 'Refreshes after each run' : 'Waiting for schedule',
+      artifactMeta: orbitEnabled ? t('tasks.orbit.artifactMetaEnabled') : t('tasks.orbit.artifactMetaPaused'),
       artifactBody: [
-        '# Orbit Daily activity summary',
-        'Connectors checked · successes, skips, and failures',
-        'Highlights become a refreshable live artifact.',
+        t('tasks.orbit.artifactBodyTitle'),
+        t('tasks.orbit.artifactBodyChecked'),
+        t('tasks.orbit.artifactBodyHighlights'),
       ],
     };
     return [orbitTask, ...BASE_TASKS];
-  }, [orbitEnabled, orbitTime]);
+  }, [orbitEnabled, orbitTime, t]);
 
   const filteredTasks = tasks.filter((task) => {
     if (activeFilter === 'all') return true;
@@ -186,17 +188,15 @@ export function TasksView({ config, onOpenOrbitSettings }: Props) {
     <section className="tasks-view" aria-labelledby="tasks-title" data-testid="tasks-view">
       <header className="tasks-view__hero">
         <div>
-          <p className="tasks-view__kicker">Automation workspace</p>
+          <p className="tasks-view__kicker">{t('tasks.kicker')}</p>
           <div className="tasks-view__title-row">
             <h1 id="tasks-title" className="entry-section__title">
-              Automations
+              {t('tasks.title')}
             </h1>
-            <span className="tasks-view__coming-soon">Coming soon</span>
+            <span className="tasks-view__coming-soon">{t('tasks.comingSoon')}</span>
           </div>
           <p className="tasks-view__lede">
-            Automations turn prompts into durable work: Orbit runs them,
-            routines keep them around, schedules decide when they fire, and live
-            artifacts show what changed.
+            {t('tasks.lede')}
           </p>
         </div>
         <button
@@ -205,62 +205,61 @@ export function TasksView({ config, onOpenOrbitSettings }: Props) {
           onClick={onOpenOrbitSettings}
         >
           <Icon name="plus" size={14} />
-          <span>New automation</span>
+          <span>{t('tasks.newAutomation')}</span>
         </button>
       </header>
 
       <div className="tasks-view__preview-note" role="note">
         <Icon name="orbit" size={14} />
         <span>
-          Preview surface only. Orbit settings are available today; routines,
-          schedules, and live artifact wiring will land as the backend branches merge.
+          {t('tasks.previewNote')}
         </span>
       </div>
 
-      <div className="tasks-primitives" aria-label="Automation primitives">
+      <div className="tasks-primitives" aria-label={t('tasks.primitivesAria')}>
         <PrimitiveCard
           icon="orbit"
-          title="Orbit"
-          body="A persistent runtime for long-running or recurring agent work."
-          meta={orbitEnabled ? 'Daily summary enabled' : 'Manual only'}
+          title={t('tasks.primitive.orbit.title')}
+          body={t('tasks.primitive.orbit.body')}
+          meta={orbitEnabled ? t('tasks.primitive.orbit.enabled') : t('tasks.primitive.orbit.manual')}
           tone="green"
         />
         <PrimitiveCard
           icon="history"
-          title="Routines"
-          body="Durable task definitions that survive after a single chat ends."
-          meta="Product shell ready"
+          title={t('tasks.primitive.routines.title')}
+          body={t('tasks.primitive.routines.body')}
+          meta={t('tasks.primitive.routines.meta')}
           tone="blue"
         />
         <PrimitiveCard
           icon="bell"
-          title="Schedules"
-          body="Time or event triggers that decide when a routine should run."
-          meta="Branch pending"
+          title={t('tasks.primitive.schedules.title')}
+          body={t('tasks.primitive.schedules.body')}
+          meta={t('tasks.primitive.schedules.meta')}
           tone="amber"
         />
         <PrimitiveCard
           icon="file"
-          title="Live artifacts"
-          body="Reports and notes that keep updating while an agent works."
-          meta="Preview model"
+          title={t('tasks.primitive.liveArtifacts.title')}
+          body={t('tasks.primitive.liveArtifacts.body')}
+          meta={t('tasks.primitive.liveArtifacts.meta')}
           tone="purple"
         />
       </div>
 
       <div className="tasks-board">
-        <aside className="tasks-list" aria-label="Automations list">
+        <aside className="tasks-list" aria-label={t('tasks.listAria')}>
           <div className="tasks-list__head">
             <div>
-              <h2>Automations</h2>
-              <p>{tasks.length} routines and runs</p>
+              <h2>{t('tasks.title')}</h2>
+              <p>{t('tasks.count', { count: tasks.length })}</p>
             </div>
             <button type="button" onClick={onOpenOrbitSettings}>
               <Icon name="plus" size={13} />
-              <span>New</span>
+              <span>{t('common.create')}</span>
             </button>
           </div>
-          <div className="tasks-filter" role="tablist" aria-label="Automation filters">
+          <div className="tasks-filter" role="tablist" aria-label={t('tasks.filtersAria')}>
             {FILTERS.map((filter) => (
               <button
                 key={filter.id}
@@ -270,7 +269,7 @@ export function TasksView({ config, onOpenOrbitSettings }: Props) {
                 className={activeFilter === filter.id ? 'is-active' : ''}
                 onClick={() => setActiveFilter(filter.id)}
               >
-                {filter.label}
+                {t(filter.labelKey)}
               </button>
             ))}
           </div>
@@ -310,11 +309,11 @@ export function TasksView({ config, onOpenOrbitSettings }: Props) {
             <p>{selectedTask.meta}</p>
           </div>
 
-          <div className="task-slots" aria-label="Automation configuration">
-            <Slot icon="bell" label="Trigger" value={selectedTask.trigger} />
-            <Slot icon="sparkles" label="Pattern" value={selectedTask.pattern} />
-            <Slot icon="orbit" label="Runtime" value={selectedTask.runtime} />
-            <Slot icon="file" label="Output" value={selectedTask.output} />
+          <div className="task-slots" aria-label={t('tasks.configAria')}>
+            <Slot icon="bell" label={t('tasks.slot.trigger')} value={selectedTask.trigger} />
+            <Slot icon="sparkles" label={t('tasks.slot.pattern')} value={selectedTask.pattern} />
+            <Slot icon="orbit" label={t('tasks.slot.runtime')} value={selectedTask.runtime} />
+            <Slot icon="file" label={t('tasks.slot.output')} value={selectedTask.output} />
           </div>
 
           <section className="task-artifact" aria-labelledby="task-artifact-title">
@@ -322,7 +321,7 @@ export function TasksView({ config, onOpenOrbitSettings }: Props) {
               <div>
                 <span className="task-artifact__kicker">
                   <Icon name="file" size={12} />
-                  Live artifact
+                  {t('tasks.liveArtifact')}
                 </span>
                 <h3 id="task-artifact-title">{selectedTask.artifactTitle}</h3>
               </div>
@@ -333,14 +332,14 @@ export function TasksView({ config, onOpenOrbitSettings }: Props) {
 
           <div className="task-detail__actions">
             <button type="button" className="task-detail__secondary">
-              View progress
+              {t('tasks.viewProgress')}
               <Icon name="external-link" size={13} />
             </button>
             <button type="button" className="task-detail__secondary">
-              {selectedTask.status === 'running' ? 'Pause' : 'Run now'}
+              {selectedTask.status === 'running' ? t('tasks.pause') : t('tasks.runNow')}
             </button>
             <button type="button" className="task-detail__primary">
-              Open artifact
+              {t('tasks.openArtifact')}
               <Icon name="external-link" size={13} />
             </button>
           </div>

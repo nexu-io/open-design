@@ -15,6 +15,8 @@ import type {
   KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
 import type { InputFieldSpec, InstalledPluginRecord, McpServerConfig } from '@open-design/contracts';
+import { useT } from '../i18n';
+import type { Dict } from '../i18n/types';
 import type { SkillSummary } from '../types';
 import { Icon, type IconName } from './Icon';
 import { PluginInputsForm } from './PluginInputsForm';
@@ -136,6 +138,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
   },
   ref,
 ) {
+  const t = useT();
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [mentionTab, setMentionTab] = useState<HomeMentionTab>('all');
   const [hoveredPlugin, setHoveredPlugin] = useState<InstalledPluginRecord | null>(null);
@@ -147,8 +150,8 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const canSubmit = (prompt.trim().length > 0 || stagedFiles.length > 0) && !submitDisabled;
   const placeholder = activePluginTitle || activeSkillTitle
-    ? 'Edit the example query or write your own…'
-    : 'Describe a design, paste or drop files, or @search plugins, skills, or MCP…';
+    ? t('homeHero.placeholderContext')
+    : t('homeHero.placeholderDefault');
   const mention = getContextMention(prompt);
   const mentionActive = Boolean(mention);
   const mentionQuery = mention?.query ?? '';
@@ -175,10 +178,10 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
   );
   const pickerOpen = mentionActive;
   const tabs: Array<{ id: HomeMentionTab; label: string; count: number }> = [
-    { id: 'all', label: 'All', count: pluginMatches.length + skillMatches.length + mcpMatches.length },
-    { id: 'plugins', label: 'Plugins', count: pluginMatches.length },
-    { id: 'skills', label: 'Skills', count: skillMatches.length },
-    { id: 'mcp', label: 'MCP', count: mcpMatches.length },
+    { id: 'all', label: t('common.all'), count: pluginMatches.length + skillMatches.length + mcpMatches.length },
+    { id: 'plugins', label: t('homeHero.mentionPlugins'), count: pluginMatches.length },
+    { id: 'skills', label: t('homeHero.mentionSkills'), count: skillMatches.length },
+    { id: 'mcp', label: t('homeHero.mentionMcp'), count: mcpMatches.length },
   ];
   const showPlugins = mentionTab === 'all' || mentionTab === 'plugins';
   const showSkills = mentionTab === 'all' || mentionTab === 'skills';
@@ -187,13 +190,13 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
     showPlugins
       ? {
           id: 'plugins',
-          label: 'Plugins',
+          label: t('homeHero.mentionPlugins'),
           options: pluginMatches.map((plugin) => ({
             id: `plugin-${plugin.id}`,
             icon: 'sparkles',
             title: plugin.title,
             description: plugin.manifest?.description ?? plugin.id,
-            meta: pendingPluginId === plugin.id ? 'Applying…' : getPluginSourceLabel(plugin),
+            meta: pendingPluginId === plugin.id ? t('plugins.card.applying') : getPluginSourceLabel(plugin, t),
             pluginRecord: plugin,
             disabled: pendingPluginId !== null,
             onPick: () => pickPlugin(plugin),
@@ -203,13 +206,13 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
     showSkills
       ? {
           id: 'skills',
-          label: 'Skills',
+          label: t('homeHero.mentionSkills'),
           options: skillMatches.map((skill) => ({
             id: `skill-${skill.id}`,
             icon: skill.id === activeSkillId ? 'check' : 'file',
             title: skill.name,
             description: skill.description || skill.id,
-            meta: skill.id === activeSkillId ? 'Active' : skill.mode,
+            meta: skill.id === activeSkillId ? t('common.active') : skill.mode,
             onPick: () => pickSkill(skill),
           })),
         }
@@ -371,11 +374,8 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
         </span>
         <span className="home-hero__brand-name">Open Design</span>
       </div>
-      <h1 className="home-hero__title">What do you want to design?</h1>
-      <p className="home-hero__subtitle">
-        Pick a plugin below to load an example query, or just type freely
-        and press <kbd>Enter</kbd>.
-      </p>
+      <h1 className="home-hero__title">{t('homeHero.title')}</h1>
+      <p className="home-hero__subtitle">{t('homeHero.subtitle')}</p>
 
       <div
         className={`home-hero__input-card${dragActive ? ' is-drag-active' : ''}`}
@@ -406,7 +406,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
                   type="button"
                   className="home-hero__active-chip-body"
                   onClick={() => onOpenPluginDetails(plugin)}
-                  title={`Plugin: ${plugin.title}`}
+                  title={t('homeHero.pluginTitle', { title: plugin.title })}
                 >
                   <span className="home-hero__active-dot" aria-hidden />
                   <span>@{plugin.title}</span>
@@ -415,8 +415,8 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
                   type="button"
                   className="home-hero__active-clear"
                   onClick={() => onRemovePluginContext(plugin.id)}
-                  aria-label={`Remove plugin ${plugin.title}`}
-                  title="Remove plugin"
+                  aria-label={t('homeHero.removePluginNamed', { title: plugin.title })}
+                  title={t('homeHero.removePlugin')}
                 >
                   ×
                 </button>
@@ -437,17 +437,17 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
                   }}
                   onClick={openActivePluginDetails}
                   disabled={!activePluginRecord}
-                  title={activePluginRecord ? `Plugin: ${activePluginRecord.title}` : undefined}
+                  title={activePluginRecord ? t('homeHero.pluginTitle', { title: activePluginRecord.title }) : undefined}
                 >
                   <span className="home-hero__active-dot" aria-hidden />
-                  <span>Plugin: {activePluginTitle}</span>
+                  <span>{t('homeHero.pluginTitle', { title: activePluginTitle })}</span>
                 </button>
                 <button
                   type="button"
                   className="home-hero__active-clear"
                   onClick={onClearActivePlugin}
-                  aria-label="Clear active plugin"
-                  title="Clear active plugin"
+                  aria-label={t('homeHero.clearActivePlugin')}
+                  title={t('homeHero.clearActivePlugin')}
                 >
                   ×
                 </button>
@@ -459,13 +459,13 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
                 data-testid="home-hero-active-skill"
               >
                 <span className="home-hero__active-dot" aria-hidden />
-                <span>Skill: {activeSkillTitle}</span>
+                <span>{t('homeHero.skillTitle', { title: activeSkillTitle })}</span>
                 <button
                   type="button"
                   className="home-hero__active-clear"
                   onClick={onClearActiveSkill}
-                  aria-label="Clear active skill"
-                  title="Clear active skill"
+                  aria-label={t('homeHero.clearActiveSkill')}
+                  title={t('homeHero.clearActiveSkill')}
                 >
                   ×
                 </button>
@@ -630,8 +630,8 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
                   type="button"
                   className="home-hero__attachment-remove"
                   onClick={() => onRemoveFile(index)}
-                  aria-label={`Remove ${file.name}`}
-                  title="Remove file"
+                  aria-label={t('homeHero.removeFileNamed', { name: file.name })}
+                  title={t('homeHero.removeFile')}
                 >
                   <Icon name="close" size={10} />
                 </button>
@@ -644,10 +644,10 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
             id="home-hero-context-picker"
             className="home-hero__plugin-picker"
             role="listbox"
-            aria-label="Context search results"
+            aria-label={t('homeHero.contextResultsAria')}
             data-testid="home-hero-plugin-picker"
           >
-            <div className="home-hero__mention-tabs" role="tablist" aria-label="Context surfaces">
+            <div className="home-hero__mention-tabs" role="tablist" aria-label={t('homeHero.contextSurfacesAria')}>
               {tabs.map((item) => (
                 <button
                   key={item.id}
@@ -667,14 +667,14 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
               ))}
             </div>
             {visibleLoading && visiblePickerOptions.length === 0 ? (
-              <div className="home-hero__plugin-picker-empty">Loading context…</div>
+              <div className="home-hero__plugin-picker-empty">{t('homeHero.loadingContext')}</div>
             ) : null}
             {!visibleLoading && visiblePickerOptions.length === 0 ? (
               <div className="home-hero__plugin-picker-empty">
                 {mentionQuery ? (
-                  <>No results for “{mentionQuery}”.</>
+                  <>{t('homeHero.noResults', { query: mentionQuery })}</>
                 ) : (
-                  <>Search plugins, skills, and MCP servers.</>
+                  <>{t('homeHero.searchHint')}</>
                 )}
               </div>
             ) : null}
@@ -725,13 +725,13 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
               >
                 <div>
                   <span className="home-hero__plugin-hover-kicker">
-                    {getPluginSourceLabel(hoveredPlugin)}
+                    {getPluginSourceLabel(hoveredPlugin, t)}
                   </span>
                   <strong>{hoveredPlugin.title}</strong>
                   <p>{hoveredPlugin.manifest?.description ?? hoveredPlugin.id}</p>
                 </div>
                 <div className="home-hero__plugin-hover-meta">
-                  <span>{(hoveredPlugin.manifest?.od?.inputs ?? []).length} parameters</span>
+                  <span>{t('homeHero.parameters', { n: (hoveredPlugin.manifest?.od?.inputs ?? []).length })}</span>
                   {getPluginQueryPreview(hoveredPlugin) ? (
                     <span>{getPluginQueryPreview(hoveredPlugin)}</span>
                   ) : null}
@@ -741,7 +741,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => onOpenPluginDetails(hoveredPlugin)}
                 >
-                  Details
+                  {t('plugins.card.details')}
                 </button>
               </div>
             ) : null}
@@ -766,13 +766,13 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
               className="home-hero__attach"
               data-testid="home-hero-attach"
               onClick={() => fileInputRef.current?.click()}
-              title="Attach files"
-              aria-label="Attach files"
+              title={t('homeHero.attachFiles')}
+              aria-label={t('homeHero.attachFiles')}
             >
               <Icon name="attach" size={14} />
             </button>
             <span className="home-hero__hint">
-              <kbd>↵</kbd> to run · <kbd>Shift</kbd>+<kbd>↵</kbd> for new line
+              <kbd>↵</kbd> {t('homeHero.keyboardRun')} · <kbd>Shift</kbd>+<kbd>↵</kbd> {t('homeHero.keyboardNewLine')}
             </span>
           </div>
           <button
@@ -781,8 +781,8 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
             data-testid="home-hero-submit"
             onClick={onSubmit}
             disabled={!canSubmit}
-            title={canSubmit ? 'Run' : 'Type something to run'}
-            aria-label="Run"
+            title={canSubmit ? t('homeHero.run') : t('homeHero.typeSomethingToRun')}
+            aria-label={t('homeHero.run')}
           >
             <Icon name="arrow-up" size={18} />
           </button>
@@ -792,7 +792,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
       <div
         className="home-hero__rail"
         role="toolbar"
-        aria-label="Pick a project category or starter shortcut"
+        aria-label={t('homeHero.railAria')}
         data-testid="home-hero-rail"
       >
         <RailGroup
@@ -1362,8 +1362,8 @@ function mcpServerMatchesQuery(server: McpServerConfig, query: string): boolean 
     .includes(q);
 }
 
-function getPluginSourceLabel(plugin: InstalledPluginRecord): string {
-  return plugin.sourceKind === 'bundled' ? 'Official' : 'My plugin';
+function getPluginSourceLabel(plugin: InstalledPluginRecord, t: (key: keyof Dict, vars?: Record<string, string | number>) => string): string {
+  return plugin.sourceKind === 'bundled' ? t('chat.plugins.official') : t('chat.plugins.mine');
 }
 
 function getPluginQueryPreview(plugin: InstalledPluginRecord): string {
@@ -1397,6 +1397,7 @@ function RailGroup({
   pluginsLoading,
   onPickChip,
 }: RailGroupProps) {
+  const t = useT();
   const chips = useMemo(() => chipsForGroup(group), [group]);
   return (
     <div
@@ -1404,6 +1405,8 @@ function RailGroup({
       data-rail-group={group}
     >
       {chips.map((chip) => {
+        const label = t(chip.labelKey);
+        const hint = chip.hintKey ? t(chip.hintKey) : (chip.hint ?? label);
         const isActive = activeChipId === chip.id;
         const isPending = pendingChipId === chip.id;
         const cls = ['home-hero__rail-chip', `home-hero__rail-chip--${group}`];
@@ -1419,10 +1422,10 @@ function RailGroup({
             onClick={() => onPickChip(chip)}
             disabled={pluginsLoading || isPending || pendingPluginId !== null}
             aria-pressed={isActive}
-            title={chip.hint ?? chip.label}
+            title={hint}
           >
             <Icon name={chip.icon} size={14} className="home-hero__rail-chip-icon" />
-            <span className="home-hero__rail-chip-label">{chip.label}</span>
+            <span className="home-hero__rail-chip-label">{label}</span>
           </button>
         );
       })}

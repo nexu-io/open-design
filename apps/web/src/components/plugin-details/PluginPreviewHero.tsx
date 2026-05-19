@@ -11,6 +11,7 @@
 
 import { useMemo, useState } from 'react';
 import { Icon } from '../Icon';
+import { useT } from '../../i18n';
 
 export interface PluginExampleEntry {
   path: string;
@@ -31,6 +32,7 @@ interface NormalizedExample {
 }
 
 export function PluginPreviewHero({ pluginId, pluginTitle, examples }: Props) {
+  const t = useT();
   const items = useMemo<NormalizedExample[]>(
     () => examples.map((e, idx) => normalize(pluginId, e, idx)),
     [pluginId, examples],
@@ -51,13 +53,13 @@ export function PluginPreviewHero({ pluginId, pluginTitle, examples }: Props) {
       <div className="plugin-details-modal__hero-head">
         <div className="plugin-details-modal__hero-eyebrow">
           <span className="plugin-details-modal__hero-dot" aria-hidden />
-          What it produces
+          {t('plugins.detail.whatItProduces')}
         </div>
         {items.length > 1 ? (
           <div
             className="plugin-details-modal__hero-tabs"
             role="tablist"
-            aria-label="Example outputs"
+            aria-label={t('plugins.detail.exampleOutputsAria')}
           >
             {items.map((it) => {
               const isActive = it.key === active.key;
@@ -104,11 +106,11 @@ export function PluginPreviewHero({ pluginId, pluginTitle, examples }: Props) {
             href={active.href}
             target="_blank"
             rel="noreferrer"
-            title="Open this example in a new tab"
+            title={t('plugins.detail.openExampleNewTab')}
             data-testid="plugin-details-hero-popout"
           >
             <Icon name="external-link" size={12} />
-            <span>Open</span>
+            <span>{t('fileViewer.open')}</span>
           </a>
         </div>
         <iframe

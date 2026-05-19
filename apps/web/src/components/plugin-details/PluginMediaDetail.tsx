@@ -164,7 +164,11 @@ export function PluginMediaDetail({
   const views: PreviewView[] = [
     {
       id: 'media',
-      label: media.isVideo ? 'Video' : media.isAudio ? 'Audio' : 'Image',
+      label: media.isVideo
+        ? t('homeHero.chip.video')
+        : media.isAudio
+          ? t('homeHero.chip.audio')
+          : t('homeHero.chip.image'),
       custom: stage,
     },
   ];
@@ -199,7 +203,7 @@ export function PluginMediaDetail({
         record={record}
         omit={{ description: true, query: true }}
         compact
-        heading="Plugin info"
+        heading={t('plugins.detail.pluginInfo')}
       />
     </div>
   );
@@ -212,16 +216,16 @@ export function PluginMediaDetail({
       exportTitleFor={() => record.title}
       onClose={onClose}
       sidebar={{
-        label: 'Plugin info',
+        label: t('plugins.detail.pluginInfo'),
         defaultOpen: true,
         contentKey: record.id,
         content: sidebar,
       }}
       primaryAction={{
-        label: 'Use plugin',
+        label: t('plugins.card.use'),
         onClick: () => onUse(record),
         busy: !!isApplying,
-        busyLabel: 'Applying…',
+        busyLabel: t('plugins.card.applying'),
         testId: `plugin-details-use-${record.id}`,
       }}
       headerExtras={<PluginShareMenu record={record} variant="inline" />}

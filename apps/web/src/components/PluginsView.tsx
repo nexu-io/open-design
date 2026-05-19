@@ -29,6 +29,7 @@ import { PluginDetailsModal } from './PluginDetailsModal';
 import { PluginsHomeSection } from './PluginsHomeSection';
 import { TrustBadge } from './TrustBadge';
 import { useI18n } from '../i18n';
+import type { Dict } from '../i18n/types';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import type { PluginUseAction } from './plugins-home/useActions';
 
@@ -45,44 +46,42 @@ const USER_SOURCE_KINDS = new Set<PluginSourceKind>([
 
 const PLUGINS_TABS: ReadonlyArray<{
   id: PluginsTab;
-  label: string;
-  hint: string;
+  labelKey: keyof Dict;
+  hintKey: keyof Dict;
 }> = [
-  { id: 'installed', label: 'Installed', hint: 'Your plugins' },
-  { id: 'available', label: 'Available', hint: 'From sources' },
-  { id: 'sources', label: 'Sources', hint: 'Catalogs' },
-  { id: 'team', label: 'Team', hint: 'Enterprise' },
+  { id: 'installed', labelKey: 'plugins.view.tabInstalled', hintKey: 'plugins.view.tabInstalledHint' },
+  { id: 'available', labelKey: 'plugins.view.tabAvailable', hintKey: 'plugins.view.tabAvailableHint' },
+  { id: 'sources', labelKey: 'plugins.view.tabSources', hintKey: 'plugins.view.tabSourcesHint' },
+  { id: 'team', labelKey: 'plugins.view.tabTeam', hintKey: 'plugins.view.tabTeamHint' },
 ];
 
 const PLUGIN_SHARE_DETAILS: Record<PluginShareAction, {
-  eyebrow: string;
-  fallbackTitle: string;
-  fallbackDescription: string;
-  confirmLabel: string;
-  steps: string[];
+  eyebrowKey: keyof Dict;
+  fallbackTitleKey: keyof Dict;
+  fallbackDescriptionKey: keyof Dict;
+  confirmLabelKey: keyof Dict;
+  stepKeys: Array<keyof Dict>;
 }> = {
   'publish-github': {
-    eyebrow: 'GitHub repository',
-    fallbackTitle: 'Publish Plugin to GitHub',
-    fallbackDescription:
-      'Creates a public GitHub repository for this local Open Design plugin.',
-    confirmLabel: 'Start publishing',
-    steps: [
-      'Create a new Open Design project for the publish workflow.',
-      'Copy this plugin into that project as isolated source context.',
-      'Run the official publish action plugin against the local daemon.',
+    eyebrowKey: 'plugins.view.sharePublishEyebrow',
+    fallbackTitleKey: 'plugins.view.sharePublishTitle',
+    fallbackDescriptionKey: 'plugins.view.sharePublishDescription',
+    confirmLabelKey: 'plugins.view.sharePublishConfirm',
+    stepKeys: [
+      'plugins.view.sharePublishStepProject',
+      'plugins.view.shareStepCopySource',
+      'plugins.view.sharePublishStepRun',
     ],
   },
   'contribute-open-design': {
-    eyebrow: 'Open Design pull request',
-    fallbackTitle: 'Contribute Plugin to Open Design',
-    fallbackDescription:
-      'Opens a pull request that adds this plugin to the Open Design community catalog.',
-    confirmLabel: 'Start contribution',
-    steps: [
-      'Create a new Open Design project for the contribution workflow.',
-      'Copy this plugin into that project as isolated source context.',
-      'Run the official contribution action plugin against the local daemon.',
+    eyebrowKey: 'plugins.view.shareContributeEyebrow',
+    fallbackTitleKey: 'plugins.view.shareContributeTitle',
+    fallbackDescriptionKey: 'plugins.view.shareContributeDescription',
+    confirmLabelKey: 'plugins.view.shareContributeConfirm',
+    stepKeys: [
+      'plugins.view.shareContributeStepProject',
+      'plugins.view.shareStepCopySource',
+      'plugins.view.shareContributeStepRun',
     ],
   },
 };
@@ -102,7 +101,7 @@ export function PluginsView({
   onUsePlugin,
   onCreatePluginShareProject,
 }: PluginsViewProps) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const [plugins, setPlugins] = useState<InstalledPluginRecord[]>([]);
   const [allInstalledPlugins, setAllInstalledPlugins] = useState<InstalledPluginRecord[]>([]);
   const [marketplaces, setMarketplaces] = useState<PluginMarketplace[]>([]);
@@ -263,14 +262,11 @@ export function PluginsView({
     <section className="plugins-view" aria-labelledby="plugins-title">
       <header className="plugins-view__hero">
         <div>
-          <p className="plugins-view__kicker">Plugins</p>
+          <p className="plugins-view__kicker">{t('plugins.view.kicker')}</p>
           <h1 id="plugins-title" className="entry-section__title">
-            Plugins
+            {t('plugins.view.title')}
           </h1>
-          <p className="plugins-view__lede">
-            Browse installed workflows, discover registry entries, manage
-            sources, and prepare plugins for team distribution.
-          </p>
+          <p className="plugins-view__lede">{t('plugins.view.lede')}</p>
         </div>
         <div className="plugins-view__hero-actions">
           <button
@@ -280,7 +276,7 @@ export function PluginsView({
             data-testid="plugins-create-button"
           >
             <Icon name="edit" size={13} />
-            <span>Create plugin</span>
+            <span>{t('plugins.view.createPlugin')}</span>
           </button>
           <button
             type="button"
@@ -290,22 +286,22 @@ export function PluginsView({
             data-testid="plugins-import-button"
           >
             <Icon name="plus" size={13} />
-            <span>Import plugin</span>
+            <span>{t('plugins.view.importPlugin')}</span>
           </button>
           <div className="plugins-view__badge" aria-hidden="true">
             <Icon name="grid" size={15} />
-            <span>Agent context</span>
+            <span>{t('plugins.view.agentContext')}</span>
           </div>
         </div>
       </header>
 
-      <div className="plugins-view__stats" aria-label="Plugin summary">
-        <StatCard label="Installed" value={userPlugins.length} />
-        <StatCard label="Available" value={availablePlugins.length} />
-        <StatCard label="Sources" value={marketplaces.length} />
+      <div className="plugins-view__stats" aria-label={t('plugins.view.summaryAria')}>
+        <StatCard label={t('plugins.view.statInstalled')} value={userPlugins.length} />
+        <StatCard label={t('plugins.view.statAvailable')} value={availablePlugins.length} />
+        <StatCard label={t('plugins.view.statSources')} value={marketplaces.length} />
       </div>
 
-      <nav className="plugins-view__tabs" role="tablist" aria-label="Plugin areas">
+      <nav className="plugins-view__tabs" role="tablist" aria-label={t('plugins.view.tabsAria')}>
         {PLUGINS_TABS.map((tab) => {
           const active = tab.id === activeTab;
           return (
@@ -323,8 +319,8 @@ export function PluginsView({
               onClick={() => setActiveTab(tab.id)}
               data-testid={`plugins-tab-${tab.id}`}
             >
-              <span className="plugins-view__tab-label">{tab.label}</span>
-              <span className="plugins-view__tab-hint">{tab.hint}</span>
+              <span className="plugins-view__tab-label">{t(tab.labelKey)}</span>
+              <span className="plugins-view__tab-hint">{t(tab.hintKey)}</span>
             </button>
           );
         })}
@@ -333,7 +329,7 @@ export function PluginsView({
       {notice ? <Notice outcome={notice} /> : null}
 
       <div className="plugins-view__gallery">
-        {loading ? <div className="plugins-view__empty">Loading plugins…</div> : null}
+        {loading ? <div className="plugins-view__empty">{t('plugins.view.loading')}</div> : null}
 
         {!loading && activeTab === 'installed' ? (
           <PluginsHomeSection
@@ -349,9 +345,9 @@ export function PluginsView({
             }
             onCreatePlugin={onCreatePlugin}
             preferDefaultFacet={false}
-            title="Installed plugins"
-            subtitle="Plugins you imported or installed from marketplace sources."
-            emptyMessage="No installed user plugins yet. Use Create / Import or install an Available entry."
+            title={t('plugins.view.installedTitle')}
+            subtitle={t('plugins.view.installedSubtitle')}
+            emptyMessage={t('plugins.view.installedEmpty')}
           />
         ) : null}
 
@@ -457,10 +453,11 @@ function PluginShareConfirmModal({
   onClose: () => void;
   onConfirm: () => void;
 }) {
+  const { t } = useI18n();
   const details = PLUGIN_SHARE_DETAILS[action];
-  const actionTitle = actionRecord?.title ?? details.fallbackTitle;
+  const actionTitle = actionRecord?.title ?? t(details.fallbackTitleKey);
   const actionDescription =
-    actionRecord?.manifest?.description ?? details.fallbackDescription;
+    actionRecord?.manifest?.description ?? t(details.fallbackDescriptionKey);
   const actionQuery = readLocalizedUseCaseQuery(actionRecord);
   const stagedPath = `plugin-source/${pluginShareSlug(sourceRecord.id)}`;
 
@@ -469,7 +466,7 @@ function PluginShareConfirmModal({
       className="plugin-details-modal-backdrop plugin-share-confirm"
       role="dialog"
       aria-modal="true"
-      aria-label={`${actionTitle} for ${sourceRecord.title}`}
+      aria-label={t('plugins.view.shareConfirmAria', { actionTitle, title: sourceRecord.title })}
       onClick={(event) => {
         if (!pending && event.target === event.currentTarget) onClose();
       }}
@@ -480,11 +477,11 @@ function PluginShareConfirmModal({
           <div className="plugin-details-modal__head-titles">
             <div className="plugin-details-modal__head-row">
               <h2 className="plugin-details-modal__title">{actionTitle}</h2>
-              <TrustBadge trust="official" label="Action plugin" />
+              <TrustBadge trust="official" label={t('plugins.view.actionPlugin')} />
             </div>
             <div className="plugin-details-modal__meta">
-              <span>{details.eyebrow}</span>
-              <span>· for {sourceRecord.title}</span>
+              <span>{t(details.eyebrowKey)}</span>
+              <span>· {t('plugins.view.forPlugin', { title: sourceRecord.title })}</span>
               {actionRecord ? <span>· v{actionRecord.version}</span> : null}
             </div>
           </div>
@@ -493,8 +490,8 @@ function PluginShareConfirmModal({
             className="plugin-details-modal__close"
             onClick={onClose}
             disabled={pending}
-            aria-label="Close share confirmation"
-            title="Close"
+            aria-label={t('plugins.view.closeShareConfirmation')}
+            title={t('common.close')}
           >
             <Icon name="close" size={18} />
           </button>
@@ -504,15 +501,15 @@ function PluginShareConfirmModal({
           <section className="plugin-details-modal__section">
             <div className="plugin-details-modal__section-head">
               <h3 className="plugin-details-modal__section-title">
-                What this starts
+                {t('plugins.view.shareWhatStarts')}
               </h3>
             </div>
             <p className="plugin-details-modal__description">
               {actionDescription}
             </p>
             <ol className="plugin-share-confirm__steps">
-              {details.steps.map((step) => (
-                <li key={step}>{step}</li>
+              {details.stepKeys.map((stepKey) => (
+                <li key={stepKey}>{t(stepKey)}</li>
               ))}
             </ol>
           </section>
@@ -520,12 +517,12 @@ function PluginShareConfirmModal({
           <section className="plugin-details-modal__section">
             <div className="plugin-details-modal__section-head">
               <h3 className="plugin-details-modal__section-title">
-                Source plugin
+                {t('plugins.view.shareSourcePlugin')}
               </h3>
             </div>
             <dl className="plugin-share-confirm__facts">
               <div>
-                <dt>Plugin</dt>
+                <dt>{t('plugins.view.shareFactPlugin')}</dt>
                 <dd>{sourceRecord.title}</dd>
               </div>
               <div>
@@ -535,13 +532,13 @@ function PluginShareConfirmModal({
                 </dd>
               </div>
               <div>
-                <dt>Copied to</dt>
+                <dt>{t('plugins.view.shareFactCopiedTo')}</dt>
                 <dd>
                   <code>{stagedPath}</code>
                 </dd>
               </div>
               <div>
-                <dt>Trust</dt>
+                <dt>{t('plugins.view.shareFactTrust')}</dt>
                 <dd>
                   <TrustBadge trust={sourceRecord.trust} />
                 </dd>
@@ -553,7 +550,7 @@ function PluginShareConfirmModal({
             <section className="plugin-details-modal__section">
               <div className="plugin-details-modal__section-head">
                 <h3 className="plugin-details-modal__section-title">
-                  Action prompt
+                  {t('plugins.view.shareActionPrompt')}
                 </h3>
               </div>
               <pre className="plugin-details-modal__query">{actionQuery}</pre>
@@ -568,7 +565,7 @@ function PluginShareConfirmModal({
             onClick={onClose}
             disabled={pending}
           >
-            Cancel
+            {t('common.cancel')}
           </button>
           <button
             type="button"
@@ -578,7 +575,7 @@ function PluginShareConfirmModal({
             aria-busy={pending ? 'true' : undefined}
             data-testid="plugin-share-confirm-start"
           >
-            {pending ? 'Starting…' : details.confirmLabel}
+            {pending ? t('plugins.view.starting') : t(details.confirmLabelKey)}
           </button>
         </footer>
       </div>
@@ -618,6 +615,7 @@ function Notice({
 }: {
   outcome: PluginInstallOutcome | { ok: boolean; message: string };
 }) {
+  const { t } = useI18n();
   const warnings = 'warnings' in outcome ? outcome.warnings : [];
   const log = 'log' in outcome ? outcome.log : [];
   return (
@@ -625,12 +623,12 @@ function Notice({
       <div>{outcome.message}</div>
       {warnings.length > 0 ? (
         <div className="plugins-view__notice-sub">
-          {warnings.length} warning{warnings.length === 1 ? '' : 's'}
+          {t('plugins.view.warningCount', { count: warnings.length })}
         </div>
       ) : null}
       {log.length > 0 ? (
         <details className="plugins-view__notice-log">
-          <summary>Install log</summary>
+          <summary>{t('plugins.view.installLog')}</summary>
           <ul>
             {log.map((line, idx) => (
               <li key={`${line}-${idx}`}>{line}</li>
@@ -678,6 +676,7 @@ function AvailablePluginsPanel({
   onOpenDetails: (plugin: AvailableMarketplacePlugin) => void;
   onInstall: (plugin: AvailableMarketplacePlugin) => void;
 }) {
+  const { t } = useI18n();
   const [query, setQuery] = useState('');
   const [sourceFilter, setSourceFilter] = useState('all');
   const sourceOptions = useMemo(() => buildAvailableSourceOptions(plugins), [plugins]);
@@ -691,8 +690,8 @@ function AvailablePluginsPanel({
     <section className="plugins-view__section" aria-labelledby="plugins-available-title">
       <div className="plugins-view__section-head">
         <div>
-          <h2 id="plugins-available-title">Available from sources</h2>
-          <p>Catalog entries discovered from configured marketplaces.</p>
+          <h2 id="plugins-available-title">{t('plugins.view.availableTitle')}</h2>
+          <p>{t('plugins.view.availableSubtitle')}</p>
         </div>
         <span className="plugins-view__section-count">
           {filteredPlugins.length === plugins.length
@@ -701,37 +700,37 @@ function AvailablePluginsPanel({
         </span>
       </div>
       {plugins.length > 0 ? (
-        <div className="plugins-view__available-controls" aria-label="Available plugin filters">
+        <div className="plugins-view__available-controls" aria-label={t('plugins.view.availableFiltersAria')}>
           <div className="plugins-view__search">
             <Icon name="search" size={13} className="plugins-view__search-icon" />
             <input
               id="plugins-available-search"
               type="search"
-              aria-label="Search available plugins"
+              aria-label={t('plugins.view.availableSearchAria')}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search available plugins"
+              placeholder={t('plugins.view.availableSearchPlaceholder')}
             />
             {query ? (
               <button
                 type="button"
                 className="plugins-view__search-clear"
                 onClick={() => setQuery('')}
-                aria-label="Clear available plugin search"
-                title="Clear search"
+                aria-label={t('plugins.view.availableClearSearch')}
+                title={t('plugins.view.clearSearch')}
               >
                 <Icon name="close" size={11} />
               </button>
             ) : null}
           </div>
           <label className="plugins-view__filter" htmlFor="plugins-available-source">
-            <span>Source</span>
+            <span>{t('plugins.view.source')}</span>
             <select
               id="plugins-available-source"
               value={sourceFilter}
               onChange={(event) => setSourceFilter(event.target.value)}
             >
-              <option value="all">All sources</option>
+              <option value="all">{t('plugins.view.allSources')}</option>
               {sourceOptions.map((option) => (
                 <option key={option.id} value={option.id}>
                   {option.label}
@@ -743,14 +742,13 @@ function AvailablePluginsPanel({
       ) : null}
       {plugins.length === 0 ? (
         <div className="plugins-view__empty">
-          No available entries yet. Installed catalog entries are removed from Available;
-          uninstall one to make it available again.
+          {t('plugins.view.availableEmptyInstalledRemoved')}
         </div>
       ) : filteredPlugins.length === 0 ? (
         <div className="plugins-view__empty">
           {filterActive
-            ? 'No available entries match your filters.'
-            : 'No available entries yet. Add a source in the Sources tab.'}
+            ? t('plugins.view.availableNoFilterMatches')
+            : t('plugins.view.availableEmptyAddSource')}
         </div>
       ) : (
         <div className="plugins-view__available-list">
@@ -780,7 +778,7 @@ function AvailablePluginsPanel({
                     onClick={() => onOpenDetails(plugin)}
                     data-testid={`plugins-available-details-${plugin.entry.name}`}
                   >
-                    Details
+                    {t('plugins.card.details')}
                   </button>
                   <button
                     type="button"
@@ -789,7 +787,7 @@ function AvailablePluginsPanel({
                     disabled={pendingKey === plugin.key}
                     data-testid={`plugins-available-install-${plugin.entry.name}`}
                   >
-                    {pendingKey === plugin.key ? 'Installing…' : 'Install'}
+                    {pendingKey === plugin.key ? t('plugins.view.installing') : t('plugins.availableDetails.install')}
                   </button>
                 </div>
               </article>
@@ -891,8 +889,8 @@ function AvailablePluginDetailsModal({
             className="plugin-details-modal__close"
             onClick={onClose}
             disabled={pending}
-            aria-label="Close available plugin details"
-            title="Close"
+            aria-label={t('plugins.view.closeAvailableDetails')}
+            title={t('common.close')}
           >
             <Icon name="close" size={18} />
           </button>
@@ -915,10 +913,10 @@ function AvailablePluginDetailsModal({
 
           <section className="plugin-details-modal__section">
             <div className="plugin-details-modal__section-head">
-              <h3 className="plugin-details-modal__section-title">About</h3>
+              <h3 className="plugin-details-modal__section-title">{t('plugins.view.about')}</h3>
             </div>
             <p className="plugin-details-modal__description">
-              {plugin.entry.description ?? 'No description provided.'}
+              {plugin.entry.description ?? t('plugins.view.noDescription')}
             </p>
           </section>
 
@@ -994,11 +992,11 @@ function AvailablePluginDetailsModal({
 
           <section className="plugin-details-modal__section">
             <div className="plugin-details-modal__section-head">
-              <h3 className="plugin-details-modal__section-title">Catalog</h3>
+              <h3 className="plugin-details-modal__section-title">{t('plugins.view.catalog')}</h3>
             </div>
             <dl className="plugin-details-modal__source">
               <div>
-                <dt>Source</dt>
+                <dt>{t('plugins.view.source')}</dt>
                 <dd>
                   <code>{selectedVersionInfo?.source ?? plugin.entry.source}</code>
                 </dd>
@@ -1020,11 +1018,11 @@ function AvailablePluginDetailsModal({
                 </div>
               ) : null}
               <div>
-                <dt>Catalog</dt>
+                <dt>{t('plugins.view.catalog')}</dt>
                 <dd>{sourceName}</dd>
               </div>
               <div>
-                <dt>Catalog URL</dt>
+                <dt>{t('plugins.view.catalogUrl')}</dt>
                 <dd>
                   <a href={plugin.marketplace.url} target="_blank" rel="noreferrer">
                     {plugin.marketplace.url}
@@ -1033,13 +1031,13 @@ function AvailablePluginDetailsModal({
               </div>
               {plugin.entry.license ? (
                 <div>
-                  <dt>License</dt>
+                  <dt>{t('plugins.view.license')}</dt>
                   <dd>{plugin.entry.license}</dd>
                 </div>
               ) : null}
               {publisherLabel ? (
                 <div>
-                  <dt>Publisher</dt>
+                  <dt>{t('plugins.view.publisher')}</dt>
                   <dd>
                     {publisher?.url ? (
                       <a href={publisher.url} target="_blank" rel="noreferrer">
@@ -1053,7 +1051,7 @@ function AvailablePluginDetailsModal({
               ) : null}
               {plugin.entry.homepage ? (
                 <div>
-                  <dt>Homepage</dt>
+                  <dt>{t('plugins.view.homepage')}</dt>
                   <dd>
                     <a href={plugin.entry.homepage} target="_blank" rel="noreferrer">
                       {plugin.entry.homepage}
@@ -1067,7 +1065,7 @@ function AvailablePluginDetailsModal({
           {permissions.length > 0 || tags.length > 0 || capabilitySummary.length > 0 ? (
             <section className="plugin-details-modal__section">
               <div className="plugin-details-modal__section-head">
-                <h3 className="plugin-details-modal__section-title">Metadata</h3>
+                <h3 className="plugin-details-modal__section-title">{t('plugins.view.metadata')}</h3>
               </div>
               <div className="plugin-details-modal__context">
                 {permissions.length > 0 ? (
@@ -1089,7 +1087,7 @@ function AvailablePluginDetailsModal({
                 ) : null}
                 {tags.length > 0 ? (
                   <div className="plugin-details-modal__ctx-group">
-                    <div className="plugin-details-modal__ctx-label">Tags</div>
+                    <div className="plugin-details-modal__ctx-label">{t('plugins.view.tags')}</div>
                     <div className="plugin-details-modal__chips">
                       {tags.map((tag) => (
                         <span key={tag} className="plugin-details-modal__chip">
@@ -1128,7 +1126,7 @@ function AvailablePluginDetailsModal({
             onClick={onClose}
             disabled={pending}
           >
-            Close
+            {t('common.close')}
           </button>
           <button
             type="button"
@@ -1138,7 +1136,7 @@ function AvailablePluginDetailsModal({
             aria-busy={pending ? 'true' : undefined}
             data-testid={`plugins-available-details-install-${plugin.entry.name}`}
           >
-            {pending ? 'Installing...' : 'Install'}
+            {pending ? t('plugins.view.installing') : t('plugins.availableDetails.install')}
           </button>
         </footer>
       </div>
@@ -1161,6 +1159,7 @@ function SourcesPanel({
   onRemove: (marketplace: PluginMarketplace) => void;
   onTrust: (marketplace: PluginMarketplace, trust: PluginMarketplaceTrust) => void;
 }) {
+  const { t } = useI18n();
   const [url, setUrl] = useState('');
   const [trust, setTrust] = useState<PluginMarketplaceTrust>('restricted');
   const trimmedUrl = url.trim();
@@ -1168,8 +1167,8 @@ function SourcesPanel({
     <section className="plugins-view__section" aria-labelledby="plugins-sources-title">
       <div className="plugins-view__section-head">
         <div>
-          <h2 id="plugins-sources-title">Registry sources</h2>
-          <p>Marketplace catalogs that feed Available plugin entries.</p>
+          <h2 id="plugins-sources-title">{t('plugins.view.sourcesTitle')}</h2>
+          <p>{t('plugins.view.sourcesSubtitle')}</p>
         </div>
         <span className="plugins-view__section-count">{marketplaces.length}</span>
       </div>
@@ -1183,7 +1182,7 @@ function SourcesPanel({
           setUrl('');
         }}
       >
-        <label htmlFor="plugin-marketplace-url">Source URL</label>
+        <label htmlFor="plugin-marketplace-url">{t('plugins.view.sourceUrl')}</label>
         <div className="plugins-view__source-row">
           <input
             id="plugin-marketplace-url"
@@ -1196,25 +1195,25 @@ function SourcesPanel({
             value={trust}
             onChange={(event) => setTrust(event.target.value as PluginMarketplaceTrust)}
             disabled={pendingAction === 'add'}
-            aria-label="Default trust"
+            aria-label={t('plugins.view.defaultTrust')}
           >
-            <option value="restricted">Restricted</option>
-            <option value="trusted">Trusted</option>
-            <option value="official">Official</option>
+            <option value="restricted">{t('trust.restricted')}</option>
+            <option value="trusted">{t('trust.trusted')}</option>
+            <option value="official">{t('trust.official')}</option>
           </select>
           <button
             type="submit"
             className="plugins-view__primary"
             disabled={!trimmedUrl || pendingAction === 'add'}
           >
-            {pendingAction === 'add' ? 'Adding…' : 'Add source'}
+            {pendingAction === 'add' ? t('plugins.view.addingSource') : t('plugins.view.addSource')}
           </button>
         </div>
       </form>
 
       {marketplaces.length === 0 ? (
         <div className="plugins-view__empty">
-          No registry sources configured yet.
+          {t('plugins.view.sourcesEmpty')}
         </div>
       ) : (
         <div className="plugins-view__marketplaces">
@@ -1227,8 +1226,8 @@ function SourcesPanel({
                 </a>
                 <div className="plugins-view__meta">
                   <TrustBadge trust={marketplace.trust} />
-                  <span>{marketplace.manifest.plugins?.length ?? 0} plugins</span>
-                  {marketplace.version ? <span>catalog v{marketplace.version}</span> : null}
+                  <span>{t('plugins.view.sourcePluginCount', { count: marketplace.manifest.plugins?.length ?? 0 })}</span>
+                  {marketplace.version ? <span>{t('plugins.view.catalogVersion', { version: marketplace.version })}</span> : null}
                 </div>
               </div>
               <div className="plugins-view__source-actions">
@@ -1237,12 +1236,12 @@ function SourcesPanel({
                   onChange={(event) =>
                     onTrust(marketplace, event.target.value as PluginMarketplaceTrust)
                   }
-                  aria-label={`Trust for ${marketplace.manifest.name ?? marketplace.url}`}
+                  aria-label={t('plugins.view.trustForSource', { source: marketplace.manifest.name ?? marketplace.url })}
                   disabled={pendingAction?.startsWith(`trust:${marketplace.id}:`)}
                 >
-                  <option value="restricted">Restricted</option>
-                  <option value="trusted">Trusted</option>
-                  <option value="official">Official</option>
+                  <option value="restricted">{t('trust.restricted')}</option>
+                  <option value="trusted">{t('trust.trusted')}</option>
+                  <option value="official">{t('trust.official')}</option>
                 </select>
                 <button
                   type="button"
@@ -1250,7 +1249,7 @@ function SourcesPanel({
                   onClick={() => onRefresh(marketplace)}
                   disabled={pendingAction === `refresh:${marketplace.id}`}
                 >
-                  {pendingAction === `refresh:${marketplace.id}` ? 'Refreshing…' : 'Refresh'}
+                  {pendingAction === `refresh:${marketplace.id}` ? t('plugins.view.refreshing') : t('plugins.view.refresh')}
                 </button>
                 <button
                   type="button"
@@ -1258,7 +1257,7 @@ function SourcesPanel({
                   onClick={() => onRemove(marketplace)}
                   disabled={pendingAction === `remove:${marketplace.id}`}
                 >
-                  {pendingAction === `remove:${marketplace.id}` ? 'Removing…' : 'Remove'}
+                  {pendingAction === `remove:${marketplace.id}` ? t('plugins.view.removing') : t('plugins.view.remove')}
                 </button>
               </div>
             </article>
@@ -1282,6 +1281,7 @@ function PluginImportModal({
   onUploadZip: (file: File) => Promise<PluginInstallOutcome>;
   onUploadFolder: (files: File[]) => Promise<PluginInstallOutcome>;
 }) {
+  const { t } = useI18n();
   const [kind, setKind] = useState<ImportKind>('github');
   const [source, setSource] = useState('');
   const [zipFile, setZipFile] = useState<File | null>(null);
@@ -1320,39 +1320,39 @@ function PluginImportModal({
       >
         <header className="plugins-import-modal__head">
           <div>
-            <p className="plugins-view__kicker">User plugins</p>
-            <h2 id="plugins-import-title">Import a plugin</h2>
+            <p className="plugins-view__kicker">{t('plugins.view.userPlugins')}</p>
+            <h2 id="plugins-import-title">{t('plugins.view.importTitle')}</h2>
           </div>
           <button
             type="button"
             className="plugins-import-modal__close"
             onClick={onClose}
-            aria-label="Close import dialog"
+            aria-label={t('plugins.view.closeImportDialog')}
           >
             <Icon name="close" size={16} />
           </button>
         </header>
 
-        <nav className="plugins-import-modal__tabs" aria-label="Import source">
+        <nav className="plugins-import-modal__tabs" aria-label={t('plugins.view.importSourceAria')}>
           <ImportChoice
             active={kind === 'github'}
             icon="github"
-            title="From GitHub"
-            body="Install github:owner/repo paths."
+            title={t('plugins.view.importFromGithub')}
+            body={t('plugins.view.importFromGithubBody')}
             onClick={() => setKind('github')}
           />
           <ImportChoice
             active={kind === 'zip'}
             icon="upload"
-            title="Upload zip"
-            body="Upload a plugin archive."
+            title={t('plugins.view.importUploadZip')}
+            body={t('plugins.view.importUploadZipBody')}
             onClick={() => setKind('zip')}
           />
           <ImportChoice
             active={kind === 'folder'}
             icon="folder"
-            title="Upload folder"
-            body="Upload a plugin directory."
+            title={t('plugins.view.importUploadFolder')}
+            body={t('plugins.view.importUploadFolderBody')}
             onClick={() => setKind('folder')}
           />
         </nav>
@@ -1360,7 +1360,7 @@ function PluginImportModal({
         <div className="plugins-import-modal__body">
           {kind === 'github' ? (
             <div className="plugins-view__install-card">
-              <label htmlFor="plugin-source">GitHub, archive, or marketplace source</label>
+              <label htmlFor="plugin-source">{t('plugins.view.importSourceLabel')}</label>
               <div className="plugins-view__source-row">
                 <input
                   id="plugin-source"
@@ -1375,23 +1375,23 @@ function PluginImportModal({
                   onClick={runImport}
                   disabled={working || !canSubmit}
                 >
-                  {working ? 'Importing…' : 'Import'}
+                  {working ? t('plugins.view.importing') : t('plugins.view.import')}
                 </button>
               </div>
               <div className="plugins-view__source-help">
-                Supports <code>github:owner/repo[@ref][/subpath]</code>, HTTPS{' '}
-                <code>.tar.gz</code>/<code>.tgz</code> archives, or marketplace plugin names.
+                {t('plugins.view.importSourceHelpBefore')} <code>github:owner/repo[@ref][/subpath]</code>, HTTPS{' '}
+                <code>.tar.gz</code>/<code>.tgz</code> {t('plugins.view.importSourceHelpAfter')}
               </div>
             </div>
           ) : null}
 
           {kind === 'zip' ? (
             <FileImportPanel
-              title="Upload zip"
-              body="Choose a .zip archive containing open-design.json, SKILL.md, or .claude-plugin/plugin.json."
+              title={t('plugins.view.importUploadZip')}
+              body={t('plugins.view.importZipBody')}
               accept=".zip,application/zip"
               working={working}
-              fileLabel={zipFile?.name ?? 'No zip selected'}
+              fileLabel={zipFile?.name ?? t('plugins.view.noZipSelected')}
               onChange={(files) => setZipFile(files[0] ?? null)}
               onImport={runImport}
               canSubmit={canSubmit}
@@ -1400,13 +1400,13 @@ function PluginImportModal({
 
           {kind === 'folder' ? (
             <FileImportPanel
-              title="Upload folder"
-              body="Choose a plugin folder. Relative paths are preserved and installed into your user plugin registry."
+              title={t('plugins.view.importUploadFolder')}
+              body={t('plugins.view.importFolderBody')}
               working={working}
               fileLabel={
                 folderFiles.length > 0
-                  ? `${folderFiles.length} file${folderFiles.length === 1 ? '' : 's'} selected`
-                  : 'No folder selected'
+                  ? t('plugins.view.folderFilesSelected', { count: folderFiles.length })
+                  : t('plugins.view.noFolderSelected')
               }
               folder
               onChange={setFolderFiles}
@@ -1419,15 +1419,14 @@ function PluginImportModal({
 
         <footer className="plugins-import-modal__foot">
           <p>
-            Imported plugins are user plugins and are stored separately from
-            bundled official plugins.
+            {t('plugins.view.importFooter')}
           </p>
           <button
             type="button"
             className="plugins-view__secondary"
             onClick={onClose}
           >
-            Cancel
+            {t('common.cancel')}
           </button>
         </footer>
       </section>
@@ -1448,6 +1447,8 @@ function ImportChoice({
   body: string;
   onClick: () => void;
 }) {
+  const { t } = useI18n();
+
   return (
     <button
       type="button"
@@ -1486,6 +1487,7 @@ function FileImportPanel({
   onChange: (files: File[]) => void;
   onImport: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <section className="plugins-view__install-card">
       <div>
@@ -1510,7 +1512,7 @@ function FileImportPanel({
         onClick={onImport}
         disabled={working || !canSubmit}
       >
-        {working ? 'Importing…' : 'Import'}
+        {working ? t('plugins.view.importing') : t('plugins.view.import')}
       </button>
     </section>
   );
@@ -1735,17 +1737,18 @@ function normalizePluginName(name: string): string {
 }
 
 function TeamPanel() {
+  const { t } = useI18n();
+
   return (
     <section className="plugins-view__team" aria-labelledby="plugins-team-title">
       <span className="plugins-view__future-icon" aria-hidden>
         <Icon name="sparkles" size={18} />
       </span>
       <div>
-        <p className="plugins-view__kicker">Coming soon</p>
-        <h2 id="plugins-team-title">Private team marketplaces</h2>
+        <p className="plugins-view__kicker">{t('integrations.comingSoon')}</p>
+        <h2 id="plugins-team-title">{t('plugins.view.teamTitle')}</h2>
         <p>
-          This area is reserved for enterprise and team catalogs, private trust
-          policies, and shared plugin lifecycle controls.
+          {t('plugins.view.teamBody')}
         </p>
       </div>
     </section>

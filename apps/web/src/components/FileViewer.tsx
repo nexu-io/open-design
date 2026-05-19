@@ -788,13 +788,13 @@ export function LiveArtifactViewer({
     if (liveArtifactEvent.kind === 'live_artifact') {
       setRefreshError(null);
       if (liveArtifactEvent.action === 'deleted') {
-        setRefreshSuccess(`Live artifact deleted: ${liveArtifactEvent.title}`);
+        setRefreshSuccess(t('liveArtifact.refresh.eventDeleted', { title: liveArtifactEvent.title }));
         continue;
       }
       setRefreshSuccess(
         liveArtifactEvent.action === 'created'
-          ? `Live artifact created: ${liveArtifactEvent.title}`
-          : `Live artifact updated: ${liveArtifactEvent.title}`,
+          ? t('liveArtifact.refresh.eventCreated', { title: liveArtifactEvent.title })
+          : t('liveArtifact.refresh.eventUpdated', { title: liveArtifactEvent.title }),
       );
       void fetchLiveArtifact(projectId, liveArtifact.artifactId).then((next) => {
         if (next) setDetail(next);
@@ -2049,6 +2049,7 @@ function InspectPanel({
   savedAt: number | null;
   error: string | null;
 }) {
+  const t = useT();
   // Local "draft" mirror of the most recent value the user picked, so
   // sliders/colors keep responding even before the iframe echoes back the
   // computed result. Reset whenever the selected element changes.
@@ -2104,7 +2105,7 @@ function InspectPanel({
           <strong title={target.label || target.elementId}>{target.label || target.elementId}</strong>
           <code title={target.selector}>{target.elementId}</code>
         </div>
-        <button type="button" className="ghost" onClick={onClose} aria-label="Close inspect">
+        <button type="button" className="ghost" onClick={onClose} aria-label={t('fileViewer.closeInspect')}>
           ×
         </button>
       </header>
@@ -2115,20 +2116,21 @@ function InspectPanel({
             i
           </div>
           <div className="inspect-ancestor-notice-text">
-            You clicked <strong>{target.clickedDescendant.label}</strong>
+            {t('fileViewer.inspectAncestorClicked')} <strong>{target.clickedDescendant.label}</strong>
             {target.clickedDescendant.text
               ? ` ("${target.clickedDescendant.text.slice(0, 40)}${target.clickedDescendant.text.length > 40 ? '...' : ''}")`
               : ''}
-            , but it has no <code>data-od-id</code> annotation. Editing{' '}
-            <strong>{target.label || target.elementId}</strong> instead, the nearest annotated ancestor.
+            {t('fileViewer.inspectAncestorNoAnnotationBefore')} <code>data-od-id</code>{' '}
+            {t('fileViewer.inspectAncestorNoAnnotationAfter')}{' '}
+            <strong>{target.label || target.elementId}</strong> {t('fileViewer.inspectAncestorInstead')}
           </div>
         </div>
       ) : null}
 
       <section className="inspect-section">
-        <div className="inspect-section-label">Colors</div>
+        <div className="inspect-section-label">{t('fileViewer.inspectColors')}</div>
         <div className="inspect-row">
-          <label htmlFor="ip-color">Text</label>
+          <label htmlFor="ip-color">{t('manualEdit.text')}</label>
           <input
             id="ip-color"
             data-testid="inspect-color"
@@ -2144,7 +2146,7 @@ function InspectPanel({
           />
         </div>
         <div className="inspect-row">
-          <label htmlFor="ip-bg">Background</label>
+          <label htmlFor="ip-bg">{t('manualEdit.background')}</label>
           <input
             id="ip-bg"
             data-testid="inspect-bg"
@@ -2162,9 +2164,9 @@ function InspectPanel({
       </section>
 
       <section className="inspect-section">
-        <div className="inspect-section-label">Typography</div>
+        <div className="inspect-section-label">{t('fileViewer.inspectTypography')}</div>
         <div className="inspect-row">
-          <label htmlFor="ip-fs">Size</label>
+          <label htmlFor="ip-fs">{t('manualEdit.fontSize')}</label>
           <input
             id="ip-fs"
             data-testid="inspect-font-size"
@@ -2178,7 +2180,7 @@ function InspectPanel({
           <span className="inspect-row-value">{Math.round(fontSizeNum)}px</span>
         </div>
         <div className="inspect-row">
-          <label htmlFor="ip-fw">Weight</label>
+          <label htmlFor="ip-fw">{t('manualEdit.weight')}</label>
           <select
             id="ip-fw"
             value={fontWeight}
@@ -2190,7 +2192,7 @@ function InspectPanel({
           </select>
         </div>
         <div className="inspect-row">
-          <label htmlFor="ip-ta">Align</label>
+          <label htmlFor="ip-ta">{t('manualEdit.align')}</label>
           <select
             id="ip-ta"
             value={textAlign}
@@ -2204,9 +2206,9 @@ function InspectPanel({
       </section>
 
       <section className="inspect-section">
-        <div className="inspect-section-label">Spacing &amp; Shape</div>
+        <div className="inspect-section-label">{t('fileViewer.inspectSpacingShape')}</div>
         <div className="inspect-row">
-          <label htmlFor="ip-pad">Padding</label>
+          <label htmlFor="ip-pad">{t('manualEdit.padding')}</label>
           <input
             id="ip-pad"
             data-testid="inspect-padding"
@@ -2220,7 +2222,7 @@ function InspectPanel({
           <span className="inspect-row-value">{Math.round(paddingNum)}px</span>
         </div>
         <div className="inspect-row">
-          <label htmlFor="ip-rad">Radius</label>
+          <label htmlFor="ip-rad">{t('manualEdit.radius')}</label>
           <input
             id="ip-rad"
             data-testid="inspect-radius"
@@ -5428,13 +5430,13 @@ function HtmlViewer({
                   type="button"
                   className={`viewer-action${selectedPalette || palettePopoverOpen ? ' active' : ''}`}
                   data-testid="palette-tweaks-toggle"
-                  title="Tweaks"
+                  title={t('fileViewer.tweaks')}
                   aria-haspopup="dialog"
                   aria-expanded={palettePopoverOpen}
                   onClick={() => setPalettePopoverOpen((v) => !v)}
                 >
                   <Icon name="tweaks" size={13} />
-                  <span>Tweaks</span>
+                  <span>{t('fileViewer.tweaks')}</span>
                   {selectedPalette ? (
                     <span
                       className="palette-tweaks-badge"
@@ -5536,24 +5538,24 @@ function HtmlViewer({
                 className={`viewer-action${boardTool === 'inspect' ? ' active' : ''}`}
                 type="button"
                 data-testid="comment-mode-toggle"
-                title="Pick one element"
-                aria-label="Picker"
+                title={t('fileViewer.pickerTitle')}
+                aria-label={t('fileViewer.picker')}
                 aria-pressed={boardTool === 'inspect'}
                 onClick={() => activateBoard('inspect')}
               >
                 <Icon name="edit" size={13} />
-                <span>Picker</span>
+                <span>{t('fileViewer.picker')}</span>
               </button>
               <button
                 className={`viewer-action${boardTool === 'pod' ? ' active' : ''}`}
                 type="button"
-                title="Draw a pod selection"
-                aria-label="Pods"
+                title={t('fileViewer.podsTitle')}
+                aria-label={t('fileViewer.pods')}
                 aria-pressed={boardTool === 'pod'}
                 onClick={() => activateBoard('pod')}
               >
                 <Icon name="draw" size={13} />
-                <span>Pods</span>
+                <span>{t('fileViewer.pods')}</span>
               </button>
             </>
           ) : null}
@@ -5561,7 +5563,7 @@ function HtmlViewer({
             className={`viewer-action${inspectMode ? ' active' : ''}`}
             type="button"
             data-testid="inspect-mode-toggle"
-            title="Inspect"
+            title={t('fileViewer.inspect')}
             aria-pressed={inspectMode}
             onClick={() => {
               setInspectMode((v) => {
@@ -5579,7 +5581,7 @@ function HtmlViewer({
             }}
           >
             <Icon name="tweaks" size={13} />
-            <span>Inspect</span>
+            <span>{t('fileViewer.inspect')}</span>
           </button>
           <button
             className={`viewer-action${manualEditMode ? ' active' : ''}`}
@@ -6195,24 +6197,26 @@ function HtmlViewer({
                     className="inspect-empty-hint"
                     data-testid="inspect-empty-hint-no-targets"
                   >
-                    This artifact has no <code>data-od-id</code>{' '}
-                    annotations yet — ask the agent to add them to the
-                    sections you want to{' '}
-                    {inspectMode ? 'inspect' : 'comment on'}.
+                    {t('fileViewer.inspectNoTargetsBefore')} <code>data-od-id</code>{' '}
+                    {t('fileViewer.inspectNoTargetsAfter', {
+                      action: inspectMode ? t('fileViewer.inspectActionInspect') : t('fileViewer.inspectActionComment'),
+                    })}
                   </div>
                 ) : (
                   <div
                     className="inspect-empty-hint"
                     data-testid="inspect-empty-hint"
                   >
-                    Click any element with <code>data-od-id</code> to{' '}
-                    {inspectMode ? 'tune its style' : 'leave a comment'}.
+                    {t('fileViewer.inspectClickBefore')} <code>data-od-id</code>{' '}
+                    {t('fileViewer.inspectClickAfter', {
+                      action: inspectMode ? t('fileViewer.inspectActionTune') : t('fileViewer.inspectActionLeaveComment'),
+                    })}
                   </div>
                 )}
                 <button
                   type="button"
-                  title="Close Inspect Hint"
-                  aria-label="Close Inspect Hint"
+                  title={t('fileViewer.closeInspectHint')}
+                  aria-label={t('fileViewer.closeInspectHint')}
                   onClick={() => setOpenHintBox(false)}
                   className="orbit-artifact-ghost"
                 >

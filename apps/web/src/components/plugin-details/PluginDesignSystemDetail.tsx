@@ -118,8 +118,8 @@ export function PluginDesignSystemDetail({
     : [
         {
           id: 'spec',
-          label: 'Spec',
-          html: '<!doctype html><meta charset="utf-8"><body style="font:14px system-ui;color:#666;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center;padding:0 24px;margin:0;">This plugin ships only the design spec — open Plugin info to read DESIGN.md.</body>',
+          label: t('plugins.detail.spec'),
+          html: `<!doctype html><meta charset="utf-8"><body style="font:14px system-ui;color:#666;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center;padding:0 24px;margin:0;">${t('plugins.detail.designSpecOnly')}</body>`,
         },
       ];
 
@@ -133,7 +133,7 @@ export function PluginDesignSystemDetail({
       exportTitleFor={(viewId) => `${record.title} — ${viewId}`}
       onClose={onClose}
       sidebar={{
-        label: 'Plugin info',
+        label: t('plugins.detail.pluginInfo'),
         defaultOpen: true,
         onToggle: handleSidebarToggle,
         contentKey: record.id,
@@ -147,7 +147,7 @@ export function PluginDesignSystemDetail({
                 record={record}
                 omit={{ description: true }}
                 compact
-                heading="Plugin info"
+                heading={t('plugins.detail.pluginInfo')}
               />
             </div>
             <section className="plugin-design-sidebar__spec">
@@ -164,10 +164,10 @@ export function PluginDesignSystemDetail({
         ),
       }}
       primaryAction={{
-        label: 'Use plugin',
+        label: t('plugins.card.use'),
         onClick: () => onUse(record),
         busy: !!isApplying,
-        busyLabel: 'Applying…',
+        busyLabel: t('plugins.card.applying'),
         testId: `plugin-details-use-${record.id}`,
       }}
       headerExtras={<PluginShareMenu record={record} variant="inline" />}

@@ -12,6 +12,8 @@
 
 import type { ContextItem, ContextItemKind } from '@open-design/contracts';
 import { Icon } from './Icon';
+import { useT } from '../i18n';
+import type { Dict } from '../i18n/types';
 
 interface Props {
   items: ContextItem[];
@@ -43,28 +45,29 @@ const KIND_ICON: Record<ContextItemKind, Parameters<typeof Icon>[0]['name']> = {
 // Short, human-readable kind labels for the chip prefix. The raw kind
 // (`design-system`, `claude-plugin`) is too long for a 200px-wide chip,
 // and shows up out-of-context on hover anyway via the title attribute.
-const KIND_LABEL: Record<ContextItemKind, string> = {
-  skill: 'Skill',
-  'design-system': 'Design',
-  craft: 'Craft',
-  asset: 'Asset',
-  mcp: 'MCP',
-  'claude-plugin': 'Claude',
-  atom: 'Atom',
-  plugin: 'Plugin',
+const KIND_LABEL_KEY: Record<ContextItemKind, keyof Dict> = {
+  skill: 'context.kindSkill',
+  'design-system': 'context.kindDesign',
+  craft: 'context.kindCraft',
+  asset: 'context.kindAsset',
+  mcp: 'context.kindMcp',
+  'claude-plugin': 'context.kindClaude',
+  atom: 'context.kindAtom',
+  plugin: 'context.kindPlugin',
 };
 
 export function ContextChipStrip(props: Props) {
+  const t = useT();
   const items = props.items ?? [];
   if (items.length === 0 && (props.hideWhenEmpty ?? true)) return null;
   return (
     <div className="context-chip-strip" role="list" data-testid="context-chip-strip">
       {items.length === 0 ? (
-        <div className="context-chip-strip__empty">No active plugin context.</div>
+        <div className="context-chip-strip__empty">{t('context.emptyPluginContext')}</div>
       ) : null}
       {items.map((item, idx) => {
         const iconName = KIND_ICON[item.kind] ?? 'sparkles';
-        const kindLabel = KIND_LABEL[item.kind] ?? item.kind;
+        const kindLabel = t(KIND_LABEL_KEY[item.kind] ?? 'context.kindUnknown');
         const label = chipLabel(item);
         const interactive = Boolean(props.onSelect);
         const titleAttr = `${kindLabel}: ${label}`;
@@ -102,7 +105,7 @@ export function ContextChipStrip(props: Props) {
               <button
                 type="button"
                 className="context-chip-strip__remove"
-                aria-label={`Remove ${kindLabel} ${label}`}
+                aria-label={t('context.removeAria', { kind: kindLabel, label })}
                 onClick={() => props.onRemove?.(item)}
               >
                 ×

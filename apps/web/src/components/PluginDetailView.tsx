@@ -18,7 +18,7 @@ interface Props {
 }
 
 export function PluginDetailView(props: Props) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const [plugin, setPlugin] = useState<InstalledPluginRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
@@ -48,9 +48,9 @@ export function PluginDetailView(props: Props) {
     return (
       <div className="plugin-detail" data-testid="plugin-detail">
         <button type="button" onClick={() => navigate({ kind: 'marketplace' })}>
-          ← Marketplace
+          ← {t('marketplace.title')}
         </button>
-        <div role="alert">Failed to load plugin: {error}</div>
+        <div role="alert">{t('plugins.detail.loadFailed', { error })}</div>
       </div>
     );
   }
@@ -58,7 +58,7 @@ export function PluginDetailView(props: Props) {
   if (!plugin) {
     return (
       <div className="plugin-detail" data-testid="plugin-detail">
-        <div>Loading plugin…</div>
+        <div>{t('plugins.detail.loading')}</div>
       </div>
     );
   }
@@ -85,7 +85,7 @@ export function PluginDetailView(props: Props) {
     const result = await applyPlugin(plugin.id, { locale });
     setApplying(false);
     if (!result) {
-      setError('Apply failed. Make sure the daemon is reachable.');
+      setError(t('plugins.detail.applyFailed'));
       return;
     }
     setApplied(result);
@@ -102,15 +102,15 @@ export function PluginDetailView(props: Props) {
         className="plugin-detail__back"
         onClick={() => navigate({ kind: 'marketplace' })}
       >
-        ← Marketplace
+        ← {t('marketplace.title')}
       </button>
 
       <header className="plugin-detail__header">
         <h1>{plugin.title}</h1>
         <div className="plugin-detail__meta">
           <span>v{plugin.version}</span>
-          <span>trust: {plugin.trust}</span>
-          <span>source: {plugin.sourceKind}</span>
+          <span>{t('plugins.detail.trustMeta', { trust: plugin.trust })}</span>
+          <span>{t('plugins.detail.sourceMeta', { source: plugin.sourceKind })}</span>
           {od.taskKind ? <span>{od.taskKind}</span> : null}
         </div>
       </header>
@@ -120,9 +120,9 @@ export function PluginDetailView(props: Props) {
       ) : null}
 
       <section className="plugin-detail__capabilities">
-        <h2>Capabilities</h2>
+        <h2>{t('plugins.detail.capabilities')}</h2>
         {capabilities.length === 0 ? (
-          <div>None declared (defaults to <code>prompt:inject</code>).</div>
+          <div>{t('plugins.detail.capabilitiesNoneBefore')} <code>prompt:inject</code>{t('plugins.detail.capabilitiesNoneAfter')}</div>
         ) : (
           <ul>
             {capabilities.map((c: string) => (
@@ -136,10 +136,10 @@ export function PluginDetailView(props: Props) {
 
       {required.length > 0 || optional.length > 0 ? (
         <section className="plugin-detail__connectors">
-          <h2>Connectors</h2>
+          <h2>{t('plugins.detail.connectors')}</h2>
           {required.length > 0 ? (
             <>
-              <h3>Required</h3>
+              <h3>{t('plugins.detail.required')}</h3>
               <ul>
                 {required.map((c: { id: string; tools?: string[] }) => (
                   <li key={c.id}>
@@ -152,7 +152,7 @@ export function PluginDetailView(props: Props) {
           ) : null}
           {optional.length > 0 ? (
             <>
-              <h3>Optional</h3>
+              <h3>{t('plugins.detail.optional')}</h3>
               <ul>
                 {optional.map((c: { id: string; tools?: string[] }) => (
                   <li key={c.id}>
@@ -168,9 +168,9 @@ export function PluginDetailView(props: Props) {
 
       {hasPreview ? (
         <section className="plugin-detail__preview" data-testid="plugin-detail-preview-section">
-          <h2>Preview</h2>
+          <h2>{t('common.preview')}</h2>
           <iframe
-            title={`${plugin.title} preview`}
+            title={t('plugins.detail.previewFrameTitle', { title: plugin.title })}
             src={`/api/plugins/${encodeURIComponent(plugin.id)}/preview`}
             sandbox="allow-scripts"
             className="plugin-detail__preview-frame"
@@ -188,7 +188,7 @@ export function PluginDetailView(props: Props) {
 
       {examples.length > 0 ? (
         <section className="plugin-detail__examples" data-testid="plugin-detail-examples-section">
-          <h2>Examples</h2>
+          <h2>{t('plugins.detail.examples')}</h2>
           <ul>
             {examples.map((e, idx) => {
               const base = e.path.split(/[\\/]/).filter(Boolean).pop() ?? `${idx}`;
@@ -218,12 +218,12 @@ export function PluginDetailView(props: Props) {
 
       {surfaces.length > 0 ? (
         <section className="plugin-detail__surfaces">
-          <h2>This plugin may ask you</h2>
+          <h2>{t('plugins.detail.mayAskYou')}</h2>
           <ul>
             {surfaces.map((s: { id: string; kind: string; persist?: string; prompt?: string }) => (
               <li key={s.id}>
                 <code>{s.kind}</code> · <code>{s.id}</code>
-                {s.persist ? <> · persists at <code>{s.persist}</code></> : null}
+                {s.persist ? <> · {t('plugins.detail.persistsAt')} <code>{s.persist}</code></> : null}
                 {s.prompt ? <> — {s.prompt}</> : null}
               </li>
             ))}
@@ -239,12 +239,11 @@ export function PluginDetailView(props: Props) {
           disabled={applying}
           data-testid="plugin-detail-use"
         >
-          {applying ? 'Applying…' : 'Use this plugin'}
+          {applying ? t('plugins.card.applying') : t('plugins.detail.useThisPlugin')}
         </button>
         {applied ? (
           <div className="plugin-detail__applied">
-            Applied (snapshot {applied.appliedPlugin.snapshotId.slice(0, 8)}…) —
-            redirected to Home with the brief pre-filled.
+            {t('plugins.detail.appliedRedirected', { snapshot: applied.appliedPlugin.snapshotId.slice(0, 8) })}
           </div>
         ) : null}
       </footer>

@@ -129,7 +129,7 @@ export function HomeView({
   skillsLoading = false,
   promptTemplates = [],
 }: Props) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const [plugins, setPlugins] = useState<InstalledPluginRecord[]>([]);
   const [pluginsLoading, setPluginsLoading] = useState(true);
   const [pendingApplyId, setPendingApplyId] = useState<string | null>(null);
@@ -320,10 +320,10 @@ export function HomeView({
     if (!active) return null;
     if (active.chipId) {
       const chip = findChip(active.chipId);
-      if (chip) return chip.label;
+      if (chip) return t(chip.labelKey);
     }
     return active.record.title;
-  }, [active]);
+  }, [active, t]);
 
   const selectableSkills = useMemo(
     () => skills.filter((skill) => !skill.aggregatesExamples),
@@ -954,9 +954,9 @@ export function HomeView({
             aria-modal="true"
             aria-labelledby="home-hero-confirm-title"
           >
-            <h2 id="home-hero-confirm-title">Replace current prompt?</h2>
+            <h2 id="home-hero-confirm-title">{t('homeHero.confirmReplaceTitle')}</h2>
             <p>
-              Using {pendingReplacement.title} will replace the text currently in the input.
+              {t('homeHero.confirmReplaceBody', { title: pendingReplacement.title })}
             </p>
             <div className="home-hero-confirm__actions">
               <button
@@ -964,7 +964,7 @@ export function HomeView({
                 className="home-hero-confirm__secondary"
                 onClick={() => setPendingReplacement(null)}
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
@@ -975,7 +975,7 @@ export function HomeView({
                   action();
                 }}
               >
-                Replace
+                {t('homeHero.confirmReplace')}
               </button>
             </div>
           </div>

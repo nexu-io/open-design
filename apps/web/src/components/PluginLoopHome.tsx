@@ -51,7 +51,7 @@ interface ActivePlugin {
 }
 
 export function PluginLoopHome({ onSubmit }: Props) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const [plugins, setPlugins] = useState<InstalledPluginRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [pendingApplyId, setPendingApplyId] = useState<string | null>(null);
@@ -151,29 +151,26 @@ export function PluginLoopHome({ onSubmit }: Props) {
   return (
     <div className="plugin-loop-home" data-testid="plugin-loop-home">
       <div className="plugin-loop-home__hero">
-        <h2 className="plugin-loop-home__title">What do you want to design?</h2>
-        <p className="plugin-loop-home__subtitle">
-          Pick a plugin below, click <strong>Use example query</strong> to load
-          a starter prompt, then press <kbd>Enter</kbd>.
-        </p>
+        <h2 className="plugin-loop-home__title">{t('pluginLoop.title')}</h2>
+        <p className="plugin-loop-home__subtitle">{t('pluginLoop.subtitle')}</p>
         {active ? (
           <div className="plugin-loop-home__active" data-active-plugin-id={active.record.id}>
             <span className="plugin-loop-home__active-chip">
               <span className="plugin-loop-home__active-dot" aria-hidden />
-              <span>Plugin: {active.record.title}</span>
+              <span>{t('pluginLoop.activePlugin', { title: active.record.title })}</span>
               <button
                 type="button"
                 className="plugin-loop-home__active-clear"
                 onClick={clearActive}
-                aria-label="Clear active plugin"
-                title="Clear active plugin"
+                aria-label={t('pluginLoop.clearActivePlugin')}
+                title={t('pluginLoop.clearActivePlugin')}
               >
                 ×
               </button>
             </span>
             {active.result.contextItems && active.result.contextItems.length > 0 ? (
               <span className="plugin-loop-home__context-summary">
-                {active.result.contextItems.length} context items resolved
+                {t('pluginLoop.contextItemsResolved', { count: active.result.contextItems.length })}
               </span>
             ) : null}
           </div>
@@ -188,8 +185,8 @@ export function PluginLoopHome({ onSubmit }: Props) {
             onKeyDown={onKeyDown}
             placeholder={
               active
-                ? 'Edit the example query or write your own…'
-                : 'Type a prompt, or pick a plugin below to load an example…'
+                ? t('pluginLoop.placeholderActive')
+                : t('pluginLoop.placeholderDefault')
             }
             rows={3}
           />
@@ -199,9 +196,9 @@ export function PluginLoopHome({ onSubmit }: Props) {
             data-testid="plugin-loop-submit"
             onClick={submit}
             disabled={!canSubmit}
-            title={canSubmit ? 'Press Enter to run' : 'Type something to run'}
+            title={canSubmit ? t('pluginLoop.pressEnterToRun') : t('pluginLoop.typeSomethingToRun')}
           >
-            Run ↵
+            {t('pluginLoop.run')}
           </button>
         </div>
         {error ? (
@@ -212,18 +209,17 @@ export function PluginLoopHome({ onSubmit }: Props) {
       </div>
 
       <div className="plugin-loop-home__rail-header">
-        <span>Plugins</span>
+        <span>{t('pluginLoop.plugins')}</span>
         <span className="plugin-loop-home__rail-count">
-          {loading ? '…' : `${sortedPlugins.length} installed`}
+          {loading ? '…' : t('pluginLoop.installedCount', { count: sortedPlugins.length })}
         </span>
       </div>
       <div className="plugin-loop-home__grid" role="list">
         {loading ? (
-          <div className="plugin-loop-home__empty">Loading plugins…</div>
+          <div className="plugin-loop-home__empty">{t('pluginLoop.loadingPlugins')}</div>
         ) : sortedPlugins.length === 0 ? (
           <div className="plugin-loop-home__empty">
-            No plugins installed. Install one with{' '}
-            <code>od plugin install &lt;source&gt;</code>.
+            {t('pluginLoop.emptyNoPlugins', { command: 'od plugin install <source>' })}
           </div>
         ) : (
           sortedPlugins.map((p) => {
@@ -264,7 +260,7 @@ export function PluginLoopHome({ onSubmit }: Props) {
                           name={links.authorName}
                           avatarUrl={links.authorAvatarUrl}
                         />
-                        <span>by {links.authorName}</span>
+                        <span>{t('pluginLoop.byAuthor', { name: links.authorName })}</span>
                       </span>
                     ) : null}
                     {links.sourceUrl ? (
@@ -273,7 +269,7 @@ export function PluginLoopHome({ onSubmit }: Props) {
                         target="_blank"
                         rel="noreferrer"
                         className="plugin-loop-home__card-byline-source"
-                        title={`View source: ${links.sourceLabel}`}
+                        title={t('pluginLoop.viewSource', { label: links.sourceLabel })}
                         onClick={(e) => e.stopPropagation()}
                       >
                         <Icon
@@ -290,12 +286,12 @@ export function PluginLoopHome({ onSubmit }: Props) {
                     type="button"
                     className="plugin-loop-home__card-details"
                     onClick={() => openDetails(p)}
-                    aria-label={`View details for ${p.title}`}
+                    aria-label={t('plugins.card.detailsAria', { title: p.title })}
                     data-testid={`view-details-${p.id}`}
-                    title="View plugin details"
+                    title={t('plugins.card.details')}
                   >
                     <Icon name="eye" size={12} />
-                    <span>Details</span>
+                    <span>{t('plugins.card.details')}</span>
                   </button>
                   <button
                     type="button"
@@ -306,14 +302,14 @@ export function PluginLoopHome({ onSubmit }: Props) {
                     data-testid={`use-example-${p.id}`}
                   >
                     {isPending
-                      ? 'Applying…'
+                      ? t('plugins.card.applying')
                       : hasQuery
                         ? isActive
-                          ? 'Reload example query'
-                          : 'Use example query'
+                          ? t('pluginLoop.reloadExampleQuery')
+                          : t('pluginLoop.useExampleQuery')
                         : isActive
-                          ? 'Plugin active'
-                          : 'Use plugin'}
+                          ? t('pluginLoop.pluginActive')
+                          : t('pluginLoop.usePlugin')}
                   </button>
                 </div>
               </div>

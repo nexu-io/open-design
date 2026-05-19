@@ -14,6 +14,7 @@ import { useState } from 'react';
 import type { InstalledPluginRecord } from '@open-design/contracts';
 import { Icon } from '../Icon';
 import { TrustBadge } from '../TrustBadge';
+import { useT } from '../../i18n';
 import {
   authorInitials,
   derivePluginSourceLinks,
@@ -25,6 +26,7 @@ interface Props {
 }
 
 export function PluginByline({ record, variant = 'default' }: Props) {
+  const t = useT();
   const links = derivePluginSourceLinks(record);
   const version = record.version;
 
@@ -41,7 +43,7 @@ export function PluginByline({ record, variant = 'default' }: Props) {
         <div className="plugin-byline__primary">
           {links.authorName ? (
             <>
-              <span className="plugin-byline__by">by</span>
+              <span className="plugin-byline__by">{t('plugins.detail.by')}</span>
               <span className="plugin-byline__name">{links.authorName}</span>
             </>
           ) : (
@@ -71,7 +73,7 @@ export function PluginByline({ record, variant = 'default' }: Props) {
                 rel="noreferrer"
               >
                 <Icon name="external-link" size={11} />
-                <span>Homepage</span>
+                <span>{t('plugins.detail.homepage')}</span>
               </a>
             ) : null}
             {links.contributeUrl ? (
@@ -82,15 +84,15 @@ export function PluginByline({ record, variant = 'default' }: Props) {
                 rel="noreferrer"
                 title={
                   links.contributeOnGithub
-                    ? 'Open an issue on GitHub'
-                    : 'Open the contribute page'
+                    ? t('plugins.detail.openIssueGithub')
+                    : t('plugins.detail.openContributePage')
                 }
               >
                 <Icon
                   name={links.contributeOnGithub ? 'github' : 'external-link'}
                   size={11}
                 />
-                <span>Contribute</span>
+                <span>{t('plugins.card.contribute')}</span>
               </a>
             ) : null}
           </div>
@@ -107,13 +109,14 @@ function Avatar({
   name: string | null;
   avatarUrl: string | null;
 }) {
+  const t = useT();
   const [broken, setBroken] = useState(false);
   if (avatarUrl && !broken) {
     return (
       <img
         className="plugin-byline__avatar"
         src={avatarUrl}
-        alt={name ? `${name} avatar` : 'Author avatar'}
+        alt={name ? t('plugins.detail.namedAuthorAvatar', { name }) : t('plugins.detail.authorAvatar')}
         loading="lazy"
         referrerPolicy="no-referrer"
         onError={() => setBroken(true)}

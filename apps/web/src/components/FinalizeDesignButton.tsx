@@ -12,6 +12,7 @@
 
 import type { DesignMdState } from '../hooks/useDesignMdState';
 import type { FinalizeStatus } from '../hooks/useFinalizeProject';
+import { useT } from '../i18n';
 
 export interface FinalizeDesignButtonProps {
   designMdState: Pick<DesignMdState, 'exists' | 'isStale'>;
@@ -26,18 +27,20 @@ export function FinalizeDesignButton({
   onFinalize,
   onCancel,
 }: FinalizeDesignButtonProps) {
+  const t = useT();
+
   if (status === 'pending') {
     return (
       <div className="project-actions-button project-actions-button-pending" role="group">
         <span className="project-actions-spinner" aria-hidden="true" />
-        <span className="project-actions-label">Finalizing…</span>
+        <span className="project-actions-label">{t('project.finalize.finalizing')}</span>
         <button
           type="button"
           className="project-actions-link"
           onClick={onCancel}
-          aria-label="Cancel finalize"
+          aria-label={t('project.finalize.cancelAria')}
         >
-          Cancel
+          {t('common.cancel')}
         </button>
       </div>
     );
@@ -46,13 +49,13 @@ export function FinalizeDesignButton({
   let label: string;
   let variantClass: string;
   if (!designMdState.exists) {
-    label = 'Finalize design package';
+    label = t('project.finalize.package');
     variantClass = 'project-actions-button-primary';
   } else if (designMdState.isStale) {
-    label = 'Re-finalize (spec is stale)';
+    label = t('project.finalize.stale');
     variantClass = 'project-actions-button-warning';
   } else {
-    label = 'Re-finalize';
+    label = t('project.finalize.again');
     variantClass = 'project-actions-button-secondary';
   }
 

@@ -100,7 +100,7 @@ export function PluginExampleDetail({
         // Default open so users see the metadata without an extra click;
         // the iframe stage scales down to fit and Fullscreen still gives
         // them an immersive view when needed.
-        label: 'Plugin info',
+        label: t('plugins.detail.pluginInfo'),
         defaultOpen: true,
         contentKey: record.id,
         content: (
@@ -109,16 +109,16 @@ export function PluginExampleDetail({
               record={record}
               omit={{ description: true }}
               compact
-              heading="Plugin info"
+              heading={t('plugins.detail.pluginInfo')}
             />
           </div>
         ),
       }}
       primaryAction={{
-        label: 'Use plugin',
+        label: t('plugins.card.use'),
         onClick: () => onUse(record),
         busy: !!isApplying,
-        busyLabel: 'Applying…',
+        busyLabel: t('plugins.card.applying'),
         testId: `plugin-details-use-${record.id}`,
       }}
       headerExtras={<PluginShareMenu record={record} variant="inline" />}

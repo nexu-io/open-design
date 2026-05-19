@@ -20,6 +20,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { InstalledPluginRecord } from '@open-design/contracts';
 import { Icon } from '../Icon';
 import { derivePluginSourceLinks } from '../../runtime/plugin-source';
+import { useT } from '../../i18n';
 
 interface Props {
   record: InstalledPluginRecord;
@@ -89,6 +90,7 @@ function buildMarkdownBadge(record: InstalledPluginRecord): string {
 }
 
 export function PluginShareMenu({ record, variant = 'default' }: Props) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -125,28 +127,28 @@ export function PluginShareMenu({ record, variant = 'default' }: Props) {
   const items: ShareItem[] = [
     {
       key: 'install',
-      label: 'Copy install command',
+      label: t('plugins.availableDetails.copyInstallCommand'),
       icon: 'copy',
       copies: true,
       onSelect: () => copyToClipboard(buildInstallCommand(record), 'install'),
     },
     {
       key: 'id',
-      label: 'Copy plugin ID',
+      label: t('plugins.detail.copyPluginId'),
       icon: 'copy',
       copies: true,
       onSelect: () => copyToClipboard(record.id, 'id'),
     },
     {
       key: 'link',
-      label: 'Copy share link',
+      label: t('plugins.detail.copyShareLink'),
       icon: 'link',
       copies: true,
       onSelect: () => copyToClipboard(buildShareUrl(record), 'link'),
     },
     {
       key: 'badge',
-      label: 'Copy markdown badge',
+      label: t('plugins.detail.copyMarkdownBadge'),
       icon: 'copy',
       copies: true,
       onSelect: () => copyToClipboard(buildMarkdownBadge(record), 'badge'),
@@ -161,8 +163,8 @@ export function PluginShareMenu({ record, variant = 'default' }: Props) {
       key: 'source',
       label:
         record.sourceKind === 'github' || links.sourceUrl.includes('github.com/')
-          ? 'Open source on GitHub'
-          : 'Open source',
+          ? t('plugins.detail.openSourceGithub')
+          : t('plugins.detail.openSource'),
       icon: links.sourceUrl.includes('github.com/') ? 'github' : 'external-link',
       href: links.sourceUrl,
     });
@@ -170,14 +172,14 @@ export function PluginShareMenu({ record, variant = 'default' }: Props) {
   if (links.homepageUrl) {
     openItems.push({
       key: 'homepage',
-      label: 'Open homepage',
+      label: t('plugins.detail.openHomepage'),
       icon: 'external-link',
       href: links.homepageUrl,
     });
   }
   openItems.push({
     key: 'marketplace',
-    label: 'Open in marketplace',
+    label: t('plugins.detail.openMarketplace'),
     icon: 'eye',
     href: buildShareUrl(record),
   });
@@ -199,10 +201,10 @@ export function PluginShareMenu({ record, variant = 'default' }: Props) {
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        title="Share plugin"
+        title={t('plugins.detail.sharePlugin')}
       >
         <Icon name="share" size={12} />
-        <span>Share</span>
+        <span>{t('common.share')}</span>
       </button>
       {open ? (
         <div className="plugin-share-popover" role="menu">
@@ -220,7 +222,7 @@ export function PluginShareMenu({ record, variant = 'default' }: Props) {
                   size={12}
                 />
                 <span>
-                  {copiedKey === item.key ? 'Copied' : item.label}
+                  {copiedKey === item.key ? t('plugins.availableDetails.copied') : item.label}
                 </span>
               </button>
             ))}
