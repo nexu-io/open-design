@@ -1296,13 +1296,27 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
     if (structured.length) return structured;
     return document.querySelectorAll('.slide');
   }
+  function hasScrollableOverflow(el){
+    if (!el) return false;
+    var ios = (el.style && el.style.overflowX) || '';
+    var io  = (el.style && el.style.overflow)  || '';
+    if (ios === 'hidden' || ios === 'clip') return false;
+    if (io  === 'hidden' || io  === 'clip') return false;
+    try {
+      var cs = window.getComputedStyle(el);
+      var ox = cs.overflowX;
+      return ox === 'auto' || ox === 'scroll' || ox === 'overlay';
+    } catch (_) { return false; }
+  }
   function scroller(){
-    if (document.body && document.body.scrollWidth > document.body.clientWidth + 1) return document.body;
-    return document.scrollingElement || document.documentElement;
+    if (document.body && document.body.scrollWidth > document.body.clientWidth + 1
+        && hasScrollableOverflow(document.body)) return document.body;
+    var se = document.scrollingElement || document.documentElement;
+    if (se && se.scrollWidth > se.clientWidth + 1 && hasScrollableOverflow(se)) return se;
+    return null;
   }
   function isScrollDeck(){
-    var sc = scroller();
-    return !!(sc && sc.scrollWidth > sc.clientWidth + 1);
+    return scroller() !== null;
   }
   function findActiveByClass(list){
     for (var i=0; i<list.length; i++) {
@@ -1322,9 +1336,10 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
   }
   function activeIndex(list){
     if (!list || !list.length) return 0;
-    if (isScrollDeck()) {
+    var sc = scroller();
+    if (sc) {
       var w = Math.max(1, window.innerWidth);
-      return Math.max(0, Math.min(list.length - 1, Math.round(scroller().scrollLeft / w)));
+      return Math.max(0, Math.min(list.length - 1, Math.round(sc.scrollLeft / w)));
     }
     var byClass = findActiveByClass(list);
     if (byClass >= 0) return byClass;
@@ -1407,7 +1422,8 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
   function scrollGo(i){
     var list = slides();
     var next = Math.max(0, Math.min(list.length - 1, i));
-    scroller().scrollTo({ left: next * window.innerWidth, behavior: 'smooth' });
+    var sc = scroller();
+    if (sc && typeof sc.scrollTo === 'function') sc.scrollTo({ left: next * window.innerWidth, behavior: 'smooth' });
     setTimeout(report, 380);
   }
   function targetFor(action, list){
@@ -1441,15 +1457,31 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
     var list = slides();
     if (!list.length) return;
     var target = Math.max(0, Math.min(list.length - 1, i));
-    if (isScrollDeck()) { scrollGo(target); return; }
-    if (canSetActive(list) && setActive(target)) return;
+    var sc = scroller();
+    if (sc) { scrollGo(target); return; }
     var current = activeIndex(list);
     var diff = target - current;
     if (!diff) { report(); return; }
+    // Pace synthetic key presses so animation-guarded handlers (which
+    // block repeat keys while a CSS/JS transition is in-flight) can
+    // consume each press. After all keys are sent, fall back to
+    // setActive() for pure CSS decks that never respond to keyboard
+    // events (no JS nav handler at all).
     var key = diff > 0 ? 'ArrowRight' : 'ArrowLeft';
-    var n = Math.abs(diff);
-    for (var k = 0; k < n; k++) dispatchKey(key);
-    setTimeout(report, 320);
+    var steps = Math.abs(diff);
+    function step(k){
+      dispatchKey(key);
+      if (k < steps - 1) {
+        setTimeout(function(){ step(k + 1); }, 350);
+      } else {
+        setTimeout(function(){
+          var sl = slides();
+          if (activeIndex(sl) !== target && canSetActive(sl)) setActive(target);
+          else report();
+        }, 100);
+      }
+    }
+    step(0);
   }
   function report(){
     try {

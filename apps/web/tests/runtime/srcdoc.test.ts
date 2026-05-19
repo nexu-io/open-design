@@ -89,6 +89,73 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).not.toContain('stopImmediatePropagation');
   });
 
+  it('deck bridge injects hasScrollableOverflow to distinguish transform decks from scroll decks', () => {
+    // hasScrollableOverflow(el) gates scroller() on both the body and the
+    // documentElement/scrollingElement branches. Without it a transform deck
+    // with overflow:hidden (wide scrollWidth from the off-screen track but
+    // no actual scroll) is mis-classified as a scroll deck and navigation
+    // falls into scrollGo() instead of dispatchKey().
+    const srcdoc = buildSrcdoc(
+      '<section class="slide active">One</section><section class="slide">Two</section>',
+      { deck: true }
+    );
+
+    expect(srcdoc).toContain('function hasScrollableOverflow(el)');
+    expect(srcdoc).toContain("=== 'hidden' || ");
+    expect(srcdoc).toContain("=== 'clip'");
+    expect(srcdoc).toContain("ox === 'auto' || ox === 'scroll'");
+  });
+
+  it('scroller() gates both body and documentElement branches on hasScrollableOverflow and returns null', () => {
+    // The root-element fallback (document.scrollingElement || document.documentElement)
+    // was the remaining path through which overflow:hidden transform decks
+    // could still be classified as scroll decks even after the body branch
+    // was fixed — its scrollWidth grows with the wide transform track just
+    // like body. Both branches must be gated; scroller() must return null
+    // when neither element has genuine horizontal scrollability.
+    const srcdoc = buildSrcdoc(
+      '<section class="slide active">One</section><section class="slide">Two</section>',
+      { deck: true }
+    );
+
+    const scrollerFn = srcdoc.match(/function scroller\(\)\{([\s\S]*?)\n  \}/)?.[1] ?? '';
+
+    expect(scrollerFn).toContain('hasScrollableOverflow(document.body)');
+    // The documentElement / scrollingElement fallback must also be gated
+    expect(scrollerFn).toContain('hasScrollableOverflow(se)');
+    // Must return null (not the element) when no scrollable element is found
+    expect(scrollerFn).toContain('return null;');
+  });
+
+  it('gotoIndex() dispatches paced keys and falls back to setActive only when keyboard unhandled', () => {
+    // Old code: canSetActive(list) && setActive(target) as immediate fast path.
+    // This bypassed keyboard dispatch entirely for any deck with class="active"
+    // on a slide, corrupting GSAP animation state (GSAP's reveal never fired).
+    // New code: always dispatch keys; after the final key, check whether the
+    // deck responded (index changed). Only fall back to setActive() when the
+    // deck has no keyboard handler (pure CSS class deck with no JS listener).
+    // This also fixes the animation-guard regression: pacing at 350ms intervals
+    // lets guarded handlers (which ignore keys while a transition is in-flight)
+    // consume each press before the next arrives.
+    const srcdoc = buildSrcdoc(
+      '<section class="slide active">One</section><section class="slide">Two</section>',
+      { deck: true }
+    );
+
+    const gotoFn = srcdoc.match(/function gotoIndex\(i\)\{([\s\S]*?)\n  \}/)?.[1] ?? '';
+
+    // Old immediate fast path must be gone
+    expect(gotoFn).not.toContain('canSetActive(list) && setActive(target)');
+    // Keyboard dispatch must be present
+    expect(gotoFn).toContain('dispatchKey(key)');
+    // Deferred fallback to setActive must be present (for CSS-only decks)
+    expect(gotoFn).toContain('setActive(target)');
+    // Fallback must be conditional on keyboard having NOT reached target
+    expect(gotoFn).toContain('activeIndex(sl) !== target');
+    // Pacing via setTimeout must be present
+    expect(gotoFn).toContain('setTimeout(function(){ step(k + 1); }');
+  });
+
   it('injects the selection bridge for comment mode', () => {
     const srcdoc = buildSrcdoc('<main data-od-id="hero">Hero</main>', {
       commentBridge: true,
