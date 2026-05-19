@@ -2,6 +2,7 @@ import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
 import { checkDesignSystemManifests } from "./check-design-system-manifests.ts";
+import { checkDesignSystemPackageQuality } from "./check-design-system-package-quality.ts";
 import { checkDesignSystemComponentFixtureReport } from "./check-components-fixtures.ts";
 import { checkDesignSystemFlagParity } from "./check-design-system-flag-parity.ts";
 import { checkComponentsManifestExtraction } from "./check-components-manifest-extraction.ts";
@@ -903,6 +904,7 @@ const checks: GuardCheck[] = [
   { name: "tools layout", run: checkToolsLayout },
   { name: "style policy", run: checkStylePolicy },
   { name: "design system manifests", run: checkDesignSystemManifests },
+  { name: "design system package quality", run: checkDesignSystemPackageQuality },
   { name: "design system component fixture report", run: checkDesignSystemComponentFixtureReport },
   { name: "design system token-fixture sync", run: checkDesignSystemTokenFixtureSync },
   { name: "design system A1 required tokens", run: checkDesignSystemA1RequiredTokens },

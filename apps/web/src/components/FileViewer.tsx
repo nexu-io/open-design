@@ -29,6 +29,7 @@ import {
   fetchProjectDeployments,
   fetchProjectFilePreview,
   fetchProjectFileText,
+  uploadProjectFiles,
   liveArtifactPreviewUrl,
   projectFileUrl,
   projectRawUrl,
@@ -5955,6 +5956,16 @@ function HtmlViewer({
                 onRedo={() => {
                   void redoManualEdit();
                 }}
+                onPickImage={async (pickedFile) => {
+                  const result = await uploadProjectFiles(projectId, [pickedFile]);
+                  const uploaded = result.uploaded[0];
+                  if (!uploaded?.path) {
+                    setManualEditError(result.error ?? t('manualEdit.uploadImageFailed'));
+                    return null;
+                  }
+                  setManualEditError(null);
+                  return toOwnerRelativePath(file.name, uploaded.path);
+                }}
               />
             ) : null}
             <div className={manualEditMode ? 'manual-edit-canvas' : 'comment-frame-clip'}>
@@ -6601,6 +6612,40 @@ function HtmlViewer({
 function baseDirFor(fileName: string): string {
   const idx = fileName.lastIndexOf('/');
   return idx >= 0 ? fileName.slice(0, idx + 1) : '';
+}
+
+function toOwnerRelativePath(ownerFileName: string, targetPath: string): string {
+  const normalize = (value: string) => decodeURIComponent(value).replace(/^\/+/, '');
+  const squash = (parts: string[]) => {
+    const out: string[] = [];
+    for (const part of parts) {
+      if (!part || part === '.') continue;
+      if (part === '..') {
+        if (out.length > 0) out.pop();
+        continue;
+      }
+      out.push(part);
+    }
+    return out;
+  };
+  const ownerDirPath = normalize(baseDirFor(ownerFileName));
+  const targetFilePath = normalize(targetPath);
+  const ownerParts = squash(ownerDirPath.split('/'));
+  const targetParts = squash(targetFilePath.split('/'));
+
+  let common = 0;
+  while (
+    common < ownerParts.length &&
+    common < targetParts.length &&
+    ownerParts[common] === targetParts[common]
+  ) {
+    common += 1;
+  }
+
+  const up = new Array(ownerParts.length - common).fill('..');
+  const down = targetParts.slice(common);
+  const rel = [...up, ...down].join('/');
+  return rel || '.';
 }
 
 function hasRelativeAssetRefs(html: string): boolean {

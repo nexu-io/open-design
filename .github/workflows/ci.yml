@@ -14,7 +14,9 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: read
+  pull-requests: read
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
@@ -36,13 +38,10 @@ jobs:
       workspace_validation_required: ${{ steps.detect.outputs.workspace_validation_required }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6.0.2
-        with:
-          fetch-depth: 0
-
       - name: Detect workspace and app test scopes
         id: detect
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
@@ -52,7 +51,9 @@ jobs:
           tools_pack_tests_required=false
           workspace_validation_required=false
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}" > "$RUNNER_TEMP/changed-files.txt"
+            gh api --paginate \
+              "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" \
+              --jq '.[].filename' > "$RUNNER_TEMP/changed-files.txt"
             while IFS= read -r file; do
               if [[ "$file" == "apps/daemon/"* || "$file" == "packages/contracts/"* || "$file" == "packages/platform/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/sidecar-proto/"* ]]; then
                 daemon_tests_required=true
@@ -172,7 +173,9 @@ jobs:
           pnpm --filter @open-design/web build:sidecar
 
       - name: Typecheck workspaces
-        run: pnpm -r --workspace-concurrency=4 --if-present run typecheck
+        run: |
+          pnpm -r --filter '!open-design' --filter '!@open-design/landing-page' --workspace-concurrency=4 --if-present run typecheck
+          pnpm exec tsc -p scripts/tsconfig.json --noEmit
 
       - name: Check repository layout policies
         run: pnpm guard
@@ -269,11 +272,15 @@ jobs:
           fi
 
   daemon_workspace_tests:
-    name: Daemon workspace tests
+    name: Daemon workspace tests (${{ matrix.shard }}/2)
     needs: [change_scopes]
     if: ${{ needs.change_scopes.outputs.daemon_tests_required == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
 
     steps:
       - name: Checkout
@@ -308,7 +315,7 @@ jobs:
         run: pnpm --filter @open-design/daemon build
 
       - name: Daemon workspace tests
-        run: pnpm --filter @open-design/daemon test
+        run: pnpm --filter @open-design/daemon exec vitest run -c vitest.config.ts --shard=${{ matrix.shard }}/2
 
   web_workspace_tests:
     name: Web workspace tests
@@ -429,11 +436,21 @@ jobs:
         run: pnpm --filter @open-design/e2e test
 
   ui_e2e_critical:
-    name: Playwright critical
+    name: Playwright critical (${{ matrix.group }})
     needs: [change_scopes]
     if: ${{ needs.change_scopes.outputs.workspace_validation_required == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: core
+            grep_flag: --grep-invert
+            grep_pattern: home starters|home hero
+          - group: starters
+            grep_flag: --grep
+            grep_pattern: home starters|home hero
 
     steps:
       - name: Checkout
@@ -491,7 +508,7 @@ jobs:
       - name: Playwright critical
         run: |
           pnpm -C e2e exec tsx scripts/playwright.ts clean
-          pnpm --filter @open-design/e2e run test:ui:critical
+          pnpm -C e2e exec playwright test -c playwright.config.ts ${{ matrix.grep_flag }} '${{ matrix.grep_pattern }}' ui/critical-smoke.test.ts ui/entry-chrome-flows.test.ts
 
   build_workspaces:
     name: Build workspaces
@@ -541,7 +558,7 @@ jobs:
       # current workspace is small enough that safer logs and fewer shared-FS
       # races outweigh the lost parallelism; revisit if the package count grows.
       - name: Build workspaces
-        run: pnpm -r --workspace-concurrency=1 --if-present run build
+        run: pnpm -r --filter '!@open-design/landing-page' --workspace-concurrency=1 --if-present run build
 
   validate:
     name: Validate workspace
@@ -569,3 +586,75 @@ jobs:
             echo "$failures"
             exit 1
           fi
+
+  runtime_trace:
+    name: Runtime trace
+    needs:
+      - validate
+    if: ${{ always() && github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Summarize workflow runtime
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          run_json="$RUNNER_TEMP/run.json"
+          gh run view "$RUN_ID" --repo "$GITHUB_REPOSITORY" --json conclusion,createdAt,databaseId,displayTitle,event,headBranch,jobs,updatedAt,url > "$run_json"
+          jq -r '
+            def parse_ts: sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601;
+            def seconds($start; $end):
+              if ($start and $end) then (($end | parse_ts) - ($start | parse_ts)) else null end;
+            def fmt($seconds):
+              if $seconds == null then "n/a"
+              elif $seconds >= 60 then "\(((($seconds / 60) * 10 | round) / 10))m"
+              else "\(($seconds | round))s"
+              end;
+            def row($cells): "| \($cells | join(" | ")) |";
+
+            .jobs as $jobs |
+            [
+              "## Runtime trace",
+              "",
+              "Run: [\(.displayTitle)](\(.url))",
+              "Event: `\(.event)`",
+              "Branch: `\(.headBranch)`",
+              "Elapsed: \(fmt(seconds(.createdAt; .updatedAt)))",
+              "",
+              "### Jobs",
+              "| Job | Result | Duration | Slowest step |",
+              "| --- | --- | ---: | --- |",
+              (
+                $jobs
+                | sort_by(seconds(.startedAt; .completedAt) // 0)
+                | reverse
+                | .[]
+                | select(.conclusion != "skipped")
+                | (
+                    [(.steps // [])[] | select(.startedAt and .completedAt and .conclusion != "skipped") | {name, duration: seconds(.startedAt; .completedAt)}]
+                    | max_by(.duration // 0)
+                  ) as $slow
+                | row([.name, (.conclusion // .status), fmt(seconds(.startedAt; .completedAt)), "\($slow.name // "n/a") (\(fmt($slow.duration)))"])
+              ),
+              "",
+              "### Slowest steps",
+              "| Step | Job | Duration |",
+              "| --- | --- | ---: |",
+              (
+                [
+                  $jobs[] as $job
+                  | ($job.steps // [])[]
+                  | select(.startedAt and .completedAt and .conclusion != "skipped")
+                  | {job: $job.name, name, duration: seconds(.startedAt; .completedAt)}
+                ]
+                | sort_by(.duration // 0)
+                | reverse
+                | .[0:20][]
+                | row([.name, .job, fmt(.duration)])
+              )
+            ][]
+          ' "$run_json" >> "$GITHUB_STEP_SUMMARY"

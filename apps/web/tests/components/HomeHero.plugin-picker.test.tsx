@@ -166,7 +166,8 @@ describe('HomeHero plugin picker', () => {
     expect(screen.getByRole('tab', { name: /plugins/i })).toBeTruthy();
     expect(screen.getByRole('tab', { name: /skills/i })).toBeTruthy();
     expect(screen.getByRole('tab', { name: /mcp/i })).toBeTruthy();
-    expect(screen.getByText('Search plugins, skills, and MCP servers.')).toBeTruthy();
+    expect(screen.getByRole('tab', { name: /connectors/i })).toBeTruthy();
+    expect(screen.getByText('Search plugins, skills, MCP servers, and connectors.')).toBeTruthy();
   });
 
   it('can pick skills and MCP servers from the home @ picker', () => {

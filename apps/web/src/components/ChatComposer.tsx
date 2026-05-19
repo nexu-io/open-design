@@ -14,7 +14,7 @@ import {
   trackStudioClickChatComposer,
   trackStudioViewChatPanel,
 } from '../analytics/events';
-import { projectRawUrl, uploadProjectFiles, openFolderDialog } from "../providers/registry";
+import { projectRawUrl, uploadProjectFiles, openFolderDialog, fetchConnectors } from "../providers/registry";
 import { patchProject } from "../state/projects";
 import { fetchMcpServers } from "../state/mcp";
 import type { McpServerConfig, McpTemplate } from "../state/mcp";
@@ -22,9 +22,11 @@ import { listPlugins } from "../state/projects";
 import type { AppConfig, ChatAttachment, ChatCommentAttachment, ProjectFile, ProjectMetadata, SkillSummary } from "../types";
 import type {
   ContextItem,
+  ConnectorDetail,
   InstalledPluginRecord,
   PluginSourceKind,
   ResearchOptions,
+  RunContextSelection,
 } from '@open-design/contracts';
 import { buildVisualAnnotationAttachment } from '../comments';
 import { Icon } from "./Icon";
@@ -42,7 +44,7 @@ type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => 
 
 type ToolsTab = 'plugins' | 'skills' | 'mcp' | 'import' | 'pet';
 
-type MentionTab = 'all' | 'plugins' | 'skills' | 'mcp' | 'files';
+type MentionTab = 'all' | 'plugins' | 'skills' | 'mcp' | 'connectors' | 'files';
 
 const USER_PLUGIN_SOURCE_KINDS = new Set<PluginSourceKind>([
   'user',
@@ -146,6 +148,7 @@ export interface ChatComposerHandle {
 
 export interface ChatSendMeta {
   research?: ResearchOptions;
+  context?: RunContextSelection;
   // Per-turn skill ids picked via the @-mention popover. The chat layer
   // forwards these to the daemon's `skillIds` field so the system prompt
   // for this run only is composed with the extra skill bodies, without
@@ -218,6 +221,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // strip the chip when the user removes the corresponding `@<skill>`
     // token from the draft, keeping draft and chips in sync.
     const [stagedSkills, setStagedSkills] = useState<SkillSummary[]>([]);
+    const [stagedMcpServers, setStagedMcpServers] = useState<McpServerConfig[]>([]);
+    const [stagedConnectors, setStagedConnectors] = useState<ConnectorDetail[]>([]);
     const [dragActive, setDragActive] = useState(false);
     const [mention, setMention] = useState<{
       q: string;
@@ -240,6 +245,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // the prompt that nudges the model to use that server's tools.
     const [mcpServers, setMcpServers] = useState<McpServerConfig[]>([]);
     const [mcpTemplates, setMcpTemplates] = useState<McpTemplate[]>([]);
+    const [connectors, setConnectors] = useState<ConnectorDetail[]>([]);
     // Installed plugins, fetched lazily for the tools-menu Plugins tab and
     // the @-mention picker. Both surfaces share the same list so applying
     // a plugin from either path lands on the same project context.
@@ -336,6 +342,17 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       };
     }, [projectId]);
 
+    useEffect(() => {
+      let cancelled = false;
+      void fetchConnectors().then((rows) => {
+        if (cancelled) return;
+        setConnectors(rows.filter((connector) => connector.status === 'connected'));
+      });
+      return () => {
+        cancelled = true;
+      };
+    }, []);
+
     // Composer-side plugin list: hide bundled atoms (pipeline-only). Keep
     // the full installed list available even when the project was created
     // from a pinned plugin, so users can switch or layer different plugin
@@ -355,13 +372,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     const composerMentionEntities = useMemo(
       () =>
         buildComposerMentionEntities({
+          connectors,
           files: projectFiles,
           mcpServers: enabledMcpServers,
           plugins: pluginsForComposer,
           skills,
           staged,
         }),
-      [enabledMcpServers, pluginsForComposer, projectFiles, skills, staged],
+      [connectors, enabledMcpServers, pluginsForComposer, projectFiles, skills, staged],
     );
     const composerMentionParts = useMemo(
       () => buildInlineMentionParts(draft, composerMentionEntities),
@@ -659,6 +677,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       setStaged([]);
       setStagedVisualComments([]);
       setStagedSkills([]);
+      setStagedMcpServers([]);
+      setStagedConnectors([]);
       setUploadError(null);
       setMention(null);
       setSlash(null);
@@ -666,6 +686,22 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
 
     function currentCommentAttachments(extra: ChatCommentAttachment[] = []): ChatCommentAttachment[] {
       return [...commentAttachments, ...stagedVisualComments, ...extra];
+    }
+
+    function currentRunContextMeta(): ChatSendMeta | undefined {
+      const skillIds = stagedSkills.map((s) => s.id);
+      const mcpServerIds = stagedMcpServers.map((s) => s.id);
+      const connectorIds = stagedConnectors.map((c) => c.id);
+      const context: RunContextSelection = {
+        ...(skillIds.length > 0 ? { skillIds } : {}),
+        ...(mcpServerIds.length > 0 ? { mcpServerIds } : {}),
+        ...(connectorIds.length > 0 ? { connectorIds } : {}),
+      };
+      const meta: ChatSendMeta = {
+        ...(skillIds.length > 0 ? { skillIds } : {}),
+        ...(Object.keys(context).length > 0 ? { context } : {}),
+      };
+      return Object.keys(meta).length > 0 ? meta : undefined;
     }
 
     async function insertSkillMention(skill: SkillSummary) {
@@ -807,9 +843,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             const attachments = [...staged, ...uploaded];
             const nextCommentAttachments = currentCommentAttachments(visualAttachment ? [visualAttachment] : []);
             if (!prompt && attachments.length === 0 && nextCommentAttachments.length === 0) return;
-            const skillIds = stagedSkills.map((s) => s.id);
-            const skillMeta = skillIds.length > 0 ? { skillIds } : undefined;
-            onSend(prompt, attachments, nextCommentAttachments, skillMeta);
+            onSend(prompt, attachments, nextCommentAttachments, currentRunContextMeta());
             reset();
             return;
           }
@@ -958,7 +992,17 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     }
 
     function insertMcpMention(server: McpServerConfig) {
+      setStagedMcpServers((current) => (
+        current.some((item) => item.id === server.id) ? current : [...current, server]
+      ));
       replaceMentionWithText(`${inlineMentionToken(server.label || server.id)} `);
+    }
+
+    function insertConnectorMention(connector: ConnectorDetail) {
+      setStagedConnectors((current) => (
+        current.some((item) => item.id === connector.id) ? current : [...current, connector]
+      ));
+      replaceMentionWithText(`${inlineMentionToken(connector.name)} `);
     }
 
     async function applyProjectSkill(skill: SkillSummary): Promise<boolean> {
@@ -992,13 +1036,12 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       // prompt and *is* sent to the agent — the agent runs the skill,
       // packages a Codex pet under `~/.codex/pets/`, and the user
       // adopts it from "Recently hatched" in pet settings afterwards.
-      const skillIds = stagedSkills.map((s) => s.id);
-      const skillMeta = skillIds.length > 0 ? { skillIds } : undefined;
+      const contextMeta = currentRunContextMeta();
       const hatched = expandHatchCommand(prompt);
       const nextCommentAttachments = currentCommentAttachments();
       if (hatched) {
         if (streaming) return;
-        onSend(hatched, staged, nextCommentAttachments, skillMeta);
+        onSend(hatched, staged, nextCommentAttachments, contextMeta);
         reset();
         return;
       }
@@ -1006,14 +1049,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       if (search) {
         if (streaming) return;
         onSend(search.prompt, staged, nextCommentAttachments, {
-          ...skillMeta,
+          ...contextMeta,
           research: { enabled: true, query: search.query },
         });
         reset();
         return;
       }
       if ((!prompt && staged.length === 0 && nextCommentAttachments.length === 0) || streaming) return;
-      onSend(prompt, staged, nextCommentAttachments, skillMeta);
+      onSend(prompt, staged, nextCommentAttachments, contextMeta);
       reset();
     }
 
@@ -1054,6 +1097,24 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               s.transport,
               s.url ?? '',
               s.command ?? '',
+            ]
+              .join(' ')
+              .toLowerCase()
+              .includes(mentionQuery);
+          })
+          .slice(0, 8)
+      : [];
+    const filteredConnectors = mention
+      ? connectors
+          .filter((connector) => {
+            if (!mentionQuery) return true;
+            return [
+              connector.id,
+              connector.name,
+              connector.provider,
+              connector.category,
+              connector.description ?? '',
+              connector.accountLabel ?? '',
             ]
               .join(' ')
               .toLowerCase()
@@ -1242,12 +1303,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 plugins={filteredPlugins}
                 skills={filteredSkills}
                 mcpServers={filteredMcpServers}
+                connectors={filteredConnectors}
                 query={mention.q}
                 currentSkillId={currentSkillId}
                 onPickFile={insertMention}
                 onPickPlugin={(record) => void insertPluginMention(record)}
                 onPickSkill={(skill) => void insertSkillMention(skill)}
                 onPickMcp={insertMcpMention}
+                onPickConnector={insertConnectorMention}
               />
             ) : null}
             {slash && filteredSlash.length > 0 ? (
@@ -1521,12 +1584,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
 );
 
 function buildComposerMentionEntities({
+  connectors,
   files,
   mcpServers,
   plugins,
   skills,
   staged,
 }: {
+  connectors: ConnectorDetail[];
   files: ProjectFile[];
   mcpServers: McpServerConfig[];
   plugins: InstalledPluginRecord[];
@@ -1577,6 +1642,24 @@ function buildComposerMentionEntities({
         label: server.id,
         token: inlineMentionToken(server.id),
         title: `MCP: ${label}`,
+      });
+    }
+  }
+  for (const connector of connectors) {
+    entities.push({
+      id: connector.id,
+      kind: 'connector',
+      label: connector.name,
+      token: inlineMentionToken(connector.name),
+      title: `Connector: ${connector.name}`,
+    });
+    if (connector.id !== connector.name) {
+      entities.push({
+        id: connector.id,
+        kind: 'connector',
+        label: connector.id,
+        token: inlineMentionToken(connector.id),
+        title: `Connector: ${connector.name}`,
       });
     }
   }
@@ -2330,6 +2413,7 @@ function SlashPopover({
 
 function MentionPopover({
   files,
+  connectors,
   plugins,
   skills,
   mcpServers,
@@ -2339,8 +2423,10 @@ function MentionPopover({
   onPickPlugin,
   onPickSkill,
   onPickMcp,
+  onPickConnector,
 }: {
   files: ProjectFile[];
+  connectors: ConnectorDetail[];
   plugins: InstalledPluginRecord[];
   skills: SkillSummary[];
   mcpServers: McpServerConfig[];
@@ -2350,6 +2436,7 @@ function MentionPopover({
   onPickPlugin: (record: InstalledPluginRecord) => void;
   onPickSkill: (skill: SkillSummary) => void;
   onPickMcp: (server: McpServerConfig) => void;
+  onPickConnector: (connector: ConnectorDetail) => void;
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
   const [tab, setTab] = useState<MentionTab>('all');
@@ -2358,20 +2445,23 @@ function MentionPopover({
     { id: 'plugins', label: 'Plugins' },
     { id: 'skills', label: 'Skills' },
     { id: 'mcp', label: 'MCP' },
+    { id: 'connectors', label: 'Connectors' },
     { id: 'files', label: 'Design files' },
   ];
   const showPlugins = tab === 'all' || tab === 'plugins';
   const showSkills = tab === 'all' || tab === 'skills';
   const showMcp = tab === 'all' || tab === 'mcp';
+  const showConnectors = tab === 'all' || tab === 'connectors';
   const showFiles = tab === 'all' || tab === 'files';
   const hasVisibleResults =
     (showPlugins && plugins.length > 0) ||
     (showSkills && skills.length > 0) ||
     (showMcp && mcpServers.length > 0) ||
+    (showConnectors && connectors.length > 0) ||
     (showFiles && files.length > 0);
   useEffect(() => {
     if (ref.current) ref.current.scrollTop = 0;
-  }, [files, plugins, skills, mcpServers, tab]);
+  }, [connectors, files, plugins, skills, mcpServers, tab]);
   return (
     <div className="mention-popover" data-testid="mention-popover">
       <div className="mention-tabs" role="tablist" aria-label="Mention surfaces">
@@ -2395,7 +2485,7 @@ function MentionPopover({
             {query ? (
               <>No results for “{query}”.</>
             ) : (
-              <>Search plugins, skills, MCP servers, and Design Files.</>
+              <>Search plugins, skills, MCP servers, connectors, and Design Files.</>
             )}
           </div>
         ) : null}
@@ -2470,6 +2560,30 @@ function MentionPopover({
                   </span>
                 </span>
                 <span className="mention-meta">{server.transport}</span>
+              </button>
+            ))}
+          </>
+        ) : null}
+        {showConnectors && connectors.length > 0 ? (
+          <>
+            <div className="mention-section-label">Connectors</div>
+            {connectors.map((connector) => (
+              <button
+                key={`connector-${connector.id}`}
+                className="mention-item"
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => onPickConnector(connector)}
+                title={`Use ${connector.name}`}
+              >
+                <Icon name="link" size={12} />
+                <span className="mention-item-body">
+                  <strong>{connector.name}</strong>
+                  <span className="mention-meta mention-meta--desc">
+                    {connector.description || connector.provider || connector.id}
+                  </span>
+                </span>
+                <span className="mention-meta">{connector.accountLabel ?? connector.provider}</span>
               </button>
             ))}
           </>

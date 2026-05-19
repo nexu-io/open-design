@@ -133,14 +133,6 @@ describe('HomeHero intent rail', () => {
       pluginId: 'example-hyperframes',
       projectKind: 'video',
     });
-    // Live artifact shares web-prototype's seed (interactive HTML/CSS/JS
-    // is a flavour of prototype) but keeps a distinct chip id + label
-    // so the rail's active state tracks user intent independently from
-    // the Prototype chip.
-    expect(findChip('live-artifact')?.action).toMatchObject({
-      kind: 'apply-scenario',
-      pluginId: 'example-web-prototype',
-      projectKind: 'prototype',
-    });
+    expect(findChip('live-artifact')).toBeUndefined();
   });
 });

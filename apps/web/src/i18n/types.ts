@@ -466,6 +466,7 @@ export interface Dict {
   'settings.memoryExtractionDelete': string;
   'settings.memoryExtractionsClear': string;
   'settings.memoryExtractionsClearTitle': string;
+  'settings.memoryExtractionsClearConfirm': string;
   'settings.memoryNoProviderBannerTitle': string;
   'settings.memoryNoProviderBannerBody': string;
   // Memory model picker — rendered inline next to the chat model picker
@@ -1619,6 +1620,13 @@ export interface Dict {
   'manualEdit.border': string;
   'manualEdit.width': string;
   'manualEdit.minHeight': string;
+  'manualEdit.deleteElement': string;
+  'manualEdit.deleteElementConfirm': string;
+  'manualEdit.uploadImage': string;
+  'manualEdit.uploadingImage': string;
+  'manualEdit.uploadImageFailed': string;
+  'manualEdit.focusSlides': string;
+  'manualEdit.showPanels': string;
   'fileViewer.zoomOut': string;
   'fileViewer.zoomIn': string;
   'fileViewer.resetZoom': string;

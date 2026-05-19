@@ -593,6 +593,7 @@
 .ds-warning-card,
 .ds-generation-review-card,
 .ds-workspace-activity-card,
+.ds-package-card,
 .ds-revision-card,
 .ds-revision-history,
 .ds-review-section,
@@ -790,6 +791,129 @@
   margin-bottom: 24px;
   border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
   background: color-mix(in srgb, var(--accent) 9%, var(--bg-panel));
+}
+.ds-package-card {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  margin-bottom: 18px;
+}
+.ds-package-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+.ds-package-card__head > span:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.ds-package-card__head small,
+.ds-package-card h2,
+.ds-package-file-list small,
+.ds-evidence-stats small {
+  color: var(--text-muted);
+}
+.ds-package-pill {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.ds-package-pill.is-ready {
+  border-color: color-mix(in srgb, var(--green) 36%, var(--border));
+  color: var(--green);
+}
+.ds-package-grid,
+.ds-package-files {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.ds-package-grid > div,
+.ds-package-files > div,
+.ds-evidence-panel {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-subtle);
+}
+.ds-package-card h2 {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+.ds-package-chips,
+.ds-package-file-list,
+.ds-confidence-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ds-package-chips code,
+.ds-package-file-list code {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 4px 7px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-panel);
+  color: var(--text);
+  font: 11px/1.35 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ds-package-metrics,
+.ds-evidence-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.ds-package-metrics span,
+.ds-evidence-stats span {
+  display: grid;
+  gap: 2px;
+}
+.ds-package-metrics strong,
+.ds-evidence-stats strong {
+  font-size: 16px;
+}
+.ds-package-metrics small,
+.ds-evidence-stats small {
+  font-size: 11px;
+}
+.ds-package-file-list span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.ds-confidence-row span {
+  padding: 4px 7px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.ds-evidence-excerpt {
+  max-height: 160px;
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  font: 12px/1.45 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
 }
 .ds-warning-card span {
   flex: 1;
@@ -1264,8 +1388,14 @@
   }
   .ds-resource-row,
   .ds-files-panel,
-  .ds-publish-card {
+  .ds-publish-card,
+  .ds-package-grid,
+  .ds-package-files {
     grid-template-columns: 1fr;
+  }
+  .ds-package-metrics,
+  .ds-evidence-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .ds-github-access-methods {
     grid-template-columns: 1fr;

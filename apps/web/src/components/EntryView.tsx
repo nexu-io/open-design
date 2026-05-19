@@ -318,6 +318,7 @@ export function EntryView({
   return (
     <EntryShell
       skills={skills}
+      designTemplates={designTemplates}
       designSystems={designSystems}
       projects={projects}
       templates={templates}

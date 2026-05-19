@@ -55,12 +55,16 @@ discover the same files without guessing.
 
 ```text
 design-systems/<slug>/
-├── manifest.json       ← machine-readable project entry
-├── DESIGN.md           ← canonical design prose for agents
-├── tokens.css          ← canonical compiled CSS custom properties
-├── components.html     ← optional standalone component fixture
-├── assets/             ← optional brand assets
-└── preview/            ← optional static preview pages
+├── manifest.json                ← machine-readable project entry
+├── USAGE.md                     ← optional agent-facing package guide
+├── DESIGN.md                    ← canonical design prose for agents
+├── tokens.css                   ← canonical compiled CSS custom properties
+├── components.html              ← optional standalone component fixture
+├── components.manifest.json     ← optional rebuildable component cache
+├── assets/                      ← optional brand assets
+├── fonts/                       ← optional webfont files
+├── preview/                     ← optional static preview pages
+└── source/                      ← optional importer evidence and snippets
 ```
 
 `manifest.json` is validated by `pnpm guard` when present. PR1 does not
@@ -96,6 +100,32 @@ For v1, file locations are intentionally fixed:
   `components.html`.
 - `assetsDir` is optional and, when declared, must be `assets`.
 - `previewDir` is optional and, when declared, must be `preview`.
+
+Imported systems may also declare richer optional indexes:
+
+```json
+{
+  "usage": "USAGE.md",
+  "componentsManifest": "components.manifest.json",
+  "importMode": "hybrid",
+  "craft": { "applies": [], "suggested": [], "exemptions": [] },
+  "fonts": [],
+  "preview": { "dir": "preview", "pages": [] },
+  "sourceFiles": {
+    "scanned": "source/scanned-files.json",
+    "evidence": "source/evidence.md",
+    "tokens": "source/tokens.source.json",
+    "snippets": "source/snippets/INDEX.json"
+  }
+}
+```
+
+For PR0, these richer fields are structural only: the guard validates safe
+relative paths, declared file or directory existence, JSON readability for
+declared JSON indexes, and optional `components.manifest.json` drift. Runtime
+prompt composition and picker behavior continue to use the existing
+`DESIGN.md` / `tokens.css` / `components.html` paths until later PRs consume
+the richer indexes.
 
 The schema source of truth lives in
 [`_schema/manifest.schema.ts`](_schema/manifest.schema.ts). The guard lives in

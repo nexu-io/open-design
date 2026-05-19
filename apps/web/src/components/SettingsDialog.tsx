@@ -1475,8 +1475,8 @@ export function SettingsDialog({
     composio: { title: t('connectors.title'), subtitle: t('connectors.subtitle') },
     orbit: { title: t('settings.orbit.title'), subtitle: t('settings.orbit.lede') },
     routines: {
-      title: 'Routines',
-      subtitle: 'Scheduled, unattended agent sessions that run on their own.',
+      title: 'Automations',
+      subtitle: 'Scheduled automations that run unattended.',
     },
     integrations: { title: t('settings.mcpServerTitle'), subtitle: t('settings.mcpServerHint') },
     mcpClient: { title: t('settings.externalMcpTitle'), subtitle: t('settings.externalMcpHint') },
@@ -1643,28 +1643,6 @@ export function SettingsDialog({
               <span>
                 <strong>{t('connectors.title')}</strong>
                 <small>{t('settings.connectorsNavHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'orbit' ? ' active' : ''}`}
-              onClick={() => setActiveSection('orbit')}
-            >
-              <Icon name="orbit" size={18} />
-              <span>
-                <strong>{t('settings.orbit.title')}</strong>
-                <small>{t('settings.orbit.navHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'routines' ? ' active' : ''}`}
-              onClick={() => setActiveSection('routines')}
-            >
-              <Icon name="history" size={18} />
-              <span>
-                <strong>Routines</strong>
-                <small>Schedule unattended agent runs</small>
               </span>
             </button>
             <button

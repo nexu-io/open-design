@@ -14487,7 +14487,14 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   gap: 4px;
 }
 .qf-required { color: var(--accent); }
-.qf-help { font-size: 11px; color: var(--text-muted); margin-top: -2px; }
+.qf-help {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: -2px;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  line-height: 1.4;
+}
 .qf-options {
   display: flex;
   flex-wrap: wrap;
@@ -19602,6 +19609,45 @@ body.desktop-pet-shell .pet-task-item {
   width: fit-content;
 }
 
+.library-import-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: center;
+}
+
+.library-import-option-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.library-import-option-label {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.library-import-mode-control button {
+  font-size: 11px;
+}
+
+.library-import-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.library-import-checkbox input {
+  margin: 0;
+}
+
 .library-install-row {
   display: flex;
   gap: 8px;
@@ -23554,7 +23600,7 @@ body.desktop-pet-shell .pet-task-item {
   background: rgba(255, 255, 255, 0.18);
 }
 
-/* ---------------- Routines (Settings → Routines) ---------------- */
+/* ---------------- Routines (Settings → Automations) ---------------- */
 
 .routines-section .section-head { align-items: flex-start; }
 .routines-section .section-head > .btn {

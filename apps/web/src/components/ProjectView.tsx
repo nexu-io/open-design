@@ -114,6 +114,7 @@ import {
 import { AppChromeHeader } from './AppChromeHeader';
 import { AvatarMenu } from './AvatarMenu';
 import { ChatPane } from './ChatPane';
+import type { ChatSendMeta } from './ChatComposer';
 import {
   CritiqueTheaterMount,
   useCritiqueTheaterEnabled,
@@ -1692,7 +1693,7 @@ export function ProjectView({
       prompt: string,
       attachments: ChatAttachment[],
       commentAttachments: ChatCommentAttachment[] = commentsToAttachments(attachedComments),
-      meta?: { research?: ResearchOptions; skillIds?: string[] },
+      meta?: ChatSendMeta,
     ) => {
       if (!activeConversationId) return;
       if (messagesConversationIdRef.current !== activeConversationId) return;
@@ -2082,6 +2083,7 @@ export function ProjectView({
           clientRequestId: randomUUID(),
           skillId: project.skillId ?? null,
           skillIds: Array.isArray(meta?.skillIds) ? meta.skillIds : [],
+          context: meta?.context,
           designSystemId: project.designSystemId ?? null,
           attachments: attachments.map((a) => a.path),
           commentAttachments,
