@@ -15,11 +15,28 @@ export interface SenseAudioPersonaEntry {
 
 export type SenseAudioCatalogue = Record<string, SenseAudioPersonaEntry>;
 
-// Variant-suffix emotion labels are documented at docs.senseaudio.cn but
-// NOT returned by /v1/get_voice. This map is the only persona-side
-// metadata we add on top of the API response. voice_ids absent from the
-// map fall back to "通用" at lookup time.
-const VARIANT_LABELS: Record<string, string> = {
+// Variant-suffix emotion labels (e.g. female_0033_b -> "开心") are
+// documented at docs.senseaudio.cn/guides/voice/catalog.md but NOT
+// returned by the /v1/get_voice API. Fallback chain when shaping the
+// catalogue's variants map:
+//   1. Doc-scraped label (fresh, authoritative — fetched once, cached 24h).
+//   2. Hardcoded snapshot (BACKUP_VARIANT_LABELS) — used only when the
+//      doc fetch returns zero rows (network down, page format change,
+//      site outage). Stale but better than nothing.
+//   3. Per-persona fallback to voice_name from the API — used only when
+//      a specific voice_id is missing from BOTH sources.
+// Never a static "通用" placeholder.
+const SENSEAUDIO_DOCS_CATALOG_URL =
+  'https://docs.senseaudio.cn/guides/voice/catalog.md';
+const VARIANT_LABEL_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+// `` `<voice_id>` (<label>) `` — captures suffix variants like
+// `female_0033_b` (开心). Tolerant of surrounding whitespace.
+const VARIANT_LABEL_PATTERN = /`([a-z]+_\d+_[a-z])`\s*\(([^)]+)\)/gi;
+
+// Last-resort snapshot of doc data — kept around solely as a degradation
+// fallback when the live doc fetch fails. May drift over time; refresh by
+// pasting the parser output back into this constant when needed.
+const BACKUP_VARIANT_LABELS: Record<string, string> = {
   // 亢奋主播
   male_0027_a: '热情介绍', male_0027_b: '卖点解读', male_0027_c: '促销逼单',
   // 可靠青叔
@@ -71,7 +88,61 @@ const VARIANT_LABELS: Record<string, string> = {
   child_0001_a: '开心', child_0001_b: '平稳',
 };
 
-const FALLBACK_VARIANT_LABEL = '通用';
+let variantLabelsCache: { expiresAt: number; labels: Record<string, string> } | null = null;
+let variantLabelsInflight: Promise<Record<string, string>> | null = null;
+
+async function fetchVariantLabelsFromDocs(): Promise<Record<string, string>> {
+  const now = Date.now();
+  if (variantLabelsCache && variantLabelsCache.expiresAt > now) {
+    return variantLabelsCache.labels;
+  }
+  if (variantLabelsInflight) return variantLabelsInflight;
+
+  variantLabelsInflight = (async () => {
+    try {
+      const resp = await fetch(SENSEAUDIO_DOCS_CATALOG_URL, {
+        headers: { accept: 'text/markdown,text/plain,*/*' },
+      });
+      if (!resp.ok) {
+        throw new Error(`docs ${resp.status}`);
+      }
+      const markdown = await resp.text();
+      const labels: Record<string, string> = {};
+      for (const match of markdown.matchAll(VARIANT_LABEL_PATTERN)) {
+        const voiceId = match[1]?.trim();
+        const label = match[2]?.trim();
+        if (voiceId && label) labels[voiceId] = label;
+      }
+      // Doc page reachable but yielded zero matches → page format drift.
+      // Surface as failure so the caller swaps in BACKUP_VARIANT_LABELS,
+      // rather than serving an "everything fell back to voice_name" UX.
+      if (Object.keys(labels).length === 0) {
+        throw new Error('docs returned zero matches (page format drift?)');
+      }
+      variantLabelsCache = {
+        expiresAt: Date.now() + VARIANT_LABEL_CACHE_TTL_MS,
+        labels,
+      };
+      return labels;
+    } catch (err) {
+      console.warn(
+        '[senseaudio] variant label doc fetch failed, using hardcoded backup:',
+        err,
+      );
+      // Cache the backup briefly (5 min) so we retry the live doc sooner
+      // than 24h once it recovers.
+      variantLabelsCache = {
+        expiresAt: Date.now() + 5 * 60 * 1000,
+        labels: BACKUP_VARIANT_LABELS,
+      };
+      return BACKUP_VARIANT_LABELS;
+    } finally {
+      variantLabelsInflight = null;
+    }
+  })();
+
+  return variantLabelsInflight;
+}
 
 interface RawVoice {
   voice_id: string;
@@ -135,7 +206,10 @@ function flattenApiVoices(payload: unknown): RawVoice[] {
   return out;
 }
 
-export function shapeCatalogue(rawVoices: RawVoice[]): SenseAudioCatalogue {
+export function shapeCatalogue(
+  rawVoices: RawVoice[],
+  variantLabels: Record<string, string> = {},
+): SenseAudioCatalogue {
   // Defensive: only operate on voices with a non-empty voice_id. Group
   // by voice_name (API's truth for persona identity); voices missing a
   // voice_name fall back to bucketing under their voice_id so they
@@ -168,9 +242,13 @@ export function shapeCatalogue(rawVoices: RawVoice[]): SenseAudioCatalogue {
     const prefix = stripSuffix(first.voice_id);
     const collides = (prefixUses.get(prefix) ?? 0) > 1;
     const key = collides ? first.voice_id : prefix;
+    const personaFallback = first.voice_name || first.voice_id;
     const variants: Record<string, string> = {};
     for (const v of sorted) {
-      variants[v.voice_id] = VARIANT_LABELS[v.voice_id] ?? FALLBACK_VARIANT_LABEL;
+      // 1) doc-scraped label wins; 2) voice_name fallback (per-persona,
+      // not a static placeholder) so the LLM still sees a meaningful
+      // anchor even when SenseAudio adds new variants ahead of doc updates.
+      variants[v.voice_id] = variantLabels[v.voice_id] ?? personaFallback;
     }
     catalogue[key] = {
       name: first.voice_name || first.voice_id,
@@ -226,12 +304,17 @@ export async function listSenseAudioCatalogue(
     }
   }
 
+  // Fetch variant labels in parallel with the catalogue shaping. Doc fetch
+  // failure (network, page-format drift) leaves labels empty — shapeCatalogue
+  // falls back to voice_name per variant, so this never blocks the catalogue.
+  const variantLabels = await fetchVariantLabelsFromDocs();
+
   // Shaping is wrapped in a try so an unexpected payload (missing arrays,
   // renamed keys, etc.) does not crash the caller — at worst we return
   // an empty catalogue and the prompt falls back to the error path.
   let catalogue: SenseAudioCatalogue = {};
   try {
-    catalogue = shapeCatalogue(flattenApiVoices(payload));
+    catalogue = shapeCatalogue(flattenApiVoices(payload), variantLabels);
   } catch (err) {
     console.warn('[senseaudio] catalogue shaping failed:', err);
   }
