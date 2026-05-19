@@ -17,6 +17,7 @@ import {
 } from '../src/db.js';
 import {
   buildHandoffPrompt,
+  EmptyTranscriptError,
   HANDOFF_SYSTEM_PROMPT,
   synthesizeHandoffPrompt,
 } from '../src/handoff-design.js';
@@ -48,9 +49,13 @@ function setupProjectFixture(): { db: any; projectsRoot: string } {
   return { db, projectsRoot };
 }
 
-function seedConversation(db: any, options?: { messageCount?: number }) {
+function seedConversation(
+  db: any,
+  options?: { messageCount?: number; conversationId?: string; text?: string },
+) {
   const count = options?.messageCount ?? 2;
-  const conversationId = 'conv-1';
+  const conversationId = options?.conversationId ?? 'conv-1';
+  const text = options?.text ?? 'message';
   insertConversation(db, {
     id: conversationId,
     projectId: PROJECT_ID,
@@ -60,10 +65,10 @@ function seedConversation(db: any, options?: { messageCount?: number }) {
   });
   for (let i = 0; i < count; i += 1) {
     upsertMessage(db, conversationId, {
-      id: `msg-${i}`,
+      id: `${conversationId}-msg-${i}`,
       role: i % 2 === 0 ? 'user' : 'assistant',
       content: '',
-      events: [{ kind: 'text', text: `message ${i}` }],
+      events: [{ kind: 'text', text: `${text} ${i}` }],
     });
   }
 }
@@ -140,6 +145,7 @@ describe('synthesizeHandoffPrompt (pipeline)', () => {
   }
 
   const baseOptions = {
+    conversationId: 'conv-1',
     apiKey: 'sk-test',
     model: 'claude-opus-4-7',
     maxTokens: 4096,
@@ -342,5 +348,48 @@ describe('synthesizeHandoffPrompt (pipeline)', () => {
     expect(userMessage.length).toBeLessThan(400 * 1024);
     expect(userMessage).toContain('"kind":"truncated"');
     expect(result.transcriptMessageCount).toBe(5_000);
+  });
+
+  it('scopes the synthesized transcript to the requested conversation, not the whole project', async () => {
+    const { db, projectsRoot } = setupProjectFixture();
+    // Two unrelated conversations in the same project. A project-wide
+    // export would blend both histories; handoff must summarize only the
+    // conversation the user is resuming.
+    seedConversation(db, { conversationId: 'conv-alpha', messageCount: 2, text: 'ALPHA-TOPIC' });
+    seedConversation(db, { conversationId: 'conv-bravo', messageCount: 2, text: 'BRAVO-TOPIC' });
+
+    let capturedBody = '';
+    const fetchImpl = vi.fn(async (_url: string, init: RequestInit) => {
+      capturedBody = String(init.body ?? '');
+      return fakeAnthropicSuccess('p');
+    });
+
+    const result = await synthesizeHandoffPrompt(db, projectsRoot, PROJECT_ID, {
+      ...baseOptions,
+      conversationId: 'conv-alpha',
+      fetchImpl,
+    });
+
+    const userMessage = JSON.parse(capturedBody).messages[0].content as string;
+    expect(userMessage).toContain('ALPHA-TOPIC');
+    expect(userMessage).not.toContain('BRAVO-TOPIC');
+    expect(result.transcriptMessageCount).toBe(2);
+  });
+
+  it('rejects an empty conversation with EmptyTranscriptError instead of spending BYOK tokens', async () => {
+    const { db, projectsRoot } = setupProjectFixture();
+    seedConversation(db, { conversationId: 'conv-empty', messageCount: 0 });
+
+    const fetchImpl = vi.fn(async () => fakeAnthropicSuccess('p'));
+
+    await expect(
+      synthesizeHandoffPrompt(db, projectsRoot, PROJECT_ID, {
+        ...baseOptions,
+        conversationId: 'conv-empty',
+        fetchImpl,
+      }),
+    ).rejects.toBeInstanceOf(EmptyTranscriptError);
+    // The guard must fire before the upstream call — no tokens spent.
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 });

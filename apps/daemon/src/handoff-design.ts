@@ -47,7 +47,24 @@ export type { HandoffRequest, HandoffResponse };
 const DEFAULT_BASE_URL = 'https://api.anthropic.com';
 const DEFAULT_MAX_TOKENS = 4096;
 
+/**
+ * Thrown when the conversation being handed off has no messages. The
+ * route maps this to `400` so an empty conversation fails fast instead
+ * of spending BYOK tokens synthesizing a handoff prompt from nothing.
+ */
+export class EmptyTranscriptError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'EmptyTranscriptError';
+  }
+}
+
 export interface HandoffOptions {
+  /**
+   * The conversation to summarize. Handoff is conversation-scoped — only
+   * this conversation's transcript is exported and synthesized.
+   */
+  conversationId: string;
   apiKey: string;
   baseUrl?: string;
   model: string;
@@ -152,7 +169,18 @@ export async function synthesizeHandoffPrompt(
   const baseUrl = options.baseUrl ?? DEFAULT_BASE_URL;
   const maxTokens = options.maxTokens ?? DEFAULT_MAX_TOKENS;
 
-  const transcriptResult = exportProjectTranscript(db, projectsRoot, projectId, { now });
+  const transcriptResult = exportProjectTranscript(db, projectsRoot, projectId, {
+    now,
+    conversationId: options.conversationId,
+  });
+  // Fail fast on an empty conversation: synthesizing a handoff from zero
+  // messages would spend BYOK tokens to fabricate context that does not
+  // exist. The route maps EmptyTranscriptError to 400.
+  if (transcriptResult.messageCount === 0) {
+    throw new EmptyTranscriptError(
+      `conversation ${options.conversationId} has no messages to hand off`,
+    );
+  }
   const transcriptJsonl = fs.readFileSync(transcriptResult.path, 'utf8');
   const truncatedJsonl = truncateTranscriptForPrompt(transcriptJsonl);
 

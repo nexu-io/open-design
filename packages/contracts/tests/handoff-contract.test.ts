@@ -8,11 +8,13 @@ import {
 
 describe('handoff contract', () => {
   it('exports a runtime schema-version marker so esbuild emits a .mjs (NodeNext requires it)', () => {
-    expect(HANDOFF_SCHEMA_VERSION).toBe(1);
+    // v2: conversationId became a required request field.
+    expect(HANDOFF_SCHEMA_VERSION).toBe(2);
   });
 
   it('HandoffRequest round-trips through JSON with the full shape preserved', () => {
     const original: HandoffRequest = {
+      conversationId: 'conv-123',
       apiKey: 'sk-ant-test',
       baseUrl: 'https://api.anthropic.com',
       model: 'claude-opus-4-7',
@@ -23,22 +25,25 @@ describe('handoff contract', () => {
     expect(Object.keys(restored).sort()).toEqual([
       'apiKey',
       'baseUrl',
+      'conversationId',
       'maxTokens',
       'model',
     ]);
+    expect(restored.conversationId).toBe(original.conversationId);
     expect(restored.apiKey).toBe(original.apiKey);
     expect(restored.baseUrl).toBe(original.baseUrl);
     expect(restored.model).toBe(original.model);
     expect(restored.maxTokens).toBe(original.maxTokens);
   });
 
-  it('HandoffRequest accepts the minimal shape (BYOK + model only; baseUrl + maxTokens optional)', () => {
+  it('HandoffRequest accepts the minimal shape (conversationId + BYOK + model; baseUrl + maxTokens optional)', () => {
     const minimal: HandoffRequest = {
+      conversationId: 'conv-123',
       apiKey: 'sk-ant-test',
       model: 'claude-opus-4-7',
     };
 
-    expect(Object.keys(minimal).sort()).toEqual(['apiKey', 'model']);
+    expect(Object.keys(minimal).sort()).toEqual(['apiKey', 'conversationId', 'model']);
   });
 
   it('HandoffResponse round-trips through JSON with the full shape preserved', () => {

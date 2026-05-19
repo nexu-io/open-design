@@ -353,7 +353,7 @@ import { registerMediaRoutes } from './media-routes.js';
 import { registerProjectRoutes, registerProjectArtifactRoutes, registerProjectFileRoutes, registerProjectUploadRoutes } from './project-routes.js';
 import { registerFinalizeRoutes, registerImportRoutes, registerProjectExportRoutes } from './import-export-routes.js';
 import { registerHandoffRoutes } from './handoff-routes.js';
-import { synthesizeHandoffPrompt } from './handoff-design.js';
+import { EmptyTranscriptError, synthesizeHandoffPrompt } from './handoff-design.js';
 import { TranscriptExportLockedError } from './transcript-export.js';
 import { registerChatRoutes } from './chat-routes.js';
 import { registerStaticResourceRoutes } from './static-resource-routes.js';
@@ -4156,6 +4156,7 @@ export async function startServer({
     synthesizeHandoffPrompt,
     FinalizeUpstreamError,
     TranscriptExportLockedError,
+    EmptyTranscriptError,
     redactSecrets,
   };
   const validationDeps = { isSafeId, validateExternalApiBaseUrl, validateBaseUrl, validateProjectDesignSystemId };
@@ -4276,6 +4277,7 @@ export async function startServer({
     http: httpDeps,
     paths: pathDeps,
     projectStore: projectStoreDeps,
+    conversations: conversationDeps,
     validation: validationDeps,
     handoff: handoffDeps,
   });

@@ -11,8 +11,11 @@
  * Also serves as a real runtime export so esbuild emits a `.mjs` for
  * this module (without it, the file is type-only and NodeNext-resolved
  * consumers cannot resolve the re-export from the package root).
+ *
+ * v2: `conversationId` became a required request field — handoff is
+ * scoped to a single conversation, not the whole project.
  */
-export const HANDOFF_SCHEMA_VERSION = 1;
+export const HANDOFF_SCHEMA_VERSION = 2;
 
 /**
  * Request body for `POST /api/projects/:id/handoff`.
@@ -22,6 +25,13 @@ export const HANDOFF_SCHEMA_VERSION = 1;
  * / self-hosted-proxy users still can.
  */
 export interface HandoffRequest {
+  /**
+   * The conversation to resume. Required: handoff synthesizes from a
+   * single conversation's transcript, not every conversation in the
+   * project — a project-wide export would blend unrelated chats and
+   * summarize the wrong context.
+   */
+  conversationId: string;
   apiKey: string;
   baseUrl?: string;
   model: string;
