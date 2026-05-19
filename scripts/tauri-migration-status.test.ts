@@ -432,6 +432,71 @@ test("tauri-migration-status reports missing platform report manifests without v
   assert.doesNotMatch(parsed.platformReports.problems.join("\n"), /Node\.js/);
 });
 
+test("tauri-migration-status reports the active follow-up heartbeat", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const automationDir = join(fixture, "automations");
+  await writeHeartbeatAutomation(automationDir, "tauri-migration-follow-up", {
+    status: "ACTIVE",
+  });
+
+  const result = await runStatus(fixture, "--automation-dir", automationDir);
+  const parsed = JSON.parse(result.stdout) as {
+    heartbeat: {
+      current: boolean;
+      expectedId: string;
+      matches: Array<{ id: string; promptIncludesContinuation: boolean; status: string }>;
+      problems: string[];
+    };
+    nextActions: string[];
+  };
+
+  assert.equal(parsed.heartbeat.current, true);
+  assert.equal(parsed.heartbeat.expectedId, "tauri-migration-follow-up");
+  assert.equal(parsed.heartbeat.matches.length, 1);
+  assert.equal(parsed.heartbeat.matches[0]?.id, "tauri-migration-follow-up");
+  assert.equal(parsed.heartbeat.matches[0]?.status, "ACTIVE");
+  assert.equal(parsed.heartbeat.matches[0]?.promptIncludesContinuation, true);
+  assert.deepEqual(parsed.heartbeat.problems, []);
+  assert.doesNotMatch(parsed.nextActions.join("\n"), /Repair the Tauri migration follow-up heartbeat/);
+});
+
+test("tauri-migration-status flags missing or inactive follow-up heartbeats", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const automationDir = join(fixture, "automations");
+  await writeHeartbeatAutomation(automationDir, "tauri-migration-follow-up", {
+    prompt:
+      "Continue the Electron to Tauri migration from docs/electron-to-tauri-migration.md, then run scripts/tauri-migration-status.ts.",
+    status: "PAUSED",
+  });
+  await writeHeartbeatAutomation(automationDir, "duplicate", {
+    id: "duplicate",
+    name: "Tauri migration follow-up",
+  });
+
+  const result = await runStatus(fixture, "--automation-dir", automationDir);
+  const parsed = JSON.parse(result.stdout) as {
+    heartbeat: {
+      current: boolean;
+      matches: Array<{ problems: string[] }>;
+      problems: string[];
+    };
+    nextActions: string[];
+  };
+
+  assert.equal(parsed.heartbeat.current, false);
+  assert.equal(parsed.heartbeat.matches.length, 2);
+  assert.match(parsed.heartbeat.problems.join("\n"), /duplicate heartbeat automations/);
+  assert.match(parsed.heartbeat.problems.join("\n"), /expected status ACTIVE, got PAUSED/);
+  assert.match(parsed.heartbeat.problems.join("\n"), /continuation dry-run/);
+  assert.match(parsed.nextActions.join("\n"), /Repair the Tauri migration follow-up heartbeat/);
+});
+
 test("tauri-migration-status reports incomplete platform report inputs", async (t) => {
   const fixture = await createFixtureRoot(t, {
     checked: [],
@@ -815,6 +880,31 @@ async function writeLinuxReport(reportRoot: string): Promise<void> {
       },
     },
   });
+}
+
+async function writeHeartbeatAutomation(
+  automationDir: string,
+  directoryName: string,
+  options: { id?: string; name?: string; prompt?: string; status?: string } = {},
+): Promise<void> {
+  const prompt =
+    options.prompt ??
+    "Continue from docs/electron-to-tauri-migration.md, then run scripts/tauri-migration-status.ts and scripts/continue-tauri-migration.ts --dry-run before mutating state.";
+  await mkdir(join(automationDir, directoryName), { recursive: true });
+  await writeFile(
+    join(automationDir, directoryName, "automation.toml"),
+    [
+      "version = 1",
+      `id = "${options.id ?? "tauri-migration-follow-up"}"`,
+      'kind = "heartbeat"',
+      `name = "${options.name ?? "Tauri migration follow-up"}"`,
+      `prompt = "${prompt}"`,
+      `status = "${options.status ?? "ACTIVE"}"`,
+      'rrule = "FREQ=DAILY;BYHOUR=9;BYMINUTE=0;BYSECOND=0"',
+      "",
+    ].join("\n"),
+    "utf8",
+  );
 }
 
 async function writeJson(path: string, value: unknown): Promise<void> {

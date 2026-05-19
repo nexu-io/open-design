@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
@@ -26,10 +26,14 @@ const handoffManifestName = "open-design-tauri-migration-handoff.json";
 const linuxReportName = "open-design-ci-linux-tauri-e2e-report";
 const noteName = "open-design-tauri-migration-handoff.md";
 const winReportName = "open-design-ci-win-tauri-e2e-report";
+const expectedHeartbeatId = "tauri-migration-follow-up";
+const expectedHeartbeatName = "Tauri migration follow-up";
+const expectedHeartbeatRrule = "FREQ=DAILY;BYHOUR=9;BYMINUTE=0;BYSECOND=0";
 
 type DesktopRuntime = "electron" | "tauri";
 
 type ParsedArgs = {
+  automationDir?: string;
   handoffArchive?: string;
   handoffDir?: string;
   json: boolean;
@@ -70,6 +74,7 @@ type MigrationStatus = {
   groups: ChecklistGroupStatus[];
   handoffArchive?: HandoffArchiveStatus;
   handoff?: HandoffStatus;
+  heartbeat?: HeartbeatStatus;
   nextActions: string[];
   platformReports?: PlatformReportsStatus;
   phase: "M4" | "M5" | "M6" | "complete";
@@ -130,6 +135,27 @@ type PlatformReportsStatus = {
   winReport?: string;
 };
 
+type HeartbeatStatus = {
+  current: boolean;
+  dir: string;
+  expectedId: string;
+  expectedName: string;
+  expectedRrule: string;
+  matches: HeartbeatMatch[];
+  problems: string[];
+};
+
+type HeartbeatMatch = {
+  file: string;
+  id?: string;
+  kind?: string;
+  name?: string;
+  promptIncludesContinuation?: boolean;
+  problems: string[];
+  rrule?: string;
+  status?: string;
+};
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const status = await readMigrationStatus(
@@ -140,6 +166,7 @@ async function main(): Promise<void> {
     args.winReport,
     args.linuxReport,
     args.reportDir,
+    args.automationDir,
   );
   if (args.json) {
     process.stdout.write(`${JSON.stringify(status, null, 2)}\n`);
@@ -149,7 +176,12 @@ async function main(): Promise<void> {
 }
 
 function parseArgs(argv: string[]): ParsedArgs {
-  const parsed: ParsedArgs = { json: false, root: defaultRoot };
+  const defaultAutomation = defaultAutomationDir();
+  const parsed: ParsedArgs = {
+    ...(defaultAutomation == null ? {} : { automationDir: defaultAutomation }),
+    json: false,
+    root: defaultRoot,
+  };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const value = argv[index + 1];
@@ -160,6 +192,12 @@ function parseArgs(argv: string[]): ParsedArgs {
     if (arg === "--handoff-dir") {
       if (value == null) throw new Error("--handoff-dir requires a path");
       parsed.handoffDir = resolve(value);
+      index += 1;
+      continue;
+    }
+    if (arg === "--automation-dir") {
+      if (value == null) throw new Error("--automation-dir requires a path");
+      parsed.automationDir = resolve(value);
       index += 1;
       continue;
     }
@@ -201,7 +239,7 @@ function parseArgs(argv: string[]): ParsedArgs {
     }
     if (arg === "--help" || arg === "-h") {
       process.stdout.write(
-        "usage: tsx scripts/tauri-migration-status.ts [--root <repo>] [--handoff-dir <dir>] [--handoff-archive <tar.gz>] [--remote <remote>] [--report-dir <dir>] [--win-report <dir>] [--linux-report <dir>] [--json]\n",
+        "usage: tsx scripts/tauri-migration-status.ts [--root <repo>] [--automation-dir <dir>] [--handoff-dir <dir>] [--handoff-archive <tar.gz>] [--remote <remote>] [--report-dir <dir>] [--win-report <dir>] [--linux-report <dir>] [--json]\n",
       );
       process.exit(0);
     }
@@ -218,6 +256,7 @@ async function readMigrationStatus(
   winReport?: string,
   linuxReport?: string,
   reportDir?: string,
+  automationDir?: string,
 ): Promise<MigrationStatus> {
   const [migrationDoc, toolsDevConfig, toolsPackConfig, releaseBetaWorkflow, gitStatus] = await Promise.all([
     readFile(join(root, "docs", "electron-to-tauri-migration.md"), "utf8"),
@@ -251,6 +290,7 @@ async function readMigrationStatus(
       : await readHandoffArchiveStatus(handoffArchiveArg ?? handoffArchivePath(handoffDir), handoff);
   const remoteStatus = remote == null ? undefined : await readRemoteStatus(root, remote, gitStatus, handoff);
   const platformReports = await resolvePlatformReportsStatus(winReport, linuxReport, reportDir);
+  const heartbeat = automationDir == null ? undefined : await readHeartbeatStatus(automationDir);
   const status: MigrationStatus = {
     defaults: {
       releaseBeta: readReleaseBetaDefault(releaseBetaWorkflow),
@@ -261,7 +301,8 @@ async function readMigrationStatus(
     groups,
     ...(handoff == null ? {} : { handoff }),
     ...(handoffArchive == null ? {} : { handoffArchive }),
-    nextActions: nextActionsForPhase(phase, handoff, handoffArchive, remoteStatus, platformReports),
+    ...(heartbeat == null ? {} : { heartbeat }),
+    nextActions: nextActionsForPhase(phase, handoff, handoffArchive, remoteStatus, platformReports, heartbeat),
     ...(platformReports == null ? {} : { platformReports }),
     phase,
     ...(remoteStatus == null ? {} : { remote: remoteStatus }),
@@ -288,6 +329,114 @@ async function resolvePlatformReportsStatus(
   return readPlatformReportsStatus(inferredWinReport, inferredLinuxReport);
 }
 
+async function readHeartbeatStatus(automationDir: string): Promise<HeartbeatStatus> {
+  const problems: string[] = [];
+  let automationFiles: string[];
+  try {
+    automationFiles = await listAutomationFiles(automationDir);
+  } catch (error) {
+    return {
+      current: false,
+      dir: automationDir,
+      expectedId: expectedHeartbeatId,
+      expectedName: expectedHeartbeatName,
+      expectedRrule: expectedHeartbeatRrule,
+      matches: [],
+      problems: [`automation directory unavailable: ${error instanceof Error ? error.message : String(error)}`],
+    };
+  }
+
+  const matches: HeartbeatMatch[] = [];
+  for (const file of automationFiles) {
+    try {
+      const fields = parseAutomationToml(await readFile(file, "utf8"));
+      if (fields.id !== expectedHeartbeatId && fields.name !== expectedHeartbeatName) continue;
+      const matchProblems: string[] = [];
+      if (fields.id !== expectedHeartbeatId) {
+        matchProblems.push(`expected id ${expectedHeartbeatId}, got ${fields.id ?? "missing"}`);
+      }
+      if (fields.name !== expectedHeartbeatName) {
+        matchProblems.push(`expected name ${expectedHeartbeatName}, got ${fields.name ?? "missing"}`);
+      }
+      if (fields.kind !== "heartbeat") {
+        matchProblems.push(`expected kind heartbeat, got ${fields.kind ?? "missing"}`);
+      }
+      if (fields.status !== "ACTIVE") {
+        matchProblems.push(`expected status ACTIVE, got ${fields.status ?? "missing"}`);
+      }
+      if (fields.rrule !== expectedHeartbeatRrule) {
+        matchProblems.push(`expected rrule ${expectedHeartbeatRrule}, got ${fields.rrule ?? "missing"}`);
+      }
+      const promptIncludesContinuation =
+        fields.prompt?.includes("docs/electron-to-tauri-migration.md") === true &&
+        fields.prompt.includes("tauri-migration-status.ts") &&
+        fields.prompt.includes("continue-tauri-migration.ts --dry-run");
+      if (!promptIncludesContinuation) {
+        matchProblems.push("prompt must read the migration document, print migration status, and run continuation dry-run");
+      }
+      matches.push({
+        file,
+        ...(fields.id == null ? {} : { id: fields.id }),
+        ...(fields.kind == null ? {} : { kind: fields.kind }),
+        ...(fields.name == null ? {} : { name: fields.name }),
+        promptIncludesContinuation,
+        problems: matchProblems,
+        ...(fields.rrule == null ? {} : { rrule: fields.rrule }),
+        ...(fields.status == null ? {} : { status: fields.status }),
+      });
+    } catch (error) {
+      problems.push(`automation file unreadable: ${file}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  if (matches.length === 0) {
+    problems.push(`missing active heartbeat ${expectedHeartbeatId}`);
+  }
+  if (matches.length > 1) {
+    problems.push(`duplicate heartbeat automations found for ${expectedHeartbeatId}/${expectedHeartbeatName}`);
+  }
+  for (const match of matches) {
+    for (const problem of match.problems) {
+      problems.push(`${match.file}: ${problem}`);
+    }
+  }
+
+  return {
+    current: problems.length === 0,
+    dir: automationDir,
+    expectedId: expectedHeartbeatId,
+    expectedName: expectedHeartbeatName,
+    expectedRrule: expectedHeartbeatRrule,
+    matches,
+    problems,
+  };
+}
+
+async function listAutomationFiles(automationDir: string): Promise<string[]> {
+  const entries = await readdir(automationDir, { withFileTypes: true });
+  return entries
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => join(automationDir, entry.name, "automation.toml"))
+    .sort();
+}
+
+function parseAutomationToml(source: string): Record<string, string> {
+  const fields: Record<string, string> = {};
+  for (const line of source.split(/\r?\n/)) {
+    const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:"((?:\\"|[^"])*)"|([^#\s]+))/);
+    if (match?.[1] == null) continue;
+    fields[match[1]] = (match[2] ?? match[3] ?? "").replaceAll('\\"', '"');
+  }
+  return fields;
+}
+
+function defaultAutomationDir(): string | undefined {
+  const codexHome = process.env.CODEX_HOME;
+  if (codexHome != null && codexHome.length > 0) return join(codexHome, "automations");
+  const home = homedir();
+  return home.length > 0 ? join(home, ".codex", "automations") : undefined;
+}
+
 function checklistGroup(name: ChecklistGroupStatus["name"], source: string, labels: readonly string[]): ChecklistGroupStatus {
   const items = labels.map((label) => ({ checked: isChecklistLineChecked(source, label), label }));
   return {
@@ -311,11 +460,19 @@ function nextActionsForPhase(
   handoffArchive?: HandoffArchiveStatus,
   remote?: RemoteStatus,
   platformReports?: PlatformReportsStatus,
+  heartbeat?: HeartbeatStatus,
 ): string[] {
+  const heartbeatActions =
+    heartbeat == null || heartbeat.current
+      ? []
+      : [
+          `Repair the ${expectedHeartbeatName} heartbeat under ${heartbeat.dir}; status currently reports: ${heartbeat.problems.join("; ")}`,
+        ];
   if (phase === "M4") {
     const handoffReady = handoff?.current === true;
     const archiveReady = handoffArchive?.current === true;
     return [
+      ...heartbeatActions,
       "Run scripts/continue-tauri-migration.ts --dry-run to print the next executable handoff/push/report sequence; add --wait-reports --advance after the remote branch and native CI are available.",
       archiveReady
         ? `Copy the current packaged handoff archive ${handoffArchive.archive}, checksum ${handoffArchive.checksum}, command script ${handoffArchive.commandScript}, and command script checksum ${handoffArchive.commandScriptChecksum} to a write-capable machine.`
@@ -339,6 +496,7 @@ function nextActionsForPhase(
   }
   if (phase === "M5") {
     return [
+      ...heartbeatActions,
       "Run scripts/apply-tauri-migration-m5.ts if M4 evidence is already recorded but M5 is still open.",
       "Keep electron in DESKTOP_RUNTIME_KINDS for the fallback window.",
       "Run pnpm guard, pnpm typecheck, and the tools-dev/tools-pack tests after the M5 applicator diff.",
@@ -346,13 +504,14 @@ function nextActionsForPhase(
   }
   if (phase === "M6") {
     return [
+      ...heartbeatActions,
       "Run scripts/tauri-migration-inventory.ts --plan to get the current Electron cleanup plan.",
       "Remove Electron dependencies, runtime files, pack hooks, tests, and guidance together.",
       "Run pnpm install so pnpm-lock.yaml importer entries match the removed dependencies.",
       "Remove electron from DESKTOP_RUNTIME_KINDS only when the M6 cleanup checkboxes move together.",
     ];
   }
-  return ["Run the full QA plan and archive the migration document as completed evidence."];
+  return [...heartbeatActions, "Run the full QA plan and archive the migration document as completed evidence."];
 }
 
 function isChecklistLineChecked(content: string, label: string): boolean {
@@ -884,6 +1043,19 @@ function formatMigrationStatus(status: MigrationStatus): string {
       lines.push(`  Linux: ${status.platformReports.linuxReport}`);
     }
     for (const problem of status.platformReports.problems) {
+      lines.push(`  - ${problem}`);
+    }
+  }
+  if (status.heartbeat != null) {
+    lines.push(`Heartbeat: ${status.heartbeat.current ? "current" : "needs attention"} (${status.heartbeat.dir})`);
+    lines.push(`  Expected: ${status.heartbeat.expectedId} / ${status.heartbeat.expectedRrule}`);
+    for (const match of status.heartbeat.matches) {
+      lines.push(`  Match: ${match.file}`);
+      if (match.status != null || match.rrule != null) {
+        lines.push(`    status=${match.status ?? "unknown"}, rrule=${match.rrule ?? "unknown"}`);
+      }
+    }
+    for (const problem of status.heartbeat.problems) {
       lines.push(`  - ${problem}`);
     }
   }

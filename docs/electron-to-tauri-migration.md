@@ -424,6 +424,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Aligned `scripts/tauri-migration-status.ts` with the packaged handoff portability policy. Status now rejects both the active handoff directory and extracted packaged archive when the manifest `bundlePath` is absolute or parent-relative, so old non-relocatable transfer artifacts cannot be reported as current.
 - 2026-05-20: Added a tracked-worktree guard to the packaged handoff command sidecar. The generated `.commands.sh` now refuses to import and move the migration branch when the receiving checkout has tracked changes, and status rejects older command sidecars that lack that guard.
 - 2026-05-20: Aligned the TypeScript bundle importer with the packaged command sidecar's clean-worktree rule. `scripts/import-tauri-migration-bundle.ts` now refuses to update migration branch refs while tracked receiver changes are present, even when it is not checking out the branch afterward.
+- 2026-05-20: Added heartbeat visibility to `scripts/tauri-migration-status.ts`. The status runner now reports whether the single `tauri-migration-follow-up` heartbeat is active, daily at 09:00, and prompts the continuation sequence from this document plus `scripts/continue-tauri-migration.ts --dry-run`.
 
 ### Platform Gate Runners
 
