@@ -67,7 +67,7 @@ registry names at scaffold time; `od plugin scaffold` creates
 ```bash
 od plugin scaffold --id figma-workflow --title "Figma workflow" --out ./plugins/community
 od plugin validate ./plugins/community/figma-workflow --no-daemon
-od plugin pack ./plugins/community/figma-workflow --out ./dist/figma-workflow-0.1.0.tgz
+od plugin pack ./plugins/community/figma-workflow
 ```
 
 When the plugin is ready for registry review, authenticate through GitHub
