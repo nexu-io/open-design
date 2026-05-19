@@ -853,6 +853,32 @@ function isPathWithin(base, target) {
   );
 }
 
+export function resolveSafeProjectAttachments(cwd, attachments, opts = {}) {
+  if (!cwd || !Array.isArray(attachments)) return [];
+  const pathImpl = opts.pathImpl ?? path;
+  const existsSync = opts.existsSync ?? fs.existsSync;
+  const root = pathImpl.resolve(cwd);
+  const out = [];
+
+  for (const attachment of attachments) {
+    if (typeof attachment !== 'string' || attachment.length === 0) continue;
+    try {
+      const abs = pathImpl.resolve(root, attachment);
+      const relativePath = pathImpl.relative(root, abs);
+      const withinRoot =
+        relativePath === '' ||
+        (relativePath.length > 0 &&
+          !relativePath.startsWith('..') &&
+          !pathImpl.isAbsolute(relativePath));
+      if (withinRoot && existsSync(abs)) out.push(attachment);
+    } catch {
+      // Drop malformed paths; attachments are advisory prompt context.
+    }
+  }
+
+  return out;
+}
+
 function resolveProcessResourcesPath() {
   if (
     typeof process.resourcesPath === 'string' &&
@@ -8108,19 +8134,7 @@ export async function startServer({
     // explicit list at the bottom of the user message so the agent knows
     // to Read it.
     const safeAttachments = cwd
-      ? (Array.isArray(attachments) ? attachments : [])
-          .filter((p) => typeof p === 'string' && p.length > 0)
-          .filter((p) => {
-            try {
-              const abs = path.resolve(cwd, p);
-              return (
-                (abs === cwd || abs.startsWith(cwd + path.sep)) &&
-                fs.existsSync(abs)
-              );
-            } catch {
-              return false;
-            }
-          })
+      ? resolveSafeProjectAttachments(cwd, attachments)
       : [];
 
     // Local code agents don't accept a separate "system" channel the way the

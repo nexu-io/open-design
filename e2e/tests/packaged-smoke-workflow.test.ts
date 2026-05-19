@@ -11,26 +11,17 @@ const releaseBetaWorkflowPath = join(workspaceRoot, ".github", "workflows", "rel
 const releaseStableWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-stable.yml");
 
 describe("packaged smoke workflow", () => {
-  it("builds the PR mac smoke artifact without portable mode", async () => {
+  it("keeps packaged smoke outside the main CI gate", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
-    const macBuildStep = workflow.match(/- name: Build PR mac artifacts\n(?:.+\n)+?(?=\n      - name: Smoke PR mac packaged runtime)/m);
-
-    expect(macBuildStep?.[0]).toBeDefined();
-    expect(macBuildStep?.[0]).not.toContain("--portable");
-  });
-
-  it("runs a linux headless packaged smoke job when packaged changes require smoke", async () => {
-    const workflow = await readFile(ciWorkflowPath, "utf8");
-    expect(workflow).toContain("packaged_smoke_linux_headless:");
-    expect(workflow).toContain("e2e/lib/linux-helpers.ts");
-    expect(workflow).toContain("Build PR linux headless artifacts");
-    expect(workflow).toContain('OD_PACKAGED_E2E_LINUX_HEADLESS: "1"');
-    expect(workflow).toContain("pnpm test specs/linux.spec.ts");
-    expect(workflow).toContain("manifest.json");
-    expect(workflow).toContain("linux-tools-pack-build.json");
-    expect(workflow).toContain("Upload linux headless e2e spec report");
-    expect(workflow).toContain("open-design-pr-linux-headless-e2e-report");
-    expectPrLinuxBuildPreservesEvidence(workflow, "Build PR linux headless artifacts");
+    expect(workflow).not.toContain("packaged_smoke_");
+    expect(workflow).not.toContain("Build PR mac artifacts");
+    expect(workflow).not.toContain("Build PR windows artifacts");
+    expect(workflow).not.toContain("Build PR linux headless artifacts");
+    expect(workflow).not.toContain("Smoke PR mac packaged runtime");
+    expect(workflow).not.toContain("Smoke PR windows packaged runtime");
+    expect(workflow).not.toContain("Smoke PR linux headless packaged runtime");
+    expect(workflow).not.toContain("OD_PACKAGED_E2E_");
+    expect(workflow).not.toContain("actions/cache/save");
   });
 
   it("preserves beta linux AppImage smoke reports for release publication", async () => {
@@ -71,17 +62,6 @@ describe("packaged smoke workflow", () => {
     expectReleaseLinuxSmokePreservesEvidenceBeforeApt(workflow, "Smoke release linux AppImage runtime");
   });
 });
-
-function expectPrLinuxBuildPreservesEvidence(workflow: string, stepName: string): void {
-  const step = workflow.match(new RegExp(`- name: ${stepName}\\n(?:.+\\n)+?(?=\\n      - name: Smoke PR linux headless packaged runtime)`, "m"))?.[0];
-  expect(step).toBeDefined();
-  expect(step).toContain('report_dir="$RUNNER_TEMP/packaged-report/linux-headless"');
-  expect(step).toContain('mkdir -p "$report_dir"');
-  expect(step).toContain('build_json_path="$report_dir/linux-tools-pack-build.json"');
-  expect(step).toContain('build_log_path="$report_dir/linux-tools-pack-build.log"');
-  const capturedStdoutWrites = step?.match(/printf '%s\\n' "\$build_output" \| tee "\$build_json_path"/g) ?? [];
-  expect(capturedStdoutWrites).toHaveLength(2);
-}
 
 function expectReleaseLinuxBuildPreservesEvidence(workflow: string, stepName: string): void {
   const step = workflow.match(new RegExp(`- name: ${stepName}\\n(?:.+\\n)+?(?=\\n      - name: Smoke .+ linux AppImage runtime)`, "m"))?.[0];

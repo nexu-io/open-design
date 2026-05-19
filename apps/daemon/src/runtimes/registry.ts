@@ -14,9 +14,10 @@ import { kiroAgentDef } from './defs/kiro.js';
 import { kiloAgentDef } from './defs/kilo.js';
 import { vibeAgentDef } from './defs/vibe.js';
 import { deepseekAgentDef } from './defs/deepseek.js';
+import { readLocalAgentProfileDefs as readLocalAgentProfileDefsFromFile } from './local-profiles.js';
 import type { RuntimeAgentDef } from './types.js';
 
-export const AGENT_DEFS: RuntimeAgentDef[] = [
+const BASE_AGENT_DEFS: RuntimeAgentDef[] = [
   claudeAgentDef,
   codexAgentDef,
   devinAgentDef,
@@ -33,6 +34,17 @@ export const AGENT_DEFS: RuntimeAgentDef[] = [
   kiloAgentDef,
   vibeAgentDef,
   deepseekAgentDef,
+];
+
+export function readLocalAgentProfileDefs(
+  baseDefs: RuntimeAgentDef[] = BASE_AGENT_DEFS,
+): RuntimeAgentDef[] {
+  return readLocalAgentProfileDefsFromFile(baseDefs);
+}
+
+export const AGENT_DEFS: RuntimeAgentDef[] = [
+  ...BASE_AGENT_DEFS,
+  ...readLocalAgentProfileDefs(BASE_AGENT_DEFS),
 ];
 
 const ids = new Set();
