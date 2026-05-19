@@ -831,7 +831,7 @@ describe('MemorySection', () => {
     expect(screen.queryByText('✓ Index saved')).toBeNull();
   });
 
-  it('deletes a single extraction row without clearing the whole history', async () => {
+  it('requires confirmation before deleting a single extraction row', async () => {
     globalThis.EventSource = StubEventSource as unknown as typeof EventSource;
     const deletedUrls: string[] = [];
 
@@ -887,10 +887,120 @@ describe('MemorySection', () => {
     const row = screen.getByText('Remember I prefer dark mode').closest('li') as HTMLElement;
     fireEvent.click(within(row).getByRole('button', { name: 'Delete' }));
 
+    expect(deletedUrls).toEqual([]);
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    const deleteDialog = within(screen.getByRole('dialog'));
+    expect(deleteDialog.getByRole('heading')).toBeTruthy();
+
+    fireEvent.click(deleteDialog.getByRole('button', { name: 'Delete' }));
+
     await waitFor(() => {
       expect(screen.queryByText('Remember I prefer dark mode')).toBeNull();
     });
     expect(screen.getByText('No durable memory in this turn')).toBeTruthy();
+    expect(deletedUrls).toEqual(['/api/memory/extractions/ex-1']);
+  });
+
+  it('cancels single extraction deletion when confirmation is dismissed', async () => {
+    globalThis.EventSource = StubEventSource as unknown as typeof EventSource;
+    const deletedUrls: string[] = [];
+
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(JSON.stringify({
+          enabled: true,
+          rootDir: '/tmp/memory',
+          index: '# Memory\n',
+          entries: [],
+          extraction: null,
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url === '/api/memory/extractions' && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({
+          extractions: [
+            {
+              id: 'ex-1',
+              phase: 'success',
+              kind: 'llm',
+              startedAt: Date.now(),
+              userMessagePreview: 'Remember I prefer dark mode',
+              writtenCount: 1,
+            },
+          ],
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url === '/api/memory/extractions/ex-1' && init?.method === 'DELETE') {
+        deletedUrls.push(url);
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    }) as typeof fetch;
+
+    renderMemorySection();
+
+    fireEvent.click(await screen.findByText('Extraction history'));
+    const row = (await screen.findByText('Remember I prefer dark mode')).closest('li') as HTMLElement;
+    fireEvent.click(within(row).getByRole('button', { name: 'Delete' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(deletedUrls).toEqual([]);
+    expect(screen.getByText('Remember I prefer dark mode')).toBeTruthy();
+  });
+
+  it('restores a single extraction row when confirmed deletion fails', async () => {
+    globalThis.EventSource = StubEventSource as unknown as typeof EventSource;
+    const deletedUrls: string[] = [];
+
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(JSON.stringify({
+          enabled: true,
+          rootDir: '/tmp/memory',
+          index: '# Memory\n',
+          entries: [],
+          extraction: null,
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url === '/api/memory/extractions' && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({
+          extractions: [
+            {
+              id: 'ex-1',
+              phase: 'success',
+              kind: 'llm',
+              startedAt: Date.now(),
+              userMessagePreview: 'Remember I prefer dark mode',
+              writtenCount: 1,
+            },
+          ],
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url === '/api/memory/extractions/ex-1' && init?.method === 'DELETE') {
+        deletedUrls.push(url);
+        return new Response(JSON.stringify({ ok: false }), {
+          status: 500,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    }) as typeof fetch;
+
+    renderMemorySection();
+
+    fireEvent.click(await screen.findByText('Extraction history'));
+    const row = (await screen.findByText('Remember I prefer dark mode')).closest('li') as HTMLElement;
+    fireEvent.click(within(row).getByRole('button', { name: 'Delete' }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Remember I prefer dark mode')).toBeTruthy();
+    });
     expect(deletedUrls).toEqual(['/api/memory/extractions/ex-1']);
   });
 

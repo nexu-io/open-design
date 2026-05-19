@@ -302,6 +302,8 @@ export function MemorySection() {
   // fetch on mount + live SSE updates merged by id so phase transitions
   // (running → success) replace the row in place.
   const [extractions, setExtractions] = useState<MemoryExtractionRecord[]>([]);
+  const [pendingExtractionDeleteId, setPendingExtractionDeleteId] = useState<string | null>(null);
+  const [isDeletingExtraction, setIsDeletingExtraction] = useState(false);
 
   const fireFlash = useCallback((kind: FlashKind) => {
     setFlash({ kind, key: Date.now() });
@@ -592,6 +594,17 @@ export function MemorySection() {
       void reloadExtractions();
     }
   }, [reloadExtractions]);
+
+  const onConfirmDeleteExtraction = useCallback(async () => {
+    if (!pendingExtractionDeleteId) return;
+    setIsDeletingExtraction(true);
+    try {
+      await onDeleteExtraction(pendingExtractionDeleteId);
+      setPendingExtractionDeleteId(null);
+    } finally {
+      setIsDeletingExtraction(false);
+    }
+  }, [onDeleteExtraction, pendingExtractionDeleteId]);
 
   const onClearExtractions = useCallback(async () => {
     if (!window.confirm(t('settings.memoryExtractionsClearConfirm'))) return;
@@ -1150,7 +1163,7 @@ export function MemorySection() {
                     <button
                       type="button"
                       className="ghost memory-extraction-delete"
-                      onClick={() => void onDeleteExtraction(record.id)}
+                      onClick={() => setPendingExtractionDeleteId(record.id)}
                       title={t('settings.memoryExtractionDelete')}
                       aria-label={t('settings.memoryExtractionDelete')}
                       style={{ marginLeft: 'auto', padding: '2px 6px' }}
@@ -1207,6 +1220,58 @@ export function MemorySection() {
             })}
           </ul>
         )}
+        {pendingExtractionDeleteId ? (
+          <div
+            className="modal-backdrop"
+            role="presentation"
+            onClick={() => {
+              if (isDeletingExtraction) return;
+              setPendingExtractionDeleteId(null);
+            }}
+          >
+            <div
+              className="modal modal-confirm"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="delete-extraction-history-item-title"
+              aria-describedby="delete-extraction-history-item-body"
+              onKeyDown={(e) => {
+                if (e.key !== 'Escape' || isDeletingExtraction) return;
+                setPendingExtractionDeleteId(null);
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 id="delete-extraction-history-item-title">
+                {t('settings.memoryExtractionDeleteConfirmTitle')}
+              </h2>
+              <p
+                id="delete-extraction-history-item-body"
+                className="modal-confirm-message"
+              >
+                {t('settings.memoryExtractionDeleteConfirmBody')}
+              </p>
+              <div className="row">
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={() => setPendingExtractionDeleteId(null)}
+                  disabled={isDeletingExtraction}
+                >
+                  {t('common.cancel')}
+                </button>
+                <button
+                  type="button"
+                  className="primary danger"
+                  onClick={() => void onConfirmDeleteExtraction()}
+                  disabled={isDeletingExtraction}
+                  autoFocus
+                >
+                  {isDeletingExtraction ? t('settings.memoryExtractionDeleting') : t('common.delete')}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </details>
 
       <details className="library-group memory-collapsible-card">

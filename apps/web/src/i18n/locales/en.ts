@@ -1994,6 +1994,9 @@ export const en: Dict = {
   'settings.memoryExtractionWritten': 'written',
   'settings.memoryExtractionDuration': 'in',
   'settings.memoryExtractionDelete': 'Delete',
+  'settings.memoryExtractionDeleting': 'Deleting…',
+  'settings.memoryExtractionDeleteConfirmTitle': 'Delete extraction history item?',
+  'settings.memoryExtractionDeleteConfirmBody': 'This will permanently remove this extraction history record. This action cannot be undone.',
   'settings.memoryExtractionsClear': 'Clear',
   'settings.memoryExtractionsClearTitle': 'Clear all extraction history',
   'settings.memoryExtractionsClearConfirm':
