@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
-import { readFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { readFile, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
@@ -34,6 +34,32 @@ test("push-tauri-migration-handoff imports, pushes, and verifies a handoff manif
   assert.equal(remoteHead, sourceHead);
 });
 
+test("push-tauri-migration-handoff can override a relocated bundle path", async (t) => {
+  const { bundlePath, manifestPath, remotePath, sourceHead, targetRepo } = await createHandoffFixture(
+    t,
+    "open-design-tauri-push-handoff-bundle-",
+  );
+  const relocatedBundlePath = join(dirname(dirname(bundlePath)), "copied", "open-design-tauri-migration.bundle");
+  await mkdir(dirname(relocatedBundlePath), { recursive: true });
+  await rename(bundlePath, relocatedBundlePath);
+
+  const result = await runPushHandoffScript(
+    targetRepo,
+    "--manifest",
+    manifestPath,
+    "--bundle",
+    relocatedBundlePath,
+    "--remote",
+    remotePath,
+  );
+
+  assert.match(result.stdout, new RegExp(`Bundle override: ${escapeRegExp(relocatedBundlePath)}`));
+  const remoteHead = (await git(targetRepo, "ls-remote", "--heads", remotePath, `refs/heads/${migrationBranch}`)).stdout
+    .trim()
+    .split(/\s+/, 1)[0];
+  assert.equal(remoteHead, sourceHead);
+});
+
 test("push-tauri-migration-handoff requires a manifest", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "open-design-tauri-push-handoff-missing-"));
   t.after(() => void rm(root, { force: true, recursive: true }));
@@ -44,7 +70,7 @@ test("push-tauri-migration-handoff requires a manifest", async (t) => {
 async function createHandoffFixture(
   t: test.TestContext,
   prefix: string,
-): Promise<{ manifestPath: string; remotePath: string; sourceHead: string; targetRepo: string }> {
+): Promise<{ bundlePath: string; manifestPath: string; remotePath: string; sourceHead: string; targetRepo: string }> {
   const root = await mkdtemp(join(tmpdir(), prefix));
   t.after(() => void rm(root, { force: true, recursive: true }));
   const sourceRepo = join(root, "source");
@@ -88,7 +114,7 @@ async function createHandoffFixture(
     "utf8",
   );
 
-  return { manifestPath, remotePath, sourceHead, targetRepo };
+  return { bundlePath, manifestPath, remotePath, sourceHead, targetRepo };
 }
 
 async function runCreateBundleScript(cwd: string, ...args: string[]): Promise<{ stderr: string; stdout: string }> {
@@ -110,4 +136,8 @@ async function git(cwd: string, ...args: string[]): Promise<{ stderr: string; st
     cwd,
     maxBuffer: 1024 * 1024,
   });
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

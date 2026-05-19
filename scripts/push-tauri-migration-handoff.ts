@@ -8,6 +8,7 @@ const scriptsRoot = import.meta.dirname;
 const defaultRemote = "origin";
 
 type Args = {
+  bundle?: string;
   cwd: string;
   manifest?: string;
   remote: string;
@@ -15,6 +16,7 @@ type Args = {
 
 type ResolvedArgs = {
   branch: string;
+  bundle?: string;
   cwd: string;
   manifest: string;
   remote: string;
@@ -28,12 +30,14 @@ type HandoffManifest = {
 
 async function main(): Promise<void> {
   const args = await resolveArgs(parseArgs(process.argv.slice(2)));
-  const importOutput = await runScript("import-tauri-migration-bundle.ts", [
+  const importArgs = [
     "--cwd",
     args.cwd,
     "--manifest",
     args.manifest,
-  ]);
+    ...(args.bundle == null ? [] : ["--bundle", args.bundle]),
+  ];
+  const importOutput = await runScript("import-tauri-migration-bundle.ts", importArgs);
   const pushOutput = await git(args.cwd, ["push", args.remote, `refs/heads/${args.branch}:refs/heads/${args.branch}`]);
   const verifyOutput = await runScript("verify-tauri-migration-remote.ts", [
     "--cwd",
@@ -49,6 +53,7 @@ async function main(): Promise<void> {
       "Pushed Tauri migration handoff.",
       `Git cwd: ${args.cwd}`,
       `Manifest: ${args.manifest}`,
+      ...(args.bundle == null ? [] : [`Bundle override: ${args.bundle}`]),
       `Remote: ${args.remote}`,
       `Branch: ${args.branch}`,
       "Import:",
@@ -71,8 +76,13 @@ function parseArgs(argv: string[]): Args {
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const value = argv[index + 1];
-    if ((arg === "--cwd" || arg === "--manifest" || arg === "--remote") && value == null) {
+    if ((arg === "--bundle" || arg === "--cwd" || arg === "--manifest" || arg === "--remote") && value == null) {
       throw new Error(`${arg} requires a value`);
+    }
+    if (arg === "--bundle") {
+      parsed.bundle = resolve(value!);
+      index += 1;
+      continue;
     }
     if (arg === "--cwd") {
       parsed.cwd = resolve(value!);
@@ -93,6 +103,7 @@ function parseArgs(argv: string[]): Args {
       process.stdout.write(
         [
           "usage: tsx scripts/push-tauri-migration-handoff.ts --manifest <path> [--remote <remote>] [--cwd <repo>]",
+          "       tsx scripts/push-tauri-migration-handoff.ts --manifest <path> --bundle <path> [--remote <remote>] [--cwd <repo>]",
           "",
           `defaults: --cwd ${process.cwd()} --remote ${defaultRemote}`,
           "",
@@ -113,6 +124,7 @@ async function resolveArgs(parsed: Args): Promise<ResolvedArgs> {
   const manifest = await readManifest(parsed.manifest);
   return {
     branch: manifest.branch,
+    ...(parsed.bundle == null ? {} : { bundle: parsed.bundle }),
     cwd: parsed.cwd,
     manifest: parsed.manifest,
     remote: parsed.remote,

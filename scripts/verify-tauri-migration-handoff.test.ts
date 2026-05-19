@@ -69,6 +69,7 @@ test("verify-tauri-migration-handoff round-trips a bundle through a receiving ch
   assert.match(note, new RegExp(`--manifest '${escapeRegExp(manifestPath)}' \\\\`));
   assert.match(note, /push-tauri-migration-handoff/);
   assert.match(note, /manifest records the bundle path relative to itself/);
+  assert.match(note, /--bundle \/path\/to\/open-design-tauri-migration\.bundle/);
   assert.match(note, /verify-tauri-migration-remote/);
   assert.match(note, /advance-tauri-migration-m4-m5/);
 });

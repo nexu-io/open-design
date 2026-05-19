@@ -425,6 +425,7 @@ async function writeNote(
       ...(note.manifestBundlePathIsRelocatable
         ? [
             "If this handoff directory is copied elsewhere, replace only the manifest path in the command above. The manifest records the bundle path relative to itself, so keep the bundle and manifest in the same copied directory.",
+            "If the bundle is copied outside the handoff directory, add `--bundle /path/to/open-design-tauri-migration.bundle` to the push command.",
             "",
           ]
         : []),
