@@ -167,7 +167,7 @@ export const en: Dict = {
   'settings.codeAgent': 'Code agent',
   'settings.codeAgentHint': 'Pick the CLI that runs your prompts.',
   'settings.rescan': '↻ Rescan',
-  'settings.rescanTitle': 'Re-scan PATH',
+  'settings.rescanTitle': 'Rescan PATH',
   'settings.rescanRunning': 'Scanning...',
   'settings.rescanSuccess': 'Scan complete. {count} available.',
   'settings.rescanFailed': 'Scan failed. Check the daemon and try again.',
@@ -1707,7 +1707,7 @@ export const en: Dict = {
   'agentPicker.selectAgent': 'Select a detected code-agent CLI',
   'agentPicker.noAgents': 'no agents on PATH',
   'agentPicker.notInstalled': 'not installed',
-  'agentPicker.rescan': 'Re-scan local PATH for agents',
+  'agentPicker.rescan': 'Rescan local PATH for agents',
 
   'tool.openInTab': 'Open {name} in a tab',
   'tool.open': 'open',
