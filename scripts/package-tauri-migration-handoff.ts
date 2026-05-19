@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 
@@ -36,7 +36,10 @@ async function main(): Promise<void> {
 
   const archiveSha256 = await sha256File(archivePath);
   const checksumPath = `${archivePath}.sha256`;
+  const commandScriptPath = `${archivePath}.commands.sh`;
   await writeFile(checksumPath, `${archiveSha256}  ${basename(archivePath)}\n`, "utf8");
+  await writeFile(commandScriptPath, commandScript(archivePath), "utf8");
+  await chmod(commandScriptPath, 0o755);
 
   process.stdout.write(
     [
@@ -50,6 +53,7 @@ async function main(): Promise<void> {
       `Archive: ${archivePath}`,
       `Archive SHA-256: ${archiveSha256}`,
       `Checksum: ${checksumPath}`,
+      `Command script: ${commandScriptPath}`,
       "Receiver push command:",
       indent(
         [
@@ -214,6 +218,41 @@ function indent(value: string): string {
 
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+function commandScript(archivePath: string): string {
+  return [
+    "#!/usr/bin/env bash",
+    "set -euo pipefail",
+    "",
+    'if [[ ! -f "scripts/push-tauri-migration-handoff.ts" ]]; then',
+    '  echo "Run this script from the Open Design repository root." >&2',
+    "  exit 1",
+    "fi",
+    "",
+    'script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"',
+    `archive="\${1:-$script_dir/${basename(archivePath)}}"`,
+    'remote="${REMOTE:-origin}"',
+    'report_dir="${TAURI_M4_REPORT_DIR:-/tmp/open-design-tauri-m4-reports}"',
+    "",
+    'pnpm exec tsx scripts/push-tauri-migration-handoff.ts --archive "$archive" --remote "$remote"',
+    "",
+    'if [[ -n "${GITHUB_RUN_ID:-}" ]]; then',
+    '  pnpm exec tsx scripts/download-tauri-m4-reports.ts --run-id "$GITHUB_RUN_ID" --output-dir "$report_dir" --advance',
+    "else",
+    "  cat <<'NEXT'",
+    "Remote push is complete. After native CI reports are available, rerun with:",
+    "  GITHUB_RUN_ID=<github-run-id> ./$(basename \"$0\")",
+    "",
+    "or run directly:",
+    "  pnpm exec tsx scripts/download-tauri-m4-reports.ts \\",
+    "    --run-id <github-run-id> \\",
+    "    --output-dir /tmp/open-design-tauri-m4-reports \\",
+    "    --advance",
+    "NEXT",
+    "fi",
+    "",
+  ].join("\n");
 }
 
 try {

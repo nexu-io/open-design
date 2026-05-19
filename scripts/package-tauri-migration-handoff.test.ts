@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import test from "node:test";
@@ -29,6 +29,7 @@ test("package-tauri-migration-handoff creates a tarball and checksum sidecar", a
   assert.match(result.stdout, new RegExp(`Bundle SHA-256: ${bundleSha256}`));
   assert.match(result.stdout, new RegExp(`Archive: ${escapeRegExp(output)}`));
   assert.match(result.stdout, /Archive SHA-256: [0-9a-f]{64}/);
+  assert.match(result.stdout, new RegExp(`Command script: ${escapeRegExp(`${output}.commands.sh`)}`));
   assert.match(result.stdout, /Receiver push command:/);
   assert.match(result.stdout, /push-tauri-migration-handoff/);
   assert.match(result.stdout, new RegExp(`--archive '${escapeRegExp(output)}'`));
@@ -37,6 +38,12 @@ test("package-tauri-migration-handoff creates a tarball and checksum sidecar", a
   assert.match(result.stdout, /tauri-migration-status/);
   assert.match(result.stdout, new RegExp(`--handoff-dir '${escapeRegExp(handoffDir)}'`));
   await access(output);
+  const commandScript = await readFile(`${output}.commands.sh`, "utf8");
+  assert.match(commandScript, /^#!\/usr\/bin\/env bash/);
+  assert.match(commandScript, /push-tauri-migration-handoff/);
+  assert.match(commandScript, /GITHUB_RUN_ID/);
+  assert.match(commandScript, /download-tauri-m4-reports/);
+  assert.equal((await stat(`${output}.commands.sh`)).mode & 0o111, 0o111);
   const checksum = await readFile(`${output}.sha256`, "utf8");
   assert.match(checksum, new RegExp(`^[0-9a-f]{64}  ${escapeRegExp(basename(output))}\\n$`));
 
