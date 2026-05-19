@@ -3,6 +3,7 @@
 import { runDaemonCliStartup } from './daemon-startup.js';
 import { runLiveArtifactsMcpServer } from './mcp-live-artifacts-server.js';
 import { runArtifactsCli } from './artifacts-cli.js';
+import { runProjectHandoff } from './handoff-cli.js';
 import { runConnectorsToolCli } from './tools-connectors-cli.js';
 import { runDesignSystemsToolCli } from './tools-design-systems-cli.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
@@ -147,6 +148,7 @@ const PROJECT_STRING_FLAGS = new Set([
   'daemon-url', 'name', 'skill', 'design-system', 'plugin', 'metadata-json',
   'pending-prompt', 'project', 'conversation', 'message', 'path', 'as',
   'agent', 'model', 'snapshot-id', 'inputs', 'grant-caps',
+  'api-key', 'base-url', 'max-tokens',
 ]);
 const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow']);
 // `od automation …` mirrors the Automations tab. Same surface, same
@@ -3678,6 +3680,9 @@ async function runProject(args) {
   od project list                         List projects.
   od project info <id>                    Print one project.
   od project delete <id>                  Delete a project.
+  od project handoff <id> --conversation <id> --api-key <key> --model <model>
+                    [--base-url <url>] [--max-tokens <n>]
+                    Synthesize a resume-conversation handoff prompt.
 
 Common options:
   --daemon-url <url>   Open Design daemon HTTP base.
@@ -3772,6 +3777,13 @@ Common options:
       const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}`, { method: 'DELETE' });
       if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
       console.log(`[project] deleted ${id}`);
+      return;
+    }
+    case 'handoff': {
+      // Conversation-scoped resume handoff. runProjectHandoff self-parses
+      // `rest` (projectId positional + flags) and resolves the daemon URL.
+      const { exitCode } = await runProjectHandoff(rest);
+      if (exitCode !== 0) process.exit(exitCode);
       return;
     }
     default:

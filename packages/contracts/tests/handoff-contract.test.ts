@@ -5,11 +5,20 @@ import {
   type HandoffRequest,
   type HandoffResponse,
 } from '../src/api/handoff';
+import { API_ERROR_CODES } from '../src/errors';
 
 describe('handoff contract', () => {
   it('exports a runtime schema-version marker so esbuild emits a .mjs (NodeNext requires it)', () => {
     // v2: conversationId became a required request field.
     expect(HANDOFF_SCHEMA_VERSION).toBe(2);
+  });
+
+  it('registers the handoff-specific error codes in the shared API error union', () => {
+    // The handoff route emits these; they must be canonical ApiErrorCode
+    // members so typed callers and contract-driven tests can represent the
+    // responses and the daemon route cannot drift from the contract.
+    expect(API_ERROR_CODES).toContain('CONVERSATION_NOT_FOUND');
+    expect(API_ERROR_CODES).toContain('EMPTY_TRANSCRIPT');
   });
 
   it('HandoffRequest round-trips through JSON with the full shape preserved', () => {
