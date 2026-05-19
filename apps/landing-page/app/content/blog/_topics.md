@@ -51,7 +51,7 @@ Currently being written. Move rows here from Active backlog before starting Pipe
 
 | Topic | Slug | Owner | Started | Target ship |
 |---|---|---|---|---|
-| _(none — latest Community / Use cases posts shipped 2026-05-18, see Shipped table)_ | | | | |
+| _(none — A1 shipped 2026-05-14, see Shipped table)_ | | | | |
 
 ### A1 fast-track context
 
