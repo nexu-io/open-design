@@ -248,7 +248,8 @@ function readReleaseBetaDesktopRuntimeDefault(source: string): DesktopRuntime {
 }
 
 function sourceAllowsElectronFallback(source: string): boolean {
-  return /DESKTOP_RUNTIME_KINDS = \["electron", "tauri"\] as const/.test(source);
+  const runtimeKinds = readDesktopRuntimeKinds(source);
+  return runtimeKinds.has("electron") && runtimeKinds.has("tauri");
 }
 
 function containsElectronDefaultTransitionText(source: string): boolean {
@@ -256,6 +257,20 @@ function containsElectronDefaultTransitionText(source: string): boolean {
     /Electron (?:remains|is) the (?:current )?default/i.test(source) ||
     /Public downloads are still Electron artifacts/i.test(source)
   );
+}
+
+function readDesktopRuntimeKinds(source: string): Set<DesktopRuntime> {
+  const match = source.match(/export const DESKTOP_RUNTIME_KINDS\s*=\s*\[([^\]]*)\]/s);
+  if (match?.[1] == null) return new Set();
+
+  const runtimeKinds = new Set<DesktopRuntime>();
+  for (const runtimeMatch of match[1].matchAll(/["']([^"']+)["']/g)) {
+    const runtime = runtimeMatch[1];
+    if (runtime === "electron" || runtime === "tauri") {
+      runtimeKinds.add(runtime);
+    }
+  }
+  return runtimeKinds;
 }
 
 function readPackageDependencyNames(source: string, label: string): Set<string> {

@@ -137,6 +137,17 @@ test("evaluateTauriMigrationOrder accepts post-M5 with explicit Electron fallbac
   assert.deepEqual(violations, []);
 });
 
+test("evaluateTauriMigrationOrder accepts formatted runtime kind arrays during the fallback window", () => {
+  const violations = evaluateTauriMigrationOrder(
+    postM5Input({
+      toolsDevConfig: formattedFallbackToolsConfig("tauri"),
+      toolsPackConfig: formattedFallbackToolsConfig("tauri"),
+    }),
+  );
+
+  assert.deepEqual(violations, []);
+});
+
 test("evaluateTauriMigrationOrder accepts the final post-M6 cleanup state", () => {
   const violations = evaluateTauriMigrationOrder(
     postM5Input({
@@ -254,6 +265,16 @@ function verifiedM4MigrationDoc(): string {
 function toolsConfig(defaultRuntime: Runtime): string {
   return [
     'export const DESKTOP_RUNTIME_KINDS = ["electron", "tauri"] as const;',
+    `export const DEFAULT_DESKTOP_RUNTIME = "${defaultRuntime}";`,
+  ].join("\n");
+}
+
+function formattedFallbackToolsConfig(defaultRuntime: Runtime): string {
+  return [
+    "export const DESKTOP_RUNTIME_KINDS = [",
+    '  "tauri",',
+    '  "electron",',
+    "] as const;",
     `export const DEFAULT_DESKTOP_RUNTIME = "${defaultRuntime}";`,
   ].join("\n");
 }
