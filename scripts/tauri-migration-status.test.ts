@@ -342,12 +342,19 @@ test("tauri-migration-status reports stale handoff artifacts", async (t) => {
   const staleHead = "0".repeat(40);
   const handoffDir = join(fixture, "handoff");
   await writeHandoffFixture(handoffDir, { branchHead: staleHead });
+  const remotePath = join(fixture, "empty.git");
+  await git(fixture, "init", "--bare", remotePath);
 
-  const result = await runStatus(fixture, "--handoff-dir", handoffDir);
-  const parsed = JSON.parse(result.stdout) as { handoff: { current: boolean; problems: string[] } };
+  const result = await runStatus(fixture, "--handoff-dir", handoffDir, "--remote", remotePath);
+  const parsed = JSON.parse(result.stdout) as {
+    handoff: { current: boolean; problems: string[] };
+    remote: { expectedHead: string; problems: string[] };
+  };
 
   assert.equal(parsed.handoff.current, false);
   assert.match(parsed.handoff.problems.join("\n"), new RegExp(`manifest branchHead is stale: expected ${head}, got ${staleHead}`));
+  assert.equal(parsed.remote.expectedHead, head);
+  assert.match(parsed.remote.problems.join("\n"), /remote branch not found/);
 });
 
 test("tauri-migration-status reports a remote branch matching the handoff", async (t) => {
@@ -396,11 +403,18 @@ test("tauri-migration-status reports a missing remote branch", async (t) => {
   await git(fixture, "init", "--bare", remotePath);
 
   const result = await runStatus(fixture, "--handoff-dir", handoffDir, "--remote", remotePath);
-  const parsed = JSON.parse(result.stdout) as { remote: { current: boolean; present: boolean; problems: string[] } };
+  const parsed = JSON.parse(result.stdout) as {
+    nextActions: string[];
+    remote: { current: boolean; expectedHead: string; present: boolean; problems: string[]; remote: string };
+  };
 
   assert.equal(parsed.remote.present, false);
   assert.equal(parsed.remote.current, false);
+  assert.equal(parsed.remote.expectedHead, head);
   assert.match(parsed.remote.problems.join("\n"), /remote branch not found/);
+  assert.match(parsed.nextActions.join("\n"), new RegExp(`Remote ${escapeRegExp(remotePath)}\\/codex\\/electron-to-tauri-migration must match ${head}`));
+  assert.match(parsed.nextActions.join("\n"), /Do not run scripts\/advance-tauri-migration-m4-m5\.ts/);
+  assert.doesNotMatch(parsed.nextActions.join("\n"), /Run the Windows and Linux Tauri package smoke jobs/);
 });
 
 test("tauri-migration-status reports verified platform reports", async (t) => {

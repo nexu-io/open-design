@@ -432,6 +432,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Added receiver-side `schemaVersion` validation to the packaged handoff command sidecar, keeping the executable archive path aligned with the TypeScript manifest readers before a write-capable receiver imports or pushes the migration branch.
 - 2026-05-20: Required `--expected-head` for all explicit `scripts/download-tauri-m4-reports.ts --run-id <id>` downloads. Known-run evidence now rejects before any `gh` call unless the receiver supplies the migration branch head, so both verify-only and `--advance` flows stay branch-head bound. `node --import tsx --test scripts/download-tauri-m4-reports.test.ts` and `tsc -p scripts/tsconfig.json --noEmit` passed.
 - 2026-05-20: Tightened `scripts/package-tauri-migration-handoff.ts` so standalone package generation refuses stale handoff manifests and tracked source changes by default. A tarball now requires the manifest branch head to match the current local migration branch before it can be handed to a write-capable receiver. `node --import tsx --test scripts/package-tauri-migration-handoff.test.ts` and `tsc -p scripts/tsconfig.json --noEmit` passed.
+- 2026-05-20: Tightened `scripts/tauri-migration-status.ts` next actions for missing remote branches. When `--remote` is checked and the migration branch is absent or stale, status now keeps native CI collection and M4→M5 advance behind the remote-head blocker instead of printing generic Windows/Linux smoke and advance steps.
 
 ### Platform Gate Runners
 

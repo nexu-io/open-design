@@ -471,6 +471,9 @@ function nextActionsForPhase(
   if (phase === "M4") {
     const handoffReady = handoff?.current === true;
     const archiveReady = handoffArchive?.current === true;
+    const remoteReady = remote?.current === true;
+    const migrationBranch = remote?.branch ?? handoff?.branch ?? "codex/electron-to-tauri-migration";
+    const expectedHead = remote?.expectedHead ?? handoff?.branchHead ?? "<sha>";
     return [
       ...heartbeatActions,
       "Run scripts/continue-tauri-migration.ts --dry-run to print the next executable handoff/push/report sequence; add --wait-reports --advance after the remote branch and native CI are available.",
@@ -486,12 +489,16 @@ function nextActionsForPhase(
           : "Copy the packaged handoff archive, .sha256 sidecar, .commands.sh sidecar, and .commands.sh.sha256 sidecar to a write-capable machine, then run the command script or scripts/push-tauri-migration-handoff.ts --archive /path/to/open-design-tauri-migration-handoff.tar.gz --remote origin.",
       platformReports?.current === true
         ? "Advance M4 evidence and M5 defaults with scripts/advance-tauri-migration-m4-m5.ts using the verified report paths shown above."
-        : remote?.current === true
-          ? `Trigger native CI with gh workflow run ci.yml --ref ${remote.branch ?? "codex/electron-to-tauri-migration"} or open a draft PR, then download and verify artifacts with scripts/download-tauri-m4-reports.ts --expected-head ${remote.expectedHead ?? "<sha>"} --wait --output-dir /tmp/open-design-tauri-m4-reports; add --advance to apply M4 evidence and M5 defaults immediately after verification.`
-          : "Run the Windows and Linux Tauri package smoke jobs.",
+        : remoteReady
+          ? `Trigger native CI with gh workflow run ci.yml --ref ${migrationBranch} or open a draft PR, then download and verify artifacts with scripts/download-tauri-m4-reports.ts --expected-head ${expectedHead} --wait --output-dir /tmp/open-design-tauri-m4-reports; add --advance to apply M4 evidence and M5 defaults immediately after verification.`
+          : remote == null
+            ? "Run the Windows and Linux Tauri package smoke jobs."
+            : `Remote ${remote.remote}/${migrationBranch} must match ${expectedHead} before native CI artifacts can be collected; current blocker: ${remote.problems.join("; ") || "remote branch is not current"}.`,
       ...(platformReports?.current === true
         ? []
-        : ["Advance M4 evidence and M5 defaults with scripts/advance-tauri-migration-m4-m5.ts --win-report <dir> --linux-report <dir>."]),
+        : remote == null || remoteReady
+          ? ["Advance M4 evidence and M5 defaults with scripts/advance-tauri-migration-m4-m5.ts --win-report <dir> --linux-report <dir>."]
+          : ["Do not run scripts/advance-tauri-migration-m4-m5.ts until the remote branch and Windows/Linux report manifests are verified for the expected head."]),
     ];
   }
   if (phase === "M5") {
@@ -785,7 +792,7 @@ async function readRemoteStatus(
   handoff?: HandoffStatus,
 ): Promise<RemoteStatus> {
   const branch = handoff?.branch ?? gitStatus.branch;
-  const expectedHead = handoff?.branchHead ?? gitStatus.head;
+  const expectedHead = handoff?.current === true ? handoff.branchHead : (gitStatus.head ?? handoff?.branchHead);
   const problems: string[] = [];
   if (branch == null || branch.length === 0 || branch === "HEAD") {
     problems.push("remote check requires a named branch");
