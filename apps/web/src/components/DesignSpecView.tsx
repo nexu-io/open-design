@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import type { JSX } from 'react';
 
 interface Props {
   source: string | null | undefined;

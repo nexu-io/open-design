@@ -14,14 +14,14 @@
     "@astrojs/rss": "4.0.18",
     "@astrojs/sitemap": "3.7.2",
     "astro": "6.3.5",
-    "react": "18.3.1",
-    "react-dom": "18.3.1"
+    "react": "19.2.6",
+    "react-dom": "19.2.6"
   },
   "devDependencies": {
     "@astrojs/check": "0.9.9",
     "@types/node": "20.19.39",
-    "@types/react": "18.3.28",
-    "@types/react-dom": "18.3.7",
+    "@types/react": "19.2.15",
+    "@types/react-dom": "19.2.3",
     "playwright": "1.60.0",
     "tsx": "4.22.2",
     "typescript": "5.9.3"

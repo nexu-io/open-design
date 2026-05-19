@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { Simulate } from 'react-dom/test-utils';
 import { JSDOM } from 'jsdom';
 import { ManualEditPanel, emptyManualEditDraft, manualEditPatchSummary, normalizeManualEditStyles, type ManualEditDraft } from '../../src/components/ManualEditPanel';
 import { emptyManualEditStyles, type ManualEditPatch, type ManualEditStyles, type ManualEditTarget } from '../../src/edit-mode/types';
@@ -252,7 +251,7 @@ describe('ManualEditPanel', () => {
 
     act(() => {
       lineInput.value = '49px';
-      Simulate.change(lineInput);
+      lineInput.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
     });
 
     expect(onError).toHaveBeenCalledWith('');

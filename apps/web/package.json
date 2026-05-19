@@ -38,16 +38,16 @@
     "next": "16.2.6",
     "openai": "6.38.0",
     "posthog-js": "1.374.2",
-    "react": "18.3.1",
-    "react-dom": "18.3.1"
+    "react": "19.2.6",
+    "react-dom": "19.2.6"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.0",
     "@testing-library/react": "16.3.2",
     "@types/jsdom": "28.0.3",
     "@types/node": "20.19.39",
-    "@types/react": "18.3.28",
-    "@types/react-dom": "18.3.7",
+    "@types/react": "19.2.15",
+    "@types/react-dom": "19.2.3",
     "jsdom": "29.1.1",
     "postcss": "8.5.14",
     "tailwindcss": "4.3.0",

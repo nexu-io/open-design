@@ -1,4 +1,4 @@
-import type { Dispatch, SetStateAction } from 'react';
+import type { Dispatch, JSX, SetStateAction } from 'react';
 import { useT } from '../i18n';
 import { Icon } from './Icon';
 import type { AppConfig, TelemetryConfig } from '../types';

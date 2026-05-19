@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import { useT } from '../i18n';
 import { Icon } from './Icon';
 
