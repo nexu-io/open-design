@@ -3,6 +3,7 @@ import Page from '../page';
 import '../globals.css';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import OutboundTelemetry from '../_components/outbound-telemetry.astro';
 import { heroImage } from '../image-assets';
 import { getCatalogCounts } from '../_lib/catalog';
 import { getGithubRepoMeta } from '../_lib/github';
@@ -44,6 +45,7 @@ const pageHtml = renderToStaticMarkup(
   </head>
   <body>
     <Fragment set:html={pageHtml} />
+    <OutboundTelemetry />
     <script is:inline>
       (() => {
         const formatStars = (count) => {

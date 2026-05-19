@@ -105,6 +105,10 @@ jobs:
       - name: Build landing page
         run: pnpm --filter @open-design/landing-page build
 
+      - name: Run SEO health scan
+        continue-on-error: true
+        run: pnpm --filter @open-design/landing-page seo:scan
+
       - name: Lint changed blog SEO
         run: |
           BASE="${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}"

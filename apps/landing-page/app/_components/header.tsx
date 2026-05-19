@@ -10,8 +10,10 @@
  * root and are kept in sync with `getCatalogCounts()` at build time.
  */
 
-const REPO = 'https://github.com/nexu-io/open-design';
-const REPO_RELEASES = `${REPO}/releases`;
+import { githubPath } from '../_lib/github-links';
+
+const REPO = githubPath('', { medium: 'nav', campaign: 'star' });
+const REPO_RELEASES = githubPath('/releases', { medium: 'nav', campaign: 'download' });
 
 const ext = {
   target: '_blank',

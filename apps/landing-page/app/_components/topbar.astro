@@ -1,6 +1,8 @@
 ---
-const REPO = 'https://github.com/nexu-io/open-design';
-const REPO_RELEASES = `${REPO}/releases`;
+import { githubPath } from '../_lib/github-links';
+
+const REPO = githubPath('', { medium: 'topbar', campaign: 'locale-switch' });
+const REPO_RELEASES = githubPath('/releases', { medium: 'topbar', campaign: 'topbar-pulse' });
 const ext = {
   target: '_blank',
   rel: 'noreferrer noopener',

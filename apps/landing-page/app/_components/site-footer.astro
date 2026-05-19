@@ -1,12 +1,15 @@
 ---
 import type { HeaderProps } from './header';
+import { githubPath } from '../_lib/github-links';
 
 interface Props {
   counts: HeaderProps['counts'];
 }
 
 const { counts } = Astro.props;
-const REPO = 'https://github.com/nexu-io/open-design';
+const REPO = githubPath('', { medium: 'footer', campaign: 'github' });
+const REPO_ISSUES = githubPath('/issues', { medium: 'footer', campaign: 'issues' });
+const REPO_RELEASES = githubPath('/releases', { medium: 'footer', campaign: 'footer-download' });
 const DISCORD = 'https://discord.gg/9ptkbbqRu';
 ---
 
@@ -38,8 +41,8 @@ const DISCORD = 'https://discord.gg/9ptkbbqRu';
         <h5>Connect</h5>
         <ul>
           <li><a href={REPO} target='_blank' rel='noopener'>GitHub</a></li>
-          <li><a href={`${REPO}/issues`} target='_blank' rel='noopener'>Issues</a></li>
-          <li><a href={`${REPO}/releases`} target='_blank' rel='noopener'>Releases</a></li>
+          <li><a href={REPO_ISSUES} target='_blank' rel='noopener'>Issues</a></li>
+          <li><a href={REPO_RELEASES} target='_blank' rel='noopener'>Releases</a></li>
           <li><a href={DISCORD} target='_blank' rel='noopener'>Discord</a></li>
           <li><a href='/blog/rss.xml'>RSS</a></li>
           <li><a href='/#contact'>Contact</a></li>

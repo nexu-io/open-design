@@ -10,6 +10,7 @@
  */
 import Layout from '../../_components/sub-page-layout.astro';
 import { getSkillRecords, type SkillRecord } from '../../_lib/catalog';
+import { withUtm } from '../../_lib/github-links';
 
 export async function getStaticPaths() {
   const skills = await getSkillRecords();
@@ -25,6 +26,12 @@ interface Props {
 }
 
 const { skill, all } = Astro.props as Props;
+const skillSourceUrl = withUtm(skill.source, {
+  medium: 'skills-detail',
+  campaign: 'skill-source',
+  content: skill.slug,
+});
+const installCommand = `open-design install ${skill.slug}`;
 
 const title = `${skill.name} — Open Design skill`;
 const description = skill.description.length > 0
@@ -79,7 +86,7 @@ const jsonLd = [
       <h1 class="display">{skill.name}<span class="dot">.</span></h1>
       <p class="lead">{description}</p>
       <div class="detail-actions">
-        <a class="btn btn-primary" href={skill.source} target="_blank" rel="noopener">
+        <a class="btn btn-primary" href={skillSourceUrl} target="_blank" rel="noopener">
           View on GitHub
         </a>
         {skill.upstream && (
@@ -126,6 +133,24 @@ const jsonLd = [
       )}
     </dl>
 
+    <section class="detail-block install-block" data-skill-install>
+      <h2>Install command</h2>
+      <p class="block-lead">
+        Copy this command when you are ready to reference the skill from your local Open Design workspace.
+      </p>
+      <div class="install-command">
+        <code>{installCommand}</code>
+        <button
+          type="button"
+          class="btn btn-ghost"
+          data-install-command={installCommand}
+          data-install-source={skillSourceUrl}
+        >
+          Copy
+        </button>
+      </div>
+    </section>
+
     {skill.triggers.length > 0 && (
       <section class="detail-block">
         <h2>Triggers</h2>
@@ -165,4 +190,35 @@ const jsonLd = [
       </section>
     )}
   </article>
+  <script is:inline>
+    (() => {
+      const button = document.querySelector('[data-install-command]');
+      if (!button) return;
+      button.addEventListener('click', async () => {
+        const command = button.getAttribute('data-install-command') || '';
+        try {
+          await navigator.clipboard.writeText(command);
+          button.textContent = 'Copied';
+        } catch {
+          button.textContent = 'Copy failed';
+        }
+        const destination = button.getAttribute('data-install-source');
+        if (!destination) return;
+        const body = JSON.stringify({
+          from_path: window.location.pathname,
+          to_url: destination,
+          utm: {
+            source: 'open-design.ai',
+            medium: 'skills-detail',
+            campaign: 'install-copy',
+            content: command.replace(/^open-design install\s+/, ''),
+          },
+          ts: new Date().toISOString(),
+        });
+        if (navigator.sendBeacon) {
+          navigator.sendBeacon('/t/outbound', new Blob([body], { type: 'application/json' }));
+        }
+      });
+    })();
+  </script>
 </Layout>
