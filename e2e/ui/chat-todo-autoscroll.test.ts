@@ -335,20 +335,17 @@ test.describe('chat pane autoscroll on TodoCard growth', () => {
 
     const distanceAfterScroll = await chatLogBottomDistance(page);
 
-    // If the viewport is shorter than 150 px of content the scroll moved us away;
-    // if the chat-log has no scrollable room (few messages, large viewport) the
-    // scroll will be a no-op and the test is a guaranteed pass. Both are fine.
+    // Assert the scroll actually moved us past the 80px suppression threshold —
+    // if this fails, the seed/layout changed and the test no longer covers the regression.
+    expect(
+      distanceAfterScroll,
+      `expected scroll-up to move chat-log more than 80px from bottom (distance=${distanceAfterScroll}); ` +
+      `seed more filler messages or increase the scroll offset if this fires`,
+    ).toBeGreaterThan(80);
+
     const scrollUpOccurred = distanceAfterScroll > 80;
 
     if (scrollUpOccurred) {
-      // Precondition: verify the scroll-up actually moved us far enough from the
-      // bottom that the auto-scroll suppression path will be exercised.
-      const distanceFromBottom = await page.evaluate(() => {
-        const el = document.querySelector('.chat-log');
-        return el ? el.scrollHeight - el.scrollTop - el.clientHeight : 0;
-      });
-      expect(distanceFromBottom).toBeGreaterThan(80); // must exceed the 80px threshold
-
       // Now grow the todo card — the non-pinned user should NOT be dragged back.
       await growPinnedTodo(page, 80);
 
@@ -360,6 +357,5 @@ test.describe('chat pane autoscroll on TodoCard growth', () => {
         `expected scroll position preserved after todo card grew (before=${distanceAfterScroll} after=${distanceAfterGrow})`,
       ).toBeGreaterThan(60);
     }
-    // When the log has no scrollable room the scenario is vacuously satisfied.
   });
 });

@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import { existsSync } from 'node:fs';
 import { networkInterfaces } from 'node:os';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,11 +26,28 @@ const shouldStaticExport = isProd && !isServerOutput;
 const WEB_ROOT = dirname(fileURLToPath(import.meta.url));
 
 function resolveWorkspaceRoot(): string {
+  const computed = dirname(dirname(WEB_ROOT));
   const override = process.env.OD_WORKSPACE_ROOT;
   if (override && override.trim()) {
-    return isAbsolute(override) ? override : resolve(WEB_ROOT, override);
+    const resolved = isAbsolute(override.trim()) ? override.trim() : resolve(WEB_ROOT, override.trim());
+    if (!existsSync(resolved)) {
+      console.warn(
+        `[next.config] OD_WORKSPACE_ROOT="${override}" resolved to "${resolved}" which does not exist; ` +
+        `falling back to computed default "${computed}".`,
+      );
+      return computed;
+    }
+    const rel = relative(resolved, WEB_ROOT);
+    if (rel.startsWith('..')) {
+      console.warn(
+        `[next.config] OD_WORKSPACE_ROOT="${override}" resolved to "${resolved}" but WEB_ROOT "${WEB_ROOT}" ` +
+        `escapes it (relative path "${rel}"); falling back to computed default "${computed}".`,
+      );
+      return computed;
+    }
+    return resolved;
   }
-  return dirname(dirname(WEB_ROOT));
+  return computed;
 }
 
 const WORKSPACE_ROOT = resolveWorkspaceRoot();
