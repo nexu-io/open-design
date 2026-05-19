@@ -49,11 +49,11 @@ export const grokBuildAgentDef = {
       label: 'grok-4.20-multi-agent (xAI · orchestration)',
     },
   ],
-  // Prompt delivered via stdin so Windows `spawn ENAMETOOLONG` and Linux
-  // `spawn E2BIG` can't truncate large composed prompts. `grok -p` with
-  // no positional argument reads from piped stdin.
-  buildArgs: (_prompt, _imagePaths, _extra = [], options = {}) => {
-    const args = ['-p'];
+  // Grok Build CLI v0.1.212 enforces `-p, --single <PROMPT>` as value-
+  // required — stdin piping no longer satisfies it. Inline the prompt.
+  // Linux MAX_ARG_STRLEN=128KB headroom is enough for typical OD prompts.
+  buildArgs: (prompt, _imagePaths, _extra = [], options = {}) => {
+    const args = ['-p', prompt];
     if (options.model && options.model !== DEFAULT_MODEL_OPTION.id) {
       args.push('--model', options.model);
     }
@@ -69,7 +69,7 @@ export const grokBuildAgentDef = {
     { id: 'xhigh', label: 'xhigh' },
     { id: 'max', label: 'max' },
   ],
-  promptViaStdin: true,
+  promptViaStdin: false,
   streamFormat: 'plain',
   installUrl: 'https://x.ai/cli',
   docsUrl: 'https://x.ai/cli',
