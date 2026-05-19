@@ -635,6 +635,20 @@ async function readPlatformReportsStatus(winReport?: string, linuxReport?: strin
   }
   const checkedWinReport = winReport!;
   const checkedLinuxReport = linuxReport!;
+  const missingManifestProblems = (
+    await Promise.all([
+      missingReportManifestProblem("Windows", checkedWinReport),
+      missingReportManifestProblem("Linux", checkedLinuxReport),
+    ])
+  ).filter((problem): problem is string => problem != null);
+  if (missingManifestProblems.length > 0) {
+    return {
+      current: false,
+      linuxReport: checkedLinuxReport,
+      problems: missingManifestProblems,
+      winReport: checkedWinReport,
+    };
+  }
   try {
     const result = await execFileAsync(
       process.execPath,
@@ -660,14 +674,31 @@ async function readPlatformReportsStatus(winReport?: string, linuxReport?: strin
       winReport: checkedWinReport,
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
     return {
       current: false,
       linuxReport: checkedLinuxReport,
-      problems: [message],
+      problems: [platformVerifierFailureMessage(error)],
       winReport: checkedWinReport,
     };
   }
+}
+
+async function missingReportManifestProblem(platform: "Linux" | "Windows", reportDir: string): Promise<string | undefined> {
+  const manifestPath = join(reportDir, "manifest.json");
+  return (await pathExists(manifestPath)) ? undefined : `${platform} report manifest missing: ${manifestPath}`;
+}
+
+function platformVerifierFailureMessage(error: unknown): string {
+  const detail = error as Error & { stderr?: string; stdout?: string };
+  const candidates = [
+    detail.stderr,
+    detail.stdout,
+    error instanceof Error ? error.message : String(error),
+  ].flatMap((value) => (value == null ? [] : value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)));
+  const explicitError = candidates.find((line) => line.startsWith("Error: "));
+  if (explicitError != null) return explicitError;
+  const firstUsefulLine = candidates.find((line) => !line.startsWith("at ") && !line.startsWith("Node.js "));
+  return firstUsefulLine ?? "platform report verifier failed";
 }
 
 async function pathExists(path: string): Promise<boolean> {
