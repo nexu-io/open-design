@@ -291,8 +291,8 @@ function nextActionsForPhase(
       remote?.current === true
         ? `Remote ${remote.remote} already matches ${remote.branch ?? "the migration branch"} at ${remote.head ?? "the expected head"}.`
         : archiveReady
-          ? "On the receiving machine, verify the .sha256 sidecar, extract the archive, then import, push, and verify the manifest with scripts/push-tauri-migration-handoff.ts --manifest /tmp/open-design-tauri-migration-handoff/open-design-tauri-migration-handoff.json --remote origin."
-          : "Copy the packaged handoff archive and .sha256 sidecar to a write-capable machine, extract it, then import, push, and verify the manifest with scripts/push-tauri-migration-handoff.ts --manifest /tmp/open-design-tauri-migration-handoff/open-design-tauri-migration-handoff.json --remote origin.",
+          ? `On the receiving machine, run scripts/push-tauri-migration-handoff.ts --archive ${handoffArchive.archive} --remote origin to verify checksum, extract, push, and verify the remote branch.`
+          : "Copy the packaged handoff archive and .sha256 sidecar to a write-capable machine, then run scripts/push-tauri-migration-handoff.ts --archive /path/to/open-design-tauri-migration-handoff.tar.gz --remote origin.",
       platformReports?.current === true
         ? "Advance M4 evidence and M5 defaults with scripts/advance-tauri-migration-m4-m5.ts using the verified report paths shown above."
         : "Run the Windows and Linux Tauri package smoke jobs.",

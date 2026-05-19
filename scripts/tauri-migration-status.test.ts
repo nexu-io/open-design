@@ -129,7 +129,8 @@ test("tauri-migration-status reports current packaged handoff archives", async (
   assert.equal(parsed.handoffArchive.sha256, archiveSha256);
   assert.deepEqual(parsed.handoffArchive.problems, []);
   assert.match(parsed.nextActions.join("\n"), /Copy the current packaged handoff archive/);
-  assert.match(parsed.nextActions.join("\n"), /verify the \.sha256 sidecar/);
+  assert.match(parsed.nextActions.join("\n"), /push-tauri-migration-handoff\.ts --archive/);
+  assert.match(parsed.nextActions.join("\n"), /verify checksum, extract, push, and verify/);
 });
 
 test("tauri-migration-status reports stale handoff artifacts", async (t) => {
