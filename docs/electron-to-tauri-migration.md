@@ -224,6 +224,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Added `e2e/specs/win-tauri.spec.ts` as the executable Windows Tauri NSIS platform gate. It builds with `--desktop-runtime tauri`, installs the NSIS artifact, waits for HTTP web health through desktop eval, captures a screenshot, validates logs, stops, and uninstalls without reusing Electron-specific NSIS direct-reinstall assertions. On this macOS host, `PATH=/opt/homebrew/bin:$PATH pnpm test specs/linux.spec.ts specs/win-tauri.spec.ts` skips both platform-gated specs as intended and `PATH=/opt/homebrew/bin:$PATH pnpm typecheck` in `e2e/` passes.
 - 2026-05-20: Updated `e2e/scripts/release-smoke.ts` so self-building platform specs can emit manifest/suite-result reports with `OD_PACKAGED_E2E_BUILD_JSON_REQUIRED=0`. The default remains strict: if the flag is not disabled, `OD_PACKAGED_E2E_BUILD_JSON_PATH` must be provided and must point to an existing file. Verified skip-mode report generation for `linux specs/linux.spec.ts` and `win specs/win-tauri.spec.ts` on this macOS host.
 - 2026-05-20: Added CI jobs `packaged_smoke_tauri_win` and `packaged_smoke_tauri_linux` to run the executable Windows/Linux Tauri platform gates when packaging-relevant files change. The Linux job installs the Tauri v2 WebKitGTK 4.1 prerequisites plus AppImage runtime support and runs under `xvfb`; both jobs publish release-smoke reports as artifacts. CI scope detection also treats the Tauri platform specs and release-smoke report wrapper as tools-pack validation triggers. The Tauri platform jobs depend only on change detection so native M4 evidence can run in parallel with general workspace validation. Local YAML parsing, root `pnpm guard`, root `pnpm typecheck`, and macOS skip-mode release-smoke checks passed.
+- 2026-05-20: Committed the migration implementation locally on branch `codex/electron-to-tauri-migration` at `e87d3109172ea0c4a9a9289f793b493bd3ebf4f8`, then added this native CI handoff note. Unrelated local files were left unstaged. Attempted `git push -u origin codex/electron-to-tauri-migration`, but the configured Git credential (`sunseol`) lacks write permission to `nexu-io/open-design` and GitHub returned 403. Native Windows/Linux M4 evidence is therefore still pending a push/PR from a credential with repository write access or an equivalent native-host run.
 
 ### Platform Gate Runners
 
@@ -256,3 +257,18 @@ CI equivalents live in `.github/workflows/ci.yml`:
 - `packaged_smoke_tauri_linux` runs `scripts/release-smoke.ts linux specs/linux.spec.ts` on `ubuntu-latest` with Rust stable, Node 24, pnpm 10.33.2, Tauri Linux prerequisites, AppImage runtime support, and `xvfb`.
 
 Do not close the Windows/Linux M4 checkboxes from CI wiring alone. Close them only after the native CI jobs or equivalent host commands produce the required eval/screenshot/stop evidence.
+
+### Remote CI Handoff
+
+The local branch `codex/electron-to-tauri-migration` contains the current migration state:
+
+```bash
+git rev-parse codex/electron-to-tauri-migration
+```
+
+To collect native M4 evidence, push that branch with a credential that can write to `nexu-io/open-design`, open a draft PR against `main`, and wait for these CI jobs:
+
+- `Packaged windows Tauri smoke`
+- `Packaged linux Tauri smoke`
+
+If both pass, download or inspect their `open-design-ci-win-tauri-e2e-report` and `open-design-ci-linux-tauri-e2e-report` artifacts. The Windows report must prove NSIS build/install/start/eval/screenshot/stop/uninstall. The Linux report must prove AppImage build/install/start/eval/screenshot/stop/uninstall plus headless install/start/stop. Only then mark the three remaining M4 platform checkboxes complete and proceed to M5.
