@@ -35,7 +35,11 @@ describe("packaged smoke workflow", () => {
     ];
 
     for (const expectedPath of expectedPaths) {
-      expect(workflow).toContain(`"${expectedPath}"`);
+      const quotedPath = `"${expectedPath}"`;
+      const occurrences = workflow.split(quotedPath).length - 1;
+      expect(occurrences, `${expectedPath} must be present in required and tools-pack CI scope detection`).toBeGreaterThanOrEqual(
+        2,
+      );
     }
   });
 });
