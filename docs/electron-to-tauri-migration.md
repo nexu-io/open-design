@@ -250,6 +250,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Extended the migration-order guard so M6 Electron dependency cleanup also verifies `pnpm-lock.yaml` importer entries for `apps/desktop`, `apps/packaged`, and `tools/pack`. This catches removing Electron deps from manifests without running `pnpm install` to refresh the lockfile. `tsc -p scripts/tsconfig.json --noEmit` and `pnpm guard` passed.
 - 2026-05-20: Extended the migration-order guard so `tools-dev` and `tools-pack` `DEFAULT_DESKTOP_RUNTIME` values cannot diverge during M5. The default desktop runtime now has to flip from Electron to Tauri as one tools surface change, with `release-beta` moving through its existing synchronized check. `tsc -p scripts/tsconfig.json --noEmit` and `pnpm guard` passed.
 - 2026-05-20: Split the Tauri migration-order policy into a pure evaluator and added `scripts/tauri-migration-policy.test.ts` so M4 partial closure, missing native evidence, premature M5 default flips, divergent tools defaults, premature M6 cleanup, stale Electron fallback, and stale lockfile importer cases are locked by tests. `tsc -p scripts/tsconfig.json --noEmit`, `node --import tsx --test scripts/tauri-migration-policy.test.ts`, and `pnpm guard` passed.
+- 2026-05-20: Added `scripts/tauri-migration-policy.ts` and its test to CI packaging scope detection. PRs that change the M4/M5/M6 ordering policy now rerun tools-pack validation and the native Windows/Linux Tauri package smoke jobs instead of only running local guard tests.
 
 ### Platform Gate Runners
 
@@ -283,7 +284,7 @@ CI equivalents live in `.github/workflows/ci.yml`:
 - `packaged_smoke_tauri_win` runs `scripts/release-smoke.ts win specs/win-tauri.spec.ts` on `windows-latest` with Rust stable, Node 24, pnpm 10.33.2, and NSIS.
 - `packaged_smoke_tauri_linux` runs `scripts/release-smoke.ts linux specs/linux.spec.ts` on `ubuntu-latest` with Rust stable, Node 24, pnpm 10.33.2, Tauri Linux prerequisites, AppImage runtime support, and `xvfb`.
 
-Both jobs run `scripts/verify-tauri-platform-gates.ts` against the generated report before uploading the artifact. Changes to the verifier script or its tests are packaging-scope changes, so CI reruns the native Tauri smoke jobs when the verifier contract changes.
+Both jobs run `scripts/verify-tauri-platform-gates.ts` against the generated report before uploading the artifact. Changes to the verifier script, the migration-order policy, or their tests are packaging-scope changes, so CI reruns the native Tauri smoke jobs when the M4 evidence contract or phase-ordering contract changes.
 
 Do not close the Windows/Linux M4 checkboxes from CI wiring alone. Close them only after the native CI jobs or equivalent host commands produce the required eval/screenshot/stop evidence.
 
