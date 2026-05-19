@@ -20,6 +20,8 @@ test("create-tauri-migration-bundle creates and verifies a branch bundle", async
 
   assert.match(result.stdout, /Created Tauri migration bundle:/);
   assert.match(result.stdout, /codex\/electron-to-tauri-migration/);
+  assert.match(result.stdout, /Bundle bytes: \d+/);
+  assert.match(result.stdout, /SHA-256: [0-9a-f]{64}/);
   await access(bundlePath);
   const heads = await git(repo, "bundle", "list-heads", bundlePath);
   assert.match(heads.stdout, /refs\/heads\/codex\/electron-to-tauri-migration/);

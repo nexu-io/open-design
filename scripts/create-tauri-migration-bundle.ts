@@ -1,5 +1,7 @@
+import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
-import { mkdir } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { mkdir, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -29,6 +31,8 @@ async function main(): Promise<void> {
   await git(args.cwd, ["bundle", "create", args.output, args.branch, `^${args.base}`]);
   const verify = await git(args.cwd, ["bundle", "verify", args.output]);
   const heads = await git(args.cwd, ["bundle", "list-heads", args.output]);
+  const outputStat = await stat(args.output);
+  const outputSha256 = await sha256File(args.output);
 
   process.stdout.write(
     [
@@ -36,6 +40,8 @@ async function main(): Promise<void> {
       `Git cwd: ${args.cwd}`,
       `Branch: ${args.branch} @ ${branchHead}`,
       `Base: ${args.base} @ ${baseHead}`,
+      `Bundle bytes: ${outputStat.size}`,
+      `SHA-256: ${outputSha256}`,
       "Verify:",
       verify.stdout.trim(),
       "Heads:",
@@ -101,6 +107,15 @@ async function git(cwd: string, args: string[]): Promise<{ stderr: string; stdou
     cwd,
     maxBuffer: 1024 * 1024,
   });
+}
+
+async function sha256File(path: string): Promise<string> {
+  const hash = createHash("sha256");
+  const stream = createReadStream(path);
+  for await (const chunk of stream) {
+    hash.update(chunk);
+  }
+  return hash.digest("hex");
 }
 
 try {
