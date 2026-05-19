@@ -40,7 +40,8 @@ test("package-tauri-migration-handoff creates a tarball and checksum sidecar", a
   await access(output);
   const commandScript = await readFile(`${output}.commands.sh`, "utf8");
   assert.match(commandScript, /^#!\/usr\/bin\/env bash/);
-  assert.match(commandScript, /push-tauri-migration-handoff/);
+  assert.match(commandScript, /git fetch "\$bundle" "\$branch:\$temp_ref"/);
+  assert.match(commandScript, /git push "\$remote" "refs\/heads\/\$branch:refs\/heads\/\$branch"/);
   assert.match(commandScript, /GITHUB_RUN_ID/);
   assert.match(commandScript, /download-tauri-m4-reports/);
   assert.equal((await stat(`${output}.commands.sh`)).mode & 0o111, 0o111);
