@@ -52,6 +52,24 @@ test("Tauri migration evidence scripts trigger package smoke and tools-pack test
   }
 });
 
+test("Tauri migration handoff can manually dispatch native CI", async () => {
+  const workflow = await readFile(ciWorkflowPath, "utf8");
+
+  assert.match(workflow, /^\s+workflow_dispatch:\s*$/m, "ci.yml must keep workflow_dispatch for handoff CI runs");
+  assert.match(
+    workflow,
+    /else\n\s+required=true\n\s+daemon_tests_required=true\n\s+web_tests_required=true\n\s+tools_dev_tests_required=true\n\s+tools_pack_tests_required=true\n\s+fi/m,
+    "workflow_dispatch must force the packaged scope so Windows/Linux Tauri smoke jobs run",
+  );
+  assert.match(workflow, /^\s+packaged_smoke_tauri_win:\s*$/m, "ci.yml must define the Windows Tauri smoke job");
+  assert.match(workflow, /^\s+packaged_smoke_tauri_linux:\s*$/m, "ci.yml must define the Linux Tauri smoke job");
+  assert.match(
+    workflow,
+    /^\s+if: \$\{\{ needs\.packaged_changes\.outputs\.required == 'true' \}\}\s*$/m,
+    "Tauri smoke jobs must remain tied to packaged_changes.required",
+  );
+});
+
 function quotedPathPattern(filePath: string): RegExp {
   return new RegExp(`"${escapeRegExp(filePath)}"`);
 }
