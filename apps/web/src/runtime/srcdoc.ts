@@ -1643,13 +1643,25 @@ function injectTweaksBridge(doc: string): string {
   }
 
   function onReady(){
-    applyClassesToPanel(!document.documentElement.hasAttribute('data-od-tweaks-hidden'));
+    // Capture the panel authored visibility BEFORE we apply the host hidden
+    // attribute. The bridge sets data-od-tweaks-hidden synchronously in head
+    // (before the body parses), so on entry to onReady the attribute is
+    // always present even though the artifact may have authored the panel
+    // as default-visible. Reading the panel class first is the only place
+    // we can still observe the author intent. Then drive the attribute,
+    // classes, and posted state from that captured value so a default
+    // visible tw-panel reports visible:true and the toolbar toggle starts
+    // ON. Issue surfaced in PR #1643 review.
+    var panel = panelEl();
+    var initialVisible = !!panel && !panel.classList.contains('tw-hidden');
+    document.documentElement.toggleAttribute('data-od-tweaks-hidden', !initialVisible);
+    applyClassesToPanel(initialVisible);
     attachObserver();
     postAvailability();
-    // Post the artifact initial visibility so the toolbar toggle reflects the
-    // default state on mount. Without this the toggle reads OFF while a
-    // default-visible tw-panel artifact clearly shows its panel and the user
-    // would have to click toggle-on then toggle-off to actually hide.
+    // Post the captured initial visibility so the toolbar toggle reflects
+    // the default state on mount. Without this the toggle reads OFF while
+    // a default-visible tw-panel artifact clearly shows its panel and the
+    // user would have to click toggle-on then toggle-off to actually hide.
     postState();
   }
 
