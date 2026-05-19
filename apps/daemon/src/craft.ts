@@ -10,14 +10,17 @@ import path from "node:path";
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
 
-/**
- * @param {string} craftDir absolute path to the craft/ directory
- * @param {string[]} requested slugs from `od.craft.requires`
- * @returns {Promise<{ body: string, sections: string[] }>}
- *   body is the concatenated markdown (each file preceded by a level-3
- *   section header). sections lists which slugs actually resolved.
- */
-export async function loadCraftSections(craftDir: string, requested: unknown[]) {
+interface CraftResult {
+  /** Concatenated markdown (each file preceded by a level-3 section header). */
+  body: string;
+  /** Slugs that actually resolved (files existed and were non-empty). */
+  sections: string[];
+}
+
+export async function loadCraftSections(
+  craftDir: string,
+  requested: unknown[],
+): Promise<CraftResult> {
   if (!craftDir || !Array.isArray(requested) || requested.length === 0) {
     return { body: "", sections: [] };
   }
@@ -37,8 +40,7 @@ export async function loadCraftSections(craftDir: string, requested: unknown[]) 
       parts.push(`### ${slug}\n\n${trimmed}`);
       sections.push(slug);
     } catch {
-      // File doesn't exist or unreadable — skip silently. Skills can
-      // forward-reference future craft sections without breaking.
+      // File doesn't exist or unreadable — skip silently.
     }
   }
   return { body: parts.join("\n\n---\n\n"), sections };
