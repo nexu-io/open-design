@@ -56,9 +56,6 @@
       "esbuild",
       "protobufjs",
       "sharp"
-    ],
-    "patchedDependencies": {
-      "@anthropic-ai/sdk@0.97.1": "patches/@anthropic-ai__sdk@0.97.1.patch"
-    }
+    ]
   }
 }
