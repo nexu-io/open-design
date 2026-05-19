@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { installMockOpenDesignHost } from '@open-design/host/testing';
 import {
   archiveFilenameFrom,
   archiveRootFromFilePath,
@@ -430,19 +431,17 @@ describe('sandboxed preview Blob exports', () => {
     expect(revokeSpy).toHaveBeenCalledWith('blob:test');
   });
 
-  it('uses the desktop native print bridge when __odDesktop.printPdf is available', async () => {
-    const printPdfMock = vi.fn().mockResolvedValue(undefined);
-    vi.stubGlobal('window', {
-      open: (_url: string, _target: string, features?: string) => {
-        openCalls.push([_url, _target]);
-        openedFeatures = features;
-        return mockWin;
-      },
-      addEventListener: () => {},
-      __odDesktop: { printPdf: printPdfMock, isDesktop: true },
+  it('uses the desktop native print bridge when the host PDF bridge is available', async () => {
+    const printPdfMock = vi.fn().mockResolvedValue({ ok: true });
+    const restoreHost = installMockOpenDesignHost({
+      host: { pdf: { print: printPdfMock } },
     });
 
-    await exportAsPdf('<script>window.parent.document.body.innerHTML="owned"</script>', 'Desktop PDF');
+    try {
+      await exportAsPdf('<script>window.parent.document.body.innerHTML="owned"</script>', 'Desktop PDF');
+    } finally {
+      restoreHost();
+    }
 
     expect(printPdfMock).toHaveBeenCalledTimes(1);
     expect(openCalls).toEqual([]);
@@ -465,14 +464,16 @@ describe('sandboxed preview Blob exports', () => {
   });
 
   it('passes deck intent through the desktop native print bridge', async () => {
-    const printPdfMock = vi.fn().mockResolvedValue(undefined);
-    vi.stubGlobal('window', {
-      open: () => mockWin,
-      addEventListener: () => {},
-      __odDesktop: { printPdf: printPdfMock, isDesktop: true },
+    const printPdfMock = vi.fn().mockResolvedValue({ ok: true });
+    const restoreHost = installMockOpenDesignHost({
+      host: { pdf: { print: printPdfMock } },
     });
 
-    await exportAsPdf('<section class="slide">One</section>', 'Desktop Deck', { deck: true });
+    try {
+      await exportAsPdf('<section class="slide">One</section>', 'Desktop Deck', { deck: true });
+    } finally {
+      restoreHost();
+    }
 
     expect(printPdfMock).toHaveBeenCalledTimes(1);
     expect(printPdfMock.mock.calls[0]![2]).toEqual({ deck: true });
@@ -480,17 +481,19 @@ describe('sandboxed preview Blob exports', () => {
   });
 
   it('injects image-waiting logic into the print-ready handshake for the desktop bridge', async () => {
-    const printPdfMock = vi.fn().mockResolvedValue(undefined);
-    vi.stubGlobal('window', {
-      open: () => mockWin,
-      addEventListener: () => {},
-      __odDesktop: { printPdf: printPdfMock, isDesktop: true },
+    const printPdfMock = vi.fn().mockResolvedValue({ ok: true });
+    const restoreHost = installMockOpenDesignHost({
+      host: { pdf: { print: printPdfMock } },
     });
 
     // HTML with an intentionally non-loadable image to exercise the
     // incomplete-image detection in the injected handshake.
     const html = '<div><img src="https://example.com/will-not-load.png" alt="test"/></div>';
-    await exportAsPdf(html, 'Image Test');
+    try {
+      await exportAsPdf(html, 'Image Test');
+    } finally {
+      restoreHost();
+    }
 
     const htmlArg = printPdfMock.mock.calls[0]![0];
     // In the sandboxed wrapper the srcdoc attribute is HTML-escaped, so the
@@ -517,16 +520,18 @@ describe('sandboxed preview Blob exports', () => {
   });
 
   it('injects the readiness cache for non-sandboxed desktop exports too', async () => {
-    const printPdfMock = vi.fn().mockResolvedValue(undefined);
-    vi.stubGlobal('window', {
-      open: () => mockWin,
-      addEventListener: () => {},
-      __odDesktop: { printPdf: printPdfMock, isDesktop: true },
+    const printPdfMock = vi.fn().mockResolvedValue({ ok: true });
+    const restoreHost = installMockOpenDesignHost({
+      host: { pdf: { print: printPdfMock } },
     });
 
-    await exportAsPdf('<main>Trusted local document</main>', 'Trusted', {
-      sandboxedPreview: false,
-    });
+    try {
+      await exportAsPdf('<main>Trusted local document</main>', 'Trusted', {
+        sandboxedPreview: false,
+      });
+    } finally {
+      restoreHost();
+    }
 
     expect(printPdfMock).toHaveBeenCalledTimes(1);
     const htmlArg = printPdfMock.mock.calls[0]![0];

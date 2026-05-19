@@ -1996,6 +1996,8 @@ export const en: Dict = {
   'settings.memoryExtractionDelete': 'Delete',
   'settings.memoryExtractionsClear': 'Clear',
   'settings.memoryExtractionsClearTitle': 'Clear all extraction history',
+  'settings.memoryExtractionsClearConfirm':
+    'Clear all extraction history? This cannot be undone.',
   'settings.memoryNoProviderBannerTitle': 'LLM memory extraction is not running',
   'settings.memoryNoProviderBannerBody': 'No API key found for the memory extractor. Add an OpenAI key under Media providers, or set ANTHROPIC_API_KEY / OPENAI_API_KEY in the environment, to enable LLM-driven extraction. Heuristic regex extraction is still active.',
   'settings.libraryInstall': 'Install',

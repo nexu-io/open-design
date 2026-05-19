@@ -594,12 +594,13 @@ export function MemorySection() {
   }, [reloadExtractions]);
 
   const onClearExtractions = useCallback(async () => {
+    if (!window.confirm(t('settings.memoryExtractionsClearConfirm'))) return;
     setExtractions([]);
     const ok = await clearExtractionHistory();
     if (!ok) {
       void reloadExtractions();
     }
-  }, [reloadExtractions]);
+  }, [reloadExtractions, t]);
 
   return (
     <section

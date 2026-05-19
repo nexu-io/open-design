@@ -287,8 +287,9 @@ export type DesktopRuntimeOptions = {
    * calls bypass the protocol handler entirely. Optional so tools-dev
    * (where webUrl IS an http:// URL Node fetch can hit) can omit it
    * and the runtime falls back to `discoverUrl` for API calls too.
-   */
+  */
   discoverDaemonUrl?: () => Promise<string | null>;
+  preloadPath?: string;
   /**
    * Round-5 (lefarcen P1, mrcfps): lazy re-handshake hook. The runtime
    * calls this when the daemon answers `503 DESKTOP_AUTH_PENDING` so a
@@ -776,7 +777,7 @@ function parsePrintReadyPdfOptions(value: unknown): PrintReadyPdfOptions {
 }
 
 export async function createDesktopRuntime(options: DesktopRuntimeOptions): Promise<DesktopRuntime> {
-  const preloadPath = join(dirname(fileURLToPath(import.meta.url)), "preload.cjs");
+  const preloadPath = options.preloadPath ?? join(dirname(fileURLToPath(import.meta.url)), "preload.cjs");
 
   // ipcMain.handle() registers a handler in an internal map that is *not*
   // surfaced via eventNames(); the previous `!eventNames().includes(...)`

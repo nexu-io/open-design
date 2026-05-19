@@ -54,8 +54,10 @@ import type {
   UpdateDeployConfigRequest,
 } from '../types';
 import type { ArtifactManifest } from '../artifacts/types';
-
-// Window.electronAPI is declared globally in apps/web/src/types/electron.d.ts.
+import {
+  isOpenDesignHostAvailable,
+  openHostExternalUrl,
+} from '@open-design/host';
 
 export const DEFAULT_DEPLOY_PROVIDER_ID = 'vercel-self';
 export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
@@ -753,8 +755,7 @@ async function decodeConnectorError(resp: Response): Promise<string> {
 
 export async function connectConnector(connectorId: string): Promise<ConnectorActionResult> {
   let authWindow: Window | null = null;
-  const openExternal = window.electronAPI?.openExternal;
-  const useExternalBrowser = typeof openExternal === 'function';
+  const useExternalBrowser = isOpenDesignHostAvailable();
   try {
     if (!useExternalBrowser) {
       authWindow = window.open('about:blank', '_blank');
@@ -783,8 +784,8 @@ export async function connectConnector(connectorId: string): Promise<ConnectorAc
     const json = (await resp.json()) as ConnectorConnectResponse;
     if (json.auth?.kind === 'redirect_required' && json.auth.redirectUrl) {
       if (useExternalBrowser) {
-        const opened = await openExternal(json.auth.redirectUrl);
-        if (!opened) {
+        const opened = await openHostExternalUrl(json.auth.redirectUrl);
+        if (!opened.ok) {
           return {
             connector: json.connector ?? null,
             auth: json.auth,

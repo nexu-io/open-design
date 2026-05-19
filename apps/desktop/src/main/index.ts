@@ -74,6 +74,7 @@ export type DesktopMainOptions = {
    * Node fetch can hit.
    */
   discoverDaemonUrl?: () => Promise<string | null>;
+  preloadPath?: string;
   update?: {
     currentVersion?: string | null;
     downloadRoot?: string | null;
@@ -378,6 +379,7 @@ export async function runDesktopMain(
     desktopAuthSecret,
     discoverUrl: options.discoverWebUrl ?? createWebDiscovery(runtime),
     discoverDaemonUrl: options.discoverDaemonUrl,
+    preloadPath: options.preloadPath,
     // Round-5 (lefarcen P1, mrcfps): runtime hands this back to itself
     // on `503 DESKTOP_AUTH_PENDING` to re-handshake with the daemon
     // (after a daemon restart, or after a missed startup window). The

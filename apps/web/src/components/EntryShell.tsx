@@ -12,9 +12,13 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   defaultScenarioPluginIdForKind,
   type ConnectorDetail,
-  type ImportFolderResponse,
   type InstalledPluginRecord,
 } from '@open-design/contracts';
+import {
+  isOpenDesignHostAvailable,
+  pickAndImportHostProject,
+  type OpenDesignHostProjectImportSuccess,
+} from '@open-design/host';
 import { useT } from '../i18n';
 import { navigate, useRoute } from '../router';
 import type {
@@ -158,7 +162,7 @@ interface Props {
   ) => Promise<PluginShareProjectOutcome>;
   onImportClaudeDesign: (file: File) => Promise<void> | void;
   onImportFolder?: (baseDir: string) => Promise<void> | void;
-  onImportFolderResponse?: (response: ImportFolderResponse) => Promise<void> | void;
+  onImportFolderResponse?: (response: OpenDesignHostProjectImportSuccess) => Promise<void> | void;
   onOpenProject: (id: string) => void;
   onOpenLiveArtifact: (projectId: string, artifactId: string) => void;
   onDeleteProject: (id: string) => void;
@@ -362,21 +366,19 @@ export function EntryShell({
   async function handleChipFolderImport() {
     if (chipImporting) return;
     // PR #974 trust boundary: the renderer cannot pick a folder directly
-    // anymore — the bridge exposes `pickAndImport` instead (atomic
-    // pick + HMAC-gated import). On the web (no electronAPI) or when
-    // the bridge is older, fall back to opening the New Project modal
-    // so the user can paste a baseDir manually.
+    // anymore — the host exposes `pickAndImport` instead (atomic pick +
+    // HMAC-gated import). On the web, fall back to opening the New
+    // Project modal so the user can paste a baseDir manually.
     if (
-      typeof window !== 'undefined' &&
-      typeof window.electronAPI?.pickAndImport === 'function' &&
+      isOpenDesignHostAvailable() &&
       onImportFolderResponse
     ) {
       setChipImporting(true);
       try {
-        const result = await window.electronAPI.pickAndImport();
+        const result = await pickAndImportHostProject();
         if (!result || ('canceled' in result && result.canceled === true)) return;
         if (result.ok === true) {
-          await onImportFolderResponse(result.response);
+          await onImportFolderResponse(result);
           return;
         }
         setFolderImportError(formatPickAndImportFailure(result));

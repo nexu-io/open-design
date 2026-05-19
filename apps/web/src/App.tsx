@@ -61,6 +61,7 @@ import {
   createProject,
   createPluginShareProject,
   deleteProject as deleteProjectApi,
+  getProject,
   importClaudeDesignZip,
   importFolderProject,
   listProjects,
@@ -72,6 +73,7 @@ import type {
   PluginShareAction,
   PluginShareProjectOutcome,
 } from './state/projects';
+import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
 import { useI18n } from './i18n';
 import { liveArtifactTabId } from './types';
 import type {
@@ -916,16 +918,21 @@ export function App() {
     });
   }, []);
 
-  // PR #974: on Electron, the desktop main process owns the picker and
-  // the import POST atomically (`pickAndImport`). The renderer never
-  // sees the path or the HMAC token; it just receives the same
-  // ImportFolderResponse shape that `importFolderProject` would
-  // produce on web, and the App-level state update is identical.
-  const handleImportFolderResponse = useCallback(async (result: import('@open-design/contracts').ImportFolderResponse) => {
-    setProjects((curr) => [result.project, ...curr.filter((p) => p.id !== result.project.id)]);
+  // PR #974: on desktop, the host bridge owns the picker and import POST
+  // atomically. The renderer never sees the path, token, or daemon DTO;
+  // it receives host-owned project identifiers and refreshes project state
+  // through the normal daemon API.
+  const handleImportFolderResponse = useCallback(async (result: OpenDesignHostProjectImportSuccess) => {
+    const project = await getProject(result.projectId);
+    if (project != null) {
+      setProjects((curr) => [project, ...curr.filter((p) => p.id !== project.id)]);
+    } else {
+      const list = await listProjects();
+      setProjects(list);
+    }
     navigate({
       kind: 'project',
-      projectId: result.project.id,
+      projectId: result.projectId,
       fileName: result.entryFile,
     });
   }, []);

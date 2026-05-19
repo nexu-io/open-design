@@ -1962,6 +1962,7 @@ export const zhCN: Dict = {
   'settings.memoryExtractionDelete': '删除',
   'settings.memoryExtractionsClear': '清空',
   'settings.memoryExtractionsClearTitle': '清空整个抽取历史',
+  'settings.memoryExtractionsClearConfirm': '确定要清空整个抽取历史吗？此操作无法撤销。',
   'settings.memoryNoProviderBannerTitle': 'LLM 抽取未启用',
   'settings.memoryNoProviderBannerBody': '未找到可用的 API key，LLM 抽取已跳过。可以在媒体提供商里填入 OpenAI key，或设置环境变量 ANTHROPIC_API_KEY / OPENAI_API_KEY 来启用。启发式抽取仍在运行。',
   'settings.libraryInstall': '安装',
