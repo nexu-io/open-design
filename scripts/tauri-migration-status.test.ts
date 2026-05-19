@@ -178,6 +178,24 @@ test("tauri-migration-status rejects packaged handoff archives without command s
   assert.match(parsed.handoffArchive.problems.join("\n"), /command script checksum sidecar unavailable/);
 });
 
+test("tauri-migration-status rejects packaged handoff archives with archive checksum filename mismatches", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+  const { archivePath, archiveSha256 } = await writeHandoffArchive(handoffDir);
+  await writeFile(`${archivePath}.sha256`, `${archiveSha256}  stale-handoff.tar.gz\n`, "utf8");
+
+  const result = await runStatus(fixture, "--handoff-dir", handoffDir);
+  const parsed = JSON.parse(result.stdout) as { handoffArchive: { current: boolean; problems: string[] } };
+
+  assert.equal(parsed.handoffArchive.current, false);
+  assert.match(parsed.handoffArchive.problems.join("\n"), /checksum sidecar filename mismatch/);
+});
+
 test("tauri-migration-status rejects packaged handoff archives with stale command checksum validation", async (t) => {
   const fixture = await createFixtureRoot(t, {
     checked: [],

@@ -475,13 +475,16 @@ async function readHandoffArchiveStatus(archivePath: string, handoff?: HandoffSt
 
   try {
     const checksum = await readFile(checksumPath, "utf8");
-    const match = checksum.match(/^([0-9a-f]{64})\s+\S+\s*$/);
-    if (match?.[1] == null) {
+    const match = checksum.match(/^([0-9a-f]{64})\s+(\S+)\s*$/);
+    if (match?.[1] == null || match[2] == null) {
       problems.push(`checksum sidecar has invalid format: ${checksumPath}`);
     } else {
       expectedSha256 = match[1];
       if (expectedSha256 !== archiveSha256) {
         problems.push(`archive SHA-256 mismatch: expected ${expectedSha256}, got ${archiveSha256}`);
+      }
+      if (match[2] !== basename(archivePath)) {
+        problems.push(`checksum sidecar filename mismatch: expected ${basename(archivePath)}, got ${match[2]}`);
       }
     }
   } catch (error) {
