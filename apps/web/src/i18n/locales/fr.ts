@@ -1007,7 +1007,6 @@ export const fr: Dict = {
   'manualEdit.altText': "Texte alternatif",
   'manualEdit.label': "Libellé",
   'manualEdit.text': "Texte",
-  'manualEdit.href': "Lien (href)",
   'manualEdit.textColor': "Couleur du texte",
   'manualEdit.background': "Arrière-plan",
   'manualEdit.fontSize': "Taille de police",

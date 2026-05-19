@@ -1481,7 +1481,6 @@ export const zhCN: Dict = {
   'manualEdit.altText': "Alt text",
   'manualEdit.label': "Label",
   'manualEdit.text': "Text",
-  'manualEdit.href': "Href",
   'manualEdit.textColor': "Text color",
   'manualEdit.background': "Background",
   'manualEdit.fontSize': "Font size",

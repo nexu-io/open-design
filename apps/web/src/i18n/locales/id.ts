@@ -1108,7 +1108,6 @@ export const id: Dict = {
   'manualEdit.altText': 'Teks alt',
   'manualEdit.label': 'Label',
   'manualEdit.text': 'Teks',
-  'manualEdit.href': 'Href',
   'manualEdit.textColor': 'Warna teks',
   'manualEdit.background': 'Latar belakang',
   'manualEdit.fontSize': 'Ukuran font',

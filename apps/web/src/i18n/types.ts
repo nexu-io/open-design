@@ -1802,7 +1802,6 @@ export interface Dict {
   'manualEdit.altText': string;
   'manualEdit.label': string;
   'manualEdit.text': string;
-  'manualEdit.href': string;
   'manualEdit.textColor': string;
   'manualEdit.background': string;
   'manualEdit.fontSize': string;

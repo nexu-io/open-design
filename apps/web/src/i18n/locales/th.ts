@@ -931,7 +931,6 @@ export const th: Dict = {
   'manualEdit.altText': "ตัวหนังสือข้อความลับ",
   'manualEdit.label': "ตัวหนังสือข้างหน้า",
   'manualEdit.text': "ข้อความ",
-  'manualEdit.href': "ตัวลิ้งก์ข้ามทาง (Href)",
   'manualEdit.textColor': "ชุดสีตัวหนังสือ",
   'manualEdit.background': "สีแผ่นพื้นหลัง",
   'manualEdit.fontSize': "ความใหญ่ตัวหนังสือ",
