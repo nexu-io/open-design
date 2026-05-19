@@ -232,6 +232,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Re-ran the local QA plan after the CI verifier wiring. `pnpm guard`, `pnpm typecheck`, `pnpm --filter @open-design/web test`, `pnpm --filter @open-design/desktop test`, `pnpm --filter @open-design/packaged test`, `pnpm --filter @open-design/tools-dev test`, `pnpm --filter @open-design/tools-pack test`, `cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml`, `cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml -- -D warnings`, and `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml` passed locally. The platform e2e specs `specs/mac.spec.ts`, `specs/linux.spec.ts`, and `specs/win-tauri.spec.ts` also load successfully on macOS and skip when their host gates are not enabled.
 - 2026-05-20: Retried `git push -u origin codex/electron-to-tauri-migration` after the latest local commits; GitHub still returned `Permission to nexu-io/open-design.git denied to sunseol` with HTTP 403.
 - 2026-05-20: Resolved the Windows/Linux Tauri `--to dir` command-shape decision by making CLI help label `dir` as Electron-only and locking the Tauri path to fail fast with installer-target guidance. `pnpm --filter @open-design/tools-pack test -- tauri-targets`, `pnpm --filter @open-design/tools-pack typecheck`, and `pnpm guard` passed.
+- 2026-05-20: Added the Tauri platform report verifier and verifier test files to CI packaging scope detection. PRs that change `scripts/verify-tauri-platform-gates.ts` or its test now rerun the Windows/Linux Tauri smoke jobs instead of only validating the script locally.
 
 ### Platform Gate Runners
 
@@ -265,7 +266,7 @@ CI equivalents live in `.github/workflows/ci.yml`:
 - `packaged_smoke_tauri_win` runs `scripts/release-smoke.ts win specs/win-tauri.spec.ts` on `windows-latest` with Rust stable, Node 24, pnpm 10.33.2, and NSIS.
 - `packaged_smoke_tauri_linux` runs `scripts/release-smoke.ts linux specs/linux.spec.ts` on `ubuntu-latest` with Rust stable, Node 24, pnpm 10.33.2, Tauri Linux prerequisites, AppImage runtime support, and `xvfb`.
 
-Both jobs run `scripts/verify-tauri-platform-gates.ts` against the generated report before uploading the artifact.
+Both jobs run `scripts/verify-tauri-platform-gates.ts` against the generated report before uploading the artifact. Changes to the verifier script or its tests are packaging-scope changes, so CI reruns the native Tauri smoke jobs when the verifier contract changes.
 
 Do not close the Windows/Linux M4 checkboxes from CI wiring alone. Close them only after the native CI jobs or equivalent host commands produce the required eval/screenshot/stop evidence.
 

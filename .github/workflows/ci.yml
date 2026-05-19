@@ -65,6 +65,8 @@ jobs:
               "e2e/lib/desktop/"
               "e2e/lib/vitest/packaged-report.ts"
               "e2e/scripts/release-smoke.ts"
+              "scripts/verify-tauri-platform-gates.ts"
+              "scripts/verify-tauri-platform-gates.test.ts"
             )
             while IFS= read -r file; do
               for pattern in "${patterns[@]}"; do
@@ -88,7 +90,7 @@ jobs:
               if [[ "$file" == "tools/pack/"* || "$file" == "apps/packaged/"* || "$file" == "apps/desktop/"* || "$file" == "packages/platform/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/sidecar-proto/"* ]]; then
                 tools_pack_tests_required=true
               fi
-              if [[ "$file" == "e2e/lib/vitest/packaged-report.ts" || "$file" == "e2e/scripts/release-smoke.ts" || "$file" == "e2e/specs/win-tauri.spec.ts" || "$file" == "e2e/specs/linux.spec.ts" ]]; then
+              if [[ "$file" == "e2e/lib/vitest/packaged-report.ts" || "$file" == "e2e/scripts/release-smoke.ts" || "$file" == "e2e/specs/win-tauri.spec.ts" || "$file" == "e2e/specs/linux.spec.ts" || "$file" == "scripts/verify-tauri-platform-gates.ts" || "$file" == "scripts/verify-tauri-platform-gates.test.ts" ]]; then
                 tools_pack_tests_required=true
               fi
               if [[ "$file" == "e2e/specs/mac.spec.ts" || "$file" == "e2e/specs/win.spec.ts" || "$file" == "e2e/specs/win-tauri.spec.ts" || "$file" == "e2e/specs/linux.spec.ts" || "$file" == "package.json" || "$file" == "pnpm-lock.yaml" || "$file" == "pnpm-workspace.yaml" || "$file" == ".github/workflows/ci.yml" || "$file" == ".github/workflows/release-beta.yml" ]]; then
