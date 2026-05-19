@@ -1177,7 +1177,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
       agentCliEnv: {},
     });
     expect(rescanButton.disabled).toBe(true);
-    expect(screen.getByText('Scanning...')).toBeTruthy();
+    expect(screen.getByText('Scanning…')).toBeTruthy();
 
     fireEvent.click(rescanButton);
     expect(onRefreshAgents).toHaveBeenCalledTimes(1);
@@ -2437,7 +2437,7 @@ describe('SettingsDialog skills section', () => {
     expect(screen.queryByText('blog-post')).toBeNull();
     expect(screen.getByText('sales-deck')).toBeTruthy();
 
-    fireEvent.change(screen.getByPlaceholderText('Search...'), {
+    fireEvent.change(screen.getByPlaceholderText('Search…'), {
       target: { value: 'sales' },
     });
     expect(screen.getByText('sales-deck')).toBeTruthy();
@@ -2482,7 +2482,7 @@ describe('SettingsDialog skills section', () => {
       expect(screen.getByText('blog-post')).toBeTruthy();
     });
 
-    fireEvent.change(screen.getByPlaceholderText('Search...'), {
+    fireEvent.change(screen.getByPlaceholderText('Search…'), {
       target: { value: 'zzz-no-match' },
     });
     expect(screen.getByText('No items match your search.')).toBeTruthy();

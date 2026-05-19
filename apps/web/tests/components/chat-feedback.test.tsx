@@ -279,7 +279,7 @@ describe('chat assistant feedback', () => {
 
     fireEvent.click(screen.getByLabelText('Understood my request'));
     fireEvent.click(screen.getByLabelText('Other'));
-    fireEvent.change(screen.getByPlaceholderText('Add a short note...'), {
+    fireEvent.change(screen.getByPlaceholderText('Add a short note…'), {
       target: { value: 'The layout is ready to present.' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
@@ -333,11 +333,11 @@ describe('chat assistant feedback', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Helpful' }));
     fireEvent.click(screen.getByLabelText('Other'));
-    fireEvent.change(screen.getByPlaceholderText('Add a short note...'), {
+    fireEvent.change(screen.getByPlaceholderText('Add a short note…'), {
       target: { value: 'This note should not be submitted.' },
     });
     fireEvent.click(screen.getByLabelText('Other'));
-    expect(screen.queryByPlaceholderText('Add a short note...')).toBeNull();
+    expect(screen.queryByPlaceholderText('Add a short note…')).toBeNull();
 
     fireEvent.click(screen.getByLabelText('Understood my request'));
     fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
