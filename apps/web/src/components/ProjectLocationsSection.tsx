@@ -178,7 +178,7 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
       {builtIn ? (
         <div className={`project-location-card is-built-in${effectiveDefaultLocationId === builtIn.id ? ' is-default' : ''}`}>
           <div>
-            <strong>{builtIn.name}</strong>
+            <strong>{t('newproj.locationDefault')}</strong>
             <code>{builtIn.path}</code>
           </div>
           <label className="project-location-default-control">
