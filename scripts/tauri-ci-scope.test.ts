@@ -7,6 +7,8 @@ const repoRoot = resolve(import.meta.dirname, "..");
 const ciWorkflowPath = join(repoRoot, ".github", "workflows", "ci.yml");
 
 const tauriEvidencePaths = [
+  "scripts/advance-tauri-migration-m4-m5.ts",
+  "scripts/advance-tauri-migration-m4-m5.test.ts",
   "scripts/apply-tauri-migration-m5.ts",
   "scripts/apply-tauri-migration-m5.test.ts",
   "scripts/create-tauri-migration-bundle.ts",
