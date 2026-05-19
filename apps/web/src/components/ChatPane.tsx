@@ -644,6 +644,15 @@ export function ChatPane({
       subtree: true,
       characterData: true,
     });
+    // PinnedTodoSlot lives outside the chat-log subtree (it is a sibling of
+    // .chat-log-wrap inside .pane). The MutationObserver above only fires for
+    // changes inside el, so it cannot detect the slot mounting or unmounting.
+    // Watch the nearest common ancestor (.pane) with childList-only to catch
+    // those transitions and keep syncPinnedTodo current.
+    const paneEl = el.parentElement?.parentElement ?? null;
+    if (paneEl && mutationObserver) {
+      mutationObserver.observe(paneEl, { childList: true });
+    }
 
     return () => {
       if (followFrame !== null) cancelAnimationFrame(followFrame);
