@@ -749,7 +749,7 @@ export async function testProviderConnection(
       ...requestInit,
       body: JSON.stringify(call.body),
     });
-    const latencyMs = Date.now() - start;
+    let latencyMs = Date.now() - start;
     if (
       !response.ok &&
       call.retryBodyOnUnsupportedMaxTokens !== undefined
@@ -768,6 +768,7 @@ export async function testProviderConnection(
           ...requestInit,
           body: JSON.stringify(call.retryBodyOnUnsupportedMaxTokens),
         });
+        latencyMs = Date.now() - start;
       } else {
         const redactedDetail = redactSecrets(detailText.slice(0, 240), [
           input.apiKey,
