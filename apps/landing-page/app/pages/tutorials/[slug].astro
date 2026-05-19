@@ -33,7 +33,8 @@ const { entry } = Astro.props;
 const { Content } = await render(entry);
 const sourceUrl = `https://github.com/nexu-io/open-design/blob/main/apps/landing-page/app/content/tutorials/${entry.id}.md`;
 const youtubeUrl = `https://www.youtube.com/watch?v=${entry.data.youtubeId}`;
-const embedUrl = `https://www.youtube-nocookie.com/embed/${entry.data.youtubeId}?rel=0&modestbranding=1`;
+const thumbnailUrl =
+  entry.data.thumbnail ?? `https://i.ytimg.com/vi/${entry.data.youtubeId}/maxresdefault.jpg`;
 
 const counts = await getCatalogCounts();
 const github = await getGithubRepoMeta();
@@ -86,16 +87,32 @@ const fmtDuration = (seconds: number) => {
           <div class='container'>
             <a class='tut-back' href='/tutorials/'>← Back to Tutorials</a>
 
-            <div class='tut-player'>
-              <iframe
-                src={embedUrl}
-                title={entry.data.title}
-                loading='lazy'
-                allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share'
-                referrerpolicy='strict-origin-when-cross-origin'
-                allowfullscreen
-              ></iframe>
-            </div>
+            <a
+              class='tut-player'
+              href={youtubeUrl}
+              target='_blank'
+              rel='noreferrer noopener'
+              aria-label={`Watch "${entry.data.title}" on YouTube`}
+            >
+              <img
+                class='tut-player-thumb'
+                src={thumbnailUrl}
+                alt={`Thumbnail for ${entry.data.title}`}
+                loading='eager'
+              />
+              <span class='tut-player-overlay' aria-hidden='true'>
+                <span class='tut-player-button'>
+                  <svg viewBox='0 0 68 48' width='68' height='48'>
+                    <path
+                      d='M66.52 7.74c-.78-2.93-2.49-5.41-5.42-6.19C55.79.13 34 0 34 0S12.21.13 6.9 1.55c-2.93.78-4.63 3.26-5.42 6.19C.06 13.05 0 24 0 24s.06 10.95 1.48 16.26c.78 2.93 2.49 5.41 5.42 6.19C12.21 47.87 34 48 34 48s21.79-.13 27.1-1.55c2.93-.78 4.64-3.26 5.42-6.19C67.94 34.95 68 24 68 24s-.06-10.95-1.48-16.26z'
+                      fill='#cc0000'
+                    />
+                    <path d='M27 34V14l18 10z' fill='#fff' />
+                  </svg>
+                </span>
+                <span class='tut-player-cta'>Watch on YouTube ↗</span>
+              </span>
+            </a>
 
             <div class='tut-detail-head'>
               <span class='tut-card-cat'>
@@ -177,6 +194,7 @@ const fmtDuration = (seconds: number) => {
       }
       .tut-player {
         position: relative;
+        display: block;
         width: 100%;
         aspect-ratio: 16 / 9;
         background: #000;
@@ -184,14 +202,72 @@ const fmtDuration = (seconds: number) => {
         box-shadow: var(--shadow);
         margin-bottom: 36px;
         overflow: hidden;
+        text-decoration: none;
+        cursor: pointer;
       }
-      .tut-player iframe {
+      .tut-player-thumb {
         position: absolute;
         inset: 0;
         width: 100%;
         height: 100%;
-        border: 0;
-        display: block;
+        object-fit: cover;
+        object-position: center;
+        filter: saturate(0.96) contrast(1.02);
+        transition: transform 320ms cubic-bezier(0.23, 1, 0.32, 1);
+      }
+      .tut-player:hover .tut-player-thumb {
+        transform: scale(1.02);
+      }
+      .tut-player-overlay {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        background: linear-gradient(
+          180deg,
+          rgba(21, 20, 15, 0.05) 0%,
+          rgba(21, 20, 15, 0.25) 60%,
+          rgba(21, 20, 15, 0.55) 100%
+        );
+        transition: background 200ms ease;
+      }
+      .tut-player:hover .tut-player-overlay {
+        background: linear-gradient(
+          180deg,
+          rgba(21, 20, 15, 0.1) 0%,
+          rgba(21, 20, 15, 0.32) 60%,
+          rgba(21, 20, 15, 0.62) 100%
+        );
+      }
+      .tut-player-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: transform 200ms cubic-bezier(0.23, 1, 0.32, 1), filter 200ms ease;
+        filter: drop-shadow(0 8px 22px rgba(0, 0, 0, 0.45));
+      }
+      .tut-player:hover .tut-player-button {
+        transform: scale(1.06);
+      }
+      .tut-player-cta {
+        font-family: var(--sans);
+        font-weight: 600;
+        font-size: 13px;
+        letter-spacing: 0.04em;
+        color: var(--paper);
+        padding: 8px 14px;
+        border: 1px solid rgba(255, 255, 255, 0.32);
+        border-radius: 999px;
+        background: rgba(21, 20, 15, 0.42);
+        backdrop-filter: blur(4px);
+        transition: background 200ms ease, border-color 200ms ease;
+      }
+      .tut-player:hover .tut-player-cta {
+        background: rgba(21, 20, 15, 0.62);
+        border-color: rgba(255, 255, 255, 0.5);
       }
       .tut-detail-head {
         margin-bottom: 32px;
