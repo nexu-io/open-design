@@ -132,9 +132,15 @@ export const it: Dict = {
   'settings.themeLight': 'Chiaro',
   'settings.themeDark': 'Scuro',
   'settings.modelPicker': 'Modello',
+  'settings.modelSourceLive': 'Live from CLI',
+  'settings.modelSourceFallback': 'Fallback list',
   'settings.reasoningPicker': 'Sforzo di ragionamento',
   'settings.modelPickerHint':
     'Recuperato dalla CLI quando espone un comando `models`. "Predefinito" lascia la scelta alla configurazione della CLI; "Personalizzato…" ti permette di inserire qualsiasi identificatore di modello accettato dalla CLI.',
+  'settings.modelPickerLiveHint':
+    'Models were refreshed from the installed CLI. Default still uses the CLI config.',
+  'settings.modelPickerFallbackHint':
+    'Using Open Design fallback models because the installed CLI did not return live model metadata. Rescan after updating or logging in to the CLI.',
   'settings.cliEnvTitle': 'Posizioni di configurazione CLI',
   'settings.cliEnvHint':
     'Imposta directory di configurazione non segrete per esecuzioni di app impacchettate e rilevamento agenti.',
@@ -170,6 +176,9 @@ export const it: Dict = {
   'settings.privacyConsentFooter': 'Puoi modificare entrambe queste opzioni in qualsiasi momento in Impostazioni → Privacy. Non carichiamo mai i contenuti dei tuoi file di artefatti generati.',
   'settings.privacyConsentShare': 'Condividi i dati di utilizzo',
   'settings.privacyConsentDecline': 'Non condividere',
+  'settings.privacyConsentAccept': 'I get it',
+  'settings.privacyConsentBannerFooter':
+    'Data sharing is on by default. You can turn it off any time in Settings → Privacy. We never upload the contents of your generated artifact files.',
   'settings.privacyConsentPolicyLink': "Leggi l'informativa sulla privacy",
   'settings.privacyMetrics': 'Metriche anonime',
   'settings.privacyMetricsHint': 'Conteggi di esecuzione, utilizzo di token, tasso di errore, durata. Nessun prompt, nessun dato di progetto.',

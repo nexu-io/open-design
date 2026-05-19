@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Neutral Modern typography</title>
+    <link rel="stylesheet" href="../tokens.css" />
+    <style>
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+      }
+      main {
+        max-width: 860px;
+        margin: 0 auto;
+        padding: var(--space-12) var(--space-6);
+      }
+      .specimen {
+        display: grid;
+        grid-template-columns: 120px 1fr;
+        gap: var(--space-5);
+        align-items: baseline;
+        padding: var(--space-5) 0;
+        border-bottom: 1px solid var(--border-soft);
+      }
+      .label {
+        color: var(--muted);
+        font-size: var(--text-sm);
+      }
+      .display {
+        font-family: var(--font-display);
+        font-size: var(--text-3xl);
+        line-height: var(--leading-tight);
+        letter-spacing: var(--tracking-display);
+      }
+      .heading {
+        font-family: var(--font-display);
+        font-size: var(--text-2xl);
+        line-height: var(--leading-tight);
+      }
+      .body {
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+      }
+      .small {
+        color: var(--muted);
+        font-size: var(--text-sm);
+        line-height: var(--leading-body);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="specimen"><div class="label">Display</div><div class="display">Quiet product confidence</div></section>
+      <section class="specimen"><div class="label">Heading</div><div class="heading">A scannable workspace heading</div></section>
+      <section class="specimen"><div class="label">Body</div><div class="body">Neutral Modern keeps body copy plain, compact, and easy to scan across dense product surfaces.</div></section>
+      <section class="specimen"><div class="label">Small</div><div class="small">Status text, table metadata, and secondary helper copy use the muted ramp.</div></section>
+    </main>
+  </body>
+</html>

@@ -117,6 +117,10 @@ async function main(): Promise<void> {
     async discoverDaemonUrl() {
       return sidecars.daemon.url;
     },
+    update: {
+      currentVersion: config.appVersion,
+      downloadRoot: paths.updateRoot,
+    },
   });
 }
 

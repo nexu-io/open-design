@@ -23,6 +23,7 @@ const ICON_EXT: Record<string, 'svg' | 'png'> = {
   deepseek: 'svg',
   mimo: 'svg',
   hermes: 'svg',
+  'grok-build': 'svg',
   kimi: 'svg',
   pi: 'svg',
   kiro: 'svg',
@@ -46,6 +47,7 @@ const MONO_ICONS = new Set([
   'mimo',
   'pi',
   'kilo',
+  'grok-build',
 ]);
 
 export function AgentIcon({ id, size = 36, className }: Props) {

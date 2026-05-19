@@ -136,9 +136,15 @@ export const de: Dict = {
   'settings.themeDark': 'Dunkel',
   'settings.agentModelHead': 'Modell für:',
   'settings.modelPicker': 'Modell',
+  'settings.modelSourceLive': 'Live from CLI',
+  'settings.modelSourceFallback': 'Fallback list',
   'settings.reasoningPicker': 'Reasoning-Aufwand',
   'settings.modelPickerHint':
     'Wird aus der CLI geladen, wenn sie einen `models`-Befehl anbietet. „Standard“ überlässt die Auswahl der CLI-Konfiguration; mit „Benutzerdefiniert…“ können Sie jede von der CLI akzeptierte Modell-ID eingeben.',
+  'settings.modelPickerLiveHint':
+    'Models were refreshed from the installed CLI. Default still uses the CLI config.',
+  'settings.modelPickerFallbackHint':
+    'Using Open Design fallback models because the installed CLI did not return live model metadata. Rescan after updating or logging in to the CLI.',
   'settings.cliEnvTitle': 'CLI config locations',
   'settings.cliEnvHint':
     'Set non-secret config directories for packaged app runs and agent detection.',
@@ -178,6 +184,9 @@ export const de: Dict = {
   'settings.privacyConsentFooter': 'You can change either of these any time in Settings → Privacy. We never upload the contents of your generated artifact files.',
   'settings.privacyConsentShare': 'Share usage data',
   'settings.privacyConsentDecline': "Don't share",
+  'settings.privacyConsentAccept': 'I get it',
+  'settings.privacyConsentBannerFooter':
+    'Data sharing is on by default. You can turn it off any time in Settings → Privacy. We never upload the contents of your generated artifact files.',
   'settings.privacyConsentPolicyLink': 'Read the privacy policy',
   'settings.privacyMetrics': 'Anonymous metrics',
   'settings.privacyMetricsHint': 'Run counts, token usage, error rate, duration. No prompts, no project data.',

@@ -7,14 +7,22 @@
 // composed with the recent-projects strip and plugins section
 // without owning their data lifecycles.
 
-import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type {
   ClipboardEvent as ReactClipboardEvent,
   DragEvent as ReactDragEvent,
   ForwardedRef,
   KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
-import type { InputFieldSpec, InstalledPluginRecord, McpServerConfig } from '@open-design/contracts';
+import type { ConnectorDetail, InputFieldSpec, InstalledPluginRecord, McpServerConfig } from '@open-design/contracts';
 import type { SkillSummary } from '../types';
 import { Icon, type IconName } from './Icon';
 import { PluginInputsForm } from './PluginInputsForm';
@@ -28,6 +36,7 @@ import {
   inlineMentionToken,
   type InlineMentionEntity,
 } from '../utils/inlineMentions';
+import { useT } from '../i18n';
 
 export interface HomeHeroSubmitHandler {
   (): void;
@@ -52,6 +61,8 @@ interface Props {
   pluginInputTemplate?: string | null;
   onPluginInputValuesChange?: (values: Record<string, unknown>) => void;
   onPluginInputValidityChange?: (valid: boolean) => void;
+  inlineEditableInputNames?: string[];
+  showPluginInputsForm?: boolean;
   stagedFiles?: File[];
   onAddFiles?: (files: File[]) => void;
   onRemoveFile?: (index: number) => void;
@@ -61,18 +72,20 @@ interface Props {
   skillsLoading?: boolean;
   mcpOptions?: McpServerConfig[];
   mcpLoading?: boolean;
+  connectorOptions?: ConnectorDetail[];
   pendingPluginId: string | null;
   pendingChipId: string | null;
   submitDisabled?: boolean;
   onPickPlugin: (record: InstalledPluginRecord, nextPrompt: string | null) => void;
   onPickSkill?: (skill: SkillSummary, nextPrompt: string | null) => void;
   onPickMcp?: (server: McpServerConfig, nextPrompt: string) => void;
+  onPickConnector?: (connector: ConnectorDetail, nextPrompt: string) => void;
   onPickChip: (chip: HomeHeroChip) => void;
   contextItemCount: number;
   error: string | null;
 }
 
-type HomeMentionTab = 'all' | 'plugins' | 'skills' | 'mcp';
+type HomeMentionTab = 'all' | 'plugins' | 'skills' | 'mcp' | 'connectors';
 
 interface HomeMentionOption {
   id: string;
@@ -110,6 +123,9 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
     pluginInputValues = {},
     pluginInputTemplate = null,
     onPluginInputValuesChange = () => undefined,
+    onPluginInputValidityChange = () => undefined,
+    inlineEditableInputNames = [],
+    showPluginInputsForm = true,
     stagedFiles = [],
     onAddFiles = () => undefined,
     onRemoveFile = () => undefined,
@@ -119,30 +135,34 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
     skillsLoading = false,
     mcpOptions = [],
     mcpLoading = false,
+    connectorOptions = [],
     pendingPluginId,
     pendingChipId,
     submitDisabled = false,
     onPickPlugin,
     onPickSkill = () => undefined,
     onPickMcp = () => undefined,
+    onPickConnector = () => undefined,
     onPickChip,
     contextItemCount,
     error,
   },
   ref,
 ) {
+  const t = useT();
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [mentionTab, setMentionTab] = useState<HomeMentionTab>('all');
   const [hoveredPlugin, setHoveredPlugin] = useState<InstalledPluginRecord | null>(null);
   const [promptScrollTop, setPromptScrollTop] = useState(0);
   const [dragActive, setDragActive] = useState(false);
+  const [openInlineInputName, setOpenInlineInputName] = useState<string | null>(null);
   const composingRef = useRef(false);
   const inputElementRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const canSubmit = (prompt.trim().length > 0 || stagedFiles.length > 0) && !submitDisabled;
   const placeholder = activePluginTitle || activeSkillTitle
-    ? 'Edit the example query or write your own…'
-    : 'Describe a design, paste or drop files, or @search plugins, skills, or MCP…';
+    ? t('homeHero.placeholderActive')
+    : t('homeHero.placeholder');
   const mention = getContextMention(prompt);
   const mentionActive = Boolean(mention);
   const mentionQuery = mention?.query ?? '';
@@ -167,27 +187,36 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
         : [],
     [mcpOptions, mentionActive, mentionQuery],
   );
+  const connectorMatches = useMemo(
+    () =>
+      mentionActive
+        ? connectorOptions.filter((connector) => connectorMatchesQuery(connector, mentionQuery)).slice(0, 6)
+        : [],
+    [connectorOptions, mentionActive, mentionQuery],
+  );
   const pickerOpen = mentionActive;
   const tabs: Array<{ id: HomeMentionTab; label: string; count: number }> = [
-    { id: 'all', label: 'All', count: pluginMatches.length + skillMatches.length + mcpMatches.length },
-    { id: 'plugins', label: 'Plugins', count: pluginMatches.length },
-    { id: 'skills', label: 'Skills', count: skillMatches.length },
+    { id: 'all', label: t('common.all'), count: pluginMatches.length + skillMatches.length + mcpMatches.length + connectorMatches.length },
+    { id: 'plugins', label: t('entry.navPlugins'), count: pluginMatches.length },
+    { id: 'skills', label: t('homeHero.skills'), count: skillMatches.length },
     { id: 'mcp', label: 'MCP', count: mcpMatches.length },
+    { id: 'connectors', label: 'Connectors', count: connectorMatches.length },
   ];
   const showPlugins = mentionTab === 'all' || mentionTab === 'plugins';
   const showSkills = mentionTab === 'all' || mentionTab === 'skills';
   const showMcp = mentionTab === 'all' || mentionTab === 'mcp';
+  const showConnectors = mentionTab === 'all' || mentionTab === 'connectors';
   const visibleSections: HomeMentionSection[] = [
     showPlugins
       ? {
           id: 'plugins',
-          label: 'Plugins',
+          label: t('entry.navPlugins'),
           options: pluginMatches.map((plugin) => ({
             id: `plugin-${plugin.id}`,
             icon: 'sparkles',
             title: plugin.title,
             description: plugin.manifest?.description ?? plugin.id,
-            meta: pendingPluginId === plugin.id ? 'Applying…' : getPluginSourceLabel(plugin),
+            meta: pendingPluginId === plugin.id ? t('homeHero.applying') : getPluginSourceLabel(plugin),
             pluginRecord: plugin,
             disabled: pendingPluginId !== null,
             onPick: () => pickPlugin(plugin),
@@ -197,13 +226,13 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
     showSkills
       ? {
           id: 'skills',
-          label: 'Skills',
+          label: t('homeHero.skills'),
           options: skillMatches.map((skill) => ({
             id: `skill-${skill.id}`,
             icon: skill.id === activeSkillId ? 'check' : 'file',
             title: skill.name,
             description: skill.description || skill.id,
-            meta: skill.id === activeSkillId ? 'Active' : skill.mode,
+            meta: skill.id === activeSkillId ? t('common.active') : skill.mode,
             onPick: () => pickSkill(skill),
           })),
         }
@@ -222,6 +251,20 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
           })),
         }
       : null,
+    showConnectors
+      ? {
+          id: 'connectors',
+          label: 'Connectors',
+          options: connectorMatches.map((connector) => ({
+            id: `connector-${connector.id}`,
+            icon: 'link',
+            title: connector.name,
+            description: connector.description || connector.provider || connector.id,
+            meta: connector.accountLabel ?? connector.provider,
+            onPick: () => pickConnector(connector),
+          })),
+        }
+      : null,
   ].filter((section): section is HomeMentionSection => Boolean(section?.options.length));
   const visiblePickerOptions = visibleSections.flatMap((section) => section.options);
   const visibleLoading =
@@ -237,6 +280,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
         activeSkillTitle,
         mcpOptions,
         pluginOptions,
+        connectorOptions,
         selectedPluginContexts,
         skillOptions,
       }),
@@ -246,6 +290,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
       activeSkillTitle,
       mcpOptions,
       pluginOptions,
+      connectorOptions,
       selectedPluginContexts,
       skillOptions,
     ],
@@ -270,11 +315,35 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
     () => new Map(pluginInputFields.map((field) => [field.name, field])),
     [pluginInputFields],
   );
-  // Inline pills in the overlay are read-only visual markers — editing
-  // happens in the PluginInputsForm below so the textarea's caret never
-  // drifts away from where the user clicked. Surface every field, not
-  // just the ones the template doesn't reference inline.
-  const remainingInputFields = pluginInputFields;
+  const editableInputNames = useMemo(
+    () => new Set(inlineEditableInputNames),
+    [inlineEditableInputNames],
+  );
+  const openInlineInputField = openInlineInputName
+    ? fieldByName.get(openInlineInputName) ?? null
+    : null;
+  // Filter out inputs whose values are already shown (and editable
+  // by clicking into the textarea or the inline pill) inline in the
+  // prompt template. Otherwise the structured form below duplicates
+  // every slot pill above it — five identical labelled inputs for a
+  // plugin like Prototype, which made the chat box look like it had
+  // grown a second composer. Keep the form for plugin inputs that
+  // are NOT in the template (e.g. a "Run in background" toggle that
+  // never appears in the prompt text).
+  const templateFieldKeys = useMemo(() => {
+    if (!pluginInputTemplate) return new Set<string>();
+    const keys = new Set<string>();
+    INPUT_PLACEHOLDER_PATTERN.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = INPUT_PLACEHOLDER_PATTERN.exec(pluginInputTemplate)) !== null) {
+      if (match[1]) keys.add(match[1]);
+    }
+    return keys;
+  }, [pluginInputTemplate]);
+  const remainingInputFields = useMemo(
+    () => pluginInputFields.filter((field) => !templateFieldKeys.has(field.name)),
+    [pluginInputFields, templateFieldKeys],
+  );
 
   useEffect(() => {
     if (selectedIndex >= visiblePickerOptions.length) setSelectedIndex(0);
@@ -285,8 +354,26 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
   }, [pickerOpen]);
 
   useEffect(() => {
+    setOpenInlineInputName(null);
+  }, [activeChipId]);
+
+  useEffect(() => {
     setPromptScrollTop(inputElementRef.current?.scrollTop ?? 0);
   }, [prompt, promptOverlayParts]);
+
+  // Auto-grow the prompt textarea so the chat box height tracks the
+  // number of lines the user has typed. We never scroll the textarea
+  // internally (CSS sets `overflow: hidden` and `resize: none`), so
+  // the only height source of truth is `scrollHeight`. Resetting to
+  // `auto` before measuring forces the browser to recompute against
+  // the actual content, otherwise shrinking the prompt would leave
+  // the textarea stuck at its previous taller size.
+  useLayoutEffect(() => {
+    const el = inputElementRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [prompt]);
 
   const setInputRef = useCallback(
     (node: HTMLTextAreaElement | null) => {
@@ -321,6 +408,21 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
     onPickMcp(server, nextPrompt);
   }
 
+  function pickConnector(connector: ConnectorDetail) {
+    const nextPrompt = mention
+      ? replaceMentionTokenWithText(
+          prompt,
+          mention,
+          inlineMentionToken(connector.name),
+        )
+      : prompt;
+    onPickConnector(connector, nextPrompt);
+  }
+
+  function updatePluginInput(name: string, value: unknown) {
+    onPluginInputValuesChange({ ...pluginInputValues, [name]: value });
+  }
+
   function handleFiles(files: File[]) {
     if (files.length === 0) return;
     onAddFiles(files);
@@ -349,17 +451,19 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
 
   return (
     <section className="home-hero" data-testid="home-hero">
-      <div className="home-hero__brand" aria-hidden>
-        <span className="home-hero__brand-mark">
-          <img src="/app-icon.svg" alt="" draggable={false} />
-        </span>
-        <span className="home-hero__brand-name">Open Design</span>
-      </div>
-      <h1 className="home-hero__title">What do you want to design?</h1>
+      <h1 className="home-hero__title">{t('homeHero.title')}</h1>
       <p className="home-hero__subtitle">
-        Pick a plugin below to load an example query, or just type freely
-        and press <kbd>Enter</kbd>.
+        {t('homeHero.subtitlePrefix')}{' '}
+        <kbd>Enter</kbd>.
       </p>
+
+      <TypeTabBar
+        activeChipId={activeChipId}
+        pendingChipId={pendingChipId}
+        pendingPluginId={pendingPluginId}
+        pluginsLoading={pluginsLoading}
+        onPickChip={onPickChip}
+      />
 
       <div
         className={`home-hero__input-card${dragActive ? ' is-drag-active' : ''}`}
@@ -390,7 +494,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
                   type="button"
                   className="home-hero__active-chip-body"
                   onClick={() => onOpenPluginDetails(plugin)}
-                  title={`Plugin: ${plugin.title}`}
+                  title={t('homeHero.pluginTitle', { title: plugin.title })}
                 >
                   <span className="home-hero__active-dot" aria-hidden />
                   <span>@{plugin.title}</span>
@@ -399,8 +503,8 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
                   type="button"
                   className="home-hero__active-clear"
                   onClick={() => onRemovePluginContext(plugin.id)}
-                  aria-label={`Remove plugin ${plugin.title}`}
-                  title="Remove plugin"
+                  aria-label={t('homeHero.removePluginAria', { title: plugin.title })}
+                  title={t('homeHero.removePlugin')}
                 >
                   ×
                 </button>
@@ -421,17 +525,17 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
                   }}
                   onClick={openActivePluginDetails}
                   disabled={!activePluginRecord}
-                  title={activePluginRecord ? `Plugin: ${activePluginRecord.title}` : undefined}
+                  title={activePluginRecord ? t('homeHero.pluginTitle', { title: activePluginRecord.title }) : undefined}
                 >
                   <span className="home-hero__active-dot" aria-hidden />
-                  <span>Plugin: {activePluginTitle}</span>
+                  <span>{t('homeHero.pluginPrefix', { title: activePluginTitle })}</span>
                 </button>
                 <button
                   type="button"
                   className="home-hero__active-clear"
                   onClick={onClearActivePlugin}
-                  aria-label="Clear active plugin"
-                  title="Clear active plugin"
+                  aria-label={t('homeHero.clearActivePlugin')}
+                  title={t('homeHero.clearActivePlugin')}
                 >
                   ×
                 </button>
@@ -443,13 +547,13 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
                 data-testid="home-hero-active-skill"
               >
                 <span className="home-hero__active-dot" aria-hidden />
-                <span>Skill: {activeSkillTitle}</span>
+                <span>{t('homeHero.skillPrefix', { title: activeSkillTitle })}</span>
                 <button
                   type="button"
                   className="home-hero__active-clear"
                   onClick={onClearActiveSkill}
-                  aria-label="Clear active skill"
-                  title="Clear active skill"
+                  aria-label={t('homeHero.clearActiveSkill')}
+                  title={t('homeHero.clearActiveSkill')}
                 >
                   ×
                 </button>
@@ -457,7 +561,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
             ) : null}
             {contextItemCount > 0 ? (
               <span className="home-hero__context-summary">
-                {contextItemCount} context items resolved
+                {t('homeHero.contextItemsResolved', { n: contextItemCount })}
               </span>
             ) : null}
           </div>
@@ -484,6 +588,9 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
                         value={part.key ? pluginInputValues[part.key] : undefined}
                         fallbackText={part.text}
                         filled={part.filled === true}
+                        editable={Boolean(part.key && editableInputNames.has(part.key))}
+                        open={part.key === openInlineInputName}
+                        onOpenChange={(open) => setOpenInlineInputName(open ? part.key ?? null : null)}
                       />
                     ) : (
                       part.kind === 'mention' ? (
@@ -568,11 +675,27 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
               aria-expanded={pickerOpen}
             />
           </div>
-          {remainingInputFields.length > 0 ? (
+          {openInlineInputField ? (
+            <InlinePromptOptionPopover
+              field={openInlineInputField}
+              value={pluginInputValues[openInlineInputField.name]}
+              onChange={(value) => {
+                onPluginInputValuesChange({
+                  ...pluginInputValues,
+                  [openInlineInputField.name]: value,
+                });
+                if (openInlineInputField.type !== 'string') {
+                  setOpenInlineInputName(null);
+                }
+              }}
+            />
+          ) : null}
+          {showPluginInputsForm && remainingInputFields.length > 0 ? (
             <PluginInputsForm
               fields={remainingInputFields}
               values={pluginInputValues}
               onChange={onPluginInputValuesChange}
+              onValidityChange={onPluginInputValidityChange}
             />
           ) : null}
         </div>
@@ -595,8 +718,8 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
                   type="button"
                   className="home-hero__attachment-remove"
                   onClick={() => onRemoveFile(index)}
-                  aria-label={`Remove ${file.name}`}
-                  title="Remove file"
+                  aria-label={t('chat.removeAria', { name: file.name })}
+                  title={t('homeHero.removeFile')}
                 >
                   <Icon name="close" size={10} />
                 </button>
@@ -609,10 +732,10 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
             id="home-hero-context-picker"
             className="home-hero__plugin-picker"
             role="listbox"
-            aria-label="Context search results"
+            aria-label={t('homeHero.contextSearchResults')}
             data-testid="home-hero-plugin-picker"
           >
-            <div className="home-hero__mention-tabs" role="tablist" aria-label="Context surfaces">
+            <div className="home-hero__mention-tabs" role="tablist" aria-label={t('homeHero.contextSurfaces')}>
               {tabs.map((item) => (
                 <button
                   key={item.id}
@@ -632,14 +755,14 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
               ))}
             </div>
             {visibleLoading && visiblePickerOptions.length === 0 ? (
-              <div className="home-hero__plugin-picker-empty">Loading context…</div>
+              <div className="home-hero__plugin-picker-empty">{t('homeHero.loadingContext')}</div>
             ) : null}
             {!visibleLoading && visiblePickerOptions.length === 0 ? (
               <div className="home-hero__plugin-picker-empty">
                 {mentionQuery ? (
-                  <>No results for “{mentionQuery}”.</>
+                  <>{t('homeHero.noResults', { query: mentionQuery })}</>
                 ) : (
-                  <>Search plugins, skills, and MCP servers.</>
+                  <>{t('homeHero.searchPrompt')}</>
                 )}
               </div>
             ) : null}
@@ -696,7 +819,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
                   <p>{hoveredPlugin.manifest?.description ?? hoveredPlugin.id}</p>
                 </div>
                 <div className="home-hero__plugin-hover-meta">
-                  <span>{(hoveredPlugin.manifest?.od?.inputs ?? []).length} parameters</span>
+                  <span>{t('homeHero.parameters', { n: (hoveredPlugin.manifest?.od?.inputs ?? []).length })}</span>
                   {getPluginQueryPreview(hoveredPlugin) ? (
                     <span>{getPluginQueryPreview(hoveredPlugin)}</span>
                   ) : null}
@@ -706,7 +829,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => onOpenPluginDetails(hoveredPlugin)}
                 >
-                  Details
+                  {t('homeHero.details')}
                 </button>
               </div>
             ) : null}
@@ -731,13 +854,13 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
               className="home-hero__attach"
               data-testid="home-hero-attach"
               onClick={() => fileInputRef.current?.click()}
-              title="Attach files"
-              aria-label="Attach files"
+              title={t('chat.attachAria')}
+              aria-label={t('chat.attachAria')}
             >
-              <Icon name="attach" size={14} />
+              <Icon name="attach" size={18} />
             </button>
             <span className="home-hero__hint">
-              <kbd>↵</kbd> to run · <kbd>Shift</kbd>+<kbd>↵</kbd> for new line
+              <kbd>↵</kbd> {t('homeHero.toRun')} · <kbd>Shift</kbd>+<kbd>↵</kbd> {t('homeHero.forNewLine')}
             </span>
           </div>
           <button
@@ -746,10 +869,10 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
             data-testid="home-hero-submit"
             onClick={onSubmit}
             disabled={!canSubmit}
-            title={canSubmit ? 'Run' : 'Type something to run'}
-            aria-label="Run"
+            title={canSubmit ? t('homeHero.run') : t('homeHero.typeSomethingToRun')}
+            aria-label={t('homeHero.run')}
           >
-            <Icon name="arrow-up" size={18} />
+            <Icon name="arrow-up" size={22} />
           </button>
         </div>
       </div>
@@ -757,18 +880,9 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
       <div
         className="home-hero__rail"
         role="toolbar"
-        aria-label="Pick a project category or starter shortcut"
+        aria-label={t('homeHero.railAria')}
         data-testid="home-hero-rail"
       >
-        <RailGroup
-          group="create"
-          activeChipId={activeChipId}
-          pendingChipId={pendingChipId}
-          pendingPluginId={pendingPluginId}
-          pluginsLoading={pluginsLoading}
-          onPickChip={onPickChip}
-        />
-        <span className="home-hero__rail-divider" aria-hidden />
         <RailGroup
           group="migrate"
           activeChipId={activeChipId}
@@ -958,6 +1072,7 @@ function buildHomeMentionEntities({
   activePluginRecord,
   activeSkillId,
   activeSkillTitle,
+  connectorOptions,
   mcpOptions,
   pluginOptions,
   selectedPluginContexts,
@@ -966,6 +1081,7 @@ function buildHomeMentionEntities({
   activePluginRecord: InstalledPluginRecord | null;
   activeSkillId: string | null;
   activeSkillTitle: string | null;
+  connectorOptions: ConnectorDetail[];
   mcpOptions: McpServerConfig[];
   pluginOptions: InstalledPluginRecord[];
   selectedPluginContexts: InstalledPluginRecord[];
@@ -1042,6 +1158,24 @@ function buildHomeMentionEntities({
       });
     }
   }
+  for (const connector of connectorOptions) {
+    entities.push({
+      id: connector.id,
+      kind: 'connector',
+      label: connector.name,
+      token: inlineMentionToken(connector.name),
+      title: `Connector: ${connector.name}`,
+    });
+    if (connector.id !== connector.name) {
+      entities.push({
+        id: connector.id,
+        kind: 'connector',
+        label: connector.id,
+        token: inlineMentionToken(connector.id),
+        title: `Connector: ${connector.name}`,
+      });
+    }
+  }
   return entities;
 }
 
@@ -1088,6 +1222,9 @@ interface InlinePromptInputProps {
   value: unknown;
   fallbackText: string;
   filled: boolean;
+  editable?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 // Render plugin-input placeholders as read-only styled spans. Earlier
@@ -1106,17 +1243,44 @@ function InlinePromptInput({
   value,
   fallbackText,
   filled,
+  editable = false,
+  open = false,
+  onOpenChange = () => undefined,
 }: InlinePromptInputProps) {
   const label = field?.label ?? name;
-  const displayValue = value === undefined || value === null || value === ''
-    ? fallbackText
-    : String(value);
+  const displayValue = formatPromptInputValue(field, value, fallbackText);
   // No aria-label here: the editable control with this label lives in
   // the PluginInputsForm below, and findByLabelText must resolve to one
   // element. The span is decorative — it just highlights where the
   // substituted value appears in the prompt the textarea already reads
   // out.
   const hint = filled ? `${label}: ${displayValue}` : label;
+  if (editable && field) {
+    return (
+      <span className="home-hero__prompt-option-shell">
+        <button
+          type="button"
+          className="home-hero__prompt-slot home-hero__prompt-slot--button"
+          data-field-name={name}
+          data-filled={filled ? 'true' : 'false'}
+          data-testid={`home-hero-prompt-slot-${name}`}
+          title={hint}
+          aria-label={`${label}: ${displayValue}`}
+          aria-expanded={open}
+          onPointerDown={(event) => {
+            event.preventDefault();
+            onOpenChange(!open);
+          }}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={(event) => {
+            if (event.detail === 0) onOpenChange(!open);
+          }}
+        >
+          {displayValue}
+        </button>
+      </span>
+    );
+  }
   return (
     <span
       className="home-hero__prompt-slot"
@@ -1129,6 +1293,98 @@ function InlinePromptInput({
       {displayValue}
     </span>
   );
+}
+
+function InlinePromptOptionPopover({
+  field,
+  value,
+  onChange,
+}: {
+  field: InputFieldSpec;
+  value: unknown;
+  onChange: (value: unknown) => void;
+}) {
+  return (
+    <div
+      className="home-hero__prompt-option-popover"
+      data-testid={`home-hero-prompt-option-${field.name}`}
+      onMouseDown={(event) => event.stopPropagation()}
+    >
+      <span className="home-hero__prompt-option-label">{field.label ?? field.name}</span>
+      {renderInlinePromptEditor(field, value, onChange)}
+      {fieldPopoverNote(field) ? (
+        <span
+          className="home-hero__prompt-option-note"
+          data-tone={fieldPopoverNoteTone(field)}
+          data-testid={`home-hero-prompt-option-${field.name}-note`}
+        >
+          {fieldPopoverNote(field)}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function renderInlinePromptEditor(
+  field: InputFieldSpec,
+  value: unknown,
+  onChange: (value: unknown) => void,
+) {
+  if (field.type === 'select' && Array.isArray(field.options)) {
+    const optionLabels = optionLabelMap(field);
+    return (
+      <select
+        className="home-hero__prompt-option-input"
+        value={value === undefined || value === null ? '' : String(value)}
+        onChange={(event) => onChange(event.target.value)}
+        data-testid={`home-hero-prompt-option-${field.name}-select`}
+        aria-label={field.label ?? field.name}
+      >
+        {field.placeholder ? <option value="">{field.placeholder}</option> : null}
+        {field.options.map((option) => (
+          <option key={option} value={option}>
+            {optionLabels[option] ?? option}
+          </option>
+        ))}
+      </select>
+    );
+  }
+  return (
+    <input
+      className="home-hero__prompt-option-input"
+      value={value === undefined || value === null ? '' : String(value)}
+      onChange={(event) => onChange(event.target.value)}
+      data-testid={`home-hero-prompt-option-${field.name}-input`}
+      aria-label={field.label ?? field.name}
+    />
+  );
+}
+
+function formatPromptInputValue(
+  field: InputFieldSpec | null,
+  value: unknown,
+  fallbackText: string,
+): string {
+  if (value === undefined || value === null || value === '') return fallbackText;
+  const raw = String(value);
+  return field ? optionLabelMap(field)[raw] ?? raw : raw;
+}
+
+function optionLabelMap(field: InputFieldSpec): Record<string, string> {
+  const labels = (field as { optionLabels?: unknown }).optionLabels;
+  return labels && typeof labels === 'object' && !Array.isArray(labels)
+    ? labels as Record<string, string>
+    : {};
+}
+
+function fieldPopoverNote(field: InputFieldSpec): string {
+  const note = (field as { popoverNote?: unknown }).popoverNote;
+  return typeof note === 'string' ? note : '';
+}
+
+function fieldPopoverNoteTone(field: InputFieldSpec): string {
+  const tone = (field as { popoverNoteTone?: unknown }).popoverNoteTone;
+  return tone === 'warning' ? 'warning' : 'info';
 }
 
 function getContextMention(value: string): ContextMention | null {
@@ -1205,6 +1461,22 @@ function mcpServerMatchesQuery(server: McpServerConfig, query: string): boolean 
     .includes(q);
 }
 
+function connectorMatchesQuery(connector: ConnectorDetail, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return [
+    connector.id,
+    connector.name,
+    connector.provider,
+    connector.category,
+    connector.description ?? '',
+    connector.accountLabel ?? '',
+  ]
+    .join(' ')
+    .toLowerCase()
+    .includes(q);
+}
+
 function getPluginSourceLabel(plugin: InstalledPluginRecord): string {
   return plugin.sourceKind === 'bundled' ? 'Official' : 'My plugin';
 }
@@ -1221,6 +1493,51 @@ function getPluginQueryPreview(plugin: InstalledPluginRecord): string {
         : '';
   const trimmed = value.replace(/\s+/g, ' ').trim();
   return trimmed.length > 96 ? `${trimmed.slice(0, 96)}…` : trimmed;
+}
+
+interface TypeTabBarProps {
+  activeChipId: string | null;
+  pendingChipId: string | null;
+  pendingPluginId: string | null;
+  pluginsLoading: boolean;
+  onPickChip: (chip: HomeHeroChip) => void;
+}
+
+function TypeTabBar({
+  activeChipId,
+  pendingChipId,
+  pendingPluginId,
+  pluginsLoading,
+  onPickChip,
+}: TypeTabBarProps) {
+  const chips = useMemo(() => chipsForGroup('create'), []);
+  return (
+    <div className="home-hero__type-tabs" role="tablist" aria-label="Output type">
+      {chips.map((chip) => {
+        const isActive = activeChipId === chip.id;
+        const isPending = pendingChipId === chip.id;
+        const cls = ['home-hero__type-tab'];
+        if (isActive) cls.push('is-active');
+        if (isPending) cls.push('is-pending');
+        return (
+          <button
+            key={chip.id}
+            type="button"
+            role="tab"
+            className={cls.join(' ')}
+            data-chip-id={chip.id}
+            data-testid={`home-hero-rail-${chip.id}`}
+            onClick={() => onPickChip(chip)}
+            disabled={pluginsLoading || isPending || pendingPluginId !== null}
+            aria-selected={isActive}
+            title={chip.hint ?? chip.label}
+          >
+            <span>{chip.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 interface RailGroupProps {
@@ -1240,6 +1557,7 @@ function RailGroup({
   pluginsLoading,
   onPickChip,
 }: RailGroupProps) {
+  const t = useT();
   const chips = useMemo(() => chipsForGroup(group), [group]);
   return (
     <div
@@ -1262,13 +1580,42 @@ function RailGroup({
             onClick={() => onPickChip(chip)}
             disabled={pluginsLoading || isPending || pendingPluginId !== null}
             aria-pressed={isActive}
-            title={chip.hint ?? chip.label}
+            title={homeHeroChipTitle(chip, t)}
           >
             <Icon name={chip.icon} size={14} className="home-hero__rail-chip-icon" />
-            <span className="home-hero__rail-chip-label">{chip.label}</span>
+            <span className="home-hero__rail-chip-label">{homeHeroChipLabel(chip.id, t)}</span>
           </button>
         );
       })}
     </div>
   );
+}
+
+function homeHeroChipLabel(chipId: string, t: ReturnType<typeof useT>): string {
+  switch (chipId) {
+    case 'prototype': return t('homeHero.chip.prototype');
+    case 'live-artifact': return t('homeHero.chip.liveArtifact');
+    case 'deck': return t('homeHero.chip.deck');
+    case 'image': return t('homeHero.chip.image');
+    case 'video': return t('homeHero.chip.video');
+    case 'hyperframes': return t('homeHero.chip.hyperframes');
+    case 'audio': return t('homeHero.chip.audio');
+    case 'create-plugin': return t('homeHero.chip.createPlugin');
+    case 'figma': return t('homeHero.chip.figma');
+    case 'folder': return t('homeHero.chip.folder');
+    case 'template': return t('homeHero.chip.template');
+    default: return chipId;
+  }
+}
+
+function homeHeroChipTitle(chip: HomeHeroChip, t: ReturnType<typeof useT>): string {
+  switch (chip.id) {
+    case 'live-artifact': return t('homeHero.chip.liveArtifactHint');
+    case 'hyperframes': return t('homeHero.chip.hyperframesHint');
+    case 'create-plugin': return t('homeHero.chip.createPluginHint');
+    case 'figma': return t('homeHero.chip.figmaHint');
+    case 'folder': return t('homeHero.chip.folderHint');
+    case 'template': return t('homeHero.chip.templateHint');
+    default: return homeHeroChipLabel(chip.id, t);
+  }
 }

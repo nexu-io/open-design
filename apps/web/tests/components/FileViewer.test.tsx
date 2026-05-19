@@ -238,7 +238,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(markup).toContain('class="viewer svg-viewer"');
     expect(markup).not.toContain('class="viewer image-viewer"');
     expect(markup).toContain('Preview');
-    expect(markup).toContain('Source');
+    expect(markup).toContain('Code');
     expect(markup).toContain('src="/api/projects/project-1/raw/diagram.svg?v=1710000000&amp;r=0"');
   });
 
@@ -338,11 +338,11 @@ describe('FileViewer SVG artifacts', () => {
     );
 
     expect(previewMarkup).toContain('class="viewer-tab active" aria-pressed="true">Preview</button>');
-    expect(previewMarkup).toContain('aria-pressed="false">Source</button>');
+    expect(previewMarkup).toContain('aria-pressed="false">Code</button>');
     expect(previewMarkup).toContain('<img');
 
     expect(sourceMarkup).toContain('aria-pressed="false">Preview</button>');
-    expect(sourceMarkup).toContain('class="viewer-tab active" aria-pressed="true">Source</button>');
+    expect(sourceMarkup).toContain('class="viewer-tab active" aria-pressed="true">Code</button>');
     expect(sourceMarkup).toContain('class="viewer-source"');
     expect(sourceMarkup).not.toContain('<img');
   });
@@ -640,7 +640,8 @@ describe('FileViewer SVG artifacts', () => {
     expect(container.querySelector('.palette-tweaks-anchor')).toBeTruthy();
     expect(container.querySelector('.viewer-viewport-switcher')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: /^source$/i }));
+    fireEvent.click(container.querySelector('.viewer-mode-trigger')!);
+    fireEvent.click(screen.getByRole('menuitem', { name: /code/i }));
 
     await waitFor(() => {
       expect(container.querySelector('.deck-nav')).toBeNull();
@@ -649,8 +650,9 @@ describe('FileViewer SVG artifacts', () => {
       expect(screen.getByTestId('manual-edit-mode-toggle')).toBeTruthy();
       expect(screen.queryByTestId('draw-overlay-toggle')).toBeNull();
       expect(screen.queryByTestId('palette-tweaks-toggle')).toBeNull();
-      expect(screen.getByRole('button', { name: /zoom out/i })).toBeTruthy();
-      expect(screen.getByRole('button', { name: /zoom in/i })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: /100%/ })).toBeNull();
+      expect(screen.queryByRole('button', { name: /zoom out/i })).toBeNull();
+      expect(screen.queryByRole('button', { name: /zoom in/i })).toBeNull();
     });
   });
 
@@ -1368,11 +1370,15 @@ describe('FileViewer tweaks toolbar', () => {
       'comment-side-panel-open',
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /hide comments/i }));
+    const closeButton = screen
+      .getByTestId('comment-side-panel')
+      .querySelector<HTMLButtonElement>('.comment-side-close');
+    expect(closeButton).toBeTruthy();
+    fireEvent.click(closeButton!);
 
-    expect(screen.getByTestId('inspect-empty-hint-container').className).not.toContain(
-      'comment-side-panel-open',
-    );
+    expect(screen.queryByTestId('comment-side-panel')).toBeNull();
+    expect(screen.queryByTestId('comment-side-collapsed-rail')).toBeNull();
+    expect(screen.queryByTestId('inspect-empty-hint-container')).toBeNull();
   });
 
   it('keeps saved comment marker numbers aligned with the side panel order', () => {
@@ -1522,12 +1528,14 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.queryByText('Do not recreate this stale comment')).toBeNull();
   });
 
-  it('collapses the comment side panel into a narrow reopen rail', () => {
+  it('closes the comment side panel from the header close button', () => {
     const onCollapseChange = vi.fn();
+    const onClose = vi.fn();
 
     function Harness() {
       const [collapsed, setCollapsed] = useState(false);
-      return (
+      const [open, setOpen] = useState(true);
+      return open ? (
         <CommentSidePanel
           comments={[
             {
@@ -1553,6 +1561,10 @@ describe('FileViewer tweaks toolbar', () => {
             onCollapseChange(next);
             setCollapsed(next);
           }}
+          onClose={() => {
+            onClose();
+            setOpen(false);
+          }}
           onToggleSelect={() => {}}
           onClearSelection={() => {}}
           onReply={() => {}}
@@ -1560,7 +1572,7 @@ describe('FileViewer tweaks toolbar', () => {
           sending={false}
           t={t}
         />
-      );
+      ) : null;
     }
 
     render(<Harness />);
@@ -1568,16 +1580,13 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.getByTestId('comment-side-panel')).toBeTruthy();
     expect(screen.getByText('不要github，换成微信')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: /hide comments/i }));
+    fireEvent.click(screen.getByRole('button', { name: /close/i }));
 
-    expect(onCollapseChange).toHaveBeenLastCalledWith(true);
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(onCollapseChange).not.toHaveBeenCalled();
     expect(screen.queryByText('不要github，换成微信')).toBeNull();
     expect(screen.queryByTestId('comment-side-selectbar')).toBeNull();
-    expect(screen.getByTestId('comment-side-collapsed-rail')).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('button', { name: /show comments/i }));
-
-    expect(onCollapseChange).toHaveBeenLastCalledWith(false);
+    expect(screen.queryByTestId('comment-side-collapsed-rail')).toBeNull();
   });
 });
 

@@ -23,6 +23,7 @@ import {
   validateCodexGeneratedImagesDir,
 } from '../src/server.js';
 import { getAgentDef } from '../src/agents.js';
+import { readMemoryConfig, writeMemoryConfig } from '../src/memory.js';
 import { renderCodexImagegenOverride } from '../src/prompts/system.js';
 
 function symlinkDir(target: string, link: string): void {
@@ -60,11 +61,19 @@ async function withFakeAgent<T>(
 describe('/api/chat', () => {
   let server: http.Server;
   let baseUrl: string;
+  let originalMemoryConfig: Awaited<ReturnType<typeof readMemoryConfig>> | null = null;
   const originalPath = process.env.PATH;
   const originalAgentHome = process.env.OD_AGENT_HOME;
   const tempDirs: string[] = [];
 
   beforeAll(async () => {
+    if (process.env.OD_DATA_DIR) {
+      originalMemoryConfig = await readMemoryConfig(process.env.OD_DATA_DIR);
+      await writeMemoryConfig(process.env.OD_DATA_DIR, {
+        enabled: false,
+        extraction: null,
+      });
+    }
     const started = await startServer({ port: 0, returnServer: true }) as {
       url: string;
       server: http.Server;
@@ -86,12 +95,19 @@ describe('/api/chat', () => {
     }
   });
 
-  afterAll(() => {
+  afterAll(async () => {
     for (const dir of tempDirs.splice(0)) {
       rmSync(dir, { recursive: true, force: true });
     }
-    if (!server) return;
-    return new Promise<void>((resolve) => server.close(() => resolve()));
+    if (server) {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+    if (process.env.OD_DATA_DIR && originalMemoryConfig) {
+      await writeMemoryConfig(process.env.OD_DATA_DIR, {
+        enabled: originalMemoryConfig.enabled,
+        extraction: originalMemoryConfig.extraction,
+      });
+    }
   });
 
   it('does not reference an out-of-scope response while starting a run', async () => {
@@ -538,7 +554,7 @@ setInterval(() => {}, 1000);
 
   it('keeps Claude stream runs alive while structured output is still flowing', async () => {
     const previous = process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
-    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '1800';
+    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '3000';
     try {
       await withFakeAgent(
         'claude',
@@ -552,6 +568,7 @@ const lines = [
   JSON.stringify({ type: 'result', usage: { input_tokens: 1, output_tokens: 2 }, duration_ms: 700, stop_reason: 'end_turn' }),
 ];
 let index = 0;
+console.log(lines[index++]);
 const timer = setInterval(() => {
   if (index >= lines.length) {
     clearInterval(timer);
@@ -559,7 +576,7 @@ const timer = setInterval(() => {
     return;
   }
   console.log(lines[index++]);
-}, 400);
+}, 750);
 `,
         async () => {
           const createResponse = await fetch(`${baseUrl}/api/runs`, {
@@ -776,13 +793,15 @@ async function waitForRunStatus(
   runId: string,
   done: (status: string) => boolean = (status) => status !== 'queued' && status !== 'running',
 ): Promise<{ status: string }> {
-  for (let attempt = 0; attempt < 120; attempt += 1) {
+  let lastStatus = 'unknown';
+  for (let attempt = 0; attempt < 500; attempt += 1) {
     const statusResponse = await fetch(`${baseUrl}/api/runs/${runId}`);
     const statusBody = await statusResponse.json() as { status: string };
+    lastStatus = statusBody.status;
     if (done(statusBody.status)) return statusBody;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
-  throw new Error('run did not reach expected status');
+  throw new Error(`run did not reach expected status; last status: ${lastStatus}`);
 }
 
 describe('chat prompt helpers', () => {

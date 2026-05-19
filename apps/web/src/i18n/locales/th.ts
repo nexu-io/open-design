@@ -130,8 +130,14 @@ export const th: Dict = {
   'settings.themeDark': 'มืด',
   'settings.agentModelHead': 'โมเดลสำหรับ:',
   'settings.modelPicker': 'โมเดล',
+  'settings.modelSourceLive': 'Live from CLI',
+  'settings.modelSourceFallback': 'Fallback list',
   'settings.reasoningPicker': 'ความพยายามในการให้เหตุผล',
   'settings.modelPickerHint': 'ดึงข้อมูลจาก CLI เมื่อมีคำสั่ง `models`',
+  'settings.modelPickerLiveHint':
+    'Models were refreshed from the installed CLI. Default still uses the CLI config.',
+  'settings.modelPickerFallbackHint':
+    'Using Open Design fallback models because the installed CLI did not return live model metadata. Rescan after updating or logging in to the CLI.',
   'settings.cliEnvTitle': 'ตำแหน่งการตั้งค่า CLI',
   'settings.cliEnvHint': 'ตั้งค่าไดเรกทอรีการกำหนดค่า (ที่ไม่เป็นความลับ) สำหรับแอปพลิเคชัน',
   'settings.cliEnvClaudeConfigDir': 'ไดเรกทอรีการตั้งค่า Claude Code',
@@ -161,6 +167,9 @@ export const th: Dict = {
   'settings.privacyConsentFooter': 'คุณสามารถเปลี่ยนการตั้งค่าเหล่านี้ได้ตลอดเวลาใน การตั้งค่า → ความเป็นส่วนตัว เราจะไม่ส่งเนื้อหาในไฟล์ที่คุณสร้างขึ้น',
   'settings.privacyConsentShare': 'แชร์ข้อมูลการใช้งาน',
   'settings.privacyConsentDecline': 'ไม่แชร์',
+  'settings.privacyConsentAccept': 'I get it',
+  'settings.privacyConsentBannerFooter':
+    'Data sharing is on by default. You can turn it off any time in Settings → Privacy. We never upload the contents of your generated artifact files.',
   'settings.privacyConsentPolicyLink': 'อ่านนโยบายความเป็นส่วนตัว',
   'settings.privacyMetrics': 'ข้อมูลผู้ใช้นิรนาม',
   'settings.privacyMetricsHint': 'จำนวนการใช้งาน, การใช้โทเค็น, อัตราข้อผิดพลาด',

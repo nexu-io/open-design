@@ -16,6 +16,7 @@ import {
   FPS_MIN,
   FRAMES_MAX,
   FRAMES_MIN,
+  prepareCodexPetCustom,
   resolveActivePet,
 } from './pets';
 import { PetSpriteFace } from './PetSpriteFace';
@@ -81,6 +82,10 @@ export function PetSettings({ cfg, setCfg }: Props) {
   const [codexPetsLoading, setCodexPetsLoading] = useState(false);
   const [codexPetsRoot, setCodexPetsRoot] = useState<string>('');
   const [codexAdopting, setCodexAdopting] = useState<string | null>(null);
+  const [petActionStatus, setPetActionStatus] = useState<{
+    kind: 'shown' | 'hidden' | 'adopted';
+    name?: string;
+  } | null>(null);
   // Community catalog sync — calls the daemon-side port of the
   // `sync-community-pets` script which fetches the latest pets from
   // Codex Pet Share + j20 Hatchery into `~/.codex/pets/`. We surface
@@ -160,6 +165,12 @@ export function PetSettings({ cfg, setCfg }: Props) {
   useEffect(() => {
     void refreshCodexPets();
   }, [refreshCodexPets]);
+
+  useEffect(() => {
+    if (!petActionStatus) return;
+    const timer = window.setTimeout(() => setPetActionStatus(null), 2400);
+    return () => window.clearTimeout(timer);
+  }, [petActionStatus]);
 
   const update = (patch: Partial<PetConfig>) => {
     setCfg((curr) => {
@@ -342,32 +353,21 @@ export function PetSettings({ cfg, setCfg }: Props) {
   // (idle ↔ waving ↔ running-*) just like the upstream
   // `codex-pets-react` `PetWidget`. Defaults `name`/`greeting` from the
   // manifest so the speech bubble feels personalized.
-  async function adoptCodexPet(pet: CodexPetSummary) {
+  async function adoptCodexPet(pet: CodexPetSummary): Promise<boolean> {
     setCodexAdopting(pet.id);
     setUploadError(null);
     try {
-      const resp = await fetch(codexPetSpritesheetUrl(pet));
-      if (!resp.ok) throw new Error('Could not download that pet.');
-      const blob = await resp.blob();
-      const dataUrl = await blobToDataUrl(blob);
-      const prepared = await prepareCodexAtlas(dataUrl);
-      patchCustom(
-        {
-          name: pet.displayName || pet.id,
-          greeting: pet.description || `Hi! I am ${pet.displayName}.`,
-          imageUrl: prepared.dataUrl,
-          // Atlas mode owns frame timing per row — clear the legacy
-          // strip fields so an older config rehydrating into the new
-          // shape does not accidentally fall back to strip rendering.
-          frames: 1,
-          fps: prepared.layout.rowsDef[0]?.fps ?? 6,
-          atlas: prepared.layout,
-        },
-        { focusCustom: true },
-      );
+      const custom = await prepareCodexPetCustom(pet);
+      patchCustom(custom, { focusCustom: true });
+      setPetActionStatus({
+        kind: 'adopted',
+        name: pet.displayName || pet.id,
+      });
+      return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not adopt that pet.';
       setUploadError(message);
+      return false;
     } finally {
       setCodexAdopting(null);
     }
@@ -426,11 +426,35 @@ export function PetSettings({ cfg, setCfg }: Props) {
     () => codexPets.filter((p) => !p.bundled),
     [codexPets],
   );
+  const selectedPetPreview = pet.adopted ? resolveActivePet(pet) : null;
+  const canToggleVisibility =
+    pet.adopted || bundledPets.length > 0 || codexPetsLoading;
+
+  async function togglePetVisibility() {
+    if (pet.enabled) {
+      update({ enabled: false });
+      setPetActionStatus({ kind: 'hidden' });
+      return;
+    }
+    if (pet.adopted) {
+      update({ enabled: true });
+      setPetActionStatus({ kind: 'shown' });
+      return;
+    }
+    const firstBundledPet = bundledPets[0];
+    if (firstBundledPet) {
+      const adopted = await adoptCodexPet(firstBundledPet);
+      if (adopted) setActiveTab('builtIn');
+    }
+  }
 
   // Shared card renderer used by both the Built-in and Community tabs
   // so the visual treatment stays consistent — the only difference
   // between the two grids is which subset of `codexPets` they show.
-  function renderCodexCard(p: CodexPetSummary) {
+  function renderCodexCard(
+    p: CodexPetSummary,
+    options?: { defaultChoice?: boolean },
+  ) {
     const adopting = codexAdopting === p.id;
     const spritesheet = `url(${codexPetSpritesheetUrl(p)})`;
     // Best-effort match: bundled / community adoption copies the
@@ -455,8 +479,17 @@ export function PetSettings({ cfg, setCfg }: Props) {
           <span className="pet-codex-thumb-preview" aria-hidden />
         </div>
         <div className="pet-codex-meta">
-          <strong>{p.displayName}</strong>
-          {p.description ? <span>{p.description}</span> : null}
+          <span className="pet-codex-title-row">
+            <strong>{p.displayName}</strong>
+            {options?.defaultChoice ? (
+              <span className="pet-codex-default-badge">
+                {t('common.default')}
+              </span>
+            ) : null}
+          </span>
+          {p.description ? (
+            <span className="pet-codex-description">{p.description}</span>
+          ) : null}
         </div>
         <button
           type="button"
@@ -477,6 +510,39 @@ export function PetSettings({ cfg, setCfg }: Props) {
 
   return (
     <section className="settings-section">
+      {petActionStatus ? (
+        <p className="pet-action-status" role="status">
+          <Icon name="check" size={12} />
+          <span>
+            {petActionStatus.kind === 'adopted'
+              ? `${t('pet.adoptedBadge')}: ${petActionStatus.name ?? ''}`
+              : petActionStatus.kind === 'shown'
+                ? t('pet.wake')
+                : t('pet.tuck')}
+          </span>
+        </p>
+      ) : null}
+
+      {selectedPetPreview ? (
+        <div
+          className="pet-current-summary"
+          style={{ ['--pet-accent' as string]: selectedPetPreview.accent }}
+        >
+          <span className="pet-current-summary__sprite" aria-hidden>
+            <PetSpriteFace active={selectedPetPreview} size={38} />
+          </span>
+          <div className="pet-current-summary__copy">
+            <span className="pet-current-summary__label">
+              {t('pet.adoptedBadge')}
+            </span>
+            <strong>{selectedPetPreview.name}</strong>
+            <span>
+              {pet.enabled ? t('pet.wake') : t('pet.tuck')} · {selectedPetPreview.greeting}
+            </span>
+          </div>
+        </div>
+      ) : null}
+
       <div className="pet-tabs">
         <div className="pet-tabs-top-row">
           <div
@@ -516,11 +582,14 @@ export function PetSettings({ cfg, setCfg }: Props) {
             <button
               type="button"
               className={`seg-btn small${pet.enabled ? ' active' : ''}`}
-              onClick={() => update({ enabled: !pet.enabled, adopted: pet.adopted || pet.petId !== '' })}
-              disabled={!pet.adopted}
+              onClick={() => void togglePetVisibility()}
+              disabled={!canToggleVisibility || codexAdopting !== null}
               title={pet.enabled ? t('pet.tuckTitle') : t('pet.wakeTitle')}
             >
-              <Icon name={pet.enabled ? 'eye' : 'sparkles'} size={14} />
+              <Icon
+                name={codexAdopting !== null ? 'spinner' : pet.enabled ? 'eye' : 'sparkles'}
+                size={14}
+              />
               <span>{pet.enabled ? t('pet.tuck') : t('pet.wake')}</span>
             </button>
           </div>
@@ -548,7 +617,11 @@ export function PetSettings({ cfg, setCfg }: Props) {
               role="radiogroup"
               aria-label={t('pet.tabBuiltIn')}
             >
-              {bundledPets.map(renderCodexCard)}
+              {bundledPets.map((p, index) =>
+                renderCodexCard(p, {
+                  defaultChoice: !pet.adopted && index === 0,
+                }),
+              )}
             </div>
           )}
           {uploadError ? (
@@ -917,7 +990,7 @@ export function PetSettings({ cfg, setCfg }: Props) {
                 role="radiogroup"
                 aria-label={t('pet.codexTitle')}
               >
-                {communityPets.map(renderCodexCard)}
+              {communityPets.map((p) => renderCodexCard(p))}
               </div>
             )}
           </div>

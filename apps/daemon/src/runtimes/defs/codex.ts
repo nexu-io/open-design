@@ -1,13 +1,61 @@
 import { DEFAULT_MODEL_OPTION, clampCodexReasoning } from './shared.js';
+import type { RuntimeModelOption } from '../types.js';
 import type { RuntimeAgentDef } from '../types.js';
+
+export function parseCodexDebugModels(stdout: string): RuntimeModelOption[] | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(String(stdout || ''));
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object') return null;
+  const models = (parsed as { models?: unknown }).models;
+  if (!Array.isArray(models)) return null;
+
+  const out = [DEFAULT_MODEL_OPTION];
+  const seen = new Set<string>([DEFAULT_MODEL_OPTION.id]);
+  for (const raw of models) {
+    if (!raw || typeof raw !== 'object') continue;
+    const entry = raw as {
+      slug?: unknown;
+      id?: unknown;
+      display_name?: unknown;
+      name?: unknown;
+      visibility?: unknown;
+    };
+    if (entry.visibility === 'hidden') continue;
+    const id =
+      typeof entry.slug === 'string'
+        ? entry.slug.trim()
+        : typeof entry.id === 'string'
+          ? entry.id.trim()
+          : '';
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const label =
+      typeof entry.display_name === 'string' && entry.display_name.trim()
+        ? entry.display_name.trim()
+        : typeof entry.name === 'string' && entry.name.trim()
+          ? entry.name.trim()
+          : id;
+    out.push({ id, label });
+  }
+  return out.length > 1 ? out : null;
+}
 
 export const codexAgentDef = {
     id: 'codex',
     name: 'Codex CLI',
     bin: 'codex',
     versionArgs: ['--version'],
-    // Codex doesn't have a `models` subcommand; ship the most common ids
-    // as a hint. Users can supply other ids via the custom-model input.
+    // Codex exposes its installed model catalog through `debug models` on
+    // recent CLIs. Older builds fall back to these static hints.
+    listModels: {
+      args: ['debug', 'models'],
+      parse: parseCodexDebugModels,
+      timeoutMs: 5000,
+    },
     fallbackModels: [
       DEFAULT_MODEL_OPTION,
       { id: 'gpt-5.5', label: 'gpt-5.5' },

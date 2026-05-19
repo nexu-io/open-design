@@ -20,6 +20,8 @@ import type {
   MemoryExtractionSkipReason,
   MemoryExtractionsResponse,
   MemoryListResponse,
+  MemoryTreeListResponse,
+  MemoryTreeNode,
   MemoryType,
 } from '@open-design/contracts';
 
@@ -91,6 +93,13 @@ async function fetchMemoryList(): Promise<MemoryListResponse> {
     return { enabled: true, rootDir: '', index: '', entries: [], extraction: null };
   }
   return (await resp.json()) as MemoryListResponse;
+}
+
+async function fetchMemoryTree(): Promise<MemoryTreeNode[]> {
+  const resp = await fetch('/api/memory/tree');
+  if (!resp.ok) return [];
+  const json = (await resp.json()) as MemoryTreeListResponse;
+  return json.tree ?? [];
 }
 
 async function fetchMemoryEntry(id: string): Promise<MemoryEntry | null> {
@@ -272,6 +281,7 @@ export function MemorySection() {
   const [index, setIndex] = useState('');
   const [indexDraft, setIndexDraft] = useState<string | null>(null);
   const [entries, setEntries] = useState<MemoryEntrySummary[]>([]);
+  const [memoryTree, setMemoryTree] = useState<MemoryTreeNode[]>([]);
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [previewBody, setPreviewBody] = useState<string | null>(null);
   const [editing, setEditing] = useState<DraftEntry | null>(null);
@@ -352,11 +362,15 @@ export function MemorySection() {
   );
 
   const reload = useCallback(async () => {
-    const list = await fetchMemoryList();
+    const [list, tree] = await Promise.all([
+      fetchMemoryList(),
+      fetchMemoryTree(),
+    ]);
     setEnabled(list.enabled);
     setRootDir(list.rootDir);
     setIndex(list.index);
     setEntries(list.entries);
+    setMemoryTree(tree);
   }, []);
 
   const reloadExtractions = useCallback(async () => {
@@ -467,6 +481,22 @@ export function MemorySection() {
     }
     return map;
   }, [filtered]);
+
+  const treeFolders = useMemo(
+    () => memoryTree.filter((node) => node.kind === 'folder'),
+    [memoryTree],
+  );
+
+  const treeChildren = useMemo(() => {
+    const map = new Map<string, MemoryTreeNode[]>();
+    for (const node of memoryTree) {
+      if (node.kind !== 'entry' || !node.parentId) continue;
+      const list = map.get(node.parentId) ?? [];
+      list.push(node);
+      map.set(node.parentId, list);
+    }
+    return map;
+  }, [memoryTree]);
 
   const openPreview = useCallback(
     async (id: string) => {
@@ -861,6 +891,66 @@ export function MemorySection() {
             </div>
           </div>
         </div>
+      ) : null}
+
+      {treeFolders.length > 0 ? (
+        <details className="library-group memory-collapsible-card" open>
+          <summary className="memory-details-summary">
+            <span className="memory-details-title">Memory tree</span>
+            <span className="filter-pill-count">{memoryTree.length}</span>
+          </summary>
+          <div style={{ display: 'grid', gap: 8, marginTop: 8 }}>
+            {treeFolders.map((folder) => {
+              const children = treeChildren.get(folder.id) ?? [];
+              return (
+                <div key={folder.id} className="library-card" style={{ alignItems: 'stretch' }}>
+                  <div className="library-card-info" style={{ width: '100%' }}>
+                    <div className="library-card-title-row">
+                      <span className="library-card-name">{folder.name}</span>
+                      <span className="library-card-badge">{folder.path}</span>
+                    </div>
+                    <div className="library-card-desc">
+                      {children.length} {children.length === 1 ? 'node' : 'nodes'}
+                    </div>
+                    {children.length > 0 ? (
+                      <ul style={{ listStyle: 'none', padding: 0, margin: '8px 0 0', display: 'grid', gap: 6 }}>
+                        {children.map((child) => (
+                          <li
+                            key={child.id}
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: 'minmax(0, 1fr) auto',
+                              alignItems: 'center',
+                              gap: 8,
+                            }}
+                          >
+                            <span style={{ minWidth: 0 }}>
+                              <span className="library-card-name">{child.name}</span>{' '}
+                              <span className="library-card-badge">{child.id}</span>
+                              {child.description ? (
+                                <span className="library-card-desc" style={{ display: 'block' }}>
+                                  {child.description}
+                                </span>
+                              ) : null}
+                            </span>
+                            <button
+                              type="button"
+                              className="ghost library-card-action"
+                              onClick={() => startEdit(child.id)}
+                              title={t('settings.memoryEdit')}
+                            >
+                              <Icon name="edit" size={14} />
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </details>
       ) : null}
 
       <div className="library-content">

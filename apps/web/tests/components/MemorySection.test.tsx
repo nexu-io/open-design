@@ -182,6 +182,97 @@ describe('MemorySection', () => {
     ]);
   });
 
+  it('renders the memory tree and opens an entry editor from a tree node', async () => {
+    globalThis.EventSource = StubEventSource as unknown as typeof EventSource;
+    const entry = {
+      id: 'project_design_agent_goal',
+      name: 'Design agent goal',
+      description: 'Open Design should evolve from accepted work',
+      type: 'project',
+      body: '- Keep design-system extraction in the loop',
+      updatedAt: Date.now(),
+    };
+
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(JSON.stringify({
+          enabled: true,
+          rootDir: '/tmp/memory',
+          index: '# Memory\n',
+          entries: [entry],
+          extraction: null,
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url === '/api/memory/tree') {
+        return new Response(JSON.stringify({
+          enabled: true,
+          rootDir: '/tmp/memory',
+          tree: [
+            {
+              id: 'folder:project',
+              parentId: null,
+              path: '/project',
+              name: 'Project',
+              kind: 'folder',
+              type: 'project',
+              scope: 'project',
+              sourcePacketIds: [],
+              proposalIds: [],
+              createdAt: new Date(entry.updatedAt).toISOString(),
+              updatedAt: new Date(entry.updatedAt).toISOString(),
+              childrenCount: 1,
+            },
+            {
+              id: entry.id,
+              parentId: 'folder:project',
+              path: `/project/${entry.id}`,
+              name: entry.name,
+              description: entry.description,
+              kind: 'entry',
+              type: 'project',
+              scope: 'project',
+              sourcePacketIds: [],
+              proposalIds: [],
+              createdAt: new Date(entry.updatedAt).toISOString(),
+              updatedAt: new Date(entry.updatedAt).toISOString(),
+              childrenCount: 0,
+            },
+          ],
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url === `/api/memory/${entry.id}`) {
+        return new Response(JSON.stringify({ entry }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/memory/extractions') {
+        return new Response(JSON.stringify({ extractions: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    }) as typeof fetch;
+
+    renderMemorySection();
+
+    const treeSummary = await screen.findByText('Memory tree');
+    const treeDetails = treeSummary.closest('details')!;
+    expect(within(treeDetails).getByText('/project')).toBeTruthy();
+    expect(within(treeDetails).getByText('project_design_agent_goal')).toBeTruthy();
+
+    fireEvent.click(within(treeDetails).getByTitle('Edit'));
+
+    await waitFor(() => {
+      expect((screen.getByPlaceholderText('e.g. UI preferences') as HTMLInputElement).value).toBe(
+        'Design agent goal',
+      );
+    });
+    expect(screen.getByDisplayValue('- Keep design-system extraction in the loop')).toBeTruthy();
+  });
+
   it('shows unsaved index state and saves the updated index', async () => {
     globalThis.EventSource = StubEventSource as unknown as typeof EventSource;
     let savedIndex = '# Memory\n\n- Existing bullet\n';

@@ -31,10 +31,19 @@ import type {
   DeployConfigResponse,
   DeployProjectFileResponse,
   DesignSystemDetail,
+  DesignSystemFileDetail,
+  DesignSystemFileSummary,
+  DesignSystemGenerationJob,
+  DesignSystemPackageAudit,
+  DesignSystemProvenance,
+  DesignSystemRevision,
+  DesignSystemRevisionJobRequest,
+  DesignSystemRevisionStatus,
   DesignSystemSummary,
   LiveArtifact,
   LiveArtifactRefreshLogEntry,
   LiveArtifactSummary,
+  Project,
   ProjectDeploymentsResponse,
   PromptTemplateDetail,
   PromptTemplateSummary,
@@ -348,9 +357,213 @@ export async function fetchDesignSystem(id: string): Promise<DesignSystemDetail 
   try {
     const resp = await fetch(`/api/design-systems/${encodeURIComponent(id)}`);
     if (!resp.ok) return null;
-    return (await resp.json()) as DesignSystemDetail;
+    return parseDesignSystemDetail(await resp.json());
   } catch {
     return null;
+  }
+}
+
+export async function fetchDesignSystemFiles(
+  id: string,
+): Promise<DesignSystemFileSummary[]> {
+  try {
+    const resp = await fetch(`/api/design-systems/${encodeURIComponent(id)}/files`);
+    if (!resp.ok) return [];
+    const json = (await resp.json()) as { files: DesignSystemFileSummary[] };
+    return json.files ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchDesignSystemFile(
+  id: string,
+  filePath: string,
+): Promise<DesignSystemFileDetail | null> {
+  try {
+    const resp = await fetch(
+      `/api/design-systems/${encodeURIComponent(id)}/file?path=${encodeURIComponent(filePath)}`,
+    );
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as { file?: DesignSystemFileDetail };
+    return json.file ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function ensureDesignSystemWorkspace(
+  id: string,
+): Promise<{ project: Project; files: ProjectFile[] } | null> {
+  try {
+    const resp = await fetch(`/api/design-systems/${encodeURIComponent(id)}/workspace`, {
+      method: 'POST',
+    });
+    if (!resp.ok) return null;
+    return (await resp.json()) as { project: Project; files: ProjectFile[] };
+  } catch {
+    return null;
+  }
+}
+
+function parseDesignSystemDetail(json: unknown): DesignSystemDetail | null {
+  if (!json || typeof json !== 'object') return null;
+  const wrapper = json as { designSystem?: DesignSystemDetail };
+  return wrapper.designSystem ?? (json as DesignSystemDetail);
+}
+
+export interface DesignSystemDraftInput {
+  title: string;
+  summary?: string;
+  category?: string;
+  surface?: 'web' | 'image' | 'video' | 'audio';
+  status?: 'draft' | 'published';
+  artifactMode?: 'generated' | 'agent-managed';
+  body?: string;
+  sourceNotes?: string;
+  provenance?: DesignSystemProvenance;
+}
+
+export async function createDesignSystemDraft(
+  input: DesignSystemDraftInput,
+): Promise<DesignSystemDetail | null> {
+  try {
+    const resp = await fetch('/api/design-systems', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!resp.ok) return null;
+    return parseDesignSystemDetail(await resp.json());
+  } catch {
+    return null;
+  }
+}
+
+export async function startDesignSystemGenerationJob(
+  input: DesignSystemDraftInput,
+): Promise<DesignSystemGenerationJob | null> {
+  try {
+    const resp = await fetch('/api/design-systems/generation-jobs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as { job?: DesignSystemGenerationJob };
+    return json.job ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchDesignSystemGenerationJob(
+  id: string,
+): Promise<DesignSystemGenerationJob | null> {
+  try {
+    const resp = await fetch(`/api/design-systems/generation-jobs/${encodeURIComponent(id)}`);
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as { job?: DesignSystemGenerationJob };
+    return json.job ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchProjectDesignSystemPackageAudit(
+  projectId: string,
+): Promise<DesignSystemPackageAudit | null> {
+  try {
+    const resp = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/design-system-package-audit`,
+      { cache: 'no-store' },
+    );
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as { audit?: DesignSystemPackageAudit };
+    return json.audit ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchDesignSystemRevisions(
+  id: string,
+): Promise<DesignSystemRevision[]> {
+  try {
+    const resp = await fetch(`/api/design-systems/${encodeURIComponent(id)}/revisions`);
+    if (!resp.ok) return [];
+    const json = (await resp.json()) as { revisions?: DesignSystemRevision[] };
+    return json.revisions ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function updateDesignSystemRevisionStatus(
+  id: string,
+  revisionId: string,
+  status: Extract<DesignSystemRevisionStatus, 'accepted' | 'rejected'>,
+): Promise<DesignSystemRevision | null> {
+  try {
+    const resp = await fetch(
+      `/api/design-systems/${encodeURIComponent(id)}/revisions/${encodeURIComponent(revisionId)}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      },
+    );
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as { revision?: DesignSystemRevision };
+    return json.revision ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function startDesignSystemRevisionJob(
+  id: string,
+  input: DesignSystemRevisionJobRequest,
+): Promise<DesignSystemGenerationJob | null> {
+  try {
+    const resp = await fetch(`/api/design-systems/${encodeURIComponent(id)}/revision-jobs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as { job?: DesignSystemGenerationJob };
+    return json.job ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function updateDesignSystemDraft(
+  id: string,
+  input: Partial<DesignSystemDraftInput>,
+): Promise<DesignSystemDetail | null> {
+  try {
+    const resp = await fetch(`/api/design-systems/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!resp.ok) return null;
+    return parseDesignSystemDetail(await resp.json());
+  } catch {
+    return null;
+  }
+}
+
+export async function deleteDesignSystemDraft(id: string): Promise<boolean> {
+  try {
+    const resp = await fetch(`/api/design-systems/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+    return resp.ok;
+  } catch {
+    return false;
   }
 }
 
@@ -457,9 +670,11 @@ export async function fetchConnectors(): Promise<ConnectorDetail[]> {
   }
 }
 
-export async function fetchConnectorStatuses(): Promise<ConnectorStatusResponse['statuses']> {
+export async function fetchConnectorStatuses(options?: {
+  signal?: AbortSignal;
+}): Promise<ConnectorStatusResponse['statuses']> {
   try {
-    const resp = await fetch('/api/connectors/status');
+    const resp = await fetch('/api/connectors/status', { signal: options?.signal });
     if (!resp.ok) return {};
     const json = (await resp.json()) as ConnectorStatusResponse;
     return json.statuses ?? {};
@@ -570,14 +785,22 @@ export async function connectConnector(connectorId: string): Promise<ConnectorAc
       if (useExternalBrowser) {
         const opened = await openExternal(json.auth.redirectUrl);
         if (!opened) {
-          return { connector: json.connector ?? null, error: popupBlockedMessage() };
+          return {
+            connector: json.connector ?? null,
+            auth: json.auth,
+            error: popupBlockedMessage(),
+          };
         }
       } else if (authWindow) {
         openConnectorAuthRedirect(authWindow, json.auth.redirectUrl);
       } else {
         const redirected = window.open(json.auth.redirectUrl, '_blank');
         if (!redirected) {
-          return { connector: json.connector ?? null, error: popupBlockedMessage() };
+          return {
+            connector: json.connector ?? null,
+            auth: json.auth,
+            error: popupBlockedMessage(),
+          };
         }
       }
     } else if (json.auth?.kind === 'connected') {
