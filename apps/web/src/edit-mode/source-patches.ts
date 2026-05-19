@@ -47,6 +47,14 @@ export function applyManualEditPatch(source: string, patch: ManualEditPatch): Ma
   } else if (patch.kind === 'set-outer-html') {
     const replaced = replaceOuterHtml(doc, el, patch.html);
     if (!replaced.ok) return { ok: false, source, error: replaced.error };
+  } else if (patch.kind === 'remove-element') {
+    if (!el.parentElement) {
+      return { ok: false, source, error: 'Cannot remove the root element.' };
+    }
+    if (el.parentElement === doc.body && doc.body.children.length === 1) {
+      return { ok: false, source, error: 'Cannot remove the last element in the document.' };
+    }
+    el.remove();
   }
 
   return { ok: true, source: serializeSource(doc, source) };

@@ -1,4 +1,9 @@
 import type { ChatMessage, ChatRunStatus } from './chat.js';
+import type {
+  ProjectContextConnectorRef,
+  ProjectContextMcpServerRef,
+  ProjectContextPluginRef,
+} from './context.js';
 
 export type ProjectKind =
   | 'prototype'
@@ -143,7 +148,9 @@ export interface ProjectMetadata {
   // Plugins selected through @ mentions on Home. These are additive
   // context references; the explicit "Use plugin" snapshot, when present,
   // remains the primary executable plugin for the run.
-  contextPlugins?: Array<{ id: string; title: string; description?: string }>;
+  contextPlugins?: ProjectContextPluginRef[];
+  contextMcpServers?: ProjectContextMcpServerRef[];
+  contextConnectors?: ProjectContextConnectorRef[];
   // Stored on design-system projects so the review overview can remember
   // which generated sections were accepted or sent back for another pass.
   designSystemReview?: Record<string, DesignSystemReviewEntry>;

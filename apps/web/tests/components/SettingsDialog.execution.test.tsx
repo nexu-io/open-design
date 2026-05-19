@@ -191,6 +191,7 @@ function renderSettingsDialog(
     onRefreshAgents?: OnRefreshAgents;
     initialSection?: SettingsSection;
     appVersionInfo?: AppVersionInfo | null;
+    welcome?: boolean;
   } = {},
 ) {
   const onPersist = vi.fn();
@@ -205,6 +206,7 @@ function renderSettingsDialog(
       daemonLive={options.daemonLive ?? true}
       appVersionInfo={options.appVersionInfo ?? null}
       initialSection={options.initialSection ?? 'execution'}
+      welcome={options.welcome}
       onPersist={onPersist}
       onPersistComposioKey={onPersistComposioKey}
       onClose={onClose}
@@ -820,6 +822,41 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*0 installed/i }));
     expect(screen.getByText(/No agents detected yet/i)).toBeTruthy();
+  });
+
+  it('labels the memory model default with the selected Local CLI', async () => {
+    const agents: AgentInfo[] = [
+      ...availableAgents,
+      {
+        id: 'claude',
+        name: 'Claude Code',
+        bin: 'claude',
+        available: true,
+        version: '1.2.3',
+        models: [{ id: 'default', label: 'Default (CLI config)' }],
+      },
+    ];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    }));
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'claude' },
+      { agents },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*2 installed/i }));
+
+    const memoryModel = await screen.findByRole('combobox', { name: 'Memory model' }) as HTMLSelectElement;
+    expect(memoryModel.options[memoryModel.selectedIndex]?.textContent).toBe('Same as chat (Claude Code)');
+    expect(screen.getByText(/anthropic is only the fallback provider family/i)).toBeTruthy();
   });
 
   it('shows rescan loading, avoids duplicate rescans, and renders the success notice', async () => {

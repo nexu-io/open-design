@@ -66,6 +66,7 @@ interface CreationProps {
   onSystemsRefresh?: () => Promise<void> | void;
   config?: AppConfig;
   onOpenConnectorsTab?: () => void;
+  chrome?: 'standalone' | 'embedded';
 }
 
 interface DetailProps {
@@ -187,6 +188,7 @@ export function DesignSystemCreationFlow({
   onSystemsRefresh,
   config,
   onOpenConnectorsTab,
+  chrome = 'standalone',
 }: CreationProps) {
   const [step, setStep] = useState<SetupStep>('setup');
   const [state, setState] = useState<SetupState>(EMPTY_SETUP);
@@ -201,6 +203,7 @@ export function DesignSystemCreationFlow({
   const [githubAuthorizationUrl, setGithubAuthorizationUrl] = useState<string | null>(null);
   const githubConnectorRefreshId = useRef(0);
   const githubConnectorRequestInFlight = useRef(false);
+  const embedded = chrome === 'embedded';
 
   const refreshGithubConnector = useCallback(async () => {
     if (!composioConfigured) {
@@ -420,38 +423,40 @@ export function DesignSystemCreationFlow({
   }
 
   return (
-    <div className="ds-setup-shell">
-      <header className="ds-setup-topbar">
-        <button type="button" className="ghost" onClick={onBack}>
-          <Icon name="arrow-left" />
-          Back
-        </button>
-        <span className="ds-setup-mark">
-          <Icon name="palette" />
-        </span>
-        <button
-          type="button"
-          className="primary"
-          disabled={!state.company.trim()}
-          onClick={() => {
-            if (!state.company.trim()) {
-              setError('Tell Open Design about the company or design system first.');
-              return;
-            }
-            setStep('confirm');
-          }}
-        >
-          Continue to generation
-          <Icon name="chevron-right" />
-        </button>
-      </header>
+    <div className={`ds-setup-shell${embedded ? ' ds-setup-shell--embedded' : ''}`}>
+      {embedded ? null : (
+        <header className="ds-setup-topbar">
+          <button type="button" className="ghost" onClick={onBack}>
+            <Icon name="arrow-left" />
+            Back
+          </button>
+          <span className="ds-setup-mark">
+            <Icon name="palette" />
+          </span>
+          <button
+            type="button"
+            className="primary"
+            disabled={!state.company.trim()}
+            onClick={() => {
+              if (!state.company.trim()) {
+                setError('Tell Open Design about the company or design system first.');
+                return;
+              }
+              setStep('confirm');
+            }}
+          >
+            Generate
+            <Icon name="chevron-right" />
+          </button>
+        </header>
+      )}
 
       <main className="ds-setup-form">
-        <h1>Set up your design system</h1>
-        <p>Tell us about your company and attach any design resources you have.</p>
+        <h1>Generate from your material</h1>
+        <p>Start with a short description, then add any source files you already have.</p>
 
         <label className="ds-setup-field">
-          <span>Company name and blurb (or name of design system)</span>
+          <span>Describe your brand or product</span>
           <textarea
             rows={4}
             value={state.company}
@@ -461,11 +466,11 @@ export function DesignSystemCreationFlow({
         </label>
 
         <section className="ds-resource-section">
-          <h2>Provide examples of your design system and products <span>(all optional)</span></h2>
-          <p>What works best: code and designs for your design system and your code products.</p>
+          <h2>Add source material <span>(optional)</span></h2>
+          <p>Use anything that shows your current style.</p>
           <div className="ds-resource-card">
             <div className="ds-resource-row">
-              <strong>Link code on GitHub</strong>
+              <strong>GitHub repo</strong>
               <div className="ds-resource-inline">
                 <input
                   value={state.githubUrl}
@@ -513,8 +518,8 @@ export function DesignSystemCreationFlow({
               />
             </div>
             <DropZone
-              label="Link code from your computer"
-              helper="Open Design can link a local folder for the agent to read, or copy a focused browser-selected folder snapshot into this design-system project."
+              label="Link local code"
+              helper="Use a folder or selected files from this computer."
               prompt="Drag a folder here or browse"
               names={localCodeSourceLabels(state)}
               directory
@@ -531,8 +536,8 @@ export function DesignSystemCreationFlow({
               }}
             />
             <DropZone
-              label="Upload a .fig file"
-              helper="The .fig source is parsed locally in your browser; only an extracted summary enters this project."
+              label="Upload .fig"
+              helper="Parsed locally; only a summary is added."
               prompt="Drop .fig here or browse"
               accept=".fig"
               names={state.figFiles}
@@ -547,7 +552,7 @@ export function DesignSystemCreationFlow({
               }}
             />
             <DropZone
-              label="Add fonts, logos and assets"
+              label="Add assets"
               prompt="Drag files here or browse"
               names={state.assetFiles}
               onFiles={(_names, files) => {
@@ -563,16 +568,41 @@ export function DesignSystemCreationFlow({
           </div>
         </section>
 
-        <label className="ds-setup-field">
-          <span>Any other notes?</span>
-          <textarea
-            rows={4}
-            value={state.notes}
-            onChange={(event) => setState((curr) => ({ ...curr, notes: event.target.value }))}
-            placeholder="e.g. We use a warm, earthy color palette with rounded corners. Our brand voice is playful but professional..."
-          />
-        </label>
+        {embedded ? null : (
+          <label className="ds-setup-field">
+            <span>Notes</span>
+            <textarea
+              rows={4}
+              value={state.notes}
+              onChange={(event) => setState((curr) => ({ ...curr, notes: event.target.value }))}
+              placeholder="e.g. We use a warm, earthy color palette with rounded corners. Our brand voice is playful but professional..."
+            />
+          </label>
+        )}
         {error ? <div className="ds-editor-error">{error}</div> : null}
+        {embedded ? (
+          <div className="ds-setup-actions ds-setup-actions--embedded">
+            <button type="button" className="ghost" onClick={onBack}>
+              <Icon name="arrow-left" />
+              Back
+            </button>
+            <button
+              type="button"
+              className="primary"
+              disabled={!state.company.trim()}
+              onClick={() => {
+                if (!state.company.trim()) {
+                  setError('Tell Open Design about the company or design system first.');
+                  return;
+                }
+                setStep('confirm');
+              }}
+            >
+              Generate
+              <Icon name="chevron-right" />
+            </button>
+          </div>
+        ) : null}
       </main>
     </div>
   );
@@ -1351,6 +1381,7 @@ export function DesignSystemDetailView({
                 </button>
               ) : null}
             </div>
+            <DesignSystemPackageCard system={system} />
             <div className="ds-warning-card">
               <Icon name="help-circle" />
               <span>
@@ -1576,6 +1607,146 @@ function findWorkspaceActivityMessage(messages: ChatMessage[]): ChatMessage | nu
       return message;
   }
   return null;
+}
+
+function DesignSystemPackageCard({ system }: { system: DesignSystemDetail }) {
+  const info = system.packageInfo;
+  const manifest = info?.manifest;
+  const evidence = info?.sourceEvidence;
+  const sourceLabel = manifest?.source?.type ? sourceTypeLabel(manifest.source.type) : sourceTypeLabel(system.source);
+  const previewPages = manifest?.preview?.pages ?? [];
+  const sourceFiles = manifest?.sourceFiles;
+  const sourceFileCount = [sourceFiles?.scanned, sourceFiles?.evidence, sourceFiles?.tokens, sourceFiles?.snippets]
+    .filter(Boolean)
+    .length;
+  const protocolItems = [
+    manifest?.usage ? manifest.usage : null,
+    manifest?.files?.design ?? 'DESIGN.md',
+    manifest?.files?.tokens ?? 'tokens.css',
+    manifest?.files?.components,
+    manifest?.componentsManifest,
+  ].filter((item): item is string => typeof item === 'string' && item.length > 0);
+  const evidenceStats = [
+    evidence?.scannedFileCount !== undefined ? { label: 'Scanned files', value: String(evidence.scannedFileCount) } : null,
+    evidence?.tokenCount !== undefined ? { label: 'Source tokens', value: String(evidence.tokenCount) } : null,
+    evidence?.snippetCount !== undefined ? { label: 'Snippets', value: String(evidence.snippetCount) } : null,
+    manifest?.fonts?.length ? { label: 'Fonts', value: String(manifest.fonts.length) } : null,
+  ].filter((item): item is { label: string; value: string } => item !== null);
+  const confidence = evidence?.confidence ? Object.entries(evidence.confidence) : [];
+
+  return (
+    <section className="ds-package-card">
+      <div className="ds-package-card__head">
+        <span>
+          <strong>{manifest ? 'Structured import package' : 'Legacy design system'}</strong>
+          <small>
+            {manifest
+              ? `${sourceLabel} · ${manifest.importMode ?? 'normalized'} mode · manifest indexed`
+              : `${sourceLabel} · DESIGN.md-only fallback`}
+          </small>
+        </span>
+        <span className={manifest ? 'ds-package-pill is-ready' : 'ds-package-pill'}>
+          {manifest ? 'Hybrid ready' : 'Fallback'}
+        </span>
+      </div>
+
+      <div className="ds-package-grid">
+        <div>
+          <h2>Agent push layer</h2>
+          <div className="ds-package-chips">
+            {protocolItems.map((item) => (
+              <code key={item}>{item}</code>
+            ))}
+          </div>
+        </div>
+        <div>
+          <h2>Pull layer</h2>
+          <div className="ds-package-metrics">
+            <span><strong>{previewPages.length}</strong><small>Preview pages</small></span>
+            <span><strong>{sourceFileCount}</strong><small>Evidence indexes</small></span>
+            <span><strong>{manifest?.assetsDir ? 'Yes' : 'No'}</strong><small>Assets</small></span>
+          </div>
+        </div>
+      </div>
+
+      {evidenceStats.length > 0 || confidence.length > 0 ? (
+        <div className="ds-evidence-panel">
+          <div className="ds-evidence-stats">
+            {evidenceStats.map((item) => (
+              <span key={item.label}>
+                <strong>{item.value}</strong>
+                <small>{item.label}</small>
+              </span>
+            ))}
+          </div>
+          {confidence.length > 0 ? (
+            <div className="ds-confidence-row">
+              {confidence.map(([key, value]) => (
+                <span key={key}>{key}: {String(value)}</span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {manifest ? (
+        <div className="ds-package-files">
+          <PackageFileGroup
+            title="Preview"
+            files={previewPages.map((page) => ({
+              path: page.path ?? '',
+              meta: [page.title, page.role].filter(Boolean).join(' · '),
+            }))}
+          />
+          <PackageFileGroup
+            title="Source evidence"
+            files={[
+              sourceFiles?.scanned ? { path: sourceFiles.scanned, meta: 'Scanned file inventory' } : null,
+              sourceFiles?.evidence ? { path: sourceFiles.evidence, meta: 'Evidence notes' } : null,
+              sourceFiles?.tokens ? { path: sourceFiles.tokens, meta: 'Token extraction evidence' } : null,
+              sourceFiles?.snippets ? { path: sourceFiles.snippets, meta: 'Snippet index' } : null,
+            ].filter((item): item is { path: string; meta: string } => item !== null)}
+          />
+        </div>
+      ) : null}
+      {evidence?.evidenceExcerpt ? (
+        <pre className="ds-evidence-excerpt">{evidence.evidenceExcerpt}</pre>
+      ) : null}
+    </section>
+  );
+}
+
+function PackageFileGroup({
+  title,
+  files,
+}: {
+  title: string;
+  files: Array<{ path: string; meta?: string }>;
+}) {
+  const visibleFiles = files.filter((file) => file.path.length > 0);
+  if (visibleFiles.length === 0) return null;
+  return (
+    <div>
+      <h2>{title}</h2>
+      <div className="ds-package-file-list">
+        {visibleFiles.map((file) => (
+          <span key={file.path}>
+            <code>{file.path}</code>
+            {file.meta ? <small>{file.meta}</small> : null}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function sourceTypeLabel(value: string | undefined): string {
+  if (value === 'github') return 'GitHub import';
+  if (value === 'local') return 'Local import';
+  if (value === 'bundled' || value === 'built-in') return 'Bundled';
+  if (value === 'user') return 'User workspace';
+  if (value === 'installed') return 'Installed';
+  return 'Design system';
 }
 
 function WorkspaceActivityCard({

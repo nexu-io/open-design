@@ -1261,6 +1261,11 @@ function meaningfulDomFallbackTarget(el) {
 html[data-od-comment-mode] body * { cursor: crosshair !important; }
 html[data-od-inspect-mode] body * { cursor: crosshair !important; }
 html[data-od-comment-mode][data-od-comment-mode-kind="pod"] body * { cursor: cell !important; }
+/* Nested iframes (e.g. shared device frames) consume clicks in their own browsing context.
+   While picker modes are on, disable pointer events on outer-document iframes so the
+   hit target resolves to an annotated ancestor (card, shell) in this document. */
+html[data-od-comment-mode] body iframe,
+html[data-od-inspect-mode] body iframe { pointer-events: none !important; }
 </style>`;
   return injectBeforeBodyEnd(injectBeforeHeadEnd(doc, style), script);
 }

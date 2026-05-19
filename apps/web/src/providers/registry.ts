@@ -54,8 +54,10 @@ import type {
   UpdateDeployConfigRequest,
 } from '../types';
 import type { ArtifactManifest } from '../artifacts/types';
-
-// Window.electronAPI is declared globally in apps/web/src/types/electron.d.ts.
+import {
+  isOpenDesignHostAvailable,
+  openHostExternalUrl,
+} from '@open-design/host';
 
 export const DEFAULT_DEPLOY_PROVIDER_ID = 'vercel-self';
 export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
@@ -742,6 +744,32 @@ function popupBlockedMessage(): string {
   return 'Popup blocked. Allow popups for Open Design and try again.';
 }
 
+export async function openExternalUrl(url: string): Promise<boolean> {
+  if (isOpenDesignHostAvailable()) {
+    const opened = await openHostExternalUrl(url);
+    if (opened.ok) return true;
+  }
+  try {
+    const resp = await fetch('/api/system/open-external', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    if (resp.ok) {
+      const json = (await resp.json().catch(() => null)) as { ok?: unknown } | null;
+      if (json?.ok === true) return true;
+    }
+  } catch {
+    // Fall through to current-tab navigation below.
+  }
+  try {
+    window.location.assign(url);
+  } catch {
+    return false;
+  }
+  return false;
+}
+
 async function decodeConnectorError(resp: Response): Promise<string> {
   try {
     const payload = (await resp.json()) as { error?: { message?: string } } | null;
@@ -753,8 +781,7 @@ async function decodeConnectorError(resp: Response): Promise<string> {
 
 export async function connectConnector(connectorId: string): Promise<ConnectorActionResult> {
   let authWindow: Window | null = null;
-  const openExternal = window.electronAPI?.openExternal;
-  const useExternalBrowser = typeof openExternal === 'function';
+  const useExternalBrowser = isOpenDesignHostAvailable();
   try {
     if (!useExternalBrowser) {
       authWindow = window.open('about:blank', '_blank');
@@ -783,8 +810,8 @@ export async function connectConnector(connectorId: string): Promise<ConnectorAc
     const json = (await resp.json()) as ConnectorConnectResponse;
     if (json.auth?.kind === 'redirect_required' && json.auth.redirectUrl) {
       if (useExternalBrowser) {
-        const opened = await openExternal(json.auth.redirectUrl);
-        if (!opened) {
+        const opened = await openHostExternalUrl(json.auth.redirectUrl);
+        if (!opened.ok) {
           return {
             connector: json.connector ?? null,
             auth: json.auth,
@@ -794,14 +821,11 @@ export async function connectConnector(connectorId: string): Promise<ConnectorAc
       } else if (authWindow) {
         openConnectorAuthRedirect(authWindow, json.auth.redirectUrl);
       } else {
-        const redirected = window.open(json.auth.redirectUrl, '_blank');
-        if (!redirected) {
-          return {
-            connector: json.connector ?? null,
-            auth: json.auth,
-            error: popupBlockedMessage(),
-          };
-        }
+        // The embedded browser can block even the synchronous placeholder
+        // popup. Ask the local daemon to open the system browser; if that
+        // route is unavailable, openExternalUrl falls back to current-tab
+        // navigation.
+        await openExternalUrl(json.auth.redirectUrl);
       }
     } else if (json.auth?.kind === 'connected') {
       renderConnectorAuthInfo(authWindow, {

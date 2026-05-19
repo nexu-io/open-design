@@ -88,13 +88,17 @@ export type TrackingFidelity =
 export type TrackingExecutionMode = 'local_cli' | 'byok';
 
 // v2 BYOK provider catalogue (CSV row 65). Replaces v1's
-// `anthropic|openai|azure|ollama|google`.
+// `anthropic|openai|azure|ollama|google`. `senseaudio` was added on
+// `main` after the v2 doc was published; we forward it verbatim so
+// dashboards can split it out even though the product CSV does not yet
+// list it.
 export type TrackingByokProviderId =
   | 'anthropic'
   | 'openai'
   | 'azure_openai'
   | 'google_gemini'
-  | 'ollama_cloud';
+  | 'ollama_cloud'
+  | 'senseaudio';
 
 // v2 CLI provider catalogue (CSV row 63 + image 59). Adds `qoder_cli` and
 // `kilo` over v1.
@@ -675,6 +679,7 @@ export type TrackingSettingsArea =
   | 'configure_execution_mode'
   | 'configure_execution_mode_local_cli'
   | 'configure_execution_mode_byok'
+  | 'instructions'
   | 'memory'
   | 'media_providers'
   | 'skills'
@@ -1225,6 +1230,8 @@ export function settingsSectionToTracking(
   switch (section) {
     case 'execution':
       return 'configure_execution_mode';
+    case 'instructions':
+      return 'instructions';
     case 'media':
       return 'media_providers';
     case 'language':

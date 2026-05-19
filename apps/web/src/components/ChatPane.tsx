@@ -287,6 +287,12 @@ interface Props {
   // message" without forcing a separate side widget.
   activePluginSnapshot?: AppliedPluginSnapshot | null;
   onCollapse?: () => void;
+  // SenseAudio BYOK only — wired straight through to ChatComposer for the
+  // in-composer image-model picker. Active protocol is read so the picker
+  // hides when the user is on any other BYOK tab (azure / openai / …).
+  byokApiProtocol?: AppConfig['apiProtocol'];
+  byokImageModel?: string;
+  onChangeByokImageModel?: (model: string) => void;
 }
 
 type Tab = 'chat' | 'comments';
@@ -336,6 +342,9 @@ export function ChatPane({
   activePluginSnapshot,
   skills = [],
   onCollapse,
+  byokApiProtocol,
+  byokImageModel,
+  onChangeByokImageModel,
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
@@ -918,6 +927,9 @@ export function ChatPane({
             researchAvailable={researchAvailable}
             projectMetadata={projectMetadata}
             onProjectMetadataChange={onProjectMetadataChange}
+            byokApiProtocol={byokApiProtocol}
+            byokImageModel={byokImageModel}
+            onChangeByokImageModel={onChangeByokImageModel}
             currentSkillId={currentSkillId}
             onProjectSkillChange={onProjectSkillChange}
             pinnedPluginId={activePluginSnapshot?.pluginId ?? null}

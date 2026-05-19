@@ -22,7 +22,7 @@ import type {
   ForwardedRef,
   KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
-import type { InputFieldSpec, InstalledPluginRecord, McpServerConfig } from '@open-design/contracts';
+import type { ConnectorDetail, InputFieldSpec, InstalledPluginRecord, McpServerConfig } from '@open-design/contracts';
 import type { SkillSummary } from '../types';
 import { Icon, type IconName } from './Icon';
 import { PluginInputsForm } from './PluginInputsForm';
@@ -72,18 +72,20 @@ interface Props {
   skillsLoading?: boolean;
   mcpOptions?: McpServerConfig[];
   mcpLoading?: boolean;
+  connectorOptions?: ConnectorDetail[];
   pendingPluginId: string | null;
   pendingChipId: string | null;
   submitDisabled?: boolean;
   onPickPlugin: (record: InstalledPluginRecord, nextPrompt: string | null) => void;
   onPickSkill?: (skill: SkillSummary, nextPrompt: string | null) => void;
   onPickMcp?: (server: McpServerConfig, nextPrompt: string) => void;
+  onPickConnector?: (connector: ConnectorDetail, nextPrompt: string) => void;
   onPickChip: (chip: HomeHeroChip) => void;
   contextItemCount: number;
   error: string | null;
 }
 
-type HomeMentionTab = 'all' | 'plugins' | 'skills' | 'mcp';
+type HomeMentionTab = 'all' | 'plugins' | 'skills' | 'mcp' | 'connectors';
 
 interface HomeMentionOption {
   id: string;
@@ -133,12 +135,14 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
     skillsLoading = false,
     mcpOptions = [],
     mcpLoading = false,
+    connectorOptions = [],
     pendingPluginId,
     pendingChipId,
     submitDisabled = false,
     onPickPlugin,
     onPickSkill = () => undefined,
     onPickMcp = () => undefined,
+    onPickConnector = () => undefined,
     onPickChip,
     contextItemCount,
     error,
@@ -183,16 +187,25 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
         : [],
     [mcpOptions, mentionActive, mentionQuery],
   );
+  const connectorMatches = useMemo(
+    () =>
+      mentionActive
+        ? connectorOptions.filter((connector) => connectorMatchesQuery(connector, mentionQuery)).slice(0, 6)
+        : [],
+    [connectorOptions, mentionActive, mentionQuery],
+  );
   const pickerOpen = mentionActive;
   const tabs: Array<{ id: HomeMentionTab; label: string; count: number }> = [
-    { id: 'all', label: t('common.all'), count: pluginMatches.length + skillMatches.length + mcpMatches.length },
+    { id: 'all', label: t('common.all'), count: pluginMatches.length + skillMatches.length + mcpMatches.length + connectorMatches.length },
     { id: 'plugins', label: t('entry.navPlugins'), count: pluginMatches.length },
     { id: 'skills', label: t('homeHero.skills'), count: skillMatches.length },
     { id: 'mcp', label: 'MCP', count: mcpMatches.length },
+    { id: 'connectors', label: 'Connectors', count: connectorMatches.length },
   ];
   const showPlugins = mentionTab === 'all' || mentionTab === 'plugins';
   const showSkills = mentionTab === 'all' || mentionTab === 'skills';
   const showMcp = mentionTab === 'all' || mentionTab === 'mcp';
+  const showConnectors = mentionTab === 'all' || mentionTab === 'connectors';
   const visibleSections: HomeMentionSection[] = [
     showPlugins
       ? {
@@ -238,6 +251,20 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
           })),
         }
       : null,
+    showConnectors
+      ? {
+          id: 'connectors',
+          label: 'Connectors',
+          options: connectorMatches.map((connector) => ({
+            id: `connector-${connector.id}`,
+            icon: 'link',
+            title: connector.name,
+            description: connector.description || connector.provider || connector.id,
+            meta: connector.accountLabel ?? connector.provider,
+            onPick: () => pickConnector(connector),
+          })),
+        }
+      : null,
   ].filter((section): section is HomeMentionSection => Boolean(section?.options.length));
   const visiblePickerOptions = visibleSections.flatMap((section) => section.options);
   const visibleLoading =
@@ -253,6 +280,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
         activeSkillTitle,
         mcpOptions,
         pluginOptions,
+        connectorOptions,
         selectedPluginContexts,
         skillOptions,
       }),
@@ -262,6 +290,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
       activeSkillTitle,
       mcpOptions,
       pluginOptions,
+      connectorOptions,
       selectedPluginContexts,
       skillOptions,
     ],
@@ -377,6 +406,21 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
         )
       : prompt;
     onPickMcp(server, nextPrompt);
+  }
+
+  function pickConnector(connector: ConnectorDetail) {
+    const nextPrompt = mention
+      ? replaceMentionTokenWithText(
+          prompt,
+          mention,
+          inlineMentionToken(connector.name),
+        )
+      : prompt;
+    onPickConnector(connector, nextPrompt);
+  }
+
+  function updatePluginInput(name: string, value: unknown) {
+    onPluginInputValuesChange({ ...pluginInputValues, [name]: value });
   }
 
   function handleFiles(files: File[]) {
@@ -1028,6 +1072,7 @@ function buildHomeMentionEntities({
   activePluginRecord,
   activeSkillId,
   activeSkillTitle,
+  connectorOptions,
   mcpOptions,
   pluginOptions,
   selectedPluginContexts,
@@ -1036,6 +1081,7 @@ function buildHomeMentionEntities({
   activePluginRecord: InstalledPluginRecord | null;
   activeSkillId: string | null;
   activeSkillTitle: string | null;
+  connectorOptions: ConnectorDetail[];
   mcpOptions: McpServerConfig[];
   pluginOptions: InstalledPluginRecord[];
   selectedPluginContexts: InstalledPluginRecord[];
@@ -1109,6 +1155,24 @@ function buildHomeMentionEntities({
         label: server.id,
         token: inlineMentionToken(server.id),
         title: `MCP: ${label}`,
+      });
+    }
+  }
+  for (const connector of connectorOptions) {
+    entities.push({
+      id: connector.id,
+      kind: 'connector',
+      label: connector.name,
+      token: inlineMentionToken(connector.name),
+      title: `Connector: ${connector.name}`,
+    });
+    if (connector.id !== connector.name) {
+      entities.push({
+        id: connector.id,
+        kind: 'connector',
+        label: connector.id,
+        token: inlineMentionToken(connector.id),
+        title: `Connector: ${connector.name}`,
       });
     }
   }
@@ -1391,6 +1455,22 @@ function mcpServerMatchesQuery(server: McpServerConfig, query: string): boolean 
     server.transport,
     server.url ?? '',
     server.command ?? '',
+  ]
+    .join(' ')
+    .toLowerCase()
+    .includes(q);
+}
+
+function connectorMatchesQuery(connector: ConnectorDetail, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return [
+    connector.id,
+    connector.name,
+    connector.provider,
+    connector.category,
+    connector.description ?? '',
+    connector.accountLabel ?? '',
   ]
     .join(' ')
     .toLowerCase()

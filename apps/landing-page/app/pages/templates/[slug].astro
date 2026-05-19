@@ -7,6 +7,7 @@
  * Live Artifact bundles under `templates/live-artifacts/`.
  */
 import Layout from '../../_components/sub-page-layout.astro';
+import LazyImg from '../../_components/lazy-img.astro';
 import { getTemplateRecords, type TemplateRecord } from '../../_lib/catalog';
 
 export async function getStaticPaths() {
@@ -65,7 +66,11 @@ const jsonLd = {
 
     {template.previewUrl && (
       <figure class="detail-preview">
-        <img src={template.previewUrl} alt={`${template.name} preview`} loading="lazy" decoding="async" />
+        <LazyImg
+          src={template.previewUrl}
+          alt={`${template.name} preview`}
+          loading="priority"
+        />
         <figcaption>Rendered from the template's seed data.</figcaption>
       </figure>
     )}

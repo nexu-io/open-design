@@ -630,8 +630,12 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       }
 
       const before = await listAllDesignSystems();
+      const importMode = normalizeDesignSystemImportMode(body.importMode);
+      const craftApplies = normalizeDesignSystemCraftApplies(body.craftApplies);
       const result = await importLocalDesignSystemProject(sourceRoot, USER_DESIGN_SYSTEMS_DIR, {
-        name: typeof body.name === 'string' ? body.name : undefined,
+        ...(typeof body.name === 'string' ? { name: body.name } : {}),
+        ...(importMode ? { importMode } : {}),
+        ...(craftApplies ? { craftApplies } : {}),
         reservedIds: before.map((system) => system.id),
       });
       const systems = await listAllDesignSystems();
@@ -664,13 +668,17 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
             ? body.url
             : '';
       const before = await listAllDesignSystems();
+      const importMode = normalizeDesignSystemImportMode(body.importMode);
+      const craftApplies = normalizeDesignSystemCraftApplies(body.craftApplies);
       const result = await importGitHubDesignSystemProject(
         githubUrl,
         path.join(PROJECT_ROOT, '.tmp'),
         USER_DESIGN_SYSTEMS_DIR,
         {
-          name: typeof body.name === 'string' ? body.name : undefined,
-          branch: typeof body.branch === 'string' ? body.branch : undefined,
+          ...(typeof body.name === 'string' ? { name: body.name } : {}),
+          ...(typeof body.branch === 'string' ? { branch: body.branch } : {}),
+          ...(importMode ? { importMode } : {}),
+          ...(craftApplies ? { craftApplies } : {}),
           reservedIds: before.map((system) => system.id),
         },
       );
@@ -712,6 +720,24 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     }
   });
 
+}
+
+function normalizeDesignSystemImportMode(value: unknown): 'normalized' | 'hybrid' | 'verbatim' | undefined {
+  return value === 'normalized' || value === 'hybrid' || value === 'verbatim' ? value : undefined;
+}
+
+function normalizeDesignSystemCraftApplies(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const entry of value) {
+    if (typeof entry !== 'string') continue;
+    const slug = entry.trim().toLowerCase();
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) || seen.has(slug)) continue;
+    seen.add(slug);
+    out.push(slug);
+  }
+  return out;
 }
 
 function assembleExample(templateHtml: string, slidesHtml: string, title: string) {

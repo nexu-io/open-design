@@ -440,6 +440,10 @@ async function writeAssembledApp(
 ): Promise<void> {
   await rm(paths.assembledAppRoot, { force: true, recursive: true });
   await mkdir(paths.assembledAppRoot, { recursive: true });
+  await cp(
+    join(config.workspaceRoot, "apps", "desktop", "dist", "main", "preload.cjs"),
+    join(paths.assembledAppRoot, "preload.cjs"),
+  );
 
   const dependencies: Record<string, string> = {};
   for (const tarball of packed) {

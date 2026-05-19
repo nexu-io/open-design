@@ -114,6 +114,7 @@ import {
 import { AppChromeHeader } from './AppChromeHeader';
 import { AvatarMenu } from './AvatarMenu';
 import { ChatPane } from './ChatPane';
+import type { ChatSendMeta } from './ChatComposer';
 import {
   CritiqueTheaterMount,
   useCritiqueTheaterEnabled,
@@ -485,6 +486,15 @@ export function ProjectView({
   const [liveArtifacts, setLiveArtifacts] = useState<LiveArtifactSummary[]>([]);
   const [liveArtifactEvents, setLiveArtifactEvents] = useState<LiveArtifactEventItem[]>([]);
   const [workspaceFocused, setWorkspaceFocused] = useState(false);
+  // Per-session override for the BYOK SenseAudio chat's generate_image
+  // tool. Seeded once from Settings (config.byokImageModel) so the
+  // composer dropdown opens on the user's chosen default; subsequent
+  // selections live only in this component's state — page refresh /
+  // project switch resets to the Settings default. Persistent defaults
+  // live in Settings → BYOK → SenseAudio → Image generation model.
+  const [byokImageModelOverride, setByokImageModelOverride] = useState<string>(
+    config.byokImageModel ?? '',
+  );
   // `closed` → no surface; `review` → read-only saved-state panel with a
   // preview + reopen-to-edit action (#1822); `edit` → the textarea editor.
   const [instructionsMode, setInstructionsMode] = useState<'closed' | 'review' | 'edit'>('closed');
@@ -1692,7 +1702,7 @@ export function ProjectView({
       prompt: string,
       attachments: ChatAttachment[],
       commentAttachments: ChatCommentAttachment[] = commentsToAttachments(attachedComments),
-      meta?: { research?: ResearchOptions; skillIds?: string[] },
+      meta?: ChatSendMeta,
     ) => {
       if (!activeConversationId) return;
       if (messagesConversationIdRef.current !== activeConversationId) return;
@@ -2082,6 +2092,7 @@ export function ProjectView({
           clientRequestId: randomUUID(),
           skillId: project.skillId ?? null,
           skillIds: Array.isArray(meta?.skillIds) ? meta.skillIds : [],
+          context: meta?.context,
           designSystemId: project.designSystemId ?? null,
           attachments: attachments.map((a) => a.path),
           commentAttachments,
@@ -2200,6 +2211,13 @@ export function ProjectView({
             });
           },
           onError: handlers.onError,
+        }, {
+          projectId: project.id,
+          // SenseAudio BYOK chat reads this to pre-fill the tool param's
+          // default model. Prefer the live composer override; fall back
+          // to the Settings default when the composer dropdown is on
+          // "use default". Other protocols ignore unknown body fields.
+          byokImageModel: byokImageModelOverride || config.byokImageModel,
         });
       }
     },
@@ -3374,6 +3392,9 @@ export function ProjectView({
               onTogglePet={onTogglePet}
               onOpenPetSettings={onOpenPetSettings}
               researchAvailable={config.mode === 'daemon'}
+              byokApiProtocol={config.apiProtocol}
+              byokImageModel={byokImageModelOverride}
+              onChangeByokImageModel={setByokImageModelOverride}
               projectMetadata={project.metadata}
               onProjectMetadataChange={(metadata) => {
                 onProjectChange({ ...project, metadata });

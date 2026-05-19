@@ -249,6 +249,22 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     model: 'mimo-v2.5-pro',
     models: ['mimo-v2.5-pro'],
   },
+  {
+    label: 'SenseAudio',
+    protocol: 'senseaudio',
+    baseUrl: 'https://api.senseaudio.cn',
+    model: 'senseaudio-s2',
+    models: [
+      'senseaudio-s2',
+      'senseaudio-s2-flash',
+      'deepseek-v4-flash',
+      'deepseek-v4-pro',
+      'glm-5.1',
+      'kimi-k2.6',
+      'MiniMax-M2.7-highspeed',
+      'MiniMax-M2.7',
+    ],
+  },
 ];
 
 function normalizePet(input: Partial<PetConfig> | undefined): PetConfig {
@@ -290,6 +306,10 @@ function inferApiProtocol(model: string, baseUrl: string): ApiProtocol {
     // protocol so both chat and the connection test hit the native Ollama
     // proxy instead of the Anthropic or OpenAI paths.
     if (normalized.includes('ollama.com')) return 'ollama';
+    // SenseAudio host gets routed to its own proxy so the daemon log line
+    // and the BYOK tab UI stay consistent with the protocol the user
+    // picked — even though the on-wire shape is OpenAI-compatible.
+    if (normalized.includes('senseaudio.cn')) return 'senseaudio';
     return isOpenAICompatible(model, baseUrl) ? 'openai' : 'anthropic';
   } catch {
     // Preserve the rest of the user's settings even if an old saved base URL is

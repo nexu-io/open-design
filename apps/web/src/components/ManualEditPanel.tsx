@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useT } from '../i18n';
 import { emptyManualEditStyles, type ManualEditHistoryEntry, type ManualEditPatch, type ManualEditStyles, type ManualEditTarget } from '../edit-mode/types';
 
 export interface ManualEditDraft {
@@ -24,11 +25,14 @@ export function ManualEditPanel({
   selectedTarget,
   draft,
   error,
+  canUndo,
   onDraftChange,
   onStyleChange,
   onInvalidStyle,
   onError,
   onClearSelection,
+  onApplyPatch,
+  onPickImage,
   pageStylesEnabled = true,
 }: {
   targets: ManualEditTarget[];
@@ -45,13 +49,23 @@ export function ManualEditPanel({
   onStyleChange?: (id: string, styles: Partial<ManualEditStyles>, label: string) => void;
   onInvalidStyle?: (id: string, keys: Array<keyof ManualEditStyles>) => void;
   onApplyPatch: (patch: ManualEditPatch, label: string) => void;
+  onPickImage?: (file: File) => Promise<string | null>;
   onError: (message: string) => void;
   onClearSelection: () => void;
   onCancelDraft: () => void;
   onUndo: () => void;
   onRedo: () => void;
 }) {
+  const t = useT();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const selectedTargetRef = useRef<ManualEditTarget | null>(selectedTarget);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const targetForInspector = selectedTarget;
+  useEffect(() => {
+    selectedTargetRef.current = selectedTarget;
+  }, [selectedTarget]);
+
   const changeTargetStyle = (key: keyof ManualEditStyles, value: string) => {
     const nextStyles = { ...draft.styles, [key]: value };
     onDraftChange({ ...draft, styles: nextStyles });
@@ -92,6 +106,88 @@ export function ManualEditPanel({
               onStyleChange?.('__body__', normalized.styles, 'Page styles');
             }}
           />
+        ) : null}
+
+          {targetForInspector?.kind === 'image' && onPickImage ? (
+          <div className="cc-section">
+            <header className="cc-section-head">IMAGE</header>
+            <div className="cc-section-body">
+              <button
+                type="button"
+                className="cc-action-btn"
+                disabled={uploadingImage}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {uploadingImage ? t('manualEdit.uploadingImage') : t('manualEdit.uploadImage')}
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={async (e) => {
+                  const file = e.currentTarget.files?.[0];
+                  if (!file) return;
+                  e.currentTarget.value = '';
+                  setUploadingImage(true);
+                  try {
+                    const src = await onPickImage(file);
+                    if (src) {
+                      const activeTargetId = selectedTargetRef.current?.id ?? targetForInspector.id;
+                      onApplyPatch(
+                        { id: activeTargetId, kind: 'set-image', src, alt: draft.alt },
+                        t('manualEdit.uploadImage'),
+                      );
+                    } else {
+                      onError(t('manualEdit.uploadImageFailed'));
+                    }
+                  } finally {
+                    setUploadingImage(false);
+                  }
+                }}
+              />
+            </div>
+          </div>
+        ) : null}
+
+        {targetForInspector ? (
+          <div className="cc-section">
+            <div className="cc-section-body">
+              {confirmDelete ? (
+                <>
+                  <p className="cc-delete-confirm">{canUndo ? t('manualEdit.deleteElementConfirm') : t('manualEdit.deleteElement')}</p>
+                  <button
+                    type="button"
+                    className="cc-action-btn cc-action-danger"
+                    onClick={() => {
+                      setConfirmDelete(false);
+                      onApplyPatch(
+                        { id: targetForInspector.id, kind: 'remove-element' },
+                        t('manualEdit.deleteElement'),
+                      );
+                    }}
+                  >
+                    {t('manualEdit.deleteElement')}
+                  </button>
+                  <button
+                    type="button"
+                    className="cc-action-btn"
+                    onClick={() => setConfirmDelete(false)}
+                  >
+                    {t('common.cancel')}
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="cc-action-btn cc-action-danger"
+                  onClick={() => setConfirmDelete(true)}
+                >
+                  {t('manualEdit.deleteElement')}
+                </button>
+              )}
+            </div>
+          </div>
         ) : null}
 
         {error ? <div className="manual-edit-error">{error}</div> : null}

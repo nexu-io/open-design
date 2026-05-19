@@ -48,6 +48,7 @@ export const COMPOSIO_CURATION_OVERLAY: Readonly<Record<string, Readonly<Record<
   },
   notion: {
     notion_search: { ...DAILY_DIGEST_CURATION, reason: 'Searching Notion pages and databases is useful for a daily recap.' },
+    notion_search_notion_page: { ...DAILY_DIGEST_CURATION, reason: 'Searching Notion pages and databases is useful for memory and digest context.' },
     notion_fetch_database: { ...DAILY_DIGEST_CURATION, reason: 'Database reads can summarize recent tasks and notes.' },
     notion_query_database: { ...DAILY_DIGEST_CURATION, reason: 'Database queries support recent activity summaries.' },
   },
