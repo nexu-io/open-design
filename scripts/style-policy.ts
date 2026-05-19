@@ -42,18 +42,25 @@ export function parseEnEntries(source: string): EnEntry[] {
 
   // Regex matches: optional leading whitespace, a quoted key, a colon,
   // optional whitespace, then optionally a quoted value on the same line.
-  const keyValueSameLine = /^\s*(['"])((?:[^'"\\]|\\.)*)\1\s*:\s*(['"])((?:[^'"\\]|\\.)*)\3\s*,?\s*$/;
+  //
+  // We use separate patterns per value-delimiter type because JS regex character
+  // classes cannot reference captured groups — [^'"\\] would incorrectly exclude
+  // the opposite delimiter from value bodies (e.g. a single-quoted value that
+  // contains a literal " would be silently skipped).
+  const keyValueSameLine_SQ = /^\s*(['"])((?:[^'"\\]|\\.)*)\1\s*:\s*'((?:[^'\\]|\\.)*)'\s*,?\s*$/;
+  const keyValueSameLine_DQ = /^\s*(['"])((?:[^'"\\]|\\.)*)\1\s*:\s*"((?:[^"\\]|\\.)*)"\s*,?\s*$/;
   const keyOnly = /^\s*(['"])((?:[^'"\\]|\\.)*)\1\s*:\s*$/;
-  const valueOnly = /^\s*(['"])((?:[^'"\\]|\\.)*)\1\s*[+,]?\s*$/;
+  const valueOnly_SQ = /^\s*'((?:[^'\\]|\\.)*)'\s*[+,]?\s*$/;
+  const valueOnly_DQ = /^\s*"((?:[^"\\]|\\.)*)"\s*[+,]?\s*$/;
 
   let i = 0;
   while (i < lines.length) {
     const line = lines[i] ?? '';
 
-    const sameLine = keyValueSameLine.exec(line);
+    const sameLine = keyValueSameLine_SQ.exec(line) ?? keyValueSameLine_DQ.exec(line);
     if (sameLine) {
       const key = sameLine[2] ?? '';
-      const value = sameLine[4] ?? '';
+      const value = sameLine[3] ?? '';
       entries.push({ key, value, valueLine: i + 1 });
       i += 1;
       continue;
@@ -68,10 +75,10 @@ export function parseEnEntries(source: string): EnEntry[] {
       let j = i + 1;
       while (j < lines.length) {
         const nextLine = lines[j] ?? '';
-        const valMatch = valueOnly.exec(nextLine);
+        const valMatch = valueOnly_SQ.exec(nextLine) ?? valueOnly_DQ.exec(nextLine);
         if (valMatch) {
           if (valueLine === -1) valueLine = j + 1;
-          value += valMatch[2] ?? '';
+          value += valMatch[1] ?? '';
           j += 1;
           // Stop after first segment if next line is not a continuation
           const afterLine = lines[j] ?? '';

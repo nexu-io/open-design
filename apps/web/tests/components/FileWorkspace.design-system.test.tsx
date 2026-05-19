@@ -156,7 +156,7 @@ describe('FileWorkspace design-system project surface', () => {
       />,
     );
 
-    expect(markup).toContain('Creating your design system...');
+    expect(markup).toContain('Creating your design system…');
     expect(markup).toContain('Keep this tab open. You can come back in a few minutes.');
     expect(markup).toContain('role="progressbar"');
     expect(markup).not.toContain('Review draft design system');
@@ -186,7 +186,7 @@ describe('FileWorkspace design-system project surface', () => {
       />,
     );
 
-    expect(markup).toContain('Creating your design system...');
+    expect(markup).toContain('Creating your design system…');
     expect(markup).not.toContain('Review draft design system');
     expect(markup).not.toContain('typography-specimens');
     expect(markup).not.toContain('<iframe');
