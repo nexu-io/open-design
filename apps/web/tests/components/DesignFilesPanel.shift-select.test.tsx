@@ -140,7 +140,10 @@ describe('DesignFilesPanel shift-click range selection', () => {
     expect(isSelected(container, 'c.html')).toBe(true);
   });
 
-  it('cmd/ctrl-click toggles a single item without clearing others', () => {
+  it('plain click replaces selection; cmd/ctrl-click is additive and does not clear others', () => {
+    // This test would fail on main because the old toggleSelect was always additive —
+    // a plain click did not replace the selection. The plain-click-replaces assertion
+    // is the load-bearing differentiator that goes RED on main.
     const files = [
       file('a.html', Date.now() - 0),
       file('b.html', Date.now() - 1000),
@@ -148,24 +151,32 @@ describe('DesignFilesPanel shift-click range selection', () => {
     ];
     const { container } = renderPanel(files);
 
-    // Select A
+    // Select A (plain click — sets anchor, selects only A)
     fireEvent.click(getCheckbox(container, 'a.html'));
     expect(isSelected(container, 'a.html')).toBe(true);
 
-    // Cmd-click C — should add C without clearing A
-    fireEvent.click(getCheckbox(container, 'c.html'), { metaKey: true });
+    // Plain click C — must REPLACE selection (only C selected; A cleared)
+    // On main (old toggleSelect) this would leave both A and C selected → assertion fails.
+    fireEvent.click(getCheckbox(container, 'c.html'));
+    expect(isSelected(container, 'a.html')).toBe(false);
+    expect(isSelected(container, 'c.html')).toBe(true);
+
+    // Cmd-click A — should add A without clearing C
+    fireEvent.click(getCheckbox(container, 'a.html'), { metaKey: true });
     expect(isSelected(container, 'a.html')).toBe(true);
     expect(isSelected(container, 'b.html')).toBe(false);
     expect(isSelected(container, 'c.html')).toBe(true);
 
-    // Cmd-click C again — toggles it off
-    fireEvent.click(getCheckbox(container, 'c.html'), { metaKey: true });
-    expect(isSelected(container, 'a.html')).toBe(true);
+    // Cmd-click A again — toggles it off
+    fireEvent.click(getCheckbox(container, 'a.html'), { metaKey: true });
+    expect(isSelected(container, 'a.html')).toBe(false);
     expect(isSelected(container, 'b.html')).toBe(false);
-    expect(isSelected(container, 'c.html')).toBe(false);
+    expect(isSelected(container, 'c.html')).toBe(true);
   });
 
-  it('ctrl-click behaves identically to cmd-click on non-mac', () => {
+  it('ctrl-click is additive; plain click after ctrl-select replaces (goes red on main)', () => {
+    // On main, the second plain click would toggle C off (additive), not replace.
+    // Here we confirm plain click truly replaces regardless of prior ctrl state.
     const files = [
       file('a.html', Date.now() - 0),
       file('b.html', Date.now() - 1000),
@@ -175,8 +186,55 @@ describe('DesignFilesPanel shift-click range selection', () => {
     fireEvent.click(getCheckbox(container, 'a.html'));
     // Ctrl-click B — adds without clearing A
     fireEvent.click(getCheckbox(container, 'b.html'), { ctrlKey: true });
+    expect(isSelected(container, 'a.html')).toBe(true);
+    expect(isSelected(container, 'b.html')).toBe(true);
+
+    // Plain click A — must REPLACE: only A selected; B cleared
+    fireEvent.click(getCheckbox(container, 'a.html'));
+    expect(isSelected(container, 'a.html')).toBe(true);
+    expect(isSelected(container, 'b.html')).toBe(false);
+  });
+
+  it('(e) Shift+Space on keyboard activates range selection the same as shift-click', () => {
+    // Keyboard a11y: Space selects, Shift+Space range-selects. This test goes RED on main
+    // because main's onKeyDown only called toggleSelect (additive), never range-selected.
+    const files = [
+      file('a.html', Date.now() - 0),
+      file('b.html', Date.now() - 1000),
+      file('c.html', Date.now() - 2000),
+    ];
+    const { container } = renderPanel(files);
+
+    // Plain Space on A — sets anchor, selects A
+    fireEvent.keyDown(getCheckbox(container, 'a.html'), { key: ' ' });
+    expect(isSelected(container, 'a.html')).toBe(true);
+
+    // Shift+Space on C — should range-select A..C (same as shift-click)
+    fireEvent.keyDown(getCheckbox(container, 'c.html'), { key: ' ', shiftKey: true });
 
     expect(isSelected(container, 'a.html')).toBe(true);
     expect(isSelected(container, 'b.html')).toBe(true);
+    expect(isSelected(container, 'c.html')).toBe(true);
+  });
+
+  it('(f) aria-selected attribute is present on rows matching selection state', () => {
+    // Verifies that the <tr> carries aria-selected so assistive technologies
+    // can announce "selected, 1 of 3". Goes RED on main (no aria-selected there).
+    const files = [
+      file('a.html', Date.now() - 0),
+      file('b.html', Date.now() - 1000),
+    ];
+    const { container } = renderPanel(files);
+
+    const rowA = container.querySelector('[data-testid="design-file-row-a.html"]') as HTMLElement;
+    const rowB = container.querySelector('[data-testid="design-file-row-b.html"]') as HTMLElement;
+
+    // Before any selection, aria-selected should be false on both rows
+    expect(rowA.getAttribute('aria-selected')).toBe('false');
+    expect(rowB.getAttribute('aria-selected')).toBe('false');
+
+    fireEvent.click(getCheckbox(container, 'a.html'));
+    expect(rowA.getAttribute('aria-selected')).toBe('true');
+    expect(rowB.getAttribute('aria-selected')).toBe('false');
   });
 });

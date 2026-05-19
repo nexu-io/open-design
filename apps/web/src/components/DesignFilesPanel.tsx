@@ -434,12 +434,21 @@ export function DesignFilesPanel({
     };
   }
 
-  function handleRowCheck(name: string, e: React.MouseEvent) {
-    const multi = e.metaKey || e.ctrlKey;
-    const range = e.shiftKey;
+  // handleRowCheck processes checkbox clicks with modifier-key semantics:
+  //   plain click  — select only this item, set anchor
+  //   Cmd/Ctrl     — toggle this item, anchor stays
+  //   Shift        — inclusive range from anchor to this row (page-scoped)
+  //
+  // Range selection is intentionally page-scoped: the anchor must be on the
+  // current page. If the anchor is not visible on this page (e.g. the user
+  // paginated away after setting it) we fall back to a plain-click selection
+  // rather than silently selecting invisible rows on other pages.
+  function handleRowCheck(name: string, e: React.MouseEvent | React.KeyboardEvent) {
+    const multi = 'metaKey' in e ? (e.metaKey || e.ctrlKey) : false;
+    const range = 'shiftKey' in e && e.shiftKey;
 
     if (range) {
-      // Shift-click: select inclusive range from anchor to this row.
+      // Shift-click / Shift+Space: select inclusive range from anchor to this row.
       // If no anchor is set yet, behave as a plain click and set anchor.
       const anchor = anchorRef.current;
       if (anchor === null) {
@@ -447,17 +456,19 @@ export function DesignFilesPanel({
         setSelected(new Set([name]));
         return;
       }
-      const anchorIdx = sortedFiles.findIndex((f) => f.name === anchor);
-      const clickIdx = sortedFiles.findIndex((f) => f.name === name);
+      // Use pageFiles so the range matches only visible rows on this page.
+      // If the anchor has been scrolled to a different page, fall back to plain-click.
+      const anchorIdx = pageFiles.findIndex((f) => f.name === anchor);
+      const clickIdx = pageFiles.findIndex((f) => f.name === name);
       if (anchorIdx === -1 || clickIdx === -1) {
-        // Fallback: just select the clicked item
+        // Anchor not on this page — reset anchor to clicked item.
         anchorRef.current = name;
         setSelected(new Set([name]));
         return;
       }
       const lo = Math.min(anchorIdx, clickIdx);
       const hi = Math.max(anchorIdx, clickIdx);
-      setSelected(new Set(sortedFiles.slice(lo, hi + 1).map((f) => f.name)));
+      setSelected(new Set(pageFiles.slice(lo, hi + 1).map((f) => f.name)));
       // Anchor stays at the original plain-click position; do not move it.
       return;
     }
@@ -598,6 +609,7 @@ export function DesignFilesPanel({
         key={f.name}
         data-testid={`design-file-row-${f.name}`}
         className={`df-file-row ${active ? 'active' : ''} ${selected.has(f.name) ? 'selected' : ''}`}
+        aria-selected={selected.has(f.name)}
         onMouseEnter={() => setHover(f.name)}
         onMouseLeave={() => setHover((c) => (c === f.name ? null : c))}
       >
@@ -615,13 +627,19 @@ export function DesignFilesPanel({
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
                 e.stopPropagation();
-                // Keyboard activation: toggle without clearing others (multi-select via keyboard is additive).
-                setSelected((prev) => {
-                  const next = new Set(prev);
-                  if (next.has(f.name)) next.delete(f.name);
-                  else next.add(f.name);
-                  return next;
-                });
+                if (e.shiftKey) {
+                  // Shift+Space: range-select from anchor to this row.
+                  handleRowCheck(f.name, e);
+                } else {
+                  // Plain Space/Enter: additive toggle (keyboard multi-select is additive by convention).
+                  anchorRef.current = f.name;
+                  setSelected((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(f.name)) next.delete(f.name);
+                    else next.add(f.name);
+                    return next;
+                  });
+                }
               }
             }}
           >
@@ -1298,7 +1316,7 @@ export function DesignFilesPanel({
                       </div>
                     </div>
                   ) : null}
-                  <table className="df-table">
+                  <table className="df-table" aria-multiselectable="true">
                     <thead>
                       <tr>
                         <th className="df-th-check">
