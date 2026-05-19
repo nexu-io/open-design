@@ -654,7 +654,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     fireEvent.change(screen.getByLabelText('Deployment name'), {
       target: { value: '__custom__' },
     });
-    fireEvent.change(screen.getByLabelText('Custom model id'), {
+    fireEvent.change(screen.getByLabelText('Custom model ID'), {
       target: { value: 'deployment-one' },
     });
     fireEvent.change(screen.getByLabelText('Base URL'), {
@@ -777,7 +777,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     });
 
     fireEvent.click(screen.getByRole('tab', { name: 'OpenAI' }));
-    expect((screen.getByLabelText('Custom model id') as HTMLInputElement).value).toBe('custom-still-here');
+    expect((screen.getByLabelText('Custom model ID') as HTMLInputElement).value).toBe('custom-still-here');
 
     expect(await screen.findByText('✓ Loaded 2 models from your account.')).toBeTruthy();
     expect(fetchProviderModelsMock).toHaveBeenCalledWith(
@@ -795,7 +795,10 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect(
       Array.from(select.options).some((option) => option.textContent === 'Remote Alpha (remote-alpha)'),
     ).toBe(true);
-    expect((screen.getByLabelText('Custom model id') as HTMLInputElement).value).toBe('custom-still-here');
+    expect((screen.getByLabelText('Custom model ID') as HTMLInputElement).value).toBe('custom-still-here');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fetch models' }));
+    expect(fetchProviderModelsMock).toHaveBeenCalledTimes(1);
   });
 
   it('clears stale fetched-model status when provider fields change', async () => {
@@ -878,7 +881,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
       target: { value: '__custom__' },
     });
 
-    const customModelInput = screen.getByLabelText('Custom model id') as HTMLInputElement;
+    const customModelInput = screen.getByLabelText('Custom model ID') as HTMLInputElement;
     expect(customModelInput).toBeTruthy();
     fireEvent.change(customModelInput, {
       target: { value: 'gpt-4.1-custom' },
