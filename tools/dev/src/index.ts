@@ -61,6 +61,7 @@ import {
   waitForDesktopRuntime,
   waitForWebRuntime,
 } from "./sidecar-client.js";
+import { createDesktopLink } from "./desktop-link.js";
 import { ensureDaemonGateForDesktop } from "./desktop-auth-gate.js";
 
 type CliOptions = ToolDevOptions & {
@@ -1119,6 +1120,19 @@ addSharedOptions(cli.command("check [app]", "Print status and recent logs for qu
     printCheckResult({ apps, diagnostics: createLogDiagnostics(logs), logs, namespace: config.namespace }, options);
   },
 );
+
+addSharedOptions(cli.command("link", "Create a macOS Desktop launcher for the dev runtime"))
+  .option("--path <file>", "Output path for the .command launcher")
+  .action(async (options: CliOptions) => {
+    const config = resolveToolDevConfig(options);
+    const result = await createDesktopLink(config, { path: options.path });
+    output(
+      options.json === true
+        ? result
+        : `${result.written === "created" ? "Created" : "Replaced"} launcher: ${result.path}`,
+      options,
+    );
+  });
 
 cli.help();
 

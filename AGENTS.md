@@ -196,6 +196,7 @@ pnpm tools-dev inspect desktop status --json
 pnpm tools-dev inspect desktop screenshot --path /tmp/open-design.png
 pnpm tools-dev stop
 pnpm tools-dev check
+pnpm tools-dev link
 ```
 
 ```bash
