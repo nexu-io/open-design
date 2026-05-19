@@ -160,6 +160,9 @@ async function validateHandoff(handoffDir: string): Promise<{
   const manifestPath = join(handoffDir, manifestName);
   const notePath = join(handoffDir, noteName);
   const manifest = readManifest(JSON.parse(await readFile(manifestPath, "utf8")) as Partial<HandoffManifest>);
+  if (!isRelocatableManifestBundlePath(manifest.bundlePath)) {
+    throw new Error(`handoff manifest bundlePath must be relative and relocatable before packaging: ${manifest.bundlePath}`);
+  }
   const bundlePath = resolve(dirname(manifestPath), manifest.bundlePath);
   ensureInsideHandoff(handoffDir, bundlePath, "handoff manifest bundlePath");
   await assertFile(notePath, "handoff note");
@@ -230,6 +233,10 @@ function ensureOutputOutsideHandoff(handoffDir: string, outputPath: string): voi
     return;
   }
   throw new Error(`--output must be outside the handoff directory so it is not archived into itself: ${outputPath}`);
+}
+
+function isRelocatableManifestBundlePath(value: string): boolean {
+  return value.length > 0 && !isAbsolute(value) && value.split(/[\\/]/)[0] !== "..";
 }
 
 async function sha256File(path: string): Promise<string> {

@@ -168,6 +168,19 @@ test("package-tauri-migration-handoff rejects mismatched bundle checksums", asyn
   );
 });
 
+test("package-tauri-migration-handoff rejects non-relocatable bundle paths", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "open-design-tauri-package-handoff-absolute-"));
+  t.after(() => void rm(root, { force: true, recursive: true }));
+  const handoffDir = join(root, "handoff");
+  const bundlePath = join(handoffDir, "open-design-tauri-migration.bundle");
+  await writeHandoffFixture(handoffDir, { bundlePath });
+
+  await assert.rejects(
+    runPackageHandoffScript("--handoff-dir", handoffDir, "--output", join(root, "handoff.tar.gz")),
+    /bundlePath must be relative and relocatable/,
+  );
+});
+
 test("package-tauri-migration-handoff rejects archives inside the handoff directory", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "open-design-tauri-package-handoff-output-"));
   t.after(() => void rm(root, { force: true, recursive: true }));
@@ -182,7 +195,7 @@ test("package-tauri-migration-handoff rejects archives inside the handoff direct
 
 async function writeHandoffFixture(
   handoffDir: string,
-  options: { bundleSha256?: string } = {},
+  options: { bundlePath?: string; bundleSha256?: string } = {},
 ): Promise<string> {
   const bundlePath = join(handoffDir, "open-design-tauri-migration.bundle");
   const bundle = Buffer.from("bundle\n", "utf8");
@@ -196,7 +209,7 @@ async function writeHandoffFixture(
         schemaVersion: 1,
         branch: migrationBranch,
         branchHead,
-        bundlePath: "open-design-tauri-migration.bundle",
+        bundlePath: options.bundlePath ?? "open-design-tauri-migration.bundle",
         bundleSha256: options.bundleSha256 ?? bundleSha256,
       },
       null,
