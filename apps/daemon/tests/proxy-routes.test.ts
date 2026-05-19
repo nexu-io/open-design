@@ -1014,21 +1014,6 @@ describe('API proxy routes', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  // Legacy /api/byok-image/:id route — kept around so chat history
-  // links from before the migration to project-scoped storage still
-  // resolve. New tool calls write to project folders; these tests
-  // pin the legacy surface so the deprecated route continues to
-  // reject path traversal and 404 cleanly on misses.
-  it('rejects unsafe byok-image ids with 400', async () => {
-    const res = await realFetch(`${baseUrl}/api/byok-image/..%2Fpasswd`);
-    expect(res.status).toBe(400);
-  });
-
-  it('returns 404 for unknown byok-image ids', async () => {
-    const res = await realFetch(`${baseUrl}/api/byok-image/this-id-does-not-exist.png`);
-    expect(res.status).toBe(404);
-  });
-
   // Plan §3.A4 / spec §11.8 (e2e-7): the API-fallback proxy paths must
   // never carry plugin context. The web sidecar's fallback mode bypasses
   // the daemon snapshot bus, so any pluginId / appliedPluginSnapshotId in
@@ -1040,6 +1025,7 @@ describe('API proxy routes', () => {
       '/api/proxy/openai/stream',
       '/api/proxy/azure/stream',
       '/api/proxy/google/stream',
+      '/api/proxy/senseaudio/stream',
     ];
 
     for (const path of proxies) {

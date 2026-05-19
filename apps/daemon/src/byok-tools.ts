@@ -17,9 +17,32 @@
 import path from 'node:path';
 import { writeFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
+import { validateBaseUrlResolved } from './connectionTest.js';
 import { resolveProviderConfig } from './media-config.js';
 import { IMAGE_MODELS } from './media-models.js';
 import { ensureProject } from './projects.js';
+
+// SSRF guard for URLs the SenseAudio gateway hands back. The primary
+// /v1/image/sync and /v1/video/create calls go through the user's
+// configured base URL which is already validated upstream, but the
+// returned `url` / `video_url` is attacker-controllable: a malicious
+// gateway could point us at http://169.254.169.254/... (AWS metadata)
+// or RFC1918 hosts to exfiltrate creds via secondary fetch. Resolve
+// the host through validateBaseUrlResolved and refuse non-loopback
+// internal addresses before downloading bytes.
+async function assertExternalAssetUrl(rawUrl: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!rawUrl) return { ok: false, error: 'empty download url' };
+  const validated = await validateBaseUrlResolved(rawUrl);
+  if (validated.error || !validated.parsed) {
+    return {
+      ok: false,
+      error: validated.forbidden
+        ? `senseaudio returned a blocked download url (${validated.error ?? 'internal address'})`
+        : `senseaudio returned an invalid download url: ${validated.error ?? 'unknown reason'}`,
+    };
+  }
+  return { ok: true };
+}
 
 // SenseAudio image model allowlist — derived from the shared media-models
 // registry so adding a new SenseAudio image model in one place (media-models)
@@ -333,9 +356,12 @@ export async function executeGenerateImage(
     };
   }
 
+  const imageUrlCheck = await assertExternalAssetUrl(imageUrl);
+  if (!imageUrlCheck.ok) return { ok: false, error: imageUrlCheck.error };
+
   let bytes: Buffer;
   try {
-    const imgResp = await fetch(imageUrl);
+    const imgResp = await fetch(imageUrl, { redirect: 'error' });
     if (!imgResp.ok) {
       return { ok: false, error: `image download ${imgResp.status}` };
     }
@@ -560,9 +586,15 @@ export async function executeGenerateVideo(
   }
 
   // Step 3: download the mp4 bytes and persist into the project folder.
+  // Re-validate the returned URL through validateBaseUrlResolved so a
+  // malicious gateway can't point us at 169.254.169.254 (AWS / Azure
+  // metadata service) or RFC1918 hosts via the response payload.
+  const videoUrlCheck = await assertExternalAssetUrl(videoUrl);
+  if (!videoUrlCheck.ok) return { ok: false, error: videoUrlCheck.error };
+
   let bytes: Buffer;
   try {
-    const videoResp = await fetch(videoUrl);
+    const videoResp = await fetch(videoUrl, { redirect: 'error' });
     if (!videoResp.ok) {
       return { ok: false, error: `video download ${videoResp.status}` };
     }
@@ -586,15 +618,3 @@ export async function executeGenerateVideo(
   };
 }
 
-/**
- * Validate that a path segment is safe for filesystem lookup. The
- * /api/byok-image/:id route uses this to refuse anything with slashes,
- * `..`, NUL, control chars, or backslashes — i.e. anything that could
- * escape <byokImagesDir>. Tests assert it rejects every traversal
- * variant we could think of.
- */
-export function isSafeByokImageId(id: string): boolean {
-  if (typeof id !== 'string' || !id) return false;
-  if (id.length > 128) return false;
-  return /^[A-Za-z0-9._-]+$/.test(id) && !id.startsWith('.') && !id.includes('..');
-}

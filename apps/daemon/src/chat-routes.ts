@@ -1,7 +1,4 @@
-import path from 'node:path';
-import { createReadStream } from 'node:fs';
-import { stat } from 'node:fs/promises';
-import type { Express, Request, Response } from 'express';
+import type { Express } from 'express';
 import type { RouteDeps } from './server-context.js';
 import { newInsertId } from './analytics.js';
 import { seedProviderIfMissing } from './media-config.js';
@@ -9,7 +6,6 @@ import {
   BYOK_SENSEAUDIO_TOOLS,
   executeGenerateImage,
   executeGenerateVideo,
-  isSafeByokImageId,
   isSenseAudioImageModel,
   type BYOKToolContext,
 } from './byok-tools.js';
@@ -1185,34 +1181,6 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     }
   });
 
-  // Serve PNG bytes produced by the BYOK generate_image tool. The
-  // SenseAudio chat handler writes images to
-  // <RUNTIME_DATA_DIR>/byok-images/<id>.png; this endpoint streams them
-  // back so the chat UI can render the URL the model embedded in
-  // markdown. isSafeByokImageId rejects any path segment that could
-  // escape the directory — see byok-tools.ts for the regex. 404 covers
-  // both unknown ids and the "directory does not exist yet" case
-  // (which happens on a fresh install before the first tool call).
-  app.get('/api/byok-image/:id', async (req: Request, res: Response) => {
-    const id = String(req.params.id || '');
-    if (!isSafeByokImageId(id)) {
-      return sendApiError(res, 400, 'BAD_REQUEST', 'invalid byok image id');
-    }
-    const filePath = path.join(ctx.paths.RUNTIME_DATA_DIR, 'byok-images', id);
-    try {
-      const info = await stat(filePath);
-      if (!info.isFile()) {
-        return sendApiError(res, 404, 'NOT_FOUND', 'byok image not found');
-      }
-    } catch {
-      return sendApiError(res, 404, 'NOT_FOUND', 'byok image not found');
-    }
-    res.setHeader('Content-Type', 'image/png');
-    res.setHeader('Cache-Control', 'public, max-age=3600');
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    createReadStream(filePath).pipe(res);
-  });
-
   // SenseAudio chat completions. Wire-compatible with OpenAI (POST
   // /v1/chat/completions, Bearer auth, SSE `data: {...}` + `data: [DONE]`)
   // plus a daemon-side tool loop: the handler injects an OpenAI
@@ -1237,6 +1205,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
 
   app.post('/api/proxy/senseaudio/stream', async (req, res) => {
     const proxyBody = req.body || {};
+    if (rejectProxyPluginContext(proxyBody, res)) return;
     const {
       baseUrl,
       apiKey,

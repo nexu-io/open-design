@@ -7,29 +7,7 @@ import {
   BYOK_SENSEAUDIO_TOOLS,
   executeGenerateImage,
   executeGenerateVideo,
-  isSafeByokImageId,
 } from '../src/byok-tools.js';
-
-describe('isSafeByokImageId', () => {
-  it('accepts ordinary id-shaped filenames', () => {
-    expect(isSafeByokImageId('abc123.png')).toBe(true);
-    expect(isSafeByokImageId('lq8h2k-abcd1234.png')).toBe(true);
-    expect(isSafeByokImageId('A1_B2.png')).toBe(true);
-  });
-
-  it('rejects directory traversal and unsafe characters', () => {
-    expect(isSafeByokImageId('../etc/passwd')).toBe(false);
-    expect(isSafeByokImageId('..png')).toBe(false);
-    expect(isSafeByokImageId('a/b.png')).toBe(false);
-    expect(isSafeByokImageId('a\\b.png')).toBe(false);
-    expect(isSafeByokImageId('.hidden.png')).toBe(false);
-    expect(isSafeByokImageId('with space.png')).toBe(false);
-    expect(isSafeByokImageId('a\0b.png')).toBe(false);
-    expect(isSafeByokImageId('a\nb.png')).toBe(false);
-    expect(isSafeByokImageId('')).toBe(false);
-    expect(isSafeByokImageId('a'.repeat(200))).toBe(false);
-  });
-});
 
 describe('BYOK_SENSEAUDIO_TOOLS', () => {
   it('exports an OpenAI-shaped generate_image tool definition', () => {
