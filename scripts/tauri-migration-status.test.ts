@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import test from "node:test";
@@ -118,6 +118,7 @@ test("tauri-migration-status reports current packaged handoff archives", async (
     handoffArchive: {
       archive: string;
       checksum: string;
+      commandScript: string;
       current: boolean;
       problems: string[];
       sha256: string;
@@ -127,12 +128,31 @@ test("tauri-migration-status reports current packaged handoff archives", async (
 
   assert.equal(parsed.handoffArchive.archive, archivePath);
   assert.equal(parsed.handoffArchive.checksum, `${archivePath}.sha256`);
+  assert.equal(parsed.handoffArchive.commandScript, `${archivePath}.commands.sh`);
   assert.equal(parsed.handoffArchive.current, true);
   assert.equal(parsed.handoffArchive.sha256, archiveSha256);
   assert.deepEqual(parsed.handoffArchive.problems, []);
-  assert.match(parsed.nextActions.join("\n"), /Copy the current packaged handoff archive/);
+  assert.match(parsed.nextActions.join("\n"), /command script/);
   assert.match(parsed.nextActions.join("\n"), /push-tauri-migration-handoff\.ts --archive/);
   assert.match(parsed.nextActions.join("\n"), /verify checksum, extract, push, and verify/);
+});
+
+test("tauri-migration-status rejects packaged handoff archives without command scripts", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+  const { archivePath } = await writeHandoffArchive(handoffDir);
+  await rm(`${archivePath}.commands.sh`);
+
+  const result = await runStatus(fixture, "--handoff-dir", handoffDir);
+  const parsed = JSON.parse(result.stdout) as { handoffArchive: { current: boolean; problems: string[] } };
+
+  assert.equal(parsed.handoffArchive.current, false);
+  assert.match(parsed.handoffArchive.problems.join("\n"), /command script unavailable/);
 });
 
 test("tauri-migration-status reports stale handoff artifacts", async (t) => {
@@ -330,6 +350,18 @@ async function writeHandoffArchive(handoffDir: string): Promise<{ archivePath: s
   });
   const archiveSha256 = createHash("sha256").update(await readFile(archivePath)).digest("hex");
   await writeFile(`${archivePath}.sha256`, `${archiveSha256}  ${basename(archivePath)}\n`, "utf8");
+  await writeFile(
+    `${archivePath}.commands.sh`,
+    [
+      "#!/usr/bin/env bash",
+      'git fetch "$bundle" "$branch:$temp_ref"',
+      "download-tauri-m4-reports.ts",
+      "GITHUB_RUN_ID",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  await chmod(`${archivePath}.commands.sh`, 0o755);
   return { archivePath, archiveSha256 };
 }
 

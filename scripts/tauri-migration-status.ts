@@ -101,6 +101,7 @@ type HandoffManifest = {
 type HandoffArchiveStatus = {
   archive: string;
   checksum: string;
+  commandScript: string;
   current?: boolean;
   expectedSha256?: string;
   present: boolean;
@@ -313,15 +314,15 @@ function nextActionsForPhase(
     const archiveReady = handoffArchive?.current === true;
     return [
       archiveReady
-        ? `Copy the current packaged handoff archive ${handoffArchive.archive} and checksum ${handoffArchive.checksum} to a write-capable machine.`
+        ? `Copy the current packaged handoff archive ${handoffArchive.archive}, checksum ${handoffArchive.checksum}, and command script ${handoffArchive.commandScript} to a write-capable machine.`
         : handoffReady
           ? `Package the current verified handoff directory with scripts/package-tauri-migration-handoff.ts --handoff-dir ${handoff.dir}.`
           : "Regenerate the verified handoff set with scripts/verify-tauri-migration-handoff.ts --output-dir /tmp/open-design-tauri-migration-handoff.",
       remote?.current === true
         ? `Remote ${remote.remote} already matches ${remote.branch ?? "the migration branch"} at ${remote.head ?? "the expected head"}.`
         : archiveReady
-          ? `On the receiving machine, run scripts/push-tauri-migration-handoff.ts --archive ${handoffArchive.archive} --remote origin to verify checksum, extract, push, and verify the remote branch.`
-          : "Copy the packaged handoff archive and .sha256 sidecar to a write-capable machine, then run scripts/push-tauri-migration-handoff.ts --archive /path/to/open-design-tauri-migration-handoff.tar.gz --remote origin.",
+          ? `On the receiving machine, run ${handoffArchive.commandScript} from the repository root, or run scripts/push-tauri-migration-handoff.ts --archive ${handoffArchive.archive} --remote origin to verify checksum, extract, push, and verify the remote branch.`
+          : "Copy the packaged handoff archive, .sha256 sidecar, and .commands.sh sidecar to a write-capable machine, then run the command script or scripts/push-tauri-migration-handoff.ts --archive /path/to/open-design-tauri-migration-handoff.tar.gz --remote origin.",
       platformReports?.current === true
         ? "Advance M4 evidence and M5 defaults with scripts/advance-tauri-migration-m4-m5.ts using the verified report paths shown above."
         : remote?.current === true
@@ -448,6 +449,7 @@ async function readHandoffStatus(handoffDir: string, gitStatus: GitStatus): Prom
 
 async function readHandoffArchiveStatus(archivePath: string, handoff?: HandoffStatus): Promise<HandoffArchiveStatus> {
   const checksumPath = `${archivePath}.sha256`;
+  const commandScriptPath = `${archivePath}.commands.sh`;
   const problems: string[] = [];
   let archiveSha256: string | undefined;
   let expectedSha256: string | undefined;
@@ -457,6 +459,7 @@ async function readHandoffArchiveStatus(archivePath: string, handoff?: HandoffSt
     return {
       archive: archivePath,
       checksum: checksumPath,
+      commandScript: commandScriptPath,
       present: false,
       problems: [`archive unavailable: ${error instanceof Error ? error.message : String(error)}`],
     };
@@ -475,6 +478,21 @@ async function readHandoffArchiveStatus(archivePath: string, handoff?: HandoffSt
     }
   } catch (error) {
     problems.push(`checksum sidecar unavailable: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  try {
+    const [commandScriptSource, commandScriptStat] = await Promise.all([readFile(commandScriptPath, "utf8"), stat(commandScriptPath)]);
+    if ((commandScriptStat.mode & 0o111) === 0) {
+      problems.push(`command script is not executable: ${commandScriptPath}`);
+    }
+    if (!commandScriptSource.includes('git fetch "$bundle" "$branch:$temp_ref"')) {
+      problems.push(`command script is missing self-contained bundle import: ${commandScriptPath}`);
+    }
+    if (!commandScriptSource.includes("download-tauri-m4-reports.ts") || !commandScriptSource.includes("GITHUB_RUN_ID")) {
+      problems.push(`command script is missing post-CI report advance guidance: ${commandScriptPath}`);
+    }
+  } catch (error) {
+    problems.push(`command script unavailable: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   const extractRoot = await mkdtemp(join(tmpdir(), "open-design-tauri-status-archive-"));
@@ -505,6 +523,7 @@ async function readHandoffArchiveStatus(archivePath: string, handoff?: HandoffSt
   return {
     archive: archivePath,
     checksum: checksumPath,
+    commandScript: commandScriptPath,
     current: problems.length === 0 && handoff?.current === true,
     ...(expectedSha256 == null ? {} : { expectedSha256 }),
     present: true,
@@ -723,6 +742,7 @@ function formatMigrationStatus(status: MigrationStatus): string {
       lines.push(`  SHA-256: ${status.handoffArchive.sha256}`);
     }
     lines.push(`  Checksum: ${status.handoffArchive.checksum}`);
+    lines.push(`  Command script: ${status.handoffArchive.commandScript}`);
     for (const problem of status.handoffArchive.problems) {
       lines.push(`  - ${problem}`);
     }
