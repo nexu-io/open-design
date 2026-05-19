@@ -262,6 +262,28 @@ export function DesignFilesPanel({
     }
     return groups;
   }, [dayBoundary, pageFiles]);
+
+  // Derives the order in which file rows are actually rendered in the DOM so
+  // that shift-click range selection operates on visible row positions rather
+  // than the underlying sort order (which differs from the DOM order when
+  // groupMode === 'kind' reorders rows by kindSortPriority).
+  const visiblePageOrder = useMemo((): ProjectFile[] => {
+    if (groupMode === 'kind') {
+      const grouped = new Map<ProjectFileKind, ProjectFile[]>();
+      for (const f of pageFiles) {
+        const bucket = grouped.get(f.kind) ?? [];
+        bucket.push(f);
+        grouped.set(f.kind, bucket);
+      }
+      return [...grouped.entries()]
+        .sort(([a], [b]) => kindSortPriority(a) - kindSortPriority(b))
+        .flatMap(([, kindFiles]) => kindFiles);
+    }
+    if (groupMode === 'modified') {
+      return MODIFIED_SECTION_ORDER.flatMap((section) => modifiedGroups[section]);
+    }
+    return pageFiles;
+  }, [groupMode, pageFiles, modifiedGroups]);
   const visibleModifiedSections = MODIFIED_SECTION_ORDER.filter(
     (section) => modifiedGroups[section].length > 0,
   );
@@ -456,10 +478,13 @@ export function DesignFilesPanel({
         setSelected(new Set([name]));
         return;
       }
-      // Use pageFiles so the range matches only visible rows on this page.
-      // If the anchor has been scrolled to a different page, fall back to plain-click.
-      const anchorIdx = pageFiles.findIndex((f) => f.name === anchor);
-      const clickIdx = pageFiles.findIndex((f) => f.name === name);
+      // Use visiblePageOrder so the range matches the rows the user actually
+      // sees on screen. pageFiles is sorted by the active sort key, but
+      // groupMode === 'kind' reorders rows visually by kindSortPriority, so
+      // indexing into pageFiles would produce wrong (and potentially larger)
+      // ranges. If the anchor is on a different page, fall back to plain-click.
+      const anchorIdx = visiblePageOrder.findIndex((f) => f.name === anchor);
+      const clickIdx = visiblePageOrder.findIndex((f) => f.name === name);
       if (anchorIdx === -1 || clickIdx === -1) {
         // Anchor not on this page — reset anchor to clicked item.
         anchorRef.current = name;
@@ -468,7 +493,7 @@ export function DesignFilesPanel({
       }
       const lo = Math.min(anchorIdx, clickIdx);
       const hi = Math.max(anchorIdx, clickIdx);
-      setSelected(new Set(pageFiles.slice(lo, hi + 1).map((f) => f.name)));
+      setSelected(new Set(visiblePageOrder.slice(lo, hi + 1).map((f) => f.name)));
       // Anchor stays at the original plain-click position; do not move it.
       return;
     }

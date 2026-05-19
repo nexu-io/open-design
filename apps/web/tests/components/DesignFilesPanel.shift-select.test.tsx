@@ -4,17 +4,17 @@ import { cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DesignFilesPanel } from '../../src/components/DesignFilesPanel';
-import type { ProjectFile } from '../../src/types';
+import type { ProjectFile, ProjectFileKind } from '../../src/types';
 
-function file(name: string, mtime = Date.now()): ProjectFile {
+function file(name: string, mtime = Date.now(), kind: ProjectFileKind = 'html'): ProjectFile {
   return {
     name,
     path: name,
     type: 'file',
     size: 1024,
     mtime,
-    kind: 'html',
-    mime: 'text/html',
+    kind,
+    mime: kind === 'image' ? 'image/png' : 'text/html',
   };
 }
 
@@ -236,5 +236,56 @@ describe('DesignFilesPanel shift-click range selection', () => {
     fireEvent.click(getCheckbox(container, 'a.html'));
     expect(rowA.getAttribute('aria-selected')).toBe('true');
     expect(rowB.getAttribute('aria-selected')).toBe('false');
+  });
+
+  it('(g) shift-select range matches visual kind-group order, not mtime sort order', () => {
+    // Regression for the bug where handleRowCheck used pageFiles (sorted by
+    // mtime desc) but renderKindSections reorders rows by kindSortPriority,
+    // causing the shift-click range to cover wrong files.
+    //
+    // Visual render order in groupMode==='kind' (default):
+    //   HTML group (priority 0): first.html, second.html
+    //   Image group (priority 4): alpha.png, beta.png
+    //
+    // mtime sort order (desc, default): first.html, alpha.png, second.html, beta.png
+    //
+    // If handleRowCheck used mtime order, clicking first.html then
+    // shift-clicking second.html would also pull in alpha.png (which sits
+    // between them in mtime order). The fix makes it use visual order, so
+    // only first.html and second.html are selected.
+    const now = Date.now();
+    const files = [
+      // Interleaved by mtime so they appear in a non-kind order if sorted by mtime
+      file('first.html',  now - 0,    'html'),
+      file('alpha.png',   now - 1000, 'image'),
+      file('second.html', now - 2000, 'html'),
+      file('beta.png',    now - 3000, 'image'),
+    ];
+    const { container } = renderPanel(files);
+
+    // Visual DOM order (kind grouping): first.html, second.html, alpha.png, beta.png
+    const domRows = Array.from(container.querySelectorAll('.df-file-row')).map(
+      (el) => el.getAttribute('data-testid')!.replace(/^design-file-row-/, ''),
+    );
+    // Confirm the DOM renders html rows before image rows regardless of mtime
+    expect(domRows.indexOf('first.html')).toBeLessThan(domRows.indexOf('alpha.png'));
+    expect(domRows.indexOf('second.html')).toBeLessThan(domRows.indexOf('alpha.png'));
+
+    // Plain click on first.html — sets anchor at visual position 0
+    fireEvent.click(getCheckbox(container, 'first.html'));
+    expect(isSelected(container, 'first.html')).toBe(true);
+
+    // Shift-click second.html — visually adjacent (position 1), so range = [first.html, second.html]
+    // With the bug, the range was computed against mtime order:
+    //   first.html=0, second.html=2 → slice(0,3) = [first.html, alpha.png, second.html]
+    // After the fix, the range uses visual order:
+    //   first.html=0, second.html=1 → slice(0,2) = [first.html, second.html]
+    fireEvent.click(getCheckbox(container, 'second.html'), { shiftKey: true });
+
+    expect(isSelected(container, 'first.html')).toBe(true);
+    expect(isSelected(container, 'second.html')).toBe(true);
+    // alpha.png must NOT be selected — it was falsely included by the buggy mtime-order range
+    expect(isSelected(container, 'alpha.png')).toBe(false);
+    expect(isSelected(container, 'beta.png')).toBe(false);
   });
 });
