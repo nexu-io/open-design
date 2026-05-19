@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import type { ToolPackConfig } from "../src/config.js";
 import {
   buildDockerArgs,
+  focusAttemptsForLinuxWindow,
   matchesAppImageProcess,
   renderDesktopTemplate,
   sanitizeNamespace,
@@ -286,5 +287,52 @@ describe("matchesAppImageProcess", () => {
       installPath,
     );
     expect(ok).toBe(false);
+  });
+});
+
+describe("focusAttemptsForLinuxWindow", () => {
+  it("uses swaymsg with pid selector when SWAYSOCK is set", () => {
+    const attempts = focusAttemptsForLinuxWindow(4180627, { SWAYSOCK: "/run/user/1000/sway-ipc.sock" });
+    expect(attempts[0]).toEqual({
+      args: ["-t", "command", '[pid="4180627"] focus'],
+      command: "swaymsg",
+      method: "swaymsg",
+    });
+  });
+
+  it("uses i3-msg with pid selector when I3SOCK is set", () => {
+    const attempts = focusAttemptsForLinuxWindow(42, { I3SOCK: "/run/user/1000/i3-ipc.sock" });
+    expect(attempts[0]).toEqual({
+      args: ['[pid="42"] focus'],
+      command: "i3-msg",
+      method: "i3-msg",
+    });
+  });
+
+  it("uses hyprctl when HYPRLAND_INSTANCE_SIGNATURE is set", () => {
+    const attempts = focusAttemptsForLinuxWindow(42, { HYPRLAND_INSTANCE_SIGNATURE: "abc" });
+    expect(attempts[0]).toEqual({
+      args: ["dispatch", "focuswindow", "pid:42"],
+      command: "hyprctl",
+      method: "hyprctl",
+    });
+  });
+
+  it("always includes wmctrl as the universal fallback", () => {
+    const swayAttempts = focusAttemptsForLinuxWindow(1, { SWAYSOCK: "/x" });
+    const headlessAttempts = focusAttemptsForLinuxWindow(1, {});
+    expect(swayAttempts.at(-1)?.method).toBe("wmctrl");
+    expect(headlessAttempts).toEqual([
+      { args: ["-x", "-a", "Open Design"], command: "wmctrl", method: "wmctrl" },
+    ]);
+  });
+
+  it("orders WM-specific attempts before the universal wmctrl fallback", () => {
+    const attempts = focusAttemptsForLinuxWindow(7, {
+      HYPRLAND_INSTANCE_SIGNATURE: "abc",
+      I3SOCK: "/run/i3",
+      SWAYSOCK: "/run/sway",
+    });
+    expect(attempts.map((a) => a.method)).toEqual(["swaymsg", "i3-msg", "hyprctl", "wmctrl"]);
   });
 });

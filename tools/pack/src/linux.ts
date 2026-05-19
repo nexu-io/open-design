@@ -628,11 +628,15 @@ export async function installPackedLinuxApp(config: ToolPackConfig): Promise<Lin
   };
 }
 
-type LinuxStartSource = "built" | "installed";
+type LinuxStartSource = "already-running" | "built" | "installed";
 
 export type LinuxStartResult = {
   appImagePath: string;
   executablePath: string;
+  // Non-null only when source is "already-running" and a window-manager
+  // focus command succeeded. Identifies which strategy was used (swaymsg,
+  // i3-msg, hyprctl, wmctrl) for debugging headless-vs-WM mismatches.
+  focusMethod?: string | null;
   logPath: string;
   namespace: string;
   pid: number;
@@ -782,8 +786,154 @@ async function fetchDesktopStatus(config: ToolPackConfig): Promise<DesktopStatus
   }
 }
 
+type DetectedRunningInstance = {
+  appImagePath: string;
+  marker: DesktopRootIdentityMarker;
+  pid: number;
+};
+
+// Mirrors the validation pattern in stopPackedLinuxApp -- stamp shape +
+// process exe + IPC liveness -- but returns the live instance instead of
+// killing it. Kept inline (vs. extracting a shared helper) to avoid widening
+// the surface of stopPackedLinuxApp during this change; refactor later.
+async function detectRunningLinuxApp(
+  config: ToolPackConfig,
+  paths: LinuxPaths,
+): Promise<DetectedRunningInstance | null> {
+  const { marker } = await readDesktopRootIdentityMarker(config);
+  if (marker == null) return null;
+
+  const snapshots = await listProcessSnapshots();
+  if (!snapshots.some((s) => s.pid === marker.pid)) return null;
+
+  const expectedIpc = resolveAppIpcPath({
+    app: APP_KEYS.DESKTOP,
+    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    namespace: config.namespace,
+  });
+  const stampOk =
+    marker.stamp.app === APP_KEYS.DESKTOP &&
+    marker.stamp.mode === SIDECAR_MODES.RUNTIME &&
+    marker.stamp.namespace === config.namespace &&
+    marker.stamp.ipc === expectedIpc &&
+    (marker.stamp.source === SIDECAR_SOURCES.TOOLS_PACK ||
+      marker.stamp.source === SIDECAR_SOURCES.PACKAGED);
+  if (!stampOk) return null;
+  if (marker.namespaceRoot !== config.roots.runtime.namespaceRoot) return null;
+
+  const candidateAppImagePath =
+    (await pathExists(paths.installAppImagePath))
+      ? paths.installAppImagePath
+      : await findBuiltAppImage(paths);
+  if (candidateAppImagePath == null) return null;
+
+  const exePath = await readProcessExe(marker.pid);
+  const env = await readProcessEnv(marker.pid);
+  const cmdOk = matchesAppImageProcess(
+    { pid: marker.pid, executable: exePath, env },
+    candidateAppImagePath,
+  );
+  if (!cmdOk) return null;
+
+  // Liveness probe: the marker may point at a wedged process whose IPC
+  // server isn't accepting connections (e.g. crashed mid-startup before
+  // sockets bound, but parent still alive). If STATUS doesn't answer
+  // quickly, treat as zombie and fall through to the spawn path -- the
+  // existing logic there rms the marker and waits for a fresh one.
+  try {
+    await requestJsonIpc(
+      marker.stamp.ipc,
+      { type: SIDECAR_MESSAGES.STATUS },
+      { timeoutMs: 1000 },
+    );
+  } catch {
+    return null;
+  }
+
+  return { appImagePath: candidateAppImagePath, marker, pid: marker.pid };
+}
+
+export type LinuxFocusAttempt = {
+  args: string[];
+  command: string;
+  method: "hyprctl" | "i3-msg" | "swaymsg" | "wmctrl";
+};
+
+// Window-manager-specific focus commands, ordered by specificity. The
+// pid-targeted variants (sway/i3/hyprland) are preferred because they
+// disambiguate when multiple Open Design windows exist; wmctrl by class is
+// the universal fallback when no WM-specific socket is present.
+export function focusAttemptsForLinuxWindow(
+  pid: number,
+  env: NodeJS.ProcessEnv,
+): LinuxFocusAttempt[] {
+  const attempts: LinuxFocusAttempt[] = [];
+  if (env.SWAYSOCK) {
+    attempts.push({
+      args: ["-t", "command", `[pid="${pid}"] focus`],
+      command: "swaymsg",
+      method: "swaymsg",
+    });
+  }
+  if (env.I3SOCK) {
+    attempts.push({
+      args: [`[pid="${pid}"] focus`],
+      command: "i3-msg",
+      method: "i3-msg",
+    });
+  }
+  if (env.HYPRLAND_INSTANCE_SIGNATURE) {
+    attempts.push({
+      args: ["dispatch", "focuswindow", `pid:${pid}`],
+      command: "hyprctl",
+      method: "hyprctl",
+    });
+  }
+  attempts.push({
+    args: ["-x", "-a", "Open Design"],
+    command: "wmctrl",
+    method: "wmctrl",
+  });
+  return attempts;
+}
+
+async function focusLinuxWindow(pid: number): Promise<string | null> {
+  for (const attempt of focusAttemptsForLinuxWindow(pid, process.env)) {
+    try {
+      await execFileAsync(attempt.command, attempt.args, { timeout: 1500 });
+      return attempt.method;
+    } catch {
+      // Try the next attempt -- command missing, WM not running, etc.
+    }
+  }
+  return null;
+}
+
 export async function startPackedLinuxApp(config: ToolPackConfig): Promise<LinuxStartResult> {
   const paths = resolveLinuxPaths(config);
+
+  // Fast path: if a live instance is already running for this namespace,
+  // focus its window and return rather than spawning a duplicate. A second
+  // spawn would race the existing AppImage for the desktop IPC socket
+  // (/tmp/open-design/ipc/<ns>/desktop.sock), hit EADDRINUSE, and exit 1 --
+  // observed as the launcher "doing nothing" on the second click. Falls
+  // through to the spawn path when the marker is missing, stale, or IPC
+  // doesn't answer STATUS.
+  const existing = await detectRunningLinuxApp(config, paths);
+  if (existing != null) {
+    const focusMethod = await focusLinuxWindow(existing.pid).catch(() => null);
+    return {
+      appImagePath: existing.appImagePath,
+      executablePath: existing.appImagePath,
+      focusMethod,
+      logPath: desktopLogPath(config),
+      namespace: config.namespace,
+      pid: existing.pid,
+      source: "already-running",
+      status: await fetchDesktopStatus(config),
+    };
+  }
+
   const installed = await pathExists(paths.installAppImagePath);
   const built = !installed ? await findBuiltAppImage(paths) : null;
   const appImagePath = installed ? paths.installAppImagePath : built;
