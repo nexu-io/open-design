@@ -166,6 +166,49 @@ test("tauri-migration-status reports a missing remote branch", async (t) => {
   assert.match(parsed.remote.problems.join("\n"), /remote branch not found/);
 });
 
+test("tauri-migration-status reports verified platform reports", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const winReport = join(fixture, "win-report");
+  const linuxReport = join(fixture, "linux-report");
+  await writeWindowsReport(winReport);
+  await writeLinuxReport(linuxReport);
+
+  const result = await runStatus(fixture, "--win-report", winReport, "--linux-report", linuxReport);
+  const parsed = JSON.parse(result.stdout) as {
+    nextActions: string[];
+    platformReports: {
+      current: boolean;
+      linuxReport: string;
+      problems: string[];
+      winReport: string;
+    };
+  };
+
+  assert.equal(parsed.platformReports.current, true);
+  assert.equal(parsed.platformReports.winReport, winReport);
+  assert.equal(parsed.platformReports.linuxReport, linuxReport);
+  assert.deepEqual(parsed.platformReports.problems, []);
+  assert.match(parsed.nextActions.join("\n"), /using the verified report paths shown above/);
+});
+
+test("tauri-migration-status reports incomplete platform report inputs", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const winReport = join(fixture, "win-report");
+  await writeWindowsReport(winReport);
+
+  const result = await runStatus(fixture, "--win-report", winReport);
+  const parsed = JSON.parse(result.stdout) as { platformReports: { current: boolean; problems: string[] } };
+
+  assert.equal(parsed.platformReports.current, false);
+  assert.deepEqual(parsed.platformReports.problems, ["Linux report not provided"]);
+});
+
 async function createFixtureRoot(
   t: test.TestContext,
   options: { checked: readonly string[]; defaults: "electron" | "tauri"; extraDocLines?: readonly string[] },
@@ -219,6 +262,132 @@ async function createRemoteFixture(root: string, branchHead: string): Promise<st
   await git(root, "init", "--bare", remotePath);
   await git(root, "push", remotePath, `${branchHead}:refs/heads/codex/electron-to-tauri-migration`);
   return remotePath;
+}
+
+async function writeWindowsReport(reportRoot: string): Promise<void> {
+  await mkdir(join(reportRoot, "screenshots"), { recursive: true });
+  await writeFile(join(reportRoot, "screenshots", "open-design-win-smoke.png"), "png");
+  await writeJson(join(reportRoot, "manifest.json"), {
+    platform: "win",
+    screenshot: "screenshots/open-design-win-smoke.png",
+    spec: "specs/win-tauri.spec.ts",
+  });
+  await writeJson(join(reportRoot, "suite-result.json"), {
+    exitCode: 0,
+    platform: "win",
+    spec: "specs/win-tauri.spec.ts",
+    status: "success",
+  });
+  await writeJson(join(reportRoot, "summary.json"), {
+    build: {
+      installerPath: "C:/tmp/OpenDesign.exe",
+      to: "nsis",
+    },
+    health: healthyEval(1234),
+    install: {
+      installDir: "C:/tmp/install",
+      uninstallerPath: "C:/tmp/install/Uninstall.exe",
+    },
+    screenshot: "screenshots/open-design-win-smoke.png",
+    start: {
+      executablePath: "C:/tmp/install/Open Design.exe",
+      pid: 123,
+      source: "installed",
+      status: runningStatus(1234),
+    },
+    stop: {
+      remainingPids: [],
+    },
+    uninstall: {
+      residueObservation: {
+        installedExeExists: false,
+        managedProcessPids: [],
+        productNamespaceRootExists: false,
+        registryResidues: [],
+        uninstallerExists: false,
+      },
+    },
+  });
+}
+
+async function writeLinuxReport(reportRoot: string): Promise<void> {
+  await mkdir(join(reportRoot, "screenshots"), { recursive: true });
+  await writeFile(join(reportRoot, "screenshots", "open-design-linux-smoke.png"), "png");
+  await writeJson(join(reportRoot, "manifest.json"), {
+    platform: "linux",
+    screenshot: "screenshots/open-design-linux-smoke.png",
+    spec: "specs/linux.spec.ts",
+  });
+  await writeJson(join(reportRoot, "suite-result.json"), {
+    exitCode: 0,
+    platform: "linux",
+    spec: "specs/linux.spec.ts",
+    status: "success",
+  });
+  await writeJson(join(reportRoot, "summary.json"), {
+    build: {
+      appImagePath: "/tmp/OpenDesign.AppImage",
+      to: "appimage",
+    },
+    headless: {
+      install: {
+        launcherPath: "/tmp/open-design-headless",
+      },
+      start: {
+        pid: 345,
+        status: {
+          url: "http://127.0.0.1:3456/",
+        },
+      },
+      stop: {
+        remainingPids: [],
+      },
+    },
+    health: healthyEval(2345),
+    install: {
+      appImagePath: "/tmp/OpenDesign.AppImage",
+    },
+    screenshot: "screenshots/open-design-linux-smoke.png",
+    start: {
+      executablePath: "/tmp/OpenDesign.AppImage",
+      pid: 234,
+      source: "installed",
+      status: runningStatus(2345),
+    },
+    stop: {
+      remainingPids: [],
+    },
+    uninstall: {
+      removed: {
+        appImage: "removed",
+        desktop: "removed",
+        icon: "removed",
+      },
+    },
+  });
+}
+
+async function writeJson(path: string, value: unknown): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+}
+
+function runningStatus(port: number): { state: string; url: string } {
+  return {
+    state: "running",
+    url: `http://127.0.0.1:${port}/`,
+  };
+}
+
+function healthyEval(port: number): { health: { ok: boolean; version: string }; href: string; status: number } {
+  return {
+    health: {
+      ok: true,
+      version: "0.7.0",
+    },
+    href: `http://127.0.0.1:${port}/`,
+    status: 200,
+  };
 }
 
 function migrationDoc(checkedLabels: readonly string[], extraLines: readonly string[]): string {

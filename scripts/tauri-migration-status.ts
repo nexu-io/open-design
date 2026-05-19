@@ -27,8 +27,10 @@ type DesktopRuntime = "electron" | "tauri";
 type ParsedArgs = {
   handoffDir?: string;
   json: boolean;
+  linuxReport?: string;
   remote?: string;
   root: string;
+  winReport?: string;
 };
 
 type ChecklistItemStatus = {
@@ -61,6 +63,7 @@ type MigrationStatus = {
   groups: ChecklistGroupStatus[];
   handoff?: HandoffStatus;
   nextActions: string[];
+  platformReports?: PlatformReportsStatus;
   phase: "M4" | "M5" | "M6" | "complete";
   remote?: RemoteStatus;
   root: string;
@@ -97,9 +100,17 @@ type RemoteStatus = {
   remote: string;
 };
 
+type PlatformReportsStatus = {
+  current: boolean;
+  linuxReport?: string;
+  problems: string[];
+  verifierOutput?: string;
+  winReport?: string;
+};
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
-  const status = await readMigrationStatus(args.root, args.handoffDir, args.remote);
+  const status = await readMigrationStatus(args.root, args.handoffDir, args.remote, args.winReport, args.linuxReport);
   if (args.json) {
     process.stdout.write(`${JSON.stringify(status, null, 2)}\n`);
     return;
@@ -134,9 +145,21 @@ function parseArgs(argv: string[]): ParsedArgs {
       index += 1;
       continue;
     }
+    if (arg === "--linux-report") {
+      if (value == null) throw new Error("--linux-report requires a path");
+      parsed.linuxReport = resolve(value);
+      index += 1;
+      continue;
+    }
+    if (arg === "--win-report") {
+      if (value == null) throw new Error("--win-report requires a path");
+      parsed.winReport = resolve(value);
+      index += 1;
+      continue;
+    }
     if (arg === "--help" || arg === "-h") {
       process.stdout.write(
-        "usage: tsx scripts/tauri-migration-status.ts [--root <repo>] [--handoff-dir <dir>] [--remote <remote>] [--json]\n",
+        "usage: tsx scripts/tauri-migration-status.ts [--root <repo>] [--handoff-dir <dir>] [--remote <remote>] [--win-report <dir>] [--linux-report <dir>] [--json]\n",
       );
       process.exit(0);
     }
@@ -145,7 +168,13 @@ function parseArgs(argv: string[]): ParsedArgs {
   return parsed;
 }
 
-async function readMigrationStatus(root: string, handoffDir?: string, remote?: string): Promise<MigrationStatus> {
+async function readMigrationStatus(
+  root: string,
+  handoffDir?: string,
+  remote?: string,
+  winReport?: string,
+  linuxReport?: string,
+): Promise<MigrationStatus> {
   const [migrationDoc, toolsDevConfig, toolsPackConfig, releaseBetaWorkflow, gitStatus] = await Promise.all([
     readFile(join(root, "docs", "electron-to-tauri-migration.md"), "utf8"),
     readFile(join(root, "tools", "dev", "src", "config.ts"), "utf8"),
@@ -173,6 +202,8 @@ async function readMigrationStatus(root: string, handoffDir?: string, remote?: s
   const phase = currentPhase(groups);
   const handoff = handoffDir == null ? undefined : await readHandoffStatus(handoffDir, gitStatus);
   const remoteStatus = remote == null ? undefined : await readRemoteStatus(root, remote, gitStatus, handoff);
+  const platformReports =
+    winReport == null && linuxReport == null ? undefined : await readPlatformReportsStatus(winReport, linuxReport);
   const status: MigrationStatus = {
     defaults: {
       releaseBeta: readReleaseBetaDefault(releaseBetaWorkflow),
@@ -182,7 +213,8 @@ async function readMigrationStatus(root: string, handoffDir?: string, remote?: s
     git: gitStatus,
     groups,
     ...(handoff == null ? {} : { handoff }),
-    nextActions: nextActionsForPhase(phase, handoff, remoteStatus),
+    nextActions: nextActionsForPhase(phase, handoff, remoteStatus, platformReports),
+    ...(platformReports == null ? {} : { platformReports }),
     phase,
     ...(remoteStatus == null ? {} : { remote: remoteStatus }),
     root,
@@ -207,7 +239,12 @@ function currentPhase(groups: ChecklistGroupStatus[]): MigrationStatus["phase"] 
   return "complete";
 }
 
-function nextActionsForPhase(phase: MigrationStatus["phase"], handoff?: HandoffStatus, remote?: RemoteStatus): string[] {
+function nextActionsForPhase(
+  phase: MigrationStatus["phase"],
+  handoff?: HandoffStatus,
+  remote?: RemoteStatus,
+  platformReports?: PlatformReportsStatus,
+): string[] {
   if (phase === "M4") {
     return [
       handoff?.current === true
@@ -216,8 +253,12 @@ function nextActionsForPhase(phase: MigrationStatus["phase"], handoff?: HandoffS
       remote?.current === true
         ? `Remote ${remote.remote} already matches ${remote.branch ?? "the migration branch"} at ${remote.head ?? "the expected head"}.`
         : "Import and push the manifest on a write-capable machine, then run scripts/verify-tauri-migration-remote.ts --manifest /tmp/open-design-tauri-migration-handoff/open-design-tauri-migration-handoff.json --remote origin.",
-      "Run the Windows and Linux Tauri package smoke jobs.",
-      "Advance M4 evidence and M5 defaults with scripts/advance-tauri-migration-m4-m5.ts --win-report <dir> --linux-report <dir>.",
+      platformReports?.current === true
+        ? "Advance M4 evidence and M5 defaults with scripts/advance-tauri-migration-m4-m5.ts using the verified report paths shown above."
+        : "Run the Windows and Linux Tauri package smoke jobs.",
+      ...(platformReports?.current === true
+        ? []
+        : ["Advance M4 evidence and M5 defaults with scripts/advance-tauri-migration-m4-m5.ts --win-report <dir> --linux-report <dir>."]),
     ];
   }
   if (phase === "M5") {
@@ -406,6 +447,55 @@ async function readRemoteBranchHead(cwd: string, remote: string, branch: string)
   return head;
 }
 
+async function readPlatformReportsStatus(winReport?: string, linuxReport?: string): Promise<PlatformReportsStatus> {
+  const problems: string[] = [];
+  if (winReport == null) problems.push("Windows report not provided");
+  if (linuxReport == null) problems.push("Linux report not provided");
+  if (problems.length > 0) {
+    return {
+      current: false,
+      ...(linuxReport == null ? {} : { linuxReport }),
+      problems,
+      ...(winReport == null ? {} : { winReport }),
+    };
+  }
+  const checkedWinReport = winReport!;
+  const checkedLinuxReport = linuxReport!;
+  try {
+    const result = await execFileAsync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        join(import.meta.dirname, "verify-tauri-platform-gates.ts"),
+        "--win-report",
+        checkedWinReport,
+        "--linux-report",
+        checkedLinuxReport,
+      ],
+      {
+        cwd: defaultRoot,
+        maxBuffer: 1024 * 1024 * 4,
+      },
+    );
+    return {
+      current: true,
+      linuxReport: checkedLinuxReport,
+      problems: [],
+      verifierOutput: result.stdout.trim(),
+      winReport: checkedWinReport,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      current: false,
+      linuxReport: checkedLinuxReport,
+      problems: [message],
+      winReport: checkedWinReport,
+    };
+  }
+}
+
 function readHandoffManifest(value: Partial<HandoffManifest>): HandoffManifest {
   if (value.schemaVersion !== 1) {
     throw new Error(`unsupported handoff manifest schemaVersion: ${String(value.schemaVersion)}`);
@@ -479,6 +569,18 @@ function formatMigrationStatus(status: MigrationStatus): string {
       lines.push(`  Expected: ${status.remote.expectedHead}`);
     }
     for (const problem of status.remote.problems) {
+      lines.push(`  - ${problem}`);
+    }
+  }
+  if (status.platformReports != null) {
+    lines.push(`Platform reports: ${status.platformReports.current ? "verified" : "needs attention"}`);
+    if (status.platformReports.winReport != null) {
+      lines.push(`  Windows: ${status.platformReports.winReport}`);
+    }
+    if (status.platformReports.linuxReport != null) {
+      lines.push(`  Linux: ${status.platformReports.linuxReport}`);
+    }
+    for (const problem of status.platformReports.problems) {
       lines.push(`  - ${problem}`);
     }
   }
