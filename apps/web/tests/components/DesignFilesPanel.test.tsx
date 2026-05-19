@@ -479,7 +479,7 @@ describe('DesignFilesPanel large-list regression', () => {
     const firstName = rows[0]!.getAttribute('data-testid')!.replace(/^design-file-row-/, '');
     const secondName = rows[1]!.getAttribute('data-testid')!.replace(/^design-file-row-/, '');
     fireEvent.click(rows[0]!.querySelector('.df-row-check')!);
-    fireEvent.click(rows[1]!.querySelector('.df-row-check')!);
+    fireEvent.click(rows[1]!.querySelector('.df-row-check')!, { metaKey: true });
     fireEvent.click(container.querySelector('[data-testid="design-files-batch-delete"]')!);
 
     expect(onDeleteFiles).toHaveBeenCalledTimes(1);

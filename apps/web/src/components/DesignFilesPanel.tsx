@@ -149,6 +149,7 @@ export function DesignFilesPanel({
   const [sortKey, setSortKey] = useState<SortKey>('mtime');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const lastKeyPress = useRef<Map<string, number>>(new Map());
+  const anchorRef = useRef<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [installingFolder, setInstallingFolder] = useState<string | null>(null);
   const [sharingFolder, setSharingFolder] = useState<string | null>(null);
@@ -433,16 +434,48 @@ export function DesignFilesPanel({
     };
   }
 
-  function toggleSelect(name: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) {
-        next.delete(name);
-      } else {
-        next.add(name);
+  function handleRowCheck(name: string, e: React.MouseEvent) {
+    const multi = e.metaKey || e.ctrlKey;
+    const range = e.shiftKey;
+
+    if (range) {
+      // Shift-click: select inclusive range from anchor to this row.
+      // If no anchor is set yet, behave as a plain click and set anchor.
+      const anchor = anchorRef.current;
+      if (anchor === null) {
+        anchorRef.current = name;
+        setSelected(new Set([name]));
+        return;
       }
-      return next;
-    });
+      const anchorIdx = sortedFiles.findIndex((f) => f.name === anchor);
+      const clickIdx = sortedFiles.findIndex((f) => f.name === name);
+      if (anchorIdx === -1 || clickIdx === -1) {
+        // Fallback: just select the clicked item
+        anchorRef.current = name;
+        setSelected(new Set([name]));
+        return;
+      }
+      const lo = Math.min(anchorIdx, clickIdx);
+      const hi = Math.max(anchorIdx, clickIdx);
+      setSelected(new Set(sortedFiles.slice(lo, hi + 1).map((f) => f.name)));
+      // Anchor stays at the original plain-click position; do not move it.
+      return;
+    }
+
+    if (multi) {
+      // Cmd/Ctrl-click: toggle only this item. Anchor stays where it was.
+      setSelected((prev) => {
+        const next = new Set(prev);
+        if (next.has(name)) next.delete(name);
+        else next.add(name);
+        return next;
+      });
+      return;
+    }
+
+    // Plain click: select only this item and reset anchor.
+    anchorRef.current = name;
+    setSelected(new Set([name]));
   }
 
   function toggleSelectPage() {
@@ -462,6 +495,7 @@ export function DesignFilesPanel({
   }
 
   function clearSelection() {
+    anchorRef.current = null;
     setSelected(new Set());
   }
 
@@ -572,7 +606,7 @@ export function DesignFilesPanel({
             className="df-row-check"
             onClick={(e) => {
               e.stopPropagation();
-              toggleSelect(f.name);
+              handleRowCheck(f.name, e);
             }}
             role="checkbox"
             aria-checked={selected.has(f.name)}
@@ -581,7 +615,13 @@ export function DesignFilesPanel({
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
                 e.stopPropagation();
-                toggleSelect(f.name);
+                // Keyboard activation: toggle without clearing others (multi-select via keyboard is additive).
+                setSelected((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(f.name)) next.delete(f.name);
+                  else next.add(f.name);
+                  return next;
+                });
               }
             }}
           >
