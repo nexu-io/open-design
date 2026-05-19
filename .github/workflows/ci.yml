@@ -126,15 +126,26 @@ jobs:
         uses: actions/checkout@v6.0.2
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v5
+        uses: pnpm/action-setup@v6.0.8
         with:
           version: 10.33.2
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v6.4.0
         with:
           node-version: 24
-          cache: pnpm
+          package-manager-cache: false
+
+      - name: Resolve pnpm store path
+        id: pnpm-store
+        shell: bash
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore pnpm store cache
+        uses: actions/cache/restore@v5.0.5
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -181,15 +192,26 @@ jobs:
         uses: actions/checkout@v6.0.2
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v5
+        uses: pnpm/action-setup@v6.0.8
         with:
           version: 10.33.2
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v6.4.0
         with:
           node-version: 24
-          cache: pnpm
+          package-manager-cache: false
+
+      - name: Resolve pnpm store path
+        id: pnpm-store
+        shell: bash
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore pnpm store cache
+        uses: actions/cache/restore@v5.0.5
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -213,15 +235,26 @@ jobs:
         uses: actions/checkout@v6.0.2
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v5
+        uses: pnpm/action-setup@v6.0.8
         with:
           version: 10.33.2
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v6.4.0
         with:
           node-version: 24
-          cache: pnpm
+          package-manager-cache: false
+
+      - name: Resolve pnpm store path
+        id: pnpm-store
+        shell: bash
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore pnpm store cache
+        uses: actions/cache/restore@v5.0.5
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -247,15 +280,26 @@ jobs:
         uses: actions/checkout@v6.0.2
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v5
+        uses: pnpm/action-setup@v6.0.8
         with:
           version: 10.33.2
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v6.4.0
         with:
           node-version: 24
-          cache: pnpm
+          package-manager-cache: false
+
+      - name: Resolve pnpm store path
+        id: pnpm-store
+        shell: bash
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore pnpm store cache
+        uses: actions/cache/restore@v5.0.5
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -278,15 +322,26 @@ jobs:
         uses: actions/checkout@v6.0.2
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v5
+        uses: pnpm/action-setup@v6.0.8
         with:
           version: 10.33.2
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v6.4.0
         with:
           node-version: 24
-          cache: pnpm
+          package-manager-cache: false
+
+      - name: Resolve pnpm store path
+        id: pnpm-store
+        shell: bash
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore pnpm store cache
+        uses: actions/cache/restore@v5.0.5
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -346,15 +401,26 @@ jobs:
         uses: actions/checkout@v6.0.2
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v5
+        uses: pnpm/action-setup@v6.0.8
         with:
           version: 10.33.2
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v6.4.0
         with:
           node-version: 24
-          cache: pnpm
+          package-manager-cache: false
+
+      - name: Resolve pnpm store path
+        id: pnpm-store
+        shell: bash
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore pnpm store cache
+        uses: actions/cache/restore@v5.0.5
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -374,29 +440,41 @@ jobs:
         uses: actions/checkout@v6.0.2
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v5
+        uses: pnpm/action-setup@v6.0.8
         with:
           version: 10.33.2
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v6.4.0
         with:
           node-version: 24
-          cache: pnpm
+          package-manager-cache: false
+
+      - name: Resolve pnpm store path
+        id: pnpm-store
+        shell: bash
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore pnpm store cache
+        uses: actions/cache/restore@v5.0.5
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Cache Playwright browser binaries between runs. The key follows the
-      # @playwright/test version so browser revisions update with package bumps.
+      # Restore Playwright browser binaries without saving from CI runs. The
+      # key follows the @playwright/test version so browser revisions update
+      # with package bumps.
       - name: Resolve Playwright version
         id: playwright-version
         run: |
           version=$(node -p "require('./e2e/package.json').devDependencies['@playwright/test'].replace(/[^0-9.]/g,'')")
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
+      - name: Restore Playwright browser cache
+        uses: actions/cache/restore@v5.0.5
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
@@ -427,15 +505,26 @@ jobs:
         uses: actions/checkout@v6.0.2
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v5
+        uses: pnpm/action-setup@v6.0.8
         with:
           version: 10.33.2
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v6.4.0
         with:
           node-version: 24
-          cache: pnpm
+          package-manager-cache: false
+
+      - name: Resolve pnpm store path
+        id: pnpm-store
+        shell: bash
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore pnpm store cache
+        uses: actions/cache/restore@v5.0.5
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
