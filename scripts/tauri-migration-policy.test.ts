@@ -142,6 +142,7 @@ test("evaluateTauriMigrationOrder accepts formatted runtime kind arrays during t
     postM5Input({
       toolsDevConfig: formattedFallbackToolsConfig("tauri"),
       toolsPackConfig: formattedFallbackToolsConfig("tauri"),
+      releaseBetaWorkflow: formattedReleaseBetaWorkflow("tauri"),
     }),
   );
 
@@ -272,10 +273,11 @@ function toolsConfig(defaultRuntime: Runtime): string {
 function formattedFallbackToolsConfig(defaultRuntime: Runtime): string {
   return [
     "export const DESKTOP_RUNTIME_KINDS = [",
-    '  "tauri",',
-    '  "electron",',
+    "  'tauri',",
+    "  'electron',",
     "] as const;",
-    `export const DEFAULT_DESKTOP_RUNTIME = "${defaultRuntime}";`,
+    "export const DEFAULT_DESKTOP_RUNTIME",
+    `  = '${defaultRuntime}' satisfies DesktopRuntimeKind;`,
   ].join("\n");
 }
 
@@ -293,6 +295,16 @@ function releaseBetaWorkflow(defaultRuntime: Runtime): string {
     "    inputs:",
     "      desktop_runtime:",
     `        default: ${defaultRuntime}`,
+  ].join("\n");
+}
+
+function formattedReleaseBetaWorkflow(defaultRuntime: Runtime): string {
+  return [
+    "on:",
+    "  workflow_dispatch:",
+    "    inputs:",
+    "      desktop_runtime:",
+    `        default: "${defaultRuntime}"`,
   ].join("\n");
 }
 

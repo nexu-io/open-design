@@ -210,7 +210,7 @@ function isChecklistLineChecked(content: string, label: string): boolean {
 }
 
 function readDefaultDesktopRuntime(source: string, label: string): DesktopRuntime {
-  const match = source.match(/export const DEFAULT_DESKTOP_RUNTIME = "([^"]+)"/);
+  const match = source.match(/export\s+const\s+DEFAULT_DESKTOP_RUNTIME\s*=\s*["']([^"']+)["']/);
   const runtime = match?.[1];
   if (runtime === "electron" || runtime === "tauri") return runtime;
   throw new Error(`${label} must export DEFAULT_DESKTOP_RUNTIME as "electron" or "tauri"`);
@@ -238,7 +238,7 @@ function readReleaseBetaDesktopRuntimeDefault(source: string): DesktopRuntime {
       break;
     }
 
-    const match = line.match(/^\s+default:\s*(electron|tauri)\s*$/);
+    const match = line.match(/^\s+default:\s*["']?(electron|tauri)["']?\s*$/);
     if (match?.[1] === "electron" || match?.[1] === "tauri") {
       return match[1];
     }
