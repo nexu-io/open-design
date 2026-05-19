@@ -17,6 +17,8 @@ const tauriEvidencePaths = [
   "scripts/tauri-migration-status.test.ts",
   "scripts/verify-tauri-migration-handoff.ts",
   "scripts/verify-tauri-migration-handoff.test.ts",
+  "scripts/verify-tauri-migration-remote.ts",
+  "scripts/verify-tauri-migration-remote.test.ts",
   "scripts/verify-tauri-platform-gates.ts",
   "scripts/verify-tauri-platform-gates.test.ts",
 ] as const;
