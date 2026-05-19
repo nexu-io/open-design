@@ -1106,6 +1106,7 @@ code {
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
+  padding-left: 1px;
 }
 .app-project-title .title {
   color: var(--text-strong);
@@ -14036,7 +14037,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   outline: none;
   border-radius: 4px;
   padding: 1px 4px;
-  margin: -1px -4px;
+  margin: 0px;
   max-width: min(100%, 420px);
 }
 .topbar-title .title.editable:focus,

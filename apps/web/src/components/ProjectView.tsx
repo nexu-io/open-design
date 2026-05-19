@@ -3207,6 +3207,7 @@ export function ProjectView({
             <span
               className="title editable"
               data-testid="project-title"
+              title={project.name}
               tabIndex={0}
               role="textbox"
               suppressContentEditableWarning
