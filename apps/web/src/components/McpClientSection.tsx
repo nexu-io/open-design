@@ -1369,14 +1369,19 @@ function McpAgentSupportBanner({ agents }: { agents: AgentInfo[] }) {
   // "daemon unreachable" path and we don't want to flash an empty hint
   // during the initial fetch.
   if (agents.length === 0) return null;
-  const supported = agents.filter(
+  // `/api/agents` returns every runtime def the daemon knows about,
+  // including CLIs the user hasn't installed (those carry
+  // `available: false`). Splitting the full catalog into "Forwarded to /
+  // Not forwarded to" would mention adapters the user can't even launch,
+  // which is misleading. Scope the banner to installed CLIs only.
+  const installed = agents.filter((a) => a.available);
+  if (installed.length === 0) return null;
+  const supported = installed.filter(
     (a) => typeof a.externalMcpInjection === 'string',
   );
-  const unsupported = agents.filter(
+  const unsupported = installed.filter(
     (a) => !a.externalMcpInjection,
   );
-  // No installed CLIs at all → the agent picker will already tell the
-  // user to install something; suppress this banner to avoid noise.
   if (supported.length === 0 && unsupported.length === 0) return null;
   const renderNames = (list: AgentInfo[]) =>
     list
