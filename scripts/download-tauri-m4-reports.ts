@@ -47,6 +47,9 @@ type GithubJob = {
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
+  if (args.advance) {
+    await assertTrackedWorktreeClean(args.root, "downloading M4 reports with --advance");
+  }
   const runId = args.runId ?? (args.wait ? await waitForCompletedRun(args) : await findLatestCompletedRun(args));
   let viewedRun: GithubRun | undefined;
   if (args.runId != null && args.expectedHead != null) {
@@ -106,6 +109,29 @@ async function main(): Promise<void> {
       "",
     ].join("\n"),
   );
+}
+
+async function assertTrackedWorktreeClean(root: string, action: string): Promise<void> {
+  if (!(await isGitWorktree(root))) return;
+  const status = await execFileAsync("git", ["status", "--porcelain", "--untracked-files=no"], {
+    cwd: root,
+    maxBuffer: 1024 * 1024,
+  });
+  if (status.stdout.trim().length > 0) {
+    throw new Error(`tracked worktree changes are present; commit or stash them before ${action}`);
+  }
+}
+
+async function isGitWorktree(root: string): Promise<boolean> {
+  try {
+    const result = await execFileAsync("git", ["rev-parse", "--is-inside-work-tree"], {
+      cwd: root,
+      maxBuffer: 1024 * 1024,
+    });
+    return result.stdout.trim() === "true";
+  } catch {
+    return false;
+  }
 }
 
 function parseArgs(argv: string[]): Args {

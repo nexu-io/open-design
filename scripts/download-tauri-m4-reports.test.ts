@@ -153,6 +153,32 @@ test("download-tauri-m4-reports requires expected head when advancing", async (t
   );
 });
 
+test("download-tauri-m4-reports refuses to advance with tracked worktree changes before gh calls", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "open-design-tauri-download-advance-dirty-"));
+  t.after(() => void rm(root, { force: true, recursive: true }));
+  const fakeGh = await writeFakeGh(root);
+  const fixtureRoot = await writeM5Fixture(root);
+  await initGitFixture(fixtureRoot);
+  await writeFile(join(fixtureRoot, "README.md"), `${readmeFixture()}\ntracked change\n`, "utf8");
+
+  await assert.rejects(
+    runDownload(
+      fakeGh,
+      "--run-id",
+      "777",
+      "--expected-head",
+      "a".repeat(40),
+      "--output-dir",
+      join(root, "reports"),
+      "--advance",
+      "--root",
+      fixtureRoot,
+    ),
+    /tracked worktree changes are present/,
+  );
+  await assert.rejects(readFile(join(root, "gh-calls.log"), "utf8"), /ENOENT/);
+});
+
 test("download-tauri-m4-reports explains missing gh", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "open-design-tauri-download-missing-gh-"));
   t.after(() => void rm(root, { force: true, recursive: true }));
@@ -370,6 +396,14 @@ async function writeM5Fixture(root: string): Promise<string> {
     "utf8",
   );
   return fixtureRoot;
+}
+
+async function initGitFixture(root: string): Promise<void> {
+  await execFileAsync("git", ["init", "--initial-branch=main"], { cwd: root, maxBuffer: 1024 * 1024 });
+  await execFileAsync("git", ["config", "user.email", "codex@example.test"], { cwd: root, maxBuffer: 1024 * 1024 });
+  await execFileAsync("git", ["config", "user.name", "Codex Test"], { cwd: root, maxBuffer: 1024 * 1024 });
+  await execFileAsync("git", ["add", "."], { cwd: root, maxBuffer: 1024 * 1024 });
+  await execFileAsync("git", ["commit", "-m", "fixture"], { cwd: root, maxBuffer: 1024 * 1024 });
 }
 
 function migrationDocFixture(): string {
