@@ -2,35 +2,45 @@ import type { Express } from 'express';
 import type { RouteDeps } from './server-context.js';
 
 export interface RegisterHandoffRoutesDeps
-  extends RouteDeps<'db' | 'http' | 'paths' | 'projectStore' | 'validation' | 'handoff'> {}
+  extends RouteDeps<
+    'db' | 'http' | 'paths' | 'projectStore' | 'conversations' | 'validation' | 'handoff'
+  > {}
 
 /**
  * `POST /api/projects/:id/handoff` — synthesise a "first user message"
  * prompt the next conversation can send so a fresh chat can resume the
  * work without replaying the full transcript.
  *
+ * Handoff is conversation-scoped: the request carries a `conversationId`
+ * the route validates belongs to `:id` (404 CONVERSATION_NOT_FOUND
+ * otherwise), and only that conversation's transcript is synthesized.
+ *
  * The validation block and BYOK upstream call mirror
  * `import-export-routes.ts::registerFinalizeRoutes`. Error mapping is
- * largely shared but diverges deliberately in two places: handoff maps
+ * largely shared but diverges deliberately: handoff maps
  * `TranscriptExportLockedError` to 409 CONFLICT (the transcript-export
- * lock is acquired transitively, not a handoff lockfile of its own), and
- * it maps an upstream 400 to the caller's 400 BAD_REQUEST rather than 502.
+ * lock is acquired transitively, not a handoff lockfile of its own),
+ * maps `EmptyTranscriptError` to 400 EMPTY_TRANSCRIPT (an empty
+ * conversation is caller input, not a server fault), and maps an
+ * upstream 400 to the caller's 400 BAD_REQUEST rather than 502.
  */
 export function registerHandoffRoutes(app: Express, ctx: RegisterHandoffRoutesDeps) {
   const { db } = ctx;
   const { sendApiError } = ctx.http;
   const { PROJECTS_DIR } = ctx.paths;
   const { getProject } = ctx.projectStore;
+  const { getConversation } = ctx.conversations;
   const { isSafeId, validateExternalApiBaseUrl } = ctx.validation;
   const {
     synthesizeHandoffPrompt,
     FinalizeUpstreamError,
     TranscriptExportLockedError,
+    EmptyTranscriptError,
     redactSecrets,
   } = ctx.handoff;
 
   app.post('/api/projects/:id/handoff', async (req, res) => {
-    const { apiKey, baseUrl, model, maxTokens } = req.body || {};
+    const { conversationId, apiKey, baseUrl, model, maxTokens } = req.body || {};
     try {
       if (!isSafeId(req.params.id)) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project id');
@@ -69,10 +79,29 @@ export function registerHandoffRoutes(app: Express, ctx: RegisterHandoffRoutesDe
           'maxTokens must be a positive number when provided',
         );
       }
+      if (typeof conversationId !== 'string' || !conversationId.trim()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'conversationId is required');
+      }
+      if (!isSafeId(conversationId)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'invalid conversationId');
+      }
 
       const project = getProject(db, req.params.id);
       if (!project) {
         return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+
+      // Handoff is conversation-scoped — the conversation must exist AND
+      // belong to this project, otherwise the synthesized transcript would
+      // either be empty or (worse) summarize an unrelated project's chat.
+      const conversation = getConversation(db, conversationId);
+      if (!conversation || conversation.projectId !== req.params.id) {
+        return sendApiError(
+          res,
+          404,
+          'CONVERSATION_NOT_FOUND',
+          'conversation not found in this project',
+        );
       }
 
       const handoffAbort = new AbortController();
@@ -84,6 +113,7 @@ export function registerHandoffRoutes(app: Express, ctx: RegisterHandoffRoutesDe
       let result;
       try {
         result = await synthesizeHandoffPrompt(db, PROJECTS_DIR, req.params.id, {
+          conversationId,
           apiKey,
           baseUrl,
           model,
@@ -104,6 +134,12 @@ export function registerHandoffRoutes(app: Express, ctx: RegisterHandoffRoutesDe
       // retryable response instead of an opaque 500.
       if (err instanceof TranscriptExportLockedError) {
         return sendApiError(res, 409, 'CONFLICT', err.message);
+      }
+
+      // The selected conversation has no messages — fail fast as caller
+      // input rather than spending BYOK tokens on an empty synthesis.
+      if (err instanceof EmptyTranscriptError) {
+        return sendApiError(res, 400, 'EMPTY_TRANSCRIPT', err.message);
       }
 
       if (err instanceof FinalizeUpstreamError) {

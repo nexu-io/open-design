@@ -18,6 +18,7 @@ import { startServer } from '../src/server.js';
 describe('POST /api/projects/:id/handoff — request-lifecycle abort', () => {
   let server: http.Server;
   let baseUrl: string;
+  let conversationId: string;
   const PROJECT_ID = 'handoff-abort-fixture';
 
   beforeAll(async () => {
@@ -45,6 +46,7 @@ describe('POST /api/projects/:id/handoff — request-lifecycle abort', () => {
       body: JSON.stringify({ title: 'Initial' }),
     });
     const convBody = (await convResp.json()) as { conversation: { id: string } };
+    conversationId = convBody.conversation.id;
     await fetch(
       `${baseUrl}/api/projects/${PROJECT_ID}/conversations/${convBody.conversation.id}/messages/seed-msg`,
       {
@@ -52,9 +54,7 @@ describe('POST /api/projects/:id/handoff — request-lifecycle abort', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           role: 'user',
-          createdAt: 1,
-          updatedAt: 1,
-          blocks: [{ type: 'text', text: 'hello' }],
+          content: 'hello',
         }),
       },
     );
@@ -101,7 +101,7 @@ describe('POST /api/projects/:id/handoff — request-lifecycle abort', () => {
     });
 
     const url = new URL(`${baseUrl}/api/projects/${PROJECT_ID}/handoff`);
-    const body = JSON.stringify({ apiKey: 'sk-test', model: 'claude-opus-4-7' });
+    const body = JSON.stringify({ conversationId, apiKey: 'sk-test', model: 'claude-opus-4-7' });
     const clientReq = http.request(
       {
         protocol: url.protocol,

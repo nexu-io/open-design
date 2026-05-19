@@ -17,6 +17,9 @@ const PROJECT_ID = 'handoff-route-fixture';
 describe('POST /api/projects/:id/handoff — HTTP layer', () => {
   let server: http.Server;
   let baseUrl: string;
+  // The seeded conversation (one message) — handoff is conversation-scoped,
+  // so every request that should reach synthesis carries this id.
+  let conversationId: string;
 
   beforeAll(async () => {
     const { startServer } = await import('../src/server.js');
@@ -45,6 +48,7 @@ describe('POST /api/projects/:id/handoff — HTTP layer', () => {
       body: JSON.stringify({ title: 'Initial' }),
     });
     const convBody = (await convResp.json()) as { conversation: { id: string } };
+    conversationId = convBody.conversation.id;
     await fetch(
       `${baseUrl}/api/projects/${PROJECT_ID}/conversations/${convBody.conversation.id}/messages/seed-msg`,
       {
@@ -52,9 +56,7 @@ describe('POST /api/projects/:id/handoff — HTTP layer', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           role: 'user',
-          createdAt: 1,
-          updatedAt: 1,
-          blocks: [{ type: 'text', text: 'hello' }],
+          content: 'hello',
         }),
       },
     );
@@ -127,6 +129,7 @@ describe('POST /api/projects/:id/handoff — HTTP layer', () => {
 
   it('400 BAD_REQUEST when :id contains unsafe characters', async () => {
     const res = await postHandoff('bad!id', {
+      conversationId,
       apiKey: 'sk-test',
       model: 'claude-opus-4-7',
     });
@@ -138,12 +141,62 @@ describe('POST /api/projects/:id/handoff — HTTP layer', () => {
 
   it('404 PROJECT_NOT_FOUND when the project id does not exist', async () => {
     const res = await postHandoff('does-not-exist', {
+      conversationId,
       apiKey: 'sk-test',
       model: 'claude-opus-4-7',
     });
     expect(res.status).toBe(404);
     const body = await res.json();
     expect(body.error.code).toBe('PROJECT_NOT_FOUND');
+  });
+
+  it('400 BAD_REQUEST when conversationId is missing', async () => {
+    const res = await postHandoff(PROJECT_ID, {
+      apiKey: 'sk-test',
+      model: 'claude-opus-4-7',
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error.code).toBe('BAD_REQUEST');
+    expect(body.error.message.toLowerCase()).toContain('conversationid');
+  });
+
+  it('404 CONVERSATION_NOT_FOUND when the conversation is not in this project', async () => {
+    const res = await postHandoff(PROJECT_ID, {
+      conversationId: 'no-such-conversation',
+      apiKey: 'sk-test',
+      model: 'claude-opus-4-7',
+    });
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.error.code).toBe('CONVERSATION_NOT_FOUND');
+  });
+
+  it('400 EMPTY_TRANSCRIPT when the conversation has no messages', async () => {
+    // An empty conversation must fail fast — synthesizing a handoff from
+    // zero messages would spend BYOK tokens fabricating context.
+    const convResp = await fetch(`${baseUrl}/api/projects/${PROJECT_ID}/conversations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Empty' }),
+    });
+    const emptyId = ((await convResp.json()) as { conversation: { id: string } }).conversation.id;
+
+    // Mock upstream so a regressed guard surfaces as a non-400 here
+    // rather than reaching out to the real network.
+    mockAnthropicResponse(
+      200,
+      JSON.stringify({ content: [{ type: 'text', text: 'x' }], usage: {} }),
+    );
+
+    const res = await postHandoff(PROJECT_ID, {
+      conversationId: emptyId,
+      apiKey: 'sk-test',
+      model: 'claude-opus-4-7',
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error.code).toBe('EMPTY_TRANSCRIPT');
   });
 
   it('200 happy path returns the synthesized prompt + usage', async () => {
@@ -156,6 +209,7 @@ describe('POST /api/projects/:id/handoff — HTTP layer', () => {
     );
 
     const res = await postHandoff(PROJECT_ID, {
+      conversationId,
       apiKey: 'sk-test',
       model: 'claude-opus-4-7',
     });
@@ -175,6 +229,7 @@ describe('POST /api/projects/:id/handoff — HTTP layer', () => {
     );
 
     const res = await postHandoff(PROJECT_ID, {
+      conversationId,
       apiKey: 'sk-bad',
       model: 'claude-opus-4-7',
     });
@@ -190,6 +245,7 @@ describe('POST /api/projects/:id/handoff — HTTP layer', () => {
     );
 
     const res = await postHandoff(PROJECT_ID, {
+      conversationId,
       apiKey: 'sk-test',
       model: 'claude-opus-4-7',
     });
@@ -205,6 +261,7 @@ describe('POST /api/projects/:id/handoff — HTTP layer', () => {
     );
 
     const res = await postHandoff(PROJECT_ID, {
+      conversationId,
       apiKey: 'sk-test',
       model: 'claude-opus-4-7',
     });
@@ -230,6 +287,7 @@ describe('POST /api/projects/:id/handoff — HTTP layer', () => {
     );
 
     const res = await postHandoff(PROJECT_ID, {
+      conversationId,
       apiKey: echoedKey,
       model: 'claude-not-a-real-model',
     });
@@ -245,6 +303,7 @@ describe('POST /api/projects/:id/handoff — HTTP layer', () => {
     mockAnthropicResponse(200, '<html>not json</html>', 'text/html');
 
     const res = await postHandoff(PROJECT_ID, {
+      conversationId,
       apiKey: 'sk-test',
       model: 'claude-opus-4-7',
     });
@@ -271,6 +330,7 @@ describe('POST /api/projects/:id/handoff — HTTP layer', () => {
       lockFd = fs.openSync(lockPath, 'wx');
 
       const res = await postHandoff(PROJECT_ID, {
+        conversationId,
         apiKey: 'sk-test',
         model: 'claude-opus-4-7',
       });
@@ -293,6 +353,7 @@ describe('POST /api/projects/:id/handoff — HTTP layer', () => {
     );
 
     const res = await postHandoff(PROJECT_ID, {
+      conversationId,
       apiKey: echoedKey,
       model: 'claude-opus-4-7',
     });

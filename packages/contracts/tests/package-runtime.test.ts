@@ -71,8 +71,8 @@ describe('@open-design/contracts package runtime shape', () => {
     // `exports` map proves the built publish surface — esbuild entrypoint,
     // exports entry, and root re-export — actually resolves, which a test
     // importing `../src/api/handoff` would not catch.
-    expect(handoff.HANDOFF_SCHEMA_VERSION).toBe(1);
-    expect(contracts.HANDOFF_SCHEMA_VERSION).toBe(1);
+    expect(handoff.HANDOFF_SCHEMA_VERSION).toBe(2);
+    expect(contracts.HANDOFF_SCHEMA_VERSION).toBe(2);
     expect(critique.defaultCritiqueConfig()).toMatchObject({
       enabled: false,
       protocolVersion: critique.CRITIQUE_PROTOCOL_VERSION,
