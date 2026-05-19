@@ -1,6 +1,6 @@
 ---
 name: pptx-html-fidelity-audit
-description: Audit a python-pptx export against its source HTML deck, identify layout/content drift (footer overflow, cropped content, missing italic/em, lost styling, off-rhythm spacing), and re-export with strict footer-rail + cursor-flow layout discipline. Use this skill whenever the user has a .pptx that was generated from an HTML slide deck and asks to compare/audit/verify/fix the export — including phrases like "compare ppt with html", "fidelity audit", "fix the pptx", "ppt is cut off", "footer overlap", "italic missing in pptx", "re-export the deck", "pptx-html-fidelity-audit", or any case where a python-pptx → HTML round-trip needs verification or repair. Also trigger when the user shows you a deck.html and a deck.pptx side by side and is debugging visual differences.
+description: Audit a python-pptx export against its source HTML deck, identify layout/content drift (footer overflow, cropped content, missing italic/em, lost styling, off-rhythm spacing), and re-export with strict footer-rail + cursor-flow layout discipline. Also handles the inverse case — the user has ONLY an externally-authored .pptx with no HTML source and wants it cleaned up, redesigned, or refreshed — by ingesting the deck, diagnosing its design problems, reconstructing it as an Open Design HTML deck that preserves order and content, and re-exporting an editable .pptx. Use this skill whenever the user has a .pptx that was generated from an HTML slide deck and asks to compare/audit/verify/fix the export — phrases like "compare ppt with html", "fidelity audit", "fix the pptx", "ppt is cut off", "footer overlap", "italic missing in pptx", "re-export the deck", "pptx-html-fidelity-audit" — OR when the user hands you only a PowerPoint file and asks to "clean up this deck", "improve this PowerPoint", "redesign these slides", "refresh this presentation", "make this deck consistent", or there is no source HTML to audit against. Also trigger when the user shows you a deck.html and a deck.pptx side by side and is debugging visual differences.
 triggers:
   - "pptx fidelity"
   - "pptx audit"
@@ -9,6 +9,12 @@ triggers:
   - "footer overlap"
   - "verify pptx"
   - "html to pptx"
+  - "clean up this deck"
+  - "improve this powerpoint"
+  - "redesign these slides"
+  - "refresh this presentation"
+  - "no source html"
+  - "美化这个 ppt"
 od:
   mode: utility
   scenario: engineering
@@ -37,7 +43,21 @@ The user has:
 - A PPTX file generated from that deck via python-pptx (or similar).
 - A suspicion (or visible evidence) that the PPTX doesn't match the HTML — text bleeding into the footer, italic words gone flat, hero slides not centered, sections cropped, tag styling lost.
 
-If the user only has *one* of those two artifacts, this skill doesn't apply yet — first generate the missing one, or ask the user to provide it.
+### Two modes — pick by what the user has
+
+| What the user has | Mode | Go to |
+|---|---|---|
+| HTML deck **and** a .pptx generated from it | **Audit** — verify/repair drift | [Workflow](#workflow) below (unchanged) |
+| Only an externally-authored .pptx, **no HTML source** | **Reconstruction** — clean up / redesign | [Reconstruction workflow](#reconstruction-workflow-existing-pptx-cleanup) |
+| Only an HTML deck, no .pptx | Not this skill yet | Generate the .pptx first (the project's PPTX export does this), then return for an audit |
+
+The Audit mode assumes an HTML source of truth to measure the .pptx against.
+Reconstruction mode is for the common real-world case where the user was
+*handed* a PowerPoint file (built in PowerPoint/Keynote/Google Slides, no HTML
+anywhere) and wants it materially better while keeping the message, the slide
+order, and editable text. It does not audit against a source — it *rebuilds*
+the source as an Open Design HTML deck, then re-exports through the same
+disciplined pipeline.
 
 ## Why this is hard (and why a skill helps)
 
@@ -189,9 +209,99 @@ Zero violations is the gate for "this re-export is shippable". Don't claim the a
 
 ---
 
+## Reconstruction workflow (existing-PPTX cleanup)
+
+Use this when the user has **only a .pptx and no HTML source**. The goal is a
+materially better, still-editable PowerPoint that preserves the message, the
+slide order, and all factual content. It reuses the same extractor, the same
+re-export pipeline, and the same verifier as Audit mode — only the middle
+(rebuild instead of compare) differs. Five steps; don't skip any.
+
+### R1 — Extract content and assets
+
+```
+python scripts/extract_pptx.py <deck.pptx> -o pptx_dump.json --assets-dir assets/
+```
+
+`--assets-dir` is required here (unlike Audit mode): the dump now also carries
+per-slide `notes`, per-shape `table.rows`, and per-shape `image` metadata, and
+the image blobs are written into `assets/` so the rebuilt deck can re-embed
+logos and charts. This is the ground truth — the deck's real content, not its
+intended content.
+
+### R2 — Diagnose design quality (not just rails)
+
+Build the audit table using the existing format and severity rubric from Step
+3 / `references/audit-table-template.md`, but scored against *design-quality*
+problems rather than only rail overflow:
+
+- inconsistent fonts / too many families
+- colour drift, accidental near-duplicate colours, low contrast
+- overcrowded slides, wall-of-text, no whitespace discipline
+- weak or missing visual hierarchy, inconsistent title placement
+- mismatched chart/table styling, inconsistent number formats
+- low-quality decorative images, stock-art clutter
+- slides that should be split, merged, or moved to an appendix
+
+Severity reuses 🔴/🟠/🟡/🟢. After the table, write the 2–3 systemic causes —
+same discipline as Audit mode: a redesign that names the systemic cause is
+smaller and more consistent than per-slide patching.
+
+### R3 — Choose a reconstruction strategy
+
+| Strategy | Use when |
+|---|---|
+| Light edit | Deck is mostly clean; only formatting/consistency fixes needed |
+| Full rebuild | Deck is messy/inconsistent; needs a real redesign |
+| **Hybrid (default)** | Preserve complex charts/images/tables from `assets/` as-is; rebuild text, layout, and hierarchy around them |
+
+Default to **hybrid**. Never invent data, claims, citations, logos, or brand
+assets. Any content that cannot be confidently preserved or interpreted goes
+into the risks file (R5), not into a guess.
+
+### R4 — Reconstruct as an Open Design HTML deck
+
+Rebuild the deck as a single-file HTML deck using the `<section class="slide">`
+convention this skill already expects (see the example in *When this skill
+applies*). Reuse a theme from `design-templates/html-ppt/` so typography,
+colour, and spacing come from one token system instead of the source deck's
+drift. Hard rules:
+
+- Preserve slide order unless the user explicitly asks to restructure; if a
+  reorder genuinely improves the executive flow, propose it in the change log
+  rather than doing it silently.
+- Preserve every factual string, number, table (`table.rows`), and speaker
+  note (`notes`) from the dump. Re-embed images from `assets/` by filename.
+- Improve hierarchy, alignment, whitespace, and headlines so each slide leads
+  with its takeaway. Keep ≤2 font families. Don't shrink body text below
+  readable size just to fit — split the slide instead.
+- Carry speaker notes into the HTML deck's presenter-notes mechanism; if a
+  note cannot be carried, list it in the risks file.
+
+### R5 — Re-export, gate, and deliver
+
+Hand the rebuilt HTML to the project's existing PPTX export (the "Export as
+PPTX" action / `handleExportAsPptx`). That pipeline already applies Step 4's
+footer-rail + cursor-flow discipline and runs `scripts/verify_layout.py` as a
+mandatory gate. Then:
+
+- Confirm `verify_layout.py` exits 0 (zero rail violations) on the new file.
+- Run `extract_pptx.py` on the input and the output and confirm the slide
+  count matches (unless a documented split/merge changed it on purpose).
+- Produce the two deliverables: a change log from
+  `references/change-log-template.md` and a fidelity-risk list from
+  `references/risks-template.md`.
+
+Acceptance is the same bar as the project mandate: the refreshed deck opens
+cleanly in PowerPoint, stays editable (real text boxes, not flattened images),
+preserves the source message and slide order, looks materially better, and
+ships with a transparent record of what changed and what needs manual review.
+
+---
+
 ## Output to the user
 
-After Step 5 passes, report:
+After Step 5 (Audit) **or** R5 (Reconstruction) passes, report:
 
 1. **Audit table** — the table from Step 3.
 2. **Root causes** — 1-paragraph systemic explanation.
@@ -199,23 +309,31 @@ After Step 5 passes, report:
 4. **Verification** — "0 rail violations across N slides, file size X KB".
 5. **Path** — absolute path to the re-exported `.pptx`.
 
+For **Reconstruction** runs, also deliver two files alongside the `.pptx`:
+
+6. **Change log** — `change-log.md` written from `references/change-log-template.md`: summary + a per-slide change table.
+7. **Risks / manual review** — `issues.md` written from `references/risks-template.md`: every content item that could not be confidently preserved (charts kept as images, unverifiable notes, ambiguous data), so the user knows exactly what to eyeball.
+
 The user is reading for two reasons: confirming the visible bugs are fixed, and trusting the systemic fix is right. Cover both.
 
 ---
 
 ## Bundled resources
 
-- `scripts/extract_pptx.py` — dump every shape on every slide as JSON. Run before the audit. **Important:** also run on the *original* export to compare, and on the *re-exported* one to confirm.
+- `scripts/extract_pptx.py` — dump every shape on every slide as JSON. Run before the audit. **Important:** also run on the *original* export to compare, and on the *re-exported* one to confirm. For Reconstruction, add `--assets-dir` to also pull speaker notes, table cells, and image blobs.
 - `scripts/verify_layout.py` — post-export rail checker. Returns nonzero exit code on violations so it slots into a CI pipeline if needed.
 - `references/layout-discipline.md` — the full footer-rail + cursor-flow rule set with code snippets for each common slide type (hero, content, pipeline, two-column, observation grid).
 - `references/font-discipline.md` — five-layer font audit: mapping, presence, variable-vs-static traps, the three XML language slots (`latin` / `ea` / `cs`), CJK + Latin italic interaction.
 - `references/audit-table-template.md` — copy-pasteable table template with severity legend.
+- `references/change-log-template.md` — Reconstruction deliverable: summary + per-slide change table.
+- `references/risks-template.md` — Reconstruction deliverable: fidelity-risk / manual-review list.
 
 Read the references when:
 
 - The deck has slide types beyond what the SKILL.md covers (multi-column dashboards, embedded images, charts) → `layout-discipline.md`.
 - The audit shows 🟡 typography issues — italic missing, CJK falling back, unexpected `Calibri` / `Microsoft JhengHei` in the XML → `font-discipline.md`.
 - You want to drop the audit table directly into a report or markdown deliverable → `audit-table-template.md`.
+- You finished a Reconstruction run and need the user-facing deliverables → `change-log-template.md`, `risks-template.md`.
 
 ---
 
