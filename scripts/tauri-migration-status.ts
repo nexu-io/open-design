@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
 import {
@@ -416,15 +416,21 @@ async function readHandoffStatus(handoffDir: string, gitStatus: GitStatus): Prom
   const problems: string[] = [];
   try {
     const manifest = readHandoffManifest(JSON.parse(await readFile(manifestPath, "utf8")) as Partial<HandoffManifest>);
-    const bundlePath = resolve(dirname(manifestPath), manifest.bundlePath);
+    const bundlePath = isRelocatableManifestBundlePath(manifest.bundlePath)
+      ? resolve(dirname(manifestPath), manifest.bundlePath)
+      : undefined;
     let bundleSha256Actual: string | undefined;
-    try {
-      bundleSha256Actual = createHash("sha256").update(await readFile(bundlePath)).digest("hex");
-      if (bundleSha256Actual !== manifest.bundleSha256) {
-        problems.push(`bundle SHA-256 mismatch: expected ${manifest.bundleSha256}, got ${bundleSha256Actual}`);
+    if (bundlePath == null) {
+      problems.push(`manifest bundlePath must be relative and relocatable before packaging: ${manifest.bundlePath}`);
+    } else {
+      try {
+        bundleSha256Actual = createHash("sha256").update(await readFile(bundlePath)).digest("hex");
+        if (bundleSha256Actual !== manifest.bundleSha256) {
+          problems.push(`bundle SHA-256 mismatch: expected ${manifest.bundleSha256}, got ${bundleSha256Actual}`);
+        }
+      } catch (error) {
+        problems.push(`bundle unavailable: ${error instanceof Error ? error.message : String(error)}`);
       }
-    } catch (error) {
-      problems.push(`bundle unavailable: ${error instanceof Error ? error.message : String(error)}`);
     }
     if (gitStatus.head != null && manifest.branchHead !== gitStatus.head) {
       problems.push(`manifest branchHead is stale: expected ${gitStatus.head}, got ${manifest.branchHead}`);
@@ -432,7 +438,7 @@ async function readHandoffStatus(handoffDir: string, gitStatus: GitStatus): Prom
     return {
       branch: manifest.branch,
       branchHead: manifest.branchHead,
-      bundle: bundlePath,
+      ...(bundlePath == null ? {} : { bundle: bundlePath }),
       bundleSha256: manifest.bundleSha256,
       ...(bundleSha256Actual == null ? {} : { bundleSha256Actual }),
       current: problems.length === 0 && gitStatus.head != null,
@@ -555,10 +561,14 @@ async function readHandoffArchiveStatus(archivePath: string, handoff?: HandoffSt
     const notePath = join(extractedHandoffDir, noteName);
     const manifest = readHandoffManifest(JSON.parse(await readFile(manifestPath, "utf8")) as Partial<HandoffManifest>);
     await readFile(notePath);
-    const bundlePath = resolve(dirname(manifestPath), manifest.bundlePath);
-    const bundleSha256 = createHash("sha256").update(await readFile(bundlePath)).digest("hex");
-    if (bundleSha256 !== manifest.bundleSha256) {
-      problems.push(`archived bundle SHA-256 mismatch: expected ${manifest.bundleSha256}, got ${bundleSha256}`);
+    if (!isRelocatableManifestBundlePath(manifest.bundlePath)) {
+      problems.push(`archived manifest bundlePath must be relative and relocatable: ${manifest.bundlePath}`);
+    } else {
+      const bundlePath = resolve(dirname(manifestPath), manifest.bundlePath);
+      const bundleSha256 = createHash("sha256").update(await readFile(bundlePath)).digest("hex");
+      if (bundleSha256 !== manifest.bundleSha256) {
+        problems.push(`archived bundle SHA-256 mismatch: expected ${manifest.bundleSha256}, got ${bundleSha256}`);
+      }
     }
     if (handoff?.branchHead != null && manifest.branchHead !== handoff.branchHead) {
       problems.push(`archived manifest branchHead is stale: expected ${handoff.branchHead}, got ${manifest.branchHead}`);
@@ -771,6 +781,10 @@ function readHandoffManifest(value: Partial<HandoffManifest>): HandoffManifest {
     bundleSha256: value.bundleSha256,
     schemaVersion: value.schemaVersion,
   };
+}
+
+function isRelocatableManifestBundlePath(value: string): boolean {
+  return value.length > 0 && !isAbsolute(value) && value.split(/[\\/]/)[0] !== "..";
 }
 
 function handoffArchivePath(handoffDir: string): string {

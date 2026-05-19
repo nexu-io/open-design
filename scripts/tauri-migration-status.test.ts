@@ -142,6 +142,47 @@ test("tauri-migration-status reports current packaged handoff archives", async (
   assert.match(parsed.nextActions.join("\n"), /attempt native CI dispatch/);
 });
 
+test("tauri-migration-status rejects non-relocatable handoff bundle paths", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  const bundlePath = join(handoffDir, "open-design-tauri-migration.bundle");
+  await writeHandoffFixture(handoffDir, { branchHead: head, bundlePath });
+
+  const result = await runStatus(fixture, "--handoff-dir", handoffDir);
+  const parsed = JSON.parse(result.stdout) as {
+    handoff: { current: boolean; problems: string[] };
+    handoffArchive: { current: boolean; problems: string[] };
+  };
+
+  assert.equal(parsed.handoff.current, false);
+  assert.match(parsed.handoff.problems.join("\n"), /manifest bundlePath must be relative and relocatable/);
+  assert.equal(parsed.handoffArchive.current === true, false);
+});
+
+test("tauri-migration-status rejects archived non-relocatable bundle paths", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  const bundlePath = join(handoffDir, "open-design-tauri-migration.bundle");
+  await writeHandoffFixture(handoffDir, { branchHead: head, bundlePath });
+  const { archivePath } = await writeHandoffArchive(handoffDir);
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+
+  const result = await runStatus(fixture, "--handoff-dir", handoffDir, "--handoff-archive", archivePath);
+  const parsed = JSON.parse(result.stdout) as { handoff: { current: boolean }; handoffArchive: { current: boolean; problems: string[] } };
+
+  assert.equal(parsed.handoff.current, true);
+  assert.equal(parsed.handoffArchive.current, false);
+  assert.match(parsed.handoffArchive.problems.join("\n"), /archived manifest bundlePath must be relative and relocatable/);
+});
+
 test("tauri-migration-status rejects packaged handoff archives without command scripts", async (t) => {
   const fixture = await createFixtureRoot(t, {
     checked: [],
@@ -574,7 +615,7 @@ async function initGitFixture(root: string): Promise<string> {
   return (await git(root, "rev-parse", "HEAD")).stdout.trim();
 }
 
-async function writeHandoffFixture(handoffDir: string, options: { branchHead: string }): Promise<string> {
+async function writeHandoffFixture(handoffDir: string, options: { branchHead: string; bundlePath?: string }): Promise<string> {
   const bundlePath = join(handoffDir, "open-design-tauri-migration.bundle");
   const bundle = Buffer.from("bundle\n", "utf8");
   const bundleSha256 = createHash("sha256").update(bundle).digest("hex");
@@ -587,7 +628,7 @@ async function writeHandoffFixture(handoffDir: string, options: { branchHead: st
         schemaVersion: 1,
         branch: "codex/electron-to-tauri-migration",
         branchHead: options.branchHead,
-        bundlePath: "open-design-tauri-migration.bundle",
+        bundlePath: options.bundlePath ?? "open-design-tauri-migration.bundle",
         bundleSha256,
       },
       null,

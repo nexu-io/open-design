@@ -421,6 +421,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Tightened `scripts/continue-tauri-migration.ts --dry-run` for stale handoff states. A dry-run now stops after printing the handoff refresh commands and asks for a second dry-run from refreshed status, instead of also printing stale push/report actions from the pre-refresh status. This keeps the continuation cadence safe when the local branch moves but the handoff artifacts have not yet been regenerated.
 - 2026-05-20: Tightened `scripts/continue-tauri-migration.ts --dry-run` for hosts without `gh`. The dry-run now reports the manual `gh workflow run ci.yml --ref codex/electron-to-tauri-migration` dispatch requirement when the configured `--gh` command is unavailable, instead of saying it would request native CI dispatch from a host that cannot run the command.
 - 2026-05-20: Tightened packaged handoff portability. `scripts/package-tauri-migration-handoff.ts` now rejects a handoff manifest whose `bundlePath` is absolute or parent-relative, so the tarball cannot encode a sender-machine-only bundle location that would break on the write-capable receiver.
+- 2026-05-20: Aligned `scripts/tauri-migration-status.ts` with the packaged handoff portability policy. Status now rejects both the active handoff directory and extracted packaged archive when the manifest `bundlePath` is absolute or parent-relative, so old non-relocatable transfer artifacts cannot be reported as current.
 
 ### Platform Gate Runners
 
