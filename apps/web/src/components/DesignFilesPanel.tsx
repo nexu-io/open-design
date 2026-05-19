@@ -286,7 +286,12 @@ export function DesignFilesPanel({
   // Drop any selected-filter kinds that no longer appear in the file list
   // (e.g. after a delete leaves the kind empty). Keeps the filter UI honest
   // and prevents a stale filter from silently hiding everything.
+  // Guard: skip when no kinds are available yet — availableKinds is empty only
+  // when files haven't loaded. Running cleanup against an empty set would
+  // clear a kindFilter that was correctly restored from localStorage before
+  // the async file list arrived.
   useEffect(() => {
+    if (availableKinds.length === 0) return;
     setKindFilter((prev) => {
       if (prev.size === 0) return prev;
       const present = new Set(availableKinds);
