@@ -1007,6 +1007,9 @@ async function checkTauriMigrationOrder(): Promise<boolean> {
     violations.push("release-beta desktop_runtime default and the M5 release-beta checklist line must be updated together.");
   }
   const bothDefaultsTauri = toolsDevDefault === "tauri" && toolsPackDefault === "tauri";
+  if (toolsDevDefault !== toolsPackDefault) {
+    violations.push("tools-dev and tools-pack DEFAULT_DESKTOP_RUNTIME must move together during the M5 default flip.");
+  }
   if ((releaseBetaDefault === "tauri") !== bothDefaultsTauri) {
     violations.push("release-beta desktop_runtime default must move with the tools-dev/tools-pack Tauri default flip.");
   }
