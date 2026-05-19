@@ -35,7 +35,7 @@
 | SET-010 | Azure 的 `apiVersion` 仅保留在 Azure draft 中，不污染其他协议 | `SettingsDialog.test.ts` |
 | SET-011 | Settings 弹窗支持右上角关闭按钮和遮罩关闭，关闭入口不会误触额外保存动作 | `SettingsDialog.execution.test.tsx` |
 | SET-012 | Azure OpenAI 页面展示 `Deployment name / API version` 专属字段，并支持保存 Azure 配置 | `SettingsDialog.execution.test.tsx` |
-| SET-013 | BYOK 支持切换到 `Custom model id` 输入路径并保存自定义 model | `SettingsDialog.execution.test.tsx` |
+| SET-013 | BYOK 支持切换到 `Custom model ID` 输入路径并保存自定义 model | `SettingsDialog.execution.test.tsx` |
 | SET-014 | Local CLI 模式下只能选择已安装 agent，选择后会自动保存为当前执行 CLI | `SettingsDialog.execution.test.tsx` |
 | SET-015 | Local CLI 在无 agent 时显示 empty state，且不会触发无效保存 | `SettingsDialog.execution.test.tsx` |
 | SET-016 | `Rescan` 会展示 loading 状态、阻止重复点击，并在成功后展示可用 agent 数 | `SettingsDialog.execution.test.tsx` |
