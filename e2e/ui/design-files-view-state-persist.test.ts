@@ -11,7 +11,7 @@
  *   (c) Project isolation: opening a second project starts with defaults, NOT
  *       the first project's persisted state.
  *
- * This test must PASS on fix/web-design-files-persist-view and FAIL on
+ * Each test must PASS on fix/web-design-files-persist-view and FAIL on
  * origin/main (where no persistence is implemented).
  */
 
@@ -28,9 +28,8 @@ const CONFIG_STORAGE_KEY = 'open-design:config';
 const TINY_PNG_B64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5W6McAAAAASUVORK5CYII=';
 
-// 90 s: the test seeds 36 files across two projects (17+1 each) via sequential
-// POST requests; on a cold CI runner this alone takes 40-50 s before any
-// assertion. Keep timeout above that floor.
+// 90 s: each test seeds ~18 files via sequential POST requests; on a cold CI
+// runner this alone takes 40-50 s before any assertion.
 test.describe.configure({ timeout: 90_000 });
 
 // Inject onboarding bypass and mock app-config before each test so the web app
@@ -182,48 +181,33 @@ async function readStoredViewState(
   return JSON.parse(raw) as Record<string, unknown> | null;
 }
 
-// ---------------------------------------------------------------------------
-// Main test
-// ---------------------------------------------------------------------------
-
-test('design files view state persists across tab navigation and reload, and stays project-scoped', async ({
-  page,
-}) => {
-  // -------------------------------------------------------------------------
-  // Setup: create project and seed files
-  // -------------------------------------------------------------------------
-  await gotoEntryHome(page);
-  const projectId = await createBlankProject(page, 'view-state-persist-test');
-
-  // Seed 17 PNG files so showListControls (> 15) fires even when the kind
-  // filter is active and shows only images. Seed one text file so
-  // availableKinds has two entries, making the kind-filter button appear.
+/**
+ * Seeds a project with 17 PNG files and 1 text file, then reloads.
+ * Enough files so showListControls (> 15) fires and the kind-filter button
+ * appears (2 kinds present).
+ */
+async function seedProjectWithFiles(page: Page, projectId: string): Promise<void> {
   for (let i = 1; i <= 17; i++) {
     await seedPngFile(page, projectId, `image-${String(i).padStart(2, '0')}.png`);
   }
   await seedTextFile(page, projectId, 'notes.txt');
-
-  // Reload so the files appear in the panel.
   await page.reload();
   await waitForLoadingToClear(page);
+}
 
-  // -------------------------------------------------------------------------
-  // (a) Change all four prefs, navigate away, navigate back, assert persistence
-  // -------------------------------------------------------------------------
-
-  await openDesignFilesTab(page);
-  await waitForPageSizeSelect(page);
-
+/**
+ * Sets non-default view prefs: pageSize=15, sort=name/asc, kindFilter=image.
+ * Precondition: the Design Files tab must be open and the page-size select visible.
+ */
+async function setNonDefaultViewPrefs(page: Page): Promise<void> {
   // Change pageSize from default 30 to 15
   const pageSizeSelect = page.getByTestId('df-page-size-select');
   await pageSizeSelect.selectOption('15');
   await expect(pageSizeSelect).toHaveValue('15');
 
   // Change sort from default mtime/desc to name/asc by clicking Name header
-  // (first click sets name+asc; default column is mtime so this switches key)
   const nameHeader = page.locator('th.df-th-name button.df-th-btn');
   await nameHeader.click();
-  // Verify aria-sort is now ascending on the Name column
   await expect(page.locator('th.df-th-name')).toHaveAttribute('aria-sort', 'ascending');
 
   // Apply kind filter: open the filter popover and check "Image"
@@ -232,11 +216,44 @@ test('design files view state persists across tab navigation and reload, and sta
   const filterPopover = page.getByRole('dialog', { name: /filter by kind/i });
   await expect(filterPopover).toBeVisible();
   await filterPopover.getByRole('checkbox', { name: /image/i }).check();
-  // Close the popover by clicking the filter button again
+  // Close the popover
   await filterBtn.click();
   await expect(filterPopover).toBeHidden();
+}
 
-  // Verify the localStorage entry was written with the correct shape
+/**
+ * Asserts that the non-default prefs set by setNonDefaultViewPrefs are visible.
+ */
+async function assertNonDefaultViewPrefs(page: Page): Promise<void> {
+  await expect(page.getByTestId('df-page-size-select')).toHaveValue('15');
+  await expect(page.locator('th.df-th-name')).toHaveAttribute('aria-sort', 'ascending');
+  await expect(page.getByRole('button', { name: /filter by kind/i })).toContainText(/image/i);
+}
+
+/**
+ * Asserts that the panel shows the default view prefs (as a fresh project would).
+ */
+async function assertDefaultViewPrefs(page: Page): Promise<void> {
+  await expect(page.getByTestId('df-page-size-select')).toHaveValue('30');
+  await expect(page.locator('th.df-th-name')).toHaveAttribute('aria-sort', 'none');
+  await expect(page.locator('th.df-th-time')).toHaveAttribute('aria-sort', 'descending');
+  await expect(page.getByRole('button', { name: /filter by kind/i })).not.toContainText(/image/i);
+}
+
+// ---------------------------------------------------------------------------
+// Scenario (a): Tab-away / tab-back — prefs survive remount
+// ---------------------------------------------------------------------------
+
+test('(a) view prefs survive navigating away to a file tab and back', async ({ page }) => {
+  await gotoEntryHome(page);
+  const projectId = await createBlankProject(page, 'view-state-nav-test');
+  await seedProjectWithFiles(page, projectId);
+
+  await openDesignFilesTab(page);
+  await waitForPageSizeSelect(page);
+  await setNonDefaultViewPrefs(page);
+
+  // Verify the localStorage entry was written
   const storedAfterChange = await readStoredViewState(page, projectId);
   expect(storedAfterChange).not.toBeNull();
   expect(storedAfterChange!.pageSize).toBe(15);
@@ -245,90 +262,98 @@ test('design files view state persists across tab navigation and reload, and sta
   expect(Array.isArray(storedAfterChange!.kindFilter)).toBe(true);
   expect((storedAfterChange!.kindFilter as string[]).includes('image')).toBe(true);
 
-  // Navigate AWAY: single-click the row button to open the preview panel,
-  // then click the "Open" button to create a dedicated file tab. This avoids
-  // mutating the project's file list (no upload needed). image-01.png is
-  // present in the filtered view (Image filter active).
+  // Navigate AWAY: open image-01.png in its own tab
   const firstImageRow = page.getByTestId('design-file-row-image-01.png');
   await firstImageRow.getByRole('button').first().click();
   await page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' }).click();
   const navAwayTab = page.getByRole('tab', { name: /image-01\.png/i });
   await expect(navAwayTab).toBeVisible();
-  // Design Files tab should no longer be selected
   await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'false');
 
-  // Navigate BACK to Design Files — this remounts DesignFilesPanel
+  // Navigate BACK — remounts DesignFilesPanel
   await openDesignFilesTab(page);
   await waitForPageSizeSelect(page);
 
-  // Assert all four prefs survived the remount
-  await expect(page.getByTestId('df-page-size-select')).toHaveValue('15');
-  await expect(page.locator('th.df-th-name')).toHaveAttribute('aria-sort', 'ascending');
-  // Kind filter button should show "Image" (1 active filter)
-  await expect(filterBtn).toContainText(/image/i);
+  // All four prefs must survive the remount
+  await assertNonDefaultViewPrefs(page);
+});
 
-  // -------------------------------------------------------------------------
-  // (b) Hard reload — assert localStorage survives the page reload
-  // -------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Scenario (b): Hard reload — prefs survive page.reload()
+// ---------------------------------------------------------------------------
 
+test('(b) view prefs survive a hard browser reload', async ({ page }) => {
+  await gotoEntryHome(page);
+  const projectId = await createBlankProject(page, 'view-state-reload-test');
+  await seedProjectWithFiles(page, projectId);
+
+  await openDesignFilesTab(page);
+  await waitForPageSizeSelect(page);
+  await setNonDefaultViewPrefs(page);
+
+  // Hard reload
   await page.reload();
   await waitForLoadingToClear(page);
   await openDesignFilesTab(page);
   await waitForPageSizeSelect(page);
 
-  await expect(page.getByTestId('df-page-size-select')).toHaveValue('15');
-  await expect(page.locator('th.df-th-name')).toHaveAttribute('aria-sort', 'ascending');
-  await expect(page.getByRole('button', { name: /filter by kind/i })).toContainText(/image/i);
+  // All four prefs must survive the reload
+  await assertNonDefaultViewPrefs(page);
 
-  // Confirm the localStorage key is still intact after reload
+  // The localStorage key must still be intact
   const storedAfterReload = await readStoredViewState(page, projectId);
   expect(storedAfterReload).not.toBeNull();
   expect(storedAfterReload!.pageSize).toBe(15);
   expect(storedAfterReload!.sortKey).toBe('name');
   expect(storedAfterReload!.sortDir).toBe('asc');
   expect((storedAfterReload!.kindFilter as string[]).includes('image')).toBe(true);
+});
 
-  // -------------------------------------------------------------------------
-  // (c) Second project: its view state must use defaults, NOT project 1's state
-  // -------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Scenario (c): Per-project key isolation — second project shows defaults
+// ---------------------------------------------------------------------------
 
-  // Navigate home and create a second project
+test('(c) second project view state is independent of the first project', async ({ page }) => {
+  // --- Project A: set non-default prefs ---
   await gotoEntryHome(page);
-  const project2Id = await createBlankProject(page, 'view-state-persist-second');
+  const projectAId = await createBlankProject(page, 'view-state-project-a');
+  await seedProjectWithFiles(page, projectAId);
 
-  // Seed enough files that showListControls fires in project 2 as well.
-  // 17 text files + 1 PNG so the kind filter button appears (2 kinds).
+  await openDesignFilesTab(page);
+  await waitForPageSizeSelect(page);
+  await setNonDefaultViewPrefs(page);
+
+  // Confirm project A's state was written to localStorage
+  const storedA = await readStoredViewState(page, projectAId);
+  expect(storedA).not.toBeNull();
+  expect(storedA!.pageSize).toBe(15);
+
+  // --- Project B: create, seed, assert defaults ---
+  await gotoEntryHome(page);
+  const projectBId = await createBlankProject(page, 'view-state-project-b');
+
+  // Seed enough files that showListControls fires in project B as well.
+  // Use text files so the kind-filter button appears (2 kinds: text + png).
   for (let i = 1; i <= 17; i++) {
-    await seedTextFile(page, project2Id, `doc-${String(i).padStart(2, '0')}.txt`);
+    await seedTextFile(page, projectBId, `doc-${String(i).padStart(2, '0')}.txt`);
   }
-  await seedPngFile(page, project2Id, 'icon.png');
+  await seedPngFile(page, projectBId, 'icon.png');
 
   await page.reload();
   await waitForLoadingToClear(page);
   await openDesignFilesTab(page);
   await waitForPageSizeSelect(page);
 
-  // Page size must be the default (30), not inherited from project 1 (15)
-  await expect(page.getByTestId('df-page-size-select')).toHaveValue('30');
+  // Project B must show defaults, not project A's persisted prefs
+  await assertDefaultViewPrefs(page);
 
-  // Sort must be on mtime/desc (default), not name/asc
-  await expect(page.locator('th.df-th-name')).toHaveAttribute('aria-sort', 'none');
-  await expect(page.locator('th.df-th-time')).toHaveAttribute('aria-sort', 'descending');
-
-  // Kind filter button must show the default "Filter by kind" label (no active filter)
-  await expect(page.getByRole('button', { name: /filter by kind/i })).not.toContainText(
-    /image/i,
-  );
-
-  // The per-project key for project 2, if it exists at all, must NOT contain
-  // values inherited from project 1 (pageSize=15, kindFilter=['image'],
-  // sortKey='name'). Isolation is the invariant; a default-value entry written
-  // opportunistically by the component is acceptable.
-  const storedProject2 = await readStoredViewState(page, project2Id);
-  if (storedProject2 !== null) {
-    expect(storedProject2.pageSize).not.toBe(15);
-    expect(storedProject2.sortKey).not.toBe('name');
-    const kf = storedProject2.kindFilter;
+  // The per-project key for project B, if it exists at all, must NOT contain
+  // values inherited from project A. A default-value entry is acceptable.
+  const storedB = await readStoredViewState(page, projectBId);
+  if (storedB !== null) {
+    expect(storedB.pageSize).not.toBe(15);
+    expect(storedB.sortKey).not.toBe('name');
+    const kf = storedB.kindFilter;
     if (Array.isArray(kf)) {
       expect((kf as string[]).includes('image')).toBe(false);
     }
