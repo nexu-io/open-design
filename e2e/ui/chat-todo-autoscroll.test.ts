@@ -335,27 +335,30 @@ test.describe('chat pane autoscroll on TodoCard growth', () => {
 
     const distanceAfterScroll = await chatLogBottomDistance(page);
 
-    // Assert the scroll actually moved us past the 80px suppression threshold —
-    // if this fails, the seed/layout changed and the test no longer covers the regression.
+    // Hard precondition: the scroll must have moved past the 80px suppression
+    // threshold. If this fails, the seed / layout changed and the test no
+    // longer exercises the "user scrolled away, do not yank them back" path —
+    // fail fast instead of silently skipping the regression check below.
     expect(
       distanceAfterScroll,
       `expected scroll-up to move chat-log more than 80px from bottom (distance=${distanceAfterScroll}); ` +
       `seed more filler messages or increase the scroll offset if this fires`,
     ).toBeGreaterThan(80);
 
-    const scrollUpOccurred = distanceAfterScroll > 80;
+    // Now grow the todo card — the non-pinned user should NOT be dragged back.
+    await growPinnedTodo(page, 80);
 
-    if (scrollUpOccurred) {
-      // Now grow the todo card — the non-pinned user should NOT be dragged back.
-      await growPinnedTodo(page, 80);
+    const distanceAfterGrow = await chatLogBottomDistance(page);
 
-      const distanceAfterGrow = await chatLogBottomDistance(page);
-      // The scroll position should be roughly preserved (within 20 px tolerance
-      // for rounding or minor layout shifts the browser may apply).
-      expect(
-        distanceAfterGrow,
-        `expected scroll position preserved after todo card grew (before=${distanceAfterScroll} after=${distanceAfterGrow})`,
-      ).toBeGreaterThan(60);
-    }
+    // Tight invariant: the scroll position should be preserved within a small
+    // delta of where the user left it. A regression that pulls the log most of
+    // the way back to the bottom (e.g. before=150, after=61) would have passed
+    // a loose absolute threshold but fails this delta check.
+    const SCROLL_PRESERVATION_TOLERANCE_PX = 20;
+    expect(
+      Math.abs(distanceAfterGrow - distanceAfterScroll),
+      `expected scroll position preserved within ${SCROLL_PRESERVATION_TOLERANCE_PX}px of pre-grow ` +
+      `(before=${distanceAfterScroll} after=${distanceAfterGrow} delta=${Math.abs(distanceAfterGrow - distanceAfterScroll)})`,
+    ).toBeLessThan(SCROLL_PRESERVATION_TOLERANCE_PX);
   });
 });

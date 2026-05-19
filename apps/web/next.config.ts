@@ -44,6 +44,19 @@ function resolveWorkspaceRoot(): string {
         `The override must be an ancestor of apps/web.`,
       );
     }
+    // Require the resolved path to be a real pnpm workspace root. Without this,
+    // an ancestor like `<repo>/apps` would pass the relative-path check but
+    // miss the sibling `packages/*` directory that `apps/web` imports from
+    // (for example `@open-design/contracts`), and Next would later fail deep
+    // inside file tracing / Turbopack with a much harder-to-diagnose error.
+    if (!existsSync(resolve(resolved, 'pnpm-workspace.yaml'))) {
+      throw new Error(
+        `OD_WORKSPACE_ROOT="${override}" resolved to "${resolved}" but no ` +
+        `pnpm-workspace.yaml was found there. The override must point at the ` +
+        `pnpm workspace root so outputFileTracingRoot and turbopack.root can ` +
+        `resolve sibling packages.`,
+      );
+    }
     return resolved;
   }
   return computed;
