@@ -118,19 +118,6 @@ jobs:
                 .filter(Boolean);
             }
 
-            function debugFeedbackShape(kind, item) {
-              return JSON.stringify({
-                kind,
-                login: item?.user?.login,
-                author_association: item?.author_association,
-                authorAssociation: item?.authorAssociation,
-                state: item?.state,
-                created_at: item?.created_at,
-                submitted_at: item?.submitted_at,
-                body_preview: item?.body?.slice?.(0, 80),
-              });
-            }
-
             const now = Date.now();
             const summary = [];
             const diagnostics = [];
@@ -167,18 +154,6 @@ jobs:
                 }),
               ]);
 
-              if (DRY_RUN && pr.number === 642) {
-                for (const comment of comments.slice(0, 5)) {
-                  core.info(`DEBUG #642 comment ${debugFeedbackShape('comment', comment)}`);
-                }
-                for (const review of reviews.slice(0, 5)) {
-                  core.info(`DEBUG #642 review ${debugFeedbackShape('review', review)}`);
-                }
-                for (const reviewComment of reviewComments.slice(0, 5)) {
-                  core.info(`DEBUG #642 reviewComment ${debugFeedbackShape('reviewComment', reviewComment)}`);
-                }
-              }
-
               const candidateTrustedLogins = new Set();
               for (const comment of comments) {
                 const login = comment.user?.login;
@@ -207,10 +182,6 @@ jobs:
                   }
                 }),
               );
-
-              if (DRY_RUN && pr.number === 642) {
-                core.info(`DEBUG #642 trustedLogins ${JSON.stringify([...trustedLogins])}`);
-              }
 
               let latestAuthorResponseAt = 0;
 
