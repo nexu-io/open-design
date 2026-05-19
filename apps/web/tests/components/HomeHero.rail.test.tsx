@@ -12,6 +12,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { InstalledPluginRecord } from '@open-design/contracts';
 
+import { I18nProvider } from '../../src/i18n';
 import { HomeHero } from '../../src/components/HomeHero';
 import {
   HOME_HERO_CHIPS,
@@ -246,4 +247,38 @@ describe('HomeHero intent rail', () => {
       },
     });
   });
+  
+  it('renders localized chip labels and tooltips in zh-CN', () => {
+  render(
+    <I18nProvider initial="zh-CN">
+      <HomeHero
+        prompt=""
+        onPromptChange={() => undefined}
+        onSubmit={() => undefined}
+        activePluginTitle={null}
+        activeChipId={null}
+        onClearActivePlugin={() => undefined}
+        pluginOptions={[]}
+        pluginsLoading={false}
+        pendingPluginId={null}
+        pendingChipId={null}
+        onPickPlugin={vi.fn()}
+        onPickChip={vi.fn()}
+        contextItemCount={0}
+        error={null}
+      />
+    </I18nProvider>
+  );
+
+  // Prototype chip label should be zh-CN
+  const prototypeChip = screen.getByTestId('home-hero-rail-prototype');
+  expect(prototypeChip.textContent).toContain('原型');
+
+  // HyperFrames tooltip should be the zh-CN string
+  const hyperframes = screen.getByTestId('home-hero-rail-hyperframes');
+  expect(hyperframes.getAttribute('title')).toBe(
+    '创作基于 HTML 的动态内容：字幕、音频响应视觉和场景转场。'
+  );
+});
+  
 });
