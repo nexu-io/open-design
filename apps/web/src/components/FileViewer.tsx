@@ -3976,7 +3976,7 @@ function HtmlViewer({
   }, [previewUsesUrlTransport]);
   const useLazySrcDocTransport = previewUsesUrlTransport || hasLazySrcDocTransport;
   const srcDocTransportContent = useLazySrcDocTransport ? lazySrcDocTransport : srcDoc;
-  const urlTransportSrc = previewUsesUrlTransport ? previewSrcUrl : 'about:blank';
+  const urlTransportSrc = previewUsesUrlTransport ? activePreviewSrcUrl : 'about:blank';
   const activateSrcDocTransport = useCallback((target: HTMLIFrameElement | null = srcDocPreviewIframeRef.current) => {
     const win = target?.contentWindow;
     if (!win || !srcDoc || previewUsesUrlTransport || !useLazySrcDocTransport) return false;
