@@ -268,6 +268,66 @@ describe('ChatComposer context pickers', () => {
     expect(skillNames.indexOf('Audit Helper 9')).toBeLessThan(skillNames.indexOf('Accessibility Review'));
   });
 
+  it('ranks name or id substring matches above description-only matches', async () => {
+    skills = [
+      makeSkill({
+        id: 'story-brief',
+        name: 'Story Brief',
+        description: 'Use when planning audit work.',
+        triggers: ['writing'],
+      }),
+      makeSkill({
+        id: 'field-audit-template',
+        name: 'Field Audit Template',
+        description: 'Field-survey audit template.',
+        triggers: ['field'],
+      }),
+      makeSkill({
+        id: 'audit-helper-1',
+        name: 'Audit Helper 1',
+        description: 'Audit support workflow.',
+        triggers: ['audit-1'],
+      }),
+    ];
+    renderComposer();
+    const input = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
+
+    fireEvent.change(input, {
+      target: { value: '@audit', selectionStart: 6 },
+    });
+
+    await waitFor(() => expect(screen.getByText('Audit Helper 1')).toBeTruthy());
+    const skillNames = Array.from(
+      screen.getByTestId('mention-popover').querySelectorAll('.mention-item strong'),
+      (node) => node.textContent,
+    );
+
+    expect(skillNames.indexOf('Audit Helper 1')).toBeLessThan(skillNames.indexOf('Field Audit Template'));
+    expect(skillNames.indexOf('Field Audit Template')).toBeLessThan(skillNames.indexOf('Story Brief'));
+  });
+
+  it('preserves input order among skills sharing the same rank tier', async () => {
+    skills = [
+      makeSkill({ id: 'audit-zulu', name: 'Audit Zulu', triggers: ['audit'] }),
+      makeSkill({ id: 'audit-alpha', name: 'Audit Alpha', triggers: ['audit'] }),
+      makeSkill({ id: 'audit-mike', name: 'Audit Mike', triggers: ['audit'] }),
+    ];
+    renderComposer();
+    const input = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
+
+    fireEvent.change(input, {
+      target: { value: '@audit', selectionStart: 6 },
+    });
+
+    await waitFor(() => expect(screen.getByText('Audit Zulu')).toBeTruthy());
+    const skillNames = Array.from(
+      screen.getByTestId('mention-popover').querySelectorAll('.mention-item strong'),
+      (node) => node.textContent,
+    );
+
+    expect(skillNames.slice(0, 3)).toEqual(['Audit Zulu', 'Audit Alpha', 'Audit Mike']);
+  });
+
   it('applies a plugin from @ search and keeps the plugin token inline', async () => {
     renderComposer();
     const input = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;

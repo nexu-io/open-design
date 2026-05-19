@@ -2068,11 +2068,12 @@ function skillMatchesQuery(skill: SkillSummary, query: string): boolean {
 
 function skillMentionRank(skill: SkillSummary, query: string): number {
   const q = query.trim().toLowerCase();
-  if (!q) return 1;
+  if (!q) return 2;
   const id = skill.id.toLowerCase();
   const name = skill.name.toLowerCase();
   if (id.startsWith(q) || name.startsWith(q)) return 0;
-  return 1;
+  if (id.includes(q) || name.includes(q)) return 1;
+  return 2;
 }
 
 function mcpServerMatchesQuery(server: McpServerConfig, query: string): boolean {
