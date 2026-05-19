@@ -523,9 +523,12 @@ export const VIDEO_MODELS: MediaModel[] = [
   },
 
   // OpenRouter video models.
-  { id: 'openrouter/bytedance/seedance-2.0', label: 'seedance-2.0 (OR)', hint: 'OpenRouter · ByteDance', provider: 'openrouter', caps: ['t2v', 'i2v'] },
+  { id: 'openrouter/bytedance/seedance-2.0:1080p', label: 'seedance-2.0 1080p (OR)', hint: 'OpenRouter · ByteDance · 1080p', provider: 'openrouter', caps: ['t2v', 'i2v'], default: true },
+  { id: 'openrouter/bytedance/seedance-2.0', label: 'seedance-2.0 720p (OR)', hint: 'OpenRouter · ByteDance · 720p', provider: 'openrouter', caps: ['t2v', 'i2v'] },
+  { id: 'openrouter/bytedance/seedance-2.0:480p', label: 'seedance-2.0 480p (OR)', hint: 'OpenRouter · ByteDance · 480p', provider: 'openrouter', caps: ['t2v', 'i2v'] },
   { id: 'openrouter/google/veo-3.1', label: 'veo-3.1 (OR)', hint: 'OpenRouter · Google', provider: 'openrouter', caps: ['t2v', 'i2v', 'audio'] },
   { id: 'openrouter/alibaba/wan-2.7', label: 'wan-2.7 (OR)', hint: 'OpenRouter · Alibaba', provider: 'openrouter', caps: ['t2v', 'i2v'] },
+  { id: 'openrouter/kwaivgi/kling-v3.0-pro', label: 'kling-v3.0-pro (OR)', hint: 'OpenRouter · Kuaishou', provider: 'openrouter', caps: ['t2v', 'i2v'] },
 
   // ImageRouter — routed video models.
   {
