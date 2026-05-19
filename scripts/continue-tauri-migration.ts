@@ -278,7 +278,7 @@ async function continueM4(args: Args, status: MigrationStatus, log: string[]): P
     }
   }
 
-  if (!remoteCurrent && !args.dryRun) {
+  if (!remoteCurrent && (!args.dryRun || !args.push)) {
     log.push("Remote branch is not ready; native CI cannot be collected yet.");
     return;
   }

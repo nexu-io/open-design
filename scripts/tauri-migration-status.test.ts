@@ -574,6 +574,34 @@ test("continue-tauri-migration dry-run plans a branch push from current handoff 
   assert.match(result.stdout, /--advance/);
 });
 
+test("continue-tauri-migration dry-run with skip-push stops before native CI when the remote is missing", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+  await writeHandoffArchive(handoffDir);
+  const remotePath = join(fixture, "empty.git");
+  await git(fixture, "init", "--bare", remotePath);
+
+  const result = await runContinue(
+    fixture,
+    "--handoff-dir",
+    handoffDir,
+    "--remote",
+    remotePath,
+    "--dry-run",
+    "--skip-push",
+  );
+
+  assert.match(result.stdout, /Push skipped/);
+  assert.match(result.stdout, /Remote branch is not ready; native CI cannot be collected yet/);
+  assert.doesNotMatch(result.stdout, /Native CI dispatch/);
+  assert.doesNotMatch(result.stdout, /download-tauri-m4-reports\.ts/);
+});
+
 test("continue-tauri-migration surfaces heartbeat problems before planning M4 work", async (t) => {
   const fixture = await createFixtureRoot(t, {
     checked: [],
