@@ -114,12 +114,12 @@ async function main(): Promise<void> {
     posthogKey: config.posthogKey,
     posthogHost: config.posthogHost,
     // PR #974 round-5 (lefarcen P2): headless packaged mode runs daemon
-    // + web only, no Electron, no privileged shell.openPath surface.
+    // + web only, no desktop host, no privileged open-path surface.
     // Pinning OD_REQUIRE_DESKTOP_AUTH here would arm a gate no client
     // can ever satisfy (no desktop main process to register a secret),
     // so folder import would permanently return DESKTOP_AUTH_PENDING.
-    // The Electron entry counterpart in `apps/packaged/src/index.ts`
-    // passes `true` because it does start desktop main.
+    // Desktop packaged entrypoints pass `true` because they do start a
+    // desktop host that can register the auth secret.
     requireDesktopAuth: false,
     webSidecarEntry: config.webSidecarEntry,
     webStandaloneRoot: config.webStandaloneRoot,

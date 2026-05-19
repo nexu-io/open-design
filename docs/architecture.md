@@ -362,12 +362,11 @@ fronted by an HMAC gate when the daemon is paired with a desktop:
   renderer toast instead of silently dropping. No desktop restart needed.
 - **Headless packaged mode.** The headless entrypoint
   (`apps/packaged/src/headless.ts`) starts daemon + web only — no
-  Electron, no `shell.openPath` surface, no desktop main process to
-  register a secret. It calls `startPackagedSidecars(...)` with
+  desktop host, no privileged open-path surface, no desktop main process
+  to register a secret. It calls `startPackagedSidecars(...)` with
   `requireDesktopAuth: false`, which keeps the daemon's gate dormant
-  for that deployment. The Electron entry
-  (`apps/packaged/src/index.ts`) passes `true` because it does start
-  desktop main alongside the daemon.
+  for that deployment. Desktop packaged entrypoints pass `true` because
+  they do start a desktop host alongside the daemon.
 - **tools-dev split-start hardening.** `tools-dev start desktop`
   introspects the running daemon's STATUS over IPC before launching
   desktop main. The split-start dev sequence

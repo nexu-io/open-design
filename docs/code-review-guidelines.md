@@ -97,8 +97,8 @@ A PR is in scope when it passes the [Product relevance test](#1-product-relevanc
 - `apps/web` — Next.js App Router UI, browser runtime behavior, web-local provider integration.
 - `apps/landing-page` — first-party marketing site workspace package with its own documented boundaries and commands.
 - `apps/daemon` — local privileged daemon APIs, SSE, agent spawning, SQLite persistence, skills/design-system/resource serving, artifacts, credentials storage, static serving, daemon CLI.
-- `apps/desktop` — Electron shell that discovers runtime state through sidecar IPC.
-- `apps/packaged` — packaged Electron entry, packaged sidecar startup, runtime integration, `od://` entry glue.
+- `apps/desktop` — desktop host runtimes; Electron is the current default and Tauri is the migration runtime. Both discover runtime state through sidecar IPC.
+- `apps/packaged` — packaged Electron entry, Tauri sidecar startup helper, headless Linux entry, runtime integration, `od://` entry glue.
 - `packages/contracts` — pure TypeScript web/daemon DTOs, request/response shapes, SSE event unions, task shapes, errors, example payloads.
 - `packages/sidecar-proto` — Open Design sidecar business protocol; app/mode/source constants, namespace validation, stamp fields/flags, IPC message schema, status shapes, error semantics.
 - `packages/sidecar` — generic sidecar bootstrap, IPC transport, path/runtime resolution, launch environment, JSON runtime-file primitives.

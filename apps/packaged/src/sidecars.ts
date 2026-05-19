@@ -252,7 +252,7 @@ export function buildPackagedDaemonSpawnEnv(
     // tokenless imports even before the desktop main process has
     // finished registering, closing the daemon-restart-mid-session
     // bypass that a runtime-only handshake left open. Headless skips
-    // it because there is no privileged shell.openPath surface and
+    // it because there is no privileged open-path surface and
     // no client to register a secret.
     ...(options.requireDesktopAuth ? { OD_REQUIRE_DESKTOP_AUTH: "1" } : {}),
     // Packaged daemon managed paths are deliberately delivered through
@@ -367,12 +367,12 @@ export async function startPackagedSidecars(
     posthogHost: string | null;
     /**
      * PR #974 round-5 (lefarcen P2): caller asserts whether a desktop
-     * runtime is being started in this packaged process group. The
-     * Electron entry passes `true`; `headless.ts` passes `false` so the
-     * daemon's import-folder gate stays dormant in headless mode where
-     * there is no `shell.openPath` surface and no client to register a
-     * secret. Required (no default) so a future packaged caller cannot
-     * silently regress the gate by omitting it.
+     * runtime is being started in this packaged process group. Desktop
+     * packaged entrypoints pass `true`; `headless.ts` passes `false` so
+     * the daemon's import-folder gate stays dormant in headless mode
+     * where there is no privileged open-path surface and no client to
+     * register a secret. Required (no default) so a future packaged
+     * caller cannot silently regress the gate by omitting it.
      */
     requireDesktopAuth: boolean;
     webSidecarEntry: string | null;
