@@ -60,10 +60,16 @@ describe('buildPublishLink', () => {
   });
 
   it('builds an Open Design registry submission URL', () => {
+    // The dedicated `open-design/plugin-registry` repo per
+    // docs/plans/plugin-registry.md §1.2 is the long-term target; until that
+    // operational launch step happens, submissions land in `nexu-io/open-design`
+    // (plugins/community/<plugin-name>/), keeping contribution where stars and
+    // PR traffic already are.
     const link = buildPublishLink({ catalog: 'open-design', meta: META });
-    expect(link.catalogLabel).toBe('open-design/plugin-registry');
-    expect(link.url).toMatch(/^https:\/\/github\.com\/open-design\/plugin-registry\/issues\/new\?/);
-    expect(link.prBody).toContain('open-design-marketplace.json');
+    expect(link.catalogLabel).toBe('nexu-io/open-design');
+    expect(link.url).toMatch(/^https:\/\/github\.com\/nexu-io\/open-design\/issues\/new\?/);
+    expect(link.prBody).toContain('plugins/community/<plugin-name>/open-design.json');
+    expect(link.prBody).toContain('plugins/registry/community/open-design-marketplace.json');
   });
 
   it('falls back to owner/repo placeholder when repoUrl is missing for skills-sh', () => {

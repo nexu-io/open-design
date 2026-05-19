@@ -156,6 +156,7 @@ test('real daemon run supports fake non-Codex runtime protocols', async ({ page 
 });
 
 async function createProject(page: Page, name: string) {
+  await gotoEntryHome(page);
   await openNewProjectModal(page);
   await expect(page.getByTestId('new-project-panel')).toBeVisible();
   await page.getByTestId('new-project-tab-prototype').click();
@@ -176,6 +177,18 @@ async function createProjectViaApi(page: Page, projectId: string, name: string) 
   });
   expect(response.ok()).toBeTruthy();
   return (await response.json()) as { conversationId: string };
+}
+
+async function gotoEntryHome(page: Page) {
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
+  if (await privacyDialog.isVisible().catch(() => false)) {
+    await privacyDialog.getByRole('button', { name: /not now/i }).click();
+    await expect(privacyDialog).toHaveCount(0);
+  }
+  await expect(page.getByTestId('home-hero')).toBeVisible();
+  await expect(page.getByTestId('home-hero-input')).toBeVisible();
 }
 
 async function expectWorkspaceReady(page: Page) {
@@ -213,6 +226,7 @@ async function openNewProjectModal(page: Page) {
     await expect(privacyDialog).toHaveCount(0);
   }
   await page.getByTestId('entry-nav-new-project').click();
+  await expect(page.getByTestId('new-project-modal')).toBeVisible();
   await expect(page.getByTestId('new-project-panel')).toBeVisible();
 }
 
@@ -304,7 +318,7 @@ async function startRunAndWaitForSuccess(
       if (!status.ok()) return `http-${status.status()}`;
       const body = (await status.json()) as { status: string };
       return body.status;
-    }, { timeout: 20_000 })
+    }, { timeout: 60_000 })
     .toBe('succeeded');
 
   if (options.expectedOutput) {

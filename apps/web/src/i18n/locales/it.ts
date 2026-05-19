@@ -176,6 +176,9 @@ export const it: Dict = {
   'settings.privacyConsentFooter': 'Puoi modificare entrambe queste opzioni in qualsiasi momento in Impostazioni → Privacy. Non carichiamo mai i contenuti dei tuoi file di artefatti generati.',
   'settings.privacyConsentShare': 'Condividi i dati di utilizzo',
   'settings.privacyConsentDecline': 'Non condividere',
+  'settings.privacyConsentAccept': 'I get it',
+  'settings.privacyConsentBannerFooter':
+    'Data sharing is on by default. You can turn it off any time in Settings → Privacy. We never upload the contents of your generated artifact files.',
   'settings.privacyConsentPolicyLink': "Leggi l'informativa sulla privacy",
   'settings.privacyMetrics': 'Metriche anonime',
   'settings.privacyMetricsHint': 'Conteggi di esecuzione, utilizzo di token, tasso di errore, durata. Nessun prompt, nessun dato di progetto.',

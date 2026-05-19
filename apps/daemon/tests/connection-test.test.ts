@@ -1149,7 +1149,10 @@ describe('POST /api/test/connection provider mode', () => {
 describe('POST /api/test/connection agent mode', () => {
   it('reports success for a fake Codex agent response', async () => {
     await withFakeCodex(
-      `console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'ok' } }));`,
+      `
+console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'ok' } }));
+setImmediate(() => process.exit(0));
+`,
       async () => {
         const res = await realFetch(`${baseUrl}/api/test/connection`, {
           method: 'POST',
@@ -1181,6 +1184,7 @@ fs.writeFileSync(${JSON.stringify(envFile)}, JSON.stringify({
   SHOULD_NOT_PASS: process.env.OD_CONNECTION_TEST_SHOULD_NOT_PASS || null,
 }));
 console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'ok' } }));
+setImmediate(() => process.exit(0));
 `,
         async () => {
           const res = await realFetch(`${baseUrl}/api/test/connection`, {

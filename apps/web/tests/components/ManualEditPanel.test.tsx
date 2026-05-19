@@ -3,8 +3,8 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { Simulate } from 'react-dom/test-utils';
 import { JSDOM } from 'jsdom';
-import { ManualEditPanel, emptyManualEditDraft, manualEditPatchSummary, normalizeManualEditStyles } from '../../src/components/ManualEditPanel';
-import { emptyManualEditStyles, type ManualEditTarget } from '../../src/edit-mode/types';
+import { ManualEditPanel, emptyManualEditDraft, manualEditPatchSummary, normalizeManualEditStyles, type ManualEditDraft } from '../../src/components/ManualEditPanel';
+import { emptyManualEditStyles, type ManualEditPatch, type ManualEditStyles, type ManualEditTarget } from '../../src/edit-mode/types';
 
 const target: ManualEditTarget = {
   id: 'hero-title',
@@ -20,6 +20,13 @@ const target: ManualEditTarget = {
   isLayoutContainer: false,
   outerHtml: '<h1 data-od-id="hero-title">Original</h1>',
 };
+
+type OnDraftChange = (draft: ManualEditDraft) => void;
+type OnStyleChange = (id: string, styles: Partial<ManualEditStyles>, label: string) => void;
+type OnInvalidStyle = (id: string, keys: Array<keyof ManualEditStyles>) => void;
+type OnApplyPatch = (patch: ManualEditPatch, label: string) => void;
+type OnError = (message: string) => void;
+type OnClearSelection = () => void;
 
 describe('ManualEditPanel', () => {
   let dom: JSDOM;
@@ -429,23 +436,23 @@ describe('ManualEditPanel', () => {
   }
 
   function renderPanel({
-    onDraftChange = vi.fn(),
-    onApplyPatch = vi.fn(),
-    onError = vi.fn(),
-    onStyleChange = vi.fn(),
-    onInvalidStyle = vi.fn(),
-    onClearSelection = vi.fn(),
+    onDraftChange = vi.fn<OnDraftChange>(),
+    onApplyPatch = vi.fn<OnApplyPatch>(),
+    onError = vi.fn<OnError>(),
+    onStyleChange = vi.fn<OnStyleChange>(),
+    onInvalidStyle = vi.fn<OnInvalidStyle>(),
+    onClearSelection = vi.fn<OnClearSelection>(),
     attributesText = '{}',
     selectedTarget = target,
     styles = emptyManualEditStyles(),
     pageStylesEnabled = true,
   }: {
-    onDraftChange?: ReturnType<typeof vi.fn>;
-    onApplyPatch?: ReturnType<typeof vi.fn>;
-    onError?: ReturnType<typeof vi.fn>;
-    onStyleChange?: ReturnType<typeof vi.fn>;
-    onInvalidStyle?: ReturnType<typeof vi.fn>;
-    onClearSelection?: ReturnType<typeof vi.fn>;
+    onDraftChange?: OnDraftChange;
+    onApplyPatch?: OnApplyPatch;
+    onError?: OnError;
+    onStyleChange?: OnStyleChange;
+    onInvalidStyle?: OnInvalidStyle;
+    onClearSelection?: OnClearSelection;
     attributesText?: string;
     selectedTarget?: ManualEditTarget | null;
     styles?: ReturnType<typeof emptyManualEditStyles>;
@@ -469,16 +476,16 @@ describe('ManualEditPanel', () => {
           canUndo={false}
           canRedo={false}
           pageStylesEnabled={pageStylesEnabled}
-          onSelectTarget={vi.fn()}
+          onSelectTarget={vi.fn<(target: ManualEditTarget) => void>()}
           onDraftChange={onDraftChange}
           onStyleChange={onStyleChange}
           onInvalidStyle={onInvalidStyle}
           onApplyPatch={onApplyPatch}
           onError={onError}
           onClearSelection={onClearSelection}
-          onCancelDraft={vi.fn()}
-          onUndo={vi.fn()}
-          onRedo={vi.fn()}
+          onCancelDraft={vi.fn<() => void>()}
+          onUndo={vi.fn<() => void>()}
+          onRedo={vi.fn<() => void>()}
         />,
       );
     });

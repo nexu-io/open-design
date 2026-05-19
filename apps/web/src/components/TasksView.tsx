@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { AppConfig } from '../types';
+import { useT } from '../i18n';
 import { Icon } from './Icon';
 
 type TaskFilter = 'all' | 'scheduled' | 'running' | 'done';
@@ -142,7 +143,113 @@ const BASE_TASKS: ReadonlyArray<TaskCard> = [
   },
 ];
 
+function taskFilterLabel(id: TaskFilter, t: ReturnType<typeof useT>): string {
+  switch (id) {
+    case 'all': return t('common.all');
+    case 'scheduled': return t('tasks.filter.scheduled');
+    case 'running': return t('tasks.filter.running');
+    case 'done': return t('tasks.filter.done');
+  }
+}
+
+function localizedTaskFields(id: string, t: ReturnType<typeof useT>): Partial<TaskCard> {
+  switch (id) {
+    case 'mcp-research':
+      return {
+        title: t('tasks.sample.mcp.title'),
+        statusLabel: t('tasks.sample.mcp.status'),
+        meta: t('tasks.sample.mcp.meta'),
+        preview: t('tasks.sample.mcp.preview'),
+        trigger: t('tasks.sample.mcp.trigger'),
+        pattern: t('tasks.sample.mcp.pattern'),
+        runtime: t('tasks.sample.mcp.runtime'),
+        output: t('tasks.sample.mcp.output'),
+        artifactMeta: t('tasks.sample.mcp.artifactMeta'),
+        artifactBody: [
+          t('tasks.sample.mcp.body1'),
+          t('tasks.sample.mcp.body2'),
+          t('tasks.sample.mcp.body3'),
+          t('tasks.sample.mcp.body4'),
+          t('tasks.sample.mcp.body5'),
+        ],
+      };
+    case 'weekly-team':
+      return {
+        title: t('tasks.sample.weekly.title'),
+        statusLabel: t('tasks.sample.weekly.status'),
+        meta: t('tasks.sample.weekly.meta'),
+        preview: t('tasks.sample.weekly.preview'),
+        trigger: t('tasks.sample.weekly.trigger'),
+        pattern: t('tasks.sample.weekly.pattern'),
+        runtime: t('tasks.sample.weekly.runtime'),
+        output: t('tasks.sample.weekly.output'),
+        artifactMeta: t('tasks.sample.weekly.artifactMeta'),
+        artifactBody: [
+          t('tasks.sample.weekly.body1'),
+          t('tasks.sample.weekly.body2'),
+          t('tasks.sample.weekly.body3'),
+          t('tasks.sample.weekly.body4'),
+          t('tasks.sample.weekly.body5'),
+        ],
+      };
+    case 'pr-review':
+      return {
+        title: t('tasks.sample.pr.title'),
+        statusLabel: t('tasks.sample.pr.status'),
+        meta: t('tasks.sample.pr.meta'),
+        preview: t('tasks.sample.pr.preview'),
+        trigger: t('tasks.sample.pr.trigger'),
+        pattern: t('tasks.sample.pr.pattern'),
+        runtime: t('tasks.sample.pr.runtime'),
+        output: t('tasks.sample.pr.output'),
+        artifactMeta: t('tasks.sample.pr.artifactMeta'),
+        artifactBody: [
+          t('tasks.sample.pr.body1'),
+          t('tasks.sample.pr.body2'),
+          t('tasks.sample.pr.body3'),
+        ],
+      };
+    case 'pre-meeting':
+      return {
+        title: t('tasks.sample.meeting.title'),
+        statusLabel: t('tasks.sample.meeting.status'),
+        meta: t('tasks.sample.meeting.meta'),
+        preview: t('tasks.sample.meeting.preview'),
+        trigger: t('tasks.sample.meeting.trigger'),
+        pattern: t('tasks.sample.meeting.pattern'),
+        runtime: t('tasks.sample.meeting.runtime'),
+        output: t('tasks.sample.meeting.output'),
+        artifactMeta: t('tasks.sample.meeting.artifactMeta'),
+        artifactBody: [
+          t('tasks.sample.meeting.body1'),
+          t('tasks.sample.meeting.body2'),
+          t('tasks.sample.meeting.body3'),
+        ],
+      };
+    case 'candidate-tracking':
+      return {
+        title: t('tasks.sample.candidate.title'),
+        statusLabel: t('tasks.sample.candidate.status'),
+        meta: t('tasks.sample.candidate.meta'),
+        preview: t('tasks.sample.candidate.preview'),
+        trigger: t('tasks.sample.candidate.trigger'),
+        pattern: t('tasks.sample.candidate.pattern'),
+        runtime: t('tasks.sample.candidate.runtime'),
+        output: t('tasks.sample.candidate.output'),
+        artifactMeta: t('tasks.sample.candidate.artifactMeta'),
+        artifactBody: [
+          t('tasks.sample.candidate.body1'),
+          t('tasks.sample.candidate.body2'),
+          t('tasks.sample.candidate.body3'),
+        ],
+      };
+    default:
+      return {};
+  }
+}
+
 export function TasksView({ config, onOpenOrbitSettings }: Props) {
+  const t = useT();
   const [activeFilter, setActiveFilter] = useState<TaskFilter>('all');
   const [selectedId, setSelectedId] = useState('mcp-research');
   const orbitEnabled = config.orbit?.enabled ?? false;
@@ -151,26 +258,26 @@ export function TasksView({ config, onOpenOrbitSettings }: Props) {
   const tasks = useMemo<ReadonlyArray<TaskCard>>(() => {
     const orbitTask: TaskCard = {
       id: 'orbit-daily',
-      title: 'Orbit Daily connector summary',
+      title: t('tasks.sample.orbit.title'),
       icon: 'orbit',
       status: orbitEnabled ? 'scheduled' : 'idle',
-      statusLabel: orbitEnabled ? `Daily · ${orbitTime}` : 'Paused · manual only',
-      meta: orbitEnabled ? 'Connector digest is scheduled' : 'Open Orbit settings to enable',
-      preview: orbitEnabled ? 'orbit_daily.html · live artifact' : 'No run scheduled',
-      trigger: orbitEnabled ? `Schedule · daily at ${orbitTime}` : 'Manual · run on demand',
-      pattern: 'Routine · connector digest',
-      runtime: 'Orbit · daemon scheduled',
-      output: 'Live artifact · refreshable report',
+      statusLabel: orbitEnabled ? t('tasks.status.dailyAt', { time: orbitTime }) : t('tasks.status.pausedManual'),
+      meta: orbitEnabled ? t('tasks.sample.orbit.metaEnabled') : t('tasks.sample.orbit.metaDisabled'),
+      preview: orbitEnabled ? t('tasks.sample.orbit.previewEnabled') : t('tasks.sample.orbit.previewDisabled'),
+      trigger: orbitEnabled ? t('tasks.sample.orbit.triggerEnabled', { time: orbitTime }) : t('tasks.sample.orbit.triggerDisabled'),
+      pattern: t('tasks.sample.orbit.pattern'),
+      runtime: t('tasks.sample.orbit.runtime'),
+      output: t('tasks.sample.orbit.output'),
       artifactTitle: 'orbit_daily.html',
-      artifactMeta: orbitEnabled ? 'Refreshes after each run' : 'Waiting for schedule',
+      artifactMeta: orbitEnabled ? t('tasks.sample.orbit.artifactMetaEnabled') : t('tasks.sample.orbit.artifactMetaDisabled'),
       artifactBody: [
-        '# Orbit Daily activity summary',
-        'Connectors checked · successes, skips, and failures',
-        'Highlights become a refreshable live artifact.',
+        t('tasks.sample.orbit.body1'),
+        t('tasks.sample.orbit.body2'),
+        t('tasks.sample.orbit.body3'),
       ],
     };
-    return [orbitTask, ...BASE_TASKS];
-  }, [orbitEnabled, orbitTime]);
+    return [orbitTask, ...BASE_TASKS.map((task) => ({ ...task, ...localizedTaskFields(task.id, t) }))];
+  }, [orbitEnabled, orbitTime, t]);
 
   const filteredTasks = tasks.filter((task) => {
     if (activeFilter === 'all') return true;
@@ -186,17 +293,15 @@ export function TasksView({ config, onOpenOrbitSettings }: Props) {
     <section className="tasks-view" aria-labelledby="tasks-title" data-testid="tasks-view">
       <header className="tasks-view__hero">
         <div>
-          <p className="tasks-view__kicker">Automation workspace</p>
+          <p className="tasks-view__kicker">{t('tasks.kicker')}</p>
           <div className="tasks-view__title-row">
             <h1 id="tasks-title" className="entry-section__title">
-              Automations
+              {t('entry.navTasks')}
             </h1>
-            <span className="tasks-view__coming-soon">Coming soon</span>
+            <span className="tasks-view__coming-soon">{t('tasks.comingSoon')}</span>
           </div>
           <p className="tasks-view__lede">
-            Automations turn prompts into durable work: Orbit runs them,
-            routines keep them around, schedules decide when they fire, and live
-            artifacts show what changed.
+            {t('tasks.lede')}
           </p>
         </div>
         <button
@@ -205,62 +310,61 @@ export function TasksView({ config, onOpenOrbitSettings }: Props) {
           onClick={onOpenOrbitSettings}
         >
           <Icon name="plus" size={14} />
-          <span>New automation</span>
+          <span>{t('tasks.newAutomation')}</span>
         </button>
       </header>
 
       <div className="tasks-view__preview-note" role="note">
         <Icon name="orbit" size={14} />
         <span>
-          Preview surface only. Orbit settings are available today; routines,
-          schedules, and live artifact wiring will land as the backend branches merge.
+          {t('tasks.previewNote')}
         </span>
       </div>
 
-      <div className="tasks-primitives" aria-label="Automation primitives">
+      <div className="tasks-primitives" aria-label={t('tasks.primitivesAria')}>
         <PrimitiveCard
           icon="orbit"
-          title="Orbit"
-          body="A persistent runtime for long-running or recurring agent work."
-          meta={orbitEnabled ? 'Daily summary enabled' : 'Manual only'}
+          title={t('tasks.primitive.orbit.title')}
+          body={t('tasks.primitive.orbit.body')}
+          meta={orbitEnabled ? t('tasks.primitive.orbit.enabled') : t('tasks.primitive.orbit.manualOnly')}
           tone="green"
         />
         <PrimitiveCard
           icon="history"
-          title="Routines"
-          body="Durable task definitions that survive after a single chat ends."
-          meta="Product shell ready"
+          title={t('tasks.primitive.routines.title')}
+          body={t('tasks.primitive.routines.body')}
+          meta={t('tasks.primitive.routines.meta')}
           tone="blue"
         />
         <PrimitiveCard
           icon="bell"
-          title="Schedules"
-          body="Time or event triggers that decide when a routine should run."
-          meta="Branch pending"
+          title={t('tasks.primitive.schedules.title')}
+          body={t('tasks.primitive.schedules.body')}
+          meta={t('tasks.primitive.schedules.meta')}
           tone="amber"
         />
         <PrimitiveCard
           icon="file"
-          title="Live artifacts"
-          body="Reports and notes that keep updating while an agent works."
-          meta="Preview model"
+          title={t('tasks.primitive.liveArtifacts.title')}
+          body={t('tasks.primitive.liveArtifacts.body')}
+          meta={t('tasks.primitive.liveArtifacts.meta')}
           tone="purple"
         />
       </div>
 
       <div className="tasks-board">
-        <aside className="tasks-list" aria-label="Automations list">
+        <aside className="tasks-list" aria-label={t('tasks.listAria')}>
           <div className="tasks-list__head">
             <div>
-              <h2>Automations</h2>
-              <p>{tasks.length} routines and runs</p>
+              <h2>{t('entry.navTasks')}</h2>
+              <p>{t('tasks.routinesAndRuns', { n: tasks.length })}</p>
             </div>
             <button type="button" onClick={onOpenOrbitSettings}>
               <Icon name="plus" size={13} />
-              <span>New</span>
+              <span>{t('chat.new')}</span>
             </button>
           </div>
-          <div className="tasks-filter" role="tablist" aria-label="Automation filters">
+          <div className="tasks-filter" role="tablist" aria-label={t('tasks.filtersAria')}>
             {FILTERS.map((filter) => (
               <button
                 key={filter.id}
@@ -270,7 +374,7 @@ export function TasksView({ config, onOpenOrbitSettings }: Props) {
                 className={activeFilter === filter.id ? 'is-active' : ''}
                 onClick={() => setActiveFilter(filter.id)}
               >
-                {filter.label}
+                {taskFilterLabel(filter.id, t)}
               </button>
             ))}
           </div>
@@ -310,11 +414,11 @@ export function TasksView({ config, onOpenOrbitSettings }: Props) {
             <p>{selectedTask.meta}</p>
           </div>
 
-          <div className="task-slots" aria-label="Automation configuration">
-            <Slot icon="bell" label="Trigger" value={selectedTask.trigger} />
-            <Slot icon="sparkles" label="Pattern" value={selectedTask.pattern} />
-            <Slot icon="orbit" label="Runtime" value={selectedTask.runtime} />
-            <Slot icon="file" label="Output" value={selectedTask.output} />
+          <div className="task-slots" aria-label={t('tasks.configurationAria')}>
+            <Slot icon="bell" label={t('tasks.slot.trigger')} value={selectedTask.trigger} />
+            <Slot icon="sparkles" label={t('tasks.slot.pattern')} value={selectedTask.pattern} />
+            <Slot icon="orbit" label={t('tasks.slot.runtime')} value={selectedTask.runtime} />
+            <Slot icon="file" label={t('tasks.slot.output')} value={selectedTask.output} />
           </div>
 
           <section className="task-artifact" aria-labelledby="task-artifact-title">
@@ -322,7 +426,7 @@ export function TasksView({ config, onOpenOrbitSettings }: Props) {
               <div>
                 <span className="task-artifact__kicker">
                   <Icon name="file" size={12} />
-                  Live artifact
+                  {t('tasks.liveArtifact')}
                 </span>
                 <h3 id="task-artifact-title">{selectedTask.artifactTitle}</h3>
               </div>
@@ -333,14 +437,14 @@ export function TasksView({ config, onOpenOrbitSettings }: Props) {
 
           <div className="task-detail__actions">
             <button type="button" className="task-detail__secondary">
-              View progress
+              {t('tasks.viewProgress')}
               <Icon name="external-link" size={13} />
             </button>
             <button type="button" className="task-detail__secondary">
-              {selectedTask.status === 'running' ? 'Pause' : 'Run now'}
+              {selectedTask.status === 'running' ? t('tasks.pause') : t('tasks.runNow')}
             </button>
             <button type="button" className="task-detail__primary">
-              Open artifact
+              {t('tasks.openArtifact')}
               <Icon name="external-link" size={13} />
             </button>
           </div>

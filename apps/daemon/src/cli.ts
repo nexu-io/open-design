@@ -247,7 +247,7 @@ function printRootHelp() {
   od artifacts create --name <path> --input <file> [--project <id-or-name>]
       Create a normal project artifact through the local daemon.
 
-  od tools connectors <list|execute> [options]
+  od tools connectors <list|execute|github-design-context> [options]
       Discover and execute configured connectors.
 
   od mcp live-artifacts
@@ -3137,7 +3137,7 @@ marks a version unresolvable for new installs while preserving lockfile replay.`
     name: parsed.name,
     version: parsed.range,
     reason,
-    url: `https://github.com/open-design/plugin-registry/issues/new?${params.toString()}`,
+    url: `https://github.com/nexu-io/open-design/issues/new?${params.toString()}`,
     body,
   };
   if (flags.json) {

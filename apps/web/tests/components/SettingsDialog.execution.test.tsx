@@ -64,7 +64,7 @@ vi.mock('../../src/providers/provider-models', () => ({
 }));
 
 import { SettingsDialog } from '../../src/components/SettingsDialog';
-import type { SettingsSection } from '../../src/components/SettingsDialog';
+import type { AgentRefreshOptions, SettingsSection } from '../../src/components/SettingsDialog';
 import { I18nProvider } from '../../src/i18n';
 import { LOCALES } from '../../src/i18n/types';
 import type { AgentInfo, AppConfig, AppVersionInfo } from '../../src/types';
@@ -97,6 +97,10 @@ const availableAgents: AgentInfo[] = [
     models: [{ id: 'default', label: 'Default' }],
   },
 ];
+
+type OnRefreshAgents = (
+  options?: AgentRefreshOptions,
+) => void | AgentInfo[] | Promise<void | AgentInfo[]>;
 
 const sampleBundledPets = [
   {
@@ -184,7 +188,7 @@ function renderSettingsDialog(
   options: {
     agents?: AgentInfo[];
     daemonLive?: boolean;
-    onRefreshAgents?: ReturnType<typeof vi.fn>;
+    onRefreshAgents?: OnRefreshAgents;
     initialSection?: SettingsSection;
     appVersionInfo?: AppVersionInfo | null;
   } = {},
@@ -192,7 +196,7 @@ function renderSettingsDialog(
   const onPersist = vi.fn();
   const onPersistComposioKey = vi.fn();
   const onClose = vi.fn();
-  const onRefreshAgents = options.onRefreshAgents ?? vi.fn();
+  const onRefreshAgents = options.onRefreshAgents ?? vi.fn<OnRefreshAgents>();
 
   const view = render(
     <SettingsDialog

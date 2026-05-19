@@ -129,7 +129,7 @@ export function HomeView({
   skillsLoading = false,
   promptTemplates = [],
 }: Props) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const [plugins, setPlugins] = useState<InstalledPluginRecord[]>([]);
   const [pluginsLoading, setPluginsLoading] = useState(true);
   const [pendingApplyId, setPendingApplyId] = useState<string | null>(null);
@@ -320,10 +320,10 @@ export function HomeView({
     if (!active) return null;
     if (active.chipId) {
       const chip = findChip(active.chipId);
-      if (chip) return chip.label;
+      if (chip) return homeHeroChipLabelForId(chip.id, t);
     }
     return active.record.title;
-  }, [active]);
+  }, [active, t]);
 
   const selectableSkills = useMemo(
     () => skills.filter((skill) => !skill.aggregatesExamples),
@@ -795,11 +795,21 @@ export function HomeView({
           });
           return;
         }
-        requestActivePlugin(record, undefined, {
+        const pluginOptions = {
           projectKind: chip.action.projectKind,
           chipId: chip.id,
           inputs: chip.action.inputs,
-        });
+        };
+        // Output-type tabs (create group) are mode-selection gestures:
+        // switching between them should never prompt for confirmation,
+        // even when the input already has template text from a previous
+        // tab. Migrate-group chips (From Figma, etc.) still go through
+        // the replacement guard because they carry a meaningful prompt.
+        if (chip.group === 'create') {
+          void usePlugin(record, undefined, pluginOptions);
+        } else {
+          requestActivePlugin(record, undefined, pluginOptions);
+        }
         return;
       }
       case 'create-plugin': {
@@ -954,9 +964,9 @@ export function HomeView({
             aria-modal="true"
             aria-labelledby="home-hero-confirm-title"
           >
-            <h2 id="home-hero-confirm-title">Replace current prompt?</h2>
+            <h2 id="home-hero-confirm-title">{t('homeHero.confirmReplaceTitle')}</h2>
             <p>
-              Using {pendingReplacement.title} will replace the text currently in the input.
+              {t('homeHero.confirmReplaceBody', { title: pendingReplacement.title })}
             </p>
             <div className="home-hero-confirm__actions">
               <button
@@ -964,7 +974,7 @@ export function HomeView({
                 className="home-hero-confirm__secondary"
                 onClick={() => setPendingReplacement(null)}
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
@@ -975,7 +985,7 @@ export function HomeView({
                   action();
                 }}
               >
-                Replace
+                {t('homeHero.confirmReplace')}
               </button>
             </div>
           </div>
@@ -994,6 +1004,23 @@ function projectKindForSkill(skill: SkillSummary | null): ProjectKind | null {
   if (skill.mode === 'video' || skill.surface === 'video') return 'video';
   if (skill.mode === 'audio' || skill.surface === 'audio') return 'audio';
   return 'other';
+}
+
+function homeHeroChipLabelForId(chipId: string, t: ReturnType<typeof useI18n>['t']): string {
+  switch (chipId) {
+    case 'prototype': return t('homeHero.chip.prototype');
+    case 'live-artifact': return t('homeHero.chip.liveArtifact');
+    case 'deck': return t('homeHero.chip.deck');
+    case 'image': return t('homeHero.chip.image');
+    case 'video': return t('homeHero.chip.video');
+    case 'hyperframes': return t('homeHero.chip.hyperframes');
+    case 'audio': return t('homeHero.chip.audio');
+    case 'create-plugin': return t('homeHero.chip.createPlugin');
+    case 'figma': return t('homeHero.chip.figma');
+    case 'folder': return t('homeHero.chip.folder');
+    case 'template': return t('homeHero.chip.template');
+    default: return chipId;
+  }
 }
 
 function hydratePluginInputs(

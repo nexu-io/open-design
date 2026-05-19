@@ -25,8 +25,9 @@ import {
   scanProjectLocation,
   writeProjectManifest,
 } from './project-locations.js';
+import { auditDesignSystemPackage } from './tools-connectors-cli.js';
 
-export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'appConfig'> {}
+export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'appConfig' | 'validation'> {}
 
 export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDeps) {
   const { db, design } = ctx;
@@ -40,6 +41,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   const { listLatestProjectRunStatuses, listProjectsAwaitingInput, normalizeProjectDisplayStatus, composeProjectDisplayStatus, listProjects } = ctx.status;
   const { subscribeFileEvents, activeProjectEventSinks } = ctx.events;
   const { randomId } = ctx.ids;
+  const { validateProjectDesignSystemId } = ctx.validation;
   async function loadPluginRegistryView() {
     const [skills, designSystems] = await Promise.all([
       listSkills(SKILLS_DIR),
@@ -383,6 +385,16 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         }
         externalProjectDir = await createLocationProjectDir(location, id);
       }
+      const designSystemValidation = await validateProjectDesignSystemId(designSystemId);
+      if (!designSystemValidation.ok) {
+        return sendApiError(
+          res,
+          400,
+          designSystemValidation.code,
+          designSystemValidation.message,
+        );
+      }
+      const normalizedDesignSystemId = designSystemValidation.id;
       const projectMetadata =
         metadata && typeof metadata === 'object'
           ? {
@@ -432,14 +444,14 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             createdAt: now,
             updatedAt: now,
             skillId: skillId ?? null,
-            designSystemId: designSystemId ?? null,
+            designSystemId: normalizedDesignSystemId,
           });
         }
         project = insertProject(db, {
           id,
           name: name.trim(),
           skillId: skillId ?? null,
-          designSystemId: designSystemId ?? null,
+          designSystemId: normalizedDesignSystemId,
           pendingPrompt: pendingPrompt || null,
           metadata: projectMetadata,
           customInstructions:
@@ -489,8 +501,8 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           conversationId: cid,
           registry,
           activeProjectDesignSystem:
-            typeof designSystemId === 'string' && designSystemId.length > 0
-              ? { id: designSystemId }
+            typeof normalizedDesignSystemId === 'string' && normalizedDesignSystemId.length > 0
+              ? { id: normalizedDesignSystemId }
               : undefined,
         });
         if (resolved && !resolved.ok) {
@@ -567,7 +579,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     res.json(body);
   });
 
-  app.patch('/api/projects/:id', (req, res) => {
+  app.patch('/api/projects/:id', async (req, res) => {
     try {
       const patch = req.body || {};
       // baseDir / folder-import state is privileged: it's set only by the
@@ -643,6 +655,18 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       }
       if (typeof patch.customInstructions === 'string' && patch.customInstructions.length > 5000) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'customInstructions exceeds 5 000 character limit');
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, 'designSystemId')) {
+        const designSystemValidation = await validateProjectDesignSystemId(patch.designSystemId);
+        if (!designSystemValidation.ok) {
+          return sendApiError(
+            res,
+            400,
+            designSystemValidation.code,
+            designSystemValidation.message,
+          );
+        }
+        patch.designSystemId = designSystemValidation.id;
       }
       const project = updateProject(db, req.params.id, patch);
       if (!project)
@@ -1048,7 +1072,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
   const { upload } = ctx.uploads;
   const { fs } = ctx.node;
   const { getProject } = ctx.projectStore;
-  const { listFiles, searchProjectFiles, readProjectFile, resolveProjectFilePath, parseByteRange, renameProjectFile, deleteProjectFile, writeProjectFile, sanitizeName, ensureProject } = ctx.projectFiles;
+  const { listFiles, searchProjectFiles, readProjectFile, resolveProjectDir, resolveProjectFilePath, parseByteRange, renameProjectFile, deleteProjectFile, writeProjectFile, sanitizeName, ensureProject } = ctx.projectFiles;
   const { buildDocumentPreview } = ctx.documents;
   const { validateArtifactManifestInput } = ctx.artifacts;
 
@@ -1088,6 +1112,22 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         metadata: searchProject?.metadata,
       });
       res.json({ query, matches });
+    } catch (err: any) {
+      sendApiError(res, 400, 'BAD_REQUEST', String(err));
+    }
+  });
+
+  app.get('/api/projects/:id/design-system-package-audit', async (req, res) => {
+    try {
+      const project = getProject(db, req.params.id);
+      if (!project) {
+        sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+        return;
+      }
+      const projectRoot = resolveProjectDir(PROJECTS_DIR, project.id, project.metadata);
+      const audit = await auditDesignSystemPackage(projectRoot);
+      res.setHeader('Cache-Control', 'no-store');
+      res.json({ audit });
     } catch (err: any) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err));
     }

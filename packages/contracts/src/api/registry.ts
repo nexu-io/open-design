@@ -151,7 +151,13 @@ export interface DesignSystemSummary {
   summary: string;
   swatches?: string[];
   surface?: 'web' | 'image' | 'video' | 'audio';
-  source?: 'built-in' | 'installed';
+  source?: 'built-in' | 'installed' | 'user';
+  status?: 'draft' | 'published';
+  isEditable?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  provenance?: DesignSystemProvenance;
+  projectId?: string;
 }
 
 export interface DesignSystemDetail extends DesignSystemSummary {
@@ -164,6 +170,140 @@ export interface DesignSystemsResponse {
 
 export interface DesignSystemResponse {
   designSystem: DesignSystemDetail;
+}
+
+export interface DesignSystemProvenance {
+  companyBlurb?: string;
+  githubUrls?: string[];
+  localCodeFiles?: string[];
+  figFiles?: string[];
+  assetFiles?: string[];
+  notes?: string;
+  sourceNotes?: string;
+}
+
+export type DesignSystemFileKind =
+  | 'folder'
+  | 'page'
+  | 'stylesheet'
+  | 'document'
+  | 'image'
+  | 'data'
+  | 'asset';
+
+export interface DesignSystemFileSummary {
+  path: string;
+  name: string;
+  kind: DesignSystemFileKind;
+  size?: number;
+  updatedAt?: string;
+}
+
+export interface DesignSystemFileDetail extends DesignSystemFileSummary {
+  content: string;
+}
+
+export interface DesignSystemFilesResponse {
+  files: DesignSystemFileSummary[];
+}
+
+export interface DesignSystemFileResponse {
+  file: DesignSystemFileDetail;
+}
+
+export interface DesignSystemWorkspaceResponse {
+  project: import('./projects.js').Project;
+  files: import('./files.js').ProjectFile[];
+}
+
+export type DesignSystemRevisionStatus = 'pending' | 'accepted' | 'rejected';
+
+export interface DesignSystemRevision {
+  id: string;
+  designSystemId: string;
+  status: DesignSystemRevisionStatus;
+  feedback: string;
+  baseBody: string;
+  proposedBody: string;
+  createdAt: string;
+  updatedAt: string;
+  sectionTitle?: string;
+  jobId?: string;
+}
+
+export interface DesignSystemRevisionsResponse {
+  revisions: DesignSystemRevision[];
+}
+
+export interface DesignSystemRevisionResponse {
+  revision: DesignSystemRevision;
+}
+
+export type DesignSystemGenerationJobStatus =
+  | 'queued'
+  | 'running'
+  | 'succeeded'
+  | 'failed';
+
+export type DesignSystemGenerationStepStatus =
+  | 'pending'
+  | 'running'
+  | 'succeeded'
+  | 'failed';
+
+export interface DesignSystemGenerationStep {
+  id: string;
+  title: string;
+  status: DesignSystemGenerationStepStatus;
+  message?: string;
+  startedAt?: string;
+  completedAt?: string;
+}
+
+export interface DesignSystemGenerationJob {
+  id: string;
+  kind?: 'generation' | 'revision';
+  status: DesignSystemGenerationJobStatus;
+  progress: number;
+  steps: DesignSystemGenerationStep[];
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  designSystemId?: string;
+  revisionId?: string;
+  error?: string;
+  message?: string;
+}
+
+export interface DesignSystemGenerationJobResponse {
+  job: DesignSystemGenerationJob;
+}
+
+export type DesignSystemPackageAuditSeverity = 'error' | 'warning';
+
+export interface DesignSystemPackageAuditIssue {
+  severity: DesignSystemPackageAuditSeverity;
+  code: string;
+  message: string;
+  path?: string;
+}
+
+export interface DesignSystemPackageAudit {
+  ok: boolean;
+  projectPath: string;
+  filesInspected: number;
+  errors: DesignSystemPackageAuditIssue[];
+  warnings: DesignSystemPackageAuditIssue[];
+}
+
+export interface DesignSystemPackageAuditResponse {
+  audit: DesignSystemPackageAudit;
+}
+
+export interface DesignSystemRevisionJobRequest {
+  feedback: string;
+  sectionTitle?: string;
+  body?: string;
 }
 
 export interface ImportLocalDesignSystemRequest {

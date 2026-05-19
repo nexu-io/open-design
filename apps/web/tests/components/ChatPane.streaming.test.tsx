@@ -5,6 +5,7 @@ import { forwardRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatPane } from '../../src/components/ChatPane';
+import { DESIGN_SYSTEM_WORKSPACE_PROMPT_PREFIX } from '../../src/design-system-auto-prompt';
 import type { ChatMessage, Conversation, ProjectMetadata } from '../../src/types';
 
 vi.mock('../../src/i18n', () => ({
@@ -59,6 +60,42 @@ describe('ChatPane streaming state', () => {
     const bubble = screen.getByText('Generate a simple sign-in page');
     expect(bubble.classList.contains('user-bubble')).toBe(true);
     expect(bubble.closest('.msg.user')).not.toBeNull();
+  });
+
+  it('summarizes auto-sent design-system workspace prompts', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'user-1',
+        role: 'user',
+        content: `${DESIGN_SYSTEM_WORKSPACE_PROMPT_PREFIX}
+Use the files in this project as the design system source for future projects.
+Expected output:
+- A clear DESIGN.md with all generated rules.`,
+        createdAt: 1,
+      },
+    ];
+
+    render(
+      <ChatPane
+        messages={messages}
+        streaming={false}
+        error={null}
+        projectId="project-1"
+        projectFiles={[]}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+        conversations={conversations}
+        activeConversationId="conv-1"
+        onSelectConversation={vi.fn()}
+        onDeleteConversation={vi.fn()}
+        projectMetadata={projectMetadata}
+      />,
+    );
+
+    expect(screen.getByText('Creating design system workspace')).toBeTruthy();
+    expect(screen.queryByText(DESIGN_SYSTEM_WORKSPACE_PROMPT_PREFIX, { exact: false })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'chat.copyPrompt' })).toBeNull();
   });
 
   it('keeps composer idle while active-run messages still render as streaming', () => {

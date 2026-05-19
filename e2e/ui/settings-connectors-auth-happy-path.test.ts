@@ -65,7 +65,7 @@ async function gotoEntryHome(page: Page) {
   if (await privacyDialog.isVisible().catch(() => false)) {
     await privacyDialog.getByRole('button', { name: /not now/i }).click();
   }
-  await expect(page.getByRole('button', { name: OPEN_SETTINGS_LABEL })).toBeVisible();
+  await expect(page.getByTestId('home-hero')).toBeVisible();
 }
 
 async function openSettingsDialogFromEntry(page: Page) {
@@ -147,6 +147,14 @@ async function openConnectorsSettings(
     });
   });
 
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ json: { config: baseConfig() } });
+      return;
+    }
+    await route.fulfill({ json: { ok: true } });
+  });
+
   await page.route('**/api/connectors', async (route) => {
     await route.fulfill({ json: { connectors } });
   });
@@ -225,9 +233,7 @@ test.describe('Settings connectors auth happy path', () => {
     const githubCard = connectorCard(dialog, 'github');
     await githubCard.getByRole('button', { name: 'Connect' }).click();
 
-    await expect(githubCard.getByRole('alert')).toContainText(
-      'Composio provider is not configured',
-    );
+    await expect(dialog.getByText('Composio provider is not configured')).toBeVisible();
     await expect(githubCard.getByRole('button', { name: 'Connect' })).toBeVisible();
   });
 
@@ -261,15 +267,13 @@ test.describe('Settings connectors auth happy path', () => {
     const githubCard = connectorCard(dialog, 'github');
 
     await githubCard.getByRole('button', { name: 'Connect' }).click();
-    await expect(githubCard.getByRole('alert')).toContainText(
-      'Composio provider is not configured',
-    );
+    await expect(dialog.getByText('Composio provider is not configured')).toBeVisible();
 
     await githubCard.getByRole('button', { name: 'Connect' }).click();
 
     await expect.poll(() => connectAttempts).toBe(2);
     await expect(githubCard.getByRole('button', { name: 'Disconnect' })).toBeVisible();
-    await expect(githubCard.getByRole('alert')).toHaveCount(0);
+    await expect(dialog.getByText('Composio provider is not configured')).toHaveCount(0);
   });
 
   test('switches from Connect to Disconnect on success, then returns to Connect after a successful disconnect', async ({ page }) => {

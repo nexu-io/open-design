@@ -69,6 +69,7 @@ import { testAgent, testApiProvider } from '../providers/connection-test';
 import { fetchProviderModels } from '../providers/provider-models';
 import { fetchConnectors, fetchDesignTemplates } from '../providers/registry';
 import { MEDIA_PROVIDERS } from '../media/models';
+import { XaiOAuthControl } from './XaiOAuthControl';
 import type { MediaProvider } from '../media/models';
 import { Toast } from './Toast';
 import { PetSettings } from './pet/PetSettings';
@@ -2346,7 +2347,10 @@ export function SettingsDialog({
                 );
                 if (cliEnvFields.length === 0) return null;
                 return (
-                  <details className="agent-cli-env">
+                  <details
+                    className="agent-cli-env"
+                    data-testid="settings-cli-env"
+                  >
                     <summary className="agent-cli-env-summary">
                       <span className="agent-cli-env-summary-title">
                         {t('settings.cliEnvTitle')}
@@ -4409,6 +4413,7 @@ function MediaProvidersSection({
                   as warnings; one chip reads as status.
                 */}
               </div>
+              {provider.id === 'grok' ? <XaiOAuthControl /> : null}
               <div className="media-provider-body">
                 <div className="media-provider-secret-field">
                   <input
