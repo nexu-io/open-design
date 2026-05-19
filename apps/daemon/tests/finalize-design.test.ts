@@ -210,6 +210,116 @@ describe('resolveCurrentArtifact', () => {
     expect(out!.body).toBe('<p>design</p>');
   });
 
+  it('rebuilds a missing HTML sidecar when the active tab points at an unregistered deliverable', async () => {
+    const { db, projectsRoot } = setupResolverFixture();
+    await writeProjectFile(projectsRoot, PROJECT_ID, 'resumed.html', '<p>resumed body</p>');
+    setActiveTab(db, 'resumed.html');
+
+    const out = await resolveCurrentArtifact(db, projectsRoot, PROJECT_ID);
+
+    expect(out).not.toBeNull();
+    expect(out!.name).toBe('resumed.html');
+    expect(out!.body).toBe('<p>resumed body</p>');
+    expect(out!.manifest?.entry).toBe('resumed.html');
+    expect(out!.manifest?.kind).toBe('html');
+
+    const sidecarPath = path.join(projectsRoot, PROJECT_ID, 'resumed.html.artifact.json');
+    const sidecar = JSON.parse(fs.readFileSync(sidecarPath, 'utf8')) as {
+      entry?: string;
+      kind?: string;
+      metadata?: { inferred?: boolean; reconciled?: boolean };
+    };
+    expect(sidecar.metadata?.inferred).toBe(true);
+    expect(sidecar.metadata?.reconciled).toBe(true);
+  });
+
+  it('keeps a newer real artifact ranked above an older reconciled HTML in the fallback path', async () => {
+    const { db, projectsRoot } = setupResolverFixture();
+    const projectDir = path.join(projectsRoot, PROJECT_ID);
+    const staleMtime = new Date('2026-05-01T00:00:00.000Z');
+
+    await writeProjectFile(projectsRoot, PROJECT_ID, 'newer.html', '<p>newer body</p>', {
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Newer',
+        entry: 'newer.html',
+        renderer: 'html',
+        exports: ['html'],
+        updatedAt: '2026-05-07T00:00:00.000Z',
+      },
+    });
+    await writeProjectFile(projectsRoot, PROJECT_ID, 'stale.html', '<p>stale body</p>');
+    fs.utimesSync(path.join(projectDir, 'stale.html'), staleMtime, staleMtime);
+
+    const out = await resolveCurrentArtifact(db, projectsRoot, PROJECT_ID);
+
+    expect(out).not.toBeNull();
+    expect(out!.name).toBe('newer.html');
+    expect(out!.body).toBe('<p>newer body</p>');
+
+    const staleSidecar = JSON.parse(
+      fs.readFileSync(path.join(projectDir, 'stale.html.artifact.json'), 'utf8'),
+    ) as { updatedAt?: string; metadata?: { reconciled?: boolean } };
+    expect(staleSidecar.metadata?.reconciled).toBe(true);
+    expect(staleSidecar.updatedAt).toBe(staleMtime.toISOString());
+  });
+
+  it('does not reconcile non-HTML files even when their sidecar is missing', async () => {
+    const { db, projectsRoot } = setupResolverFixture();
+    await writeProjectFile(projectsRoot, PROJECT_ID, 'README.md', '# notes\n');
+    await writeProjectFile(projectsRoot, PROJECT_ID, 'diagram.svg', '<svg/>');
+
+    const out = await resolveCurrentArtifact(db, projectsRoot, PROJECT_ID);
+
+    expect(out).toBeNull();
+    const dir = path.join(projectsRoot, PROJECT_ID);
+    expect(fs.existsSync(path.join(dir, 'README.md.artifact.json'))).toBe(false);
+    expect(fs.existsSync(path.join(dir, 'diagram.svg.artifact.json'))).toBe(false);
+  });
+
+  it('rebuilds a corrupt sidecar rather than leaving the artifact unrecoverable', async () => {
+    const { db, projectsRoot } = setupResolverFixture();
+    await writeProjectFile(projectsRoot, PROJECT_ID, 'broken.html', '<p>broken body</p>');
+    const sidecarPath = path.join(projectsRoot, PROJECT_ID, 'broken.html.artifact.json');
+    fs.writeFileSync(sidecarPath, '{not valid json');
+    setActiveTab(db, 'broken.html');
+
+    const out = await resolveCurrentArtifact(db, projectsRoot, PROJECT_ID);
+
+    expect(out).not.toBeNull();
+    expect(out!.name).toBe('broken.html');
+    const rebuilt = JSON.parse(fs.readFileSync(sidecarPath, 'utf8')) as {
+      metadata?: { reconciled?: boolean };
+    };
+    expect(rebuilt.metadata?.reconciled).toBe(true);
+  });
+
+  it('returns the existing sidecar verbatim when one is already present (idempotent)', async () => {
+    const { db, projectsRoot } = setupResolverFixture();
+    await writeProjectFile(projectsRoot, PROJECT_ID, 'kept.html', '<p>kept</p>', {
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Kept',
+        entry: 'kept.html',
+        renderer: 'html',
+        exports: ['html'],
+        updatedAt: '2026-05-09T00:00:00.000Z',
+      },
+    });
+    const sidecarPath = path.join(projectsRoot, PROJECT_ID, 'kept.html.artifact.json');
+    const beforeBytes = fs.readFileSync(sidecarPath);
+    const beforeMtime = fs.statSync(sidecarPath).mtimeMs;
+    setActiveTab(db, 'kept.html');
+
+    const out = await resolveCurrentArtifact(db, projectsRoot, PROJECT_ID);
+
+    expect(out).not.toBeNull();
+    expect(fs.readFileSync(sidecarPath).equals(beforeBytes)).toBe(true);
+    expect(fs.statSync(sidecarPath).mtimeMs).toBe(beforeMtime);
+  });
+
   it('returns null when no active tab and no .artifact.json sidecars exist', async () => {
     const { db, projectsRoot } = setupResolverFixture();
 

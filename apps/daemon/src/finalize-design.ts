@@ -34,6 +34,7 @@ import type {
 import { getProject } from './db.js';
 import { readDesignSystem } from './design-systems.js';
 import {
+  ensureArtifactSidecarFor,
   listFiles,
   readProjectFile,
   resolveProjectDir,
@@ -182,6 +183,12 @@ export async function resolveCurrentArtifact(
       safeTabName = null;
     }
     if (safeTabName) {
+      await ensureArtifactSidecarFor(
+        projectsRoot,
+        projectId,
+        safeTabName,
+        metadata ?? undefined,
+      );
       const sidecarPath = path.join(dir, `${safeTabName}.artifact.json`);
       if (fs.existsSync(sidecarPath)) {
         const file = await readProjectFile(
@@ -201,7 +208,22 @@ export async function resolveCurrentArtifact(
     // through to the newest-artifact branch.
   }
 
-  const files = await listFiles(projectsRoot, projectId, { metadata: metadata ?? undefined });
+  const filesBeforeReconcile = await listFiles(projectsRoot, projectId, { metadata: metadata ?? undefined });
+  const reconcileTargets = filesBeforeReconcile.filter(
+    (f) => !fs.existsSync(path.join(dir, `${f.name}.artifact.json`)),
+  );
+  if (reconcileTargets.length > 0) {
+    await Promise.all(
+      reconcileTargets.map((f) =>
+        ensureArtifactSidecarFor(projectsRoot, projectId, f.name, metadata ?? undefined),
+      ),
+    );
+  }
+  // Re-list after reconcile so candidates pick up the recovered manifests' updatedAt for ranking.
+  const files =
+    reconcileTargets.length > 0
+      ? await listFiles(projectsRoot, projectId, { metadata: metadata ?? undefined })
+      : filesBeforeReconcile;
   const candidates = files
     .filter((f) => {
       // Require a real sidecar on disk; an inferred manifest does not count.

@@ -79,7 +79,15 @@ function validateSupportingPath(value: unknown): string | null {
   return null;
 }
 
-export function validateArtifactManifestInput(manifest: unknown, entry: unknown): ValidationResult {
+export interface SanitizeManifestOptions {
+  preserveUpdatedAt?: boolean;
+}
+
+export function validateArtifactManifestInput(
+  manifest: unknown,
+  entry: unknown,
+  options: SanitizeManifestOptions = {},
+): ValidationResult {
   if (manifest == null) return { ok: true, value: null };
   if (!isPlainObject(manifest)) {
     return { ok: false, error: 'artifactManifest must be an object' };
@@ -191,11 +199,16 @@ export function validateArtifactManifestInput(manifest: unknown, entry: unknown)
     return { ok: false, error: `artifact entry exceeds max length (${MAX_ENTRY_LENGTH})` };
   }
 
-  return { ok: true, value: sanitizeManifest(manifest, safeEntry) };
+  return { ok: true, value: sanitizeManifest(manifest, safeEntry, options) };
 }
 
-export function sanitizeManifest(manifest: JsonRecord, entry: string): JsonRecord {
+export function sanitizeManifest(
+  manifest: JsonRecord,
+  entry: string,
+  options: SanitizeManifestOptions = {},
+): JsonRecord {
   const now = new Date().toISOString();
+  const incomingUpdatedAt = typeof manifest.updatedAt === 'string' ? manifest.updatedAt : null;
   return {
     version: MANIFEST_VERSION,
     kind: manifest.kind,
@@ -208,7 +221,7 @@ export function sanitizeManifest(manifest: JsonRecord, entry: string): JsonRecor
       ? manifest.supportingFiles.map((x) => String(x).replace(/\\/g, '/'))
       : undefined,
     createdAt: typeof manifest.createdAt === 'string' ? manifest.createdAt : now,
-    updatedAt: now,
+    updatedAt: options.preserveUpdatedAt && incomingUpdatedAt ? incomingUpdatedAt : now,
     sourceSkillId: manifest.sourceSkillId,
     designSystemId: manifest.designSystemId ?? undefined,
     metadata: manifest.metadata,
@@ -220,7 +233,7 @@ export function parsePersistedManifest(raw: string, fallbackEntry: string): Json
     const parsed = JSON.parse(raw);
     if (!parsed || parsed.version !== MANIFEST_VERSION) return null;
     const entry = typeof parsed.entry === 'string' && parsed.entry ? parsed.entry : fallbackEntry;
-    const result = validateArtifactManifestInput(parsed, entry);
+    const result = validateArtifactManifestInput(parsed, entry, { preserveUpdatedAt: true });
     return result.ok ? result.value : null;
   } catch {
     return null;
