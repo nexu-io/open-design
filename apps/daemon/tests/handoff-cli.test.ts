@@ -193,4 +193,36 @@ describe('od project handoff CLI', () => {
     expect(result.exitCode).toBe(1);
     expect(stderr.join('')).toContain('malformed handoff response');
   });
+
+  // Malformed flags must reach this structured fail() path. `od project
+  // handoff` short-circuits to runProjectHandoff before runProject's
+  // generic parseFlags, so these are the real entrypoint's behavior.
+  it('fails fast on an unknown flag without calling the daemon', async () => {
+    const result = await runProjectHandoff([
+      'proj-1',
+      '--conversation', 'conv-9',
+      '--api-key', 'sk-test',
+      '--model', 'claude-opus-4-7',
+      '--bogus',
+      '--daemon-url', DAEMON,
+    ]);
+
+    expect(result.exitCode).toBe(1);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(stderr.join('')).toContain('unknown option');
+  });
+
+  it('fails fast when --max-tokens is given without a value', async () => {
+    const result = await runProjectHandoff([
+      'proj-1',
+      '--conversation', 'conv-9',
+      '--api-key', 'sk-test',
+      '--model', 'claude-opus-4-7',
+      '--max-tokens',
+    ]);
+
+    expect(result.exitCode).toBe(1);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(stderr.join('')).toContain('max-tokens');
+  });
 });
