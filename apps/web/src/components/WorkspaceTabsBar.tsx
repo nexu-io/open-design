@@ -482,7 +482,7 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
                 <span className="workspace-tab__icon" aria-hidden>
                   <Icon name={display.icon} size={14} />
                 </span>
-                <span className="workspace-tab__label">{display.title}</span>
+                <span className={`workspace-tab__label${tab.kind === 'project' ? ' workspace-tab__label--project' : ''}`}>{display.title}</span>
               </button>
               <button
                 type="button"
@@ -495,94 +495,104 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
             </div>
           );
         })}
-      </div>
-      <div className="workspace-tabs-actions" ref={menuRef}>
-        <button
-          type="button"
-          className="workspace-tabs-new-btn"
-          onClick={createNewTab}
-          title="New tab"
-          aria-label="New tab"
-        >
-          <Icon name="plus" size={14} />
-        </button>
-        <button
-          type="button"
-          className={`workspace-tabs-icon-btn${tabsMenuOpen ? ' is-active' : ''}`}
-          onClick={() => setTabsMenuOpen((open) => !open)}
-          title="Search tabs"
-          aria-label="Search tabs"
-          aria-haspopup="dialog"
-          aria-expanded={tabsMenuOpen}
-        >
-          <Icon name="search" size={15} />
-        </button>
-        {tabsMenuOpen && typeof document !== 'undefined'
-          ? createPortal(
-              <div
-                className="workspace-tabs-popover"
-                role="dialog"
-                aria-label="Search tabs"
-                ref={popoverRef}
-              >
-                <div className="workspace-tabs-search">
-                  <Icon name="search" size={14} />
-                  <input
-                    ref={searchInputRef}
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Search tabs"
-                    aria-label="Search tabs"
-                  />
-                </div>
-                <div className="workspace-tabs-popover__section">
-                  <span>Open tabs</span>
-                  <span>{state.tabs.length}</span>
-                </div>
-                <div className="workspace-tabs-list" role="listbox" aria-label="Open tabs">
-                  {filteredTabs.length > 0 ? (
-                    filteredTabs.map((display) => {
-                      const active = display.id === state.activeTabId;
-                      return (
-                        <div
-                          key={display.id}
-                          className={`workspace-tabs-list__item${active ? ' is-active' : ''}`}
-                          role="option"
-                          aria-selected={active}
+        {hiddenTabCount > 0 ? (
+          <button
+            type="button"
+            className="workspace-tab workspace-tab--overflow"
+            onClick={() => setTabsMenuOpen(true)}
+            title="Show hidden tabs"
+          >
+            {hiddenTabCount} more
+          </button>
+        ) : null}
+        <div className="workspace-tabs-actions" ref={menuRef}>
+          <button
+            type="button"
+            className="workspace-tabs-new-btn"
+            onClick={createNewTab}
+            title="New tab"
+            aria-label="New tab"
+          >
+            <Icon name="plus" size={14} />
+          </button>
+          <button
+            type="button"
+            className={`workspace-tabs-icon-btn${tabsMenuOpen ? ' is-active' : ''}`}
+            onClick={() => setTabsMenuOpen((open) => !open)}
+            title="Search tabs"
+            aria-label="Search tabs"
+            aria-haspopup="dialog"
+            aria-expanded={tabsMenuOpen}
+          >
+            <Icon name="search" size={15} />
+          </button>
+          {tabsMenuOpen && typeof document !== 'undefined'
+            ? createPortal(
+                <div
+                  className="workspace-tabs-popover"
+                  role="dialog"
+                  aria-label="Search tabs"
+                  ref={popoverRef}
+                >
+              <div className="workspace-tabs-search">
+                <Icon name="search" size={14} />
+                <input
+                  ref={searchInputRef}
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search tabs"
+                  aria-label="Search tabs"
+                />
+              </div>
+              <div className="workspace-tabs-popover__section">
+                <span>Open tabs</span>
+                <span>{state.tabs.length}</span>
+              </div>
+              <div className="workspace-tabs-list" role="listbox" aria-label="Open tabs">
+                {filteredTabs.length > 0 ? (
+                  filteredTabs.map((display) => {
+                    const active = display.id === state.activeTabId;
+                    return (
+                      <div
+                        key={display.id}
+                        className={`workspace-tabs-list__item${active ? ' is-active' : ''}`}
+                        role="option"
+                        aria-selected={active}
+                      >
+                        <button
+                          type="button"
+                          className="workspace-tabs-list__main"
+                          onClick={() => openTab(display.tab)}
                         >
-                          <button
-                            type="button"
-                            className="workspace-tabs-list__main"
-                            onClick={() => openTab(display.tab)}
-                          >
-                            <span className="workspace-tabs-list__icon" aria-hidden>
-                              <Icon name={display.icon} size={15} />
-                            </span>
-                            <span className="workspace-tabs-list__text">
-                              <span className="workspace-tabs-list__title">{display.title}</span>
-                              <span className="workspace-tabs-list__meta">{display.meta}</span>
-                            </span>
-                          </button>
-                          <button
-                            type="button"
-                            className="workspace-tabs-list__close"
-                            onClick={() => closeTab(display.id)}
-                            title={t('common.close')}
-                            aria-label={t('common.close')}
-                          >
-                            <Icon name="close" size={11} />
-                          </button>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <div className="workspace-tabs-empty">No tabs found</div>
-                  )}
-                </div>
-              </div>,
-              document.body,
-            )
-          : null}
+                          <span className="workspace-tabs-list__icon" aria-hidden>
+                            <Icon name={display.icon} size={15} />
+                          </span>
+                          <span className="workspace-tabs-list__text">
+                            <span className={`workspace-tabs-list__title${display.tab.kind === 'project' ? ' workspace-tabs-list__title--project' : ''}`}>{display.title}</span>
+                            <span className="workspace-tabs-list__meta">{display.meta}</span>
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          className="workspace-tabs-list__close"
+                          onClick={() => closeTab(display.id)}
+                          title={t('common.close')}
+                          aria-label={t('common.close')}
+                        >
+                          <Icon name="close" size={11} />
+                        </button>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="workspace-tabs-empty">No tabs found</div>
+                )}
+              </div>
+                </div>,
+                document.body,
+              )
+            : null}
+        </div>
       </div>
       {hoverPreview && typeof document !== 'undefined' && !tabsMenuOpen
         ? createPortal(

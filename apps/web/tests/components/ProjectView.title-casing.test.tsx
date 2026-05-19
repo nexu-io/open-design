@@ -150,16 +150,16 @@ function renderProjectView() {
 // lines of unrelated CSS that jsdom would parse at test cost.
 //
 // Covered selectors (all five project-name display sites):
-//   1. .app-project-title .title        — design-files page header (this test)
-//   2. .workspace-tab__label            — tab strip
-//   3. .workspace-tabs-list__title      — tab overflow popover
-//   4. .design-card-name                — designs grid cards
-//   5. .recent-projects__card-name      — recent-projects strip (separate CSS file)
+//   1. .app-project-title .title             — design-files page header (this test)
+//   2. .workspace-tab__label--project        — tab strip (project tabs only)
+//   3. .workspace-tabs-list__title--project  — tab overflow popover (project tabs only)
+//   4. .design-card-name--project            — designs grid cards (project cards only)
+//   5. .recent-projects__card-name           — recent-projects strip (separate CSS file)
 const PROJECT_NAME_SELECTORS = [
   'app-project-title',
-  'workspace-tab__label',
-  'workspace-tabs-list__title',
-  'design-card-name',
+  'workspace-tab__label--project',
+  'workspace-tabs-list__title--project',
+  'design-card-name--project',
   'recent-projects__card-name',
 ] as const;
 

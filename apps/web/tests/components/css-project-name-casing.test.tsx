@@ -7,15 +7,13 @@
 // resolves the declared rule in jsdom without paying the cost of parsing the
 // full ~25 000-line index.css.
 //
-// NOTE: .workspace-tab__label and .workspace-tabs-list__title also render
-// non-project tab labels (Home, Marketplace, etc.). capitalize is safe there
-// too — already-uppercase strings are unaffected and sentence-case labels
-// (e.g. "common.untitled") benefit. The brand-name trade-off documented in
-// index.css on .app-project-title .title applies equally here.
+// NOTE: .workspace-tab__label--project and .workspace-tabs-list__title--project
+// scope text-transform: capitalize to project tabs only. Non-project tab labels
+// (Home, Marketplace, etc.) use localized strings that must not be auto-capitalized.
 //
-// NOTE: .design-card-name renders project names in the projects grid AND
-// live-artifact titles in the live-artifact grid. capitalize applies to both
-// for the same reason.
+// NOTE: .design-card-name--project scopes text-transform: capitalize to project
+// cards only. Live-artifact titles may have intentional casing (brand names,
+// version strings) and must not be auto-capitalized.
 
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -146,7 +144,7 @@ describe('project-name CSS capitalization — additional display sites', () => {
   // Site 2: .workspace-tab__label (WorkspaceTabsBar tab strip)
   // -------------------------------------------------------------------------
 
-  describe('.workspace-tab__label', () => {
+  describe('.workspace-tab__label--project', () => {
     beforeEach(() => {
       const css = loadIndexCss();
       injectRules(extractRulesBySelector(css, 'workspace-tab__label'));
@@ -157,12 +155,11 @@ describe('project-name CSS capitalization — additional display sites', () => {
         <WorkspaceTabsBar route={projectRoute} projects={[project]} />,
       );
 
-      const labels = container.querySelectorAll('.workspace-tab__label');
-      // At least one tab should be present (the project tab).
-      expect(labels.length).toBeGreaterThan(0);
+      // Project tab labels carry the --project modifier class.
+      const projectLabels = container.querySelectorAll('.workspace-tab__label--project');
+      expect(projectLabels.length).toBeGreaterThan(0);
 
-      // Find the label whose text content matches the project name.
-      const projectLabel = Array.from(labels).find(
+      const projectLabel = Array.from(projectLabels).find(
         (el) => el.textContent === project.name,
       );
       expect(projectLabel).not.toBeNull();
@@ -170,37 +167,68 @@ describe('project-name CSS capitalization — additional display sites', () => {
       const style = window.getComputedStyle(projectLabel as Element);
       expect(style.textTransform).toBe('capitalize');
     });
+
+    it('does not apply text-transform: capitalize to non-project tab labels', () => {
+      const { container } = render(
+        <WorkspaceTabsBar route={projectRoute} projects={[project]} />,
+      );
+
+      // Non-project labels must NOT carry the --project modifier.
+      const allLabels = container.querySelectorAll('.workspace-tab__label');
+      const nonProjectLabels = Array.from(allLabels).filter(
+        (el) => !el.classList.contains('workspace-tab__label--project'),
+      );
+
+      for (const el of nonProjectLabels) {
+        const style = window.getComputedStyle(el);
+        expect(style.textTransform).not.toBe('capitalize');
+      }
+    });
   });
 
   // -------------------------------------------------------------------------
   // Site 3: .workspace-tabs-list__title (tab overflow popover)
   // -------------------------------------------------------------------------
 
-  describe('.workspace-tabs-list__title', () => {
+  describe('.workspace-tabs-list__title--project', () => {
     beforeEach(() => {
       const css = loadIndexCss();
       injectRules(extractRulesBySelector(css, 'workspace-tabs-list__title'));
     });
 
-    it('applies text-transform: capitalize to the overflow list title', () => {
-      // Render a minimal DOM that replicates the production selector path.
-      // Mounting the full WorkspaceTabsBar overflow popover requires
-      // simulating enough tabs to overflow, which is viewport-width-dependent
-      // and flaky in jsdom. A fixture DOM is the correct approach here: it is
-      // cheaper, deterministic, and tests the CSS contract (selector → rule)
-      // without depending on component render logic.
-      //
-      // The selector `.workspace-tabs-list__title` is tested against a fixture
-      // DOM that exactly matches the production structure; production render
-      // correctness (correct class applied to the element) is covered by the
-      // WorkspaceTabsBar navigation tests.
+    it('applies text-transform: capitalize to a project overflow list title', () => {
+      // Fixture DOM matching production structure. The --project modifier class
+      // is what carries the text-transform rule; the base class does not.
       const wrapper = document.createElement('div');
       wrapper.innerHTML = `
         <div class="workspace-tabs-list__item">
           <button class="workspace-tabs-list__main">
             <span class="workspace-tabs-list__text">
-              <span class="workspace-tabs-list__title">acme studio</span>
+              <span class="workspace-tabs-list__title workspace-tabs-list__title--project">acme studio</span>
               <span class="workspace-tabs-list__meta">Project</span>
+            </span>
+          </button>
+        </div>
+      `;
+      document.body.appendChild(wrapper);
+
+      const titleEl = wrapper.querySelector('.workspace-tabs-list__title--project');
+      expect(titleEl).not.toBeNull();
+
+      const style = window.getComputedStyle(titleEl as Element);
+      expect(style.textTransform).toBe('capitalize');
+
+      wrapper.remove();
+    });
+
+    it('does not apply text-transform: capitalize to non-project overflow titles', () => {
+      const wrapper = document.createElement('div');
+      wrapper.innerHTML = `
+        <div class="workspace-tabs-list__item">
+          <button class="workspace-tabs-list__main">
+            <span class="workspace-tabs-list__text">
+              <span class="workspace-tabs-list__title">Home</span>
+              <span class="workspace-tabs-list__meta">Workspace</span>
             </span>
           </button>
         </div>
@@ -211,7 +239,7 @@ describe('project-name CSS capitalization — additional display sites', () => {
       expect(titleEl).not.toBeNull();
 
       const style = window.getComputedStyle(titleEl as Element);
-      expect(style.textTransform).toBe('capitalize');
+      expect(style.textTransform).not.toBe('capitalize');
 
       wrapper.remove();
     });
@@ -221,13 +249,13 @@ describe('project-name CSS capitalization — additional display sites', () => {
   // Site 4: .design-card-name (DesignsTab grid cards)
   // -------------------------------------------------------------------------
 
-  describe('.design-card-name', () => {
+  describe('.design-card-name--project', () => {
     beforeEach(() => {
       const css = loadIndexCss();
       injectRules(extractRulesBySelector(css, 'design-card-name'));
     });
 
-    it('applies text-transform: capitalize to the design card project name', () => {
+    it('applies text-transform: capitalize to project card names', () => {
       const { container } = render(
         <DesignsTab
           projects={[project]}
@@ -240,16 +268,38 @@ describe('project-name CSS capitalization — additional display sites', () => {
         />,
       );
 
-      const nameEls = container.querySelectorAll('.design-card-name');
-      expect(nameEls.length).toBeGreaterThan(0);
+      // Project cards carry the --project modifier class.
+      const projectNameEls = container.querySelectorAll('.design-card-name--project');
+      expect(projectNameEls.length).toBeGreaterThan(0);
 
-      const projectNameEl = Array.from(nameEls).find(
+      const projectNameEl = Array.from(projectNameEls).find(
         (el) => el.textContent === project.name,
       );
       expect(projectNameEl).not.toBeNull();
 
       const style = window.getComputedStyle(projectNameEl as Element);
       expect(style.textTransform).toBe('capitalize');
+    });
+
+    it('does not apply text-transform: capitalize to live-artifact titles', () => {
+      // Live-artifact cards use .design-card-name without --project.
+      // Fixture DOM replicates the production element; component rendering of
+      // live-artifact cards requires a running daemon, so a fixture is appropriate.
+      const wrapper = document.createElement('div');
+      wrapper.innerHTML = `
+        <div class="design-card-meta-block">
+          <div class="design-card-name" title="iPhone 16 Pro — v2.1">iPhone 16 Pro — v2.1</div>
+        </div>
+      `;
+      document.body.appendChild(wrapper);
+
+      const nameEl = wrapper.querySelector('.design-card-name');
+      expect(nameEl).not.toBeNull();
+
+      const style = window.getComputedStyle(nameEl as Element);
+      expect(style.textTransform).not.toBe('capitalize');
+
+      wrapper.remove();
     });
   });
 

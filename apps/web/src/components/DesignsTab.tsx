@@ -785,7 +785,7 @@ export function DesignsTab({
 											<ProjectTag category={projectCategory(p)} />
 										)}
 									</div>
-									<div className="design-card-name" title={p.name}>
+									<div className="design-card-name design-card-name--project" title={p.name}>
 										{p.name}
 									</div>
 									<div className="design-card-meta">
