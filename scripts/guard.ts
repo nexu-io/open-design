@@ -31,6 +31,11 @@ const electronRuntimeFiles = [
 const electronPackResourceFiles = [
   path.join(repoRoot, "tools", "pack", "resources", "web-standalone-after-pack.cjs"),
 ] as const;
+const electronTestDirectories = [
+  path.join(repoRoot, "apps", "desktop", "tests"),
+  path.join(repoRoot, "apps", "packaged", "tests"),
+  path.join(repoRoot, "tools", "pack", "tests"),
+] as const;
 
 const m4PlatformGateLabels = [
   "Windows NSIS: build, install, start, inspect status/eval/screenshot, stop.",
@@ -47,6 +52,7 @@ const m5PrimaryDocsLabel = "Update README, architecture docs, and directory guid
 const m6ElectronDepsLabel = "Remove `electron`, `electron-builder`, `@electron/rebuild`, and Electron-only package scripts.";
 const m6ElectronRuntimeLabel = "Remove Electron preload/runtime code after Tauri bridge and packaging parity are complete.";
 const m6ElectronResourcesLabel = "Remove Electron-only resources/hooks from `tools-pack`.";
+const m6ElectronTestsLabel = "Delete or rewrite Electron-only tests.";
 
 const allowedE2eScripts = new Set([
   "e2e/scripts/playwright.ts",
@@ -786,6 +792,10 @@ function containsElectronDefaultTransitionText(source: string): boolean {
   );
 }
 
+function containsElectronTestReference(source: string): boolean {
+  return /\b[Ee]lectron\b|@electron\/|electron-builder|electronuserland/.test(source);
+}
+
 async function pathExists(filePath: string): Promise<boolean> {
   try {
     await access(filePath);
@@ -793,6 +803,44 @@ async function pathExists(filePath: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+async function collectFilesWithExtensions(directory: string, extensions: ReadonlySet<string>): Promise<string[]> {
+  if (!(await pathExists(directory))) {
+    return [];
+  }
+
+  const entries = await readdir(directory, { withFileTypes: true });
+  const files: string[] = [];
+  for (const entry of entries) {
+    const fullPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...(await collectFilesWithExtensions(fullPath, extensions)));
+      continue;
+    }
+    if (entry.isFile() && extensions.has(path.extname(entry.name))) {
+      files.push(fullPath);
+    }
+  }
+  return files;
+}
+
+async function collectElectronTestReferenceFiles(): Promise<string[]> {
+  const testFiles = (
+    await Promise.all(
+      electronTestDirectories.map((directory) => collectFilesWithExtensions(directory, new Set([".ts", ".tsx"]))),
+    )
+  ).flat();
+  const fileSources = await Promise.all(
+    testFiles.map(async (filePath) => ({
+      filePath,
+      source: await readFile(filePath, "utf8"),
+    })),
+  );
+  return fileSources
+    .filter(({ source }) => containsElectronTestReference(source))
+    .map(({ filePath }) => filePath)
+    .sort();
 }
 
 function readPackageDependencyNames(source: string, label: string): Set<string> {
@@ -827,6 +875,7 @@ async function checkTauriMigrationOrder(): Promise<boolean> {
     toolsPackPackageJson,
     electronRuntimeFileExists,
     electronPackResourceFileExists,
+    electronTestReferenceFiles,
   ] = await Promise.all([
     readFile(migrationDocPath, "utf8"),
     readFile(readmePath, "utf8"),
@@ -840,6 +889,7 @@ async function checkTauriMigrationOrder(): Promise<boolean> {
     readFile(toolsPackPackageJsonPath, "utf8"),
     Promise.all(electronRuntimeFiles.map((filePath) => pathExists(filePath))),
     Promise.all(electronPackResourceFiles.map((filePath) => pathExists(filePath))),
+    collectElectronTestReferenceFiles(),
   ]);
   const toolsDevDefault = readDefaultDesktopRuntime(toolsDevConfig, "tools-dev");
   const toolsPackDefault = readDefaultDesktopRuntime(toolsPackConfig, "tools-pack");
@@ -859,6 +909,7 @@ async function checkTauriMigrationOrder(): Promise<boolean> {
   const electronDepsRemoved = isChecklistLineChecked(migrationDoc, m6ElectronDepsLabel);
   const electronRuntimeRemoved = isChecklistLineChecked(migrationDoc, m6ElectronRuntimeLabel);
   const electronResourcesRemoved = isChecklistLineChecked(migrationDoc, m6ElectronResourcesLabel);
+  const electronTestsRemoved = isChecklistLineChecked(migrationDoc, m6ElectronTestsLabel);
 
   const violations: string[] = [];
   if (m4Complete && !m4EvidenceLogMarked) {
@@ -932,6 +983,16 @@ async function checkTauriMigrationOrder(): Promise<boolean> {
   }
   if (!electronResourcesRemoved && remainingElectronResourceFiles.length === 0) {
     violations.push("Electron-only tools-pack resources were removed, but the M6 resources cleanup checklist line is not checked.");
+  }
+  if (electronTestsRemoved && electronTestReferenceFiles.length > 0) {
+    violations.push(
+      `the M6 Electron test cleanup is checked, but these tests still reference Electron: ${electronTestReferenceFiles
+        .map(toRepositoryPath)
+        .join(", ")}.`,
+    );
+  }
+  if (!electronTestsRemoved && electronTestReferenceFiles.length === 0) {
+    violations.push("Electron-only tests no longer reference Electron, but the M6 test cleanup checklist line is not checked.");
   }
 
   if (violations.length > 0) {
