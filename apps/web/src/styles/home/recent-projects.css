@@ -138,6 +138,9 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* Same display-layer capitalize as .app-project-title .title — see that rule for the
+     brand-name trade-off note. */
+  text-transform: capitalize;
 }
 .recent-projects__card-time {
   font-size: 11.5px;

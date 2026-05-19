@@ -145,15 +145,34 @@ function renderProjectView() {
   );
 }
 
-// Extract only the rules relevant to the project-title selector block so
-// that the injected stylesheet stays small and does not pull in thousands
-// of lines of unrelated CSS that jsdom would parse at test cost.
+// Extract only the rules relevant to the five project-name selector blocks so
+// that the injected stylesheet stays small and does not pull in thousands of
+// lines of unrelated CSS that jsdom would parse at test cost.
+//
+// Covered selectors (all five project-name display sites):
+//   1. .app-project-title .title        — design-files page header (this test)
+//   2. .workspace-tab__label            — tab strip
+//   3. .workspace-tabs-list__title      — tab overflow popover
+//   4. .design-card-name                — designs grid cards
+//   5. .recent-projects__card-name      — recent-projects strip (separate CSS file)
+const PROJECT_NAME_SELECTORS = [
+  'app-project-title',
+  'workspace-tab__label',
+  'workspace-tabs-list__title',
+  'design-card-name',
+  'recent-projects__card-name',
+] as const;
+
 function extractProjectTitleRules(css: string): string {
   const rules: string[] = [];
-  const re = /([^{}]*\.app-project-title[^{}]*)\{([^}]*)\}/g;
+  const blockRe = /([^{}]+)\{([^}]*)\}/g;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(css)) !== null) {
-    rules.push(`${m[1]}{${m[2]}}`);
+  while ((m = blockRe.exec(css)) !== null) {
+    const selector = m[1] ?? '';
+    const body = m[2] ?? '';
+    if (PROJECT_NAME_SELECTORS.some((sel) => selector.includes(sel))) {
+      rules.push(`${selector}{${body}}`);
+    }
   }
   return rules.join('\n');
 }

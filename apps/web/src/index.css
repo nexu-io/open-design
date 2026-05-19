@@ -683,6 +683,9 @@ code {
   font-size: 11.5px;
   font-weight: 520;
   letter-spacing: 0;
+  /* Same display-layer capitalize as .app-project-title .title — see that rule for the
+     brand-name trade-off note. Applies to all tab types (project, home, marketplace). */
+  text-transform: capitalize;
 }
 .workspace-tab__close {
   width: 18px;
@@ -853,6 +856,9 @@ code {
   color: var(--text-strong);
   font-size: 12.5px;
   font-weight: 600;
+  /* Same display-layer capitalize as .app-project-title .title — see that rule for the
+     brand-name trade-off note. Applies to all tab types (project, home, marketplace). */
+  text-transform: capitalize;
 }
 .workspace-tabs-list__meta {
   color: var(--text-muted);
@@ -8990,6 +8996,9 @@ button.connector-action.is-loading {
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--text-strong);
+  /* Same display-layer capitalize as .app-project-title .title — see that rule for the
+     brand-name trade-off note. Applies to project names and live-artifact titles. */
+  text-transform: capitalize;
 }
 .design-card-meta {
   display: flex;
