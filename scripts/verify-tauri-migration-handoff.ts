@@ -16,6 +16,7 @@ type Args = {
   cwd: string;
   keepTemp: boolean;
   manifest?: string;
+  note?: string;
   output?: string;
 };
 
@@ -58,6 +59,19 @@ async function main(): Promise<void> {
         source: args.cwd,
       });
     }
+    if (args.note != null) {
+      await writeNote(args.note, {
+        base: args.base,
+        baseHead,
+        branch: args.branch,
+        branchHead,
+        bundlePath,
+        bundleSha256,
+        importCommand,
+        ...(args.manifest == null ? {} : { manifestPath: args.manifest }),
+        source: args.cwd,
+      });
+    }
 
     await git(args.cwd, ["init", "--bare", remotePath]);
     await git(args.cwd, ["push", remotePath, `${baseHead}:refs/heads/main`]);
@@ -93,6 +107,7 @@ async function main(): Promise<void> {
         `Bundle: ${bundlePath}`,
         `SHA-256: ${bundleSha256}`,
         ...(args.manifest == null ? [] : [`Manifest: ${args.manifest}`]),
+        ...(args.note == null ? [] : [`Note: ${args.note}`]),
         "Receiving import command (replace --manifest or --bundle if copied elsewhere):",
         indent(importCommand),
         "Create:",
@@ -121,7 +136,7 @@ function parseArgs(argv: string[]): Args {
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const value = argv[index + 1];
-    if ((arg === "--base" || arg === "--branch" || arg === "--cwd" || arg === "--output") && value == null) {
+    if ((arg === "--base" || arg === "--branch" || arg === "--cwd" || arg === "--note" || arg === "--output") && value == null) {
       throw new Error(`${arg} requires a value`);
     }
     if (arg === "--base") {
@@ -156,10 +171,15 @@ function parseArgs(argv: string[]): Args {
       index += 1;
       continue;
     }
+    if (arg === "--note") {
+      parsed.note = resolve(value!);
+      index += 1;
+      continue;
+    }
     if (arg === "--help" || arg === "-h") {
       process.stdout.write(
         [
-          "usage: tsx scripts/verify-tauri-migration-handoff.ts [--cwd <repo>] [--branch <ref>] [--base <ref>] [--output <bundle>] [--manifest <path>] [--keep-temp]",
+          "usage: tsx scripts/verify-tauri-migration-handoff.ts [--cwd <repo>] [--branch <ref>] [--base <ref>] [--output <bundle>] [--manifest <path>] [--note <path>] [--keep-temp]",
           "",
           `defaults: --cwd ${defaultRoot} --branch ${defaultBranch} --base ${defaultBase}`,
           "",
@@ -260,6 +280,78 @@ async function writeManifest(
     )}\n`,
     "utf8",
   );
+}
+
+async function writeNote(
+  path: string,
+  note: {
+    base: string;
+    baseHead: string;
+    branch: string;
+    branchHead: string;
+    bundlePath: string;
+    bundleSha256: string;
+    importCommand: string;
+    manifestPath?: string;
+    source: string;
+  },
+): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(
+    path,
+    [
+      "# Tauri Migration Handoff",
+      "",
+      "## Verified Artifact",
+      "",
+      `- Source: \`${note.source}\``,
+      `- Base: \`${note.base}\` @ \`${note.baseHead}\``,
+      `- Branch: \`${note.branch}\` @ \`${note.branchHead}\``,
+      `- Bundle: \`${note.bundlePath}\``,
+      `- Bundle SHA-256: \`${note.bundleSha256}\``,
+      ...(note.manifestPath == null ? [] : [`- Manifest: \`${note.manifestPath}\``]),
+      "",
+      "## Receiving Machine",
+      "",
+      "Verify and import the copied bundle/manifest:",
+      "",
+      "```bash",
+      note.importCommand,
+      "git push -u origin " + shellWord(note.branch),
+      "```",
+      "",
+      "Confirm the remote branch matches this handoff:",
+      "",
+      "```bash",
+      ...(note.manifestPath == null
+        ? [
+            "pnpm exec tsx scripts/verify-tauri-migration-remote.ts \\",
+            `  --branch ${shellWord(note.branch)} \\`,
+            `  --expected-head ${note.branchHead} \\`,
+            "  --remote origin",
+          ]
+        : [
+            "pnpm exec tsx scripts/verify-tauri-migration-remote.ts \\",
+            `  --manifest ${shellWord(note.manifestPath)} \\`,
+            "  --remote origin",
+          ]),
+      "```",
+      "",
+      "After the Windows and Linux Tauri smoke artifacts are available, advance the migration through M4 evidence and M5 defaults:",
+      "",
+      "```bash",
+      "pnpm exec tsx scripts/advance-tauri-migration-m4-m5.ts \\",
+      "  --win-report /path/to/open-design-ci-win-tauri-e2e-report \\",
+      "  --linux-report /path/to/open-design-ci-linux-tauri-e2e-report",
+      "```",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+}
+
+function shellWord(value: string): string {
+  return shellQuote(value);
 }
 
 try {

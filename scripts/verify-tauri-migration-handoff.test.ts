@@ -18,6 +18,7 @@ test("verify-tauri-migration-handoff round-trips a bundle through a receiving ch
   const sourceHead = (await git(sourceRepo, "rev-parse", migrationBranch)).stdout.trim();
   const bundlePath = join(sourceRepo, "handoff.bundle");
   const manifestPath = join(sourceRepo, "handoff.json");
+  const notePath = join(sourceRepo, "handoff.md");
 
   const result = await runHandoffScript(
     "--cwd",
@@ -30,12 +31,15 @@ test("verify-tauri-migration-handoff round-trips a bundle through a receiving ch
     bundlePath,
     "--manifest",
     manifestPath,
+    "--note",
+    notePath,
   );
 
   assert.match(result.stdout, /Verified Tauri migration bundle handoff round-trip/);
   assert.match(result.stdout, new RegExp(`Branch: ${migrationBranch.replaceAll("/", "\\/")} @ ${sourceHead}`));
   assert.match(result.stdout, /SHA-256: [0-9a-f]{64}/);
   assert.match(result.stdout, new RegExp(`Manifest: ${escapeRegExp(manifestPath)}`));
+  assert.match(result.stdout, new RegExp(`Note: ${escapeRegExp(notePath)}`));
   assert.match(result.stdout, /Receiving import command \(replace --manifest or --bundle if copied elsewhere\):/);
   assert.match(result.stdout, /pnpm exec tsx scripts\/import-tauri-migration-bundle\.ts \\/);
   assert.match(result.stdout, new RegExp(`--manifest '${escapeRegExp(manifestPath)}' \\\\`));
@@ -57,6 +61,12 @@ test("verify-tauri-migration-handoff round-trips a bundle through a receiving ch
   assert.match(manifest.bundleSha256, /^[0-9a-f]{64}$/);
   assert.match(manifest.importCommand, /import-tauri-migration-bundle/);
   assert.match(manifest.importCommand, new RegExp(`--manifest '${escapeRegExp(manifestPath)}'`));
+  const note = await readFile(notePath, "utf8");
+  assert.match(note, /# Tauri Migration Handoff/);
+  assert.match(note, new RegExp(`Branch: \`${migrationBranch.replaceAll("/", "\\/")}\` @ \`${sourceHead}\``));
+  assert.match(note, new RegExp(`--manifest '${escapeRegExp(manifestPath)}' \\\\`));
+  assert.match(note, /verify-tauri-migration-remote/);
+  assert.match(note, /advance-tauri-migration-m4-m5/);
 });
 
 test("verify-tauri-migration-handoff rejects dirty source worktrees", async (t) => {
