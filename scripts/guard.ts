@@ -941,6 +941,17 @@ async function checkTauriMigrationOrder(): Promise<boolean> {
   const electronResourcesRemoved = isChecklistLineChecked(migrationDoc, m6ElectronResourcesLabel);
   const electronTestsRemoved = isChecklistLineChecked(migrationDoc, m6ElectronTestsLabel);
   const electronGuidanceUpdated = isChecklistLineChecked(migrationDoc, m6ElectronGuidanceLabel);
+  const m6CleanupStates = [
+    electronDepsRemoved,
+    electronRuntimeRemoved,
+    electronResourcesRemoved,
+    electronTestsRemoved,
+    electronGuidanceUpdated,
+  ];
+  const anyM6CleanupMarked = m6CleanupStates.some(Boolean);
+  const m6CleanupComplete = m6CleanupStates.every(Boolean);
+  const toolsAllowElectronFallback =
+    sourceAllowsElectronFallback(toolsDevConfig) && sourceAllowsElectronFallback(toolsPackConfig);
 
   const violations: string[] = [];
   if (m4PartiallyComplete) {
@@ -975,14 +986,20 @@ async function checkTauriMigrationOrder(): Promise<boolean> {
   if (primaryDocsMarked !== bothDefaultsTauri) {
     violations.push("the M5 Tauri-primary documentation checklist line must move with the default runtime flip.");
   }
+  if (anyM6CleanupMarked && !bothDefaultsTauri) {
+    violations.push("M6 Electron cleanup cannot be checked before the M5 Tauri default flip is complete.");
+  }
   if (
     primaryDocsMarked &&
     [readme, appsAgents, architectureDoc].some((source) => containsElectronDefaultTransitionText(source))
   ) {
     violations.push("Tauri-primary docs are checked, but README/app/architecture docs still describe Electron as the default.");
   }
-  if (fallbackMarked && (!sourceAllowsElectronFallback(toolsDevConfig) || !sourceAllowsElectronFallback(toolsPackConfig))) {
+  if (fallbackMarked && !m6CleanupComplete && !toolsAllowElectronFallback) {
     violations.push("Electron fallback is checked, but a tool no longer accepts both electron and tauri runtime values.");
+  }
+  if (m6CleanupComplete && toolsAllowElectronFallback) {
+    violations.push("M6 Electron cleanup is complete, but tools-dev/tools-pack still accept the electron desktop runtime.");
   }
   const electronDependencyNames = ["electron", "electron-builder", "@electron/rebuild"];
   const electronDependenciesPresent = electronDependencyNames.filter((dependencyName) =>
