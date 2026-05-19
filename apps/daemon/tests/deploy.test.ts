@@ -9,6 +9,7 @@ import {
   analyzeDeployPlan,
   buildDeployFilePlan,
   buildDeployFileSet,
+  buildVercelRoutingConfig,
   checkDeploymentUrl,
   chunkCloudflarePagesAssetUploads,
   CLOUDFLARE_PAGES_ASSET_MAX_BYTES,
@@ -2303,3 +2304,65 @@ describe('deployment link readiness', () => {
     expect(isVercelProtectedResponse(new Response(null, { headers }), 'Authentication Required')).toBe(true);
   });
 });
+
+describe('vercel routing config for multi-page deploys', () => {
+  function htmlFile(file: string, body: string, sourcePath = file) {
+    return { file, data: Buffer.from(body, 'utf8'), contentType: 'text/html', sourcePath };
+  }
+
+  it('returns null for a single-page deploy file set', () => {
+    const result = buildVercelRoutingConfig([
+      htmlFile('index.html', '<!doctype html><a href="https://example.com">x</a>', 'landing.html'),
+      { file: 'styles.css', data: Buffer.from('body{}'), contentType: 'text/css', sourcePath: 'styles.css' },
+    ]);
+    expect(result).toBeNull();
+  });
+
+  it('emits vercel.json with cleanUrls true when the file set has multiple html pages', () => {
+    const result = buildVercelRoutingConfig([
+      htmlFile('index.html', '<!doctype html><h1>Landing</h1>', 'landing.html'),
+      htmlFile('pricing.html', '<!doctype html><h1>Pricing</h1>'),
+      htmlFile('about.html', '<!doctype html><h1>About</h1>'),
+    ]);
+    expect(result).not.toBeNull();
+    expect(result!.vercelJson.file).toBe('vercel.json');
+    expect(JSON.parse(Buffer.from(result!.vercelJson.data).toString('utf8'))).toEqual({ cleanUrls: true });
+    expect(result!.routes.sort()).toEqual(['/', '/about', '/pricing']);
+  });
+
+  it('rewrites intra-set anchor hrefs to clean routes and leaves external/hash/missing-target links alone', () => {
+    const pricingHtml =
+      '<a href="about.html">About</a>' +
+      '<a href="./about.html">About dot</a>' +
+      '<a href="missing.html">Missing</a>' +
+      '<a href="https://example.com/about.html">External</a>' +
+      '<a href="#section">Hash</a>' +
+      '<a href="mailto:hi@example.com">Mail</a>';
+    const result = buildVercelRoutingConfig([
+      htmlFile('index.html', '<!doctype html><a href="pricing.html">Pricing</a>', 'landing.html'),
+      htmlFile('pricing.html', pricingHtml),
+      htmlFile('about.html', '<!doctype html><h1>About</h1>'),
+    ]);
+    expect(result).not.toBeNull();
+    const rewrittenPricing = result!.rewrittenHtml.get('pricing.html');
+    expect(rewrittenPricing).toBe(
+      '<a href="/about">About</a>' +
+      '<a href="/about">About dot</a>' +
+      '<a href="missing.html">Missing</a>' +
+      '<a href="https://example.com/about.html">External</a>' +
+      '<a href="#section">Hash</a>' +
+      '<a href="mailto:hi@example.com">Mail</a>',
+    );
+  });
+
+  it('rewrites the entry source name back to the root path', () => {
+    const pricingHtml = '<a href="landing.html">Home</a><a href="/landing.html">Abs home</a>';
+    const result = buildVercelRoutingConfig([
+      htmlFile('index.html', '<!doctype html><h1>Landing</h1>', 'landing.html'),
+      htmlFile('pricing.html', pricingHtml),
+    ]);
+    const rewrittenPricing = result!.rewrittenHtml.get('pricing.html');
+    expect(rewrittenPricing).toBe('<a href="/">Home</a><a href="/">Abs home</a>');
+  });
+});
+
