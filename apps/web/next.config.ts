@@ -23,7 +23,7 @@ const isServerOutput = webOutputMode === 'server' || webOutputMode === 'standalo
 const shouldStaticExport = isProd && !isServerOutput;
 
 const WEB_ROOT = dirname(fileURLToPath(import.meta.url));
-const WORKSPACE_ROOT = dirname(dirname(WEB_ROOT));
+const WORKSPACE_ROOT = process.env.OD_WORKSPACE_ROOT ?? dirname(dirname(WEB_ROOT));
 const toPosixPath = (value: string) => value.replaceAll('\\', '/');
 
 function resolveDistDir(defaultValue: string) {
