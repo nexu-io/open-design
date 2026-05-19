@@ -11586,7 +11586,7 @@ button.connector-action.is-loading {
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
   margin-top: 8px;
 }
 .comment-popover-actions > * {
@@ -11596,6 +11596,14 @@ button.connector-action.is-loading {
      past the popover's right edge instead of breaking onto a new line.
      Issue #779. */
   max-width: 100%;
+}
+.comment-popover-actions-end {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-width: 0;
 }
 .comment-popover-remove {
   color: var(--red);
