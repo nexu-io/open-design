@@ -516,6 +516,13 @@ async function readHandoffArchiveStatus(archivePath: string, handoff?: HandoffSt
     if (!commandScriptSource.includes("TAURI_PR_BODY_PATH") || !commandScriptSource.includes("--body-file")) {
       problems.push(`command script is missing template-complete draft PR guidance: ${commandScriptPath}`);
     }
+    if (
+      !commandScriptSource.includes("read_checksum()") ||
+      !commandScriptSource.includes('read_checksum "$command_checksum" "$(basename -- "$script_path")" "command script"') ||
+      !commandScriptSource.includes('read_checksum "$checksum" "$(basename -- "$archive")" "archive"')
+    ) {
+      problems.push(`command script is missing checksum target-name validation: ${commandScriptPath}`);
+    }
   } catch (error) {
     problems.push(`command script unavailable: ${error instanceof Error ? error.message : String(error)}`);
   }

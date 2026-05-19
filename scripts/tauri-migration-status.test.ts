@@ -178,6 +178,27 @@ test("tauri-migration-status rejects packaged handoff archives without command s
   assert.match(parsed.handoffArchive.problems.join("\n"), /command script checksum sidecar unavailable/);
 });
 
+test("tauri-migration-status rejects packaged handoff archives with stale command checksum validation", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+  const { archivePath } = await writeHandoffArchive(handoffDir);
+  const commandScriptPath = `${archivePath}.commands.sh`;
+  const commandScript = await readFile(commandScriptPath, "utf8");
+  await writeFile(commandScriptPath, commandScript.replace("read_checksum()\n", ""), "utf8");
+  await writeCommandScriptChecksum(commandScriptPath);
+
+  const result = await runStatus(fixture, "--handoff-dir", handoffDir);
+  const parsed = JSON.parse(result.stdout) as { handoffArchive: { current: boolean; problems: string[] } };
+
+  assert.equal(parsed.handoffArchive.current, false);
+  assert.match(parsed.handoffArchive.problems.join("\n"), /command script is missing checksum target-name validation/);
+});
+
 test("tauri-migration-status reports stale handoff artifacts", async (t) => {
   const fixture = await createFixtureRoot(t, {
     checked: [],
@@ -517,6 +538,9 @@ async function writeHandoffArchive(handoffDir: string): Promise<{ archivePath: s
     `${archivePath}.commands.sh`,
     [
       "#!/usr/bin/env bash",
+      "read_checksum()",
+      'read_checksum "$command_checksum" "$(basename -- "$script_path")" "command script"',
+      'read_checksum "$checksum" "$(basename -- "$archive")" "archive"',
       'git fetch "$bundle" "$branch:$temp_ref"',
       'gh workflow run "$workflow" --ref "$branch"',
       "download-tauri-m4-reports.ts",
@@ -532,9 +556,13 @@ async function writeHandoffArchive(handoffDir: string): Promise<{ archivePath: s
     "utf8",
   );
   await chmod(`${archivePath}.commands.sh`, 0o755);
-  const commandScriptSha256 = createHash("sha256").update(await readFile(`${archivePath}.commands.sh`)).digest("hex");
-  await writeFile(`${archivePath}.commands.sh.sha256`, `${commandScriptSha256}  ${basename(`${archivePath}.commands.sh`)}\n`, "utf8");
+  await writeCommandScriptChecksum(`${archivePath}.commands.sh`);
   return { archivePath, archiveSha256 };
+}
+
+async function writeCommandScriptChecksum(commandScriptPath: string): Promise<void> {
+  const commandScriptSha256 = createHash("sha256").update(await readFile(commandScriptPath)).digest("hex");
+  await writeFile(`${commandScriptPath}.sha256`, `${commandScriptSha256}  ${basename(commandScriptPath)}\n`, "utf8");
 }
 
 async function createRemoteFixture(root: string, branchHead: string): Promise<string> {
