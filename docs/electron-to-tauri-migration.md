@@ -303,6 +303,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Relaxed the migration-order parser for `DEFAULT_DESKTOP_RUNTIME` and `release-beta` `desktop_runtime.default` formatting. M5 now keys on the actual `electron|tauri` values across common TypeScript/YAML quote and whitespace variants, reducing false failures during the default flip. `node --import tsx --test scripts/tauri-migration-policy.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `pnpm guard` passed.
 - 2026-05-20: Added a post-M4 execution runbook that maps M5 and M6 checklist items to the concrete files and verification commands required after native Windows/Linux evidence lands. This keeps default flip and Electron removal execution tied to the guard policy instead of relying on checklist memory. `pnpm guard` passed.
 - 2026-05-20: Added a git-bundle fallback to the remote CI handoff so the branch can be transferred to a write-capable machine even when the configured local GitHub credential cannot push. This keeps native Windows/Linux evidence collection unblocked by the current `sunseol` 403. `pnpm guard` passed.
+- 2026-05-20: Added `scripts/create-tauri-migration-bundle.ts` to make the branch handoff repeatable. The script rejects tracked dirty worktrees, creates the bundle from the migration branch against `origin/main`, verifies it, and prints the bundled heads for the receiving machine. `node --import tsx --test scripts/create-tauri-migration-bundle.test.ts` and `pnpm guard` passed.
 
 ### Platform Gate Runners
 
@@ -353,12 +354,10 @@ To collect native M4 evidence, push that branch with a credential that can write
 - `Packaged windows Tauri smoke`
 - `Packaged linux Tauri smoke`
 
-If direct push is blocked by credentials, create a git bundle from this machine and import it on a machine or account that can push to the repository:
+If direct push is blocked by credentials, create a verified git bundle from this machine and import it on a machine or account that can push to the repository:
 
 ```bash
-git bundle create /tmp/open-design-tauri-migration.bundle codex/electron-to-tauri-migration ^origin/main
-git bundle verify /tmp/open-design-tauri-migration.bundle
-git bundle list-heads /tmp/open-design-tauri-migration.bundle
+pnpm exec tsx scripts/create-tauri-migration-bundle.ts --output /tmp/open-design-tauri-migration.bundle
 ```
 
 On the receiving checkout:
