@@ -51,6 +51,48 @@ type DesignFilesGroupMode = 'kind' | 'modified';
 type ModifiedSection = 'today' | 'yesterday' | 'previous7Days' | 'previous30Days' | 'older';
 type SortKey = 'name' | 'kind' | 'mtime';
 type SortDir = 'asc' | 'desc';
+
+const VIEW_STATE_KEY_PREFIX = 'od:design-files:view-state:v1:';
+
+interface PersistedViewState {
+  sortKey?: SortKey;
+  sortDir?: SortDir;
+  pageSize?: number | 'all';
+  kindFilter?: string[];
+}
+
+function readViewState(projectId: string): PersistedViewState {
+  try {
+    const raw = localStorage.getItem(VIEW_STATE_KEY_PREFIX + projectId);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return parsed as PersistedViewState;
+  } catch {
+    return {};
+  }
+}
+
+function writeViewState(projectId: string, state: PersistedViewState): void {
+  try {
+    localStorage.setItem(VIEW_STATE_KEY_PREFIX + projectId, JSON.stringify(state));
+  } catch {
+    // localStorage unavailable (private mode, quota exceeded) — silently skip
+  }
+}
+
+function isSortKey(v: unknown): v is SortKey {
+  return v === 'name' || v === 'kind' || v === 'mtime';
+}
+
+function isSortDir(v: unknown): v is SortDir {
+  return v === 'asc' || v === 'desc';
+}
+
+function isPageSize(v: unknown): v is number | 'all' {
+  if (v === 'all') return true;
+  return typeof v === 'number' && Number.isFinite(v) && v > 0;
+}
 type FileSystemEntryWithReader = FileSystemEntry & {
   createReader?: () => FileSystemDirectoryReader;
 };
@@ -146,8 +188,14 @@ export function DesignFilesPanel({
   const MENU_SAFE_PADDING = 8;
   const [preview, setPreview] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [sortKey, setSortKey] = useState<SortKey>('mtime');
-  const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [sortKey, setSortKey] = useState<SortKey>(() => {
+    const saved = readViewState(projectId);
+    return isSortKey(saved.sortKey) ? saved.sortKey : 'mtime';
+  });
+  const [sortDir, setSortDir] = useState<SortDir>(() => {
+    const saved = readViewState(projectId);
+    return isSortDir(saved.sortDir) ? saved.sortDir : 'desc';
+  });
   const lastKeyPress = useRef<Map<string, number>>(new Map());
   const [deleting, setDeleting] = useState(false);
   const [installingFolder, setInstallingFolder] = useState<string | null>(null);
@@ -159,7 +207,11 @@ export function DesignFilesPanel({
   >(new Set());
   const [renaming, setRenaming] = useState<{ name: string; draft: string; saving: boolean } | null>(null);
   const [dayBoundary, setDayBoundary] = useState(() => Date.now());
-  const [kindFilter, setKindFilter] = useState<Set<ProjectFileKind>>(() => new Set());
+  const [kindFilter, setKindFilter] = useState<Set<ProjectFileKind>>(() => {
+    const saved = readViewState(projectId);
+    if (!Array.isArray(saved.kindFilter) || saved.kindFilter.length === 0) return new Set();
+    return new Set(saved.kindFilter as ProjectFileKind[]);
+  });
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const filterMenuRef = useRef<HTMLDivElement | null>(null);
   const [currentDir, setCurrentDir] = useState<string>('');
@@ -234,7 +286,10 @@ export function DesignFilesPanel({
   }, [filteredFiles, sortKey, sortDir]);
 
   const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState<number | 'all'>(30);
+  const [pageSize, setPageSize] = useState<number | 'all'>(() => {
+    const saved = readViewState(projectId);
+    return isPageSize(saved.pageSize) ? saved.pageSize : 30;
+  });
 
   const effectivePageSize = pageSize === 'all' ? Math.max(1, sortedFiles.length) : pageSize;
   const totalPages = Math.max(1, Math.ceil(sortedFiles.length / effectivePageSize));
@@ -274,6 +329,17 @@ export function DesignFilesPanel({
   useEffect(() => {
     setPage(0);
   }, [pageSize]);
+
+  // Persist view state so it survives navigation (the panel remounts via
+  // key={projectId} when the user tabs away and back).
+  useEffect(() => {
+    writeViewState(projectId, {
+      sortKey,
+      sortDir,
+      pageSize,
+      kindFilter: Array.from(kindFilter),
+    });
+  }, [projectId, sortKey, sortDir, pageSize, kindFilter]);
 
   // Reset to the first page when the filter changes — the previous page
   // index may no longer exist (or may now sit past the new totalPages).
