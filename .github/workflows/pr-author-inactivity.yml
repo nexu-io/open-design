@@ -55,7 +55,7 @@ jobs:
             const REMINDER_MARKER = '<!-- pr-author-inactivity:reminder -->';
             const REMINDER_MS = 72 * 60 * 60 * 1000;
             const CLOSE_MS = 120 * 60 * 60 * 1000;
-            const DRY_RUN = core.getBooleanInput('dry_run');
+            const DRY_RUN = String(context.payload.inputs?.dry_run || 'false').toLowerCase() === 'true';
 
             function ts(value) {
               return value ? new Date(value).getTime() : 0;
