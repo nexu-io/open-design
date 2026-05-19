@@ -347,6 +347,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Added `scripts/advance-tauri-migration-m4-m5.ts` so extracted native platform reports can move the migration through M4 evidence recording and M5 default flip in one guarded command. It runs the platform verifier with `--update-migration-doc`, then invokes the M5 applicator; if platform verification fails, M5 defaults remain untouched. `node --import tsx --test scripts/advance-tauri-migration-m4-m5.test.ts scripts/tauri-ci-scope.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, `cd e2e && pnpm test tests/packaged-smoke-workflow.test.ts`, `pnpm guard`, and `pnpm install` passed.
 - 2026-05-20: Added `scripts/tauri-migration-inventory.ts` so M6 Electron cleanup starts from a machine-readable inventory of remaining Electron dependencies, lockfile importers, runtime files, pack resources, tests, and guidance references. Current inventory reports 3 package manifests, 3 lockfile importers, 3 runtime files, 1 pack resource, 18 test files, and 6 guidance files still blocking M6. `node --import tsx --test scripts/tauri-migration-inventory.test.ts scripts/tauri-migration-status.test.ts scripts/tauri-ci-scope.test.ts`, `pnpm exec tsx scripts/tauri-migration-inventory.ts --json`, `tsc -p scripts/tsconfig.json --noEmit`, `cd e2e && pnpm test tests/packaged-smoke-workflow.test.ts`, `pnpm guard`, and `pnpm install` passed.
 - 2026-05-20: Updated `scripts/tauri-migration-status.ts` next actions so M4 points at the current verified handoff, remote verification, native smoke, and M4→M5 advance commands, while M5 points at the guarded applicator instead of stale manual default-flip prose. `node --import tsx --test scripts/tauri-migration-status.test.ts`, `pnpm exec tsx scripts/tauri-migration-status.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `pnpm guard` passed.
+- 2026-05-20: Added `scripts/package-tauri-migration-handoff.ts` so a verified handoff directory is revalidated and packaged as a tarball with a `.sha256` sidecar before transfer. The status output now points at this packaging step before asking a write-capable machine to extract and run `scripts/push-tauri-migration-handoff.ts`. `node --import tsx --test scripts/package-tauri-migration-handoff.test.ts scripts/tauri-ci-scope.test.ts scripts/tauri-migration-status.test.ts` and `tsc -p scripts/tsconfig.json --noEmit` passed.
 
 ### Platform Gate Runners
 
@@ -414,11 +415,20 @@ pnpm exec tsx scripts/verify-tauri-migration-handoff.ts \
   --output-dir /tmp/open-design-tauri-migration-handoff
 ```
 
-Keep the script output, JSON manifest, and Markdown handoff note together. They record the migration branch head, `origin/main` base, bundle byte size, SHA-256, `git bundle verify` result, bundled heads, receiving-side import command, remote verification command, and M4→M5 advance command. The manifest records the bundle path relative to itself, so the handoff directory can be copied to another machine as one relocatable directory.
-
-On the receiving checkout, import the copied bundle, push the branch, and verify the remote head:
+Package the verified handoff directory before copying it to another machine:
 
 ```bash
+pnpm exec tsx scripts/package-tauri-migration-handoff.ts \
+  --handoff-dir /tmp/open-design-tauri-migration-handoff
+```
+
+Keep the script output, JSON manifest, Markdown handoff note, tarball, and `.sha256` sidecar together. They record the migration branch head, `origin/main` base, bundle byte size, SHA-256, `git bundle verify` result, bundled heads, receiving-side import command, remote verification command, and M4→M5 advance command. The manifest records the bundle path relative to itself, so the extracted handoff directory remains relocatable.
+
+On the receiving checkout, verify the tarball checksum, extract it, then import the copied bundle, push the branch, and verify the remote head:
+
+```bash
+shasum -a 256 -c open-design-tauri-migration-handoff.tar.gz.sha256
+tar -xzf open-design-tauri-migration-handoff.tar.gz
 pnpm exec tsx scripts/push-tauri-migration-handoff.ts \
   --manifest /path/to/open-design-tauri-migration-handoff/open-design-tauri-migration-handoff.json \
   --remote origin

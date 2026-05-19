@@ -53,6 +53,7 @@ test("tauri-migration-status reports the current M4 blocker state", async (t) =>
     ],
   );
   assert.match(parsed.nextActions.join("\n"), /verify-tauri-migration-handoff/);
+  assert.match(parsed.nextActions.join("\n"), /packaged handoff archive/);
   assert.match(parsed.nextActions.join("\n"), /push-tauri-migration-handoff/);
   assert.match(parsed.nextActions.join("\n"), /advance-tauri-migration-m4-m5/);
 });
@@ -97,7 +98,7 @@ test("tauri-migration-status reports current handoff artifacts", async (t) => {
   assert.equal(parsed.handoff.branchHead, head);
   assert.equal(parsed.handoff.bundleSha256, bundleSha256);
   assert.deepEqual(parsed.handoff.problems, []);
-  assert.match(parsed.nextActions.join("\n"), /Copy the current verified handoff directory/);
+  assert.match(parsed.nextActions.join("\n"), /Package the current verified handoff directory/);
 });
 
 test("tauri-migration-status reports stale handoff artifacts", async (t) => {
