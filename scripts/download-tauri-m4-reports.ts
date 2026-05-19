@@ -288,10 +288,27 @@ async function downloadArtifact(args: Args, runId: string, artifactName: string,
 }
 
 async function gh(args: Args, commandArgs: string[]): Promise<{ stderr: string; stdout: string }> {
-  return execFileAsync(args.ghBin, commandArgs, {
-    cwd: workspaceRoot,
-    maxBuffer: 1024 * 1024 * 8,
-  });
+  try {
+    return await execFileAsync(args.ghBin, commandArgs, {
+      cwd: workspaceRoot,
+      maxBuffer: 1024 * 1024 * 8,
+    });
+  } catch (error) {
+    const detail = error as Error & { code?: string; stderr?: string; stdout?: string };
+    throw new Error(
+      [
+        `GitHub CLI command failed: ${formatCommand(args.ghBin, commandArgs)}`,
+        ...(detail.code === "ENOENT"
+          ? [
+              `GitHub CLI was not found at ${args.ghBin}. Install gh or pass --gh <path-to-gh>.`,
+              "If reports are already available locally, skip this downloader and run scripts/verify-tauri-platform-gates.ts or scripts/advance-tauri-migration-m4-m5.ts with the report directories.",
+            ]
+          : []),
+        ...(detail.stdout == null || detail.stdout.trim() === "" ? [] : [`stdout:\n${detail.stdout.trimEnd()}`]),
+        ...(detail.stderr == null || detail.stderr.trim() === "" ? [] : [`stderr:\n${detail.stderr.trimEnd()}`]),
+      ].join("\n"),
+    );
+  }
 }
 
 async function runScript(scriptName: string, args: string[]): Promise<{ stderr: string; stdout: string }> {
@@ -310,6 +327,10 @@ function indent(value: string): string {
 
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+function formatCommand(command: string, args: string[]): string {
+  return [command, ...args].map(shellQuote).join(" ");
 }
 
 try {

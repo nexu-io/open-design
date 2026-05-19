@@ -63,6 +63,22 @@ test("download-tauri-m4-reports can use an explicit run id without listing runs"
   assert.match(calls, /run download 777/);
 });
 
+test("download-tauri-m4-reports explains missing gh", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "open-design-tauri-download-missing-gh-"));
+  t.after(() => void rm(root, { force: true, recursive: true }));
+  const missingGh = join(root, "missing-gh");
+
+  await assert.rejects(runDownload(missingGh, "--run-id", "777", "--output-dir", join(root, "reports")), (error) => {
+    const detail = error as Error & { stderr?: string };
+    const stderr = detail.stderr ?? "";
+    assert.match(stderr, /GitHub CLI command failed/);
+    assert.match(stderr, /GitHub CLI was not found/);
+    assert.match(stderr, /--gh <path-to-gh>/);
+    assert.match(stderr, /advance-tauri-migration-m4-m5/);
+    return true;
+  });
+});
+
 test("download-tauri-m4-reports waits for a completed run at the expected head", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "open-design-tauri-download-wait-"));
   t.after(() => void rm(root, { force: true, recursive: true }));
