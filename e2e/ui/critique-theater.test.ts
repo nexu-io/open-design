@@ -240,7 +240,9 @@ test.describe('Critique Theater e2e (Phase 11)', () => {
     const projectId = await seedProject(page, 'interrupt');
     await page.goto(`/projects/${projectId}`);
     await expect(page.getByRole('region', { name: 'Design Jury' })).toBeVisible();
-    const interruptBtn = page.getByRole('button', { name: 'Interrupt' });
+    const interruptBtn = page
+      .getByRole('region', { name: 'Design Jury' })
+      .getByRole('button', { name: 'Interrupt', exact: true });
     await expect(interruptBtn).toBeVisible();
     await interruptBtn.focus();
     await page.keyboard.press('Escape');

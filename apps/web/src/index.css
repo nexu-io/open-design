@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap');
+@import './styles/design-system-flow.css';
 
 /* ============================================================
    Open Design — neutral product workspace
@@ -1802,6 +1803,49 @@ a.avatar-item:visited {
 .msg.user .user-text-wrap .user-text {
   padding-inline-end: 28px;
 }
+.msg.user .user-status-wrap {
+  display: flex;
+  justify-content: flex-end;
+}
+.user-status-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(320px, 100%);
+  padding: 9px 11px;
+  border-radius: 14px 14px 4px 14px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-xs);
+  color: var(--text);
+  text-align: start;
+}
+.user-status-card__icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.user-status-card__copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.user-status-card__copy strong {
+  font-size: 12.5px;
+  line-height: 1.2;
+  font-weight: 650;
+}
+.user-status-card__copy span {
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
 
 .msg.user .user-copy-btn {
   position: absolute;
@@ -2283,9 +2327,9 @@ a.avatar-item:visited {
 /* -------- Mention popover ------------------------------------------- */
 .mention-popover {
   order: -1;
-  flex: 0 0 clamp(248px, 38vh, 320px);
+  flex: 0 0 clamp(300px, 52vh, 480px);
   min-height: 248px;
-  max-height: 320px;
+  max-height: min(480px, 72vh);
   margin: 0 0 6px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
@@ -5066,10 +5110,39 @@ a.avatar-item:visited {
 }
 .agent-model-row .field { gap: 4px; }
 .agent-model-row .field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
   font-size: 11.5px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-muted);
+}
+.agent-model-source-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.agent-model-source-badge.live {
+  border-color: var(--green-border);
+  background: var(--green-bg);
+  color: var(--green);
+}
+.agent-model-source-badge.fallback {
+  border-color: var(--amber-border, color-mix(in srgb, var(--amber) 28%, var(--border)));
+  background: var(--amber-bg);
+  color: var(--amber);
 }
 .agent-model-row .hint { margin: 0; font-size: 11.5px; }
 .agent-model-select-wrap {
@@ -20575,6 +20648,51 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   -webkit-backdrop-filter: blur(6px);
 }
 
+/* xAI OAuth paste-back: shown while a Sign in flow is in flight, in case
+   xAI returns a code instead of redirecting to the loopback listener. */
+.xai-oauth-paste {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+.xai-oauth-paste .hint {
+  font-size: 11.5px;
+}
+.xai-oauth-paste-row {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+.xai-oauth-paste-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Heads-up banner shown while a Sign-in flow is awaiting callback. xAI
+   sometimes renders a "Cannot connect" page that misleads the user into
+   thinking auth failed; this banner tells them to ignore that page and
+   stay on the OD panel. */
+.xai-oauth-warning {
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 10px 12px;
+  border: 1px solid var(--accent);
+  border-left-width: 3px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  color: var(--text);
+  margin-top: 6px;
+}
+.xai-oauth-warning strong {
+  color: var(--accent);
+}
+.xai-oauth-warning em {
+  font-style: normal;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
 /* PluginLoopHome — the minimum-closed-loop Home entry: a single prompt
    textarea + plugin grid with "Use example query" affordance. Replaces
    the tabbed NewProjectPanel on Home until the plugin-first UX matures. */
@@ -21277,6 +21395,18 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   line-height: 1.6;
   color: var(--text);
 }
+.plugin-details-modal__provenance-line {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-subtle);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
 .plugin-details-modal__chip-btn {
   appearance: none;
   display: inline-flex;
@@ -21754,6 +21884,45 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   border: 1px solid var(--border);
   letter-spacing: 0.02em;
   text-transform: uppercase;
+}
+.plugins-view__version-install {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.plugins-view__version-select {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+.plugins-view__version-select select {
+  width: min(240px, 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg);
+  color: var(--text);
+  padding: 7px 9px;
+  font: inherit;
+}
+.plugins-view__install-command {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.plugins-view__install-command code {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-subtle);
+  color: var(--text);
+  font-size: 12px;
 }
 .plugin-details-modal__avatar {
   width: 40px;

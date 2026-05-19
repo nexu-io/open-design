@@ -92,9 +92,7 @@ async function openMemorySettings(page: Page) {
 async function openRoutinesSettings(page: Page) {
   const dialog = await openSettings(page);
   await dialog.getByRole('button', { name: /^Routines\b/ }).click();
-  await expect(
-    dialog.getByText('Scheduled, unattended agent sessions. Each run starts a new'),
-  ).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'New routine' })).toBeVisible();
   return dialog;
 }
 

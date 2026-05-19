@@ -7,7 +7,7 @@ import {
   type InlineAssetReader,
 } from './inline-assets.js';
 
-export interface RegisterImportRoutesDeps extends RouteDeps<'db' | 'http' | 'uploads' | 'node' | 'ids' | 'paths' | 'imports' | 'auth' | 'projectStore' | 'conversations' | 'projectFiles'> {}
+export interface RegisterImportRoutesDeps extends RouteDeps<'db' | 'http' | 'uploads' | 'node' | 'ids' | 'paths' | 'imports' | 'auth' | 'projectStore' | 'conversations' | 'projectFiles' | 'validation'> {}
 
 export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps) {
   const { db } = ctx;
@@ -27,6 +27,7 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
   const { insertProject } = ctx.projectStore;
   const { insertConversation } = ctx.conversations;
   const { setTabs } = ctx.projectFiles;
+  const { validateProjectDesignSystemId } = ctx.validation;
   app.post(
     '/api/import/claude-design',
     importUpload.single('file'),
@@ -185,12 +186,21 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
           ? name.trim()
           : path.basename(normalizedPath);
       const entryFile = await detectEntryFile(normalizedPath);
+      const designSystemValidation = await validateProjectDesignSystemId(designSystemId);
+      if (!designSystemValidation.ok) {
+        return sendApiError(
+          res,
+          400,
+          designSystemValidation.code,
+          designSystemValidation.message,
+        );
+      }
 
       const project = insertProject(db, {
         id,
         name: projectName,
         skillId: skillId ?? null,
-        designSystemId: designSystemId ?? null,
+        designSystemId: designSystemValidation.id,
         pendingPrompt: null,
         metadata: {
           kind: 'prototype',

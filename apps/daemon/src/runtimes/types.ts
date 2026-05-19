@@ -7,6 +7,8 @@ export type RuntimeModelOption = {
   label: string;
 };
 
+export type RuntimeModelSource = 'live' | 'fallback';
+
 export type RuntimeReasoningOption = RuntimeModelOption;
 
 export type RuntimeBuildOptions = {
@@ -87,6 +89,7 @@ export type DetectedAgent = Omit<
   | 'env'
 > & {
   models: RuntimeModelOption[];
+  modelsSource: RuntimeModelSource;
   available: boolean;
   authStatus?: 'ok' | 'missing' | 'unknown';
   authMessage?: string;

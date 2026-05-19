@@ -137,9 +137,15 @@ export const fr: Dict = {
   'settings.themeDark': 'Sombre',
   'settings.agentModelHead': 'Modèle pour :',
   'settings.modelPicker': 'Modèle',
+  'settings.modelSourceLive': 'En direct depuis la CLI',
+  'settings.modelSourceFallback': 'Liste de secours',
   'settings.reasoningPicker': 'Effort de raisonnement',
   'settings.modelPickerHint':
     'Par défaut utilise la configuration propre de la CLI. Personnalisé… vous permet de saisir n’importe quel identifiant de modèle.',
+  'settings.modelPickerLiveHint':
+    'Les modèles ont été actualisés depuis la CLI installée. Par défaut utilise toujours la configuration propre de la CLI.',
+  'settings.modelPickerFallbackHint':
+    'Utilisation de la liste de modèles de secours d’Open Design, car la CLI installée n’a pas renvoyé de métadonnées de modèle en direct. Relancez l’analyse après avoir mis à jour la CLI ou vous y être connecté.',
   'settings.cliEnvTitle': 'Avancé : proxy et chemins personnalisés',
   'settings.cliEnvHint':
     'Utilisez ces réglages uniquement si vous routez le trafic CLI via votre propre proxy ou si le binaire est installé à un emplacement non standard. Les secrets restent dans la configuration locale de l’app et seule la CLI sélectionnée les voit.',

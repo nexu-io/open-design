@@ -63,10 +63,20 @@ import { buildWindowsFolderDialogCommand, parseFolderDialogStdout } from './nati
 import { listCodexPets, readCodexPetSpritesheet } from './codex-pets.js';
 import { syncCommunityPets } from './community-pets-sync.js';
 import {
+  createUserDesignSystem,
+  deleteUserDesignSystem,
+  LEGACY_DESIGN_SYSTEM_ARTIFACTS,
+  linkUserDesignSystemProject,
   listDesignSystems,
+  listUserDesignSystemFiles,
+  listUserDesignSystemRevisions,
   readDesignSystem,
+  readUserDesignSystemFile,
   resolveDesignSystemAssets,
+  updateUserDesignSystem,
+  updateUserDesignSystemRevisionStatus,
 } from './design-systems.js';
+import { createDesignSystemGenerationJobStore } from './design-system-generation-jobs.js';
 import {
   applyDiffReviewDecisionToCwd,
   applyPlugin,
@@ -319,6 +329,7 @@ import { LiveArtifactRefreshAbortError } from './live-artifacts/refresh.js';
 import { registerConnectorRoutes } from './connectors/routes.js';
 import { registerActiveContextRoutes } from './active-context-routes.js';
 import { registerMcpRoutes } from './mcp-routes.js';
+import { registerXaiRoutes } from './xai-routes.js';
 import { registerLiveArtifactRoutes } from './live-artifact-routes.js';
 import { registerDeployRoutes, registerDeploymentCheckRoutes } from './deploy-routes.js';
 import { registerMediaRoutes } from './media-routes.js';
@@ -852,6 +863,32 @@ function isPathWithin(base, target) {
   );
 }
 
+export function resolveSafeProjectAttachments(cwd, attachments, opts = {}) {
+  if (!cwd || !Array.isArray(attachments)) return [];
+  const pathImpl = opts.pathImpl ?? path;
+  const existsSync = opts.existsSync ?? fs.existsSync;
+  const root = pathImpl.resolve(cwd);
+  const out = [];
+
+  for (const attachment of attachments) {
+    if (typeof attachment !== 'string' || attachment.length === 0) continue;
+    try {
+      const abs = pathImpl.resolve(root, attachment);
+      const relativePath = pathImpl.relative(root, abs);
+      const withinRoot =
+        relativePath === '' ||
+        (relativePath.length > 0 &&
+          !relativePath.startsWith('..') &&
+          !pathImpl.isAbsolute(relativePath));
+      if (withinRoot && existsSync(abs)) out.push(attachment);
+    } catch {
+      // Drop malformed paths; attachments are advisory prompt context.
+    }
+  }
+
+  return out;
+}
+
 function resolveProcessResourcesPath() {
   if (
     typeof process.resourcesPath === 'string' &&
@@ -1142,6 +1179,9 @@ for (const dir of [USER_SKILLS_DIR, USER_DESIGN_SYSTEMS_DIR, USER_DESIGN_TEMPLAT
 }
 fs.mkdirSync(CRITIQUE_ARTIFACTS_DIR, { recursive: true });
 const orbitService = new OrbitService(RUNTIME_DATA_DIR);
+const designSystemGenerationJobs = createDesignSystemGenerationJobStore({
+  root: USER_DESIGN_SYSTEMS_DIR,
+});
 let routineService = null;
 
 // In-memory OAuth state cache. Lives for the daemon process's lifetime.
@@ -2562,17 +2602,206 @@ export async function startServer({
     const builtIn = (await listDesignSystems(DESIGN_SYSTEMS_DIR)).map((s) => ({
       ...s,
       source: 'built-in',
+      isEditable: false,
+      status: 'published',
     }));
     let installed = [];
     try {
-      installed = (await listDesignSystems(USER_DESIGN_SYSTEMS_DIR)).map(
-        (s) => ({ ...s, source: 'installed' }),
-      );
+      installed = await listDesignSystems(USER_DESIGN_SYSTEMS_DIR, {
+        idPrefix: 'user:',
+        source: 'user',
+        isEditable: true,
+        defaultStatus: 'draft',
+      });
     } catch {
       // User directory may not exist yet or be unreadable.
     }
     const seen = new Set(builtIn.map((s) => s.id));
-    return [...builtIn, ...installed.filter((s) => !seen.has(s.id))];
+    return [
+      ...installed
+        .filter((s) => s.source === 'user')
+        .sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? '')),
+      ...builtIn,
+      ...installed.filter((s) => s.source !== 'user' && !seen.has(s.id)),
+    ];
+  }
+
+  async function readAvailableDesignSystem(id) {
+    if (typeof id === 'string' && id.startsWith('user:')) {
+      return readDesignSystem(USER_DESIGN_SYSTEMS_DIR, id, { idPrefix: 'user:' });
+    }
+    return (
+      (await readDesignSystem(DESIGN_SYSTEMS_DIR, id))
+      ?? (await readDesignSystem(USER_DESIGN_SYSTEMS_DIR, id))
+    );
+  }
+
+  function isProjectUsableDesignSystem(summary) {
+    return summary?.status !== 'draft';
+  }
+
+  async function validateProjectDesignSystemId(id) {
+    if (id === undefined || id === null || id === '') return { ok: true, id: null };
+    if (typeof id !== 'string') {
+      return {
+        ok: false,
+        code: 'INVALID_DESIGN_SYSTEM',
+        message: 'designSystemId must be a string or null',
+      };
+    }
+    const systems = await listAllDesignSystems();
+    const summary = systems.find((system) => system.id === id);
+    if (!summary) {
+      return {
+        ok: false,
+        code: 'DESIGN_SYSTEM_NOT_FOUND',
+        message: 'design system not found',
+      };
+    }
+    if (!isProjectUsableDesignSystem(summary)) {
+      return {
+        ok: false,
+        code: 'DESIGN_SYSTEM_NOT_PUBLISHED',
+        message: 'draft design systems cannot be used by projects',
+      };
+    }
+    return { ok: true, id };
+  }
+
+  function userDesignSystemWorkspaceProjectId(id) {
+    if (typeof id !== 'string' || !id.startsWith('user:')) return null;
+    const dirId = id.slice('user:'.length);
+    if (!/^[A-Za-z0-9._-]{1,120}$/.test(dirId)) return null;
+    return `ds-${dirId}`.slice(0, 128);
+  }
+
+  function projectBackedDesignSystemProjectId(id, summary) {
+    if (typeof summary?.projectId === 'string' && isSafeId(summary.projectId)) {
+      return summary.projectId;
+    }
+    return userDesignSystemWorkspaceProjectId(id);
+  }
+
+  async function ensureUserDesignSystemWorkspaceProject(db, id) {
+    const systems = await listAllDesignSystems();
+    const summary = systems.find((s) => s.id === id && s.source === 'user');
+    if (!summary) return null;
+    const projectId = projectBackedDesignSystemProjectId(id, summary);
+    if (!projectId) return null;
+
+    const now = Date.now();
+    const metadata = {
+      kind: 'other',
+      importedFrom: 'design-system',
+      entryFile: 'DESIGN.md',
+      sourceFileName: id,
+    };
+    const existing = getProject(db, projectId);
+    const project = existing
+      ? updateProject(db, projectId, {
+          name: summary.title,
+          designSystemId: id,
+          metadata: { ...existing.metadata, ...metadata },
+          updatedAt: now,
+        })
+      : insertProject(db, {
+          id: projectId,
+          name: summary.title,
+          skillId: null,
+          designSystemId: id,
+          pendingPrompt: null,
+          metadata,
+          createdAt: now,
+          updatedAt: now,
+        });
+    if (!project) return null;
+
+    const files = await listUserDesignSystemFiles(USER_DESIGN_SYSTEMS_DIR, id);
+    if (!files) return null;
+    for (const file of files) {
+      if (file.kind === 'folder') continue;
+      const detail = await readUserDesignSystemFile(USER_DESIGN_SYSTEMS_DIR, id, file.path);
+      if (!detail) continue;
+      if (existing) {
+        try {
+          const existingFile = await readProjectFile(PROJECTS_DIR, projectId, detail.path, project.metadata);
+          if (!isReplaceableDesignSystemWorkspaceFile(detail.path, existingFile)) continue;
+        } catch (err) {
+          if (!err || err.code !== 'ENOENT') throw err;
+        }
+      }
+      await writeProjectFile(
+        PROJECTS_DIR,
+        projectId,
+        detail.path,
+        Buffer.from(detail.content, 'utf8'),
+        {},
+        project.metadata,
+      );
+    }
+    await removeLegacyDesignSystemWorkspaceArtifacts(project);
+    await linkUserDesignSystemProject(USER_DESIGN_SYSTEMS_DIR, id, project.id);
+    const projectFiles = await listFiles(PROJECTS_DIR, projectId, { metadata: project.metadata });
+    return { project, files: projectFiles };
+  }
+
+  function isReplaceableDesignSystemWorkspaceFile(filePath, file) {
+    const buffer = file?.buffer;
+    if (!Buffer.isBuffer(buffer)) return false;
+    const text = buffer.toString('utf8');
+    if (/^ui_kits\/app\/components\/.+\.(jsx|tsx|js|ts|css|html)$/u.test(filePath)) {
+      return buffer.length < 700 && /od-ui-kit-[a-z-]+/u.test(text);
+    }
+    if (!/^(DESIGN\.md|README\.md|SKILL\.md|ui_kits\/app\/README\.md)$/u.test(filePath)) {
+      return false;
+    }
+    return hasLegacyDesignSystemPackageReferences(text);
+  }
+
+  function hasLegacyDesignSystemPackageReferences(text) {
+    return /preview\/(colors-node-types|colors-ui-palette|typography-scale|spacing-system|logo-variants)\.html|ui_kits\/generated_interface(?:\/index\.html|\/)?/u.test(text);
+  }
+
+  async function removeLegacyDesignSystemWorkspaceArtifacts(project) {
+    if (project?.metadata?.importedFrom !== 'design-system') return;
+    const dir = resolveProjectDir(PROJECTS_DIR, project.id, project.metadata);
+    for (const artifact of LEGACY_DESIGN_SYSTEM_ARTIFACTS) {
+      const replacementReady = await Promise.all(
+        artifact.replacementPaths.map(async (replacementPath) => {
+          try {
+            const stats = await fs.promises.stat(path.join(dir, ...replacementPath.split('/')));
+            return stats.isFile();
+          } catch (err) {
+            if (!err || (err.code !== 'ENOENT' && err.code !== 'ENOTDIR')) throw err;
+            return false;
+          }
+        }),
+      );
+      if (!replacementReady.every(Boolean)) continue;
+      await fs.promises.rm(path.join(dir, ...artifact.legacyPath.split('/')), {
+        recursive: artifact.removeDirectory === true,
+        force: true,
+      });
+    }
+  }
+
+  async function readDesignSystemWorkspaceTextFile(db, summary, filePath) {
+    if (!summary?.projectId || !isSafeId(summary.projectId)) return null;
+    const project = getProject(db, summary.projectId);
+    if (!project) return null;
+    try {
+      const file = await readProjectFile(
+        PROJECTS_DIR,
+        project.id,
+        filePath,
+        project.metadata,
+      );
+      const text = file.buffer.toString('utf8');
+      if (text.includes('\0')) return null;
+      return text;
+    } catch {
+      return null;
+    }
   }
 
   // Chrome may strip the port from the Origin header on same-origin GET
@@ -3605,7 +3834,7 @@ export async function startServer({
     isFinalizeProviderProtocol,
     redactSecrets,
   };
-  const validationDeps = { isSafeId, validateExternalApiBaseUrl, validateBaseUrl };
+  const validationDeps = { isSafeId, validateExternalApiBaseUrl, validateBaseUrl, validateProjectDesignSystemId };
   const agentDeps = {
     listProviderModels,
     testProviderConnection,
@@ -3628,6 +3857,10 @@ export async function startServer({
     paths: pathDeps,
     mcp: { pendingAuth: mcpPendingAuth, daemonUrlRef },
   });
+  registerXaiRoutes(app, {
+    http: httpDeps,
+    paths: pathDeps,
+  });
   // Project workspace
   registerActiveContextRoutes(app, {
     db,
@@ -3647,6 +3880,7 @@ export async function startServer({
     events: projectEventDeps,
     ids: idDeps,
     telemetry: { reportFinalizedMessage },
+    validation: validationDeps,
   });
   registerImportRoutes(app, {
     db,
@@ -3660,6 +3894,7 @@ export async function startServer({
     projectStore: projectStoreDeps,
     conversations: conversationDeps,
     projectFiles: projectFileDeps,
+    validation: validationDeps,
   });
 
   // Resource catalog
@@ -4160,7 +4395,7 @@ export async function startServer({
 
   app.get('/api/design-systems', async (_req, res) => {
     try {
-      const systems = await listDesignSystems(DESIGN_SYSTEMS_DIR);
+      const systems = await listAllDesignSystems();
       res.json({
         designSystems: systems.map(({ body, ...rest }) => rest),
       });
@@ -4169,12 +4404,165 @@ export async function startServer({
     }
   });
 
+  app.post('/api/design-systems', async (req, res) => {
+    try {
+      const created = await createUserDesignSystem(USER_DESIGN_SYSTEMS_DIR, req.body || {});
+      res.status(201).json({ ...created, designSystem: created });
+    } catch (err) {
+      res.status(400).json({ error: String(err) });
+    }
+  });
+
+  app.post('/api/design-systems/generation-jobs', async (req, res) => {
+    try {
+      const job = designSystemGenerationJobs.start(req.body || {});
+      res.status(202).json({ job });
+    } catch (err) {
+      res.status(400).json({ error: String(err) });
+    }
+  });
+
+  app.get('/api/design-systems/generation-jobs/:jobId', async (req, res) => {
+    try {
+      const job = designSystemGenerationJobs.get(req.params.jobId);
+      if (!job) {
+        return res.status(404).json({ error: 'design system generation job not found' });
+      }
+      res.json({ job });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  app.post('/api/design-systems/:id/revision-jobs', async (req, res) => {
+    try {
+      const feedback = typeof req.body?.feedback === 'string' ? req.body.feedback : '';
+      if (!feedback.trim()) return res.status(400).json({ error: 'feedback is required' });
+      const job = designSystemGenerationJobs.revise({
+        designSystemId: req.params.id,
+        feedback,
+        sectionTitle: typeof req.body?.sectionTitle === 'string' ? req.body.sectionTitle : undefined,
+        body: typeof req.body?.body === 'string' ? req.body.body : undefined,
+      });
+      res.status(202).json({ job });
+    } catch (err) {
+      res.status(400).json({ error: String(err) });
+    }
+  });
+
+  app.get('/api/design-systems/:id/revisions', async (req, res) => {
+    try {
+      const revisions = await listUserDesignSystemRevisions(
+        USER_DESIGN_SYSTEMS_DIR,
+        req.params.id,
+      );
+      if (!revisions) {
+        return res.status(404).json({ error: 'editable design system not found' });
+      }
+      res.json({ revisions });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  app.patch('/api/design-systems/:id/revisions/:revisionId', async (req, res) => {
+    try {
+      const status = typeof req.body?.status === 'string' ? req.body.status : '';
+      if (status !== 'accepted' && status !== 'rejected') {
+        return res.status(400).json({ error: 'status must be accepted or rejected' });
+      }
+      const revision = await updateUserDesignSystemRevisionStatus(
+        USER_DESIGN_SYSTEMS_DIR,
+        req.params.id,
+        req.params.revisionId,
+        status,
+      );
+      if (!revision) {
+        return res.status(404).json({ error: 'design system revision not found' });
+      }
+      res.json({ revision });
+    } catch (err) {
+      res.status(400).json({ error: String(err) });
+    }
+  });
+
   app.get('/api/design-systems/:id', async (req, res) => {
     try {
-      const body = await readDesignSystem(DESIGN_SYSTEMS_DIR, req.params.id);
-      if (body === null)
+      const systems = await listAllDesignSystems();
+      const summary = systems.find((s) => s.id === req.params.id);
+      const projectBody = await readDesignSystemWorkspaceTextFile(db, summary, 'DESIGN.md');
+      const body = projectBody ?? await readAvailableDesignSystem(req.params.id);
+      if (body === null || !summary)
         return res.status(404).json({ error: 'design system not found' });
-      res.json({ id: req.params.id, body });
+      const detail = { ...summary, body };
+      res.json({ ...detail, designSystem: detail });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  app.post('/api/design-systems/:id/workspace', async (req, res) => {
+    try {
+      const workspace = await ensureUserDesignSystemWorkspaceProject(db, req.params.id);
+      if (!workspace) {
+        return res.status(404).json({ error: 'editable design system not found' });
+      }
+      res.status(201).json(workspace);
+    } catch (err) {
+      res.status(400).json({ error: String(err) });
+    }
+  });
+
+  app.get('/api/design-systems/:id/files', async (req, res) => {
+    try {
+      const files = await listUserDesignSystemFiles(USER_DESIGN_SYSTEMS_DIR, req.params.id);
+      if (!files) {
+        return res.status(404).json({ error: 'editable design system not found' });
+      }
+      res.json({ files });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  app.get('/api/design-systems/:id/file', async (req, res) => {
+    try {
+      const requestedPath = typeof req.query.path === 'string' ? req.query.path : '';
+      const file = await readUserDesignSystemFile(
+        USER_DESIGN_SYSTEMS_DIR,
+        req.params.id,
+        requestedPath,
+      );
+      if (!file) return res.status(404).json({ error: 'design system file not found' });
+      res.json({ file });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  app.patch('/api/design-systems/:id', async (req, res) => {
+    try {
+      const updated = await updateUserDesignSystem(
+        USER_DESIGN_SYSTEMS_DIR,
+        req.params.id,
+        req.body || {},
+      );
+      if (!updated) {
+        return res.status(404).json({ error: 'editable design system not found' });
+      }
+      res.json({ ...updated, designSystem: updated });
+    } catch (err) {
+      res.status(400).json({ error: String(err) });
+    }
+  });
+
+  app.delete('/api/design-systems/:id', async (req, res) => {
+    try {
+      const ok = await deleteUserDesignSystem(USER_DESIGN_SYSTEMS_DIR, req.params.id);
+      if (!ok) {
+        return res.status(404).json({ error: 'editable design system not found' });
+      }
+      res.status(204).end();
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }
@@ -5755,7 +6143,7 @@ export async function startServer({
   // file shows up on the next view, no rebuild needed.
   app.get('/api/design-systems/:id/preview', async (req, res) => {
     try {
-      const body = await readDesignSystem(DESIGN_SYSTEMS_DIR, req.params.id);
+      const body = await readAvailableDesignSystem(req.params.id);
       if (body === null)
         return res.status(404).type('text/plain').send('not found');
       const html = renderDesignSystemPreview(req.params.id, body);
@@ -5770,7 +6158,7 @@ export async function startServer({
   // /preview: built at request time, no caching.
   app.get('/api/design-systems/:id/showcase', async (req, res) => {
     try {
-      const body = await readDesignSystem(DESIGN_SYSTEMS_DIR, req.params.id);
+      const body = await readAvailableDesignSystem(req.params.id);
       if (body === null)
         return res.status(404).type('text/plain').send('not found');
       const html = renderDesignSystemShowcase(req.params.id, body);
@@ -7704,25 +8092,34 @@ export async function startServer({
     let designSystemComponentsManifest;
     let designSystemFixtureHtml;
     if (effectiveDesignSystemId) {
-      const systems = await listAllDesignSystems();
-      const summary = systems.find((s) => s.id === effectiveDesignSystemId);
+      let systems = await listAllDesignSystems();
+      let summary = systems.find((s) => s.id === effectiveDesignSystemId);
+      if (summary?.source === 'user') {
+        await ensureUserDesignSystemWorkspaceProject(db, effectiveDesignSystemId);
+        systems = await listAllDesignSystems();
+        summary = systems.find((s) => s.id === effectiveDesignSystemId);
+      }
+      const editingOwnDraftDesignSystem =
+        project?.metadata?.importedFrom === 'design-system'
+        && project.designSystemId === effectiveDesignSystemId;
       designSystemTitle = summary?.title;
-      designSystemBody =
-        (await readDesignSystem(DESIGN_SYSTEMS_DIR, effectiveDesignSystemId)) ??
-        (await readDesignSystem(USER_DESIGN_SYSTEMS_DIR, effectiveDesignSystemId)) ??
-        undefined;
-      // Single seam: env gate + built-in→user-installed fallback chain
-      // live together inside `resolveDesignSystemAssets` so the whole
-      // server-side asset-resolution path can be tested end-to-end
-      // from real disk fixtures (see `tests/design-system-assets.test.ts`).
-      const assets = await resolveDesignSystemAssets(
-        effectiveDesignSystemId,
-        DESIGN_SYSTEMS_DIR,
-        USER_DESIGN_SYSTEMS_DIR,
-      );
-      designSystemTokensCss = assets.tokensCss;
-      designSystemComponentsManifest = assets.componentsManifest;
-      designSystemFixtureHtml = assets.fixtureHtml;
+      if (summary && (isProjectUsableDesignSystem(summary) || editingOwnDraftDesignSystem)) {
+        const workspaceBody = await readDesignSystemWorkspaceTextFile(db, summary, 'DESIGN.md');
+        const registryBody = await readAvailableDesignSystem(effectiveDesignSystemId);
+        designSystemBody = (workspaceBody ?? registryBody) ?? undefined;
+        // Single seam: env gate + built-in→user-installed fallback chain
+        // live together inside `resolveDesignSystemAssets` so the whole
+        // server-side asset-resolution path can be tested end-to-end
+        // from real disk fixtures (see `tests/design-system-assets.test.ts`).
+        const assets = await resolveDesignSystemAssets(
+          effectiveDesignSystemId,
+          DESIGN_SYSTEMS_DIR,
+          USER_DESIGN_SYSTEMS_DIR,
+        );
+        designSystemTokensCss = assets.tokensCss;
+        designSystemComponentsManifest = assets.componentsManifest;
+        designSystemFixtureHtml = assets.fixtureHtml;
+      }
     }
 
     const template =
@@ -8103,19 +8500,7 @@ export async function startServer({
     // explicit list at the bottom of the user message so the agent knows
     // to Read it.
     const safeAttachments = cwd
-      ? (Array.isArray(attachments) ? attachments : [])
-          .filter((p) => typeof p === 'string' && p.length > 0)
-          .filter((p) => {
-            try {
-              const abs = path.resolve(cwd, p);
-              return (
-                (abs === cwd || abs.startsWith(cwd + path.sep)) &&
-                fs.existsSync(abs)
-              );
-            } catch {
-              return false;
-            }
-          })
+      ? resolveSafeProjectAttachments(cwd, attachments)
       : [];
 
     // Local code agents don't accept a separate "system" channel the way the

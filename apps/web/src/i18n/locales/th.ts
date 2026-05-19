@@ -131,8 +131,14 @@ export const th: Dict = {
   'settings.themeDark': 'มืด',
   'settings.agentModelHead': 'โมเดลสำหรับ:',
   'settings.modelPicker': 'โมเดล',
+  'settings.modelSourceLive': 'Live from CLI',
+  'settings.modelSourceFallback': 'Fallback list',
   'settings.reasoningPicker': 'ความพยายามในการให้เหตุผล',
   'settings.modelPickerHint': 'ดึงข้อมูลจาก CLI เมื่อมีคำสั่ง `models`',
+  'settings.modelPickerLiveHint':
+    'Models were refreshed from the installed CLI. Default still uses the CLI config.',
+  'settings.modelPickerFallbackHint':
+    'Using Open Design fallback models because the installed CLI did not return live model metadata. Rescan after updating or logging in to the CLI.',
   'settings.cliEnvTitle': 'ตำแหน่งการตั้งค่า CLI',
   'settings.cliEnvHint': 'ตั้งค่าไดเรกทอรีการกำหนดค่า (ที่ไม่เป็นความลับ) สำหรับแอปพลิเคชัน',
   'settings.cliEnvClaudeConfigDir': 'ไดเรกทอรีการตั้งค่า Claude Code',

@@ -247,7 +247,7 @@ function printRootHelp() {
   od artifacts create --name <path> --input <file> [--project <id-or-name>]
       Create a normal project artifact through the local daemon.
 
-  od tools connectors <list|execute> [options]
+  od tools connectors <list|execute|github-design-context> [options]
       Discover and execute configured connectors.
 
   od mcp live-artifacts

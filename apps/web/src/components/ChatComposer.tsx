@@ -1041,21 +1041,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     const filteredSkills = mention
       ? skills
           .filter((s) => !stagedSkillIds.has(s.id))
-          .filter((s) => {
-            if (!mentionQuery) return true;
-            return [
-              s.id,
-              s.name,
-              s.description,
-              s.mode,
-              s.surface ?? '',
-              ...s.triggers,
-            ]
-              .join(' ')
-              .toLowerCase()
-              .includes(mentionQuery);
-          })
-          .slice(0, 8)
+          .filter((s) => skillMatchesQuery(s, mentionQuery))
+          .sort((a, b) => skillMentionRank(a, mentionQuery) - skillMentionRank(b, mentionQuery))
       : [];
 
     return (
@@ -2136,6 +2123,15 @@ function skillMatchesQuery(skill: SkillSummary, query: string): boolean {
     .join(' ')
     .toLowerCase()
     .includes(q);
+}
+
+function skillMentionRank(skill: SkillSummary, query: string): number {
+  const q = query.trim().toLowerCase();
+  if (!q) return 1;
+  const id = skill.id.toLowerCase();
+  const name = skill.name.toLowerCase();
+  if (id.startsWith(q) || name.startsWith(q)) return 0;
+  return 1;
 }
 
 function mcpServerMatchesQuery(server: McpServerConfig, query: string): boolean {

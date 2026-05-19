@@ -301,17 +301,11 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     }
   });
 
-  app.get('/api/design-systems/:id', async (req, res) => {
-    try {
-      const body =
-        (await readDesignSystem(DESIGN_SYSTEMS_DIR, req.params.id)) ??
-        (await readDesignSystem(USER_DESIGN_SYSTEMS_DIR, req.params.id));
-      if (body === null)
-        return res.status(404).json({ error: 'design system not found' });
-      res.json({ id: req.params.id, body });
-    } catch (err: any) {
-      res.status(500).json({ error: String(err) });
-    }
+  app.get('/api/design-systems/:id', (_req, _res, next) => {
+    // The design-system workflow owns the detail shape now because user-created
+    // systems may be backed by a review workspace project. Let the richer route
+    // registered in server.ts answer this request.
+    next();
   });
 
   app.get('/api/prompt-templates', async (_req, res) => {
@@ -344,35 +338,15 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
   // samples, sample components, and the full DESIGN.md rendered as prose.
   // Built at request time from the on-disk DESIGN.md so any update to the
   // file shows up on the next view, no rebuild needed.
-  app.get('/api/design-systems/:id/preview', async (req, res) => {
-    try {
-      const body =
-        (await readDesignSystem(DESIGN_SYSTEMS_DIR, req.params.id)) ??
-        (await readDesignSystem(USER_DESIGN_SYSTEMS_DIR, req.params.id));
-      if (body === null)
-        return res.status(404).type('text/plain').send('not found');
-      const html = renderDesignSystemPreview(req.params.id, body);
-      res.type('text/html').send(html);
-    } catch (err: any) {
-      res.status(500).type('text/plain').send(String(err));
-    }
+  app.get('/api/design-systems/:id/preview', (_req, _res, next) => {
+    next();
   });
 
   // Marketing-style showcase derived from the same DESIGN.md — full landing
   // page parameterised by the system's tokens. Same lazy-render strategy as
   // /preview: built at request time, no caching.
-  app.get('/api/design-systems/:id/showcase', async (req, res) => {
-    try {
-      const body =
-        (await readDesignSystem(DESIGN_SYSTEMS_DIR, req.params.id)) ??
-        (await readDesignSystem(USER_DESIGN_SYSTEMS_DIR, req.params.id));
-      if (body === null)
-        return res.status(404).type('text/plain').send('not found');
-      const html = renderDesignSystemShowcase(req.params.id, body);
-      res.type('text/html').send(html);
-    } catch (err: any) {
-      res.status(500).type('text/plain').send(String(err));
-    }
+  app.get('/api/design-systems/:id/showcase', (_req, _res, next) => {
+    next();
   });
 
   // Pre-built example HTML for a skill — what a typical artifact from this
@@ -719,8 +693,11 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     }
   });
 
-  app.delete('/api/design-systems/:id', async (req, res) => {
+  app.delete('/api/design-systems/:id', async (req, res, next) => {
     if (!requireLocalOrigin(req, res)) return;
+    if (req.params.id.startsWith('user:')) {
+      return next();
+    }
     try {
       const result = await uninstallById(
         req.params.id,

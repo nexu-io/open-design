@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { app } from "electron";
+import { app, dialog, Menu, shell, type MenuItemConstructorOptions } from "electron";
 
 import {
   APP_KEYS,
@@ -14,6 +14,7 @@ import {
   type DesktopEvalInput,
   type DesktopExportPdfInput,
   type DesktopScreenshotInput,
+  type DesktopUpdateInput,
   type RegisterDesktopAuthResult,
   type SidecarStamp,
   type WebStatusSnapshot,
@@ -30,6 +31,7 @@ import { readProcessStamp } from "@open-design/platform";
 
 import { createDesktopRuntime } from "./runtime.js";
 import { attachDesktopProcessErrorFilter } from "./uncaught-exception.js";
+import { createDesktopUpdater, type DesktopUpdater } from "./updater.js";
 
 // Re-export pure URL-policy helpers so the packaged workspace's
 // vitest can pin their behaviour without spinning up a full Electron
@@ -72,6 +74,10 @@ export type DesktopMainOptions = {
    * Node fetch can hit.
    */
   discoverDaemonUrl?: () => Promise<string | null>;
+  update?: {
+    currentVersion?: string | null;
+    downloadRoot?: string | null;
+  };
 };
 
 function isDirectEntry(): boolean {
@@ -116,6 +122,165 @@ function createWebDiscovery(runtime: SidecarRuntimeContext<SidecarStamp>): () =>
     const web = await requestJsonIpc<WebStatusSnapshot>(webIpc, { type: SIDECAR_MESSAGES.STATUS }, { timeoutMs: 600 }).catch(() => null);
     return web?.url ?? null;
   };
+}
+
+function buildUpdateMenuItems(updater: DesktopUpdater): MenuItemConstructorOptions[] {
+  const status = updater.snapshot();
+  const busy = status.state === "checking" || status.state === "downloading" || status.state === "installing";
+  return [
+    {
+      enabled: status.enabled && !busy,
+      label: status.state === "downloading" ? "Downloading Update..." : "Check for Updates...",
+      async click() {
+        const next = await updater.checkForUpdates();
+        await showUpdateResultDialog(updater, next);
+      },
+    },
+    {
+      enabled: status.enabled && status.state === "downloaded",
+      label: "Install Update...",
+      async click() {
+        const next = await updater.installUpdate();
+        if (next.state === "error") {
+          dialog.showErrorBox("Open Design update failed", next.error?.message ?? "Could not open the downloaded installer.");
+        }
+      },
+    },
+  ];
+}
+
+async function showUpdateResultDialog(updater: DesktopUpdater, status = updater.snapshot()): Promise<void> {
+  if (!status.enabled) return;
+  if (status.state === "downloaded") {
+    const result = await dialog.showMessageBox({
+      buttons: ["Install Update", "Later"],
+      defaultId: 0,
+      message: "A new Open Design version has been downloaded.",
+      detail: "Open the installer to update Open Design. You may need to quit the app and replace the existing copy.",
+      type: "info",
+    });
+    if (result.response === 0) await updater.installUpdate();
+    return;
+  }
+  if (status.state === "not-available") {
+    await dialog.showMessageBox({
+      buttons: ["OK"],
+      message: "Open Design is up to date.",
+      type: "info",
+    });
+    return;
+  }
+  if (status.state === "unsupported") {
+    await dialog.showMessageBox({
+      buttons: ["OK"],
+      detail: status.error?.message,
+      message: "Updates are not available for this Open Design build.",
+      type: "info",
+    });
+    return;
+  }
+  if (status.state === "error") {
+    dialog.showErrorBox("Open Design update failed", status.error?.message ?? "Could not check for updates.");
+  }
+}
+
+function installDesktopMenu(updater: DesktopUpdater): () => void {
+  const rebuild = () => {
+    const updateItems = buildUpdateMenuItems(updater);
+    const template: MenuItemConstructorOptions[] = [
+      ...(process.platform === "darwin"
+        ? [
+            {
+              label: app.name,
+              submenu: [
+                { role: "about" as const },
+                { type: "separator" as const },
+                ...updateItems,
+                { type: "separator" as const },
+                { role: "services" as const },
+                { type: "separator" as const },
+                { role: "hide" as const },
+                { role: "hideOthers" as const },
+                { role: "unhide" as const },
+                { type: "separator" as const },
+                { role: "quit" as const },
+              ],
+            },
+          ]
+        : [
+            {
+              label: "File",
+              submenu: [
+                ...updateItems,
+                { type: "separator" as const },
+                { role: "quit" as const },
+              ],
+            },
+          ]),
+      {
+        label: "Edit",
+        submenu: [
+          { role: "undo" },
+          { role: "redo" },
+          { type: "separator" },
+          { role: "cut" },
+          { role: "copy" },
+          { role: "paste" },
+          { role: "selectAll" },
+        ],
+      },
+      {
+        label: "View",
+        submenu: [
+          { role: "reload" },
+          { role: "forceReload" },
+          { role: "toggleDevTools" },
+          { type: "separator" },
+          { role: "resetZoom" },
+          { role: "zoomIn" },
+          { role: "zoomOut" },
+          { type: "separator" },
+          { role: "togglefullscreen" },
+        ],
+      },
+      {
+        label: "Window",
+        submenu: [
+          { role: "minimize" },
+          { role: "zoom" },
+          ...(process.platform === "darwin"
+            ? [{ type: "separator" as const }, { role: "front" as const }]
+            : [{ role: "close" as const }]),
+        ],
+      },
+      {
+        label: "Help",
+        submenu: [
+          {
+            label: "Open Design",
+            click() {
+              void shell.openExternal("https://github.com/nexu-io/open-design");
+            },
+          },
+        ],
+      },
+    ];
+    Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+  };
+
+  rebuild();
+  return updater.subscribe(rebuild);
+}
+
+function scheduleStartupUpdateCheck(updater: DesktopUpdater): void {
+  if (!updater.shouldAutoCheck()) return;
+  setTimeout(() => {
+    void updater.checkForUpdates().then(async (status) => {
+      if (status.state === "downloaded") await showUpdateResultDialog(updater, status);
+    }).catch((error: unknown) => {
+      console.error("desktop update auto-check failed", error);
+    });
+  }, 5000).unref();
 }
 
 const REGISTER_DESKTOP_AUTH_RETRY_DELAYS_MS = [120, 240, 480, 960, 1500];
@@ -220,6 +385,17 @@ export async function runDesktopMain(
     // protection still works) and POSTs once more.
     registerDesktopAuthWithDaemon: () => registerDesktopAuthWithDaemon(runtime, desktopAuthSecret),
   });
+  const updater = createDesktopUpdater(
+    {
+      currentVersion: options.update?.currentVersion,
+      downloadRoot: options.update?.downloadRoot,
+      runtimeBase: runtime.base,
+      source: runtime.source,
+    },
+    { openPath: (path) => shell.openPath(path) },
+  );
+  const disposeMenu = installDesktopMenu(updater);
+  scheduleStartupUpdateCheck(updater);
   let ipcServer: JsonIpcServerHandle | null = null;
   let shuttingDown = false;
 
@@ -229,6 +405,7 @@ export async function runDesktopMain(
     await options.beforeShutdown?.().catch((error: unknown) => {
       console.error("desktop beforeShutdown failed", error);
     });
+    disposeMenu();
     await ipcServer?.close().catch(() => undefined);
     await desktop.close().catch(() => undefined);
     app.quit();
@@ -252,7 +429,7 @@ export async function runDesktopMain(
       const request = normalizeDesktopSidecarMessage(message);
       switch (request.type) {
         case SIDECAR_MESSAGES.STATUS:
-          return desktop.status();
+          return { ...desktop.status(), update: await updater.status() };
         case SIDECAR_MESSAGES.EVAL:
           return await desktop.eval(request.input as DesktopEvalInput);
         case SIDECAR_MESSAGES.SCREENSHOT:
@@ -263,6 +440,8 @@ export async function runDesktopMain(
           return await desktop.click(request.input as DesktopClickInput);
         case SIDECAR_MESSAGES.EXPORT_PDF:
           return await desktop.exportPdf(request.input as DesktopExportPdfInput);
+        case SIDECAR_MESSAGES.UPDATE:
+          return await updater.handle((request.input as DesktopUpdateInput).action);
         case SIDECAR_MESSAGES.SHUTDOWN:
           setImmediate(() => {
             shutdownAndExit();

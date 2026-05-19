@@ -137,9 +137,15 @@ export const ko: Dict = {
   'settings.themeDark': '다크',
   'settings.agentModelHead': '모델:',
   'settings.modelPicker': '모델',
+  'settings.modelSourceLive': 'Live from CLI',
+  'settings.modelSourceFallback': 'Fallback list',
   'settings.reasoningPicker': '추론 (Reasoning)',
   'settings.modelPickerHint':
     'CLI가 `models` 명령어를 지원할 때 가져옵니다. "Default"는 CLI 자체 설정을 따르며, "직접 입력…"을 선택하면 CLI가 허용하는 모델 ID를 입력할 수 있습니다.',
+  'settings.modelPickerLiveHint':
+    'Models were refreshed from the installed CLI. Default still uses the CLI config.',
+  'settings.modelPickerFallbackHint':
+    'Using Open Design fallback models because the installed CLI did not return live model metadata. Rescan after updating or logging in to the CLI.',
   'settings.cliEnvTitle': 'CLI config locations',
   'settings.cliEnvHint':
     'Set non-secret config directories for packaged app runs and agent detection.',

@@ -117,11 +117,23 @@ function buildPriorRunContextWarning(history: ChatMessage[]): string | null {
   ].join('\n');
 }
 
-export function buildDaemonTranscript(history: ChatMessage[]): string {
-  const transcript = history
+function scopeHistoryToAgent(history: ChatMessage[], targetAgentId?: string): ChatMessage[] {
+  if (!targetAgentId) return history;
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    const message = history[i];
+    if (message?.role === 'assistant' && message.agentId && message.agentId !== targetAgentId) {
+      return history.slice(i + 1);
+    }
+  }
+  return history;
+}
+
+export function buildDaemonTranscript(history: ChatMessage[], targetAgentId?: string): string {
+  const scopedHistory = scopeHistoryToAgent(history, targetAgentId);
+  const transcript = scopedHistory
     .map((m) => `## ${m.role}\n${truncateForTranscript(m.content.trim())}`)
     .join('\n\n');
-  const warning = buildPriorRunContextWarning(history);
+  const warning = buildPriorRunContextWarning(scopedHistory);
   return warning ? `${warning}\n\n${transcript}` : transcript;
 }
 
@@ -218,7 +230,7 @@ export async function streamViaDaemon({
   // Local CLIs are single-turn print-mode programs, so we collapse the whole
   // chat into one string. If this becomes too noisy for long histories, the
   // fix is to only include the final user turn.
-  const transcript = buildDaemonTranscript(history);
+  const transcript = buildDaemonTranscript(history, agentId);
   const request: ChatRequest = {
     agentId,
     message: transcript,

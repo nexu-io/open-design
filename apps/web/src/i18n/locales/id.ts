@@ -137,9 +137,15 @@ export const id: Dict = {
   'settings.themeDark': 'Gelap',
   'settings.agentModelHead': 'Model untuk:',
   'settings.modelPicker': 'Model',
+  'settings.modelSourceLive': 'Live from CLI',
+  'settings.modelSourceFallback': 'Fallback list',
   'settings.reasoningPicker': 'Kekuatan penalaran',
   'settings.modelPickerHint':
     'Diambil dari CLI jika tersedia. "Default" mengikuti konfigurasi CLI; "Custom..." untuk mengetik model id sendiri.',
+  'settings.modelPickerLiveHint':
+    'Models were refreshed from the installed CLI. Default still uses the CLI config.',
+  'settings.modelPickerFallbackHint':
+    'Using Open Design fallback models because the installed CLI did not return live model metadata. Rescan after updating or logging in to the CLI.',
   'settings.cliEnvTitle': 'Lokasi konfigurasi CLI',
   'settings.cliEnvHint': 'Atur direktori konfigurasi non-rahasia untuk menjalankan aplikasi paket dan deteksi agent.',
   'settings.cliEnvClaudeConfigDir': 'Direktori konfigurasi Claude Code',
