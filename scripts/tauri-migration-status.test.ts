@@ -363,6 +363,33 @@ test("continue-tauri-migration dry-run waits for reports when the remote already
   assert.match(result.stdout, /Would wait for native M4 reports and advance M4→M5/);
 });
 
+test("continue-tauri-migration reports transferable handoff paths when push fails", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+  const { archivePath } = await writeHandoffArchive(handoffDir);
+  const remotePath = join(fixture, "empty.git");
+  await git(fixture, "init", "--bare", remotePath);
+
+  await assert.rejects(
+    runContinue(fixture, "--handoff-dir", handoffDir, "--remote", remotePath, "--skip-dispatch"),
+    (error) => {
+      const detail = error as Error & { stderr?: string };
+      const stderr = detail.stderr ?? "";
+      assert.match(stderr, /Remote handoff push failed/);
+      assert.match(stderr, new RegExp(escapeRegExp(archivePath)));
+      assert.match(stderr, new RegExp(escapeRegExp(`${archivePath}.sha256`)));
+      assert.match(stderr, new RegExp(escapeRegExp(`${archivePath}.commands.sh`)));
+      assert.match(stderr, /push-tauri-migration-handoff\.ts/);
+      return true;
+    },
+  );
+});
+
 async function createFixtureRoot(
   t: test.TestContext,
   options: { checked: readonly string[]; defaults: "electron" | "tauri"; extraDocLines?: readonly string[] },

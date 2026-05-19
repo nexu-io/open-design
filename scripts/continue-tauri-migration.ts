@@ -222,10 +222,26 @@ async function continueM4(args: Args, status: MigrationStatus, log: string[]): P
   let remoteCurrent = status.remote?.current === true;
   if (!remoteCurrent) {
     if (args.push) {
-      await runScript("push-tauri-migration-handoff.ts", ["--archive", archive, "--remote", args.remote, "--cwd", args.root], {
-        cwd: args.root,
-        dryRun: args.dryRun,
-      });
+      try {
+        await runScript("push-tauri-migration-handoff.ts", ["--archive", archive, "--remote", args.remote, "--cwd", args.root], {
+          cwd: args.root,
+          dryRun: args.dryRun,
+        });
+      } catch (error) {
+        throw new Error(
+          [
+            error instanceof Error ? error.message : String(error),
+            "",
+            "Remote handoff push failed. Transfer the current packaged handoff to a checkout with repository write access:",
+            `  ${archive}`,
+            `  ${archive}.sha256`,
+            `  ${archive}.commands.sh`,
+            "",
+            "Then run the command sidecar from that checkout, or run:",
+            `  ${formatScriptCommand("push-tauri-migration-handoff.ts", ["--archive", archive, "--remote", args.remote])}`,
+          ].join("\n"),
+        );
+      }
       log.push(`${args.dryRun ? "Would push" : "Pushed"} ${args.branch} to ${args.remote} from ${archive}.`);
       if (!args.dryRun) {
         const refreshed = await readStatus(args);
