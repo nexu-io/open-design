@@ -148,7 +148,6 @@ const PROJECT_STRING_FLAGS = new Set([
   'daemon-url', 'name', 'skill', 'design-system', 'plugin', 'metadata-json',
   'pending-prompt', 'project', 'conversation', 'message', 'path', 'as',
   'agent', 'model', 'snapshot-id', 'inputs', 'grant-caps',
-  'api-key', 'base-url', 'max-tokens',
 ]);
 const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow']);
 // `od automation …` mirrors the Automations tab. Same surface, same
@@ -3691,6 +3690,16 @@ Common options:
   }
   const sub = args[0];
   const rest = args.slice(1);
+  // Handoff owns its own flag parsing, daemon-URL resolution, and
+  // structured fail() output. Dispatch it before the generic project
+  // parser below so a malformed `od project handoff` invocation
+  // (`--unknown`, `--max-tokens` with no value) hits handoff-cli's
+  // machine-readable fail() path instead of throwing out of parseFlags.
+  if (sub === 'handoff') {
+    const { exitCode } = await runProjectHandoff(rest);
+    if (exitCode !== 0) process.exit(exitCode);
+    return;
+  }
   const flags = parseFlags(rest, { string: PROJECT_STRING_FLAGS, boolean: PROJECT_BOOLEAN_FLAGS });
   const base = (await projectDaemonUrl(flags)).replace(/\/$/, '');
   switch (sub) {
@@ -3777,13 +3786,6 @@ Common options:
       const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}`, { method: 'DELETE' });
       if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
       console.log(`[project] deleted ${id}`);
-      return;
-    }
-    case 'handoff': {
-      // Conversation-scoped resume handoff. runProjectHandoff self-parses
-      // `rest` (projectId positional + flags) and resolves the daemon URL.
-      const { exitCode } = await runProjectHandoff(rest);
-      if (exitCode !== 0) process.exit(exitCode);
       return;
     }
     default:
