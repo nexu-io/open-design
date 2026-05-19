@@ -1439,7 +1439,7 @@ export const hu: Dict = {
   'settings.connectorsClearFinalTitle': 'Ez minden csatlakozót lekapcsol',
   'settings.connectorsClearFinalBody': 'Nincs visszavonás. Új kulcs beillesztése után minden integrációt újra kell csatlakoztatnod.',
   'settings.connectorsClearFinalConfirm': 'Kulcs törlése és lecsatlakoztatás',
-  'settings.connectorsClearArming': 'Egy pillanat\u2026',
+  'settings.connectorsClearArming': 'Egy pillanat…',
   'settings.connectorsClearCancel': 'Mégse',
   'settings.connectorsSaveKey': "Kulcs mentése",
   'settings.connectorsSaveKeyTitle': "Kulcs elküldése a helyi daemonhoz",

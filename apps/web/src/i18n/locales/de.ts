@@ -1367,7 +1367,7 @@ export const de: Dict = {
   'settings.connectorsClearFinalTitle': 'Damit werden alle Connectors getrennt',
   'settings.connectorsClearFinalBody': 'Dieser Schritt lässt sich nicht rückgängig machen. Nach dem Einfügen eines neuen Schlüssels musst du jede Integration neu verbinden.',
   'settings.connectorsClearFinalConfirm': 'Schlüssel löschen & trennen',
-  'settings.connectorsClearArming': 'Einen Moment\u2026',
+  'settings.connectorsClearArming': 'Einen Moment…',
   'settings.connectorsClearCancel': 'Abbrechen',
   'settings.connectorsSaveKey': "Key speichern",
   'settings.connectorsSaveKeyTitle': "Diesen Key an den lokalen Daemon senden",

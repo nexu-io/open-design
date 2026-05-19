@@ -1479,7 +1479,7 @@ export const ko: Dict = {
   'settings.connectorsClearFinalTitle': '모든 커넥터 연결이 해제됩니다',
   'settings.connectorsClearFinalBody': '되돌릴 수 없습니다. 새 키를 붙여 넣은 뒤에는 각 통합을 처음부터 다시 연결해야 합니다.',
   'settings.connectorsClearFinalConfirm': '키 삭제 및 연결 해제',
-  'settings.connectorsClearArming': '잠시만요\u2026',
+  'settings.connectorsClearArming': '잠시만요…',
   'settings.connectorsClearCancel': '취소',
   'settings.connectorsSaveKey': "키 저장",
   'settings.connectorsSaveKeyTitle': "이 키를 로컬 데몬으로 전송",

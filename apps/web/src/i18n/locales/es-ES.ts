@@ -1318,7 +1318,7 @@ export const esES: Dict = {
   'settings.connectorsClearFinalTitle': 'Esto desconectará todos los conectores',
   'settings.connectorsClearFinalBody': 'No hay vuelta atrás. Tendrás que volver a conectar cada integración desde cero después de pegar una clave nueva.',
   'settings.connectorsClearFinalConfirm': 'Borrar clave y desconectar',
-  'settings.connectorsClearArming': 'Un momento\u2026',
+  'settings.connectorsClearArming': 'Un momento…',
   'settings.connectorsClearCancel': 'Cancelar',
   'settings.connectorsSaveKey': "Guardar clave",
   'settings.connectorsSaveKeyTitle': "Enviar esta clave al daemon local",

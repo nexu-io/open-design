@@ -1472,7 +1472,7 @@ export const fa: Dict = {
   'settings.connectorsClearFinalTitle': 'این کار همهٔ کانکتورها را قطع می‌کند',
   'settings.connectorsClearFinalBody': 'بازگشتی وجود ندارد. پس از چسباندن کلید جدید باید هر ادغام را از ابتدا دوباره متصل کنید.',
   'settings.connectorsClearFinalConfirm': 'حذف کلید و قطع اتصال',
-  'settings.connectorsClearArming': 'یک لحظه\u2026',
+  'settings.connectorsClearArming': 'یک لحظه…',
   'settings.connectorsClearCancel': 'انصراف',
   'settings.connectorsSaveKey': "ذخیره کلید",
   'settings.connectorsSaveKeyTitle': "ارسال این کلید به daemon محلی",

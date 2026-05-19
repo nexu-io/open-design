@@ -1471,7 +1471,7 @@ export const uk: Dict = {
   'settings.connectorsClearFinalTitle': 'Це від’єднає всі конектори',
   'settings.connectorsClearFinalBody': 'Скасувати неможливо. Після вставлення нового ключа кожну інтеграцію доведеться під’єднувати з нуля.',
   'settings.connectorsClearFinalConfirm': 'Видалити ключ і від’єднати',
-  'settings.connectorsClearArming': 'Хвилинку\u2026',
+  'settings.connectorsClearArming': 'Хвилинку…',
   'settings.connectorsClearCancel': 'Скасувати',
   'settings.connectorsSaveKey': "Зберегти ключ",
   'settings.connectorsSaveKeyTitle': "Надіслати цей ключ локальному демону",

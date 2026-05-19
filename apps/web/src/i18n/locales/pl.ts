@@ -1429,7 +1429,7 @@ export const pl: Dict = {
   'settings.connectorsClearFinalTitle': 'To odłączy wszystkie konektory',
   'settings.connectorsClearFinalBody': 'Tej operacji nie da się cofnąć. Po wklejeniu nowego klucza każdą integrację trzeba podłączyć od nowa.',
   'settings.connectorsClearFinalConfirm': 'Usuń klucz i odłącz',
-  'settings.connectorsClearArming': 'Chwilka\u2026',
+  'settings.connectorsClearArming': 'Chwilka…',
   'settings.connectorsClearCancel': 'Anuluj',
   'settings.connectorsSaveKey': "Zapisz klucz",
   'settings.connectorsSaveKeyTitle': "Wyślij ten klucz do lokalnego demona",

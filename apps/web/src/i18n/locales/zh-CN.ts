@@ -2049,7 +2049,7 @@ export const zhCN: Dict = {
   'settings.connectorsClearFinalTitle': '此操作会断开所有连接器',
   'settings.connectorsClearFinalBody': '该操作无法撤销。粘贴新密钥后，需要从头重新连接每个集成。',
   'settings.connectorsClearFinalConfirm': '删除密钥并断开',
-  'settings.connectorsClearArming': '稍等\u2026',
+  'settings.connectorsClearArming': '稍等…',
   'settings.connectorsClearCancel': '取消',
   'settings.connectorsSaveKey': "保存密钥",
   'settings.connectorsSaveKeyTitle': "将此密钥发送到本地 daemon",

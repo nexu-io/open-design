@@ -1429,7 +1429,7 @@ export const ar: Dict = {
   'settings.connectorsClearFinalTitle': 'سيؤدي هذا إلى فصل جميع الموصلات',
   'settings.connectorsClearFinalBody': 'لا يمكن التراجع عن هذا الإجراء. ستحتاج إلى إعادة ربط كل تكامل من البداية بعد لصق مفتاح جديد.',
   'settings.connectorsClearFinalConfirm': 'حذف المفتاح وفصل التكاملات',
-  'settings.connectorsClearArming': 'لحظة\u2026',
+  'settings.connectorsClearArming': 'لحظة…',
   'settings.connectorsClearCancel': 'إلغاء',
   'settings.connectorsSaveKey': "حفظ المفتاح",
   'settings.connectorsSaveKeyTitle': "إرسال هذا المفتاح إلى الـ daemon المحلي",

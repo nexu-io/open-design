@@ -1416,7 +1416,7 @@ export const tr: Dict = {
   'settings.connectorsClearFinalTitle': 'Bu işlem tüm bağlayıcıların bağlantısını keser',
   'settings.connectorsClearFinalBody': 'Geri alınamaz. Yeni bir anahtar yapıştırdıktan sonra her entegrasyonu sıfırdan yeniden bağlamanız gerekir.',
   'settings.connectorsClearFinalConfirm': 'Anahtarı sil ve bağlantıyı kes',
-  'settings.connectorsClearArming': 'Bir saniye\u2026',
+  'settings.connectorsClearArming': 'Bir saniye…',
   'settings.connectorsClearCancel': 'İptal',
   'settings.connectorsSaveKey': "Anahtarı kaydet",
   'settings.connectorsSaveKeyTitle': "Bu anahtarı yerel daemon’a gönder",

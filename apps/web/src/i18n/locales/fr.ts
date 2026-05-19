@@ -1445,7 +1445,7 @@ export const fr: Dict = {
   'settings.connectorsClearFinalTitle': 'Cette action déconnectera tous les connecteurs',
   'settings.connectorsClearFinalBody': 'Action irréversible. Vous devrez reconnecter chaque intégration depuis le début après avoir collé une nouvelle clé.',
   'settings.connectorsClearFinalConfirm': 'Supprimer la clé et déconnecter',
-  'settings.connectorsClearArming': 'Un instant\u2026',
+  'settings.connectorsClearArming': 'Un instant…',
   'settings.connectorsClearCancel': 'Annuler',
   'settings.connectorsSaveKey': "Enregistrer la clé",
   'settings.connectorsSaveKeyTitle': "Envoyer cette clé au daemon local",

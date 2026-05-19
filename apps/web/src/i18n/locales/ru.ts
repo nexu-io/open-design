@@ -1470,7 +1470,7 @@ export const ru: Dict = {
   'settings.connectorsClearFinalTitle': 'Это отключит все коннекторы',
   'settings.connectorsClearFinalBody': 'Отменить нельзя. После вставки нового ключа каждую интеграцию придётся подключать заново.',
   'settings.connectorsClearFinalConfirm': 'Удалить ключ и отключить',
-  'settings.connectorsClearArming': 'Минуточку\u2026',
+  'settings.connectorsClearArming': 'Минуточку…',
   'settings.connectorsClearCancel': 'Отмена',
   'settings.connectorsSaveKey': "Сохранить ключ",
   'settings.connectorsSaveKeyTitle': "Отправить ключ локальному демону",

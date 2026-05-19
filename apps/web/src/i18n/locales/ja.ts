@@ -1366,7 +1366,7 @@ export const ja: Dict = {
   'settings.connectorsClearFinalTitle': 'すべてのコネクタが切断されます',
   'settings.connectorsClearFinalBody': '元には戻せません。新しいキーを貼り付けたあと、各インテグレーションをイチから接続し直す必要があります。',
   'settings.connectorsClearFinalConfirm': 'キーを削除して切断',
-  'settings.connectorsClearArming': '少々お待ちを\u2026',
+  'settings.connectorsClearArming': '少々お待ちを…',
   'settings.connectorsClearCancel': 'キャンセル',
   'settings.connectorsSaveKey': "キーを保存",
   'settings.connectorsSaveKeyTitle': "このキーをローカルの daemon に送信",

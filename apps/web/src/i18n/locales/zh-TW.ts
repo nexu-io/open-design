@@ -1629,7 +1629,7 @@ export const zhTW: Dict = {
   'settings.connectorsClearFinalTitle': '此動作會斷開所有連接器',
   'settings.connectorsClearFinalBody': '無法復原。貼上新金鑰後，每個整合都必須從頭重新連線。',
   'settings.connectorsClearFinalConfirm': '刪除金鑰並斷線',
-  'settings.connectorsClearArming': '稍候\u2026',
+  'settings.connectorsClearArming': '稍候…',
   'settings.connectorsClearCancel': '取消',
   'settings.connectorsSaveKey': "儲存金鑰",
   'settings.connectorsSaveKeyTitle': "將此金鑰送往本機 daemon",

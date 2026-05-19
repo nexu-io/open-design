@@ -1470,7 +1470,7 @@ export const ptBR: Dict = {
   'settings.connectorsClearFinalTitle': 'Isso vai desconectar todos os conectores',
   'settings.connectorsClearFinalBody': 'Não há como desfazer. Você precisará reconectar cada integração do zero depois de colar uma nova chave.',
   'settings.connectorsClearFinalConfirm': 'Apagar chave e desconectar',
-  'settings.connectorsClearArming': 'Um instante\u2026',
+  'settings.connectorsClearArming': 'Um instante…',
   'settings.connectorsClearCancel': 'Cancelar',
   'settings.connectorsSaveKey': "Salvar chave",
   'settings.connectorsSaveKeyTitle': "Enviar esta chave para o daemon local",
