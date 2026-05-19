@@ -26,6 +26,8 @@ import type {
   McpServerConfig,
   McpTemplate,
 } from '../state/mcp';
+import { fetchAgents } from '../providers/registry';
+import type { AgentInfo } from '../types';
 import { Icon } from './Icon';
 
 interface Props {
@@ -306,6 +308,11 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
   // picker preserves the user's last query while they scan through it.
   const [pickerQuery, setPickerQuery] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // Cached agent list so the support banner can tell the user which of the
+  // installed CLI agents will actually receive the MCP servers below.
+  // Without this, OpenCode / Codex / Gemini users save a server and have
+  // no way to learn it never reached the agent (issue #2142).
+  const [agents, setAgents] = useState<AgentInfo[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -322,6 +329,18 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
       setSavedSig(signature(fresh));
       setTemplates(data.templates);
       setLoaded(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const list = await fetchAgents();
+      if (cancelled) return;
+      setAgents(list);
     })();
     return () => {
       cancelled = true;
@@ -423,6 +442,8 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
           <span>Add server</span>
         </button>
       </div>
+
+      <McpAgentSupportBanner agents={agents} />
 
       {pickerOpen ? (
         <PickerPanel
@@ -1325,6 +1346,59 @@ function McpOAuthControl({ serverId }: { serverId: string }) {
       ) : null}
 
       {error ? <div className="mcp-oauth-error">{error}</div> : null}
+    </div>
+  );
+}
+
+/**
+ * Renders a compact two-line banner showing which installed CLI agents
+ * receive the user's external MCP servers at spawn time and which do not.
+ * The truth source is the daemon `/api/agents` payload — every runtime def
+ * carries an `externalMcpInjection` discriminator (one of
+ * `claude-mcp-json` / `acp-merge` / `opencode-env-content`, or undefined
+ * when no native injection is wired yet).
+ *
+ * The banner replaces the previous silent-failure UX from issue #2142:
+ * users were configuring servers under OpenCode / Codex / Gemini and
+ * never learning the daemon never forwarded them to the agent process.
+ * Rendered above the picker so it is the first thing the user reads.
+ */
+function McpAgentSupportBanner({ agents }: { agents: AgentInfo[] }) {
+  // Empty payload = either still loading or daemon unreachable. Either
+  // way, render nothing — the error banner below already covers the
+  // "daemon unreachable" path and we don't want to flash an empty hint
+  // during the initial fetch.
+  if (agents.length === 0) return null;
+  const supported = agents.filter(
+    (a) => typeof a.externalMcpInjection === 'string',
+  );
+  const unsupported = agents.filter(
+    (a) => !a.externalMcpInjection,
+  );
+  // No installed CLIs at all → the agent picker will already tell the
+  // user to install something; suppress this banner to avoid noise.
+  if (supported.length === 0 && unsupported.length === 0) return null;
+  const renderNames = (list: AgentInfo[]) =>
+    list
+      .map((a) => a.name)
+      .sort((a, b) => a.localeCompare(b))
+      .join(' · ');
+  return (
+    <div className="mcp-agent-support">
+      {supported.length > 0 ? (
+        <p className="hint mcp-agent-support-line">
+          <strong>Forwarded to:</strong> {renderNames(supported)}.
+        </p>
+      ) : null}
+      {unsupported.length > 0 ? (
+        <p className="hint mcp-agent-support-line mcp-agent-support-unsupported">
+          <strong>Not forwarded to:</strong> {renderNames(unsupported)}. For
+          those agents, configure MCP servers in the agent's own config file
+          (e.g.&nbsp;<code>~/.codex/config.toml</code>,&nbsp;
+          <code>~/.gemini/settings.json</code>); the servers below are
+          silently unused there.
+        </p>
+      ) : null}
     </div>
   );
 }

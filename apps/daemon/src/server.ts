@@ -208,6 +208,7 @@ import {
   MCP_TEMPLATES,
   buildAcpMcpServers,
   buildClaudeMcpJson,
+  buildOpenCodeMcpConfigContent,
   isManagedProjectCwd,
   readMcpConfig,
   writeMcpConfig,
@@ -8414,7 +8415,17 @@ export async function startServer({
     // We also unlink a stale `.mcp.json` we previously wrote when the user has
     // since disabled all servers, so removing a server actually takes effect
     // on the next run.
-    if (def.id === 'claude' && isManagedProjectCwd(cwd, PROJECTS_DIR)) {
+    // Dispatch on `def.externalMcpInjection` rather than hard-coding agent
+    // id / stream-format checks. The three branches are functionally
+    // equivalent to the previous shape (claude/acp), with the OpenCode
+    // env-content branch added to fix #2142. Runtimes that leave the field
+    // undefined fall through unchanged — the settings UI surfaces an
+    // explicit "external MCP is not forwarded to <agent>" banner for them
+    // so the previous silent-failure UX is gone.
+    if (
+      def.externalMcpInjection === 'claude-mcp-json' &&
+      isManagedProjectCwd(cwd, PROJECTS_DIR)
+    ) {
       {
         const target = path.join(cwd, '.mcp.json');
         if (enabledExternalMcp.length > 0) {
@@ -8451,9 +8462,38 @@ export async function startServer({
         }
       }
     }
-    if (enabledExternalMcp.length > 0 && def.streamFormat === 'acp-json-rpc') {
+    if (
+      enabledExternalMcp.length > 0 &&
+      def.externalMcpInjection === 'acp-merge'
+    ) {
       const acpExternal = buildAcpMcpServers(enabledExternalMcp);
       mcpServers.push(...acpExternal);
+    }
+    // OpenCode: serialise enabled MCP servers into its `mcp` config schema
+    // and hand the JSON to the child via `OPENCODE_CONFIG_CONTENT`. The env
+    // var is *merged* with the user's saved `~/.config/opencode/opencode
+    // .json` (per OpenCode's documented config layering), so adding a
+    // server here does not erase whatever the user already has in their
+    // global config. We deliberately leave the env unset when no servers
+    // are enabled — overwriting with `{}` would wipe the user's saved
+    // mcp section for this single invocation, which is exactly the kind
+    // of surprise the previous silent-failure UX taught us to avoid.
+    let opencodeConfigContent: string | null = null;
+    if (
+      def.externalMcpInjection === 'opencode-env-content' &&
+      enabledExternalMcp.length > 0
+    ) {
+      try {
+        opencodeConfigContent = buildOpenCodeMcpConfigContent(
+          enabledExternalMcp,
+          oauthTokensForSpawn,
+        );
+      } catch (err) {
+        console.warn(
+          '[mcp-config] failed to build OPENCODE_CONFIG_CONTENT:',
+          err && err.message ? err.message : err,
+        );
+      }
     }
 
     // Pre-flight the composed prompt against any argv-byte budget the
@@ -8693,6 +8733,19 @@ export async function startServer({
           configuredAgentEnv,
         ),
         ...odMediaEnv,
+        // OpenCode external-MCP injection (issue #2142). Layered AFTER
+        // spawnEnvForAgent / odMediaEnv / configuredAgentEnv so the
+        // daemon-built MCP config wins over a stale value the user
+        // might have exported in their shell — that would let an
+        // outdated content string suppress the user's freshly-saved
+        // MCP servers, which is exactly the bug we are fixing.
+        // `opencodeConfigContent === null` means "no enabled servers";
+        // we deliberately leave the env unset in that case so the
+        // user's saved `~/.config/opencode/opencode.json` continues
+        // to apply as-is.
+        ...(opencodeConfigContent
+          ? { OPENCODE_CONFIG_CONTENT: opencodeConfigContent }
+          : {}),
       }, agentLaunch);
       spawnedAgentEnv = env;
       const invocation = createCommandInvocation({

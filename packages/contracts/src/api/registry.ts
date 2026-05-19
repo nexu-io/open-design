@@ -20,6 +20,18 @@ export interface AgentInfo {
   installUrl?: string;
   /** Optional HTTPS URL for configuration / auth / usage docs. */
   docsUrl?: string;
+  /**
+   * How the daemon forwards the user's `.od/mcp-config.json` external MCP
+   * servers to this runtime at spawn time. Mirrors the field on
+   * `RuntimeAgentDef` in the daemon. Undefined means the runtime has no
+   * native MCP transport wired yet, in which case the settings UI surfaces
+   * a "configure MCP in the agent's own config file" hint instead of
+   * silently dropping the servers (issue #2142).
+   */
+  externalMcpInjection?:
+    | 'claude-mcp-json'
+    | 'acp-merge'
+    | 'opencode-env-content';
 }
 
 export interface AgentsResponse {

@@ -20223,6 +20223,31 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   color: var(--danger, #d54);
 }
 
+.mcp-agent-support {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle, color-mix(in srgb, var(--bg-panel) 90%, transparent));
+}
+.mcp-agent-support-line {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.mcp-agent-support-line code {
+  font-size: 11.5px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+}
+.mcp-agent-support-unsupported {
+  color: color-mix(in srgb, var(--danger, #d54) 85%, var(--text));
+}
+
 .mcp-rows {
   display: flex;
   flex-direction: column;

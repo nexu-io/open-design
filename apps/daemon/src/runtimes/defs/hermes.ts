@@ -26,4 +26,5 @@ export const hermesAgentDef = {
     buildArgs: () => ['acp', '--accept-hooks'],
     streamFormat: 'acp-json-rpc',
     mcpDiscovery: 'mature-acp',
+    externalMcpInjection: 'acp-merge',
 } satisfies RuntimeAgentDef;
