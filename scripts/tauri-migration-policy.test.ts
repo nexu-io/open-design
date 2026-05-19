@@ -136,6 +136,18 @@ test("evaluateTauriMigrationOrder rejects checked dependency cleanup with stale 
   assertContains(violations, "package scripts still reference Electron");
 });
 
+test("evaluateTauriMigrationOrder rejects checked resource cleanup with stale release workflow references", () => {
+  const violations = evaluateTauriMigrationOrder(
+    postM5Input({
+      migrationDoc: postM5MigrationDoc({ m6Checked: [m6ElectronResourcesLabel] }),
+      remainingElectronResourceFiles: [],
+      electronReleaseReferenceFiles: [".github/workflows/release-beta.yml"],
+    }),
+  );
+
+  assertContains(violations, "release workflow files still reference Electron");
+});
+
 test("evaluateTauriMigrationOrder accepts verified M4 before the default flip", () => {
   const violations = evaluateTauriMigrationOrder(
     baseInput({
@@ -184,6 +196,7 @@ test("evaluateTauriMigrationOrder accepts the final post-M6 cleanup state", () =
       pnpmLock: lockfileWithoutElectronDeps(),
       remainingElectronRuntimeFiles: [],
       remainingElectronResourceFiles: [],
+      electronReleaseReferenceFiles: [],
       electronPackageScriptReferences: [],
       electronTestReferenceFiles: [],
       electronGuidanceReferenceFiles: [],
@@ -215,6 +228,7 @@ function baseInput(overrides: Partial<TauriMigrationPolicyInputs> = {}): TauriMi
     toolsPackPackageJson: packageJsonWithDeps({ "electron-builder": "1.0.0" }),
     remainingElectronRuntimeFiles: ["apps/desktop/src/main/runtime.ts"],
     remainingElectronResourceFiles: ["tools/pack/resources/web-standalone-after-pack.cjs"],
+    electronReleaseReferenceFiles: [".github/workflows/release-beta.yml"],
     electronPackageScriptReferences: ["tools/pack/package.json:scripts.electron:build"],
     electronTestReferenceFiles: ["apps/desktop/tests/runtime.test.ts"],
     electronGuidanceReferenceFiles: ["AGENTS.md"],

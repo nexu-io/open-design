@@ -23,6 +23,7 @@ test("tauri-migration-inventory reports Electron blockers by cleanup category", 
   assert.match(result.stdout, /tools\/pack\/package\.json:scripts\.electron:dist/);
   assert.match(result.stdout, /apps\/desktop\/src\/main\/runtime\.ts/);
   assert.match(result.stdout, /tools\/pack\/resources\/web-standalone-after-pack\.cjs/);
+  assert.match(result.stdout, /\.github\/workflows\/ci\.yml/);
   assert.match(result.stdout, /apps\/desktop\/tests\/runtime\.test\.ts/);
   assert.match(result.stdout, /tools\/pack\/AGENTS\.md/);
 });
@@ -37,6 +38,7 @@ test("tauri-migration-inventory emits machine-readable blocker counts", async (t
       electronGuidanceReferences: number;
       electronLockfileImporters: number;
       electronPackageScriptReferences: number;
+      electronReleaseReferences: number;
       electronResourceFiles: number;
       electronRuntimeFiles: number;
       electronTestReferences: number;
@@ -49,6 +51,7 @@ test("tauri-migration-inventory emits machine-readable blocker counts", async (t
     electronGuidanceReferences: 2,
     electronLockfileImporters: 3,
     electronPackageScriptReferences: 1,
+    electronReleaseReferences: 2,
     electronResourceFiles: 1,
     electronRuntimeFiles: 2,
     electronTestReferences: 1,
@@ -72,6 +75,7 @@ test("tauri-migration-inventory emits an M6 cleanup plan", async (t) => {
   assert.match(result.stdout, /tools\/pack\/package\.json:scripts\.electron:dist/);
   assert.match(result.stdout, /apps\/desktop\/src\/main\/runtime\.ts/);
   assert.match(result.stdout, /tools\/pack\/resources\/web-standalone-after-pack\.cjs/);
+  assert.match(result.stdout, /\.github\/workflows\/ci\.yml/);
   assert.match(result.stdout, /Remove electron from DESKTOP_RUNTIME_KINDS/);
   assert.match(result.stdout, /cargo clippy --manifest-path apps\/desktop\/src-tauri\/Cargo\.toml -- -D warnings/);
 });
@@ -80,7 +84,8 @@ async function createInventoryFixture(t: test.TestContext): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "open-design-tauri-inventory-"));
   t.after(() => void rm(root, { force: true, recursive: true }));
 
-  await mkdir(join(root, ".github"), { recursive: true });
+  await mkdir(join(root, ".github", "scripts", "release", "cache"), { recursive: true });
+  await mkdir(join(root, ".github", "workflows"), { recursive: true });
   await mkdir(join(root, "apps", "desktop", "src", "main"), { recursive: true });
   await mkdir(join(root, "apps", "desktop", "tests"), { recursive: true });
   await mkdir(join(root, "apps", "packaged"), { recursive: true });
@@ -138,6 +143,10 @@ async function createInventoryFixture(t: test.TestContext): Promise<string> {
   await writeFile(join(root, "apps", "desktop", "src", "main", "runtime.ts"), "import { BrowserWindow } from 'electron';\n");
   await writeFile(join(root, "apps", "desktop", "src", "main", "preload.cts"), "require('electron');\n");
   await writeFile(join(root, "tools", "pack", "resources", "web-standalone-after-pack.cjs"), "electron-builder hook\n");
+  await writeFile(join(root, ".github", "workflows", "ci.yml"), "Verify mac Electron framework symlinks\n");
+  await writeFile(join(root, ".github", "workflows", "release-beta.yml"), "desktop_runtime: tauri\n");
+  await writeFile(join(root, ".github", "workflows", "release-stable.yml"), "Release Tauri artifacts only\n");
+  await writeFile(join(root, ".github", "scripts", "release", "cache", "win.ps1"), '"win.electron-builder-dir" = 0\n');
   await writeFile(join(root, "apps", "desktop", "tests", "runtime.test.ts"), "vi.mock('electron', () => ({}));\n");
   await writeFile(join(root, "tools", "pack", "tests", "tauri.test.ts"), "Tauri test only\n");
 

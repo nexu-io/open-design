@@ -14,6 +14,7 @@ import { collectCssHardcodedColorMatches, cssWideAndSpecialColorKeywords, realNa
 import {
   containsElectronGuidanceReference,
   containsElectronPackageScriptReference,
+  containsElectronReleaseReference,
   containsElectronTestReference,
   evaluateTauriMigrationOrder,
 } from "./tauri-migration-policy.ts";
@@ -35,6 +36,12 @@ const guidanceReferenceFiles = [
 const toolsDevConfigPath = path.join(repoRoot, "tools", "dev", "src", "config.ts");
 const toolsPackConfigPath = path.join(repoRoot, "tools", "pack", "src", "config.ts");
 const releaseBetaWorkflowPath = path.join(repoRoot, ".github", "workflows", "release-beta.yml");
+const electronReleaseReferenceFiles = [
+  path.join(repoRoot, ".github", "workflows", "ci.yml"),
+  releaseBetaWorkflowPath,
+  path.join(repoRoot, ".github", "workflows", "release-stable.yml"),
+  path.join(repoRoot, ".github", "scripts", "release", "cache", "win.ps1"),
+] as const;
 const desktopPackageJsonPath = path.join(repoRoot, "apps", "desktop", "package.json");
 const packagedPackageJsonPath = path.join(repoRoot, "apps", "packaged", "package.json");
 const toolsPackPackageJsonPath = path.join(repoRoot, "tools", "pack", "package.json");
@@ -789,6 +796,19 @@ async function collectElectronGuidanceReferenceFiles(): Promise<string[]> {
     .sort();
 }
 
+async function collectElectronReleaseReferenceFiles(): Promise<string[]> {
+  const fileSources = await Promise.all(
+    electronReleaseReferenceFiles.map(async (filePath) => ({
+      filePath,
+      source: await readFile(filePath, "utf8"),
+    })),
+  );
+  return fileSources
+    .filter(({ source }) => containsElectronReleaseReference(source))
+    .map(({ filePath }) => filePath)
+    .sort();
+}
+
 function collectElectronPackageScriptReferences(...packageSources: Array<[filePath: string, source: string]>): string[] {
   const references: string[] = [];
   for (const [filePath, source] of packageSources) {
@@ -818,6 +838,7 @@ async function checkTauriMigrationOrder(): Promise<boolean> {
     toolsPackPackageJson,
     electronRuntimeFileExists,
     electronPackResourceFileExists,
+    electronReleaseReferenceFiles,
     electronTestReferenceFiles,
     electronGuidanceReferenceFiles,
   ] = await Promise.all([
@@ -834,6 +855,7 @@ async function checkTauriMigrationOrder(): Promise<boolean> {
     readFile(toolsPackPackageJsonPath, "utf8"),
     Promise.all(electronRuntimeFiles.map((filePath) => pathExists(filePath))),
     Promise.all(electronPackResourceFiles.map((filePath) => pathExists(filePath))),
+    collectElectronReleaseReferenceFiles(),
     collectElectronTestReferenceFiles(),
     collectElectronGuidanceReferenceFiles(),
   ]);
@@ -860,6 +882,7 @@ async function checkTauriMigrationOrder(): Promise<boolean> {
     toolsPackPackageJson,
     remainingElectronRuntimeFiles: remainingElectronRuntimeFiles.map(toRepositoryPath),
     remainingElectronResourceFiles: remainingElectronResourceFiles.map(toRepositoryPath),
+    electronReleaseReferenceFiles: electronReleaseReferenceFiles.map(toRepositoryPath),
     electronPackageScriptReferences,
     electronTestReferenceFiles: electronTestReferenceFiles.map(toRepositoryPath),
     electronGuidanceReferenceFiles: electronGuidanceReferenceFiles.map(toRepositoryPath),

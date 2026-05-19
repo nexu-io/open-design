@@ -139,7 +139,7 @@ Do not create duplicate reminders for the same work. If the continuation sequenc
 
 - [ ] Remove `electron`, `electron-builder`, `@electron/rebuild`, and Electron-only package scripts.
 - [ ] Remove Electron preload/runtime code after Tauri bridge and packaging parity are complete.
-- [ ] Remove Electron-only resources/hooks from `tools-pack`.
+- [ ] Remove Electron-only resources/hooks from `tools-pack` and release workflows.
 - [ ] Delete or rewrite Electron-only tests.
 - [ ] Update AGENTS guidance and PR checklist references from Electron to Tauri.
 
@@ -185,15 +185,15 @@ pnpm --filter @open-design/tools-pack test
 pnpm exec tsx scripts/tauri-migration-inventory.ts --plan
 ```
 
-The plan groups the exact M6 blockers by package manifest dependencies, Electron-only package scripts, `pnpm-lock.yaml` importers, Electron runtime files, Electron-only pack resources, Electron-referencing tests, and Electron-specific guidance, then prints the cleanup order and verification commands. Use it as the removal checklist before editing. Use `--json` when automation needs the same data as structured input.
+The plan groups the exact M6 blockers by package manifest dependencies, Electron-only package scripts, `pnpm-lock.yaml` importers, Electron runtime files, Electron-only pack resources, Electron-specific release workflow references, Electron-referencing tests, and Electron-specific guidance, then prints the cleanup order and verification commands. Use it as the removal checklist before editing. Use `--json` when automation needs the same data as structured input.
 
 2. Remove Electron packages and any Electron-only package scripts from `apps/desktop/package.json`, `apps/packaged/package.json`, and `tools/pack/package.json`; then run `pnpm install` so `pnpm-lock.yaml` importer entries are updated.
 3. Remove or replace Electron runtime files under `apps/desktop/src/main/`, including `index.ts`, `preload.cts`, and `runtime.ts`. Keep any runtime-neutral code only if it has a Tauri caller.
-4. Remove Electron-only pack resources such as `tools/pack/resources/web-standalone-after-pack.cjs` and any electron-builder hook wiring that becomes unreachable.
+4. Remove Electron-only pack resources such as `tools/pack/resources/web-standalone-after-pack.cjs`, any electron-builder hook wiring that becomes unreachable, and Electron-specific CI/release workflow steps in `.github/workflows/` or `.github/scripts/release/`.
 5. Delete or rewrite Electron-only tests in `apps/desktop/tests`, `apps/packaged/tests`, and `tools/pack/tests`. Tests for Tauri behavior, headless Linux, and generic sidecar contracts should remain.
 6. Update Electron-specific guidance in root/app/tool AGENTS files, `tools/pack/AGENTS.md`, `docs/code-review-guidelines.md`, and `.github/pull_request_template.md`.
 7. Remove `electron` from `DESKTOP_RUNTIME_KINDS` in `tools/dev/src/config.ts` and `tools/pack/src/config.ts` only after the M6 cleanup checkboxes are ready to move together.
-8. Mark all five M6 checklist items together. `pnpm guard` intentionally rejects M6 cleanup before M5 and rejects stale files, deps, package scripts, lockfile importers, tests, or guidance.
+8. Mark all five M6 checklist items together. `pnpm guard` intentionally rejects M6 cleanup before M5 and rejects stale files, deps, package scripts, lockfile importers, release workflow references, tests, or guidance.
 9. Run:
 
 ```bash
@@ -433,6 +433,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Required `--expected-head` for all explicit `scripts/download-tauri-m4-reports.ts --run-id <id>` downloads. Known-run evidence now rejects before any `gh` call unless the receiver supplies the migration branch head, so both verify-only and `--advance` flows stay branch-head bound. `node --import tsx --test scripts/download-tauri-m4-reports.test.ts` and `tsc -p scripts/tsconfig.json --noEmit` passed.
 - 2026-05-20: Tightened `scripts/package-tauri-migration-handoff.ts` so standalone package generation refuses stale handoff manifests and tracked source changes by default. A tarball now requires the manifest branch head to match the current local migration branch before it can be handed to a write-capable receiver. `node --import tsx --test scripts/package-tauri-migration-handoff.test.ts` and `tsc -p scripts/tsconfig.json --noEmit` passed.
 - 2026-05-20: Tightened `scripts/tauri-migration-status.ts` next actions for missing remote branches. When `--remote` is checked and the migration branch is absent or stale, status now keeps native CI collection and M4→M5 advance behind the remote-head blocker instead of printing generic Windows/Linux smoke and advance steps.
+- 2026-05-20: Extended the M6 cleanup inventory and guard to include Electron-specific CI/release workflow references alongside `tools-pack` resources, so Electron-specific CI/release cache wiring cannot survive behind a checked resources box. `scripts/tauri-migration-inventory.ts --plan` now lists `.github/workflows/ci.yml`, `.github/workflows/release-beta.yml`, `.github/workflows/release-stable.yml`, and `.github/scripts/release/cache/win.ps1`. `node --import tsx --test scripts/tauri-migration-policy.test.ts scripts/tauri-migration-inventory.test.ts` and `tsc -p scripts/tsconfig.json --noEmit` passed.
 
 ### Platform Gate Runners
 

@@ -4,6 +4,7 @@ import { extname, join, relative, resolve, sep } from "node:path";
 import {
   containsElectronGuidanceReference,
   containsElectronPackageScriptReference,
+  containsElectronReleaseReference,
   containsElectronTestReference,
 } from "./tauri-migration-policy.ts";
 
@@ -25,6 +26,13 @@ const electronRuntimePaths = [
 ] as const;
 
 const electronResourcePaths = ["tools/pack/resources/web-standalone-after-pack.cjs"] as const;
+
+const releaseReferencePaths = [
+  ".github/workflows/ci.yml",
+  ".github/workflows/release-beta.yml",
+  ".github/workflows/release-stable.yml",
+  ".github/scripts/release/cache/win.ps1",
+] as const;
 
 const electronTestDirectories = ["apps/desktop/tests", "apps/packaged/tests", "tools/pack/tests"] as const;
 
@@ -55,6 +63,7 @@ type TauriMigrationInventory = {
     electronGuidanceReferences: number;
     electronLockfileImporters: number;
     electronPackageScriptReferences: number;
+    electronReleaseReferences: number;
     electronResourceFiles: number;
     electronRuntimeFiles: number;
     electronTestReferences: number;
@@ -63,6 +72,7 @@ type TauriMigrationInventory = {
   lockfileImporters: InventoryEntry[];
   packageManifests: InventoryEntry[];
   packageScriptReferences: string[];
+  releaseReferences: string[];
   resourceFiles: string[];
   root: string;
   runtimeFiles: string[];
@@ -120,6 +130,7 @@ async function readTauriMigrationInventory(root: string): Promise<TauriMigration
     lockfileImportersWithDeps,
     runtimeFiles,
     resourceFiles,
+    releaseReferences,
     testReferences,
     guidanceReferences,
   ] = await Promise.all([
@@ -128,6 +139,7 @@ async function readTauriMigrationInventory(root: string): Promise<TauriMigration
       readLockfileInventory(root),
       existingRepositoryPaths(root, electronRuntimePaths),
       existingRepositoryPaths(root, electronResourcePaths),
+      collectElectronReleaseReferenceFiles(root),
       collectElectronTestReferenceFiles(root),
       collectElectronGuidanceReferenceFiles(root),
     ]);
@@ -138,6 +150,7 @@ async function readTauriMigrationInventory(root: string): Promise<TauriMigration
       electronGuidanceReferences: guidanceReferences.length,
       electronLockfileImporters: lockfileImportersWithDeps.length,
       electronPackageScriptReferences: packageScriptReferences.length,
+      electronReleaseReferences: releaseReferences.length,
       electronResourceFiles: resourceFiles.length,
       electronRuntimeFiles: runtimeFiles.length,
       electronTestReferences: testReferences.length,
@@ -146,6 +159,7 @@ async function readTauriMigrationInventory(root: string): Promise<TauriMigration
     lockfileImporters: lockfileImportersWithDeps,
     packageManifests,
     packageScriptReferences,
+    releaseReferences,
     resourceFiles,
     root,
     runtimeFiles,
@@ -216,6 +230,11 @@ async function collectElectronTestReferenceFiles(root: string): Promise<string[]
 async function collectElectronGuidanceReferenceFiles(root: string): Promise<string[]> {
   const files = guidanceReferencePaths.map((repositoryPath) => join(root, repositoryPath));
   return filterFilesByReference(root, files, containsElectronGuidanceReference);
+}
+
+async function collectElectronReleaseReferenceFiles(root: string): Promise<string[]> {
+  const files = releaseReferencePaths.map((repositoryPath) => join(root, repositoryPath));
+  return filterFilesByReference(root, files, containsElectronReleaseReference);
 }
 
 async function filterFilesByReference(
@@ -312,7 +331,7 @@ function formatInventory(inventory: TauriMigrationInventory): string {
   const lines = [
     "Tauri migration Electron inventory",
     `Root: ${inventory.root}`,
-    `Blockers: manifests=${inventory.blockers.electronDependencyManifests}, packageScripts=${inventory.blockers.electronPackageScriptReferences}, lockfileImporters=${inventory.blockers.electronLockfileImporters}, runtimeFiles=${inventory.blockers.electronRuntimeFiles}, resourceFiles=${inventory.blockers.electronResourceFiles}, testRefs=${inventory.blockers.electronTestReferences}, guidanceRefs=${inventory.blockers.electronGuidanceReferences}`,
+    `Blockers: manifests=${inventory.blockers.electronDependencyManifests}, packageScripts=${inventory.blockers.electronPackageScriptReferences}, lockfileImporters=${inventory.blockers.electronLockfileImporters}, runtimeFiles=${inventory.blockers.electronRuntimeFiles}, resourceFiles=${inventory.blockers.electronResourceFiles}, releaseRefs=${inventory.blockers.electronReleaseReferences}, testRefs=${inventory.blockers.electronTestReferences}, guidanceRefs=${inventory.blockers.electronGuidanceReferences}`,
     "Package manifest dependencies:",
     ...formatDependencyEntries(inventory.packageManifests),
     "Package script references:",
@@ -323,6 +342,8 @@ function formatInventory(inventory: TauriMigrationInventory): string {
     ...formatPaths(inventory.runtimeFiles),
     "Resource files:",
     ...formatPaths(inventory.resourceFiles),
+    "Release workflow references:",
+    ...formatPaths(inventory.releaseReferences),
     "Test references:",
     ...formatPaths(inventory.testReferences),
     "Guidance references:",
@@ -351,8 +372,10 @@ function formatM6CleanupPlan(inventory: TauriMigrationInventory): string {
     "2. Remove or replace Electron runtime entry files:",
     ...formatPaths(inventory.runtimeFiles),
     "",
-    "3. Remove Electron-only tools-pack resources:",
+    "3. Remove Electron-only tools-pack resources and release workflow references:",
     ...formatPaths(inventory.resourceFiles),
+    "  Release workflow references:",
+    ...formatPaths(inventory.releaseReferences),
     "",
     "4. Delete or rewrite Electron-only tests:",
     ...formatPaths(inventory.testReferences),

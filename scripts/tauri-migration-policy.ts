@@ -13,7 +13,7 @@ export const m5ElectronFallbackLabel = "Keep Electron fallback explicit during t
 export const m5PrimaryDocsLabel = "Update README, architecture docs, and directory guidance to describe Tauri as the primary runtime.";
 export const m6ElectronDepsLabel = "Remove `electron`, `electron-builder`, `@electron/rebuild`, and Electron-only package scripts.";
 export const m6ElectronRuntimeLabel = "Remove Electron preload/runtime code after Tauri bridge and packaging parity are complete.";
-export const m6ElectronResourcesLabel = "Remove Electron-only resources/hooks from `tools-pack`.";
+export const m6ElectronResourcesLabel = "Remove Electron-only resources/hooks from `tools-pack` and release workflows.";
 export const m6ElectronTestsLabel = "Delete or rewrite Electron-only tests.";
 export const m6ElectronGuidanceLabel = "Update AGENTS guidance and PR checklist references from Electron to Tauri.";
 
@@ -33,6 +33,7 @@ export type TauriMigrationPolicyInputs = {
   toolsPackPackageJson: string;
   remainingElectronRuntimeFiles: string[];
   remainingElectronResourceFiles: string[];
+  electronReleaseReferenceFiles: string[];
   electronPackageScriptReferences: string[];
   electronTestReferenceFiles: string[];
   electronGuidanceReferenceFiles: string[];
@@ -48,6 +49,10 @@ export function containsElectronTestReference(source: string): boolean {
 
 export function containsElectronGuidanceReference(source: string): boolean {
   return /\b[Ee]lectron\b|electron-builder|electronuserland/.test(source);
+}
+
+export function containsElectronReleaseReference(source: string): boolean {
+  return /\b[Ee]lectron\b|@electron\/|electron-builder|electronuserland/.test(source);
 }
 
 export function evaluateTauriMigrationOrder(input: TauriMigrationPolicyInputs): string[] {
@@ -190,8 +195,19 @@ export function evaluateTauriMigrationOrder(input: TauriMigrationPolicyInputs): 
       `the M6 Electron resources cleanup is checked, but these files still exist: ${input.remainingElectronResourceFiles.join(", ")}.`,
     );
   }
-  if (!electronResourcesRemoved && input.remainingElectronResourceFiles.length === 0) {
-    violations.push("Electron-only tools-pack resources were removed, but the M6 resources cleanup checklist line is not checked.");
+  if (electronResourcesRemoved && input.electronReleaseReferenceFiles.length > 0) {
+    violations.push(
+      `the M6 Electron resources cleanup is checked, but release workflow files still reference Electron: ${input.electronReleaseReferenceFiles.join(", ")}.`,
+    );
+  }
+  if (
+    !electronResourcesRemoved &&
+    input.remainingElectronResourceFiles.length === 0 &&
+    input.electronReleaseReferenceFiles.length === 0
+  ) {
+    violations.push(
+      "Electron-only tools-pack resources and release workflow references were removed, but the M6 resources cleanup checklist line is not checked.",
+    );
   }
   if (electronTestsRemoved && input.electronTestReferenceFiles.length > 0) {
     violations.push(
