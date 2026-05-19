@@ -23,6 +23,13 @@ export type ToolsDevStartResult = {
     pid?: number;
     status: ToolsDevAppStatus;
   };
+  desktop?: {
+    app: 'desktop';
+    created: boolean;
+    logPath: string;
+    pid?: number;
+    status: ToolsDevAppStatus;
+  };
   web?: {
     app: 'web';
     created: boolean;
@@ -55,6 +62,19 @@ export type ToolsDevRuntime = {
   webPort: number;
 };
 
+export type ToolsDevDesktopRuntime = 'electron' | 'tauri';
+
+export type ToolsDevDesktopEvalResult = {
+  error?: string;
+  ok: boolean;
+  value?: unknown;
+};
+
+export type ToolsDevDesktopScreenshotResult = {
+  error?: string;
+  path?: string;
+};
+
 export async function allocateToolsDevRuntime(): Promise<ToolsDevRuntime> {
   const [daemonPort, webPort] = await Promise.all([findFreePort(), findFreePort()]);
   if (daemonPort === webPort) return await allocateToolsDevRuntime();
@@ -80,12 +100,51 @@ export async function startToolsDevWeb(suite: SmokeSuite, runtime: ToolsDevRunti
   );
 }
 
+export async function startToolsDevDesktop(
+  suite: SmokeSuite,
+  runtime: ToolsDevRuntime,
+  desktopRuntime: ToolsDevDesktopRuntime,
+): Promise<ToolsDevStartResult> {
+  return await runToolsDevJson<ToolsDevStartResult>(
+    suite,
+    [
+      'start',
+      'desktop',
+      '--namespace',
+      suite.namespace,
+      '--tools-dev-root',
+      suite.toolsDevRoot,
+      '--daemon-port',
+      String(runtime.daemonPort),
+      '--web-port',
+      String(runtime.webPort),
+      '--desktop-runtime',
+      desktopRuntime,
+      '--json',
+    ],
+  );
+}
+
 export async function stopToolsDevWeb(suite: SmokeSuite): Promise<unknown> {
   return await runToolsDevJson<unknown>(
     suite,
     [
       'stop',
       'web',
+      '--namespace',
+      suite.namespace,
+      '--tools-dev-root',
+      suite.toolsDevRoot,
+      '--json',
+    ],
+  );
+}
+
+export async function stopToolsDevAll(suite: SmokeSuite): Promise<unknown> {
+  return await runToolsDevJson<unknown>(
+    suite,
+    [
+      'stop',
       '--namespace',
       suite.namespace,
       '--tools-dev-root',
@@ -104,6 +163,64 @@ export async function inspectToolsDevStatus(suite: SmokeSuite): Promise<ToolsDev
       suite.namespace,
       '--tools-dev-root',
       suite.toolsDevRoot,
+      '--json',
+    ],
+  );
+}
+
+export async function inspectToolsDevDesktopStatus(suite: SmokeSuite): Promise<ToolsDevAppStatus> {
+  return await runToolsDevJson<ToolsDevAppStatus>(
+    suite,
+    [
+      'inspect',
+      'desktop',
+      'status',
+      '--namespace',
+      suite.namespace,
+      '--tools-dev-root',
+      suite.toolsDevRoot,
+      '--json',
+    ],
+  );
+}
+
+export async function inspectToolsDevDesktopEval(
+  suite: SmokeSuite,
+  expression: string,
+): Promise<ToolsDevDesktopEvalResult> {
+  return await runToolsDevJson<ToolsDevDesktopEvalResult>(
+    suite,
+    [
+      'inspect',
+      'desktop',
+      'eval',
+      '--namespace',
+      suite.namespace,
+      '--tools-dev-root',
+      suite.toolsDevRoot,
+      '--expr',
+      expression,
+      '--json',
+    ],
+  );
+}
+
+export async function inspectToolsDevDesktopScreenshot(
+  suite: SmokeSuite,
+  screenshotPath: string,
+): Promise<ToolsDevDesktopScreenshotResult> {
+  return await runToolsDevJson<ToolsDevDesktopScreenshotResult>(
+    suite,
+    [
+      'inspect',
+      'desktop',
+      'screenshot',
+      '--namespace',
+      suite.namespace,
+      '--tools-dev-root',
+      suite.toolsDevRoot,
+      '--path',
+      screenshotPath,
       '--json',
     ],
   );

@@ -4,7 +4,7 @@ import { isAbsolute, join, resolve } from 'node:path';
 import { createReport, type E2eReport } from './report.ts';
 import { e2eWorkspaceRoot } from './smoke-suite.ts';
 
-export type PackagedReportPlatform = 'mac' | 'win';
+export type PackagedReportPlatform = 'linux' | 'mac' | 'win';
 
 export type PackagedSmokeReport = {
   report: E2eReport;

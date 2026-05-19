@@ -1,12 +1,18 @@
 // @vitest-environment node
 
 import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
 
 import { describe, expect, test } from 'vitest';
 
 import { requestJson, requestText } from '@/vitest/http';
 import { createMockOpenAiServer } from '@/vitest/mock-openai';
 import { createSmokeSuite } from '@/vitest/smoke-suite';
+import {
+  inspectToolsDevDesktopEval,
+  inspectToolsDevDesktopScreenshot,
+  inspectToolsDevDesktopStatus,
+} from '@/vitest/tools-dev';
 
 type HealthResponse = {
   ok?: unknown;
@@ -161,4 +167,37 @@ describe('tools-dev pure inspect smoke', () => {
       await mock.close();
     }
   }, 180_000);
+
+  test('runs Tauri desktop inspect status/eval/screenshot against tools-dev', async () => {
+    const suite = await createSmokeSuite('tools-dev-tauri-desktop');
+
+    await suite.with.toolsDev(
+      async ({ status, webUrl }) => {
+        expect(status.apps?.desktop?.state).toBe('running');
+
+        const desktopStatus = await inspectToolsDevDesktopStatus(suite);
+        expect(desktopStatus.state).toBe('running');
+        expect(desktopStatus.url).toBe(webUrl);
+
+        const evalResult = await inspectToolsDevDesktopEval(suite, 'location.href');
+        expect(evalResult.ok).toBe(true);
+        expect(evalResult.value).toBe(`${webUrl}/`);
+
+        const screenshotPath = join(suite.scratchDir, 'tauri-desktop-inspect.png');
+        const screenshot = await inspectToolsDevDesktopScreenshot(suite, screenshotPath);
+        expect(screenshot.path).toBe(screenshotPath);
+
+        await suite.report.json('tauri-desktop-inspect.json', {
+          desktopStatus,
+          evalResult,
+          screenshot,
+          webUrl,
+        });
+      },
+      {
+        desktopRuntime: 'tauri',
+        startApp: 'desktop',
+      },
+    );
+  }, 240_000);
 });

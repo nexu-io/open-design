@@ -4,6 +4,7 @@ import { basename, join } from "node:path";
 
 import { ToolPackCache } from "../cache.js";
 import type { ToolPackConfig } from "../config.js";
+import { packTauriWin } from "../tauri.js";
 import {
   collectWorkspaceTarballs,
   createWinPackagedAppCacheKey,
@@ -47,6 +48,10 @@ async function writeLocalLatestYml(config: ToolPackConfig, paths: WinPaths): Pro
 }
 
 export async function packWin(config: ToolPackConfig): Promise<WinPackResult> {
+  if (config.desktopRuntime === "tauri") {
+    return await packTauriWin(config);
+  }
+
   const paths = resolveWinPaths(config);
   const cache = new ToolPackCache(config.roots.cacheRoot);
   const timings: WinPackTiming[] = [];

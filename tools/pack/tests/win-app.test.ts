@@ -31,6 +31,7 @@ async function writeWorkspace(root: string): Promise<void> {
 function createConfig(root: string, webOutputMode: ToolPackConfig["webOutputMode"]): ToolPackConfig {
   return {
     containerized: false,
+    desktopRuntime: "electron",
     electronBuilderCliPath: "electron-builder",
     electronDistPath: "electron-dist",
     electronVersion: "41.3.0",
@@ -58,6 +59,8 @@ function createConfig(root: string, webOutputMode: ToolPackConfig["webOutputMode
     },
     signed: false,
     silent: true,
+    tauriCliPath: "tauri",
+    tauriConfigPath: join(root, "apps", "desktop", "src-tauri", "tauri.conf.json"),
     to: "dir",
     webOutputMode,
     workspaceRoot: root,

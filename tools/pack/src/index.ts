@@ -26,6 +26,7 @@ import {
 } from "./win/index.js";
 import {
   cleanupPackedLinuxNamespace,
+  inspectPackedLinuxApp,
   installPackedLinuxApp,
   installPackedLinuxHeadless,
   packLinux,
@@ -60,6 +61,7 @@ type CacCommand = ReturnType<CAC["command"]>;
 function addSharedOptions(command: CacCommand) {
   return command
     .option("--cache-dir <path>", "tools-pack cache directory")
+    .option("--desktop-runtime <runtime>", "desktop runtime: electron|tauri (default: electron)")
     .option("--dir <path>", "tools-pack root directory")
     .option("--json", "print JSON")
     .option("--namespace <name>", "runtime namespace")
@@ -182,7 +184,7 @@ addWinLifecycleOptions(
   }
 });
 
-addBuildOptions(addSharedOptions(cli.command("linux <action>", "Linux packaging commands: build|install|start|stop|logs|uninstall|cleanup")), "linux")
+addBuildOptions(addSharedOptions(cli.command("linux <action>", "Linux packaging commands: build|install|start|stop|logs|uninstall|cleanup|inspect")), "linux")
   .option("--containerized", "build inside electronuserland/builder Docker for distro-agnostic glibc compat")
   .option("--headless", "install/start/stop the headless (no-Electron) entry instead of the full desktop app")
   .action(async (action: string, options: CliOptions) => {
@@ -202,6 +204,9 @@ addBuildOptions(addSharedOptions(cli.command("linux <action>", "Linux packaging 
         return;
       case "logs":
         printLogs(await readPackedLinuxLogs(config), options);
+        return;
+      case "inspect":
+        printJson(await inspectPackedLinuxApp(config, options));
         return;
       case "uninstall":
         printJson(await uninstallPackedLinuxApp(config));

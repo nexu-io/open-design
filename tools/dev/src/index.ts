@@ -36,6 +36,7 @@ import {
   DEFAULT_START_APPS,
   DEFAULT_STOP_APPS,
   parsePortOption,
+  resolveDesktopRuntimeKind,
   resolveRunApps,
   resolveStartApps,
   resolveStopApps,
@@ -492,6 +493,36 @@ async function buildDesktop(config: ToolDevConfig, logHandle: FileHandle): Promi
   });
 }
 
+async function buildTauriDesktop(config: ToolDevConfig, logHandle: FileHandle): Promise<void> {
+  await logHandle.write(`\n[tools-dev] building @open-design/desktop Tauri runtime at ${new Date().toISOString()}\n`);
+  await runLoggedCommand({
+    args: ["build", "--manifest-path", config.apps.desktop.tauriManifestPath],
+    command: "cargo",
+    cwd: config.workspaceRoot,
+    env: process.env,
+    logFd: logHandle.fd,
+  });
+}
+
+function createDesktopSpawnEnv(env: NodeJS.ProcessEnv, options: CliOptions): NodeJS.ProcessEnv {
+  const spawnEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    ...env,
+    ...(options.parentPid == null ? {} : { [TOOLS_DEV_PARENT_PID_ENV]: String(options.parentPid) }),
+  };
+  // ELECTRON_RUN_AS_NODE=1 makes Electron boot as plain Node and skip
+  // main-process API injection (app, BrowserWindow, protocol all become
+  // undefined). Strip it from the spawn env so desktop always boots in
+  // real GUI mode even when the parent shell is an Electron-based IDE
+  // that sets this variable for sidecar reuse.
+  for (const key of Object.keys(spawnEnv)) {
+    if (key.toUpperCase() === "ELECTRON_RUN_AS_NODE") {
+      delete spawnEnv[key];
+    }
+  }
+  return spawnEnv;
+}
+
 async function ensureWebDevNodeModules(config: ToolDevConfig): Promise<void> {
   const webRuntimeRoot = path.dirname(config.apps.web.nextDistDir);
   const runtimeNodeModules = path.join(webRuntimeRoot, "node_modules");
@@ -527,37 +558,25 @@ async function writeWebDevTsconfig(config: ToolDevConfig): Promise<void> {
 async function spawnDesktopRuntime(config: ToolDevConfig, options: CliOptions): Promise<{ pid: number }> {
   const { args: stampArgs, env } = createAppStamp(config, APP_KEYS.DESKTOP);
   const logHandle = await openAppLog(config, APP_KEYS.DESKTOP);
+  const runtime = resolveDesktopRuntimeKind(options.desktopRuntime);
 
   try {
-    await buildDesktop(config, logHandle);
-    await logHandle.write(`[tools-dev] launching desktop at ${new Date().toISOString()}\n`);
-    const spawnEnv: NodeJS.ProcessEnv = {
-      ...process.env,
-      ...env,
-      ...(options.parentPid == null ? {} : { [TOOLS_DEV_PARENT_PID_ENV]: String(options.parentPid) }),
-    };
-    // ELECTRON_RUN_AS_NODE=1 makes Electron boot as plain Node and skip
-    // main-process API injection (app, BrowserWindow, protocol all become
-    // undefined). Strip it from the spawn env so desktop always boots in
-    // real Electron mode even when the parent shell is an Electron-based
-    // IDE that sets this variable for sidecar reuse.
-    //
-    // Iterate keys with a case-insensitive comparison rather than
-    // `delete spawnEnv.ELECTRON_RUN_AS_NODE`: spreading process.env into
-    // a plain object loses Node's Windows case-insensitive proxy, so any
-    // alternate-cased variant (e.g. `electron_run_as_node`) would still
-    // be passed to the child and Win32 CreateProcess would treat it as
-    // the same variable, undoing the fix.
-    //
-    // Scope is tools-dev only. The packaged runtime intentionally sets
-    // ELECTRON_RUN_AS_NODE on its own daemon/web sidecars (see
-    // apps/packaged/src/sidecars.ts) to reuse the bundled Node binary;
-    // that flow is independent and untouched here.
-    for (const key of Object.keys(spawnEnv)) {
-      if (key.toUpperCase() === "ELECTRON_RUN_AS_NODE") {
-        delete spawnEnv[key];
-      }
+    const spawnEnv = createDesktopSpawnEnv(env, options);
+    await logHandle.write(`[tools-dev] launching desktop (${runtime}) at ${new Date().toISOString()}\n`);
+    if (runtime === "tauri") {
+      await buildTauriDesktop(config, logHandle);
+      const spawned = await spawnBackgroundProcess({
+        args: stampArgs,
+        command: config.apps.desktop.tauriDebugBinaryPath,
+        cwd: config.workspaceRoot,
+        detached: true,
+        env: spawnEnv,
+        logFd: logHandle.fd,
+      });
+      return { pid: spawned.pid };
     }
+
+    await buildDesktop(config, logHandle);
     const spawned = await spawnBackgroundProcess({
       args: [config.apps.desktop.mainEntryPath, ...stampArgs],
       command: config.apps.desktop.electronBinaryPath,
@@ -991,6 +1010,7 @@ function addPortOptions(command: ReturnType<typeof cli.command>) {
   return command
     .option("--daemon-port <port>", "force daemon port; conflict quick-fails")
     .option("--web-port <port>", "force web port; conflict quick-fails")
+    .option("--desktop-runtime <runtime>", "desktop runtime: electron|tauri (default: electron)")
     .option("--prod", "use production build (requires pnpm --filter @open-design/web build first)");
 }
 

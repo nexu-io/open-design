@@ -41,8 +41,7 @@ import type {
   UpdateDeployConfigRequest,
 } from '../types';
 import type { ArtifactManifest } from '../artifacts/types';
-
-// Window.electronAPI is declared globally in apps/web/src/types/electron.d.ts.
+import { resolveDesktopBridge } from '../native/desktop-bridge';
 
 export const DEFAULT_DEPLOY_PROVIDER_ID = 'vercel-self';
 export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
@@ -478,7 +477,7 @@ async function decodeConnectorError(resp: Response): Promise<string> {
 
 export async function connectConnector(connectorId: string): Promise<ConnectorActionResult> {
   let authWindow: Window | null = null;
-  const openExternal = window.electronAPI?.openExternal;
+  const openExternal = resolveDesktopBridge()?.openExternal;
   const useExternalBrowser = typeof openExternal === 'function';
   try {
     if (!useExternalBrowser) {

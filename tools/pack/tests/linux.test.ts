@@ -16,6 +16,7 @@ import {
 function makeConfig(): ToolPackConfig {
   return {
     containerized: true,
+    desktopRuntime: "electron",
     electronBuilderCliPath: "/x/electron-builder/cli.js",
     electronDistPath: "/x/electron/dist",
     electronVersion: "41.3.0",
@@ -43,6 +44,8 @@ function makeConfig(): ToolPackConfig {
     },
     silent: true,
     signed: false,
+    tauriCliPath: "/x/tauri/main.js",
+    tauriConfigPath: "/work/apps/desktop/src-tauri/tauri.conf.json",
     to: "all",
     webOutputMode: "server",
     workspaceRoot: "/work",
@@ -101,7 +104,7 @@ describe("buildDockerArgs", () => {
     const args = buildDockerArgs(makeConfig(), { uid: 1000, gid: 1000 });
     const last = args[args.length - 1];
     expect(last).toMatch(/npx --yes pnpm@\d+\.\d+\.\d+ install --frozen-lockfile/);
-    expect(last).toMatch(/npx --yes pnpm@\d+\.\d+\.\d+ tools-pack linux build --to all --namespace default/);
+    expect(last).toMatch(/npx --yes pnpm@\d+\.\d+\.\d+ tools-pack linux build --to all --desktop-runtime electron --namespace default/);
     expect(last).not.toMatch(/--containerized/);
   });
 

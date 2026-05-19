@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 import { createReport } from '../lib/vitest/report.ts';
 
-type Platform = 'mac' | 'win';
+type Platform = 'linux' | 'mac' | 'win';
 
 const e2eRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const workspaceRoot = dirname(e2eRoot);
@@ -39,7 +39,12 @@ async function main(): Promise<void> {
     screenshot: `screenshots/open-design-${platform}-smoke.png`,
     spec,
   });
-  await saveRequiredSource(report, 'tools-pack.json', process.env.OD_PACKAGED_E2E_BUILD_JSON_PATH);
+  await saveConfiguredSource(
+    report,
+    'tools-pack.json',
+    process.env.OD_PACKAGED_E2E_BUILD_JSON_PATH,
+    process.env.OD_PACKAGED_E2E_BUILD_JSON_REQUIRED !== '0',
+  );
   await saveOptionalSource(report, 'tools-pack.log', process.env.OD_PACKAGED_E2E_BUILD_LOG_PATH);
 
   const startedAt = Date.now();
@@ -64,13 +69,15 @@ async function main(): Promise<void> {
   }
 }
 
-async function saveRequiredSource(
+async function saveConfiguredSource(
   report: Awaited<ReturnType<typeof createReport>>,
   relpath: string,
   sourcePath: string | undefined,
+  required: boolean,
 ): Promise<void> {
   if (sourcePath == null || sourcePath === '') {
-    throw new Error(`missing source path for ${relpath}`);
+    if (required) throw new Error(`missing source path for ${relpath}`);
+    return;
   }
   const resolved = resolveFromWorkspace(sourcePath);
   if (!existsSync(resolved)) {
@@ -115,15 +122,17 @@ async function runVitest(spec: string): Promise<{ exitCode: number; log: string 
 }
 
 function parsePlatform(value: string | undefined): Platform {
-  if (value === 'mac' || value === 'win') return value;
-  throw new Error('usage: tsx scripts/release-smoke.ts <mac|win> [spec]');
+  if (value === 'linux' || value === 'mac' || value === 'win') return value;
+  throw new Error('usage: tsx scripts/release-smoke.ts <linux|mac|win> [spec]');
 }
 
 function defaultSpec(platform: Platform): string {
+  if (platform === 'linux') return 'specs/linux.spec.ts';
   return platform === 'mac' ? 'specs/mac.spec.ts' : 'specs/win.spec.ts';
 }
 
 function defaultNamespace(platform: Platform): string {
+  if (platform === 'linux') return 'release-beta-linux';
   return platform === 'mac' ? 'release-beta' : 'release-beta-win';
 }
 

@@ -1,4 +1,4 @@
-import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import {
@@ -51,6 +51,10 @@ import type {
 
 const PACKAGED_CONFIG_PATH_ENV = "OD_PACKAGED_CONFIG_PATH";
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value != null && !Array.isArray(value);
+}
+
 function desktopStamp(config: ToolPackConfig): SidecarStamp {
   return {
     app: APP_KEYS.DESKTOP,
@@ -69,17 +73,26 @@ function desktopIdentityPath(config: ToolPackConfig): string {
   return join(config.roots.runtime.namespaceRoot, "runtime", "desktop-root.json");
 }
 
+function isDesktopStartStatusReady(config: ToolPackConfig, status: DesktopStatusSnapshot): boolean {
+  if (config.desktopRuntime !== "tauri") return true;
+  return status.state === "running" && typeof status.url === "string" && status.url.length > 0;
+}
+
 async function waitForDesktopStatus(config: ToolPackConfig, timeoutMs = 45_000): Promise<DesktopStatusSnapshot | null> {
   const stamp = desktopStamp(config);
   const startedAt = Date.now();
+  let lastStatus: DesktopStatusSnapshot | null = null;
   while (Date.now() - startedAt < timeoutMs) {
     try {
-      return await requestJsonIpc<DesktopStatusSnapshot>(stamp.ipc, { type: SIDECAR_MESSAGES.STATUS }, { timeoutMs: 1000 });
+      const status = await requestJsonIpc<DesktopStatusSnapshot>(stamp.ipc, { type: SIDECAR_MESSAGES.STATUS }, { timeoutMs: 1000 });
+      lastStatus = status;
+      if (isDesktopStartStatusReady(config, status)) return status;
     } catch {
-      await new Promise((resolveWait) => setTimeout(resolveWait, 200));
+      // Retry below.
     }
+    await new Promise((resolveWait) => setTimeout(resolveWait, 200));
   }
-  return null;
+  return lastStatus;
 }
 
 function installArgs(config: ToolPackConfig, paths: WinPaths): string[] {
@@ -194,10 +207,53 @@ async function resolveStartTarget(config: ToolPackConfig): Promise<{ configPath:
   throw new Error(`no windows app executable found for namespace=${config.namespace}; run tools-pack win build first or tools-pack win install after building an NSIS installer`);
 }
 
+async function readLaunchConfigSource(candidates: string[]): Promise<Record<string, unknown>> {
+  for (const candidate of candidates) {
+    const raw = await readFile(candidate, "utf8").catch(() => null);
+    if (raw == null) continue;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!isRecord(parsed)) {
+      throw new Error(`packaged launch config source must be a JSON object: ${candidate}`);
+    }
+    return parsed;
+  }
+  return {};
+}
+
+async function writeLaunchPackagedConfig(
+  config: ToolPackConfig,
+  target: { configPath: string | null; executablePath: string },
+): Promise<string> {
+  const executableDir = dirname(target.executablePath);
+  const raw = await readLaunchConfigSource([
+    ...(target.configPath == null ? [] : [target.configPath]),
+    join(executableDir, "resources", "open-design-config.json"),
+    join(executableDir, "open-design-config.json"),
+  ]);
+
+  const launchConfigPath = join(config.roots.runtime.namespaceRoot, "runtime", "open-design-config.json");
+  await mkdir(dirname(launchConfigPath), { recursive: true });
+  await writeFile(
+    launchConfigPath,
+    `${JSON.stringify(
+      {
+        ...raw,
+        namespace: config.namespace,
+        namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot,
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  return launchConfigPath;
+}
+
 export async function startPackedWinApp(config: ToolPackConfig): Promise<WinStartResult> {
   const target = await resolveStartTarget(config);
   const stamp = desktopStamp(config);
   const logPath = desktopLogPath(config);
+  const launchConfigPath = await writeLaunchPackagedConfig(config, target);
   await mkdir(dirname(logPath), { recursive: true });
   await writeFile(logPath, "", "utf8");
   const spawned = await spawnBackgroundProcess({
@@ -210,7 +266,7 @@ export async function startPackedWinApp(config: ToolPackConfig): Promise<WinStar
       extraEnv: {
         ...process.env,
         [DESKTOP_LOG_ECHO_ENV]: "0",
-        ...(target.configPath == null ? {} : { [PACKAGED_CONFIG_PATH_ENV]: target.configPath }),
+        [PACKAGED_CONFIG_PATH_ENV]: launchConfigPath,
       },
       stamp,
     }),

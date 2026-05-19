@@ -7,6 +7,7 @@ import { expect } from 'vitest';
 import { assertRelativeReportPath, createReport, type E2eReport } from './report.ts';
 import type {
   ToolsDevCheckResult,
+  ToolsDevDesktopRuntime,
   ToolsDevLogResult,
   ToolsDevRuntime,
   ToolsDevStartResult,
@@ -49,12 +50,14 @@ export type ToolsDevSuiteContext = {
 };
 
 export type ToolsDevSuiteOptions = {
+  desktopRuntime?: ToolsDevDesktopRuntime;
   onFailure?: (input: {
     context: ToolsDevSuiteContext | null;
     error: unknown;
     suite: SmokeSuite;
   }) => Promise<void>;
   skipFatalLogCheck?: boolean;
+  startApp?: 'desktop' | 'web';
 };
 
 const e2eRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
@@ -133,12 +136,15 @@ async function runToolsDevSuite(
   let diagnostics: unknown = null;
   let caughtError: unknown = null;
   let success = false;
+  const startApp = options.startApp ?? 'web';
 
   try {
-    const start = await toolsDev.startToolsDevWeb(suite, runtime);
+    const start = startApp === 'desktop'
+      ? await toolsDev.startToolsDevDesktop(suite, runtime, options.desktopRuntime ?? 'electron')
+      : await toolsDev.startToolsDevWeb(suite, runtime);
     const webUrl = assertRuntimeUrl(start.web?.status.url, 'web');
     const status = await toolsDev.inspectToolsDevStatus(suite);
-    assertToolsDevStatus(suite, status);
+    assertToolsDevStatus(suite, status, { expectDesktop: startApp === 'desktop' });
 
     context = {
       check: () => toolsDev.inspectToolsDevCheck(suite),
@@ -172,7 +178,11 @@ async function runToolsDevSuite(
     // next smoke run on a shared CI runner.
     let stopError: unknown = null;
     try {
-      await toolsDev.stopToolsDevWeb(suite);
+      if (startApp === 'desktop') {
+        await toolsDev.stopToolsDevAll(suite);
+      } else {
+        await toolsDev.stopToolsDevWeb(suite);
+      }
     } catch (error) {
       stopError = error;
     }
@@ -204,10 +214,17 @@ function assertRuntimeUrl(value: string | null | undefined, app: string): string
   return value;
 }
 
-function assertToolsDevStatus(suite: SmokeSuite, status: ToolsDevStatusResult): void {
+function assertToolsDevStatus(
+  suite: SmokeSuite,
+  status: ToolsDevStatusResult,
+  options: { expectDesktop?: boolean } = {},
+): void {
   expect(status.namespace).toBe(suite.namespace);
   expect(status.apps?.daemon?.state).toBe('running');
   expect(status.apps?.web?.state).toBe('running');
+  if (options.expectDesktop === true) {
+    expect(status.apps?.desktop?.state).toBe('running');
+  }
 }
 
 function assertNoFatalLogs(logs: Record<string, { lines: string[] }>): void {

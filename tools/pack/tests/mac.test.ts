@@ -10,6 +10,7 @@ import { resolveSeededAppConfigPaths, seedPackagedAppConfig, writeLaunchPackaged
 function makeConfig(root: string, overrides: Partial<ToolPackConfig> = {}): ToolPackConfig {
   return {
     containerized: false,
+    desktopRuntime: "electron",
     electronBuilderCliPath: "/x/electron-builder/cli.js",
     electronDistPath: "/x/electron/dist",
     electronVersion: "41.3.0",
@@ -37,6 +38,8 @@ function makeConfig(root: string, overrides: Partial<ToolPackConfig> = {}): Tool
     },
     silent: true,
     signed: false,
+    tauriCliPath: "/x/tauri/main.js",
+    tauriConfigPath: join(root, "apps", "desktop", "src-tauri", "tauri.conf.json"),
     to: "app",
     webOutputMode: "standalone",
     workspaceRoot: root,

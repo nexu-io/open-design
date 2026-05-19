@@ -25,6 +25,29 @@ afterEach(() => {
 });
 
 describe("resolveToolPackConfig telemetry relay", () => {
+  it("defaults to the Electron desktop runtime during the parallel packaging phase", () => {
+    const config = resolveToolPackConfig("mac", { namespace: "runtime-default-test" });
+    expect(config.desktopRuntime).toBe("electron");
+  });
+
+  it("accepts the Tauri desktop runtime without changing namespace-scoped roots", () => {
+    const config = resolveToolPackConfig("mac", {
+      desktopRuntime: "tauri",
+      namespace: "runtime-tauri-test",
+    });
+    expect(config.desktopRuntime).toBe("tauri");
+    expect(config.roots.output.namespaceRoot).toContain("runtime-tauri-test");
+    expect(config.roots.runtime.namespaceRoot).toContain("runtime-tauri-test");
+    expect(config.tauriCliPath).toContain("@tauri-apps");
+    expect(config.tauriConfigPath).toContain("apps/desktop/src-tauri/tauri.conf.json");
+  });
+
+  it("rejects unsupported desktop runtimes", () => {
+    expect(() => resolveToolPackConfig("mac", { desktopRuntime: "native" })).toThrow(
+      /unsupported --desktop-runtime value: native/,
+    );
+  });
+
   it("reads and normalizes OPEN_DESIGN_TELEMETRY_RELAY_URL for packaged config", () => {
     process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL = "https://telemetry.open-design.ai/api/langfuse//";
     const config = resolveToolPackConfig("mac", { namespace: "telemetry-test" });

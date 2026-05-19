@@ -215,17 +215,26 @@ function isUnmanagedDesktopFallback(fallback: DesktopRootIdentityFallback | unde
   ].includes(fallback.reason);
 }
 
+function isDesktopStartStatusReady(config: ToolPackConfig, status: DesktopStatusSnapshot): boolean {
+  if (config.desktopRuntime !== "tauri") return true;
+  return status.state === "running" && typeof status.url === "string" && status.url.length > 0;
+}
+
 async function waitForDesktopStatus(config: ToolPackConfig, timeoutMs = 45_000): Promise<DesktopStatusSnapshot | null> {
   const stamp = desktopStamp(config);
   const startedAt = Date.now();
+  let lastStatus: DesktopStatusSnapshot | null = null;
   while (Date.now() - startedAt < timeoutMs) {
     try {
-      return await requestJsonIpc<DesktopStatusSnapshot>(stamp.ipc, { type: SIDECAR_MESSAGES.STATUS }, { timeoutMs: 1000 });
+      const status = await requestJsonIpc<DesktopStatusSnapshot>(stamp.ipc, { type: SIDECAR_MESSAGES.STATUS }, { timeoutMs: 1000 });
+      lastStatus = status;
+      if (isDesktopStartStatusReady(config, status)) return status;
     } catch {
-      await new Promise((resolveWait) => setTimeout(resolveWait, 200));
+      // Retry below.
     }
+    await new Promise((resolveWait) => setTimeout(resolveWait, 200));
   }
-  return null;
+  return lastStatus;
 }
 
 type ProcessExit = { code: number | null; signal: NodeJS.Signals | null };

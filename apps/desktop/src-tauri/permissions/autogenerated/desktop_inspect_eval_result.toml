@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-desktop-inspect-eval-result"
+description = "Enables the desktop_inspect_eval_result command without any pre-configured scope."
+commands.allow = ["desktop_inspect_eval_result"]
+
+[[permission]]
+identifier = "deny-desktop-inspect-eval-result"
+description = "Denies the desktop_inspect_eval_result command without any pre-configured scope."
+commands.deny = ["desktop_inspect_eval_result"]

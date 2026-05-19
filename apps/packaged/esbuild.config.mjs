@@ -19,3 +19,9 @@ await build({
   entryPoints: ["./src/headless.ts"],
   outfile: "./dist/headless.mjs",
 });
+
+await build({
+  ...sharedOptions,
+  entryPoints: ["./src/tauri-sidecars.ts"],
+  outfile: "./dist/tauri-sidecars.mjs",
+});

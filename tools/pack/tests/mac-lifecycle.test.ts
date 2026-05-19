@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ToolPackConfig } from "../src/config.js";
 import { resolveMacPaths } from "../src/mac/paths.js";
 
-const requestJsonIpc = vi.fn(async () => ({ state: "running" }));
+const requestJsonIpc = vi.fn(async () => ({ state: "running" } as { state: string; url?: string | null }));
 const resolveAppIpcPath = vi.fn(() => "/tmp/open-design/ipc/test/desktop.sock");
 const createSidecarLaunchEnv = vi.fn(({ extraEnv }: { extraEnv: NodeJS.ProcessEnv }) => extraEnv);
 const spawnLoggedProcess = vi.fn(async ({ env }: { env: NodeJS.ProcessEnv }) => {
@@ -42,6 +42,7 @@ const { startPackedMacApp } = await import("../src/mac/lifecycle.js");
 function makeConfig(root: string, overrides: Partial<ToolPackConfig> = {}): ToolPackConfig {
   return {
     containerized: false,
+    desktopRuntime: "electron",
     electronBuilderCliPath: "/x/electron-builder/cli.js",
     electronDistPath: "/x/electron/dist",
     electronVersion: "41.3.0",
@@ -69,6 +70,8 @@ function makeConfig(root: string, overrides: Partial<ToolPackConfig> = {}): Tool
     },
     silent: true,
     signed: false,
+    tauriCliPath: "/x/tauri/main.js",
+    tauriConfigPath: join(root, "apps", "desktop", "src-tauri", "tauri.conf.json"),
     to: "app",
     webOutputMode: "standalone",
     workspaceRoot: root,
@@ -142,6 +145,30 @@ describe("startPackedMacApp", () => {
         `"namespaceBaseRoot": ${JSON.stringify(config.roots.runtime.namespaceBaseRoot)}`,
       );
       await expect(readFile(launchConfigPath, "utf8")).resolves.toContain('"appVersion": "1.2.3"');
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("waits for a Tauri packaged app to report its web URL", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-lifecycle-"));
+    try {
+      const config = makeConfig(root, { desktopRuntime: "tauri" });
+      const paths = resolveMacPaths(config);
+      const executablePath = join(paths.installedAppPath, "Contents", "MacOS", "Open Design");
+
+      requestJsonIpc
+        .mockResolvedValueOnce({ state: "running", url: null })
+        .mockResolvedValueOnce({ state: "running", url: "http://127.0.0.1:17456" });
+
+      await mkdir(join(paths.installedAppPath, "Contents", "MacOS"), { recursive: true });
+      await writeFile(executablePath, "#!/bin/sh\nexit 0\n", "utf8");
+      await chmod(executablePath, 0o755);
+
+      const result = await startPackedMacApp(config);
+
+      expect(requestJsonIpc).toHaveBeenCalledTimes(2);
+      expect(result.status?.url).toBe("http://127.0.0.1:17456");
     } finally {
       await rm(root, { force: true, recursive: true });
     }

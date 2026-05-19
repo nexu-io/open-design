@@ -6,6 +6,8 @@
 
 import type { AnalyticsClientType } from '@open-design/contracts/analytics';
 
+import { hasDesktopBridge } from '../native/desktop-bridge';
+
 const ANONYMOUS_ID_KEY = 'open-design:analytics.anonymous_id';
 const SESSION_ID_KEY = 'open-design:analytics.session_id';
 
@@ -59,10 +61,9 @@ export function detectClientType(): AnalyticsClientType {
   if (typeof window === 'undefined') return 'web';
   const w = window as Window & {
     __OD_CLIENT_TYPE__?: AnalyticsClientType;
-    electronAPI?: unknown;
   };
   if (w.__OD_CLIENT_TYPE__ === 'desktop') return 'desktop';
-  if (w.electronAPI) return 'desktop';
+  if (hasDesktopBridge()) return 'desktop';
   return 'web';
 }
 

@@ -15,6 +15,8 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "tauri:build": "tauri build --config src-tauri/tauri.conf.json",
+    "tauri:check": "cargo check --manifest-path src-tauri/Cargo.toml",
     "test": "vitest run -c vitest.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
@@ -25,6 +27,7 @@
   },
   "devDependencies": {
     "@types/node": "24.12.2",
+    "@tauri-apps/cli": "2.11.2",
     "electron": "41.3.0",
     "typescript": "6.0.3",
     "vitest": "^2.1.8"

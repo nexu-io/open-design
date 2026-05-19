@@ -27,11 +27,14 @@ export const ALL_APPS = [APP_KEYS.DAEMON, APP_KEYS.WEB, APP_KEYS.DESKTOP] as con
 export const DEFAULT_START_APPS = [APP_KEYS.DAEMON, APP_KEYS.WEB, APP_KEYS.DESKTOP] as const;
 export const DEFAULT_RUN_APPS = [APP_KEYS.DAEMON, APP_KEYS.WEB] as const;
 export const DEFAULT_STOP_APPS = [APP_KEYS.DESKTOP, APP_KEYS.WEB, APP_KEYS.DAEMON] as const;
+export const DESKTOP_RUNTIME_KINDS = ["electron", "tauri"] as const;
 
 export type ToolDevAppName = (typeof ALL_APPS)[number];
+export type DesktopRuntimeKind = (typeof DESKTOP_RUNTIME_KINDS)[number];
 
 export type ToolDevOptions = {
   daemonPort?: number | string | null;
+  desktopRuntime?: DesktopRuntimeKind | string;
   json?: boolean;
   namespace?: string;
   prod?: boolean;
@@ -55,6 +58,8 @@ export type ToolDevConfig = {
       electronBinaryPath: string;
       mainEntryPath: string;
       packageJsonPath: string;
+      tauriDebugBinaryPath: string;
+      tauriManifestPath: string;
     };
     web: ToolDevAppConfig & {
       nextDistDir: string;
@@ -144,6 +149,14 @@ export function parsePortOption(value: number | string | null | undefined, optio
   return parsed;
 }
 
+export function resolveDesktopRuntimeKind(value: DesktopRuntimeKind | string | null | undefined): DesktopRuntimeKind {
+  if (value == null || value === "") return "electron";
+  if (DESKTOP_RUNTIME_KINDS.includes(value as DesktopRuntimeKind)) {
+    return value as DesktopRuntimeKind;
+  }
+  throw new Error(`--desktop-runtime must be one of: ${DESKTOP_RUNTIME_KINDS.join(", ")}`);
+}
+
 export function resolveToolDevConfig(options: ToolDevOptions = {}): ToolDevConfig {
   const namespace = resolveNamespace({ namespace: options.namespace, env: process.env, contract: OPEN_DESIGN_SIDECAR_CONTRACT });
   const toolsDevRoot = resolveSidecarBase({
@@ -178,6 +191,12 @@ export function resolveToolDevConfig(options: ToolDevOptions = {}): ToolDevConfi
         },
         mainEntryPath: path.join(WORKSPACE_ROOT, "apps/desktop/dist/main/index.js"),
         packageJsonPath: desktopPackageJsonPath,
+        tauriDebugBinaryPath: path.join(
+          WORKSPACE_ROOT,
+          "apps/desktop/src-tauri/target/debug",
+          process.platform === "win32" ? "open-design-desktop-tauri.exe" : "open-design-desktop-tauri",
+        ),
+        tauriManifestPath: path.join(WORKSPACE_ROOT, "apps/desktop/src-tauri/Cargo.toml"),
       },
       web: {
         ...web,

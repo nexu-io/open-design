@@ -16,13 +16,17 @@ export const WORKSPACE_ROOT = resolve(__dirname, ENTRY_DIR_NAME === "dist" ? "..
 
 export type ToolPackPlatform = "mac" | "win" | "linux";
 export type ToolPackBuildOutput = "all" | "app" | "appimage" | "dir" | "dmg" | "nsis" | "zip";
+export type ToolPackDesktopRuntimeKind = "electron" | "tauri";
 export type ToolPackMacCompression = "store" | "normal" | "maximum";
 export type ToolPackWebOutputMode = "server" | "standalone";
+
+export const DESKTOP_RUNTIME_KINDS = ["electron", "tauri"] as const;
 
 export type ToolPackCliOptions = {
   appVersion?: string;
   cacheDir?: string;
   containerized?: boolean;
+  desktopRuntime?: string;
   dir?: string;
   expr?: string;
   headless?: boolean;
@@ -58,6 +62,7 @@ export type ToolPackRoots = {
 export type ToolPackConfig = {
   appVersion?: string;
   containerized: boolean;
+  desktopRuntime: ToolPackDesktopRuntimeKind;
   electronBuilderCliPath: string;
   electronDistPath: string;
   electronVersion: string;
@@ -72,6 +77,8 @@ export type ToolPackConfig = {
   roots: ToolPackRoots;
   silent: boolean;
   signed: boolean;
+  tauriCliPath: string;
+  tauriConfigPath: string;
   telemetryRelayUrl?: string;
   /**
    * PostHog product-analytics ingest key, sourced from process.env.POSTHOG_KEY
@@ -96,6 +103,16 @@ function resolveToolPackBuildOutput(platform: ToolPackPlatform, value: string | 
   if (platform === "win" && (value === "all" || value === "dir" || value === "nsis")) return value;
   if (platform === "linux" && (value === "all" || value === "appimage" || value === "dir")) return value;
   throw new Error(`unsupported ${platform} --to target: ${value}`);
+}
+
+export function resolveToolPackDesktopRuntimeKind(
+  value: string | undefined,
+): ToolPackDesktopRuntimeKind {
+  if (value == null || value.length === 0) return "electron";
+  if ((DESKTOP_RUNTIME_KINDS as readonly string[]).includes(value)) {
+    return value as ToolPackDesktopRuntimeKind;
+  }
+  throw new Error(`unsupported --desktop-runtime value: ${value}`);
 }
 
 function resolveToolPackMacCompression(value: string | undefined): ToolPackMacCompression {
@@ -190,6 +207,11 @@ function resolveElectronBuilderCliPath(): string {
   return require.resolve("electron-builder/out/cli/cli.js");
 }
 
+function resolveTauriCliPath(workspaceRoot: string): string {
+  const require = createRequire(join(workspaceRoot, "apps/desktop/package.json"));
+  return require.resolve("@tauri-apps/cli/tauri.js");
+}
+
 export function resolveToolPackConfig(
   platform: ToolPackPlatform,
   options: ToolPackCliOptions = {},
@@ -209,6 +231,7 @@ export function resolveToolPackConfig(
   return {
     appVersion: resolveToolPackAppVersion(options.appVersion),
     containerized: options.containerized === true,
+    desktopRuntime: resolveToolPackDesktopRuntimeKind(options.desktopRuntime),
     electronBuilderCliPath: resolveElectronBuilderCliPath(),
     electronDistPath: resolveElectronDistPath(WORKSPACE_ROOT),
     electronVersion: resolveElectronVersion(WORKSPACE_ROOT),
@@ -236,6 +259,8 @@ export function resolveToolPackConfig(
     removeSidecars: options.removeSidecars === true,
     silent: options.silent !== false,
     signed: options.signed === true,
+    tauriCliPath: resolveTauriCliPath(WORKSPACE_ROOT),
+    tauriConfigPath: join(WORKSPACE_ROOT, "apps", "desktop", "src-tauri", "tauri.conf.json"),
     telemetryRelayUrl: resolveToolPackTelemetryRelayUrl(process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL),
     posthogKey: resolveToolPackPosthogKey(process.env.POSTHOG_KEY),
     posthogHost: resolveToolPackPosthogHost(process.env.POSTHOG_HOST),

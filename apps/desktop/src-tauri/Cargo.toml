@@ -1,0 +1,28 @@
+[package]
+name = "open-design-desktop-tauri"
+version = "0.7.0"
+description = "Open Design desktop shell"
+edition = "2021"
+license = "Apache-2.0"
+
+[[bin]]
+name = "open-design-desktop-tauri"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2.5.1", features = [] }
+
+[dependencies]
+base64 = "0.22"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+hmac = "0.12"
+open = "5"
+rand = "0.8"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rfd = "0.15"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tauri = { version = "2.11.2", features = [] }
+tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
+url = "2"

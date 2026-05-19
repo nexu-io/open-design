@@ -63,6 +63,8 @@ jobs:
               "packages/sidecar-proto/"
               "tools/pack/"
               "e2e/lib/desktop/"
+              "e2e/lib/vitest/packaged-report.ts"
+              "e2e/scripts/release-smoke.ts"
             )
             while IFS= read -r file; do
               for pattern in "${patterns[@]}"; do
@@ -86,7 +88,10 @@ jobs:
               if [[ "$file" == "tools/pack/"* || "$file" == "apps/packaged/"* || "$file" == "apps/desktop/"* || "$file" == "packages/platform/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/sidecar-proto/"* ]]; then
                 tools_pack_tests_required=true
               fi
-              if [[ "$file" == "e2e/specs/mac.spec.ts" || "$file" == "e2e/specs/win.spec.ts" || "$file" == "package.json" || "$file" == "pnpm-lock.yaml" || "$file" == "pnpm-workspace.yaml" || "$file" == ".github/workflows/ci.yml" || "$file" == ".github/workflows/release-beta.yml" ]]; then
+              if [[ "$file" == "e2e/lib/vitest/packaged-report.ts" || "$file" == "e2e/scripts/release-smoke.ts" || "$file" == "e2e/specs/win-tauri.spec.ts" || "$file" == "e2e/specs/linux.spec.ts" ]]; then
+                tools_pack_tests_required=true
+              fi
+              if [[ "$file" == "e2e/specs/mac.spec.ts" || "$file" == "e2e/specs/win.spec.ts" || "$file" == "e2e/specs/win-tauri.spec.ts" || "$file" == "e2e/specs/linux.spec.ts" || "$file" == "package.json" || "$file" == "pnpm-lock.yaml" || "$file" == "pnpm-workspace.yaml" || "$file" == ".github/workflows/ci.yml" || "$file" == ".github/workflows/release-beta.yml" ]]; then
                 required=true
                 daemon_tests_required=true
                 web_tests_required=true
@@ -523,3 +528,130 @@ jobs:
         with:
           path: ${{ runner.temp }}/tools-pack-cache
           key: tools-pack-win-v6-${{ runner.os }}-${{ steps.win_tools_pack_cache_key.outputs.epoch }}-${{ github.sha }}
+
+  packaged_smoke_tauri_win:
+    name: Packaged windows Tauri smoke
+    needs: [packaged_changes]
+    if: ${{ needs.packaged_changes.outputs.required == 'true' }}
+    runs-on: windows-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup NSIS
+        shell: pwsh
+        run: |
+          if ((Get-Command makensis.exe -ErrorAction SilentlyContinue) -or (Test-Path "C:\Program Files (x86)\NSIS\makensis.exe")) {
+            exit 0
+          }
+          choco install nsis -y --no-progress
+
+      - name: Smoke PR windows Tauri packaged runtime
+        working-directory: e2e
+        shell: pwsh
+        env:
+          OD_PACKAGED_E2E_BUILD_JSON_REQUIRED: "0"
+          OD_PACKAGED_E2E_NAMESPACE: ci-pr-win-tauri
+          OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/win-tauri
+          OD_PACKAGED_E2E_SCREENSHOT_PATH: ${{ runner.temp }}/open-design-win-tauri-smoke.png
+          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack-tauri
+          OD_PACKAGED_E2E_WIN_TAURI: "1"
+        run: |
+          $ErrorActionPreference = "Stop"
+          pnpm exec tsx scripts/release-smoke.ts win specs/win-tauri.spec.ts
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+      - name: Upload windows Tauri e2e spec report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-ci-win-tauri-e2e-report
+          path: ${{ runner.temp }}/release-report/win-tauri
+          if-no-files-found: warn
+
+  packaged_smoke_tauri_linux:
+    name: Packaged linux Tauri smoke
+    needs: [packaged_changes]
+    if: ${{ needs.packaged_changes.outputs.required == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Tauri Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            libfuse2 \
+            libgtk-3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            patchelf \
+            wget \
+            xvfb
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Smoke PR linux Tauri packaged runtime
+        working-directory: e2e
+        env:
+          OD_PACKAGED_E2E_BUILD_JSON_REQUIRED: "0"
+          OD_PACKAGED_E2E_DESKTOP_RUNTIME: tauri
+          OD_PACKAGED_E2E_LINUX: "1"
+          OD_PACKAGED_E2E_NAMESPACE: ci-pr-linux-tauri
+          OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/linux-tauri
+          OD_PACKAGED_E2E_SCREENSHOT_PATH: ${{ runner.temp }}/open-design-linux-tauri-smoke.png
+          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack-tauri
+        run: |
+          set -euo pipefail
+          xvfb-run -a pnpm exec tsx scripts/release-smoke.ts linux specs/linux.spec.ts
+
+      - name: Upload linux Tauri e2e spec report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-ci-linux-tauri-e2e-report
+          path: ${{ runner.temp }}/release-report/linux-tauri
+          if-no-files-found: warn

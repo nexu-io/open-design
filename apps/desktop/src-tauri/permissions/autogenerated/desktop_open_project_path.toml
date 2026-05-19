@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-desktop-open-project-path"
+description = "Enables the desktop_open_project_path command without any pre-configured scope."
+commands.allow = ["desktop_open_project_path"]
+
+[[permission]]
+identifier = "deny-desktop-open-project-path"
+description = "Denies the desktop_open_project_path command without any pre-configured scope."
+commands.deny = ["desktop_open_project_path"]

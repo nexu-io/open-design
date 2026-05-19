@@ -464,6 +464,30 @@ describe('sandboxed preview Blob exports', () => {
     expect(htmlArg).not.toContain('window.print()');
   });
 
+  it('keeps Tauri PDF export on the browser print fallback', async () => {
+    vi.stubGlobal('window', {
+      open: (_url: string, _target: string, features?: string) => {
+        openCalls.push([_url, _target]);
+        openedFeatures = features;
+        return mockWin;
+      },
+      addEventListener: () => {},
+      __TAURI_INTERNALS__: {},
+    });
+
+    await exportAsPdf('<main>Tauri print fallback</main>', 'Tauri PDF');
+
+    expect(openCalls).toEqual([['', '_blank']]);
+    expect(openedFeatures).toBeUndefined();
+    expect(mockWin.location.href).toBe('blob:test');
+    expect(capturedBlob).toBeDefined();
+
+    const doc = await capturedBlob!.text();
+    expect(doc).toContain('sandbox="allow-scripts allow-modals"');
+    expect(doc).toContain('window.print()');
+    expect(doc).toContain('Tauri print fallback');
+  });
+
   it('injects image-waiting logic into the print-ready handshake for the desktop bridge', async () => {
     const printPdfMock = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal('window', {

@@ -10,6 +10,8 @@ import {
   SIDECAR_MESSAGES,
   SIDECAR_MODES,
   SIDECAR_SOURCES,
+  type DesktopEvalResult,
+  type DesktopScreenshotResult,
   type DesktopStatusSnapshot,
   type SidecarStamp,
 } from "@open-design/sidecar-proto";
@@ -26,6 +28,7 @@ import {
 
 import type { ToolPackConfig } from "./config.js";
 import { copyBundledResourceTrees, linuxResources } from "./resources.js";
+import { packTauriLinux } from "./tauri.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -123,6 +126,7 @@ export function buildDockerArgs(
   const innerArgs = [
     `${pnpmCmd} tools-pack linux build`,
     `--to ${config.to}`,
+    `--desktop-runtime ${config.desktopRuntime}`,
     `--namespace ${config.namespace}`,
     "--dir /tools-pack",
   ];
@@ -494,6 +498,10 @@ export type LinuxPackResult = {
 };
 
 export async function packLinux(config: ToolPackConfig): Promise<LinuxPackResult> {
+  if (config.desktopRuntime === "tauri") {
+    return await packTauriLinux(config);
+  }
+
   if (config.containerized) {
     await runBuildInContainer(config);
     const paths = resolveLinuxPaths(config);
@@ -649,6 +657,12 @@ export type LinuxStartResult = {
   status: DesktopStatusSnapshot | null;
 };
 
+export type LinuxInspectResult = {
+  eval?: DesktopEvalResult;
+  screenshot?: DesktopScreenshotResult;
+  status: DesktopStatusSnapshot | null;
+};
+
 type DesktopRootIdentityMarker = {
   appPath: string;
   executablePath: string;
@@ -776,19 +790,30 @@ async function waitForMarker(markerPath: string, timeoutMs: number): Promise<boo
   return false;
 }
 
-async function fetchDesktopStatus(config: ToolPackConfig): Promise<DesktopStatusSnapshot | null> {
-  try {
-    const ipc = resolveAppIpcPath({
-      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
-      namespace: config.namespace,
-      app: APP_KEYS.DESKTOP,
-    });
-    const reply = await requestJsonIpc(ipc, { type: SIDECAR_MESSAGES.STATUS });
-    if (reply == null || typeof reply !== "object") return null;
-    return reply as DesktopStatusSnapshot;
-  } catch {
-    return null;
+function isLinuxDesktopStartStatusReady(config: ToolPackConfig, status: DesktopStatusSnapshot): boolean {
+  if (config.desktopRuntime !== "tauri") return true;
+  return status.state === "running" && typeof status.url === "string" && status.url.length > 0;
+}
+
+async function waitForDesktopStatus(config: ToolPackConfig, timeoutMs = 45_000): Promise<DesktopStatusSnapshot | null> {
+  const stamp = linuxDesktopStamp(config);
+  const startedAt = Date.now();
+  let lastStatus: DesktopStatusSnapshot | null = null;
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const status = await requestJsonIpc<DesktopStatusSnapshot>(
+        stamp.ipc,
+        { type: SIDECAR_MESSAGES.STATUS },
+        { timeoutMs: 1000 },
+      );
+      lastStatus = status;
+      if (isLinuxDesktopStartStatusReady(config, status)) return status;
+    } catch {
+      // Retry below.
+    }
+    await new Promise((resolveWait) => setTimeout(resolveWait, 200));
   }
+  return lastStatus;
 }
 
 export async function startPackedLinuxApp(config: ToolPackConfig): Promise<LinuxStartResult> {
@@ -848,7 +873,7 @@ export async function startPackedLinuxApp(config: ToolPackConfig): Promise<Linux
     if (!ready) {
       throw new Error(`desktop-root.json not written within 60s at ${markerPath}`);
     }
-    status = await fetchDesktopStatus(config);
+    status = await waitForDesktopStatus(config);
   } catch (error) {
     await teardownOrphanedStart(child.pid).catch(() => undefined);
     throw error;
@@ -991,6 +1016,33 @@ export async function readPackedLinuxLogs(config: ToolPackConfig): Promise<{
     logs[app] = { lines, logPath };
   }
   return { logs, namespace: config.namespace };
+}
+
+export async function inspectPackedLinuxApp(config: ToolPackConfig, options: { expr?: string; path?: string }): Promise<LinuxInspectResult> {
+  const stamp = linuxDesktopStamp(config);
+  const status = await requestJsonIpc<DesktopStatusSnapshot>(
+    stamp.ipc,
+    { type: SIDECAR_MESSAGES.STATUS },
+    { timeoutMs: 2000 },
+  ).catch(() => null);
+
+  return {
+    ...(options.expr == null ? {} : {
+      eval: await requestJsonIpc<DesktopEvalResult>(
+        stamp.ipc,
+        { input: { expression: options.expr }, type: SIDECAR_MESSAGES.EVAL },
+        { timeoutMs: 5000 },
+      ),
+    }),
+    ...(options.path == null ? {} : {
+      screenshot: await requestJsonIpc<DesktopScreenshotResult>(
+        stamp.ipc,
+        { input: { path: options.path }, type: SIDECAR_MESSAGES.SCREENSHOT },
+        { timeoutMs: 10000 },
+      ),
+    }),
+    status,
+  };
 }
 
 export type LinuxUninstallResult = {

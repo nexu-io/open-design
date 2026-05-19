@@ -1,5 +1,6 @@
 import { ToolPackCache } from "../cache.js";
 import type { ToolPackConfig } from "../config.js";
+import { packTauriMac } from "../tauri.js";
 import { collectWorkspaceTarballs, copyResourceTree, writeAssembledApp } from "./app.js";
 import { seedPackagedAppConfig } from "./app-config.js";
 import { finalizeMacArtifacts } from "./artifacts.js";
@@ -18,6 +19,10 @@ function logMacBuildProgress(message: string, fields: Record<string, unknown> = 
 }
 
 export async function packMac(config: ToolPackConfig): Promise<MacPackResult> {
+  if (config.desktopRuntime === "tauri") {
+    return await packTauriMac(config);
+  }
+
   const paths = resolveMacPaths(config);
   const targets = resolveElectronBuilderTargets(config.to as MacBuildOutput);
   const cache = new ToolPackCache(config.roots.cacheRoot);

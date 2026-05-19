@@ -103,6 +103,8 @@ function workspaceBuildOutputFiles(config: ToolPackConfig): string[] {
     "apps/desktop/dist/main/index.d.ts",
     "apps/packaged/dist/index.mjs",
     "apps/packaged/dist/index.d.ts",
+    "apps/packaged/dist/tauri-sidecars.mjs",
+    "apps/packaged/dist/tauri-sidecars.d.ts",
   ];
 }
 

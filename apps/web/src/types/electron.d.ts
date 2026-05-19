@@ -12,17 +12,17 @@
 // the main side so even legacy projects with a `metadata.baseDir` set
 // outside the HMAC-gated flow cannot be opened.
 
-import type { ImportFolderResponse } from '@open-design/contracts';
+import type { DesktopPickAndImportResult } from '../native/desktop-bridge';
 
 export {};
 
-export type DesktopPickAndImportResult =
-  | { ok: true; response: ImportFolderResponse }
-  | { canceled: true; ok: false }
-  | { details?: unknown; ok: false; reason: string };
-
 declare global {
   interface Window {
+    __TAURI_INTERNALS__?: unknown;
+    __odDesktop?: {
+      isDesktop?: boolean;
+      printPdf?: (html: string, nonce?: string) => Promise<void>;
+    };
     electronAPI?: {
       openExternal?: (url: string) => Promise<boolean>;
       // Atomic main-process flow: show the native folder picker, mint

@@ -39,6 +39,8 @@ const OUTPUT_FILES = [
   "apps/desktop/dist/main/index.d.ts",
   "apps/packaged/dist/index.mjs",
   "apps/packaged/dist/index.d.ts",
+  "apps/packaged/dist/tauri-sidecars.mjs",
+  "apps/packaged/dist/tauri-sidecars.d.ts",
 ] as const;
 
 async function writeWorkspace(root: string): Promise<void> {
@@ -61,6 +63,7 @@ async function writeOutputs(root: string, value: string): Promise<void> {
 function createConfig(root: string, cacheRoot: string): ToolPackConfig {
   return {
     containerized: false,
+    desktopRuntime: "electron",
     electronBuilderCliPath: "electron-builder",
     electronDistPath: "electron-dist",
     electronVersion: "41.3.0",
@@ -88,6 +91,8 @@ function createConfig(root: string, cacheRoot: string): ToolPackConfig {
     },
     signed: false,
     silent: true,
+    tauriCliPath: "tauri",
+    tauriConfigPath: join(root, "apps", "desktop", "src-tauri", "tauri.conf.json"),
     to: "dir",
     webOutputMode: "standalone",
     workspaceRoot: root,

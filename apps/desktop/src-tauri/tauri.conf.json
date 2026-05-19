@@ -1,0 +1,39 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "Open Design",
+  "version": "0.7.0",
+  "identifier": "dev.opendsgn.open-design",
+  "build": {
+    "beforeBuildCommand": "",
+    "beforeDevCommand": "",
+    "frontendDist": "static"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "security": {
+      "csp": null
+    },
+    "windows": [
+      {
+        "label": "main",
+        "url": "pending.html",
+        "title": "Open Design",
+        "width": 1280,
+        "height": 900,
+        "minWidth": 900,
+        "minHeight": 600,
+        "visible": true
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "icon": [
+      "../../../tools/pack/resources/mac/icon.png",
+      "../../../tools/pack/resources/mac/icon.icns",
+      "../../../tools/pack/resources/win/icon.ico"
+    ],
+    "targets": "all",
+    "resources": []
+  }
+}

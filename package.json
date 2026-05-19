@@ -36,6 +36,7 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
+      "@tauri-apps/cli",
       "better-sqlite3",
       "electron",
       "esbuild"
