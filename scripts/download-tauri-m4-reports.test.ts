@@ -100,6 +100,30 @@ test("download-tauri-m4-reports rejects explicit run ids from stale heads", asyn
   assert.doesNotMatch(calls, /run download 777/);
 });
 
+test("download-tauri-m4-reports rejects explicit run ids from another branch", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "open-design-tauri-download-run-branch-"));
+  t.after(() => void rm(root, { force: true, recursive: true }));
+  const fakeGh = await writeFakeGh(root, { viewHeadBranch: "not-the-migration-branch" });
+
+  await assert.rejects(
+    runDownload(
+      fakeGh,
+      "--run-id",
+      "777",
+      "--branch",
+      "codex/electron-to-tauri-migration",
+      "--expected-head",
+      "a".repeat(40),
+      "--output-dir",
+      join(root, "reports"),
+    ),
+    /branch mismatch: expected codex\/electron-to-tauri-migration, got not-the-migration-branch/,
+  );
+  const calls = await readFile(join(root, "gh-calls.log"), "utf8");
+  assert.match(calls, /run view 777/);
+  assert.doesNotMatch(calls, /run download 777/);
+});
+
 test("download-tauri-m4-reports explains missing gh", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "open-design-tauri-download-missing-gh-"));
   t.after(() => void rm(root, { force: true, recursive: true }));
@@ -198,15 +222,18 @@ async function writeFakeGh(
   root: string,
   options: {
     listResponses?: Array<Array<Record<string, unknown>>>;
+    viewHeadBranch?: string;
   } = {},
 ): Promise<string> {
   const fakeGh = join(root, "gh");
+  const viewHeadBranch = options.viewHeadBranch ?? "codex/electron-to-tauri-migration";
   const listResponses = options.listResponses ?? [
     [
       {
         databaseId: 12345,
         status: "completed",
         conclusion: "success",
+        headBranch: "feature",
         headSha: "a".repeat(40),
         createdAt: "2026-05-20T00:00:00Z",
       },
@@ -230,7 +257,8 @@ async function writeFakeGh(
       "  process.exit(0);",
       "}",
       "if (args[0] === 'run' && args[1] === 'view') {",
-      "  process.stdout.write(JSON.stringify({ databaseId: Number(args[2]), status: 'completed', conclusion: 'success', headSha: 'a'.repeat(40), createdAt: '2026-05-20T00:00:00Z' }));",
+      `  const viewHeadBranch = ${JSON.stringify(viewHeadBranch)};`,
+      "  process.stdout.write(JSON.stringify({ databaseId: Number(args[2]), status: 'completed', conclusion: 'success', headBranch: viewHeadBranch, headSha: 'a'.repeat(40), createdAt: '2026-05-20T00:00:00Z' }));",
       "  process.exit(0);",
       "}",
       "if (args[0] === 'run' && args[1] === 'download') {",

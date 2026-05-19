@@ -32,6 +32,7 @@ type GithubRun = {
   conclusion?: string;
   createdAt?: string;
   databaseId?: number;
+  headBranch?: string;
   headSha?: string;
   status?: string;
 };
@@ -247,7 +248,7 @@ async function listRuns(args: Args): Promise<GithubRun[]> {
     "--workflow",
     args.workflow,
     "--json",
-    "databaseId,status,conclusion,headSha,createdAt",
+    "databaseId,status,conclusion,headBranch,headSha,createdAt",
     "--limit",
     "20",
   ]);
@@ -262,7 +263,7 @@ async function viewRun(args: Args, runId: string): Promise<GithubRun> {
     "--repo",
     args.repo,
     "--json",
-    "databaseId,status,conclusion,headSha,createdAt",
+    "databaseId,status,conclusion,headBranch,headSha,createdAt",
   ]);
   return JSON.parse(result.stdout) as GithubRun;
 }
@@ -273,6 +274,9 @@ async function assertRunMatchesExpectedHead(args: Args, runId: string): Promise<
     throw new Error(
       `GitHub Actions run ${runId} head mismatch: expected ${args.expectedHead}, got ${run.headSha ?? "unknown"}`,
     );
+  }
+  if (run.headBranch != null && run.headBranch !== args.branch) {
+    throw new Error(`GitHub Actions run ${runId} branch mismatch: expected ${args.branch}, got ${run.headBranch}`);
   }
   if (run.status !== "completed" || run.conclusion === "cancelled") {
     throw new Error(
@@ -286,6 +290,7 @@ function selectCompletedRun(args: Args, runs: GithubRun[]): GithubRun | undefine
     (candidate) =>
       candidate.status === "completed" &&
       candidate.conclusion !== "cancelled" &&
+      (candidate.headBranch == null || candidate.headBranch === args.branch) &&
       (args.expectedHead == null || candidate.headSha === args.expectedHead),
   );
 }
@@ -296,7 +301,7 @@ function summarizeRuns(runs: GithubRun[]): string {
     .slice(0, 3)
     .map(
       (run) =>
-        `${run.databaseId ?? "unknown"}:${run.status ?? "unknown"}/${run.conclusion ?? "unknown"}@${run.headSha ?? "unknown"}`,
+        `${run.databaseId ?? "unknown"}:${run.status ?? "unknown"}/${run.conclusion ?? "unknown"}@${run.headBranch ?? "unknown"}:${run.headSha ?? "unknown"}`,
     )
     .join(", ");
 }
