@@ -607,19 +607,16 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
         },
         body: {
           ...(usesVersionedOpenAIPath ? { model } : {}),
-          ...(usesVersionedOpenAIPath
-            ? buildOpenAIChatTokenParam(model, PROVIDER_MAX_TOKENS)
-            : buildLegacyMaxTokensParam(PROVIDER_MAX_TOKENS)),
+          ...buildLegacyMaxTokensParam(PROVIDER_MAX_TOKENS),
           messages: [{ role: 'user', content: SMOKE_PROMPT }],
           stream: false,
         },
-        retryBodyOnUnsupportedMaxTokens: usesVersionedOpenAIPath
-          ? undefined
-          : {
-              messages: [{ role: 'user', content: SMOKE_PROMPT }],
-              stream: false,
-              ...buildMaxCompletionTokensParam(PROVIDER_MAX_TOKENS),
-            },
+        retryBodyOnUnsupportedMaxTokens: {
+          ...(usesVersionedOpenAIPath ? { model } : {}),
+          messages: [{ role: 'user', content: SMOKE_PROMPT }],
+          stream: false,
+          ...buildMaxCompletionTokensParam(PROVIDER_MAX_TOKENS),
+        },
         extractText: extractOpenAIMessageText,
       };
     }

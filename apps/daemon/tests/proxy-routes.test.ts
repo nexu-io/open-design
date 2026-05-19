@@ -308,10 +308,27 @@ describe('API proxy routes', () => {
     expect(upstreamInit?.redirect).toBe('error');
   });
 
-  it('uses max_completion_tokens for GPT-5 Azure OpenAI-compatible v1 payloads', async () => {
+  it('retries Azure OpenAI-compatible v1 alias requests with max_completion_tokens when max_tokens is rejected', async () => {
     const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
       const url = String(input);
       if (url.startsWith(baseUrl)) return realFetch(input, init);
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      if ('max_tokens' in body) {
+        return Promise.resolve(new Response(
+          JSON.stringify({
+            error: {
+              message: "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.",
+              type: 'invalid_request_error',
+              param: 'max_tokens',
+              code: 'unsupported_parameter',
+            },
+          }),
+          {
+            status: 400,
+            headers: { 'content-type': 'application/json' },
+          },
+        ));
+      }
       return Promise.resolve(sseResponse('data: [DONE]\n\n'));
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -322,20 +339,33 @@ describe('API proxy routes', () => {
       body: JSON.stringify({
         baseUrl: 'https://resource.services.ai.azure.com/api/projects/project/openai/v1',
         apiKey: 'azure-key',
-        model: 'gpt-5.4',
+        model: 'prod',
         apiVersion: '',
         maxTokens: 1234,
         messages: [{ role: 'user', content: 'hello' }],
       }),
     });
 
-    const [, upstreamInit] = fetchMock.mock.calls[0]!;
-    expect(JSON.parse(String(upstreamInit?.body))).toMatchObject({
+    const upstreamCalls = fetchMock.mock.calls.filter(
+      ([input]) => !String(input).startsWith(baseUrl),
+    );
+    expect(upstreamCalls).toHaveLength(2);
+    const firstBody = JSON.parse(String(upstreamCalls[0]![1]?.body));
+    const secondBody = JSON.parse(String(upstreamCalls[1]![1]?.body));
+    expect(firstBody).toMatchObject({
+      model: 'prod',
+      messages: [{ role: 'user', content: 'hello' }],
+      max_tokens: 1234,
+      stream: true,
+    });
+    expect(firstBody).not.toHaveProperty('max_completion_tokens');
+    expect(secondBody).toMatchObject({
+      model: 'prod',
       messages: [{ role: 'user', content: 'hello' }],
       max_completion_tokens: 1234,
       stream: true,
     });
-    expect(JSON.parse(String(upstreamInit?.body))).not.toHaveProperty('max_tokens');
+    expect(secondBody).not.toHaveProperty('max_tokens');
   });
 
   it('retries Azure deployment-mode requests with max_completion_tokens when max_tokens is rejected', async () => {
