@@ -2403,5 +2403,23 @@ describe('vercel routing config for multi-page deploys', () => {
       '<a href="/about?utm=x#team">Both</a>',
     );
   });
+
+  it('leaves anchor-looking text inside script and comment regions unchanged while rewriting real anchors', () => {
+    const pricingHtml =
+      '<script>const tpl = \'<a href="about.html">Script</a>\';</script>' +
+      '<!-- <a href="about.html">Comment</a> -->' +
+      '<a href="about.html">Real</a>';
+    const result = buildVercelRoutingConfig([
+      htmlFile('index.html', '<!doctype html><h1>Home</h1>'),
+      htmlFile('pricing.html', pricingHtml),
+      htmlFile('about.html', '<!doctype html><h1>About</h1>'),
+    ]);
+    const rewrittenPricing = result!.rewrittenHtml.get('pricing.html');
+    expect(rewrittenPricing).toBe(
+      '<script>const tpl = \'<a href="about.html">Script</a>\';</script>' +
+      '<!-- <a href="about.html">Comment</a> -->' +
+      '<a href="/about">Real</a>',
+    );
+  });
 });
 

@@ -1475,7 +1475,14 @@ function htmlPathToCleanRoute(filePath: string) {
 
 function rewriteAnchorHrefsToCleanRoutes(html: string, pathToRoute: Map<string, string>, currentFile: string) {
   const currentDir = path.posix.dirname(currentFile);
-  return html.replace(/<a\b([^<>]*?)\bhref\s*=\s*(["'])([^"']+)\2([^<>]*)>/gi, (match, pre, quote, href, post) => {
+  // Gate by absolute offset so anchor-looking text inside `<script>` /
+  // `<style>` / HTML comments stays verbatim. Without this, an inline
+  // script string literal or a stale commented-out `<a href="...">`
+  // would silently be rewritten, changing runtime JS behavior or
+  // mutating comment contents.
+  const rawTextRanges = htmlRawTextRanges(html);
+  return html.replace(/<a\b([^<>]*?)\bhref\s*=\s*(["'])([^"']+)\2([^<>]*)>/gi, (match, pre, quote, href, post, offset) => {
+    if (isOffsetInRanges(offset, rawTextRanges)) return match;
     if (isExternalUrl(href)) return match;
     if (href.startsWith('#')) return match;
     const splitIdx = href.search(/[?#]/);
