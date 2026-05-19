@@ -9529,6 +9529,10 @@ button.connector-action.is-loading {
   text-overflow: ellipsis;
   /* Reserve room for the absolutely-positioned close button. */
   padding-right: 20px;
+  /* Same display-layer capitalize as .app-project-title .title — see that rule for the
+     brand-name trade-off rationale. Selector is project-name-only (kanban renders only
+     project cards; live artifacts use .design-card-name in the grid view). */
+  text-transform: capitalize;
 }
 .design-kanban-card-meta {
   font-size: 12px;

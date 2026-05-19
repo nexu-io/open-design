@@ -6,11 +6,12 @@
  * execute text-transform on painted glyphs, so Playwright is required to
  * verify the actual CSS property is both declared and inherited correctly.
  *
- * The five selectors under test:
+ * The six selectors under test:
  *   1. .app-project-title .title    - design-files page header
- *   2. .workspace-tab__label        - workspace tab bar strip
+ *   2. .workspace-tab__label--project - workspace tab bar strip (project tabs only)
  *   3. .workspace-tabs-list__title  - workspace tab overflow / search popover
- *   4. .design-card-name            - designs grid and kanban cards
+ *   4a. .design-card-name--project  - designs grid (project cards only)
+ *   4b. .design-kanban-card-name    - designs kanban view (project cards only)
  *   5. .recent-projects__card-name  - recent-projects strip on Home
  *
  * Red-on-main: c9d93498 is the parent of the first fix commit (fix(web): preserve
@@ -237,6 +238,40 @@ test('designs grid card applies capitalize to project name', async ({ page }) =>
     (el) => window.getComputedStyle(el).textTransform,
   );
   expect(cardTransform).toBe('capitalize');
+});
+
+// ---------------------------------------------------------------------------
+// Selector 4b: .design-kanban-card-name (designs kanban view)
+//
+// The DesignsTab kanban view renders project names via a separate selector
+// (.design-kanban-card-name) that bypasses the grid's .design-card-name path.
+// The capitalize rule must apply here too or the casing flips when the user
+// switches DisplayMode.
+// ---------------------------------------------------------------------------
+
+test('designs kanban card applies capitalize to project name', async ({ page }) => {
+  await createTestProject(page, PROJECT_NAME);
+
+  await page.goto('/projects');
+  await waitForLoadingToClear(page);
+  await expect(page.locator('.design-grid, .design-kanban-board')).toBeVisible({ timeout: 10_000 });
+
+  // Toggle to the kanban view via the designs-view picker.
+  await page.getByTestId('designs-view-kanban').click();
+  await expect(page.locator('.design-kanban-board')).toBeVisible({ timeout: 10_000 });
+
+  const kanbanCardName = page.locator('.design-kanban-card-name', {
+    hasText: PROJECT_NAME,
+  }).first();
+  await expect(kanbanCardName).toBeVisible();
+
+  const storedText = await kanbanCardName.textContent();
+  expect(storedText?.trim()).toBe(PROJECT_NAME);
+
+  const transform = await kanbanCardName.evaluate(
+    (el) => window.getComputedStyle(el).textTransform,
+  );
+  expect(transform).toBe('capitalize');
 });
 
 // ---------------------------------------------------------------------------
