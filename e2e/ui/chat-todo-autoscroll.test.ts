@@ -341,6 +341,14 @@ test.describe('chat pane autoscroll on TodoCard growth', () => {
     const scrollUpOccurred = distanceAfterScroll > 80;
 
     if (scrollUpOccurred) {
+      // Precondition: verify the scroll-up actually moved us far enough from the
+      // bottom that the auto-scroll suppression path will be exercised.
+      const distanceFromBottom = await page.evaluate(() => {
+        const el = document.querySelector('.chat-log');
+        return el ? el.scrollHeight - el.scrollTop - el.clientHeight : 0;
+      });
+      expect(distanceFromBottom).toBeGreaterThan(80); // must exceed the 80px threshold
+
       // Now grow the todo card — the non-pinned user should NOT be dragged back.
       await growPinnedTodo(page, 80);
 
