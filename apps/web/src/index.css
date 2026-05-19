@@ -1215,6 +1215,7 @@ code {
   text-overflow: ellipsis;
   flex: 0 1 auto;
   min-width: 0;
+  text-transform: capitalize;
 }
 .app-project-title .meta {
   color: var(--text-muted);
