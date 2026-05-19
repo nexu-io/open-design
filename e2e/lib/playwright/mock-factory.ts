@@ -69,9 +69,13 @@ export async function routeAppConfig(page: Page): Promise<void> {
   });
 }
 
-/** Intercept /api/agents with a single standard mock agent. */
+/** Intercept GET /api/agents with a single standard mock agent. */
 export async function routeMockAgents(page: Page): Promise<void> {
   await page.route('**/api/agents', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
     await route.fulfill({ json: { agents: [STANDARD_MOCK_AGENT] } });
   });
 }
