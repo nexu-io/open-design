@@ -302,6 +302,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Made the migration-order guard parse `DESKTOP_RUNTIME_KINDS` instead of relying on an exact formatted string. The M5 Electron fallback window now tolerates order/whitespace-only formatting changes while still requiring both tools to accept `electron` and `tauri`. `node --import tsx --test scripts/tauri-migration-policy.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `pnpm guard` passed.
 - 2026-05-20: Relaxed the migration-order parser for `DEFAULT_DESKTOP_RUNTIME` and `release-beta` `desktop_runtime.default` formatting. M5 now keys on the actual `electron|tauri` values across common TypeScript/YAML quote and whitespace variants, reducing false failures during the default flip. `node --import tsx --test scripts/tauri-migration-policy.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `pnpm guard` passed.
 - 2026-05-20: Added a post-M4 execution runbook that maps M5 and M6 checklist items to the concrete files and verification commands required after native Windows/Linux evidence lands. This keeps default flip and Electron removal execution tied to the guard policy instead of relying on checklist memory. `pnpm guard` passed.
+- 2026-05-20: Added a git-bundle fallback to the remote CI handoff so the branch can be transferred to a write-capable machine even when the configured local GitHub credential cannot push. This keeps native Windows/Linux evidence collection unblocked by the current `sunseol` 403. `pnpm guard` passed.
 
 ### Platform Gate Runners
 
@@ -351,6 +352,22 @@ To collect native M4 evidence, push that branch with a credential that can write
 
 - `Packaged windows Tauri smoke`
 - `Packaged linux Tauri smoke`
+
+If direct push is blocked by credentials, create a git bundle from this machine and import it on a machine or account that can push to the repository:
+
+```bash
+git bundle create /tmp/open-design-tauri-migration.bundle codex/electron-to-tauri-migration ^origin/main
+git bundle verify /tmp/open-design-tauri-migration.bundle
+git bundle list-heads /tmp/open-design-tauri-migration.bundle
+```
+
+On the receiving checkout:
+
+```bash
+git fetch /path/to/open-design-tauri-migration.bundle codex/electron-to-tauri-migration:codex/electron-to-tauri-migration
+git checkout codex/electron-to-tauri-migration
+git push -u origin codex/electron-to-tauri-migration
+```
 
 If both pass, download or inspect their `open-design-ci-win-tauri-e2e-report` and `open-design-ci-linux-tauri-e2e-report` artifacts. The Windows report must prove NSIS build/install/start/eval/screenshot/stop/uninstall. The Linux report must prove AppImage build/install/start/eval/screenshot/stop/uninstall plus headless install/start/stop. Only then mark the three remaining M4 platform checkboxes complete and proceed to M5.
 
