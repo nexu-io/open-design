@@ -604,7 +604,7 @@ export function DesignSystemCreationFlow({
               rows={4}
               value={state.notes}
               onChange={(event) => setState((curr) => ({ ...curr, notes: event.target.value }))}
-              placeholder="e.g. We use a warm, earthy color palette with rounded corners. Our brand voice is playful but professional..."
+              placeholder="e.g. We use a warm, earthy color palette with rounded corners. Our brand voice is playful but professional…"
             />
           </label>
         )}
@@ -1374,7 +1374,7 @@ export function DesignSystemDetailView({
     return (
       <div className="ds-setup-shell ds-setup-shell--center">
         <div className="ds-setup-center-card">
-          <h1>Loading design system...</h1>
+          <h1>Loading design system…</h1>
           <p>Opening the review workspace.</p>
         </div>
       </div>
@@ -1577,7 +1577,7 @@ export function DesignSystemDetailView({
                 onTabsStateChange={persistWorkspaceTabsState}
               />
             ) : (
-              <div className="viewer-empty">Opening the design system workspace...</div>
+              <div className="viewer-empty">Opening the design system workspace…</div>
             )}
           </div>
         )}

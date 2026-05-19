@@ -987,7 +987,7 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
               <input
                 value={sourceForm.title}
                 onChange={(event) => patchSourceForm({ title: event.currentTarget.value })}
-                placeholder="Decision, brand notes, workflow pattern..."
+                placeholder="Decision, brand notes, workflow pattern…"
               />
             </label>
             <label className="automation-ingest-field">
@@ -995,7 +995,7 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
               <input
                 value={sourceForm.sourceRef}
                 onChange={(event) => patchSourceForm({ sourceRef: event.currentTarget.value })}
-                placeholder="URL, repo path, connector event id, artifact id..."
+                placeholder="URL, repo path, connector event ID, artifact ID…"
               />
             </label>
           </div>
@@ -1173,7 +1173,7 @@ function AutomationRunHistory({
   }, [refreshKey, routineId]);
 
   if (runs === null) {
-    return <div className="automation-history automation-history--empty">Loading run history...</div>;
+    return <div className="automation-history automation-history--empty">Loading run history…</div>;
   }
 
   if (runs.length === 0) {

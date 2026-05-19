@@ -607,7 +607,7 @@ export function NewAutomationModal({
             <textarea
               ref={promptRef}
               className="automation-modal__prompt"
-              placeholder="Ask the agent what to run on this schedule, or @mention context..."
+              placeholder="Ask the agent what to run on this schedule, or @mention context…"
               value={form.prompt}
               onChange={(e) => updatePrompt(e.target.value, e.target.selectionStart ?? e.target.value.length)}
               onClick={refreshMentionFromPrompt}

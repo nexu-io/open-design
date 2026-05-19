@@ -476,7 +476,7 @@ export function PreviewDrawOverlay({
             {pendingAction === 'queue' ? (
               <>
                 <Icon name="spinner" size={12} />
-                <span>Queueing...</span>
+                <span>Queueing…</span>
               </>
             ) : (
               'Queue'
@@ -496,7 +496,7 @@ export function PreviewDrawOverlay({
               {pendingAction === 'send' ? (
                 <>
                   <Icon name="spinner" size={12} />
-                  <span>Sending...</span>
+                  <span>Sending…</span>
                 </>
               ) : (
                 'Send'

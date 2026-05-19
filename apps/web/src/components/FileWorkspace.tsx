@@ -1426,9 +1426,48 @@ function DesignSystemProjectPanel({
             ) : (
               <div className="ds-project-preview-placeholder">
                 <Icon name="sparkles" size={16} />
-                <span>Generating preview...</span>
+                <span>Generating preview…</span>
               </div>
             )}
+            {feedbackSection === section.title ? (
+              <form
+                className="ds-project-feedback-box"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  submitNeedsWorkFeedback(section.title, section.files);
+                }}
+              >
+                <label htmlFor={`ds-feedback-${slugForTestId(section.title)}`}>
+                  Tell the agent what to change in {section.title}
+                </label>
+                <textarea
+                  id={`ds-feedback-${slugForTestId(section.title)}`}
+                  value={feedbackText}
+                  rows={3}
+                  placeholder="e.g. make the color tokens closer to our product, tighten spacing, regenerate the preview…"
+                  onChange={(event) => setFeedbackText(event.target.value)}
+                />
+                <div>
+                  <button
+                    type="button"
+                    className="ghost compact"
+                    onClick={() => {
+                      setFeedbackSection(null);
+                      setFeedbackText('');
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="primary compact"
+                    disabled={!feedbackText.trim()}
+                  >
+                    Send feedback
+                  </button>
+                </div>
+              </form>
+            ) : null}
           </div>
         ) : null}
       </section>
@@ -1442,7 +1481,7 @@ function DesignSystemProjectPanel({
           <span className="ds-project-generation-mark">
             <Icon name="blocks" size={24} />
           </span>
-          <h1>Creating your design system...</h1>
+          <h1>Creating your design system…</h1>
           <p>Keep this tab open. You can come back in a few minutes.</p>
           <div
             className="ds-project-generation-progress"

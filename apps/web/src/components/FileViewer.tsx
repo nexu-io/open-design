@@ -6580,14 +6580,14 @@ function HtmlViewer({
           </button>
           {useUrlLoadPreview ? (
             <iframe
-              title="present"
+              title="Presentation"
               sandbox="allow-scripts allow-downloads"
               data-od-render-mode="url-load"
               src={activePreviewSrcUrl}
             />
           ) : (
             <iframe
-              title="present"
+              title="Presentation"
               sandbox="allow-scripts allow-downloads"
               data-od-render-mode="srcdoc"
               srcDoc={srcDoc}
