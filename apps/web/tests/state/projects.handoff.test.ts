@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { synthesizeHandoff } from '../../src/state/projects';
 
 const request = {
+  conversationId: 'conv-1',
   apiKey: 'sk-test',
   baseUrl: '',
   model: 'claude-opus-4-7',

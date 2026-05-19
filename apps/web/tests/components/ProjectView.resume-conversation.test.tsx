@@ -247,6 +247,8 @@ describe('ProjectView resume conversation', () => {
 
     await waitFor(() => {
       expect(mockedSynthesizeHandoff).toHaveBeenCalledWith('p1', {
+        // Scoped to the conversation being resumed, not the whole project.
+        conversationId: origConversation.id,
         apiKey: 'sk-test',
         baseUrl: '',
         model: 'claude-opus-4-7',

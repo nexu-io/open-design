@@ -2634,12 +2634,17 @@ export function ProjectView({
   const handleResumeConversation = useCallback(async () => {
     if (resumingConversation || creatingConversationRef.current) return;
     if (currentConversationBusy) return;
-    // Nothing to hand off from an empty conversation.
+    // Nothing to hand off without an active conversation that has messages.
+    if (!activeConversationId) return;
     if (messages.length === 0) return;
+    const resumedConversationId = activeConversationId;
     setResumingConversation(true);
     setConversationLoadError(null);
     try {
       const result = await synthesizeHandoff(project.id, {
+        // Scope the handoff to the conversation being resumed — the
+        // endpoint synthesizes from this conversation's transcript only.
+        conversationId: resumedConversationId,
         apiKey: config.apiKey,
         baseUrl: config.baseUrl,
         model: config.model,
@@ -2680,7 +2685,14 @@ export function ProjectView({
     } finally {
       setResumingConversation(false);
     }
-  }, [resumingConversation, currentConversationBusy, messages.length, project.id, config]);
+  }, [
+    resumingConversation,
+    currentConversationBusy,
+    activeConversationId,
+    messages.length,
+    project.id,
+    config,
+  ]);
 
   const handleSelectConversation = useCallback((id: string) => {
     if (id === activeConversationId && failedMessagesConversationId !== id) return;
