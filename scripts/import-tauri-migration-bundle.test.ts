@@ -114,6 +114,17 @@ test("import-tauri-migration-bundle rejects checksum mismatches before fetch", a
   await assert.rejects(git(targetRepo, "rev-parse", migrationBranch));
 });
 
+test("import-tauri-migration-bundle rejects tracked dirty worktrees before ref updates", async (t) => {
+  const { bundlePath, targetRepo } = await createBundleFixture(t, "open-design-tauri-import-dirty-");
+  await writeFile(join(targetRepo, "base.txt"), "dirty\n", "utf8");
+
+  await assert.rejects(
+    runImportScript(targetRepo, "--bundle", bundlePath),
+    /tracked worktree changes are present; commit or stash them before importing the migration handoff/,
+  );
+  await assert.rejects(git(targetRepo, "rev-parse", migrationBranch));
+});
+
 async function createBundleFixture(
   t: test.TestContext,
   prefix: string,

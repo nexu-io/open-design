@@ -51,8 +51,8 @@ async function main(): Promise<void> {
   const currentBranch = await readCurrentBranch(args.cwd);
   const shouldRestoreCheckedOutBranch = currentBranch === args.branch;
   const tempRef = `refs/heads/__open_design_tauri_import_${process.pid}_${Date.now()}`;
+  await ensureTrackedClean(args.cwd);
   if (shouldRestoreCheckedOutBranch) {
-    await ensureTrackedClean(args.cwd);
     await git(args.cwd, ["checkout", "--detach"]);
   }
   try {
@@ -202,7 +202,7 @@ function resolveMaybeRelative(manifestPath: string, targetPath: string): string 
 async function ensureTrackedClean(cwd: string): Promise<void> {
   const trackedStatus = (await git(cwd, ["status", "--porcelain", "--untracked-files=no"])).stdout.trim();
   if (trackedStatus.length > 0) {
-    throw new Error("tracked worktree changes are present; commit or stash them before checking out the imported branch");
+    throw new Error("tracked worktree changes are present; commit or stash them before importing the migration handoff");
   }
 }
 
