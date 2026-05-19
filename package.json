@@ -14,7 +14,7 @@
     "tools-dev": "pnpm exec tools-dev",
     "tools-pack": "pnpm exec tools-pack",
     "tools-pr": "pnpm exec tools-pr",
-    "guard": "tsx ./scripts/guard.ts && node --import tsx --test scripts/style-policy.test.ts scripts/verify-tauri-platform-gates.test.ts scripts/tauri-migration-policy.test.ts scripts/create-tauri-migration-bundle.test.ts scripts/import-tauri-migration-bundle.test.ts scripts/tauri-migration-status.test.ts scripts/verify-tauri-migration-handoff.test.ts",
+    "guard": "tsx ./scripts/guard.ts && node --import tsx --test scripts/style-policy.test.ts scripts/verify-tauri-platform-gates.test.ts scripts/tauri-migration-policy.test.ts scripts/tauri-ci-scope.test.ts scripts/create-tauri-migration-bundle.test.ts scripts/import-tauri-migration-bundle.test.ts scripts/tauri-migration-status.test.ts scripts/verify-tauri-migration-handoff.test.ts",
     "i18n:check": "tsx ./scripts/i18n-check.ts",
     "sync:community-pets": "node --experimental-strip-types scripts/sync-community-pets.ts",
     "bake:community-pets": "node --experimental-strip-types scripts/bake-community-pets.ts",
