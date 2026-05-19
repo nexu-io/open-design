@@ -121,6 +121,21 @@ test("verify-tauri-platform-gates can apply verified M4 evidence to the migratio
   assert.match(updated, /### Platform Gate Runners/);
 });
 
+test("verify-tauri-platform-gates rejects migration doc updates without both platform reports", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "open-design-tauri-gates-doc-incomplete-"));
+  t.after(() => void rm(root, { force: true, recursive: true }));
+
+  const winReport = join(root, "win");
+  const migrationDoc = join(root, "electron-to-tauri-migration.md");
+  await writeWindowsReport(winReport);
+  await writeFile(migrationDoc, "# Electron to Tauri Migration\n", "utf8");
+
+  await assert.rejects(
+    runVerifier("--win-report", winReport, "--update-migration-doc", migrationDoc),
+    /--update-migration-doc requires both --win-report and --linux-report/,
+  );
+});
+
 async function runVerifier(...args: string[]): Promise<{ stderr: string; stdout: string }> {
   return execFileAsync(process.execPath, ["--import", "tsx", verifierPath, ...args], {
     cwd: repoRoot,

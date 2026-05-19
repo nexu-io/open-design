@@ -251,6 +251,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Extended the migration-order guard so `tools-dev` and `tools-pack` `DEFAULT_DESKTOP_RUNTIME` values cannot diverge during M5. The default desktop runtime now has to flip from Electron to Tauri as one tools surface change, with `release-beta` moving through its existing synchronized check. `tsc -p scripts/tsconfig.json --noEmit` and `pnpm guard` passed.
 - 2026-05-20: Split the Tauri migration-order policy into a pure evaluator and added `scripts/tauri-migration-policy.test.ts` so M4 partial closure, missing native evidence, premature M5 default flips, divergent tools defaults, premature M6 cleanup, stale Electron fallback, and stale lockfile importer cases are locked by tests. `tsc -p scripts/tsconfig.json --noEmit`, `node --import tsx --test scripts/tauri-migration-policy.test.ts`, and `pnpm guard` passed.
 - 2026-05-20: Added `scripts/tauri-migration-policy.ts` and its test to CI packaging scope detection. PRs that change the M4/M5/M6 ordering policy now rerun tools-pack validation and the native Windows/Linux Tauri package smoke jobs instead of only running local guard tests.
+- 2026-05-20: Added verifier coverage proving `--update-migration-doc` refuses to modify the migration checklist unless both Windows and Linux Tauri platform reports are supplied. `node --import tsx --test scripts/verify-tauri-platform-gates.test.ts` passed.
 
 ### Platform Gate Runners
 
