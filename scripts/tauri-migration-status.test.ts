@@ -201,6 +201,8 @@ test("tauri-migration-status reports a remote branch matching the handoff", asyn
   assert.deepEqual(parsed.remote.problems, []);
   assert.match(parsed.nextActions.join("\n"), /already matches/);
   assert.match(parsed.nextActions.join("\n"), /gh workflow run ci\.yml --ref codex\/electron-to-tauri-migration/);
+  assert.match(parsed.nextActions.join("\n"), new RegExp(`--expected-head ${head}`));
+  assert.match(parsed.nextActions.join("\n"), /--wait/);
   assert.match(parsed.nextActions.join("\n"), /download-tauri-m4-reports/);
 });
 
@@ -358,6 +360,8 @@ async function writeHandoffArchive(handoffDir: string): Promise<{ archivePath: s
       'git fetch "$bundle" "$branch:$temp_ref"',
       'gh workflow run "$workflow" --ref "$branch"',
       "download-tauri-m4-reports.ts",
+      "--expected-head",
+      "--wait",
       "GITHUB_RUN_ID",
       "",
     ].join("\n"),

@@ -357,6 +357,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Extended `scripts/package-tauri-migration-handoff.ts` output with the receiver archive push command, the post-CI report download command with `--advance`, and the status check command. It also writes an executable `.commands.sh` sidecar beside the tarball so the receiver can verify/import/push the archive without first having the migration branch checked out, then run report download/advance with `GITHUB_RUN_ID=<run-id>`.
 - 2026-05-20: Tightened the remote CI handoff instructions so the receiving machine explicitly triggers native CI after the verified branch push. `ci.yml` does not run on arbitrary feature-branch pushes, so the generated handoff output and `.commands.sh` sidecar now point at `gh workflow run ci.yml --ref codex/electron-to-tauri-migration` or opening a draft PR before downloading Windows/Linux M4 reports.
 - 2026-05-20: Extended the `.commands.sh` sidecar so a write-capable receiver automatically attempts `gh workflow run ci.yml --ref codex/electron-to-tauri-migration` after the verified branch push when `gh` is available. If dispatch is disabled with `TAURI_NATIVE_CI_TRIGGER=0` or `gh` is unavailable, the same script prints the manual workflow dispatch and draft PR commands.
+- 2026-05-20: Added branch-head-aware CI report waiting to `scripts/download-tauri-m4-reports.ts`. Receivers can now pass `--expected-head <sha> --wait` so post-dispatch report download waits for the matching migration commit instead of accidentally consuming an older completed branch run.
 
 ### Platform Gate Runners
 
@@ -484,7 +485,7 @@ pnpm exec tsx scripts/download-tauri-m4-reports.ts \
   --output-dir /tmp/open-design-tauri-m4-reports
 ```
 
-When `--run-id` is omitted, the script uses `gh run list` to select the latest completed `ci.yml` run for `codex/electron-to-tauri-migration`. The Windows report must prove NSIS build/install/start/eval/screenshot/stop/uninstall. The Linux report must prove AppImage build/install/start/eval/screenshot/stop/uninstall plus headless install/start/stop. If you are ready to mutate the migration branch immediately after verified downloads, add `--advance`; the script will run `scripts/advance-tauri-migration-m4-m5.ts` against the downloaded reports and apply the guarded M5 default flip.
+When `--run-id` is omitted, the script uses `gh run list` to select the latest completed `ci.yml` run for `codex/electron-to-tauri-migration`. Prefer adding `--expected-head <migration-commit-sha> --wait` after a manual dispatch so the downloader waits for the run that matches the pushed handoff commit instead of consuming stale branch evidence. The Windows report must prove NSIS build/install/start/eval/screenshot/stop/uninstall. The Linux report must prove AppImage build/install/start/eval/screenshot/stop/uninstall plus headless install/start/stop. If you are ready to mutate the migration branch immediately after verified downloads, add `--advance`; the script will run `scripts/advance-tauri-migration-m4-m5.ts` against the downloaded reports and apply the guarded M5 default flip.
 
 After extracting the report artifacts, verify the required evidence mechanically:
 

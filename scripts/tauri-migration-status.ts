@@ -326,7 +326,7 @@ function nextActionsForPhase(
       platformReports?.current === true
         ? "Advance M4 evidence and M5 defaults with scripts/advance-tauri-migration-m4-m5.ts using the verified report paths shown above."
         : remote?.current === true
-          ? `Trigger native CI with gh workflow run ci.yml --ref ${remote.branch ?? "codex/electron-to-tauri-migration"} or open a draft PR, then download and verify artifacts with scripts/download-tauri-m4-reports.ts --run-id <github-run-id> --output-dir /tmp/open-design-tauri-m4-reports; add --advance to apply M4 evidence and M5 defaults immediately after verification.`
+          ? `Trigger native CI with gh workflow run ci.yml --ref ${remote.branch ?? "codex/electron-to-tauri-migration"} or open a draft PR, then download and verify artifacts with scripts/download-tauri-m4-reports.ts --expected-head ${remote.expectedHead ?? "<sha>"} --wait --output-dir /tmp/open-design-tauri-m4-reports; add --advance to apply M4 evidence and M5 defaults immediately after verification.`
           : "Run the Windows and Linux Tauri package smoke jobs.",
       ...(platformReports?.current === true
         ? []
@@ -490,6 +490,9 @@ async function readHandoffArchiveStatus(archivePath: string, handoff?: HandoffSt
     }
     if (!commandScriptSource.includes("download-tauri-m4-reports.ts") || !commandScriptSource.includes("GITHUB_RUN_ID")) {
       problems.push(`command script is missing post-CI report advance guidance: ${commandScriptPath}`);
+    }
+    if (!commandScriptSource.includes("--expected-head") || !commandScriptSource.includes("--wait")) {
+      problems.push(`command script is missing branch-head CI wait guidance: ${commandScriptPath}`);
     }
     if (!commandScriptSource.includes("gh workflow run") && !commandScriptSource.includes("gh pr create")) {
       problems.push(`command script is missing native CI trigger guidance: ${commandScriptPath}`);

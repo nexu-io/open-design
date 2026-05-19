@@ -63,6 +63,50 @@ test("download-tauri-m4-reports can use an explicit run id without listing runs"
   assert.match(calls, /run download 777/);
 });
 
+test("download-tauri-m4-reports waits for a completed run at the expected head", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "open-design-tauri-download-wait-"));
+  t.after(() => void rm(root, { force: true, recursive: true }));
+  const expectedHead = "b".repeat(40);
+  const fakeGh = await writeFakeGh(root, {
+    listResponses: [
+      [
+        { databaseId: 111, status: "completed", conclusion: "success", headSha: "a".repeat(40), createdAt: "2026-05-20T00:00:00Z" },
+      ],
+      [
+        { databaseId: 222, status: "in_progress", conclusion: null, headSha: expectedHead, createdAt: "2026-05-20T00:01:00Z" },
+        { databaseId: 111, status: "completed", conclusion: "success", headSha: "a".repeat(40), createdAt: "2026-05-20T00:00:00Z" },
+      ],
+      [
+        { databaseId: 222, status: "completed", conclusion: "success", headSha: expectedHead, createdAt: "2026-05-20T00:01:00Z" },
+      ],
+    ],
+  });
+  const outputDir = join(root, "reports");
+
+  const result = await runDownload(
+    fakeGh,
+    "--output-dir",
+    outputDir,
+    "--repo",
+    "example/open-design",
+    "--branch",
+    "feature",
+    "--expected-head",
+    expectedHead,
+    "--wait",
+    "--poll-ms",
+    "1",
+    "--timeout-ms",
+    "1000",
+  );
+
+  assert.match(result.stdout, /Expected head: b{40}/);
+  assert.match(result.stdout, /Run: 222/);
+  const calls = await readFile(join(root, "gh-calls.log"), "utf8");
+  assert.equal([...calls.matchAll(/run list/g)].length, 3);
+  assert.match(calls, new RegExp(`run download 222[\\s\\S]*--name ${winArtifactName}`));
+});
+
 test("download-tauri-m4-reports can advance M4 and M5 after verified downloads", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "open-design-tauri-download-advance-"));
   t.after(() => void rm(root, { force: true, recursive: true }));
@@ -97,19 +141,39 @@ test("download-tauri-m4-reports can advance M4 and M5 after verified downloads",
   assert.match(await readFile(join(fixtureRoot, ".github", "workflows", "release-beta.yml"), "utf8"), /default: tauri/);
 });
 
-async function writeFakeGh(root: string): Promise<string> {
+async function writeFakeGh(
+  root: string,
+  options: {
+    listResponses?: Array<Array<Record<string, unknown>>>;
+  } = {},
+): Promise<string> {
   const fakeGh = join(root, "gh");
+  const listResponses = options.listResponses ?? [
+    [
+      {
+        databaseId: 12345,
+        status: "completed",
+        conclusion: "success",
+        headSha: "a".repeat(40),
+        createdAt: "2026-05-20T00:00:00Z",
+      },
+    ],
+  ];
   await writeFile(
     fakeGh,
     [
       "#!/usr/bin/env node",
-      "const { mkdirSync, writeFileSync, appendFileSync } = require('node:fs');",
+      "const { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } = require('node:fs');",
       "const { join } = require('node:path');",
       `const root = ${JSON.stringify(root)};`,
+      `const listResponses = ${JSON.stringify(listResponses)};`,
       "const args = process.argv.slice(2);",
       "appendFileSync(join(root, 'gh-calls.log'), args.join(' ') + '\\n');",
       "if (args[0] === 'run' && args[1] === 'list') {",
-      "  process.stdout.write(JSON.stringify([{ databaseId: 12345, status: 'completed', conclusion: 'success', headSha: 'a'.repeat(40), createdAt: '2026-05-20T00:00:00Z' }]));",
+      "  const countPath = join(root, 'gh-list-count.txt');",
+      "  const count = existsSync(countPath) ? Number(readFileSync(countPath, 'utf8')) : 0;",
+      "  writeFileSync(countPath, String(count + 1));",
+      "  process.stdout.write(JSON.stringify(listResponses[Math.min(count, listResponses.length - 1)]));",
       "  process.exit(0);",
       "}",
       "if (args[0] === 'run' && args[1] === 'download') {",

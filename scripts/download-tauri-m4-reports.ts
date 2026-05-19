@@ -16,11 +16,15 @@ const winArtifactName = "open-design-ci-win-tauri-e2e-report";
 type Args = {
   advance: boolean;
   branch: string;
+  expectedHead?: string;
   ghBin: string;
   outputDir: string;
+  pollMs: number;
   repo: string;
   root: string;
   runId?: string;
+  timeoutMs: number;
+  wait: boolean;
   workflow: string;
 };
 
@@ -34,7 +38,7 @@ type GithubRun = {
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
-  const runId = args.runId ?? (await findLatestCompletedRun(args));
+  const runId = args.runId ?? (args.wait ? await waitForCompletedRun(args) : await findLatestCompletedRun(args));
   const winReport = join(args.outputDir, winArtifactName);
   const linuxReport = join(args.outputDir, linuxArtifactName);
 
@@ -66,6 +70,7 @@ async function main(): Promise<void> {
       `Repository: ${args.repo}`,
       `Workflow: ${args.workflow}`,
       `Branch: ${args.branch}`,
+      ...(args.expectedHead == null ? [] : [`Expected head: ${args.expectedHead}`]),
       `Run: ${runId}`,
       `Output: ${args.outputDir}`,
       `Windows report: ${winReport}`,
@@ -95,8 +100,11 @@ function parseArgs(argv: string[]): Args {
     branch: defaultBranch,
     ghBin: process.env.GH_BIN ?? "gh",
     outputDir: defaultOutputDir,
+    pollMs: 30_000,
     repo: defaultRepo,
     root: workspaceRoot,
+    timeoutMs: 30 * 60_000,
+    wait: false,
     workflow: defaultWorkflow,
   };
 
@@ -107,13 +115,20 @@ function parseArgs(argv: string[]): Args {
       parsed.advance = true;
       continue;
     }
+    if (arg === "--wait") {
+      parsed.wait = true;
+      continue;
+    }
     if (
       (arg === "--branch" ||
+        arg === "--expected-head" ||
         arg === "--gh" ||
         arg === "--output-dir" ||
+        arg === "--poll-ms" ||
         arg === "--repo" ||
         arg === "--root" ||
         arg === "--run-id" ||
+        arg === "--timeout-ms" ||
         arg === "--workflow") &&
       value == null
     ) {
@@ -124,6 +139,12 @@ function parseArgs(argv: string[]): Args {
       index += 1;
       continue;
     }
+    if (arg === "--expected-head") {
+      if (!/^[0-9a-f]{40}$/.test(value!)) throw new Error(`invalid --expected-head: ${value}`);
+      parsed.expectedHead = value!;
+      index += 1;
+      continue;
+    }
     if (arg === "--gh") {
       parsed.ghBin = value!;
       index += 1;
@@ -131,6 +152,11 @@ function parseArgs(argv: string[]): Args {
     }
     if (arg === "--output-dir") {
       parsed.outputDir = resolve(value!);
+      index += 1;
+      continue;
+    }
+    if (arg === "--poll-ms") {
+      parsed.pollMs = parsePositiveInt(arg, value!);
       index += 1;
       continue;
     }
@@ -149,6 +175,11 @@ function parseArgs(argv: string[]): Args {
       index += 1;
       continue;
     }
+    if (arg === "--timeout-ms") {
+      parsed.timeoutMs = parsePositiveInt(arg, value!);
+      index += 1;
+      continue;
+    }
     if (arg === "--workflow") {
       parsed.workflow = value!;
       index += 1;
@@ -160,6 +191,7 @@ function parseArgs(argv: string[]): Args {
           "usage: tsx scripts/download-tauri-m4-reports.ts [--run-id <id>] [--repo <owner/repo>] [--branch <ref>] [--output-dir <dir>] [--advance] [--root <repo>]",
           "",
           "Downloads the Windows/Linux Tauri CI report artifacts with gh, verifies them with scripts/verify-tauri-platform-gates.ts, and optionally applies the guarded M4→M5 advance.",
+          "Use --expected-head <sha> to avoid stale branch runs, and --wait to poll until a matching completed run exists.",
           "",
           `defaults: --repo ${defaultRepo} --branch ${defaultBranch} --workflow ${defaultWorkflow} --output-dir ${defaultOutputDir}`,
           "",
@@ -174,6 +206,34 @@ function parseArgs(argv: string[]): Args {
 }
 
 async function findLatestCompletedRun(args: Args): Promise<string> {
+  const runs = await listRuns(args);
+  const run = selectCompletedRun(args, runs);
+  if (run?.databaseId == null) {
+    const headLabel = args.expectedHead == null ? "" : ` at ${args.expectedHead}`;
+    throw new Error(`no completed GitHub Actions run found for ${args.repo} ${args.branch}${headLabel} ${args.workflow}`);
+  }
+  return String(run.databaseId);
+}
+
+async function waitForCompletedRun(args: Args): Promise<string> {
+  const startedAt = Date.now();
+  let lastRunSummary = "no runs returned";
+  for (;;) {
+    const runs = await listRuns(args);
+    const run = selectCompletedRun(args, runs);
+    if (run?.databaseId != null) return String(run.databaseId);
+    lastRunSummary = summarizeRuns(runs);
+    if (Date.now() - startedAt >= args.timeoutMs) {
+      const headLabel = args.expectedHead == null ? "" : ` at ${args.expectedHead}`;
+      throw new Error(
+        `timed out waiting for completed GitHub Actions run for ${args.repo} ${args.branch}${headLabel} ${args.workflow}; latest runs: ${lastRunSummary}`,
+      );
+    }
+    await sleep(args.pollMs);
+  }
+}
+
+async function listRuns(args: Args): Promise<GithubRun[]> {
   const result = await gh(args, [
     "run",
     "list",
@@ -188,12 +248,37 @@ async function findLatestCompletedRun(args: Args): Promise<string> {
     "--limit",
     "20",
   ]);
-  const runs = JSON.parse(result.stdout) as GithubRun[];
-  const run = runs.find((candidate) => candidate.status === "completed" && candidate.conclusion !== "cancelled");
-  if (run?.databaseId == null) {
-    throw new Error(`no completed GitHub Actions run found for ${args.repo} ${args.branch} ${args.workflow}`);
-  }
-  return String(run.databaseId);
+  return JSON.parse(result.stdout) as GithubRun[];
+}
+
+function selectCompletedRun(args: Args, runs: GithubRun[]): GithubRun | undefined {
+  return runs.find(
+    (candidate) =>
+      candidate.status === "completed" &&
+      candidate.conclusion !== "cancelled" &&
+      (args.expectedHead == null || candidate.headSha === args.expectedHead),
+  );
+}
+
+function summarizeRuns(runs: GithubRun[]): string {
+  if (runs.length === 0) return "none";
+  return runs
+    .slice(0, 3)
+    .map(
+      (run) =>
+        `${run.databaseId ?? "unknown"}:${run.status ?? "unknown"}/${run.conclusion ?? "unknown"}@${run.headSha ?? "unknown"}`,
+    )
+    .join(", ");
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
+}
+
+function parsePositiveInt(label: string, value: string): number {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) throw new Error(`${label} must be a positive integer`);
+  return parsed;
 }
 
 async function downloadArtifact(args: Args, runId: string, artifactName: string, outputDir: string): Promise<void> {
