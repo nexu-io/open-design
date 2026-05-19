@@ -35,6 +35,37 @@ The migration stays parallel until parity is proven. Electron remains the defaul
 | M5 Default flip | 2026-06-18 to 2026-06-19 | Make Tauri the default desktop runtime. | `tools-dev`, `tools-pack`, and `release-beta` default to Tauri; Electron remains available behind an explicit fallback flag for one release window. |
 | M6 Electron removal | 2026-06-22 to 2026-06-24 | Remove Electron-only runtime code and dependencies. | Electron deps, builder hooks, packaged Electron entry glue, and Electron-only docs/tests are removed or replaced. |
 
+## Continuation Cadence
+
+Each continuation pass starts from current repository evidence, not from a remembered status:
+
+```bash
+git status --short --branch
+pnpm exec tsx scripts/tauri-migration-status.ts \
+  --handoff-dir /tmp/open-design-tauri-migration-handoff \
+  --remote origin
+pnpm exec tsx scripts/continue-tauri-migration.ts --dry-run
+```
+
+If the handoff is stale, regenerate it before attempting a remote push:
+
+```bash
+pnpm exec tsx scripts/verify-tauri-migration-handoff.ts \
+  --output-dir /tmp/open-design-tauri-migration-handoff
+pnpm exec tsx scripts/package-tauri-migration-handoff.ts \
+  --handoff-dir /tmp/open-design-tauri-migration-handoff
+```
+
+Do not write mutable handoff commit SHAs or archive hashes into this document as fixed requirements. The source of truth is the latest `tauri-migration-status` output plus the generated handoff manifest, archive checksum, and command sidecar. Once a write-capable credential has pushed the branch and native CI has produced matching Windows/Linux reports, continue with:
+
+```bash
+pnpm exec tsx scripts/continue-tauri-migration.ts \
+  --wait-reports \
+  --advance
+```
+
+If the push is still blocked, keep the archive, `.sha256`, and `.commands.sh` sidecars current and retry the remote handoff on the next continuation pass.
+
 ## Work Breakdown
 
 ### M0 Runtime parity
