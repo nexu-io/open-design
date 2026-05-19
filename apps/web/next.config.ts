@@ -31,19 +31,18 @@ function resolveWorkspaceRoot(): string {
   if (override && override.trim()) {
     const resolved = isAbsolute(override.trim()) ? override.trim() : resolve(WEB_ROOT, override.trim());
     if (!existsSync(resolved)) {
-      console.warn(
-        `[next.config] OD_WORKSPACE_ROOT="${override}" resolved to "${resolved}" which does not exist; ` +
-        `falling back to computed default "${computed}".`,
+      throw new Error(
+        `OD_WORKSPACE_ROOT="${override}" resolved to "${resolved}" which does not exist. ` +
+        `Fix the path or unset the variable to use the computed default.`,
       );
-      return computed;
     }
     const rel = relative(resolved, WEB_ROOT);
     if (rel.startsWith('..')) {
-      console.warn(
-        `[next.config] OD_WORKSPACE_ROOT="${override}" resolved to "${resolved}" but WEB_ROOT "${WEB_ROOT}" ` +
-        `escapes it (relative path "${rel}"); falling back to computed default "${computed}".`,
+      throw new Error(
+        `OD_WORKSPACE_ROOT="${override}" resolved to "${resolved}" but WEB_ROOT "${WEB_ROOT}" ` +
+        `is not inside it (relative path "${rel}"). ` +
+        `The override must be an ancestor of apps/web.`,
       );
-      return computed;
     }
     return resolved;
   }
