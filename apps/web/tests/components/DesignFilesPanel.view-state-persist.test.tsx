@@ -137,11 +137,8 @@ describe('DesignFilesPanel view-state persistence', () => {
     // First mount: open the filter popover and check 'HTML page'
     const first = renderPanel(files);
     const filterTrigger = first.container.querySelector<HTMLElement>('.df-kind-filter-trigger');
-    if (!filterTrigger) {
-      first.unmount();
-      return;
-    }
-    fireEvent.click(filterTrigger);
+    expect(filterTrigger).not.toBeNull();
+    fireEvent.click(filterTrigger!);
     const checkboxes = first.container.querySelectorAll<HTMLInputElement>(
       '.df-kind-filter-list input[type="checkbox"]',
     );

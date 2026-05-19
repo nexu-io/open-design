@@ -52,7 +52,15 @@ type ModifiedSection = 'today' | 'yesterday' | 'previous7Days' | 'previous30Days
 type SortKey = 'name' | 'kind' | 'mtime';
 type SortDir = 'asc' | 'desc';
 
+// Storage key for per-project view state. Bump the version suffix (v1 → v2) when
+// removing or renaming a persisted field — just adding an optional field is safe
+// without a version bump. No cleanup of old keys on project deletion; the keys
+// are small preference blobs and orphan gracefully.
 const VIEW_STATE_KEY_PREFIX = 'od:design-files:view-state:v1:';
+
+const DEFAULT_SORT_KEY: SortKey = 'mtime';
+const DEFAULT_SORT_DIR: SortDir = 'desc';
+const DEFAULT_PAGE_SIZE: number | 'all' = 30;
 
 interface PersistedViewState {
   sortKey?: SortKey;
@@ -93,6 +101,19 @@ function isSortDir(v: unknown): v is SortDir {
 function isPageSize(v: unknown): v is number | 'all' {
   if (v === 'all') return true;
   return typeof v === 'number' && Number.isFinite(v) && v > 0;
+}
+
+// Validate that a value is one of the known ProjectFileKind literals. This
+// guards against stored values that were valid under a previous schema but
+// are no longer part of the union — they are silently dropped rather than
+// poisoning the kindFilter state.
+const VALID_KIND_SET: ReadonlySet<string> = new Set<ProjectFileKind>([
+  'html', 'image', 'video', 'audio', 'sketch', 'text',
+  'code', 'pdf', 'document', 'presentation', 'spreadsheet', 'binary',
+]);
+
+function isProjectFileKind(v: unknown): v is ProjectFileKind {
+  return typeof v === 'string' && VALID_KIND_SET.has(v);
 }
 type FileSystemEntryWithReader = FileSystemEntry & {
   createReader?: () => FileSystemDirectoryReader;
@@ -192,11 +213,16 @@ export function DesignFilesPanel({
   // Read once at mount; projectId is stable for this component instance
   // (parent uses key={projectId} to remount on project switch).
   const savedViewState = useRef(readViewState(projectId));
+  // Guard for the persist useEffect: skip the initial write so we only
+  // flush to localStorage when the user actually changes a preference.
+  // Without this, every project the user opens gets a default-value entry
+  // written on first render, making stale-key garbage grow unbounded.
+  const viewStateHasMounted = useRef(false);
   const [sortKey, setSortKey] = useState<SortKey>(
-    () => isSortKey(savedViewState.current.sortKey) ? savedViewState.current.sortKey : 'mtime',
+    () => isSortKey(savedViewState.current.sortKey) ? savedViewState.current.sortKey : DEFAULT_SORT_KEY,
   );
   const [sortDir, setSortDir] = useState<SortDir>(
-    () => isSortDir(savedViewState.current.sortDir) ? savedViewState.current.sortDir : 'desc',
+    () => isSortDir(savedViewState.current.sortDir) ? savedViewState.current.sortDir : DEFAULT_SORT_DIR,
   );
   const lastKeyPress = useRef<Map<string, number>>(new Map());
   const [deleting, setDeleting] = useState(false);
@@ -212,7 +238,9 @@ export function DesignFilesPanel({
   const [kindFilter, setKindFilter] = useState<Set<ProjectFileKind>>(() => {
     const { kindFilter: kf } = savedViewState.current;
     if (!Array.isArray(kf) || kf.length === 0) return new Set();
-    return new Set(kf as ProjectFileKind[]);
+    // Validate each stored value against the current ProjectFileKind union so
+    // stale values from a prior schema (e.g. a renamed kind) are dropped silently.
+    return new Set(kf.filter(isProjectFileKind));
   });
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const filterMenuRef = useRef<HTMLDivElement | null>(null);
@@ -289,7 +317,7 @@ export function DesignFilesPanel({
 
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState<number | 'all'>(
-    () => isPageSize(savedViewState.current.pageSize) ? savedViewState.current.pageSize : 30,
+    () => isPageSize(savedViewState.current.pageSize) ? savedViewState.current.pageSize : DEFAULT_PAGE_SIZE,
   );
 
   const effectivePageSize = pageSize === 'all' ? Math.max(1, sortedFiles.length) : pageSize;
@@ -333,7 +361,13 @@ export function DesignFilesPanel({
 
   // Persist view state so it survives navigation (the panel remounts via
   // key={projectId} when the user tabs away and back).
+  // Skip the initial render: we only want to write when the user actually
+  // changes a preference, not on every project the user visits.
   useEffect(() => {
+    if (!viewStateHasMounted.current) {
+      viewStateHasMounted.current = true;
+      return;
+    }
     writeViewState(projectId, {
       sortKey,
       sortDir,
