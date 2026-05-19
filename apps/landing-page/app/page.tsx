@@ -11,7 +11,33 @@
 
 import { Header, type HeaderProps } from './_components/header';
 import { Wire } from './_components/wire';
-import { heroImage, imageAsset } from './image-assets';
+import {
+  heroImage,
+  heroImageSrcset,
+  imageAsset,
+  PRECISE_LAZY_PLACEHOLDER,
+} from './image-assets';
+
+/**
+ * `<img>` wrapper for non-hero homepage images. Outputs `data-precise-src`
+ * so the global IntersectionObserver in `precise-lazyload.astro` swaps it
+ * to a real `src` once the element enters viewport ± 300px. Avoids the
+ * Chrome native-lazy 1250–3000px over-prefetch on this image-heavy page.
+ *
+ * Use a plain `<img>` (NOT this) for above-the-fold or LCP-critical images
+ * where waiting on IntersectionObserver would defeat the priority hint.
+ */
+function LazyImg(props: { src: string; alt?: string; className?: string }) {
+  return (
+    <img
+      src={PRECISE_LAZY_PLACEHOLDER}
+      data-precise-src={props.src}
+      alt={props.alt ?? ''}
+      className={props.className}
+      decoding='async'
+    />
+  );
+}
 
 const arrowOut = (
   <svg viewBox='0 0 24 24'>
@@ -257,7 +283,16 @@ export default function Page({ counts, github }: PageProps) {
                 Composed in{NBSP}
                 <span style={{ color: 'var(--coral)' }}>Open Design</span>
               </span>
-              <img src={heroImage} alt='' />
+              <img
+                src={heroImage}
+                srcSet={heroImageSrcset}
+                sizes='(max-width: 768px) 100vw, 60vw'
+                width={1280}
+                height={1600}
+                alt=''
+                fetchPriority='high'
+                decoding='async'
+              />
               <div className='index'>
                 <span>
                   <span className='n'>01</span>Detect
@@ -333,7 +368,7 @@ export default function Page({ counts, github }: PageProps) {
                 </div>
               </div>
               <div className='about-art' data-reveal='right'>
-                <img src={imageAsset('about.png', { width: 1024, quality: 82 })} alt='' />
+                <LazyImg src={imageAsset('about.png', { width: 1024, quality: 82 })} />
                 <div className='about-side-note'>
                   <b />
                   From model behavior
@@ -375,7 +410,7 @@ export default function Page({ counts, github }: PageProps) {
               <div className='capabilities-art' data-reveal='left'>
                 <span className='corner tl' />
                 <span className='corner br' />
-                <img src={imageAsset('capabilities.png', { width: 1024, quality: 82 })} alt='' />
+                <LazyImg src={imageAsset('capabilities.png', { width: 1024, quality: 82 })} />
                 <div className='ribbon'>
                   <b>OPEN DESIGN</b>
                   {NBSP}·{NBSP}CAPABILITIES MATRIX{NBSP}·{NBSP}OD/26
@@ -643,7 +678,7 @@ export default function Page({ counts, github }: PageProps) {
                 <div className='lab' key={lab.num} data-reveal>
                   <div className='lab-img'>
                     <span className='badge'>{lab.badge}</span>
-                    <img src={lab.src} alt='' />
+                    <LazyImg src={lab.src} />
                   </div>
                   <div className='num-row'>
                     <span>{lab.num}</span>
@@ -750,7 +785,7 @@ export default function Page({ counts, github }: PageProps) {
                   </h4>
                   <p>{step.body}</p>
                   <div className='img'>
-                    <img src={step.src} alt='' />
+                    <LazyImg src={step.src} />
                   </div>
                 </div>
               ))}
@@ -810,7 +845,7 @@ export default function Page({ counts, github }: PageProps) {
                   Bundled verbatim, original LICENSE preserved.
                 </p>
                 <div className='img'>
-                  <img src={imageAsset('work-1.png', { width: 768, quality: 82 })} alt='' />
+                  <LazyImg src={imageAsset('work-1.png', { width: 768, quality: 82 })} />
                 </div>
                 <div className='meta-row'>
                   <span className='year'>2026 · DECK</span>
@@ -834,7 +869,7 @@ export default function Page({ counts, github }: PageProps) {
                   zh-CN · ja).
                 </p>
                 <div className='img'>
-                  <img src={imageAsset('work-2.png', { width: 768, quality: 82 })} alt='' />
+                  <LazyImg src={imageAsset('work-2.png', { width: 768, quality: 82 })} />
                 </div>
                 <div className='meta-row'>
                   <span className='year'>2026 · PAPER</span>
@@ -1010,7 +1045,7 @@ export default function Page({ counts, github }: PageProps) {
                 </a>
               </div>
               <div className='testimonial-art' data-reveal='right'>
-                <img src={imageAsset('testimonial.png', { width: 1024, quality: 82 })} alt='' />
+                <LazyImg src={imageAsset('testimonial.png', { width: 1024, quality: 82 })} />
               </div>
             </div>
           </div>
@@ -1063,7 +1098,7 @@ export default function Page({ counts, github }: PageProps) {
                 </div>
               </div>
               <div className='cta-art' data-reveal='right'>
-                <img src={imageAsset('cta.png', { width: 1024, quality: 82 })} alt='' />
+                <LazyImg src={imageAsset('cta.png', { width: 1024, quality: 82 })} />
                 <div className='index'>Nº 08</div>
                 <div className='ribbon'>
                   OPEN DESIGN{NBSP}·{NBSP}FIN.

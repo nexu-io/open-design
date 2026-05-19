@@ -20,6 +20,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import HeaderEnhancer from './header-enhancer.astro';
 import { Header, type HeaderProps } from './header';
+import PreciseLazyload from './precise-lazyload.astro';
 import SiteFooter from './site-footer.astro';
 import Topbar from './topbar.astro';
 import { heroImage } from '../image-assets';
@@ -89,5 +90,6 @@ const ldArray = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
     </div>
 
     <HeaderEnhancer />
+    <PreciseLazyload />
   </body>
 </html>
