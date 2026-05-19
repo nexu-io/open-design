@@ -927,7 +927,9 @@ async function checkTauriMigrationOrder(): Promise<boolean> {
     ...readPackageDependencyNames(packagedPackageJson, "apps/packaged/package.json"),
     ...readPackageDependencyNames(toolsPackPackageJson, "tools/pack/package.json"),
   ]);
-  const m4Complete = m4PlatformGateLabels.every((label) => isChecklistLineChecked(migrationDoc, label));
+  const m4PlatformGateStates = m4PlatformGateLabels.map((label) => isChecklistLineChecked(migrationDoc, label));
+  const m4Complete = m4PlatformGateStates.every(Boolean);
+  const m4PartiallyComplete = m4PlatformGateStates.some(Boolean) && !m4Complete;
   const m4EvidenceLogMarked = migrationDoc.includes(m4EvidenceLogMarker);
   const toolsDevDefaultFlipped = isChecklistLineChecked(migrationDoc, m5ToolsDevDefaultLabel);
   const toolsPackDefaultFlipped = isChecklistLineChecked(migrationDoc, m5ToolsPackDefaultLabel);
@@ -941,6 +943,11 @@ async function checkTauriMigrationOrder(): Promise<boolean> {
   const electronGuidanceUpdated = isChecklistLineChecked(migrationDoc, m6ElectronGuidanceLabel);
 
   const violations: string[] = [];
+  if (m4PartiallyComplete) {
+    violations.push(
+      "M4 Windows/Linux platform gate checkboxes must move together through the verified --update-migration-doc path.",
+    );
+  }
   if (m4Complete && !m4EvidenceLogMarked) {
     violations.push(
       "M4 platform gates are checked, but the migration doc is missing the verifier-applied native evidence log marker.",
