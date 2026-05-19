@@ -318,6 +318,18 @@ export async function buildDeployFilePlan(projectsRoot: string, projectId: strin
     }
   }
 
+  const fileList = Array.from(files.values());
+  const routing = buildVercelRoutingConfig(fileList);
+  if (routing) {
+    for (const [filePath, rewritten] of routing.rewrittenHtml) {
+      const existing = files.get(filePath);
+      if (existing) {
+        files.set(filePath, { ...existing, data: Buffer.from(rewritten, 'utf8') });
+      }
+    }
+    files.set(routing.vercelJson.file, routing.vercelJson);
+  }
+
   return {
     entryPath,
     html,
@@ -1410,6 +1422,66 @@ export function analyzeDeployPlan(input: {
 
 function formatMib(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MiB`;
+}
+
+export type VercelRoutingConfig = {
+  vercelJson: DeployFile;
+  rewrittenHtml: Map<string, string>;
+  routes: string[];
+};
+
+export function buildVercelRoutingConfig(files: DeployFile[]): VercelRoutingConfig | null {
+  const htmlFiles = files.filter((f) => /\.html?$/i.test(f.file));
+  if (htmlFiles.length < 2) return null;
+
+  const routes: string[] = [];
+  const pathToRoute = new Map<string, string>();
+  for (const f of htmlFiles) {
+    const route = htmlPathToCleanRoute(f.file);
+    routes.push(route);
+    pathToRoute.set(f.file, route);
+    const source = f.sourcePath;
+    if (source && source !== f.file && !pathToRoute.has(source)) {
+      pathToRoute.set(source, route);
+    }
+  }
+
+  const rewrittenHtml = new Map<string, string>();
+  for (const f of htmlFiles) {
+    const original = Buffer.isBuffer(f.data) || f.data instanceof Uint8Array
+      ? Buffer.from(f.data).toString('utf8')
+      : String(f.data);
+    const rewritten = rewriteAnchorHrefsToCleanRoutes(original, pathToRoute);
+    if (rewritten !== original) {
+      rewrittenHtml.set(f.file, rewritten);
+    }
+  }
+
+  const vercelJson: DeployFile = {
+    file: 'vercel.json',
+    data: Buffer.from(JSON.stringify({ cleanUrls: true }), 'utf8'),
+    contentType: 'application/json',
+    sourcePath: 'vercel.json',
+  };
+
+  return { vercelJson, rewrittenHtml, routes };
+}
+
+function htmlPathToCleanRoute(filePath: string) {
+  if (filePath === 'index.html') return '/';
+  const stripped = filePath.replace(/\.html?$/i, '');
+  return `/${stripped}`;
+}
+
+function rewriteAnchorHrefsToCleanRoutes(html: string, pathToRoute: Map<string, string>) {
+  return html.replace(/<a\b([^<>]*?)\bhref\s*=\s*(["'])([^"']+)\2([^<>]*)>/gi, (match, pre, quote, href, post) => {
+    if (isExternalUrl(href)) return match;
+    if (href.startsWith('#')) return match;
+    const cleaned = href.replace(/^\.\//, '').replace(/^\//, '');
+    const route = pathToRoute.get(cleaned);
+    if (!route) return match;
+    return `<a${pre}href=${quote}${route}${quote}${post}>`;
+  });
 }
 
 // One-shot orchestrator: build the file plan, run the analyzer, and
