@@ -440,14 +440,11 @@ export function App() {
           void syncConfigToDaemon(next);
           void syncComposioConfigToDaemon(next.composio);
 
-          // Pop the onboarding modal only on the first run. Once the user
-          // has saved or skipped past it once, we trust their stored config
-          // and let them re-open Settings explicitly via the env pill. Hold
-          // the welcome modal until the privacy decision is resolved; the
-          // installation id can rotate later without re-opening the banner.
+          // Route first-run users through the global onboarding panel after
+          // privacy is resolved. The panel owns completion; Settings stays a
+          // configuration surface rather than the product onboarding path.
           if (!next.onboardingCompleted && next.privacyDecisionAt != null) {
-            setSettingsWelcome(true);
-            setSettingsOpen(true);
+            navigate({ kind: 'home', view: 'onboarding' }, { replace: true });
           }
           return next;
         });
@@ -1073,6 +1070,16 @@ export function App() {
     navigate({ kind: 'home', view: 'integrations' });
   }, []);
 
+  const handleCompleteOnboarding = useCallback(() => {
+    const current = latestPersistedConfigRef.current;
+    if (current.onboardingCompleted) return;
+    const next: AppConfig = { ...current, onboardingCompleted: true };
+    latestPersistedConfigRef.current = next;
+    saveConfig(next);
+    void syncConfigToDaemon(next);
+    setConfig(next);
+  }, []);
+
   // Cmd+, (mac) / Ctrl+, (win/linux) opens Settings. Capture phase so we
   // beat the browser's default Preferences dialog. Platform-gated so
   // meta/ctrl don't conflict across OS.
@@ -1286,6 +1293,8 @@ export function App() {
         onAgentModelChange={handleAgentModelChange}
         onApiProtocolChange={handleApiProtocolChange}
         onApiModelChange={handleApiModelChange}
+        onConfigPersist={handleConfigPersist}
+        onRefreshAgents={refreshAgents}
         onThemeChange={handleThemeChange}
         skillsLoading={skillsLoading}
         designSystemsLoading={dsLoading}
@@ -1302,10 +1311,35 @@ export function App() {
         onRenameProject={handleRenameProject}
         onChangeDefaultDesignSystem={handleChangeDefaultDesignSystem}
         onCreateDesignSystem={() => navigate({ kind: 'design-system-create' })}
+        renderDesignSystemCreation={(onBack) => (
+          <DesignSystemCreationFlow
+            chrome="embedded"
+            onBack={onBack}
+            onCreated={(projectId, project) => {
+              if (project) {
+                setProjects((curr) => [
+                  project,
+                  ...curr.filter((p) => p.id !== project.id),
+                ]);
+              }
+              navigate({ kind: 'project', projectId, conversationId: null, fileName: null });
+            }}
+            onProjectPrepared={(project) => {
+              setProjects((curr) => [
+                project,
+                ...curr.filter((p) => p.id !== project.id),
+              ]);
+            }}
+            onSystemsRefresh={refreshDesignSystems}
+            config={config}
+            onOpenConnectorsTab={() => openSettings('composio')}
+          />
+        )}
         onOpenDesignSystem={(id: string) => navigate({ kind: 'design-system-detail', designSystemId: id })}
         onDesignSystemsRefresh={refreshDesignSystems}
         onPersistComposioKey={handleConfigPersistComposioKey}
         onOpenSettings={openSettings}
+        onCompleteOnboarding={handleCompleteOnboarding}
       />
     );
   }
@@ -1380,12 +1414,8 @@ export function App() {
               privacyDecisionAt: Date.now(),
               telemetry: { metrics: true, content: true, artifactManifest: false },
             });
-            // Hand the foreground over to the welcome modal now that the
-            // privacy decision is recorded — bootstrap deferred opening
-            // it while consent was pending.
             if (!latestPersistedConfigRef.current.onboardingCompleted) {
-              setSettingsWelcome(true);
-              setSettingsOpen(true);
+              navigate({ kind: 'home', view: 'onboarding' });
             }
           }}
         />
