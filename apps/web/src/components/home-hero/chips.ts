@@ -193,7 +193,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   },
   {
     id: 'create-plugin',
-    labelKey: 'homeHero.chip.create-plugin',
+    labelKey: 'homeHero.chip.createPlugin',
     icon: 'edit',
     group: 'migrate',
     hint: 'Author a reusable Open Design plugin and add it to My plugins.',
