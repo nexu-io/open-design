@@ -927,7 +927,7 @@ async function checkEnLocaleTextQuality(): Promise<boolean> {
     for (const v of violations) {
       console.error(`- ${enLocaleFilePath}:${v.line} [${v.rule}] ${JSON.stringify(v.value)}`);
     }
-    console.error("See docs/visual-text-audit.md § Style Rules for remediation guidance.");
+    console.error("See scripts/style-policy.ts for the active rule definitions.");
     return false;
   }
 
