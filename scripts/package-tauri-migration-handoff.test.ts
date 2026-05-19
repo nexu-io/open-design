@@ -56,7 +56,11 @@ test("package-tauri-migration-handoff creates a tarball and checksum sidecar", a
   await access(output);
   const commandScript = await readFile(`${output}.commands.sh`, "utf8");
   assert.match(commandScript, /^#!\/usr\/bin\/env bash/);
+  assert.match(commandScript, /read_checksum\(\)/);
   assert.match(commandScript, /command_checksum="\$\{script_path\}\.sha256"/);
+  assert.match(commandScript, /read_checksum "\$command_checksum" "\$\(basename -- "\$script_path"\)" "command script"/);
+  assert.match(commandScript, /read_checksum "\$checksum" "\$\(basename -- "\$archive"\)" "archive"/);
+  assert.match(commandScript, /checksum sidecar filename mismatch/);
   assert.match(commandScript, /command script SHA-256 mismatch/);
   assert.match(commandScript, /git fetch "\$bundle" "\$branch:\$temp_ref"/);
   assert.match(commandScript, /git push "\$remote" "refs\/heads\/\$branch:refs\/heads\/\$branch"/);
@@ -107,6 +111,46 @@ test("package-tauri-migration-handoff command sidecar verifies its checksum side
     (error) => {
       const detail = error as Error & { stderr?: string };
       assert.match(detail.stderr ?? "", /command script checksum sidecar not found/);
+      return true;
+    },
+  );
+});
+
+test("package-tauri-migration-handoff command sidecar rejects command checksum filename mismatches", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "open-design-tauri-package-handoff-command-filename-"));
+  t.after(() => void rm(root, { force: true, recursive: true }));
+  const handoffDir = join(root, "handoff");
+  const output = join(root, "open-design-tauri-migration-handoff.tar.gz");
+  await writeHandoffFixture(handoffDir);
+  await runPackageHandoffScript("--handoff-dir", handoffDir, "--output", output);
+  const commandScriptSha256 = createHash("sha256").update(await readFile(`${output}.commands.sh`)).digest("hex");
+  await writeFile(`${output}.commands.sh.sha256`, `${commandScriptSha256}  stale.commands.sh\n`, "utf8");
+
+  await assert.rejects(
+    execFileAsync("bash", [`${output}.commands.sh`, output]),
+    (error) => {
+      const detail = error as Error & { stderr?: string };
+      assert.match(detail.stderr ?? "", /command script checksum sidecar filename mismatch/);
+      return true;
+    },
+  );
+});
+
+test("package-tauri-migration-handoff command sidecar rejects archive checksum filename mismatches", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "open-design-tauri-package-handoff-archive-filename-"));
+  t.after(() => void rm(root, { force: true, recursive: true }));
+  const handoffDir = join(root, "handoff");
+  const output = join(root, "open-design-tauri-migration-handoff.tar.gz");
+  await writeHandoffFixture(handoffDir);
+  await runPackageHandoffScript("--handoff-dir", handoffDir, "--output", output);
+  const archiveSha256 = createHash("sha256").update(await readFile(output)).digest("hex");
+  await writeFile(`${output}.sha256`, `${archiveSha256}  stale-handoff.tar.gz\n`, "utf8");
+
+  await assert.rejects(
+    execFileAsync("bash", [`${output}.commands.sh`, output]),
+    (error) => {
+      const detail = error as Error & { stderr?: string };
+      assert.match(detail.stderr ?? "", /archive checksum sidecar filename mismatch/);
       return true;
     },
   );
