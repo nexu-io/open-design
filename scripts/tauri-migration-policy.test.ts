@@ -121,6 +121,21 @@ test("evaluateTauriMigrationOrder rejects checked dependency cleanup with stale 
   assertContains(violations, "pnpm-lock.yaml importers still include");
 });
 
+test("evaluateTauriMigrationOrder rejects checked dependency cleanup with stale package scripts", () => {
+  const violations = evaluateTauriMigrationOrder(
+    postM5Input({
+      migrationDoc: postM5MigrationDoc({ m6Checked: [m6ElectronDepsLabel] }),
+      desktopPackageJson: packageJsonWithoutElectronDeps(),
+      packagedPackageJson: packageJsonWithoutElectronDeps(),
+      toolsPackPackageJson: packageJsonWithoutElectronDeps(),
+      pnpmLock: lockfileWithoutElectronDeps(),
+      electronPackageScriptReferences: ["tools/pack/package.json:scripts.electron:build"],
+    }),
+  );
+
+  assertContains(violations, "package scripts still reference Electron");
+});
+
 test("evaluateTauriMigrationOrder accepts verified M4 before the default flip", () => {
   const violations = evaluateTauriMigrationOrder(
     baseInput({
@@ -169,6 +184,7 @@ test("evaluateTauriMigrationOrder accepts the final post-M6 cleanup state", () =
       pnpmLock: lockfileWithoutElectronDeps(),
       remainingElectronRuntimeFiles: [],
       remainingElectronResourceFiles: [],
+      electronPackageScriptReferences: [],
       electronTestReferenceFiles: [],
       electronGuidanceReferenceFiles: [],
     }),
@@ -199,6 +215,7 @@ function baseInput(overrides: Partial<TauriMigrationPolicyInputs> = {}): TauriMi
     toolsPackPackageJson: packageJsonWithDeps({ "electron-builder": "1.0.0" }),
     remainingElectronRuntimeFiles: ["apps/desktop/src/main/runtime.ts"],
     remainingElectronResourceFiles: ["tools/pack/resources/web-standalone-after-pack.cjs"],
+    electronPackageScriptReferences: ["tools/pack/package.json:scripts.electron:build"],
     electronTestReferenceFiles: ["apps/desktop/tests/runtime.test.ts"],
     electronGuidanceReferenceFiles: ["AGENTS.md"],
     ...overrides,

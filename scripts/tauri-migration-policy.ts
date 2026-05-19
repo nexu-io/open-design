@@ -33,9 +33,14 @@ export type TauriMigrationPolicyInputs = {
   toolsPackPackageJson: string;
   remainingElectronRuntimeFiles: string[];
   remainingElectronResourceFiles: string[];
+  electronPackageScriptReferences: string[];
   electronTestReferenceFiles: string[];
   electronGuidanceReferenceFiles: string[];
 };
+
+export function containsElectronPackageScriptReference(scriptName: string, scriptValue: string): boolean {
+  return containsElectronGuidanceReference(`${scriptName}\n${scriptValue}`);
+}
 
 export function containsElectronTestReference(source: string): boolean {
   return /\b[Ee]lectron\b|@electron\/|electron-builder|electronuserland/.test(source);
@@ -145,6 +150,10 @@ export function evaluateTauriMigrationOrder(input: TauriMigrationPolicyInputs): 
   const electronLockfileDependenciesPresent = electronDependencyNames.filter((dependencyName) =>
     lockfileDependencyNames.has(dependencyName),
   );
+  const electronDependencyOrScriptPresent =
+    electronDependenciesPresent.length > 0 ||
+    electronLockfileDependenciesPresent.length > 0 ||
+    input.electronPackageScriptReferences.length > 0;
   if (electronDepsRemoved && electronDependenciesPresent.length > 0) {
     violations.push(
       `the M6 Electron dependency cleanup is checked, but package manifests still include: ${electronDependenciesPresent.join(", ")}.`,
@@ -158,8 +167,15 @@ export function evaluateTauriMigrationOrder(input: TauriMigrationPolicyInputs): 
       `the M6 Electron dependency cleanup is checked, but pnpm-lock.yaml importers still include: ${electronLockfileDependenciesPresent.join(", ")}.`,
     );
   }
-  if (!electronDepsRemoved && electronLockfileDependenciesPresent.length === 0) {
-    violations.push("Electron dependencies were removed from pnpm-lock.yaml importers, but the M6 dependency cleanup checklist line is not checked.");
+  if (electronDepsRemoved && input.electronPackageScriptReferences.length > 0) {
+    violations.push(
+      `the M6 Electron dependency cleanup is checked, but package scripts still reference Electron: ${input.electronPackageScriptReferences.join(", ")}.`,
+    );
+  }
+  if (!electronDepsRemoved && !electronDependencyOrScriptPresent) {
+    violations.push(
+      "Electron dependencies and package scripts were removed, but the M6 dependency cleanup checklist line is not checked.",
+    );
   }
   if (electronRuntimeRemoved && input.remainingElectronRuntimeFiles.length > 0) {
     violations.push(

@@ -20,6 +20,7 @@ test("tauri-migration-inventory reports Electron blockers by cleanup category", 
   assert.match(result.stdout, /Tauri migration Electron inventory/);
   assert.match(result.stdout, /apps\/desktop\/package\.json: electron/);
   assert.match(result.stdout, /tools\/pack\/package\.json: @electron\/rebuild, electron-builder/);
+  assert.match(result.stdout, /tools\/pack\/package\.json:scripts\.electron:dist/);
   assert.match(result.stdout, /apps\/desktop\/src\/main\/runtime\.ts/);
   assert.match(result.stdout, /tools\/pack\/resources\/web-standalone-after-pack\.cjs/);
   assert.match(result.stdout, /apps\/desktop\/tests\/runtime\.test\.ts/);
@@ -35,6 +36,7 @@ test("tauri-migration-inventory emits machine-readable blocker counts", async (t
       electronDependencyManifests: number;
       electronGuidanceReferences: number;
       electronLockfileImporters: number;
+      electronPackageScriptReferences: number;
       electronResourceFiles: number;
       electronRuntimeFiles: number;
       electronTestReferences: number;
@@ -46,6 +48,7 @@ test("tauri-migration-inventory emits machine-readable blocker counts", async (t
     electronDependencyManifests: 3,
     electronGuidanceReferences: 2,
     electronLockfileImporters: 3,
+    electronPackageScriptReferences: 1,
     electronResourceFiles: 1,
     electronRuntimeFiles: 2,
     electronTestReferences: 1,
@@ -66,6 +69,7 @@ test("tauri-migration-inventory emits an M6 cleanup plan", async (t) => {
   assert.match(result.stdout, /pnpm --filter @open-design\/desktop remove electron/);
   assert.match(result.stdout, /pnpm --filter @open-design\/packaged remove electron/);
   assert.match(result.stdout, /pnpm --filter @open-design\/tools-pack remove @electron\/rebuild electron-builder/);
+  assert.match(result.stdout, /tools\/pack\/package\.json:scripts\.electron:dist/);
   assert.match(result.stdout, /apps\/desktop\/src\/main\/runtime\.ts/);
   assert.match(result.stdout, /tools\/pack\/resources\/web-standalone-after-pack\.cjs/);
   assert.match(result.stdout, /Remove electron from DESKTOP_RUNTIME_KINDS/);
@@ -101,6 +105,10 @@ async function createInventoryFixture(t: test.TestContext): Promise<string> {
     dependencies: {
       "@electron/rebuild": "4.0.4",
       "electron-builder": "26.8.1",
+    },
+    scripts: {
+      "electron:dist": "electron-builder --mac",
+      "tauri:dist": "tauri build",
     },
   });
   await writeFile(

@@ -1,7 +1,11 @@
 import { access, readFile, readdir } from "node:fs/promises";
 import { extname, join, relative, resolve, sep } from "node:path";
 
-import { containsElectronGuidanceReference, containsElectronTestReference } from "./tauri-migration-policy.ts";
+import {
+  containsElectronGuidanceReference,
+  containsElectronPackageScriptReference,
+  containsElectronTestReference,
+} from "./tauri-migration-policy.ts";
 
 const defaultRoot = resolve(import.meta.dirname, "..");
 const electronDependencyNames = ["electron", "electron-builder", "@electron/rebuild"] as const;
@@ -50,6 +54,7 @@ type TauriMigrationInventory = {
     electronDependencyManifests: number;
     electronGuidanceReferences: number;
     electronLockfileImporters: number;
+    electronPackageScriptReferences: number;
     electronResourceFiles: number;
     electronRuntimeFiles: number;
     electronTestReferences: number;
@@ -57,6 +62,7 @@ type TauriMigrationInventory = {
   guidanceReferences: string[];
   lockfileImporters: InventoryEntry[];
   packageManifests: InventoryEntry[];
+  packageScriptReferences: string[];
   resourceFiles: string[];
   root: string;
   runtimeFiles: string[];
@@ -108,9 +114,17 @@ function parseArgs(argv: string[]): Args {
 }
 
 async function readTauriMigrationInventory(root: string): Promise<TauriMigrationInventory> {
-  const [packageManifests, lockfileImportersWithDeps, runtimeFiles, resourceFiles, testReferences, guidanceReferences] =
-    await Promise.all([
+  const [
+    packageManifests,
+    packageScriptReferences,
+    lockfileImportersWithDeps,
+    runtimeFiles,
+    resourceFiles,
+    testReferences,
+    guidanceReferences,
+  ] = await Promise.all([
       readPackageManifestInventory(root),
+      readPackageScriptReferenceInventory(root),
       readLockfileInventory(root),
       existingRepositoryPaths(root, electronRuntimePaths),
       existingRepositoryPaths(root, electronResourcePaths),
@@ -123,6 +137,7 @@ async function readTauriMigrationInventory(root: string): Promise<TauriMigration
       electronDependencyManifests: packageManifests.length,
       electronGuidanceReferences: guidanceReferences.length,
       electronLockfileImporters: lockfileImportersWithDeps.length,
+      electronPackageScriptReferences: packageScriptReferences.length,
       electronResourceFiles: resourceFiles.length,
       electronRuntimeFiles: runtimeFiles.length,
       electronTestReferences: testReferences.length,
@@ -130,6 +145,7 @@ async function readTauriMigrationInventory(root: string): Promise<TauriMigration
     guidanceReferences,
     lockfileImporters: lockfileImportersWithDeps,
     packageManifests,
+    packageScriptReferences,
     resourceFiles,
     root,
     runtimeFiles,
@@ -149,6 +165,26 @@ async function readPackageManifestInventory(root: string): Promise<InventoryEntr
     }),
   );
   return entries.filter((entry) => entry.dependencies.length > 0);
+}
+
+async function readPackageScriptReferenceInventory(root: string): Promise<string[]> {
+  const entries = await Promise.all(
+    packageManifestPaths.map(async (repositoryPath) => {
+      const source = await readFile(join(root, repositoryPath), "utf8");
+      return collectElectronPackageScriptReferences(repositoryPath, source);
+    }),
+  );
+  return entries.flat().sort();
+}
+
+function collectElectronPackageScriptReferences(repositoryPath: string, source: string): string[] {
+  const parsed = JSON.parse(source) as { scripts?: Record<string, unknown> };
+  return Object.entries(parsed.scripts ?? {})
+    .filter(
+      (entry): entry is [string, string] =>
+        typeof entry[1] === "string" && containsElectronPackageScriptReference(entry[0], entry[1]),
+    )
+    .map(([scriptName]) => `${repositoryPath}:scripts.${scriptName}`);
 }
 
 async function readLockfileInventory(root: string): Promise<InventoryEntry[]> {
@@ -276,9 +312,11 @@ function formatInventory(inventory: TauriMigrationInventory): string {
   const lines = [
     "Tauri migration Electron inventory",
     `Root: ${inventory.root}`,
-    `Blockers: manifests=${inventory.blockers.electronDependencyManifests}, lockfileImporters=${inventory.blockers.electronLockfileImporters}, runtimeFiles=${inventory.blockers.electronRuntimeFiles}, resourceFiles=${inventory.blockers.electronResourceFiles}, testRefs=${inventory.blockers.electronTestReferences}, guidanceRefs=${inventory.blockers.electronGuidanceReferences}`,
+    `Blockers: manifests=${inventory.blockers.electronDependencyManifests}, packageScripts=${inventory.blockers.electronPackageScriptReferences}, lockfileImporters=${inventory.blockers.electronLockfileImporters}, runtimeFiles=${inventory.blockers.electronRuntimeFiles}, resourceFiles=${inventory.blockers.electronResourceFiles}, testRefs=${inventory.blockers.electronTestReferences}, guidanceRefs=${inventory.blockers.electronGuidanceReferences}`,
     "Package manifest dependencies:",
     ...formatDependencyEntries(inventory.packageManifests),
+    "Package script references:",
+    ...formatPaths(inventory.packageScriptReferences),
     "Lockfile importer dependencies:",
     ...formatDependencyEntries(inventory.lockfileImporters),
     "Runtime files:",
@@ -306,6 +344,8 @@ function formatM6CleanupPlan(inventory: TauriMigrationInventory): string {
     "",
     "1. Remove Electron package dependencies:",
     ...formatDependencyRemovalCommands(inventory.packageManifests),
+    "  - Remove any remaining Electron-only package scripts:",
+    ...formatPaths(inventory.packageScriptReferences),
     "  - pnpm install",
     "",
     "2. Remove or replace Electron runtime entry files:",

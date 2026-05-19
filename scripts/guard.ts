@@ -13,6 +13,7 @@ import {
 import { collectCssHardcodedColorMatches, cssWideAndSpecialColorKeywords, realNamedColors } from "./style-policy.ts";
 import {
   containsElectronGuidanceReference,
+  containsElectronPackageScriptReference,
   containsElectronTestReference,
   evaluateTauriMigrationOrder,
 } from "./tauri-migration-policy.ts";
@@ -788,6 +789,20 @@ async function collectElectronGuidanceReferenceFiles(): Promise<string[]> {
     .sort();
 }
 
+function collectElectronPackageScriptReferences(...packageSources: Array<[filePath: string, source: string]>): string[] {
+  const references: string[] = [];
+  for (const [filePath, source] of packageSources) {
+    const parsed = JSON.parse(source) as { scripts?: Record<string, unknown> };
+    for (const [scriptName, scriptValue] of Object.entries(parsed.scripts ?? {})) {
+      if (typeof scriptValue !== "string") continue;
+      if (containsElectronPackageScriptReference(scriptName, scriptValue)) {
+        references.push(`${toRepositoryPath(filePath)}:scripts.${scriptName}`);
+      }
+    }
+  }
+  return references.sort();
+}
+
 async function checkTauriMigrationOrder(): Promise<boolean> {
   const [
     migrationDoc,
@@ -826,6 +841,11 @@ async function checkTauriMigrationOrder(): Promise<boolean> {
   const remainingElectronResourceFiles = electronPackResourceFiles.filter(
     (_, index) => electronPackResourceFileExists[index],
   );
+  const electronPackageScriptReferences = collectElectronPackageScriptReferences(
+    [desktopPackageJsonPath, desktopPackageJson],
+    [packagedPackageJsonPath, packagedPackageJson],
+    [toolsPackPackageJsonPath, toolsPackPackageJson],
+  );
   const violations = evaluateTauriMigrationOrder({
     migrationDoc,
     pnpmLock,
@@ -840,6 +860,7 @@ async function checkTauriMigrationOrder(): Promise<boolean> {
     toolsPackPackageJson,
     remainingElectronRuntimeFiles: remainingElectronRuntimeFiles.map(toRepositoryPath),
     remainingElectronResourceFiles: remainingElectronResourceFiles.map(toRepositoryPath),
+    electronPackageScriptReferences,
     electronTestReferenceFiles: electronTestReferenceFiles.map(toRepositoryPath),
     electronGuidanceReferenceFiles: electronGuidanceReferenceFiles.map(toRepositoryPath),
   });
