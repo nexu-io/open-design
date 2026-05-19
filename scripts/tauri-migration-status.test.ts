@@ -574,6 +574,41 @@ test("continue-tauri-migration dry-run plans a branch push from current handoff 
   assert.match(result.stdout, /--advance/);
 });
 
+test("continue-tauri-migration surfaces heartbeat problems before planning M4 work", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+  await writeHandoffArchive(handoffDir);
+  const remotePath = join(fixture, "empty.git");
+  await git(fixture, "init", "--bare", remotePath);
+  const automationDir = join(fixture, "automations");
+  await writeHeartbeatAutomation(automationDir, "tauri-migration-follow-up", {
+    prompt: "Continue from docs/electron-to-tauri-migration.md without the dry-run cadence.",
+    status: "PAUSED",
+  });
+
+  const result = await runContinue(
+    fixture,
+    "--handoff-dir",
+    handoffDir,
+    "--remote",
+    remotePath,
+    "--automation-dir",
+    automationDir,
+    "--dry-run",
+    "--skip-dispatch",
+  );
+
+  assert.match(result.stdout, /Heartbeat needs attention/);
+  assert.match(result.stdout, /expected status ACTIVE, got PAUSED/);
+  assert.match(result.stdout, /continuation dry-run/);
+  assert.match(result.stdout, /Would push codex\/electron-to-tauri-migration/);
+});
+
 test("continue-tauri-migration dry-run waits for reports when the remote already matches", async (t) => {
   const fixture = await createFixtureRoot(t, {
     checked: [],

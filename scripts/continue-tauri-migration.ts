@@ -13,6 +13,7 @@ const defaultReportDir = "/tmp/open-design-tauri-m4-reports";
 
 type Args = {
   advance: boolean;
+  automationDir?: string;
   branch: string;
   dispatchCi: boolean;
   dryRun: boolean;
@@ -39,6 +40,11 @@ type MigrationStatus = {
     archive: string;
     current?: boolean;
   };
+  heartbeat?: {
+    current: boolean;
+    dir: string;
+    problems: string[];
+  };
   phase: "M4" | "M5" | "M6" | "complete";
   platformReports?: {
     current: boolean;
@@ -62,6 +68,10 @@ async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const log: string[] = [`Continuing Tauri migration from ${args.root}`];
   let status = await readStatus(args);
+
+  if (status.heartbeat?.current === false) {
+    log.push(`Heartbeat needs attention under ${status.heartbeat.dir}: ${status.heartbeat.problems.join("; ")}`);
+  }
 
   if (status.git.trackedClean !== true && !args.dryRun) {
     throw new Error("tracked worktree changes are present; commit or stash them before continuing the migration");
@@ -153,6 +163,7 @@ function parseArgs(argv: string[]): Args {
     }
     if (
       (arg === "--branch" ||
+        arg === "--automation-dir" ||
         arg === "--gh" ||
         arg === "--handoff-dir" ||
         arg === "--remote" ||
@@ -164,6 +175,11 @@ function parseArgs(argv: string[]): Args {
     }
     if (arg === "--branch") {
       parsed.branch = value!;
+      index += 1;
+      continue;
+    }
+    if (arg === "--automation-dir") {
+      parsed.automationDir = resolve(value!);
       index += 1;
       continue;
     }
@@ -195,7 +211,7 @@ function parseArgs(argv: string[]): Args {
     if (arg === "--help" || arg === "-h") {
       process.stdout.write(
         [
-          "usage: tsx scripts/continue-tauri-migration.ts [--root <repo>] [--handoff-dir <dir>] [--remote <remote>] [--report-dir <dir>] [--wait-reports] [--advance] [--dry-run] [--skip-push] [--skip-dispatch]",
+          "usage: tsx scripts/continue-tauri-migration.ts [--root <repo>] [--automation-dir <dir>] [--handoff-dir <dir>] [--remote <remote>] [--report-dir <dir>] [--wait-reports] [--advance] [--dry-run] [--skip-push] [--skip-dispatch]",
           "",
           "Continues the Electron→Tauri migration from the current phase without bypassing M4/M5/M6 guards.",
           "It refreshes stale handoff artifacts, pushes/verifies the migration branch when credentials allow, and can wait for native M4 reports before applying the guarded M5 advance.",
@@ -389,6 +405,7 @@ async function readStatus(args: Args): Promise<MigrationStatus> {
     [
       "--root",
       args.root,
+      ...(args.automationDir == null ? [] : ["--automation-dir", args.automationDir]),
       "--handoff-dir",
       args.handoffDir,
       "--remote",
