@@ -81,10 +81,12 @@ export interface ReadinessResult {
   canonical?: string;
 }
 
+export type SearchAnalyticsWindow = 3 | 7 | 28;
+
 export interface SearchAnalyticsRecord {
   url: string;
   queriedAt: string;
-  windowDays: 7 | 28;
+  windowDays: SearchAnalyticsWindow;
   startDate: string;
   endDate: string;
   clicks: number;
@@ -327,7 +329,7 @@ export async function inspectUrl(url: string): Promise<InspectionVerdict> {
  */
 export async function querySearchAnalytics(
   url: string,
-  windowDays: 7 | 28,
+  windowDays: SearchAnalyticsWindow,
 ): Promise<SearchAnalyticsRecord> {
   const token = await getAccessToken();
   const end = new Date();
