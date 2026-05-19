@@ -1298,7 +1298,7 @@ function McpOAuthControl({ serverId }: { serverId: string }) {
               className="primary"
               onClick={onConnect}
               disabled={busy !== 'idle' && busy !== 'refreshing'}
-              title="Reauthenticate (replaces the existing token)"
+              title="Re-authenticate (replaces the existing token)"
             >
               {busy === 'starting' || busy === 'awaiting' ? 'Connecting…' : 'Reconnect'}
             </button>
