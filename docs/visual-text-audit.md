@@ -27,10 +27,13 @@ at the end.
 
 ### "Rescan" vs "Re-scan" inconsistency
 
+There are three keys that refer to the same rescan action; two spellings are in use:
+
 | Key | Current | Recommended | Why |
 |-----|---------|-------------|-----|
-| `settings.rescan` | `↻ Rescan` | `↻ Rescan` | *(keep)* — the button label form. |
-| `settings.rescanTitle` | `Re-scan PATH` | `Rescan PATH` | Tooltip text should match the button label. Two different spellings for the same action. |
+| `settings.rescan` | `↻ Rescan` | `↻ Rescan` | *(keep)* — the primary button label. |
+| `avatar.rescan` | `Rescan PATH` | `Rescan PATH` | *(keep)* — already consistent with the button. |
+| `settings.rescanTitle` | `Re-scan PATH` | `Rescan PATH` | Tooltip text should match the button label. |
 | `agentPicker.rescan` | `Re-scan local PATH for agents` | `Rescan local PATH for agents` | Same inconsistency in the agent-picker tooltip. |
 
 ### "model id" not capitalised as acronym
@@ -110,27 +113,39 @@ while the rest of the file uses `\'` escape sequences inside single-quoted JS st
 | `settings.modelPickerLiveHint` | `CLI's` (curly `'`) |
 | `settings.modelPickerFallbackHint` | `Open Design's` (curly `'`) |
 
-Recommend either normalising to straight apostrophes (consistent with `privacyConsentDecline`: `Don't share` — plain quote) or adopting `’` escapes uniformly. Do not mix literal curly and escaped curly in the same file.
+Recommendation: normalise to **straight ASCII apostrophes** (`’`), consistent with
+`privacyConsentDecline`: `Don’t share`. Style Rule 8 establishes straight apostrophe
+as the file-wide standard. The `’` escape sequences found elsewhere in the file
+(see "Unicode escapes inconsistently applied" below) are also incorrect under this
+rule and are fixed in Batch 10.
 
 ### Unicode escapes inconsistently applied
 
 A small cluster of keys use `…` / `’` / `—` escapes instead of the
 literal characters used elsewhere. This is a source-file formatting issue, not a
-user-facing one, but it creates noise when reading the file:
+user-facing one, but it creates noise when reading the file.
 
-| Key | Escape | Literal equivalent |
-|-----|--------|--------------------|
-| `settings.connectorsClearArming` | `…` | `…` |
-| `settings.connectorsKeySaving` | `…` | `…` |
-| `settings.connectorsKeyError` | `’` | `'` |
-| `settings.connectorsHelpUnsaved` | `—` | `—` |
-| `settings.connectorsLoadingSavedKey` | `…` | `…` |
-| `settings.autosaveSaving` | `…` | `…` |
-| `settings.autosaveError` | `’` | `'` |
-| `settings.orbit.gateBody` | `’`, `—` | `'`, `—` |
-| `settings.orbit.gateLoading` | `…` | `…` |
-| `settings.orbit.controlsLockedHint` | `’` | `'` |
-| `entry.helpWhatsNew` | `’` | `'` |
+The `…` (ellipsis) and `—` (em dash) escapes should become their literal Unicode
+equivalents (`…`, `—`) to match the majority style.
+
+The `’` (right single quotation mark) escapes are a separate concern: Style Rule 8
+establishes **straight ASCII apostrophe** as the standard. Keys using `’` escapes
+should be normalised to `’`, not to the literal curly character `’`. These keys
+are included in Batch 10 rather than Batch 4.
+
+| Key | Escape | Target |
+|-----|--------|--------|
+| `settings.connectorsClearArming` | `…` | `…` (literal) |
+| `settings.connectorsKeySaving` | `…` | `…` (literal) |
+| `settings.connectorsHelpUnsaved` | `—` | `—` (literal) |
+| `settings.connectorsLoadingSavedKey` | `…` | `…` (literal) |
+| `settings.autosaveSaving` | `…` | `…` (literal) |
+| `settings.orbit.gateBody` | `—` | `—` (literal) |
+| `settings.orbit.gateLoading` | `…` | `…` (literal) |
+
+Keys with `’` escapes (`settings.connectorsKeyError`, `settings.autosaveError`,
+`settings.orbit.gateBody` apostrophe, `settings.orbit.controlsLockedHint`,
+`entry.helpWhatsNew`) are moved to Batch 10.
 
 ---
 
@@ -164,7 +179,7 @@ These are internally consistent (sentence case). However `liveArtifact.refresh.p
 
 ### Section headings
 
-All `designFiles.section*` keys are Title Cased:
+All single-word `designFiles.section*` keys are capitalized; the two-word key uses sentence case:
 
 | Key | Current |
 |-----|---------|
@@ -189,19 +204,19 @@ No issue; already consistent.
 
 ### "HTML page" vs "HTML Page"
 
-| Key | Current | Recommended |
-|-----|---------|-------------|
-| `designFiles.kindHtml` | `HTML page` | `HTML page` *(keep)* — sentence case is correct here. |
-
 The other kind labels (`Image`, `Sketch`, `Text`, `Script`, `PDF`, `Document`,
-`Presentation`, `Spreadsheet`, `Binary`) are all single-word Title Case. "HTML page"
-is the only two-word label. Recommended: make all kind labels sentence case to be
-consistent, or Title Case the `HTML Page`. Currently `HTML page` is a sentence-case
-outlier among otherwise Title Cased peers.
+`Presentation`, `Spreadsheet`, `Binary`) are all single-word and are capitalized
+by virtue of being proper nouns or acronyms, not because of a Title Case rule.
+`HTML page` is the only two-word label and uses sentence case.
+
+**Recommendation: keep `HTML page` as-is.** Sentence case is correct for a
+common-noun phrase and aligns with `designFiles.sectionLiveArtifacts` (`Live artifacts`).
+If a future decision standardises all kind labels to Title Case, this key becomes
+`HTML Page` — but that is a separate batch decision, not a fix for this audit.
 
 | Key | Current | Recommended |
 |-----|---------|-------------|
-| `designFiles.kindHtml` | `HTML page` | `HTML Page` |
+| `designFiles.kindHtml` | `HTML page` | `HTML page` *(keep)* |
 
 ---
 
@@ -496,6 +511,28 @@ Based on the dominant patterns in `apps/web/src/i18n/locales/en.ts`:
 
 ---
 
+## Coverage Notes
+
+### Locale propagation
+
+This audit inspects `apps/web/src/i18n/locales/en.ts` only. The repository ships
+19 locale files (`ar`, `de`, `en`, `es-ES`, `fa`, `fr`, `hu`, `id`, `it`, `ja`,
+`ko`, `pl`, `pt-BR`, `ru`, `th`, `tr`, `uk`, `zh-CN`, `zh-TW`). Every fix batch
+that changes a value in `en.ts` must be mirrored to all other locale files.
+Non-Latin-script locales (`ar`, `fa`) are RTL; changes to punctuation placement
+(especially ellipsis and em-dash) or acronym casing carry no additional RTL risk
+because those characters render neutrally in RTL context. Translators for each
+locale should be consulted before the corresponding follow-up PRs land.
+
+### Accessibility text (out of scope for this PR)
+
+This audit does not cover `aria-label`, `aria-placeholder`, `role`, or `alt`
+attribute strings in component JSX. Those strings bypass the i18n dict and are
+not visible in `en.ts`. Batch 7 includes a note to sweep hardcoded `title=`,
+`aria-label=`, and `placeholder=` strings in components as a follow-up.
+
+---
+
 ## Fix Batches
 
 Each batch is scoped to ~5–15 key edits and targets one PR.
@@ -507,10 +544,15 @@ Keys: `settings.designSystems`, `settings.libraryDesignSystems`, `settings.custo
 Keys: `settings.rescanTitle`, `agentPicker.rescan`.
 
 ### Batch 3 — Ellipsis normalisation (ASCII `...` → Unicode `…`)
-Keys: `settings.librarySearch`, `settings.libraryLoading`, `settings.rescanRunning`, `connectors.authorizationPending`, `assistant.feedbackReasonPlaceholder`, `tasks.sample.mcp.body4`, `tasks.sample.mcp.body5`.
+Keys: `settings.librarySearch`, `settings.libraryLoading`, `settings.rescanRunning`, `connectors.authorizationPending`, `assistant.feedbackReasonPlaceholder`.
 
-### Batch 4 — Unicode escape normalisation
-Keys: `settings.connectorsClearArming`, `settings.connectorsKeySaving`, `settings.connectorsKeyError`, `settings.connectorsHelpUnsaved`, `settings.connectorsLoadingSavedKey`, `settings.autosaveSaving`, `settings.autosaveError`, `settings.orbit.gateBody`, `settings.orbit.gateLoading`, `settings.orbit.controlsLockedHint`, `entry.helpWhatsNew`.
+> `tasks.sample.mcp.body4` and `tasks.sample.mcp.body5` are editorial markdown content strings (not UI chrome) and are excluded per the sample-data exception noted in the "Any Other Surface" section.
+
+### Batch 4 — Unicode escape normalisation (ellipsis and em-dash only)
+Replace `…` and `—` escapes with their literal Unicode characters.
+Keys: `settings.connectorsClearArming`, `settings.connectorsKeySaving`, `settings.connectorsHelpUnsaved`, `settings.connectorsLoadingSavedKey`, `settings.autosaveSaving`, `settings.orbit.gateBody` (em-dash only), `settings.orbit.gateLoading`.
+
+> Keys that also contain `'` apostrophe escapes are handled in Batch 10, not here.
 
 ### Batch 5 — Hint strings: missing trailing periods
 Keys: `settings.privacyHint`, `settings.aboutHint`, `settings.notificationsHint`, `settings.skillsHint`, `settings.designSystemsHint`, `settings.connectorsNavHint`, `settings.memoryHint`, `settings.orbit.navHint`, `critiqueTheater.settingsNavHint`.
@@ -527,5 +569,6 @@ Keys: `pet.composerMenuHint` (tip → Tip), `pet.slashPopoverHint` (enter → En
 ### Batch 9 — Onboarding: en dash in numeric ranges
 Keys: `settings.onboardingOrgTeam`, `settings.onboardingOrgStartup`, `settings.onboardingOrgGrowth`, `settings.onboardingOrgMidMarket` (ASCII hyphen in ranges → en dash `–`).
 
-### Batch 10 — Smart apostrophe normalisation
-Keys: `settings.modelPickerHint`, `settings.modelPickerLiveHint`, `settings.modelPickerFallbackHint` (curly `'` → straight `'`).
+### Batch 10 — Apostrophe normalisation (all forms → straight `'`)
+Replace both literal curly apostrophes (`'`) and `'` Unicode escapes with straight ASCII apostrophes.
+Keys: `settings.modelPickerHint`, `settings.modelPickerLiveHint`, `settings.modelPickerFallbackHint` (literal curly `'`), `settings.connectorsKeyError`, `settings.autosaveError`, `settings.orbit.gateBody` (apostrophe only), `settings.orbit.controlsLockedHint`, `entry.helpWhatsNew` (all `'` escapes → `'`).
