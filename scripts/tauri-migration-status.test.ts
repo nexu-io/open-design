@@ -134,7 +134,7 @@ test("tauri-migration-status reports current packaged handoff archives", async (
   assert.deepEqual(parsed.handoffArchive.problems, []);
   assert.match(parsed.nextActions.join("\n"), /command script/);
   assert.match(parsed.nextActions.join("\n"), /push-tauri-migration-handoff\.ts --archive/);
-  assert.match(parsed.nextActions.join("\n"), /verify checksum, extract, push, and verify/);
+  assert.match(parsed.nextActions.join("\n"), /attempt native CI dispatch/);
 });
 
 test("tauri-migration-status rejects packaged handoff archives without command scripts", async (t) => {
@@ -200,6 +200,7 @@ test("tauri-migration-status reports a remote branch matching the handoff", asyn
   assert.equal(parsed.remote.expectedHead, head);
   assert.deepEqual(parsed.remote.problems, []);
   assert.match(parsed.nextActions.join("\n"), /already matches/);
+  assert.match(parsed.nextActions.join("\n"), /gh workflow run ci\.yml --ref codex\/electron-to-tauri-migration/);
   assert.match(parsed.nextActions.join("\n"), /download-tauri-m4-reports/);
 });
 
@@ -355,6 +356,7 @@ async function writeHandoffArchive(handoffDir: string): Promise<{ archivePath: s
     [
       "#!/usr/bin/env bash",
       'git fetch "$bundle" "$branch:$temp_ref"',
+      'gh workflow run "$workflow" --ref "$branch"',
       "download-tauri-m4-reports.ts",
       "GITHUB_RUN_ID",
       "",

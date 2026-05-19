@@ -355,6 +355,8 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Extended `scripts/tauri-migration-status.ts` to validate the packaged handoff archive, checksum sidecar, and executable `.commands.sh` sidecar. With a current archive, M4 next actions now start at copying all three transferable handoff files instead of re-running package generation. `node --import tsx --test scripts/tauri-migration-status.test.ts` and `tsc -p scripts/tsconfig.json --noEmit` passed.
 - 2026-05-20: Extended `scripts/tauri-migration-status.ts` with platform report directory discovery. Status now auto-checks `/tmp/open-design-tauri-m4-reports` when default report artifacts exist, and `--report-dir <dir>` verifies the same `open-design-ci-win-tauri-e2e-report` / `open-design-ci-linux-tauri-e2e-report` layout from a non-default download directory.
 - 2026-05-20: Extended `scripts/package-tauri-migration-handoff.ts` output with the receiver archive push command, the post-CI report download command with `--advance`, and the status check command. It also writes an executable `.commands.sh` sidecar beside the tarball so the receiver can verify/import/push the archive without first having the migration branch checked out, then run report download/advance with `GITHUB_RUN_ID=<run-id>`.
+- 2026-05-20: Tightened the remote CI handoff instructions so the receiving machine explicitly triggers native CI after the verified branch push. `ci.yml` does not run on arbitrary feature-branch pushes, so the generated handoff output and `.commands.sh` sidecar now point at `gh workflow run ci.yml --ref codex/electron-to-tauri-migration` or opening a draft PR before downloading Windows/Linux M4 reports.
+- 2026-05-20: Extended the `.commands.sh` sidecar so a write-capable receiver automatically attempts `gh workflow run ci.yml --ref codex/electron-to-tauri-migration` after the verified branch push when `gh` is available. If dispatch is disabled with `TAURI_NATIVE_CI_TRIGGER=0` or `gh` is unavailable, the same script prints the manual workflow dispatch and draft PR commands.
 
 ### Platform Gate Runners
 
@@ -433,12 +435,41 @@ pnpm exec tsx scripts/package-tauri-migration-handoff.ts \
 
 Keep the script output, JSON manifest, Markdown handoff note, tarball, `.sha256` sidecar, and `.commands.sh` sidecar together. They record the migration branch head, `origin/main` base, bundle byte size, SHA-256, `git bundle verify` result, bundled heads, receiving-side import command, remote verification command, M4→M5 advance command, and the receiver command sequence printed by `scripts/package-tauri-migration-handoff.ts`. The manifest records the bundle path relative to itself, so the extracted handoff directory remains relocatable.
 
-On the receiving checkout, copy the tarball plus its `.sha256` and `.commands.sh` sidecars, then verify the checksum, extract the handoff, import the bundle, push the branch, and verify the remote head in one command:
+On the receiving checkout, copy the tarball plus its `.sha256` and `.commands.sh` sidecars, then verify the checksum, extract the handoff, import the bundle, push the branch, verify the remote head, and attempt native CI dispatch in one command:
+
+```bash
+/path/to/open-design-tauri-migration-handoff.tar.gz.commands.sh
+```
+
+The command script still accepts the archive path as an explicit argument if the sidecars are copied under a different name:
+
+```bash
+/path/to/open-design-tauri-migration-handoff.tar.gz.commands.sh \
+  /path/to/open-design-tauri-migration-handoff.tar.gz
+```
+
+If you need push-only behavior without the `gh` dispatch attempt, run the TypeScript helper directly:
 
 ```bash
 pnpm exec tsx scripts/push-tauri-migration-handoff.ts \
   --archive /path/to/open-design-tauri-migration-handoff.tar.gz \
   --remote origin
+```
+
+That branch push alone does not trigger `ci.yml`, because this repository runs CI on pull requests, `main` pushes, and manual dispatches. The command script attempts the workflow dispatch automatically when `gh` is available. If it cannot dispatch, either open a draft PR or manually dispatch the workflow for the migration branch:
+
+```bash
+gh workflow run ci.yml --ref codex/electron-to-tauri-migration
+```
+
+or:
+
+```bash
+gh pr create --draft \
+  --base main \
+  --head codex/electron-to-tauri-migration \
+  --title "Migrate desktop runtime to Tauri" \
+  --body "Tauri migration branch for native Windows/Linux package smoke."
 ```
 
 If the bundle is copied outside the extracted handoff directory, use the manifest form instead and add `--bundle /path/to/open-design-tauri-migration.bundle` to override only the file location.

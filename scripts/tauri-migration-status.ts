@@ -321,12 +321,12 @@ function nextActionsForPhase(
       remote?.current === true
         ? `Remote ${remote.remote} already matches ${remote.branch ?? "the migration branch"} at ${remote.head ?? "the expected head"}.`
         : archiveReady
-          ? `On the receiving machine, run ${handoffArchive.commandScript} from the repository root, or run scripts/push-tauri-migration-handoff.ts --archive ${handoffArchive.archive} --remote origin to verify checksum, extract, push, and verify the remote branch.`
+          ? `On the receiving machine, run ${handoffArchive.commandScript} from the repository root to verify checksum, extract, push, verify the remote branch, and attempt native CI dispatch when gh is available; or run scripts/push-tauri-migration-handoff.ts --archive ${handoffArchive.archive} --remote origin for push-only handoff.`
           : "Copy the packaged handoff archive, .sha256 sidecar, and .commands.sh sidecar to a write-capable machine, then run the command script or scripts/push-tauri-migration-handoff.ts --archive /path/to/open-design-tauri-migration-handoff.tar.gz --remote origin.",
       platformReports?.current === true
         ? "Advance M4 evidence and M5 defaults with scripts/advance-tauri-migration-m4-m5.ts using the verified report paths shown above."
         : remote?.current === true
-          ? "Download and verify native CI artifacts with scripts/download-tauri-m4-reports.ts --run-id <github-run-id> --output-dir /tmp/open-design-tauri-m4-reports, or add --advance to apply M4 evidence and M5 defaults immediately after verification."
+          ? `Trigger native CI with gh workflow run ci.yml --ref ${remote.branch ?? "codex/electron-to-tauri-migration"} or open a draft PR, then download and verify artifacts with scripts/download-tauri-m4-reports.ts --run-id <github-run-id> --output-dir /tmp/open-design-tauri-m4-reports; add --advance to apply M4 evidence and M5 defaults immediately after verification.`
           : "Run the Windows and Linux Tauri package smoke jobs.",
       ...(platformReports?.current === true
         ? []
@@ -490,6 +490,9 @@ async function readHandoffArchiveStatus(archivePath: string, handoff?: HandoffSt
     }
     if (!commandScriptSource.includes("download-tauri-m4-reports.ts") || !commandScriptSource.includes("GITHUB_RUN_ID")) {
       problems.push(`command script is missing post-CI report advance guidance: ${commandScriptPath}`);
+    }
+    if (!commandScriptSource.includes("gh workflow run") && !commandScriptSource.includes("gh pr create")) {
+      problems.push(`command script is missing native CI trigger guidance: ${commandScriptPath}`);
     }
   } catch (error) {
     problems.push(`command script unavailable: ${error instanceof Error ? error.message : String(error)}`);
