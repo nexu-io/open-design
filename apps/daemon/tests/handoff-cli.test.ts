@@ -150,4 +150,47 @@ describe('od project handoff CLI', () => {
     expect(errOut).toContain('CONVERSATION_NOT_FOUND');
     expect(errOut).toContain('conversation not found');
   });
+
+  it('fails a 200 response whose body is not a well-formed HandoffResponse', async () => {
+    // A broken daemon/proxy 200 with a shape-invalid body must not print
+    // `undefined` and exit 0 — scripts rely on the exit code.
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ unexpected: 'shape' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    const result = await runProjectHandoff([
+      'proj-1',
+      '--conversation', 'conv-9',
+      '--api-key', 'sk-test',
+      '--model', 'claude-opus-4-7',
+      '--daemon-url', DAEMON,
+    ]);
+
+    expect(result.exitCode).toBe(1);
+    expect(stdout.join('')).not.toContain('undefined');
+    expect(stderr.join('')).toContain('malformed handoff response');
+  });
+
+  it('fails a 200 response with an unparseable body instead of exiting 0', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response('<html>not json</html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html' },
+      }),
+    );
+
+    const result = await runProjectHandoff([
+      'proj-1',
+      '--conversation', 'conv-9',
+      '--api-key', 'sk-test',
+      '--model', 'claude-opus-4-7',
+      '--daemon-url', DAEMON,
+    ]);
+
+    expect(result.exitCode).toBe(1);
+    expect(stderr.join('')).toContain('malformed handoff response');
+  });
 });

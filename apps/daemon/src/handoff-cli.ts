@@ -15,6 +15,25 @@ interface HandoffCliResult {
   exitCode: number;
 }
 
+/**
+ * A 2xx response is only a success if the body is actually a well-formed
+ * HandoffResponse. A broken daemon/proxy can return 200 with malformed or
+ * shape-invalid JSON; without this check the CLI would print `undefined`
+ * (or `{}` under --json) and still exit 0, breaking the fail-fast contract
+ * scripts depend on.
+ */
+function isHandoffResponse(value: unknown): value is HandoffResponse {
+  if (!value || typeof value !== 'object') return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.prompt === 'string' &&
+    typeof v.model === 'string' &&
+    typeof v.inputTokens === 'number' &&
+    typeof v.outputTokens === 'number' &&
+    typeof v.transcriptMessageCount === 'number'
+  );
+}
+
 const USAGE = `Usage:
   od project handoff <projectId> --conversation <id> --api-key <key> --model <model>
                      [--base-url <url>] [--max-tokens <n>] [--daemon-url <url>] [--json]
@@ -131,20 +150,23 @@ export async function runProjectHandoff(args: string[]): Promise<HandoffCliResul
         body: JSON.stringify(body),
       },
     );
-    const payload = (await resp.json().catch(() => ({}))) as
-      | HandoffResponse
-      | { error?: { code?: string; message?: string } };
+    const payload = await resp.json().catch(() => undefined);
     if (!resp.ok) {
-      const err = (payload as { error?: { code?: string; message?: string } }).error;
+      const err = (payload as { error?: { code?: string; message?: string } } | undefined)?.error;
       return fail(err?.message ?? `handoff failed: HTTP ${resp.status}`, err?.code, resp.status);
     }
-    const result = payload as HandoffResponse;
+    // A 2xx with an unparseable or shape-invalid body is a failure, not a
+    // success that prints `undefined` — fail fast so scripts can trust the
+    // exit code.
+    if (!isHandoffResponse(payload)) {
+      return fail('daemon returned a malformed handoff response', undefined, resp.status);
+    }
     if (options.json) {
-      writeJson(result);
+      writeJson(payload);
     } else {
       // Default output is the synthesized prompt itself, so it pipes
       // cleanly into a file or another command.
-      process.stdout.write(`${result.prompt}\n`);
+      process.stdout.write(`${payload.prompt}\n`);
     }
     return { exitCode: 0 };
   } catch (error) {
