@@ -343,7 +343,7 @@ function nextActionsForPhase(
   }
   if (phase === "M6") {
     return [
-      "Run scripts/tauri-migration-inventory.ts --json to get the current Electron cleanup inventory.",
+      "Run scripts/tauri-migration-inventory.ts --plan to get the current Electron cleanup plan.",
       "Remove Electron dependencies, runtime files, pack hooks, tests, and guidance together.",
       "Run pnpm install so pnpm-lock.yaml importer entries match the removed dependencies.",
       "Remove electron from DESKTOP_RUNTIME_KINDS only when the M6 cleanup checkboxes move together.",

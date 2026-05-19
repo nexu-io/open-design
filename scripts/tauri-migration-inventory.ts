@@ -35,6 +35,7 @@ const guidanceReferencePaths = [
 
 type Args = {
   json: boolean;
+  plan: boolean;
   root: string;
 };
 
@@ -68,17 +69,25 @@ async function main(): Promise<void> {
     process.stdout.write(`${JSON.stringify(inventory, null, 2)}\n`);
     return;
   }
+  if (args.plan) {
+    process.stdout.write(formatM6CleanupPlan(inventory));
+    return;
+  }
   process.stdout.write(formatInventory(inventory));
 }
 
 function parseArgs(argv: string[]): Args {
-  const parsed: Args = { json: false, root: defaultRoot };
+  const parsed: Args = { json: false, plan: false, root: defaultRoot };
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const value = argv[index + 1];
     if (arg === "--json") {
       parsed.json = true;
+      continue;
+    }
+    if (arg === "--plan") {
+      parsed.plan = true;
       continue;
     }
     if (arg === "--root") {
@@ -88,7 +97,7 @@ function parseArgs(argv: string[]): Args {
       continue;
     }
     if (arg === "--help" || arg === "-h") {
-      process.stdout.write("usage: tsx scripts/tauri-migration-inventory.ts [--root <repo>] [--json]\n");
+      process.stdout.write("usage: tsx scripts/tauri-migration-inventory.ts [--root <repo>] [--json] [--plan]\n");
       process.exit(0);
     }
     throw new Error(`unsupported argument: ${arg}`);
@@ -276,6 +285,60 @@ function formatInventory(inventory: TauriMigrationInventory): string {
     "",
   ];
   return lines.join("\n");
+}
+
+function formatM6CleanupPlan(inventory: TauriMigrationInventory): string {
+  const lines = [
+    "Tauri migration M6 cleanup plan",
+    `Root: ${inventory.root}`,
+    "",
+    "Preconditions:",
+    "  - M4 native Windows/Linux evidence is recorded by scripts/verify-tauri-platform-gates.ts --update-migration-doc.",
+    "  - M5 default flip is complete and Electron remains only as an explicit fallback.",
+    "  - Run pnpm guard before starting cleanup so failures are attributable to the cleanup diff.",
+    "",
+    "1. Remove Electron package dependencies:",
+    ...formatDependencyRemovalCommands(inventory.packageManifests),
+    "  - pnpm install",
+    "",
+    "2. Remove or replace Electron runtime entry files:",
+    ...formatPaths(inventory.runtimeFiles),
+    "",
+    "3. Remove Electron-only tools-pack resources:",
+    ...formatPaths(inventory.resourceFiles),
+    "",
+    "4. Delete or rewrite Electron-only tests:",
+    ...formatPaths(inventory.testReferences),
+    "",
+    "5. Update Electron-specific guidance references:",
+    ...formatPaths(inventory.guidanceReferences),
+    "",
+    "6. Finalize runtime constants and migration checklist:",
+    "  - Remove electron from DESKTOP_RUNTIME_KINDS in tools/dev/src/config.ts and tools/pack/src/config.ts.",
+    "  - Mark the five M6 checklist items in docs/electron-to-tauri-migration.md together.",
+    "",
+    "7. Required verification after cleanup:",
+    "  - pnpm install",
+    "  - pnpm guard",
+    "  - pnpm typecheck",
+    "  - pnpm --filter @open-design/web test",
+    "  - pnpm --filter @open-design/desktop test",
+    "  - pnpm --filter @open-design/packaged test",
+    "  - pnpm --filter @open-design/tools-dev test",
+    "  - pnpm --filter @open-design/tools-pack test",
+    "  - cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml",
+    "  - cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml -- -D warnings",
+    "  - cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml",
+    "",
+  ];
+  return lines.join("\n");
+}
+
+function formatDependencyRemovalCommands(entries: InventoryEntry[]): string[] {
+  if (entries.length === 0) {
+    return ["  - none"];
+  }
+  return entries.map((entry) => `  - pnpm --filter ${entry.path.replace(/\/package\.json$/, "")} remove ${entry.dependencies?.join(" ") ?? ""}`);
 }
 
 function formatDependencyEntries(entries: InventoryEntry[]): string[] {

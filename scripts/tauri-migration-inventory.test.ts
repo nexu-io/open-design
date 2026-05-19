@@ -56,6 +56,22 @@ test("tauri-migration-inventory emits machine-readable blocker counts", async (t
   ]);
 });
 
+test("tauri-migration-inventory emits an M6 cleanup plan", async (t) => {
+  const root = await createInventoryFixture(t);
+
+  const result = await runInventory(root, "--plan");
+
+  assert.match(result.stdout, /Tauri migration M6 cleanup plan/);
+  assert.match(result.stdout, /Preconditions:/);
+  assert.match(result.stdout, /pnpm --filter apps\/desktop remove electron/);
+  assert.match(result.stdout, /pnpm --filter apps\/packaged remove electron/);
+  assert.match(result.stdout, /pnpm --filter tools\/pack remove @electron\/rebuild electron-builder/);
+  assert.match(result.stdout, /apps\/desktop\/src\/main\/runtime\.ts/);
+  assert.match(result.stdout, /tools\/pack\/resources\/web-standalone-after-pack\.cjs/);
+  assert.match(result.stdout, /Remove electron from DESKTOP_RUNTIME_KINDS/);
+  assert.match(result.stdout, /cargo clippy --manifest-path apps\/desktop\/src-tauri\/Cargo\.toml -- -D warnings/);
+});
+
 async function createInventoryFixture(t: test.TestContext): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "open-design-tauri-inventory-"));
   t.after(() => void rm(root, { force: true, recursive: true }));

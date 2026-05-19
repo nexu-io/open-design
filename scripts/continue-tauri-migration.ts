@@ -83,8 +83,8 @@ async function main(): Promise<void> {
   }
 
   if (status.phase === "M6") {
-    log.push("M6 is open. Start with the Electron cleanup inventory:");
-    log.push(formatScriptCommand("tauri-migration-inventory.ts", ["--json"]));
+    log.push("M6 is open. Start with the generated Electron cleanup plan:");
+    log.push(formatScriptCommand("tauri-migration-inventory.ts", ["--plan"]));
     process.stdout.write(`${log.join("\n")}\n`);
     return;
   }

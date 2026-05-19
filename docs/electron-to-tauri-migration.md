@@ -142,13 +142,13 @@ pnpm --filter @open-design/tools-pack test
 
 ### M6 Electron removal procedure
 
-1. Print the current Electron cleanup inventory:
+1. Print the current Electron cleanup plan:
 
 ```bash
-pnpm exec tsx scripts/tauri-migration-inventory.ts --json
+pnpm exec tsx scripts/tauri-migration-inventory.ts --plan
 ```
 
-The inventory groups the exact M6 blockers by package manifest dependencies, `pnpm-lock.yaml` importers, Electron runtime files, Electron-only pack resources, Electron-referencing tests, and Electron-specific guidance. Use it as the removal checklist before editing.
+The plan groups the exact M6 blockers by package manifest dependencies, `pnpm-lock.yaml` importers, Electron runtime files, Electron-only pack resources, Electron-referencing tests, and Electron-specific guidance, then prints the cleanup order and verification commands. Use it as the removal checklist before editing. Use `--json` when automation needs the same data as structured input.
 
 2. Remove Electron packages from `apps/desktop/package.json`, `apps/packaged/package.json`, and `tools/pack/package.json`; then run `pnpm install` so `pnpm-lock.yaml` importer entries are updated.
 3. Remove or replace Electron runtime files under `apps/desktop/src/main/`, including `index.ts`, `preload.cts`, and `runtime.ts`. Keep any runtime-neutral code only if it has a Tauri caller.
@@ -349,6 +349,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Added `scripts/download-tauri-m4-reports.ts` so the post-push CI handoff can download the Windows/Linux Tauri report artifacts through `gh`, verify them with `scripts/verify-tauri-platform-gates.ts`, and print the exact M4→M5 advance command. `node --import tsx --test scripts/download-tauri-m4-reports.test.ts scripts/tauri-ci-scope.test.ts` and `tsc -p scripts/tsconfig.json --noEmit` passed.
 - 2026-05-20: Extended `scripts/download-tauri-m4-reports.ts` with `--advance`, allowing a write-capable receiver to download native CI artifacts, verify them, update M4 evidence, and apply the guarded M5 default flip in one command after the Windows/Linux reports pass. The default remains verify-only unless `--advance` is set.
 - 2026-05-20: Added `scripts/tauri-migration-inventory.ts` so M6 Electron cleanup starts from a machine-readable inventory of remaining Electron dependencies, lockfile importers, runtime files, pack resources, tests, and guidance references. Current inventory reports 3 package manifests, 3 lockfile importers, 3 runtime files, 1 pack resource, 18 test files, and 6 guidance files still blocking M6. `node --import tsx --test scripts/tauri-migration-inventory.test.ts scripts/tauri-migration-status.test.ts scripts/tauri-ci-scope.test.ts`, `pnpm exec tsx scripts/tauri-migration-inventory.ts --json`, `tsc -p scripts/tsconfig.json --noEmit`, `cd e2e && pnpm test tests/packaged-smoke-workflow.test.ts`, `pnpm guard`, and `pnpm install` passed.
+- 2026-05-20: Extended `scripts/tauri-migration-inventory.ts --plan` so M6 Electron cleanup has a generated execution plan with dependency removal commands, runtime/resource/test/guidance blockers, checklist steps, and required verification commands.
 - 2026-05-20: Updated `scripts/tauri-migration-status.ts` next actions so M4 points at the current verified handoff, remote verification, native smoke, and M4→M5 advance commands, while M5 points at the guarded applicator instead of stale manual default-flip prose. `node --import tsx --test scripts/tauri-migration-status.test.ts`, `pnpm exec tsx scripts/tauri-migration-status.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `pnpm guard` passed.
 - 2026-05-20: Added `scripts/package-tauri-migration-handoff.ts` so a verified handoff directory is revalidated and packaged as a tarball with a `.sha256` sidecar before transfer. The status output now points at this packaging step before asking a write-capable machine to extract and run `scripts/push-tauri-migration-handoff.ts`. `node --import tsx --test scripts/package-tauri-migration-handoff.test.ts scripts/tauri-ci-scope.test.ts scripts/tauri-migration-status.test.ts` and `tsc -p scripts/tsconfig.json --noEmit` passed.
 - 2026-05-20: Updated the generated handoff Markdown note from the older manifest-first receiver instructions to the current package/archive push, CI report download, and M4→M5 advance flow. `node --import tsx --test scripts/verify-tauri-migration-handoff.test.ts` and `tsc -p scripts/tsconfig.json --noEmit` passed.
