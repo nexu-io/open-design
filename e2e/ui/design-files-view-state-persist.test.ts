@@ -28,7 +28,10 @@ const CONFIG_STORAGE_KEY = 'open-design:config';
 const TINY_PNG_B64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5W6McAAAAASUVORK5CYII=';
 
-test.describe.configure({ timeout: 60_000 });
+// 90 s: the test seeds 36 files across two projects (17+1 each) via sequential
+// POST requests; on a cold CI runner this alone takes 40-50 s before any
+// assertion. Keep timeout above that floor.
+test.describe.configure({ timeout: 90_000 });
 
 // Inject onboarding bypass and mock app-config before each test so the web app
 // boots straight into the workspace without prompts.
@@ -112,6 +115,7 @@ async function gotoEntryHome(page: Page): Promise<void> {
     await expect(privacyDialog).toHaveCount(0);
   }
   await expect(page.getByTestId('home-hero')).toBeVisible();
+  await expect(page.getByTestId('home-hero-input')).toBeVisible();
 }
 
 async function createBlankProject(page: Page, name: string): Promise<string> {
@@ -130,20 +134,26 @@ async function createBlankProject(page: Page, name: string): Promise<string> {
   return projectId;
 }
 
-async function seedTextFile(page: Page, projectId: string, name: string): Promise<void> {
+async function seedFile(
+  page: Page,
+  projectId: string,
+  name: string,
+  content: string,
+  encoding?: 'base64',
+): Promise<void> {
   const res = await page.request.post(`/api/projects/${projectId}/files`, {
-    data: { name, content: `# ${name}` },
+    data: { name, content, ...(encoding ? { encoding } : {}) },
     timeout: 10_000,
   });
   expect(res.ok()).toBeTruthy();
 }
 
-async function seedPngFile(page: Page, projectId: string, name: string): Promise<void> {
-  const res = await page.request.post(`/api/projects/${projectId}/files`, {
-    data: { name, content: TINY_PNG_B64, encoding: 'base64' },
-    timeout: 10_000,
-  });
-  expect(res.ok()).toBeTruthy();
+function seedTextFile(page: Page, projectId: string, name: string): Promise<void> {
+  return seedFile(page, projectId, name, `# ${name}`);
+}
+
+function seedPngFile(page: Page, projectId: string, name: string): Promise<void> {
+  return seedFile(page, projectId, name, TINY_PNG_B64, 'base64');
 }
 
 async function openDesignFilesTab(page: Page): Promise<void> {
@@ -156,7 +166,7 @@ async function openDesignFilesTab(page: Page): Promise<void> {
 // Wait until the per-page <select> is present — it only appears when
 // sortedFiles.length > 15 (showListControls = true).
 async function waitForPageSizeSelect(page: Page): Promise<void> {
-  await expect(page.getByLabel('Show')).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId('df-page-size-select')).toBeVisible({ timeout: 10_000 });
 }
 
 // Read the view state from localStorage for a given projectId.
@@ -205,7 +215,7 @@ test('design files view state persists across tab navigation and reload, and sta
   await waitForPageSizeSelect(page);
 
   // Change pageSize from default 30 to 15
-  const pageSizeSelect = page.getByLabel('Show');
+  const pageSizeSelect = page.getByTestId('df-page-size-select');
   await pageSizeSelect.selectOption('15');
   await expect(pageSizeSelect).toHaveValue('15');
 
@@ -235,15 +245,15 @@ test('design files view state persists across tab navigation and reload, and sta
   expect(Array.isArray(storedAfterChange!.kindFilter)).toBe(true);
   expect((storedAfterChange!.kindFilter as string[]).includes('image')).toBe(true);
 
-  // Navigate AWAY: upload a tiny file to create a tab, then click that tab
-  await page.getByTestId('design-files-upload-input').setInputFiles({
-    name: 'nav-away.png',
-    mimeType: 'image/png',
-    buffer: Buffer.from(TINY_PNG_B64, 'base64'),
-  });
-  const navAwayTab = page.getByRole('tab', { name: /nav-away\.png/i });
+  // Navigate AWAY: single-click the row button to open the preview panel,
+  // then click the "Open" button to create a dedicated file tab. This avoids
+  // mutating the project's file list (no upload needed). image-01.png is
+  // present in the filtered view (Image filter active).
+  const firstImageRow = page.getByTestId('design-file-row-image-01.png');
+  await firstImageRow.getByRole('button').first().click();
+  await page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' }).click();
+  const navAwayTab = page.getByRole('tab', { name: /image-01\.png/i });
   await expect(navAwayTab).toBeVisible();
-  await navAwayTab.click();
   // Design Files tab should no longer be selected
   await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'false');
 
@@ -252,7 +262,7 @@ test('design files view state persists across tab navigation and reload, and sta
   await waitForPageSizeSelect(page);
 
   // Assert all four prefs survived the remount
-  await expect(page.getByLabel('Show')).toHaveValue('15');
+  await expect(page.getByTestId('df-page-size-select')).toHaveValue('15');
   await expect(page.locator('th.df-th-name')).toHaveAttribute('aria-sort', 'ascending');
   // Kind filter button should show "Image" (1 active filter)
   await expect(filterBtn).toContainText(/image/i);
@@ -266,7 +276,7 @@ test('design files view state persists across tab navigation and reload, and sta
   await openDesignFilesTab(page);
   await waitForPageSizeSelect(page);
 
-  await expect(page.getByLabel('Show')).toHaveValue('15');
+  await expect(page.getByTestId('df-page-size-select')).toHaveValue('15');
   await expect(page.locator('th.df-th-name')).toHaveAttribute('aria-sort', 'ascending');
   await expect(page.getByRole('button', { name: /filter by kind/i })).toContainText(/image/i);
 
@@ -299,7 +309,7 @@ test('design files view state persists across tab navigation and reload, and sta
   await waitForPageSizeSelect(page);
 
   // Page size must be the default (30), not inherited from project 1 (15)
-  await expect(page.getByLabel('Show')).toHaveValue('30');
+  await expect(page.getByTestId('df-page-size-select')).toHaveValue('30');
 
   // Sort must be on mtime/desc (default), not name/asc
   await expect(page.locator('th.df-th-name')).toHaveAttribute('aria-sort', 'none');

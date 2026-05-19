@@ -217,6 +217,13 @@ export function DesignFilesPanel({
   // flush to localStorage when the user actually changes a preference.
   // Without this, every project the user opens gets a default-value entry
   // written on first render, making stale-key garbage grow unbounded.
+  // Note: React 18 StrictMode (active in next dev) fires effects twice,
+  // keeping refs intact across the simulated remount. This means the guard
+  // fires on the first effect run, sets the ref true, and the second run
+  // then writes the defaults. The result is a harmless default-value entry
+  // for the project; subsequent user changes overwrite it correctly. The
+  // invariant ("no write without a user action") only holds in production
+  // builds where StrictMode is not active.
   const viewStateHasMounted = useRef(false);
   const [sortKey, setSortKey] = useState<SortKey>(
     () => isSortKey(savedViewState.current.sortKey) ? savedViewState.current.sortKey : DEFAULT_SORT_KEY,
@@ -1332,6 +1339,7 @@ export function DesignFilesPanel({
                       <label>
                         {t('designFiles.perPage')}:
                         <select
+                          data-testid="df-page-size-select"
                           value={pageSize === 'all' ? 'all' : pageSize}
                           onChange={(e) => {
                             const val = e.target.value;
