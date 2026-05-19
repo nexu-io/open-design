@@ -113,6 +113,8 @@ type MediaContext = {
   promptInfluence: number | undefined;
   compositionDir: string | null;
   imageRef: ImageRef | null;
+  /** Additional reference images for multi-image i2v / style reference flows. */
+  imageRefs: ImageRef[];
 };
 type RenderResult = { bytes: Buffer; providerNote: string; suggestedExt?: string };
 type JsonRecord = Record<string, unknown>;
@@ -290,7 +292,7 @@ export async function generateMedia(args: {
   projectRoot: string; projectsRoot: string; projectId: string; surface: MediaSurface; model: string;
   prompt?: string; output?: string; aspect?: string; length?: number; duration?: number; voice?: string;
   audioKind?: AudioKind; language?: string; loop?: boolean; promptInfluence?: number;
-  compositionDir?: string; image?: string; onProgress?: ProgressFn;
+  compositionDir?: string; image?: string; images?: string[]; onProgress?: ProgressFn;
 }) {
   const {
     projectRoot,
@@ -386,6 +388,19 @@ export async function generateMedia(args: {
   // and decide how to splice the data URL into their request.
   const imageRef = await resolveProjectImage(image, dir);
 
+  // Multi-image support: resolve additional images from the `images`
+  // array param. The first resolved image (imageRef) is the primary
+  // reference; additional images flow as style/content references.
+  const extraImages = Array.isArray(args.images) ? args.images : [];
+  const imageRefs: ImageRef[] = [];
+  if (imageRef) imageRefs.push(imageRef);
+  for (const imgPath of extraImages) {
+    const ref = await resolveProjectImage(imgPath, dir);
+    if (ref && !imageRefs.some((r) => r.abs === ref.abs)) {
+      imageRefs.push(ref);
+    }
+  }
+
   // Resolve any user-configured model alias BEFORE we hand the id to a
   // dispatcher (issue #1277). Catalog lookup + surface validation above
   // ran against the original id so we still enforce the registered
@@ -419,6 +434,7 @@ export async function generateMedia(args: {
     // Resolved reference image for i2v / image-edit flows. `null` when
     // the agent didn't pass --image. See resolveProjectImage below.
     imageRef,
+    imageRefs,
   };
 
   const credentials = await resolveProviderConfig(projectRoot, def.provider);
@@ -1712,9 +1728,19 @@ async function renderOpenRouterVideo(
   // Then strip the `openrouter/` catalogue prefix so the wire model name
   // matches OpenRouter's canonical slug (e.g. `bytedance/seedance-2.0`).
   const resolved = (credentials.model || ctx.wireModel).trim();
-  const wireModel = resolved.startsWith('openrouter/')
+  const afterPrefix = resolved.startsWith('openrouter/')
     ? resolved.slice('openrouter/'.length)
     : resolved;
+
+  // Parse optional resolution suffix encoded in the model ID
+  // (e.g. `bytedance/seedance-2.0:1080p` → model `bytedance/seedance-2.0`,
+  // resolution `1080p`). When no suffix is present, default to 720p.
+  const RESOLUTION_SUFFIX_RE = /:(\d+p)$/;
+  const resSuffixMatch = afterPrefix.match(RESOLUTION_SUFFIX_RE);
+  const wireModel = resSuffixMatch
+    ? afterPrefix.slice(0, -resSuffixMatch[0].length)
+    : afterPrefix;
+  const resolution = resSuffixMatch?.[1] ?? '720p';
 
   const aspectRatio = openRouterAspectFor(ctx.aspect);
 
@@ -1724,14 +1750,32 @@ async function renderOpenRouterVideo(
     model: wireModel,
     prompt: ctx.prompt || 'A short cinematic clip.',
     aspect_ratio: aspectRatio,
-    resolution: '720p',
+    resolution,
     duration: durationSec,
   };
 
-  // Image-to-video: pass the reference image as a first_frame via
-  // OpenRouter's `frame_images` array. Seedance 2.0 and Wan 2.7
-  // support this mode.
-  if (ctx.imageRef && ctx.imageRef.dataUrl) {
+  // Image-to-video: pass reference images via OpenRouter's
+  // `frame_images` + `input_references` arrays. Seedance 2.0 supports
+  // up to 9 images, 3 video clips, and 3 audio clips as inputs.
+  // The first image is treated as the first_frame for i2v; additional
+  // images go into input_references for style/content guidance.
+  if (ctx.imageRefs.length > 0) {
+    const [primary, ...extras] = ctx.imageRefs;
+    body.frame_images = [
+      {
+        type: 'image_url',
+        image_url: { url: primary!.dataUrl },
+        frame_type: 'first_frame',
+      },
+    ];
+    if (extras.length > 0) {
+      body.input_references = extras.map((ref) => ({
+        type: 'image_url',
+        image_url: { url: ref.dataUrl },
+      }));
+    }
+  } else if (ctx.imageRef && ctx.imageRef.dataUrl) {
+    // Backward compat: single --image param without --images.
     body.frame_images = [
       {
         type: 'image_url',
