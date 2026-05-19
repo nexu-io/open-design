@@ -12839,7 +12839,9 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   display: inline-flex;
   align-self: flex-start;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
+  max-width: 100%;
   padding: 3px 12px;
   background: var(--bg-subtle);
   border: 1px solid var(--border);
@@ -12848,7 +12850,11 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   color: var(--text-muted);
 }
 .status-label { letter-spacing: 0.02em; }
-.status-detail { color: var(--text); }
+.status-detail {
+  min-width: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
 
 /* Grouped tool / action card — the collapsible pill from screenshot 9 */
 .action-card {
@@ -14344,6 +14350,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  max-width: 100%;
   padding: 8px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -14365,12 +14372,16 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   color: var(--text);
 }
 .op-waiting-detail {
+  min-width: 0;
+  max-width: 100%;
   font-family: var(--mono);
   font-size: 11px;
   background: var(--bg-panel);
   padding: 1px 6px;
   border-radius: 4px;
   color: var(--text-muted);
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 .op-waiting-hint {
   flex-basis: 100%;
