@@ -27,6 +27,7 @@ type DesktopRuntime = "electron" | "tauri";
 type ParsedArgs = {
   handoffDir?: string;
   json: boolean;
+  remote?: string;
   root: string;
 };
 
@@ -61,6 +62,7 @@ type MigrationStatus = {
   handoff?: HandoffStatus;
   nextActions: string[];
   phase: "M4" | "M5" | "M6" | "complete";
+  remote?: RemoteStatus;
   root: string;
 };
 
@@ -85,9 +87,19 @@ type HandoffManifest = {
   schemaVersion: 1;
 };
 
+type RemoteStatus = {
+  branch?: string;
+  current?: boolean;
+  expectedHead?: string;
+  head?: string;
+  present: boolean;
+  problems: string[];
+  remote: string;
+};
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
-  const status = await readMigrationStatus(args.root, args.handoffDir);
+  const status = await readMigrationStatus(args.root, args.handoffDir, args.remote);
   if (args.json) {
     process.stdout.write(`${JSON.stringify(status, null, 2)}\n`);
     return;
@@ -116,8 +128,16 @@ function parseArgs(argv: string[]): ParsedArgs {
       index += 1;
       continue;
     }
+    if (arg === "--remote") {
+      if (value == null) throw new Error("--remote requires a value");
+      parsed.remote = value;
+      index += 1;
+      continue;
+    }
     if (arg === "--help" || arg === "-h") {
-      process.stdout.write("usage: tsx scripts/tauri-migration-status.ts [--root <repo>] [--handoff-dir <dir>] [--json]\n");
+      process.stdout.write(
+        "usage: tsx scripts/tauri-migration-status.ts [--root <repo>] [--handoff-dir <dir>] [--remote <remote>] [--json]\n",
+      );
       process.exit(0);
     }
     throw new Error(`unsupported argument: ${arg}`);
@@ -125,8 +145,8 @@ function parseArgs(argv: string[]): ParsedArgs {
   return parsed;
 }
 
-async function readMigrationStatus(root: string, handoffDir?: string): Promise<MigrationStatus> {
-  const [migrationDoc, toolsDevConfig, toolsPackConfig, releaseBetaWorkflow, git] = await Promise.all([
+async function readMigrationStatus(root: string, handoffDir?: string, remote?: string): Promise<MigrationStatus> {
+  const [migrationDoc, toolsDevConfig, toolsPackConfig, releaseBetaWorkflow, gitStatus] = await Promise.all([
     readFile(join(root, "docs", "electron-to-tauri-migration.md"), "utf8"),
     readFile(join(root, "tools", "dev", "src", "config.ts"), "utf8"),
     readFile(join(root, "tools", "pack", "src", "config.ts"), "utf8"),
@@ -151,18 +171,20 @@ async function readMigrationStatus(root: string, handoffDir?: string): Promise<M
     ]),
   ];
   const phase = currentPhase(groups);
-  const handoff = handoffDir == null ? undefined : await readHandoffStatus(handoffDir, git);
+  const handoff = handoffDir == null ? undefined : await readHandoffStatus(handoffDir, gitStatus);
+  const remoteStatus = remote == null ? undefined : await readRemoteStatus(root, remote, gitStatus, handoff);
   const status: MigrationStatus = {
     defaults: {
       releaseBeta: readReleaseBetaDefault(releaseBetaWorkflow),
       toolsDev: readDefaultDesktopRuntime(toolsDevConfig, "tools-dev"),
       toolsPack: readDefaultDesktopRuntime(toolsPackConfig, "tools-pack"),
     },
-    git,
+    git: gitStatus,
     groups,
     ...(handoff == null ? {} : { handoff }),
-    nextActions: nextActionsForPhase(phase, handoff),
+    nextActions: nextActionsForPhase(phase, handoff, remoteStatus),
     phase,
+    ...(remoteStatus == null ? {} : { remote: remoteStatus }),
     root,
   };
   return status;
@@ -185,13 +207,15 @@ function currentPhase(groups: ChecklistGroupStatus[]): MigrationStatus["phase"] 
   return "complete";
 }
 
-function nextActionsForPhase(phase: MigrationStatus["phase"], handoff?: HandoffStatus): string[] {
+function nextActionsForPhase(phase: MigrationStatus["phase"], handoff?: HandoffStatus, remote?: RemoteStatus): string[] {
   if (phase === "M4") {
     return [
       handoff?.current === true
         ? `Copy the current verified handoff directory from ${handoff.dir} to a write-capable machine.`
         : "Regenerate the verified handoff set with scripts/verify-tauri-migration-handoff.ts --output-dir /tmp/open-design-tauri-migration-handoff.",
-      "Import and push the manifest on a write-capable machine, then run scripts/verify-tauri-migration-remote.ts --manifest /tmp/open-design-tauri-migration-handoff/open-design-tauri-migration-handoff.json --remote origin.",
+      remote?.current === true
+        ? `Remote ${remote.remote} already matches ${remote.branch ?? "the migration branch"} at ${remote.head ?? "the expected head"}.`
+        : "Import and push the manifest on a write-capable machine, then run scripts/verify-tauri-migration-remote.ts --manifest /tmp/open-design-tauri-migration-handoff/open-design-tauri-migration-handoff.json --remote origin.",
       "Run the Windows and Linux Tauri package smoke jobs.",
       "Advance M4 evidence and M5 defaults with scripts/advance-tauri-migration-m4-m5.ts --win-report <dir> --linux-report <dir>.",
     ];
@@ -310,6 +334,78 @@ async function readHandoffStatus(handoffDir: string, gitStatus: GitStatus): Prom
   }
 }
 
+async function readRemoteStatus(
+  root: string,
+  remote: string,
+  gitStatus: GitStatus,
+  handoff?: HandoffStatus,
+): Promise<RemoteStatus> {
+  const branch = handoff?.branch ?? gitStatus.branch;
+  const expectedHead = handoff?.branchHead ?? gitStatus.head;
+  const problems: string[] = [];
+  if (branch == null || branch.length === 0 || branch === "HEAD") {
+    problems.push("remote check requires a named branch");
+  }
+  if (expectedHead == null) {
+    problems.push("remote check requires an expected branch head");
+  }
+  if (problems.length > 0) {
+    return {
+      ...(branch == null ? {} : { branch }),
+      ...(expectedHead == null ? {} : { expectedHead }),
+      current: false,
+      present: false,
+      problems,
+      remote,
+    };
+  }
+  const checkedBranch = branch!;
+  const checkedExpectedHead = expectedHead!;
+  try {
+    const head = await readRemoteBranchHead(root, remote, checkedBranch);
+    if (head !== checkedExpectedHead) {
+      problems.push(`remote branch head mismatch: expected ${checkedExpectedHead}, got ${head}`);
+    }
+    return {
+      branch: checkedBranch,
+      current: problems.length === 0,
+      expectedHead: checkedExpectedHead,
+      head,
+      present: true,
+      problems,
+      remote,
+    };
+  } catch (error) {
+    return {
+      branch: checkedBranch,
+      current: false,
+      expectedHead: checkedExpectedHead,
+      present: false,
+      problems: [error instanceof Error ? error.message : String(error)],
+      remote,
+    };
+  }
+}
+
+async function readRemoteBranchHead(cwd: string, remote: string, branch: string): Promise<string> {
+  const result = await execFileAsync("git", ["ls-remote", "--heads", remote, `refs/heads/${branch}`], {
+    cwd,
+    maxBuffer: 1024 * 1024,
+  });
+  const lines = result.stdout.trim().split(/\r?\n/).filter(Boolean);
+  if (lines.length === 0) {
+    throw new Error(`remote branch not found: ${remote} ${branch}`);
+  }
+  if (lines.length !== 1) {
+    throw new Error(`remote branch resolved ambiguously: ${remote} ${branch}`);
+  }
+  const [head, ref] = lines[0]!.split(/\s+/, 2);
+  if (head == null || ref !== `refs/heads/${branch}`) {
+    throw new Error(`unexpected ls-remote output: ${lines[0]}`);
+  }
+  return head;
+}
+
 function readHandoffManifest(value: Partial<HandoffManifest>): HandoffManifest {
   if (value.schemaVersion !== 1) {
     throw new Error(`unsupported handoff manifest schemaVersion: ${String(value.schemaVersion)}`);
@@ -366,6 +462,23 @@ function formatMigrationStatus(status: MigrationStatus): string {
       lines.push(`  Bundle: ${status.handoff.bundle}`);
     }
     for (const problem of status.handoff.problems) {
+      lines.push(`  - ${problem}`);
+    }
+  }
+  if (status.remote != null) {
+    lines.push(
+      `Remote: ${status.remote.present ? (status.remote.current ? "current" : "needs attention") : "missing"} (${status.remote.remote})`,
+    );
+    if (status.remote.branch != null) {
+      lines.push(`  Branch: ${status.remote.branch}`);
+    }
+    if (status.remote.head != null) {
+      lines.push(`  Head: ${status.remote.head}`);
+    }
+    if (status.remote.expectedHead != null) {
+      lines.push(`  Expected: ${status.remote.expectedHead}`);
+    }
+    for (const problem of status.remote.problems) {
       lines.push(`  - ${problem}`);
     }
   }

@@ -117,6 +117,55 @@ test("tauri-migration-status reports stale handoff artifacts", async (t) => {
   assert.match(parsed.handoff.problems.join("\n"), new RegExp(`manifest branchHead is stale: expected ${head}, got ${staleHead}`));
 });
 
+test("tauri-migration-status reports a remote branch matching the handoff", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+  const remotePath = await createRemoteFixture(fixture, head);
+
+  const result = await runStatus(fixture, "--handoff-dir", handoffDir, "--remote", remotePath);
+  const parsed = JSON.parse(result.stdout) as {
+    nextActions: string[];
+    remote: {
+      current: boolean;
+      expectedHead: string;
+      head: string;
+      present: boolean;
+      problems: string[];
+    };
+  };
+
+  assert.equal(parsed.remote.present, true);
+  assert.equal(parsed.remote.current, true);
+  assert.equal(parsed.remote.head, head);
+  assert.equal(parsed.remote.expectedHead, head);
+  assert.deepEqual(parsed.remote.problems, []);
+  assert.match(parsed.nextActions.join("\n"), /already matches/);
+});
+
+test("tauri-migration-status reports a missing remote branch", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+  const remotePath = join(fixture, "empty.git");
+  await git(fixture, "init", "--bare", remotePath);
+
+  const result = await runStatus(fixture, "--handoff-dir", handoffDir, "--remote", remotePath);
+  const parsed = JSON.parse(result.stdout) as { remote: { current: boolean; present: boolean; problems: string[] } };
+
+  assert.equal(parsed.remote.present, false);
+  assert.equal(parsed.remote.current, false);
+  assert.match(parsed.remote.problems.join("\n"), /remote branch not found/);
+});
+
 async function createFixtureRoot(
   t: test.TestContext,
   options: { checked: readonly string[]; defaults: "electron" | "tauri"; extraDocLines?: readonly string[] },
@@ -163,6 +212,13 @@ async function writeHandoffFixture(handoffDir: string, options: { branchHead: st
     "utf8",
   );
   return bundleSha256;
+}
+
+async function createRemoteFixture(root: string, branchHead: string): Promise<string> {
+  const remotePath = join(root, "remote.git");
+  await git(root, "init", "--bare", remotePath);
+  await git(root, "push", remotePath, `${branchHead}:refs/heads/codex/electron-to-tauri-migration`);
+  return remotePath;
 }
 
 function migrationDoc(checkedLabels: readonly string[], extraLines: readonly string[]): string {
