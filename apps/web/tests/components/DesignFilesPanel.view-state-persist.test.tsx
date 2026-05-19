@@ -176,4 +176,16 @@ describe('DesignFilesPanel view-state persistence', () => {
       expect.any(String),
     );
   });
+
+  it('falls back to default pageSize when stored value is not a supported option', () => {
+    const files = generateFiles(500);
+
+    // Seed localStorage with an unsupported value (fractional, out-of-set integer)
+    for (const bad of [0.5, 17, 999, -1, 0]) {
+      vi.mocked(localStorage.getItem).mockReturnValueOnce(JSON.stringify({ pageSize: bad }));
+      const { container } = renderPanel(files);
+      expect(getPerPageSelect(container).value).toBe('30');
+      cleanup();
+    }
+  });
 });

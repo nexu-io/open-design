@@ -61,6 +61,7 @@ const VIEW_STATE_KEY_PREFIX = 'od:design-files:view-state:v1:';
 const DEFAULT_SORT_KEY: SortKey = 'mtime';
 const DEFAULT_SORT_DIR: SortDir = 'desc';
 const DEFAULT_PAGE_SIZE: number | 'all' = 30;
+const PAGE_SIZE_OPTIONS = [15, 30, 45, 60, 'all'] as const;
 
 interface PersistedViewState {
   sortKey?: SortKey;
@@ -99,8 +100,7 @@ function isSortDir(v: unknown): v is SortDir {
 }
 
 function isPageSize(v: unknown): v is number | 'all' {
-  if (v === 'all') return true;
-  return typeof v === 'number' && Number.isFinite(v) && v > 0;
+  return (PAGE_SIZE_OPTIONS as ReadonlyArray<unknown>).includes(v);
 }
 
 // Validate that a value is one of the known ProjectFileKind literals. This
