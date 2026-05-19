@@ -142,14 +142,22 @@ pnpm --filter @open-design/tools-pack test
 
 ### M6 Electron removal procedure
 
-1. Remove Electron packages from `apps/desktop/package.json`, `apps/packaged/package.json`, and `tools/pack/package.json`; then run `pnpm install` so `pnpm-lock.yaml` importer entries are updated.
-2. Remove or replace Electron runtime files under `apps/desktop/src/main/`, including `index.ts`, `preload.cts`, and `runtime.ts`. Keep any runtime-neutral code only if it has a Tauri caller.
-3. Remove Electron-only pack resources such as `tools/pack/resources/web-standalone-after-pack.cjs` and any electron-builder hook wiring that becomes unreachable.
-4. Delete or rewrite Electron-only tests in `apps/desktop/tests`, `apps/packaged/tests`, and `tools/pack/tests`. Tests for Tauri behavior, headless Linux, and generic sidecar contracts should remain.
-5. Update Electron-specific guidance in root/app/tool AGENTS files, `tools/pack/AGENTS.md`, `docs/code-review-guidelines.md`, and `.github/pull_request_template.md`.
-6. Remove `electron` from `DESKTOP_RUNTIME_KINDS` in `tools/dev/src/config.ts` and `tools/pack/src/config.ts` only after the M6 cleanup checkboxes are ready to move together.
-7. Mark all five M6 checklist items together. `pnpm guard` intentionally rejects M6 cleanup before M5 and rejects stale files, deps, lockfile importers, tests, or guidance.
-8. Run:
+1. Print the current Electron cleanup inventory:
+
+```bash
+pnpm exec tsx scripts/tauri-migration-inventory.ts --json
+```
+
+The inventory groups the exact M6 blockers by package manifest dependencies, `pnpm-lock.yaml` importers, Electron runtime files, Electron-only pack resources, Electron-referencing tests, and Electron-specific guidance. Use it as the removal checklist before editing.
+
+2. Remove Electron packages from `apps/desktop/package.json`, `apps/packaged/package.json`, and `tools/pack/package.json`; then run `pnpm install` so `pnpm-lock.yaml` importer entries are updated.
+3. Remove or replace Electron runtime files under `apps/desktop/src/main/`, including `index.ts`, `preload.cts`, and `runtime.ts`. Keep any runtime-neutral code only if it has a Tauri caller.
+4. Remove Electron-only pack resources such as `tools/pack/resources/web-standalone-after-pack.cjs` and any electron-builder hook wiring that becomes unreachable.
+5. Delete or rewrite Electron-only tests in `apps/desktop/tests`, `apps/packaged/tests`, and `tools/pack/tests`. Tests for Tauri behavior, headless Linux, and generic sidecar contracts should remain.
+6. Update Electron-specific guidance in root/app/tool AGENTS files, `tools/pack/AGENTS.md`, `docs/code-review-guidelines.md`, and `.github/pull_request_template.md`.
+7. Remove `electron` from `DESKTOP_RUNTIME_KINDS` in `tools/dev/src/config.ts` and `tools/pack/src/config.ts` only after the M6 cleanup checkboxes are ready to move together.
+8. Mark all five M6 checklist items together. `pnpm guard` intentionally rejects M6 cleanup before M5 and rejects stale files, deps, lockfile importers, tests, or guidance.
+9. Run:
 
 ```bash
 pnpm install
@@ -329,6 +337,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Added `scripts/verify-tauri-migration-remote.ts` so the write-capable receiving machine can confirm the pushed remote branch exactly matches the handoff manifest `branchHead` before waiting on native Windows/Linux CI. The remote verifier and test are part of root `pnpm guard` and CI packaging scope detection. `node --import tsx --test scripts/verify-tauri-migration-remote.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, `cd e2e && pnpm test tests/packaged-smoke-workflow.test.ts`, and `pnpm guard` passed.
 - 2026-05-20: Added `scripts/apply-tauri-migration-m5.ts` so the default flip after native M4 evidence is a guarded one-command edit instead of a manual multi-file checklist update. The script refuses to run before the verifier-applied M4 marker, then flips the tools-dev/tools-pack/release-beta defaults, preserves explicit Electron fallback support, updates Tauri-primary docs, and checks all M5 lines together. `node --import tsx --test scripts/apply-tauri-migration-m5.test.ts scripts/tauri-ci-scope.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, `cd e2e && pnpm test tests/packaged-smoke-workflow.test.ts`, `pnpm guard`, `pnpm install`, and a current-state `--dry-run` rejection check passed.
 - 2026-05-20: Added `scripts/advance-tauri-migration-m4-m5.ts` so extracted native platform reports can move the migration through M4 evidence recording and M5 default flip in one guarded command. It runs the platform verifier with `--update-migration-doc`, then invokes the M5 applicator; if platform verification fails, M5 defaults remain untouched. `node --import tsx --test scripts/advance-tauri-migration-m4-m5.test.ts scripts/tauri-ci-scope.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, `cd e2e && pnpm test tests/packaged-smoke-workflow.test.ts`, `pnpm guard`, and `pnpm install` passed.
+- 2026-05-20: Added `scripts/tauri-migration-inventory.ts` so M6 Electron cleanup starts from a machine-readable inventory of remaining Electron dependencies, lockfile importers, runtime files, pack resources, tests, and guidance references. Current inventory reports 3 package manifests, 3 lockfile importers, 3 runtime files, 1 pack resource, 18 test files, and 6 guidance files still blocking M6. `node --import tsx --test scripts/tauri-migration-inventory.test.ts scripts/tauri-migration-status.test.ts scripts/tauri-ci-scope.test.ts`, `pnpm exec tsx scripts/tauri-migration-inventory.ts --json`, `tsc -p scripts/tsconfig.json --noEmit`, `cd e2e && pnpm test tests/packaged-smoke-workflow.test.ts`, `pnpm guard`, and `pnpm install` passed.
 
 ### Platform Gate Runners
 
