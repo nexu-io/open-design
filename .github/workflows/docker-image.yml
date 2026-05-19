@@ -2,12 +2,10 @@ name: Docker image
 
 # Phase 5 / spec §15.5 — multi-arch image builds.
 #
-# Pushes to ghcr.io on:
-#   - tag (v*.*.*)    → ghcr.io/<owner>/od:<tag> + :latest
+# Pushes to ghcr.io when run manually for a selected ref.
 
 on:
-  push:
-    tags: ['v*.*.*']
+  workflow_dispatch:
 
 jobs:
   build-and-push:

@@ -2,6 +2,10 @@ name: landing-page-ci
 
 on:
   pull_request:
+    branches:
+      - development
+      - test
+      - main
     paths:
       # Workflow files
       - .github/workflows/landing-page-ci.yml

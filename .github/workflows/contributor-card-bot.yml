@@ -12,6 +12,10 @@ name: Contributor Card Bot
 # want to recognize. They can be re-added later via a workflow_run handoff.
 on:
   pull_request_target:
+    branches:
+      - development
+      - test
+      - main
     types: [closed]
   issues:
     types: [opened]
