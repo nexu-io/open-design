@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -15,6 +15,7 @@ type Args = {
   branch: string;
   cwd: string;
   keepTemp: boolean;
+  manifest?: string;
   output?: string;
 };
 
@@ -58,6 +59,19 @@ async function main(): Promise<void> {
     if (importedHead !== branchHead) {
       throw new Error(`imported branch head mismatch: expected ${branchHead}, got ${importedHead}`);
     }
+    const importCommand = receivingImportCommand(bundlePath, bundleSha256, args.branch);
+    if (args.manifest != null) {
+      await writeManifest(args.manifest, {
+        base: args.base,
+        baseHead,
+        branch: args.branch,
+        branchHead,
+        bundlePath,
+        bundleSha256,
+        importCommand,
+        source: args.cwd,
+      });
+    }
 
     process.stdout.write(
       [
@@ -68,8 +82,9 @@ async function main(): Promise<void> {
         `Base: ${args.base} @ ${baseHead}`,
         `Bundle: ${bundlePath}`,
         `SHA-256: ${bundleSha256}`,
+        ...(args.manifest == null ? [] : [`Manifest: ${args.manifest}`]),
         "Receiving import command (replace --bundle if copied elsewhere):",
-        indent(receivingImportCommand(bundlePath, bundleSha256, args.branch)),
+        indent(importCommand),
         "Create:",
         indent(createOutput.stdout.trim()),
         "Import:",
@@ -123,10 +138,18 @@ function parseArgs(argv: string[]): Args {
       parsed.keepTemp = true;
       continue;
     }
+    if (arg === "--manifest") {
+      if (value == null) {
+        throw new Error("--manifest requires a path");
+      }
+      parsed.manifest = resolve(value);
+      index += 1;
+      continue;
+    }
     if (arg === "--help" || arg === "-h") {
       process.stdout.write(
         [
-          "usage: tsx scripts/verify-tauri-migration-handoff.ts [--cwd <repo>] [--branch <ref>] [--base <ref>] [--output <bundle>] [--keep-temp]",
+          "usage: tsx scripts/verify-tauri-migration-handoff.ts [--cwd <repo>] [--branch <ref>] [--base <ref>] [--output <bundle>] [--manifest <path>] [--keep-temp]",
           "",
           `defaults: --cwd ${defaultRoot} --branch ${defaultBranch} --base ${defaultBase}`,
           "",
@@ -181,6 +204,35 @@ function receivingImportCommand(bundlePath: string, bundleSha256: string, branch
 
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+async function writeManifest(
+  path: string,
+  manifest: {
+    base: string;
+    baseHead: string;
+    branch: string;
+    branchHead: string;
+    bundlePath: string;
+    bundleSha256: string;
+    importCommand: string;
+    source: string;
+  },
+): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(
+    path,
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        createdAt: new Date().toISOString(),
+        ...manifest,
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
 }
 
 try {

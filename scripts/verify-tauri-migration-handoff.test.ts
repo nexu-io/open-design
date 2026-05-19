@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
@@ -17,6 +17,7 @@ test("verify-tauri-migration-handoff round-trips a bundle through a receiving ch
   const sourceRepo = await createFixtureRepo(t, "open-design-tauri-handoff-pass-");
   const sourceHead = (await git(sourceRepo, "rev-parse", migrationBranch)).stdout.trim();
   const bundlePath = join(sourceRepo, "handoff.bundle");
+  const manifestPath = join(sourceRepo, "handoff.json");
 
   const result = await runHandoffScript(
     "--cwd",
@@ -27,17 +28,34 @@ test("verify-tauri-migration-handoff round-trips a bundle through a receiving ch
     "main",
     "--output",
     bundlePath,
+    "--manifest",
+    manifestPath,
   );
 
   assert.match(result.stdout, /Verified Tauri migration bundle handoff round-trip/);
   assert.match(result.stdout, new RegExp(`Branch: ${migrationBranch.replaceAll("/", "\\/")} @ ${sourceHead}`));
   assert.match(result.stdout, /SHA-256: [0-9a-f]{64}/);
+  assert.match(result.stdout, new RegExp(`Manifest: ${escapeRegExp(manifestPath)}`));
   assert.match(result.stdout, /Receiving import command \(replace --bundle if copied elsewhere\):/);
   assert.match(result.stdout, /pnpm exec tsx scripts\/import-tauri-migration-bundle\.ts \\/);
   assert.match(result.stdout, /--expected-sha256 [0-9a-f]{64} \\/);
   assert.match(result.stdout, new RegExp(`--branch '${migrationBranch.replaceAll("/", "\\/")}' \\\\`));
   assert.match(result.stdout, /Temp retained: false/);
   await access(bundlePath);
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+    branch: string;
+    branchHead: string;
+    bundlePath: string;
+    bundleSha256: string;
+    importCommand: string;
+    schemaVersion: number;
+  };
+  assert.equal(manifest.schemaVersion, 1);
+  assert.equal(manifest.branch, migrationBranch);
+  assert.equal(manifest.branchHead, sourceHead);
+  assert.equal(manifest.bundlePath, bundlePath);
+  assert.match(manifest.bundleSha256, /^[0-9a-f]{64}$/);
+  assert.match(manifest.importCommand, /import-tauri-migration-bundle/);
 });
 
 test("verify-tauri-migration-handoff rejects dirty source worktrees", async (t) => {
@@ -80,4 +98,8 @@ async function git(cwd: string, ...args: string[]): Promise<{ stderr: string; st
     cwd,
     maxBuffer: 1024 * 1024,
   });
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

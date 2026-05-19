@@ -310,6 +310,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Added the Tauri migration handoff/status scripts to CI packaging scope detection so changes to bundle creation, bundle import, status reporting, phase-order policy, or platform report verification rerun the Windows/Linux Tauri smoke jobs. The workflow test now requires each migration evidence script to appear in both the `required=true` packaging scope and the `tools_pack_tests_required=true` scope. `cd e2e && pnpm test tests/packaged-smoke-workflow.test.ts` and `pnpm guard` passed.
 - 2026-05-20: Added `scripts/tauri-ci-scope.test.ts` to root `pnpm guard` so Tauri migration evidence scripts must remain in both the CI packaging `required=true` pattern list and the explicit `tools_pack_tests_required=true` condition. `node --import tsx --test scripts/tauri-ci-scope.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `pnpm guard` passed.
 - 2026-05-20: Updated `scripts/verify-tauri-migration-handoff.ts` so the verified handoff output includes the receiving-side import command with the current SHA-256 and branch already filled in. `node --import tsx --test scripts/verify-tauri-migration-handoff.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `pnpm guard` passed.
+- 2026-05-20: Added `--manifest` support to `scripts/verify-tauri-migration-handoff.ts`, producing a JSON sidecar with schema version, branch/base heads, bundle path, bundle SHA-256, and the receiving-side import command. `node --import tsx --test scripts/verify-tauri-migration-handoff.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `pnpm guard` passed.
 
 ### Platform Gate Runners
 
@@ -370,10 +371,11 @@ If direct push is blocked by credentials, create a verified git bundle from this
 
 ```bash
 pnpm exec tsx scripts/verify-tauri-migration-handoff.ts \
-  --output /tmp/open-design-tauri-migration.bundle
+  --output /tmp/open-design-tauri-migration.bundle \
+  --manifest /tmp/open-design-tauri-migration-handoff.json
 ```
 
-Keep the script output with the handoff notes. It records the migration branch head, `origin/main` base, bundle byte size, SHA-256, `git bundle verify` result, bundled heads, and the receiving-side import command with the checksum already filled in.
+Keep the script output and JSON manifest with the handoff notes. They record the migration branch head, `origin/main` base, bundle byte size, SHA-256, `git bundle verify` result, bundled heads, and the receiving-side import command with the checksum already filled in.
 
 On the receiving checkout, verify and fetch the bundle before pushing:
 
