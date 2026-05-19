@@ -1304,6 +1304,26 @@ function TemplatePicker({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  function dismissConfirm() {
+    if (deleting) return;
+    setConfirmTarget(null);
+    setDeleteError(null);
+  }
+
+  useEffect(() => {
+    if (!confirmTarget) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (deleting) return;
+      setConfirmTarget(null);
+      setDeleteError(null);
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
+  }, [confirmTarget, deleting]);
+
   async function handleConfirmDelete() {
     if (!confirmTarget || !onDelete) return;
     setDeleting(true);
@@ -1371,15 +1391,16 @@ function TemplatePicker({
       {confirmTarget ? (
         <div
           className="modal-backdrop template-delete-confirm-backdrop"
-          onClick={() => {
-            if (deleting) return;
-            setConfirmTarget(null);
-            setDeleteError(null);
-          }}
+          onClick={dismissConfirm}
         >
           <div
             className="modal modal-confirm"
             onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key !== 'Escape') return;
+              e.stopPropagation();
+              dismissConfirm();
+            }}
             role="alertdialog"
             aria-modal="true"
             data-testid="template-delete-confirm-dialog"
@@ -1393,10 +1414,7 @@ function TemplatePicker({
                 type="button"
                 disabled={deleting}
                 data-testid="template-delete-cancel"
-                onClick={() => {
-                  setConfirmTarget(null);
-                  setDeleteError(null);
-                }}
+                onClick={dismissConfirm}
               >
                 {t('common.cancel')}
               </button>

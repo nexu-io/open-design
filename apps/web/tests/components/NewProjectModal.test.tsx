@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { NewProjectModal } from '../../src/components/NewProjectModal';
-import type { DesignSystemSummary, SkillSummary } from '../../src/types';
+import type { DesignSystemSummary, ProjectTemplate, SkillSummary } from '../../src/types';
 
 const skills: SkillSummary[] = [
   {
@@ -21,6 +21,16 @@ const skills: SkillSummary[] = [
     hasBody: true,
     examplePrompt: 'Build a prototype.',
     aggregatesExamples: false,
+  },
+];
+
+const templates: ProjectTemplate[] = [
+  {
+    id: 'tmpl-landing',
+    name: 'Landing Page',
+    description: 'A saved landing page starter.',
+    files: [{ name: 'prototype/App.jsx', path: 'prototype/App.jsx' }],
+    createdAt: '2026-05-07T00:00:00.000Z',
   },
 ];
 
@@ -75,5 +85,31 @@ describe('NewProjectModal layout', () => {
     expect(panelBody).toBeTruthy();
     expect(screen.getByTestId('new-project-panel')).toBeTruthy();
     expect(screen.getByTestId('create-project')).toBeTruthy();
+  });
+
+  it('Escape dismisses template delete confirm without closing the modal', () => {
+    const onClose = vi.fn();
+    render(
+      <NewProjectModal
+        open
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={templates}
+        onDeleteTemplate={vi.fn()}
+        promptTemplates={[]}
+        onCreate={() => {}}
+        onClose={onClose}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'From template' }));
+    fireEvent.click(screen.getByLabelText(/delete template landing page/i));
+    expect(screen.getByTestId('template-delete-confirm-dialog')).toBeTruthy();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByTestId('template-delete-confirm-dialog')).toBeNull();
+    expect(screen.getByTestId('new-project-modal')).toBeTruthy();
+    expect(onClose).not.toHaveBeenCalled();
   });
 });

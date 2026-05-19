@@ -745,4 +745,26 @@ describe('NewProjectPanel template deletion', () => {
     expect(screen.getByText('Landing Page')).toBeTruthy();
     expect(screen.getByTestId('template-delete-confirm-dialog')).toBeTruthy();
   });
+
+  it('Escape dismisses delete confirm without calling onDelete', () => {
+    const onDelete = vi.fn();
+    render(
+      <NewProjectPanel
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={templates}
+        onDeleteTemplate={onDelete}
+        promptTemplates={[]}
+        onCreate={vi.fn()}
+      />,
+    );
+
+    openTemplateTab();
+    clickTemplateDelete();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByTestId('template-delete-confirm-dialog')).toBeNull();
+    expect(onDelete).not.toHaveBeenCalled();
+    expect(screen.getByText('Landing Page')).toBeTruthy();
+  });
 });
