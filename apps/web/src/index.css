@@ -3299,13 +3299,24 @@ a.avatar-item:visited {
 .project-location-card,
 .project-location-edit {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
   align-items: center;
-  padding: 10px 12px;
-  border: 1px solid var(--border-soft);
+  min-height: 58px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--bg-subtle);
+  background: var(--bg-panel);
+  transition: border-color 120ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 120ms cubic-bezier(0.23, 1, 0.32, 1), background 120ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.project-location-card:hover,
+.project-location-edit:hover {
+  border-color: var(--border-strong);
+}
+.project-location-card.is-default,
+.project-location-edit.is-default {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
 }
 .project-location-card code {
   display: block;
@@ -3317,10 +3328,12 @@ a.avatar-item:visited {
 .project-location-default-control span {
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
-  padding: 3px 8px;
+  padding: 4px 10px;
   color: var(--text-muted);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
+  background: var(--bg-subtle);
+  white-space: nowrap;
 }
 .project-location-default-control {
   display: inline-flex;
@@ -3330,7 +3343,14 @@ a.avatar-item:visited {
   cursor: pointer;
 }
 .project-location-default-control input {
-  accent-color: var(--accent);
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.project-location-default-control input:checked + span {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 .project-location-list {
   display: flex;
@@ -3340,7 +3360,6 @@ a.avatar-item:visited {
 .project-location-edit {
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
-  background: var(--bg-panel);
 }
 .project-location-edit-main {
   display: flex;

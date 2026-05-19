@@ -176,7 +176,7 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
       </div>
 
       {builtIn ? (
-        <div className="project-location-card is-built-in">
+        <div className={`project-location-card is-built-in${effectiveDefaultLocationId === builtIn.id ? ' is-default' : ''}`}>
           <div>
             <strong>{builtIn.name}</strong>
             <code>{builtIn.path}</code>
@@ -195,15 +195,15 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
 
       <div className="project-location-list">
         {drafts.map((draft, index) => (
-          <div className="project-location-edit" key={`${draft.id ?? 'new'}-${index}`}>
+          <div
+            className={`project-location-edit${draft.id && effectiveDefaultLocationId === draft.id ? ' is-default' : ''}`}
+            key={`${draft.id ?? 'new'}-${index}`}
+          >
             <div className="project-location-edit-main">
               <strong>{locationLabel(draft.path)}</strong>
               <code>{draft.path}</code>
               <small>{t('settings.projectLocationsWorkBaseMeta')}</small>
             </div>
-            <button type="button" className="icon-btn danger" onClick={() => removeDraft(index)} disabled={saving}>
-              Remove
-            </button>
             {draft.id ? (
               <label className="project-location-default-control">
                 <input
@@ -215,6 +215,9 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
                 <span>{defaultControlLabel(draft.id)}</span>
               </label>
             ) : null}
+            <button type="button" className="icon-btn danger" onClick={() => removeDraft(index)} disabled={saving}>
+              {t('common.delete')}
+            </button>
           </div>
         ))}
       </div>
