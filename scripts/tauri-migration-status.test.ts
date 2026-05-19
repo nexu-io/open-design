@@ -381,12 +381,12 @@ test("tauri-migration-status reports incomplete platform report inputs", async (
   assert.deepEqual(parsed.platformReports.problems, ["Linux report not provided"]);
 });
 
-test("continue-tauri-migration dry-run refreshes handoff and plans a branch push", async (t) => {
+test("continue-tauri-migration dry-run stops after a stale handoff refresh plan", async (t) => {
   const fixture = await createFixtureRoot(t, {
     checked: [],
     defaults: "electron",
   });
-  const head = await initGitFixture(fixture);
+  await initGitFixture(fixture);
   const handoffDir = join(fixture, "handoff");
   const remotePath = join(fixture, "empty.git");
   await git(fixture, "init", "--bare", remotePath);
@@ -405,6 +405,37 @@ test("continue-tauri-migration dry-run refreshes handoff and plans a branch push
   assert.match(result.stdout, /verify-tauri-migration-handoff\.ts/);
   assert.match(result.stdout, new RegExp(`--cwd ${escapeRegExp(fixture)}`));
   assert.match(result.stdout, /package-tauri-migration-handoff\.ts/);
+  assert.match(result.stdout, /Rerun the continuation dry-run after refreshing handoff artifacts/);
+  assert.doesNotMatch(result.stdout, /push-tauri-migration-handoff\.ts/);
+  assert.doesNotMatch(result.stdout, /Would push codex\/electron-to-tauri-migration/);
+  assert.doesNotMatch(result.stdout, /download-tauri-m4-reports\.ts/);
+});
+
+test("continue-tauri-migration dry-run plans a branch push from current handoff status", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+  await writeHandoffArchive(handoffDir);
+  const remotePath = join(fixture, "empty.git");
+  await git(fixture, "init", "--bare", remotePath);
+
+  const result = await runContinue(
+    fixture,
+    "--handoff-dir",
+    handoffDir,
+    "--remote",
+    remotePath,
+    "--dry-run",
+    "--skip-dispatch",
+  );
+
+  assert.match(result.stdout, /Continuing Tauri migration/);
+  assert.doesNotMatch(result.stdout, /verify-tauri-migration-handoff\.ts/);
+  assert.doesNotMatch(result.stdout, /package-tauri-migration-handoff\.ts/);
   assert.match(result.stdout, /push-tauri-migration-handoff\.ts/);
   assert.match(result.stdout, /Would push codex\/electron-to-tauri-migration/);
   assert.match(result.stdout, /download-tauri-m4-reports\.ts/);

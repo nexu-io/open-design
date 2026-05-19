@@ -100,9 +100,12 @@ async function main(): Promise<void> {
       dryRun: args.dryRun,
     });
     log.push(`${args.dryRun ? "Would refresh" : "Refreshed"} verified handoff artifacts under ${args.handoffDir}.`);
-    if (!args.dryRun) {
-      status = await readStatus(args);
+    if (args.dryRun) {
+      log.push("Rerun the continuation dry-run after refreshing handoff artifacts to plan push and report actions from current status.");
+      process.stdout.write(`${log.join("\n")}\n`);
+      return;
     }
+    status = await readStatus(args);
   }
 
   await continueM4(args, status, log);
