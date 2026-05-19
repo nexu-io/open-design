@@ -4,16 +4,19 @@ name: PR author inactivity
 # for more than 3 days, and close after more than 5 days.
 #
 # Inactivity heuristic:
-# - We look for the latest trusted non-author feedback on an open PR via:
-#   1) issue comments,
-#   2) non-approval reviews, or
-#   3) inline review comments.
-# - We then check whether the PR author responded after that feedback via:
+# - We look for the PR author's latest response via:
 #   1) an issue comment,
 #   2) a submitted pull-request review,
 #   3) an inline review comment reply, or
 #   4) a commit / force-push timeline event.
-# - If not, we remind once after 72h and close after 120h.
+# - We then find the first trusted human reviewer / maintainer feedback that
+#   arrived after that author response via:
+#   1) issue comments,
+#   2) non-approval reviews, or
+#   3) inline review comments.
+# - Only author activity resets the clock. Later reviewer / maintainer bumps do
+#   not. If that feedback goes unanswered, we remind once after 72h and close
+#   after 120h.
 #
 # Bot feedback note: trusted human reviewers / maintainers are the trigger for
 # this workflow. Bot-authored reviews and comments (e.g. CodeRabbit, Codex) are
@@ -73,6 +76,19 @@ jobs:
               direction: 'asc',
             });
 
+            function collectFeedbackAt(author, collection, getLogin, getTimestamp, predicate = () => true) {
+              return collection
+                .filter((item) => {
+                  const login = getLogin(item);
+                  if (!login || login === author || isBot(login) || !isTrustedReviewer(item)) {
+                    return false;
+                  }
+                  return predicate(item);
+                })
+                .map((item) => getTimestamp(item))
+                .filter(Boolean);
+            }
+
             const now = Date.now();
             const summary = [];
 
@@ -104,40 +120,6 @@ jobs:
                   issue_number: pr.number,
                 }),
               ]);
-
-              let latestFeedbackAt = 0;
-
-              for (const comment of comments) {
-                const login = comment.user?.login;
-                if (login === author || isBot(login) || !isTrustedReviewer(comment)) {
-                  continue;
-                }
-                latestFeedbackAt = Math.max(latestFeedbackAt, ts(comment.created_at));
-              }
-
-              for (const review of reviews) {
-                const login = review.user?.login;
-                const state = review.state?.toUpperCase();
-                if (login === author || isBot(login) || !isTrustedReviewer(review)) {
-                  continue;
-                }
-                if (state === 'APPROVED' || state === 'DISMISSED' || state === 'PENDING') {
-                  continue;
-                }
-                latestFeedbackAt = Math.max(latestFeedbackAt, ts(review.submitted_at || review.created_at));
-              }
-
-              for (const reviewComment of reviewComments) {
-                const login = reviewComment.user?.login;
-                if (login === author || isBot(login) || !isTrustedReviewer(reviewComment)) {
-                  continue;
-                }
-                latestFeedbackAt = Math.max(latestFeedbackAt, ts(reviewComment.created_at));
-              }
-
-              if (!latestFeedbackAt) {
-                continue;
-              }
 
               let latestAuthorResponseAt = 0;
 
@@ -175,15 +157,32 @@ jobs:
                 latestAuthorResponseAt = Math.max(latestAuthorResponseAt, ts(event.created_at));
               }
 
-              if (latestAuthorResponseAt > latestFeedbackAt) {
+              const feedbackAts = [
+                ...collectFeedbackAt(author, comments, (comment) => comment.user?.login, (comment) => ts(comment.created_at)),
+                ...collectFeedbackAt(
+                  author,
+                  reviews,
+                  (review) => review.user?.login,
+                  (review) => ts(review.submitted_at || review.created_at),
+                  (review) => {
+                    const state = review.state?.toUpperCase();
+                    return state !== 'APPROVED' && state !== 'DISMISSED' && state !== 'PENDING';
+                  },
+                ),
+                ...collectFeedbackAt(author, reviewComments, (reviewComment) => reviewComment.user?.login, (reviewComment) => ts(reviewComment.created_at)),
+              ].filter((feedbackAt) => feedbackAt > latestAuthorResponseAt);
+
+              if (feedbackAts.length === 0) {
                 continue;
               }
 
+              const feedbackAt = Math.min(...feedbackAts);
+
               const reminderSent = comments.some((comment) => {
-                return ts(comment.created_at) > latestFeedbackAt && comment.body?.includes(REMINDER_MARKER);
+                return ts(comment.created_at) > feedbackAt && comment.body?.includes(REMINDER_MARKER);
               });
 
-              const inactiveFor = now - latestFeedbackAt;
+              const inactiveFor = now - feedbackAt;
 
               if (inactiveFor >= CLOSE_MS) {
                 await github.rest.issues.createComment({
