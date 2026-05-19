@@ -484,8 +484,7 @@ async function sendPrompt(page: Page, prompt: string) {
   const input = page.getByTestId('chat-composer-input');
   const sendButton = page.getByTestId('chat-send');
   await input.click();
-  // fill() is unreliable on contenteditable divs; use pressSequentially instead.
-  await input.pressSequentially(prompt);
+  await input.fill(prompt);
   await expect(input).toHaveValue(prompt, { timeout: 1500 });
   await expect(sendButton).toBeEnabled({ timeout: 1500 });
   const chatResponse = page.waitForResponse(isCreateRunResponse, { timeout: 2000 });

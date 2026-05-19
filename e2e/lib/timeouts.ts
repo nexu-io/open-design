@@ -6,4 +6,4 @@ export const T = {
   medium: Math.ceil(10_000 * scale),
   long: Math.ceil(30_000 * scale),
   xlong: Math.ceil(60_000 * scale),
-} as const;
+};

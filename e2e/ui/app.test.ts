@@ -637,10 +637,7 @@ async function sendPrompt(page: Page, prompt: string) {
   const sendButton = page.getByTestId('chat-send');
   await expect(input).toBeVisible({ timeout: T.short });
   await input.click();
-  // fill() is unreliable on contenteditable divs (inputValue() reads the
-  // DOM value property, which is always '' on contenteditable). Use
-  // pressSequentially which types key-by-key and is authoritative.
-  await input.pressSequentially(prompt);
+  await input.fill(prompt);
   await expect(input).toHaveValue(prompt, { timeout: T.short });
   await expect(sendButton).toBeEnabled({ timeout: T.short });
   await Promise.all([
@@ -1229,7 +1226,7 @@ async function openNewProjectModal(page: Page) {
 }
 
 async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: 10_000 });
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.medium });
 }
 
 async function getCurrentProjectContext(

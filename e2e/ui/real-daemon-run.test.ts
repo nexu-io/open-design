@@ -5,6 +5,7 @@ import {
   FAKE_AGENT_RUNTIME_IDS,
 } from '@/playwright/fake-agents';
 import type { FakeAgentId } from '@/playwright/fake-agents';
+import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
 const GENERATED_FILE = 'real-daemon-smoke.html';
@@ -385,7 +386,7 @@ async function dismissPrivacyDialog(page: Page) {
 }
 
 async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: 10_000 });
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.medium });
 }
 
 async function configureFakeAgent(page: Page, agentId: FakeAgentId) {

@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import type { Dialog, Locator, Page, Request, Response } from '@playwright/test';
 import { automatedUiScenarios } from '@/playwright/resources';
 import type { UiScenario } from '@/playwright/resources';
+import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
 
@@ -2128,8 +2129,7 @@ async function sendPrompt(page: Page, prompt: string) {
   const sendButton = page.getByTestId('chat-send');
   await expect(input).toBeVisible({ timeout: 3_000 });
   await input.click();
-  // fill() is unreliable on contenteditable divs; use pressSequentially instead.
-  await input.pressSequentially(prompt);
+  await input.fill(prompt);
   await expect(input).toHaveValue(prompt, { timeout: 1500 });
   await expect(sendButton).toBeEnabled({ timeout: 1500 });
   await Promise.all([
@@ -2531,7 +2531,7 @@ async function expectProjectsView(page: Page) {
 }
 
 async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: 10_000 });
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.medium });
 }
 
 async function getCurrentProjectContext(

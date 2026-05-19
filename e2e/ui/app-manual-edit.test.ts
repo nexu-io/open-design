@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
 
@@ -314,7 +315,7 @@ async function openDesignFile(page: Page, fileName: string) {
     // Not yet visible; try opening via tab or file list
   }
 
-  const filePattern = new RegExp(fileName.replace('.', '\\.'), 'i');
+  const filePattern = new RegExp(fileName.replace(/\./g, '\\.'), 'i');
   const fileTabButton = page
     .locator('.workspace-tab')
     .filter({ hasText: filePattern })
@@ -322,21 +323,20 @@ async function openDesignFile(page: Page, fileName: string) {
     .first();
   try {
     await fileTabButton.waitFor({ state: 'visible', timeout: 2_000 });
-    await fileTabButton.click();
-    await expect(preview).toBeVisible();
-    return;
   } catch {
     // Tab not visible; open from the file list instead
+    const fileButton = page.getByRole('button', { name: filePattern });
+    await fileButton.click();
+    await page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' }).click();
+    await expect(preview).toBeVisible();
+    return;
   }
-
-  const fileButton = page.getByRole('button', { name: filePattern });
-  await fileButton.click();
-  await page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' }).click();
+  await fileTabButton.click();
   await expect(preview).toBeVisible();
 }
 
 async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: 10_000 });
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.medium });
 }
 
 async function expectFileSource(page: Page, projectId: string, fileName: string, snippets: string[]) {

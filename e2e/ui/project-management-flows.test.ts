@@ -53,6 +53,10 @@ test.beforeEach(async ({ page }) => {
   }, STORAGE_KEY);
 
   await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
     await route.fulfill({
       json: {
         config: {
