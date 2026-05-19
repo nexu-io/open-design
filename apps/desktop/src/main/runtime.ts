@@ -3,11 +3,20 @@ import { mkdir, writeFile, realpath, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { BrowserWindow, dialog, ipcMain, shell } from "electron";
-import type { DesktopExportPdfInput, DesktopExportPdfResult } from "@open-design/sidecar-proto";
+import { BrowserWindow, dialog, ipcMain, screen, shell } from "electron";
+import {
+  DESKTOP_UPDATE_CHANNELS,
+  DESKTOP_UPDATE_MODES,
+  DESKTOP_UPDATE_STATES,
+  type DesktopExportPdfInput,
+  type DesktopExportPdfResult,
+  type DesktopUpdateStatusSnapshot,
+} from "@open-design/sidecar-proto";
+import type { OpenDesignHostActionResult, OpenDesignHostUpdaterActionOptions } from "@open-design/host";
 
 import { createElectronPdfTarget, exportPdfFromHtml, savePrintReadyDocumentAsPdf } from "./pdf-export.js";
 import type { PrintReadyPdfOptions } from "./pdf-export.js";
+import type { DesktopUpdater } from "./updater.js";
 
 /**
  * Result of validating a candidate path before exposing it to a
@@ -205,6 +214,17 @@ export function signDesktopImportToken(
 const PENDING_POLL_MS = 120;
 const RUNNING_POLL_MS = 2000;
 const MAX_CONSOLE_ENTRIES = 200;
+const DESKTOP_PET_WINDOW_WIDTH = 360;
+const DESKTOP_PET_WINDOW_HEIGHT = 300;
+const DESKTOP_PET_WINDOW_MARGIN = 24;
+const UPDATER_STATUS_EVENT = "od:update:status-changed";
+const UPDATER_IPC_CHANNELS = [
+  "od:update:status",
+  "od:update:check",
+  "od:update:download",
+  "od:update:install",
+  "od:update:quit",
+] as const;
 
 export type DesktopEvalInput = {
   expression: string;
@@ -284,8 +304,9 @@ export type DesktopRuntimeOptions = {
    * calls bypass the protocol handler entirely. Optional so tools-dev
    * (where webUrl IS an http:// URL Node fetch can hit) can omit it
    * and the runtime falls back to `discoverUrl` for API calls too.
-   */
+  */
   discoverDaemonUrl?: () => Promise<string | null>;
+  preloadPath?: string;
   /**
    * Round-5 (lefarcen P1, mrcfps): lazy re-handshake hook. The runtime
    * calls this when the daemon answers `503 DESKTOP_AUTH_PENDING` so a
@@ -296,6 +317,8 @@ export type DesktopRuntimeOptions = {
    * skip it (the lazy retry then collapses into a single attempt).
    */
   registerDesktopAuthWithDaemon?: () => Promise<boolean>;
+  requestQuit?: () => void;
+  updater?: DesktopUpdater;
 };
 
 const DESKTOP_IMPORT_TOKEN_HEADER = "X-OD-Desktop-Import-Token";
@@ -624,6 +647,49 @@ function installWindowChromeCssHook(window: BrowserWindow): void {
   });
 }
 
+function desktopPetUrl(baseUrl: string): string {
+  const url = new URL(baseUrl);
+  url.pathname = "/desktop-pet";
+  url.search = "";
+  url.hash = "";
+  return url.toString();
+}
+
+function createDesktopPetWindow(preloadPath: string): BrowserWindow {
+  const { workArea } = screen.getPrimaryDisplay();
+  const petWindow = new BrowserWindow({
+    width: DESKTOP_PET_WINDOW_WIDTH,
+    height: DESKTOP_PET_WINDOW_HEIGHT,
+    x: workArea.x + workArea.width - DESKTOP_PET_WINDOW_WIDTH - DESKTOP_PET_WINDOW_MARGIN,
+    y: workArea.y + workArea.height - DESKTOP_PET_WINDOW_HEIGHT - DESKTOP_PET_WINDOW_MARGIN,
+    show: false,
+    frame: false,
+    transparent: true,
+    backgroundColor: "#00000000",
+    resizable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    hasShadow: false,
+    focusable: false,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      preload: preloadPath,
+      sandbox: true,
+    },
+  });
+  petWindow.setAlwaysOnTop(true, "floating");
+  petWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  petWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (isHttpUrl(url)) void shell.openExternal(url);
+    return { action: "deny" };
+  });
+  petWindow.webContents.on("will-navigate", (event, url) => {
+    if (!url.includes("/desktop-pet")) event.preventDefault();
+  });
+  return petWindow;
+}
+
 function showWindowButtons(window: BrowserWindow): void {
   if (process.platform !== "darwin" || window.isDestroyed()) return;
   window.setWindowButtonVisibility(true);
@@ -729,8 +795,38 @@ function parsePrintReadyPdfOptions(value: unknown): PrintReadyPdfOptions {
   return deck === true ? { deck: true } : {};
 }
 
+function unavailableUpdaterStatus(): DesktopUpdateStatusSnapshot {
+  return {
+    arch: process.arch,
+    capabilities: {
+      canApplyInPlace: false,
+      canDownload: false,
+      canOpenInstaller: false,
+      requiresManualInstall: false,
+    },
+    channel: DESKTOP_UPDATE_CHANNELS.BETA,
+    currentVersion: "0.0.0",
+    enabled: false,
+    error: {
+      code: "updater-unavailable",
+      message: "Desktop updater is not available.",
+    },
+    mode: DESKTOP_UPDATE_MODES.PACKAGE_LAUNCHER,
+    platform: process.platform,
+    state: DESKTOP_UPDATE_STATES.UNSUPPORTED,
+    supported: false,
+  };
+}
+
+function checkOptionsFromHost(options: unknown): { autoDownload?: boolean } | undefined {
+  const input = options as OpenDesignHostUpdaterActionOptions | null | undefined;
+  const payload = input?.payload;
+  if (payload == null || typeof payload.autoDownload !== "boolean") return undefined;
+  return { autoDownload: payload.autoDownload };
+}
+
 export async function createDesktopRuntime(options: DesktopRuntimeOptions): Promise<DesktopRuntime> {
-  const preloadPath = join(dirname(fileURLToPath(import.meta.url)), "preload.cjs");
+  const preloadPath = options.preloadPath ?? join(dirname(fileURLToPath(import.meta.url)), "preload.cjs");
 
   // ipcMain.handle() registers a handler in an internal map that is *not*
   // surfaced via eventNames(); the previous `!eventNames().includes(...)`
@@ -741,6 +837,9 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   ipcMain.removeHandler("dialog:pick-and-import");
   ipcMain.removeHandler("shell:open-external");
   ipcMain.removeHandler("shell:open-path");
+  for (const channel of UPDATER_IPC_CHANNELS) {
+    ipcMain.removeHandler(channel);
+  }
   ipcMain.handle("shell:open-external", async (_event, url: string) => {
     if (!isHttpUrl(url)) return false;
     try {
@@ -860,6 +959,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   });
 
   const consoleEntries: DesktopConsoleEntry[] = [];
+  const petWindow = createDesktopPetWindow(preloadPath);
   const window = new BrowserWindow({
     height: 900,
     // Below this size the project page's left/right split (chat
@@ -882,6 +982,60 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   installWindowChromeCssHook(window);
   showWindowButtons(window);
   attachDownloadSaveAsDialog(window);
+
+  const sendUpdaterStatus = (status = options.updater?.snapshot() ?? unavailableUpdaterStatus()) => {
+    if (window.isDestroyed()) return;
+    window.webContents.send(UPDATER_STATUS_EVENT, status);
+  };
+  const unsubscribeUpdater = options.updater?.subscribe(() => sendUpdaterStatus()) ?? (() => undefined);
+  const requireMainWindowSender = (event: Electron.IpcMainInvokeEvent): void => {
+    if (event.sender !== window.webContents) {
+      throw new Error("updater IPC is only available to the main Open Design window");
+    }
+  };
+  ipcMain.handle("od:update:status", async (event) => {
+    requireMainWindowSender(event);
+    const status = await (options.updater?.status() ?? unavailableUpdaterStatus());
+    sendUpdaterStatus(status);
+    return status;
+  });
+  ipcMain.handle("od:update:check", async (event, updaterOptions: unknown) => {
+    requireMainWindowSender(event);
+    const status = await (options.updater?.checkForUpdates(checkOptionsFromHost(updaterOptions)) ?? unavailableUpdaterStatus());
+    sendUpdaterStatus(status);
+    return status;
+  });
+  ipcMain.handle("od:update:download", async (event) => {
+    requireMainWindowSender(event);
+    const status = await (options.updater?.downloadUpdate() ?? unavailableUpdaterStatus());
+    sendUpdaterStatus(status);
+    return status;
+  });
+  ipcMain.handle("od:update:install", async (event) => {
+    requireMainWindowSender(event);
+    const status = await (options.updater?.installUpdate() ?? unavailableUpdaterStatus());
+    sendUpdaterStatus(status);
+    return status;
+  });
+  ipcMain.handle("od:update:quit", async (event): Promise<OpenDesignHostActionResult> => {
+    requireMainWindowSender(event);
+    const status = await (options.updater?.status() ?? unavailableUpdaterStatus());
+    if (status.installResult == null) {
+      return { ok: false, reason: "installer has not been opened" };
+    }
+    if (options.requestQuit == null) {
+      return { ok: false, reason: "desktop quit is not available" };
+    }
+    setTimeout(() => options.requestQuit?.(), 0);
+    return { ok: true };
+  });
+
+  ipcMain.removeAllListeners("desktop-pet:set-visible");
+  ipcMain.on("desktop-pet:set-visible", (event, visible: unknown) => {
+    if (petWindow.isDestroyed() || event.sender !== petWindow.webContents) return;
+    if (visible) petWindow.showInactive();
+    else petWindow.hide();
+  });
 
   ipcMain.removeHandler('od:print-pdf');
   ipcMain.handle('od:print-pdf', async (_event, html: unknown, nonce: unknown, options: unknown): Promise<void> => {
@@ -909,6 +1063,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   });
 
   let currentUrl: string | null = null;
+  let currentPetUrl: string | null = null;
   let pendingUrl: string | null = null;
   let stopped = false;
   let timer: NodeJS.Timeout | null = null;
@@ -1006,6 +1161,11 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
         currentUrl = url;
         pendingUrl = null;
         showWindowButtons(window);
+        const nextPetUrl = desktopPetUrl(url);
+        if (!petWindow.isDestroyed() && nextPetUrl !== currentPetUrl) {
+          await petWindow.loadURL(nextPetUrl);
+          currentPetUrl = nextPetUrl;
+        }
       } else if (url == null) {
         pendingUrl = null;
       }
@@ -1039,6 +1199,12 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
         clearTimeout(timer);
         timer = null;
       }
+      unsubscribeUpdater();
+      ipcMain.removeAllListeners("desktop-pet:set-visible");
+      for (const channel of UPDATER_IPC_CHANNELS) {
+        ipcMain.removeHandler(channel);
+      }
+      if (!petWindow.isDestroyed()) petWindow.close();
       if (!window.isDestroyed()) window.close();
     },
     console() {

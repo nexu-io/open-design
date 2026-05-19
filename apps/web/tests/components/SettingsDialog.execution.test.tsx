@@ -822,6 +822,41 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     expect(screen.getByText(/No agents detected yet/i)).toBeTruthy();
   });
 
+  it('labels the memory model default with the selected Local CLI', async () => {
+    const agents: AgentInfo[] = [
+      ...availableAgents,
+      {
+        id: 'claude',
+        name: 'Claude Code',
+        bin: 'claude',
+        available: true,
+        version: '1.2.3',
+        models: [{ id: 'default', label: 'Default (CLI config)' }],
+      },
+    ];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    }));
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'claude' },
+      { agents },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*2 installed/i }));
+
+    const memoryModel = await screen.findByRole('combobox', { name: 'Memory model' }) as HTMLSelectElement;
+    expect(memoryModel.options[memoryModel.selectedIndex]?.textContent).toBe('Same as chat (Claude Code)');
+    expect(screen.getByText(/anthropic is only the fallback provider family/i)).toBeTruthy();
+  });
+
   it('shows rescan loading, avoids duplicate rescans, and renders the success notice', async () => {
     const nextAgents: AgentInfo[] = [
       availableAgents[0]!,
@@ -1894,7 +1929,7 @@ describe('SettingsDialog pets interactions', () => {
       { initialSection: 'pet' },
     );
 
-    expect((screen.getByRole('button', { name: 'Wake' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Show pet' }) as HTMLButtonElement).disabled).toBe(false);
 
     await waitFor(() => {
       expect(screen.getByText('Dario')).toBeTruthy();
@@ -1973,9 +2008,10 @@ describe('SettingsDialog pets interactions', () => {
       { initialSection: 'pet' },
     );
 
-    const toggle = screen.getByRole('button', { name: 'Tuck away' });
+    const toggle = screen.getByRole('button', { name: 'Hide pet' });
     fireEvent.click(toggle);
-    expect(screen.getByRole('button', { name: 'Wake' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Show pet' })).toBeTruthy();
+    expect(screen.getByText('Hide pet')).toBeTruthy();
 
     await waitForPersist(
       onPersist,

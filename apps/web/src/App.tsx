@@ -12,7 +12,8 @@ import { MarketplaceView } from './components/MarketplaceView';
 import { PluginDetailView } from './components/PluginDetailView';
 import type { CreateInput } from './components/NewProjectPanel';
 import { MemoryToast } from './components/MemoryToast';
-import { PetOverlay } from './components/pet/PetOverlay';
+import { PetOverlay, type PetTaskCenter } from './components/pet/PetOverlay';
+import { buildPetTaskCenter } from './components/pet/taskCenter';
 import { migrateCustomPetAtlas } from './components/pet/pets';
 import { ProjectView } from './components/ProjectView';
 import { WorkspaceTabsBar } from './components/WorkspaceTabsBar';
@@ -37,6 +38,7 @@ import {
   fetchSkills,
   uploadProjectFiles,
 } from './providers/registry';
+import { RUNS_CHANGED_EVENT, listProjectRuns } from './providers/daemon';
 import { navigate, useRoute } from './router';
 import {
   fetchDaemonConfig,
@@ -59,6 +61,7 @@ import {
   createProject,
   createPluginShareProject,
   deleteProject as deleteProjectApi,
+  getProject,
   importClaudeDesignZip,
   importFolderProject,
   listProjects,
@@ -70,6 +73,7 @@ import type {
   PluginShareAction,
   PluginShareProjectOutcome,
 } from './state/projects';
+import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
 import { useI18n } from './i18n';
 import { liveArtifactTabId } from './types';
 import type {
@@ -183,6 +187,11 @@ export function App() {
   const [designTemplates, setDesignTemplates] = useState<SkillSummary[]>([]);
   const [designSystems, setDesignSystems] = useState<DesignSystemSummary[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [petTaskCenter, setPetTaskCenter] = useState<PetTaskCenter>({
+    running: [],
+    queued: [],
+    recent: [],
+  });
   const [templates, setTemplates] = useState<ProjectTemplate[]>([]);
   const [promptTemplates, setPromptTemplates] = useState<
     PromptTemplateSummary[]
@@ -909,16 +918,21 @@ export function App() {
     });
   }, []);
 
-  // PR #974: on Electron, the desktop main process owns the picker and
-  // the import POST atomically (`pickAndImport`). The renderer never
-  // sees the path or the HMAC token; it just receives the same
-  // ImportFolderResponse shape that `importFolderProject` would
-  // produce on web, and the App-level state update is identical.
-  const handleImportFolderResponse = useCallback(async (result: import('@open-design/contracts').ImportFolderResponse) => {
-    setProjects((curr) => [result.project, ...curr.filter((p) => p.id !== result.project.id)]);
+  // PR #974: on desktop, the host bridge owns the picker and import POST
+  // atomically. The renderer never sees the path, token, or daemon DTO;
+  // it receives host-owned project identifiers and refreshes project state
+  // through the normal daemon API.
+  const handleImportFolderResponse = useCallback(async (result: OpenDesignHostProjectImportSuccess) => {
+    const project = await getProject(result.projectId);
+    if (project != null) {
+      setProjects((curr) => [project, ...curr.filter((p) => p.id !== project.id)]);
+    } else {
+      const list = await listProjects();
+      setProjects(list);
+    }
     navigate({
       kind: 'project',
-      projectId: result.project.id,
+      projectId: result.projectId,
       fileName: result.entryFile,
     });
   }, []);
@@ -926,6 +940,32 @@ export function App() {
   const handleOpenProject = useCallback((id: string) => {
     navigate({ kind: 'project', projectId: id, fileName: null });
   }, []);
+
+  useEffect(() => {
+    if (!config.pet?.enabled || !daemonLive) {
+      setPetTaskCenter({ running: [], queued: [], recent: [] });
+      return;
+    }
+
+    let cancelled = false;
+    const refresh = async () => {
+      const runs = await listProjectRuns();
+      if (cancelled) return;
+      setPetTaskCenter(buildPetTaskCenter(projects, runs));
+    };
+    const handleRunsChanged = () => {
+      void refresh();
+    };
+
+    void refresh();
+    window.addEventListener(RUNS_CHANGED_EVENT, handleRunsChanged);
+    const id = window.setInterval(refresh, 2000);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(RUNS_CHANGED_EVENT, handleRunsChanged);
+      window.clearInterval(id);
+    };
+  }, [config.pet?.enabled, daemonLive, projects]);
 
   const handleOpenLiveArtifact = useCallback((projectId: string, artifactId: string) => {
     navigate({ kind: 'project', projectId, fileName: liveArtifactTabId(artifactId) });
@@ -1281,11 +1321,13 @@ export function App() {
         />
         <div className="workspace-shell__body">{appMain}</div>
       </div>
-      <PetOverlay
-        pet={config.pet?.enabled ? config.pet : undefined}
-        onTuck={handleTuckPet}
-        onOpenSettings={openPetSettings}
-      />
+      {clientType === 'desktop' ? null : (
+        <PetOverlay
+          pet={config.pet?.enabled ? config.pet : undefined}
+          taskCenter={petTaskCenter}
+          onOpenProject={handleOpenProject}
+        />
+      )}
       {settingsOpen ? (
         <SettingsDialog
           initial={config}

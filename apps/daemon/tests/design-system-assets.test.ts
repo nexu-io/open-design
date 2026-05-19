@@ -19,6 +19,8 @@ import {
   listDesignSystems,
   readDesignSystem,
   readDesignSystemAssets,
+  readDesignSystemPackageInfo,
+  readDesignSystemPullFile,
   resolveDesignSystemAssets,
 } from '../src/design-systems.js';
 
@@ -234,6 +236,208 @@ describe('Design System Project manifest runtime consumption', () => {
     const assets = await readDesignSystemAssets(root, 'tokens-only-project');
     expect(assets.tokensCss).toBe(':root { --accent: #2F6FEB; }');
     expect(assets.fixtureHtml).toBeUndefined();
+  });
+
+  it('reads USAGE.md, committed component cache, and manifest pull index without loading rich files', async () => {
+    const root = fresh();
+    const dir = writeDesignSystemProject(root, 'hybrid-project', {
+      manifest: {
+        schemaVersion: 'od-design-system-project/v1',
+        id: 'hybrid-project',
+        name: 'Hybrid Project',
+        category: 'Imported',
+        source: { type: 'local', path: '/tmp/project' },
+        files: {
+          design: 'DESIGN.md',
+          tokens: 'tokens.css',
+          components: 'components.html',
+        },
+        usage: 'USAGE.md',
+        componentsManifest: 'components.manifest.json',
+        importMode: 'verbatim',
+        craft: {
+          applies: ['color'],
+          suggested: [],
+          exemptions: ['typography'],
+        },
+        assetsDir: 'assets',
+        fonts: [{ family: 'Inter', weight: 500, file: 'fonts/Inter-Medium.woff2' }],
+        preview: {
+          dir: 'preview',
+          pages: [
+            { path: 'preview/colors.html', role: 'colors', title: 'Colors' },
+            { path: 'preview/app.html', role: 'app', title: 'App Preview' },
+          ],
+        },
+        sourceFiles: {
+          scanned: 'source/scanned-files.json',
+          evidence: 'source/evidence.md',
+          tokens: 'source/tokens.source.json',
+          snippets: 'source/snippets/INDEX.json',
+        },
+      },
+      tokens: ':root { --accent: #00aa55; }',
+      components: '<button class="btn">Derived should lose to cache</button>',
+    });
+    writeFileSync(path.join(dir, 'USAGE.md'), '## Read Order\n\nUse cache first.');
+    writeFileSync(
+      path.join(dir, 'components.manifest.json'),
+      `${JSON.stringify({
+        schemaVersion: 1,
+        brandId: 'cache-brand',
+        source: { componentsHtml: 'components.html', tokensCss: 'tokens.css' },
+        fixture: {
+          styleBlockCount: 1,
+          selectorCount: 3,
+          classCount: 2,
+          elementCount: 1,
+        },
+        tokens: {
+          declared: ['--accent'],
+          referenced: ['--accent'],
+          unusedDeclared: [],
+          undeclaredReferenced: [],
+        },
+        selectors: ['.cached-button'],
+        classes: ['cached-button'],
+        elements: ['button'],
+        groups: [
+          {
+            id: 'buttons',
+            label: 'Cached buttons',
+            present: true,
+            selectors: ['.cached-button'],
+            classes: ['cached-button'],
+            elements: ['button'],
+            tokenReferences: ['--accent'],
+          },
+        ],
+        literals: {
+          colorExpressions: 0,
+          pixelValues: 0,
+          hardcodedFontFamilies: 0,
+        },
+      }, null, 2)}\n`,
+    );
+
+    const assets = await readDesignSystemAssets(root, 'hybrid-project');
+    expect(assets.usageMd).toContain('Use cache first');
+    expect(assets.importMode).toBe('verbatim');
+    expect(assets.craftApplies).toEqual(['color']);
+    expect(assets.craftExemptions).toEqual(['typography']);
+    expect(assets.componentsManifest).toContain('components.manifest schema v1 for cache-brand');
+    expect(assets.componentsManifest).toContain('Cached buttons');
+    expect(assets.pullIndex).toContain('preview/colors.html: Colors; colors');
+    expect(assets.pullIndex).toContain('fonts/Inter-Medium.woff2: font: Inter 500');
+    expect(assets.pullIndex).toContain('source/snippets/INDEX.json: source snippet index');
+  });
+
+  it('allows pull reads only for manifest-declared rich-layer files', async () => {
+    const root = fresh();
+    const dir = writeDesignSystemProject(root, 'pull-project', {
+      manifest: {
+        schemaVersion: 'od-design-system-project/v1',
+        id: 'pull-project',
+        name: 'Pull Project',
+        category: 'Imported',
+        source: { type: 'local', path: '/tmp/project' },
+        files: {
+          design: 'DESIGN.md',
+          tokens: 'tokens.css',
+          components: 'components.html',
+        },
+        assetsDir: 'assets',
+        preview: {
+          dir: 'preview',
+          pages: [{ path: 'preview/colors.html', role: 'colors', title: 'Colors' }],
+        },
+        sourceFiles: {
+          snippets: 'source/snippets/INDEX.json',
+        },
+      },
+    });
+    mkdirSync(path.join(dir, 'preview'), { recursive: true });
+    mkdirSync(path.join(dir, 'source', 'snippets'), { recursive: true });
+    mkdirSync(path.join(dir, 'assets', 'icons'), { recursive: true });
+    writeFileSync(path.join(dir, 'preview', 'colors.html'), '<h1>Colors</h1>');
+    writeFileSync(path.join(dir, 'preview', 'spacing.html'), '<h1>Spacing</h1>');
+    writeFileSync(path.join(dir, 'source', 'snippets', 'INDEX.json'), `${JSON.stringify({
+      schemaVersion: 1,
+      snippets: [{ path: 'source/snippets/Button.tsx', role: 'button' }],
+    })}\n`);
+    writeFileSync(path.join(dir, 'source', 'snippets', 'Button.tsx'), 'export function Button() {}');
+    writeFileSync(path.join(dir, 'assets', 'icons', 'mark.svg'), '<svg />');
+
+    await expect(readDesignSystemPullFile(root, 'pull-project', 'preview/colors.html')).resolves.toMatchObject({
+      path: 'preview/colors.html',
+      encoding: 'utf8',
+      content: '<h1>Colors</h1>',
+    });
+    await expect(readDesignSystemPullFile(root, 'pull-project', 'source/snippets/Button.tsx')).resolves.toMatchObject({
+      path: 'source/snippets/Button.tsx',
+      content: 'export function Button() {}',
+    });
+    await expect(readDesignSystemPullFile(root, 'pull-project', 'assets/icons/mark.svg')).resolves.toMatchObject({
+      path: 'assets/icons/mark.svg',
+      content: '<svg />',
+    });
+    await expect(readDesignSystemPullFile(root, 'pull-project', 'preview/spacing.html')).resolves.toBeNull();
+    await expect(readDesignSystemPullFile(root, 'pull-project', '../pull-project/preview/colors.html')).resolves.toBeNull();
+  });
+
+  it('summarizes manifest and source evidence for the detail page', async () => {
+    const root = fresh();
+    const dir = writeDesignSystemProject(root, 'detail-project', {
+      manifest: {
+        schemaVersion: 'od-design-system-project/v1',
+        id: 'detail-project',
+        name: 'Detail Project',
+        category: 'Imported',
+        source: { type: 'local', path: '/tmp/project' },
+        files: {
+          design: 'DESIGN.md',
+          tokens: 'tokens.css',
+          components: 'components.html',
+        },
+        usage: 'USAGE.md',
+        componentsManifest: 'components.manifest.json',
+        importMode: 'hybrid',
+        preview: {
+          dir: 'preview',
+          pages: [{ path: 'preview/colors.html', role: 'colors', title: 'Colors' }],
+        },
+        sourceFiles: {
+          scanned: 'source/scanned-files.json',
+          evidence: 'source/evidence.md',
+          tokens: 'source/tokens.source.json',
+          snippets: 'source/snippets/INDEX.json',
+        },
+      },
+    });
+    mkdirSync(path.join(dir, 'source', 'snippets'), { recursive: true });
+    writeFileSync(path.join(dir, 'source', 'scanned-files.json'), JSON.stringify({ files: [{ path: 'Button.tsx' }] }));
+    writeFileSync(path.join(dir, 'source', 'evidence.md'), '# Evidence\n\n- Buttons matched source.');
+    writeFileSync(path.join(dir, 'source', 'tokens.source.json'), JSON.stringify({
+      tokenCount: 7,
+      confidence: { color: 'high', spacing: 0.4 },
+    }));
+    writeFileSync(path.join(dir, 'source', 'snippets', 'INDEX.json'), JSON.stringify({
+      snippets: [{ path: 'source/snippets/Button.tsx' }],
+    }));
+
+    await expect(readDesignSystemPackageInfo(root, 'detail-project')).resolves.toMatchObject({
+      manifest: {
+        usage: 'USAGE.md',
+        importMode: 'hybrid',
+        preview: { pages: [{ path: 'preview/colors.html' }] },
+      },
+      sourceEvidence: {
+        scannedFileCount: 1,
+        tokenCount: 7,
+        snippetCount: 1,
+        confidence: { color: 'high', spacing: 0.4 },
+      },
+    });
   });
 });
 

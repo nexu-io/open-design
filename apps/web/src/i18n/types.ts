@@ -480,6 +480,7 @@ export interface Dict {
   'settings.memoryExtractionDelete': string;
   'settings.memoryExtractionsClear': string;
   'settings.memoryExtractionsClearTitle': string;
+  'settings.memoryExtractionsClearConfirm': string;
   'settings.memoryNoProviderBannerTitle': string;
   'settings.memoryNoProviderBannerBody': string;
   // Memory model picker — rendered inline next to the chat model picker
@@ -1636,6 +1637,13 @@ export interface Dict {
   'manualEdit.border': string;
   'manualEdit.width': string;
   'manualEdit.minHeight': string;
+  'manualEdit.deleteElement': string;
+  'manualEdit.deleteElementConfirm': string;
+  'manualEdit.uploadImage': string;
+  'manualEdit.uploadingImage': string;
+  'manualEdit.uploadImageFailed': string;
+  'manualEdit.focusSlides': string;
+  'manualEdit.showPanels': string;
   'fileViewer.zoomOut': string;
   'fileViewer.zoomIn': string;
   'fileViewer.resetZoom': string;
@@ -1959,6 +1967,27 @@ export interface Dict {
   'pet.overlayAria': string;
   'pet.spriteAria': string;
   'pet.spriteTitle': string;
+  'pet.taskSummarySingle': string;
+  'pet.taskSummaryMultiple': string;
+  'pet.taskSummaryRecentSingle': string;
+  'pet.taskSummaryRecentMultiple': string;
+  'pet.taskListAria': string;
+  'pet.taskOpenProject': string;
+  'pet.taskGroup.running': string;
+  'pet.taskGroup.queued': string;
+  'pet.taskGroup.recent': string;
+  'pet.idleQuote.leonardo.text': string;
+  'pet.idleQuote.leonardo.author': string;
+  'pet.idleQuote.michelangelo.text': string;
+  'pet.idleQuote.michelangelo.author': string;
+  'pet.idleQuote.bernini.text': string;
+  'pet.idleQuote.bernini.author': string;
+  'pet.idleQuote.raphael.text': string;
+  'pet.idleQuote.raphael.author': string;
+  'pet.idleQuote.caravaggio.text': string;
+  'pet.idleQuote.caravaggio.author': string;
+  'pet.idleQuote.rodin.text': string;
+  'pet.idleQuote.rodin.author': string;
   // Composer pet menu
   'pet.composerTitle': string;
   'pet.composerMenuTitle': string;

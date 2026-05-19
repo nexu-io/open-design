@@ -105,6 +105,7 @@ import {
 
 export type SettingsSection =
   | 'execution'
+  | 'instructions'
   | 'media'
   | 'composio'
   | 'orbit'
@@ -802,6 +803,16 @@ export function SettingsDialog({
   // stale result be ignored when it returns; the button stays disabled so a
   // new smoke test cannot overlap the old one.
   const agentChoiceForTest = cfg.agentModels?.[cfg.agentId ?? ''];
+  const selectedMemoryChatAgent =
+    cfg.mode === 'daemon' && cfg.agentId
+      ? agents.find((agent) => agent.id === cfg.agentId) ?? null
+      : null;
+  const selectedMemoryChatModel =
+    cfg.mode === 'daemon' && cfg.agentId
+      ? cfg.agentModels?.[cfg.agentId]?.model
+      ?? selectedMemoryChatAgent?.models?.[0]?.id
+      ?? null
+    : null;
   useEffect(() => {
     agentTestRevisionRef.current += 1;
     setAgentTestState((state) =>
@@ -1475,12 +1486,16 @@ export function SettingsDialog({
   // not twice (heading + tab).
   const sectionHeader: Record<SettingsSection, { title: string; subtitle: string }> = {
     execution: { title: t('settings.title'), subtitle: t('settings.subtitle') },
+    instructions: {
+      title: 'Instructions / Rules',
+      subtitle: 'Fixed behavior the assistant should follow',
+    },
     media: { title: t('settings.mediaProviders'), subtitle: t('settings.mediaProvidersHint') },
     composio: { title: t('connectors.title'), subtitle: t('connectors.subtitle') },
     orbit: { title: t('settings.orbit.title'), subtitle: t('settings.orbit.lede') },
     routines: {
-      title: 'Routines',
-      subtitle: 'Scheduled, unattended agent sessions that run on their own.',
+      title: 'Automations',
+      subtitle: 'Scheduled automations that run unattended.',
     },
     integrations: { title: t('settings.mcpServerTitle'), subtitle: t('settings.mcpServerHint') },
     mcpClient: { title: t('settings.externalMcpTitle'), subtitle: t('settings.externalMcpHint') },
@@ -1600,6 +1615,17 @@ export function SettingsDialog({
             </button>
             <button
               type="button"
+              className={`settings-nav-item${activeSection === 'instructions' ? ' active' : ''}`}
+              onClick={() => setActiveSection('instructions')}
+            >
+              <Icon name="edit" size={18} />
+              <span>
+                <strong>Instructions / Rules</strong>
+                <small>Fixed assistant behavior</small>
+              </span>
+            </button>
+            <button
+              type="button"
               className={`settings-nav-item${activeSection === 'memory' ? ' active' : ''}`}
               onClick={() => setActiveSection('memory')}
             >
@@ -1651,28 +1677,6 @@ export function SettingsDialog({
               <span>
                 <strong>{t('connectors.title')}</strong>
                 <small>{t('settings.connectorsNavHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'orbit' ? ' active' : ''}`}
-              onClick={() => setActiveSection('orbit')}
-            >
-              <Icon name="orbit" size={18} />
-              <span>
-                <strong>{t('settings.orbit.title')}</strong>
-                <small>{t('settings.orbit.navHint')}</small>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'routines' ? ' active' : ''}`}
-              onClick={() => setActiveSection('routines')}
-            >
-              <Icon name="history" size={18} />
-              <span>
-                <strong>Routines</strong>
-                <small>Schedule unattended agent runs</small>
               </span>
             </button>
             <button
@@ -2809,26 +2813,45 @@ export function SettingsDialog({
             <ProjectLocationsSection cfg={cfg} setCfg={setCfg} onProjectsRefresh={onProjectsRefresh} />
           ) : null}
 
-          {activeSection === 'memory' ? (
-            <>
-              <section className="settings-section settings-section-card">
-                <div className="section-head">
+          {activeSection === 'instructions' ? (
+            <section className="settings-section settings-section-card instructions-rules-section">
+              <div className="memory-field-block instructions-rules-card">
+                <div className="memory-block-head">
+                  <span className="memory-block-icon">
+                    <Icon name="sliders" size={15} />
+                  </span>
                   <div>
-                    <h3>{t('settings.customInstructionsTitle')}</h3>
-                    <p className="hint">{t('settings.customInstructionsHint')}</p>
+                    <h4>{t('settings.customInstructionsTitle')}</h4>
+                    <p className="hint">
+                      Fixed instructions OpenDesign follows in every chat. These are
+                      not saved memories; use Memory for facts, preferences, and
+                      project context.
+                    </p>
                   </div>
                 </div>
                 <textarea
-                  className="custom-instructions-input"
-                  rows={3}
+                  className="custom-instructions-input memory-global-rules-input instructions-rules-input"
+                  rows={5}
                   maxLength={5000}
                   placeholder={t('settings.customInstructionsPlaceholder')}
                   value={cfg.customInstructions ?? ''}
-                  onChange={(e) => setCfg({ ...cfg, customInstructions: e.target.value || undefined })}
+                  onChange={(event) =>
+                    setCfg({
+                      ...cfg,
+                      customInstructions: event.target.value || undefined,
+                    })
+                  }
                 />
-              </section>
-              <MemorySection />
-            </>
+              </div>
+            </section>
+          ) : null}
+
+          {activeSection === 'memory' ? (
+            <MemorySection
+              onOpenConnectors={() => setActiveSection('composio')}
+              chatAgentId={cfg.mode === 'daemon' ? cfg.agentId ?? null : null}
+              chatModel={selectedMemoryChatModel}
+            />
           ) : null}
 
           {activeSection === 'privacy' ? (

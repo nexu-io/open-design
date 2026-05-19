@@ -25,6 +25,8 @@ export interface PluginLoopSubmit {
   taskKind: string | null;
   pluginInputs?: Record<string, unknown> | null;
   contextPlugins?: Array<{ id: string; title: string; description?: string }> | null;
+  contextMcpServers?: Array<{ id: string; label?: string; transport?: string; url?: string; command?: string }> | null;
+  contextConnectors?: Array<{ id: string; name: string; provider?: string; category?: string; status?: string; accountLabel?: string }> | null;
   // Stage B of plugin-driven-flow-plan: when the user picked a Home
   // chip the rail tells the submit handler which `ProjectKind` to
   // stamp on the new project's metadata. The daemon-side default

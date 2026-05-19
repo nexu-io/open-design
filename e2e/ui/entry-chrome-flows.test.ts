@@ -171,7 +171,7 @@ test('entry top navigation matches the current home tab structure', async ({ pag
   await expect(page.getByTestId('entry-nav-integrations')).toBeVisible();
   await expect(page.getByTestId('home-hero-rail')).toBeVisible();
   await expect(page.getByTestId('home-hero-rail-prototype')).toBeVisible();
-  await expect(page.getByTestId('home-hero-rail-live-artifact')).toBeVisible();
+  await expect(page.getByTestId('home-hero-rail-live-artifact')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-rail-deck')).toBeVisible();
   await expect(page.getByTestId('home-hero-rail-image')).toBeVisible();
   await expect(page.getByTestId('home-hero-rail-video')).toBeVisible();

@@ -7,6 +7,7 @@
  * automatically surfaces here on the next build.
  */
 import Layout from '../../_components/sub-page-layout.astro';
+import LazyImg from '../../_components/lazy-img.astro';
 import SkillRow from '../../_components/skill-row.astro';
 import {
   getSkillRecords,
@@ -102,12 +103,12 @@ const jsonLd = {
     <section class="featured-strip" aria-labelledby="featured-skills">
       <h2 id="featured-skills" class="strip-title">Featured</h2>
       <ul class="featured-grid">
-        {featured.map((s) => (
+        {featured.map((s, i) => (
           <li class="featured-card">
             <a href={`/skills/${s.slug}/`}>
               {s.previewUrl ? (
                 <span class="featured-thumb">
-                  <img src={s.previewUrl} alt="" loading="lazy" decoding="async" />
+                  <LazyImg src={s.previewUrl} alt="" loading={i < 4 ? 'eager' : 'precise'} />
                 </span>
               ) : (
                 <span class="featured-thumb featured-thumb-empty" aria-hidden="true" />

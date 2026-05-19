@@ -5,6 +5,7 @@
 // headers (see @open-design/contracts/analytics).
 
 import type { AnalyticsClientType } from '@open-design/contracts/analytics';
+import { detectOpenDesignHostClientType } from '@open-design/host';
 
 const ANONYMOUS_ID_KEY = 'open-design:analytics.anonymous_id';
 const SESSION_ID_KEY = 'open-design:analytics.session_id';
@@ -52,18 +53,12 @@ export function getSessionId(): string {
   }
 }
 
-// Desktop packaged builds set this marker on window in a preload script so
-// the same web bundle can distinguish desktop runs from browser visits.
-// Falls back to 'web' when the marker isn't present.
+// Desktop packaged builds install the Open Design host bridge so the
+// same web bundle can distinguish desktop runs from browser visits.
+// Falls back to 'web' when the host bridge isn't present.
 export function detectClientType(): AnalyticsClientType {
   if (typeof window === 'undefined') return 'web';
-  const w = window as Window & {
-    __OD_CLIENT_TYPE__?: AnalyticsClientType;
-    electronAPI?: unknown;
-  };
-  if (w.__OD_CLIENT_TYPE__ === 'desktop') return 'desktop';
-  if (w.electronAPI) return 'desktop';
-  return 'web';
+  return detectOpenDesignHostClientType();
 }
 
 // Read the launch_source for app_launch. Best-effort: PerformanceNavigation

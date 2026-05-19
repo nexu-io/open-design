@@ -20,6 +20,7 @@ import type {
   ChatSseStartPayload,
   DaemonAgentPayload,
   ResearchOptions,
+  RunContextSelection,
   SseErrorPayload,
 } from '@open-design/contracts';
 import type { StreamHandlers } from './anthropic';
@@ -179,6 +180,7 @@ export interface DaemonStreamOptions {
   model?: string | null;
   reasoning?: string | null;
   research?: ResearchOptions;
+  context?: RunContextSelection;
   initialLastEventId?: string | null;
   onRunCreated?: (runId: string) => void;
   onRunStatus?: (status: ChatRunStatus) => void;
@@ -193,6 +195,13 @@ export interface DaemonReattachOptions {
   initialLastEventId?: string | null;
   onRunStatus?: (status: ChatRunStatus) => void;
   onRunEventId?: (eventId: string) => void;
+}
+
+export const RUNS_CHANGED_EVENT = 'open-design:runs-changed';
+
+function notifyRunsChanged() {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new Event(RUNS_CHANGED_EVENT));
 }
 
 function daemonSseErrorMessage(data: SseErrorPayload): string {
@@ -226,11 +235,16 @@ export async function streamViaDaemon({
   model,
   reasoning,
   research,
+  context,
   initialLastEventId,
   onRunCreated,
   onRunStatus,
   onRunEventId,
 }: DaemonStreamOptions): Promise<void> {
+  const emitRunStatus = (status: ChatRunStatus) => {
+    onRunStatus?.(status);
+    notifyRunsChanged();
+  };
   // Local CLIs are single-turn print-mode programs, so we collapse the whole
   // chat into one string. If this becomes too noisy for long histories, the
   // fix is to only include the final user turn.
@@ -250,6 +264,7 @@ export async function streamViaDaemon({
     commentAttachments: commentAttachments ?? [],
     model: model ?? null,
     reasoning: reasoning ?? null,
+    ...(context ? { context } : {}),
     ...(research ? { research } : {}),
   };
   const body = JSON.stringify(request);
@@ -270,7 +285,7 @@ export async function streamViaDaemon({
 
     if (!createResp.ok) {
       const text = await createResp.text().catch(() => '');
-      onRunStatus?.('failed');
+      emitRunStatus('failed');
       handlers.onError(new Error(`daemon ${createResp.status}: ${text || 'no body'}`));
       return;
     }
@@ -278,25 +293,32 @@ export async function streamViaDaemon({
     const created = (await createResp.json()) as ChatRunCreateResponse;
     const runId = created.runId;
     onRunCreated?.(runId);
-    onRunStatus?.('queued');
+    notifyRunsChanged();
+    emitRunStatus('queued');
     await consumeDaemonRun({
       runId,
       signal,
       cancelSignal,
       handlers,
       initialLastEventId,
-      onRunStatus,
+      onRunStatus: emitRunStatus,
       onRunEventId,
     });
   } catch (err) {
     if ((err as Error).name === 'AbortError') return;
-    onRunStatus?.('failed');
+    emitRunStatus('failed');
     handlers.onError(err instanceof Error ? err : new Error(String(err)));
   }
 }
 
 export async function reattachDaemonRun(options: DaemonReattachOptions): Promise<void> {
-  await consumeDaemonRun(options);
+  await consumeDaemonRun({
+    ...options,
+    onRunStatus: (status) => {
+      options.onRunStatus?.(status);
+      notifyRunsChanged();
+    },
+  });
 }
 
 export async function fetchChatRunStatus(runId: string): Promise<ChatRunStatusResponse | null> {
@@ -340,6 +362,17 @@ export async function listActiveChatRuns(
   try {
     const qs = new URLSearchParams({ projectId, conversationId, status: 'active' });
     const resp = await fetch(`/api/runs?${qs.toString()}`);
+    if (!resp.ok) return [];
+    const body = (await resp.json()) as ChatRunListResponse;
+    return body.runs ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function listProjectRuns(): Promise<ChatRunStatusResponse[]> {
+  try {
+    const resp = await fetch('/api/runs');
     if (!resp.ok) return [];
     const body = (await resp.json()) as ChatRunListResponse;
     return body.runs ?? [];

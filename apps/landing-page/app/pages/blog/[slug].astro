@@ -9,6 +9,7 @@
 import { getCollection, render } from 'astro:content';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import FontStylesheet from '../../_components/font-stylesheet.astro';
 import HeaderEnhancer from '../../_components/header-enhancer.astro';
 import { Header, type HeaderProps } from '../../_components/header';
 import SeoHead from '../../_components/seo-head.astro';
@@ -29,7 +30,33 @@ export async function getStaticPaths() {
 
 const { post } = Astro.props;
 const { Content } = await render(post);
+const DISCORD = 'https://discord.gg/9ptkbbqRu';
 const sourceUrl = `https://github.com/nexu-io/open-design/blob/main/apps/landing-page/app/content/blog/${post.id}.md`;
+const category = post.data.category.toLowerCase();
+const bottomCta =
+  category.includes('announcement') || category.includes('product')
+    ? {
+        title: 'Download the desktop build',
+        body: 'Take the open-source design workspace for a spin, inspect the release notes on GitHub, or join our Discord for live community feedback.',
+        href: 'https://github.com/nexu-io/open-design/releases',
+        label: 'Download desktop ↗',
+        external: true,
+      }
+    : category.includes('guide') || category.includes('use') || category.includes('case')
+      ? {
+          title: 'Run the skill workflow locally',
+          body: 'Browse the workflow library, pick a starting point, and wire it into the agent you already use. Join our Discord if you want help adapting it.',
+          href: '/skills/',
+          label: 'Browse workflows ↗',
+          external: false,
+        }
+      : {
+          title: 'See the implementation on GitHub',
+          body: 'Open the repository to inspect the source, star the project, fork the workflow, or join our Discord to discuss what should land next.',
+          href: 'https://github.com/nexu-io/open-design',
+          label: 'Open repository ↗',
+          external: true,
+        };
 
 const counts = await getCatalogCounts();
 const github = await getGithubRepoMeta();
@@ -63,6 +90,7 @@ const fmtDate = (d: Date) =>
       datePublished={post.data.date}
       category={post.data.category}
     />
+    <FontStylesheet />
   </head>
   <body>
     <div class='shell'>
@@ -89,6 +117,27 @@ const fmtDate = (d: Date) =>
           <div class='post-body'>
             <Content />
           </div>
+
+          <aside class='post-conversion' aria-labelledby='post-conversion-title'>
+            <div>
+              <span class='label'>Next step</span>
+              <h2 id='post-conversion-title'>{bottomCta.title}</h2>
+              <p>{bottomCta.body}</p>
+            </div>
+            <div class='post-conversion-actions'>
+              <a
+                class='btn btn-primary'
+                href={bottomCta.href}
+                target={bottomCta.external === false ? undefined : '_blank'}
+                rel={bottomCta.external === false ? undefined : 'noreferrer noopener'}
+              >
+                {bottomCta.label}
+              </a>
+              <a class='btn btn-ghost' href={DISCORD} target='_blank' rel='noreferrer noopener'>
+                Join Discord
+              </a>
+            </div>
+          </aside>
 
           <hr class='post-rule' />
 
@@ -285,6 +334,42 @@ const fmtDate = (d: Date) =>
         margin: 2em 0;
       }
 
+      .post-conversion {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 24px;
+        align-items: center;
+        margin: 52px 0 40px;
+        padding: 28px;
+        border: 1px solid var(--line);
+        background: color-mix(in srgb, var(--paper-warm) 72%, white);
+      }
+      .post-conversion .label {
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--coral);
+      }
+      .post-conversion h2 {
+        margin: 10px 0 8px;
+        font-family: var(--serif);
+        font-size: clamp(28px, 3vw, 38px);
+        font-weight: 500;
+        color: var(--ink);
+      }
+      .post-conversion p {
+        margin: 0;
+        max-width: 52ch;
+        color: var(--ink-soft);
+      }
+      .post-conversion-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: flex-end;
+      }
+
       .post-foot {
         display: flex;
         justify-content: space-between;
@@ -313,6 +398,12 @@ const fmtDate = (d: Date) =>
         .post-foot {
           align-items: flex-start;
           flex-direction: column;
+        }
+        .post-conversion {
+          grid-template-columns: 1fr;
+        }
+        .post-conversion-actions {
+          justify-content: flex-start;
         }
       }
     </style>

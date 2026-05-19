@@ -71,7 +71,7 @@ async function gotoEntryHome(page: Page) {
   await waitForLoadingToClear(page);
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
   if (await privacyDialog.isVisible().catch(() => false)) {
-    await privacyDialog.getByRole('button', { name: /not now/i }).click();
+    await privacyDialog.getByRole('button', { name: /not now|don't share/i }).click();
   }
   await expect(page.getByTestId('home-hero')).toBeVisible();
 }
@@ -125,6 +125,7 @@ async function openConnectorsSettings(
     blockPopup?: boolean;
   } = {},
 ) {
+  let cancelRequestCount = 0;
   await page.addInitScript(
     ({ key, value, pendingAuthorization, blockPopup }) => {
       window.localStorage.setItem(key, JSON.stringify(value));
@@ -225,7 +226,8 @@ async function openConnectorsSettings(
     });
   });
 
-  await page.route('**/api/connectors/github/authorization/cancel', async (route) => {
+  await page.route('**/api/connectors/github/authorization/cancel*', async (route) => {
+    cancelRequestCount += 1;
     const response = onCancel();
     await route.fulfill({
       status: response.status,
@@ -239,12 +241,12 @@ async function openConnectorsSettings(
   await dialog.getByRole('button', { name: /Connectors|连接器/i }).click();
   await expect(dialog.getByTestId('connector-grid-wrap')).toBeVisible();
   await expect(connectorCard(dialog, 'github')).toBeVisible();
-  return dialog;
+  return { dialog, getCancelRequestCount: () => cancelRequestCount };
 }
 
 test.describe('Settings connectors auth recovery', () => {
   test('clears pending authorization when OAuth launch is blocked after redirect_required', async ({ page }) => {
-    const dialog = await openConnectorsSettings(page, {
+    const { dialog } = await openConnectorsSettings(page, {
       blockPopup: true,
       onConnect: () => ({
         status: 200,
@@ -276,7 +278,7 @@ test.describe('Settings connectors auth recovery', () => {
   });
 
   test('keeps a pending authorization visible when the connector enters authorization-pending state', async ({ page }) => {
-    const dialog = await openConnectorsSettings(page, {
+    const { dialog } = await openConnectorsSettings(page, {
       pendingAuthorization: pendingAuthorizationStorage(),
     });
 
@@ -295,7 +297,7 @@ test.describe('Settings connectors auth recovery', () => {
   });
 
   test('keeps pending authorization visible when daemon cancellation fails', async ({ page }) => {
-    const dialog = await openConnectorsSettings(page, {
+    const { dialog, getCancelRequestCount } = await openConnectorsSettings(page, {
       pendingAuthorization: pendingAuthorizationStorage(),
       onCancel: () => ({
         status: 500,
@@ -310,8 +312,11 @@ test.describe('Settings connectors auth recovery', () => {
 
     await githubCard.getByRole('button', { name: 'Cancel' }).click();
 
+    await expect.poll(getCancelRequestCount).toBe(1);
     await expect(githubCard.getByRole('button', { name: 'Cancel' })).toBeVisible();
-    await expect(githubCard).toContainText("Couldn't cancel authorization. Try again.");
+    await expect(
+      dialog.getByRole('status').filter({ hasText: "Couldn't cancel authorization. Try again." }),
+    ).toBeVisible();
     await expect
       .poll(async () =>
         page.evaluate(() => {
@@ -325,7 +330,7 @@ test.describe('Settings connectors auth recovery', () => {
   });
 
   test('restores a pending authorization after a full page reload', async ({ page }) => {
-    const dialog = await openConnectorsSettings(page, {
+    const { dialog } = await openConnectorsSettings(page, {
       pendingAuthorization: pendingAuthorizationStorage(),
     });
 
@@ -343,7 +348,7 @@ test.describe('Settings connectors auth recovery', () => {
 
   test('settles a pending authorization into Disconnect when status polling reports the connector as connected', async ({ page }) => {
     let statusRequests = 0;
-    const dialog = await openConnectorsSettings(page, {
+    const { dialog } = await openConnectorsSettings(page, {
       pendingAuthorization: pendingAuthorizationStorage(),
     });
 
@@ -380,7 +385,7 @@ test.describe('Settings connectors auth recovery', () => {
   });
 
   test('returns a pending authorization to Connect and clears session storage after a successful cancel', async ({ page }) => {
-    const dialog = await openConnectorsSettings(page, {
+    const { dialog } = await openConnectorsSettings(page, {
       pendingAuthorization: pendingAuthorizationStorage(),
       onCancel: () => ({
         status: 200,
@@ -408,7 +413,7 @@ test.describe('Settings connectors auth recovery', () => {
   });
 
   test('restores a pending authorization from session storage after reopening settings', async ({ page }) => {
-    const dialog = await openConnectorsSettings(page, {
+    const { dialog } = await openConnectorsSettings(page, {
       pendingAuthorization: pendingAuthorizationStorage(),
     });
 

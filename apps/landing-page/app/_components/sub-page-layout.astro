@@ -18,8 +18,10 @@ import '../globals.css';
 import '../sub-pages.css';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import FontStylesheet from './font-stylesheet.astro';
 import HeaderEnhancer from './header-enhancer.astro';
 import { Header, type HeaderProps } from './header';
+import PreciseLazyload from './precise-lazyload.astro';
 import SiteFooter from './site-footer.astro';
 import Topbar from './topbar.astro';
 import { heroImage } from '../image-assets';
@@ -58,6 +60,8 @@ const ldArray = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
+    <FontStylesheet />
+
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Open Design" />
     <meta property="og:title" content={title} />
@@ -89,5 +93,6 @@ const ldArray = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
     </div>
 
     <HeaderEnhancer />
+    <PreciseLazyload />
   </body>
 </html>

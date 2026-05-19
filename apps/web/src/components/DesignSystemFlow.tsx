@@ -1351,6 +1351,7 @@ export function DesignSystemDetailView({
                 </button>
               ) : null}
             </div>
+            <DesignSystemPackageCard system={system} />
             <div className="ds-warning-card">
               <Icon name="help-circle" />
               <span>
@@ -1576,6 +1577,146 @@ function findWorkspaceActivityMessage(messages: ChatMessage[]): ChatMessage | nu
       return message;
   }
   return null;
+}
+
+function DesignSystemPackageCard({ system }: { system: DesignSystemDetail }) {
+  const info = system.packageInfo;
+  const manifest = info?.manifest;
+  const evidence = info?.sourceEvidence;
+  const sourceLabel = manifest?.source?.type ? sourceTypeLabel(manifest.source.type) : sourceTypeLabel(system.source);
+  const previewPages = manifest?.preview?.pages ?? [];
+  const sourceFiles = manifest?.sourceFiles;
+  const sourceFileCount = [sourceFiles?.scanned, sourceFiles?.evidence, sourceFiles?.tokens, sourceFiles?.snippets]
+    .filter(Boolean)
+    .length;
+  const protocolItems = [
+    manifest?.usage ? manifest.usage : null,
+    manifest?.files?.design ?? 'DESIGN.md',
+    manifest?.files?.tokens ?? 'tokens.css',
+    manifest?.files?.components,
+    manifest?.componentsManifest,
+  ].filter((item): item is string => typeof item === 'string' && item.length > 0);
+  const evidenceStats = [
+    evidence?.scannedFileCount !== undefined ? { label: 'Scanned files', value: String(evidence.scannedFileCount) } : null,
+    evidence?.tokenCount !== undefined ? { label: 'Source tokens', value: String(evidence.tokenCount) } : null,
+    evidence?.snippetCount !== undefined ? { label: 'Snippets', value: String(evidence.snippetCount) } : null,
+    manifest?.fonts?.length ? { label: 'Fonts', value: String(manifest.fonts.length) } : null,
+  ].filter((item): item is { label: string; value: string } => item !== null);
+  const confidence = evidence?.confidence ? Object.entries(evidence.confidence) : [];
+
+  return (
+    <section className="ds-package-card">
+      <div className="ds-package-card__head">
+        <span>
+          <strong>{manifest ? 'Structured import package' : 'Legacy design system'}</strong>
+          <small>
+            {manifest
+              ? `${sourceLabel} · ${manifest.importMode ?? 'normalized'} mode · manifest indexed`
+              : `${sourceLabel} · DESIGN.md-only fallback`}
+          </small>
+        </span>
+        <span className={manifest ? 'ds-package-pill is-ready' : 'ds-package-pill'}>
+          {manifest ? 'Hybrid ready' : 'Fallback'}
+        </span>
+      </div>
+
+      <div className="ds-package-grid">
+        <div>
+          <h2>Agent push layer</h2>
+          <div className="ds-package-chips">
+            {protocolItems.map((item) => (
+              <code key={item}>{item}</code>
+            ))}
+          </div>
+        </div>
+        <div>
+          <h2>Pull layer</h2>
+          <div className="ds-package-metrics">
+            <span><strong>{previewPages.length}</strong><small>Preview pages</small></span>
+            <span><strong>{sourceFileCount}</strong><small>Evidence indexes</small></span>
+            <span><strong>{manifest?.assetsDir ? 'Yes' : 'No'}</strong><small>Assets</small></span>
+          </div>
+        </div>
+      </div>
+
+      {evidenceStats.length > 0 || confidence.length > 0 ? (
+        <div className="ds-evidence-panel">
+          <div className="ds-evidence-stats">
+            {evidenceStats.map((item) => (
+              <span key={item.label}>
+                <strong>{item.value}</strong>
+                <small>{item.label}</small>
+              </span>
+            ))}
+          </div>
+          {confidence.length > 0 ? (
+            <div className="ds-confidence-row">
+              {confidence.map(([key, value]) => (
+                <span key={key}>{key}: {String(value)}</span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {manifest ? (
+        <div className="ds-package-files">
+          <PackageFileGroup
+            title="Preview"
+            files={previewPages.map((page) => ({
+              path: page.path ?? '',
+              meta: [page.title, page.role].filter(Boolean).join(' · '),
+            }))}
+          />
+          <PackageFileGroup
+            title="Source evidence"
+            files={[
+              sourceFiles?.scanned ? { path: sourceFiles.scanned, meta: 'Scanned file inventory' } : null,
+              sourceFiles?.evidence ? { path: sourceFiles.evidence, meta: 'Evidence notes' } : null,
+              sourceFiles?.tokens ? { path: sourceFiles.tokens, meta: 'Token extraction evidence' } : null,
+              sourceFiles?.snippets ? { path: sourceFiles.snippets, meta: 'Snippet index' } : null,
+            ].filter((item): item is { path: string; meta: string } => item !== null)}
+          />
+        </div>
+      ) : null}
+      {evidence?.evidenceExcerpt ? (
+        <pre className="ds-evidence-excerpt">{evidence.evidenceExcerpt}</pre>
+      ) : null}
+    </section>
+  );
+}
+
+function PackageFileGroup({
+  title,
+  files,
+}: {
+  title: string;
+  files: Array<{ path: string; meta?: string }>;
+}) {
+  const visibleFiles = files.filter((file) => file.path.length > 0);
+  if (visibleFiles.length === 0) return null;
+  return (
+    <div>
+      <h2>{title}</h2>
+      <div className="ds-package-file-list">
+        {visibleFiles.map((file) => (
+          <span key={file.path}>
+            <code>{file.path}</code>
+            {file.meta ? <small>{file.meta}</small> : null}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function sourceTypeLabel(value: string | undefined): string {
+  if (value === 'github') return 'GitHub import';
+  if (value === 'local') return 'Local import';
+  if (value === 'bundled' || value === 'built-in') return 'Bundled';
+  if (value === 'user') return 'User workspace';
+  if (value === 'installed') return 'Installed';
+  return 'Design system';
 }
 
 function WorkspaceActivityCard({
