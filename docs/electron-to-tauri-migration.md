@@ -512,7 +512,7 @@ On the receiving checkout, copy the tarball plus its `.sha256`, `.commands.sh`, 
 /path/to/open-design-tauri-migration-handoff.tar.gz.commands.sh
 ```
 
-The command script still accepts the archive path as an explicit argument if the sidecars are copied under a different name:
+The command script still accepts the archive path as an explicit argument if the sidecars are copied to another location without renaming the files. The archive and command-script checksum sidecars name their target files, so renaming a handoff file requires regenerating the package:
 
 ```bash
 /path/to/open-design-tauri-migration-handoff.tar.gz.commands.sh \

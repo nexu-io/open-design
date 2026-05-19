@@ -71,7 +71,8 @@ test("verify-tauri-migration-handoff round-trips a bundle through a receiving ch
   assert.match(note, /Preferred path when you copied the tarball plus its `.sha256`, `.commands.sh`, and `.commands.sh.sha256` sidecars/);
   assert.match(note, new RegExp(escapeRegExp(`${dirname(manifestPath)}.tar.gz.commands.sh`)));
   assert.match(note, /verifies its own checksum sidecar and the archive checksum/);
-  assert.match(note, /Use an explicit archive argument/);
+  assert.match(note, /Use an explicit archive argument if the sidecars were copied to another location without renaming the files/);
+  assert.doesNotMatch(note, /renamed or copied/);
   assert.match(note, /TAURI_NATIVE_CI_TRIGGER=0/);
   assert.match(note, /TAURI_NATIVE_CI_WAIT=1/);
   assert.match(note, /TAURI_PR_BODY_PATH=<path>/);
@@ -80,6 +81,7 @@ test("verify-tauri-migration-handoff round-trips a bundle through a receiving ch
   assert.match(note, /--body-file \.tmp\/tauri-migration-pr-body\.md/);
   assert.match(note, new RegExp(`--manifest '${escapeRegExp(manifestPath)}' \\\\`));
   assert.match(note, /push-tauri-migration-handoff/);
+  assert.match(note, /including checksum target filenames/);
   assert.match(note, /manifest records the bundle path relative to itself/);
   assert.match(note, /--bundle \/path\/to\/open-design-tauri-migration\.bundle/);
   assert.match(note, /verify-tauri-migration-remote/);
