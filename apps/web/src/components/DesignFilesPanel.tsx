@@ -280,10 +280,15 @@ export function DesignFilesPanel({
         .flatMap(([, kindFiles]) => kindFiles);
     }
     if (groupMode === 'modified') {
-      return MODIFIED_SECTION_ORDER.flatMap((section) => modifiedGroups[section]);
+      // Only include files from sections that are currently expanded; collapsed
+      // sections are hidden from the DOM so their files must not participate in
+      // shift-click range selection (which uses visible row positions).
+      return MODIFIED_SECTION_ORDER
+        .filter((section) => !collapsedModifiedSections.has(section))
+        .flatMap((section) => modifiedGroups[section]);
     }
     return pageFiles;
-  }, [groupMode, pageFiles, modifiedGroups]);
+  }, [groupMode, pageFiles, modifiedGroups, collapsedModifiedSections]);
   const visibleModifiedSections = MODIFIED_SECTION_ORDER.filter(
     (section) => modifiedGroups[section].length > 0,
   );

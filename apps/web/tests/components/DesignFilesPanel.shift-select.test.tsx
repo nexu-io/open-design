@@ -238,6 +238,70 @@ describe('DesignFilesPanel shift-click range selection', () => {
     expect(rowB.getAttribute('aria-selected')).toBe('false');
   });
 
+  it('(h) shift-select across a collapsed modified section does not include hidden files', () => {
+    // Regression: visiblePageOrder previously flatMapped all modifiedGroups[section]
+    // regardless of collapsedModifiedSections, so files inside a collapsed section
+    // were silently included in shift-click ranges and fed into batch delete/download.
+    //
+    // Layout under groupMode==='modified' with the middle section collapsed:
+    //   [today]          visible: today.html                 (idx 0)
+    //   [yesterday]      COLLAPSED — hidden from DOM
+    //   [previous7Days]  visible: week.html                  (idx 1 after fix, 2 before)
+    //
+    // The fix makes visiblePageOrder skip collapsed sections, so shift-clicking
+    // from today.html to week.html produces range [today.html, week.html] with no
+    // files from the collapsed yesterday section.
+
+    const now = Date.now();
+    const startOfToday = new Date(now);
+    startOfToday.setHours(0, 0, 0, 0);
+    const todayTs = startOfToday.getTime() + 1000;           // within today
+    const yesterdayTs = startOfToday.getTime() - 12 * 3600 * 1000; // yesterday
+    const weekTs = startOfToday.getTime() - 3 * 24 * 3600 * 1000; // previous 7 days
+
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
+    const files = [
+      file('today.html',     todayTs,     'html'),
+      file('yesterday.html', yesterdayTs, 'html'),
+      file('week.html',      weekTs,      'html'),
+    ];
+    const { container } = renderPanel(files);
+
+    // Switch to groupMode === 'modified'. The group-toggle area contains two
+    // buttons: "Kind" (active/pressed) and "Modified" (not yet active).
+    const modifiedBtn = Array.from(container.querySelectorAll('.df-group-toggle button')).find(
+      (el) => el.getAttribute('aria-pressed') === 'false',
+    ) as HTMLElement | undefined;
+    if (!modifiedBtn) throw new Error('Modified group button not found');
+    fireEvent.click(modifiedBtn);
+
+    // Collapse the "yesterday" section
+    const collapseBtn = Array.from(container.querySelectorAll('button.df-section-toggle')).find(
+      (el) => el.textContent?.toLowerCase().includes('yesterday'),
+    ) as HTMLElement | undefined;
+    if (!collapseBtn) throw new Error('Yesterday section toggle not found');
+    fireEvent.click(collapseBtn);
+
+    // yesterday.html row must now be absent from the DOM
+    expect(container.querySelector('[data-testid="design-file-row-yesterday.html"]')).toBeNull();
+
+    // Plain click on today.html — sets anchor
+    fireEvent.click(getCheckbox(container, 'today.html'));
+    expect(isSelected(container, 'today.html')).toBe(true);
+
+    // Shift-click on week.html — range should only cover today.html and week.html
+    fireEvent.click(getCheckbox(container, 'week.html'), { shiftKey: true });
+
+    expect(isSelected(container, 'today.html')).toBe(true);
+    expect(isSelected(container, 'week.html')).toBe(true);
+    // yesterday.html must NOT be selected — it lives in a collapsed section
+    expect(isSelected(container, 'yesterday.html')).toBe(false);
+
+    vi.useRealTimers();
+  });
+
   it('(g) shift-select range matches visual kind-group order, not mtime sort order', () => {
     // Regression for the bug where handleRowCheck used pageFiles (sorted by
     // mtime desc) but renderKindSections reorders rows by kindSortPriority,
