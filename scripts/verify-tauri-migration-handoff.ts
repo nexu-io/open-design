@@ -68,6 +68,8 @@ async function main(): Promise<void> {
         `Base: ${args.base} @ ${baseHead}`,
         `Bundle: ${bundlePath}`,
         `SHA-256: ${bundleSha256}`,
+        "Receiving import command (replace --bundle if copied elsewhere):",
+        indent(receivingImportCommand(bundlePath, bundleSha256, args.branch)),
         "Create:",
         indent(createOutput.stdout.trim()),
         "Import:",
@@ -165,6 +167,20 @@ function indent(value: string): string {
     .split(/\r?\n/)
     .map((line) => `  ${line}`)
     .join("\n");
+}
+
+function receivingImportCommand(bundlePath: string, bundleSha256: string, branch: string): string {
+  return [
+    "pnpm exec tsx scripts/import-tauri-migration-bundle.ts \\",
+    `  --bundle ${shellQuote(bundlePath)} \\`,
+    `  --expected-sha256 ${bundleSha256} \\`,
+    `  --branch ${shellQuote(branch)} \\`,
+    "  --checkout",
+  ].join("\n");
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 try {

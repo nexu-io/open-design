@@ -32,6 +32,10 @@ test("verify-tauri-migration-handoff round-trips a bundle through a receiving ch
   assert.match(result.stdout, /Verified Tauri migration bundle handoff round-trip/);
   assert.match(result.stdout, new RegExp(`Branch: ${migrationBranch.replaceAll("/", "\\/")} @ ${sourceHead}`));
   assert.match(result.stdout, /SHA-256: [0-9a-f]{64}/);
+  assert.match(result.stdout, /Receiving import command \(replace --bundle if copied elsewhere\):/);
+  assert.match(result.stdout, /pnpm exec tsx scripts\/import-tauri-migration-bundle\.ts \\/);
+  assert.match(result.stdout, /--expected-sha256 [0-9a-f]{64} \\/);
+  assert.match(result.stdout, new RegExp(`--branch '${migrationBranch.replaceAll("/", "\\/")}' \\\\`));
   assert.match(result.stdout, /Temp retained: false/);
   await access(bundlePath);
 });
