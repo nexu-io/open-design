@@ -186,7 +186,15 @@ describe('FileViewer manual edit history regressions', () => {
 
     fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
     await waitFor(() => expect(panelState.props).not.toBeNull());
-    await waitFor(() => expect((document.querySelector('iframe') as HTMLIFrameElement | null)?.srcdoc).toContain('Hero'));
+    const getActivePreviewFrame = () => screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+
+    await waitFor(() => {
+      const frame = getActivePreviewFrame();
+      expect(frame.getAttribute('data-od-active')).toBe('true');
+      expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      expect(panelState.props?.draft.fullSource).toContain('Hero');
+    });
+    const postMessageSpy = vi.spyOn(getActivePreviewFrame().contentWindow!, 'postMessage');
 
     act(() => {
       panelState.props?.onApplyPatch(
@@ -196,7 +204,16 @@ describe('FileViewer manual edit history regressions', () => {
     });
 
     await waitFor(() => expect(savedSources).toHaveLength(1));
-    await waitFor(() => expect((document.querySelector('iframe') as HTMLIFrameElement | null)?.srcdoc).toContain('Updated hero'));
+    await waitFor(() => expect(panelState.props?.draft.fullSource).toContain('Updated hero'));
+    await waitFor(() => {
+      expect(postMessageSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'od:srcdoc-transport-activate',
+          html: expect.stringContaining('Updated hero'),
+        }),
+        '*',
+      );
+    });
   });
 });
 
