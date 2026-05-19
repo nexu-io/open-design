@@ -41,6 +41,7 @@ type Args = {
 
 type InventoryEntry = {
   dependencies?: string[];
+  packageName?: string;
   path: string;
 };
 
@@ -140,10 +141,11 @@ async function readPackageManifestInventory(root: string): Promise<InventoryEntr
   const entries = await Promise.all(
     packageManifestPaths.map(async (repositoryPath) => {
       const source = await readFile(join(root, repositoryPath), "utf8");
+      const packageName = readPackageName(source);
       const dependencies = [...readPackageDependencyNames(source)].filter((dependencyName) =>
         electronDependencyNames.includes(dependencyName as (typeof electronDependencyNames)[number]),
       );
-      return { dependencies, path: repositoryPath };
+      return { dependencies, ...(packageName == null ? {} : { packageName }), path: repositoryPath };
     }),
   );
   return entries.filter((entry) => entry.dependencies.length > 0);
@@ -228,6 +230,11 @@ function readPackageDependencyNames(source: string): Set<string> {
     ...Object.keys(parsed.devDependencies ?? {}),
     ...Object.keys(parsed.optionalDependencies ?? {}),
   ]);
+}
+
+function readPackageName(source: string): string | undefined {
+  const parsed = JSON.parse(source) as { name?: unknown };
+  return typeof parsed.name === "string" && parsed.name.length > 0 ? parsed.name : undefined;
 }
 
 function readPnpmImporterDependencyNames(source: string, importer: string): Set<string> {
@@ -338,7 +345,10 @@ function formatDependencyRemovalCommands(entries: InventoryEntry[]): string[] {
   if (entries.length === 0) {
     return ["  - none"];
   }
-  return entries.map((entry) => `  - pnpm --filter ${entry.path.replace(/\/package\.json$/, "")} remove ${entry.dependencies?.join(" ") ?? ""}`);
+  return entries.map((entry) => {
+    const filter = entry.packageName ?? `./${entry.path.replace(/\/package\.json$/, "")}`;
+    return `  - pnpm --filter ${filter} remove ${entry.dependencies?.join(" ") ?? ""}`;
+  });
 }
 
 function formatDependencyEntries(entries: InventoryEntry[]): string[] {

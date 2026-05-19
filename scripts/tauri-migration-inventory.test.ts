@@ -63,9 +63,9 @@ test("tauri-migration-inventory emits an M6 cleanup plan", async (t) => {
 
   assert.match(result.stdout, /Tauri migration M6 cleanup plan/);
   assert.match(result.stdout, /Preconditions:/);
-  assert.match(result.stdout, /pnpm --filter apps\/desktop remove electron/);
-  assert.match(result.stdout, /pnpm --filter apps\/packaged remove electron/);
-  assert.match(result.stdout, /pnpm --filter tools\/pack remove @electron\/rebuild electron-builder/);
+  assert.match(result.stdout, /pnpm --filter @open-design\/desktop remove electron/);
+  assert.match(result.stdout, /pnpm --filter @open-design\/packaged remove electron/);
+  assert.match(result.stdout, /pnpm --filter @open-design\/tools-pack remove @electron\/rebuild electron-builder/);
   assert.match(result.stdout, /apps\/desktop\/src\/main\/runtime\.ts/);
   assert.match(result.stdout, /tools\/pack\/resources\/web-standalone-after-pack\.cjs/);
   assert.match(result.stdout, /Remove electron from DESKTOP_RUNTIME_KINDS/);
@@ -85,16 +85,19 @@ async function createInventoryFixture(t: test.TestContext): Promise<string> {
   await mkdir(join(root, "tools", "pack", "tests"), { recursive: true });
 
   await writeJson(join(root, "apps", "desktop", "package.json"), {
+    name: "@open-design/desktop",
     devDependencies: {
       electron: "41.3.0",
     },
   });
   await writeJson(join(root, "apps", "packaged", "package.json"), {
+    name: "@open-design/packaged",
     devDependencies: {
       electron: "41.3.0",
     },
   });
   await writeJson(join(root, "tools", "pack", "package.json"), {
+    name: "@open-design/tools-pack",
     dependencies: {
       "@electron/rebuild": "4.0.4",
       "electron-builder": "26.8.1",
