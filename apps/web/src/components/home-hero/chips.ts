@@ -22,6 +22,7 @@
 import type { ProjectKind, ProjectMetadata } from '@open-design/contracts';
 import type { DefaultScenarioPluginId } from '@open-design/contracts';
 import type { IconName } from '../Icon';
+import type { Dict } from '../../i18n/types';
 
 // Plugin ids the chip rail can dispatch to. Most chips route to a
 // `DefaultScenarioPluginId` so the same fallback table the daemon
@@ -62,7 +63,7 @@ export type ChipGroup = 'create' | 'migrate';
 
 export interface HomeHeroChip {
   id: string;
-  labelKey: string;
+  labelKey: keyof Dict;
   icon: IconName;
   group: ChipGroup;
   hint?: string;
