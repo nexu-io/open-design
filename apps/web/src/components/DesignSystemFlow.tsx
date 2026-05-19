@@ -66,6 +66,7 @@ interface CreationProps {
   onSystemsRefresh?: () => Promise<void> | void;
   config?: AppConfig;
   onOpenConnectorsTab?: () => void;
+  chrome?: 'standalone' | 'embedded';
 }
 
 interface DetailProps {
@@ -187,6 +188,7 @@ export function DesignSystemCreationFlow({
   onSystemsRefresh,
   config,
   onOpenConnectorsTab,
+  chrome = 'standalone',
 }: CreationProps) {
   const [step, setStep] = useState<SetupStep>('setup');
   const [state, setState] = useState<SetupState>(EMPTY_SETUP);
@@ -201,6 +203,7 @@ export function DesignSystemCreationFlow({
   const [githubAuthorizationUrl, setGithubAuthorizationUrl] = useState<string | null>(null);
   const githubConnectorRefreshId = useRef(0);
   const githubConnectorRequestInFlight = useRef(false);
+  const embedded = chrome === 'embedded';
 
   const refreshGithubConnector = useCallback(async () => {
     if (!composioConfigured) {
@@ -420,38 +423,40 @@ export function DesignSystemCreationFlow({
   }
 
   return (
-    <div className="ds-setup-shell">
-      <header className="ds-setup-topbar">
-        <button type="button" className="ghost" onClick={onBack}>
-          <Icon name="arrow-left" />
-          Back
-        </button>
-        <span className="ds-setup-mark">
-          <Icon name="palette" />
-        </span>
-        <button
-          type="button"
-          className="primary"
-          disabled={!state.company.trim()}
-          onClick={() => {
-            if (!state.company.trim()) {
-              setError('Tell Open Design about the company or design system first.');
-              return;
-            }
-            setStep('confirm');
-          }}
-        >
-          Continue to generation
-          <Icon name="chevron-right" />
-        </button>
-      </header>
+    <div className={`ds-setup-shell${embedded ? ' ds-setup-shell--embedded' : ''}`}>
+      {embedded ? null : (
+        <header className="ds-setup-topbar">
+          <button type="button" className="ghost" onClick={onBack}>
+            <Icon name="arrow-left" />
+            Back
+          </button>
+          <span className="ds-setup-mark">
+            <Icon name="palette" />
+          </span>
+          <button
+            type="button"
+            className="primary"
+            disabled={!state.company.trim()}
+            onClick={() => {
+              if (!state.company.trim()) {
+                setError('Tell Open Design about the company or design system first.');
+                return;
+              }
+              setStep('confirm');
+            }}
+          >
+            Generate
+            <Icon name="chevron-right" />
+          </button>
+        </header>
+      )}
 
       <main className="ds-setup-form">
-        <h1>Set up your design system</h1>
-        <p>Tell us about your company and attach any design resources you have.</p>
+        <h1>Generate from your material</h1>
+        <p>Start with a short description, then add any source files you already have.</p>
 
         <label className="ds-setup-field">
-          <span>Company name and blurb (or name of design system)</span>
+          <span>Describe your brand or product</span>
           <textarea
             rows={4}
             value={state.company}
@@ -461,11 +466,11 @@ export function DesignSystemCreationFlow({
         </label>
 
         <section className="ds-resource-section">
-          <h2>Provide examples of your design system and products <span>(all optional)</span></h2>
-          <p>What works best: code and designs for your design system and your code products.</p>
+          <h2>Add source material <span>(optional)</span></h2>
+          <p>Use anything that shows your current style.</p>
           <div className="ds-resource-card">
             <div className="ds-resource-row">
-              <strong>Link code on GitHub</strong>
+              <strong>GitHub repo</strong>
               <div className="ds-resource-inline">
                 <input
                   value={state.githubUrl}
@@ -513,8 +518,8 @@ export function DesignSystemCreationFlow({
               />
             </div>
             <DropZone
-              label="Link code from your computer"
-              helper="Open Design can link a local folder for the agent to read, or copy a focused browser-selected folder snapshot into this design-system project."
+              label="Link local code"
+              helper="Use a folder or selected files from this computer."
               prompt="Drag a folder here or browse"
               names={localCodeSourceLabels(state)}
               directory
@@ -531,8 +536,8 @@ export function DesignSystemCreationFlow({
               }}
             />
             <DropZone
-              label="Upload a .fig file"
-              helper="The .fig source is parsed locally in your browser; only an extracted summary enters this project."
+              label="Upload .fig"
+              helper="Parsed locally; only a summary is added."
               prompt="Drop .fig here or browse"
               accept=".fig"
               names={state.figFiles}
@@ -547,7 +552,7 @@ export function DesignSystemCreationFlow({
               }}
             />
             <DropZone
-              label="Add fonts, logos and assets"
+              label="Add assets"
               prompt="Drag files here or browse"
               names={state.assetFiles}
               onFiles={(_names, files) => {
@@ -563,16 +568,41 @@ export function DesignSystemCreationFlow({
           </div>
         </section>
 
-        <label className="ds-setup-field">
-          <span>Any other notes?</span>
-          <textarea
-            rows={4}
-            value={state.notes}
-            onChange={(event) => setState((curr) => ({ ...curr, notes: event.target.value }))}
-            placeholder="e.g. We use a warm, earthy color palette with rounded corners. Our brand voice is playful but professional..."
-          />
-        </label>
+        {embedded ? null : (
+          <label className="ds-setup-field">
+            <span>Notes</span>
+            <textarea
+              rows={4}
+              value={state.notes}
+              onChange={(event) => setState((curr) => ({ ...curr, notes: event.target.value }))}
+              placeholder="e.g. We use a warm, earthy color palette with rounded corners. Our brand voice is playful but professional..."
+            />
+          </label>
+        )}
         {error ? <div className="ds-editor-error">{error}</div> : null}
+        {embedded ? (
+          <div className="ds-setup-actions ds-setup-actions--embedded">
+            <button type="button" className="ghost" onClick={onBack}>
+              <Icon name="arrow-left" />
+              Back
+            </button>
+            <button
+              type="button"
+              className="primary"
+              disabled={!state.company.trim()}
+              onClick={() => {
+                if (!state.company.trim()) {
+                  setError('Tell Open Design about the company or design system first.');
+                  return;
+                }
+                setStep('confirm');
+              }}
+            >
+              Generate
+              <Icon name="chevron-right" />
+            </button>
+          </div>
+        ) : null}
       </main>
     </div>
   );
