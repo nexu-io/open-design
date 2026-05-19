@@ -1,4 +1,4 @@
-import { readFile, readdir } from "node:fs/promises";
+import { access, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
 import { checkDesignSystemFlagParity } from "./check-design-system-flag-parity.ts";
@@ -17,6 +17,17 @@ const migrationDocPath = path.join(repoRoot, "docs", "electron-to-tauri-migratio
 const toolsDevConfigPath = path.join(repoRoot, "tools", "dev", "src", "config.ts");
 const toolsPackConfigPath = path.join(repoRoot, "tools", "pack", "src", "config.ts");
 const releaseBetaWorkflowPath = path.join(repoRoot, ".github", "workflows", "release-beta.yml");
+const desktopPackageJsonPath = path.join(repoRoot, "apps", "desktop", "package.json");
+const packagedPackageJsonPath = path.join(repoRoot, "apps", "packaged", "package.json");
+const toolsPackPackageJsonPath = path.join(repoRoot, "tools", "pack", "package.json");
+const electronRuntimeFiles = [
+  path.join(repoRoot, "apps", "desktop", "src", "main", "index.ts"),
+  path.join(repoRoot, "apps", "desktop", "src", "main", "preload.cts"),
+  path.join(repoRoot, "apps", "desktop", "src", "main", "runtime.ts"),
+] as const;
+const electronPackResourceFiles = [
+  path.join(repoRoot, "tools", "pack", "resources", "web-standalone-after-pack.cjs"),
+] as const;
 
 const m4PlatformGateLabels = [
   "Windows NSIS: build, install, start, inspect status/eval/screenshot, stop.",
@@ -27,6 +38,9 @@ const m5ToolsDevDefaultLabel = "Change `tools-dev` default desktop runtime to Ta
 const m5ToolsPackDefaultLabel = "Change `tools-pack` default desktop runtime to Tauri.";
 const m5ReleaseBetaDefaultLabel = "Change `release-beta` desktop runtime workflow default to Tauri.";
 const m5ElectronFallbackLabel = "Keep Electron fallback explicit during the transition window.";
+const m6ElectronDepsLabel = "Remove `electron`, `electron-builder`, `@electron/rebuild`, and Electron-only package scripts.";
+const m6ElectronRuntimeLabel = "Remove Electron preload/runtime code after Tauri bridge and packaging parity are complete.";
+const m6ElectronResourcesLabel = "Remove Electron-only resources/hooks from `tools-pack`.";
 
 const allowedE2eScripts = new Set([
   "e2e/scripts/playwright.ts",
@@ -759,21 +773,71 @@ function sourceAllowsElectronFallback(source: string): boolean {
   return /DESKTOP_RUNTIME_KINDS = \["electron", "tauri"\] as const/.test(source);
 }
 
+async function pathExists(filePath: string): Promise<boolean> {
+  try {
+    await access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function readPackageDependencyNames(source: string, label: string): Set<string> {
+  let parsed: {
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+    optionalDependencies?: Record<string, string>;
+  };
+  try {
+    parsed = JSON.parse(source) as typeof parsed;
+  } catch (error) {
+    throw new Error(`${label} must be valid JSON: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  return new Set([
+    ...Object.keys(parsed.dependencies ?? {}),
+    ...Object.keys(parsed.devDependencies ?? {}),
+    ...Object.keys(parsed.optionalDependencies ?? {}),
+  ]);
+}
+
 async function checkTauriMigrationOrder(): Promise<boolean> {
-  const [migrationDoc, toolsDevConfig, toolsPackConfig, releaseBetaWorkflow] = await Promise.all([
+  const [
+    migrationDoc,
+    toolsDevConfig,
+    toolsPackConfig,
+    releaseBetaWorkflow,
+    desktopPackageJson,
+    packagedPackageJson,
+    toolsPackPackageJson,
+    electronRuntimeFileExists,
+    electronPackResourceFileExists,
+  ] = await Promise.all([
     readFile(migrationDocPath, "utf8"),
     readFile(toolsDevConfigPath, "utf8"),
     readFile(toolsPackConfigPath, "utf8"),
     readFile(releaseBetaWorkflowPath, "utf8"),
+    readFile(desktopPackageJsonPath, "utf8"),
+    readFile(packagedPackageJsonPath, "utf8"),
+    readFile(toolsPackPackageJsonPath, "utf8"),
+    Promise.all(electronRuntimeFiles.map((filePath) => pathExists(filePath))),
+    Promise.all(electronPackResourceFiles.map((filePath) => pathExists(filePath))),
   ]);
   const toolsDevDefault = readDefaultDesktopRuntime(toolsDevConfig, "tools-dev");
   const toolsPackDefault = readDefaultDesktopRuntime(toolsPackConfig, "tools-pack");
   const releaseBetaDefault = readReleaseBetaDesktopRuntimeDefault(releaseBetaWorkflow);
+  const packageDependencyNames = new Set([
+    ...readPackageDependencyNames(desktopPackageJson, "apps/desktop/package.json"),
+    ...readPackageDependencyNames(packagedPackageJson, "apps/packaged/package.json"),
+    ...readPackageDependencyNames(toolsPackPackageJson, "tools/pack/package.json"),
+  ]);
   const m4Complete = m4PlatformGateLabels.every((label) => isChecklistLineChecked(migrationDoc, label));
   const toolsDevDefaultFlipped = isChecklistLineChecked(migrationDoc, m5ToolsDevDefaultLabel);
   const toolsPackDefaultFlipped = isChecklistLineChecked(migrationDoc, m5ToolsPackDefaultLabel);
   const releaseBetaDefaultFlipped = isChecklistLineChecked(migrationDoc, m5ReleaseBetaDefaultLabel);
   const fallbackMarked = isChecklistLineChecked(migrationDoc, m5ElectronFallbackLabel);
+  const electronDepsRemoved = isChecklistLineChecked(migrationDoc, m6ElectronDepsLabel);
+  const electronRuntimeRemoved = isChecklistLineChecked(migrationDoc, m6ElectronRuntimeLabel);
+  const electronResourcesRemoved = isChecklistLineChecked(migrationDoc, m6ElectronResourcesLabel);
 
   const violations: string[] = [];
   if (!m4Complete && (toolsDevDefault === "tauri" || toolsPackDefault === "tauri" || releaseBetaDefault === "tauri")) {
@@ -797,6 +861,42 @@ async function checkTauriMigrationOrder(): Promise<boolean> {
   }
   if (fallbackMarked && (!sourceAllowsElectronFallback(toolsDevConfig) || !sourceAllowsElectronFallback(toolsPackConfig))) {
     violations.push("Electron fallback is checked, but a tool no longer accepts both electron and tauri runtime values.");
+  }
+  const electronDependencyNames = ["electron", "electron-builder", "@electron/rebuild"];
+  const electronDependenciesPresent = electronDependencyNames.filter((dependencyName) =>
+    packageDependencyNames.has(dependencyName),
+  );
+  if (electronDepsRemoved && electronDependenciesPresent.length > 0) {
+    violations.push(
+      `the M6 Electron dependency cleanup is checked, but package manifests still include: ${electronDependenciesPresent.join(", ")}.`,
+    );
+  }
+  if (!electronDepsRemoved && electronDependenciesPresent.length === 0) {
+    violations.push("Electron dependencies were removed, but the M6 dependency cleanup checklist line is not checked.");
+  }
+  const remainingElectronRuntimeFiles = electronRuntimeFiles.filter((_, index) => electronRuntimeFileExists[index]);
+  if (electronRuntimeRemoved && remainingElectronRuntimeFiles.length > 0) {
+    violations.push(
+      `the M6 Electron runtime cleanup is checked, but these files still exist: ${remainingElectronRuntimeFiles
+        .map(toRepositoryPath)
+        .join(", ")}.`,
+    );
+  }
+  if (!electronRuntimeRemoved && remainingElectronRuntimeFiles.length === 0) {
+    violations.push("Electron runtime files were removed, but the M6 runtime cleanup checklist line is not checked.");
+  }
+  const remainingElectronResourceFiles = electronPackResourceFiles.filter(
+    (_, index) => electronPackResourceFileExists[index],
+  );
+  if (electronResourcesRemoved && remainingElectronResourceFiles.length > 0) {
+    violations.push(
+      `the M6 Electron resources cleanup is checked, but these files still exist: ${remainingElectronResourceFiles
+        .map(toRepositoryPath)
+        .join(", ")}.`,
+    );
+  }
+  if (!electronResourcesRemoved && remainingElectronResourceFiles.length === 0) {
+    violations.push("Electron-only tools-pack resources were removed, but the M6 resources cleanup checklist line is not checked.");
   }
 
   if (violations.length > 0) {
