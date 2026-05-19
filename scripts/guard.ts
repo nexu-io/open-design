@@ -11,6 +11,11 @@ import {
   checkDesignSystemUnknownTokens,
 } from "./check-tokens-fixture-sync.ts";
 import { collectCssHardcodedColorMatches, cssWideAndSpecialColorKeywords, realNamedColors } from "./style-policy.ts";
+import {
+  containsElectronGuidanceReference,
+  containsElectronTestReference,
+  evaluateTauriMigrationOrder,
+} from "./tauri-migration-policy.ts";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const migrationDocPath = path.join(repoRoot, "docs", "electron-to-tauri-migration.md");
@@ -45,24 +50,6 @@ const electronTestDirectories = [
   path.join(repoRoot, "apps", "packaged", "tests"),
   path.join(repoRoot, "tools", "pack", "tests"),
 ] as const;
-
-const m4PlatformGateLabels = [
-  "Windows NSIS: build, install, start, inspect status/eval/screenshot, stop.",
-  "Linux: build AppImage, install, start, inspect status/eval/screenshot, stop.",
-  "Linux headless platform smoke remains supported and unaffected.",
-] as const;
-const m4EvidenceLogMarker =
-  "Verified native Windows/Linux M4 package smoke with `scripts/verify-tauri-platform-gates.ts --update-migration-doc`.";
-const m5ToolsDevDefaultLabel = "Change `tools-dev` default desktop runtime to Tauri.";
-const m5ToolsPackDefaultLabel = "Change `tools-pack` default desktop runtime to Tauri.";
-const m5ReleaseBetaDefaultLabel = "Change `release-beta` desktop runtime workflow default to Tauri.";
-const m5ElectronFallbackLabel = "Keep Electron fallback explicit during the transition window.";
-const m5PrimaryDocsLabel = "Update README, architecture docs, and directory guidance to describe Tauri as the primary runtime.";
-const m6ElectronDepsLabel = "Remove `electron`, `electron-builder`, `@electron/rebuild`, and Electron-only package scripts.";
-const m6ElectronRuntimeLabel = "Remove Electron preload/runtime code after Tauri bridge and packaging parity are complete.";
-const m6ElectronResourcesLabel = "Remove Electron-only resources/hooks from `tools-pack`.";
-const m6ElectronTestsLabel = "Delete or rewrite Electron-only tests.";
-const m6ElectronGuidanceLabel = "Update AGENTS guidance and PR checklist references from Electron to Tauri.";
 
 const allowedE2eScripts = new Set([
   "e2e/scripts/playwright.ts",
@@ -741,75 +728,6 @@ async function checkStylePolicy(): Promise<boolean> {
   return true;
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function isChecklistLineChecked(content: string, label: string): boolean {
-  const checked = new RegExp(`^- \\[x\\] ${escapeRegExp(label)}$`, "m");
-  const unchecked = new RegExp(`^- \\[ \\] ${escapeRegExp(label)}$`, "m");
-  if (checked.test(content)) return true;
-  if (unchecked.test(content)) return false;
-  throw new Error(`missing migration checklist line: ${label}`);
-}
-
-function readDefaultDesktopRuntime(source: string, label: string): "electron" | "tauri" {
-  const match = source.match(/export const DEFAULT_DESKTOP_RUNTIME = "([^"]+)"/);
-  const runtime = match?.[1];
-  if (runtime === "electron" || runtime === "tauri") return runtime;
-  throw new Error(`${label} must export DEFAULT_DESKTOP_RUNTIME as "electron" or "tauri"`);
-}
-
-function leadingWhitespaceLength(line: string): number {
-  return line.match(/^(\s*)/)?.[1]?.length ?? 0;
-}
-
-function readReleaseBetaDesktopRuntimeDefault(source: string): "electron" | "tauri" {
-  const lines = source.split(/\r?\n/);
-  const desktopRuntimeIndex = lines.findIndex((line) => /^\s+desktop_runtime:\s*$/.test(line));
-  if (desktopRuntimeIndex < 0) {
-    throw new Error('release-beta workflow must define a "desktop_runtime" input');
-  }
-
-  const desktopRuntimeIndent = leadingWhitespaceLength(lines[desktopRuntimeIndex] ?? "");
-  for (const line of lines.slice(desktopRuntimeIndex + 1)) {
-    if (line.trim() === "" || line.trimStart().startsWith("#")) {
-      continue;
-    }
-
-    const indent = leadingWhitespaceLength(line);
-    if (indent <= desktopRuntimeIndent) {
-      break;
-    }
-
-    const match = line.match(/^\s+default:\s*(electron|tauri)\s*$/);
-    if (match?.[1] === "electron" || match?.[1] === "tauri") {
-      return match[1];
-    }
-  }
-
-  throw new Error('release-beta desktop_runtime input must default to "electron" or "tauri"');
-}
-
-function sourceAllowsElectronFallback(source: string): boolean {
-  return /DESKTOP_RUNTIME_KINDS = \["electron", "tauri"\] as const/.test(source);
-}
-
-function containsElectronDefaultTransitionText(source: string): boolean {
-  return (
-    /Electron (?:remains|is) the (?:current )?default/i.test(source) ||
-    /Public downloads are still Electron artifacts/i.test(source)
-  );
-}
-
-function containsElectronTestReference(source: string): boolean {
-  return /\b[Ee]lectron\b|@electron\/|electron-builder|electronuserland/.test(source);
-}
-
-function containsElectronGuidanceReference(source: string): boolean {
-  return /\b[Ee]lectron\b|electron-builder|electronuserland/.test(source);
-}
-
 async function pathExists(filePath: string): Promise<boolean> {
   try {
     await access(filePath);
@@ -870,46 +788,6 @@ async function collectElectronGuidanceReferenceFiles(): Promise<string[]> {
     .sort();
 }
 
-function readPackageDependencyNames(source: string, label: string): Set<string> {
-  let parsed: {
-    dependencies?: Record<string, string>;
-    devDependencies?: Record<string, string>;
-    optionalDependencies?: Record<string, string>;
-  };
-  try {
-    parsed = JSON.parse(source) as typeof parsed;
-  } catch (error) {
-    throw new Error(`${label} must be valid JSON: ${error instanceof Error ? error.message : String(error)}`);
-  }
-  return new Set([
-    ...Object.keys(parsed.dependencies ?? {}),
-    ...Object.keys(parsed.devDependencies ?? {}),
-    ...Object.keys(parsed.optionalDependencies ?? {}),
-  ]);
-}
-
-function readPnpmImporterDependencyNames(source: string, importer: string): Set<string> {
-  const lines = source.split(/\r?\n/);
-  const importerHeader = importer === "." ? "  .:" : `  ${importer}:`;
-  const startIndex = lines.indexOf(importerHeader);
-  if (startIndex < 0) {
-    throw new Error(`pnpm-lock.yaml must include importer ${importer}`);
-  }
-
-  const dependencyNames = new Set<string>();
-  for (const line of lines.slice(startIndex + 1)) {
-    if (/^  [^ ].*:$/.test(line)) {
-      break;
-    }
-
-    const match = line.match(/^      ('?[@/A-Za-z0-9._-]+'?):\s*$/);
-    if (match?.[1] != null) {
-      dependencyNames.add(match[1].replace(/^'|'$/g, ""));
-    }
-  }
-  return dependencyNames;
-}
-
 async function checkTauriMigrationOrder(): Promise<boolean> {
   const [
     migrationDoc,
@@ -944,163 +822,27 @@ async function checkTauriMigrationOrder(): Promise<boolean> {
     collectElectronTestReferenceFiles(),
     collectElectronGuidanceReferenceFiles(),
   ]);
-  const toolsDevDefault = readDefaultDesktopRuntime(toolsDevConfig, "tools-dev");
-  const toolsPackDefault = readDefaultDesktopRuntime(toolsPackConfig, "tools-pack");
-  const releaseBetaDefault = readReleaseBetaDesktopRuntimeDefault(releaseBetaWorkflow);
-  const packageDependencyNames = new Set([
-    ...readPackageDependencyNames(desktopPackageJson, "apps/desktop/package.json"),
-    ...readPackageDependencyNames(packagedPackageJson, "apps/packaged/package.json"),
-    ...readPackageDependencyNames(toolsPackPackageJson, "tools/pack/package.json"),
-  ]);
-  const lockfileDependencyNames = new Set([
-    ...readPnpmImporterDependencyNames(pnpmLock, "apps/desktop"),
-    ...readPnpmImporterDependencyNames(pnpmLock, "apps/packaged"),
-    ...readPnpmImporterDependencyNames(pnpmLock, "tools/pack"),
-  ]);
-  const m4PlatformGateStates = m4PlatformGateLabels.map((label) => isChecklistLineChecked(migrationDoc, label));
-  const m4Complete = m4PlatformGateStates.every(Boolean);
-  const m4PartiallyComplete = m4PlatformGateStates.some(Boolean) && !m4Complete;
-  const m4EvidenceLogMarked = migrationDoc.includes(m4EvidenceLogMarker);
-  const toolsDevDefaultFlipped = isChecklistLineChecked(migrationDoc, m5ToolsDevDefaultLabel);
-  const toolsPackDefaultFlipped = isChecklistLineChecked(migrationDoc, m5ToolsPackDefaultLabel);
-  const releaseBetaDefaultFlipped = isChecklistLineChecked(migrationDoc, m5ReleaseBetaDefaultLabel);
-  const fallbackMarked = isChecklistLineChecked(migrationDoc, m5ElectronFallbackLabel);
-  const primaryDocsMarked = isChecklistLineChecked(migrationDoc, m5PrimaryDocsLabel);
-  const electronDepsRemoved = isChecklistLineChecked(migrationDoc, m6ElectronDepsLabel);
-  const electronRuntimeRemoved = isChecklistLineChecked(migrationDoc, m6ElectronRuntimeLabel);
-  const electronResourcesRemoved = isChecklistLineChecked(migrationDoc, m6ElectronResourcesLabel);
-  const electronTestsRemoved = isChecklistLineChecked(migrationDoc, m6ElectronTestsLabel);
-  const electronGuidanceUpdated = isChecklistLineChecked(migrationDoc, m6ElectronGuidanceLabel);
-  const m6CleanupStates = [
-    electronDepsRemoved,
-    electronRuntimeRemoved,
-    electronResourcesRemoved,
-    electronTestsRemoved,
-    electronGuidanceUpdated,
-  ];
-  const anyM6CleanupMarked = m6CleanupStates.some(Boolean);
-  const m6CleanupComplete = m6CleanupStates.every(Boolean);
-  const toolsAllowElectronFallback =
-    sourceAllowsElectronFallback(toolsDevConfig) && sourceAllowsElectronFallback(toolsPackConfig);
-
-  const violations: string[] = [];
-  if (m4PartiallyComplete) {
-    violations.push(
-      "M4 Windows/Linux platform gate checkboxes must move together through the verified --update-migration-doc path.",
-    );
-  }
-  if (m4Complete && !m4EvidenceLogMarked) {
-    violations.push(
-      "M4 platform gates are checked, but the migration doc is missing the verifier-applied native evidence log marker.",
-    );
-  }
-  if (!m4Complete && (toolsDevDefault === "tauri" || toolsPackDefault === "tauri" || releaseBetaDefault === "tauri")) {
-    violations.push("desktop runtime defaults cannot flip to Tauri before all M4 Windows/Linux platform gates are checked.");
-  }
-  if ((toolsDevDefault === "tauri") !== toolsDevDefaultFlipped) {
-    violations.push("tools-dev DEFAULT_DESKTOP_RUNTIME and the M5 tools-dev checklist line must be updated together.");
-  }
-  if ((toolsPackDefault === "tauri") !== toolsPackDefaultFlipped) {
-    violations.push("tools-pack DEFAULT_DESKTOP_RUNTIME and the M5 tools-pack checklist line must be updated together.");
-  }
-  if ((releaseBetaDefault === "tauri") !== releaseBetaDefaultFlipped) {
-    violations.push("release-beta desktop_runtime default and the M5 release-beta checklist line must be updated together.");
-  }
-  const bothDefaultsTauri = toolsDevDefault === "tauri" && toolsPackDefault === "tauri";
-  if (toolsDevDefault !== toolsPackDefault) {
-    violations.push("tools-dev and tools-pack DEFAULT_DESKTOP_RUNTIME must move together during the M5 default flip.");
-  }
-  if ((releaseBetaDefault === "tauri") !== bothDefaultsTauri) {
-    violations.push("release-beta desktop_runtime default must move with the tools-dev/tools-pack Tauri default flip.");
-  }
-  if (bothDefaultsTauri !== fallbackMarked) {
-    violations.push("the M5 Electron fallback checklist line must reflect the post-flip runtime state.");
-  }
-  if (primaryDocsMarked !== bothDefaultsTauri) {
-    violations.push("the M5 Tauri-primary documentation checklist line must move with the default runtime flip.");
-  }
-  if (anyM6CleanupMarked && !bothDefaultsTauri) {
-    violations.push("M6 Electron cleanup cannot be checked before the M5 Tauri default flip is complete.");
-  }
-  if (
-    primaryDocsMarked &&
-    [readme, appsAgents, architectureDoc].some((source) => containsElectronDefaultTransitionText(source))
-  ) {
-    violations.push("Tauri-primary docs are checked, but README/app/architecture docs still describe Electron as the default.");
-  }
-  if (fallbackMarked && !m6CleanupComplete && !toolsAllowElectronFallback) {
-    violations.push("Electron fallback is checked, but a tool no longer accepts both electron and tauri runtime values.");
-  }
-  if (m6CleanupComplete && toolsAllowElectronFallback) {
-    violations.push("M6 Electron cleanup is complete, but tools-dev/tools-pack still accept the electron desktop runtime.");
-  }
-  const electronDependencyNames = ["electron", "electron-builder", "@electron/rebuild"];
-  const electronDependenciesPresent = electronDependencyNames.filter((dependencyName) =>
-    packageDependencyNames.has(dependencyName),
-  );
-  const electronLockfileDependenciesPresent = electronDependencyNames.filter((dependencyName) =>
-    lockfileDependencyNames.has(dependencyName),
-  );
-  if (electronDepsRemoved && electronDependenciesPresent.length > 0) {
-    violations.push(
-      `the M6 Electron dependency cleanup is checked, but package manifests still include: ${electronDependenciesPresent.join(", ")}.`,
-    );
-  }
-  if (!electronDepsRemoved && electronDependenciesPresent.length === 0) {
-    violations.push("Electron dependencies were removed, but the M6 dependency cleanup checklist line is not checked.");
-  }
-  if (electronDepsRemoved && electronLockfileDependenciesPresent.length > 0) {
-    violations.push(
-      `the M6 Electron dependency cleanup is checked, but pnpm-lock.yaml importers still include: ${electronLockfileDependenciesPresent.join(", ")}.`,
-    );
-  }
-  if (!electronDepsRemoved && electronLockfileDependenciesPresent.length === 0) {
-    violations.push("Electron dependencies were removed from pnpm-lock.yaml importers, but the M6 dependency cleanup checklist line is not checked.");
-  }
   const remainingElectronRuntimeFiles = electronRuntimeFiles.filter((_, index) => electronRuntimeFileExists[index]);
-  if (electronRuntimeRemoved && remainingElectronRuntimeFiles.length > 0) {
-    violations.push(
-      `the M6 Electron runtime cleanup is checked, but these files still exist: ${remainingElectronRuntimeFiles
-        .map(toRepositoryPath)
-        .join(", ")}.`,
-    );
-  }
-  if (!electronRuntimeRemoved && remainingElectronRuntimeFiles.length === 0) {
-    violations.push("Electron runtime files were removed, but the M6 runtime cleanup checklist line is not checked.");
-  }
   const remainingElectronResourceFiles = electronPackResourceFiles.filter(
     (_, index) => electronPackResourceFileExists[index],
   );
-  if (electronResourcesRemoved && remainingElectronResourceFiles.length > 0) {
-    violations.push(
-      `the M6 Electron resources cleanup is checked, but these files still exist: ${remainingElectronResourceFiles
-        .map(toRepositoryPath)
-        .join(", ")}.`,
-    );
-  }
-  if (!electronResourcesRemoved && remainingElectronResourceFiles.length === 0) {
-    violations.push("Electron-only tools-pack resources were removed, but the M6 resources cleanup checklist line is not checked.");
-  }
-  if (electronTestsRemoved && electronTestReferenceFiles.length > 0) {
-    violations.push(
-      `the M6 Electron test cleanup is checked, but these tests still reference Electron: ${electronTestReferenceFiles
-        .map(toRepositoryPath)
-        .join(", ")}.`,
-    );
-  }
-  if (!electronTestsRemoved && electronTestReferenceFiles.length === 0) {
-    violations.push("Electron-only tests no longer reference Electron, but the M6 test cleanup checklist line is not checked.");
-  }
-  if (electronGuidanceUpdated && electronGuidanceReferenceFiles.length > 0) {
-    violations.push(
-      `the M6 AGENTS/PR guidance cleanup is checked, but these guidance files still reference Electron: ${electronGuidanceReferenceFiles
-        .map(toRepositoryPath)
-        .join(", ")}.`,
-    );
-  }
-  if (!electronGuidanceUpdated && electronGuidanceReferenceFiles.length === 0) {
-    violations.push("AGENTS/PR guidance no longer references Electron, but the M6 guidance cleanup checklist line is not checked.");
-  }
+  const violations = evaluateTauriMigrationOrder({
+    migrationDoc,
+    pnpmLock,
+    readme,
+    appsAgents,
+    architectureDoc,
+    toolsDevConfig,
+    toolsPackConfig,
+    releaseBetaWorkflow,
+    desktopPackageJson,
+    packagedPackageJson,
+    toolsPackPackageJson,
+    remainingElectronRuntimeFiles: remainingElectronRuntimeFiles.map(toRepositoryPath),
+    remainingElectronResourceFiles: remainingElectronResourceFiles.map(toRepositoryPath),
+    electronTestReferenceFiles: electronTestReferenceFiles.map(toRepositoryPath),
+    electronGuidanceReferenceFiles: electronGuidanceReferenceFiles.map(toRepositoryPath),
+  });
 
   if (violations.length > 0) {
     console.error("Electron to Tauri migration order violations found:");
