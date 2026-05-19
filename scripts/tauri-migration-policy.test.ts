@@ -121,6 +121,22 @@ test("evaluateTauriMigrationOrder rejects checked dependency cleanup with stale 
   assertContains(violations, "pnpm-lock.yaml importers still include");
 });
 
+test("evaluateTauriMigrationOrder accepts verified M4 before the default flip", () => {
+  const violations = evaluateTauriMigrationOrder(
+    baseInput({
+      migrationDoc: verifiedM4MigrationDoc(),
+    }),
+  );
+
+  assert.deepEqual(violations, []);
+});
+
+test("evaluateTauriMigrationOrder accepts post-M5 with explicit Electron fallback", () => {
+  const violations = evaluateTauriMigrationOrder(postM5Input());
+
+  assert.deepEqual(violations, []);
+});
+
 test("evaluateTauriMigrationOrder accepts the final post-M6 cleanup state", () => {
   const violations = evaluateTauriMigrationOrder(
     postM5Input({
@@ -224,6 +240,13 @@ function postM5MigrationDoc(options: { m6Checked?: readonly string[] } = {}): st
       m5PrimaryDocsLabel,
       ...(options.m6Checked ?? []),
     ],
+    extra: [m4EvidenceLogMarker],
+  });
+}
+
+function verifiedM4MigrationDoc(): string {
+  return migrationDoc({
+    checked: [...m4PlatformGateLabels],
     extra: [m4EvidenceLogMarker],
   });
 }
