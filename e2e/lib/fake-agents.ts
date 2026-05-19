@@ -112,9 +112,17 @@ if (args.includes('--version')) {
 
 let prompt = '';
 let emitted = false;
+let emitTimer = null;
 process.stdin.setEncoding('utf8');
 process.stdin.resume();
-process.stdin.on('data', (chunk) => { prompt += chunk; });
+process.stdin.on('data', (chunk) => {
+  prompt += chunk;
+  if (emitted) return;
+  if (emitTimer) clearTimeout(emitTimer);
+  emitTimer = setTimeout(() => {
+    void emitRun(prompt).catch(failUnhandled);
+  }, 25);
+});
 process.stdin.on('end', () => {
   void emitRun(prompt).catch(failUnhandled);
 });
@@ -147,10 +155,15 @@ async function emitRun(promptText) {
   const artifact = '<artifact identifier="' + identifier + '" type="text/html" title="' + heading + '">' + html + '</artifact>';
   emitSuccess(artifact, isChunked);
   process.exitCode = 0;
+  exitSoon(0);
 }
 
 function writeJson(value) {
   process.stdout.write(JSON.stringify(value) + '\\n');
+}
+
+function exitSoon(code) {
+  setTimeout(() => process.exit(code), 10);
 }
 
 function emitSuccess(artifact, isChunked) {
@@ -213,6 +226,7 @@ async function emitOrbitRun() {
   const text = 'Orbit fake digest registered live artifact ' + artifact.id + ' for project ' + artifact.projectId + '.';
   emitSuccess(text, false);
   process.exitCode = 0;
+  exitSoon(0);
 }
 
 async function createOrbitLiveArtifact() {
@@ -272,6 +286,7 @@ async function createOrbitLiveArtifact() {
 function failUnhandled(error) {
   process.stderr.write((error && error.stack ? error.stack : String(error)) + '\\n');
   process.exitCode = 1;
+  exitSoon(1);
 }
 
 function emitFailure() {
@@ -281,18 +296,22 @@ function emitFailure() {
       writeJson({ type: 'turn.started' });
       writeJson({ type: 'turn.failed', error: { message: 'intentional fake codex failure' } });
       process.exitCode = 0;
+      exitSoon(0);
       return;
     case 'opencode':
       writeJson({ type: 'error', error: { data: { message: 'intentional fake opencode failure' } } });
       process.exitCode = 0;
+      exitSoon(0);
       return;
     case 'qoder':
       writeJson({ type: 'assistant', message: { content: [] }, error: { message: 'intentional fake qoder failure' } });
       process.exitCode = 0;
+      exitSoon(0);
       return;
     default:
       process.stderr.write('intentional fake ' + agentId + ' failure\\n');
       process.exitCode = 1;
+      exitSoon(1);
   }
 }
 }

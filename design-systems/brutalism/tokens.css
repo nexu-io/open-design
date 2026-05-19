@@ -1,0 +1,63 @@
+/* design-systems/brutalism/tokens.css
+ * Structured token bindings for Brutalism.
+ * brutalist UI with hard black lines, loud yellow action, and intentionally raw layout structure.
+ */
+
+:root {
+  --bg: #f5f1e8;
+  --surface: #ffffff;
+  --surface-warm: #ffef5a;
+  --fg: #000000;
+  --fg-2: #222222;
+  --muted: #555555;
+  --meta: #000000;
+  --border: #000000;
+  --border-soft: #000000;
+  --accent: #ffef5a;
+  --accent-on: #000000;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #00b050;
+  --warn: #ff8c00;
+  --danger: #ff2b2b;
+  --font-display: Arial Black, Impact, sans-serif;
+  --font-body: Arial, Helvetica, sans-serif;
+  --font-mono: "Courier New", ui-monospace, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 17px;
+  --text-lg: 20px;
+  --text-xl: 28px;
+  --text-2xl: 42px;
+  --text-3xl: 64px;
+  --text-4xl: 88px;
+  --leading-body: 1.35;
+  --leading-tight: 0.98;
+  --tracking-display: 0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 88px;
+  --section-y-tablet: 64px;
+  --section-y-phone: 44px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 8px 8px 0 #000000;
+  --focus-ring: 0 0 0 4px #000000, 0 0 0 8px #ffef5a;
+  --motion-fast: 90ms;
+  --motion-base: 140ms;
+  --ease-standard: steps(2, end);
+  --container-max: 1160px;
+  --container-gutter-desktop: 36px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

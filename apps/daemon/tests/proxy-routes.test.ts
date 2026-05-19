@@ -487,6 +487,91 @@ describe('API proxy routes', () => {
       generationConfig: { maxOutputTokens: 1234 },
     });
   });
+
+  // Regression for PR #1176: the Ollama proxy fetch must also set
+  // `redirect: 'error'`. Without it, a validated public host could
+  // 3xx the daemon to a private/internal URL and slip past the
+  // resolved-IP SSRF check that runs *before* the fetch.
+  it('forwards redirect:error on the Ollama proxy upstream fetch', async () => {
+    const ndjsonResponse = new Response(
+      new TextEncoder().encode('{"done":true}\n'),
+      {
+        status: 200,
+        headers: { 'content-type': 'application/x-ndjson' },
+      },
+    );
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      return Promise.resolve(ndjsonResponse);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await realFetch(`${baseUrl}/api/proxy/ollama/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://ollama.example.com',
+        apiKey: 'ollama-key',
+        model: 'llama3',
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+
+    const [upstreamUrl, upstreamInit] = fetchMock.mock.calls[0]!;
+    expect(String(upstreamUrl)).toBe('https://ollama.example.com/api/chat');
+    expect(upstreamInit?.redirect).toBe('error');
+  });
+
+  // Plan §3.A4 / spec §11.8 (e2e-7): the API-fallback proxy paths must
+  // never carry plugin context. The web sidecar's fallback mode bypasses
+  // the daemon snapshot bus, so any pluginId / appliedPluginSnapshotId in
+  // the body short-circuits with 409 PLUGIN_REQUIRES_DAEMON. This is the
+  // behavioral anchor for e2e-7 and is exercised against every proxy entry.
+  describe('API fallback rejects plugin runs', () => {
+    const proxies = [
+      '/api/proxy/anthropic/stream',
+      '/api/proxy/openai/stream',
+      '/api/proxy/azure/stream',
+      '/api/proxy/google/stream',
+    ];
+
+    for (const path of proxies) {
+      it(`rejects pluginId on ${path} with 409 PLUGIN_REQUIRES_DAEMON`, async () => {
+        const res = await realFetch(`${baseUrl}${path}`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            baseUrl: 'https://api.example.com/v1',
+            apiKey: 'sk-test',
+            model: 'gpt-test',
+            messages: [{ role: 'user', content: 'hello' }],
+            pluginId: 'sample-plugin',
+          }),
+        });
+        expect(res.status).toBe(409);
+        const body = (await res.json()) as { error?: { code?: string } };
+        expect(body?.error?.code).toBe('PLUGIN_REQUIRES_DAEMON');
+      });
+
+      it(`rejects appliedPluginSnapshotId on ${path}`, async () => {
+        const res = await realFetch(`${baseUrl}${path}`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            baseUrl: 'https://api.example.com/v1',
+            apiKey: 'sk-test',
+            model: 'gpt-test',
+            messages: [{ role: 'user', content: 'hello' }],
+            appliedPluginSnapshotId: '00000000-0000-0000-0000-000000000000',
+          }),
+        });
+        expect(res.status).toBe(409);
+        const body = (await res.json()) as { error?: { code?: string } };
+        expect(body?.error?.code).toBe('PLUGIN_REQUIRES_DAEMON');
+      });
+    }
+  });
 });
 
 function sseResponse(text: string): Response {

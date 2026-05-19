@@ -25,8 +25,8 @@ function roundTrip(route: Route): Route {
 
 describe('parseRoute / buildPath (issue #1505)', () => {
   it('parses the home route', () => {
-    expect(parseRoute('/')).toEqual({ kind: 'home' });
-    expect(parseRoute('')).toEqual({ kind: 'home' });
+    expect(parseRoute('/')).toEqual({ kind: 'home', view: 'home' });
+    expect(parseRoute('')).toEqual({ kind: 'home', view: 'home' });
   });
 
   it('round-trips a bare project route', () => {
@@ -108,7 +108,7 @@ describe('parseRoute / buildPath (issue #1505)', () => {
   });
 
   it('falls back to home when the URL is unrecognized', () => {
-    expect(parseRoute('/something/else')).toEqual({ kind: 'home' });
-    expect(parseRoute('/projects')).toEqual({ kind: 'home' });
+    expect(parseRoute('/something/else')).toEqual({ kind: 'home', view: 'home' });
+    expect(parseRoute('/projects')).toEqual({ kind: 'home', view: 'projects' });
   });
 });

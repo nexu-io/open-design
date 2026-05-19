@@ -1,0 +1,87 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-tweaks",
+  "title": "Tweaks",
+  "version": "0.1.0",
+  "description": "Wrap any HTML artifact with a side panel of live, parameterized\ncontrols — accent color, type scale, density, motion, theme — that\nrewrite CSS custom properties in real time and persist to\nlocalStorage. Lets the user explore variants of a design without\nre-prompting the agent. Use when the brief asks for \"variants\",\n\"side-by-side options\", \"tweak this\", \"let me adjust\", \"live\nknobs\", or \"实时调参\".",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/tweaks",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "design",
+    "web",
+    "desktop",
+    "tweaks",
+    "variants",
+    "tweak-panel",
+    "live-controls",
+    "adjust-on-the-fly",
+    "untitled",
+    "side-panel",
+    "knobs"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Wrap this landing page with a tweak panel — accent color, type scale, density, light/dark — persist to localStorage so the user can refresh without losing their choice.",
+        "zh-CN": "使用这个插件完成以下任务：Wrap this landing page with a tweak panel — accent color, type scale, density, light/dark — persist to localStorage so the user can refresh without losing their choice."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Tweaks"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html",
+        "./assets/wrap.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

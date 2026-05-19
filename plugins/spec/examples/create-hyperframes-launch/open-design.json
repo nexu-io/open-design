@@ -1,0 +1,48 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "create-hyperframes-launch",
+  "title": "HyperFrames Launch",
+  "version": "0.1.0",
+  "description": "Create a HyperFrames-ready motion composition for product launches and social video.",
+  "license": "MIT",
+  "tags": ["create", "video", "hyperframes", "motion"],
+  "compat": {
+    "agentSkills": [{ "path": "./SKILL.md" }]
+  },
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "hyperframes",
+    "useCase": {
+      "query": "Create a {{duration}} HyperFrames launch composition for {{product}} with {{motionStyle}} motion."
+    },
+    "context": {
+      "skills": [{ "path": "./SKILL.md" }],
+      "atoms": ["discovery-question-form", "todo-write", "file-write", "live-artifact", "media-video", "critique-theater"]
+    },
+    "pipeline": {
+      "stages": [
+        { "id": "discovery", "atoms": ["discovery-question-form"] },
+        { "id": "plan", "atoms": ["todo-write"] },
+        { "id": "compose", "atoms": ["file-write", "live-artifact"] },
+        { "id": "render", "atoms": ["media-video"] },
+        {
+          "id": "critique",
+          "atoms": ["critique-theater"],
+          "repeat": true,
+          "until": "critique.score>=4 || iterations>=2"
+        }
+      ]
+    },
+    "inputs": [
+      { "name": "product", "type": "string", "required": true, "label": "Product" },
+      { "name": "duration", "type": "string", "required": false, "label": "Duration", "default": "5 seconds" },
+      { "name": "motionStyle", "type": "select", "required": false, "label": "Motion style", "options": ["minimal reveal", "kinetic typography", "data pulse"], "default": "minimal reveal" }
+    ],
+    "capabilities": ["prompt:inject", "fs:write", "subprocess"]
+  }
+}
+

@@ -1,0 +1,1320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scatterbrain — Post-it Inspired Presentation Template</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Shrikhand&family=Zilla+Slab:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400&family=Caveat:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --yellow: #ffe066;
+            --yellow-deep: #ffd43b;
+            --blue: #a5d8ff;
+            --blue-deep: #74c0fc;
+            --pink: #ffc9c9;
+            --pink-deep: #ff9f9f;
+            --green: #b2f2bb;
+            --green-deep: #8ce99a;
+            --orange: #ffcc80;
+            --purple: #d0bfff;
+            --cream: #faf8f3;
+            --paper: #f7f5f0;
+            --ink: #2d2a26;
+            --ink-light: #5c5750;
+            --shadow: rgba(45, 42, 38, 0.15);
+            --shadow-deep: rgba(45, 42, 38, 0.25);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Zilla Slab', serif;
+            background: var(--paper);
+            color: var(--ink);
+            /* Switched to overflow: hidden so the deck behaves like a
+               slide-by-slide presentation rather than a long-scroll page. */
+            overflow: hidden;
+            cursor: default;
+            height: 100vh;
+        }
+
+        /* Custom cursor - thumbtack feel */
+        .slide {
+            cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='5' fill='%23ff6b6b'/%3E%3Ccircle cx='12' cy='12' r='2' fill='%23fff'/%3E%3C/svg%3E") 12 12, auto;
+        }
+
+        /* Paper grain overlay */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 9999;
+            opacity: 0.04;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+            background-repeat: repeat;
+            background-size: 200px 200px;
+        }
+
+        .presentation {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        /* Slides stack on top of each other; only .active is shown.
+           Same visual layout as before — just hidden until activated. */
+        .slide {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            padding: 3rem;
+            page-break-after: always;
+        }
+        .slide.active { display: flex; }
+
+        /* Background patterns for different slides */
+        .slide::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            z-index: 0;
+        }
+
+        /* Cork board texture */
+        .bg-cork::before {
+            background: 
+                radial-gradient(ellipse at 20% 30%, rgba(210, 170, 120, 0.3) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 70%, rgba(190, 150, 100, 0.2) 0%, transparent 40%),
+                linear-gradient(135deg, #e8ddd0 0%, #d4c5b0 50%, #c9b8a0 100%);
+            background-size: 100% 100%, 100% 100%, 100% 100%;
+        }
+
+        .bg-cork::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23b8a088' fill-opacity='0.15'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+            opacity: 0.5;
+            z-index: 0;
+        }
+
+        /* Paper desk texture */
+        .bg-paper::before {
+            background: 
+                linear-gradient(180deg, #faf8f3 0%, #f5f2ec 100%);
+        }
+
+        .bg-paper::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image: 
+                linear-gradient(rgba(200, 190, 175, 0.08) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(200, 190, 175, 0.08) 1px, transparent 1px);
+            background-size: 40px 40px;
+            z-index: 0;
+        }
+
+        /* Warm gradient background */
+        .bg-warm::before {
+            background: 
+                radial-gradient(ellipse at 30% 20%, rgba(255, 224, 102, 0.4) 0%, transparent 50%),
+                radial-gradient(ellipse at 70% 80%, rgba(165, 216, 255, 0.3) 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 50%, rgba(255, 201, 201, 0.15) 0%, transparent 60%),
+                linear-gradient(160deg, #fdf8f0 0%, #f7f0e6 100%);
+        }
+
+        /* Post-it note base styles */
+        .post-it {
+            position: relative;
+            padding: 2rem;
+            box-shadow: 
+                2px 3px 15px var(--shadow),
+                0 1px 3px var(--shadow-deep);
+            transition: transform 0.3s ease;
+            z-index: 1;
+        }
+
+        .post-it-yellow {
+            background: var(--yellow);
+            background: linear-gradient(135deg, var(--yellow) 0%, var(--yellow-deep) 100%);
+        }
+
+        .post-it-blue {
+            background: var(--blue);
+            background: linear-gradient(135deg, var(--blue) 0%, var(--blue-deep) 100%);
+        }
+
+        .post-it-pink {
+            background: var(--pink);
+            background: linear-gradient(135deg, var(--pink) 0%, var(--pink-deep) 100%);
+        }
+
+        .post-it-green {
+            background: var(--green);
+            background: linear-gradient(135deg, var(--green) 0%, var(--green-deep) 100%);
+        }
+
+        .post-it-orange {
+            background: var(--orange);
+        }
+
+        .post-it-purple {
+            background: var(--purple);
+        }
+
+        .post-it-white {
+            background: #fff;
+            border: 2px solid var(--ink);
+        }
+
+        /* Thumbtack / pin decoration */
+        .pin::before {
+            content: '';
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: radial-gradient(circle at 30% 30%, #ff6b6b, #c92a2a);
+            box-shadow: 0 2px 4px var(--shadow-deep), inset -2px -2px 4px rgba(0,0,0,0.2);
+            z-index: 10;
+        }
+
+        .pin-blue::before {
+            background: radial-gradient(circle at 30% 30%, #4dabf7, #1864ab);
+        }
+
+        .pin-green::before {
+            background: radial-gradient(circle at 30% 30%, #69db7c, #2f9e44);
+        }
+
+        .pin-gold::before {
+            background: radial-gradient(circle at 30% 30%, #ffd43b, #f59f00);
+        }
+
+        /* Tape decoration */
+        .tape::after {
+            content: '';
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%) rotate(-2deg);
+            width: 80px;
+            height: 25px;
+            background: rgba(255, 255, 255, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            z-index: 10;
+        }
+
+        /* Typography */
+        h1, h2, h3 {
+            font-family: 'Shrikhand', cursive;
+            font-weight: 400;
+            line-height: 1.1;
+            letter-spacing: 0.02em;
+        }
+
+        h1 {
+            font-size: clamp(2.5rem, 5vw, 4.5rem);
+            color: var(--ink);
+        }
+
+        h2 {
+            font-size: clamp(1.8rem, 3.5vw, 3rem);
+            color: var(--ink);
+        }
+
+        h3 {
+            font-size: clamp(1.3rem, 2.5vw, 1.8rem);
+            color: var(--ink);
+        }
+
+        p {
+            font-family: 'Zilla Slab', serif;
+            font-size: clamp(1rem, 1.5vw, 1.25rem);
+            line-height: 1.7;
+            color: var(--ink-light);
+        }
+
+        .handwritten {
+            font-family: 'Caveat', cursive;
+            font-size: clamp(1.2rem, 2vw, 1.6rem);
+            line-height: 1.4;
+        }
+
+        .label {
+            font-family: 'Caveat', cursive;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            color: var(--ink-light);
+        }
+
+        /* Slide content containers */
+        .slide-content {
+            position: relative;
+            z-index: 1;
+            max-width: 1200px;
+            width: 100%;
+        }
+
+        /* ===== SLIDE 1: Title ===== */
+        .slide-title {
+            flex-direction: column;
+            text-align: center;
+        }
+
+        .title-cluster {
+            position: relative;
+            display: inline-block;
+        }
+
+        .main-title-postit {
+            display: inline-block;
+            padding: 3rem 4rem;
+            transform: rotate(-2deg);
+        }
+
+        .title-accent-1 {
+            position: absolute;
+            top: -40px;
+            right: -60px;
+            padding: 1.5rem 2rem;
+            transform: rotate(12deg);
+            font-family: 'Caveat', cursive;
+            font-size: 1.5rem;
+            z-index: 2;
+        }
+
+        .title-accent-2 {
+            position: absolute;
+            bottom: -30px;
+            left: -50px;
+            padding: 1.2rem 1.8rem;
+            transform: rotate(-8deg);
+            z-index: 2;
+        }
+
+        .title-accent-3 {
+            position: absolute;
+            top: 20px;
+            left: -80px;
+            width: 80px;
+            height: 80px;
+            padding: 0.5rem;
+            transform: rotate(-15deg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Caveat', cursive;
+            font-size: 2rem;
+            z-index: 0;
+        }
+
+        .subtitle-text {
+            margin-top: 3rem;
+            font-family: 'Zilla Slab', serif;
+            font-size: 1.3rem;
+            font-style: italic;
+            color: var(--ink-light);
+            max-width: 500px;
+            line-height: 1.6;
+        }
+
+        /* ===== SLIDE 2: Big Statement ===== */
+        .statement-layout {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 3rem;
+            flex-wrap: wrap;
+        }
+
+        .statement-postit {
+            max-width: 700px;
+            padding: 3.5rem 4rem;
+            transform: rotate(1deg);
+            text-align: center;
+        }
+
+        .statement-postit h2 {
+            font-size: clamp(2rem, 4vw, 3.5rem);
+            margin-bottom: 1.5rem;
+        }
+
+        .side-note {
+            position: absolute;
+            right: 5%;
+            top: 15%;
+            padding: 1.5rem;
+            max-width: 200px;
+            transform: rotate(8deg);
+        }
+
+        /* ===== SLIDE 3: Two Column ===== */
+        .two-col-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 3rem;
+            align-items: start;
+        }
+
+        .col-postit {
+            padding: 2.5rem;
+        }
+
+        .col-postit h3 {
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid var(--ink);
+            display: inline-block;
+        }
+
+        .col-postit p {
+            margin-bottom: 1rem;
+        }
+
+        .col-postit ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .col-postit li {
+            font-family: 'Zilla Slab', serif;
+            font-size: 1.1rem;
+            padding: 0.5rem 0;
+            padding-left: 1.5rem;
+            position: relative;
+            line-height: 1.6;
+        }
+
+        .col-postit li::before {
+            content: '\2713';
+            position: absolute;
+            left: 0;
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+
+        /* ===== SLIDE 4: Chart Slide ===== */
+        .chart-layout {
+            display: grid;
+            grid-template-columns: 1.2fr 0.8fr;
+            gap: 3rem;
+            align-items: center;
+        }
+
+        .chart-container {
+            background: #fff;
+            padding: 2.5rem;
+            box-shadow: 2px 3px 15px var(--shadow);
+            transform: rotate(-1deg);
+        }
+
+        .chart-legend {
+            padding: 2rem;
+            transform: rotate(2deg);
+        }
+
+        .chart-legend h3 {
+            margin-bottom: 1.5rem;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            margin-bottom: 1rem;
+            font-family: 'Zilla Slab', serif;
+            font-size: 1.1rem;
+        }
+
+        .legend-swatch {
+            width: 20px;
+            height: 20px;
+            border-radius: 3px;
+            flex-shrink: 0;
+        }
+
+        /* Hand-drawn bar chart */
+        .sketch-chart {
+            width: 100%;
+            height: auto;
+        }
+
+        .bar-group {
+            animation: growBar 1s ease-out forwards;
+            transform-origin: bottom;
+        }
+
+        @keyframes growBar {
+            from { transform: scaleY(0); }
+            to { transform: scaleY(1); }
+        }
+
+        /* ===== SLIDE 5: Three Cards ===== */
+        .three-col-layout {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2.5rem;
+            align-items: start;
+        }
+
+        .feature-postit {
+            padding: 2.5rem 2rem;
+            text-align: center;
+        }
+
+        .feature-postit:nth-child(1) { transform: rotate(-3deg); }
+        .feature-postit:nth-child(2) { transform: rotate(2deg); margin-top: 2rem; }
+        .feature-postit:nth-child(3) { transform: rotate(-1deg); }
+
+        .feature-icon {
+            width: 60px;
+            height: 60px;
+            margin: 0 auto 1.5rem;
+            border: 3px solid var(--ink);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Shrikhand', cursive;
+            font-size: 1.5rem;
+        }
+
+        .feature-postit h3 {
+            margin-bottom: 1rem;
+            font-size: 1.4rem;
+        }
+
+        /* ===== SLIDE 6: Timeline ===== */
+        .timeline-layout {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .timeline-row {
+            display: flex;
+            align-items: stretch;
+            gap: 2rem;
+        }
+
+        .timeline-row:nth-child(even) {
+            flex-direction: row-reverse;
+        }
+
+        .timeline-node {
+            padding: 2rem;
+            min-width: 200px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .timeline-connector {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .timeline-connector svg {
+            width: 100%;
+            height: 60px;
+        }
+
+        .timeline-content {
+            padding: 2rem;
+            flex: 1;
+        }
+
+        .timeline-content h3 {
+            margin-bottom: 0.5rem;
+        }
+
+        .phase-label {
+            font-family: 'Caveat', cursive;
+            font-size: 1.2rem;
+            margin-top: 0.5rem;
+        }
+
+        /* ===== SLIDE 7: Image + Text ===== */
+        .imgtext-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 3rem;
+            align-items: center;
+        }
+
+        .photo-frame {
+            background: #fff;
+            padding: 1rem;
+            box-shadow: 2px 3px 15px var(--shadow);
+            transform: rotate(-2deg);
+        }
+
+        .photo-frame .photo-inner {
+            width: 100%;
+            aspect-ratio: 4/3;
+            background: 
+                linear-gradient(135deg, #e9ecef 0%, #dee2e6 50%, #ced4da 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .photo-inner::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: 
+                radial-gradient(circle at 40% 40%, rgba(255,224,102,0.3) 0%, transparent 50%),
+                radial-gradient(circle at 60% 60%, rgba(165,216,255,0.3) 0%, transparent 50%);
+        }
+
+        .photo-placeholder {
+            font-family: 'Shrikhand', cursive;
+            font-size: 1.5rem;
+            color: var(--ink-light);
+            opacity: 0.4;
+            z-index: 1;
+        }
+
+        .text-cluster {
+            position: relative;
+        }
+
+        .main-text-postit {
+            padding: 2.5rem;
+            transform: rotate(1deg);
+            margin-bottom: 1.5rem;
+        }
+
+        .mini-note {
+            position: absolute;
+            bottom: -20px;
+            right: -20px;
+            padding: 1rem 1.5rem;
+            transform: rotate(5deg);
+            font-family: 'Caveat', cursive;
+            font-size: 1.3rem;
+            z-index: 2;
+        }
+
+        /* ===== SLIDE 8: Data Diagram ===== */
+        .diagram-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 3rem;
+            align-items: center;
+        }
+
+        .diagram-canvas {
+            background: #fff;
+            padding: 2.5rem;
+            box-shadow: 2px 3px 15px var(--shadow);
+            transform: rotate(-1deg);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .diagram-canvas h3 {
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+
+        .diagram-note {
+            padding: 2rem;
+            transform: rotate(2deg);
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 0;
+            border-bottom: 1px dashed rgba(45, 42, 38, 0.2);
+        }
+
+        .stat-value {
+            font-family: 'Shrikhand', cursive;
+            font-size: 1.8rem;
+            color: var(--ink);
+        }
+
+        .stat-label {
+            font-family: 'Zilla Slab', serif;
+            font-size: 1.1rem;
+            color: var(--ink-light);
+        }
+
+        /* ===== SLIDE 9: Comparison ===== */
+        .compare-layout {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 3rem;
+            align-items: stretch;
+            max-width: 1000px;
+            margin: 0 auto;
+            position: relative;
+        }
+
+        .compare-postit {
+            padding: 3rem;
+            position: relative;
+        }
+
+        .compare-postit.left {
+            transform: rotate(-2deg);
+        }
+
+        .compare-postit.right {
+            transform: rotate(2deg);
+        }
+
+        .compare-vs {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 60px;
+            height: 60px;
+            background: var(--ink);
+            color: var(--paper);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Shrikhand', cursive;
+            font-size: 1.2rem;
+            z-index: 10;
+            box-shadow: 0 2px 8px var(--shadow-deep);
+        }
+
+        .compare-postit h3 {
+            text-align: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 0.8rem;
+            border-bottom: 3px solid var(--ink);
+        }
+
+        .compare-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .compare-list li {
+            font-family: 'Zilla Slab', serif;
+            font-size: 1.1rem;
+            padding: 0.8rem 0;
+            line-height: 1.5;
+            border-bottom: 1px solid rgba(45, 42, 38, 0.1);
+        }
+
+        .compare-list li:last-child {
+            border-bottom: none;
+        }
+
+        /* ===== SLIDE 10: Closing ===== */
+        .closing-cluster {
+            position: relative;
+            text-align: center;
+        }
+
+        .closing-main {
+            display: inline-block;
+            padding: 3rem 5rem;
+            transform: rotate(-1deg);
+        }
+
+        .closing-main h2 {
+            font-size: clamp(2.5rem, 5vw, 4rem);
+        }
+
+        .closing-accent-1 {
+            position: absolute;
+            top: -50px;
+            left: -80px;
+            padding: 1.5rem;
+            transform: rotate(-12deg);
+            font-family: 'Caveat', cursive;
+            font-size: 1.4rem;
+            z-index: 2;
+        }
+
+        .closing-accent-2 {
+            position: absolute;
+            bottom: -40px;
+            right: -60px;
+            padding: 1.5rem 2rem;
+            transform: rotate(8deg);
+            z-index: 2;
+        }
+
+        .closing-accent-3 {
+            position: absolute;
+            top: 0;
+            right: -100px;
+            padding: 1rem;
+            transform: rotate(15deg);
+            z-index: 0;
+        }
+
+        .closing-accent-4 {
+            position: absolute;
+            bottom: -20px;
+            left: -60px;
+            padding: 1.2rem;
+            transform: rotate(-6deg);
+            z-index: 0;
+        }
+
+        /* Doodle decorations */
+        .doodle {
+            position: absolute;
+            z-index: 0;
+            opacity: 0.15;
+            pointer-events: none;
+        }
+
+        .doodle-circle {
+            border: 3px solid var(--ink);
+            border-radius: 50%;
+        }
+
+        .doodle-line {
+            height: 3px;
+            background: var(--ink);
+            border-radius: 2px;
+        }
+
+        .doodle-squiggle {
+            stroke: var(--ink);
+            stroke-width: 3;
+            fill: none;
+            opacity: 0.15;
+        }
+
+        /* Responsive */
+        @media (max-width: 900px) {
+            .two-col-layout,
+            .chart-layout,
+            .imgtext-layout,
+            .diagram-layout,
+            .compare-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .three-col-layout {
+                grid-template-columns: 1fr;
+            }
+
+            .timeline-row,
+            .timeline-row:nth-child(even) {
+                flex-direction: column;
+            }
+
+            .side-note {
+                position: relative;
+                right: auto;
+                top: auto;
+                margin-top: 2rem;
+            }
+
+            .compare-vs {
+                position: relative;
+                left: auto;
+                top: auto;
+                transform: none;
+                margin: 1rem auto;
+            }
+        }
+
+        /* Print styles */
+        @media print {
+            .slide {
+                page-break-after: always;
+                min-height: 100vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="presentation">
+
+        <!-- SLIDE 1: Title -->
+        <section class="slide bg-cork slide-title active">
+            <div class="slide-content">
+                <div class="title-cluster">
+                    <div class="post-it post-it-yellow main-title-postit pin">
+                        <h1>Scatterbrain</h1>
+                        <p class="handwritten" style="margin-top: 0.5rem; color: var(--ink-light);">A Post-it Inspired Template</p>
+                    </div>
+                    <div class="post-it post-it-blue title-accent-1 pin-blue">Remember this!</div>
+                    <div class="post-it post-it-pink title-accent-2 pin">Notes & Ideas</div>
+                    <div class="post-it post-it-green title-accent-3">!</div>
+                </div>
+                <p class="subtitle-text">Collect your thoughts, pin your ideas, and watch the big picture emerge from the chaos of creativity.</p>
+            </div>
+            <svg class="doodle" style="top: 10%; left: 5%; width: 100px; height: 100px;" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="40" stroke="#2d2a26" stroke-width="3" fill="none" opacity="0.15"/>
+            </svg>
+            <svg class="doodle" style="bottom: 15%; right: 8%; width: 120px; height: 60px;" viewBox="0 0 120 60">
+                <path d="M10 30 Q30 10, 50 30 T90 30" stroke="#2d2a26" stroke-width="3" fill="none" opacity="0.15"/>
+            </svg>
+        </section>
+
+        <!-- SLIDE 2: Big Statement -->
+        <section class="slide bg-paper">
+            <div class="slide-content">
+                <div class="statement-layout">
+                    <div class="post-it post-it-yellow statement-postit pin tape">
+                        <h2>"The best ideas start as scattered thoughts on sticky corners."</h2>
+                        <p style="margin-top: 1.5rem; font-style: italic;">Every great project begins with a single note, a fleeting thought, a moment of inspiration captured before it drifts away.</p>
+                        <p class="handwritten" style="margin-top: 1rem; text-align: right;">— The Creative Process</p>
+                    </div>
+                </div>
+                <div class="post-it post-it-blue side-note pin-blue">
+                    <p class="handwritten">Jot it down before you forget!</p>
+                </div>
+            </div>
+            <svg class="doodle" style="top: 20%; left: 8%; width: 80px; height: 80px;" viewBox="0 0 80 80">
+                <rect x="10" y="10" width="60" height="60" stroke="#2d2a26" stroke-width="3" fill="none" opacity="0.15" transform="rotate(10 40 40)"/>
+            </svg>
+        </section>
+
+        <!-- SLIDE 3: Two Column -->
+        <section class="slide bg-warm">
+            <div class="slide-content">
+                <div class="two-col-layout">
+                    <div class="post-it post-it-blue col-postit pin-blue" style="transform: rotate(-2deg);">
+                        <span class="label">01 / Discovery</span>
+                        <h3 style="margin-top: 1rem;">Finding the Problem</h3>
+                        <p>Every solution starts with understanding. We dive deep into research, interviews, and observation to uncover what truly matters.</p>
+                        <ul style="margin-top: 1rem;">
+                            <li>User research sessions</li>
+                            <li>Market analysis</li>
+                            <li>Stakeholder interviews</li>
+                            <li>Competitive landscape</li>
+                        </ul>
+                    </div>
+                    <div class="post-it post-it-yellow col-postit pin-gold" style="transform: rotate(1deg); margin-top: 3rem;">
+                        <span class="label">02 / Solution</span>
+                        <h3 style="margin-top: 1rem;">Crafting the Answer</h3>
+                        <p>With clarity comes creativity. We synthesize findings into actionable strategies and tangible designs.</p>
+                        <ul style="margin-top: 1rem;">
+                            <li>Ideation workshops</li>
+                            <li>Prototype development</li>
+                            <li>Iterative testing</li>
+                            <li>Final delivery</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <svg class="doodle" style="bottom: 10%; right: 5%; width: 150px; height: 80px;" viewBox="0 0 150 80">
+                <path d="M10 40 Q40 20, 75 40 T140 40" stroke="#2d2a26" stroke-width="3" fill="none" opacity="0.15"/>
+                <circle cx="10" cy="40" r="5" fill="#2d2a26" opacity="0.15"/>
+                <circle cx="140" cy="40" r="5" fill="#2d2a26" opacity="0.15"/>
+            </svg>
+        </section>
+
+        <!-- SLIDE 4: Chart/Data -->
+        <section class="slide bg-cork">
+            <div class="slide-content">
+                <div class="chart-layout">
+                    <div class="chart-container pin tape">
+                        <h3 style="text-align: center; margin-bottom: 2rem;">Quarterly Growth</h3>
+                        <svg class="sketch-chart" viewBox="0 0 400 250" style="max-height: 300px;">
+                            <!-- Grid lines -->
+                            <line x1="50" y1="200" x2="380" y2="200" stroke="#c9b8a0" stroke-width="1" stroke-dasharray="4"/>
+                            <line x1="50" y1="150" x2="380" y2="150" stroke="#c9b8a0" stroke-width="1" stroke-dasharray="4"/>
+                            <line x1="50" y1="100" x2="380" y2="100" stroke="#c9b8a0" stroke-width="1" stroke-dasharray="4"/>
+                            <line x1="50" y1="50" x2="380" y2="50" stroke="#c9b8a0" stroke-width="1" stroke-dasharray="4"/>
+
+                            <!-- Bars -->
+                            <rect class="bar-group" x="70" y="120" width="50" height="80" fill="#ffe066" stroke="#2d2a26" stroke-width="2" rx="4"/>
+                            <rect class="bar-group" x="140" y="90" width="50" height="110" fill="#a5d8ff" stroke="#2d2a26" stroke-width="2" rx="4"/>
+                            <rect class="bar-group" x="210" y="60" width="50" height="140" fill="#ffc9c9" stroke="#2d2a26" stroke-width="2" rx="4"/>
+                            <rect class="bar-group" x="280" y="30" width="50" height="170" fill="#b2f2bb" stroke="#2d2a26" stroke-width="2" rx="4"/>
+
+                            <!-- Labels -->
+                            <text x="95" y="225" text-anchor="middle" font-family="Zilla Slab" font-size="14" fill="#5c5750">Q1</text>
+                            <text x="165" y="225" text-anchor="middle" font-family="Zilla Slab" font-size="14" fill="#5c5750">Q2</text>
+                            <text x="235" y="225" text-anchor="middle" font-family="Zilla Slab" font-size="14" fill="#5c5750">Q3</text>
+                            <text x="305" y="225" text-anchor="middle" font-family="Zilla Slab" font-size="14" fill="#5c5750">Q4</text>
+
+                            <!-- Value labels on bars -->
+                            <text x="95" y="110" text-anchor="middle" font-family="Caveat" font-size="18" fill="#2d2a26">24</text>
+                            <text x="165" y="80" text-anchor="middle" font-family="Caveat" font-size="18" fill="#2d2a26">38</text>
+                            <text x="235" y="50" text-anchor="middle" font-family="Caveat" font-size="18" fill="#2d2a26">52</text>
+                            <text x="305" y="20" text-anchor="middle" font-family="Caveat" font-size="18" fill="#2d2a26">71</text>
+
+                            <!-- Axis -->
+                            <line x1="50" y1="200" x2="380" y2="200" stroke="#2d2a26" stroke-width="2"/>
+                            <line x1="50" y1="200" x2="50" y2="20" stroke="#2d2a26" stroke-width="2"/>
+                        </svg>
+                    </div>
+                    <div class="chart-legend post-it post-it-green pin-green">
+                        <h3>Key Metrics</h3>
+                        <div class="legend-item">
+                            <div class="legend-swatch" style="background: var(--yellow);"></div>
+                            <span>Revenue Streams</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-swatch" style="background: var(--blue);"></div>
+                            <span>User Acquisition</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-swatch" style="background: var(--pink);"></div>
+                            <span>Market Expansion</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-swatch" style="background: var(--green);"></div>
+                            <span>Product Lines</span>
+                        </div>
+                        <p class="handwritten" style="margin-top: 1.5rem; border-top: 2px solid var(--ink); padding-top: 1rem;">Steady upward trend across all channels this fiscal year.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE 5: Three Features -->
+        <section class="slide bg-paper">
+            <div class="slide-content">
+                <div class="three-col-layout">
+                    <div class="post-it post-it-yellow feature-postit pin">
+                        <div class="feature-icon">A</div>
+                        <h3>Strategy</h3>
+                        <p>Map out your vision with clarity and purpose. Define objectives, set milestones, and align your team.</p>
+                    </div>
+                    <div class="post-it post-it-blue feature-postit pin-blue">
+                        <div class="feature-icon">B</div>
+                        <h3>Design</h3>
+                        <p>Craft experiences that resonate. From wireframes to polished interfaces, every pixel serves a function.</p>
+                    </div>
+                    <div class="post-it post-it-pink feature-postit pin">
+                        <div class="feature-icon">C</div>
+                        <h3>Launch</h3>
+                        <p>Ship with confidence. Test, iterate, and release products that users genuinely love and remember.</p>
+                    </div>
+                </div>
+            </div>
+            <svg class="doodle" style="top: 8%; right: 10%; width: 60px; height: 60px;" viewBox="0 0 60 60">
+                <polygon points="30,5 55,45 5,45" stroke="#2d2a26" stroke-width="3" fill="none" opacity="0.15"/>
+            </svg>
+            <svg class="doodle" style="bottom: 12%; left: 8%; width: 80px; height: 80px;" viewBox="0 0 80 80">
+                <circle cx="40" cy="40" r="30" stroke="#2d2a26" stroke-width="3" fill="none" opacity="0.15" stroke-dasharray="10 5"/>
+            </svg>
+        </section>
+
+        <!-- SLIDE 6: Timeline -->
+        <section class="slide bg-warm">
+            <div class="slide-content">
+                <div class="timeline-layout">
+                    <div class="timeline-row">
+                        <div class="post-it post-it-yellow timeline-node pin">
+                            <h3>Phase One</h3>
+                            <p class="phase-label">Foundation</p>
+                        </div>
+                        <div class="timeline-connector">
+                            <svg viewBox="0 0 200 60" preserveAspectRatio="none">
+                                <path d="M0 30 Q100 10, 200 30" stroke="#2d2a26" stroke-width="3" fill="none" opacity="0.3" stroke-dasharray="8 4"/>
+                                <polygon points="190,25 200,30 190,35" fill="#2d2a26" opacity="0.3"/>
+                            </svg>
+                        </div>
+                        <div class="post-it post-it-white timeline-content" style="border: 2px solid var(--ink);">
+                            <p>Establish core principles, gather requirements, and build the foundational architecture that everything else will stand upon.</p>
+                        </div>
+                    </div>
+                    <div class="timeline-row">
+                        <div class="post-it post-it-blue timeline-node pin-blue">
+                            <h3>Phase Two</h3>
+                            <p class="phase-label">Creation</p>
+                        </div>
+                        <div class="timeline-connector">
+                            <svg viewBox="0 0 200 60" preserveAspectRatio="none">
+                                <path d="M0 30 Q100 50, 200 30" stroke="#2d2a26" stroke-width="3" fill="none" opacity="0.3" stroke-dasharray="8 4"/>
+                                <polygon points="190,25 200,30 190,35" fill="#2d2a26" opacity="0.3"/>
+                            </svg>
+                        </div>
+                        <div class="post-it post-it-white timeline-content" style="border: 2px solid var(--ink);">
+                            <p>Design prototypes, iterate through feedback cycles, and refine the product until every detail feels intentional.</p>
+                        </div>
+                    </div>
+                    <div class="timeline-row">
+                        <div class="post-it post-it-green timeline-node pin-green">
+                            <h3>Phase Three</h3>
+                            <p class="phase-label">Delivery</p>
+                        </div>
+                        <div class="timeline-connector">
+                            <svg viewBox="0 0 200 60" preserveAspectRatio="none">
+                                <path d="M0 30 Q100 10, 200 30" stroke="#2d2a26" stroke-width="3" fill="none" opacity="0.3" stroke-dasharray="8 4"/>
+                                <polygon points="190,25 200,30 190,35" fill="#2d2a26" opacity="0.3"/>
+                            </svg>
+                        </div>
+                        <div class="post-it post-it-white timeline-content" style="border: 2px solid var(--ink);">
+                            <p>Launch to the world, measure impact, gather insights, and prepare for the next cycle of innovation.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SLIDE 7: Image + Text -->
+        <section class="slide bg-cork">
+            <div class="slide-content">
+                <div class="imgtext-layout">
+                    <div class="photo-frame pin tape">
+                        <div class="photo-inner">
+                            <span class="photo-placeholder">[ Visual Content ]</span>
+                        </div>
+                    </div>
+                    <div class="text-cluster">
+                        <div class="post-it post-it-pink main-text-postit pin">
+                            <span class="label">Spotlight</span>
+                            <h3 style="margin-top: 1rem;">Capturing the Moment</h3>
+                            <p>Visual storytelling transforms abstract concepts into tangible understanding. A single image can communicate what paragraphs struggle to explain.</p>
+                            <p style="margin-top: 1rem;">We believe in the power of imagery to bridge gaps, evoke emotion, and create lasting impressions that words alone cannot achieve.</p>
+                        </div>
+                        <div class="post-it post-it-yellow mini-note pin-gold">
+                            <p class="handwritten">Visuals first, text second.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <svg class="doodle" style="top: 15%; right: 5%; width: 100px; height: 100px;" viewBox="0 0 100 100">
+                <path d="M20 50 Q50 20, 80 50 Q50 80, 20 50" stroke="#2d2a26" stroke-width="3" fill="none" opacity="0.15"/>
+            </svg>
+        </section>
+
+        <!-- SLIDE 8: Data Diagram -->
+        <section class="slide bg-paper">
+            <div class="slide-content">
+                <div class="diagram-layout">
+                    <div class="diagram-canvas pin tape">
+                        <h3>Distribution Overview</h3>
+                        <svg viewBox="0 0 280 200" style="max-width: 280px;">
+                            <!-- Pie chart -->
+                            <circle cx="100" cy="100" r="80" fill="#ffe066" stroke="#2d2a26" stroke-width="2"/>
+                            <path d="M100 100 L100 20 A80 80 0 0 1 180 100 Z" fill="#a5d8ff" stroke="#2d2a26" stroke-width="2"/>
+                            <path d="M100 100 L180 100 A80 80 0 0 1 140 170 Z" fill="#ffc9c9" stroke="#2d2a26" stroke-width="2"/>
+                            <path d="M100 100 L140 170 A80 80 0 0 1 60 170 Z" fill="#b2f2bb" stroke="#2d2a26" stroke-width="2"/>
+                            <path d="M100 100 L60 170 A80 80 0 0 1 20 100 Z" fill="#ffcc80" stroke="#2d2a26" stroke-width="2"/>
+
+                            <!-- Center hole for donut effect -->
+                            <circle cx="100" cy="100" r="25" fill="#fff" stroke="#2d2a26" stroke-width="2"/>
+                            <text x="100" y="105" text-anchor="middle" font-family="Shrikhand" font-size="14" fill="#2d2a26">Total</text>
+
+                            <!-- Legend -->
+                            <rect x="200" y="40" width="15" height="15" fill="#ffe066" stroke="#2d2a26" stroke-width="1"/>
+                            <text x="225" y="52" font-family="Zilla Slab" font-size="12" fill="#5c5750">Alpha</text>
+
+                            <rect x="200" y="70" width="15" height="15" fill="#a5d8ff" stroke="#2d2a26" stroke-width="1"/>
+                            <text x="225" y="82" font-family="Zilla Slab" font-size="12" fill="#5c5750">Beta</text>
+
+                            <rect x="200" y="100" width="15" height="15" fill="#ffc9c9" stroke="#2d2a26" stroke-width="1"/>
+                            <text x="225" y="112" font-family="Zilla Slab" font-size="12" fill="#5c5750">Gamma</text>
+
+                            <rect x="200" y="130" width="15" height="15" fill="#b2f2bb" stroke="#2d2a26" stroke-width="1"/>
+                            <text x="225" y="142" font-family="Zilla Slab" font-size="12" fill="#5c5750">Delta</text>
+
+                            <rect x="200" y="160" width="15" height="15" fill="#ffcc80" stroke="#2d2a26" stroke-width="1"/>
+                            <text x="225" y="172" font-family="Zilla Slab" font-size="12" fill="#5c5750">Epsilon</text>
+                        </svg>
+                    </div>
+                    <div class="diagram-note post-it post-it-yellow pin">
+                        <h3>Key Statistics</h3>
+                        <div class="stat-row">
+                            <span class="stat-label">Total Reach</span>
+                            <span class="stat-value">128K</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Engagement</span>
+                            <span class="stat-value">84%</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Retention</span>
+                            <span class="stat-value">62%</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Satisfaction</span>
+                            <span class="stat-value">4.8</span>
+                        </div>
+                        <p class="handwritten" style="margin-top: 1.5rem;">Numbers tell the story we need to hear.</p>
+                    </div>
+                </div>
+            </div>
+            <svg class="doodle" style="bottom: 10%; left: 5%; width: 120px; height: 50px;" viewBox="0 0 120 50">
+                <line x1="10" y1="25" x2="110" y2="25" stroke="#2d2a26" stroke-width="3" opacity="0.15" stroke-linecap="round"/>
+            </svg>
+        </section>
+
+        <!-- SLIDE 9: Comparison -->
+        <section class="slide bg-warm">
+            <div class="slide-content">
+                <div class="compare-layout">
+                    <div class="post-it post-it-blue compare-postit left pin-blue">
+                        <h3>Before</h3>
+                        <ul class="compare-list">
+                            <li>Scattered documentation</li>
+                            <li>Unclear ownership</li>
+                            <li>Inconsistent processes</li>
+                            <li>Reactive problem solving</li>
+                            <li>Silos between teams</li>
+                        </ul>
+                    </div>
+                    <div class="compare-vs">vs</div>
+                    <div class="post-it post-it-yellow compare-postit right pin-gold">
+                        <h3>After</h3>
+                        <ul class="compare-list">
+                            <li>Centralized knowledge base</li>
+                            <li>Defined responsibilities</li>
+                            <li>Streamlined workflows</li>
+                            <li>Proactive planning</li>
+                            <li>Cross-functional alignment</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <svg class="doodle" style="top: 12%; left: 50%; width: 100px; height: 100px; transform: translateX(-50%);" viewBox="0 0 100 100">
+                <path d="M50 10 L50 90 M10 50 L90 50" stroke="#2d2a26" stroke-width="3" opacity="0.1" stroke-linecap="round"/>
+            </svg>
+        </section>
+
+        <!-- SLIDE 10: Closing -->
+        <section class="slide bg-cork slide-title">
+            <div class="slide-content">
+                <div class="closing-cluster">
+                    <div class="post-it post-it-yellow closing-main pin">
+                        <h2>Thanks for Sticking Around</h2>
+                        <p class="handwritten" style="margin-top: 1rem;">Every great idea starts with a little note.</p>
+                    </div>
+                    <div class="post-it post-it-blue closing-accent-1 pin-blue">
+                        <p class="handwritten">Keep the ideas flowing!</p>
+                    </div>
+                    <div class="post-it post-it-pink closing-accent-2 pin">
+                        <p class="handwritten">Pin this somewhere safe.</p>
+                    </div>
+                    <div class="post-it post-it-green closing-accent-3 pin-green">
+                        <p class="handwritten">OK</p>
+                    </div>
+                    <div class="post-it post-it-orange closing-accent-4 pin-gold">
+                        <p class="handwritten">:)</p>
+                    </div>
+                </div>
+                <p style="margin-top: 3rem; font-family: 'Zilla Slab', serif; font-style: italic; color: var(--ink-light); font-size: 1.1rem;">Questions, thoughts, or just want to say hello?</p>
+            </div>
+            <svg class="doodle" style="top: 8%; right: 8%; width: 80px; height: 80px;" viewBox="0 0 80 80">
+                <polygon points="40,10 70,70 10,70" stroke="#2d2a26" stroke-width="3" fill="none" opacity="0.15"/>
+            </svg>
+            <svg class="doodle" style="bottom: 12%; left: 10%; width: 100px; height: 60px;" viewBox="0 0 100 60">
+                <path d="M10 30 Q50 10, 90 30" stroke="#2d2a26" stroke-width="3" fill="none" opacity="0.15"/>
+            </svg>
+        </section>
+
+    </div>
+
+    <script>
+      // Page-by-page navigation: arrow keys, space, PgUp/PgDn, Home/End,
+      // touch swipe, and mouse wheel — same vocabulary as the rest of the
+      // template library. Pure JS, no dependencies. Visual styling unchanged.
+      (function () {
+        const slides = Array.from(document.querySelectorAll('.slide'));
+        const total = slides.length;
+        let current = slides.findIndex(s => s.classList.contains('active'));
+        if (current < 0) {
+          current = 0;
+          slides[0].classList.add('active');
+        }
+
+        function go(n) {
+          n = Math.max(0, Math.min(total - 1, n));
+          if (n === current) return;
+          slides[current].classList.remove('active');
+          slides[n].classList.add('active');
+          current = n;
+          // Reset scroll in case anything inside the slide was scrolled.
+          window.scrollTo(0, 0);
+        }
+
+        document.addEventListener('keydown', e => {
+          if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+          if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ' || e.key === 'PageDown') {
+            e.preventDefault();
+            go(current + 1);
+          } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') {
+            e.preventDefault();
+            go(current - 1);
+          } else if (e.key === 'Home') {
+            e.preventDefault();
+            go(0);
+          } else if (e.key === 'End') {
+            e.preventDefault();
+            go(total - 1);
+          }
+        });
+
+        // Touch swipe (mobile / trackpad)
+        let touchStartX = 0;
+        let touchStartY = 0;
+        document.addEventListener('touchstart', e => {
+          touchStartX = e.changedTouches[0].clientX;
+          touchStartY = e.changedTouches[0].clientY;
+        }, { passive: true });
+        document.addEventListener('touchend', e => {
+          const dx = e.changedTouches[0].clientX - touchStartX;
+          const dy = e.changedTouches[0].clientY - touchStartY;
+          if (Math.abs(dx) < 50 && Math.abs(dy) < 50) return;
+          if (Math.abs(dx) > Math.abs(dy)) {
+            go(current + (dx < 0 ? 1 : -1));
+          } else {
+            go(current + (dy < 0 ? 1 : -1));
+          }
+        }, { passive: true });
+
+        // Mouse wheel — locked for 700ms to prevent multi-skip on trackpads
+        let wheelLocked = false;
+        document.addEventListener('wheel', e => {
+          if (wheelLocked) return;
+          const primary = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+          if (Math.abs(primary) < 5) return;
+          go(current + (primary > 0 ? 1 : -1));
+          wheelLocked = true;
+          setTimeout(() => { wheelLocked = false; }, 700);
+        }, { passive: true });
+      })();
+    </script>
+</body>
+</html>

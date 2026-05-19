@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { Dispatch, SetStateAction } from 'react';
+import type { Dispatch, FormEvent, SetStateAction } from 'react';
 import { useT } from '../i18n';
 import type { AppConfig } from '../types';
 import type { DesignSystemSummary } from '@open-design/contracts';
 import {
   fetchDesignSystem,
   fetchDesignSystems,
+  importGitHubDesignSystem,
+  importLocalDesignSystem,
 } from '../providers/registry';
 
 // Sibling Settings section that hosts the design-systems registry.
@@ -18,6 +20,13 @@ interface Props {
   setCfg: Dispatch<SetStateAction<AppConfig>>;
 }
 
+function toggleCraftSlug(current: string[], slug: string, enabled: boolean): string[] {
+  const next = new Set(current);
+  if (enabled) next.add(slug);
+  else next.delete(slug);
+  return Array.from(next);
+}
+
 export function DesignSystemsSection({ cfg, setCfg }: Props) {
   const t = useT();
   const [designSystems, setDesignSystems] = useState<DesignSystemSummary[]>([]);
@@ -26,6 +35,13 @@ export function DesignSystemsSection({ cfg, setCfg }: Props) {
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [previewBody, setPreviewBody] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [importPath, setImportPath] = useState('');
+  const [importSource, setImportSource] = useState<'local' | 'github'>('local');
+  const [packageImportMode, setPackageImportMode] = useState<'normalized' | 'hybrid' | 'verbatim'>('hybrid');
+  const [craftApplies, setCraftApplies] = useState<string[]>([]);
+  const [importing, setImporting] = useState(false);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchDesignSystems().then(setDesignSystems);
@@ -105,14 +121,124 @@ export function DesignSystemsSection({ cfg, setCfg }: Props) {
     });
   }
 
+  async function handleLocalImport(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const importTarget = importPath.trim();
+    if (!importTarget || importing) return;
+    setImporting(true);
+    setImportError(null);
+    setImportMessage(null);
+    const importOptions = {
+      importMode: packageImportMode,
+      craftApplies,
+    };
+    const result =
+      importSource === 'github'
+        ? await importGitHubDesignSystem({ githubUrl: importTarget, ...importOptions })
+        : await importLocalDesignSystem({ baseDir: importTarget, ...importOptions });
+    setImporting(false);
+    if ('error' in result) {
+      setImportError(result.error.message);
+      return;
+    }
+    setDesignSystems((current) => {
+      const withoutDuplicate = current.filter((system) => system.id !== result.designSystem.id);
+      return [...withoutDuplicate, result.designSystem].sort((a, b) => a.title.localeCompare(b.title));
+    });
+    setCategoryFilter(result.designSystem.category);
+    setPreviewId(null);
+    setPreviewBody(null);
+    setImportPath('');
+    setImportMessage(`Imported ${result.designSystem.title}`);
+  }
+
   return (
     <section className="settings-section settings-design-systems">
-      <div className="section-head">
-        <div>
-          <h3>{t('settings.designSystems')}</h3>
-          <p className="hint">{t('settings.designSystemsHint')}</p>
+      <form className="library-install-form" onSubmit={handleLocalImport}>
+        <div className="seg-control">
+          <button
+            type="button"
+            className={importSource === 'local' ? 'active' : ''}
+            onClick={() => setImportSource('local')}
+          >
+            Local
+          </button>
+          <button
+            type="button"
+            className={importSource === 'github' ? 'active' : ''}
+            onClick={() => setImportSource('github')}
+          >
+            GitHub
+          </button>
         </div>
-      </div>
+        <div className="library-import-options">
+          <div className="library-import-option-group">
+            <span className="library-import-option-label">Structure</span>
+            <div className="seg-control library-import-mode-control">
+              <button
+                type="button"
+                className={packageImportMode === 'hybrid' ? 'active' : ''}
+                onClick={() => setPackageImportMode('hybrid')}
+              >
+                Hybrid
+              </button>
+              <button
+                type="button"
+                className={packageImportMode === 'normalized' ? 'active' : ''}
+                onClick={() => setPackageImportMode('normalized')}
+              >
+                Normalized
+              </button>
+              <button
+                type="button"
+                className={packageImportMode === 'verbatim' ? 'active' : ''}
+                onClick={() => setPackageImportMode('verbatim')}
+              >
+                Verbatim
+              </button>
+            </div>
+          </div>
+          <div className="library-import-option-group">
+            <span className="library-import-option-label">Craft</span>
+            <label className="library-import-checkbox">
+              <input
+                type="checkbox"
+                checked={craftApplies.includes('color')}
+                onChange={(e) => setCraftApplies((current) => toggleCraftSlug(current, 'color', e.target.checked))}
+              />
+              <span>Color</span>
+            </label>
+            <label className="library-import-checkbox">
+              <input
+                type="checkbox"
+                checked={craftApplies.includes('accessibility-baseline')}
+                onChange={(e) =>
+                  setCraftApplies((current) => toggleCraftSlug(current, 'accessibility-baseline', e.target.checked))
+                }
+              />
+              <span>Accessibility</span>
+            </label>
+          </div>
+        </div>
+        <div className="library-install-row">
+          <input
+            type="text"
+            className="library-search"
+            placeholder={importSource === 'github' ? 'https://github.com/owner/repo' : '/path/to/project'}
+            value={importPath}
+            onChange={(e) => setImportPath(e.target.value)}
+          />
+          <button
+            type="submit"
+            className="library-install-submit"
+            disabled={importing || importPath.trim().length === 0}
+          >
+            {importing ? t('settings.libraryLoading') : 'Import from project'}
+          </button>
+        </div>
+        {importError ? <p className="library-install-error">{importError}</p> : null}
+        {importMessage ? <p className="library-install-status">{importMessage}</p> : null}
+      </form>
 
       <div className="library-toolbar">
         <input

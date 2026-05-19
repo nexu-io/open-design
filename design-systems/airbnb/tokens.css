@@ -1,0 +1,261 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/airbnb/tokens.css
+ *
+ * Structured token bindings for the Airbnb design system — pristine
+ * Canvas White surfaces, a single Rausch coral-pink accent (#ff385c),
+ * generous soft-circle radii, and Airbnb Cereal VF as the lone type
+ * family. The system reads like a travel magazine that happens to be
+ * an app: the interface disappears so the listings can breathe.
+ *
+ * This file pre-compiles the values described in `DESIGN.md` into the
+ * schema shared with every OD design system. Agents should paste the
+ * `:root { … }` block verbatim into the first `<style>` of an artifact,
+ * then resolve every value via `var(--*)` from that point on.
+ *
+ * Schema notes (brand-specific bindings worth flagging — section
+ * references point into `DESIGN.md`):
+ *
+ *   #Bind 1  — --bg and --surface both resolve to Canvas White
+ *              (#ffffff). Airbnb cards sit directly on the page
+ *              without a tonal step; separation comes from the
+ *              Hairline Gray (--border) edge and from the
+ *              photograph inside the card, never from a surface
+ *              tint (§4 Listing Card).
+ *
+ *   #Bind 2  — --surface-warm binds to Soft Cloud (#f7f7f7), the
+ *              brand-named subsurface tier used for footers, map
+ *              wrappers, and the calendar's middle-of-range dates.
+ *              A real value rather than `var(--surface)` because
+ *              Airbnb publishes a distinct tier here (§2 Surface).
+ *
+ *   #Bind 3  — --accent-hover and --accent-active are hand-picked,
+ *              NOT formula-derived. DESIGN.md §2 publishes Deep
+ *              Rausch (#e00b41) as the pressed/active state.
+ *              color-mix would overshoot that saturation and
+ *              under-shoot the brand's gradient terminal stop,
+ *              so we hand-bind both states.
+ *
+ *   #Bind 4  — Radius scale concentrates on the brand's signature
+ *              soft-circle geometry: 8px for buttons/inputs, 14px
+ *              for listing cards (the workhorse), 20px for the
+ *              booking panel and hero photo frames, 9999px for
+ *              the circular icon buttons and avatars that
+ *              punctuate every surface (§5 Border Radius Scale).
+ *
+ *   #Bind 5  — --elev-raised encodes Airbnb's signature three-
+ *              layer booking-panel shadow verbatim — a 2% hairline
+ *              ring, a 4% short blur, and a 10% medium blur. The
+ *              brand forbids single drop shadows; this stacked
+ *              triple is what gives the booking panel its premium
+ *              anti-aliased perimeter (§6 Depth & Elevation).
+ *
+ *   #Bind 6  — --focus-ring is 2px solid Ink Black (#222222), NOT
+ *              the schema's accent-tinted default. DESIGN.md §6
+ *              mandates this specific ring so focus reads cleanly
+ *              against full-bleed colorful photography — a Rausch
+ *              ring would disappear against warm sunset shots or
+ *              sea-blue overlays. Pair with the 4px white
+ *              separator ring at circular buttons floating on
+ *              images.
+ *
+ *   #Bind 7  — --leading-body is 1.43 (generous). Airbnb pairs
+ *              tight display leading (1.18–1.25) with notably
+ *              open body leading; that two-mode rhythm is why
+ *              the system reads as a travel magazine rather than
+ *              a utility app (§3 Principles).
+ *
+ * Brand-specific extensions: none in this revision. The Plus
+ * Magenta (#92174d) and Luxe Purple (#460479) product-tier accents
+ * called out in DESIGN.md §2 stay inline at the tier-specific
+ * components that need them; promoting them to schema slots would
+ * encourage non-tier surfaces to reach for them.
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface (3 levels) ────────────────────────────────────────
+   * Canvas White is both the page and the card — Airbnb refuses a
+   * tonal shift between the two. Cards earn their edges from the
+   * Hairline Gray border and from full-bleed photography. The
+   * tertiary tier (--surface-warm) is Soft Cloud, used only for
+   * footer backgrounds, map-view wrappers, and middle-of-range
+   * date cells in the date picker. */
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-warm: #f7f7f7;
+
+  /* ─── Foreground ramp (4 levels) ────────────────────────────────
+   * Ink Black (#222222) carries roughly ninety percent of every
+   * page — every heading, every body paragraph, every nav label,
+   * every price. The brand's near-black is never true #000000.
+   * Charcoal (--fg-2) is a one-step-down emphasis tier reserved
+   * for focused-input text. Ash Gray (--muted) is the secondary
+   * label — "Cottage rentals" subtitles, muted footer links.
+   * Mute Gray (--meta) is reserved for disabled buttons and
+   * low-priority metadata. */
+  --fg: #222222;
+  --fg-2: #3f3f3f;
+  --muted: #6a6a6a;
+  --meta: #929292;
+
+  /* ─── Border (2 levels) ─────────────────────────────────────────
+   * Hairline Gray (#dddddd) is the workhorse — every card-to-card
+   * divider, every amenity-row separator, every footer-column
+   * rule. The soft tier is a lighter hairline used to break up
+   * dense list interiors without competing with the primary card
+   * edge. */
+  --border: #dddddd;
+  --border-soft: #ebebeb;
+
+  /* ─── Accent ────────────────────────────────────────────────────
+   * Rausch coral-pink — the single signature color. Reserve for
+   * primary CTAs (Reserve, Search, Add dates), the active-tab
+   * underline, the wishlist heart fill, and price emphasis. Hard
+   * cap of two visible uses per viewport; if a third Rausch
+   * element shows up, neutralize one. Plus Magenta (#92174d) and
+   * Luxe Purple (#460479) are kept inline at their product-tier
+   * surfaces, not promoted to shared accent slots. */
+  --accent: #ff385c;
+  --accent-on: #ffffff;
+  --accent-hover: #e31c5f;       /* hand-picked, between Rausch and Deep Rausch */
+  --accent-active: #e00b41;      /* Deep Rausch — DESIGN.md §2 pressed-state value */
+
+  /* ─── Semantic ──────────────────────────────────────────────────
+   * Error Red is explicit from DESIGN.md §2; success and warn are
+   * not specified by the brand and are bound to desaturated values
+   * that survive the white canvas without competing with Rausch.
+   * Keep total semantic-color pixels well under five percent of
+   * any page — the brand almost never renders status. */
+  --success: #008a05;            /* hand-picked warm green — available/in-stock */
+  --warn: #c47700;               /* burnt amber — never tailwind yellow */
+  --danger: #c13515;             /* DESIGN.md §2 Error Red */
+
+  /* ─── Typography — fonts ────────────────────────────────────────
+   * Airbnb Cereal VF is the proprietary face that carries every
+   * label from 8px superscript to 28px section heading. The
+   * documented fallback chain renders acceptably on macOS/iOS
+   * where system-ui resolves to San Francisco. Display and body
+   * share the same stack — the visual identity comes from the
+   * family itself, never from typeface mixing. Mono is a generic
+   * stack for kbd, tabular metrics, and the rare code label. */
+  --font-display:
+    "Airbnb Cereal VF", "Airbnb Cereal App", Circular,
+    -apple-system, system-ui, "Helvetica Neue", Roboto, sans-serif;
+  --font-body:
+    "Airbnb Cereal VF", "Airbnb Cereal App", Circular,
+    -apple-system, system-ui, "Helvetica Neue", Roboto, sans-serif;
+  --font-mono:
+    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco,
+    Consolas, monospace;
+
+  /* ─── Typography — type scale (px) ──────────────────────────────
+   * Derived from DESIGN.md §3 Hierarchy table. The system clusters
+   * tightly between 11 and 22px (the conversational range) and
+   * jumps to 28px for section headings; the higher tiers are used
+   * sparingly for the Guest Favorite rating lockup (44–56px) and
+   * the rare hero numeral. No 400-regular: Cereal's body weight
+   * is 500, which any consuming component should set explicitly. */
+  --text-xs: 12px;               /* micro / footer disclaimer */
+  --text-sm: 14px;               /* button default, link, caption */
+  --text-base: 16px;             /* body medium, button large, subtitle bold */
+  --text-lg: 20px;               /* listing title */
+  --text-xl: 22px;               /* subsection heading */
+  --text-2xl: 28px;              /* section heading */
+  --text-3xl: 44px;              /* Guest Favorite rating, hero numeral */
+  --text-4xl: 56px;              /* display ceiling — Guest Favorite max */
+
+  /* ─── Typography — leading & tracking ───────────────────────────
+   * Tight for display (1.20 — chiseled headlines), generous for
+   * body (1.43 — magazine reading comfort). Display tracking
+   * compresses negatively at sizes ≥20px; body and caption hold
+   * at zero. The two-mode rhythm is what gives Airbnb pages
+   * their travel-magazine feel rather than a utility-app feel. */
+  --leading-body: 1.43;
+  --leading-tight: 1.2;
+  --tracking-display: -0.02em;   /* applied at sizes ≥20px only */
+
+  /* ─── Spacing — base scale ──────────────────────────────────────
+   * 8px base unit per DESIGN.md §5. The brand uses fine-grained
+   * off-grid values (5.5, 10, 11, 18.5, 22) for pixel-perfect
+   * icon alignment, but the shared scale stays on the standard
+   * 4px grid — off-grid spacing belongs inline at the component
+   * level, not in shared tokens. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* ─── Section rhythm ────────────────────────────────────────────
+   * Section padding ranges 48–64px on desktop, 24–32px on mobile
+   * per DESIGN.md §5. We bind the upper bound on desktop because
+   * Airbnb's content-dense pages benefit from generous breathing
+   * room between content blocks; the lower phone bound keeps the
+   * vertical rhythm tight on small screens. */
+  --section-y-desktop: 64px;
+  --section-y-tablet: 48px;
+  --section-y-phone: 32px;
+
+  /* ─── Radius ────────────────────────────────────────────────────
+   * The brand's signature soft-circle geometry. 14px (--radius-md)
+   * is the workhorse — every listing card photograph, every
+   * amenity badge, every generic content container lands here.
+   * 20px (--radius-lg) is reserved for the booking panel and hero
+   * photo frames; 8px (--radius-sm) is the small radius for
+   * buttons, dropdowns, and inputs; --radius-pill (9999px) is the
+   * system's signature round geometry, applied to every circular
+   * icon button, every avatar, and the wishlist heart. */
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-pill: 9999px;
+
+  /* ─── Elevation ─────────────────────────────────────────────────
+   * Airbnb forbids single drop shadows; the system uses stacked
+   * layered shadows or no shadow at all. Listing cards sit flat
+   * on the canvas. Booking panels, modals, and dropdowns use the
+   * signature three-layer stack — a 2% hairline ring, a 4% short
+   * blur, and a 10% medium blur — which reads as one cohesive
+   * lift while giving the perimeter a premium anti-aliased edge. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised:
+    rgba(0, 0, 0, 0.02) 0 0 0 1px,
+    rgba(0, 0, 0, 0.04) 0 2px 6px 0,
+    rgba(0, 0, 0, 0.1) 0 4px 8px 0;
+
+  /* ─── Focus ring ────────────────────────────────────────────────
+   * 2px solid Ink Black, NOT the schema's accent-tinted default.
+   * DESIGN.md §6 mandates this exact treatment so focus indicators
+   * read cleanly against full-bleed colorful photography — a
+   * Rausch-tinted ring would disappear against warm sunset shots
+   * or sea-blue beach overlays. Pair with a 4px white separator
+   * ring at circular-icon buttons that float on images. */
+  --focus-ring: 0 0 0 2px var(--fg);
+
+  /* ─── Motion ────────────────────────────────────────────────────
+   * DESIGN.md did not capture transition timings (static
+   * extraction scope). We bind defaults consistent with the
+   * brand's tactile feel: 150ms for micro-states (the famous
+   * `transform: scale(0.92)` pressed-button rebound) and 200ms
+   * for general state changes. Standard easing is the schema
+   * default — short, purposeful, no overshoot. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ────────────────────────────────────────────────────
+   * Detail pages cap at 1280px per DESIGN.md §5; the homepage
+   * listing grid lets the canvas breathe to 1760–1920px on
+   * ultra-wide. We bind the detail-page width as the shared
+   * default because that is the geometry agents will most often
+   * generate (rooms, experiences, host profiles). Gutters
+   * tighten progressively: 40px desktop, 24px tablet, 16px
+   * phone per DESIGN.md §8 small-mobile clause. */
+  --container-max: 1280px;
+  --container-gutter-desktop: 40px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

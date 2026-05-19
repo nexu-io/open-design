@@ -4,7 +4,19 @@ import path from 'node:path';
 
 const ACP_PROTOCOL_VERSION = 1;
 const DEFAULT_TIMEOUT_MS = 15_000;
-const DEFAULT_STAGE_TIMEOUT_MS = 180_000;
+const MAX_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+// Gap-between-chunks watchdog for an ACP session stage. The timer resets on
+// every line received from the agent, so this bounds *silent* periods, not
+// total runtime. Default kept in line with the outer chat-run inactivity
+// watchdog (10 min) so agents that spend several minutes silently writing
+// large artifacts do not get killed before the outer watchdog can apply.
+// Callers can override via `stageTimeoutMs`; the chat server reads
+// `OD_ACP_STAGE_TIMEOUT_MS` from the environment.
+// A non-positive `stageTimeoutMs` (`<= 0`) disables the watchdog entirely,
+// mirroring the outer chat watchdog's escape-hatch semantics — without this,
+// `OD_ACP_STAGE_TIMEOUT_MS=0` would call `setTimeout(..., 0)` and fail every
+// ACP session on the next tick instead of disabling the watchdog.
+const DEFAULT_STAGE_TIMEOUT_MS = 600_000;
 
 type JsonRpcId = string | number;
 type JsonObject = Record<string, unknown>;
@@ -62,6 +74,12 @@ interface AttachAcpSessionOptions {
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+function resolveAcpTimeoutMs(env: NodeJS.ProcessEnv, fallbackMs: number): number {
+  const raw = Number(env.OD_ACP_TIMEOUT_MS);
+  if (!Number.isFinite(raw)) return fallbackMs;
+  return Math.min(MAX_TIMEOUT_MS, Math.max(0, Math.floor(raw)));
 }
 
 function asObject(value: unknown): JsonObject | null {
@@ -297,6 +315,7 @@ export async function detectAcpModels({
   clientVersion = 'runtime-adapter',
   defaultModelOption = { id: 'default', label: 'Default (CLI config)' },
 }: DetectAcpModelsOptions): Promise<ModelOption[]> {
+  const effectiveTimeoutMs = resolveAcpTimeoutMs(env, timeoutMs);
   return await new Promise<ModelOption[]>((resolve, reject) => {
     const child = spawn(bin, args, {
       cwd,
@@ -311,11 +330,11 @@ export async function detectAcpModels({
     let expectedId = 1;
     let nextId = 2;
 
-    let timer: TimerHandle;
+    let timer: TimerHandle | null = null;
     const finish = <T extends ModelOption[] | Error>(fn: (value: T) => void, value: T) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       try {
         child.stdin.end();
       } catch {}
@@ -383,9 +402,11 @@ export async function detectAcpModels({
       }
     });
 
-    timer = setTimeout(() => {
-      fail(`ACP model detection timed out after ${timeoutMs}ms`);
-    }, timeoutMs);
+    if (effectiveTimeoutMs > 0) {
+      timer = setTimeout(() => {
+        fail(`ACP model detection timed out after ${effectiveTimeoutMs}ms`);
+      }, effectiveTimeoutMs);
+    }
 
     writeRpc(1, 'initialize', {
       protocolVersion: ACP_PROTOCOL_VERSION,
@@ -427,8 +448,15 @@ export function attachAcpSession({
   let aborted = false;
   let stageTimer: TimerHandle | null = null;
 
+  const stageWatchdogDisabled = stageTimeoutMs <= 0;
   const resetStageTimer = (label: string) => {
     if (stageTimer) clearTimeout(stageTimer);
+    // `stageTimeoutMs <= 0` disables the watchdog. Mirrors the outer chat
+    // inactivity watchdog escape hatch (see server.ts → inactivityTimer).
+    // Without this, an operator setting `OD_ACP_STAGE_TIMEOUT_MS=0` would
+    // schedule a 0ms timeout that fires on the next tick and kills the
+    // session immediately.
+    if (stageWatchdogDisabled) return;
     stageTimer = setTimeout(() => {
       fail(`ACP ${label} timed out after ${stageTimeoutMs}ms`);
     }, stageTimeoutMs);

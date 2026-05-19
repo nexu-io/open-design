@@ -1,0 +1,81 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-orbit-general",
+  "title": "Orbit General",
+  "version": "0.1.0",
+  "description": "Open Orbit briefing skill — selected by the Orbit pipeline when the\nuser has two or more connectors connected. Pulls the past 24 hours of\nactivity from every authenticated connector (GitHub, Linear, Notion,\nSlack, 飞书, Calendar, Gmail, Drive, Sentry, Vercel, …) and renders a\nsingle adaptive bento-grid dashboard at the top of \"我的设计\". Each\nconnector module picks its own UI form (list, avatar stack, status\nring, heatmap, file grid, alert card, …) based on the data shape it\nreturns, so the layout scales as Orbit's connector ecosystem grows.\nThis skill should not be triggered manually — it is invoked by\nOrbit's daily-digest scheduler against the user's live connector\ndata.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/orbit-general",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "orbit",
+    "web",
+    "desktop",
+    "daily-digest",
+    "morning-briefing",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "orbit",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Generate today's Open Orbit morning briefing. I have ~10 connectors connected (GitHub, Linear, Notion, Calendar, 飞书, Sentry, Vercel, Slack, Gmail, Drive). Pull yesterday's activity from each and render the editorial bento dashboard.",
+        "zh-CN": "Generate today's Open Orbit morning briefing. I have ~10 connectors connected (GitHub, Linear, Notion, Calendar, 飞书, Sentry, Vercel, Slack, Gmail, Drive). Pull yesterday's activity from each and render the editorial bento dashboard."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Orbit General"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

@@ -1,0 +1,93 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-flowai-live-dashboard-template",
+  "title": "Flowai Live Dashboard Template",
+  "version": "0.1.0",
+  "description": "Team-management dashboard skill in the FlowAI aesthetic — three tabs\n(Team Members, Team Details, Activity Log), KPI stat row, member table,\nrole distribution bar chart, online presence and activity sparklines,\nand a top-contributors panel, all in a single self-contained HTML file\nwith light/dark theming, hoverable chart tooltips, click-to-zoom panels,\nand CSV export. Use when the brief asks for a team / workspace admin\ndashboard, an interactive admin dashboard with charts, or names FlowAI.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/flowai-live-dashboard-template",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "operations",
+    "web",
+    "desktop",
+    "flowai-dashboard",
+    "team-dashboard",
+    "team-management-dashboard",
+    "interactive-admin-dashboard",
+    "workspace-admin-dashboard",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "operations",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create a FlowAI-style team management dashboard with Team Members, Team Details and Activity Log tabs, KPI cards, a member table with status badges, a role-distribution bar chart, an online-presence sparkline, top contributors, light/dark mode, and CSV export.",
+        "zh-CN": "使用这个插件完成以下任务：Create a FlowAI-style team management dashboard with Team Members, Team Details and Activity Log tabs, KPI cards, a member table with status badges, a role-distribution bar chart, an online-presence sparkline, top contributors, light/dark mode, and CSV export."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Flowai Live Dashboard Template"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "craft": [
+        "state-coverage",
+        "accessibility-baseline"
+      ],
+      "assets": [
+        "./example.html",
+        "./assets/template.html",
+        "./references/checklist.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

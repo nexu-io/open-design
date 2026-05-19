@@ -63,7 +63,7 @@ export async function listFiles(projectsRoot, projectId, opts = {}) {
   // Skip build/install dirs for linked folders so node_modules doesn't stall
   // the walk on large repos.
   const skipDirs = metadata?.baseDir ? SKIP_DIRS : undefined;
-  await collectFiles(dir, '', out, skipDirs);
+  await collectFiles(dir, '', out, skipDirs, dir);
   // Newest first — matches the visual order users expect after generating.
   out.sort((a, b) => b.mtime - a.mtime);
   const since = Number(opts.since);
@@ -100,7 +100,7 @@ export async function detectEntryFile(dir: string): Promise<string | null> {
   return null;
 }
 
-async function collectFiles(dir, relDir, out, skipDirs?: Set<string>) {
+async function collectFiles(dir, relDir, out, skipDirs?: Set<string>, projectRoot = dir) {
   let entries = [];
   try {
     entries = await readdir(dir, { withFileTypes: true });
@@ -114,13 +114,13 @@ async function collectFiles(dir, relDir, out, skipDirs?: Set<string>) {
     const full = path.join(dir, e.name);
     if (e.isDirectory()) {
       if (skipDirs && skipDirs.has(e.name)) continue;
-      await collectFiles(full, rel, out, skipDirs);
+      await collectFiles(full, rel, out, skipDirs, projectRoot);
       continue;
     }
     if (!e.isFile()) continue;
     if (e.name.endsWith('.artifact.json')) continue;
     const st = await stat(full);
-    const manifest = await readManifestForPath(dir, rel);
+    const manifest = await readManifestForPath(projectRoot, rel);
     out.push({
       name: rel,
       path: rel,
@@ -626,7 +626,9 @@ export async function writeProjectFile(
   if (!overwrite) {
     try {
       await stat(target);
-      throw new Error('file already exists');
+      const err = new Error('file already exists');
+      err.code = 'EEXIST';
+      throw err;
     } catch (err) {
       if (!err || err.code !== 'ENOENT') throw err;
     }

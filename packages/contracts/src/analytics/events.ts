@@ -77,6 +77,7 @@ export type TrackingTopTabId =
 
 export type TrackingActiveSection =
   | 'execution_model'
+  | 'instructions'
   | 'media_providers'
   | 'language'
   | 'appearance'
@@ -490,6 +491,8 @@ export function settingsSectionToTracking(
   switch (section) {
     case 'execution':
       return 'execution_model';
+    case 'instructions':
+      return 'instructions';
     case 'media':
       return 'media_providers';
     case 'language':

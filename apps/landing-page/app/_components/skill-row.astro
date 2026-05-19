@@ -9,6 +9,7 @@
  * unfiltered index.
  */
 import type { SkillRecord } from '../_lib/catalog';
+import LazyImg from './lazy-img.astro';
 
 export interface Props {
   skill: SkillRecord;
@@ -16,6 +17,12 @@ export interface Props {
 }
 
 const { skill, index } = Astro.props;
+
+// The first ~4 rows are visible above the fold on a typical laptop and
+// always render at the top of the first catalog list a visitor sees.
+// Skip the IntersectionObserver round-trip for them; everything below
+// uses precise lazy loading (rootMargin 300px) via the global script.
+const aboveFold = index < 4;
 ---
 
 <li class="catalog-row catalog-row-skill">
@@ -23,7 +30,11 @@ const { skill, index } = Astro.props;
     <span class="row-index">{String(index + 1).padStart(3, '0')}</span>
     <span class="row-thumb">
       {skill.previewUrl ? (
-        <img src={skill.previewUrl} alt="" loading="lazy" decoding="async" />
+        <LazyImg
+          src={skill.previewUrl}
+          alt=""
+          loading={aboveFold ? 'eager' : 'precise'}
+        />
       ) : (
         <span class="row-thumb-empty" aria-hidden="true" />
       )}

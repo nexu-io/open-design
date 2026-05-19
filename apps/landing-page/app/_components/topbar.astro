@@ -1,0 +1,60 @@
+---
+const REPO = 'https://github.com/nexu-io/open-design';
+const REPO_RELEASES = `${REPO}/releases`;
+const ext = {
+  target: '_blank',
+  rel: 'noreferrer noopener',
+} as const;
+const NBSP = '\u00A0';
+const { github = { versionLabel: 'v0.3.0' } } = Astro.props;
+---
+
+<div class='topbar' data-od-id='topbar'>
+  <div class='container topbar-inner'>
+    <span>
+      <b>OD / 2026</b>{NBSP}·{NBSP}Vol. 01 / Issue Nº 26
+    </span>
+    <span class='mid'>
+      <span>
+        Filed under <b class='coral'>Design · Intelligence</b>
+      </span>
+      <span>Apache-2.0 · Made on Earth</span>
+    </span>
+    <span class='right'>
+      <a class='topbar-link' href={REPO_RELEASES} {...ext}>
+        <span class='pulse'></span>
+        Live · <span data-github-version>{github.versionLabel}</span>
+      </a>
+      <span class='locale-switch'>
+        <b>EN</b>
+        {' · '}
+        <a
+          class='topbar-link'
+          href={REPO}
+          {...ext}
+          title='Localization in progress — open the repo on GitHub'
+        >
+          DE
+        </a>
+        {' · '}
+        <a
+          class='topbar-link'
+          href={REPO}
+          {...ext}
+          title='Localization in progress — open the repo on GitHub'
+        >
+          中文
+        </a>
+        {' · '}
+        <a
+          class='topbar-link'
+          href={REPO}
+          {...ext}
+          title='Localization in progress — open the repo on GitHub'
+        >
+          日本語
+        </a>
+      </span>
+    </span>
+  </div>
+</div>

@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import {
-  assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, gemini, join, kilo, kiro, mkdtempSync, opencode, pi, qoder, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
+  assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, gemini, join, kilo, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
 } from './helpers/test-helpers.js';
 import type { TestAgentDef } from './helpers/test-helpers.js';
 
@@ -431,6 +431,25 @@ test('detectAgents keeps qoder unavailable with fallback metadata when qodercli 
   }
 });
 
+test('qwen args check promptViaStdin, base args, model args and exclude `-` sentinel', () => {
+  assert.equal(qwen.promptViaStdin, true);
+
+  const baseArgs = qwen.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
+  assert.deepEqual(baseArgs, ['--yolo']);
+  assert.equal(baseArgs.includes('-'), false);
+
+  const withModel = qwen.buildArgs(
+    '',
+    [],
+    [],
+    { model: 'qwen3-coder-plus' },
+    { cwd: '/tmp/od-project' },
+  );
+
+  assert.deepEqual(withModel, ['--yolo', '--model', 'qwen3-coder-plus']);
+  assert.equal(withModel.includes('-'), false);
+});
+
 test('kiro fetchModels falls back to fallbackModels when detection fails', async () => {
   // fetchModels rejects when the binary doesn't exist; the daemon's
   // probe() catches this and uses fallbackModels instead.
@@ -617,4 +636,43 @@ test('claude helpArgs probes the -p subcommand where --add-dir lives (issue #430
     ['-p', '--help'],
     `claude.helpArgs must be ['-p', '--help'], not just ['--help'], because --add-dir lives under the -p subcommand. Probing global help never finds it! Got: ${JSON.stringify(claude.helpArgs)}`,
   );
+});
+
+// server.ts:4615 branches on `def.promptInputFormat` to decide how to write
+// the composed prompt to a stdin-fed child: 'stream-json' writes one JSONL
+// `user` message and keeps stdin open, anything else writes the raw prompt
+// and ends stdin. Because server.ts opens with `// @ts-nocheck`, a typo on
+// that property (e.g. an undefined `runtimeAdapter.promptInputFormat()`)
+// passes typecheck but throws `ReferenceError` at runtime for every chat
+// run that goes through the stdin-write path — i.e. every agent below.
+// Pin the field shape so a future regression of that contract fails here
+// instead of in production.
+test('promptInputFormat is a string property (or undefined) on every promptViaStdin agent', () => {
+  const stdinAgents = [
+    { name: 'claude', def: claude, expected: 'stream-json' },
+    { name: 'codex', def: codex, expected: undefined },
+    { name: 'copilot', def: copilot, expected: undefined },
+    { name: 'cursor-agent', def: cursorAgent, expected: undefined },
+    { name: 'gemini', def: gemini, expected: undefined },
+    { name: 'opencode', def: opencode, expected: undefined },
+    { name: 'pi', def: pi, expected: undefined },
+    { name: 'qoder', def: qoder, expected: undefined },
+  ];
+  for (const { name, def, expected } of stdinAgents) {
+    assert.equal(
+      def.promptViaStdin,
+      true,
+      `${name} must keep promptViaStdin: true`,
+    );
+    assert.equal(
+      typeof def.promptInputFormat,
+      typeof expected,
+      `${name}.promptInputFormat must be a ${typeof expected}, not a function — server.ts reads it as a property, not a method call`,
+    );
+    assert.equal(
+      def.promptInputFormat,
+      expected,
+      `${name}.promptInputFormat must equal ${JSON.stringify(expected)}`,
+    );
+  }
 });

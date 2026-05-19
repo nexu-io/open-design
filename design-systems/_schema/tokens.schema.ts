@@ -210,6 +210,9 @@ export const BRAND_EXTENSIONS: Readonly<Record<string, readonly string[]>> = {
   default: [
     "--space-20", // 80px — used as section-y-desktop's twin; only default needs it
   ],
+  openai: [
+    "--space-16", // 64px — major section gap in OpenAI's DESIGN.md §5 spacing scale
+  ],
   kami: [
     "--accent-light", // brighter ink-blue for links on dark surfaces
     "--text-md", // 15px lede tier between --text-base and --text-lg
