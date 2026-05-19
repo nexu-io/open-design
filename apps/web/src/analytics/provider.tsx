@@ -12,7 +12,7 @@ import {
 } from 'react';
 import { useI18n } from '../i18n';
 import {
-  ANALYTICS_HEADER_ANONYMOUS_ID,
+  ANALYTICS_HEADER_DEVICE_ID,
   ANALYTICS_HEADER_CLIENT_TYPE,
   ANALYTICS_HEADER_LOCALE,
   ANALYTICS_HEADER_REQUEST_ID,
@@ -157,7 +157,7 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
     if (!resolvedAnonId) return;
     const original = window.fetch;
     const baseHeaders: Record<string, string> = {
-      [ANALYTICS_HEADER_ANONYMOUS_ID]: resolvedAnonId,
+      [ANALYTICS_HEADER_DEVICE_ID]: resolvedAnonId,
       [ANALYTICS_HEADER_SESSION_ID]: identity.sessionId,
       [ANALYTICS_HEADER_CLIENT_TYPE]: identity.clientType,
     };

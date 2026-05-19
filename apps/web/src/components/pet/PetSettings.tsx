@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
+import { useAnalytics } from '../../analytics/provider';
+import { trackSettingsPetsClick } from '../../analytics/events';
 import { useT } from '../../i18n';
 import { Icon } from '../Icon';
 import type { AppConfig, CodexPetSummary, PetConfig, PetCustom } from '../../types';
@@ -51,6 +53,7 @@ const ACCENT_SWATCHES = [
 
 export function PetSettings({ cfg, setCfg }: Props) {
   const t = useT();
+  const analytics = useAnalytics();
   const pet: PetConfig = cfg.pet ?? { ...DEFAULT_PET, custom: defaultCustomPet() };
   const customGlyphId = useId();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -555,7 +558,14 @@ export function PetSettings({ cfg, setCfg }: Props) {
               role="tab"
               aria-selected={activeTab === 'builtIn'}
               className={activeTab === 'builtIn' ? 'active' : ''}
-              onClick={() => setActiveTab('builtIn')}
+              onClick={() => {
+                trackSettingsPetsClick(analytics.track, {
+                  page: 'settings',
+                  area: 'pets',
+                  element: 'built_in',
+                });
+                setActiveTab('builtIn');
+              }}
             >
               {t('pet.tabBuiltIn')}
             </button>
@@ -564,7 +574,14 @@ export function PetSettings({ cfg, setCfg }: Props) {
               role="tab"
               aria-selected={activeTab === 'custom'}
               className={activeTab === 'custom' ? 'active' : ''}
-              onClick={() => setActiveTab('custom')}
+              onClick={() => {
+                trackSettingsPetsClick(analytics.track, {
+                  page: 'settings',
+                  area: 'pets',
+                  element: 'custom',
+                });
+                setActiveTab('custom');
+              }}
             >
               {t('pet.tabCustom')}
             </button>
@@ -573,7 +590,14 @@ export function PetSettings({ cfg, setCfg }: Props) {
               role="tab"
               aria-selected={activeTab === 'community'}
               className={activeTab === 'community' ? 'active' : ''}
-              onClick={() => setActiveTab('community')}
+              onClick={() => {
+                trackSettingsPetsClick(analytics.track, {
+                  page: 'settings',
+                  area: 'pets',
+                  element: 'community',
+                });
+                setActiveTab('community');
+              }}
             >
               {t('pet.tabCommunity')}
             </button>
@@ -582,7 +606,14 @@ export function PetSettings({ cfg, setCfg }: Props) {
             <button
               type="button"
               className={`seg-btn small${pet.enabled ? ' active' : ''}`}
-              onClick={() => void togglePetVisibility()}
+              onClick={() => {
+                trackSettingsPetsClick(analytics.track, {
+                  page: 'settings',
+                  area: 'pets',
+                  element: 'tuck_away',
+                });
+                void togglePetVisibility();
+              }}
               disabled={!canToggleVisibility || codexAdopting !== null}
               title={pet.enabled ? t('pet.tuckTitle') : t('pet.wakeTitle')}
             >
@@ -640,7 +671,15 @@ export function PetSettings({ cfg, setCfg }: Props) {
           <button
             type="button"
             className={`seg-btn small${pet.adopted && pet.petId === CUSTOM_PET_ID ? ' active' : ''}`}
-            onClick={() => adopt(CUSTOM_PET_ID)}
+            onClick={() => {
+              trackSettingsPetsClick(analytics.track, {
+                page: 'settings',
+                area: 'pets',
+                element: 'adopt',
+                pet_id: CUSTOM_PET_ID,
+              });
+              adopt(CUSTOM_PET_ID);
+            }}
           >
             <Icon
               name={pet.adopted && pet.petId === CUSTOM_PET_ID ? 'check' : 'sparkles'}

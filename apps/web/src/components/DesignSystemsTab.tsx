@@ -1,4 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useAnalytics } from '../analytics/provider';
+import {
+  trackDesignSystemsTemplateCardClick,
+  trackDesignSystemsTopClick,
+  trackPageView,
+} from '../analytics/events';
 import { useI18n } from '../i18n';
 import {
   localizeDesignSystemCategory,
@@ -77,6 +83,15 @@ export function DesignSystemsTab({
   onSystemsRefresh,
 }: Props) {
   const { locale, t } = useI18n();
+  const analytics = useAnalytics();
+  const designSystemsPageViewFiredRef = useRef(false);
+  useEffect(() => {
+    if (designSystemsPageViewFiredRef.current) return;
+    designSystemsPageViewFiredRef.current = true;
+    trackPageView(analytics.track, { page_name: 'design_systems' });
+  }, [analytics.track]);
+  const searchTrackedRef = useRef(false);
+  const categoryTrackedRef = useRef(false);
   const [filter, setFilter] = useState('');
   const [userFilter, setUserFilter] = useState<UserListFilter>('all');
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -343,11 +358,29 @@ export function DesignSystemsTab({
             data-testid="design-systems-search"
             placeholder={t('ds.searchPlaceholder')}
             value={filter}
+            onFocus={() => {
+              if (searchTrackedRef.current) return;
+              searchTrackedRef.current = true;
+              trackDesignSystemsTopClick(analytics.track, {
+                page_name: 'design_systems',
+                area: 'design_systems',
+                element: 'search_input',
+              });
+            }}
             onChange={(e) => setFilter(e.target.value)}
           />
           <select
             data-testid="design-systems-category-select"
             value={category}
+            onFocus={() => {
+              if (categoryTrackedRef.current) return;
+              categoryTrackedRef.current = true;
+              trackDesignSystemsTopClick(analytics.track, {
+                page_name: 'design_systems',
+                area: 'design_systems',
+                element: 'search_dropdown',
+              });
+            }}
             onChange={(e) => setCategory(e.target.value)}
           >
             {categories.map((c) => (
@@ -372,6 +405,12 @@ export function DesignSystemsTab({
               data-testid={`design-systems-surface-${p.value}`}
               className={`filter-pill ${surfaceFilter === p.value ? 'active' : ''}`}
               onClick={() => {
+                trackDesignSystemsTopClick(analytics.track, {
+                  page_name: 'design_systems',
+                  area: 'design_systems',
+                  element: 'filter_chip',
+                  filter_name: p.value,
+                });
                 setSurfaceFilter(p.value);
                 setCategory('All');
               }}
@@ -392,9 +431,27 @@ export function DesignSystemsTab({
                 active={s.id === selectedId}
                 thumbHtml={thumbs[s.id]}
                 onIntersect={() => loadThumb(s.id)}
-                onSelect={() => onSelect(s.id)}
+                onSelect={() => {
+                  trackDesignSystemsTemplateCardClick(analytics.track, {
+                    page_name: 'design_systems',
+                    area: 'templates_card',
+                    element: 'templates_card',
+                    templates_id: s.id,
+                    templates_type: s.source ?? 'library',
+                  });
+                  onSelect(s.id);
+                }}
                 onOpenSystem={onOpenSystem ? () => onOpenSystem(s.id) : undefined}
-                onPreview={() => onPreview(s.id)}
+                onPreview={() => {
+                  trackDesignSystemsTemplateCardClick(analytics.track, {
+                    page_name: 'design_systems',
+                    area: 'templates_card',
+                    element: 'templates_card',
+                    templates_id: s.id,
+                    templates_type: s.source ?? 'library',
+                  });
+                  onPreview(s.id);
+                }}
               />
             ))}
           </div>

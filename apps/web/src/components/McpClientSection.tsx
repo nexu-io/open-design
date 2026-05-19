@@ -13,6 +13,8 @@ import {
   useRef,
   useState,
 } from 'react';
+import { useAnalytics } from '../analytics/provider';
+import { trackIntegrationsMcpTabClick } from '../analytics/events';
 import {
   disconnectMcpOAuth,
   fetchMcpOAuthStatus,
@@ -296,6 +298,7 @@ function signature(rows: DraftRow[]): string {
 export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
   function McpClientSection({ onServersChanged, onDirtyChange }, ref) {
   const t = useT();
+  const analytics = useAnalytics();
   const [rows, setRows] = useState<DraftRow[]>([]);
   const [savedSig, setSavedSig] = useState<string>('[]');
   const [templates, setTemplates] = useState<McpTemplate[]>([]);
@@ -418,7 +421,14 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
         <button
           type="button"
           className="primary mcp-add-btn"
-          onClick={() => setPickerOpen((v) => !v)}
+          onClick={() => {
+            trackIntegrationsMcpTabClick(analytics.track, {
+              page_name: 'integrations',
+              area: 'mcp_tab',
+              element: 'add_server',
+            });
+            setPickerOpen((v) => !v);
+          }}
           aria-expanded={pickerOpen}
         >
           <Icon name="sparkles" size={13} />
@@ -474,7 +484,14 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
         <button
           type="button"
           className="primary"
-          onClick={() => void save()}
+          onClick={() => {
+            trackIntegrationsMcpTabClick(analytics.track, {
+              page_name: 'integrations',
+              area: 'mcp_tab',
+              element: 'saved',
+            });
+            void save();
+          }}
           disabled={saving || !dirty}
         >
           {saving ? t('settings.autosaveSaving') : dirty ? t('mcpClient.saveChanges') : t('settings.autosaveSaved')}

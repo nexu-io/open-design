@@ -11,8 +11,8 @@ import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { useAnalytics } from '../analytics/provider';
 import {
-  trackStudioClickChatComposer,
-  trackStudioViewChatPanel,
+  trackChatPanelClick,
+  trackPageView,
 } from '../analytics/events';
 import { projectRawUrl, uploadProjectFiles, openFolderDialog } from "../providers/registry";
 import { patchProject } from "../state/projects";
@@ -203,13 +203,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     useEffect(() => {
       if (studioViewFiredRef.current === projectId) return;
       studioViewFiredRef.current = projectId;
-      trackStudioViewChatPanel(analytics.track, {
-        page: 'studio',
-        area: 'chat_panel',
-        element: 'chat_tab',
-        view_type: 'panel',
-        source: 'open_project',
-        conversation_id: null,
+      trackPageView(analytics.track, {
+        page_name: 'chat_panel',
+        // `source` records which entry surface launched the studio. The
+        // ProjectView path defaults to 'recent_project'; helpers that
+        // navigate from the New project modal pass 'new_project' through
+        // the route state instead.
+        source: 'recent_project',
       });
     }, [projectId, analytics.track]);
     const [staged, setStaged] = useState<ChatAttachment[]>([]);
@@ -1278,7 +1278,23 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 ref={toolsTriggerRef}
                 type="button"
                 className={`icon-btn composer-tools-trigger${toolsOpen ? ' active' : ''}`}
-                onClick={() => setToolsOpen((v) => !v)}
+                onClick={() => {
+                  setToolsOpen((v) => {
+                    const next = !v;
+                    if (next) {
+                      // P0 ui_click resources_popover_trigger — only emit on
+                      // the open transition so accidental double-clicks
+                      // don't pair an open + close into a "double tap" the
+                      // dashboard can't interpret.
+                      trackChatPanelClick(analytics.track, {
+                        page_name: 'chat_panel',
+                        area: 'chat_panel',
+                        element: 'resources_popover_trigger',
+                      });
+                    }
+                    return next;
+                  });
+                }}
                 title={t('chat.cliSettingsTitle')}
                 aria-haspopup="menu"
                 aria-expanded={toolsOpen}
@@ -1431,6 +1447,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                       role="menuitem"
                       className="composer-tools-settings"
                       onClick={() => {
+                        trackChatPanelClick(analytics.track, {
+                          page_name: 'chat_panel',
+                          area: 'chat_panel',
+                          element: 'composer_settings',
+                        });
                         setToolsOpen(false);
                         onOpenSettings?.();
                       }}
@@ -1446,13 +1467,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               className="icon-btn"
               data-testid="chat-attach"
               onClick={() => {
-                trackStudioClickChatComposer(analytics.track, {
-                  page: 'studio',
-                  area: 'chat_composer',
-                  element: 'attachment_button',
-                  action: 'click_composer_control',
-                  user_query_tokens: Math.ceil(draft.length / 4),
-                  has_attachment: staged.length > 0 || commentAttachments.length > 0,
+                trackChatPanelClick(analytics.track, {
+                  page_name: 'chat_panel',
+                  area: 'chat_panel',
+                  element: 'attachment',
                 });
                 fileInputRef.current?.click();
               }}
@@ -1482,14 +1500,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 className="composer-send"
                 data-testid="chat-send"
                 onClick={() => {
-                  trackStudioClickChatComposer(analytics.track, {
-                    page: 'studio',
-                    area: 'chat_composer',
-                    element: 'send_button',
-                    action: 'click_composer_control',
-                    user_query_tokens: Math.ceil(draft.length / 4),
-                    has_attachment:
-                      staged.length > 0 || currentCommentAttachments().length > 0,
+                  trackChatPanelClick(analytics.track, {
+                    page_name: 'chat_panel',
+                    area: 'chat_panel',
+                    element: 'send',
                   });
                   void submit();
                 }}

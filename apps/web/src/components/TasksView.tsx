@@ -1,5 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { AppConfig } from '../types';
+import { useAnalytics } from '../analytics/provider';
+import { trackAutomationsClick, trackPageView } from '../analytics/events';
 import { useT } from '../i18n';
 import { Icon } from './Icon';
 
@@ -248,8 +250,24 @@ function localizedTaskFields(id: string, t: ReturnType<typeof useT>): Partial<Ta
   }
 }
 
+type PrimitiveTypeId = 'orbit' | 'routines' | 'schedules' | 'live_artifacts';
+
+const PRIMITIVE_ICON_TO_TYPE_ID: Record<'orbit' | 'history' | 'bell' | 'file', PrimitiveTypeId> = {
+  orbit: 'orbit',
+  history: 'routines',
+  bell: 'schedules',
+  file: 'live_artifacts',
+};
+
 export function TasksView({ config, onOpenOrbitSettings }: Props) {
   const t = useT();
+  const analytics = useAnalytics();
+  const automationsPageViewFiredRef = useRef(false);
+  useEffect(() => {
+    if (automationsPageViewFiredRef.current) return;
+    automationsPageViewFiredRef.current = true;
+    trackPageView(analytics.track, { page_name: 'automations' });
+  }, [analytics.track]);
   const [activeFilter, setActiveFilter] = useState<TaskFilter>('all');
   const [selectedId, setSelectedId] = useState('mcp-research');
   const orbitEnabled = config.orbit?.enabled ?? false;
@@ -307,7 +325,14 @@ export function TasksView({ config, onOpenOrbitSettings }: Props) {
         <button
           type="button"
           className="tasks-view__new"
-          onClick={onOpenOrbitSettings}
+          onClick={() => {
+            trackAutomationsClick(analytics.track, {
+              page_name: 'automations',
+              area: 'automations',
+              element: 'new_automation',
+            });
+            onOpenOrbitSettings();
+          }}
         >
           <Icon name="plus" size={14} />
           <span>{t('tasks.newAutomation')}</span>
@@ -328,6 +353,14 @@ export function TasksView({ config, onOpenOrbitSettings }: Props) {
           body={t('tasks.primitive.orbit.body')}
           meta={orbitEnabled ? t('tasks.primitive.orbit.enabled') : t('tasks.primitive.orbit.manualOnly')}
           tone="green"
+          onClick={() =>
+            trackAutomationsClick(analytics.track, {
+              page_name: 'automations',
+              area: 'automations',
+              element: 'type_card',
+              type_id: PRIMITIVE_ICON_TO_TYPE_ID.orbit,
+            })
+          }
         />
         <PrimitiveCard
           icon="history"
@@ -335,6 +368,14 @@ export function TasksView({ config, onOpenOrbitSettings }: Props) {
           body={t('tasks.primitive.routines.body')}
           meta={t('tasks.primitive.routines.meta')}
           tone="blue"
+          onClick={() =>
+            trackAutomationsClick(analytics.track, {
+              page_name: 'automations',
+              area: 'automations',
+              element: 'type_card',
+              type_id: PRIMITIVE_ICON_TO_TYPE_ID.history,
+            })
+          }
         />
         <PrimitiveCard
           icon="bell"
@@ -342,6 +383,14 @@ export function TasksView({ config, onOpenOrbitSettings }: Props) {
           body={t('tasks.primitive.schedules.body')}
           meta={t('tasks.primitive.schedules.meta')}
           tone="amber"
+          onClick={() =>
+            trackAutomationsClick(analytics.track, {
+              page_name: 'automations',
+              area: 'automations',
+              element: 'type_card',
+              type_id: PRIMITIVE_ICON_TO_TYPE_ID.bell,
+            })
+          }
         />
         <PrimitiveCard
           icon="file"
@@ -349,6 +398,14 @@ export function TasksView({ config, onOpenOrbitSettings }: Props) {
           body={t('tasks.primitive.liveArtifacts.body')}
           meta={t('tasks.primitive.liveArtifacts.meta')}
           tone="purple"
+          onClick={() =>
+            trackAutomationsClick(analytics.track, {
+              page_name: 'automations',
+              area: 'automations',
+              element: 'type_card',
+              type_id: PRIMITIVE_ICON_TO_TYPE_ID.file,
+            })
+          }
         />
       </div>
 
@@ -359,7 +416,17 @@ export function TasksView({ config, onOpenOrbitSettings }: Props) {
               <h2>{t('entry.navTasks')}</h2>
               <p>{t('tasks.routinesAndRuns', { n: tasks.length })}</p>
             </div>
-            <button type="button" onClick={onOpenOrbitSettings}>
+            <button
+              type="button"
+              onClick={() => {
+                trackAutomationsClick(analytics.track, {
+                  page_name: 'automations',
+                  area: 'automations',
+                  element: 'new',
+                });
+                onOpenOrbitSettings();
+              }}
+            >
               <Icon name="plus" size={13} />
               <span>{t('chat.new')}</span>
             </button>
@@ -372,7 +439,15 @@ export function TasksView({ config, onOpenOrbitSettings }: Props) {
                 role="tab"
                 aria-selected={activeFilter === filter.id}
                 className={activeFilter === filter.id ? 'is-active' : ''}
-                onClick={() => setActiveFilter(filter.id)}
+                onClick={() => {
+                  trackAutomationsClick(analytics.track, {
+                    page_name: 'automations',
+                    area: 'automations',
+                    element: 'filter_tab',
+                    filter_id: filter.id,
+                  });
+                  setActiveFilter(filter.id);
+                }}
               >
                 {taskFilterLabel(filter.id, t)}
               </button>
@@ -436,14 +511,44 @@ export function TasksView({ config, onOpenOrbitSettings }: Props) {
           </section>
 
           <div className="task-detail__actions">
-            <button type="button" className="task-detail__secondary">
+            <button
+              type="button"
+              className="task-detail__secondary"
+              onClick={() =>
+                trackAutomationsClick(analytics.track, {
+                  page_name: 'automations',
+                  area: 'automations',
+                  element: 'view_progress',
+                })
+              }
+            >
               {t('tasks.viewProgress')}
               <Icon name="external-link" size={13} />
             </button>
-            <button type="button" className="task-detail__secondary">
+            <button
+              type="button"
+              className="task-detail__secondary"
+              onClick={() =>
+                trackAutomationsClick(analytics.track, {
+                  page_name: 'automations',
+                  area: 'automations',
+                  element: 'run_now',
+                })
+              }
+            >
               {selectedTask.status === 'running' ? t('tasks.pause') : t('tasks.runNow')}
             </button>
-            <button type="button" className="task-detail__primary">
+            <button
+              type="button"
+              className="task-detail__primary"
+              onClick={() =>
+                trackAutomationsClick(analytics.track, {
+                  page_name: 'automations',
+                  area: 'automations',
+                  element: 'open_artifact',
+                })
+              }
+            >
               {t('tasks.openArtifact')}
               <Icon name="external-link" size={13} />
             </button>
@@ -460,15 +565,20 @@ function PrimitiveCard({
   body,
   meta,
   tone,
+  onClick,
 }: {
   icon: 'bell' | 'file' | 'history' | 'orbit';
   title: string;
   body: string;
   meta: string;
   tone: 'amber' | 'blue' | 'green' | 'purple';
+  onClick?: () => void;
 }) {
   return (
-    <article className={`tasks-primitive tasks-primitive--${tone}`}>
+    <article
+      className={`tasks-primitive tasks-primitive--${tone}`}
+      {...(onClick ? { onClick, role: 'button', tabIndex: 0 } : {})}
+    >
       <span className="tasks-primitive__icon" aria-hidden="true">
         <Icon name={icon} size={16} />
       </span>

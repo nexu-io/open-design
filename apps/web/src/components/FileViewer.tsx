@@ -9,8 +9,12 @@ import {
 import { useAnalytics } from '../analytics/provider';
 import {
   trackArtifactExportResult,
-  trackStudioClickShareOption,
-  trackStudioViewArtifact,
+  trackArtifactHeaderClick,
+  trackArtifactToolbarClick,
+  trackPageView,
+  trackPresentPopoverClick,
+  trackShareOptionPopoverClick,
+  trackTweaksPopoverClick,
 } from '../analytics/events';
 import { MarkdownRenderer, artifactRendererRegistry } from '../artifacts/renderer-registry';
 import { renderMarkdownToSafeHtml } from '../artifacts/markdown';
@@ -632,18 +636,8 @@ export function FileViewer({
     const key = `${projectId}::${file.name}`;
     if (studioViewKeyRef.current === key) return;
     studioViewKeyRef.current = key;
-    trackStudioViewArtifact(analytics.track, {
-      page: 'studio',
-      area: 'artifact',
-      element: 'artifact_view',
-      view_type: 'artifact',
-      artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
-      artifact_kind: artifactKindToTracking({
-        rendererId: rendererMatch?.renderer.id ?? null,
-        fileKind: file.kind ?? null,
-      }),
-      project_id: projectId,
-      project_kind: projectKind,
+    trackPageView(analytics.track, {
+      page_name: 'artifact',
     });
   }, [projectId, projectKind, file.name, file.kind, rendererMatch?.renderer.id, analytics.track]);
 
@@ -3431,16 +3425,15 @@ function HtmlViewer({
   ) => {
     const requestId = analytics.newRequestId();
     const artifactId = anonymizeArtifactId({ projectId, fileName: file.name });
-    trackStudioClickShareOption(
+    const artifactKind = artifactKindToTracking({ fileKind: file.kind ?? null });
+    trackShareOptionPopoverClick(
       analytics.track,
       {
-        page: 'studio',
-        area: 'app_header',
+        page_name: 'artifact',
+        area: 'share_option_popover',
         artifact_id: artifactId,
-        element: 'share_option',
-        action: 'select_share_option',
-        share_context: 'artifact',
-        export_format: format,
+        artifact_kind: artifactKind,
+        element: format,
         project_id: projectId,
         project_kind: projectKind,
       },
@@ -3451,9 +3444,10 @@ function HtmlViewer({
       trackArtifactExportResult(
         analytics.track,
         {
-          page: 'studio',
-          area: 'app_header',
+          page_name: 'artifact',
+          area: 'share_option_popover',
           artifact_id: artifactId,
+          artifact_kind: artifactKind,
           project_id: projectId,
           project_kind: projectKind,
           export_format: format,
@@ -3477,6 +3471,55 @@ function HtmlViewer({
     } catch (err) {
       finish('failed', err instanceof Error ? err.name : 'UNKNOWN');
     }
+  };
+  // P0 helpers — keep the artifact_id + artifact_kind derivation in one place
+  // so each per-button onClick stays a one-liner. We compute lazily inside the
+  // closure because `file.kind` / `file.name` can change as the user navigates
+  // tabs without remounting HtmlViewer.
+  const fireArtifactToolbarClick = (
+    element:
+      | 'reload'
+      | 'preview'
+      | 'source'
+      | 'tweaks'
+      | 'draw'
+      | 'comment'
+      | 'pods'
+      | 'inspect'
+      | 'edit'
+      | 'zoom_out'
+      | 'zoom_level_dropdown'
+      | 'zoom_in',
+  ) => {
+    trackArtifactToolbarClick(analytics.track, {
+      page_name: 'artifact',
+      area: 'artifact_toolbar',
+      element,
+      artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
+      artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+    });
+  };
+  const fireArtifactHeaderClick = (
+    element: 'back' | 'edit' | 'present_dropdown' | 'share_dropdown' | 'settings',
+  ) => {
+    trackArtifactHeaderClick(analytics.track, {
+      page_name: 'artifact',
+      area: 'artifact_header',
+      element,
+      artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
+      artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+    });
+  };
+  const firePresentPopoverClick = (
+    element: 'in_this_tab' | 'fullscreen' | 'new_tab',
+  ) => {
+    trackPresentPopoverClick(analytics.track, {
+      page_name: 'artifact',
+      area: 'present_popover',
+      element,
+      artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
+      artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+    });
   };
   const [mode, setMode] = useState<'preview' | 'source'>('preview');
   const [source, setSource] = useState<string | null>(liveHtml ?? null);
@@ -5383,7 +5426,10 @@ function HtmlViewer({
           <button
             type="button"
             className="icon-only"
-            onClick={() => setReloadKey((n) => n + 1)}
+            onClick={() => {
+              fireArtifactToolbarClick('reload');
+              setReloadKey((n) => n + 1);
+            }}
             title={t('fileViewer.reload')}
             aria-label={t('fileViewer.reloadAria')}
           >
@@ -5411,7 +5457,10 @@ function HtmlViewer({
                     type="button"
                     className={`viewer-mode-menu-item${mode === id ? ' active' : ''}`}
                     role="menuitem"
-                    onClick={() => selectMode(id)}
+                    onClick={() => {
+                      fireArtifactToolbarClick(id);
+                      selectMode(id);
+                    }}
                   >
                     <span>{label}</span>
                     {mode === id ? <Icon name="check" size={13} /> : null}
@@ -5435,7 +5484,10 @@ function HtmlViewer({
                   className="viewer-action zoom-trigger"
                   aria-haspopup="menu"
                   aria-expanded={zoomMenuOpen}
-                  onClick={() => setZoomMenuOpen((v) => !v)}
+                  onClick={() => {
+                    fireArtifactToolbarClick('zoom_level_dropdown');
+                    setZoomMenuOpen((v) => !v);
+                  }}
                   style={{ minWidth: 64 }}
                 >
                   <span style={{ fontVariantNumeric: 'tabular-nums' }}>{zoom}%</span>
@@ -5513,7 +5565,10 @@ function HtmlViewer({
                   title="Tweaks"
                   aria-haspopup="dialog"
                   aria-expanded={palettePopoverOpen}
-                  onClick={() => setPalettePopoverOpen((v) => !v)}
+                  onClick={() => {
+                    fireArtifactToolbarClick('tweaks');
+                    setPalettePopoverOpen((v) => !v);
+                  }}
                 >
                   <Icon name="tweaks" size={13} />
                   <span>Tweaks</span>
@@ -5535,7 +5590,29 @@ function HtmlViewer({
                 <PaletteTweaks
                   open={palettePopoverOpen}
                   selected={selectedPalette}
-                  onChange={setSelectedPalette}
+                  onChange={(nextPalette) => {
+                    // P0 ui_click area=tweaks_popover. status_before/after
+                    // reflect whether THIS variant was selected. Picking
+                    // "Original" (nextPalette === null) reads as turning
+                    // off the previously selected variant — record that
+                    // by passing the prior selection as variant_name.
+                    const targetVariant = nextPalette ?? selectedPalette;
+                    if (targetVariant) {
+                      const wasSelected = selectedPalette === targetVariant;
+                      const willBeSelected = nextPalette === targetVariant;
+                      trackTweaksPopoverClick(analytics.track, {
+                        page_name: 'artifact',
+                        area: 'tweaks_popover',
+                        element: 'variant_option',
+                        variant_name: targetVariant,
+                        artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
+                        artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+                        status_before: wasSelected ? 'on' : 'off',
+                        status_after: willBeSelected ? 'on' : 'off',
+                      });
+                    }
+                    setSelectedPalette(nextPalette);
+                  }}
                   onPreview={setPreviewPalette}
                   onClose={() => setPalettePopoverOpen(false)}
                 />
@@ -5547,6 +5624,7 @@ function HtmlViewer({
                 title={t('fileViewer.draw')}
                 aria-pressed={drawOverlayOpen}
                 onClick={() => {
+                  fireArtifactToolbarClick('draw');
                   const next = !drawOverlayOpen;
                   if (!next) {
                     setDrawOverlayOpen(false);
@@ -5581,6 +5659,7 @@ function HtmlViewer({
             title={t('fileViewer.comment')}
             aria-pressed={boardMode}
             onClick={() => {
+              fireArtifactToolbarClick('comment');
               capturePreviewScrollPosition();
               if (boardMode) {
                 setBoardMode(false);
@@ -5626,7 +5705,10 @@ function HtmlViewer({
                 title="Draw a pod selection"
                 aria-label="Pods"
                 aria-pressed={boardTool === 'pod'}
-                onClick={() => activateBoard('pod')}
+                onClick={() => {
+                  fireArtifactToolbarClick('pods');
+                  activateBoard('pod');
+                }}
               >
                 <Icon name="draw" size={13} />
                 <span>Pods</span>
@@ -5640,6 +5722,7 @@ function HtmlViewer({
             title="Inspect"
             aria-pressed={inspectMode}
             onClick={() => {
+              fireArtifactToolbarClick('inspect');
               setInspectMode((v) => {
                 const next = !v;
                 if (next) {
@@ -5664,6 +5747,7 @@ function HtmlViewer({
             title={t('fileViewer.edit')}
             aria-pressed={manualEditMode}
             onClick={() => {
+              fireArtifactToolbarClick('edit');
               capturePreviewScrollPosition();
               if (!manualEditMode) {
                 setBoardMode(false);
@@ -5692,7 +5776,10 @@ function HtmlViewer({
                 className="chrome-action chrome-action-secondary present-trigger"
                 aria-haspopup="menu"
                 aria-expanded={presentMenuOpen}
-                onClick={() => setPresentMenuOpen((v) => !v)}
+                onClick={() => {
+                  fireArtifactHeaderClick('present_dropdown');
+                  setPresentMenuOpen((v) => !v);
+                }}
               >
                 <Icon name="present" size={13} />
                 <span>{t('fileViewer.present')}</span>
@@ -5700,15 +5787,15 @@ function HtmlViewer({
               </button>
               {presentMenuOpen ? (
                 <div className="present-menu" role="menu">
-                  <button role="menuitem" onClick={presentInThisTab}>
+                  <button role="menuitem" onClick={() => { firePresentPopoverClick('in_this_tab'); presentInThisTab(); }}>
                     <span className="present-icon"><Icon name="eye" size={13} /></span>{' '}
                     {t('fileViewer.presentInTab')}
                   </button>
-                  <button role="menuitem" onClick={presentFullscreen}>
+                  <button role="menuitem" onClick={() => { firePresentPopoverClick('fullscreen'); presentFullscreen(); }}>
                     <span className="present-icon"><Icon name="play" size={13} /></span>{' '}
                     {t('fileViewer.presentFullscreen')}
                   </button>
-                  <button role="menuitem" onClick={presentNewTab}>
+                  <button role="menuitem" onClick={() => { firePresentPopoverClick('new_tab'); presentNewTab(); }}>
                     <span className="present-icon"><Icon name="share" size={13} /></span>{' '}
                     {t('fileViewer.presentNewTab')}
                   </button>
@@ -5722,7 +5809,10 @@ function HtmlViewer({
                 className="chrome-action chrome-action-primary"
                 aria-haspopup="menu"
                 aria-expanded={shareMenuOpen}
-                onClick={() => setShareMenuOpen((v) => !v)}
+                onClick={() => {
+                  fireArtifactHeaderClick('share_dropdown');
+                  setShareMenuOpen((v) => !v);
+                }}
               >
                 <Icon name="share" size={13} />
                 <span>{t('fileViewer.shareLabel')}</span>

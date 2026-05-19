@@ -17,6 +17,16 @@ import type {
   AudioVoiceOption,
 } from '@open-design/contracts';
 import { DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID } from '@open-design/contracts';
+import { projectKindToTracking } from '@open-design/contracts/analytics';
+import { useAnalytics } from '../analytics/provider';
+import {
+  trackHomeChatComposerClick,
+  trackPageView,
+  trackPluginReplacementModalClick,
+  trackPluginReplacementModalSurfaceView,
+  trackPluginReplacementResult,
+  trackRecentProjectsClick,
+} from '../analytics/events';
 import {
   applyPlugin,
   listPlugins,
@@ -83,6 +93,13 @@ interface SelectedPluginContext {
 interface PendingReplacement {
   title: string;
   confirm: () => void;
+  // Plugin ids surrounding the replacement so the result event can
+  // report which plugin owned the existing prompt and which plugin is
+  // about to take over. `pluginBefore` is null when nothing was active
+  // (e.g. a manually typed prompt that should be replaced by a plugin
+  // selection).
+  pluginBefore: string | null;
+  pluginAfter: string;
 }
 
 interface PendingPluginUseHandoff {
@@ -130,6 +147,15 @@ export function HomeView({
   promptTemplates = [],
 }: Props) {
   const { locale, t } = useI18n();
+  const analytics = useAnalytics();
+  // P0 page_view page_name=home — fire once on mount. ref-keyed to survive
+  // re-renders that flip parent state without remounting HomeView.
+  const homePageViewFiredRef = useRef(false);
+  useEffect(() => {
+    if (homePageViewFiredRef.current) return;
+    homePageViewFiredRef.current = true;
+    trackPageView(analytics.track, { page_name: 'home' });
+  }, [analytics.track]);
   const [plugins, setPlugins] = useState<InstalledPluginRecord[]>([]);
   const [pluginsLoading, setPluginsLoading] = useState(true);
   const [pendingApplyId, setPendingApplyId] = useState<string | null>(null);
@@ -156,6 +182,23 @@ export function HomeView({
   const [elevenLabsVoicesError, setElevenLabsVoicesError] = useState<string | null>(null);
   const [detailsRecord, setDetailsRecord] = useState<InstalledPluginRecord | null>(null);
   const [pendingReplacement, setPendingReplacement] = useState<PendingReplacement | null>(null);
+  // Surface_view fires when the replacement modal becomes visible. Tied
+  // to the {before, after} pair so reopening with the same pair after a
+  // close doesn't double-fire, but a fresh pair always does.
+  const lastPluginReplacementViewRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!pendingReplacement) {
+      lastPluginReplacementViewRef.current = null;
+      return;
+    }
+    const key = `${pendingReplacement.pluginBefore ?? ''}->${pendingReplacement.pluginAfter}`;
+    if (lastPluginReplacementViewRef.current === key) return;
+    lastPluginReplacementViewRef.current = key;
+    trackPluginReplacementModalSurfaceView(analytics.track, {
+      page_name: 'home',
+      area: 'plugin_replacement_modal',
+    });
+  }, [pendingReplacement, analytics.track]);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const consumedHandoffIdRef = useRef<number | null>(null);
   const pendingPromptFocusEndRef = useRef(false);
@@ -502,7 +545,10 @@ export function HomeView({
       confirm();
       return;
     }
-    runWithReplacementConfirmation(record.title, replacement, confirm);
+    runWithReplacementConfirmation(record.title, replacement, confirm, {
+      before: active?.record.id ?? null,
+      after: record.id,
+    });
   }
 
   function requestPluginContextUse(
@@ -532,13 +578,19 @@ export function HomeView({
     title: string,
     replacementPrompt: string | null,
     confirm: () => void,
+    pluginIds: { before: string | null; after: string },
   ) {
     if (
       replacementPrompt !== null &&
       prompt.trim().length > 0 &&
       prompt.trim() !== replacementPrompt.trim()
     ) {
-      setPendingReplacement({ title, confirm });
+      setPendingReplacement({
+        title,
+        confirm,
+        pluginBefore: pluginIds.before,
+        pluginAfter: pluginIds.after,
+      });
       return;
     }
     confirm();
@@ -726,6 +778,9 @@ export function HomeView({
       setPendingAuthoringInputs(nextInputs);
       setPendingAuthoringChipId(chipId ?? 'create-plugin');
       requestAnimationFrame(() => inputRef.current?.focus());
+    }, {
+      before: active?.record.id ?? null,
+      after: 'od-plugin-authoring',
     });
   }
 
@@ -758,6 +813,22 @@ export function HomeView({
   // forward to callbacks threaded in from EntryShell.
   function pickChip(chip: HomeHeroChip) {
     setError(null);
+    // P0 ui_click area=chat_composer element=plugin_chip|action_chip. The
+    // chip's `action.kind` discriminates: plugin-bound chips
+    // (apply-scenario / apply-figma-migration) route to a plugin; the rest
+    // (create-plugin, import-folder, open-template-picker) are action
+    // shortcuts. Failure paths below still fire because the user did pick
+    // the chip — error state belongs in the run lifecycle event.
+    const chipElement: 'plugin_chip' | 'action_chip' =
+      chip.action.kind === 'apply-scenario' || chip.action.kind === 'apply-figma-migration'
+        ? 'plugin_chip'
+        : 'action_chip';
+    trackHomeChatComposerClick(analytics.track, {
+      page_name: 'home',
+      area: 'chat_composer',
+      element: chipElement,
+      chip_id: chip.id,
+    });
     switch (chip.action.kind) {
       case 'apply-scenario':
       case 'apply-figma-migration': {
@@ -838,6 +909,15 @@ export function HomeView({
   async function submit() {
     const trimmed = prompt.trim();
     if (!trimmed && stagedFiles.length === 0) return;
+    // P0 ui_click area=chat_composer element=send_button. Fires before the
+    // async plugin-apply roundtrip so the click count reflects user intent
+    // even when the run is rejected (missing inputs, apply failure). The
+    // subsequent run_created/run_finished events carry the result detail.
+    trackHomeChatComposerClick(analytics.track, {
+      page_name: 'home',
+      area: 'chat_composer',
+      element: 'send_button',
+    });
     let submittedActive = active;
     if (submittedActive && !submittedActive.inputsValid) {
       setError('Fill the required plugin parameters before running.');
@@ -933,8 +1013,29 @@ export function HomeView({
       <RecentProjectsStrip
         projects={projects}
         {...(projectsLoading !== undefined ? { loading: projectsLoading } : {})}
-        onOpen={onOpenProject}
-        onViewAll={onViewAllProjects}
+        onOpen={(id) => {
+          // P0 ui_click area=recent_projects element=project_card — emit
+          // before navigation so the event isn't lost when the host
+          // re-renders into the project view.
+          const project = projects.find((p) => p.id === id);
+          const projectKind = projectKindToTracking(project?.metadata?.kind);
+          trackRecentProjectsClick(analytics.track, {
+            page_name: 'home',
+            area: 'recent_projects',
+            element: 'project_card',
+            project_id: id,
+            ...(projectKind ? { project_kind: projectKind } : {}),
+          });
+          onOpenProject(id);
+        }}
+        onViewAll={() => {
+          trackRecentProjectsClick(analytics.track, {
+            page_name: 'home',
+            area: 'recent_projects',
+            element: 'view_all',
+          });
+          onViewAllProjects();
+        }}
       />
 
       <PluginsHomeSection
@@ -972,7 +1073,14 @@ export function HomeView({
               <button
                 type="button"
                 className="home-hero-confirm__secondary"
-                onClick={() => setPendingReplacement(null)}
+                onClick={() => {
+                  trackPluginReplacementModalClick(analytics.track, {
+                    page_name: 'home',
+                    area: 'plugin_replacement_modal',
+                    element: 'cancel',
+                  });
+                  setPendingReplacement(null);
+                }}
               >
                 {t('common.cancel')}
               </button>
@@ -980,9 +1088,35 @@ export function HomeView({
                 type="button"
                 className="home-hero-confirm__primary"
                 onClick={() => {
+                  trackPluginReplacementModalClick(analytics.track, {
+                    page_name: 'home',
+                    area: 'plugin_replacement_modal',
+                    element: 'replace',
+                  });
+                  const pluginBefore = pendingReplacement.pluginBefore;
+                  const pluginAfter = pendingReplacement.pluginAfter;
                   const action = pendingReplacement.confirm;
                   setPendingReplacement(null);
-                  action();
+                  try {
+                    action();
+                    trackPluginReplacementResult(analytics.track, {
+                      page_name: 'home',
+                      area: 'plugin_replacement',
+                      plugin_before: pluginBefore ?? '',
+                      plugin_after: pluginAfter,
+                      result: 'success',
+                    });
+                  } catch (err) {
+                    trackPluginReplacementResult(analytics.track, {
+                      page_name: 'home',
+                      area: 'plugin_replacement',
+                      plugin_before: pluginBefore ?? '',
+                      plugin_after: pluginAfter,
+                      result: 'failed',
+                      error_code: err instanceof Error ? err.message : String(err),
+                    });
+                    throw err;
+                  }
                 }}
               >
                 {t('homeHero.confirmReplace')}

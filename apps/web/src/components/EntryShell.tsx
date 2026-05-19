@@ -15,6 +15,11 @@ import {
   type ImportFolderResponse,
   type InstalledPluginRecord,
 } from '@open-design/contracts';
+import { useAnalytics } from '../analytics/provider';
+import {
+  trackHomeNavClick,
+  trackHomeToolbarClick,
+} from '../analytics/events';
 import { useT } from '../i18n';
 import { navigate, useRoute } from '../router';
 import type {
@@ -230,6 +235,7 @@ export function EntryShell({
   // view from the route rather than keeping it in component state.
   const route = useRoute();
   const view: EntryViewKind = route.kind === 'home' ? route.view : 'home';
+  const analytics = useAnalytics();
   const [previewSystemId, setPreviewSystemId] = useState<string | null>(null);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [newProjectInitialTab, setNewProjectInitialTab] =
@@ -242,6 +248,16 @@ export function EntryShell({
   const [integrationTab, setIntegrationTab] = useState<IntegrationTab>(integrationInitialTab);
   const [homePromptHandoff, setHomePromptHandoff] = useState<HomePromptHandoff | null>(null);
   function changeView(next: EntryViewKind) {
+    if (next !== view) {
+      const navElement = navElementForView(next);
+      if (navElement) {
+        trackHomeNavClick(analytics.track, {
+          page_name: 'home',
+          area: 'nav',
+          element: navElement,
+        });
+      }
+    }
     navigate({ kind: 'home', view: next });
   }
 
@@ -274,6 +290,17 @@ export function EntryShell({
   function openNewProject(tab: CreateTab = 'prototype') {
     setNewProjectInitialTab(tab);
     setNewProjectOpen(true);
+  }
+
+  // P0 ui_click area=nav element=new_project_plus — wraps openNewProject for
+  // the rail's "+" button so the plain modal-open path stays free of analytics.
+  function openNewProjectFromRail() {
+    trackHomeNavClick(analytics.track, {
+      page_name: 'home',
+      area: 'nav',
+      element: 'new_project_plus',
+    });
+    openNewProject();
   }
 
   const previewSystem = useMemo(
@@ -385,7 +412,14 @@ export function EntryShell({
     <button
       type="button"
       className="settings-icon-btn"
-      onClick={() => onOpenSettings()}
+      onClick={() => {
+        trackHomeToolbarClick(analytics.track, {
+          page_name: 'home',
+          area: 'toolbar',
+          element: 'settings',
+        });
+        onOpenSettings();
+      }}
       title={t('entry.openSettingsTitle')}
       aria-label={t('entry.openSettingsAria')}
     >
@@ -399,7 +433,7 @@ export function EntryShell({
         <EntryNavRail
           view={view}
           onViewChange={changeView}
-          onNewProject={() => openNewProject()}
+          onNewProject={openNewProjectFromRail}
         />
         <main className="entry-main entry-main--scroll">
           <div className="entry-main__topbar">
@@ -419,7 +453,14 @@ export function EntryShell({
               <button
                 type="button"
                 className="use-everywhere-chip"
-                onClick={() => openIntegrationTab('use-everywhere')}
+                onClick={() => {
+                  trackHomeToolbarClick(analytics.track, {
+                    page_name: 'home',
+                    area: 'toolbar',
+                    element: 'use_everywhere',
+                  });
+                  openIntegrationTab('use-everywhere');
+                }}
                 title={t('entry.useEverywhereTitle')}
                 aria-label={t('entry.useEverywhereAria')}
                 data-testid="entry-use-everywhere-button"
@@ -562,4 +603,36 @@ export function EntryShell({
       ) : null}
     </div>
   );
+}
+
+// Map an EntryNavRail view id to the analytics `element` enum on
+// `home/nav` ui_click. Returns `null` for views without a dedicated nav
+// button (the rail's "Home" target is the brand logo, which gets its own
+// element value via the logo click handler — not the changeView path).
+function navElementForView(
+  next: EntryViewKind,
+):
+  | 'home'
+  | 'projects'
+  | 'automations'
+  | 'plugins'
+  | 'design_systems'
+  | 'integrations'
+  | null {
+  switch (next) {
+    case 'home':
+      return 'home';
+    case 'projects':
+      return 'projects';
+    case 'tasks':
+      return 'automations';
+    case 'plugins':
+      return 'plugins';
+    case 'design-systems':
+      return 'design_systems';
+    case 'integrations':
+      return 'integrations';
+    default:
+      return null;
+  }
 }
