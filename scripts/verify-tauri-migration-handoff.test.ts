@@ -44,6 +44,8 @@ test("verify-tauri-migration-handoff round-trips a bundle through a receiving ch
   assert.match(result.stdout, /pnpm exec tsx scripts\/import-tauri-migration-bundle\.ts \\/);
   assert.match(result.stdout, new RegExp(`--manifest '${escapeRegExp(manifestPath)}' \\\\`));
   assert.match(result.stdout, new RegExp(`Import:[\\s\\S]*Manifest: ${escapeRegExp(manifestPath)}`));
+  assert.match(result.stdout, /Relocated import:/);
+  assert.match(result.stdout, /relocated-handoff/);
   assert.match(result.stdout, /Temp retained: false/);
   await access(bundlePath);
   const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
@@ -92,6 +94,7 @@ test("verify-tauri-migration-handoff can derive standard artifact paths from out
   assert.match(result.stdout, new RegExp(`Bundle: ${escapeRegExp(bundlePath)}`));
   assert.match(result.stdout, new RegExp(`Manifest: ${escapeRegExp(manifestPath)}`));
   assert.match(result.stdout, new RegExp(`Note: ${escapeRegExp(notePath)}`));
+  assert.match(result.stdout, /Relocated import:/);
   await access(bundlePath);
   const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
     branchHead: string;

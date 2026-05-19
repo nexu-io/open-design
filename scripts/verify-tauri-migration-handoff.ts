@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -43,6 +43,7 @@ async function main(): Promise<void> {
     ]);
     const bundleSha256 = readSha256(createOutput.stdout);
     const manifestBundlePath = args.manifest == null ? bundlePath : bundlePathForManifest(args.manifest, bundlePath);
+    const manifestBundlePathIsRelocatable = isRelocatableManifestBundlePath(manifestBundlePath);
     const importCommand = receivingImportCommand({
       branch: args.branch,
       bundlePath,
@@ -71,6 +72,7 @@ async function main(): Promise<void> {
         bundleSha256,
         importCommand,
         ...(args.manifest == null ? {} : { manifestPath: args.manifest }),
+        manifestBundlePathIsRelocatable,
         source: args.cwd,
       });
     }
@@ -98,6 +100,18 @@ async function main(): Promise<void> {
     if (importedHead !== branchHead) {
       throw new Error(`imported branch head mismatch: expected ${branchHead}, got ${importedHead}`);
     }
+    const relocatedImportOutput =
+      args.manifest == null || !manifestBundlePathIsRelocatable
+        ? undefined
+        : await verifyRelocatedHandoff({
+            branch: args.branch,
+            branchHead,
+            bundlePath,
+            manifestBundlePath,
+            manifestPath: args.manifest,
+            remotePath,
+            tempRoot,
+          });
 
     process.stdout.write(
       [
@@ -116,6 +130,7 @@ async function main(): Promise<void> {
         indent(createOutput.stdout.trim()),
         "Import:",
         indent(importOutput.stdout.trim()),
+        ...(relocatedImportOutput == null ? [] : ["Relocated import:", indent(relocatedImportOutput.stdout.trim())]),
         args.keepTemp ? `Temp retained: ${tempRoot}` : "Temp retained: false",
         "",
       ].join("\n"),
@@ -228,6 +243,47 @@ async function runScript(scriptName: string, args: string[]): Promise<{ stderr: 
   });
 }
 
+async function verifyRelocatedHandoff({
+  branch,
+  branchHead,
+  bundlePath,
+  manifestBundlePath,
+  manifestPath,
+  remotePath,
+  tempRoot,
+}: {
+  branch: string;
+  branchHead: string;
+  bundlePath: string;
+  manifestBundlePath: string;
+  manifestPath: string;
+  remotePath: string;
+  tempRoot: string;
+}): Promise<{ stderr: string; stdout: string }> {
+  const relocatedHandoffPath = join(tempRoot, "relocated-handoff");
+  const relocatedBundlePath = join(relocatedHandoffPath, manifestBundlePath);
+  const relocatedManifestPath = join(relocatedHandoffPath, basename(manifestPath));
+  const relocatedReceiverPath = join(tempRoot, "relocated-receiver");
+
+  await mkdir(dirname(relocatedBundlePath), { recursive: true });
+  await mkdir(dirname(relocatedManifestPath), { recursive: true });
+  await copyFile(bundlePath, relocatedBundlePath);
+  await copyFile(manifestPath, relocatedManifestPath);
+  await git(defaultRoot, ["clone", "--branch", "main", remotePath, relocatedReceiverPath]);
+  const importOutput = await runScript("import-tauri-migration-bundle.ts", [
+    "--cwd",
+    relocatedReceiverPath,
+    "--manifest",
+    relocatedManifestPath,
+    "--checkout",
+  ]);
+  const importedHead = (await git(relocatedReceiverPath, ["rev-parse", "--verify", branch])).stdout.trim();
+  if (importedHead !== branchHead) {
+    throw new Error(`relocated imported branch head mismatch: expected ${branchHead}, got ${importedHead}`);
+  }
+  return importOutput;
+}
+
 async function git(cwd: string, args: string[]): Promise<{ stderr: string; stdout: string }> {
   return execFileAsync("git", args, {
     cwd,
@@ -283,7 +339,11 @@ function shellQuote(value: string): string {
 
 function bundlePathForManifest(manifestPath: string, bundlePath: string): string {
   const manifestRelativePath = relative(dirname(manifestPath), bundlePath);
-  return manifestRelativePath.length === 0 ? bundlePath : manifestRelativePath;
+  return isRelocatableManifestBundlePath(manifestRelativePath) ? manifestRelativePath : bundlePath;
+}
+
+function isRelocatableManifestBundlePath(value: string): boolean {
+  return value.length > 0 && !isAbsolute(value) && value.split(/[\\/]/)[0] !== "..";
 }
 
 async function writeManifest(
@@ -325,6 +385,7 @@ async function writeNote(
     bundlePath: string;
     bundleSha256: string;
     importCommand: string;
+    manifestBundlePathIsRelocatable: boolean;
     manifestPath?: string;
     source: string;
   },
@@ -353,8 +414,12 @@ async function writeNote(
       "git push -u origin " + shellWord(note.branch),
       "```",
       "",
-      "If this handoff directory is copied elsewhere, replace only the manifest path in the command above. The manifest records the bundle path relative to itself, so keep the bundle and manifest in the same copied directory.",
-      "",
+      ...(note.manifestBundlePathIsRelocatable
+        ? [
+            "If this handoff directory is copied elsewhere, replace only the manifest path in the command above. The manifest records the bundle path relative to itself, so keep the bundle and manifest in the same copied directory.",
+            "",
+          ]
+        : []),
       "Confirm the remote branch matches this handoff:",
       "",
       "```bash",
