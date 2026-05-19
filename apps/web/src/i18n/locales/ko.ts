@@ -337,7 +337,7 @@ export const ko: Dict = {
   'entry.resizeAria': '사이드바 크기 조절',
   'entry.loadingWorkspace': '워크스페이스를 불러오는 중…',
   'entry.useEverywhereTitle': '어디서나 사용',
-  'entry.useEverywhereAria': '‘어디서나 사용’ 가이드 열기 (CLI, MCP, HTTP, Skills)',
+  'entry.useEverywhereAria': '‘어디서나 사용\' 가이드 열기 (CLI, MCP, HTTP, Skills)',
   'entry.navNewProject': '새 프로젝트',
   'entry.navHome': '홈',
   'entry.navProjects': '프로젝트',
