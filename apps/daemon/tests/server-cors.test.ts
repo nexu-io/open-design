@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 function makeTestApp() {
   const app = express();
 
-  app.options('/api/projects/:id/raw/*', (req, res) => {
+  app.options('/api/projects/:id/raw/*splat', (req, res) => {
     if (req.headers.origin === 'null') {
       res.header('Access-Control-Allow-Origin', '*');
       res.header('Access-Control-Allow-Methods', 'GET');
@@ -16,7 +16,7 @@ function makeTestApp() {
     res.sendStatus(204);
   });
 
-  app.get('/api/projects/:id/raw/*', (req, res) => {
+  app.get('/api/projects/:id/raw/*splat', (req, res) => {
     if (req.headers.origin === 'null') {
       res.header('Access-Control-Allow-Origin', '*');
     }

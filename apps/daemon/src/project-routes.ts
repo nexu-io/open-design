@@ -872,7 +872,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
   // Preflight for the raw file route. Current artifact fetches are simple GETs
   // (no preflight needed), but an explicit handler future-proofs the route if
   // artifacts ever add custom request headers.
-  app.options('/api/projects/:id/raw/*', (req, res) => {
+  app.options('/api/projects/:id/raw/*splat', (req, res) => {
     if (req.headers.origin === 'null') {
       res.header('Access-Control-Allow-Origin', '*');
       res.header('Access-Control-Allow-Methods', 'GET');
@@ -881,9 +881,10 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     res.sendStatus(204);
   });
 
-  app.get('/api/projects/:id/raw/*', async (req, res) => {
+  app.get('/api/projects/:id/raw/*splat', async (req, res) => {
     try {
-      const relPath = (req.params as any)[0];
+      const splatParam = req.params.splat;
+      const relPath = Array.isArray(splatParam) ? splatParam.join('/') : String(splatParam ?? '');
       const project = getProject(db, req.params.id);
       // PreviewModal loads artifact HTML via srcdoc, giving the iframe Origin: "null".
       // data: URIs, file://, and some sandboxed iframes also send null — all are
@@ -957,10 +958,12 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     }
   });
 
-  app.delete('/api/projects/:id/raw/*', async (req, res) => {
+  app.delete('/api/projects/:id/raw/*splat', async (req, res) => {
     try {
       const project = getProject(db, req.params.id);
-      await deleteProjectFile(PROJECTS_DIR, req.params.id, (req.params as any)[0], project?.metadata);
+      const splatParam = req.params.splat;
+      const rawSplat = Array.isArray(splatParam) ? splatParam.join('/') : String(splatParam ?? '');
+      await deleteProjectFile(PROJECTS_DIR, req.params.id, rawSplat, project?.metadata);
       /** @type {import('@open-design/contracts').DeleteProjectFileResponse} */
       const body = { ok: true };
       res.json(body);
@@ -1002,13 +1005,15 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     }
   });
 
-  app.get('/api/projects/:id/files/*', async (req, res) => {
+  app.get('/api/projects/:id/files/*splat', async (req, res) => {
     try {
       const project = getProject(db, req.params.id);
+      const splatParam = req.params.splat;
+      const fileSplat = Array.isArray(splatParam) ? splatParam.join('/') : String(splatParam ?? '');
       const file = await readProjectFile(
         PROJECTS_DIR,
         req.params.id,
-        (req.params as any)[0],
+        fileSplat,
         project?.metadata,
       );
       res.type(file.mime).send(file.buffer);

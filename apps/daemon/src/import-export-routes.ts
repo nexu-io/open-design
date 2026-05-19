@@ -494,7 +494,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
   //
   // See nexu-io/open-design#368 and the architecture lock at
   // https://github.com/nexu-io/open-design/issues/368#issuecomment-4366243218.
-  app.get('/api/projects/:id/export/*', async (req, res) => {
+  app.get('/api/projects/:id/export/*splat', async (req, res) => {
     try {
       if (!isSafeId(req.params.id)) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project id');
@@ -512,7 +512,8 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
       }
 
       const project = getProject(db, req.params.id);
-      const relPath = (req.params as any)[0];
+      const splatParam = req.params.splat;
+      const relPath = Array.isArray(splatParam) ? splatParam.join('/') : String(splatParam ?? '');
 
       // PR #1312 round-5 (lefarcen P2): stat the owner file BEFORE
       // readProjectFile so a 100 MiB owner HTML is rejected after a
