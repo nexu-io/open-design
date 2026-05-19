@@ -61,14 +61,23 @@ export type ChipAction =
 // narrow viewports without horizontal scrolling.
 export type ChipGroup = 'create' | 'migrate';
 
-export interface HomeHeroChip {
+export interface CreateChip {
   id: string;
   labelKey: keyof Dict;
   icon: IconName;
-  group: ChipGroup;
-  hint?: string;
+  group: 'create';
   action: ChipAction;
 }
+
+export interface MigrateChip {
+  id: string;
+  icon: IconName;
+  group: 'migrate';
+  hint: string;
+  action: ChipAction;
+}
+
+export type HomeHeroChip = CreateChip | MigrateChip;
 
 export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   {
@@ -194,7 +203,6 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   },
   {
     id: 'create-plugin',
-    labelKey: 'homeHero.chip.createPlugin',
     icon: 'edit',
     group: 'migrate',
     hint: 'Author a reusable Open Design plugin and add it to My plugins.',
@@ -202,7 +210,6 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   },
   {
     id: 'figma',
-    labelKey: 'homeHero.chip.figma',
     icon: 'import',
     group: 'migrate',
     hint: 'Migrate a Figma frame into the active design system.',
@@ -218,7 +225,6 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   },
   {
     id: 'folder',
-    labelKey: 'homeHero.chip.folder',
     icon: 'folder',
     group: 'migrate',
     hint: 'Import an existing local folder and continue editing.',
@@ -226,7 +232,6 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   },
   {
     id: 'template',
-    labelKey: 'homeHero.chip.template',
     icon: 'file-code',
     group: 'migrate',
     hint: 'Start from a bundled template.',

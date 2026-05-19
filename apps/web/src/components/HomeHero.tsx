@@ -2389,7 +2389,7 @@ function TypeTabBar({
             aria-selected={isActive}
             title={homeHeroChipTitle(chip, t)}
           >
-           <span>{t(chip.labelKey)}</span>
+         <span>{chip.group === 'create' ? t(chip.labelKey) : homeHeroChipLabel(chip.id, t)}</span>
           </button>
         );
       })}
