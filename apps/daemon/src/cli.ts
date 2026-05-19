@@ -473,7 +473,7 @@ async function runMediaGenerate(rawArgs) {
   const projectId = flags.project || process.env.OD_PROJECT_ID;
   if (!projectId) {
     console.error(
-      'project id required. Pass --project <id> or set OD_PROJECT_ID. The daemon injects this when it spawns the code agent.',
+      'project ID required. Pass --project <id> or set OD_PROJECT_ID. The daemon injects this when it spawns the code agent.',
     );
     process.exit(2);
   }
@@ -756,8 +756,8 @@ function printMediaHelp() {
 
 Required:
   --surface  image | video | audio
-  --model    Model id from /api/media/models (e.g. gpt-image-2, seedance-2, suno-v5).
-  --project  Project id. Auto-resolved from OD_PROJECT_ID when invoked by the daemon.
+  --model    Model ID from /api/media/models (e.g. gpt-image-2, seedance-2, suno-v5).
+  --project  Project ID. Auto-resolved from OD_PROJECT_ID when invoked by the daemon.
 
 Common options:
   --prompt "<text>"         Generation prompt. ElevenLabs SFX prompts must stay under 450 characters.
