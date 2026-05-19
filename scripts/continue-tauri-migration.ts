@@ -262,12 +262,13 @@ async function continueM4(args: Args, status: MigrationStatus, log: string[]): P
   }
 
   if (args.dispatchCi) {
-    await run(args.ghBin, ["workflow", "run", "ci.yml", "--ref", args.branch], {
-      cwd: args.root,
-      dryRun: args.dryRun,
-      okIfUnavailable: true,
-    });
-    log.push(`${args.dryRun ? "Would request" : "Requested or attempted"} native CI dispatch for ${args.branch}.`);
+    const dispatch = await requestNativeCiDispatch(args);
+    if (dispatch.status === "requested" || dispatch.status === "dry-run") {
+      log.push(`${args.dryRun ? "Would request" : "Requested"} native CI dispatch for ${args.branch}.`);
+    } else {
+      log.push(`Native CI dispatch ${dispatch.status === "unavailable" ? "skipped" : "failed"}: ${dispatch.message}`);
+      log.push(`Trigger it manually with: gh workflow run ci.yml --ref ${args.branch}`);
+    }
   }
 
   if (args.waitReports) {
@@ -309,6 +310,39 @@ async function continueM4(args: Args, status: MigrationStatus, log: string[]): P
       "--advance",
     ]),
   );
+}
+
+async function requestNativeCiDispatch(args: Args): Promise<
+  | { status: "dry-run" }
+  | { status: "failed"; message: string }
+  | { status: "requested" }
+  | { status: "unavailable"; message: string }
+> {
+  const commandArgs = ["workflow", "run", "ci.yml", "--ref", args.branch];
+  if (args.dryRun) {
+    await run(args.ghBin, commandArgs, {
+      cwd: args.root,
+      dryRun: true,
+    });
+    return { status: "dry-run" };
+  }
+  if (!(await commandExists(args.ghBin))) {
+    return { status: "unavailable", message: `${args.ghBin} is not available on PATH` };
+  }
+  try {
+    await run(args.ghBin, commandArgs, {
+      cwd: args.root,
+      dryRun: false,
+    });
+    return { status: "requested" };
+  } catch (error) {
+    return { status: "failed", message: conciseErrorMessage(error) };
+  }
+}
+
+function conciseErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.split(/\r?\n/).find((line) => line.trim().length > 0)?.trim() ?? "unknown error";
 }
 
 async function continueM5(args: Args, log: string[]): Promise<void> {

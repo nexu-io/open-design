@@ -385,6 +385,28 @@ test("continue-tauri-migration dry-run waits for reports when the remote already
   assert.match(result.stdout, /Would wait for native M4 reports and advance M4→M5/);
 });
 
+test("continue-tauri-migration reports manual dispatch when gh workflow dispatch fails", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+  await writeHandoffArchive(handoffDir);
+  const remotePath = await createRemoteFixture(fixture, head);
+  const ghBin = join(fixture, "fake-gh");
+  await writeFile(ghBin, "#!/usr/bin/env bash\necho dispatch denied >&2\nexit 1\n", "utf8");
+  await chmod(ghBin, 0o755);
+
+  const result = await runContinue(fixture, "--handoff-dir", handoffDir, "--remote", remotePath, "--gh", ghBin);
+
+  assert.match(result.stdout, /Native CI dispatch failed/);
+  assert.match(result.stdout, /Trigger it manually with: gh workflow run ci\.yml --ref codex\/electron-to-tauri-migration/);
+  assert.match(result.stdout, /download-tauri-m4-reports\.ts/);
+  assert.match(result.stdout, new RegExp(`--expected-head ${head}`));
+});
+
 test("continue-tauri-migration reports transferable handoff paths when push fails", async (t) => {
   const fixture = await createFixtureRoot(t, {
     checked: [],
