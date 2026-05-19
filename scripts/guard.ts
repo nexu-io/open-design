@@ -34,6 +34,8 @@ const m4PlatformGateLabels = [
   "Linux: build AppImage, install, start, inspect status/eval/screenshot, stop.",
   "Linux headless platform smoke remains supported and unaffected.",
 ] as const;
+const m4EvidenceLogMarker =
+  "Verified native Windows/Linux M4 package smoke with `scripts/verify-tauri-platform-gates.ts --update-migration-doc`.";
 const m5ToolsDevDefaultLabel = "Change `tools-dev` default desktop runtime to Tauri.";
 const m5ToolsPackDefaultLabel = "Change `tools-pack` default desktop runtime to Tauri.";
 const m5ReleaseBetaDefaultLabel = "Change `release-beta` desktop runtime workflow default to Tauri.";
@@ -831,6 +833,7 @@ async function checkTauriMigrationOrder(): Promise<boolean> {
     ...readPackageDependencyNames(toolsPackPackageJson, "tools/pack/package.json"),
   ]);
   const m4Complete = m4PlatformGateLabels.every((label) => isChecklistLineChecked(migrationDoc, label));
+  const m4EvidenceLogMarked = migrationDoc.includes(m4EvidenceLogMarker);
   const toolsDevDefaultFlipped = isChecklistLineChecked(migrationDoc, m5ToolsDevDefaultLabel);
   const toolsPackDefaultFlipped = isChecklistLineChecked(migrationDoc, m5ToolsPackDefaultLabel);
   const releaseBetaDefaultFlipped = isChecklistLineChecked(migrationDoc, m5ReleaseBetaDefaultLabel);
@@ -840,6 +843,11 @@ async function checkTauriMigrationOrder(): Promise<boolean> {
   const electronResourcesRemoved = isChecklistLineChecked(migrationDoc, m6ElectronResourcesLabel);
 
   const violations: string[] = [];
+  if (m4Complete && !m4EvidenceLogMarked) {
+    violations.push(
+      "M4 platform gates are checked, but the migration doc is missing the verifier-applied native evidence log marker.",
+    );
+  }
   if (!m4Complete && (toolsDevDefault === "tauri" || toolsPackDefault === "tauri" || releaseBetaDefault === "tauri")) {
     violations.push("desktop runtime defaults cannot flip to Tauri before all M4 Windows/Linux platform gates are checked.");
   }
