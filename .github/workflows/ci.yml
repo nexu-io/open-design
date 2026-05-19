@@ -581,6 +581,17 @@ jobs:
             exit $LASTEXITCODE
           }
 
+      - name: Verify windows Tauri smoke report evidence
+        shell: pwsh
+        env:
+          TAURI_REPORT_DIR: ${{ runner.temp }}/release-report/win-tauri
+        run: |
+          $ErrorActionPreference = "Stop"
+          pnpm exec tsx scripts/verify-tauri-platform-gates.ts --win-report $env:TAURI_REPORT_DIR
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
       - name: Upload windows Tauri e2e spec report
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
@@ -647,6 +658,11 @@ jobs:
         run: |
           set -euo pipefail
           xvfb-run -a pnpm exec tsx scripts/release-smoke.ts linux specs/linux.spec.ts
+
+      - name: Verify linux Tauri smoke report evidence
+        run: |
+          set -euo pipefail
+          pnpm exec tsx scripts/verify-tauri-platform-gates.ts --linux-report "$RUNNER_TEMP/release-report/linux-tauri"
 
       - name: Upload linux Tauri e2e spec report
         if: ${{ always() }}

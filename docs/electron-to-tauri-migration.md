@@ -229,6 +229,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Added `scripts/verify-tauri-platform-gates.ts` to mechanically validate extracted Windows/Linux release-smoke artifacts before closing M4. It rejects skipped reports, missing `summary.json`, missing screenshots, wrong specs, failed suite results, bad health evals, non-empty stop PID lists, Windows uninstall residue, and Linux headless regressions. Verified a synthetic passing report pair and confirmed the current macOS skip report fails with a missing `summary.json` error.
 - 2026-05-20: Added `scripts/verify-tauri-platform-gates.test.ts` and wired it into `pnpm guard`, so the report verifier is now part of the repository policy gate. The tests cover a complete Windows+Linux evidence pair, a skipped report with no runtime summary, and Windows stop residue. `pnpm guard` and `pnpm typecheck` passed after the wiring change.
 - 2026-05-20: Added `OD_PACKAGED_E2E_REUSE_BUILD=1` support to `e2e/specs/win-tauri.spec.ts` and `e2e/specs/linux.spec.ts`, allowing release workflows to smoke the artifact built in an earlier tools-pack step instead of rebuilding. `release-beta` now has a `desktop_runtime: electron|tauri` input, keeps Electron as the default, and wires Tauri beta runs through the runtime-specific tools-pack build flags, Rust/Tauri Linux prerequisites, Windows Tauri smoke, Linux Tauri smoke, and the existing mac packaged smoke with `OD_PACKAGED_E2E_DESKTOP_RUNTIME`.
+- 2026-05-20: Wired `scripts/verify-tauri-platform-gates.ts` into the PR CI Tauri platform jobs and the `release-beta desktop_runtime=tauri` Windows/Linux smoke paths. Native Windows/Linux jobs now fail if the release-smoke wrapper exits successfully but the report artifact lacks the M4 evidence needed for signoff.
 
 ### Platform Gate Runners
 
@@ -261,6 +262,8 @@ CI equivalents live in `.github/workflows/ci.yml`:
 
 - `packaged_smoke_tauri_win` runs `scripts/release-smoke.ts win specs/win-tauri.spec.ts` on `windows-latest` with Rust stable, Node 24, pnpm 10.33.2, and NSIS.
 - `packaged_smoke_tauri_linux` runs `scripts/release-smoke.ts linux specs/linux.spec.ts` on `ubuntu-latest` with Rust stable, Node 24, pnpm 10.33.2, Tauri Linux prerequisites, AppImage runtime support, and `xvfb`.
+
+Both jobs run `scripts/verify-tauri-platform-gates.ts` against the generated report before uploading the artifact.
 
 Do not close the Windows/Linux M4 checkboxes from CI wiring alone. Close them only after the native CI jobs or equivalent host commands produce the required eval/screenshot/stop evidence.
 
