@@ -2364,5 +2364,44 @@ describe('vercel routing config for multi-page deploys', () => {
     const rewrittenPricing = result!.rewrittenHtml.get('pricing.html');
     expect(rewrittenPricing).toBe('<a href="/">Home</a><a href="/">Abs home</a>');
   });
+
+  it('resolves anchor hrefs relative to the current html file directory for nested deploys', () => {
+    const docsPageHtml =
+      '<a href="about.html">Sibling</a>' +
+      '<a href="./guide.html">Sibling dot</a>' +
+      '<a href="../index.html">Parent</a>' +
+      '<a href="/docs/about.html">Absolute</a>';
+    const result = buildVercelRoutingConfig([
+      htmlFile('index.html', '<!doctype html><h1>Home</h1>'),
+      htmlFile('docs/page.html', docsPageHtml),
+      htmlFile('docs/about.html', '<!doctype html><h1>About</h1>'),
+      htmlFile('docs/guide.html', '<!doctype html><h1>Guide</h1>'),
+    ]);
+    const rewrittenPage = result!.rewrittenHtml.get('docs/page.html');
+    expect(rewrittenPage).toBe(
+      '<a href="/docs/about">Sibling</a>' +
+      '<a href="/docs/guide">Sibling dot</a>' +
+      '<a href="/">Parent</a>' +
+      '<a href="/docs/about">Absolute</a>',
+    );
+  });
+
+  it('preserves query strings and fragments when rewriting anchor hrefs', () => {
+    const pricingHtml =
+      '<a href="about.html?utm=x">Tracked</a>' +
+      '<a href="about.html#team">Fragment</a>' +
+      '<a href="about.html?utm=x#team">Both</a>';
+    const result = buildVercelRoutingConfig([
+      htmlFile('index.html', '<!doctype html><h1>Home</h1>'),
+      htmlFile('pricing.html', pricingHtml),
+      htmlFile('about.html', '<!doctype html><h1>About</h1>'),
+    ]);
+    const rewrittenPricing = result!.rewrittenHtml.get('pricing.html');
+    expect(rewrittenPricing).toBe(
+      '<a href="/about?utm=x">Tracked</a>' +
+      '<a href="/about#team">Fragment</a>' +
+      '<a href="/about?utm=x#team">Both</a>',
+    );
+  });
 });
 

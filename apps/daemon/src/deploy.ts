@@ -1451,7 +1451,7 @@ export function buildVercelRoutingConfig(files: DeployFile[]): VercelRoutingConf
     const original = Buffer.isBuffer(f.data) || f.data instanceof Uint8Array
       ? Buffer.from(f.data).toString('utf8')
       : String(f.data);
-    const rewritten = rewriteAnchorHrefsToCleanRoutes(original, pathToRoute);
+    const rewritten = rewriteAnchorHrefsToCleanRoutes(original, pathToRoute, f.file);
     if (rewritten !== original) {
       rewrittenHtml.set(f.file, rewritten);
     }
@@ -1473,14 +1473,21 @@ function htmlPathToCleanRoute(filePath: string) {
   return `/${stripped}`;
 }
 
-function rewriteAnchorHrefsToCleanRoutes(html: string, pathToRoute: Map<string, string>) {
+function rewriteAnchorHrefsToCleanRoutes(html: string, pathToRoute: Map<string, string>, currentFile: string) {
+  const currentDir = path.posix.dirname(currentFile);
   return html.replace(/<a\b([^<>]*?)\bhref\s*=\s*(["'])([^"']+)\2([^<>]*)>/gi, (match, pre, quote, href, post) => {
     if (isExternalUrl(href)) return match;
     if (href.startsWith('#')) return match;
-    const cleaned = href.replace(/^\.\//, '').replace(/^\//, '');
-    const route = pathToRoute.get(cleaned);
+    const splitIdx = href.search(/[?#]/);
+    const pathnamePart = splitIdx >= 0 ? href.slice(0, splitIdx) : href;
+    const suffix = splitIdx >= 0 ? href.slice(splitIdx) : '';
+    if (!pathnamePart) return match;
+    const resolved = pathnamePart.startsWith('/')
+      ? pathnamePart.replace(/^\/+/, '')
+      : path.posix.normalize(`${currentDir}/${pathnamePart}`);
+    const route = pathToRoute.get(resolved);
     if (!route) return match;
-    return `<a${pre}href=${quote}${route}${quote}${post}>`;
+    return `<a${pre}href=${quote}${route}${suffix}${quote}${post}>`;
   });
 }
 
