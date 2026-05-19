@@ -66,12 +66,18 @@ test("verify-tauri-migration-handoff round-trips a bundle through a receiving ch
   const note = await readFile(notePath, "utf8");
   assert.match(note, /# Tauri Migration Handoff/);
   assert.match(note, new RegExp(`Branch: \`${migrationBranch.replaceAll("/", "\\/")}\` @ \`${sourceHead}\``));
+  assert.match(note, /package-tauri-migration-handoff/);
+  assert.match(note, new RegExp(`--handoff-dir '${escapeRegExp(dirname(manifestPath))}'`));
+  assert.match(note, /Preferred path when you copied the tarball/);
+  assert.match(note, new RegExp(`--archive '${escapeRegExp(`${dirname(manifestPath)}.tar.gz`)}' \\\\`));
   assert.match(note, new RegExp(`--manifest '${escapeRegExp(manifestPath)}' \\\\`));
   assert.match(note, /push-tauri-migration-handoff/);
   assert.match(note, /manifest records the bundle path relative to itself/);
   assert.match(note, /--bundle \/path\/to\/open-design-tauri-migration\.bundle/);
   assert.match(note, /verify-tauri-migration-remote/);
+  assert.match(note, /download-tauri-m4-reports/);
   assert.match(note, /advance-tauri-migration-m4-m5/);
+  assert.match(note, /\/tmp\/open-design-tauri-m4-reports\/open-design-ci-win-tauri-e2e-report/);
 });
 
 test("verify-tauri-migration-handoff can derive standard artifact paths from output-dir", async (t) => {
