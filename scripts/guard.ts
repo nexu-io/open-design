@@ -13,6 +13,19 @@ import {
 import { collectCssHardcodedColorMatches, cssWideAndSpecialColorKeywords, realNamedColors } from "./style-policy.ts";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
+const migrationDocPath = path.join(repoRoot, "docs", "electron-to-tauri-migration.md");
+const toolsDevConfigPath = path.join(repoRoot, "tools", "dev", "src", "config.ts");
+const toolsPackConfigPath = path.join(repoRoot, "tools", "pack", "src", "config.ts");
+
+const m4PlatformGateLabels = [
+  "Windows NSIS: build, install, start, inspect status/eval/screenshot, stop.",
+  "Linux: build AppImage, install, start, inspect status/eval/screenshot, stop.",
+  "Linux headless platform smoke remains supported and unaffected.",
+] as const;
+const m5ToolsDevDefaultLabel = "Change `tools-dev` default desktop runtime to Tauri.";
+const m5ToolsPackDefaultLabel = "Change `tools-pack` default desktop runtime to Tauri.";
+const m5ElectronFallbackLabel = "Keep Electron fallback explicit during the transition window.";
+
 const allowedE2eScripts = new Set([
   "e2e/scripts/playwright.ts",
   "e2e/scripts/release-smoke.ts",
@@ -690,12 +703,79 @@ async function checkStylePolicy(): Promise<boolean> {
   return true;
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function isChecklistLineChecked(content: string, label: string): boolean {
+  const checked = new RegExp(`^- \\[x\\] ${escapeRegExp(label)}$`, "m");
+  const unchecked = new RegExp(`^- \\[ \\] ${escapeRegExp(label)}$`, "m");
+  if (checked.test(content)) return true;
+  if (unchecked.test(content)) return false;
+  throw new Error(`missing migration checklist line: ${label}`);
+}
+
+function readDefaultDesktopRuntime(source: string, label: string): "electron" | "tauri" {
+  const match = source.match(/export const DEFAULT_DESKTOP_RUNTIME = "([^"]+)"/);
+  const runtime = match?.[1];
+  if (runtime === "electron" || runtime === "tauri") return runtime;
+  throw new Error(`${label} must export DEFAULT_DESKTOP_RUNTIME as "electron" or "tauri"`);
+}
+
+function sourceAllowsElectronFallback(source: string): boolean {
+  return /DESKTOP_RUNTIME_KINDS = \["electron", "tauri"\] as const/.test(source);
+}
+
+async function checkTauriMigrationOrder(): Promise<boolean> {
+  const [migrationDoc, toolsDevConfig, toolsPackConfig] = await Promise.all([
+    readFile(migrationDocPath, "utf8"),
+    readFile(toolsDevConfigPath, "utf8"),
+    readFile(toolsPackConfigPath, "utf8"),
+  ]);
+  const toolsDevDefault = readDefaultDesktopRuntime(toolsDevConfig, "tools-dev");
+  const toolsPackDefault = readDefaultDesktopRuntime(toolsPackConfig, "tools-pack");
+  const m4Complete = m4PlatformGateLabels.every((label) => isChecklistLineChecked(migrationDoc, label));
+  const toolsDevDefaultFlipped = isChecklistLineChecked(migrationDoc, m5ToolsDevDefaultLabel);
+  const toolsPackDefaultFlipped = isChecklistLineChecked(migrationDoc, m5ToolsPackDefaultLabel);
+  const fallbackMarked = isChecklistLineChecked(migrationDoc, m5ElectronFallbackLabel);
+
+  const violations: string[] = [];
+  if (!m4Complete && (toolsDevDefault === "tauri" || toolsPackDefault === "tauri")) {
+    violations.push("DEFAULT_DESKTOP_RUNTIME cannot flip to Tauri before all M4 Windows/Linux platform gates are checked.");
+  }
+  if ((toolsDevDefault === "tauri") !== toolsDevDefaultFlipped) {
+    violations.push("tools-dev DEFAULT_DESKTOP_RUNTIME and the M5 tools-dev checklist line must be updated together.");
+  }
+  if ((toolsPackDefault === "tauri") !== toolsPackDefaultFlipped) {
+    violations.push("tools-pack DEFAULT_DESKTOP_RUNTIME and the M5 tools-pack checklist line must be updated together.");
+  }
+  const bothDefaultsTauri = toolsDevDefault === "tauri" && toolsPackDefault === "tauri";
+  if (bothDefaultsTauri !== fallbackMarked) {
+    violations.push("the M5 Electron fallback checklist line must reflect the post-flip runtime state.");
+  }
+  if (fallbackMarked && (!sourceAllowsElectronFallback(toolsDevConfig) || !sourceAllowsElectronFallback(toolsPackConfig))) {
+    violations.push("Electron fallback is checked, but a tool no longer accepts both electron and tauri runtime values.");
+  }
+
+  if (violations.length > 0) {
+    console.error("Electron to Tauri migration order violations found:");
+    for (const violation of violations) {
+      console.error(`- ${violation}`);
+    }
+    return false;
+  }
+
+  console.log("Tauri migration order check passed: M5 defaults remain gated by M4 platform evidence.");
+  return true;
+}
+
 const checks: GuardCheck[] = [
   { name: "residual JavaScript", run: checkResidualJavaScript },
   { name: "test layout", run: checkTestLayout },
   { name: "e2e layout", run: checkE2eLayout },
   { name: "web test layout", run: checkWebTestLayout },
   { name: "tools layout", run: checkToolsLayout },
+  { name: "Tauri migration order", run: checkTauriMigrationOrder },
   { name: "style policy", run: checkStylePolicy },
   { name: "design system token-fixture sync", run: checkDesignSystemTokenFixtureSync },
   { name: "design system A1 required tokens", run: checkDesignSystemA1RequiredTokens },
