@@ -2641,7 +2641,7 @@ export function ProjectView({
     setResumingConversation(true);
     setConversationLoadError(null);
     try {
-      const result = await synthesizeHandoff(project.id, {
+      const outcome = await synthesizeHandoff(project.id, {
         // Scope the handoff to the conversation being resumed — the
         // endpoint synthesizes from this conversation's transcript only.
         conversationId: resumedConversationId,
@@ -2650,11 +2650,22 @@ export function ProjectView({
         model: config.model,
         maxTokens: effectiveMaxTokens(config),
       });
-      if (!result) {
+      if (!outcome) {
+        // Transport failure / unparseable response — the daemon never gave
+        // us a classified reason.
         setProjectActionsToast({
-          message:
-            'Could not synthesize a handoff prompt. Check your API key and model in Settings, then try again.',
+          message: 'Could not reach the daemon to synthesize a handoff prompt. Try again.',
           details: null,
+        });
+        return;
+      }
+      if ('error' in outcome) {
+        // Surface the daemon's classified error verbatim (rate limit,
+        // empty transcript, upstream provider detail, ...) rather than
+        // collapsing every case into one generic message.
+        setProjectActionsToast({
+          message: outcome.error.message,
+          details: typeof outcome.error.details === 'string' ? outcome.error.details : null,
         });
         return;
       }
@@ -2669,7 +2680,7 @@ export function ProjectView({
       // Hand the prompt to the auto-send effect, then switch to the new
       // conversation — mirrors handleNewConversation's eager state reset
       // so rapid clicks cannot double-create.
-      pendingResumeRef.current = { conversationId: fresh.id, prompt: result.prompt };
+      pendingResumeRef.current = { conversationId: fresh.id, prompt: outcome.prompt };
       setMessages([]);
       setStreaming(false);
       streamingConversationIdRef.current = null;

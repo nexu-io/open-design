@@ -56,4 +56,17 @@ describe('synthesizeHandoff', () => {
 
     expect(await synthesizeHandoff('p1', request)).toBeNull();
   });
+
+  it('returns the daemon error structure when the response carries a classified error', async () => {
+    // A classified daemon failure (rate limit, empty transcript, upstream
+    // detail) must survive to the caller, not collapse into a bare null.
+    const error = { code: 'EMPTY_TRANSCRIPT', message: 'conversation has no messages' };
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(
+      JSON.stringify({ error }),
+      { status: 400, headers: { 'content-type': 'application/json' } },
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+
+    expect(await synthesizeHandoff('p1', request)).toEqual({ error });
+  });
 });

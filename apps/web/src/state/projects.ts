@@ -6,6 +6,7 @@
 // the UI can stay rendered when the daemon is briefly unreachable.
 
 import type {
+  ApiError,
   AppliedPluginSnapshot,
   ApplyResult,
   CreatePluginShareProjectResponse,
@@ -256,14 +257,23 @@ export async function createConversation(
   }
 }
 
+// Outcome of a handoff synthesis call. The daemon route classifies its
+// failures (RATE_LIMITED, EMPTY_TRANSCRIPT, an upstream 400 with provider
+// detail, ...); `{ error }` carries that structured error through so the
+// caller can show the real reason instead of a generic message. `null`
+// is reserved for a transport failure or an unparseable error body.
+export type HandoffOutcome = HandoffResponse | { error: ApiError } | null;
+
 // Synthesizes a self-contained "first user message" from the project's
 // chat transcript so a fresh conversation can resume work without the
-// user replaying context by hand. Fails soft (null) like the other
-// wrappers so a transport error surfaces as a toast, not a crash.
+// user replaying context by hand. A transport failure returns null; a
+// daemon-classified failure returns `{ error }` so the caller keeps the
+// daemon's message/details rather than collapsing every case into one
+// generic toast.
 export async function synthesizeHandoff(
   projectId: string,
   body: HandoffRequest,
-): Promise<HandoffResponse | null> {
+): Promise<HandoffOutcome> {
   try {
     const resp = await fetch(
       `/api/projects/${encodeURIComponent(projectId)}/handoff`,
@@ -273,7 +283,12 @@ export async function synthesizeHandoff(
         body: JSON.stringify(body),
       },
     );
-    if (!resp.ok) return null;
+    if (!resp.ok) {
+      const payload = (await resp.json().catch(() => null)) as
+        | { error?: ApiError }
+        | null;
+      return payload?.error ? { error: payload.error } : null;
+    }
     return (await resp.json()) as HandoffResponse;
   } catch {
     return null;

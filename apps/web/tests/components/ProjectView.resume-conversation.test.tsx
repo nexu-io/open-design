@@ -299,4 +299,26 @@ describe('ProjectView resume conversation', () => {
     expect(mockedCreateConversation).not.toHaveBeenCalled();
     expect(messagesText()).toContain('user:first turn');
   });
+
+  it('surfaces the daemon-classified error message in the toast', async () => {
+    // A structured daemon error (rate limit, empty transcript, ...) must
+    // reach the toast verbatim, not collapse into a generic message.
+    mockedSynthesizeHandoff.mockResolvedValue({
+      error: {
+        code: 'RATE_LIMITED',
+        message: 'This request would exceed your rate limit of 30,000 input tokens per minute.',
+      },
+    });
+
+    renderProjectView();
+
+    await waitFor(() => {
+      expect(messagesText()).toContain('user:first turn');
+    });
+
+    screen.getByTestId('resume').click();
+
+    await screen.findByText(/exceed your rate limit/i);
+    expect(mockedCreateConversation).not.toHaveBeenCalled();
+  });
 });
