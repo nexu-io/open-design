@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -70,6 +71,52 @@ test("tauri-migration-status advances to M5 after verified M4 checkboxes", async
   assert.match(parsed.nextActions.join("\n"), /apply-tauri-migration-m5/);
 });
 
+test("tauri-migration-status reports current handoff artifacts", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  const bundleSha256 = await writeHandoffFixture(handoffDir, { branchHead: head });
+
+  const result = await runStatus(fixture, "--handoff-dir", handoffDir);
+  const parsed = JSON.parse(result.stdout) as {
+    handoff: {
+      branchHead: string;
+      bundleSha256: string;
+      current: boolean;
+      present: boolean;
+      problems: string[];
+    };
+    nextActions: string[];
+  };
+
+  assert.equal(parsed.handoff.present, true);
+  assert.equal(parsed.handoff.current, true);
+  assert.equal(parsed.handoff.branchHead, head);
+  assert.equal(parsed.handoff.bundleSha256, bundleSha256);
+  assert.deepEqual(parsed.handoff.problems, []);
+  assert.match(parsed.nextActions.join("\n"), /Copy the current verified handoff directory/);
+});
+
+test("tauri-migration-status reports stale handoff artifacts", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const staleHead = "0".repeat(40);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: staleHead });
+
+  const result = await runStatus(fixture, "--handoff-dir", handoffDir);
+  const parsed = JSON.parse(result.stdout) as { handoff: { current: boolean; problems: string[] } };
+
+  assert.equal(parsed.handoff.current, false);
+  assert.match(parsed.handoff.problems.join("\n"), new RegExp(`manifest branchHead is stale: expected ${head}, got ${staleHead}`));
+});
+
 async function createFixtureRoot(
   t: test.TestContext,
   options: { checked: readonly string[]; defaults: "electron" | "tauri"; extraDocLines?: readonly string[] },
@@ -82,6 +129,40 @@ async function createFixtureRoot(
   await writeFixtureFile(root, "tools/pack/src/config.ts", toolsConfig(options.defaults));
   await writeFixtureFile(root, ".github/workflows/release-beta.yml", releaseBetaWorkflow(options.defaults));
   return root;
+}
+
+async function initGitFixture(root: string): Promise<string> {
+  await git(root, "init", "--initial-branch=main");
+  await git(root, "config", "user.email", "codex@example.test");
+  await git(root, "config", "user.name", "Codex Test");
+  await git(root, "add", ".");
+  await git(root, "commit", "-m", "fixture");
+  await git(root, "update-ref", "refs/remotes/origin/main", "HEAD");
+  return (await git(root, "rev-parse", "HEAD")).stdout.trim();
+}
+
+async function writeHandoffFixture(handoffDir: string, options: { branchHead: string }): Promise<string> {
+  const bundlePath = join(handoffDir, "open-design-tauri-migration.bundle");
+  const bundle = Buffer.from("bundle\n", "utf8");
+  const bundleSha256 = createHash("sha256").update(bundle).digest("hex");
+  await mkdir(handoffDir, { recursive: true });
+  await writeFile(bundlePath, bundle);
+  await writeFile(
+    join(handoffDir, "open-design-tauri-migration-handoff.json"),
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        branch: "codex/electron-to-tauri-migration",
+        branchHead: options.branchHead,
+        bundlePath: "open-design-tauri-migration.bundle",
+        bundleSha256,
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  return bundleSha256;
 }
 
 function migrationDoc(checkedLabels: readonly string[], extraLines: readonly string[]): string {
@@ -132,9 +213,16 @@ async function writeFixtureFile(root: string, relativePath: string, content: str
   await writeFile(fullPath, content, "utf8");
 }
 
-async function runStatus(root: string): Promise<{ stderr: string; stdout: string }> {
-  return execFileAsync(process.execPath, ["--import", "tsx", statusScript, "--root", root, "--json"], {
+async function runStatus(root: string, ...args: string[]): Promise<{ stderr: string; stdout: string }> {
+  return execFileAsync(process.execPath, ["--import", "tsx", statusScript, "--root", root, ...args, "--json"], {
     cwd: repoRoot,
+    maxBuffer: 1024 * 1024,
+  });
+}
+
+async function git(cwd: string, ...args: string[]): Promise<{ stderr: string; stdout: string }> {
+  return execFileAsync("git", args, {
+    cwd,
     maxBuffer: 1024 * 1024,
   });
 }

@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
 import {
@@ -19,10 +20,12 @@ import {
 
 const execFileAsync = promisify(execFile);
 const defaultRoot = resolve(import.meta.dirname, "..");
+const handoffManifestName = "open-design-tauri-migration-handoff.json";
 
 type DesktopRuntime = "electron" | "tauri";
 
 type ParsedArgs = {
+  handoffDir?: string;
   json: boolean;
   root: string;
 };
@@ -55,14 +58,36 @@ type MigrationStatus = {
   };
   git: GitStatus;
   groups: ChecklistGroupStatus[];
+  handoff?: HandoffStatus;
   nextActions: string[];
   phase: "M4" | "M5" | "M6" | "complete";
   root: string;
 };
 
+type HandoffStatus = {
+  branch?: string;
+  branchHead?: string;
+  bundle?: string;
+  bundleSha256?: string;
+  bundleSha256Actual?: string;
+  current?: boolean;
+  dir: string;
+  manifest: string;
+  present: boolean;
+  problems: string[];
+};
+
+type HandoffManifest = {
+  branch: string;
+  branchHead: string;
+  bundlePath: string;
+  bundleSha256: string;
+  schemaVersion: 1;
+};
+
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
-  const status = await readMigrationStatus(args.root);
+  const status = await readMigrationStatus(args.root, args.handoffDir);
   if (args.json) {
     process.stdout.write(`${JSON.stringify(status, null, 2)}\n`);
     return;
@@ -79,6 +104,12 @@ function parseArgs(argv: string[]): ParsedArgs {
       parsed.json = true;
       continue;
     }
+    if (arg === "--handoff-dir") {
+      if (value == null) throw new Error("--handoff-dir requires a path");
+      parsed.handoffDir = resolve(value);
+      index += 1;
+      continue;
+    }
     if (arg === "--root") {
       if (value == null) throw new Error("--root requires a path");
       parsed.root = resolve(value);
@@ -86,7 +117,7 @@ function parseArgs(argv: string[]): ParsedArgs {
       continue;
     }
     if (arg === "--help" || arg === "-h") {
-      process.stdout.write("usage: tsx scripts/tauri-migration-status.ts [--root <repo>] [--json]\n");
+      process.stdout.write("usage: tsx scripts/tauri-migration-status.ts [--root <repo>] [--handoff-dir <dir>] [--json]\n");
       process.exit(0);
     }
     throw new Error(`unsupported argument: ${arg}`);
@@ -94,7 +125,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   return parsed;
 }
 
-async function readMigrationStatus(root: string): Promise<MigrationStatus> {
+async function readMigrationStatus(root: string, handoffDir?: string): Promise<MigrationStatus> {
   const [migrationDoc, toolsDevConfig, toolsPackConfig, releaseBetaWorkflow, git] = await Promise.all([
     readFile(join(root, "docs", "electron-to-tauri-migration.md"), "utf8"),
     readFile(join(root, "tools", "dev", "src", "config.ts"), "utf8"),
@@ -120,7 +151,8 @@ async function readMigrationStatus(root: string): Promise<MigrationStatus> {
     ]),
   ];
   const phase = currentPhase(groups);
-  return {
+  const handoff = handoffDir == null ? undefined : await readHandoffStatus(handoffDir, git);
+  const status: MigrationStatus = {
     defaults: {
       releaseBeta: readReleaseBetaDefault(releaseBetaWorkflow),
       toolsDev: readDefaultDesktopRuntime(toolsDevConfig, "tools-dev"),
@@ -128,10 +160,12 @@ async function readMigrationStatus(root: string): Promise<MigrationStatus> {
     },
     git,
     groups,
-    nextActions: nextActionsForPhase(phase),
+    ...(handoff == null ? {} : { handoff }),
+    nextActions: nextActionsForPhase(phase, handoff),
     phase,
     root,
   };
+  return status;
 }
 
 function checklistGroup(name: ChecklistGroupStatus["name"], source: string, labels: readonly string[]): ChecklistGroupStatus {
@@ -151,10 +185,12 @@ function currentPhase(groups: ChecklistGroupStatus[]): MigrationStatus["phase"] 
   return "complete";
 }
 
-function nextActionsForPhase(phase: MigrationStatus["phase"]): string[] {
+function nextActionsForPhase(phase: MigrationStatus["phase"], handoff?: HandoffStatus): string[] {
   if (phase === "M4") {
     return [
-      "Regenerate the verified handoff set with scripts/verify-tauri-migration-handoff.ts --output-dir /tmp/open-design-tauri-migration-handoff.",
+      handoff?.current === true
+        ? `Copy the current verified handoff directory from ${handoff.dir} to a write-capable machine.`
+        : "Regenerate the verified handoff set with scripts/verify-tauri-migration-handoff.ts --output-dir /tmp/open-design-tauri-migration-handoff.",
       "Import and push the manifest on a write-capable machine, then run scripts/verify-tauri-migration-remote.ts --manifest /tmp/open-design-tauri-migration-handoff/open-design-tauri-migration-handoff.json --remote origin.",
       "Run the Windows and Linux Tauri package smoke jobs.",
       "Advance M4 evidence and M5 defaults with scripts/advance-tauri-migration-m4-m5.ts --win-report <dir> --linux-report <dir>.",
@@ -234,6 +270,71 @@ async function git(cwd: string, args: string[]): Promise<{ stderr: string; stdou
   return execFileAsync("git", args, { cwd, maxBuffer: 1024 * 1024 });
 }
 
+async function readHandoffStatus(handoffDir: string, gitStatus: GitStatus): Promise<HandoffStatus> {
+  const manifestPath = join(handoffDir, handoffManifestName);
+  const problems: string[] = [];
+  try {
+    const manifest = readHandoffManifest(JSON.parse(await readFile(manifestPath, "utf8")) as Partial<HandoffManifest>);
+    const bundlePath = resolve(dirname(manifestPath), manifest.bundlePath);
+    let bundleSha256Actual: string | undefined;
+    try {
+      bundleSha256Actual = createHash("sha256").update(await readFile(bundlePath)).digest("hex");
+      if (bundleSha256Actual !== manifest.bundleSha256) {
+        problems.push(`bundle SHA-256 mismatch: expected ${manifest.bundleSha256}, got ${bundleSha256Actual}`);
+      }
+    } catch (error) {
+      problems.push(`bundle unavailable: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (gitStatus.head != null && manifest.branchHead !== gitStatus.head) {
+      problems.push(`manifest branchHead is stale: expected ${gitStatus.head}, got ${manifest.branchHead}`);
+    }
+    return {
+      branch: manifest.branch,
+      branchHead: manifest.branchHead,
+      bundle: bundlePath,
+      bundleSha256: manifest.bundleSha256,
+      ...(bundleSha256Actual == null ? {} : { bundleSha256Actual }),
+      current: problems.length === 0 && gitStatus.head != null,
+      dir: handoffDir,
+      manifest: manifestPath,
+      present: true,
+      problems,
+    };
+  } catch (error) {
+    return {
+      dir: handoffDir,
+      manifest: manifestPath,
+      present: false,
+      problems: [error instanceof Error ? error.message : String(error)],
+    };
+  }
+}
+
+function readHandoffManifest(value: Partial<HandoffManifest>): HandoffManifest {
+  if (value.schemaVersion !== 1) {
+    throw new Error(`unsupported handoff manifest schemaVersion: ${String(value.schemaVersion)}`);
+  }
+  if (typeof value.branch !== "string" || value.branch.length === 0) {
+    throw new Error("handoff manifest missing branch");
+  }
+  if (typeof value.branchHead !== "string" || !/^[0-9a-f]{40}$/.test(value.branchHead)) {
+    throw new Error("handoff manifest missing branchHead");
+  }
+  if (typeof value.bundlePath !== "string" || value.bundlePath.length === 0) {
+    throw new Error("handoff manifest missing bundlePath");
+  }
+  if (typeof value.bundleSha256 !== "string" || !/^[0-9a-f]{64}$/.test(value.bundleSha256)) {
+    throw new Error("handoff manifest missing bundleSha256");
+  }
+  return {
+    branch: value.branch,
+    branchHead: value.branchHead,
+    bundlePath: value.bundlePath,
+    bundleSha256: value.bundleSha256,
+    schemaVersion: value.schemaVersion,
+  };
+}
+
 function formatMigrationStatus(status: MigrationStatus): string {
   const lines = [
     "Tauri migration status",
@@ -252,6 +353,20 @@ function formatMigrationStatus(status: MigrationStatus): string {
     lines.push(`${group.name}: ${group.checked}/${group.total}`);
     for (const item of group.items.filter((candidate) => !candidate.checked)) {
       lines.push(`  - [ ] ${item.label}`);
+    }
+  }
+  if (status.handoff != null) {
+    lines.push(
+      `Handoff: ${status.handoff.present ? (status.handoff.current ? "current" : "needs attention") : "missing"} (${status.handoff.dir})`,
+    );
+    if (status.handoff.branch != null && status.handoff.branchHead != null) {
+      lines.push(`  Branch: ${status.handoff.branch} @ ${status.handoff.branchHead}`);
+    }
+    if (status.handoff.bundle != null) {
+      lines.push(`  Bundle: ${status.handoff.bundle}`);
+    }
+    for (const problem of status.handoff.problems) {
+      lines.push(`  - ${problem}`);
     }
   }
   lines.push("Next actions:");
