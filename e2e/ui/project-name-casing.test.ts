@@ -267,18 +267,14 @@ test('recent-projects strip applies capitalize to project name', async ({ page }
 });
 
 // ---------------------------------------------------------------------------
-// Side-effect: navigation labels that are already Title Case stay correct.
+// Selector scoping guard: the capitalize rule is limited to project tabs only.
 //
-// CSS capitalize is idempotent for words whose first letter is already
-// uppercase. This test confirms that entry-view tabs (Home, Projects,
-// Marketplace) are not distorted by the capitalize rule on .workspace-tab__label.
-//
-// Strategy: navigate to the home view so an entry tab is visible in the strip,
-// then assert the computed textTransform is capitalize (no harm) and that the
-// visible label text matches the expected title (first-letter already capital).
+// After the CSS was scoped to .workspace-tab__label--project, entry-view nav
+// tabs (Home, Projects) render with plain .workspace-tab__label and must NOT
+// receive the capitalize rule. This test verifies that scoping is respected.
 // ---------------------------------------------------------------------------
 
-test('workspace tab bar capitalize is a no-op for already-capitalised nav labels', async ({ page }) => {
+test('workspace tab bar does not apply capitalize to nav entry tabs', async ({ page }) => {
   await page.goto('/');
   await waitForLoadingToClear(page);
 
@@ -288,19 +284,16 @@ test('workspace tab bar capitalize is a no-op for already-capitalised nav labels
   await expect(activeTabLabel).toBeVisible({ timeout: 10_000 });
 
   const labelText = await activeTabLabel.textContent();
-  // The label must not be empty and must still start with a capital letter,
-  // confirming capitalize did not mangle an already-correct first letter.
   expect(labelText?.trim()).toBeTruthy();
   expect(labelText?.trim()[0]).toMatch(/[A-Z]/);
 
-  // The property is declared (the rule applies to this element).
+  // The CSS rule is scoped to --project modifier; it must NOT apply to this plain nav entry tab.
   const labelTransform = await activeTabLabel.evaluate(
     (el) => window.getComputedStyle(el).textTransform,
   );
-  expect(labelTransform).toBe('capitalize');
+  expect(labelTransform).not.toBe('capitalize');
 
-  // Navigate to a second entry view so a second tab with a nav label is
-  // visible and verify it too.
+  // Navigate to a second entry view and verify the same invariant holds.
   await page.getByTestId('entry-nav-projects').click();
   await expect(page).toHaveURL(/\/projects$/);
 
@@ -314,5 +307,5 @@ test('workspace tab bar capitalize is a no-op for already-capitalised nav labels
   const projectsTransform = await projectsTabLabel.evaluate(
     (el) => window.getComputedStyle(el).textTransform,
   );
-  expect(projectsTransform).toBe('capitalize');
+  expect(projectsTransform).not.toBe('capitalize');
 });
