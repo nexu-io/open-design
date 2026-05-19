@@ -1663,6 +1663,61 @@ describe('FileViewer tweaks toolbar', () => {
     );
     await waitFor(() => expect(tweaksButton()?.getAttribute('aria-pressed')).toBe('true'));
   });
+
+  // PR #1643 regression: Protocol A in `design-templates/tweaks/SKILL.md`
+  // says the artifact MAY declare a default-closed panel via
+  // `{ type: '__edit_mode_available', visible: false }`. The handler used
+  // to unconditionally mirror availability into `tweaksMode = true`, so a
+  // default-closed dynamic artifact would be force-opened by the next
+  // `syncBridgeModes` posting `__activate_edit_mode`. The host must now
+  // read `visible` and only flip to ON when the panel reports itself open
+  // (or omits `visible` — back-compat shim for the common open-by-default
+  // case). Surfaced by Siri-Ray in
+  // https://github.com/nexu-io/open-design/pull/1643#discussion_r3269955351.
+  it('respects __edit_mode_available { visible: false } for default-closed dynamic artifacts', async () => {
+    const file = baseFile({
+      name: 'closed.html',
+      path: 'closed.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'closed',
+        entry: 'closed.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const tweaksButton = () =>
+      Array.from(document.querySelectorAll('button')).find(
+        (b) => b.getAttribute('title') === 'Tweaks' || b.getAttribute('aria-label') === 'Tweaks',
+      ) as HTMLButtonElement | undefined;
+
+    // Artifact announces availability AND declares the panel is currently
+    // closed. The toolbar must enable (panel exists) but stay OFF — opening
+    // it without intent would override the artifact-declared default.
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: '__edit_mode_available', visible: false },
+      }),
+    );
+
+    await waitFor(() => expect(tweaksButton()?.disabled).toBe(false));
+    expect(tweaksButton()?.getAttribute('aria-pressed')).toBe('false');
+  });
 });
 
 describe('applyInspectOverridesToSource', () => {

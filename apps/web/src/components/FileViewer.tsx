@@ -4348,20 +4348,24 @@ function HtmlViewer({
         setTweaksMode(!!data.visible);
       } else if (data.type === '__edit_mode_available') {
         setTweaksAvailable(true);
-        // Mirror the artifact's default-open state into `tweaksMode` exactly
-        // once per file. Agent-generated `.twk-panel` artifacts mount their
-        // panel visible (the SDK pattern is `useState(true)`), so without
-        // this the toolbar toggle reads as OFF while the panel is clearly
-        // ON — the user has to click toggle-on → toggle-off to hide the
-        // panel. Guarded by `firstEditModeAvailableSeenForFileRef` so a
-        // later iframe remount (Themes popover flipping render mode, etc.)
-        // doesn't snap a user-driven OFF back to ON. `syncBridgeModes` is
-        // still the source of truth on every subsequent load: it pushes the
-        // current `tweaksMode` into the artifact via `__activate_edit_mode`
-        // / `__deactivate_edit_mode` so the artifact tracks the toolbar.
+        // Mirror the artifact's reported default visibility into `tweaksMode`
+        // exactly once per file. Per design-templates/tweaks/SKILL.md the
+        // artifact MAY emit `{ visible: boolean }` on the availability
+        // payload to declare a default-closed panel; if absent we treat it
+        // as default-open because the SDK pattern is `useState(true)` and
+        // omitting `visible` is the backward-compatible signal that the
+        // panel is already on screen. Without this mirror, the toolbar reads
+        // OFF while the panel is clearly visible and the user has to click
+        // toggle-on then toggle-off to actually hide it. Guarded by
+        // `firstEditModeAvailableSeenForFileRef` so a later iframe remount
+        // (Themes popover flipping render mode, etc.) doesn't snap a
+        // user-driven OFF back to ON. `syncBridgeModes` remains the source
+        // of truth on every subsequent load: it pushes the current
+        // `tweaksMode` into the artifact via `__activate_edit_mode` /
+        // `__deactivate_edit_mode` so the artifact tracks the toolbar.
         if (firstEditModeAvailableSeenForFileRef.current !== file.name) {
           firstEditModeAvailableSeenForFileRef.current = file.name;
-          setTweaksMode(true);
+          setTweaksMode(data.visible !== false);
         }
       } else if (data.type === '__edit_mode_dismissed') {
         setTweaksMode(false);

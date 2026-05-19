@@ -152,8 +152,12 @@ mix). The toolbar enables itself the moment it sees either signal.
 Use this when the panel mounts via JS (React, vanilla, anything dynamic).
 
 **Artifact → host:**
-- On mount, post `{ type: '__edit_mode_available' }` to `window.parent`.
-  Tells the toolbar a panel exists; toolbar enables and reflects "open".
+- On mount, post `{ type: '__edit_mode_available', visible?: boolean }` to
+  `window.parent`. Tells the toolbar a panel exists; the optional `visible`
+  reports the panel's initial state so the toolbar toggle starts in sync.
+  Omit `visible` for the common "panel is already on screen" case (the host
+  treats a missing field as `true` so the legacy zero-arg message keeps
+  working). Pass `visible: false` to declare a default-closed panel.
 - When the user closes the panel locally (× button, Esc, etc.), post
   `{ type: '__edit_mode_dismissed' }`. Toolbar flips to "off".
 
@@ -169,6 +173,8 @@ window.addEventListener('message', (e) => {
   if (t === '__activate_edit_mode') setOpen(true);
   else if (t === '__deactivate_edit_mode') setOpen(false);
 });
+// Or, for a default-closed panel:
+//   window.parent.postMessage({ type: '__edit_mode_available', visible: open }, '*');
 window.parent.postMessage({ type: '__edit_mode_available' }, '*');
 // in your close handler:
 const dismiss = () => {
