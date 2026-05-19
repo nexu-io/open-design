@@ -42,8 +42,29 @@ function resolveDevTsconfigPath() {
 
 const DEV_TSCONFIG_PATH = resolveDevTsconfigPath();
 
+function resolveAllowedDevOrigins() {
+  const defaults = ['127.0.0.1'];
+  const configured = process.env.OD_ALLOWED_ORIGINS;
+  if (!configured) return defaults;
+
+  const configuredHosts = configured
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean)
+    .flatMap((origin) => {
+      try {
+        const url = new URL(origin);
+        return url.port ? [url.hostname, url.host] : [url.hostname];
+      } catch {
+        return [origin];
+      }
+    });
+
+  return Array.from(new Set([...defaults, ...configuredHosts]));
+}
+
 const nextConfig: NextConfig = {
-  allowedDevOrigins: ['127.0.0.1'],
+  allowedDevOrigins: resolveAllowedDevOrigins(),
   outputFileTracingRoot: WORKSPACE_ROOT,
   reactStrictMode: true,
   turbopack: {
