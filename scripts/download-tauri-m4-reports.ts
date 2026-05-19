@@ -11,6 +11,7 @@ const defaultOutputDir = "/tmp/open-design-tauri-m4-reports";
 const defaultRepo = "nexu-io/open-design";
 const defaultWorkflow = "ci.yml";
 const linuxArtifactName = "open-design-ci-linux-tauri-e2e-report";
+const requiredTauriJobNames = ["Packaged windows Tauri smoke", "Packaged linux Tauri smoke"] as const;
 const winArtifactName = "open-design-ci-win-tauri-e2e-report";
 
 type Args = {
@@ -34,15 +35,24 @@ type GithubRun = {
   databaseId?: number;
   headBranch?: string;
   headSha?: string;
+  jobs?: GithubJob[];
+  status?: string;
+};
+
+type GithubJob = {
+  conclusion?: string;
+  name?: string;
   status?: string;
 };
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const runId = args.runId ?? (args.wait ? await waitForCompletedRun(args) : await findLatestCompletedRun(args));
+  let viewedRun: GithubRun | undefined;
   if (args.runId != null && args.expectedHead != null) {
-    await assertRunMatchesExpectedHead(args, runId);
+    viewedRun = await assertRunMatchesExpectedHead(args, runId);
   }
+  await assertRunHasSuccessfulTauriJobs(args, runId, viewedRun);
   const winReport = join(args.outputDir, winArtifactName);
   const linuxReport = join(args.outputDir, linuxArtifactName);
 
@@ -263,12 +273,12 @@ async function viewRun(args: Args, runId: string): Promise<GithubRun> {
     "--repo",
     args.repo,
     "--json",
-    "databaseId,status,conclusion,headBranch,headSha,createdAt",
+    "databaseId,status,conclusion,headBranch,headSha,createdAt,jobs",
   ]);
   return JSON.parse(result.stdout) as GithubRun;
 }
 
-async function assertRunMatchesExpectedHead(args: Args, runId: string): Promise<void> {
+async function assertRunMatchesExpectedHead(args: Args, runId: string): Promise<GithubRun> {
   const run = await viewRun(args, runId);
   if (run.headSha !== args.expectedHead) {
     throw new Error(
@@ -282,6 +292,23 @@ async function assertRunMatchesExpectedHead(args: Args, runId: string): Promise<
     throw new Error(
       `GitHub Actions run ${runId} is not completed usable evidence: ${run.status ?? "unknown"}/${run.conclusion ?? "unknown"}`,
     );
+  }
+  return run;
+}
+
+async function assertRunHasSuccessfulTauriJobs(args: Args, runId: string, viewedRun?: GithubRun): Promise<void> {
+  const run = viewedRun ?? (await viewRun(args, runId));
+  const jobs = run.jobs ?? [];
+  for (const jobName of requiredTauriJobNames) {
+    const job = jobs.find((candidate) => candidate.name === jobName);
+    if (job == null) {
+      throw new Error(`GitHub Actions run ${runId} is missing required native M4 job: ${jobName}`);
+    }
+    if (job.status !== "completed" || job.conclusion !== "success") {
+      throw new Error(
+        `GitHub Actions run ${runId} required native M4 job did not pass: ${jobName} is ${job.status ?? "unknown"}/${job.conclusion ?? "unknown"}`,
+      );
+    }
   }
 }
 

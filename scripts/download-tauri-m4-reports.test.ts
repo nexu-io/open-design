@@ -46,6 +46,7 @@ test("download-tauri-m4-reports downloads latest completed artifacts and verifie
   assert.equal((await readJson(join(outputDir, linuxArtifactName, "manifest.json"))).platform, "linux");
   const calls = await readFile(join(root, "gh-calls.log"), "utf8");
   assert.match(calls, /run list --repo example\/open-design --branch feature/);
+  assert.match(calls, /run view 12345/);
   assert.match(calls, new RegExp(`run download 12345[\\s\\S]*--name ${winArtifactName}`));
   assert.match(calls, new RegExp(`run download 12345[\\s\\S]*--name ${linuxArtifactName}`));
 });
@@ -60,6 +61,7 @@ test("download-tauri-m4-reports can use an explicit run id without listing runs"
   assert.match(result.stdout, /Run: 777/);
   const calls = await readFile(join(root, "gh-calls.log"), "utf8");
   assert.doesNotMatch(calls, /run list/);
+  assert.match(calls, /run view 777/);
   assert.match(calls, /run download 777/);
 });
 
@@ -84,6 +86,22 @@ test("download-tauri-m4-reports verifies explicit run ids against the expected h
   assert.doesNotMatch(calls, /run list/);
   assert.match(calls, /run view 777/);
   assert.match(calls, /run download 777/);
+});
+
+test("download-tauri-m4-reports rejects runs without passing native Tauri jobs", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "open-design-tauri-download-run-jobs-"));
+  t.after(() => void rm(root, { force: true, recursive: true }));
+  const fakeGh = await writeFakeGh(root, {
+    viewJobs: [{ name: "Packaged windows Tauri smoke", status: "completed", conclusion: "failure" }],
+  });
+
+  await assert.rejects(
+    runDownload(fakeGh, "--run-id", "777", "--output-dir", join(root, "reports")),
+    /required native M4 job did not pass: Packaged windows Tauri smoke is completed\/failure/,
+  );
+  const calls = await readFile(join(root, "gh-calls.log"), "utf8");
+  assert.match(calls, /run view 777/);
+  assert.doesNotMatch(calls, /run download 777/);
 });
 
 test("download-tauri-m4-reports rejects explicit run ids from stale heads", async (t) => {
@@ -222,10 +240,15 @@ async function writeFakeGh(
   root: string,
   options: {
     listResponses?: Array<Array<Record<string, unknown>>>;
+    viewJobs?: Array<Record<string, unknown>>;
     viewHeadBranch?: string;
   } = {},
 ): Promise<string> {
   const fakeGh = join(root, "gh");
+  const viewJobs = options.viewJobs ?? [
+    { name: "Packaged windows Tauri smoke", status: "completed", conclusion: "success" },
+    { name: "Packaged linux Tauri smoke", status: "completed", conclusion: "success" },
+  ];
   const viewHeadBranch = options.viewHeadBranch ?? "codex/electron-to-tauri-migration";
   const listResponses = options.listResponses ?? [
     [
@@ -257,8 +280,9 @@ async function writeFakeGh(
       "  process.exit(0);",
       "}",
       "if (args[0] === 'run' && args[1] === 'view') {",
+      `  const viewJobs = ${JSON.stringify(viewJobs)};`,
       `  const viewHeadBranch = ${JSON.stringify(viewHeadBranch)};`,
-      "  process.stdout.write(JSON.stringify({ databaseId: Number(args[2]), status: 'completed', conclusion: 'success', headBranch: viewHeadBranch, headSha: 'a'.repeat(40), createdAt: '2026-05-20T00:00:00Z' }));",
+      "  process.stdout.write(JSON.stringify({ databaseId: Number(args[2]), status: 'completed', conclusion: 'success', headBranch: viewHeadBranch, headSha: 'a'.repeat(40), createdAt: '2026-05-20T00:00:00Z', jobs: viewJobs }));",
       "  process.exit(0);",
       "}",
       "if (args[0] === 'run' && args[1] === 'download') {",
