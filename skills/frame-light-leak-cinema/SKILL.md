@@ -20,7 +20,6 @@ od:
   mode: video
   surface: video
   scenario: video
-  featured: 36
   upstream: "https://github.com/nexu-io/html-anything"
   preview:
     type: html

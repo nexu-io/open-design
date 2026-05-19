@@ -95,7 +95,7 @@ jobs:
           pnpm --filter @open-design/desktop build
 
       - name: Typecheck workspaces
-        run: pnpm -r --workspace-concurrency=1 --if-present run typecheck
+        run: pnpm -r --workspace-concurrency=4 --if-present run typecheck
 
       - name: Check repository layout policies
         run: pnpm guard

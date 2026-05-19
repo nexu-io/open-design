@@ -2,11 +2,103 @@ import { test } from 'vitest';
 import {
   AGENT_DEFS, assert, chmodSync, codex, detectAgents, join, mkdtempSync, rmSync, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
 } from './helpers/test-helpers.js';
+import { readLocalAgentProfileDefs } from '../../src/runtimes/registry.js';
 
 test('AGENT_DEFS ids are unique', () => {
   const ids = AGENT_DEFS.map((a) => a.id);
   const dupes = ids.filter((id, i) => ids.indexOf(id) !== i);
   assert.deepEqual(dupes, [], `duplicate agent ids: ${JSON.stringify(dupes)}`);
+});
+
+test('local agent profiles inherit a base adapter and can pin the default model', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-local-agent-profiles-'));
+  try {
+    await withEnvSnapshot(['OD_AGENT_PROFILES_CONFIG'], async () => {
+      const config = join(dir, 'agents.local.json');
+      writeFileSync(
+        config,
+        JSON.stringify({
+          agents: [
+            {
+              id: 'zcode',
+              name: 'ZCode',
+              baseAgent: 'claude',
+              bin: 'zcode',
+              args: ['run'],
+              defaultModel: 'zyb-claude',
+              models: [
+                { id: 'zyb-claude', label: 'zyb-claude' },
+                { id: 'zyb-gpt', label: 'zyb-gpt' },
+              ],
+              env: {
+                ZCODE_ROUTE: 'design',
+                RETRIES: 2,
+                'BAD-NAME': 'ignored',
+              },
+            },
+          ],
+        }),
+      );
+      process.env.OD_AGENT_PROFILES_CONFIG = config;
+
+      const profiles = readLocalAgentProfileDefs();
+      assert.equal(profiles.length, 1);
+      const [profile] = profiles;
+      assert.ok(profile);
+      assert.equal(profile.id, 'zcode');
+      assert.equal(profile.name, 'ZCode');
+      assert.equal(profile.bin, 'zcode');
+      assert.equal(profile.promptViaStdin, true);
+      assert.equal(profile.streamFormat, 'claude-stream-json');
+      assert.deepEqual(profile.fallbackModels.map((model) => model.id), [
+        'default',
+        'zyb-claude',
+        'zyb-gpt',
+      ]);
+      assert.deepEqual(profile.env, {
+        ZCODE_ROUTE: 'design',
+        RETRIES: '2',
+      });
+
+      const defaultArgs = profile.buildArgs('', [], [], {});
+      assert.deepEqual(defaultArgs.slice(0, 2), ['run', '-p']);
+      assert.ok(defaultArgs.includes('--model'));
+      assert.equal(defaultArgs[defaultArgs.indexOf('--model') + 1], 'zyb-claude');
+
+      const explicitArgs = profile.buildArgs('', [], [], { model: 'zyb-gpt' });
+      assert.equal(explicitArgs[explicitArgs.indexOf('--model') + 1], 'zyb-gpt');
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('local agent profiles skip explicit unknown baseAgent without falling back', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-local-agent-profiles-invalid-'));
+  try {
+    await withEnvSnapshot(['OD_AGENT_PROFILES_CONFIG'], async () => {
+      const config = join(dir, 'agents.local.json');
+      writeFileSync(
+        config,
+        JSON.stringify({
+          agents: [
+            { id: 'claude', bin: 'duplicate' },
+            { id: 'bad id with spaces', bin: 'bad' },
+            { id: 'unknown-base', baseAgent: 'does-not-exist', bin: 'bad' },
+            { id: 'ok-wrapper', bin: 'ok-wrapper' },
+          ],
+        }),
+      );
+      process.env.OD_AGENT_PROFILES_CONFIG = config;
+
+      const profiles = readLocalAgentProfileDefs();
+
+      assert.deepEqual(profiles.map((profile) => profile.id), ['ok-wrapper']);
+      assert.equal(profiles[0]?.bin, 'ok-wrapper');
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('codex args disable plugins when OD_CODEX_DISABLE_PLUGINS is 1', () => {
@@ -155,6 +247,71 @@ test('codex model picker includes current OpenAI choices in priority order', asy
       assert.equal(detected.available, true);
       assert.equal(detected.version, 'codex 1.0.0');
       assert.deepEqual(detected.models.map((m: { id: string }) => m.id), expectedModels);
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('codex parses live model catalog from debug models JSON', () => {
+  assert.ok(codex.listModels, 'codex must define live model discovery');
+  const parsed = codex.listModels.parse(JSON.stringify({
+    models: [
+      {
+        slug: 'gpt-6-codex',
+        display_name: 'GPT-6 Codex',
+        visibility: 'list',
+      },
+      {
+        slug: 'gpt-6-codex-mini',
+        display_name: 'GPT-6 Codex Mini',
+        visibility: 'list',
+      },
+      {
+        slug: 'gpt-hidden-internal',
+        display_name: 'Hidden internal',
+        visibility: 'hidden',
+      },
+    ],
+  }));
+
+  assert.deepEqual(parsed, [
+    { id: 'default', label: 'Default (CLI config)' },
+    { id: 'gpt-6-codex', label: 'GPT-6 Codex' },
+    { id: 'gpt-6-codex-mini', label: 'GPT-6 Codex Mini' },
+  ]);
+});
+
+test('codex detection surfaces live debug models separately from fallback models', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-agents-codex-live-models-'));
+  try {
+    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME'], async () => {
+      const codexBin = join(dir, 'codex');
+      writeFileSync(
+        codexBin,
+        `#!/bin/sh
+if [ "$1" = "--version" ]; then echo "codex-cli 9.9.9"; exit 0; fi
+if [ "$1" = "debug" ] && [ "$2" = "models" ]; then
+  printf '%s\\n' '{"models":[{"slug":"gpt-6-codex","display_name":"GPT-6 Codex","visibility":"list"}]}'
+  exit 0
+fi
+exit 2
+`,
+      );
+      chmodSync(codexBin, 0o755);
+      process.env.OD_AGENT_HOME = dir;
+      process.env.PATH = dir;
+
+      const agents = await detectAgents();
+      const detected = agents.find((agent) => agent.id === 'codex');
+
+      assert.ok(detected);
+      assert.equal(detected.available, true);
+      assert.equal(detected.modelsSource, 'live');
+      assert.deepEqual(detected.models.map((m: { id: string }) => m.id), [
+        'default',
+        'gpt-6-codex',
+      ]);
     });
   } finally {
     rmSync(dir, { recursive: true, force: true });

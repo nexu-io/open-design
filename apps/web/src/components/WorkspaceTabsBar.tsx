@@ -89,7 +89,7 @@ function tabFromRoute(route: Route, timestamp = Date.now()): WorkspaceChromeTab 
       lastActiveAt: timestamp,
     };
   }
-  return createEntryTab(route.view, timestamp);
+  return createEntryTab(route.kind === 'home' ? route.view : 'design-systems', timestamp);
 }
 
 function routeForTab(tab: WorkspaceChromeTab): Route {
@@ -544,7 +544,7 @@ function displayTabFor(
     return {
       id: tab.id,
       title: project?.name?.trim() || t('common.untitled'),
-      meta: 'Project',
+      meta: t('workspaceTabs.project'),
       icon: 'folder',
       tab,
     };
@@ -552,8 +552,8 @@ function displayTabFor(
   if (tab.kind === 'marketplace') {
     return {
       id: tab.id,
-      title: tab.pluginId ? 'Plugin details' : 'Marketplace',
-      meta: 'Plugins',
+      title: tab.pluginId ? t('workspaceTabs.pluginDetails') : t('workspaceTabs.marketplace'),
+      meta: t('entry.navPlugins'),
       icon: 'grid',
       tab,
     };
@@ -561,10 +561,10 @@ function displayTabFor(
   const entryTitle: Record<EntryHomeView, string> = {
     home: t('entry.navHome'),
     projects: t('entry.navProjects'),
-    tasks: 'Automations',
-    plugins: 'Plugins',
+    tasks: t('entry.navTasks'),
+    plugins: t('entry.navPlugins'),
     'design-systems': t('entry.navDesignSystems'),
-    integrations: 'Integrations',
+    integrations: t('entry.navIntegrations'),
   };
   const entryIcon: Record<EntryHomeView, IconName> = {
     home: 'home',

@@ -1,7 +1,9 @@
+import type { ConnectionTestProtocol } from './connectionTest';
+
 // Shared DTOs for the `/api/projects/:id/finalize/<provider>` family of
-// synthesis endpoints. The first endpoint is `/finalize/anthropic`
-// (introduced in PR #832); future provider-namespaced siblings
-// (`/finalize/openai` etc.) can reuse the request/response shape.
+// synthesis endpoints. `/finalize/anthropic` was introduced first; the
+// request body now also carries the BYOK protocol so callers can route the
+// same finalized-design synthesis through the provider selected in Settings.
 
 /**
  * Bumped when the finalize request/response shape changes incompatibly.
@@ -12,20 +14,35 @@
 export const FINALIZE_SCHEMA_VERSION = 1;
 
 /**
- * Request body for `POST /api/projects/:id/finalize/anthropic`.
+ * Provider ids supported by the finalized-design synthesis path.
+ * Matches the BYOK protocols exposed by Settings and connection tests.
+ */
+export type FinalizeProviderProtocol = ConnectionTestProtocol;
+
+/**
+ * Request body for `POST /api/projects/:id/finalize/<provider>`.
  *
  * Field names mirror `ProxyStreamRequest` (./proxy.ts) so a caller that
  * already has provider credentials assembled for chat can reuse the
  * same shape. `baseUrl` is optional here (intentional divergence from
- * the proxy, which requires it) — standard Anthropic users do not need
- * to set it; Bedrock / self-hosted-proxy users still can.
+ * the proxy, which requires it for some providers) — standard provider
+ * defaults are applied by the daemon when possible.
  */
-export interface FinalizeAnthropicRequest {
+export interface FinalizeProviderRequest {
+  /**
+   * BYOK protocol selected in Settings. Omitted means `anthropic` for
+   * backward compatibility with the original `/finalize/anthropic` caller.
+   */
+  protocol?: FinalizeProviderProtocol;
   apiKey: string;
   baseUrl?: string;
   model: string;
   maxTokens?: number;
+  /** Azure OpenAI only. Defaults at the daemon when omitted. */
+  apiVersion?: string;
 }
+
+export type FinalizeAnthropicRequest = FinalizeProviderRequest;
 
 /**
  * Reference to the artifact that participated in the finalize call, if
@@ -45,7 +62,7 @@ export interface FinalizeArtifactRef {
  * is the exact UTF-8 byte length on disk. Token counts are echoed
  * straight from the provider's `usage` block.
  */
-export interface FinalizeAnthropicResponse {
+export interface FinalizeProviderResponse {
   designMdPath: string;
   bytesWritten: number;
   model: string;
@@ -55,3 +72,5 @@ export interface FinalizeAnthropicResponse {
   transcriptMessageCount: number;
   designSystemId: string | null;
 }
+
+export type FinalizeAnthropicResponse = FinalizeProviderResponse;

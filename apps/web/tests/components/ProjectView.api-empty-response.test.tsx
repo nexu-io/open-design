@@ -118,7 +118,9 @@ vi.mock('../../src/components/AvatarMenu', () => ({
 }));
 
 vi.mock('../../src/components/FileWorkspace', () => ({
-  FileWorkspace: () => <div data-testid="file-workspace" />,
+  FileWorkspace: ({ openRequest }: { openRequest?: { name: string; nonce: number } | null }) => (
+    <div data-testid="file-workspace" data-open-request-name={openRequest?.name ?? ''} />
+  ),
 }));
 
 vi.mock('../../src/components/Loading', () => ({
@@ -461,6 +463,44 @@ describe('ProjectView API empty response handling', () => {
     await waitFor(() => expect(mockedWriteProjectTextFile).toHaveBeenCalled());
     expect(screen.queryByText(/provider ended the request/i)).toBeNull();
     expect(screen.queryByText('empty_response:deepseek-chat')).toBeNull();
+  });
+
+  it('opens the real HTML page instead of saving a pointer artifact as the preview entry', async () => {
+    const realPage = {
+      name: 'worker-edition-v2.html',
+      path: 'worker-edition-v2.html',
+      kind: 'html',
+      mime: 'text/html',
+      size: 60_000,
+      mtime: 1,
+    };
+    mockedFetchProjectFiles.mockResolvedValue([realPage] as never);
+    const artifact =
+      '<artifact identifier="worker-edition-v2" type="text/html" title="合同审查报告">' +
+      '见 worker-edition-v2.html' +
+      '</artifact>';
+    mockedStreamMessage.mockImplementation(async (
+      _cfg: AppConfig,
+      _system: string,
+      _history: ChatMessage[],
+      _signal: AbortSignal,
+      handlers: StreamHandlers,
+    ) => {
+      handlers.onDelta(artifact);
+      handlers.onDone('');
+    });
+    renderProjectView();
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(true);
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('file-workspace').dataset.openRequestName).toBe('worker-edition-v2.html');
+    });
+    expect(mockedWriteProjectTextFile).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Refused to save artifact/i)).toBeNull();
   });
 
   it('injects ElevenLabs voice options into API-mode audio project prompts', async () => {

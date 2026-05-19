@@ -335,15 +335,6 @@
   line-height: 1.45;
 }
 
-.plugins-view__trust {
-  flex: 0 0 auto;
-  padding: 2px 6px;
-  border-radius: 999px;
-  font-size: 10.5px;
-  font-weight: 650;
-  text-transform: uppercase;
-}
-
 .plugins-view__meta {
   display: flex;
   flex-wrap: wrap;
@@ -353,7 +344,7 @@
   font-size: 11.5px;
 }
 
-.plugins-view__meta span {
+.plugins-view__meta > span {
   padding: 2px 6px;
   border: 1px solid var(--border-soft);
   border-radius: 999px;

@@ -72,8 +72,8 @@ jobs:
           node-version: 24
           cache: pnpm
 
-      - name: Install dependencies (landing-page only)
-        run: pnpm install --frozen-lockfile --filter @open-design/landing-page
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Check indexing configuration
         id: config

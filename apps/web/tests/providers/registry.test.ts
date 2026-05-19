@@ -11,6 +11,7 @@ import {
   fetchAppVersionInfo,
   fetchConnectorDetail,
   fetchConnectorDiscovery,
+  fetchProjectDesignSystemPackageAudit,
   fetchProjectFileText,
   fetchSkillExample,
   isDeployProviderId,
@@ -94,17 +95,30 @@ describe('fetchSkillExample', () => {
     expect(fetchMock).toHaveBeenCalledWith('/api/skills/blog-post/example');
   });
 
-  it('forwards the html fetch and returns a discriminated error on non-2xx', async () => {
+  it('treats missing html previews as unavailable instead of an error', async () => {
     const fetchMock = vi.fn(
       async () => new Response('not found', { status: 404 }),
     );
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(fetchSkillExample('design-brief', 'html')).resolves.toEqual({
-      error: 'HTTP 404',
+      unavailable: true,
+      kind: 'html',
     });
     // Confirm the dispatch did call through to the daemon for the html
     // path (i.e. the short-circuit above only catches non-html types).
+    expect(fetchMock).toHaveBeenCalledWith('/api/skills/design-brief/example');
+  });
+
+  it('forwards real html preview fetch failures as discriminated errors', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response('server error', { status: 500 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchSkillExample('design-brief', 'html')).resolves.toEqual({
+      error: 'HTTP 500',
+    });
     expect(fetchMock).toHaveBeenCalledWith('/api/skills/design-brief/example');
   });
 });
@@ -168,6 +182,43 @@ describe('fetchProjectFileText', () => {
         url: '/api/projects/project-1/raw/diagram.svg',
       }),
     );
+  });
+});
+
+describe('fetchProjectDesignSystemPackageAudit', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('returns the daemon package audit for a project', async () => {
+    const audit = {
+      ok: false,
+      projectPath: '/tmp/project',
+      filesInspected: 4,
+      errors: [{
+        severity: 'error',
+        code: 'ui_kit_index_missing_runtime_bootstrap',
+        message: 'UI kit must mount.',
+        path: 'ui_kits/app/index.html',
+      }],
+      warnings: [],
+    };
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ audit }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchProjectDesignSystemPackageAudit('ds acme')).resolves.toEqual(audit);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/projects/ds%20acme/design-system-package-audit',
+      { cache: 'no-store' },
+    );
+  });
+
+  it('returns null when the audit endpoint is unavailable', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('missing', { status: 404 })));
+
+    await expect(fetchProjectDesignSystemPackageAudit('missing')).resolves.toBeNull();
   });
 });
 
@@ -343,6 +394,7 @@ describe('connectConnector', () => {
 
     await expect(connectConnector('github')).resolves.toEqual({
       connector: { id: 'github', name: 'GitHub', status: 'available', tools: [] },
+      auth: { kind: 'redirect_required', redirectUrl: 'https://example.com/oauth' },
       error: 'Popup blocked. Allow popups for Open Design and try again.',
     });
     expect(open).toHaveBeenCalledTimes(2);
@@ -441,6 +493,7 @@ describe('connectConnector', () => {
 
     await expect(connectConnector('github')).resolves.toEqual({
       connector: { id: 'github', name: 'GitHub', status: 'available', tools: [] },
+      auth: { kind: 'redirect_required', redirectUrl: 'https://example.com/oauth' },
       error: 'Popup blocked. Allow popups for Open Design and try again.',
     });
     expect(open).not.toHaveBeenCalled();

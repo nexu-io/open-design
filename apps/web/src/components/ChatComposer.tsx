@@ -2,6 +2,7 @@ import {
   forwardRef,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -51,6 +52,17 @@ const USER_PLUGIN_SOURCE_KINDS = new Set<PluginSourceKind>([
   'url',
   'local',
 ]);
+
+const COMPOSER_TEXTAREA_MIN_HEIGHT = 88;
+const COMPOSER_TEXTAREA_MAX_HEIGHT = 184;
+
+function composerTextareaMaxHeight(): number {
+  if (typeof window === 'undefined') return COMPOSER_TEXTAREA_MAX_HEIGHT;
+  return Math.max(
+    COMPOSER_TEXTAREA_MIN_HEIGHT,
+    Math.min(COMPOSER_TEXTAREA_MAX_HEIGHT, Math.round(window.innerHeight * 0.34)),
+  );
+}
 
 interface SlashCommand {
   id: string;
@@ -355,6 +367,32 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       () => buildInlineMentionParts(draft, composerMentionEntities),
       [composerMentionEntities, draft],
     );
+
+    function resizeTextarea() {
+      const ta = textareaRef.current;
+      if (!ta) return;
+      const maxHeight = composerTextareaMaxHeight();
+      ta.style.height = 'auto';
+      const nextHeight = Math.min(
+        Math.max(ta.scrollHeight, COMPOSER_TEXTAREA_MIN_HEIGHT),
+        maxHeight,
+      );
+      ta.style.height = `${nextHeight}px`;
+      ta.style.overflowY = ta.scrollHeight > maxHeight ? 'auto' : 'hidden';
+    }
+
+    useLayoutEffect(() => {
+      resizeTextarea();
+    }, [draft, composerMentionParts, staged.length, stagedSkills.length]);
+
+    useEffect(() => {
+      function onResize() {
+        resizeTextarea();
+      }
+      window.addEventListener('resize', onResize);
+      return () => window.removeEventListener('resize', onResize);
+    }, []);
+
     useEffect(() => {
       setComposerScrollTop(textareaRef.current?.scrollTop ?? 0);
     }, [composerMentionParts, draft]);
@@ -1029,21 +1067,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     const filteredSkills = mention
       ? skills
           .filter((s) => !stagedSkillIds.has(s.id))
-          .filter((s) => {
-            if (!mentionQuery) return true;
-            return [
-              s.id,
-              s.name,
-              s.description,
-              s.mode,
-              s.surface ?? '',
-              ...s.triggers,
-            ]
-              .join(' ')
-              .toLowerCase()
-              .includes(mentionQuery);
-          })
-          .slice(0, 8)
+          .filter((s) => skillMatchesQuery(s, mentionQuery))
+          .sort((a, b) => skillMentionRank(a, mentionQuery) - skillMentionRank(b, mentionQuery))
       : [];
 
     return (
@@ -1259,7 +1284,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 aria-expanded={toolsOpen}
                 aria-label={t('chat.cliSettingsAria')}
               >
-                <Icon name="sliders" size={15} />
+                <span className="composer-tools-at" aria-hidden>
+                  @
+                </span>
               </button>
               {toolsOpen ? (
                 <div
@@ -1478,7 +1505,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           </div>
         </div>
         {uploadError ? <span className="composer-hint">{uploadError}</span> : null}
-        <span className="composer-hint">{t('chat.composerHint')}</span>
         {detailsRecord ? (
           <PluginDetailsModal
             record={detailsRecord}
@@ -2077,6 +2103,15 @@ function skillMatchesQuery(skill: SkillSummary, query: string): boolean {
     .join(' ')
     .toLowerCase()
     .includes(q);
+}
+
+function skillMentionRank(skill: SkillSummary, query: string): number {
+  const q = query.trim().toLowerCase();
+  if (!q) return 1;
+  const id = skill.id.toLowerCase();
+  const name = skill.name.toLowerCase();
+  if (id.startsWith(q) || name.startsWith(q)) return 0;
+  return 1;
 }
 
 function mcpServerMatchesQuery(server: McpServerConfig, query: string): boolean {

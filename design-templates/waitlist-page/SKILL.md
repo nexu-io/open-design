@@ -14,7 +14,6 @@ od:
   mode: prototype
   platform: desktop
   scenario: marketing
-  featured: 1
   preview:
     type: html
     entry: example.html

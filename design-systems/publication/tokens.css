@@ -1,0 +1,63 @@
+/* design-systems/publication/tokens.css
+ * Structured token bindings for Publication.
+ * news publication system with white pages, black editorial type, and crisp red section signals.
+ */
+
+:root {
+  --bg: #ffffff;
+  --surface: #f6f6f6;
+  --surface-warm: #fff2f0;
+  --fg: #0b0b0b;
+  --fg-2: #333333;
+  --muted: #666666;
+  --meta: #c1121f;
+  --border: #d6d6d6;
+  --border-soft: #ececec;
+  --accent: #c1121f;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #0f8a3b;
+  --warn: #d99a00;
+  --danger: #b00020;
+  --font-display: "Franklin Gothic", Arial, sans-serif;
+  --font-body: Georgia, "Times New Roman", serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 17px;
+  --text-lg: 20px;
+  --text-xl: 28px;
+  --text-2xl: 42px;
+  --text-3xl: 64px;
+  --text-4xl: 88px;
+  --leading-body: 1.58;
+  --leading-tight: 0.98;
+  --tracking-display: -0.018em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 88px;
+  --section-y-tablet: 64px;
+  --section-y-phone: 44px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 16px 42px rgba(0, 0, 0, 0.12);
+  --focus-ring: 0 0 0 4px rgba(193, 18, 31, 0.24);
+  --motion-fast: 120ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --container-max: 1180px;
+  --container-gutter-desktop: 36px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

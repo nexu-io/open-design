@@ -135,9 +135,15 @@ export const zhTW: Dict = {
   'settings.themeDark': '深色',
   'settings.agentModelHead': '模型：',
   'settings.modelPicker': '模型',
+  'settings.modelSourceLive': 'Live from CLI',
+  'settings.modelSourceFallback': 'Fallback list',
   'settings.reasoningPicker': '推理強度',
   'settings.modelPickerHint':
     '當 CLI 提供 `models` 命令時會自動拉取。選擇「預設」則沿用 CLI 自身的設定；選擇「自訂」可手動輸入任何 CLI 支援的模型 id。',
+  'settings.modelPickerLiveHint':
+    'Models were refreshed from the installed CLI. Default still uses the CLI config.',
+  'settings.modelPickerFallbackHint':
+    'Using Open Design fallback models because the installed CLI did not return live model metadata. Rescan after updating or logging in to the CLI.',
   'settings.cliEnvTitle': 'CLI 設定位置',
   'settings.cliEnvHint':
     '為打包版應用執行和 agent 偵測設定非敏感設定目錄。',
@@ -176,6 +182,9 @@ export const zhTW: Dict = {
   'settings.privacyConsentFooter': '你可以隨時在 設定 → 隱私 中變更任一項。我們絕不上傳你產生的產出檔案內容。',
   'settings.privacyConsentShare': '分享使用資料',
   'settings.privacyConsentDecline': '不分享',
+  'settings.privacyConsentAccept': '我知道了',
+  'settings.privacyConsentBannerFooter':
+    '預設開啟資料分享。你可以隨時在 設定 → 隱私 中關閉。我們絕不上傳你產生的產出檔案內容。',
   'settings.privacyConsentPolicyLink': '閱讀隱私政策',
   'settings.privacyMetrics': '匿名指標',
   'settings.privacyMetricsHint': '執行次數、token 用量、錯誤率、時長。不包含 prompt,不包含專案資料。',
@@ -719,7 +728,7 @@ export const zhTW: Dict = {
   'chat.openFile': '開啟 {name}',
   'chat.copyPrompt': '複製提示詞',
   'chat.copyDone': '已複製！',
-  'chat.composerPlaceholder': '描述你想要的設計 — 可貼上/拖入圖片，或用 @ 引用檔案或技能…',
+  'chat.composerPlaceholder': '描述你想要的設計 — 貼上圖片、@ 檔案或技能、/ 叫出指令…',
   'chat.composerHint': '⌘/Ctrl + Enter 傳送 · 可貼上圖片 · @ 引用檔案或技能 · / 叫出指令',
   'chat.cliSettingsTitle': 'CLI 與模型設定',
   'chat.cliSettingsAria': '開啟 CLI 與模型設定',
@@ -900,7 +909,7 @@ export const zhTW: Dict = {
   'fileViewer.saveDisabled': '儲存（唯讀預覽）',
   'fileViewer.save': '儲存',
   'fileViewer.preview': '預覽',
-  'fileViewer.source': '原始碼',
+  'fileViewer.source': '程式碼',
   'fileViewer.tweaks': '調整',
   'fileViewer.comment': '評論',
   'fileViewer.edit': '編輯',

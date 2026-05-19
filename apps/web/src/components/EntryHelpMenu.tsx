@@ -19,6 +19,8 @@ const ISSUES_URL = `${REPO}/issues/new`;
 const PRS_URL = `${REPO}/pulls`;
 const RELEASES_URL = `${REPO}/releases`;
 const LATEST_RELEASE_URL = `${REPO}/releases/latest`;
+const X_URL = 'https://x.com/nexudotio';
+const DISCORD_URL = 'https://discord.gg/BYShPgWpq';
 
 const ext = { target: '_blank', rel: 'noreferrer noopener' } as const;
 
@@ -112,6 +114,31 @@ export function EntryHelpMenu() {
               <Icon name="download" size={14} />
             </span>
             <span>{t('entry.helpDownloadDesktop')}</span>
+          </a>
+          <div className="entry-help-popover__divider" aria-hidden />
+          <a
+            className="entry-help-popover__item"
+            href={X_URL}
+            {...ext}
+            role="menuitem"
+            onClick={() => setOpen(false)}
+          >
+            <span className="entry-help-popover__icon" aria-hidden>
+              <Icon name="external-link" size={14} />
+            </span>
+            <span>Follow @nexudotio on X</span>
+          </a>
+          <a
+            className="entry-help-popover__item"
+            href={DISCORD_URL}
+            {...ext}
+            role="menuitem"
+            onClick={() => setOpen(false)}
+          >
+            <span className="entry-help-popover__icon" aria-hidden>
+              <Icon name="discord" size={14} />
+            </span>
+            <span>Join Discord</span>
           </a>
         </div>
       ) : null}

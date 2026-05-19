@@ -21,6 +21,7 @@ export * from './api/registry.js';
 export * from './api/research.js';
 export * from './api/version.js';
 export * from './examples.js';
+export * from './design-systems/components-manifest.js';
 export * from './sse/common.js';
 export * from './sse/chat.js';
 export * from './sse/proxy.js';

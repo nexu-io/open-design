@@ -13,6 +13,7 @@ import type {
   PluginManifest,
 } from '@open-design/contracts';
 import { Icon } from '../Icon';
+import { TrustBadge } from '../TrustBadge';
 import { PluginPreviewHero } from './PluginPreviewHero';
 import { PluginMetaSections } from './PluginMetaSections';
 import { PluginShareMenu } from './PluginShareMenu';
@@ -81,11 +82,7 @@ export function PluginScenarioDetail({
           <div className="plugin-details-modal__head-titles">
             <div className="plugin-details-modal__head-row">
               <h2 className="plugin-details-modal__title">{record.title}</h2>
-              <span
-                className={`plugin-details-modal__trust trust-${record.trust}`}
-              >
-                {record.trust}
-              </span>
+              <TrustBadge trust={record.trust} />
             </div>
             <div className="plugin-details-modal__meta">
               <span>v{record.version}</span>

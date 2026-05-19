@@ -909,7 +909,7 @@ function meaningfulDomFallbackTarget(el) {
 
   return true;
 }
-  function targetFrom(el, allowDomFallback){
+  function targetFrom(el, allowDomFallback, clickedEl){
     var id = el.getAttribute('data-od-id') || el.getAttribute('data-screen-label');
     var selector = annotatedSelectorFor(el);
     if (!id && allowDomFallback && meaningfulDomFallbackTarget(el)) {
@@ -922,7 +922,7 @@ function meaningfulDomFallbackTarget(el) {
     var cls = typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\\s+/).slice(0,2).join('.') : '';
     var html = '';
     try { html = (el.outerHTML || '').replace(/\\s+/g, ' ').match(/^<[^>]+>/)?.[0] || ''; } catch (_) {}
-    return {
+    var payload = {
       type: 'od:comment-target',
       elementId: id,
       selector: selector,
@@ -932,6 +932,15 @@ function meaningfulDomFallbackTarget(el) {
       htmlHint: html.slice(0, 180),
       style: styleSnapshot(el)
     };
+    if (clickedEl && clickedEl !== el) {
+      var clickedTag = clickedEl.tagName ? clickedEl.tagName.toLowerCase() : 'element';
+      var clickedCls = typeof clickedEl.className === 'string' && clickedEl.className.trim() ? '.' + clickedEl.className.trim().split(/\\s+/).slice(0,2).join('.') : '';
+      payload.clickedDescendant = {
+        label: clickedTag + clickedCls,
+        text: (clickedEl.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 80)
+      };
+    }
+    return payload;
   }
   function allTargets(){
     var annotatedNodes = document.querySelectorAll('[data-od-id], [data-screen-label]');
@@ -1004,15 +1013,18 @@ function meaningfulDomFallbackTarget(el) {
     return commentEnabled && !inspectEnabled && document.querySelectorAll('[data-od-id], [data-screen-label]').length === 0;
   }
   function closestTarget(event){
-    var el = event.target;
+    var clicked = event.target;
+    var el = clicked;
     var fallback = null;
     var allowDomFallback = mode === 'picker' && canUseDomFallback();
     while (el && el !== document.documentElement) {
-      if (el.getAttribute && (el.hasAttribute('data-od-id') || el.hasAttribute('data-screen-label'))) return el;
-if (!fallback && allowDomFallback && meaningfulDomFallbackTarget(el)) fallback = el;
+      if (el.getAttribute && (el.hasAttribute('data-od-id') || el.hasAttribute('data-screen-label'))) {
+        return { target: el, clicked: clicked };
+      }
+      if (!fallback && allowDomFallback && meaningfulDomFallbackTarget(el)) fallback = el;
       el = el.parentElement;
     }
-    return fallback;
+    return fallback ? { target: fallback, clicked: clicked } : null;
   }
   function applyOverride(elementId, selector, prop, value){
     if (!elementId || !prop) return;
@@ -1123,20 +1135,20 @@ if (!fallback && allowDomFallback && meaningfulDomFallbackTarget(el)) fallback =
   function pickerActive(){ return inspectEnabled || (commentEnabled && mode === 'picker'); }
   document.addEventListener('mouseover', function(ev){
     if (!pickerActive()) return;
-    var el = closestTarget(ev);
-    if (!el) return;
-    var payload = targetFrom(el, commentEnabled && mode === 'picker' && !inspectEnabled);
+    var result = closestTarget(ev);
+    if (!result) return;
+    var payload = targetFrom(result.target, commentEnabled && mode === 'picker' && !inspectEnabled);
     if (!payload || payload.elementId === hoveredId) return;
     hoveredId = payload.elementId;
     window.parent.postMessage(Object.assign({}, payload, { type: 'od:comment-hover' }), '*');
   }, true);
   document.addEventListener('mouseout', function(ev){
     if (!pickerActive()) return;
-    var el = closestTarget(ev);
-    if (!el) return;
+    var result = closestTarget(ev);
+    if (!result) return;
     var next = ev.relatedTarget;
     while (next && next !== document.documentElement) {
-      if (next === el) return;
+      if (next === result.target) return;
       next = next.parentElement;
     }
     hoveredId = null;
@@ -1144,11 +1156,11 @@ if (!fallback && allowDomFallback && meaningfulDomFallbackTarget(el)) fallback =
   }, true);
   document.addEventListener('click', function(ev){
     if (!pickerActive()) return;
-    var el = closestTarget(ev);
-    if (el) {
+    var result = closestTarget(ev);
+    if (result) {
       ev.preventDefault();
       ev.stopPropagation();
-      var payload = targetFrom(el, commentEnabled && mode === 'picker' && !inspectEnabled);
+      var payload = targetFrom(result.target, commentEnabled && mode === 'picker' && !inspectEnabled, result.clicked);
       if (payload) window.parent.postMessage(payload, '*');
       return;
     }

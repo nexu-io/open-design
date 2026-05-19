@@ -38,7 +38,6 @@
     "platform": "desktop",
     "scenario": "marketing",
     "surface": "web",
-    "featured": 42,
     "preview": {
       "type": "html",
       "entry": "./example.html"

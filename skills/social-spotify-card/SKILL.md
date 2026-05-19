@@ -21,7 +21,6 @@ od:
   surface: web
   platform: desktop
   scenario: personal
-  featured: 43
   upstream: "https://github.com/nexu-io/html-anything"
   preview:
     type: html

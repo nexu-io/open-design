@@ -64,7 +64,7 @@ vi.mock('../../src/providers/provider-models', () => ({
 }));
 
 import { SettingsDialog } from '../../src/components/SettingsDialog';
-import type { SettingsSection } from '../../src/components/SettingsDialog';
+import type { AgentRefreshOptions, SettingsSection } from '../../src/components/SettingsDialog';
 import { I18nProvider } from '../../src/i18n';
 import { LOCALES } from '../../src/i18n/types';
 import type { AgentInfo, AppConfig, AppVersionInfo } from '../../src/types';
@@ -97,6 +97,10 @@ const availableAgents: AgentInfo[] = [
     models: [{ id: 'default', label: 'Default' }],
   },
 ];
+
+type OnRefreshAgents = (
+  options?: AgentRefreshOptions,
+) => void | AgentInfo[] | Promise<void | AgentInfo[]>;
 
 const sampleBundledPets = [
   {
@@ -184,7 +188,7 @@ function renderSettingsDialog(
   options: {
     agents?: AgentInfo[];
     daemonLive?: boolean;
-    onRefreshAgents?: ReturnType<typeof vi.fn>;
+    onRefreshAgents?: OnRefreshAgents;
     initialSection?: SettingsSection;
     appVersionInfo?: AppVersionInfo | null;
   } = {},
@@ -192,7 +196,7 @@ function renderSettingsDialog(
   const onPersist = vi.fn();
   const onPersistComposioKey = vi.fn();
   const onClose = vi.fn();
-  const onRefreshAgents = options.onRefreshAgents ?? vi.fn();
+  const onRefreshAgents = options.onRefreshAgents ?? vi.fn<OnRefreshAgents>();
 
   const view = render(
     <SettingsDialog
@@ -764,6 +768,50 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     );
   });
 
+  it('labels live CLI model metadata in the model picker', () => {
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      {
+        agents: [
+          {
+            ...availableAgents[0]!,
+            modelsSource: 'live',
+            models: [
+              { id: 'default', label: 'Default' },
+              { id: 'gpt-6-codex', label: 'GPT-6 Codex' },
+            ],
+          },
+        ],
+      },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI/i }));
+    expect(screen.getByText('Live from CLI')).toBeTruthy();
+    expect(
+      screen.getByText(/Models were refreshed from the installed CLI/i),
+    ).toBeTruthy();
+  });
+
+  it('labels fallback CLI model metadata in the model picker', () => {
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      {
+        agents: [
+          {
+            ...availableAgents[0]!,
+            modelsSource: 'fallback',
+          },
+        ],
+      },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI/i }));
+    expect(screen.getByText('Fallback list')).toBeTruthy();
+    expect(
+      screen.getByText(/installed CLI did not return live model metadata/i),
+    ).toBeTruthy();
+  });
+
   it('shows an empty state when no local CLI agents are detected', () => {
     renderSettingsDialog(
       { mode: 'daemon', agentId: null },
@@ -840,6 +888,13 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
       { mode: 'daemon', agentId: 'codex' },
       { agents: availableAgents },
     );
+
+    expect(
+      screen.getByLabelText('Codex/OpenAI proxy API key (CODEX_API_KEY)'),
+    ).toBeTruthy();
+    expect(
+      screen.getByLabelText('Codex/OpenAI proxy API key (OPENAI_API_KEY · proxy/legacy)'),
+    ).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText('Codex home'), {
       target: { value: ' ~/.codex-team ' },

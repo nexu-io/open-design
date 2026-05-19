@@ -4,6 +4,7 @@ import { ConnectorSection } from './SettingsDialog';
 import { Icon } from './Icon';
 import { McpClientSection } from './McpClientSection';
 import { UseEverywhereGuidePanel } from './UseEverywhereModal';
+import { useT } from '../i18n';
 
 export type IntegrationTab = 'mcp' | 'connectors' | 'skills' | 'use-everywhere';
 
@@ -16,29 +17,11 @@ interface Props {
 
 const INTEGRATION_TABS: ReadonlyArray<{
   id: IntegrationTab;
-  label: string;
-  hint: string;
 }> = [
-  {
-    id: 'mcp',
-    label: 'MCP',
-    hint: 'External tools',
-  },
-  {
-    id: 'connectors',
-    label: 'Connectors',
-    hint: 'Accounts and APIs',
-  },
-  {
-    id: 'skills',
-    label: 'Skills',
-    hint: 'Coming soon',
-  },
-  {
-    id: 'use-everywhere',
-    label: 'Use everywhere',
-    hint: 'CLI, HTTP, MCP',
-  },
+  { id: 'mcp' },
+  { id: 'connectors' },
+  { id: 'skills' },
+  { id: 'use-everywhere' },
 ];
 
 export function IntegrationsView({
@@ -47,6 +30,7 @@ export function IntegrationsView({
   composioConfigLoading = false,
   onPersistComposioKey,
 }: Props) {
+  const t = useT();
   const [activeTab, setActiveTab] = useState<IntegrationTab>(initialTab);
   const [localConfig, setLocalConfig] = useState<AppConfig>(config);
 
@@ -68,25 +52,24 @@ export function IntegrationsView({
     <section className="integrations-view" aria-labelledby="integrations-title">
       <header className="integrations-view__hero">
         <div>
-          <p className="integrations-view__kicker">Integration</p>
+          <p className="integrations-view__kicker">{t('integrations.kicker')}</p>
           <h1 id="integrations-title" className="entry-section__title">
-            Integrations
+            {t('entry.navIntegrations')}
           </h1>
           <p className="integrations-view__lede">
-            Connect external systems, bring MCP tools into your agent loop, and
-            use Open Design from other IDEs, scripts, and automations.
+            {t('integrations.lede')}
           </p>
         </div>
         <div className="integrations-view__badge" aria-hidden="true">
           <Icon name="link" size={15} />
-          <span>Agent-ready</span>
+          <span>{t('integrations.agentReady')}</span>
         </div>
       </header>
 
       <nav
         className="integrations-view__tabs"
         role="tablist"
-        aria-label="Integration areas"
+        aria-label={t('integrations.areasAria')}
       >
         {INTEGRATION_TABS.map((tab) => {
           const active = tab.id === activeTab;
@@ -100,8 +83,8 @@ export function IntegrationsView({
               onClick={() => setActiveTab(tab.id)}
               data-testid={`integrations-tab-${tab.id}`}
             >
-              <span className="integrations-view__tab-label">{tab.label}</span>
-              <span className="integrations-view__tab-hint">{tab.hint}</span>
+              <span className="integrations-view__tab-label">{integrationTabLabel(tab.id, t)}</span>
+              <span className="integrations-view__tab-hint">{integrationTabHint(tab.id, t)}</span>
             </button>
           );
         })}
@@ -135,20 +118,37 @@ export function IntegrationsView({
 }
 
 function SkillsComingSoonPanel() {
+  const t = useT();
   return (
     <section className="integrations-view__coming-soon" aria-labelledby="integration-skills-title">
       <div className="integrations-view__coming-icon" aria-hidden="true">
         <Icon name="sparkles" size={22} />
       </div>
       <div>
-        <p className="integrations-view__coming-kicker">Coming soon</p>
-        <h2 id="integration-skills-title">Skills integrations</h2>
+        <p className="integrations-view__coming-kicker">{t('tasks.comingSoon')}</p>
+        <h2 id="integration-skills-title">{t('integrations.skillsTitle')}</h2>
         <p>
-          Skill-level integration management is being carried over from another
-          branch. This tab is reserved so MCP, Connectors, and future Skills
-          setup live in the same Integration route.
+          {t('integrations.skillsBody')}
         </p>
       </div>
     </section>
   );
+}
+
+function integrationTabLabel(id: IntegrationTab, t: ReturnType<typeof useT>): string {
+  switch (id) {
+    case 'mcp': return 'MCP';
+    case 'connectors': return t('entry.tabConnectors');
+    case 'skills': return t('homeHero.skills');
+    case 'use-everywhere': return t('entry.useEverywhereTitle');
+  }
+}
+
+function integrationTabHint(id: IntegrationTab, t: ReturnType<typeof useT>): string {
+  switch (id) {
+    case 'mcp': return t('integrations.tabHint.mcp');
+    case 'connectors': return t('integrations.tabHint.connectors');
+    case 'skills': return t('tasks.comingSoon');
+    case 'use-everywhere': return 'CLI, HTTP, MCP';
+  }
 }

@@ -23,7 +23,6 @@ od:
   surface: web
   mode: deck
   scenario: marketing
-  featured: 2
   audience: founders pitching, conference talks, internal reviews
   tone: editorial, restrained, premium
   scale: 6-15 viewport-locked slides

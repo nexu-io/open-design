@@ -815,6 +815,7 @@ describe('saveConfig', () => {
           CLAUDE_CONFIG_DIR: '~/.claude-2',
         },
         codex: {
+          CODEX_API_KEY: 'sk-codex',
           OPENAI_API_KEY: 'sk-openai',
           OPENAI_BASE_URL: 'https://proxy.example/openai',
           CODEX_HOME: '~/.codex-alt',
