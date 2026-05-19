@@ -161,6 +161,30 @@ export type ConnectionTestRequest =
   | ({ mode: 'provider' } & ProviderTestRequest)
   | ({ mode: 'agent' } & AgentTestRequest);
 
+// Stage in the agent connection test that produced the surfaced result.
+// Used as `diagnostics.phase`; on the success path it always reads 'stream'.
+export type ConnectionTestPhase =
+  | 'binary_resolution'
+  | 'version_probe'
+  | 'auth_probe'
+  | 'model_listing'
+  | 'spawn'
+  | 'stream';
+
+// Structured diagnostics envelope that agent-mode connection tests attach
+// to every response (success or failure). Designed for the Settings dialog
+// and any `--json` CLI consumer to render an actionable error without
+// parsing free-form `detail` text.
+export interface ConnectionTestDiagnostics {
+  agentId: string;
+  agentName: string;
+  phase: ConnectionTestPhase;
+  binaryPath: string | null;
+  binaryVersion: string | null;
+  stderrExcerpt: string | null;
+  recoveryHints: string[];
+}
+
 export interface ConnectionTestResponse {
   ok: boolean;
   kind: ConnectionTestKind;
@@ -183,4 +207,7 @@ export interface ConnectionTestResponse {
   detectedExecutablePath?: string;
   usedExecutablePath?: string;
   usedExecutableSource?: 'configured' | 'path' | 'fallback_invalid' | 'fallback_failed';
+  // Structured agent-mode diagnostics. Present on every agent-mode response;
+  // omitted for provider-mode responses.
+  diagnostics?: ConnectionTestDiagnostics;
 }
