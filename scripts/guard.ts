@@ -17,6 +17,14 @@ const migrationDocPath = path.join(repoRoot, "docs", "electron-to-tauri-migratio
 const readmePath = path.join(repoRoot, "README.md");
 const appsAgentsPath = path.join(repoRoot, "apps", "AGENTS.md");
 const architectureDocPath = path.join(repoRoot, "docs", "architecture.md");
+const guidanceReferenceFiles = [
+  path.join(repoRoot, "AGENTS.md"),
+  appsAgentsPath,
+  path.join(repoRoot, "tools", "AGENTS.md"),
+  path.join(repoRoot, "tools", "pack", "AGENTS.md"),
+  path.join(repoRoot, "docs", "code-review-guidelines.md"),
+  path.join(repoRoot, ".github", "pull_request_template.md"),
+] as const;
 const toolsDevConfigPath = path.join(repoRoot, "tools", "dev", "src", "config.ts");
 const toolsPackConfigPath = path.join(repoRoot, "tools", "pack", "src", "config.ts");
 const releaseBetaWorkflowPath = path.join(repoRoot, ".github", "workflows", "release-beta.yml");
@@ -53,6 +61,7 @@ const m6ElectronDepsLabel = "Remove `electron`, `electron-builder`, `@electron/r
 const m6ElectronRuntimeLabel = "Remove Electron preload/runtime code after Tauri bridge and packaging parity are complete.";
 const m6ElectronResourcesLabel = "Remove Electron-only resources/hooks from `tools-pack`.";
 const m6ElectronTestsLabel = "Delete or rewrite Electron-only tests.";
+const m6ElectronGuidanceLabel = "Update AGENTS guidance and PR checklist references from Electron to Tauri.";
 
 const allowedE2eScripts = new Set([
   "e2e/scripts/playwright.ts",
@@ -796,6 +805,10 @@ function containsElectronTestReference(source: string): boolean {
   return /\b[Ee]lectron\b|@electron\/|electron-builder|electronuserland/.test(source);
 }
 
+function containsElectronGuidanceReference(source: string): boolean {
+  return /\b[Ee]lectron\b|electron-builder|electronuserland/.test(source);
+}
+
 async function pathExists(filePath: string): Promise<boolean> {
   try {
     await access(filePath);
@@ -843,6 +856,19 @@ async function collectElectronTestReferenceFiles(): Promise<string[]> {
     .sort();
 }
 
+async function collectElectronGuidanceReferenceFiles(): Promise<string[]> {
+  const fileSources = await Promise.all(
+    guidanceReferenceFiles.map(async (filePath) => ({
+      filePath,
+      source: await readFile(filePath, "utf8"),
+    })),
+  );
+  return fileSources
+    .filter(({ source }) => containsElectronGuidanceReference(source))
+    .map(({ filePath }) => filePath)
+    .sort();
+}
+
 function readPackageDependencyNames(source: string, label: string): Set<string> {
   let parsed: {
     dependencies?: Record<string, string>;
@@ -876,6 +902,7 @@ async function checkTauriMigrationOrder(): Promise<boolean> {
     electronRuntimeFileExists,
     electronPackResourceFileExists,
     electronTestReferenceFiles,
+    electronGuidanceReferenceFiles,
   ] = await Promise.all([
     readFile(migrationDocPath, "utf8"),
     readFile(readmePath, "utf8"),
@@ -890,6 +917,7 @@ async function checkTauriMigrationOrder(): Promise<boolean> {
     Promise.all(electronRuntimeFiles.map((filePath) => pathExists(filePath))),
     Promise.all(electronPackResourceFiles.map((filePath) => pathExists(filePath))),
     collectElectronTestReferenceFiles(),
+    collectElectronGuidanceReferenceFiles(),
   ]);
   const toolsDevDefault = readDefaultDesktopRuntime(toolsDevConfig, "tools-dev");
   const toolsPackDefault = readDefaultDesktopRuntime(toolsPackConfig, "tools-pack");
@@ -910,6 +938,7 @@ async function checkTauriMigrationOrder(): Promise<boolean> {
   const electronRuntimeRemoved = isChecklistLineChecked(migrationDoc, m6ElectronRuntimeLabel);
   const electronResourcesRemoved = isChecklistLineChecked(migrationDoc, m6ElectronResourcesLabel);
   const electronTestsRemoved = isChecklistLineChecked(migrationDoc, m6ElectronTestsLabel);
+  const electronGuidanceUpdated = isChecklistLineChecked(migrationDoc, m6ElectronGuidanceLabel);
 
   const violations: string[] = [];
   if (m4Complete && !m4EvidenceLogMarked) {
@@ -993,6 +1022,16 @@ async function checkTauriMigrationOrder(): Promise<boolean> {
   }
   if (!electronTestsRemoved && electronTestReferenceFiles.length === 0) {
     violations.push("Electron-only tests no longer reference Electron, but the M6 test cleanup checklist line is not checked.");
+  }
+  if (electronGuidanceUpdated && electronGuidanceReferenceFiles.length > 0) {
+    violations.push(
+      `the M6 AGENTS/PR guidance cleanup is checked, but these guidance files still reference Electron: ${electronGuidanceReferenceFiles
+        .map(toRepositoryPath)
+        .join(", ")}.`,
+    );
+  }
+  if (!electronGuidanceUpdated && electronGuidanceReferenceFiles.length === 0) {
+    violations.push("AGENTS/PR guidance no longer references Electron, but the M6 guidance cleanup checklist line is not checked.");
   }
 
   if (violations.length > 0) {
