@@ -14,6 +14,9 @@ import { collectCssHardcodedColorMatches, cssWideAndSpecialColorKeywords, realNa
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const migrationDocPath = path.join(repoRoot, "docs", "electron-to-tauri-migration.md");
+const readmePath = path.join(repoRoot, "README.md");
+const appsAgentsPath = path.join(repoRoot, "apps", "AGENTS.md");
+const architectureDocPath = path.join(repoRoot, "docs", "architecture.md");
 const toolsDevConfigPath = path.join(repoRoot, "tools", "dev", "src", "config.ts");
 const toolsPackConfigPath = path.join(repoRoot, "tools", "pack", "src", "config.ts");
 const releaseBetaWorkflowPath = path.join(repoRoot, ".github", "workflows", "release-beta.yml");
@@ -40,6 +43,7 @@ const m5ToolsDevDefaultLabel = "Change `tools-dev` default desktop runtime to Ta
 const m5ToolsPackDefaultLabel = "Change `tools-pack` default desktop runtime to Tauri.";
 const m5ReleaseBetaDefaultLabel = "Change `release-beta` desktop runtime workflow default to Tauri.";
 const m5ElectronFallbackLabel = "Keep Electron fallback explicit during the transition window.";
+const m5PrimaryDocsLabel = "Update README, architecture docs, and directory guidance to describe Tauri as the primary runtime.";
 const m6ElectronDepsLabel = "Remove `electron`, `electron-builder`, `@electron/rebuild`, and Electron-only package scripts.";
 const m6ElectronRuntimeLabel = "Remove Electron preload/runtime code after Tauri bridge and packaging parity are complete.";
 const m6ElectronResourcesLabel = "Remove Electron-only resources/hooks from `tools-pack`.";
@@ -775,6 +779,13 @@ function sourceAllowsElectronFallback(source: string): boolean {
   return /DESKTOP_RUNTIME_KINDS = \["electron", "tauri"\] as const/.test(source);
 }
 
+function containsElectronDefaultTransitionText(source: string): boolean {
+  return (
+    /Electron (?:remains|is) the (?:current )?default/i.test(source) ||
+    /Public downloads are still Electron artifacts/i.test(source)
+  );
+}
+
 async function pathExists(filePath: string): Promise<boolean> {
   try {
     await access(filePath);
@@ -805,6 +816,9 @@ function readPackageDependencyNames(source: string, label: string): Set<string> 
 async function checkTauriMigrationOrder(): Promise<boolean> {
   const [
     migrationDoc,
+    readme,
+    appsAgents,
+    architectureDoc,
     toolsDevConfig,
     toolsPackConfig,
     releaseBetaWorkflow,
@@ -815,6 +829,9 @@ async function checkTauriMigrationOrder(): Promise<boolean> {
     electronPackResourceFileExists,
   ] = await Promise.all([
     readFile(migrationDocPath, "utf8"),
+    readFile(readmePath, "utf8"),
+    readFile(appsAgentsPath, "utf8"),
+    readFile(architectureDocPath, "utf8"),
     readFile(toolsDevConfigPath, "utf8"),
     readFile(toolsPackConfigPath, "utf8"),
     readFile(releaseBetaWorkflowPath, "utf8"),
@@ -838,6 +855,7 @@ async function checkTauriMigrationOrder(): Promise<boolean> {
   const toolsPackDefaultFlipped = isChecklistLineChecked(migrationDoc, m5ToolsPackDefaultLabel);
   const releaseBetaDefaultFlipped = isChecklistLineChecked(migrationDoc, m5ReleaseBetaDefaultLabel);
   const fallbackMarked = isChecklistLineChecked(migrationDoc, m5ElectronFallbackLabel);
+  const primaryDocsMarked = isChecklistLineChecked(migrationDoc, m5PrimaryDocsLabel);
   const electronDepsRemoved = isChecklistLineChecked(migrationDoc, m6ElectronDepsLabel);
   const electronRuntimeRemoved = isChecklistLineChecked(migrationDoc, m6ElectronRuntimeLabel);
   const electronResourcesRemoved = isChecklistLineChecked(migrationDoc, m6ElectronResourcesLabel);
@@ -866,6 +884,15 @@ async function checkTauriMigrationOrder(): Promise<boolean> {
   }
   if (bothDefaultsTauri !== fallbackMarked) {
     violations.push("the M5 Electron fallback checklist line must reflect the post-flip runtime state.");
+  }
+  if (primaryDocsMarked !== bothDefaultsTauri) {
+    violations.push("the M5 Tauri-primary documentation checklist line must move with the default runtime flip.");
+  }
+  if (
+    primaryDocsMarked &&
+    [readme, appsAgents, architectureDoc].some((source) => containsElectronDefaultTransitionText(source))
+  ) {
+    violations.push("Tauri-primary docs are checked, but README/app/architecture docs still describe Electron as the default.");
   }
   if (fallbackMarked && (!sourceAllowsElectronFallback(toolsDevConfig) || !sourceAllowsElectronFallback(toolsPackConfig))) {
     violations.push("Electron fallback is checked, but a tool no longer accepts both electron and tauri runtime values.");
