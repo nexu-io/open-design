@@ -143,7 +143,12 @@ function redactApiKeyHeaderValue(
 export function redactSecrets(input: string): string {
   if (!input) return input;
   let out = input;
+  const skipExpensive = input.length > 10_000;
   for (const { name, regex } of PATTERNS) {
+    // Skip expensive regexes on long inputs to prevent ReDoS.
+    // The phone pattern has nested optional groups that can cause
+    // catastrophic backtracking on adversarial inputs.
+    if (skipExpensive && name === 'phone') continue;
     out = out.replace(regex, `[REDACTED:${name}]`);
   }
   out = out
@@ -178,7 +183,9 @@ export function redactSecretsWithCounts(input: string): {
   const counts: Record<string, number> = {};
   if (!input) return { redacted: input, counts };
   let out = input;
+  const skipExpensive = input.length > 10_000;
   for (const { name, regex } of PATTERNS) {
+    if (skipExpensive && name === 'phone') continue;
     let matched = 0;
     out = out.replace(regex, () => {
       matched += 1;
