@@ -170,7 +170,9 @@ function resolveTauriBundleTargets(config: ToolPackConfig): TauriBundleTarget[] 
         case "nsis":
           return ["nsis"];
         case "dir":
-          throw new Error("tools-pack win build --desktop-runtime tauri --to dir is not implemented yet; use --to nsis");
+          throw new Error(
+            "tools-pack win build --desktop-runtime tauri --to dir is not supported by Tauri; use --to nsis or --desktop-runtime electron for the legacy unpacked directory target",
+          );
         default:
           throw new Error(`unsupported win Tauri --to target: ${config.to}`);
       }
@@ -180,7 +182,9 @@ function resolveTauriBundleTargets(config: ToolPackConfig): TauriBundleTarget[] 
         case "appimage":
           return ["appimage"];
         case "dir":
-          throw new Error("tools-pack linux build --desktop-runtime tauri --to dir is not implemented yet; use --to appimage");
+          throw new Error(
+            "tools-pack linux build --desktop-runtime tauri --to dir is not supported by Tauri; use --to appimage or --desktop-runtime electron for the legacy unpacked directory target",
+          );
         default:
           throw new Error(`unsupported linux Tauri --to target: ${config.to}`);
       }

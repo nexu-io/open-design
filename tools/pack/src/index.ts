@@ -73,9 +73,9 @@ function addSharedOptions(command: CacCommand) {
 // config.ts. Keep these in sync: the resolver throws on any value not listed
 // here for the given platform.
 const TO_HELP_BY_PLATFORM: Record<ToolPackPlatform, string> = {
-  linux: "build target: all|appimage|dir (default: all)",
+  linux: "build target: all|appimage|dir (default: all; dir is Electron-only)",
   mac: "build target: all|app|dmg|zip (default: all)",
-  win: "build target: all|dir|nsis (default: nsis)",
+  win: "build target: all|dir|nsis (default: nsis; dir is Electron-only)",
 };
 
 function addBuildOptions(command: CacCommand, platform: ToolPackPlatform) {
