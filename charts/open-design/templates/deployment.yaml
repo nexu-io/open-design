@@ -16,6 +16,9 @@ spec:
       {{- include "open-design.selectorLabels" . | nindent 6 }}
   template:
     metadata:
+      annotations:
+          checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+          checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
       labels:
         {{- include "open-design.selectorLabels" . | nindent 8 }}
     spec:
@@ -40,6 +43,12 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ include "open-design.fullname" . }}
+          env:
+            - name: OD_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "open-design.fullname" . }}
+                  key: OD_API_TOKEN
           {{- if .Values.livenessProbe.enabled }}
           livenessProbe:
             {{- omit .Values.livenessProbe "enabled" | toYaml | nindent 12 }}

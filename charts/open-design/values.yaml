@@ -18,6 +18,7 @@ config:
   publicBaseUrl: "http://localhost:7456"
   nodeOptions: "--max-old-space-size=192"
   webPort: 7456
+  apiToken: "" # Auto-generated if left empty
 
 service:
   type: ClusterIP

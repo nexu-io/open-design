@@ -61,6 +61,8 @@ This chart adheres to strict security defaults:
 | `config.allowedOrigins`| CORS allowed origins (leave empty for default)             | `""`                    |
 | `config.publicBaseUrl` | Public base URL used by the application                    | `http://localhost:7456` |
 | `config.nodeOptions`   | V8 engine memory optimizations                             | `--max-old-space-size=192`|
+| `config.webPort`       | Web server listening port                                  | `7456`                  |
+| `config.apiToken`      | API authentication token (auto-generated if left empty)    | `""`                    |
 
 ### Network & Ingress Parameters
 
@@ -114,6 +116,8 @@ This chart adheres to strict security defaults:
 | `nodeSelector`                                                    | Node labels for pod assignment                  | `{}`               |
 | `tolerations`                                                     | Tolerations for pod assignment                  | `[]`               |
 | `affinity`                                                        | Affinity rules for pod assignment               | `{}`               |
+| `initContainers`                                                  | Additional init containers to add to the pod    | `[]`               |
+| `sidecars`                                                        | Additional sidecar containers to add to the pod | `[]`               |
 
 Specify each parameter using the `--set key=value[,key=value]` argument to `helm install`. For example,
 

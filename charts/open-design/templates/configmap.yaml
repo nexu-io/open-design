@@ -6,10 +6,20 @@ metadata:
     {{- include "open-design.labels" . | nindent 4 }}
 data:
   OD_BIND_HOST: "0.0.0.0"
-  OD_PORT: "7456"
-  OD_WEB_PORT: "7456"
+  OD_PORT: {{ .Values.config.webPort | quote }}
+  OD_WEB_PORT: {{ .Values.config.webPort | quote }}
 
   NODE_ENV: {{ .Values.config.nodeEnv | quote }}
   NODE_OPTIONS: {{ .Values.config.nodeOptions | quote }}
-  OD_ALLOWED_ORIGINS: {{ .Values.config.allowedOrigins | quote }}
   OD_PUBLIC_BASE_URL: {{ .Values.config.publicBaseUrl | quote }}
+
+{{- $origins := .Values.config.allowedOrigins }}
+  {{- if and .Values.ingress.enabled (not $origins) }}
+    {{- $hostList := list }}
+    {{- $scheme := ternary "https://" "http://" (gt (len .Values.ingress.tls) 0) }}
+    {{- range .Values.ingress.hosts }}
+      {{- $hostList = append $hostList (printf "%s%s" $scheme .host) }}
+    {{- end }}
+    {{- $origins = join "," $hostList }}
+  {{- end }}
+  OD_ALLOWED_ORIGINS: {{ $origins | quote }}
