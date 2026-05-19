@@ -13,10 +13,9 @@ Chase AI's structured tutorial on Open Design — every section gated by a times
 
 Chapter map:
 
-- 00:00 — What is Open Design
+- 00:00 — Open Design
 - 03:17 — Install + demo
 - 08:31 — Design systems
-- 14:06 — Dashboard
 - 12:40 — Final verdict
 
 Chase frames Open Design as building on the foundation laid by Huashu Design — same surface area, but with a GUI that mirrors Claude Design's UX.
