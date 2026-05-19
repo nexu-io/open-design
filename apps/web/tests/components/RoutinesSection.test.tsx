@@ -64,7 +64,7 @@ describe('RoutinesSection', () => {
 
     render(<RoutinesSection />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'New routine' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'New automation' }));
     fireEvent.change(screen.getByLabelText('Name'), {
       target: { value: 'Weekly digest' },
     });
@@ -289,7 +289,7 @@ describe('RoutinesSection', () => {
 
     render(<RoutinesSection />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'New routine' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'New automation' }));
     fireEvent.change(screen.getByLabelText('Name'), {
       target: { value: 'Weekly digest' },
     });
@@ -351,7 +351,7 @@ describe('RoutinesSection', () => {
     fireEvent.click(within(row).getByRole('button', { name: 'Delete' }));
 
     await waitFor(() => {
-      expect(screen.getByText('No routines yet.')).toBeTruthy();
+      expect(screen.getByText('No automations yet.')).toBeTruthy();
     });
     expect(deletedUrls).toEqual(['/api/routines/routine-1']);
   });
@@ -645,7 +645,7 @@ describe('RoutinesSection', () => {
 
     render(<RoutinesSection />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'New routine' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'New automation' }));
     fireEvent.change(screen.getByLabelText('Name'), {
       target: { value: 'Weekly digest' },
     });

@@ -1,8 +1,9 @@
 // @vitest-environment node
 
-import { execFile } from 'node:child_process';
+import { execFile, spawn, type ChildProcessByStdio } from 'node:child_process';
 import { access, mkdir, stat } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
+import type { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
@@ -81,11 +82,34 @@ type MacInspectResult = {
     path: string;
   };
   status: DesktopStatus | null;
+  update?: {
+    availableVersion?: string;
+    channel?: string;
+    currentVersion?: string;
+    downloadPath?: string;
+    error?: {
+      code: string;
+      message: string;
+    };
+    installResult?: {
+      dryRun?: boolean;
+      path: string;
+    };
+    state: string;
+  };
 };
 
 type LogsResult = {
   logs: Record<string, { lines: string[]; logPath: string }>;
   namespace: string;
+};
+
+type UpdaterFixtureProcess = {
+  close: () => Promise<void>;
+  info: {
+    metadataUrl: string;
+    version: string;
+  };
 };
 
 type HealthEvalValue = {
@@ -110,6 +134,8 @@ macDescribe('packaged mac runtime smoke', () => {
 
   test('installs, starts, inspects, stops, and uninstalls the built mac artifact', async () => {
     const report = await createPackagedSmokeReport('mac');
+    const updateEnv = captureUpdateEnv();
+    let updaterFixture: UpdaterFixtureProcess | null = null;
     let passed = false;
     try {
       const install = await runToolsPackJson<MacInstallResult>('install');
@@ -119,6 +145,13 @@ macDescribe('packaged mac runtime smoke', () => {
       expect(install.detached).toBe(true);
       expectPathInside(install.dmgPath, join(outputNamespaceRoot, 'dmg'));
       expectPathInside(install.installedAppPath, join(outputNamespaceRoot, 'install', 'Applications'));
+
+      updaterFixture = await startUpdaterFixtureProcess();
+      process.env.OD_UPDATE_ENABLED = '1';
+      process.env.OD_UPDATE_METADATA_URL = updaterFixture.info.metadataUrl;
+      process.env.OD_UPDATE_CURRENT_VERSION = '99.0.0-beta.0';
+      process.env.OD_UPDATE_OPEN_DRY_RUN = '1';
+      process.env.OD_UPDATE_AUTO_CHECK = '0';
 
       const start = await runToolsPackJson<MacStartResult>('start');
       started = true;
@@ -146,6 +179,16 @@ macDescribe('packaged mac runtime smoke', () => {
       expect(value.status).toBe(200);
       expect(value.health.ok).toBe(true);
       expect(value.health.version).toEqual(expect.any(String));
+
+      const updateStatus = await runToolsPackJson<MacInspectResult>('inspect', ['--update-action', 'check']);
+      expect(updateStatus.update?.state).toBe('downloaded');
+      expect(updateStatus.update?.channel).toBe('beta');
+      expect(updateStatus.update?.currentVersion).toBe('99.0.0-beta.0');
+      expect(updateStatus.update?.availableVersion).toBe(updaterFixture.info.version);
+      expectPathInside(updateStatus.update?.downloadPath ?? '', join(runtimeNamespaceRoot, 'updates'));
+      const updateInstall = await runToolsPackJson<MacInspectResult>('inspect', ['--update-action', 'install']);
+      expect(updateInstall.update?.state).toBe('downloaded');
+      expect(updateInstall.update?.installResult?.dryRun).toBe(true);
 
       await mkdir(dirname(screenshotPath), { recursive: true });
       const screenshot = await runToolsPackJson<MacInspectResult>('inspect', ['--path', screenshotPath]);
@@ -192,6 +235,10 @@ macDescribe('packaged mac runtime smoke', () => {
       });
       passed = true;
     } finally {
+      restoreUpdateEnv(updateEnv);
+      await updaterFixture?.close().catch((error: unknown) => {
+        console.error('failed to close updater fixture', error);
+      });
       if (!passed) {
         await printPackagedLogs().catch((error: unknown) => {
           console.error('failed to read packaged mac logs after failure', error);
@@ -1041,6 +1088,82 @@ async function runToolsPackJson<T>(action: string, extraArgs: string[] = []): Pr
   } catch (error) {
     throw new Error(`tools-pack mac ${action} did not print JSON: ${String(error)}\n${result.stdout}`);
   }
+}
+
+const UPDATE_ENV_KEYS = [
+  'OD_UPDATE_AUTO_CHECK',
+  'OD_UPDATE_ENABLED',
+  'OD_UPDATE_METADATA_URL',
+  'OD_UPDATE_CURRENT_VERSION',
+  'OD_UPDATE_OPEN_DRY_RUN',
+] as const;
+
+function captureUpdateEnv(): Partial<Record<(typeof UPDATE_ENV_KEYS)[number], string>> {
+  return Object.fromEntries(
+    UPDATE_ENV_KEYS
+      .map((key) => [key, process.env[key]] as const)
+      .filter((entry): entry is readonly [(typeof UPDATE_ENV_KEYS)[number], string] => entry[1] != null),
+  );
+}
+
+function restoreUpdateEnv(previous: Partial<Record<(typeof UPDATE_ENV_KEYS)[number], string>>): void {
+  for (const key of UPDATE_ENV_KEYS) {
+    if (previous[key] == null) delete process.env[key];
+    else process.env[key] = previous[key];
+  }
+}
+
+async function startUpdaterFixtureProcess(): Promise<UpdaterFixtureProcess> {
+  const child = spawn(pnpmCommand, ['tools-serve', 'start', 'updater', '--json', '--channel', 'beta', '--version', '99.0.0-beta.1'], {
+    cwd: workspaceRoot,
+    env: process.env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  const info = await readUpdaterFixtureInfo(child);
+  return {
+    async close() {
+      if (child.exitCode != null) return;
+      child.kill('SIGTERM');
+      await new Promise<void>((resolve) => {
+        child.once('exit', () => resolve());
+        setTimeout(resolve, 2000).unref();
+      });
+    },
+    info,
+  };
+}
+
+async function readUpdaterFixtureInfo(child: ChildProcessByStdio<null, Readable, Readable>): Promise<UpdaterFixtureProcess['info']> {
+  let stdout = '';
+  let stderr = '';
+  return await new Promise<UpdaterFixtureProcess['info']>((resolveInfo, rejectInfo) => {
+    const timeout = setTimeout(() => {
+      rejectInfo(new Error(`tools-serve updater did not report metadata in time\nstdout:\n${stdout}\nstderr:\n${stderr}`));
+    }, 10_000);
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString();
+      const line = stdout.split('\n').find((entry) => entry.trim().startsWith('{'));
+      if (line == null) return;
+      clearTimeout(timeout);
+      try {
+        const parsed = JSON.parse(line) as UpdaterFixtureProcess['info'];
+        resolveInfo(parsed);
+      } catch (error) {
+        rejectInfo(error);
+      }
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.once('exit', (code, signal) => {
+      clearTimeout(timeout);
+      rejectInfo(new Error(`tools-serve updater exited before ready (code=${code}, signal=${signal ?? 'none'})\nstderr:\n${stderr}`));
+    });
+    child.once('error', (error) => {
+      clearTimeout(timeout);
+      rejectInfo(error);
+    });
+  });
 }
 
 type DesktopHarness = ReturnType<typeof createDesktopHarness>;

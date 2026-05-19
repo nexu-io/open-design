@@ -90,23 +90,6 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
     },
   },
   {
-    id: 'live-artifact',
-    label: 'Live artifact',
-    icon: 'pencil',
-    group: 'create',
-    hint: 'Build an interactive HTML/CSS/JS artifact you can preview live.',
-    // Live artifact shares web-prototype's seed today — the difference
-    // is intent (interactive HTML/CSS/JS) vs static prototype, not the
-    // underlying template. The chip keeps a distinct id so active-state
-    // tracking + analytics see "user picked live-artifact" rather than
-    // "user picked prototype".
-    action: {
-      kind: 'apply-scenario',
-      pluginId: 'example-web-prototype',
-      projectKind: 'prototype',
-    },
-  },
-  {
     id: 'deck',
     label: 'Slide deck',
     icon: 'present',

@@ -6,6 +6,7 @@ import type {
   PreviewVisualMarkKind,
 } from './comments';
 import type { ResearchOptions } from './research';
+import type { RunContextSelection } from './context.js';
 
 export type ChatRole = 'user' | 'assistant';
 export type ChatCommentSelectionKind = PreviewCommentSelectionKind | 'visual';
@@ -33,6 +34,7 @@ export interface ChatRequest {
   model?: string | null;
   reasoning?: string | null;
   research?: ResearchOptions;
+  context?: RunContextSelection;
 }
 
 export interface ChatRunCreateRequest extends ChatRequest {

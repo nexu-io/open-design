@@ -29,6 +29,7 @@ import {
   fetchProjectDeployments,
   fetchProjectFilePreview,
   fetchProjectFileText,
+  uploadProjectFiles,
   liveArtifactPreviewUrl,
   projectFileUrl,
   projectRawUrl,
@@ -1863,6 +1864,7 @@ export function CommentSidePanel({
   selectedIds,
   collapsed,
   onCollapsedChange,
+  onClose,
   onToggleSelect,
   onClearSelection,
   onReply,
@@ -1874,6 +1876,7 @@ export function CommentSidePanel({
   selectedIds: Set<string>;
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
+  onClose: () => void;
   onToggleSelect: (commentId: string) => void;
   onClearSelection: () => void;
   onReply: (comment: PreviewComment) => void;
@@ -1911,12 +1914,12 @@ export function CommentSidePanel({
         </div>
         <button
           type="button"
-          className="comment-side-collapse"
-          aria-label={t('preview.hideSidebar', { label: commentsLabel })}
-          title={t('preview.hideSidebar', { label: commentsLabel })}
-          onClick={() => onCollapsedChange(true)}
+          className="comment-side-close"
+          aria-label={t('common.close')}
+          title={t('common.close')}
+          onClick={onClose}
         >
-          <Icon name="chevron-right" size={14} />
+          <Icon name="close" size={12} />
         </button>
       </div>
       <div className="comment-side-list">
@@ -3481,6 +3484,8 @@ function HtmlViewer({
   const [inlinedSource, setInlinedSource] = useState<string | null>(null);
   const [zoom, setZoom] = useState(100);
   const [previewViewport, setPreviewViewport] = useState<PreviewViewportId>('desktop');
+  const [modeMenuOpen, setModeMenuOpen] = useState(false);
+  const modeMenuRef = useRef<HTMLDivElement | null>(null);
   const [zoomMenuOpen, setZoomMenuOpen] = useState(false);
   const zoomMenuRef = useRef<HTMLDivElement | null>(null);
   const [presentMenuOpen, setPresentMenuOpen] = useState(false);
@@ -4910,6 +4915,23 @@ function HtmlViewer({
   }, [presentMenuOpen]);
 
   useEffect(() => {
+    if (!modeMenuOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (!modeMenuRef.current) return;
+      if (!modeMenuRef.current.contains(e.target as Node)) setModeMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setModeMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [modeMenuOpen]);
+
+  useEffect(() => {
     if (!zoomMenuOpen) return;
     const onDocClick = (e: MouseEvent) => {
       if (!zoomMenuRef.current) return;
@@ -5183,8 +5205,10 @@ function HtmlViewer({
     openInNewTab();
   }
 
-  function bumpZoom(delta: number) {
-    setZoom((z) => Math.max(25, Math.min(200, z + delta)));
+  function selectMode(nextMode: 'preview' | 'source') {
+    if (nextMode === 'source') setDrawOverlayOpen(false);
+    setMode(nextMode);
+    setModeMenuOpen(false);
   }
 
   function activateBoard(nextTool?: BoardTool) {
@@ -5366,23 +5390,82 @@ function HtmlViewer({
           >
             <Icon name="reload" size={14} />
           </button>
-          <div className="viewer-tabs">
+          <div className="viewer-mode-menu" ref={modeMenuRef}>
             <button
-              className={`viewer-tab ${mode === 'preview' ? 'active' : ''}`}
-              onClick={() => setMode('preview')}
+              type="button"
+              className="viewer-action viewer-mode-trigger"
+              aria-haspopup="menu"
+              aria-expanded={modeMenuOpen}
+              onClick={() => setModeMenuOpen((v) => !v)}
             >
-              {t('fileViewer.preview')}
+              <span>{mode === 'preview' ? t('fileViewer.preview') : t('fileViewer.source')}</span>
+              <Icon name="chevron-down" size={11} />
             </button>
-            <button
-              className={`viewer-tab ${mode === 'source' ? 'active' : ''}`}
-              onClick={() => {
-                setDrawOverlayOpen(false);
-                setMode('source');
-              }}
-            >
-              {t('fileViewer.source')}
-            </button>
+            {modeMenuOpen ? (
+              <div className="viewer-mode-popover" role="menu">
+                {([
+                  ['preview', t('fileViewer.preview')],
+                  ['source', t('fileViewer.source')],
+                ] as const).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    className={`viewer-mode-menu-item${mode === id ? ' active' : ''}`}
+                    role="menuitem"
+                    onClick={() => selectMode(id)}
+                  >
+                    <span>{label}</span>
+                    {mode === id ? <Icon name="check" size={13} /> : null}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
+          {showPreviewToolbarControls ? (
+            <>
+              <span className="viewer-divider" aria-hidden />
+              <PreviewViewportControls
+                viewport={previewViewport}
+                onViewport={setPreviewViewport}
+                t={t}
+              />
+              <span className="viewer-divider" aria-hidden />
+              <div className="zoom-menu" ref={zoomMenuRef}>
+                <button
+                  type="button"
+                  className="viewer-action zoom-trigger"
+                  aria-haspopup="menu"
+                  aria-expanded={zoomMenuOpen}
+                  onClick={() => setZoomMenuOpen((v) => !v)}
+                  style={{ minWidth: 64 }}
+                >
+                  <span style={{ fontVariantNumeric: 'tabular-nums' }}>{zoom}%</span>
+                  <Icon name="chevron-down" size={11} />
+                </button>
+                {zoomMenuOpen ? (
+                  <div className="zoom-menu-popover" role="menu">
+                    {[50, 75, 100, 125, 150, 200].map((level) => (
+                      <button
+                        key={level}
+                        type="button"
+                        className={`zoom-menu-item${zoom === level ? ' active' : ''}`}
+                        role="menuitem"
+                        onClick={() => {
+                          setZoom(level);
+                          setZoomMenuOpen(false);
+                        }}
+                      >
+                        <span style={{ fontVariantNumeric: 'tabular-nums' }}>{level}%</span>
+                        {zoom === level ? (
+                          <Icon name="check" size={13} />
+                        ) : null}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </>
+          ) : null}
           {showPreviewToolbarControls && effectiveDeck ? (
             <span
               className="deck-nav"
@@ -5490,12 +5573,6 @@ function HtmlViewer({
                 <Icon name="draw" size={13} />
                 <span>{t('fileViewer.draw')}</span>
               </button>
-              <span className="viewer-divider" aria-hidden />
-              <PreviewViewportControls
-                viewport={previewViewport}
-                onViewport={setPreviewViewport}
-                t={t}
-              />
             </>
           ) : null}
           <button
@@ -5604,59 +5681,6 @@ function HtmlViewer({
           >
             <Icon name="edit" size={13} />
             <span>{t('fileViewer.edit')}</span>
-          </button>
-          <span className="viewer-divider" aria-hidden />
-          <button
-            type="button"
-            className="icon-only"
-            onClick={() => bumpZoom(-25)}
-            title={t('fileViewer.zoomOut')}
-            aria-label={t('fileViewer.zoomOut')}
-          >
-            <Icon name="minus" size={14} />
-          </button>
-          <div className="zoom-menu" ref={zoomMenuRef}>
-            <button
-              type="button"
-              className="viewer-action zoom-trigger"
-              aria-haspopup="menu"
-              aria-expanded={zoomMenuOpen}
-              onClick={() => setZoomMenuOpen((v) => !v)}
-              style={{ minWidth: 64 }}
-            >
-              <span style={{ fontVariantNumeric: 'tabular-nums' }}>{zoom}%</span>
-              <Icon name="chevron-down" size={11} />
-            </button>
-            {zoomMenuOpen ? (
-              <div className="zoom-menu-popover" role="menu">
-                {[50, 75, 100, 125, 150, 200].map((level) => (
-                  <button
-                    key={level}
-                    type="button"
-                    className={`zoom-menu-item${zoom === level ? ' active' : ''}`}
-                    role="menuitem"
-                    onClick={() => {
-                      setZoom(level);
-                      setZoomMenuOpen(false);
-                    }}
-                  >
-                    <span style={{ fontVariantNumeric: 'tabular-nums' }}>{level}%</span>
-                    {zoom === level ? (
-                      <Icon name="check" size={13} />
-                    ) : null}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
-          <button
-            type="button"
-            className="icon-only"
-            onClick={() => bumpZoom(25)}
-            title={t('fileViewer.zoomIn')}
-            aria-label={t('fileViewer.zoomIn')}
-          >
-            <Icon name="plus" size={14} />
           </button>
         </div>
       </div>
@@ -5932,6 +5956,16 @@ function HtmlViewer({
                 onRedo={() => {
                   void redoManualEdit();
                 }}
+                onPickImage={async (pickedFile) => {
+                  const result = await uploadProjectFiles(projectId, [pickedFile]);
+                  const uploaded = result.uploaded[0];
+                  if (!uploaded?.path) {
+                    setManualEditError(result.error ?? t('manualEdit.uploadImageFailed'));
+                    return null;
+                  }
+                  setManualEditError(null);
+                  return toOwnerRelativePath(file.name, uploaded.path);
+                }}
               />
             ) : null}
             <div className={manualEditMode ? 'manual-edit-canvas' : 'comment-frame-clip'}>
@@ -6078,6 +6112,11 @@ function HtmlViewer({
                 selectedIds={selectedSideCommentIds}
                 collapsed={commentSidePanelCollapsed}
                 onCollapsedChange={setCommentSidePanelCollapsed}
+                onClose={() => {
+                  setBoardMode(false);
+                  setCommentSidePanelCollapsed(false);
+                  clearBoardComposer();
+                }}
                 onToggleSelect={(commentId) => {
                   setSelectedSideCommentIds((current) => {
                     const next = new Set(current);
@@ -6573,6 +6612,40 @@ function HtmlViewer({
 function baseDirFor(fileName: string): string {
   const idx = fileName.lastIndexOf('/');
   return idx >= 0 ? fileName.slice(0, idx + 1) : '';
+}
+
+function toOwnerRelativePath(ownerFileName: string, targetPath: string): string {
+  const normalize = (value: string) => decodeURIComponent(value).replace(/^\/+/, '');
+  const squash = (parts: string[]) => {
+    const out: string[] = [];
+    for (const part of parts) {
+      if (!part || part === '.') continue;
+      if (part === '..') {
+        if (out.length > 0) out.pop();
+        continue;
+      }
+      out.push(part);
+    }
+    return out;
+  };
+  const ownerDirPath = normalize(baseDirFor(ownerFileName));
+  const targetFilePath = normalize(targetPath);
+  const ownerParts = squash(ownerDirPath.split('/'));
+  const targetParts = squash(targetFilePath.split('/'));
+
+  let common = 0;
+  while (
+    common < ownerParts.length &&
+    common < targetParts.length &&
+    ownerParts[common] === targetParts[common]
+  ) {
+    common += 1;
+  }
+
+  const up = new Array(ownerParts.length - common).fill('..');
+  const down = targetParts.slice(common);
+  const rel = [...up, ...down].join('/');
+  return rel || '.';
 }
 
 function hasRelativeAssetRefs(html: string): boolean {

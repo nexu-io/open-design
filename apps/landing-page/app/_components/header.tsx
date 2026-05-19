@@ -55,7 +55,7 @@ export function Header({
       <div className='container nav-inner'>
         <a href={brandHref} className='brand'>
           <span className='brand-mark'>
-            <img src='/logo.png' alt='' width={36} height={36} />
+            <img src='/logo.webp' alt='' width={36} height={36} />
           </span>
           <span>Open Design</span>
           <span className='brand-meta'>

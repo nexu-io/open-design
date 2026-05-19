@@ -8,35 +8,39 @@ import { I18nProvider } from '../../src/i18n';
 
 const PRIVACY_POLICY_HREF = 'https://github.com/nexu-io/open-design/blob/main/PRIVACY.md';
 
-function renderModal(overrides?: { onShare?: () => void; onDecline?: () => void }) {
-  const onShare = overrides?.onShare ?? vi.fn();
-  const onDecline = overrides?.onDecline ?? vi.fn();
+function renderModal(overrides?: { onAccept?: () => void }) {
+  const onAccept = overrides?.onAccept ?? vi.fn();
   render(
     <I18nProvider initial="en">
-      <PrivacyConsentModal onShare={onShare} onDecline={onDecline} />
+      <PrivacyConsentModal onAccept={onAccept} />
     </I18nProvider>,
   );
-  return { onShare, onDecline };
+  return { onAccept };
 }
 
 describe('PrivacyConsentModal', () => {
   afterEach(cleanup);
 
-  it('labels the affirmative action as a consent choice, not "Help improve"', () => {
+  it('renders a single "I get it" acknowledgement button (no decline)', () => {
     renderModal();
-    expect(screen.getByRole('button', { name: 'Share usage data' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: "Don't share" })).toBeTruthy();
-    // The old label gave no signal that this was a privacy consent decision.
-    expect(screen.queryByRole('button', { name: 'Help improve' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'I get it' })).toBeTruthy();
+    // Single-button banner: previous double-button labels must be gone so
+    // the surface reads as informed-disclosure-plus-acknowledgement, not a
+    // forced binary choice.
+    expect(screen.queryByRole('button', { name: 'Share usage data' })).toBeNull();
+    expect(screen.queryByRole('button', { name: "Don't share" })).toBeNull();
   });
 
-  it('keeps the accept and decline buttons equal-prominence (EDPB/GDPR)', () => {
+  it('tells the user data sharing is on by default and toggleable in Settings', () => {
     renderModal();
-    const share = screen.getByRole('button', { name: 'Share usage data' });
-    const decline = screen.getByRole('button', { name: "Don't share" });
-    // Identical class lists — neither button is styled as primary/secondary.
-    expect(share.className).toBe(decline.className);
-    expect(share.className).toContain('privacy-consent-action');
+    // The single-button banner replaces the binary consent picker, so the
+    // disclosure must say plainly that telemetry defaults on and point the
+    // user at the off switch in Settings. Without this hint the surface
+    // would feel like a dark pattern.
+    const footer = screen.getByText(/Data sharing is on by default/i);
+    expect(footer.textContent ?? '').toMatch(/Settings/);
+    expect(footer.textContent ?? '').toMatch(/Privacy/);
+    expect(footer.textContent ?? '').toMatch(/turn it off any time/i);
   });
 
   it('exposes the privacy policy via an obvious external link', () => {
@@ -47,15 +51,9 @@ describe('PrivacyConsentModal', () => {
     expect(link.getAttribute('rel') ?? '').toContain('noopener');
   });
 
-  it('invokes the matching handler when each action is clicked', () => {
-    const { onShare, onDecline } = renderModal();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Share usage data' }));
-    expect(onShare).toHaveBeenCalledTimes(1);
-    expect(onDecline).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole('button', { name: "Don't share" }));
-    expect(onDecline).toHaveBeenCalledTimes(1);
-    expect(onShare).toHaveBeenCalledTimes(1);
+  it('invokes onAccept when the acknowledgement button is clicked', () => {
+    const { onAccept } = renderModal();
+    fireEvent.click(screen.getByRole('button', { name: 'I get it' }));
+    expect(onAccept).toHaveBeenCalledTimes(1);
   });
 });

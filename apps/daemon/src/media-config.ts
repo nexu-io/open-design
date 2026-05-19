@@ -40,6 +40,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { MEDIA_PROVIDERS } from './media-models.js';
 import { expandHomePrefix } from './home-expansion.js';
+import { resolveXAIBearer } from './xai-credentials.js';
 
 const PROVIDER_IDS = MEDIA_PROVIDERS.map((p) => p.id);
 type ProviderEntry = { apiKey?: string; baseUrl?: string; model?: string };
@@ -134,13 +135,21 @@ function envOverrideDir(envName: string, projectRoot: string): string | null {
   return trimmed ? resolveOverrideDir(trimmed, projectRoot) : null;
 }
 
-function configFile(projectRoot: string): string {
-  // Precedence: explicit media-config override > general data dir > default.
-  const dir =
+/**
+ * Resolve the directory media-config.json (and credentials living next to
+ * it, like xai-tokens.json) actually live in. Precedence: explicit
+ * media-config override > general data dir > default.
+ */
+export function mediaConfigDir(projectRoot: string): string {
+  return (
     envOverrideDir('OD_MEDIA_CONFIG_DIR', projectRoot)
     ?? envOverrideDir('OD_DATA_DIR', projectRoot)
-    ?? path.join(projectRoot, '.od');
-  return path.join(dir, 'media-config.json');
+    ?? path.join(projectRoot, '.od')
+  );
+}
+
+function configFile(projectRoot: string): string {
+  return path.join(mediaConfigDir(projectRoot), 'media-config.json');
 }
 
 /**
@@ -330,6 +339,45 @@ async function resolveOpenAIOAuthCredential(): Promise<OAuthCredential | null> {
   return null;
 }
 
+async function resolveXAIOAuthCredential(
+  projectRoot: string,
+): Promise<OAuthCredential | null> {
+  // 1. OD-native xAI OAuth tokens (written by the daemon's own
+  //    xai-oauth.ts client when the user authorizes inside OD).
+  const odBearer = await resolveXAIBearer(mediaConfigDir(projectRoot)).catch(
+    () => null,
+  );
+  if (odBearer) {
+    return {
+      apiKey: odBearer.accessToken,
+      source: `oauth-xai-${odBearer.source}`,
+    };
+  }
+
+  // 2. Borrow the xAI OAuth token Hermes wrote to ~/.hermes/auth.json
+  //    when the user ran `hermes auth add xai-oauth`. Mirrors how
+  //    resolveOpenAIOAuthCredential already borrows the openai-codex
+  //    token from the same file, so a user who has already authorized
+  //    Hermes doesn't have to run a second OAuth dance inside OD.
+  //    (No proactive refresh here — Hermes itself maintains the token,
+  //    and we only borrow what is currently fresh.)
+  const home = os.homedir();
+  const hermesAuth = await readJsonIfPresent(
+    path.join(home, '.hermes', 'auth.json'),
+  );
+  const hermesXaiToken = readNestedString(hermesAuth, [
+    'providers',
+    'xai-oauth',
+    'tokens',
+    'access_token',
+  ]);
+  if (hermesXaiToken) {
+    return { apiKey: hermesXaiToken, source: 'oauth-hermes-xai' };
+  }
+
+  return null;
+}
+
 /**
  * Resolve credentials for a provider. Env vars win, then stored config,
  * then OpenAI/Codex OAuth for the OpenAI media provider.
@@ -339,10 +387,14 @@ export async function resolveProviderConfig(projectRoot: string, providerId: str
   const stored = await readStored(projectRoot);
   const entry = stored[providerId] || {};
   const envKey = readEnvKey(providerId);
-  const oauth =
-    providerId === 'openai' && !envKey && !entry.apiKey
+  const needsOAuthFallback = !envKey && !entry.apiKey;
+  const oauth = needsOAuthFallback
+    ? providerId === 'openai'
       ? await resolveOpenAIOAuthCredential()
-      : null;
+      : providerId === 'grok'
+        ? await resolveXAIOAuthCredential(projectRoot)
+        : null
+    : null;
   return {
     apiKey: envKey || entry.apiKey || oauth?.apiKey || '',
     baseUrl: entry.baseUrl || '',
@@ -375,10 +427,14 @@ export async function readMaskedConfig(projectRoot: string): Promise<MaskedConfi
     const entry = stored[id] || {};
     const envKey = readEnvKey(id);
     const hasStoredKey = typeof entry.apiKey === 'string' && entry.apiKey.length > 0;
-    const oauth =
-      id === 'openai' && !envKey && !hasStoredKey
+    const needsOAuthFallback = !envKey && !hasStoredKey;
+    const oauth = needsOAuthFallback
+      ? id === 'openai'
         ? await resolveOpenAIOAuthCredential()
-        : null;
+        : id === 'grok'
+          ? await resolveXAIOAuthCredential(projectRoot)
+          : null
+      : null;
     providers[id] = {
       configured: Boolean(envKey || hasStoredKey || oauth?.apiKey),
       source: envKey ? 'env' : hasStoredKey ? 'stored' : oauth?.source || 'unset',

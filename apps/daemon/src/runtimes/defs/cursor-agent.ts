@@ -1,5 +1,31 @@
-import { DEFAULT_MODEL_OPTION, parseLineSeparatedModels } from './shared.js';
+import { DEFAULT_MODEL_OPTION } from './shared.js';
 import type { RuntimeAgentDef } from '../types.js';
+import type { RuntimeModelOption } from '../types.js';
+
+export function parseCursorAgentModels(stdout: string): RuntimeModelOption[] | null {
+  const lines = String(stdout || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith('#'));
+  if (lines.length === 0) return null;
+
+  const out = [DEFAULT_MODEL_OPTION];
+  const seen = new Set<string>([DEFAULT_MODEL_OPTION.id]);
+  for (const line of lines) {
+    if (/^(available models|models)$/i.test(line)) continue;
+
+    const match = line.match(/^([A-Za-z0-9][A-Za-z0-9._/:@-]*)(?:\s+-\s+(.+))?$/);
+    if (!match) continue;
+    const id = match[1];
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+
+    const label = match[2]?.trim() || id;
+    out.push({ id, label });
+  }
+
+  return out.length > 1 ? out : null;
+}
 
 export const cursorAgentDef = {
     id: 'cursor-agent',
@@ -15,7 +41,7 @@ export const cursorAgentDef = {
       parse: (stdout) => {
         const trimmed = String(stdout || '').trim();
         if (!trimmed || /no models available/i.test(trimmed)) return null;
-        return parseLineSeparatedModels(trimmed);
+        return parseCursorAgentModels(trimmed);
       },
     },
     fallbackModels: [

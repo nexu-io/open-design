@@ -99,6 +99,8 @@ exit 1
       {
         gitBin: fakeGit,
         now: new Date('2026-05-18T10:00:00.000Z'),
+        importMode: 'normalized',
+        craftApplies: ['color'],
       },
     );
 
@@ -119,9 +121,25 @@ exit 1
         tokens: 'tokens.css',
         components: 'components.html',
       },
+      usage: 'USAGE.md',
+      componentsManifest: 'components.manifest.json',
+      importMode: 'normalized',
+      craft: {
+        applies: ['color'],
+      },
+      sourceFiles: {
+        scanned: 'source/scanned-files.json',
+        evidence: 'source/evidence.md',
+        tokens: 'source/tokens.source.json',
+        snippets: 'source/snippets/INDEX.json',
+      },
     });
     expect(fs.readFileSync(path.join(result.dir, 'DESIGN.md'), 'utf8')).toContain(
       'A GitHub-hosted design kit.',
     );
+    expect(fs.existsSync(path.join(result.dir, 'USAGE.md'))).toBe(true);
+    expect(fs.existsSync(path.join(result.dir, 'components.manifest.json'))).toBe(true);
+    expect(fs.existsSync(path.join(result.dir, 'preview', 'app.html'))).toBe(true);
+    expect(fs.existsSync(path.join(result.dir, 'source', 'snippets', 'card.tsx'))).toBe(true);
   });
 });

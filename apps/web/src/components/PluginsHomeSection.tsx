@@ -16,13 +16,11 @@
 // owns layout only.
 
 import type { InstalledPluginRecord } from '@open-design/contracts';
+import { useT } from '../i18n';
 import type { PluginShareAction } from '../state/projects';
 import { Icon } from './Icon';
 import { PluginCard } from './plugins-home/PluginCard';
-import {
-  usePluginFacets,
-  type FilterMode,
-} from './plugins-home/usePluginFacets';
+import { usePluginFacets } from './plugins-home/usePluginFacets';
 import type { FacetOption } from './plugins-home/facets';
 import type { PluginUseAction } from './plugins-home/useActions';
 
@@ -60,10 +58,11 @@ export function PluginsHomeSection({
   onCreatePlugin,
   onBrowseRegistry,
   preferDefaultFacet = true,
-  title = 'Official starters',
-  subtitle = 'Ready-to-use Open Design workflows bundled with this runtime. Pick one to load a starter prompt, or browse the registry for more.',
-  emptyMessage = 'Catalog is empty. Bundled plugins ship with Open Design and should appear here automatically — try restarting the daemon if this persists.',
+  title,
+  subtitle,
+  emptyMessage,
 }: Props) {
+  const t = useT();
   const {
     visiblePlugins,
     featuredList,
@@ -73,7 +72,6 @@ export function PluginsHomeSection({
     pickCategory,
     pickSubcategory,
     clearFacets,
-    hasActiveFacet,
     mode,
     setMode,
     query,
@@ -91,10 +89,10 @@ export function PluginsHomeSection({
     <section className="plugins-home" data-testid="plugins-home-section">
       <header className="plugins-home__head">
         <div className="plugins-home__heading">
-          <h2 className="plugins-home__title">{title}</h2>
-          <p className="plugins-home__subtitle">
-            {subtitle}
-          </p>
+          <h2 className="plugins-home__title">{title ?? t('pluginsHome.title')}</h2>
+          {subtitle ? (
+            <p className="plugins-home__subtitle">{subtitle}</p>
+          ) : null}
         </div>
         <div className="plugins-home__head-tools">
           {onBrowseRegistry ? (
@@ -104,32 +102,20 @@ export function PluginsHomeSection({
               onClick={onBrowseRegistry}
               data-testid="plugins-home-browse-registry"
             >
-              Browse registry
+              {t('pluginsHome.browseRegistry')}
             </button>
           ) : null}
-          <SearchInput value={query} onChange={setQuery} />
-          <span className="plugins-home__count">
-            {loading ? '…' : `${filtered.length} of ${totalVisible}`}
-          </span>
         </div>
       </header>
 
       {loading ? (
-        <div className="plugins-home__empty">Loading catalog…</div>
+        <div className="plugins-home__empty">{t('pluginsHome.loadingCatalog')}</div>
       ) : visiblePlugins.length === 0 ? (
         <div className="plugins-home__empty">
-          {emptyMessage}
+          {emptyMessage ?? t('pluginsHome.emptyCatalog')}
         </div>
       ) : (
         <>
-          <ModeRow
-            mode={mode}
-            featuredCount={featuredList.length}
-            totalVisible={totalVisible}
-            hasActiveFacet={hasActiveFacet}
-            onModeChange={setMode}
-            onClearFacets={clearFacets}
-          />
           <div
             className="plugins-home__facets"
             role="group"
@@ -140,6 +126,13 @@ export function PluginsHomeSection({
               selectedSlug={selection.category}
               totalVisible={totalVisible}
               onPick={pickCategory}
+              featuredCount={featuredList.length}
+              featuredActive={mode === 'featured'}
+              onToggleFeatured={() =>
+                setMode(mode === 'featured' ? 'all' : 'featured')
+              }
+              query={query}
+              onQueryChange={setQuery}
             />
             {selection.category ? (
               <SubcategoryRow
@@ -153,13 +146,13 @@ export function PluginsHomeSection({
 
           {filtered.length === 0 && !showContributionCard ? (
             <div className="plugins-home__empty plugins-home__empty--filtered">
-              No plugins match the current filters.{' '}
+              {t('pluginsHome.emptyFiltered')}{' '}
               <button
                 type="button"
                 className="plugins-home__linkbtn"
                 onClick={clearFacets}
               >
-                Clear filters
+                {t('pluginsHome.clearFilters')}
               </button>
             </div>
           ) : (
@@ -183,6 +176,7 @@ export function PluginsHomeSection({
                   label={contributionTarget.label}
                   starterPrompt={contributionTarget.starterPrompt}
                   onCreatePlugin={() => onCreatePlugin?.(contributionTarget.starterPrompt)}
+                  t={t}
                 />
               ) : null}
             </div>
@@ -215,10 +209,12 @@ function ContributionCard({
   label,
   starterPrompt,
   onCreatePlugin,
+  t,
 }: {
   label: string;
   starterPrompt: string;
   onCreatePlugin: () => void;
+  t: ReturnType<typeof useT>;
 }) {
   return (
     <article
@@ -231,13 +227,12 @@ function ContributionCard({
           <Icon name="plus" size={18} />
         </span>
         <div>
-          <h3>Contribute a {label} plugin</h3>
+          <h3>{t('pluginsHome.contributeTitle', { label })}</h3>
           <p>
-            This area is still sparse. Turn your workflow into a reusable
-            plugin, add it to My plugins, then share it with the community.
+            {t('pluginsHome.contributeBody')}
           </p>
           <p className="plugins-home__contribute-template">
-            Starter: {starterPrompt}
+            {t('pluginsHome.starterPrefix', { starter: starterPrompt })}
           </p>
         </div>
         <button
@@ -246,68 +241,10 @@ function ContributionCard({
           onClick={onCreatePlugin}
           data-testid="plugins-home-contribution-create"
         >
-          Create plugin
+          {t('homeHero.chip.createPlugin')}
         </button>
       </div>
     </article>
-  );
-}
-
-interface ModeRowProps {
-  mode: FilterMode;
-  featuredCount: number;
-  totalVisible: number;
-  hasActiveFacet: boolean;
-  onModeChange: (next: FilterMode) => void;
-  onClearFacets: () => void;
-}
-
-// Tiny strip above the category row: Featured override + a clear-link
-// when at least one filter is active. Kept compact so the category
-// bar is what the eye lands on first.
-function ModeRow({
-  mode,
-  featuredCount,
-  totalVisible,
-  hasActiveFacet,
-  onModeChange,
-  onClearFacets,
-}: ModeRowProps) {
-  return (
-    <div className="plugins-home__mode" role="group" aria-label="Plugin mode">
-      {featuredCount > 0 ? (
-        <button
-          type="button"
-          className={[
-            'plugins-home__chip',
-            'plugins-home__chip--featured',
-            mode === 'featured' ? 'is-active' : '',
-          ]
-            .filter(Boolean)
-            .join(' ')}
-          onClick={() => onModeChange(mode === 'featured' ? 'all' : 'featured')}
-          aria-pressed={mode === 'featured'}
-          data-testid="plugins-home-chip-featured"
-        >
-          <Icon name="star" size={11} />
-          <span>Featured</span>
-          <span className="plugins-home__chip-count">{featuredCount}</span>
-        </button>
-      ) : null}
-      <span className="plugins-home__mode-total">
-        {totalVisible} in catalog
-      </span>
-      {hasActiveFacet ? (
-        <button
-          type="button"
-          className="plugins-home__linkbtn"
-          onClick={onClearFacets}
-          data-testid="plugins-home-clear"
-        >
-          Clear filters
-        </button>
-      ) : null}
-    </div>
   );
 }
 
@@ -316,9 +253,30 @@ interface CategoryRowProps {
   selectedSlug: string | null;
   totalVisible: number;
   onPick: (slug: string | null) => void;
+  featuredCount: number;
+  featuredActive: boolean;
+  onToggleFeatured: () => void;
+  query: string;
+  onQueryChange: (next: string) => void;
 }
 
-function CategoryRow({ options, selectedSlug, totalVisible, onPick }: CategoryRowProps) {
+// Single combined filter bar: Featured override chip + category pills
+// on the left, search field on the right. Each chip carries its own
+// count, and the "All" chip doubles as a clear-filters affordance,
+// so a separate `X / Y` counter and `Clear` link would just repeat
+// what the chip strip already shows.
+function CategoryRow({
+  options,
+  selectedSlug,
+  totalVisible,
+  onPick,
+  featuredCount,
+  featuredActive,
+  onToggleFeatured,
+  query,
+  onQueryChange,
+}: CategoryRowProps) {
+  const t = useT();
   if (options.length === 0) return null;
   return (
     <div
@@ -328,11 +286,30 @@ function CategoryRow({ options, selectedSlug, totalVisible, onPick }: CategoryRo
       <div
         className="plugins-home__facet-pills"
         role="tablist"
-        aria-label="Category filter"
+        aria-label={t('pluginsHome.categoryFilterAria')}
       >
+        {featuredCount > 0 ? (
+          <button
+            type="button"
+            className={[
+              'plugins-home__chip',
+              'plugins-home__chip--featured',
+              featuredActive ? 'is-active' : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+            onClick={onToggleFeatured}
+            aria-pressed={featuredActive}
+            data-testid="plugins-home-chip-featured"
+          >
+            <Icon name="star" size={11} />
+            <span>{t('pluginsHome.featured')}</span>
+            <span className="plugins-home__chip-count">{featuredCount}</span>
+          </button>
+        ) : null}
         <CategoryPill
           slug={null}
-          label="All"
+          label={t('common.all')}
           count={totalVisible}
           active={selectedSlug === null}
           onPick={onPick}
@@ -349,6 +326,9 @@ function CategoryRow({ options, selectedSlug, totalVisible, onPick }: CategoryRo
           />
         ))}
       </div>
+      <div className="plugins-home__facet-tools">
+        <SearchInput value={query} onChange={onQueryChange} />
+      </div>
     </div>
   );
 }
@@ -361,6 +341,7 @@ interface SubcategoryRowProps {
 }
 
 function SubcategoryRow({ parent, options, selectedSlug, onPick }: SubcategoryRowProps) {
+  const t = useT();
   if (!parent || options.length === 0) return null;
   return (
     <div
@@ -370,11 +351,11 @@ function SubcategoryRow({ parent, options, selectedSlug, onPick }: SubcategoryRo
       <div
         className="plugins-home__facet-pills"
         role="tablist"
-        aria-label={`${parent.label} subcategory filter`}
+        aria-label={t('pluginsHome.subcategoryFilterAria', { label: parent.label })}
       >
         <CategoryPill
           slug={null}
-          label={`All ${parent.label}`}
+          label={t('pluginsHome.allCategory', { label: pluginFacetLabel(parent.slug, parent.label, t) })}
           count={parent.count}
           active={selectedSlug === null}
           onPick={onPick}
@@ -408,6 +389,8 @@ interface CategoryPillProps {
 }
 
 function CategoryPill({ slug, label, count, active, variant, testId, onPick }: CategoryPillProps) {
+  const t = useT();
+  const displayLabel = slug ? pluginFacetLabel(slug, label, t) : label;
   return (
     <button
       type="button"
@@ -422,12 +405,53 @@ function CategoryPill({ slug, label, count, active, variant, testId, onPick }: C
         .filter(Boolean)
         .join(' ')}
       onClick={() => onPick(slug)}
+      // Empty lanes are intentionally kept in the strip so the
+      // overall workflow shape (Import / Create / Export / Share /
+      // Deploy / Refine / Extend) is visible at a glance, and
+      // clicking one surfaces a "Contribute a X plugin" card. The
+      // `data-empty` flag drives a faded treatment in CSS so users
+      // can tell at a glance which chips are populated vs which
+      // are open-invite buckets — without that hint, "Deploy 0"
+      // and "Create 375" read as the same kind of control.
+      data-empty={count === 0 ? 'true' : 'false'}
       data-testid={testId ?? `plugins-home-pill-category-${slug ?? 'all'}`}
     >
-      <span>{label}</span>
+      <span>{displayLabel}</span>
       <span className="plugins-home__pill-count">{count}</span>
     </button>
   );
+}
+
+function pluginFacetLabel(slug: string, fallback: string, t: ReturnType<typeof useT>): string {
+  switch (slug) {
+    case 'import': return t('pluginsHome.facet.import');
+    case 'create': return t('pluginsHome.facet.create');
+    case 'export': return t('pluginsHome.facet.export');
+    case 'share': return t('pluginsHome.facet.share');
+    case 'deploy': return t('pluginsHome.facet.deploy');
+    case 'refine': return t('pluginsHome.facet.refine');
+    case 'extend': return t('pluginsHome.facet.extend');
+    case 'from-figma': return t('pluginsHome.facet.figma');
+    case 'from-github': return t('pluginsHome.facet.github');
+    case 'from-code': return t('pluginsHome.facet.codeFolder');
+    case 'from-url': return t('pluginsHome.facet.url');
+    case 'from-screenshot': return t('pluginsHome.facet.screenshot');
+    case 'from-pdf': return t('pluginsHome.facet.pdf');
+    case 'from-pptx': return t('pluginsHome.facet.pptx');
+    case 'from-framer': return t('pluginsHome.facet.framer');
+    case 'from-webflow': return t('pluginsHome.facet.webflow');
+    case 'prototype': return t('homeHero.chip.prototype');
+    case 'deck': return t('pluginsHome.facet.slides');
+    case 'design-system': return t('entry.navDesignSystems');
+    case 'hyperframes': return t('homeHero.chip.hyperframes');
+    case 'image': return t('homeHero.chip.image');
+    case 'video': return t('homeHero.chip.video');
+    case 'audio': return t('homeHero.chip.audio');
+    case 'public-link': return t('pluginsHome.facet.publicLink');
+    case 'github-pr': return t('pluginsHome.facet.githubPr');
+    case 'github-gist': return t('pluginsHome.facet.githubGist');
+    default: return fallback;
+  }
 }
 
 interface SearchInputProps {
@@ -442,6 +466,7 @@ interface SearchInputProps {
 // with an optional clear button so it sits inside the existing head
 // row without a heavyweight toolbar.
 function SearchInput({ value, onChange }: SearchInputProps) {
+  const t = useT();
   return (
     <div className="plugins-home__search">
       <Icon name="search" size={12} className="plugins-home__search-icon" />
@@ -450,8 +475,8 @@ function SearchInput({ value, onChange }: SearchInputProps) {
         className="plugins-home__search-input"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Search plugins…"
-        aria-label="Search plugins"
+        placeholder={t('pluginsHome.searchPlaceholder')}
+        aria-label={t('pluginsHome.searchAria')}
         data-testid="plugins-home-search"
         spellCheck={false}
         autoComplete="off"
@@ -461,7 +486,7 @@ function SearchInput({ value, onChange }: SearchInputProps) {
           type="button"
           className="plugins-home__search-clear"
           onClick={() => onChange('')}
-          aria-label="Clear search"
+          aria-label={t('pluginsHome.clearSearch')}
           data-testid="plugins-home-search-clear"
         >
           <Icon name="close" size={12} />

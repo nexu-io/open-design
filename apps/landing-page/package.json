@@ -11,20 +11,20 @@
     "typecheck": "astro check"
   },
   "dependencies": {
-    "@astrojs/rss": "^4.0.18",
-    "@astrojs/sitemap": "^3.6.0",
-    "astro": "^5.15.4",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "@astrojs/rss": "4.0.18",
+    "@astrojs/sitemap": "3.7.2",
+    "astro": "6.3.5",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
   },
   "devDependencies": {
-    "@astrojs/check": "^0.9.4",
-    "@types/node": "^20.17.10",
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
-    "playwright": "^1.59.1",
-    "tsx": "^4.21.0",
-    "typescript": "^5.6.3"
+    "@astrojs/check": "0.9.9",
+    "@types/node": "20.19.39",
+    "@types/react": "18.3.28",
+    "@types/react-dom": "18.3.7",
+    "playwright": "1.60.0",
+    "tsx": "4.22.2",
+    "typescript": "5.9.3"
   },
   "engines": {
     "node": "~24"

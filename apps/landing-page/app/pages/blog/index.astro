@@ -13,8 +13,11 @@
 import { getCollection } from 'astro:content';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import FontStylesheet from '../../_components/font-stylesheet.astro';
 import HeaderEnhancer from '../../_components/header-enhancer.astro';
 import { Header, type HeaderProps } from '../../_components/header';
+import LazyImg from '../../_components/lazy-img.astro';
+import PreciseLazyload from '../../_components/precise-lazyload.astro';
 import SeoHead from '../../_components/seo-head.astro';
 import SiteFooter from '../../_components/site-footer.astro';
 import Topbar from '../../_components/topbar.astro';
@@ -95,6 +98,7 @@ const getPostImage = (id: string) => postImages[id];
       description={seoDescription}
       pathname={Astro.url.pathname}
     />
+    <FontStylesheet />
   </head>
   <body>
     <div class='shell'>
@@ -196,10 +200,10 @@ const getPostImage = (id: string) => postImages[id];
                     >
                       <span class={`media-panel ${getPostImage(post.id) ? 'has-image' : ''}`}>
                         {getPostImage(post.id) ? (
-                          <img
-                            src={getPostImage(post.id)?.src}
-                            alt={getPostImage(post.id)?.alt}
-                            loading='lazy'
+                          <LazyImg
+                            src={getPostImage(post.id)!.src}
+                            alt={getPostImage(post.id)?.alt ?? ''}
+                            loading={idx < 4 ? 'eager' : 'precise'}
                           />
                         ) : (
                           <>
@@ -264,6 +268,7 @@ const getPostImage = (id: string) => postImages[id];
       })();
     </script>
     <HeaderEnhancer />
+    <PreciseLazyload />
 
     <style>
       .blog-shell {

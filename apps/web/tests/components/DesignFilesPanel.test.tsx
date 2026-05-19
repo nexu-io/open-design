@@ -70,7 +70,7 @@ function getPageInfo(container: HTMLElement): string {
   return el?.textContent?.trim() ?? '';
 }
 
-/** page-btn order: top-Prev=0, top-Next=1, bottom-Prev=2, bottom-Next=3 */
+/** page-btn order: bottom-Prev=0, bottom-Next=1 */
 function getPageBtns(container: HTMLElement) {
   return Array.from(container.querySelectorAll<HTMLButtonElement>('.df-page-btn'));
 }
@@ -377,11 +377,19 @@ describe('DesignFilesPanel large-list regression', () => {
   });
 
   it('keeps the bulk toolbar focused on the all-files action instead of duplicating page select', () => {
-    const { container } = renderPanel(generateFiles(3));
+    const { container } = renderPanel(generateFiles(20));
 
     const toolbar = container.querySelector('.df-select-bar');
     expect(toolbar?.textContent).toContain('Select everything');
     expect(toolbar?.textContent).not.toContain('Select all on page');
+  });
+
+  it('hides redundant pagination controls for a single small page', () => {
+    const { container } = renderPanel(generateFiles(3));
+
+    expect(container.querySelector('.df-pagination')).toBeNull();
+    expect(container.querySelector('.df-page-btn')).toBeNull();
+    expect(container.querySelector('.df-select-bar')).toBeNull();
   });
 
   it('uses non-control table cells as file row click targets', () => {

@@ -37,6 +37,18 @@ type DesignFilesGroupMode = 'kind' | 'modified';
 type ModifiedSection = 'today' | 'yesterday' | 'previous7Days' | 'previous30Days' | 'older';
 type SortKey = 'name' | 'kind' | 'mtime';
 type SortDir = 'asc' | 'desc';
+type FileSystemEntryWithReader = FileSystemEntry & {
+  createReader?: () => FileSystemDirectoryReader;
+};
+type FileSystemFileEntryWithFile = FileSystemFileEntry & {
+  file: (
+    successCallback: (file: File) => void,
+    errorCallback?: (error: DOMException) => void,
+  ) => void;
+};
+type DataTransferItemWithEntry = DataTransferItem & {
+  webkitGetAsEntry?: () => FileSystemEntry | null;
+};
 
 const MODIFIED_SECTION_ORDER: ModifiedSection[] = [
   'today',
@@ -185,6 +197,8 @@ export function DesignFilesPanel({
   const rangeEnd = Math.min((safePage + 1) * effectivePageSize, sortedFiles.length);
   const allPageSelected = pageFiles.every((f) => selected.has(f.name));
   const somePageSelected = !allPageSelected && pageFiles.some((f) => selected.has(f.name));
+  const hasMultiplePages = totalPages > 1;
+  const showListControls = sortedFiles.length > 15 || selected.size > 0;
 
   useEffect(() => {
     setPage(0);
@@ -669,11 +683,11 @@ export function DesignFilesPanel({
     }
   }
 
-  function handleDrop(ev: React.DragEvent<HTMLDivElement>) {
+  async function handleDrop(ev: React.DragEvent<HTMLDivElement>) {
     ev.preventDefault();
     dragDepthRef.current = 0;
     setDraggingFiles(false);
-    const dropped = Array.from(ev.dataTransfer.files ?? []);
+    const dropped = await filesFromDataTransfer(ev.dataTransfer);
     if (dropped.length > 0) onUploadFiles(dropped);
   }
 
@@ -697,64 +711,172 @@ export function DesignFilesPanel({
     }
   }
 
+  const refreshControl = (
+    <button
+      type="button"
+      className="icon-only df-refresh-control"
+      onClick={() => void handleRefresh()}
+      disabled={refreshing}
+      title={t('designFiles.refresh')}
+      aria-label={t('designFiles.refresh')}
+    >
+      <Icon name={refreshing ? 'spinner' : 'reload'} size={14} />
+    </button>
+  );
+
+  const fileActions =
+    selected.size > 0 ? (
+      <div className="df-actions">
+        <button
+          type="button"
+          onClick={() => void handleBatchDownload()}
+          title={t('designFiles.downloadSelected', { n: selected.size })}
+        >
+          <Icon name="download" size={13} />
+          <span>{t('designFiles.downloadSelected', { n: selected.size })}</span>
+        </button>
+        <button
+          type="button"
+          className="danger"
+          data-testid="design-files-batch-delete"
+          disabled={deleting}
+          onClick={() => void handleBatchDelete()}
+          title={t('designFiles.deleteSelected', { n: selected.size })}
+        >
+          <span>{t('designFiles.deleteSelected', { n: selected.size })}</span>
+        </button>
+      </div>
+    ) : (
+      <div className="df-actions">
+        <button type="button" onClick={onNewSketch} title={t('designFiles.newSketch')}>
+          <Icon name="pencil" size={13} />
+          <span>{t('designFiles.newSketch')}</span>
+        </button>
+        <button type="button" onClick={onPaste} title={t('designFiles.paste.title')}>
+          <Icon name="copy" size={13} />
+          <span>{t('designFiles.paste.label')}</span>
+        </button>
+        <button
+          type="button"
+          data-testid="design-files-upload-trigger"
+          onClick={onUpload}
+          title={t('designFiles.upload.title')}
+        >
+          <Icon name="upload" size={13} />
+          <span>{t('designFiles.upload.label')}</span>
+        </button>
+      </div>
+    );
+
+  const groupToggle =
+    files.length > 0 ? (
+      <div
+        className="df-group-toggle"
+        role="group"
+        aria-label={t('designFiles.groupBy')}
+      >
+        <span>{t('designFiles.groupBy')}</span>
+        <button
+          type="button"
+          className={groupMode === 'kind' ? 'active' : ''}
+          aria-pressed={groupMode === 'kind'}
+          onClick={() => setGroupMode('kind')}
+        >
+          {t('designFiles.groupByKind')}
+        </button>
+        <button
+          type="button"
+          className={groupMode === 'modified' ? 'active' : ''}
+          aria-pressed={groupMode === 'modified'}
+          onClick={() => setGroupMode('modified')}
+        >
+          {t('designFiles.groupByModified')}
+        </button>
+      </div>
+    ) : (
+      <span className="df-controls-spacer" aria-hidden="true" />
+    );
+
+  const kindFilterControl =
+    files.length > 0 && availableKinds.length > 1 ? (
+      <div className="df-kind-filter" ref={filterMenuRef}>
+        <button
+          type="button"
+          className={`df-kind-filter-trigger${kindFilter.size > 0 ? ' active' : ''}`}
+          aria-haspopup="dialog"
+          aria-expanded={filterMenuOpen}
+          aria-label={t('designFiles.filterBy')}
+          onClick={() => setFilterMenuOpen((open) => !open)}
+        >
+          <Icon name="sliders" size={13} />
+          <span className="df-kind-filter-trigger-label">
+            {kindFilter.size === 0
+              ? t('designFiles.filterBy')
+              : kindFilter.size === 1
+                ? kindLabel(Array.from(kindFilter)[0]!, t)
+                : t('designFiles.filterCount', { n: kindFilter.size })}
+          </span>
+          {kindFilter.size > 0 ? (
+            <span
+              className="df-kind-filter-count"
+              aria-hidden
+            >
+              {kindFilter.size}
+            </span>
+          ) : null}
+        </button>
+        {filterMenuOpen ? (
+          <div
+            className="df-kind-filter-popover"
+            role="dialog"
+            aria-label={t('designFiles.filterBy')}
+          >
+            <div className="df-kind-filter-header">
+              <span>{t('designFiles.filterBy')}</span>
+              {kindFilter.size > 0 ? (
+                <button
+                  type="button"
+                  className="df-kind-filter-clear"
+                  onClick={() => setKindFilter(new Set())}
+                >
+                  {t('designFiles.filterClear')}
+                </button>
+              ) : null}
+            </div>
+            <ul className="df-kind-filter-list">
+              {availableKinds.map((kind) => {
+                const checked = kindFilter.has(kind);
+                const count = kindCounts.get(kind) ?? 0;
+                return (
+                  <li key={kind}>
+                    <label className="df-kind-filter-item">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleKindFilter(kind)}
+                      />
+                      <span className="df-kind-filter-glyph" aria-hidden>
+                        {kindGlyph(kind)}
+                      </span>
+                      <span className="df-kind-filter-label">
+                        {kindLabel(kind, t)}
+                      </span>
+                      <span className="df-kind-filter-itemcount">
+                        {count}
+                      </span>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ) : null}
+      </div>
+    ) : null;
+
   return (
     <div className={`df-panel ${preview ? '' : 'no-preview'}`}>
       <div className="df-main">
-        <div className="df-head">
-          <button
-            type="button"
-            className="icon-only"
-            onClick={() => void handleRefresh()}
-            disabled={refreshing}
-            title={t('designFiles.refresh')}
-            aria-label={t('designFiles.refresh')}
-          >
-            <Icon name={refreshing ? 'spinner' : 'reload'} size={14} />
-          </button>
-          <span className="crumbs">{t('designFiles.crumbs')}</span>
-          {selected.size > 0 ? (
-            <div className="df-actions">
-              <button
-                type="button"
-                onClick={() => void handleBatchDownload()}
-                title={t('designFiles.downloadSelected', { n: selected.size })}
-              >
-                <Icon name="download" size={13} />
-                <span>{t('designFiles.downloadSelected', { n: selected.size })}</span>
-              </button>
-              <button
-                type="button"
-                className="danger"
-                data-testid="design-files-batch-delete"
-                disabled={deleting}
-                onClick={() => void handleBatchDelete()}
-                title={t('designFiles.deleteSelected', { n: selected.size })}
-              >
-                <span>{t('designFiles.deleteSelected', { n: selected.size })}</span>
-              </button>
-            </div>
-          ) : (
-            <div className="df-actions">
-            <button type="button" onClick={onNewSketch} title={t('designFiles.newSketch')}>
-              <Icon name="pencil" size={13} />
-              <span>{t('designFiles.newSketch')}</span>
-            </button>
-            <button type="button" onClick={onPaste} title={t('designFiles.paste.title')}>
-              <Icon name="copy" size={13} />
-              <span>{t('designFiles.paste.label')}</span>
-            </button>
-            <button
-              type="button"
-              data-testid="design-files-upload-trigger"
-              onClick={onUpload}
-              title={t('designFiles.upload.title')}
-            >
-              <Icon name="upload" size={13} />
-              <span>{t('designFiles.upload.label')}</span>
-            </button>
-          </div>
-          )}
-        </div>
         <div className="df-body">
           {uploadError && !preview ? (
             <div className="df-upload-banner" data-testid="upload-error-banner">
@@ -770,6 +892,12 @@ export function DesignFilesPanel({
               ) : null}
             </div>
           ) : null}
+          <div className="df-controls-row">
+            {refreshControl}
+            {groupToggle}
+            {kindFilterControl}
+            {fileActions}
+          </div>
           {files.length === 0 && liveArtifacts.length === 0 ? (
             <div className="df-empty" data-testid="design-files-empty">
               <div className="df-empty-pill">
@@ -790,108 +918,6 @@ export function DesignFilesPanel({
             </div>
           ) : (
             <>
-              {files.length > 0 ? (
-                <div className="df-toolbar-row">
-                  <div
-                    className="df-group-toggle"
-                    role="group"
-                    aria-label={t('designFiles.groupBy')}
-                  >
-                    <span>{t('designFiles.groupBy')}</span>
-                    <button
-                      type="button"
-                      className={groupMode === 'kind' ? 'active' : ''}
-                      aria-pressed={groupMode === 'kind'}
-                      onClick={() => setGroupMode('kind')}
-                    >
-                      {t('designFiles.groupByKind')}
-                    </button>
-                    <button
-                      type="button"
-                      className={groupMode === 'modified' ? 'active' : ''}
-                      aria-pressed={groupMode === 'modified'}
-                      onClick={() => setGroupMode('modified')}
-                    >
-                      {t('designFiles.groupByModified')}
-                    </button>
-                  </div>
-                  {availableKinds.length > 1 ? (
-                    <div className="df-kind-filter" ref={filterMenuRef}>
-                      <button
-                        type="button"
-                        className={`df-kind-filter-trigger${kindFilter.size > 0 ? ' active' : ''}`}
-                        aria-haspopup="dialog"
-                        aria-expanded={filterMenuOpen}
-                        aria-label={t('designFiles.filterBy')}
-                        onClick={() => setFilterMenuOpen((open) => !open)}
-                      >
-                        <Icon name="sliders" size={13} />
-                        <span className="df-kind-filter-trigger-label">
-                          {kindFilter.size === 0
-                            ? t('designFiles.filterBy')
-                            : kindFilter.size === 1
-                              ? kindLabel(Array.from(kindFilter)[0]!, t)
-                              : t('designFiles.filterCount', { n: kindFilter.size })}
-                        </span>
-                        {kindFilter.size > 0 ? (
-                          <span
-                            className="df-kind-filter-count"
-                            aria-hidden
-                          >
-                            {kindFilter.size}
-                          </span>
-                        ) : null}
-                      </button>
-                      {filterMenuOpen ? (
-                        <div
-                          className="df-kind-filter-popover"
-                          role="dialog"
-                          aria-label={t('designFiles.filterBy')}
-                        >
-                          <div className="df-kind-filter-header">
-                            <span>{t('designFiles.filterBy')}</span>
-                            {kindFilter.size > 0 ? (
-                              <button
-                                type="button"
-                                className="df-kind-filter-clear"
-                                onClick={() => setKindFilter(new Set())}
-                              >
-                                {t('designFiles.filterClear')}
-                              </button>
-                            ) : null}
-                          </div>
-                          <ul className="df-kind-filter-list">
-                            {availableKinds.map((kind) => {
-                              const checked = kindFilter.has(kind);
-                              const count = kindCounts.get(kind) ?? 0;
-                              return (
-                                <li key={kind}>
-                                  <label className="df-kind-filter-item">
-                                    <input
-                                      type="checkbox"
-                                      checked={checked}
-                                      onChange={() => toggleKindFilter(kind)}
-                                    />
-                                    <span className="df-kind-filter-glyph" aria-hidden>
-                                      {kindGlyph(kind)}
-                                    </span>
-                                    <span className="df-kind-filter-label">
-                                      {kindLabel(kind, t)}
-                                    </span>
-                                    <span className="df-kind-filter-itemcount">
-                                      {count}
-                                    </span>
-                                  </label>
-                                </li>
-                              );
-                            })}
-                          </ul>
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
               {liveArtifacts.length > 0 ? (
                 <div className="df-section" key="live-artifacts">
                   <div className="df-section-label">{t('designFiles.sectionLiveArtifacts')}</div>
@@ -999,57 +1025,43 @@ export function DesignFilesPanel({
               ) : null}
               {sortedFiles.length > 0 ? (
                 <>
-                  <div className="df-pagination df-pagination-start">
-                    <label>
-                      {t('designFiles.perPage')}:
-                      <select
-                        value={pageSize === 'all' ? 'all' : pageSize}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setPageSize(val === 'all' ? 'all' : Number(val));
-                        }}
-                      >
-                        <option value={15}>15</option>
-                        <option value={30}>30</option>
-                        <option value={45}>45</option>
-                        <option value={60}>60</option>
-                        <option value="all">{t('designFiles.all')}</option>
-                      </select>
-                    </label>
-                    <span className="df-page-info">
-                      {t('designFiles.pageInfo', { start: rangeStart, end: rangeEnd, total: sortedFiles.length })}
-                    </span>
-                    <div className="df-select-bar">
-                      {selected.size < sortedFiles.length ? (
-                        <button type="button" className="df-select-all" onClick={selectAllFiles}>
-                          {t('designFiles.selectAll', { n: sortedFiles.length })}
-                        </button>
+                  {showListControls ? (
+                    <div className="df-pagination df-pagination-start">
+                      <label>
+                        {t('designFiles.perPage')}:
+                        <select
+                          value={pageSize === 'all' ? 'all' : pageSize}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setPageSize(val === 'all' ? 'all' : Number(val));
+                          }}
+                        >
+                          <option value={15}>15</option>
+                          <option value={30}>30</option>
+                          <option value={45}>45</option>
+                          <option value={60}>60</option>
+                          <option value="all">{t('designFiles.all')}</option>
+                        </select>
+                      </label>
+                      {!hasMultiplePages ? (
+                        <span className="df-page-info">
+                          {t('designFiles.pageInfo', { start: rangeStart, end: rangeEnd, total: sortedFiles.length })}
+                        </span>
                       ) : null}
-                      {selected.size > 0 ? (
-                        <button type="button" className="df-select-all" onClick={clearSelection}>
-                          {t('designFiles.clearSelection')}
-                        </button>
-                      ) : null}
+                      <div className="df-select-bar">
+                        {selected.size < sortedFiles.length ? (
+                          <button type="button" className="df-select-all" onClick={selectAllFiles}>
+                            {t('designFiles.selectAll', { n: sortedFiles.length })}
+                          </button>
+                        ) : null}
+                        {selected.size > 0 ? (
+                          <button type="button" className="df-select-all" onClick={clearSelection}>
+                            {t('designFiles.clearSelection')}
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
-                    <div className="df-pagination-right">
-                      <button
-                        type="button"
-                        className="df-page-btn"
-                        disabled={safePage <= 0}
-                        onClick={() => setPage(Math.max(0, safePage - 1))}
-                      >
-                        {t('designFiles.prev')}
-                      </button>
-                      <button
-                        type="button"
-                        className="df-page-btn"
-                        disabled={safePage >= totalPages - 1}
-                        onClick={() => setPage(Math.min(totalPages - 1, safePage + 1))}
-                      >
-                        {t('designFiles.next')}
-                      </button>
-                    </div>
-                  </div>
+                  ) : null}
                   <table className="df-table">
                     <thead>
                       <tr>
@@ -1112,40 +1124,42 @@ export function DesignFilesPanel({
                           : pageFiles.map(renderFileRow)}
                     </tbody>
                   </table>
-                  <div className="df-pagination df-pagination-center">
-                    <button
-                      type="button"
-                      className="df-page-btn"
-                      disabled={safePage <= 0}
-                      onClick={() => setPage((p) => Math.max(0, p - 1))}
-                    >
-                      {t('designFiles.prev')}
-                    </button>
-                    <label>
-                      {t('designFiles.jumpToPage')}:
-                      <select
-                        value={safePage}
-                        onChange={(e) => setPage(Number(e.target.value))}
+                  {hasMultiplePages ? (
+                    <div className="df-pagination df-pagination-center">
+                      <button
+                        type="button"
+                        className="df-page-btn"
+                        disabled={safePage <= 0}
+                        onClick={() => setPage((p) => Math.max(0, p - 1))}
                       >
-                        {Array.from({ length: totalPages }, (_, i) => (
-                          <option key={i} value={i}>
-                            {i + 1}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <button
-                      type="button"
-                      className="df-page-btn"
-                      disabled={safePage >= totalPages - 1}
-                      onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                    >
-                      {t('designFiles.next')}
-                    </button>
-                    <span className="df-page-info">
-                      {t('designFiles.pageInfo', { start: rangeStart, end: rangeEnd, total: sortedFiles.length })}
-                    </span>
-                  </div>
+                        {t('designFiles.prev')}
+                      </button>
+                      <label>
+                        {t('designFiles.jumpToPage')}:
+                        <select
+                          value={safePage}
+                          onChange={(e) => setPage(Number(e.target.value))}
+                        >
+                          {Array.from({ length: totalPages }, (_, i) => (
+                            <option key={i} value={i}>
+                              {i + 1}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <button
+                        type="button"
+                        className="df-page-btn"
+                        disabled={safePage >= totalPages - 1}
+                        onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                      >
+                        {t('designFiles.next')}
+                      </button>
+                      <span className="df-page-info">
+                        {t('designFiles.pageInfo', { start: rangeStart, end: rangeEnd, total: sortedFiles.length })}
+                      </span>
+                    </div>
+                  ) : null}
                 </>
               ) : null}
             </>
@@ -1262,9 +1276,20 @@ function DfPreview({
   const t = useT();
   const url = projectFileUrl(projectId, file.name);
   const rendersSketchJson = isRenderableSketchJson(file);
+  const openPreviewLabel = `${t('designFiles.previewOpen')} ${file.name}`;
+  const thumbCanOpen = file.kind !== 'audio' && file.kind !== 'video';
   return (
     <aside className="df-preview">
-      <div className="df-preview-thumb">
+      <button
+        type="button"
+        className="df-preview-close"
+        onClick={onClose}
+        title={t('designFiles.previewClose')}
+        aria-label={t('designFiles.previewClose')}
+      >
+        <Icon name="close" size={13} />
+      </button>
+      <div className={`df-preview-thumb${thumbCanOpen ? ' is-openable' : ''}`}>
         {rendersSketchJson ? (
           <SketchPreview projectId={projectId} file={file} />
         ) : file.kind === 'image' || file.kind === 'sketch' ? (
@@ -1295,17 +1320,31 @@ function DfPreview({
             {kindGlyph(file.kind)}
           </div>
         )}
+        {thumbCanOpen ? (
+          <button
+            type="button"
+            className="df-preview-thumb-open"
+            onClick={onOpen}
+            title={openPreviewLabel}
+            aria-label={openPreviewLabel}
+          />
+        ) : null}
       </div>
       <div className="df-preview-meta" data-testid="design-file-preview">
-        <button
-          type="button"
-          className="ghost"
-          onClick={onOpen}
-          style={{ alignSelf: 'flex-start' }}
-        >
-          <Icon name="eye" size={13} />
-          <span>{t('designFiles.previewOpen')}</span>
-        </button>
+        <div className="df-preview-actions">
+          <button type="button" className="ghost" onClick={onOpen}>
+            <Icon name="eye" size={13} />
+            <span>{t('designFiles.previewOpen')}</span>
+          </button>
+          <a
+            className="ghost-link"
+            href={url}
+            download={file.name}
+          >
+            <Icon name="download" size={13} />
+            <span>{t('designFiles.download')}</span>
+          </a>
+        </div>
         <div className="df-preview-name">{file.name}</div>
         <div className="df-preview-kind">{kindLabel(file.kind, t)}</div>
         <div className="df-preview-stats">
@@ -1313,19 +1352,6 @@ function DfPreview({
             time: relativeTime(file.mtime, t),
             size: humanBytes(file.size),
           })}
-        </div>
-        <div className="df-preview-actions">
-          <a
-            className="ghost-link"
-            href={url}
-            download={file.name}
-            style={{ textDecoration: 'none' }}
-          >
-            {t('designFiles.download')}
-          </a>
-          <button type="button" onClick={onClose}>
-            {t('designFiles.previewClose')}
-          </button>
         </div>
       </div>
     </aside>
@@ -1378,6 +1404,49 @@ function dateDaysBefore(date: Date, days: number): Date {
   const result = new Date(date);
   result.setDate(result.getDate() - days);
   return result;
+}
+
+async function filesFromDataTransfer(dataTransfer: DataTransfer): Promise<File[]> {
+  const items = Array.from(dataTransfer.items ?? []);
+  if (items.length === 0) return Array.from(dataTransfer.files ?? []);
+
+  const files = await Promise.all(items.map(filesFromDataTransferItem));
+  const flattened = files.flat();
+  return flattened.length > 0 ? flattened : Array.from(dataTransfer.files ?? []);
+}
+
+async function filesFromDataTransferItem(item: DataTransferItem): Promise<File[]> {
+  const entry = (item as DataTransferItemWithEntry).webkitGetAsEntry?.();
+  if (!entry) {
+    const file = item.kind === 'file' ? item.getAsFile() : null;
+    return file ? [file] : [];
+  }
+  return filesFromFileSystemEntry(entry);
+}
+
+async function filesFromFileSystemEntry(entry: FileSystemEntry): Promise<File[]> {
+  if (entry.isFile) return [await fileFromEntry(entry as FileSystemFileEntryWithFile)];
+  if (!entry.isDirectory) return [];
+
+  const reader = (entry as FileSystemEntryWithReader).createReader?.();
+  if (!reader) return [];
+
+  const files: File[] = [];
+  for (;;) {
+    const entries = await readEntryBatch(reader);
+    if (entries.length === 0) break;
+    const nested = await Promise.all(entries.map(filesFromFileSystemEntry));
+    files.push(...nested.flat());
+  }
+  return files;
+}
+
+function fileFromEntry(entry: FileSystemFileEntryWithFile): Promise<File> {
+  return new Promise((resolve, reject) => entry.file(resolve, reject));
+}
+
+function readEntryBatch(reader: FileSystemDirectoryReader): Promise<FileSystemEntry[]> {
+  return new Promise((resolve, reject) => reader.readEntries(resolve, reject));
 }
 
 function kindGlyph(kind: ProjectFileKind): string {

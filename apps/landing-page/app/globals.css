@@ -1,15 +1,16 @@
 /*
  * Atelier Zero — landing page styles.
  *
- * Mirrors `skills/open-design-landing/example.html` <style> block 1:1, plus
- * a Google Fonts import so we do not need to inject <link rel='preconnect'>
- * tags into the document head from a server component.
+ * Mirrors `skills/open-design-landing/example.html` <style> block 1:1.
+ * When the canonical example.html changes, mirror the diff here so the
+ * skill's known-good rendering stays in lockstep with the deployed site.
  *
- * When the canonical example.html changes, mirror the diff here. The two
- * files are intentionally kept in lockstep for visual parity between the
- * skill's known-good rendering and the deployed landing page.
+ * Font loading lives in `_components/font-stylesheet.astro` — a server
+ * component injected into every page's <head>. We used to `@import` it
+ * inline here, but that serialized HTML → CSS → fonts CSS → woff2 and
+ * cost ~3s on first paint. Moving to <link> + preconnect parallelizes
+ * the fetch with HTML parse.
  */
-@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700;800;900&family=Inter:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,500;0,600;1,400;1,500;1,600;1,700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
   --paper: #efe7d2;
@@ -488,6 +489,35 @@ body::before {
   display: flex;
   flex-direction: column;
   position: relative;
+}
+.hero-discord-pill {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 22px;
+  padding: 7px 13px;
+  border: 1px solid rgba(237, 111, 92, 0.28);
+  border-radius: 999px;
+  background: rgba(237, 111, 92, 0.12);
+  color: var(--coral);
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  line-height: 1;
+  text-decoration: none;
+  box-shadow: 0 12px 24px -22px rgba(237, 111, 92, 0.8);
+  transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
+}
+.hero-discord-pill:hover {
+  transform: translateY(-1px);
+  border-color: rgba(237, 111, 92, 0.46);
+  background: rgba(237, 111, 92, 0.18);
+}
+.hero-discord-pill span {
+  font-size: 8px;
+  line-height: 1;
 }
 .hero-copy .label { margin-bottom: 28px; }
 .hero-copy .lead { margin-bottom: 30px; max-width: 38ch; font-size: 16px; }

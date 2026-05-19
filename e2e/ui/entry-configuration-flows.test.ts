@@ -120,6 +120,9 @@ test('prompt template retry preserves the edited body in project metadata', asyn
   });
 
   await gotoEntryHome(page);
+  await page.getByTestId('entry-nav-new-project').click();
+  await expect(page.getByTestId('new-project-modal')).toBeVisible();
+  await expect(page.getByTestId('new-project-panel')).toBeVisible();
   await page.getByTestId('new-project-tab-media').click();
   await page.getByTestId('new-project-media-surface-image').click();
   await page.getByTestId('new-project-name').fill('Prompt template retry metadata');
@@ -161,6 +164,9 @@ test('live artifact empty connector CTA opens the gated connector setup path', a
   await routeComposioConfig(page, { configured: false, apiKeyTail: '' });
 
   await gotoEntryHome(page);
+  await page.getByTestId('entry-nav-new-project').click();
+  await expect(page.getByTestId('new-project-modal')).toBeVisible();
+  await expect(page.getByTestId('new-project-panel')).toBeVisible();
   await page.getByTestId('new-project-tab-live-artifact').click();
   await expect(page.getByTestId('new-project-connectors')).toBeVisible();
 
@@ -202,9 +208,8 @@ test('connectors search supports empty results and keyboard-closeable details', 
     window.localStorage.setItem(key, JSON.stringify(next));
   }, STORAGE_KEY);
 
-  await page.goto('/');
-  const settingsDialog = await openEntrySettingsDialog(page, /^Connectors\b/);
-  await expect(settingsDialog.getByTestId('connector-grid-wrap')).toBeVisible();
+  await gotoEntryHome(page);
+  const settingsDialog = await openIntegrationsConnectors(page);
 
   const search = settingsDialog.getByTestId('connectors-search-input');
   await search.fill('git');
@@ -226,7 +231,7 @@ test('connectors search supports empty results and keyboard-closeable details', 
   await expect(page.getByTestId('connector-drawer')).toHaveCount(0);
 });
 
-test('saving a Composio key from Settings unlocks the connectors gate immediately', async ({ page }) => {
+test('saving a Composio key from Integrations unlocks the connectors gate immediately', async ({ page }) => {
   const { accountLabel: _unusedAccountLabel, ...slackConnector } = CONNECTORS[1]!;
   await routeConnectors(page, [
     {
@@ -254,8 +259,8 @@ test('saving a Composio key from Settings unlocks the connectors gate immediatel
     await route.fulfill({ status: 200, body: '{}' });
   });
 
-  await page.goto('/');
-  const settingsDialog = await openEntrySettingsDialog(page, /^Connectors\b/);
+  await gotoEntryHome(page);
+  const settingsDialog = await openIntegrationsConnectors(page);
   await expect(settingsDialog.getByTestId('connectors-search-input')).toBeDisabled();
 
   await settingsDialog.getByPlaceholder('Paste Composio API key').fill('cmp-secret-1234');
@@ -313,8 +318,8 @@ test('typing a draft replacement Composio key does not trigger global autosave',
     await route.fulfill({ status: 200, body: '{}' });
   });
 
-  await page.goto('/');
-  const settingsDialog = await openEntrySettingsDialog(page, /^Connectors\b/);
+  await gotoEntryHome(page);
+  const settingsDialog = await openIntegrationsConnectors(page);
   await expect(settingsDialog.getByTestId('connector-grid-wrap')).toBeVisible();
   await expect(settingsDialog.getByText('Saved · ••••1234')).toBeVisible();
 
@@ -326,7 +331,6 @@ test('typing a draft replacement Composio key does not trigger global autosave',
 
   await page.waitForTimeout(900);
   expect(appConfigPersistBodies).toHaveLength(appConfigPersistCountBeforeDraftEdit);
-  await expect(settingsDialog.locator('.settings-autosave')).not.toContainText(/Saving|All changes saved/);
 });
 
 async function routeConnectors(page: Page, connectors: typeof CONNECTORS) {
@@ -357,24 +361,22 @@ async function routeConnectors(page: Page, connectors: typeof CONNECTORS) {
 
 async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await page.getByTestId('entry-nav-new-project').click();
-  await expect(page.getByTestId('new-project-modal')).toBeVisible();
-  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+  await expect(page.getByTestId('home-hero')).toBeVisible();
+  await expect(page.getByTestId('home-hero-input')).toBeVisible();
 }
 
-async function openEntrySettingsDialog(page: Page, sectionName?: RegExp | string): Promise<Locator> {
-  const settingsButton = page.getByRole('button', { name: /open settings/i });
-  await settingsButton.click();
-  const settingsMenu = page.locator('.avatar-popover[role="menu"]');
-  await expect(settingsMenu).toBeVisible();
-  await settingsMenu.getByRole('button', { name: /^Settings$/i }).click();
-
-  const settingsDialog = page.getByRole('dialog');
-  await expect(settingsDialog).toBeVisible();
-  if (sectionName) {
-    await settingsDialog.getByRole('button', { name: sectionName }).click();
-  }
-  return settingsDialog;
+async function openIntegrationsConnectors(page: Page): Promise<Locator> {
+  await page.getByTestId('entry-nav-integrations').click();
+  await expect(page).toHaveURL(/\/integrations$/);
+  await expect(page.getByRole('heading', { name: 'Integrations' })).toBeVisible();
+  await page.getByTestId('integrations-tab-connectors').click();
+  await expect(page.getByTestId('integrations-tab-connectors')).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  const panel = page.locator('.integrations-view__panel');
+  await expect(panel.getByTestId('connector-grid-wrap')).toBeVisible();
+  return panel;
 }
 
 async function routeComposioConfig(

@@ -734,6 +734,7 @@ open-design/
 │   ├── architecture.md            ← topologies, data flow, components
 │   ├── skills-protocol.md         ← extended SKILL.md od: frontmatter
 │   ├── agent-adapters.md          ← per-CLI detection + dispatch
+│   ├── new-agent-runtime-acp.md   ← ACP-over-stdio runtime integration guide
 │   ├── modes.md                   ← prototype / deck / template / design-system
 │   ├── references.md              ← long-form provenance
 │   ├── roadmap.md                 ← phased delivery
