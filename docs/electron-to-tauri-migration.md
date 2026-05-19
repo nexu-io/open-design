@@ -106,6 +106,51 @@ The migration stays parallel until parity is proven. Electron remains the defaul
 - [ ] Delete or rewrite Electron-only tests.
 - [ ] Update AGENTS guidance and PR checklist references from Electron to Tauri.
 
+## Post-M4 Execution Runbook
+
+Do not start this runbook until `scripts/verify-tauri-platform-gates.ts --update-migration-doc docs/electron-to-tauri-migration.md` has updated the three Windows/Linux M4 checkboxes and appended the verified native evidence log entry.
+
+### M5 default flip procedure
+
+1. Change `DEFAULT_DESKTOP_RUNTIME` from `electron` to `tauri` in both `tools/dev/src/config.ts` and `tools/pack/src/config.ts`.
+2. Keep `DESKTOP_RUNTIME_KINDS` accepting both `electron` and `tauri` during this transition window. This is the explicit Electron fallback required before M6.
+3. Change `.github/workflows/release-beta.yml` `desktop_runtime.default` from `electron` to `tauri`; update the adjacent input description so it no longer says public beta should keep Electron.
+4. Update Tauri-primary wording in `README.md`, `apps/AGENTS.md`, and `docs/architecture.md`. These files must stop describing Electron as the current/default desktop runtime.
+5. Mark all five M5 checklist items together. `pnpm guard` intentionally rejects partial M5 default flips.
+6. Run:
+
+```bash
+pnpm guard
+pnpm typecheck
+pnpm --filter @open-design/tools-dev test
+pnpm --filter @open-design/tools-pack test
+```
+
+### M6 Electron removal procedure
+
+1. Remove Electron packages from `apps/desktop/package.json`, `apps/packaged/package.json`, and `tools/pack/package.json`; then run `pnpm install` so `pnpm-lock.yaml` importer entries are updated.
+2. Remove or replace Electron runtime files under `apps/desktop/src/main/`, including `index.ts`, `preload.cts`, and `runtime.ts`. Keep any runtime-neutral code only if it has a Tauri caller.
+3. Remove Electron-only pack resources such as `tools/pack/resources/web-standalone-after-pack.cjs` and any electron-builder hook wiring that becomes unreachable.
+4. Delete or rewrite Electron-only tests in `apps/desktop/tests`, `apps/packaged/tests`, and `tools/pack/tests`. Tests for Tauri behavior, headless Linux, and generic sidecar contracts should remain.
+5. Update Electron-specific guidance in root/app/tool AGENTS files, `tools/pack/AGENTS.md`, `docs/code-review-guidelines.md`, and `.github/pull_request_template.md`.
+6. Remove `electron` from `DESKTOP_RUNTIME_KINDS` in `tools/dev/src/config.ts` and `tools/pack/src/config.ts` only after the M6 cleanup checkboxes are ready to move together.
+7. Mark all five M6 checklist items together. `pnpm guard` intentionally rejects M6 cleanup before M5 and rejects stale files, deps, lockfile importers, tests, or guidance.
+8. Run:
+
+```bash
+pnpm install
+pnpm guard
+pnpm typecheck
+pnpm --filter @open-design/web test
+pnpm --filter @open-design/desktop test
+pnpm --filter @open-design/packaged test
+pnpm --filter @open-design/tools-dev test
+pnpm --filter @open-design/tools-pack test
+cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml
+cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml -- -D warnings
+cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
+```
+
 ## QA Plan
 
 ### Always-run checks
@@ -256,6 +301,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Added positive migration-order policy tests for the two required intermediate states: verified M4 before the default flip, and post-M5 with Tauri defaults plus explicit Electron fallback before M6 cleanup. This proves the guard permits the intended phase-by-phase path instead of only the current and final states. `node --import tsx --test scripts/tauri-migration-policy.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `pnpm guard` passed.
 - 2026-05-20: Made the migration-order guard parse `DESKTOP_RUNTIME_KINDS` instead of relying on an exact formatted string. The M5 Electron fallback window now tolerates order/whitespace-only formatting changes while still requiring both tools to accept `electron` and `tauri`. `node --import tsx --test scripts/tauri-migration-policy.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `pnpm guard` passed.
 - 2026-05-20: Relaxed the migration-order parser for `DEFAULT_DESKTOP_RUNTIME` and `release-beta` `desktop_runtime.default` formatting. M5 now keys on the actual `electron|tauri` values across common TypeScript/YAML quote and whitespace variants, reducing false failures during the default flip. `node --import tsx --test scripts/tauri-migration-policy.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `pnpm guard` passed.
+- 2026-05-20: Added a post-M4 execution runbook that maps M5 and M6 checklist items to the concrete files and verification commands required after native Windows/Linux evidence lands. This keeps default flip and Electron removal execution tied to the guard policy instead of relying on checklist memory. `pnpm guard` passed.
 
 ### Platform Gate Runners
 
