@@ -23,6 +23,10 @@ test("verify-tauri-platform-gates accepts complete Windows and Linux report evid
 
   const result = await runVerifier("--win-report", winReport, "--linux-report", linuxReport);
   assert.match(result.stdout, /Tauri platform gate reports passed verification/);
+  assert.match(result.stdout, /Windows NSIS M4 evidence/);
+  assert.match(result.stdout, /executablePath=C:\/tmp\/install\/Open Design\.exe/);
+  assert.match(result.stdout, /Linux AppImage\/headless M4 evidence/);
+  assert.match(result.stdout, /headless\.stop\.remainingPids=\[\]/);
 });
 
 test("verify-tauri-platform-gates rejects skipped reports with no runtime summary", async (t) => {
@@ -59,6 +63,16 @@ test("verify-tauri-platform-gates rejects process residue in Windows stop eviden
   await assert.rejects(runVerifier("--win-report", winReport), /win stop\.remainingPids must be an empty array/);
 });
 
+test("verify-tauri-platform-gates rejects missing installed executable evidence", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "open-design-tauri-gates-executable-"));
+  t.after(() => void rm(root, { force: true, recursive: true }));
+
+  const winReport = join(root, "win");
+  await writeWindowsReport(winReport, { omitExecutablePath: true });
+
+  await assert.rejects(runVerifier("--win-report", winReport), /win start\.executablePath must be a non-empty string/);
+});
+
 async function runVerifier(...args: string[]): Promise<{ stderr: string; stdout: string }> {
   return execFileAsync(process.execPath, ["--import", "tsx", verifierPath, ...args], {
     cwd: repoRoot,
@@ -66,7 +80,7 @@ async function runVerifier(...args: string[]): Promise<{ stderr: string; stdout:
   });
 }
 
-async function writeWindowsReport(reportRoot: string, options: { remainingPids?: number[] } = {}): Promise<void> {
+async function writeWindowsReport(reportRoot: string, options: { omitExecutablePath?: boolean; remainingPids?: number[] } = {}): Promise<void> {
   await mkdir(join(reportRoot, "screenshots"), { recursive: true });
   await writeFile(join(reportRoot, "screenshots", "open-design-win-smoke.png"), "png");
   await writeJson(join(reportRoot, "manifest.json"), {
@@ -92,6 +106,7 @@ async function writeWindowsReport(reportRoot: string, options: { remainingPids?:
     },
     screenshot: "screenshots/open-design-win-smoke.png",
     start: {
+      ...(options.omitExecutablePath === true ? {} : { executablePath: "C:/tmp/install/Open Design.exe" }),
       pid: 123,
       source: "installed",
       status: runningStatus(1234),
@@ -150,6 +165,7 @@ async function writeLinuxReport(reportRoot: string): Promise<void> {
     },
     screenshot: "screenshots/open-design-linux-smoke.png",
     start: {
+      executablePath: "/tmp/OpenDesign.AppImage",
       pid: 234,
       source: "installed",
       status: runningStatus(2345),

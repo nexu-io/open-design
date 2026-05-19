@@ -22,18 +22,30 @@ type VerificationContext = {
   summary: Record<string, unknown>;
 };
 
+type PlatformEvidence = {
+  platform: Platform;
+  title: string;
+  lines: string[];
+};
+
 const workspaceRoot = resolve(import.meta.dirname, "..");
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
-  const checks: Array<Promise<void>> = [];
+  const checks: Array<Promise<PlatformEvidence>> = [];
   if (args.winReport != null) checks.push(verifyReport("win", args.winReport));
   if (args.linuxReport != null) checks.push(verifyReport("linux", args.linuxReport));
   if (checks.length === 0) {
     throw new Error("usage: tsx scripts/verify-tauri-platform-gates.ts --win-report <dir> --linux-report <dir>");
   }
-  await Promise.all(checks);
+  const evidence = (await Promise.all(checks)).sort((left, right) => left.platform.localeCompare(right.platform));
   console.log("Tauri platform gate reports passed verification.");
+  for (const entry of evidence) {
+    console.log(`${entry.title}:`);
+    for (const line of entry.lines) {
+      console.log(`  - ${line}`);
+    }
+  }
 }
 
 function parseArgs(args: string[]): { linuxReport?: string; winReport?: string } {
@@ -59,7 +71,7 @@ function parseArgs(args: string[]): { linuxReport?: string; winReport?: string }
   return parsed;
 }
 
-async function verifyReport(platform: Platform, reportRoot: string): Promise<void> {
+async function verifyReport(platform: Platform, reportRoot: string): Promise<PlatformEvidence> {
   const manifest = await readJson<Manifest>(join(reportRoot, "manifest.json"));
   const suite = await readJson<SuiteResult>(join(reportRoot, "suite-result.json"));
   const summary = await readJson<Record<string, unknown>>(join(reportRoot, "summary.json"));
@@ -77,8 +89,10 @@ async function verifyReport(platform: Platform, reportRoot: string): Promise<voi
   await verifyScreenshot(context, manifest);
   if (platform === "win") {
     verifyWindowsSummary(context);
+    return windowsEvidence(context, manifest);
   } else {
     verifyLinuxSummary(context);
+    return linuxEvidence(context, manifest);
   }
 }
 
@@ -93,6 +107,7 @@ function verifyWindowsSummary({ summary }: VerificationContext): void {
 
   const start = expectRecord(summary.start, "win summary.start");
   expectEqual("win start.source", start.source, "installed");
+  expectNonEmptyString(start.executablePath, "win start.executablePath");
   expectPositiveNumber(start.pid, "win start.pid");
   expectRunningStatus(start.status, "win start.status");
 
@@ -120,6 +135,7 @@ function verifyLinuxSummary({ summary }: VerificationContext): void {
 
   const start = expectRecord(summary.start, "linux summary.start");
   expectEqual("linux start.source", start.source, "installed");
+  expectNonEmptyString(start.executablePath, "linux start.executablePath");
   expectPositiveNumber(start.pid, "linux start.pid");
   expectRunningStatus(start.status, "linux start.status");
 
@@ -143,6 +159,65 @@ function verifyLinuxSummary({ summary }: VerificationContext): void {
   expectNotEqual("linux uninstall.removed.appImage", removed.appImage, "skipped-process-running");
   expectNotEqual("linux uninstall.removed.desktop", removed.desktop, "skipped-process-running");
   expectNotEqual("linux uninstall.removed.icon", removed.icon, "skipped-process-running");
+}
+
+function windowsEvidence({ summary }: VerificationContext, manifest: Manifest): PlatformEvidence {
+  const build = expectRecord(summary.build, "win summary.build");
+  const install = expectRecord(summary.install, "win summary.install");
+  const start = expectRecord(summary.start, "win summary.start");
+  const status = expectRecord(start.status, "win start.status");
+  const health = expectRecord(summary.health, "win health");
+  const stop = expectRecord(summary.stop, "win summary.stop");
+  const uninstall = expectRecord(summary.uninstall, "win summary.uninstall");
+  const residue = expectRecord(uninstall.residueObservation, "win uninstall.residueObservation");
+  return {
+    platform: "win",
+    title: "Windows NSIS M4 evidence",
+    lines: [
+      `installerPath=${expectNonEmptyString(build.installerPath, "win build.installerPath")}`,
+      `installDir=${expectNonEmptyString(install.installDir, "win install.installDir")}`,
+      `executablePath=${expectNonEmptyString(start.executablePath, "win start.executablePath")}`,
+      `start.url=${expectNonEmptyString(status.url, "win start.status.url")}`,
+      `health.href=${expectNonEmptyString(health.href, "win health.href")}`,
+      `screenshot=${expectNonEmptyString(summary.screenshot ?? manifest.screenshot, "win screenshot relpath")}`,
+      `stop.remainingPids=${JSON.stringify(stop.remainingPids)}`,
+      `uninstall.installedExeExists=${JSON.stringify(residue.installedExeExists)}`,
+      `uninstall.registryResidues=${JSON.stringify(residue.registryResidues)}`,
+    ],
+  };
+}
+
+function linuxEvidence({ summary }: VerificationContext, manifest: Manifest): PlatformEvidence {
+  const build = expectRecord(summary.build, "linux summary.build");
+  const install = expectRecord(summary.install, "linux summary.install");
+  const start = expectRecord(summary.start, "linux summary.start");
+  const status = expectRecord(start.status, "linux start.status");
+  const health = expectRecord(summary.health, "linux health");
+  const stop = expectRecord(summary.stop, "linux summary.stop");
+  const headless = expectRecord(summary.headless, "linux summary.headless");
+  const headlessInstall = expectRecord(headless.install, "linux headless.install");
+  const headlessStart = expectRecord(headless.start, "linux headless.start");
+  const headlessStatus = expectRecord(headlessStart.status, "linux headless.start.status");
+  const headlessStop = expectRecord(headless.stop, "linux headless.stop");
+  const uninstall = expectRecord(summary.uninstall, "linux summary.uninstall");
+  const removed = expectRecord(uninstall.removed, "linux uninstall.removed");
+  return {
+    platform: "linux",
+    title: "Linux AppImage/headless M4 evidence",
+    lines: [
+      `appImagePath=${expectNonEmptyString(build.appImagePath, "linux build.appImagePath")}`,
+      `installedAppImagePath=${expectNonEmptyString(install.appImagePath, "linux install.appImagePath")}`,
+      `executablePath=${expectNonEmptyString(start.executablePath, "linux start.executablePath")}`,
+      `start.url=${expectNonEmptyString(status.url, "linux start.status.url")}`,
+      `health.href=${expectNonEmptyString(health.href, "linux health.href")}`,
+      `screenshot=${expectNonEmptyString(summary.screenshot ?? manifest.screenshot, "linux screenshot relpath")}`,
+      `stop.remainingPids=${JSON.stringify(stop.remainingPids)}`,
+      `headless.launcherPath=${expectNonEmptyString(headlessInstall.launcherPath, "linux headless.install.launcherPath")}`,
+      `headless.start.url=${expectNonEmptyString(headlessStatus.url, "linux headless.start.status.url")}`,
+      `headless.stop.remainingPids=${JSON.stringify(headlessStop.remainingPids)}`,
+      `uninstall.removed=${JSON.stringify(removed)}`,
+    ],
+  };
 }
 
 async function verifyScreenshot({ platform, reportRoot, summary }: VerificationContext, manifest: Manifest): Promise<void> {
