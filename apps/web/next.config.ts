@@ -164,13 +164,6 @@ const nextConfig: NextConfig = {
   productionBrowserSourceMaps: true,
   turbopack: {
     root: WORKSPACE_ROOT,
-    // Redirect the Node.js-only agent toolset entry to a browser stub so
-    // Turbopack does not trace node:fs / node:child_process into the browser
-    // bundle. The daemon imports the real implementation at runtime.
-    resolveAlias: {
-      '@anthropic-ai/sdk/tools/agent-toolset/node': './src/stubs/agent-toolset-node.ts',
-      '@anthropic-ai/sdk/tools/agent-toolset/node.mjs': './src/stubs/agent-toolset-node.ts',
-    },
   },
   ...(DEV_TSCONFIG_PATH ? { typescript: { tsconfigPath: DEV_TSCONFIG_PATH } } : {}),
   // Keep the bundle output predictable so the daemon's STATIC_DIR can point

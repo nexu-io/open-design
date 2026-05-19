@@ -1,0 +1,85 @@
+diff --git a/package.json b/package.json
+index 0c7adac..1b67da0 100644
+--- a/package.json
++++ b/package.json
+@@ -5,6 +5,10 @@
+   "author": "Anthropic <support@anthropic.com>",
+   "types": "./index.d.ts",
+   "main": "./index.js",
++  "browser": {
++    "./tools/agent-toolset/node.mjs": "./tools/agent-toolset/node.browser.mjs",
++    "./tools/agent-toolset/node.js": "./tools/agent-toolset/node.browser.js"
++  },
+   "type": "commonjs",
+   "repository": "github:anthropics/anthropic-sdk-typescript",
+   "license": "MIT",
+@@ -230,4 +234,4 @@
+       "default": "./version.mjs"
+     }
+   }
+-}
+\ No newline at end of file
++}
+diff --git a/tools/agent-toolset/node.browser.js b/tools/agent-toolset/node.browser.js
+new file mode 100644
+index 0000000..e405abb
+--- /dev/null
++++ b/tools/agent-toolset/node.browser.js
+@@ -0,0 +1,29 @@
++"use strict";
++// Browser-environment stub (CommonJS) — selected by the "browser" package.json field.
++// See node.browser.mjs for details.
++Object.defineProperty(exports, "__esModule", { value: true });
++exports.BashSession = exports.extractSkillArchive = exports.resolveSkillVersion = exports.setupSkills = void 0;
++exports.betaAgentToolset20260401 = betaAgentToolset20260401;
++exports.resolvePath = resolvePath;
++exports.betaBashTool = betaBashTool;
++exports.betaReadTool = betaReadTool;
++exports.betaWriteTool = betaWriteTool;
++exports.betaEditTool = betaEditTool;
++exports.betaGlobTool = betaGlobTool;
++exports.betaGrepTool = betaGrepTool;
++function notBrowser() {
++  throw new Error('@anthropic-ai/sdk agent toolset requires Node.js — not available in browser environments');
++}
++function betaAgentToolset20260401() { return notBrowser(); }
++function resolvePath() { return notBrowser(); }
++function betaBashTool() { return notBrowser(); }
++function betaReadTool() { return notBrowser(); }
++function betaWriteTool() { return notBrowser(); }
++function betaEditTool() { return notBrowser(); }
++function betaGlobTool() { return notBrowser(); }
++function betaGrepTool() { return notBrowser(); }
++exports.setupSkills = notBrowser;
++exports.resolveSkillVersion = notBrowser;
++exports.extractSkillArchive = notBrowser;
++class BashSession { constructor() { notBrowser(); } }
++exports.BashSession = BashSession;
+diff --git a/tools/agent-toolset/node.browser.mjs b/tools/agent-toolset/node.browser.mjs
+new file mode 100644
+index 0000000..003c95a
+--- /dev/null
++++ b/tools/agent-toolset/node.browser.mjs
+@@ -0,0 +1,22 @@
++// Browser-environment stub — selected by the "browser" package.json field.
++// Bundlers (webpack, Turbopack) redirect the browser bundle here so the
++// real node.mjs (which imports node:fs, node:child_process, etc.) is never
++// traced into the browser build. The real Node.js implementation at
++// tools/agent-toolset/node.mjs is untouched; the daemon loads it at runtime.
++
++function notBrowser() {
++  throw new Error('@anthropic-ai/sdk agent toolset requires Node.js — not available in browser environments');
++}
++
++export function betaAgentToolset20260401() { return notBrowser(); }
++export function resolvePath() { return notBrowser(); }
++export function betaBashTool() { return notBrowser(); }
++export function betaReadTool() { return notBrowser(); }
++export function betaWriteTool() { return notBrowser(); }
++export function betaEditTool() { return notBrowser(); }
++export function betaGlobTool() { return notBrowser(); }
++export function betaGrepTool() { return notBrowser(); }
++export function setupSkills() { return notBrowser(); }
++export function resolveSkillVersion() { return notBrowser(); }
++export function extractSkillArchive() { return notBrowser(); }
++export class BashSession { constructor() { notBrowser(); } }
