@@ -39,6 +39,9 @@ type GithubRun = {
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const runId = args.runId ?? (args.wait ? await waitForCompletedRun(args) : await findLatestCompletedRun(args));
+  if (args.runId != null && args.expectedHead != null) {
+    await assertRunMatchesExpectedHead(args, runId);
+  }
   const winReport = join(args.outputDir, winArtifactName);
   const linuxReport = join(args.outputDir, linuxArtifactName);
 
@@ -249,6 +252,33 @@ async function listRuns(args: Args): Promise<GithubRun[]> {
     "20",
   ]);
   return JSON.parse(result.stdout) as GithubRun[];
+}
+
+async function viewRun(args: Args, runId: string): Promise<GithubRun> {
+  const result = await gh(args, [
+    "run",
+    "view",
+    runId,
+    "--repo",
+    args.repo,
+    "--json",
+    "databaseId,status,conclusion,headSha,createdAt",
+  ]);
+  return JSON.parse(result.stdout) as GithubRun;
+}
+
+async function assertRunMatchesExpectedHead(args: Args, runId: string): Promise<void> {
+  const run = await viewRun(args, runId);
+  if (run.headSha !== args.expectedHead) {
+    throw new Error(
+      `GitHub Actions run ${runId} head mismatch: expected ${args.expectedHead}, got ${run.headSha ?? "unknown"}`,
+    );
+  }
+  if (run.status !== "completed" || run.conclusion === "cancelled") {
+    throw new Error(
+      `GitHub Actions run ${runId} is not completed usable evidence: ${run.status ?? "unknown"}/${run.conclusion ?? "unknown"}`,
+    );
+  }
 }
 
 function selectCompletedRun(args: Args, runs: GithubRun[]): GithubRun | undefined {

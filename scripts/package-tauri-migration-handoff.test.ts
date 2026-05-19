@@ -68,6 +68,7 @@ test("package-tauri-migration-handoff creates a tarball and checksum sidecar", a
   assert.match(commandScript, /## Validation/);
   assert.match(commandScript, /GITHUB_RUN_ID/);
   assert.match(commandScript, /download-tauri-m4-reports/);
+  assert.match(commandScript, /--run-id "\$GITHUB_RUN_ID" --expected-head "\$expected_head"/);
   assert.match(commandScript, /--expected-head "\$expected_head"/);
   assert.match(commandScript, /--wait/);
   await execFileAsync("bash", ["-n", `${output}.commands.sh`]);

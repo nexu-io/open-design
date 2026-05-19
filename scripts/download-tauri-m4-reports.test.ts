@@ -63,6 +63,43 @@ test("download-tauri-m4-reports can use an explicit run id without listing runs"
   assert.match(calls, /run download 777/);
 });
 
+test("download-tauri-m4-reports verifies explicit run ids against the expected head", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "open-design-tauri-download-run-head-"));
+  t.after(() => void rm(root, { force: true, recursive: true }));
+  const expectedHead = "a".repeat(40);
+  const fakeGh = await writeFakeGh(root);
+
+  const result = await runDownload(
+    fakeGh,
+    "--run-id",
+    "777",
+    "--expected-head",
+    expectedHead,
+    "--output-dir",
+    join(root, "reports"),
+  );
+
+  assert.match(result.stdout, /Expected head: a{40}/);
+  const calls = await readFile(join(root, "gh-calls.log"), "utf8");
+  assert.doesNotMatch(calls, /run list/);
+  assert.match(calls, /run view 777/);
+  assert.match(calls, /run download 777/);
+});
+
+test("download-tauri-m4-reports rejects explicit run ids from stale heads", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "open-design-tauri-download-run-stale-"));
+  t.after(() => void rm(root, { force: true, recursive: true }));
+  const fakeGh = await writeFakeGh(root);
+
+  await assert.rejects(
+    runDownload(fakeGh, "--run-id", "777", "--expected-head", "b".repeat(40), "--output-dir", join(root, "reports")),
+    /head mismatch: expected b{40}, got a{40}/,
+  );
+  const calls = await readFile(join(root, "gh-calls.log"), "utf8");
+  assert.match(calls, /run view 777/);
+  assert.doesNotMatch(calls, /run download 777/);
+});
+
 test("download-tauri-m4-reports explains missing gh", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "open-design-tauri-download-missing-gh-"));
   t.after(() => void rm(root, { force: true, recursive: true }));
@@ -190,6 +227,10 @@ async function writeFakeGh(
       "  const count = existsSync(countPath) ? Number(readFileSync(countPath, 'utf8')) : 0;",
       "  writeFileSync(countPath, String(count + 1));",
       "  process.stdout.write(JSON.stringify(listResponses[Math.min(count, listResponses.length - 1)]));",
+      "  process.exit(0);",
+      "}",
+      "if (args[0] === 'run' && args[1] === 'view') {",
+      "  process.stdout.write(JSON.stringify({ databaseId: Number(args[2]), status: 'completed', conclusion: 'success', headSha: 'a'.repeat(40), createdAt: '2026-05-20T00:00:00Z' }));",
       "  process.exit(0);",
       "}",
       "if (args[0] === 'run' && args[1] === 'download') {",
