@@ -2641,14 +2641,19 @@ export function ProjectView({
     setResumingConversation(true);
     setConversationLoadError(null);
     try {
+      // Only forward baseUrl when the user set a custom one. The default
+      // Anthropic path normalizes config.baseUrl to '', and the handoff
+      // route rejects an explicit empty baseUrl with 400 — forwarding it
+      // would break Resume for every default-config user before synthesis.
+      const customBaseUrl = config.baseUrl.trim();
       const outcome = await synthesizeHandoff(project.id, {
         // Scope the handoff to the conversation being resumed — the
         // endpoint synthesizes from this conversation's transcript only.
         conversationId: resumedConversationId,
         apiKey: config.apiKey,
-        baseUrl: config.baseUrl,
         model: config.model,
         maxTokens: effectiveMaxTokens(config),
+        ...(customBaseUrl ? { baseUrl: customBaseUrl } : {}),
       });
       if (!outcome) {
         // Transport failure / unparseable response — the daemon never gave

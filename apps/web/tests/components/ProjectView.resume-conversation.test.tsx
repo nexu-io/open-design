@@ -173,12 +173,12 @@ const origMessage: ChatMessage = {
   createdAt: 1,
 };
 
-function renderProjectView() {
+function renderProjectView(configOverride?: Partial<AppConfig>) {
   return render(
     <ProjectView
       project={project}
       routeFileName={null}
-      config={config}
+      config={configOverride ? { ...config, ...configOverride } : config}
       agents={[] as AgentInfo[]}
       skills={[] as SkillSummary[]}
       designTemplates={[] as SkillSummary[]}
@@ -250,11 +250,13 @@ describe('ProjectView resume conversation', () => {
         // Scoped to the conversation being resumed, not the whole project.
         conversationId: origConversation.id,
         apiKey: 'sk-test',
-        baseUrl: '',
         model: 'claude-opus-4-7',
         maxTokens: expect.any(Number),
       });
     });
+    // Default Anthropic config has baseUrl '' — it must be omitted, not
+    // forwarded as an empty string the handoff route would 400.
+    expect(mockedSynthesizeHandoff.mock.calls[0]![1]).not.toHaveProperty('baseUrl');
     await waitFor(() => {
       expect(mockedCreateConversation).toHaveBeenCalledWith('p1');
     });
@@ -265,6 +267,30 @@ describe('ProjectView resume conversation', () => {
     });
     expect(messagesText()).not.toContain('user:first turn');
     expect((screen.getByTestId('draft') as HTMLTextAreaElement).value).toBe('');
+  });
+
+  it('forwards baseUrl when the user has set a custom one', async () => {
+    mockedSynthesizeHandoff.mockResolvedValue({
+      prompt: 'SYNTHESIZED HANDOFF',
+      model: 'claude-opus-4-7',
+      inputTokens: 10,
+      outputTokens: 5,
+      transcriptMessageCount: 1,
+    });
+
+    renderProjectView({ baseUrl: 'https://proxy.example' });
+
+    await waitFor(() => {
+      expect(messagesText()).toContain('user:first turn');
+    });
+    screen.getByTestId('resume').click();
+
+    await waitFor(() => {
+      expect(mockedSynthesizeHandoff).toHaveBeenCalledWith(
+        'p1',
+        expect.objectContaining({ baseUrl: 'https://proxy.example' }),
+      );
+    });
   });
 
   it('disables the resume control while the conversation has no transcript to hand off', async () => {

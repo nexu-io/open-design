@@ -2,10 +2,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { synthesizeHandoff } from '../../src/state/projects';
 
+// A realistic request shape — synthesizeHandoff forwards the body
+// verbatim, so the fixture uses a valid non-empty baseUrl rather than the
+// empty string the handoff route rejects (caller-side omission of an
+// unset baseUrl is ProjectView's job, covered in its own test).
 const request = {
   conversationId: 'conv-1',
   apiKey: 'sk-test',
-  baseUrl: '',
+  baseUrl: 'https://api.anthropic.com',
   model: 'claude-opus-4-7',
   maxTokens: 4096,
 };
