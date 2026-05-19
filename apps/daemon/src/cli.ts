@@ -7,6 +7,8 @@ import { runConnectorsToolCli } from './tools-connectors-cli.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
+import fs from 'node:fs';
+import path from 'node:path';
 
 const argv = process.argv.slice(2);
 
@@ -3606,8 +3608,6 @@ async function projectDaemonUrl(flags) {
 
 function safeReadJsonFile(p) {
   try {
-    const fs = (require ? require('node:fs') : null);
-    if (!fs) return null;
     if (p === '-') return JSON.parse(fs.readFileSync(0, 'utf8'));
     return JSON.parse(fs.readFileSync(p, 'utf8'));
   } catch {
@@ -3942,8 +3942,6 @@ Common options:
         console.error('Usage: od files upload <projectId> <localpath> [--as <relpath>]');
         process.exit(2);
       }
-      const fs = require('node:fs');
-      const path = require('node:path');
       const buf = fs.readFileSync(localPath);
       const desiredName = typeof flags.as === 'string' && flags.as.length > 0
         ? flags.as
@@ -3971,7 +3969,6 @@ Common options:
         process.exit(2);
       }
       // Read stdin synchronously into a buffer.
-      const fs = require('node:fs');
       let chunks = [];
       try {
         const stdin = fs.readFileSync(0);
