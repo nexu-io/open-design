@@ -23,6 +23,13 @@ describe('discovery.ts RULE 3 — TodoWrite plan item count', () => {
     expect(DISCOVERY_AND_PHILOSOPHY).not.toMatch(/5 to 10\s+(?:short\s+)?items/i);
   });
 
+  it('does not re-introduce a numeric cap via "at most / maximum / no more than" phrasing', () => {
+    // Guard against semantically equivalent upper-bound re-introduction.
+    expect(DISCOVERY_AND_PHILOSOPHY).not.toMatch(
+      /(?:at most|maximum|no more than)\s+1[0-9]\s+(?:todo|plan|step|item)/i,
+    );
+  });
+
   it('still instructs the agent to write at least a few items', () => {
     // The intent — plan with TodoWrite before building — must survive the fix.
     expect(DISCOVERY_AND_PHILOSOPHY).toContain('TodoWrite');
