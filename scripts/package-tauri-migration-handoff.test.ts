@@ -74,6 +74,8 @@ test("package-tauri-migration-handoff creates a tarball and checksum sidecar", a
   assert.match(commandScript, /gh pr create --draft/);
   assert.match(commandScript, /TAURI_PR_BODY_PATH/);
   assert.match(commandScript, /handoff_dir=/);
+  assert.match(commandScript, /schema_version=/);
+  assert.match(commandScript, /unsupported handoff manifest schemaVersion/);
   assert.match(commandScript, /bundle_sha=/);
   assert.match(commandScript, /handoff manifest bundleSha256 must be a 64-character SHA-256/);
   assert.match(commandScript, /handoff manifest bundlePath must be relative and relocatable/);
@@ -210,6 +212,35 @@ test("package-tauri-migration-handoff command sidecar rejects extracted bundle c
     (error) => {
       const detail = error as Error & { stderr?: string };
       assert.match(detail.stderr ?? "", /bundle SHA-256 mismatch/);
+      return true;
+    },
+  );
+});
+
+test("package-tauri-migration-handoff command sidecar rejects unsupported manifest schemas", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "open-design-tauri-package-handoff-schema-"));
+  t.after(() => void rm(root, { force: true, recursive: true }));
+  const handoffDir = join(root, "handoff");
+  const output = join(root, "open-design-tauri-migration-handoff.tar.gz");
+  await writeHandoffFixture(handoffDir);
+  await runPackageHandoffScript("--handoff-dir", handoffDir, "--output", output);
+
+  const extractDir = join(root, "extract");
+  await mkdir(extractDir);
+  await execFileAsync("tar", ["-xzf", output, "-C", extractDir]);
+  const manifestPath = join(extractDir, "handoff", "open-design-tauri-migration-handoff.json");
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<string, unknown>;
+  manifest.schemaVersion = 2;
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  await execFileAsync("tar", ["-czf", output, "-C", extractDir, "handoff"]);
+  const archiveSha256 = createHash("sha256").update(await readFile(output)).digest("hex");
+  await writeFile(`${output}.sha256`, `${archiveSha256}  ${basename(output)}\n`, "utf8");
+
+  await assert.rejects(
+    execFileAsync("bash", [`${output}.commands.sh`, output]),
+    (error) => {
+      const detail = error as Error & { stderr?: string };
+      assert.match(detail.stderr ?? "", /unsupported handoff manifest schemaVersion: 2/);
       return true;
     },
   );

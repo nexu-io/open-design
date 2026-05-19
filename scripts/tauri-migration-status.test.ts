@@ -923,6 +923,7 @@ async function writeHandoffArchive(handoffDir: string): Promise<{ archivePath: s
       "bundle_sha=",
       'actual_bundle_sha="$(hash_file "$bundle")"',
       "bundle SHA-256 mismatch",
+      "unsupported handoff manifest schemaVersion",
       "handoff manifest branchHead must be a 40-character SHA-1",
       "handoff manifest bundlePath must be relative and relocatable",
       "handoff manifest bundleSha256 must be a 64-character SHA-256",
