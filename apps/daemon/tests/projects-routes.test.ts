@@ -13,7 +13,7 @@
  */
 import type http from 'node:http';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { mkdir, readFile, realpath, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, realpath, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -526,6 +526,28 @@ describe('project locations routes', () => {
     const body = (await resp.json()) as { error?: { code?: string; message?: string } };
     expect(body.error?.code).toBe('BAD_REQUEST');
     expect(body.error?.message).toMatch(/project location/i);
+  });
+
+  it('POST /api/projects with invalid designSystemId does not create external project directory', async () => {
+    const extDir = makeTempDir();
+    await putProjectLocations([{ id: 'invalid-ds-ext', name: 'Invalid DS External', path: extDir }]);
+
+    const projectId = `invalid-ds-${Date.now()}`;
+    const resp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Invalid design system project',
+        designSystemId: `missing-design-system-${Date.now()}`,
+        projectLocationId: 'invalid-ds-ext',
+      }),
+    });
+
+    expect(resp.status).toBe(400);
+    const body = (await resp.json()) as { error?: { code?: string } };
+    expect(body.error?.code).toBe('DESIGN_SYSTEM_NOT_FOUND');
+    await expect(readdir(extDir)).resolves.toEqual([]);
   });
 
   it('PUT /api/project-locations rejects non-array locations body', async () => {

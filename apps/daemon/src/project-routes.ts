@@ -373,6 +373,16 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       if (skipDiscoveryBrief !== undefined && typeof skipDiscoveryBrief !== 'boolean') {
         return sendApiError(res, 400, 'BAD_REQUEST', 'skipDiscoveryBrief must be a boolean');
       }
+      const designSystemValidation = await validateProjectDesignSystemId(designSystemId);
+      if (!designSystemValidation.ok) {
+        return sendApiError(
+          res,
+          400,
+          designSystemValidation.code,
+          designSystemValidation.message,
+        );
+      }
+      const normalizedDesignSystemId = designSystemValidation.id;
       const selectedLocationId = await resolveCreateProjectLocationId(projectLocationId);
       let externalProjectDir: string | null = null;
       if (selectedLocationId !== BUILT_IN_PROJECT_LOCATION_ID) {
@@ -385,16 +395,6 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         }
         externalProjectDir = await createLocationProjectDir(location, id);
       }
-      const designSystemValidation = await validateProjectDesignSystemId(designSystemId);
-      if (!designSystemValidation.ok) {
-        return sendApiError(
-          res,
-          400,
-          designSystemValidation.code,
-          designSystemValidation.message,
-        );
-      }
-      const normalizedDesignSystemId = designSystemValidation.id;
       const projectMetadata =
         metadata && typeof metadata === 'object'
           ? {
