@@ -480,39 +480,17 @@ async function openQuickSwitcher(page: Page) {
   await expect(quickSwitcher).toBeVisible();
 }
 
-async function sendPrompt(
-  page: Page,
-  prompt: string,
-) {
+async function sendPrompt(page: Page, prompt: string) {
   const input = page.getByTestId('chat-composer-input');
   const sendButton = page.getByTestId('chat-send');
-  for (let attempt = 0; attempt < 3; attempt++) {
-    await input.click();
-    await input.fill(prompt);
-    try {
-      await expect(input).toHaveValue(prompt, { timeout: 1500 });
-      await expect(sendButton).toBeEnabled({ timeout: 1500 });
-      const chatResponse = page.waitForResponse(isCreateRunResponse, { timeout: 2000 });
-      await sendButton.evaluate((button: HTMLButtonElement) => button.click());
-      await chatResponse;
-      return;
-    } catch (error) {
-      await input.click();
-      await input.press(`${process.platform === 'darwin' ? 'Meta' : 'Control'}+A`);
-      await input.press('Backspace');
-      await input.pressSequentially(prompt);
-      try {
-        await expect(input).toHaveValue(prompt, { timeout: 1500 });
-        await expect(sendButton).toBeEnabled({ timeout: 1500 });
-        const chatResponse = page.waitForResponse(isCreateRunResponse, { timeout: 2000 });
-        await sendButton.evaluate((button: HTMLButtonElement) => button.click());
-        await chatResponse;
-        return;
-      } catch (retryError) {
-        if (attempt === 2) throw retryError;
-      }
-    }
-  }
+  await input.click();
+  // fill() is unreliable on contenteditable divs; use pressSequentially instead.
+  await input.pressSequentially(prompt);
+  await expect(input).toHaveValue(prompt, { timeout: 1500 });
+  await expect(sendButton).toBeEnabled({ timeout: 1500 });
+  const chatResponse = page.waitForResponse(isCreateRunResponse, { timeout: 2000 });
+  await sendButton.evaluate((button: HTMLButtonElement) => button.click());
+  await chatResponse;
 }
 
 function tabBySuffix(page: Page, name: string): Locator {

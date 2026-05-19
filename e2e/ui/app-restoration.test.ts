@@ -2123,43 +2123,19 @@ async function expectWorkspaceReady(page: Page) {
   await expect(page.getByTestId('file-workspace')).toBeVisible();
 }
 
-async function sendPrompt(
-  page: Page,
-  prompt: string,
-) {
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const input = page.getByTestId('chat-composer-input');
-    const sendButton = page.getByTestId('chat-send');
-    await expect(input).toBeVisible({ timeout: 3_000 });
-    await input.fill(prompt);
-    try {
-      await expect(input).toHaveValue(prompt, { timeout: 1500 });
-      await expect(sendButton).toBeEnabled({ timeout: 1500 });
-      await Promise.all([
-        page.waitForResponse(isCreateRunResponse, { timeout: 5_000 }),
-        sendButton.evaluate((button: HTMLButtonElement) => button.click()),
-      ]);
-      return;
-    } catch (error) {
-      const retryInput = page.getByTestId('chat-composer-input');
-      const retrySendButton = page.getByTestId('chat-send');
-      await expect(retryInput).toBeVisible({ timeout: 3_000 });
-      await retryInput.press(`${process.platform === 'darwin' ? 'Meta' : 'Control'}+A`);
-      await retryInput.press('Backspace');
-      await retryInput.pressSequentially(prompt);
-      try {
-        await expect(retryInput).toHaveValue(prompt, { timeout: 1500 });
-        await expect(retrySendButton).toBeEnabled({ timeout: 1500 });
-        await Promise.all([
-          page.waitForResponse(isCreateRunResponse, { timeout: 5_000 }),
-          retrySendButton.evaluate((button: HTMLButtonElement) => button.click()),
-        ]);
-        return;
-      } catch (retryError) {
-        if (attempt === 2) throw retryError;
-      }
-    }
-  }
+async function sendPrompt(page: Page, prompt: string) {
+  const input = page.getByTestId('chat-composer-input');
+  const sendButton = page.getByTestId('chat-send');
+  await expect(input).toBeVisible({ timeout: 3_000 });
+  await input.click();
+  // fill() is unreliable on contenteditable divs; use pressSequentially instead.
+  await input.pressSequentially(prompt);
+  await expect(input).toHaveValue(prompt, { timeout: 1500 });
+  await expect(sendButton).toBeEnabled({ timeout: 1500 });
+  await Promise.all([
+    page.waitForResponse(isCreateRunResponse, { timeout: 5_000 }),
+    sendButton.evaluate((button: HTMLButtonElement) => button.click()),
+  ]);
 }
 
 function tabBySuffix(page: Page, name: string): Locator {

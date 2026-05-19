@@ -3,6 +3,7 @@ import type { Dialog, Page, Request, Response } from '@playwright/test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { T } from '@/timeouts';
 import { automatedUiScenarios } from '@/playwright/resources';
 import type { UiScenario } from '@/playwright/resources';
 
@@ -634,18 +635,14 @@ async function expectProjectShellReady(page: Page) {
 async function sendPrompt(page: Page, prompt: string) {
   const input = page.getByTestId('chat-composer-input');
   const sendButton = page.getByTestId('chat-send');
-  await expect(input).toBeVisible({ timeout: 3_000 });
+  await expect(input).toBeVisible({ timeout: T.short });
   await input.click();
-  await input.fill(prompt);
-  // ContentEditable inputs occasionally don't accept fill() reliably; fall
-  // back to pressSequentially when the value hasn't landed after fill.
-  if ((await input.inputValue()) !== prompt) {
-    await input.press(`${process.platform === 'darwin' ? 'Meta' : 'Control'}+A`);
-    await input.press('Backspace');
-    await input.pressSequentially(prompt);
-  }
-  await expect(input).toHaveValue(prompt);
-  await expect(sendButton).toBeEnabled();
+  // fill() is unreliable on contenteditable divs (inputValue() reads the
+  // DOM value property, which is always '' on contenteditable). Use
+  // pressSequentially which types key-by-key and is authoritative.
+  await input.pressSequentially(prompt);
+  await expect(input).toHaveValue(prompt, { timeout: T.short });
+  await expect(sendButton).toBeEnabled({ timeout: T.short });
   await Promise.all([
     page.waitForResponse(isCreateRunResponse, { timeout: 5_000 }),
     sendButton.evaluate((button: HTMLButtonElement) => button.click()),
