@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -21,8 +21,11 @@ import {
 
 const execFileAsync = promisify(execFile);
 const defaultRoot = resolve(import.meta.dirname, "..");
+const defaultReportDir = "/tmp/open-design-tauri-m4-reports";
 const handoffManifestName = "open-design-tauri-migration-handoff.json";
+const linuxReportName = "open-design-ci-linux-tauri-e2e-report";
 const noteName = "open-design-tauri-migration-handoff.md";
+const winReportName = "open-design-ci-win-tauri-e2e-report";
 
 type DesktopRuntime = "electron" | "tauri";
 
@@ -31,6 +34,7 @@ type ParsedArgs = {
   handoffDir?: string;
   json: boolean;
   linuxReport?: string;
+  reportDir?: string;
   remote?: string;
   root: string;
   winReport?: string;
@@ -131,6 +135,7 @@ async function main(): Promise<void> {
     args.remote,
     args.winReport,
     args.linuxReport,
+    args.reportDir,
   );
   if (args.json) {
     process.stdout.write(`${JSON.stringify(status, null, 2)}\n`);
@@ -172,6 +177,12 @@ function parseArgs(argv: string[]): ParsedArgs {
       index += 1;
       continue;
     }
+    if (arg === "--report-dir") {
+      if (value == null) throw new Error("--report-dir requires a path");
+      parsed.reportDir = resolve(value);
+      index += 1;
+      continue;
+    }
     if (arg === "--linux-report") {
       if (value == null) throw new Error("--linux-report requires a path");
       parsed.linuxReport = resolve(value);
@@ -186,7 +197,7 @@ function parseArgs(argv: string[]): ParsedArgs {
     }
     if (arg === "--help" || arg === "-h") {
       process.stdout.write(
-        "usage: tsx scripts/tauri-migration-status.ts [--root <repo>] [--handoff-dir <dir>] [--handoff-archive <tar.gz>] [--remote <remote>] [--win-report <dir>] [--linux-report <dir>] [--json]\n",
+        "usage: tsx scripts/tauri-migration-status.ts [--root <repo>] [--handoff-dir <dir>] [--handoff-archive <tar.gz>] [--remote <remote>] [--report-dir <dir>] [--win-report <dir>] [--linux-report <dir>] [--json]\n",
       );
       process.exit(0);
     }
@@ -202,6 +213,7 @@ async function readMigrationStatus(
   remote?: string,
   winReport?: string,
   linuxReport?: string,
+  reportDir?: string,
 ): Promise<MigrationStatus> {
   const [migrationDoc, toolsDevConfig, toolsPackConfig, releaseBetaWorkflow, gitStatus] = await Promise.all([
     readFile(join(root, "docs", "electron-to-tauri-migration.md"), "utf8"),
@@ -234,8 +246,7 @@ async function readMigrationStatus(
       ? undefined
       : await readHandoffArchiveStatus(handoffArchiveArg ?? handoffArchivePath(handoffDir), handoff);
   const remoteStatus = remote == null ? undefined : await readRemoteStatus(root, remote, gitStatus, handoff);
-  const platformReports =
-    winReport == null && linuxReport == null ? undefined : await readPlatformReportsStatus(winReport, linuxReport);
+  const platformReports = await resolvePlatformReportsStatus(winReport, linuxReport, reportDir);
   const status: MigrationStatus = {
     defaults: {
       releaseBeta: readReleaseBetaDefault(releaseBetaWorkflow),
@@ -253,6 +264,24 @@ async function readMigrationStatus(
     root,
   };
   return status;
+}
+
+async function resolvePlatformReportsStatus(
+  winReport?: string,
+  linuxReport?: string,
+  reportDir?: string,
+): Promise<PlatformReportsStatus | undefined> {
+  if (winReport != null || linuxReport != null) {
+    return readPlatformReportsStatus(winReport, linuxReport);
+  }
+  const inferredReportDir = reportDir ?? defaultReportDir;
+  const inferredWinReport = join(inferredReportDir, winReportName);
+  const inferredLinuxReport = join(inferredReportDir, linuxReportName);
+  if (reportDir == null) {
+    const [winExists, linuxExists] = await Promise.all([pathExists(inferredWinReport), pathExists(inferredLinuxReport)]);
+    if (!winExists && !linuxExists) return undefined;
+  }
+  return readPlatformReportsStatus(inferredWinReport, inferredLinuxReport);
 }
 
 function checklistGroup(name: ChecklistGroupStatus["name"], source: string, labels: readonly string[]): ChecklistGroupStatus {
@@ -602,6 +631,15 @@ async function readPlatformReportsStatus(winReport?: string, linuxReport?: strin
       problems: [message],
       winReport: checkedWinReport,
     };
+  }
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return true;
+  } catch {
+    return false;
   }
 }
 

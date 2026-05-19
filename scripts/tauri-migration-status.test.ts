@@ -27,6 +27,8 @@ const execFileAsync = promisify(execFile);
 const scriptsRoot = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsRoot, "..");
 const statusScript = join(scriptsRoot, "tauri-migration-status.ts");
+const linuxArtifactName = "open-design-ci-linux-tauri-e2e-report";
+const winArtifactName = "open-design-ci-win-tauri-e2e-report";
 
 test("tauri-migration-status reports the current M4 blocker state", async (t) => {
   const fixture = await createFixtureRoot(t, {
@@ -211,6 +213,35 @@ test("tauri-migration-status reports verified platform reports", async (t) => {
   await writeLinuxReport(linuxReport);
 
   const result = await runStatus(fixture, "--win-report", winReport, "--linux-report", linuxReport);
+  const parsed = JSON.parse(result.stdout) as {
+    nextActions: string[];
+    platformReports: {
+      current: boolean;
+      linuxReport: string;
+      problems: string[];
+      winReport: string;
+    };
+  };
+
+  assert.equal(parsed.platformReports.current, true);
+  assert.equal(parsed.platformReports.winReport, winReport);
+  assert.equal(parsed.platformReports.linuxReport, linuxReport);
+  assert.deepEqual(parsed.platformReports.problems, []);
+  assert.match(parsed.nextActions.join("\n"), /using the verified report paths shown above/);
+});
+
+test("tauri-migration-status discovers reports from a report directory", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const reportDir = join(fixture, "reports");
+  const winReport = join(reportDir, winArtifactName);
+  const linuxReport = join(reportDir, linuxArtifactName);
+  await writeWindowsReport(winReport);
+  await writeLinuxReport(linuxReport);
+
+  const result = await runStatus(fixture, "--report-dir", reportDir);
   const parsed = JSON.parse(result.stdout) as {
     nextActions: string[];
     platformReports: {

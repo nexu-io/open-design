@@ -353,6 +353,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Added `scripts/package-tauri-migration-handoff.ts` so a verified handoff directory is revalidated and packaged as a tarball with a `.sha256` sidecar before transfer. The status output now points at this packaging step before asking a write-capable machine to extract and run `scripts/push-tauri-migration-handoff.ts`. `node --import tsx --test scripts/package-tauri-migration-handoff.test.ts scripts/tauri-ci-scope.test.ts scripts/tauri-migration-status.test.ts` and `tsc -p scripts/tsconfig.json --noEmit` passed.
 - 2026-05-20: Updated the generated handoff Markdown note from the older manifest-first receiver instructions to the current package/archive push, CI report download, and M4→M5 advance flow. `node --import tsx --test scripts/verify-tauri-migration-handoff.test.ts` and `tsc -p scripts/tsconfig.json --noEmit` passed.
 - 2026-05-20: Extended `scripts/tauri-migration-status.ts` to validate the packaged handoff archive and checksum sidecar. With a current archive, M4 next actions now start at copying the tarball and `.sha256` file instead of re-running package generation. `node --import tsx --test scripts/tauri-migration-status.test.ts` and `tsc -p scripts/tsconfig.json --noEmit` passed.
+- 2026-05-20: Extended `scripts/tauri-migration-status.ts` with platform report directory discovery. Status now auto-checks `/tmp/open-design-tauri-m4-reports` when default report artifacts exist, and `--report-dir <dir>` verifies the same `open-design-ci-win-tauri-e2e-report` / `open-design-ci-linux-tauri-e2e-report` layout from a non-default download directory.
 
 ### Platform Gate Runners
 
@@ -408,7 +409,7 @@ pnpm exec tsx scripts/tauri-migration-status.ts \
   --linux-report /path/to/open-design-ci-linux-tauri-e2e-report
 ```
 
-When `--handoff-dir` is provided, status also checks the default handoff archive at `<handoff-dir>.tar.gz` plus its `.sha256` sidecar. If the archive was written elsewhere, add `--handoff-archive /path/to/open-design-tauri-migration-handoff.tar.gz` so the next-action list reflects the actual transferable artifact.
+When `--handoff-dir` is provided, status also checks the default handoff archive at `<handoff-dir>.tar.gz` plus its `.sha256` sidecar. If the archive was written elsewhere, add `--handoff-archive /path/to/open-design-tauri-migration-handoff.tar.gz` so the next-action list reflects the actual transferable artifact. Status also auto-detects verified platform reports in `/tmp/open-design-tauri-m4-reports` when that default download directory exists. If reports were downloaded elsewhere with `scripts/download-tauri-m4-reports.ts --output-dir <dir>`, pass `--report-dir <dir>` instead of spelling out both report artifact paths.
 
 To collect native M4 evidence, push that branch with a credential that can write to `nexu-io/open-design`, open a draft PR against `main`, and wait for these CI jobs:
 
