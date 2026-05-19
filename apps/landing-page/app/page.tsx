@@ -42,6 +42,7 @@ const REPO_DAEMON = `${REPO}/tree/main/apps/daemon`;
 const REPO_SKILLS = `${REPO}/tree/main/skills`;
 const REPO_DESIGN_SYSTEMS = `${REPO}/tree/main/design-systems`;
 const REPO_DOCS = (file: string) => `${REPO}/blob/main/${file}`;
+const DISCORD = 'https://discord.gg/9ptkbbqRu';
 
 // Lineage / inspiration projects — make every brand mention clickable.
 const LINEAGE = {
@@ -191,6 +192,16 @@ export default function Page({ counts, github }: PageProps) {
         <section className='hero' id='top' data-od-id='hero'>
           <div className='container hero-grid'>
             <div className='hero-copy'>
+              <a
+                className='hero-discord-pill'
+                href={DISCORD}
+                aria-label='Join the Open Design Discord'
+                {...ext}
+                data-reveal
+              >
+                <span aria-hidden='true'>●</span>
+                Join Discord
+              </a>
               <span className='label' data-reveal>
                 Open-source design studio <span className='ix'>· Nº 01</span>
               </span>
@@ -1191,6 +1202,11 @@ export default function Page({ counts, github }: PageProps) {
                   <li>
                     <a href={REPO_RELEASES} {...ext}>
                       Releases
+                    </a>
+                  </li>
+                  <li>
+                    <a href={DISCORD} {...ext}>
+                      Discord
                     </a>
                   </li>
                 </ul>

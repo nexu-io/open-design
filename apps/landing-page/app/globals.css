@@ -489,6 +489,35 @@ body::before {
   flex-direction: column;
   position: relative;
 }
+.hero-discord-pill {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 22px;
+  padding: 7px 13px;
+  border: 1px solid rgba(237, 111, 92, 0.28);
+  border-radius: 999px;
+  background: rgba(237, 111, 92, 0.12);
+  color: var(--coral);
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  line-height: 1;
+  text-decoration: none;
+  box-shadow: 0 12px 24px -22px rgba(237, 111, 92, 0.8);
+  transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
+}
+.hero-discord-pill:hover {
+  transform: translateY(-1px);
+  border-color: rgba(237, 111, 92, 0.46);
+  background: rgba(237, 111, 92, 0.18);
+}
+.hero-discord-pill span {
+  font-size: 8px;
+  line-height: 1;
+}
 .hero-copy .label { margin-bottom: 28px; }
 .hero-copy .lead { margin-bottom: 30px; max-width: 38ch; font-size: 16px; }
 .hero h1 {
