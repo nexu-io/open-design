@@ -427,6 +427,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Added heartbeat visibility to `scripts/tauri-migration-status.ts`. The status runner now reports whether the single `tauri-migration-follow-up` heartbeat is active, daily at 09:00, and prompts the continuation sequence from this document plus `scripts/continue-tauri-migration.ts --dry-run`.
 - 2026-05-20: Connected heartbeat visibility to `scripts/continue-tauri-migration.ts`. The continuation runner now prints heartbeat repair problems before planning M4 push/report work, so a paused, duplicate, or stale follow-up cannot be missed during the daily continuation pass.
 - 2026-05-20: Tightened `scripts/continue-tauri-migration.ts --dry-run --skip-push` so it stops at the missing-remote blocker instead of printing native CI dispatch or report-download steps that require a pushed migration branch.
+- 2026-05-20: Bound `scripts/continue-tauri-migration.ts --branch` to handoff generation and status. Branch overrides now flow into `scripts/verify-tauri-migration-handoff.ts`, and the continuation runner refuses to proceed when an existing handoff/status branch differs from the requested CI/report branch.
 
 ### Platform Gate Runners
 

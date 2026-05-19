@@ -33,6 +33,7 @@ type MigrationStatus = {
     trackedClean?: boolean;
   };
   handoff?: {
+    branch?: string;
     branchHead?: string;
     current?: boolean;
   };
@@ -52,6 +53,7 @@ type MigrationStatus = {
     winReport?: string;
   };
   remote?: {
+    branch?: string;
     current?: boolean;
     head?: string;
   };
@@ -68,6 +70,7 @@ async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const log: string[] = [`Continuing Tauri migration from ${args.root}`];
   let status = await readStatus(args);
+  ensureBranchMatchesStatus(args, status);
 
   if (status.heartbeat?.current === false) {
     log.push(`Heartbeat needs attention under ${status.heartbeat.dir}: ${status.heartbeat.problems.join("; ")}`);
@@ -101,10 +104,14 @@ async function main(): Promise<void> {
 
   const needsHandoff = status.handoff?.current !== true || status.handoffArchive?.current !== true;
   if (needsHandoff) {
-    await runScript("verify-tauri-migration-handoff.ts", ["--cwd", args.root, "--output-dir", args.handoffDir], {
-      cwd: args.root,
-      dryRun: args.dryRun,
-    });
+    await runScript(
+      "verify-tauri-migration-handoff.ts",
+      ["--cwd", args.root, "--branch", args.branch, "--output-dir", args.handoffDir],
+      {
+        cwd: args.root,
+        dryRun: args.dryRun,
+      },
+    );
     await runScript("package-tauri-migration-handoff.ts", ["--handoff-dir", args.handoffDir], {
       cwd: args.root,
       dryRun: args.dryRun,
@@ -116,10 +123,19 @@ async function main(): Promise<void> {
       return;
     }
     status = await readStatus(args);
+    ensureBranchMatchesStatus(args, status);
   }
 
   await continueM4(args, status, log);
   process.stdout.write(`${log.join("\n")}\n`);
+}
+
+function ensureBranchMatchesStatus(args: Args, status: MigrationStatus): void {
+  const statusBranch = status.handoff?.branch;
+  if (statusBranch == null || statusBranch === args.branch) return;
+  throw new Error(
+    `continuation branch ${args.branch} does not match current handoff/status branch ${statusBranch}; refresh the handoff with --branch ${args.branch} or rerun without the branch override`,
+  );
 }
 
 function parseArgs(argv: string[]): Args {

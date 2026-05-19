@@ -542,6 +542,34 @@ test("continue-tauri-migration dry-run stops after a stale handoff refresh plan"
   assert.doesNotMatch(result.stdout, /download-tauri-m4-reports\.ts/);
 });
 
+test("continue-tauri-migration forwards branch overrides when refreshing handoff artifacts", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  const remotePath = join(fixture, "empty.git");
+  await git(fixture, "init", "--bare", remotePath);
+
+  const result = await runContinue(
+    fixture,
+    "--branch",
+    "codex/custom-tauri-migration",
+    "--handoff-dir",
+    handoffDir,
+    "--remote",
+    remotePath,
+    "--dry-run",
+    "--skip-dispatch",
+  );
+
+  assert.match(result.stdout, /verify-tauri-migration-handoff\.ts/);
+  assert.match(result.stdout, /--branch codex\/custom-tauri-migration/);
+  assert.match(result.stdout, /Rerun the continuation dry-run after refreshing handoff artifacts/);
+  assert.doesNotMatch(result.stdout, /push-tauri-migration-handoff\.ts/);
+});
+
 test("continue-tauri-migration dry-run plans a branch push from current handoff status", async (t) => {
   const fixture = await createFixtureRoot(t, {
     checked: [],
@@ -572,6 +600,34 @@ test("continue-tauri-migration dry-run plans a branch push from current handoff 
   assert.match(result.stdout, /download-tauri-m4-reports\.ts/);
   assert.match(result.stdout, new RegExp(`--expected-head ${head}`));
   assert.match(result.stdout, /--advance/);
+});
+
+test("continue-tauri-migration rejects branch overrides that differ from the current handoff", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+  await writeHandoffArchive(handoffDir);
+  const remotePath = join(fixture, "empty.git");
+  await git(fixture, "init", "--bare", remotePath);
+
+  await assert.rejects(
+    runContinue(
+      fixture,
+      "--branch",
+      "codex/other-tauri-migration",
+      "--handoff-dir",
+      handoffDir,
+      "--remote",
+      remotePath,
+      "--dry-run",
+      "--skip-dispatch",
+    ),
+    /continuation branch codex\/other-tauri-migration does not match current handoff\/status branch codex\/electron-to-tauri-migration/,
+  );
 });
 
 test("continue-tauri-migration dry-run with skip-push stops before native CI when the remote is missing", async (t) => {
