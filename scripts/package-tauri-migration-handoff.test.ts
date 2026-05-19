@@ -41,9 +41,13 @@ test("package-tauri-migration-handoff creates a tarball and checksum sidecar", a
   assert.match(result.stdout, /gh pr create --draft/);
   assert.match(result.stdout, /--body-file \.tmp\/tauri-migration-pr-body\.md/);
   assert.match(result.stdout, /download-tauri-m4-reports/);
-  assert.match(result.stdout, /--expected-head <migration-branch-head>/);
+  assert.match(result.stdout, /--branch 'codex\/electron-to-tauri-migration'/);
+  assert.match(result.stdout, new RegExp(`--expected-head ${branchHead}`));
   assert.match(result.stdout, /--wait/);
   assert.match(result.stdout, /--advance/);
+  assert.match(result.stdout, /Continuation runner:/);
+  assert.match(result.stdout, /continue-tauri-migration/);
+  assert.match(result.stdout, /--wait-reports/);
   assert.match(result.stdout, /tauri-migration-status/);
   assert.match(result.stdout, new RegExp(`--handoff-dir '${escapeRegExp(handoffDir)}'`));
   await access(output);

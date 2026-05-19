@@ -82,9 +82,18 @@ async function main(): Promise<void> {
       indent(
         [
           "pnpm exec tsx scripts/download-tauri-m4-reports.ts \\",
-          "  --expected-head <migration-branch-head> \\",
+          `  --branch ${shellQuote(handoff.manifest.branch)} \\`,
+          `  --expected-head ${handoff.manifest.branchHead} \\`,
           "  --wait \\",
           "  --output-dir /tmp/open-design-tauri-m4-reports \\",
+          "  --advance",
+        ].join("\n"),
+      ),
+      "Continuation runner:",
+      indent(
+        [
+          "pnpm exec tsx scripts/continue-tauri-migration.ts \\",
+          "  --wait-reports \\",
           "  --advance",
         ].join("\n"),
       ),
