@@ -51,18 +51,39 @@ test("download-tauri-m4-reports downloads latest completed artifacts and verifie
   assert.match(calls, new RegExp(`run download 12345[\\s\\S]*--name ${linuxArtifactName}`));
 });
 
-test("download-tauri-m4-reports can use an explicit run id without listing runs", async (t) => {
+test("download-tauri-m4-reports can use an explicit run id with expected head without listing runs", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "open-design-tauri-download-run-"));
   t.after(() => void rm(root, { force: true, recursive: true }));
   const fakeGh = await writeFakeGh(root);
 
-  const result = await runDownload(fakeGh, "--run-id", "777", "--output-dir", join(root, "reports"));
+  const result = await runDownload(
+    fakeGh,
+    "--run-id",
+    "777",
+    "--expected-head",
+    "a".repeat(40),
+    "--output-dir",
+    join(root, "reports"),
+  );
 
   assert.match(result.stdout, /Run: 777/);
+  assert.match(result.stdout, /Expected head: a{40}/);
   const calls = await readFile(join(root, "gh-calls.log"), "utf8");
   assert.doesNotMatch(calls, /run list/);
   assert.match(calls, /run view 777/);
   assert.match(calls, /run download 777/);
+});
+
+test("download-tauri-m4-reports requires expected head for explicit run ids", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "open-design-tauri-download-run-requires-head-"));
+  t.after(() => void rm(root, { force: true, recursive: true }));
+  const fakeGh = await writeFakeGh(root);
+
+  await assert.rejects(
+    runDownload(fakeGh, "--run-id", "777", "--output-dir", join(root, "reports")),
+    /--run-id requires --expected-head so explicit M4 evidence is tied to the migration branch head/,
+  );
+  await assert.rejects(readFile(join(root, "gh-calls.log"), "utf8"), /ENOENT/);
 });
 
 test("download-tauri-m4-reports verifies explicit run ids against the expected head", async (t) => {
@@ -96,7 +117,15 @@ test("download-tauri-m4-reports rejects runs without passing native Tauri jobs",
   });
 
   await assert.rejects(
-    runDownload(fakeGh, "--run-id", "777", "--output-dir", join(root, "reports")),
+    runDownload(
+      fakeGh,
+      "--run-id",
+      "777",
+      "--expected-head",
+      "a".repeat(40),
+      "--output-dir",
+      join(root, "reports"),
+    ),
     /required native M4 job did not pass: Packaged windows Tauri smoke is completed\/failure/,
   );
   const calls = await readFile(join(root, "gh-calls.log"), "utf8");
@@ -184,15 +213,26 @@ test("download-tauri-m4-reports explains missing gh", async (t) => {
   t.after(() => void rm(root, { force: true, recursive: true }));
   const missingGh = join(root, "missing-gh");
 
-  await assert.rejects(runDownload(missingGh, "--run-id", "777", "--output-dir", join(root, "reports")), (error) => {
-    const detail = error as Error & { stderr?: string };
-    const stderr = detail.stderr ?? "";
-    assert.match(stderr, /GitHub CLI command failed/);
-    assert.match(stderr, /GitHub CLI was not found/);
-    assert.match(stderr, /--gh <path-to-gh>/);
-    assert.match(stderr, /advance-tauri-migration-m4-m5/);
-    return true;
-  });
+  await assert.rejects(
+    runDownload(
+      missingGh,
+      "--run-id",
+      "777",
+      "--expected-head",
+      "a".repeat(40),
+      "--output-dir",
+      join(root, "reports"),
+    ),
+    (error) => {
+      const detail = error as Error & { stderr?: string };
+      const stderr = detail.stderr ?? "";
+      assert.match(stderr, /GitHub CLI command failed/);
+      assert.match(stderr, /GitHub CLI was not found/);
+      assert.match(stderr, /--gh <path-to-gh>/);
+      assert.match(stderr, /advance-tauri-migration-m4-m5/);
+      return true;
+    },
+  );
 });
 
 test("download-tauri-m4-reports waits for a completed run at the expected head", async (t) => {
