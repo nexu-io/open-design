@@ -202,13 +202,17 @@ export function validateArtifactManifestInput(
   return { ok: true, value: sanitizeManifest(manifest, safeEntry, options) };
 }
 
+function isParseableTimestamp(value: unknown): value is string {
+  return typeof value === 'string' && Number.isFinite(Date.parse(value));
+}
+
 export function sanitizeManifest(
   manifest: JsonRecord,
   entry: string,
   options: SanitizeManifestOptions = {},
 ): JsonRecord {
   const now = new Date().toISOString();
-  const incomingUpdatedAt = typeof manifest.updatedAt === 'string' ? manifest.updatedAt : null;
+  const incomingUpdatedAt = isParseableTimestamp(manifest.updatedAt) ? manifest.updatedAt : null;
   return {
     version: MANIFEST_VERSION,
     kind: manifest.kind,

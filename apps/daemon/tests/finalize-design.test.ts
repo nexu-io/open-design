@@ -320,6 +320,69 @@ describe('resolveCurrentArtifact', () => {
     expect(fs.statSync(sidecarPath).mtimeMs).toBe(beforeMtime);
   });
 
+  it('ignores a pre-existing wrapper sidecar when the active tab points at it', async () => {
+    const { db, projectsRoot } = setupResolverFixture();
+    const projectDir = path.join(projectsRoot, PROJECT_ID);
+    fs.writeFileSync(path.join(projectDir, 'browser-chrome.html'), '<iframe/>');
+    fs.writeFileSync(
+      path.join(projectDir, 'browser-chrome.html.artifact.json'),
+      JSON.stringify({
+        version: 1,
+        kind: 'html',
+        title: 'Wrapper',
+        entry: 'browser-chrome.html',
+        renderer: 'html',
+        status: 'complete',
+        exports: ['html'],
+        updatedAt: '2026-05-09T00:00:00.000Z',
+      }),
+    );
+    setActiveTab(db, 'browser-chrome.html');
+
+    const out = await resolveCurrentArtifact(db, projectsRoot, PROJECT_ID);
+
+    expect(out).toBeNull();
+  });
+
+  it('skips a wrapper file in the fallback candidate list even when its sidecar already exists', async () => {
+    const { db, projectsRoot } = setupResolverFixture();
+    const projectDir = path.join(projectsRoot, PROJECT_ID);
+    fs.mkdirSync(path.join(projectDir, 'frames'), { recursive: true });
+    fs.writeFileSync(path.join(projectDir, 'frames', 'browser-chrome.html'), '<iframe/>');
+    fs.writeFileSync(
+      path.join(projectDir, 'frames', 'browser-chrome.html.artifact.json'),
+      JSON.stringify({
+        version: 1,
+        kind: 'html',
+        title: 'Frame Wrapper',
+        entry: 'frames/browser-chrome.html',
+        renderer: 'html',
+        status: 'complete',
+        exports: ['html'],
+        updatedAt: '2026-05-09T00:00:00.000Z',
+      }),
+    );
+    await writeProjectFile(projectsRoot, PROJECT_ID, 'real.html', '<p>real</p>');
+    fs.writeFileSync(
+      path.join(projectDir, 'real.html.artifact.json'),
+      JSON.stringify({
+        version: 1,
+        kind: 'html',
+        title: 'Real',
+        entry: 'real.html',
+        renderer: 'html',
+        status: 'complete',
+        exports: ['html'],
+        updatedAt: '2026-05-01T00:00:00.000Z',
+      }),
+    );
+
+    const out = await resolveCurrentArtifact(db, projectsRoot, PROJECT_ID);
+
+    expect(out).not.toBeNull();
+    expect(out!.name).toBe('real.html');
+  });
+
   it('does not reconcile preview-chrome wrapper HTML in the fallback path', async () => {
     const { db, projectsRoot } = setupResolverFixture();
     const projectDir = path.join(projectsRoot, PROJECT_ID);

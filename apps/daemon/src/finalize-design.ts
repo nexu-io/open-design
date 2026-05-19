@@ -35,6 +35,7 @@ import { getProject } from './db.js';
 import { readDesignSystem } from './design-systems.js';
 import {
   ensureArtifactSidecarFor,
+  isFrameWrapperHtmlFile,
   listFiles,
   readProjectFile,
   resolveProjectDir,
@@ -182,7 +183,7 @@ export async function resolveCurrentArtifact(
     } catch {
       safeTabName = null;
     }
-    if (safeTabName) {
+    if (safeTabName && !isFrameWrapperHtmlFile(safeTabName)) {
       await ensureArtifactSidecarFor(
         projectsRoot,
         projectId,
@@ -225,7 +226,10 @@ export async function resolveCurrentArtifact(
   const candidates = files
     .filter((f) => {
       // Require a real sidecar on disk; an inferred manifest does not count.
-      return fs.existsSync(path.join(dir, `${f.name}.artifact.json`));
+      if (!fs.existsSync(path.join(dir, `${f.name}.artifact.json`))) return false;
+      // Preview-chrome wrappers are never the user's deliverable, even when
+      // a stale sidecar already exists on disk for them.
+      return !isFrameWrapperHtmlFile(f.name);
     })
     .map((f) => {
       const manifest =

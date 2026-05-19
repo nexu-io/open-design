@@ -82,6 +82,19 @@ describe('validateArtifactManifestInput', () => {
     expect(res.ok).toBe(true);
     if (res.ok) expect(typeof res.value?.updatedAt).toBe('string');
   });
+
+  it('restamps updatedAt when the incoming value is not a parseable timestamp', () => {
+    const res = validateArtifactManifestInput(
+      { ...validBase(), updatedAt: 'zzz-not-a-date' },
+      'index.html',
+      { preserveUpdatedAt: true },
+    );
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.value?.updatedAt).not.toBe('zzz-not-a-date');
+      expect(Number.isFinite(Date.parse(res.value!.updatedAt as string))).toBe(true);
+    }
+  });
 });
 
 describe('inferLegacyManifest', () => {
