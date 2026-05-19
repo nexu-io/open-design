@@ -98,10 +98,14 @@ jobs:
 
             const now = Date.now();
             const summary = [];
+            const diagnostics = [];
 
             for (const pr of pulls) {
               const author = pr.user?.login;
               if (!author || pr.draft || isBot(author)) {
+                if (DRY_RUN) {
+                  diagnostics.push(`#${pr.number}: skipped (${!author ? 'missing-author' : pr.draft ? 'draft' : 'bot-author'})`);
+                }
                 continue;
               }
 
@@ -180,6 +184,11 @@ jobs:
               ].filter((feedbackAt) => feedbackAt > latestAuthorResponseAt);
 
               if (feedbackAts.length === 0) {
+                if (DRY_RUN) {
+                  diagnostics.push(
+                    `#${pr.number}: skipped (no outstanding trusted feedback after author response; latestAuthorResponseAt=${latestAuthorResponseAt ? new Date(latestAuthorResponseAt).toISOString() : 'none'})`,
+                  );
+                }
                 continue;
               }
 
@@ -191,6 +200,7 @@ jobs:
 
               const inactiveFor = now - feedbackAt;
               const inactiveHours = Math.floor(inactiveFor / 3600000);
+              const feedbackAtIso = new Date(feedbackAt).toISOString();
 
               if (inactiveFor >= CLOSE_MS) {
                 const line = DRY_RUN
@@ -198,6 +208,9 @@ jobs:
                   : `#${pr.number}: closed after ${inactiveHours}h of author inactivity`;
 
                 if (DRY_RUN) {
+                  diagnostics.push(
+                    `#${pr.number}: action=would-close latestAuthorResponseAt=${latestAuthorResponseAt ? new Date(latestAuthorResponseAt).toISOString() : 'none'} firstOutstandingFeedbackAt=${feedbackAtIso} reminderSent=${reminderSent}`,
+                  );
                   summary.push(line);
                   continue;
                 }
@@ -230,6 +243,9 @@ jobs:
                   : `#${pr.number}: reminded after ${inactiveHours}h of author inactivity`;
 
                 if (DRY_RUN) {
+                  diagnostics.push(
+                    `#${pr.number}: action=would-remind latestAuthorResponseAt=${latestAuthorResponseAt ? new Date(latestAuthorResponseAt).toISOString() : 'none'} firstOutstandingFeedbackAt=${feedbackAtIso} reminderSent=${reminderSent}`,
+                  );
                   summary.push(line);
                   continue;
                 }
@@ -248,6 +264,19 @@ jobs:
                 });
 
                 summary.push(line);
+                continue;
+              }
+
+              if (DRY_RUN) {
+                diagnostics.push(
+                  `#${pr.number}: skipped (already-reminded-or-below-threshold) latestAuthorResponseAt=${latestAuthorResponseAt ? new Date(latestAuthorResponseAt).toISOString() : 'none'} firstOutstandingFeedbackAt=${feedbackAtIso} inactiveHours=${inactiveHours} reminderSent=${reminderSent}`,
+                );
+              }
+            }
+
+            if (DRY_RUN) {
+              for (const line of diagnostics) {
+                core.info(line);
               }
             }
 
