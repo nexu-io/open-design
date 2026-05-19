@@ -48,9 +48,22 @@ async function main(): Promise<void> {
     throw new Error(`bundle does not contain refs/heads/${args.branch}`);
   }
 
-  await git(args.cwd, ["fetch", args.bundle, `${args.branch}:refs/heads/${args.branch}`]);
+  const currentBranch = await readCurrentBranch(args.cwd);
+  const shouldRestoreCheckedOutBranch = currentBranch === args.branch;
+  const tempRef = `refs/heads/__open_design_tauri_import_${process.pid}_${Date.now()}`;
+  if (shouldRestoreCheckedOutBranch) {
+    await ensureTrackedClean(args.cwd);
+    await git(args.cwd, ["checkout", "--detach"]);
+  }
+  try {
+    await deleteRefIfPresent(args.cwd, tempRef);
+    await git(args.cwd, ["fetch", args.bundle, `${args.branch}:${tempRef}`]);
+    await git(args.cwd, ["branch", "-f", args.branch, tempRef]);
+  } finally {
+    await deleteRefIfPresent(args.cwd, tempRef);
+  }
   const branchHead = (await git(args.cwd, ["rev-parse", "--verify", args.branch])).stdout.trim();
-  if (args.checkout) {
+  if (args.checkout || shouldRestoreCheckedOutBranch) {
     await ensureTrackedClean(args.cwd);
     await git(args.cwd, ["checkout", args.branch]);
   }
@@ -190,6 +203,23 @@ async function ensureTrackedClean(cwd: string): Promise<void> {
   const trackedStatus = (await git(cwd, ["status", "--porcelain", "--untracked-files=no"])).stdout.trim();
   if (trackedStatus.length > 0) {
     throw new Error("tracked worktree changes are present; commit or stash them before checking out the imported branch");
+  }
+}
+
+async function readCurrentBranch(cwd: string): Promise<string | undefined> {
+  try {
+    const branch = (await git(cwd, ["symbolic-ref", "--short", "-q", "HEAD"])).stdout.trim();
+    return branch.length === 0 ? undefined : branch;
+  } catch {
+    return undefined;
+  }
+}
+
+async function deleteRefIfPresent(cwd: string, ref: string): Promise<void> {
+  try {
+    await git(cwd, ["update-ref", "-d", ref]);
+  } catch {
+    // The temp ref is best-effort cleanup; absence is the normal case.
   }
 }
 

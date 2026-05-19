@@ -60,6 +60,21 @@ test("import-tauri-migration-bundle can import from the handoff manifest", async
   assert.equal(targetHead, sourceHead);
 });
 
+test("import-tauri-migration-bundle can refresh the checked-out migration branch", async (t) => {
+  const { bundlePath, sourceRepo, targetRepo } = await createBundleFixture(t, "open-design-tauri-import-current-");
+  const sourceHead = (await git(sourceRepo, "rev-parse", migrationBranch)).stdout.trim();
+
+  await runImportScript(targetRepo, "--bundle", bundlePath, "--checkout");
+  assert.equal((await git(targetRepo, "symbolic-ref", "--short", "HEAD")).stdout.trim(), migrationBranch);
+
+  const result = await runImportScript(targetRepo, "--bundle", bundlePath);
+
+  assert.match(result.stdout, /Imported Tauri migration bundle:/);
+  assert.equal((await git(targetRepo, "symbolic-ref", "--short", "HEAD")).stdout.trim(), migrationBranch);
+  const targetHead = (await git(targetRepo, "rev-parse", migrationBranch)).stdout.trim();
+  assert.equal(targetHead, sourceHead);
+});
+
 test("import-tauri-migration-bundle resolves manifest bundle paths relative to the manifest", async (t) => {
   const { bundlePath, sourceRepo, targetRepo } = await createBundleFixture(t, "open-design-tauri-import-relative-");
   const sourceHead = (await git(sourceRepo, "rev-parse", migrationBranch)).stdout.trim();
