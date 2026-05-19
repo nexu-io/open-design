@@ -407,11 +407,19 @@ async function writeNote(
       "",
       "## Receiving Machine",
       "",
-      "Verify and import the copied bundle/manifest:",
+      "Import, push, and verify the copied bundle/manifest:",
       "",
       "```bash",
-      note.importCommand,
-      "git push -u origin " + shellWord(note.branch),
+      ...(note.manifestPath == null
+        ? [
+            note.importCommand,
+            "git push -u origin " + shellWord(note.branch),
+          ]
+        : [
+            "pnpm exec tsx scripts/push-tauri-migration-handoff.ts \\",
+            `  --manifest ${shellWord(note.manifestPath)} \\`,
+            "  --remote origin",
+          ]),
       "```",
       "",
       ...(note.manifestBundlePathIsRelocatable
@@ -420,7 +428,7 @@ async function writeNote(
             "",
           ]
         : []),
-      "Confirm the remote branch matches this handoff:",
+      "To verify an already-pushed remote without importing again:",
       "",
       "```bash",
       ...(note.manifestPath == null

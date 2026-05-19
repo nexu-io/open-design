@@ -1,0 +1,113 @@
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { execFile } from "node:child_process";
+import { readFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import test from "node:test";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
+const scriptsRoot = dirname(fileURLToPath(import.meta.url));
+const repoRoot = resolve(scriptsRoot, "..");
+const createBundleScript = join(scriptsRoot, "create-tauri-migration-bundle.ts");
+const pushHandoffScript = join(scriptsRoot, "push-tauri-migration-handoff.ts");
+const migrationBranch = "codex/electron-to-tauri-migration";
+
+test("push-tauri-migration-handoff imports, pushes, and verifies a handoff manifest", async (t) => {
+  const { manifestPath, remotePath, sourceHead, targetRepo } = await createHandoffFixture(
+    t,
+    "open-design-tauri-push-handoff-pass-",
+  );
+
+  const result = await runPushHandoffScript(targetRepo, "--manifest", manifestPath, "--remote", remotePath);
+
+  assert.match(result.stdout, /Pushed Tauri migration handoff/);
+  assert.match(result.stdout, /Import:/);
+  assert.match(result.stdout, /Push:/);
+  assert.match(result.stdout, /Verify:/);
+  assert.match(result.stdout, new RegExp(`Branch: ${migrationBranch.replaceAll("/", "\\/")}`));
+  const remoteHead = (await git(targetRepo, "ls-remote", "--heads", remotePath, `refs/heads/${migrationBranch}`)).stdout
+    .trim()
+    .split(/\s+/, 1)[0];
+  assert.equal(remoteHead, sourceHead);
+});
+
+test("push-tauri-migration-handoff requires a manifest", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "open-design-tauri-push-handoff-missing-"));
+  t.after(() => void rm(root, { force: true, recursive: true }));
+
+  await assert.rejects(runPushHandoffScript(root), /--manifest is required/);
+});
+
+async function createHandoffFixture(
+  t: test.TestContext,
+  prefix: string,
+): Promise<{ manifestPath: string; remotePath: string; sourceHead: string; targetRepo: string }> {
+  const root = await mkdtemp(join(tmpdir(), prefix));
+  t.after(() => void rm(root, { force: true, recursive: true }));
+  const sourceRepo = join(root, "source");
+  const remotePath = join(root, "remote.git");
+  const targetRepo = join(root, "target");
+  const handoffDir = join(root, "handoff");
+  const bundlePath = join(handoffDir, "open-design-tauri-migration.bundle");
+  const manifestPath = join(handoffDir, "open-design-tauri-migration-handoff.json");
+
+  await git(root, "init", "--initial-branch=main", sourceRepo);
+  await git(sourceRepo, "config", "user.email", "codex@example.test");
+  await git(sourceRepo, "config", "user.name", "Codex Test");
+  await writeFile(join(sourceRepo, "base.txt"), "base\n", "utf8");
+  await git(sourceRepo, "add", "base.txt");
+  await git(sourceRepo, "commit", "-m", "base");
+  await git(sourceRepo, "checkout", "-b", migrationBranch);
+  await writeFile(join(sourceRepo, "feature.txt"), "feature\n", "utf8");
+  await git(sourceRepo, "add", "feature.txt");
+  await git(sourceRepo, "commit", "-m", "feature");
+  const sourceHead = (await git(sourceRepo, "rev-parse", migrationBranch)).stdout.trim();
+
+  await git(root, "init", "--bare", remotePath);
+  await git(sourceRepo, "push", remotePath, "main:refs/heads/main");
+  await git(root, "clone", "--branch", "main", remotePath, targetRepo);
+  await runCreateBundleScript(sourceRepo, "--branch", migrationBranch, "--base", "main", "--output", bundlePath);
+  const bundleSha256 = createHash("sha256").update(await readFile(bundlePath)).digest("hex");
+  await mkdir(handoffDir, { recursive: true });
+  await writeFile(
+    manifestPath,
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        branch: migrationBranch,
+        branchHead: sourceHead,
+        bundlePath: "open-design-tauri-migration.bundle",
+        bundleSha256,
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+
+  return { manifestPath, remotePath, sourceHead, targetRepo };
+}
+
+async function runCreateBundleScript(cwd: string, ...args: string[]): Promise<{ stderr: string; stdout: string }> {
+  return execFileAsync(process.execPath, ["--import", "tsx", createBundleScript, "--cwd", cwd, ...args], {
+    cwd: repoRoot,
+    maxBuffer: 1024 * 1024,
+  });
+}
+
+async function runPushHandoffScript(cwd: string, ...args: string[]): Promise<{ stderr: string; stdout: string }> {
+  return execFileAsync(process.execPath, ["--import", "tsx", pushHandoffScript, "--cwd", cwd, ...args], {
+    cwd: repoRoot,
+    maxBuffer: 1024 * 1024 * 4,
+  });
+}
+
+async function git(cwd: string, ...args: string[]): Promise<{ stderr: string; stdout: string }> {
+  return execFileAsync("git", args, {
+    cwd,
+    maxBuffer: 1024 * 1024,
+  });
+}

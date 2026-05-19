@@ -15,6 +15,8 @@ const tauriEvidencePaths = [
   "scripts/create-tauri-migration-bundle.test.ts",
   "scripts/import-tauri-migration-bundle.ts",
   "scripts/import-tauri-migration-bundle.test.ts",
+  "scripts/push-tauri-migration-handoff.ts",
+  "scripts/push-tauri-migration-handoff.test.ts",
   "scripts/tauri-migration-inventory.ts",
   "scripts/tauri-migration-inventory.test.ts",
   "scripts/tauri-migration-policy.ts",

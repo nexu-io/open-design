@@ -53,7 +53,7 @@ test("tauri-migration-status reports the current M4 blocker state", async (t) =>
     ],
   );
   assert.match(parsed.nextActions.join("\n"), /verify-tauri-migration-handoff/);
-  assert.match(parsed.nextActions.join("\n"), /verify-tauri-migration-remote/);
+  assert.match(parsed.nextActions.join("\n"), /push-tauri-migration-handoff/);
   assert.match(parsed.nextActions.join("\n"), /advance-tauri-migration-m4-m5/);
 });
 

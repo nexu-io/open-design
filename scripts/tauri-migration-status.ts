@@ -252,7 +252,7 @@ function nextActionsForPhase(
         : "Regenerate the verified handoff set with scripts/verify-tauri-migration-handoff.ts --output-dir /tmp/open-design-tauri-migration-handoff.",
       remote?.current === true
         ? `Remote ${remote.remote} already matches ${remote.branch ?? "the migration branch"} at ${remote.head ?? "the expected head"}.`
-        : "Import and push the manifest on a write-capable machine, then run scripts/verify-tauri-migration-remote.ts --manifest /tmp/open-design-tauri-migration-handoff/open-design-tauri-migration-handoff.json --remote origin.",
+        : "Import, push, and verify the manifest on a write-capable machine with scripts/push-tauri-migration-handoff.ts --manifest /tmp/open-design-tauri-migration-handoff/open-design-tauri-migration-handoff.json --remote origin.",
       platformReports?.current === true
         ? "Advance M4 evidence and M5 defaults with scripts/advance-tauri-migration-m4-m5.ts using the verified report paths shown above."
         : "Run the Windows and Linux Tauri package smoke jobs.",
