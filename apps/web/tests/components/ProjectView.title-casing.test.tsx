@@ -6,7 +6,7 @@
 // `getComputedStyle` resolves the rule against the real rendered DOM node.
 
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { resolve } from 'node:path';
 import { cleanup, render } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -162,7 +162,10 @@ describe('project title casing — rendered DOM', () => {
   let styleEl: HTMLStyleElement;
 
   beforeEach(() => {
-    const css = readFileSync(join(process.cwd(), 'src/index.css'), 'utf8');
+    // Resolved from package root: vitest runs with cwd = apps/web.
+    // Note: import.meta.url is not a file: URL in the jsdom environment, so
+    // process.cwd()-relative resolution is the correct anchor here.
+    const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8');
     styleEl = document.createElement('style');
     styleEl.setAttribute('data-testid', 'project-title-rules');
     styleEl.textContent = extractProjectTitleRules(css);
