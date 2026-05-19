@@ -77,7 +77,7 @@ The migration stays parallel until parity is proven. Electron remains the defaul
 - [x] Keep ports out of packaged runtime path decisions.
 - [x] Make macOS, Windows, and Linux Tauri packaged starts wait for a running desktop status with a web URL before reporting readiness.
 - [x] Decide Windows MSI is not a default-flip release requirement; keep it as a post-flip follow-up unless release ownership requires it.
-- [x] Decide Windows/Linux Tauri `--to dir` is not a default-flip release requirement; resolve it during M6 by either removing win/linux `dir` or adding an explicit portable Tauri mode.
+- [x] Resolve Windows/Linux Tauri `--to dir` as an Electron-only legacy target; Tauri builds fail fast with installer-target guidance.
 
 ### M4 Platform package smoke
 
