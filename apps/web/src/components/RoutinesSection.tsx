@@ -560,7 +560,7 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
   };
 
   const remove = async (id: string) => {
-    if (!window.confirm('Delete this routine? Past runs and their projects are kept.'))
+    if (!window.confirm('Delete this automation? Past runs and their projects are kept.'))
       return;
     setBusyId(id);
     try {
@@ -582,7 +582,7 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
     <section className="settings-section routines-section">
       <div className="section-head">
         <div>
-          <h3>Routines</h3>
+          <h3>Automations</h3>
         </div>
         {!showForm ? (
           <button
@@ -594,7 +594,7 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
             }}
           >
             <Icon name="plus" size={14} />
-            <span>New routine</span>
+            <span>New automation</span>
           </button>
         ) : null}
       </div>
@@ -699,8 +699,8 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
         <div className="routines-empty">Loading…</div>
       ) : routines.length === 0 ? (
         <div className="routines-empty">
-          <strong>No routines yet.</strong>
-          <p>Click <em>New routine</em> to schedule an unattended agent run.</p>
+          <strong>No automations yet.</strong>
+          <p>Click <em>New automation</em> to schedule an unattended agent run.</p>
         </div>
       ) : (
         <ul className="routines-list">
@@ -783,7 +783,7 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
                       className="btn btn-ghost btn-danger"
                       onClick={() => remove(r.id)}
                       disabled={isBusy}
-                      title="Delete this routine"
+                      title="Delete this automation"
                     >
                       Delete
                     </button>

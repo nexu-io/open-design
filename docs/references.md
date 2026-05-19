@@ -38,6 +38,7 @@ Every external project this spec leans on. Three questions per entry: what is it
 
 ### [multica][multica] (multica-ai)
 - **Repo:** [github.com/multica-ai/multica][multica]
+- **Docs:** [multica.ai/docs/skills](https://multica.ai/docs/skills)
 
 [multica]: https://github.com/multica-ai/multica
 - **What it is:** Open-source "managed agents platform." Frontend: Next.js 16. Backend: Go + Chi + WebSocket. DB: PostgreSQL + pgvector. **Local daemon auto-detects CLIs on PATH: Claude Code, Codex, OpenClaw, OpenCode, Hermes, Gemini, Pi, Cursor Agent.** Assigns work via a web board view; agents execute; WebSocket streams progress.
@@ -46,10 +47,51 @@ Every external project this spec leans on. Three questions per entry: what is it
   - **PATH-scan + config-dir probe detection** strategy.
   - **Local daemon + WebSocket** topology (daemon on user's machine, thin web client).
   - Agent catalog (our P0–P2 list maps closely to theirs).
+  - Workspace/local skill import and agent-scoped skill attachment model.
 - **What we don't:**
   - Go backend + PostgreSQL — overkill for our scope; Node daemon + filesystem is enough.
   - Team / board / issue-assignment model — not our domain.
   - pgvector — we don't embed anything in MVP.
+
+### [OpenHuman][openhuman] (tinyhumansai)
+- **Repo:** [github.com/tinyhumansai/openhuman][openhuman]
+
+[openhuman]: https://github.com/tinyhumansai/openhuman
+- **What it is:** Open-source personal AI assistant with many integrations, auto-fetch into a memory tree, local editable knowledge, and a TokenJuice-style compression layer before LLM use.
+- **Why it matters:** It is the clearest reference for "connect sources once, then the agent wakes up with compressed context already available."
+- **What we borrow:**
+  - Connector-driven ingestion as a first-class loop, not a prompt the user rewrites each time.
+  - Editable local memory tree rather than opaque vector-only recall.
+  - Token compression as an optional stage before agent context injection.
+- **What we don't:**
+  - General personal-assistant scope, messaging/voice/meeting participation, and bundled subscription/model routing.
+
+### [Hermes Agent][hermes] (Nous Research)
+- **Repo:** [github.com/nousresearch/hermes-agent][hermes]
+- **Docs:** [hermes-agent.nousresearch.com/docs/skills](https://hermes-agent.nousresearch.com/docs/skills)
+
+[hermes]: https://github.com/nousresearch/hermes-agent
+- **What it is:** Self-improving agent with persistent memory, skills created from experience, skill improvement during use, scheduled automations, and a large skill hub.
+- **Why it matters:** It turns "agent learns from work" into a product loop instead of a side effect.
+- **What we borrow:**
+  - Closed learning loop: experience -> memory or skill proposal -> future run.
+  - Scheduled automations that can deliver across surfaces.
+  - Explicit compression and usage inspection controls.
+- **What we don't:**
+  - Owning the user's entire agent runtime, messaging gateway, or model/provider layer.
+
+### [GenericAgent][genericagent] (lsdefine)
+- **Repo:** [github.com/lsdefine/GenericAgent][genericagent]
+
+[genericagent]: https://github.com/lsdefine/GenericAgent
+- **What it is:** Minimal self-evolving autonomous agent framework that crystallizes solved tasks into a personal skill tree for direct reuse.
+- **Why it matters:** It names the core loop OD needs for design work: solve once, verify, save the execution path, and recall it with less context next time.
+- **What we borrow:**
+  - Skill crystallization from successful tasks.
+  - Layered memory and direct recall to reduce prompt size.
+  - A bias toward small composable primitives instead of a heavy agent framework.
+- **What we don't:**
+  - Broad uncontrolled desktop authority. OD keeps daemon, connector, filesystem, and review gates explicit.
 
 ### [cc-switch][ccsw] (farion1231)
 - **Repo:** [github.com/farion1231/cc-switch][ccsw]

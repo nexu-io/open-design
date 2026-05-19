@@ -11,7 +11,12 @@
 //   - awesome-agent-skills   → VoltAgent/awesome-agent-skills
 //   - clawhub                → openclaw/clawhub
 //   - skills-sh              → skills.sh discovery hint
-//   - open-design            → open-design/plugin-registry
+//   - open-design            → nexu-io/open-design (plugins/community/<plugin-name>/).
+//                              The dedicated `open-design/plugin-registry` repo per
+//                              docs/plans/plugin-registry.md §1.2 stays the long-term
+//                              target, but submissions land in the monorepo until
+//                              that operational launch step happens — keeping the
+//                              contribution surface where stars / PRs already are.
 //
 // The function is pure: it accepts the plugin's metadata and returns
 // the catalog target description. The CLI is the side-effect-bearing
@@ -143,14 +148,14 @@ export function buildPublishLink(args: {
         '',
         '## Open Design registry entry',
         '',
-        '- Target path: `community/<vendor>/<plugin-name>/open-design.json`',
-        '- Generated index: `open-design-marketplace.json`',
+        '- Target path: `plugins/community/<plugin-name>/open-design.json`',
+        '- Generated index: `plugins/registry/community/open-design-marketplace.json`',
         '- Required checks: `od plugin validate`, `od plugin pack`, integrity digest, preview smoke.',
       ].join('\n');
-      const url = newIssueUrl('open-design/plugin-registry', title, bodyWithRegistry);
+      const url = newIssueUrl('nexu-io/open-design', title, bodyWithRegistry);
       return {
         catalog: args.catalog,
-        catalogLabel: 'open-design/plugin-registry',
+        catalogLabel: 'nexu-io/open-design',
         url,
         prBody: bodyWithRegistry,
       };

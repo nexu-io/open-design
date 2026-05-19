@@ -3,15 +3,14 @@ import {
   createTabToTracking,
   projectKindToTracking,
 } from '@open-design/contracts/analytics';
+import {
+  isOpenDesignHostAvailable,
+  pickAndImportHostProject,
+  type OpenDesignHostProjectImportSuccess,
+} from '@open-design/host';
 import { useAnalytics } from '../analytics/provider';
 import { trackHomeClickCreateButton } from '../analytics/events';
-import type { ConnectorDetail, ImportFolderResponse } from '@open-design/contracts';
-
-// Window.electronAPI is declared globally in apps/web/src/types/electron.d.ts
-// so the new openPath + pickAndImport methods (#451 / PR #974) and
-// existing openExternal stay in one place. PR #974 deleted the raw
-// `pickFolder` bridge: the renderer no longer receives a filesystem
-// path from the main process, only the daemon's import response.
+import type { ConnectorDetail } from '@open-design/contracts';
 
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
@@ -122,12 +121,12 @@ interface Props {
   // builds have no `shell.openPath` surface, so the renderer naming a
   // path here cannot escalate (PR #974 trust model).
   onImportFolder?: (baseDir: string) => Promise<void> | void;
-  // Electron flow: the desktop main process owns the picker dialog and
+  // Host flow: the desktop main process owns the picker dialog and
   // the import call atomically (`pickAndImport` IPC). The renderer
   // never sees the path or the HMAC token; it only receives the
-  // daemon's import response and forwards it here so App-level state
-  // can update without a second fetch.
-  onImportFolderResponse?: (response: ImportFolderResponse) => Promise<void> | void;
+  // host-owned project identifiers and forwards them here so App-level
+  // state can refresh through the daemon API.
+  onImportFolderResponse?: (response: OpenDesignHostProjectImportSuccess) => Promise<void> | void;
   mediaProviders?: Record<string, MediaProviderCredentials>;
   connectors?: ConnectorDetail[];
   connectorsLoading?: boolean;
@@ -483,6 +482,7 @@ export function NewProjectPanel({
             ? videoPromptTemplate
             : null
         : null;
+    const trimmedName = name.trim();
     const metadata = buildMetadata({
       tab,
       mediaSurface,
@@ -524,10 +524,13 @@ export function NewProjectPanel({
       { requestId },
     );
     onCreate({
-      name: name.trim() || autoName(tab, mediaSurface, t),
+      name: trimmedName || autoName(tab, mediaSurface, t),
       skillId: skillIdForTab,
       designSystemId: primaryDs,
-      metadata,
+      metadata: {
+        ...metadata,
+        nameSource: trimmedName ? 'user' : 'generated',
+      },
       requestId,
     });
   }
@@ -544,28 +547,27 @@ export function NewProjectPanel({
     }
   }
 
-  // PR #974: the bridge no longer exposes `pickFolder` (raw path
-  // crossing to the renderer). The Electron flow now uses
-  // `pickAndImport`, which performs the picker + the HMAC-gated import
-  // atomically in the main process and returns the daemon response.
+  // PR #974: the host bridge does not expose raw folder paths to the
+  // renderer. The desktop flow uses `pickAndImport`, which performs the
+  // picker + the HMAC-gated import atomically in the main process and
+  // returns host-owned project identifiers.
   // The web fallback continues to use the manual baseDir input —
   // browser builds have no `shell.openPath` surface so a renderer-named
   // path cannot escalate.
-  const hasElectronPickAndImport =
-    typeof window !== 'undefined' && typeof window.electronAPI?.pickAndImport === 'function';
+  const hasHostPickAndImport = isOpenDesignHostAvailable();
 
   async function handleOpenFolder() {
-    if (hasElectronPickAndImport) {
+    if (hasHostPickAndImport) {
       if (!onImportFolderResponse) return;
       setImportFolderError(null);
       setImportingFolder(true);
       try {
-        const result = await window.electronAPI!.pickAndImport!({
+        const result = await pickAndImportHostProject({
           skillId: skillIdForTab,
         });
         if (!result) return;
         if (result.ok === true) {
-          await onImportFolderResponse(result.response);
+          await onImportFolderResponse(result);
           return;
         }
         // Round-4 (mrcfps #2): every non-OK shape used to fall through
@@ -850,9 +852,9 @@ export function NewProjectPanel({
             </button>
           </>
         ) : null}
-        {(hasElectronPickAndImport ? onImportFolderResponse : onImportFolder) ? (
+        {(hasHostPickAndImport ? onImportFolderResponse : onImportFolder) ? (
           <div className="newproj-open-folder">
-            {!hasElectronPickAndImport ? (
+            {!hasHostPickAndImport ? (
               <input
                 type="text"
                 className="newproj-folder-input"
@@ -866,7 +868,7 @@ export function NewProjectPanel({
             <button
               type="button"
               className="ghost newproj-import"
-              disabled={(!hasElectronPickAndImport && !baseDir.trim()) || importingFolder}
+              disabled={(!hasHostPickAndImport && !baseDir.trim()) || importingFolder}
               onClick={() => void handleOpenFolder()}
             >
               <Icon name="folder" size={13} />

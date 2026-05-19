@@ -27,6 +27,7 @@ import type {
   McpTemplate,
 } from '../state/mcp';
 import { Icon } from './Icon';
+import { useT } from '../i18n';
 
 interface Props {
   // Receive a notification when servers list changes so the parent can
@@ -294,6 +295,7 @@ function signature(rows: DraftRow[]): string {
 
 export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
   function McpClientSection({ onServersChanged, onDirtyChange }, ref) {
+  const t = useT();
   const [rows, setRows] = useState<DraftRow[]>([]);
   const [savedSig, setSavedSig] = useState<string>('[]');
   const [templates, setTemplates] = useState<McpTemplate[]>([]);
@@ -313,7 +315,7 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
       const data = await fetchMcpServers();
       if (cancelled) return;
       if (!data) {
-        setError('Could not reach the local daemon. Make sure Open Design is running, then reopen this panel.');
+        setError(t('mcpClient.daemonError'));
         setLoaded(true);
         return;
       }
@@ -376,7 +378,7 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
     const data = await saveMcpServers(payload);
     setSaving(false);
     if (!data) {
-      setError('Save failed. Check that the daemon is running and try again.');
+      setError(t('mcpClient.saveFailed'));
       return false;
     }
     const fresh = rowsFromServers(data.servers);
@@ -398,8 +400,8 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
       <section className="settings-section">
         <div className="section-head">
           <div>
-            <h3>External MCP servers</h3>
-            <p className="hint">Loading…</p>
+            <h3>{t('mcpClient.title')}</h3>
+            <p className="hint">{t('common.loading')}</p>
           </div>
         </div>
       </section>
@@ -410,8 +412,8 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
     <section className="settings-section">
       <div className="section-head">
         <div>
-          <h3>External MCP servers</h3>
-          <p className="hint">Third-party tools for your coding agent.</p>
+          <h3>{t('mcpClient.title')}</h3>
+          <p className="hint">{t('mcpClient.subtitle')}</p>
         </div>
         <button
           type="button"
@@ -420,7 +422,7 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
           aria-expanded={pickerOpen}
         >
           <Icon name="sparkles" size={13} />
-          <span>Add server</span>
+          <span>{t('mcpClient.addServer')}</span>
         </button>
       </div>
 
@@ -441,11 +443,9 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
 
       {rows.length === 0 ? (
         <div className="empty-card">
-          <strong>No MCP servers configured.</strong>
+          <strong>{t('mcpClient.emptyTitle')}</strong>
           <p className="hint">
-            Click &ldquo;Add server&rdquo; to get started — pick a template
-            (Higgsfield OpenClaw, Pollinations, Allyson, Imagician, EdgeOne
-            Pages, GitHub, Filesystem…) or set up a custom stdio / HTTP server.
+            {t('mcpClient.emptyBody')}
           </p>
         </div>
       ) : (
@@ -477,14 +477,14 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
           onClick={() => void save()}
           disabled={saving || !dirty}
         >
-          {saving ? 'Saving…' : dirty ? 'Save changes' : 'Saved'}
+          {saving ? t('settings.autosaveSaving') : dirty ? t('mcpClient.saveChanges') : t('settings.autosaveSaved')}
         </button>
         {savedAt && !dirty ? (
-          <span className="hint mcp-saved-msg">Saved.</span>
+          <span className="hint mcp-saved-msg">{t('settings.connectorsSaved')}.</span>
         ) : null}
         <span className="mcp-foot-spacer" />
         <span className="hint">
-          Stored at <code>.od/mcp-config.json</code>
+          {t('mcpClient.storedAt')} <code>.od/mcp-config.json</code>
         </span>
       </div>
     </section>

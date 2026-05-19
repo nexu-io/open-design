@@ -2,7 +2,7 @@ import { execFile, spawn, type ChildProcess, type StdioOptions } from "node:chil
 import { existsSync, readdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { isAbsolute, join } from "node:path";
+import { extname, isAbsolute, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
 export type CommandInvocation = {
@@ -193,6 +193,8 @@ function buildCmdShimInvocation(command: string, args: string[], env: NodeJS.Pro
   };
 }
 
+const nodeLoadablePackageManagerExtensions = new Set([".js", ".cjs", ".mjs"]);
+
 export function createCommandInvocation({ args = [], command, env = process.env }: CommandInvocationRequest): CommandInvocation {
   if (process.platform === "win32" && /\.(bat|cmd)$/i.test(command)) {
     return buildCmdShimInvocation(command, args, env);
@@ -202,7 +204,12 @@ export function createCommandInvocation({ args = [], command, env = process.env 
 
 export function createPackageManagerInvocation(args: string[], env: NodeJS.ProcessEnv = process.env): CommandInvocation {
   const execPath = env.npm_execpath;
-  if (execPath) return { args: [execPath, ...args], command: process.execPath };
+  if (execPath) {
+    if (nodeLoadablePackageManagerExtensions.has(extname(execPath).toLowerCase())) {
+      return { args: [execPath, ...args], command: process.execPath };
+    }
+    return createCommandInvocation({ args, command: execPath, env });
+  }
   if (process.platform === "win32") {
     return buildCmdShimInvocation("pnpm", args, env);
   }

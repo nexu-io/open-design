@@ -1,29 +1,6 @@
 <!doctype html>
 <html lang="en">
-<head><script>(function(){
-  function makeStore(){
-    var data = {};
-    var api = {
-      getItem: function(k){ return Object.prototype.hasOwnProperty.call(data, k) ? data[k] : null; },
-      setItem: function(k, v){ data[k] = String(v); },
-      removeItem: function(k){ delete data[k]; },
-      clear: function(){ data = {}; },
-      key: function(i){ return Object.keys(data)[i] || null; }
-    };
-    Object.defineProperty(api, 'length', { get: function(){ return Object.keys(data).length; } });
-    return api;
-  }
-  function tryShim(name){
-    var works = false;
-    try { works = !!window[name] && typeof window[name].getItem === 'function'; void window[name].length; }
-    catch (_) { works = false; }
-    if (works) return;
-    try { Object.defineProperty(window, name, { configurable: true, value: makeStore() }); }
-    catch (_) { try { window[name] = makeStore(); } catch (__) {} }
-  }
-  tryShim('localStorage');
-  tryShim('sessionStorage');
-})();</script>
+<head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Orbit · GitHub Briefing — 2026-05-06</title>
@@ -104,7 +81,6 @@
       font-size: 10px;
       font-weight: 600;
       color: #ffffff;
-      cursor: pointer;
     }
 
     /* ── Page Layout ── */
@@ -124,7 +100,7 @@
     .sidebar-nav {
       list-style: none;
     }
-    .sidebar-nav li button {
+    .sidebar-filter {
       display: flex;
       align-items: center;
       gap: 8px;
@@ -137,23 +113,19 @@
       background: none;
       border: none;
       width: 100%;
-      cursor: pointer;
       text-align: left;
     }
-    .sidebar-nav li button:hover {
-      background: rgba(208,215,222,0.32);
-    }
-    .sidebar-nav li button.active {
+    .sidebar-filter.active {
       background: rgba(208,215,222,0.48);
       font-weight: 600;
     }
-    .sidebar-nav li button svg {
+    .sidebar-filter svg {
       fill: #656d76;
       width: 16px;
       height: 16px;
       flex-shrink: 0;
     }
-    .sidebar-nav li button.active svg { fill: #1f2328; }
+    .sidebar-filter.active svg { fill: #1f2328; }
     .sidebar-count {
       margin-left: auto;
       background: rgba(208,215,222,0.48);
@@ -443,7 +415,7 @@
 <!-- ════════ GitHub Header ════════ -->
 <header class="gh-header">
   <!-- Octocat Logo -->
-  <a class="gh-header-logo" href="#">
+  <a class="gh-header-logo" href="https://github.com/nexu-io/open-design" target="_blank" rel="noopener noreferrer">
     <svg viewBox="0 0 16 16" width="32" height="32">
       <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/>
     </svg>
@@ -468,30 +440,30 @@
   <nav class="sidebar" data-od-id="sidebar">
     <ul class="sidebar-nav" id="sidebarNav">
       <li>
-        <button class="active" data-filter="all">
+        <span class="sidebar-filter active" aria-current="true">
           <svg viewBox="0 0 16 16"><path d="M1.75 1h12.5c.966 0 1.75.784 1.75 1.75v10.5A1.75 1.75 0 0 1 14.25 15H1.75A1.75 1.75 0 0 1 0 13.25V2.75C0 1.784.784 1 1.75 1ZM1.5 2.75v10.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25V2.75a.25.25 0 0 0-.25-.25H1.75a.25.25 0 0 0-.25.25Z"/></svg>
           All
           <span class="sidebar-count">5</span>
-        </button>
+        </span>
       </li>
       <li>
-        <button data-filter="participating">
+        <span class="sidebar-filter">
           <svg viewBox="0 0 16 16"><path d="M1.5 14.25c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25V1.75a.25.25 0 0 0-.25-.25H1.75a.25.25 0 0 0-.25.25v12.5ZM0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v12.5A1.75 1.75 0 0 1 14.25 16H1.75A1.75 1.75 0 0 1 0 14.25Zm9.22 3.72a.749.749 0 0 1 1.06 0l3.5 3.5a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L10 7.31 7.28 10.03a.749.749 0 0 1-1.275-.326.749.749 0 0 1 .215-.734Z"/></svg>
           Participating
-        </button>
+        </span>
       </li>
       <li>
-        <button data-filter="mentions">
+        <span class="sidebar-filter">
           <svg viewBox="0 0 16 16"><path d="M4.75 7.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Zm3.25.75a.75.75 0 1 1 1.5 0 .75.75 0 0 1-1.5 0Zm4 0a.75.75 0 1 1 1.5 0 .75.75 0 0 1-1.5 0Z"/><path d="M0 2.75C0 1.784.784 1 1.75 1h12.5c.966 0 1.75.784 1.75 1.75v10.5A1.75 1.75 0 0 1 14.25 15H1.75A1.75 1.75 0 0 1 0 13.25Zm1.75-.25a.25.25 0 0 0-.25.25v10.5c0 .138.112.25.25.25h12.5a.25.25 0 0 0 .25-.25V2.75a.25.25 0 0 0-.25-.25Z"/></svg>
           Mentions
-        </button>
+        </span>
       </li>
       <li>
-        <button data-filter="reviews">
+        <span class="sidebar-filter">
           <svg viewBox="0 0 16 16"><path d="M3.5 9.5a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm5-1a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm4 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"/><path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Z"/></svg>
           Review requests
           <span class="sidebar-count">2</span>
-        </button>
+        </span>
       </li>
     </ul>
   </nav>
@@ -523,7 +495,7 @@
                 <svg viewBox="0 0 16 16"><path d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25Zm5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354Z"/></svg>
                 Open
               </span>
-              <span class="event-title-text"><a href="#">feat: orbit briefing card</a></span>
+              <span class="event-title-text"><a href="https://github.com/nexu-io/open-design/pull/2371" target="_blank" rel="noopener noreferrer">feat: orbit briefing card</a></span>
               <span class="event-timestamp">opened 2d ago by marie</span>
             </div>
             <div class="event-meta">
@@ -577,7 +549,7 @@
                 <svg viewBox="0 0 16 16"><path d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25Zm5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354Z"/></svg>
                 Open
               </span>
-              <span class="event-title-text"><a href="#">refactor: skill loader</a></span>
+              <span class="event-title-text"><a href="https://github.com/nexu-io/open-design/pull/2389" target="_blank" rel="noopener noreferrer">refactor: skill loader</a></span>
               <span class="event-timestamp">1d ago</span>
             </div>
             <div class="event-meta">
@@ -645,7 +617,7 @@
                 <svg viewBox="0 0 16 16"><path d="M8 9.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/><path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0ZM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0Z"/></svg>
                 Open
               </span>
-              <span class="event-title-text"><a href="#">Auth middleware refactor</a></span>
+              <span class="event-title-text"><a href="https://github.com/nexu-io/open-design/issues?q=ENG-148" target="_blank" rel="noopener noreferrer">Auth middleware refactor</a></span>
               <span class="event-timestamp">no activity 5d</span>
             </div>
             <div class="event-meta">
@@ -695,76 +667,5 @@
   <strong>Open Orbit</strong> · auto-generated 06:42 · 2026-05-06
 </footer>
 
-<script>
-(function() {
-  var nav = document.getElementById('sidebarNav');
-  var groups = document.querySelectorAll('.event-group');
-
-  nav.addEventListener('click', function(e) {
-    var btn = e.target.closest('button');
-    if (!btn) return;
-
-    // Toggle active
-    nav.querySelectorAll('button').forEach(function(b) { b.classList.remove('active'); });
-    btn.classList.add('active');
-
-    var filter = btn.getAttribute('data-filter');
-
-    groups.forEach(function(g) {
-      if (filter === 'all') {
-        g.style.display = '';
-      } else if (filter === 'participating') {
-        // User participates in reviews + issues assigned
-        g.style.display = (g.hasAttribute('data-category') &&
-          (g.dataset.category === 'reviews' || g.dataset.category === 'issues')) ? '' : 'none';
-      } else if (filter === 'mentions') {
-        g.style.display = g.hasAttribute('data-mentions') ? '' : 'none';
-      } else if (filter === 'reviews') {
-        g.style.display = g.dataset.category === 'reviews' ? '' : 'none';
-      }
-    });
-  });
-
-  // Row hover highlight + click-to-open-on-GitHub
-  const REPO = 'https://github.com/nexu-io/open-design';
-  function buildUrl(label) {
-    const t = (label || '').trim();
-    const prMatch = t.match(/PR\s*#(\d+)/i);
-    if (prMatch) return REPO + '/pull/' + prMatch[1];
-    const issueIdMatch = t.match(/^[A-Z]+-(\d+)/);
-    if (issueIdMatch) return REPO + '/issues?q=' + encodeURIComponent(t);
-    const hashMatch = t.match(/#(\d+)/);
-    if (hashMatch) return REPO + '/issues/' + hashMatch[1];
-    return REPO;
-  }
-  document.querySelectorAll('.event-row').forEach(function(row) {
-    const label = row.querySelector('.event-pr-label')?.textContent;
-    const url = buildUrl(label);
-    row.style.cursor = 'pointer';
-    row.style.transition = 'background 80ms ease-out';
-    row.addEventListener('mouseenter', function() { row.style.background = '#f6f8fa'; });
-    row.addEventListener('mouseleave', function() { row.style.background = ''; });
-    row.addEventListener('click', function(e) {
-      // Don't override clicks on inner real anchors
-      if (e.target.closest('a')) return;
-      window.open(url, '_blank', 'noopener,noreferrer');
-    });
-    // Upgrade the title placeholder anchor to a real URL
-    const titleAnchor = row.querySelector('.event-title-text a');
-    if (titleAnchor) {
-      titleAnchor.href = url;
-      titleAnchor.target = '_blank';
-      titleAnchor.rel = 'noopener noreferrer';
-    }
-  });
-  // Top logo also points to the repo
-  const headerLogo = document.querySelector('.gh-header-logo');
-  if (headerLogo) {
-    headerLogo.href = REPO;
-    headerLogo.target = '_blank';
-    headerLogo.rel = 'noopener noreferrer';
-  }
-})();
-</script>
 </body>
 </html>

@@ -54,6 +54,24 @@ const SKILL = {
   aggregatesExamples: false,
 };
 
+function makeSkill(overrides: Partial<typeof SKILL>): typeof SKILL {
+  return {
+    ...SKILL,
+    id: overrides.id ?? SKILL.id,
+    name: overrides.name ?? SKILL.name,
+    description: overrides.description ?? SKILL.description,
+    triggers: overrides.triggers ?? SKILL.triggers,
+    mode: overrides.mode ?? SKILL.mode,
+    previewType: overrides.previewType ?? SKILL.previewType,
+    designSystemRequired: overrides.designSystemRequired ?? SKILL.designSystemRequired,
+    defaultFor: overrides.defaultFor ?? SKILL.defaultFor,
+    upstream: overrides.upstream ?? SKILL.upstream,
+    hasBody: overrides.hasBody ?? SKILL.hasBody,
+    examplePrompt: overrides.examplePrompt ?? SKILL.examplePrompt,
+    aggregatesExamples: overrides.aggregatesExamples ?? SKILL.aggregatesExamples,
+  };
+}
+
 const MCP_SERVER = {
   id: 'slack',
   label: 'Slack MCP',
@@ -173,8 +191,9 @@ describe('ChatComposer context pickers', () => {
     expect(screen.getByRole('tab', { name: 'Plugins' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'Skills' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'MCP' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Connectors' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'Design files' })).toBeTruthy();
-    expect(screen.getByText('Search plugins, skills, MCP servers, and Design Files.')).toBeTruthy();
+    expect(screen.getByText('Search plugins, skills, MCP servers, connectors, and Design Files.')).toBeTruthy();
   });
 
   it('selects an MCP server from @ search and keeps the inline token visible', async () => {
@@ -207,6 +226,47 @@ describe('ChatComposer context pickers', () => {
     await waitFor(() => expect(onProjectSkillChange).toHaveBeenCalledWith('deck-builder'));
     expect(input.value).toBe('@Deck Builder ');
     expect(screen.getByTestId('chat-composer-mention-overlay').textContent).toContain('@Deck Builder');
+  });
+
+  it('shows all matching skills and ranks exact prefix matches first', async () => {
+    skills = [
+      makeSkill({
+        id: 'story-brief',
+        name: 'Story Brief',
+        description: 'Use when planning audit work.',
+        triggers: ['writing'],
+      }),
+      ...Array.from({ length: 9 }, (_, index) =>
+        makeSkill({
+          id: `audit-helper-${index + 1}`,
+          name: `Audit Helper ${index + 1}`,
+          description: `Audit support workflow ${index + 1}.`,
+          triggers: [`audit-${index + 1}`],
+        }),
+      ),
+      makeSkill({
+        id: 'accessibility-review',
+        name: 'Accessibility Review',
+        description: 'Audit accessible interaction details.',
+        triggers: ['a11y-audit'],
+      }),
+    ];
+    renderComposer();
+    const input = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
+
+    fireEvent.change(input, {
+      target: { value: '@audit', selectionStart: 6 },
+    });
+
+    await waitFor(() => expect(screen.getByText('Audit Helper 9')).toBeTruthy());
+    const skillNames = Array.from(
+      screen.getByTestId('mention-popover').querySelectorAll('.mention-item strong'),
+      (node) => node.textContent,
+    );
+
+    expect(skillNames).toContain('Audit Helper 9');
+    expect(skillNames.indexOf('Audit Helper 1')).toBeLessThan(skillNames.indexOf('Story Brief'));
+    expect(skillNames.indexOf('Audit Helper 9')).toBeLessThan(skillNames.indexOf('Accessibility Review'));
   });
 
   it('applies a plugin from @ search and keeps the plugin token inline', async () => {

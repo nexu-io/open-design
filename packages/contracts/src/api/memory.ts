@@ -9,6 +9,8 @@
 // llm_wiki, gbrain, memU. Kept deliberately small so every read/write
 // stays a plain `cat` / `editor` round trip — no DB, no fancy schema.
 
+import type { MemoryTreeNode } from './automations.js';
+
 export type MemoryType = 'user' | 'feedback' | 'project' | 'reference';
 
 export const MEMORY_TYPES: readonly MemoryType[] = [
@@ -90,6 +92,31 @@ export interface MemoryExtractionMaskedConfig {
 // GET /api/memory/:id
 export interface MemoryEntryResponse {
   entry: MemoryEntry;
+}
+
+// GET /api/memory/tree — tree-aware view over the same markdown store.
+// Folder nodes are derived from entry type buckets; entry nodes point at
+// the underlying <id>.md files and remain editable through the normal
+// memory entry API. This gives agents a stable tree contract without
+// introducing a second memory persistence layer.
+export interface MemoryTreeListResponse {
+  enabled: boolean;
+  rootDir: string;
+  tree: MemoryTreeNode[];
+}
+
+// PATCH /api/memory/tree/:id — edit an entry node from tree-aware callers.
+// Folder nodes are currently derived, so only entry ids are patchable.
+export interface UpdateMemoryTreeNodeRequest {
+  name?: string;
+  description?: string;
+  type?: MemoryType;
+  body?: string;
+}
+
+export interface UpdateMemoryTreeNodeResponse {
+  entry: MemoryEntry;
+  tree: MemoryTreeNode[];
 }
 
 // POST /api/memory      → upsert (id supplied → update; missing → create)

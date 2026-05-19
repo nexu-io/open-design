@@ -2,7 +2,10 @@
 import '../../globals.css';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import FontStylesheet from '../../_components/font-stylesheet.astro';
 import { Header } from '../../_components/header';
+import LazyImg from '../../_components/lazy-img.astro';
+import PreciseLazyload from '../../_components/precise-lazyload.astro';
 import { getCatalogCounts } from '../../_lib/catalog';
 import { getPublicPlugins, getRegistryCounts } from '../../plugin-registry';
 
@@ -82,6 +85,7 @@ const primaryMeta = (plugin: (typeof plugins)[number]) =>
     <meta name='description' content={description} />
     <meta name='robots' content='index,follow' />
     <link rel='canonical' href={canonical} />
+    <FontStylesheet />
     <meta property='og:type' content='website' />
     <meta property='og:site_name' content='Open Design' />
     <meta property='og:title' content={title} />
@@ -155,7 +159,11 @@ const primaryMeta = (plugin: (typeof plugins)[number]) =>
                   >
                     <span class='plugin-showcase-item__visual' aria-hidden='true'>
                       {plugin.preview?.poster ? (
-                        <img src={plugin.preview.poster} alt='' loading='lazy' />
+                        <LazyImg
+                          src={plugin.preview.poster}
+                          alt=''
+                          loading={index < 4 ? 'eager' : 'precise'}
+                        />
                       ) : (
                         <>
                           <span />
@@ -233,7 +241,7 @@ const primaryMeta = (plugin: (typeof plugins)[number]) =>
                     aria-label={`Open ${plugin.title} details`}
                   >
                     {plugin.preview?.poster ? (
-                      <img src={plugin.preview.poster} alt='' loading='lazy' />
+                      <LazyImg src={plugin.preview.poster} alt='' loading='precise' />
                     ) : (
                       <span class='plugin-card__mock' aria-hidden='true'>
                         <span />
@@ -321,5 +329,6 @@ const primaryMeta = (plugin: (typeof plugins)[number]) =>
         })
         .catch(() => {});
     </script>
+    <PreciseLazyload />
   </body>
 </html>

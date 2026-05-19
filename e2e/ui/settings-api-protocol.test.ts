@@ -4,6 +4,7 @@ import type { Page } from '@playwright/test';
 const STORAGE_KEY = 'open-design:config';
 const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定/i;
 const SETTINGS_MENU_LABEL = /^Settings$|^设置$|^設定$/i;
+const LOCAL_CLI_LABEL = /Local CLI|本机 CLI|本地 CLI/i;
 
 test.describe.configure({ timeout: 30_000 });
 
@@ -368,7 +369,7 @@ test('saving Local CLI updates the entry status pill with the selected agent', a
 
   const dialog = page.getByRole('dialog');
 
-  await dialog.getByRole('tab', { name: /Local CLI|本机 CLI/i }).click();
+  await dialog.getByRole('tab', { name: LOCAL_CLI_LABEL }).click();
   await dialog.getByRole('button', { name: /Codex CLI/i }).click();
   await expect.poll(async () => readSavedConfig(page)).toMatchObject({
     mode: 'daemon',
@@ -377,8 +378,8 @@ test('saving Local CLI updates the entry status pill with the selected agent', a
   await dialog.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 
-  const executionPill = page.locator('.inline-switcher__chip');
-  await expect(executionPill).toContainText(/Local CLI|本机 CLI/i);
+  const executionPill = page.getByTestId('inline-model-switcher-chip');
+  await expect(executionPill).toContainText(LOCAL_CLI_LABEL);
   await expect(executionPill).toContainText('Codex CLI');
   await expect(executionPill).toContainText('default');
 });

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { installMockOpenDesignHost } from '@open-design/host/testing';
 
 import {
   cancelConnectorAuthorization,
@@ -11,6 +12,7 @@ import {
   fetchAppVersionInfo,
   fetchConnectorDetail,
   fetchConnectorDiscovery,
+  fetchProjectDesignSystemPackageAudit,
   fetchProjectFileText,
   fetchSkillExample,
   isDeployProviderId,
@@ -181,6 +183,43 @@ describe('fetchProjectFileText', () => {
         url: '/api/projects/project-1/raw/diagram.svg',
       }),
     );
+  });
+});
+
+describe('fetchProjectDesignSystemPackageAudit', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('returns the daemon package audit for a project', async () => {
+    const audit = {
+      ok: false,
+      projectPath: '/tmp/project',
+      filesInspected: 4,
+      errors: [{
+        severity: 'error',
+        code: 'ui_kit_index_missing_runtime_bootstrap',
+        message: 'UI kit must mount.',
+        path: 'ui_kits/app/index.html',
+      }],
+      warnings: [],
+    };
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ audit }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchProjectDesignSystemPackageAudit('ds acme')).resolves.toEqual(audit);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/projects/ds%20acme/design-system-package-audit',
+      { cache: 'no-store' },
+    );
+  });
+
+  it('returns null when the audit endpoint is unavailable', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('missing', { status: 404 })));
+
+    await expect(fetchProjectDesignSystemPackageAudit('missing')).resolves.toBeNull();
   });
 });
 
@@ -356,6 +395,7 @@ describe('connectConnector', () => {
 
     await expect(connectConnector('github')).resolves.toEqual({
       connector: { id: 'github', name: 'GitHub', status: 'available', tools: [] },
+      auth: { kind: 'redirect_required', redirectUrl: 'https://example.com/oauth' },
       error: 'Popup blocked. Allow popups for Open Design and try again.',
     });
     expect(open).toHaveBeenCalledTimes(2);
@@ -400,13 +440,15 @@ describe('connectConnector', () => {
     expect(authWindow.document.body.innerHTML).toContain('Authorization pending');
   });
 
-  it('opens connector auth in the system browser when Electron returns a success boolean', async () => {
+  it('opens connector auth in the system browser when the host bridge succeeds', async () => {
     const open = vi.fn();
-    const openExternal = vi.fn(async () => true);
+    const openExternal = vi.fn(async () => ({ ok: true as const }));
     vi.stubGlobal('window', {
       open,
-      electronAPI: { openExternal },
     } as unknown as Window & typeof globalThis);
+    const restoreHost = installMockOpenDesignHost({
+      host: { shell: { openExternal } },
+    });
     const fetchMock = vi.fn(async (url: string) => {
       if (url === '/api/connectors/auth-configs/prepare') {
         return new Response(JSON.stringify({
@@ -422,21 +464,27 @@ describe('connectConnector', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(connectConnector('github')).resolves.toEqual({
-      connector: { id: 'github', name: 'GitHub', status: 'available', tools: [] },
-      auth: { kind: 'redirect_required', redirectUrl: 'https://example.com/oauth' },
-    });
+    try {
+      await expect(connectConnector('github')).resolves.toEqual({
+        connector: { id: 'github', name: 'GitHub', status: 'available', tools: [] },
+        auth: { kind: 'redirect_required', redirectUrl: 'https://example.com/oauth' },
+      });
+    } finally {
+      restoreHost();
+    }
     expect(open).not.toHaveBeenCalled();
     expect(openExternal).toHaveBeenCalledWith('https://example.com/oauth');
   });
 
-  it('surfaces an error when Electron cannot confirm that the system browser opened', async () => {
+  it('surfaces an error when the host bridge cannot confirm that the system browser opened', async () => {
     const open = vi.fn();
-    const openExternal = vi.fn(async () => false);
+    const openExternal = vi.fn(async () => ({ ok: false as const, reason: 'blocked' }));
     vi.stubGlobal('window', {
       open,
-      electronAPI: { openExternal },
     } as unknown as Window & typeof globalThis);
+    const restoreHost = installMockOpenDesignHost({
+      host: { shell: { openExternal } },
+    });
     const fetchMock = vi.fn(async (url: string) => {
       if (url === '/api/connectors/auth-configs/prepare') {
         return new Response(JSON.stringify({
@@ -452,10 +500,15 @@ describe('connectConnector', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    await expect(connectConnector('github')).resolves.toEqual({
-      connector: { id: 'github', name: 'GitHub', status: 'available', tools: [] },
-      error: 'Popup blocked. Allow popups for Open Design and try again.',
-    });
+    try {
+      await expect(connectConnector('github')).resolves.toEqual({
+        connector: { id: 'github', name: 'GitHub', status: 'available', tools: [] },
+        auth: { kind: 'redirect_required', redirectUrl: 'https://example.com/oauth' },
+        error: 'Popup blocked. Allow popups for Open Design and try again.',
+      });
+    } finally {
+      restoreHost();
+    }
     expect(open).not.toHaveBeenCalled();
     expect(openExternal).toHaveBeenCalledWith('https://example.com/oauth');
     expect(fetchMock).not.toHaveBeenCalledWith('/api/connectors/github/authorization/cancel', {

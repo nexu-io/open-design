@@ -9,14 +9,15 @@ import { Icon } from './Icon';
 const PRIVACY_POLICY_URL = 'https://github.com/nexu-io/open-design/blob/main/PRIVACY.md';
 
 interface Props {
-  /** Affirmative consent (Share usage data). */
-  onShare: () => void;
-  /** Decline (Don't share). */
-  onDecline: () => void;
+  /** Acknowledges the disclosure. Implies default opt-in; the host opts the
+   *  user into the same telemetry surface the previous "Share usage data"
+   *  button enabled. The user can flip the toggle off any time from
+   *  Settings → Privacy, which the banner footer says explicitly. */
+  onAccept: () => void;
 }
 
 /**
- * First-run privacy consent banner.
+ * First-run privacy disclosure banner.
  *
  * Anchored to the bottom-right of the viewport (cookie-consent style)
  * so it's prominently visible without blocking the underlying app —
@@ -24,20 +25,21 @@ interface Props {
  * it stretches to a bottom-edge bar (see `.privacy-consent-banner` in
  * index.css) so it doesn't crowd content on phones.
  *
- * The two action buttons share equal visual prominence so the reject
- * path is not de-emphasised, matching the EDPB equal-prominence
- * requirement under GDPR. Neither button is rendered as selected before
- * the user chooses, and their labels name the action ("Share usage
- * data" / "Don't share") rather than a vague outcome so the affirmative
- * button reads as a consent choice. A link to the full privacy policy
- * sits above the actions so the policy is reachable before deciding.
+ * Single "I get it" action: the product runs with telemetry on by
+ * default. The banner is an informed-disclosure surface, not a binary
+ * consent picker — the user reads what's collected and dismisses with
+ * an acknowledgement. The footer states the default explicitly and
+ * points at Settings → Privacy as the off switch, so the user keeps a
+ * one-click path to opt out at any time. The matching Settings UI
+ * (PrivacySection.tsx) still exposes both Share and Don't share buttons
+ * for users who arrive there before this banner has been shown.
  *
- * Stays mounted until the user picks Share or Don't share — there is
- * no dismiss-without-choice button on purpose. Telemetry decisions
- * downstream key off whether `installationId` is set, so an "ambiguous
+ * Stays mounted until the user clicks I get it — there is no
+ * dismiss-without-acknowledgement button on purpose. The downstream
+ * telemetry gate keys off `privacyDecisionAt`, so an "ambiguous
  * not-yet-decided" state would be hard to interpret.
  */
-export function PrivacyConsentModal({ onShare, onDecline }: Props): JSX.Element {
+export function PrivacyConsentModal({ onAccept }: Props): JSX.Element {
   const t = useT();
   return (
     <div className="privacy-consent-banner" role="region" aria-labelledby="privacy-consent-title">
@@ -59,7 +61,7 @@ export function PrivacyConsentModal({ onShare, onDecline }: Props): JSX.Element 
         </div>
       </dl>
 
-      <p className="hint privacy-consent-banner-footer">{t('settings.privacyConsentFooter')}</p>
+      <p className="hint privacy-consent-banner-footer">{t('settings.privacyConsentBannerFooter')}</p>
 
       <a
         className="privacy-consent-policy-link"
@@ -76,11 +78,8 @@ export function PrivacyConsentModal({ onShare, onDecline }: Props): JSX.Element 
         role="group"
         aria-label={t('settings.privacyConsentKicker')}
       >
-        <button type="button" className="privacy-consent-action" onClick={onDecline}>
-          {t('settings.privacyConsentDecline')}
-        </button>
-        <button type="button" className="privacy-consent-action" onClick={onShare}>
-          {t('settings.privacyConsentShare')}
+        <button type="button" className="privacy-consent-action" onClick={onAccept}>
+          {t('settings.privacyConsentAccept')}
         </button>
       </div>
     </div>
