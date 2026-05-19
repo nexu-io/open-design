@@ -951,6 +951,7 @@ export const id: Dict = {
   'fileViewer.preview': 'Pratinjau',
   'fileViewer.source': 'Sumber',
   'fileViewer.tweaks': 'Tweaks',
+  'fileViewer.tweaksUnavailable': 'Tidak ada panel tweaks pada artefak ini',
   'fileViewer.comment': 'Komentar',
   'fileViewer.edit': 'Edit',
   'fileViewer.draw': 'Gambar',
