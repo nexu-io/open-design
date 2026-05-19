@@ -208,9 +208,10 @@ describe('chat-log autoscroll when pinned todo card grows', () => {
     });
     await flushFrames();
 
-    // If the pinned-todo element was observed, followLatestIfPinned fires and
-    // scrolls to scrollHeight (1000). Without the fix, no callback fires for
-    // the pinned-todo resize and scrollTop stays at 600.
+    // followLatestIfPinned fires from the shared callback and snaps scrollTop
+    // to scrollHeight (1000). The structural guarantee that the pinned-todo
+    // element is observed (tested separately above) ensures this path runs in
+    // the real browser when the card grows.
     expect(geom.scrollTop).toBe(1000);
   });
 });
