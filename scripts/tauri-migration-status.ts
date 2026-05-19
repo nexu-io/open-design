@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
 import {
@@ -102,6 +102,9 @@ type HandoffArchiveStatus = {
   archive: string;
   checksum: string;
   commandScript: string;
+  commandScriptChecksum: string;
+  commandScriptExpectedSha256?: string;
+  commandScriptSha256?: string;
   current?: boolean;
   expectedSha256?: string;
   present: boolean;
@@ -315,7 +318,7 @@ function nextActionsForPhase(
     return [
       "Run scripts/continue-tauri-migration.ts --dry-run to print the next executable handoff/push/report sequence; add --wait-reports --advance after the remote branch and native CI are available.",
       archiveReady
-        ? `Copy the current packaged handoff archive ${handoffArchive.archive}, checksum ${handoffArchive.checksum}, and command script ${handoffArchive.commandScript} to a write-capable machine.`
+        ? `Copy the current packaged handoff archive ${handoffArchive.archive}, checksum ${handoffArchive.checksum}, command script ${handoffArchive.commandScript}, and command script checksum ${handoffArchive.commandScriptChecksum} to a write-capable machine.`
         : handoffReady
           ? `Package the current verified handoff directory with scripts/package-tauri-migration-handoff.ts --handoff-dir ${handoff.dir}.`
           : "Regenerate the verified handoff set with scripts/verify-tauri-migration-handoff.ts --output-dir /tmp/open-design-tauri-migration-handoff.",
@@ -323,7 +326,7 @@ function nextActionsForPhase(
         ? `Remote ${remote.remote} already matches ${remote.branch ?? "the migration branch"} at ${remote.head ?? "the expected head"}.`
         : archiveReady
           ? `On the receiving machine, run ${handoffArchive.commandScript} from the repository root to verify checksum, extract, push, verify the remote branch, and attempt native CI dispatch when gh is available; or run scripts/push-tauri-migration-handoff.ts --archive ${handoffArchive.archive} --remote origin for push-only handoff.`
-          : "Copy the packaged handoff archive, .sha256 sidecar, and .commands.sh sidecar to a write-capable machine, then run the command script or scripts/push-tauri-migration-handoff.ts --archive /path/to/open-design-tauri-migration-handoff.tar.gz --remote origin.",
+          : "Copy the packaged handoff archive, .sha256 sidecar, .commands.sh sidecar, and .commands.sh.sha256 sidecar to a write-capable machine, then run the command script or scripts/push-tauri-migration-handoff.ts --archive /path/to/open-design-tauri-migration-handoff.tar.gz --remote origin.",
       platformReports?.current === true
         ? "Advance M4 evidence and M5 defaults with scripts/advance-tauri-migration-m4-m5.ts using the verified report paths shown above."
         : remote?.current === true
@@ -451,8 +454,11 @@ async function readHandoffStatus(handoffDir: string, gitStatus: GitStatus): Prom
 async function readHandoffArchiveStatus(archivePath: string, handoff?: HandoffStatus): Promise<HandoffArchiveStatus> {
   const checksumPath = `${archivePath}.sha256`;
   const commandScriptPath = `${archivePath}.commands.sh`;
+  const commandScriptChecksumPath = `${commandScriptPath}.sha256`;
   const problems: string[] = [];
   let archiveSha256: string | undefined;
+  let commandScriptExpectedSha256: string | undefined;
+  let commandScriptSha256: string | undefined;
   let expectedSha256: string | undefined;
   try {
     archiveSha256 = createHash("sha256").update(await readFile(archivePath)).digest("hex");
@@ -461,6 +467,7 @@ async function readHandoffArchiveStatus(archivePath: string, handoff?: HandoffSt
       archive: archivePath,
       checksum: checksumPath,
       commandScript: commandScriptPath,
+      commandScriptChecksum: commandScriptChecksumPath,
       present: false,
       problems: [`archive unavailable: ${error instanceof Error ? error.message : String(error)}`],
     };
@@ -483,6 +490,7 @@ async function readHandoffArchiveStatus(archivePath: string, handoff?: HandoffSt
 
   try {
     const [commandScriptSource, commandScriptStat] = await Promise.all([readFile(commandScriptPath, "utf8"), stat(commandScriptPath)]);
+    commandScriptSha256 = createHash("sha256").update(commandScriptSource).digest("hex");
     if ((commandScriptStat.mode & 0o111) === 0) {
       problems.push(`command script is not executable: ${commandScriptPath}`);
     }
@@ -510,6 +518,23 @@ async function readHandoffArchiveStatus(archivePath: string, handoff?: HandoffSt
     }
   } catch (error) {
     problems.push(`command script unavailable: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  try {
+    const commandScriptChecksum = await readFile(commandScriptChecksumPath, "utf8");
+    const match = commandScriptChecksum.match(/^([0-9a-f]{64})\s+(\S+)\s*$/);
+    if (match?.[1] == null || match[2] == null) {
+      problems.push(`command script checksum sidecar has invalid format: ${commandScriptChecksumPath}`);
+    } else {
+      commandScriptExpectedSha256 = match[1];
+      if (match[2] !== basename(commandScriptPath)) {
+        problems.push(`command script checksum filename mismatch: expected ${basename(commandScriptPath)}, got ${match[2]}`);
+      }
+      if (commandScriptSha256 != null && commandScriptExpectedSha256 !== commandScriptSha256) {
+        problems.push(`command script SHA-256 mismatch: expected ${commandScriptExpectedSha256}, got ${commandScriptSha256}`);
+      }
+    }
+  } catch (error) {
+    problems.push(`command script checksum sidecar unavailable: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   const extractRoot = await mkdtemp(join(tmpdir(), "open-design-tauri-status-archive-"));
@@ -541,6 +566,9 @@ async function readHandoffArchiveStatus(archivePath: string, handoff?: HandoffSt
     archive: archivePath,
     checksum: checksumPath,
     commandScript: commandScriptPath,
+    commandScriptChecksum: commandScriptChecksumPath,
+    ...(commandScriptExpectedSha256 == null ? {} : { commandScriptExpectedSha256 }),
+    ...(commandScriptSha256 == null ? {} : { commandScriptSha256 }),
     current: problems.length === 0 && handoff?.current === true,
     ...(expectedSha256 == null ? {} : { expectedSha256 }),
     present: true,
@@ -791,6 +819,10 @@ function formatMigrationStatus(status: MigrationStatus): string {
     }
     lines.push(`  Checksum: ${status.handoffArchive.checksum}`);
     lines.push(`  Command script: ${status.handoffArchive.commandScript}`);
+    if (status.handoffArchive.commandScriptSha256 != null) {
+      lines.push(`  Command script SHA-256: ${status.handoffArchive.commandScriptSha256}`);
+    }
+    lines.push(`  Command script checksum: ${status.handoffArchive.commandScriptChecksum}`);
     for (const problem of status.handoffArchive.problems) {
       lines.push(`  - ${problem}`);
     }

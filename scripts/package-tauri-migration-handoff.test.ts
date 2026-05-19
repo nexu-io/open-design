@@ -30,6 +30,8 @@ test("package-tauri-migration-handoff creates a tarball and checksum sidecar", a
   assert.match(result.stdout, new RegExp(`Archive: ${escapeRegExp(output)}`));
   assert.match(result.stdout, /Archive SHA-256: [0-9a-f]{64}/);
   assert.match(result.stdout, new RegExp(`Command script: ${escapeRegExp(`${output}.commands.sh`)}`));
+  assert.match(result.stdout, /Command script SHA-256: [0-9a-f]{64}/);
+  assert.match(result.stdout, new RegExp(`Command script checksum: ${escapeRegExp(`${output}.commands.sh.sha256`)}`));
   assert.match(result.stdout, /Receiver push command:/);
   assert.match(result.stdout, /push-tauri-migration-handoff/);
   assert.match(result.stdout, new RegExp(`--archive '${escapeRegExp(output)}'`));
@@ -80,6 +82,8 @@ test("package-tauri-migration-handoff creates a tarball and checksum sidecar", a
   assert.equal((await stat(`${output}.commands.sh`)).mode & 0o111, 0o111);
   const checksum = await readFile(`${output}.sha256`, "utf8");
   assert.match(checksum, new RegExp(`^[0-9a-f]{64}  ${escapeRegExp(basename(output))}\\n$`));
+  const commandScriptChecksum = await readFile(`${output}.commands.sh.sha256`, "utf8");
+  assert.match(commandScriptChecksum, new RegExp(`^[0-9a-f]{64}  ${escapeRegExp(basename(`${output}.commands.sh`))}\\n$`));
 
   const listing = await execFileAsync("tar", ["-tzf", output], { maxBuffer: 1024 * 1024 });
   assert.match(listing.stdout, /handoff\/open-design-tauri-migration\.bundle/);

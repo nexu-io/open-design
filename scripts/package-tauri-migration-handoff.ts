@@ -37,9 +37,12 @@ async function main(): Promise<void> {
   const archiveSha256 = await sha256File(archivePath);
   const checksumPath = `${archivePath}.sha256`;
   const commandScriptPath = `${archivePath}.commands.sh`;
+  const commandScriptChecksumPath = `${commandScriptPath}.sha256`;
   await writeFile(checksumPath, `${archiveSha256}  ${basename(archivePath)}\n`, "utf8");
   await writeFile(commandScriptPath, commandScript(archivePath), "utf8");
   await chmod(commandScriptPath, 0o755);
+  const commandScriptSha256 = await sha256File(commandScriptPath);
+  await writeFile(commandScriptChecksumPath, `${commandScriptSha256}  ${basename(commandScriptPath)}\n`, "utf8");
 
   process.stdout.write(
     [
@@ -54,6 +57,8 @@ async function main(): Promise<void> {
       `Archive SHA-256: ${archiveSha256}`,
       `Checksum: ${checksumPath}`,
       `Command script: ${commandScriptPath}`,
+      `Command script SHA-256: ${commandScriptSha256}`,
+      `Command script checksum: ${commandScriptChecksumPath}`,
       "Receiver push command:",
       indent(
         [

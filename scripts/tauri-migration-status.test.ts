@@ -120,6 +120,8 @@ test("tauri-migration-status reports current packaged handoff archives", async (
       archive: string;
       checksum: string;
       commandScript: string;
+      commandScriptChecksum: string;
+      commandScriptSha256: string;
       current: boolean;
       problems: string[];
       sha256: string;
@@ -130,7 +132,9 @@ test("tauri-migration-status reports current packaged handoff archives", async (
   assert.equal(parsed.handoffArchive.archive, archivePath);
   assert.equal(parsed.handoffArchive.checksum, `${archivePath}.sha256`);
   assert.equal(parsed.handoffArchive.commandScript, `${archivePath}.commands.sh`);
+  assert.equal(parsed.handoffArchive.commandScriptChecksum, `${archivePath}.commands.sh.sha256`);
   assert.equal(parsed.handoffArchive.current, true);
+  assert.match(parsed.handoffArchive.commandScriptSha256, /^[0-9a-f]{64}$/);
   assert.equal(parsed.handoffArchive.sha256, archiveSha256);
   assert.deepEqual(parsed.handoffArchive.problems, []);
   assert.match(parsed.nextActions.join("\n"), /command script/);
@@ -154,6 +158,24 @@ test("tauri-migration-status rejects packaged handoff archives without command s
 
   assert.equal(parsed.handoffArchive.current, false);
   assert.match(parsed.handoffArchive.problems.join("\n"), /command script unavailable/);
+});
+
+test("tauri-migration-status rejects packaged handoff archives without command script checksum sidecars", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+  const { archivePath } = await writeHandoffArchive(handoffDir);
+  await rm(`${archivePath}.commands.sh.sha256`);
+
+  const result = await runStatus(fixture, "--handoff-dir", handoffDir);
+  const parsed = JSON.parse(result.stdout) as { handoffArchive: { current: boolean; problems: string[] } };
+
+  assert.equal(parsed.handoffArchive.current, false);
+  assert.match(parsed.handoffArchive.problems.join("\n"), /command script checksum sidecar unavailable/);
 });
 
 test("tauri-migration-status reports stale handoff artifacts", async (t) => {
@@ -509,6 +531,8 @@ async function writeHandoffArchive(handoffDir: string): Promise<{ archivePath: s
     "utf8",
   );
   await chmod(`${archivePath}.commands.sh`, 0o755);
+  const commandScriptSha256 = createHash("sha256").update(await readFile(`${archivePath}.commands.sh`)).digest("hex");
+  await writeFile(`${archivePath}.commands.sh.sha256`, `${commandScriptSha256}  ${basename(`${archivePath}.commands.sh`)}\n`, "utf8");
   return { archivePath, archiveSha256 };
 }
 

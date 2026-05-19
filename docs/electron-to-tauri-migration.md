@@ -56,7 +56,7 @@ pnpm exec tsx scripts/package-tauri-migration-handoff.ts \
   --handoff-dir /tmp/open-design-tauri-migration-handoff
 ```
 
-Do not write mutable handoff commit SHAs or archive hashes into this document as fixed requirements. The source of truth is the latest `tauri-migration-status` output plus the generated handoff manifest, archive checksum, and command sidecar. Once a write-capable credential has pushed the branch and native CI has produced matching Windows/Linux reports, continue with:
+Do not write mutable handoff commit SHAs or archive hashes into this document as fixed requirements. The source of truth is the latest `tauri-migration-status` output plus the generated handoff manifest, archive checksum, command sidecar, and command-sidecar checksum. Once a write-capable credential has pushed the branch and native CI has produced matching Windows/Linux reports, continue with:
 
 ```bash
 pnpm exec tsx scripts/continue-tauri-migration.ts \
@@ -64,7 +64,7 @@ pnpm exec tsx scripts/continue-tauri-migration.ts \
   --advance
 ```
 
-If the push is still blocked, keep the archive, `.sha256`, and `.commands.sh` sidecars current and retry the remote handoff on the next continuation pass.
+If the push is still blocked, keep the archive, `.sha256`, `.commands.sh`, and `.commands.sh.sha256` sidecars current and retry the remote handoff on the next continuation pass.
 
 ### Sustained follow-up
 
@@ -415,6 +415,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Improved the packaged handoff command sidecar for write-capable receivers. After importing and pushing the branch, the sidecar now prints `scripts/tauri-migration-status.ts --handoff-dir ... --remote ... --report-dir ...` so the receiver sees remote and report readiness immediately, and all generated follow-up download commands honor `TAURI_M4_REPORT_DIR` instead of hardcoding `/tmp/open-design-tauri-m4-reports`. `node --import tsx --test scripts/package-tauri-migration-handoff.test.ts` and `tsc -p scripts/tsconfig.json --noEmit` passed.
 - 2026-05-20: Hardened the repo-local continuation runner after a successful remote handoff. `scripts/continue-tauri-migration.ts` now treats `gh workflow run ci.yml --ref ...` failures as actionable manual-dispatch blockers instead of aborting the whole continuation, so a branch push with insufficient GitHub Actions dispatch permission still prints the branch-head-aware report download command. `node --import tsx --test scripts/tauri-migration-status.test.ts` and `tsc -p scripts/tsconfig.json --noEmit` passed.
 - 2026-05-20: Moved the `scripts/download-tauri-m4-reports.ts --advance` clean-worktree guard ahead of all GitHub artifact reads. If tracked changes are present, the downloader now fails before calling `gh run view` or downloading Windows/Linux reports, keeping native M4 evidence consumption from mixing with unrelated tracked edits. `node --import tsx --test scripts/download-tauri-m4-reports.test.ts` and `tsc -p scripts/tsconfig.json --noEmit` passed.
+- 2026-05-20: Added a SHA-256 sidecar for the generated handoff command script. `scripts/package-tauri-migration-handoff.ts` now writes `<archive>.commands.sh.sha256`, and `scripts/tauri-migration-status.ts` rejects current-archive claims when that checksum is missing, malformed, filename-mismatched, or stale. This keeps the executable receiver flow covered by the same transfer-integrity checks as the handoff tarball.
 
 ### Platform Gate Runners
 
@@ -503,9 +504,9 @@ pnpm exec tsx scripts/package-tauri-migration-handoff.ts \
   --handoff-dir /tmp/open-design-tauri-migration-handoff
 ```
 
-Keep the script output, JSON manifest, Markdown handoff note, tarball, `.sha256` sidecar, and `.commands.sh` sidecar together. They record the migration branch head, `origin/main` base, bundle byte size, SHA-256, `git bundle verify` result, bundled heads, receiving-side import command, remote verification command, M4→M5 advance command, and the receiver command sequence printed by `scripts/package-tauri-migration-handoff.ts`. The manifest records the bundle path relative to itself, so the extracted handoff directory remains relocatable.
+Keep the script output, JSON manifest, Markdown handoff note, tarball, `.sha256` sidecar, `.commands.sh` sidecar, and `.commands.sh.sha256` sidecar together. They record the migration branch head, `origin/main` base, bundle byte size, SHA-256, `git bundle verify` result, bundled heads, receiving-side import command, remote verification command, M4→M5 advance command, and the receiver command sequence printed by `scripts/package-tauri-migration-handoff.ts`. The manifest records the bundle path relative to itself, so the extracted handoff directory remains relocatable.
 
-On the receiving checkout, copy the tarball plus its `.sha256` and `.commands.sh` sidecars, then verify the checksum, extract the handoff, import the bundle, push the branch, verify the remote head, and attempt native CI dispatch in one command:
+On the receiving checkout, copy the tarball plus its `.sha256`, `.commands.sh`, and `.commands.sh.sha256` sidecars, then verify the checksum, extract the handoff, import the bundle, push the branch, verify the remote head, and attempt native CI dispatch in one command:
 
 ```bash
 /path/to/open-design-tauri-migration-handoff.tar.gz.commands.sh
