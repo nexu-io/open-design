@@ -52,6 +52,8 @@ const USER_PLUGIN_SOURCE_KINDS = new Set<PluginSourceKind>([
   'local',
 ]);
 
+const MENTION_SKILL_VISIBLE_CAP = 24;
+
 interface SlashCommand {
   id: string;
   // Visible label, e.g. `/hatch`. Shown in the popover row.
@@ -1027,23 +1029,25 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // from main) so the @-popover keeps moving forward as the user picks.
     const stagedSkillIds = new Set(stagedSkills.map((s) => s.id));
     const filteredSkills = mention
-      ? skills
-          .filter((s) => !stagedSkillIds.has(s.id))
-          .filter((s) => {
-            if (!mentionQuery) return true;
-            return [
-              s.id,
-              s.name,
-              s.description,
-              s.mode,
-              s.surface ?? '',
-              ...s.triggers,
-            ]
-              .join(' ')
-              .toLowerCase()
-              .includes(mentionQuery);
-          })
-          .slice(0, 8)
+      ? sortSkillsByPrefixMatch(
+          skills
+            .filter((s) => !stagedSkillIds.has(s.id))
+            .filter((s) => {
+              if (!mentionQuery) return true;
+              return [
+                s.id,
+                s.name,
+                s.description,
+                s.mode,
+                s.surface ?? '',
+                ...s.triggers,
+              ]
+                .join(' ')
+                .toLowerCase()
+                .includes(mentionQuery);
+            }),
+          mentionQuery,
+        ).slice(0, MENTION_SKILL_VISIBLE_CAP)
       : [];
 
     return (
@@ -2077,6 +2081,21 @@ function skillMatchesQuery(skill: SkillSummary, query: string): boolean {
     .join(' ')
     .toLowerCase()
     .includes(q);
+}
+
+function sortSkillsByPrefixMatch(skills: SkillSummary[], query: string): SkillSummary[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return skills;
+  const namePrefix: SkillSummary[] = [];
+  const nameContains: SkillSummary[] = [];
+  const otherMatch: SkillSummary[] = [];
+  for (const s of skills) {
+    const name = s.name.toLowerCase();
+    if (name.startsWith(q)) namePrefix.push(s);
+    else if (name.includes(q)) nameContains.push(s);
+    else otherMatch.push(s);
+  }
+  return namePrefix.concat(nameContains, otherMatch);
 }
 
 function mcpServerMatchesQuery(server: McpServerConfig, query: string): boolean {
