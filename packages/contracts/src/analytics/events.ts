@@ -1216,6 +1216,8 @@ export function byokProtocolToTracking(
     case 'ollama':
     case 'ollama_cloud':
       return 'ollama_cloud';
+    case 'senseaudio':
+      return 'senseaudio';
     default:
       return null;
   }
