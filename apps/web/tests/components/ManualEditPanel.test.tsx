@@ -225,7 +225,7 @@ describe('ManualEditPanel', () => {
     if (!lineInput) throw new Error('Line input not found');
 
     act(() => {
-      lineInput.dispatchEvent(new dom.window.FocusEvent('blur', { bubbles: true }));
+      lineInput.dispatchEvent(new dom.window.FocusEvent('focusout', { bubbles: true }));
     });
 
     expect(onError).not.toHaveBeenCalled();
@@ -251,7 +251,7 @@ describe('ManualEditPanel', () => {
 
     act(() => {
       lineInput.value = '49px';
-      lineInput.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+      lineInput.dispatchEvent(new dom.window.FocusEvent('focusout', { bubbles: true }));
     });
 
     expect(onError).toHaveBeenCalledWith('');
