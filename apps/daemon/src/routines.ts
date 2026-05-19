@@ -34,6 +34,13 @@ export type RoutineProjectTarget =
   | { mode: 'create_each_run' }
   | { mode: 'reuse'; projectId: string };
 
+export interface RoutineContextSelection {
+  skillIds?: string[];
+  pluginIds?: string[];
+  mcpServerIds?: string[];
+  connectorIds?: string[];
+}
+
 export interface Routine {
   id: string;
   name: string;
@@ -42,6 +49,7 @@ export interface Routine {
   target: RoutineProjectTarget;
   skillId: string | null;
   agentId: string | null;
+  context: RoutineContextSelection;
   enabled: boolean;
   nextRunAt: number | null;
   lastRun: unknown;

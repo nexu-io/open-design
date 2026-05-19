@@ -191,8 +191,9 @@ describe('ChatComposer context pickers', () => {
     expect(screen.getByRole('tab', { name: 'Plugins' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'Skills' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'MCP' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Connectors' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'Design files' })).toBeTruthy();
-    expect(screen.getByText('Search plugins, skills, MCP servers, and Design Files.')).toBeTruthy();
+    expect(screen.getByText('Search plugins, skills, MCP servers, connectors, and Design Files.')).toBeTruthy();
   });
 
   it('selects an MCP server from @ search and keeps the inline token visible', async () => {

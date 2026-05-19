@@ -48,6 +48,7 @@ declare global {
       // failure (Electron's shell.openPath contract, plus PR #974
       // trust-boundary failures).
       openPath?: (projectId: string) => Promise<string>;
+      setDesktopPetVisible?: (visible: boolean) => void;
     };
   }
 }

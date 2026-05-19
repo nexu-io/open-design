@@ -3,7 +3,7 @@ import { mkdir, writeFile, realpath, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { BrowserWindow, dialog, ipcMain, screen, shell } from "electron";
 import type { DesktopExportPdfInput, DesktopExportPdfResult } from "@open-design/sidecar-proto";
 
 import { createElectronPdfTarget, exportPdfFromHtml, savePrintReadyDocumentAsPdf } from "./pdf-export.js";
@@ -205,6 +205,9 @@ export function signDesktopImportToken(
 const PENDING_POLL_MS = 120;
 const RUNNING_POLL_MS = 2000;
 const MAX_CONSOLE_ENTRIES = 200;
+const DESKTOP_PET_WINDOW_WIDTH = 360;
+const DESKTOP_PET_WINDOW_HEIGHT = 300;
+const DESKTOP_PET_WINDOW_MARGIN = 24;
 
 export type DesktopEvalInput = {
   expression: string;
@@ -624,6 +627,49 @@ function installWindowChromeCssHook(window: BrowserWindow): void {
   });
 }
 
+function desktopPetUrl(baseUrl: string): string {
+  const url = new URL(baseUrl);
+  url.pathname = "/desktop-pet";
+  url.search = "";
+  url.hash = "";
+  return url.toString();
+}
+
+function createDesktopPetWindow(preloadPath: string): BrowserWindow {
+  const { workArea } = screen.getPrimaryDisplay();
+  const petWindow = new BrowserWindow({
+    width: DESKTOP_PET_WINDOW_WIDTH,
+    height: DESKTOP_PET_WINDOW_HEIGHT,
+    x: workArea.x + workArea.width - DESKTOP_PET_WINDOW_WIDTH - DESKTOP_PET_WINDOW_MARGIN,
+    y: workArea.y + workArea.height - DESKTOP_PET_WINDOW_HEIGHT - DESKTOP_PET_WINDOW_MARGIN,
+    show: false,
+    frame: false,
+    transparent: true,
+    backgroundColor: "#00000000",
+    resizable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    hasShadow: false,
+    focusable: false,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      preload: preloadPath,
+      sandbox: true,
+    },
+  });
+  petWindow.setAlwaysOnTop(true, "floating");
+  petWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  petWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (isHttpUrl(url)) void shell.openExternal(url);
+    return { action: "deny" };
+  });
+  petWindow.webContents.on("will-navigate", (event, url) => {
+    if (!url.includes("/desktop-pet")) event.preventDefault();
+  });
+  return petWindow;
+}
+
 function showWindowButtons(window: BrowserWindow): void {
   if (process.platform !== "darwin" || window.isDestroyed()) return;
   window.setWindowButtonVisibility(true);
@@ -860,6 +906,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   });
 
   const consoleEntries: DesktopConsoleEntry[] = [];
+  const petWindow = createDesktopPetWindow(preloadPath);
   const window = new BrowserWindow({
     height: 900,
     // Below this size the project page's left/right split (chat
@@ -882,6 +929,13 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   installWindowChromeCssHook(window);
   showWindowButtons(window);
   attachDownloadSaveAsDialog(window);
+
+  ipcMain.removeAllListeners("desktop-pet:set-visible");
+  ipcMain.on("desktop-pet:set-visible", (event, visible: unknown) => {
+    if (petWindow.isDestroyed() || event.sender !== petWindow.webContents) return;
+    if (visible) petWindow.showInactive();
+    else petWindow.hide();
+  });
 
   ipcMain.removeHandler('od:print-pdf');
   ipcMain.handle('od:print-pdf', async (_event, html: unknown, nonce: unknown, options: unknown): Promise<void> => {
@@ -909,6 +963,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   });
 
   let currentUrl: string | null = null;
+  let currentPetUrl: string | null = null;
   let pendingUrl: string | null = null;
   let stopped = false;
   let timer: NodeJS.Timeout | null = null;
@@ -1006,6 +1061,11 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
         currentUrl = url;
         pendingUrl = null;
         showWindowButtons(window);
+        const nextPetUrl = desktopPetUrl(url);
+        if (!petWindow.isDestroyed() && nextPetUrl !== currentPetUrl) {
+          await petWindow.loadURL(nextPetUrl);
+          currentPetUrl = nextPetUrl;
+        }
       } else if (url == null) {
         pendingUrl = null;
       }
@@ -1039,6 +1099,8 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
         clearTimeout(timer);
         timer = null;
       }
+      ipcMain.removeAllListeners("desktop-pet:set-visible");
+      if (!petWindow.isDestroyed()) petWindow.close();
       if (!window.isDestroyed()) window.close();
     },
     console() {

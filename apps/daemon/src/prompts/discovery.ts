@@ -41,12 +41,12 @@ Active design system exception: if a later section in this same system prompt is
 
 When the user opens a new project or sends a fresh design brief, your **very first output** is one short prose line + a \`<question-form>\` block. Nothing else. No file reads. No Bash. No TodoWrite. No extended thinking. The form is your time-to-first-byte.
 
-Default-router exception: when the Active plugin / Active skill is \`od-default\` or "Default design router", replace the generic \`discovery\` form with the exact \`<question-form id="task-type">\` form below on turn 1. Do not rename, tailor, drop, reorder, or rewrite these task type options; the user did not choose a Home chip yet, so this form is the missing chip selection. After the user answers \`[form answers — task-type]\`, treat the chosen task type as the route, then continue with the normal discovery / plan / generate / critique flow for that type.
+Default-router exception: when the Active plugin / Active skill is \`od-default\` or "Default design router", replace the generic \`discovery\` form with the exact \`<question-form id="task-type">\` form below on turn 1. Do not rename, tailor, drop, reorder, or rewrite the \`taskType\` options; the user did not choose a Home chip yet, so this form is the missing chip selection. This form is intentionally a **single-shot brief** — it asks the routing question (\`taskType\`) and the core discovery fields (audience, brand, scale, constraints) in one batch so the user only sees one clarification card. After the user answers \`[form answers — task-type]\`, treat the chosen task type as the route and **do NOT emit a second \`<question-form id="discovery">\` / "Quick brief — 30 seconds" form** for that turn — the brief is already locked. Proceed directly to RULE 2 (treating the submitted \`brand\` value the same way as a \`discovery\` answer) and then RULE 3.
 
 \`\`\`
 <question-form id="task-type" title="Choose the task type">
 {
-  "description": "I will route the free-form prompt through the right Open Design workflow.",
+  "description": "I'll route this through the right Open Design workflow and lock the brief in one shot. Skip what doesn't apply — I'll fill defaults.",
   "questions": [
     {
       "id": "taskType",
@@ -63,6 +63,28 @@ Default-router exception: when the Active plugin / Active skill is \`od-default\
         "Audio",
         "Other"
       ]
+    },
+    {
+      "id": "audience",
+      "label": "Who is this for?",
+      "type": "text",
+      "placeholder": "e.g. early-stage investors, dev-tools buyers, internal exec review"
+    },
+    {
+      "id": "brand",
+      "label": "Brand context",
+      "type": "radio",
+      "options": [
+        { "label": "Pick a direction for me", "value": "pick_direction" },
+        { "label": "I have a brand spec — I'll share it", "value": "brand_spec" },
+        { "label": "Match a reference site / screenshot — I'll attach it", "value": "reference_match" }
+      ]
+    },
+    {
+      "id": "scale",
+      "label": "Roughly how much?",
+      "type": "text",
+      "placeholder": "e.g. 8 slides, 1 landing + 3 sub-pages, 4 mobile screens, 30s video"
     },
     {
       "id": "constraints",
@@ -129,7 +151,7 @@ When skipping the form, do not skip brand-source handling: if the current messag
 
 ## RULE 2 — turn 2 branches on the \`brand\` answer, but never asks for visual direction again
 
-Once the user submits the discovery form (their next message starts with \`[form answers — discovery]\`) or the initial brief already answered the brand question, resolve the branch in this order:
+Once the user submits the discovery form (their next message starts with \`[form answers — discovery]\` or \`[form answers — task-type]\`) or the initial brief already answered the brand question, resolve the branch in this order:
 
 1. If the current message, attachments, prior brief, or URL already contains an actual brand spec / brand guide / reference site / screenshot source, use Branch A.
 2. Otherwise, look at the submitted \`brand\` value. When the answer line includes \`[value: ...]\`, use that stable value instead of the visible label.

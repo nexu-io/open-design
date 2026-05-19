@@ -46,6 +46,10 @@ import { navigate } from '../router';
 import { agentDisplayName, agentModelDisplayName } from '../utils/agentLabels';
 import { isMacPlatform } from '../utils/platform';
 import {
+  canAutoRenameProjectFromPrompt,
+  summarizeProjectNameFromPrompt,
+} from '../utils/projectName';
+import {
   apiProtocolAgentId,
   apiProtocolModelLabel,
 } from '../utils/apiProtocol';
@@ -110,6 +114,7 @@ import {
 import { AppChromeHeader } from './AppChromeHeader';
 import { AvatarMenu } from './AvatarMenu';
 import { ChatPane } from './ChatPane';
+import type { ChatSendMeta } from './ChatComposer';
 import {
   CritiqueTheaterMount,
   useCritiqueTheaterEnabled,
@@ -1697,7 +1702,7 @@ export function ProjectView({
       prompt: string,
       attachments: ChatAttachment[],
       commentAttachments: ChatCommentAttachment[] = commentsToAttachments(attachedComments),
-      meta?: { research?: ResearchOptions; skillIds?: string[] },
+      meta?: ChatSendMeta,
     ) => {
       if (!activeConversationId) return;
       if (messagesConversationIdRef.current !== activeConversationId) return;
@@ -1806,6 +1811,27 @@ export function ProjectView({
             ),
           );
           void patchConversation(project.id, runConversationId, { title });
+        }
+        const projectName = summarizeProjectNameFromPrompt(prompt);
+        if (
+          projectName &&
+          projectName !== project.name &&
+          canAutoRenameProjectFromPrompt(project)
+        ) {
+          const metadata = project.metadata
+            ? { ...project.metadata, nameSource: 'prompt' as const }
+            : undefined;
+          const updated: Project = {
+            ...project,
+            name: projectName,
+            ...(metadata ? { metadata } : {}),
+            updatedAt: Date.now(),
+          };
+          onProjectChange(updated);
+          void patchProject(project.id, {
+            name: projectName,
+            ...(metadata ? { metadata } : {}),
+          });
         }
       }
 
@@ -2066,6 +2092,7 @@ export function ProjectView({
           clientRequestId: randomUUID(),
           skillId: project.skillId ?? null,
           skillIds: Array.isArray(meta?.skillIds) ? meta.skillIds : [],
+          context: meta?.context,
           designSystemId: project.designSystemId ?? null,
           attachments: attachments.map((a) => a.path),
           commentAttachments,
@@ -2204,6 +2231,7 @@ export function ProjectView({
       composedSystemPrompt,
       onTouchProject,
       project.id,
+      project.name,
       projectFiles,
       refreshProjectFiles,
       refreshLiveArtifacts,
@@ -2217,6 +2245,7 @@ export function ProjectView({
       clearStreamingMarker,
       clearActiveRunRefs,
       onProjectsRefresh,
+      onProjectChange,
     ],
   );
 
@@ -2673,9 +2702,20 @@ export function ProjectView({
     (newName: string) => {
       const trimmed = newName.trim();
       if (!trimmed || trimmed === project.name) return;
-      const updated: Project = { ...project, name: trimmed, updatedAt: Date.now() };
+      const metadata = project.metadata
+        ? { ...project.metadata, nameSource: 'user' as const }
+        : undefined;
+      const updated: Project = {
+        ...project,
+        name: trimmed,
+        ...(metadata ? { metadata } : {}),
+        updatedAt: Date.now(),
+      };
       onProjectChange(updated);
-      void patchProject(project.id, { name: trimmed });
+      void patchProject(project.id, {
+        name: trimmed,
+        ...(metadata ? { metadata } : {}),
+      });
     },
     [project, onProjectChange],
   );

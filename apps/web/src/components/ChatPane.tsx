@@ -746,9 +746,6 @@ export function ChatPane({
                     <span className="chat-empty-title">
                       {t('chat.startTitle')}
                     </span>
-                    <span className="chat-empty-hint">
-                      {t('chat.startHint')}
-                    </span>
                   </div>
                   <div className="chat-examples" role="list">
                     {pickStarters(projectMetadata, t).map((ex, i) => (

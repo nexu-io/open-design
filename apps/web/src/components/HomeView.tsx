@@ -10,6 +10,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   ApplyResult,
+  ConnectorDetail,
   InputFieldSpec,
   McpServerConfig,
   InstalledPluginRecord,
@@ -80,6 +81,14 @@ interface SelectedPluginContext {
   record: InstalledPluginRecord;
 }
 
+interface SelectedMcpContext {
+  server: McpServerConfig;
+}
+
+interface SelectedConnectorContext {
+  connector: ConnectorDetail;
+}
+
 interface PendingReplacement {
   title: string;
   confirm: () => void;
@@ -112,6 +121,7 @@ interface Props {
   promptHandoff?: HomePromptHandoff | null;
   skills?: SkillSummary[];
   skillsLoading?: boolean;
+  connectors?: ConnectorDetail[];
   promptTemplates?: PromptTemplateSummary[];
 }
 
@@ -127,6 +137,7 @@ export function HomeView({
   promptHandoff,
   skills = [],
   skillsLoading = false,
+  connectors = [],
   promptTemplates = [],
 }: Props) {
   const { locale, t } = useI18n();
@@ -145,6 +156,8 @@ export function HomeView({
   const [active, setActive] = useState<ActivePlugin | null>(null);
   const [activeSkill, setActiveSkill] = useState<SkillSummary | null>(null);
   const [selectedPluginContexts, setSelectedPluginContexts] = useState<SelectedPluginContext[]>([]);
+  const [selectedMcpContexts, setSelectedMcpContexts] = useState<SelectedMcpContext[]>([]);
+  const [selectedConnectorContexts, setSelectedConnectorContexts] = useState<SelectedConnectorContext[]>([]);
   const [stagedFiles, setStagedFiles] = useState<File[]>([]);
   const [mcpServers, setMcpServers] = useState<McpServerConfig[]>([]);
   const [mcpLoading, setMcpLoading] = useState(true);
@@ -293,6 +306,8 @@ export function HomeView({
     setActive(null);
     setActiveSkill(null);
     setSelectedPluginContexts([]);
+    setSelectedMcpContexts([]);
+    setSelectedConnectorContexts([]);
     setFallbackProjectKind('other');
     setPrompt(promptHandoff.prompt);
     setPendingAuthoringPrompt(promptHandoff.prompt);
@@ -307,8 +322,10 @@ export function HomeView({
     () =>
       (active?.result?.contextItems?.length ?? 0) +
       selectedPluginContexts.length +
+      selectedMcpContexts.length +
+      selectedConnectorContexts.length +
       stagedFiles.length,
-    [active, selectedPluginContexts, stagedFiles.length],
+    [active, selectedConnectorContexts.length, selectedMcpContexts.length, selectedPluginContexts, stagedFiles.length],
   );
 
   // When the active plugin was bound through a chip, the badge shows
@@ -708,6 +725,22 @@ export function HomeView({
   }
 
   function useMcpServer(_server: McpServerConfig, nextPrompt: string) {
+    setSelectedMcpContexts((current) => (
+      current.some((item) => item.server.id === _server.id)
+        ? current
+        : [...current, { server: _server }]
+    ));
+    setPrompt(nextPrompt);
+    setError(null);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }
+
+  function useConnector(connector: ConnectorDetail, nextPrompt: string) {
+    setSelectedConnectorContexts((current) => (
+      current.some((item) => item.connector.id === connector.id)
+        ? current
+        : [...current, { connector }]
+    ));
     setPrompt(nextPrompt);
     setError(null);
     requestAnimationFrame(() => inputRef.current?.focus());
@@ -795,11 +828,21 @@ export function HomeView({
           });
           return;
         }
-        requestActivePlugin(record, undefined, {
+        const pluginOptions = {
           projectKind: chip.action.projectKind,
           chipId: chip.id,
           inputs: chip.action.inputs,
-        });
+        };
+        // Output-type tabs (create group) are mode-selection gestures:
+        // switching between them should never prompt for confirmation,
+        // even when the input already has template text from a previous
+        // tab. Migrate-group chips (From Figma, etc.) still go through
+        // the replacement guard because they carry a meaningful prompt.
+        if (chip.group === 'create') {
+          void usePlugin(record, undefined, pluginOptions);
+        } else {
+          requestActivePlugin(record, undefined, pluginOptions);
+        }
         return;
       }
       case 'create-plugin': {
@@ -849,6 +892,21 @@ export function HomeView({
         ? { description: item.record.manifest.description }
         : {}),
     }));
+    const contextMcpServers = selectedMcpContexts.map((item) => ({
+      id: item.server.id,
+      ...(item.server.label ? { label: item.server.label } : {}),
+      ...(item.server.transport ? { transport: item.server.transport } : {}),
+      ...(item.server.url ? { url: item.server.url } : {}),
+      ...(item.server.command ? { command: item.server.command } : {}),
+    }));
+    const contextConnectors = selectedConnectorContexts.map((item) => ({
+      id: item.connector.id,
+      name: item.connector.name,
+      provider: item.connector.provider,
+      category: item.connector.category,
+      status: item.connector.status,
+      ...(item.connector.accountLabel ? { accountLabel: item.connector.accountLabel } : {}),
+    }));
     const defaultInputs = { prompt: trimmed };
     const submittedProjectMetadata = submittedActive?.mediaSurface
       ? metadataForHomeMediaComposer(submittedActive.mediaSurface, submittedActive.inputs, promptTemplates)
@@ -864,6 +922,8 @@ export function HomeView({
       projectKind: submittedActive?.projectKind ?? fallbackProjectKind ?? projectKindForSkill(activeSkill) ?? 'other',
       projectMetadata: submittedProjectMetadata,
       contextPlugins,
+      contextMcpServers,
+      contextConnectors,
       attachments: stagedFiles,
     });
   }
@@ -905,6 +965,7 @@ export function HomeView({
         skillsLoading={skillsLoading}
         mcpOptions={enabledMcpServers}
         mcpLoading={mcpLoading}
+        connectorOptions={connectors.filter((connector) => connector.status === 'connected')}
         pendingPluginId={pendingApplyId}
         pendingChipId={pendingChipId}
         submitDisabled={
@@ -915,6 +976,7 @@ export function HomeView({
         onPickPlugin={(record, nextPrompt) => addPluginContext(record, nextPrompt)}
         onPickSkill={useSkill}
         onPickMcp={useMcpServer}
+        onPickConnector={useConnector}
         onPickChip={pickChip}
         contextItemCount={contextItemCount}
         error={error}

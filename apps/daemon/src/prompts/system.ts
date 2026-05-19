@@ -127,6 +127,21 @@ type ProjectMetadata = {
     title?: string | null;
     description?: string | null;
   }> | null;
+  contextMcpServers?: Array<{
+    id?: string | null;
+    label?: string | null;
+    transport?: string | null;
+    url?: string | null;
+    command?: string | null;
+  }> | null;
+  contextConnectors?: Array<{
+    id?: string | null;
+    name?: string | null;
+    provider?: string | null;
+    category?: string | null;
+    status?: string | null;
+    accountLabel?: string | null;
+  }> | null;
 };
 type ProjectTemplate = { name: string; description?: string | null; files: Array<{ name: string; content: string }> };
 type AudioVoiceOption = {
@@ -871,6 +886,44 @@ function renderMetadataBlock(
         ? ` — ${plugin.description.trim()}`
         : '';
       lines.push(`- ${title}${id ? ` (\`${id}\`)` : ''}${description}`);
+    }
+  }
+
+  if (Array.isArray(metadata.contextMcpServers) && metadata.contextMcpServers.length > 0) {
+    lines.push('');
+    lines.push('### @ MCP context');
+    lines.push(
+      'The user selected these MCP servers as context. Prefer their tools when mounted and relevant before asking where data should come from.',
+    );
+    for (const server of metadata.contextMcpServers) {
+      const id = typeof server.id === 'string' ? server.id : '';
+      const label = typeof server.label === 'string' && server.label.trim().length > 0
+        ? server.label.trim()
+        : id;
+      if (!id && !label) continue;
+      const transport = typeof server.transport === 'string' && server.transport.trim().length > 0
+        ? ` — ${server.transport.trim()}`
+        : '';
+      lines.push(`- ${label}${id ? ` (\`${id}\`)` : ''}${transport}`);
+    }
+  }
+
+  if (Array.isArray(metadata.contextConnectors) && metadata.contextConnectors.length > 0) {
+    lines.push('');
+    lines.push('### @ connector context');
+    lines.push(
+      'The user selected these connectors as context. Use daemon connector tools through the OD CLI wrapper when data from these sources is needed; do not ask the user to identify a source that is already selected.',
+    );
+    for (const connector of metadata.contextConnectors) {
+      const id = typeof connector.id === 'string' ? connector.id : '';
+      const name = typeof connector.name === 'string' && connector.name.trim().length > 0
+        ? connector.name.trim()
+        : id;
+      if (!id && !name) continue;
+      const meta = [connector.provider, connector.status, connector.accountLabel]
+        .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+        .join(' · ');
+      lines.push(`- ${name}${id ? ` (\`${id}\`)` : ''}${meta ? ` — ${meta}` : ''}`);
     }
   }
 
