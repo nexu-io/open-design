@@ -16,6 +16,7 @@
  *
  * Usage:
  *   tsx report-3day.ts [--out docs/blog-traffic-digest.md]
+ *                      [--summary-out .blog-indexing/blog-traffic-digest-summary.json]
  *                      [--today YYYY-MM-DD]
  *                      [--no-inspect]
  *                      [--dry-run]
@@ -41,6 +42,7 @@ const T3_AGE_DAYS = 3;
 
 interface Args {
   out: string;
+  summaryOut?: string;
   today: string;
   inspect: boolean;
   dryRun: boolean;
@@ -61,20 +63,54 @@ interface PostRow extends PostMeta {
   error?: string;
 }
 
+interface DigestSummaryRow {
+  title: string;
+  category: string;
+  url: string;
+  publishedAt: string;
+  ageDays: number;
+  impressions: number | null;
+  clicks: number | null;
+  ctr: number | null;
+  position: number | null;
+  indexed: string;
+  error?: string;
+}
+
+interface DigestSummary {
+  generatedAt: string;
+  reportDate: string;
+  digestPath: string;
+  t3PublishedAt: string;
+  totals: {
+    rollingImpressions: number;
+    rollingClicks: number;
+    rollingCtr: number | null;
+  };
+  t3: DigestSummaryRow[];
+  rollingTop: DigestSummaryRow[];
+}
+
 function parseArgs(argv: string[]): Args {
   const out: Partial<Args> = {};
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--out') out.out = argv[++i];
+    else if (argv[i] === '--summary-out') out.summaryOut = argv[++i];
     else if (argv[i] === '--today') out.today = argv[++i];
     else if (argv[i] === '--no-inspect') out.inspect = false;
     else if (argv[i] === '--dry-run') out.dryRun = true;
   }
   return {
     out: out.out ?? DEFAULT_OUT,
+    summaryOut: out.summaryOut,
     today: out.today ?? new Date().toISOString().slice(0, 10),
     inspect: out.inspect ?? true,
     dryRun: out.dryRun ?? false,
   };
+}
+
+function nullableNumber(n: number | undefined): number | null {
+  return n !== undefined && Number.isFinite(n) ? n : null;
 }
 
 function diffDays(today: string, publishedAt: string): number {
@@ -246,6 +282,63 @@ function renderSection(today: string, t3: PostRow[], rolling: PostRow[]): string
   ].join('\n');
 }
 
+function toSummaryRow(row: PostRow): DigestSummaryRow {
+  return {
+    title: row.title,
+    category: row.category,
+    url: row.url,
+    publishedAt: row.publishedAt,
+    ageDays: row.ageDays,
+    impressions: nullableNumber(row.analytics?.impressions),
+    clicks: nullableNumber(row.analytics?.clicks),
+    ctr: nullableNumber(row.analytics?.ctr),
+    position: nullableNumber(row.analytics?.position),
+    indexed: indexLabel(row),
+    ...(row.error ? { error: row.error } : {}),
+  };
+}
+
+function buildSummary(
+  today: string,
+  digestPath: string,
+  t3: PostRow[],
+  rolling: PostRow[],
+): DigestSummary {
+  const totals = rolling.reduce(
+    (acc, r) => {
+      acc.rollingImpressions += r.analytics?.impressions ?? 0;
+      acc.rollingClicks += r.analytics?.clicks ?? 0;
+      return acc;
+    },
+    { rollingImpressions: 0, rollingClicks: 0 },
+  );
+  const rollingCtr =
+    totals.rollingImpressions > 0
+      ? totals.rollingClicks / totals.rollingImpressions
+      : null;
+  const rollingTop = rolling
+    .slice()
+    .sort((a, b) => (b.analytics?.impressions ?? 0) - (a.analytics?.impressions ?? 0))
+    .slice(0, 5)
+    .map(toSummaryRow);
+
+  return {
+    generatedAt: new Date().toISOString(),
+    reportDate: today,
+    digestPath: path.relative(REPO_ROOT, digestPath),
+    t3PublishedAt: plusDaysIso(today, -T3_AGE_DAYS),
+    totals: { ...totals, rollingCtr },
+    t3: t3.map(toSummaryRow),
+    rollingTop,
+  };
+}
+
+function writeSummary(summaryOut: string | undefined, summary: DigestSummary): void {
+  if (!summaryOut) return;
+  writeFileSync(summaryOut, JSON.stringify(summary, null, 2) + '\n');
+  console.error(`[report-3day] wrote ${summaryOut}`);
+}
+
 function plusDaysIso(iso: string, delta: number): string {
   const d = new Date(`${iso}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + delta);
@@ -311,8 +404,10 @@ async function main() {
 
   if (args.dryRun) {
     console.error('[report-3day] --dry-run: skipping network calls');
-    const placeholderRows: PostRow[] = rollingCohort.map((p) => ({ ...p }));
-    const section = renderSection(today, t3Cohort.map((p) => ({ ...p })), placeholderRows);
+    const t3Rows: PostRow[] = t3Cohort.map((p) => ({ ...p }));
+    const rollingRows: PostRow[] = rollingCohort.map((p) => ({ ...p }));
+    const section = renderSection(today, t3Rows, rollingRows);
+    writeSummary(args.summaryOut, buildSummary(today, args.out, t3Rows, rollingRows));
     const next = upsertDigest(args.out, today, section);
     process.stdout.write(next);
     return;
@@ -327,6 +422,7 @@ async function main() {
 
   const section = renderSection(today, t3Rows, rollingRows);
   const next = upsertDigest(args.out, today, section);
+  writeSummary(args.summaryOut, buildSummary(today, args.out, t3Rows, rollingRows));
 
   writeFileSync(args.out, next);
   console.error(`[report-3day] wrote ${args.out}`);

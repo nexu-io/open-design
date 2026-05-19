@@ -16,13 +16,17 @@ doc is its concrete implementation in `nexu-io/open-design`.
 | `landing-page-ci` | `lint-blog-seo.ts` + `check-blog-url-changes.ts` | Changed posts are checked for frontmatter, internal/external links, rendered canonical/JSON-LD/OG metadata, and slug delete/rename redirects before they can merge. |
 | `landing-page-deploy` finishes successfully on `main` | `blog-indexing-on-deploy.yml` | New blog URLs are detected, verified ready, submitted to IndexNow, the sitemap-index is re-submitted to GSC, baseline URL Inspection is captured, and baseline Search Analytics is queried. |
 | Daily `cron: 0 2 * * *` | `blog-indexing-monitor.yml` | Every blog post in the T+1 / T+3 / T+7 / T+14 window is re-inspected; GSC Search Analytics is refreshed; stall and low-traffic issues are opened/refreshed when needed. |
-| Daily `cron: 0 2 * * *` (10:00 Asia/Shanghai) | `blog-3day-report.yml` | T-3 cohort + 30-day rolling cohort traffic digest written to `docs/blog-traffic-digest.md` via the `automation/blog-traffic-digest` PR. Read-only against GSC. |
+| Daily `cron: 0 2 * * *` (10:00 Asia/Shanghai) | `blog-3day-report.yml` | T-3 cohort + 30-day rolling cohort traffic digest written to `docs/blog-traffic-digest.md` via the `automation/blog-traffic-digest` PR, with an optional Feishu group push. Read-only against GSC. |
 | Manual `workflow_dispatch` | `blog-indexing-monitor.yml` | Maintainers can dry-run or explicitly publish a token-gated dev.to/Hashnode cross-post with canonical URL pointing back to Open Design. |
 
-Both workflows commit their results back via the `open-design-bot`
-GitHub App, opening or refreshing the `automation/blog-indexing-status`
-PR. The human-readable view is `docs/blog-indexing-status.md`; the
-canonical state is the sidecar `docs/blog-indexing-status.json`.
+The monitor and 3-day digest workflows commit their durable outputs
+back via the `open-design-bot` GitHub App. The monitor opens or
+refreshes the `automation/blog-indexing-status` PR; the traffic digest
+opens or refreshes the `automation/blog-traffic-digest` PR. The
+human-readable indexing view is `docs/blog-indexing-status.md`; the
+canonical indexing state is the sidecar
+`docs/blog-indexing-status.json`. The human-readable traffic view is
+`docs/blog-traffic-digest.md`.
 Before each run renders a new report, it restores the latest files from
 the pending `automation/blog-indexing-status` branch when that branch
 exists. That keeps inspection history continuous even if the previous
@@ -99,6 +103,8 @@ cron 02:00 UTC ──▶ blog-3day-report
                           │
             upsert ──▶ docs/blog-traffic-digest.md
                           │
+                  post-feishu-digest (optional webhook)
+                          │
                      bot PR (automation/blog-traffic-digest)
 ```
 
@@ -173,6 +179,10 @@ These are not required for indexing.
   `blog-indexing-monitor.yml` to publish a dev.to cross-post.
 - `HASHNODE_TOKEN` and `HASHNODE_PUBLICATION_ID` — only needed for
   Hashnode cross-posts.
+- `FEISHU_BLOG_DIGEST_WEBHOOK` — optional Feishu custom bot webhook for
+  the daily `blog-3day-report.yml` digest push. Missing this secret does
+  not fail the workflow; the digest still lands in
+  `docs/blog-traffic-digest.md` and as an Actions artifact.
 - `CLOUDFLARE_ZONE_ID` — optional future optimization if we choose to
   purge cache directly. Current automation polls the live sitemap until
   the new URLs appear, so this secret is not required.
@@ -230,6 +240,11 @@ The expected steady state:
   impressions, the monitor opens `Blog traffic — indexed posts with zero
   impressions`. Treat that as a distribution/query-fit issue, not an
   indexing issue.
+- Daily traffic digest runs at 10:00 Asia/Shanghai. It writes
+  `docs/blog-traffic-digest.md`, uploads the Markdown plus compact JSON
+  summary as an artifact, optionally sends a compact Feishu card, and
+  opens or refreshes `automation/blog-traffic-digest`. The Feishu card is
+  delivery-only; the Markdown file and bot PR remain the source of truth.
 
 The status PR is intentionally **not** auto-merged. A maintainer
 reviews each refresh so the daily diff is part of the team's
@@ -271,6 +286,9 @@ awareness of search-side health.
 - `apps/landing-page/scripts/blog-indexing/report-3day.ts` —
   daily T-3 cohort + 30-day rolling cohort digest written to
   `docs/blog-traffic-digest.md`.
+- `apps/landing-page/scripts/blog-indexing/post-feishu-digest.ts` —
+  send the compact 3-day digest summary to the optional Feishu custom
+  bot webhook.
 - `apps/landing-page/app/pages/rss.xml.ts`
 - `apps/landing-page/public/llms.txt`
 - `apps/landing-page/public/_redirects`
