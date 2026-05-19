@@ -68,7 +68,8 @@ jobs:
             const TRUSTED_ASSOCIATIONS = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
 
             function isTrustedReviewer(actor) {
-              return Boolean(actor?.user?.login) && TRUSTED_ASSOCIATIONS.has(actor.author_association);
+              const association = actor?.author_association || actor?.authorAssociation;
+              return Boolean(actor?.user?.login) && TRUSTED_ASSOCIATIONS.has(association);
             }
 
             async function paginate(method, params) {
