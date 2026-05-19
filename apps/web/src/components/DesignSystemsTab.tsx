@@ -440,7 +440,6 @@ export function DesignSystemsTab({
                   filter_name: p.value,
                 });
                 setSurfaceFilter(p.value);
-                setCategory('All');
               }}
             >
               {t(p.labelKey)}
