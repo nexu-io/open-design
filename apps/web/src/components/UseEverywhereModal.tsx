@@ -9,6 +9,8 @@
 // modal only owns rendering + clipboard interactions.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useT } from '../i18n';
+import type { Dict } from '../i18n/types';
 import { Icon } from './Icon';
 import {
   buildAgentGuideMarkdown,
@@ -34,12 +36,121 @@ type CopyState = 'idle' | 'copied' | 'failed';
 
 const COPY_RESET_MS = 1600;
 
+type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
+
+interface GuideSectionI18n {
+  tab: keyof Dict;
+  heading: keyof Dict;
+  intro: keyof Dict;
+  bullets: readonly (keyof Dict)[];
+  snippets: readonly (keyof Dict)[];
+  footer?: keyof Dict;
+}
+
+const GUIDE_SECTION_I18N: Record<GuideSection['id'], GuideSectionI18n> = {
+  overview: {
+    tab: 'useEverywhere.section.overview.tab',
+    heading: 'useEverywhere.section.overview.heading',
+    intro: 'useEverywhere.section.overview.intro',
+    bullets: [
+      'useEverywhere.section.overview.bullet.cli',
+      'useEverywhere.section.overview.bullet.mcp',
+      'useEverywhere.section.overview.bullet.http',
+      'useEverywhere.section.overview.bullet.skills',
+      'useEverywhere.section.overview.bullet.artifacts',
+    ],
+    snippets: [
+      'useEverywhere.section.overview.snippet.start',
+      'useEverywhere.section.overview.snippet.health',
+      'useEverywhere.section.overview.snippet.ingest',
+    ],
+    footer: 'useEverywhere.section.overview.footer',
+  },
+  cli: {
+    tab: 'useEverywhere.section.cli.tab',
+    heading: 'useEverywhere.section.cli.heading',
+    intro: 'useEverywhere.section.cli.intro',
+    bullets: [
+      'useEverywhere.section.cli.bullet.boot',
+      'useEverywhere.section.cli.bullet.media',
+      'useEverywhere.section.cli.bullet.run',
+      'useEverywhere.section.cli.bullet.plugins',
+      'useEverywhere.section.cli.bullet.registry',
+      'useEverywhere.section.cli.bullet.doctor',
+    ],
+    snippets: [
+      'useEverywhere.section.cli.snippet.media',
+      'useEverywhere.section.cli.snippet.run',
+      'useEverywhere.section.cli.snippet.inventory',
+      'useEverywhere.section.cli.snippet.seeded',
+      'useEverywhere.section.cli.snippet.doctor',
+    ],
+    footer: 'useEverywhere.section.cli.footer',
+  },
+  mcp: {
+    tab: 'useEverywhere.section.mcp.tab',
+    heading: 'useEverywhere.section.mcp.heading',
+    intro: 'useEverywhere.section.mcp.intro',
+    bullets: [
+      'useEverywhere.section.mcp.bullet.stdio',
+      'useEverywhere.section.mcp.bullet.autodiscover',
+      'useEverywhere.section.mcp.bullet.daemonUrl',
+      'useEverywhere.section.mcp.bullet.dataDir',
+    ],
+    snippets: [
+      'useEverywhere.section.mcp.snippet.generic',
+      'useEverywhere.section.mcp.snippet.installInfo',
+      'useEverywhere.section.mcp.snippet.liveArtifacts',
+    ],
+    footer: 'useEverywhere.section.mcp.footer',
+  },
+  http: {
+    tab: 'useEverywhere.section.http.tab',
+    heading: 'useEverywhere.section.http.heading',
+    intro: 'useEverywhere.section.http.intro',
+    bullets: [
+      'useEverywhere.section.http.bullet.health',
+      'useEverywhere.section.http.bullet.registries',
+      'useEverywhere.section.http.bullet.projects',
+      'useEverywhere.section.http.bullet.chat',
+      'useEverywhere.section.http.bullet.plugins',
+      'useEverywhere.section.http.bullet.agents',
+    ],
+    snippets: [
+      'useEverywhere.section.http.snippet.skills',
+      'useEverywhere.section.http.snippet.project',
+      'useEverywhere.section.http.snippet.stream',
+    ],
+    footer: 'useEverywhere.section.http.footer',
+  },
+  skills: {
+    tab: 'useEverywhere.section.skills.tab',
+    heading: 'useEverywhere.section.skills.heading',
+    intro: 'useEverywhere.section.skills.intro',
+    bullets: [
+      'useEverywhere.section.skills.bullet.discovery',
+      'useEverywhere.section.skills.bullet.symlink',
+      'useEverywhere.section.skills.bullet.declare',
+      'useEverywhere.section.skills.bullet.headless',
+      'useEverywhere.section.skills.bullet.seed',
+    ],
+    snippets: [
+      'useEverywhere.section.skills.snippet.minimal',
+      'useEverywhere.section.skills.snippet.symlink',
+      'useEverywhere.section.skills.snippet.list',
+      'useEverywhere.section.skills.snippet.fixture',
+    ],
+    footer: 'useEverywhere.section.skills.footer',
+  },
+};
+
 export function UseEverywhereModal({
   onClose,
   onOpenSettings,
   daemonUrl,
   versionHint,
 }: Props) {
+  const t = useT();
   const closeRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
@@ -67,7 +178,7 @@ export function UseEverywhereModal({
       className="use-everywhere-modal-backdrop"
       role="dialog"
       aria-modal="true"
-      aria-label="Use Open Design everywhere"
+      aria-label={t('useEverywhere.dialogAria')}
       data-testid="use-everywhere-modal"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
@@ -76,14 +187,12 @@ export function UseEverywhereModal({
       <div className="use-everywhere-modal">
         <header className="use-everywhere-modal__head">
           <div className="use-everywhere-modal__head-titles">
-            <span className="use-everywhere-modal__kicker">Integrations</span>
+            <span className="use-everywhere-modal__kicker">{t('useEverywhere.kicker')}</span>
             <h2 className="use-everywhere-modal__title">
-              Use Open Design everywhere
+              {t('useEverywhere.title')}
             </h2>
             <p className="use-everywhere-modal__subtitle">
-              Drop Open Design into any IDE, agent, or script — CLI, HTTP, MCP,
-              and Skills. Use “Copy guide for an agent” and paste into Claude
-              Code, Codex, Cursor, openclaw, or hermes to set up everything.
+              {t('useEverywhere.subtitle')}
             </p>
           </div>
           <button
@@ -91,8 +200,8 @@ export function UseEverywhereModal({
             type="button"
             className="use-everywhere-modal__close"
             onClick={onClose}
-            aria-label="Close use everywhere"
-            title="Close (Esc)"
+            aria-label={t('useEverywhere.closeAria')}
+            title={t('plugins.detail.closeEsc')}
           >
             <Icon name="close" size={14} />
           </button>
@@ -113,6 +222,7 @@ export function UseEverywhereGuidePanel({
   daemonUrl,
   versionHint,
 }: Omit<Props, 'onClose'>) {
+  const t = useT();
   const [activeId, setActiveId] = useState<GuideSection['id']>('overview');
   const [guideCopy, setGuideCopy] = useState<CopyState>('idle');
   const [snippetCopy, setSnippetCopy] = useState<{ key: string; state: CopyState } | null>(null);
@@ -163,7 +273,7 @@ export function UseEverywhereGuidePanel({
 
   return (
     <>
-      <nav className="use-everywhere-modal__tabs" role="tablist" aria-label="Integration surfaces">
+      <nav className="use-everywhere-modal__tabs" role="tablist" aria-label={t('useEverywhere.tabsAria')}>
         {GUIDE_SECTIONS.map((section) => {
           const active = section.id === activeId;
           return (
@@ -176,7 +286,7 @@ export function UseEverywhereGuidePanel({
               onClick={() => setActiveId(section.id)}
               data-testid={`use-everywhere-tab-${section.id}`}
             >
-              {section.tabLabel}
+              {t(GUIDE_SECTION_I18N[section.id].tab)}
             </button>
           );
         })}
@@ -193,10 +303,9 @@ export function UseEverywhereGuidePanel({
 
       <footer className="use-everywhere-modal__foot">
         <div className="use-everywhere-modal__foot-info">
-          <strong>One-click handoff.</strong>{' '}
+          <strong>{t('useEverywhere.handoffTitle')}</strong>{' '}
           <span>
-            Copies a structured markdown guide your agent can act on
-            immediately — install, verify, and use.
+            {t('useEverywhere.handoffBody')}
           </span>
         </div>
         <div className="use-everywhere-modal__foot-actions">
@@ -208,7 +317,7 @@ export function UseEverywhereGuidePanel({
               data-testid="use-everywhere-open-settings"
             >
               <Icon name="settings" size={13} />
-              Configure MCP server
+              {t('useEverywhere.configureMcp')}
             </button>
           ) : null}
           <button
@@ -218,7 +327,7 @@ export function UseEverywhereGuidePanel({
             data-testid="use-everywhere-copy-guide"
           >
             <Icon name="copy" size={13} />
-            {copyLabel(guideCopy, 'Copy guide for an agent')}
+            {copyLabel(guideCopy, t('useEverywhere.copyGuide'), t)}
           </button>
         </div>
       </footer>
@@ -251,6 +360,8 @@ function SectionView({
   snippetCopy,
   onCopySnippet,
 }: SectionViewProps) {
+  const t = useT();
+  const sectionKeys = GUIDE_SECTION_I18N[section.id];
   return (
     <section
       className="use-everywhere-section"
@@ -258,17 +369,17 @@ function SectionView({
     >
       <header className="use-everywhere-section__head">
         <h3 className="use-everywhere-section__heading">
-          {applyDaemonUrl(section.heading, daemonUrl)}
+          {applyDaemonUrl(t(sectionKeys.heading), daemonUrl)}
         </h3>
         <p className="use-everywhere-section__intro">
-          {applyDaemonUrl(section.intro, daemonUrl)}
+          {applyDaemonUrl(t(sectionKeys.intro), daemonUrl)}
         </p>
       </header>
 
-      {section.bullets.length > 0 ? (
+      {sectionKeys.bullets.length > 0 ? (
         <ul className="use-everywhere-section__bullets">
-          {section.bullets.map((bullet) => (
-            <li key={bullet}>{applyDaemonUrl(bullet, daemonUrl)}</li>
+          {sectionKeys.bullets.map((bulletKey) => (
+            <li key={bulletKey}>{applyDaemonUrl(t(bulletKey), daemonUrl)}</li>
           ))}
         </ul>
       ) : null}
@@ -278,20 +389,21 @@ function SectionView({
           const key = `${section.id}-${idx}`;
           const isThis = snippetCopy?.key === key;
           const state: CopyState = isThis ? snippetCopy.state : 'idle';
+          const label = translateIndexed(t, sectionKeys.snippets, idx, snippet.label);
           return (
             <div key={key} className="use-everywhere-snippet">
               <div className="use-everywhere-snippet__head">
                 <span className="use-everywhere-snippet__label">
-                  {snippet.label}
+                  {label}
                 </span>
                 <button
                   type="button"
                   className="use-everywhere-snippet__copy"
                   onClick={() => onCopySnippet(key, snippet)}
-                  aria-label={`Copy snippet: ${snippet.label}`}
+                  aria-label={t('useEverywhere.copySnippetAria', { label })}
                 >
                   <Icon name="copy" size={11} />
-                  {copyLabel(state, 'Copy')}
+                  {copyLabel(state, t('fileViewer.copy'), t)}
                 </button>
               </div>
               <pre
@@ -305,18 +417,28 @@ function SectionView({
         })}
       </div>
 
-      {section.footer ? (
+      {sectionKeys.footer ? (
         <p className="use-everywhere-section__footer">
-          {applyDaemonUrl(section.footer, daemonUrl)}
+          {applyDaemonUrl(t(sectionKeys.footer), daemonUrl)}
         </p>
       ) : null}
     </section>
   );
 }
 
-function copyLabel(state: CopyState, idle: string): string {
-  if (state === 'copied') return 'Copied';
-  if (state === 'failed') return 'Copy failed';
+function translateIndexed(
+  t: TranslateFn,
+  keys: readonly (keyof Dict)[],
+  index: number,
+  fallback: string,
+): string {
+  const key = keys[index];
+  return key ? t(key) : fallback;
+}
+
+function copyLabel(state: CopyState, idle: string, t: TranslateFn): string {
+  if (state === 'copied') return t('plugins.availableDetails.copied');
+  if (state === 'failed') return t('useEverywhere.copyFailed');
   return idle;
 }
 
