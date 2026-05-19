@@ -62,6 +62,9 @@ test("package-tauri-migration-handoff creates a tarball and checksum sidecar", a
   assert.match(commandScript, /read_checksum "\$checksum" "\$\(basename -- "\$archive"\)" "archive"/);
   assert.match(commandScript, /checksum sidecar filename mismatch/);
   assert.match(commandScript, /command script SHA-256 mismatch/);
+  assert.match(commandScript, /ensure_tracked_clean\(\)/);
+  assert.match(commandScript, /git status --porcelain --untracked-files=no/);
+  assert.match(commandScript, /tracked worktree changes are present/);
   assert.match(commandScript, /git fetch "\$bundle" "\$branch:\$temp_ref"/);
   assert.match(commandScript, /git push "\$remote" "refs\/heads\/\$branch:refs\/heads\/\$branch"/);
   assert.match(commandScript, /command -v gh/);
@@ -156,6 +159,31 @@ test("package-tauri-migration-handoff command sidecar rejects archive checksum f
   );
 });
 
+test("package-tauri-migration-handoff command sidecar rejects tracked dirty worktrees", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "open-design-tauri-package-handoff-dirty-worktree-"));
+  t.after(() => void rm(root, { force: true, recursive: true }));
+  const handoffDir = join(root, "handoff");
+  const output = join(root, "open-design-tauri-migration-handoff.tar.gz");
+  await writeHandoffFixture(handoffDir);
+  await runPackageHandoffScript("--handoff-dir", handoffDir, "--output", output);
+  await git(root, "init", "--initial-branch=main");
+  await git(root, "config", "user.email", "codex@example.test");
+  await git(root, "config", "user.name", "Codex Test");
+  await writeFile(join(root, "tracked.txt"), "clean\n", "utf8");
+  await git(root, "add", "tracked.txt");
+  await git(root, "commit", "-m", "tracked");
+  await writeFile(join(root, "tracked.txt"), "dirty\n", "utf8");
+
+  await assert.rejects(
+    execFileAsync("bash", [`${output}.commands.sh`, output], { cwd: root }),
+    (error) => {
+      const detail = error as Error & { stderr?: string };
+      assert.match(detail.stderr ?? "", /tracked worktree changes are present/);
+      return true;
+    },
+  );
+});
+
 test("package-tauri-migration-handoff rejects mismatched bundle checksums", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "open-design-tauri-package-handoff-mismatch-"));
   t.after(() => void rm(root, { force: true, recursive: true }));
@@ -224,6 +252,13 @@ async function writeHandoffFixture(
 async function runPackageHandoffScript(...args: string[]): Promise<{ stderr: string; stdout: string }> {
   return execFileAsync(process.execPath, ["--import", "tsx", packageHandoffScript, ...args], {
     cwd: repoRoot,
+    maxBuffer: 1024 * 1024,
+  });
+}
+
+async function git(cwd: string, ...args: string[]): Promise<{ stderr: string; stdout: string }> {
+  return execFileAsync("git", args, {
+    cwd,
     maxBuffer: 1024 * 1024,
   });
 }

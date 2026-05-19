@@ -506,6 +506,13 @@ async function readHandoffArchiveStatus(archivePath: string, handoff?: HandoffSt
     if (!commandScriptSource.includes('git fetch "$bundle" "$branch:$temp_ref"')) {
       problems.push(`command script is missing self-contained bundle import: ${commandScriptPath}`);
     }
+    if (
+      !commandScriptSource.includes("ensure_tracked_clean()") ||
+      !commandScriptSource.includes("git status --porcelain --untracked-files=no") ||
+      !commandScriptSource.includes("tracked worktree changes are present")
+    ) {
+      problems.push(`command script is missing tracked worktree guard: ${commandScriptPath}`);
+    }
     if (!commandScriptSource.includes("download-tauri-m4-reports.ts") || !commandScriptSource.includes("GITHUB_RUN_ID")) {
       problems.push(`command script is missing post-CI report advance guidance: ${commandScriptPath}`);
     }

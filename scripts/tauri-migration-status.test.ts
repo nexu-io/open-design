@@ -258,6 +258,31 @@ test("tauri-migration-status rejects packaged handoff archives with stale comman
   assert.match(parsed.handoffArchive.problems.join("\n"), /command script is missing checksum target-name validation/);
 });
 
+test("tauri-migration-status rejects packaged handoff archives without tracked worktree guards", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+  const { archivePath } = await writeHandoffArchive(handoffDir);
+  const commandScriptPath = `${archivePath}.commands.sh`;
+  const commandScript = await readFile(commandScriptPath, "utf8");
+  await writeFile(
+    commandScriptPath,
+    commandScript.replace(/ensure_tracked_clean\(\)[\s\S]*?^ensure_tracked_clean$/m, ""),
+    "utf8",
+  );
+  await writeCommandScriptChecksum(commandScriptPath);
+
+  const result = await runStatus(fixture, "--handoff-dir", handoffDir);
+  const parsed = JSON.parse(result.stdout) as { handoffArchive: { current: boolean; problems: string[] } };
+
+  assert.equal(parsed.handoffArchive.current, false);
+  assert.match(parsed.handoffArchive.problems.join("\n"), /command script is missing tracked worktree guard/);
+});
+
 test("tauri-migration-status reports stale handoff artifacts", async (t) => {
   const fixture = await createFixtureRoot(t, {
     checked: [],
@@ -654,6 +679,10 @@ async function writeHandoffArchive(handoffDir: string): Promise<{ archivePath: s
       "read_checksum()",
       'read_checksum "$command_checksum" "$(basename -- "$script_path")" "command script"',
       'read_checksum "$checksum" "$(basename -- "$archive")" "archive"',
+      "ensure_tracked_clean()",
+      "git status --porcelain --untracked-files=no",
+      "tracked worktree changes are present",
+      "ensure_tracked_clean",
       'git fetch "$bundle" "$branch:$temp_ref"',
       'gh workflow run "$workflow" --ref "$branch"',
       "download-tauri-m4-reports.ts",
