@@ -40,26 +40,12 @@ async function main(): Promise<void> {
       bundlePath,
     ]);
     const bundleSha256 = readSha256(createOutput.stdout);
-
-    await git(args.cwd, ["init", "--bare", remotePath]);
-    await git(args.cwd, ["push", remotePath, `${baseHead}:refs/heads/main`]);
-    await git(args.cwd, ["clone", "--branch", "main", remotePath, receiverPath]);
-    const importOutput = await runScript("import-tauri-migration-bundle.ts", [
-      "--cwd",
-      receiverPath,
-      "--branch",
-      args.branch,
-      "--bundle",
+    const importCommand = receivingImportCommand({
+      branch: args.branch,
       bundlePath,
-      "--expected-sha256",
       bundleSha256,
-      "--checkout",
-    ]);
-    const importedHead = (await git(receiverPath, ["rev-parse", "--verify", args.branch])).stdout.trim();
-    if (importedHead !== branchHead) {
-      throw new Error(`imported branch head mismatch: expected ${branchHead}, got ${importedHead}`);
-    }
-    const importCommand = receivingImportCommand(bundlePath, bundleSha256, args.branch);
+      ...(args.manifest == null ? {} : { manifestPath: args.manifest }),
+    });
     if (args.manifest != null) {
       await writeManifest(args.manifest, {
         base: args.base,
@@ -73,6 +59,30 @@ async function main(): Promise<void> {
       });
     }
 
+    await git(args.cwd, ["init", "--bare", remotePath]);
+    await git(args.cwd, ["push", remotePath, `${baseHead}:refs/heads/main`]);
+    await git(args.cwd, ["clone", "--branch", "main", remotePath, receiverPath]);
+    const importOutput = await runScript(
+      "import-tauri-migration-bundle.ts",
+      args.manifest == null
+        ? [
+            "--cwd",
+            receiverPath,
+            "--branch",
+            args.branch,
+            "--bundle",
+            bundlePath,
+            "--expected-sha256",
+            bundleSha256,
+            "--checkout",
+          ]
+        : ["--cwd", receiverPath, "--manifest", args.manifest, "--checkout"],
+    );
+    const importedHead = (await git(receiverPath, ["rev-parse", "--verify", args.branch])).stdout.trim();
+    if (importedHead !== branchHead) {
+      throw new Error(`imported branch head mismatch: expected ${branchHead}, got ${importedHead}`);
+    }
+
     process.stdout.write(
       [
         "Verified Tauri migration bundle handoff round-trip.",
@@ -83,7 +93,7 @@ async function main(): Promise<void> {
         `Bundle: ${bundlePath}`,
         `SHA-256: ${bundleSha256}`,
         ...(args.manifest == null ? [] : [`Manifest: ${args.manifest}`]),
-        "Receiving import command (replace --bundle if copied elsewhere):",
+        "Receiving import command (replace --manifest or --bundle if copied elsewhere):",
         indent(importCommand),
         "Create:",
         indent(createOutput.stdout.trim()),
@@ -192,7 +202,24 @@ function indent(value: string): string {
     .join("\n");
 }
 
-function receivingImportCommand(bundlePath: string, bundleSha256: string, branch: string): string {
+function receivingImportCommand({
+  branch,
+  bundlePath,
+  bundleSha256,
+  manifestPath,
+}: {
+  branch: string;
+  bundlePath: string;
+  bundleSha256: string;
+  manifestPath?: string;
+}): string {
+  if (manifestPath != null) {
+    return [
+      "pnpm exec tsx scripts/import-tauri-migration-bundle.ts \\",
+      `  --manifest ${shellQuote(manifestPath)} \\`,
+      "  --checkout",
+    ].join("\n");
+  }
   return [
     "pnpm exec tsx scripts/import-tauri-migration-bundle.ts \\",
     `  --bundle ${shellQuote(bundlePath)} \\`,

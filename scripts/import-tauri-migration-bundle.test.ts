@@ -29,6 +29,37 @@ test("import-tauri-migration-bundle verifies and fetches the migration branch", 
   assert.equal(targetHead, sourceHead);
 });
 
+test("import-tauri-migration-bundle can import from the handoff manifest", async (t) => {
+  const { bundlePath, sourceRepo, targetRepo } = await createBundleFixture(t, "open-design-tauri-import-manifest-");
+  const sourceHead = (await git(sourceRepo, "rev-parse", migrationBranch)).stdout.trim();
+  const sha256 = await sha256File(bundlePath);
+  const manifestPath = join(dirname(bundlePath), "handoff.json");
+  await writeFile(
+    manifestPath,
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        branch: migrationBranch,
+        branchHead: sourceHead,
+        bundlePath,
+        bundleSha256: sha256,
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+
+  const result = await runImportScript(targetRepo, "--manifest", manifestPath);
+
+  assert.match(result.stdout, /Imported Tauri migration bundle:/);
+  assert.match(result.stdout, new RegExp(`Manifest: ${escapeRegExp(manifestPath)}`));
+  assert.match(result.stdout, new RegExp(`Branch: ${migrationBranch.replaceAll("/", "\\/")} @ ${sourceHead}`));
+  assert.match(result.stdout, new RegExp(`SHA-256: ${sha256}`));
+  const targetHead = (await git(targetRepo, "rev-parse", migrationBranch)).stdout.trim();
+  assert.equal(targetHead, sourceHead);
+});
+
 test("import-tauri-migration-bundle rejects checksum mismatches before fetch", async (t) => {
   const { bundlePath, targetRepo } = await createBundleFixture(t, "open-design-tauri-import-sha-");
 
@@ -92,4 +123,8 @@ async function sha256File(path: string): Promise<string> {
   const hash = createHash("sha256");
   hash.update(await readFile(path));
   return hash.digest("hex");
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

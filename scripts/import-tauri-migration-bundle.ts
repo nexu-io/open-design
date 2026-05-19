@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { createReadStream } from "node:fs";
-import { stat } from "node:fs/promises";
-import { resolve } from "node:path";
+import { readFile, stat } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -10,17 +10,31 @@ const defaultBranch = "codex/electron-to-tauri-migration";
 
 type Args = {
   branch: string;
+  bundle: string;
+  checkout: boolean;
+  cwd: string;
+  expectedSha256?: string;
+  manifest?: string;
+};
+
+type ParsedArgs = {
+  branch?: string;
   bundle?: string;
   checkout: boolean;
   cwd: string;
   expectedSha256?: string;
+  manifest?: string;
+};
+
+type HandoffManifest = {
+  branch: string;
+  bundlePath: string;
+  bundleSha256: string;
+  schemaVersion: 1;
 };
 
 async function main(): Promise<void> {
-  const args = parseArgs(process.argv.slice(2));
-  if (args.bundle == null) {
-    throw new Error("--bundle requires a path");
-  }
+  const args = await resolveArgs(parseArgs(process.argv.slice(2)));
 
   const outputStat = await stat(args.bundle);
   const outputSha256 = await sha256File(args.bundle);
@@ -44,6 +58,7 @@ async function main(): Promise<void> {
   process.stdout.write(
     [
       `Imported Tauri migration bundle: ${args.bundle}`,
+      ...(args.manifest == null ? [] : [`Manifest: ${args.manifest}`]),
       `Git cwd: ${args.cwd}`,
       `Branch: ${args.branch} @ ${branchHead}`,
       `Bundle bytes: ${outputStat.size}`,
@@ -57,9 +72,8 @@ async function main(): Promise<void> {
   );
 }
 
-function parseArgs(argv: string[]): Args {
-  const parsed: Args = {
-    branch: defaultBranch,
+function parseArgs(argv: string[]): ParsedArgs {
+  const parsed: ParsedArgs = {
     checkout: false,
     cwd: process.cwd(),
   };
@@ -67,7 +81,14 @@ function parseArgs(argv: string[]): Args {
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const value = argv[index + 1];
-    if ((arg === "--branch" || arg === "--bundle" || arg === "--cwd" || arg === "--expected-sha256") && value == null) {
+    if (
+      (arg === "--branch" ||
+        arg === "--bundle" ||
+        arg === "--cwd" ||
+        arg === "--expected-sha256" ||
+        arg === "--manifest") &&
+      value == null
+    ) {
       throw new Error(`${arg} requires a value`);
     }
     if (arg === "--branch") {
@@ -90,6 +111,11 @@ function parseArgs(argv: string[]): Args {
       index += 1;
       continue;
     }
+    if (arg === "--manifest") {
+      parsed.manifest = resolve(value!);
+      index += 1;
+      continue;
+    }
     if (arg === "--checkout") {
       parsed.checkout = true;
       continue;
@@ -97,7 +123,7 @@ function parseArgs(argv: string[]): Args {
     if (arg === "--help" || arg === "-h") {
       process.stdout.write(
         [
-          "usage: tsx scripts/import-tauri-migration-bundle.ts --bundle <path> [--expected-sha256 <sha>] [--cwd <repo>] [--branch <ref>] [--checkout]",
+          "usage: tsx scripts/import-tauri-migration-bundle.ts (--bundle <path> | --manifest <path>) [--expected-sha256 <sha>] [--cwd <repo>] [--branch <ref>] [--checkout]",
           "",
           `defaults: --cwd ${process.cwd()} --branch ${defaultBranch}`,
           "",
@@ -109,6 +135,55 @@ function parseArgs(argv: string[]): Args {
   }
 
   return parsed;
+}
+
+async function resolveArgs(parsed: ParsedArgs): Promise<Args> {
+  const manifest = parsed.manifest == null ? undefined : await readManifest(parsed.manifest);
+  const bundle = parsed.bundle ?? (manifest == null ? undefined : resolveMaybeRelative(parsed.manifest!, manifest.bundlePath));
+  if (bundle == null) {
+    throw new Error("--bundle or --manifest requires a bundle path");
+  }
+
+  const args: Args = {
+    branch: parsed.branch ?? manifest?.branch ?? defaultBranch,
+    bundle,
+    checkout: parsed.checkout,
+    cwd: parsed.cwd,
+  };
+  const expectedSha256 = parsed.expectedSha256 ?? manifest?.bundleSha256;
+  if (expectedSha256 != null) {
+    args.expectedSha256 = expectedSha256;
+  }
+  if (parsed.manifest != null) {
+    args.manifest = parsed.manifest;
+  }
+  return args;
+}
+
+async function readManifest(path: string): Promise<HandoffManifest> {
+  const value = JSON.parse(await readFile(path, "utf8")) as Partial<HandoffManifest>;
+  if (value.schemaVersion !== 1) {
+    throw new Error(`unsupported handoff manifest schemaVersion: ${String(value.schemaVersion)}`);
+  }
+  if (typeof value.branch !== "string" || value.branch.length === 0) {
+    throw new Error("handoff manifest missing branch");
+  }
+  if (typeof value.bundlePath !== "string" || value.bundlePath.length === 0) {
+    throw new Error("handoff manifest missing bundlePath");
+  }
+  if (typeof value.bundleSha256 !== "string" || !/^[0-9a-f]{64}$/.test(value.bundleSha256)) {
+    throw new Error("handoff manifest missing bundleSha256");
+  }
+  return {
+    branch: value.branch,
+    bundlePath: value.bundlePath,
+    bundleSha256: value.bundleSha256,
+    schemaVersion: value.schemaVersion,
+  };
+}
+
+function resolveMaybeRelative(manifestPath: string, targetPath: string): string {
+  return resolve(dirname(manifestPath), targetPath);
 }
 
 async function ensureTrackedClean(cwd: string): Promise<void> {

@@ -36,10 +36,10 @@ test("verify-tauri-migration-handoff round-trips a bundle through a receiving ch
   assert.match(result.stdout, new RegExp(`Branch: ${migrationBranch.replaceAll("/", "\\/")} @ ${sourceHead}`));
   assert.match(result.stdout, /SHA-256: [0-9a-f]{64}/);
   assert.match(result.stdout, new RegExp(`Manifest: ${escapeRegExp(manifestPath)}`));
-  assert.match(result.stdout, /Receiving import command \(replace --bundle if copied elsewhere\):/);
+  assert.match(result.stdout, /Receiving import command \(replace --manifest or --bundle if copied elsewhere\):/);
   assert.match(result.stdout, /pnpm exec tsx scripts\/import-tauri-migration-bundle\.ts \\/);
-  assert.match(result.stdout, /--expected-sha256 [0-9a-f]{64} \\/);
-  assert.match(result.stdout, new RegExp(`--branch '${migrationBranch.replaceAll("/", "\\/")}' \\\\`));
+  assert.match(result.stdout, new RegExp(`--manifest '${escapeRegExp(manifestPath)}' \\\\`));
+  assert.match(result.stdout, new RegExp(`Import:[\\s\\S]*Manifest: ${escapeRegExp(manifestPath)}`));
   assert.match(result.stdout, /Temp retained: false/);
   await access(bundlePath);
   const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
@@ -56,6 +56,7 @@ test("verify-tauri-migration-handoff round-trips a bundle through a receiving ch
   assert.equal(manifest.bundlePath, bundlePath);
   assert.match(manifest.bundleSha256, /^[0-9a-f]{64}$/);
   assert.match(manifest.importCommand, /import-tauri-migration-bundle/);
+  assert.match(manifest.importCommand, new RegExp(`--manifest '${escapeRegExp(manifestPath)}'`));
 });
 
 test("verify-tauri-migration-handoff rejects dirty source worktrees", async (t) => {

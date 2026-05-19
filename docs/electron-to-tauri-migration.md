@@ -311,6 +311,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Added `scripts/tauri-ci-scope.test.ts` to root `pnpm guard` so Tauri migration evidence scripts must remain in both the CI packaging `required=true` pattern list and the explicit `tools_pack_tests_required=true` condition. `node --import tsx --test scripts/tauri-ci-scope.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `pnpm guard` passed.
 - 2026-05-20: Updated `scripts/verify-tauri-migration-handoff.ts` so the verified handoff output includes the receiving-side import command with the current SHA-256 and branch already filled in. `node --import tsx --test scripts/verify-tauri-migration-handoff.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `pnpm guard` passed.
 - 2026-05-20: Added `--manifest` support to `scripts/verify-tauri-migration-handoff.ts`, producing a JSON sidecar with schema version, branch/base heads, bundle path, bundle SHA-256, and the receiving-side import command. `node --import tsx --test scripts/verify-tauri-migration-handoff.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `pnpm guard` passed.
+- 2026-05-20: Added `--manifest` support to `scripts/import-tauri-migration-bundle.ts` so the receiving machine can import the handoff JSON directly instead of manually copying the branch and SHA-256 arguments. The handoff verifier now round-trips through the same manifest import command it prints, while CLI `--bundle`, `--branch`, and `--expected-sha256` still override the manifest for copied bundle paths. `node --import tsx --test scripts/import-tauri-migration-bundle.test.ts scripts/verify-tauri-migration-handoff.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `pnpm guard` passed.
 
 ### Platform Gate Runners
 
@@ -375,17 +376,18 @@ pnpm exec tsx scripts/verify-tauri-migration-handoff.ts \
   --manifest /tmp/open-design-tauri-migration-handoff.json
 ```
 
-Keep the script output and JSON manifest with the handoff notes. They record the migration branch head, `origin/main` base, bundle byte size, SHA-256, `git bundle verify` result, bundled heads, and the receiving-side import command with the checksum already filled in.
+Keep the script output and JSON manifest with the handoff notes. They record the migration branch head, `origin/main` base, bundle byte size, SHA-256, `git bundle verify` result, bundled heads, and the receiving-side import command.
 
 On the receiving checkout, verify and fetch the bundle before pushing:
 
 ```bash
 pnpm exec tsx scripts/import-tauri-migration-bundle.ts \
-  --bundle /path/to/open-design-tauri-migration.bundle \
-  --expected-sha256 <sha256-from-create-output> \
+  --manifest /path/to/open-design-tauri-migration-handoff.json \
   --checkout
 git push -u origin codex/electron-to-tauri-migration
 ```
+
+If the bundle is copied to a different path than the manifest's `bundlePath`, keep using the manifest for branch/checksum data and add `--bundle /path/to/open-design-tauri-migration.bundle` to override only the file location.
 
 If both pass, download or inspect their `open-design-ci-win-tauri-e2e-report` and `open-design-ci-linux-tauri-e2e-report` artifacts. The Windows report must prove NSIS build/install/start/eval/screenshot/stop/uninstall. The Linux report must prove AppImage build/install/start/eval/screenshot/stop/uninstall plus headless install/start/stop. Only then mark the three remaining M4 platform checkboxes complete and proceed to M5.
 
