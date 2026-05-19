@@ -307,6 +307,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Added `scripts/tauri-migration-status.ts` so maintainers can print the current phase, default runtime values, open M4/M5/M6 checklist items, git head/base, and next action list before each handoff or phase transition. `node --import tsx --test scripts/tauri-migration-status.test.ts` and `pnpm guard` passed.
 - 2026-05-20: Added `scripts/import-tauri-migration-bundle.ts` so the receiving machine verifies bundle SHA-256, `git bundle verify`, and bundled heads before fetching the migration branch. `node --import tsx --test scripts/import-tauri-migration-bundle.test.ts` and `pnpm guard` passed.
 - 2026-05-20: Added `scripts/verify-tauri-migration-handoff.ts` to locally prove the bundle handoff round-trip before asking a write-capable machine to push. It creates the bundle, seeds a temporary receiving checkout with the base commit, imports the bundle through the receiving-side script, and verifies the imported branch head. `node --import tsx --test scripts/verify-tauri-migration-handoff.test.ts` and `pnpm guard` passed.
+- 2026-05-20: Added the Tauri migration handoff/status scripts to CI packaging scope detection so changes to bundle creation, bundle import, status reporting, phase-order policy, or platform report verification rerun the Windows/Linux Tauri smoke jobs. `cd e2e && pnpm test tests/packaged-smoke-workflow.test.ts` and `pnpm guard` passed.
 
 ### Platform Gate Runners
 
@@ -340,7 +341,7 @@ CI equivalents live in `.github/workflows/ci.yml`:
 - `packaged_smoke_tauri_win` runs `scripts/release-smoke.ts win specs/win-tauri.spec.ts` on `windows-latest` with Rust stable, Node 24, pnpm 10.33.2, and NSIS.
 - `packaged_smoke_tauri_linux` runs `scripts/release-smoke.ts linux specs/linux.spec.ts` on `ubuntu-latest` with Rust stable, Node 24, pnpm 10.33.2, Tauri Linux prerequisites, AppImage runtime support, and `xvfb`.
 
-Both jobs run `scripts/verify-tauri-platform-gates.ts` against the generated report before uploading the artifact. Changes to the verifier script, the migration-order policy, or their tests are packaging-scope changes, so CI reruns the native Tauri smoke jobs when the M4 evidence contract or phase-ordering contract changes.
+Both jobs run `scripts/verify-tauri-platform-gates.ts` against the generated report before uploading the artifact. Changes to the verifier script, migration-order policy, handoff/status scripts, or their tests are packaging-scope changes, so CI reruns the native Tauri smoke jobs when the M4 evidence contract, handoff path, or phase-ordering contract changes.
 
 Do not close the Windows/Linux M4 checkboxes from CI wiring alone. Close them only after the native CI jobs or equivalent host commands produce the required eval/screenshot/stop evidence.
 

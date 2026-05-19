@@ -16,4 +16,26 @@ describe("packaged smoke workflow", () => {
     expect(macBuildStep?.[0]).toBeDefined();
     expect(macBuildStep?.[0]).not.toContain("--portable");
   });
+
+  it("reruns Tauri package smoke when migration handoff scripts change", async () => {
+    const workflow = await readFile(ciWorkflowPath, "utf8");
+    const expectedPaths = [
+      "scripts/create-tauri-migration-bundle.ts",
+      "scripts/create-tauri-migration-bundle.test.ts",
+      "scripts/import-tauri-migration-bundle.ts",
+      "scripts/import-tauri-migration-bundle.test.ts",
+      "scripts/tauri-migration-policy.ts",
+      "scripts/tauri-migration-policy.test.ts",
+      "scripts/tauri-migration-status.ts",
+      "scripts/tauri-migration-status.test.ts",
+      "scripts/verify-tauri-migration-handoff.ts",
+      "scripts/verify-tauri-migration-handoff.test.ts",
+      "scripts/verify-tauri-platform-gates.ts",
+      "scripts/verify-tauri-platform-gates.test.ts",
+    ];
+
+    for (const expectedPath of expectedPaths) {
+      expect(workflow).toContain(`"${expectedPath}"`);
+    }
+  });
 });
