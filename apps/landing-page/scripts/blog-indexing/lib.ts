@@ -95,6 +95,22 @@ export interface SearchAnalyticsRecord {
   position: number;
 }
 
+export interface SearchAnalyticsRow {
+  keys: string[];
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+}
+
+export interface SearchAnalyticsQueryOptions {
+  startDate: string;
+  endDate: string;
+  dimensions?: string[];
+  rowLimit?: number;
+  dimensionFilterGroups?: unknown[];
+}
+
 export interface BlogIndexingState {
   /** url -> latest URL Inspection record */
   latest: Record<string, InspectionRecord>;
@@ -388,6 +404,41 @@ export async function querySearchAnalytics(
     ctr: row.ctr ?? 0,
     position: row.position ?? 0,
   };
+}
+
+export async function querySearchAnalyticsRows(
+  options: SearchAnalyticsQueryOptions,
+): Promise<SearchAnalyticsRow[]> {
+  const token = await getAccessToken();
+  const endpoint = `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(GSC_SITE_URL)}/searchAnalytics/query`;
+  const res = await fetchWithRetry(endpoint, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      startDate: options.startDate,
+      endDate: options.endDate,
+      dimensions: options.dimensions ?? [],
+      rowLimit: options.rowLimit ?? 25_000,
+      dataState: 'final',
+      ...(options.dimensionFilterGroups
+        ? { dimensionFilterGroups: options.dimensionFilterGroups }
+        : {}),
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`Search Analytics failed (${res.status}): ${await res.text()}`);
+  }
+  const body = (await res.json()) as { rows?: SearchAnalyticsRow[] };
+  return (body.rows ?? []).map((row) => ({
+    keys: row.keys ?? [],
+    clicks: row.clicks ?? 0,
+    impressions: row.impressions ?? 0,
+    ctr: row.ctr ?? 0,
+    position: row.position ?? 0,
+  }));
 }
 
 /* --------------------------- URLs ---------------------------- */
