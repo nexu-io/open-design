@@ -154,8 +154,8 @@ function currentPhase(groups: ChecklistGroupStatus[]): MigrationStatus["phase"] 
 function nextActionsForPhase(phase: MigrationStatus["phase"]): string[] {
   if (phase === "M4") {
     return [
-      "Regenerate the verified handoff bundle with scripts/verify-tauri-migration-handoff.ts --output /tmp/open-design-tauri-migration.bundle --manifest /tmp/open-design-tauri-migration-handoff.json --note /tmp/open-design-tauri-migration-handoff.md.",
-      "Import and push the manifest on a write-capable machine, then run scripts/verify-tauri-migration-remote.ts --manifest /tmp/open-design-tauri-migration-handoff.json --remote origin.",
+      "Regenerate the verified handoff set with scripts/verify-tauri-migration-handoff.ts --output-dir /tmp/open-design-tauri-migration-handoff.",
+      "Import and push the manifest on a write-capable machine, then run scripts/verify-tauri-migration-remote.ts --manifest /tmp/open-design-tauri-migration-handoff/open-design-tauri-migration-handoff.json --remote origin.",
       "Run the Windows and Linux Tauri package smoke jobs.",
       "Advance M4 evidence and M5 defaults with scripts/advance-tauri-migration-m4-m5.ts --win-report <dir> --linux-report <dir>.",
     ];

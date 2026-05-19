@@ -334,6 +334,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Updated `scripts/verify-tauri-migration-handoff.ts` so the verified handoff output includes the receiving-side import command with the current SHA-256 and branch already filled in. `node --import tsx --test scripts/verify-tauri-migration-handoff.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `pnpm guard` passed.
 - 2026-05-20: Added `--manifest` support to `scripts/verify-tauri-migration-handoff.ts`, producing a JSON sidecar with schema version, branch/base heads, bundle path, bundle SHA-256, and the receiving-side import command. `node --import tsx --test scripts/verify-tauri-migration-handoff.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `pnpm guard` passed.
 - 2026-05-20: Added `--note` support to `scripts/verify-tauri-migration-handoff.ts`, producing a Markdown handoff note beside the bundle and manifest. The note includes the import command, remote verification command, and M4→M5 advance command so the write-capable receiving machine does not need to reconstruct the sequence from this document. `node --import tsx --test scripts/verify-tauri-migration-handoff.test.ts scripts/tauri-migration-status.test.ts`, `pnpm exec tsx scripts/tauri-migration-status.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `pnpm guard` passed.
+- 2026-05-20: Added `--output-dir` support to `scripts/verify-tauri-migration-handoff.ts`, deriving standard bundle, manifest, and Markdown note paths from one directory. This makes the transferable handoff set a single directory instead of three manually coordinated paths. `node --import tsx --test scripts/verify-tauri-migration-handoff.test.ts scripts/tauri-migration-status.test.ts`, `pnpm exec tsx scripts/tauri-migration-status.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `pnpm guard` passed.
 - 2026-05-20: Added `--manifest` support to `scripts/import-tauri-migration-bundle.ts` so the receiving machine can import the handoff JSON directly instead of manually copying the branch and SHA-256 arguments. The handoff verifier now round-trips through the same manifest import command it prints, while CLI `--bundle`, `--branch`, and `--expected-sha256` still override the manifest for copied bundle paths. `node --import tsx --test scripts/import-tauri-migration-bundle.test.ts scripts/verify-tauri-migration-handoff.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `pnpm guard` passed.
 - 2026-05-20: Added `scripts/verify-tauri-migration-remote.ts` so the write-capable receiving machine can confirm the pushed remote branch exactly matches the handoff manifest `branchHead` before waiting on native Windows/Linux CI. The remote verifier and test are part of root `pnpm guard` and CI packaging scope detection. `node --import tsx --test scripts/verify-tauri-migration-remote.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, `cd e2e && pnpm test tests/packaged-smoke-workflow.test.ts`, and `pnpm guard` passed.
 - 2026-05-20: Added `scripts/apply-tauri-migration-m5.ts` so the default flip after native M4 evidence is a guarded one-command edit instead of a manual multi-file checklist update. The script refuses to run before the verifier-applied M4 marker, then flips the tools-dev/tools-pack/release-beta defaults, preserves explicit Electron fallback support, updates Tauri-primary docs, and checks all M5 lines together. `node --import tsx --test scripts/apply-tauri-migration-m5.test.ts scripts/tauri-ci-scope.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, `cd e2e && pnpm test tests/packaged-smoke-workflow.test.ts`, `pnpm guard`, `pnpm install`, and a current-state `--dry-run` rejection check passed.
@@ -400,9 +401,7 @@ If direct push is blocked by credentials, create a verified git bundle from this
 
 ```bash
 pnpm exec tsx scripts/verify-tauri-migration-handoff.ts \
-  --output /tmp/open-design-tauri-migration.bundle \
-  --manifest /tmp/open-design-tauri-migration-handoff.json \
-  --note /tmp/open-design-tauri-migration-handoff.md
+  --output-dir /tmp/open-design-tauri-migration-handoff
 ```
 
 Keep the script output, JSON manifest, and Markdown handoff note together. They record the migration branch head, `origin/main` base, bundle byte size, SHA-256, `git bundle verify` result, bundled heads, receiving-side import command, remote verification command, and M4→M5 advance command.
@@ -411,11 +410,11 @@ On the receiving checkout, verify and fetch the bundle before pushing:
 
 ```bash
 pnpm exec tsx scripts/import-tauri-migration-bundle.ts \
-  --manifest /path/to/open-design-tauri-migration-handoff.json \
+  --manifest /path/to/open-design-tauri-migration-handoff/open-design-tauri-migration-handoff.json \
   --checkout
 git push -u origin codex/electron-to-tauri-migration
 pnpm exec tsx scripts/verify-tauri-migration-remote.ts \
-  --manifest /path/to/open-design-tauri-migration-handoff.json \
+  --manifest /path/to/open-design-tauri-migration-handoff/open-design-tauri-migration-handoff.json \
   --remote origin
 ```
 

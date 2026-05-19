@@ -18,6 +18,7 @@ type Args = {
   manifest?: string;
   note?: string;
   output?: string;
+  outputDir?: string;
 };
 
 async function main(): Promise<void> {
@@ -136,7 +137,15 @@ function parseArgs(argv: string[]): Args {
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const value = argv[index + 1];
-    if ((arg === "--base" || arg === "--branch" || arg === "--cwd" || arg === "--note" || arg === "--output") && value == null) {
+    if (
+      (arg === "--base" ||
+        arg === "--branch" ||
+        arg === "--cwd" ||
+        arg === "--note" ||
+        arg === "--output" ||
+        arg === "--output-dir") &&
+      value == null
+    ) {
       throw new Error(`${arg} requires a value`);
     }
     if (arg === "--base") {
@@ -156,6 +165,11 @@ function parseArgs(argv: string[]): Args {
     }
     if (arg === "--output") {
       parsed.output = resolve(value!);
+      index += 1;
+      continue;
+    }
+    if (arg === "--output-dir") {
+      parsed.outputDir = resolve(value!);
       index += 1;
       continue;
     }
@@ -180,6 +194,7 @@ function parseArgs(argv: string[]): Args {
       process.stdout.write(
         [
           "usage: tsx scripts/verify-tauri-migration-handoff.ts [--cwd <repo>] [--branch <ref>] [--base <ref>] [--output <bundle>] [--manifest <path>] [--note <path>] [--keep-temp]",
+          "       tsx scripts/verify-tauri-migration-handoff.ts --output-dir <dir> [--cwd <repo>] [--branch <ref>] [--base <ref>] [--keep-temp]",
           "",
           `defaults: --cwd ${defaultRoot} --branch ${defaultBranch} --base ${defaultBase}`,
           "",
@@ -190,7 +205,19 @@ function parseArgs(argv: string[]): Args {
     throw new Error(`unsupported argument: ${arg}`);
   }
 
-  return parsed;
+  return applyOutputDirDefaults(parsed);
+}
+
+function applyOutputDirDefaults(args: Args): Args {
+  if (args.outputDir == null) {
+    return args;
+  }
+  return {
+    ...args,
+    manifest: args.manifest ?? join(args.outputDir, "open-design-tauri-migration-handoff.json"),
+    note: args.note ?? join(args.outputDir, "open-design-tauri-migration-handoff.md"),
+    output: args.output ?? join(args.outputDir, "open-design-tauri-migration.bundle"),
+  };
 }
 
 async function runScript(scriptName: string, args: string[]): Promise<{ stderr: string; stdout: string }> {

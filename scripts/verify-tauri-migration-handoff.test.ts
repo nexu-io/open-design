@@ -69,6 +69,38 @@ test("verify-tauri-migration-handoff round-trips a bundle through a receiving ch
   assert.match(note, /advance-tauri-migration-m4-m5/);
 });
 
+test("verify-tauri-migration-handoff can derive standard artifact paths from output-dir", async (t) => {
+  const sourceRepo = await createFixtureRepo(t, "open-design-tauri-handoff-dir-");
+  const sourceHead = (await git(sourceRepo, "rev-parse", migrationBranch)).stdout.trim();
+  const outputDir = join(sourceRepo, "handoff");
+
+  const result = await runHandoffScript(
+    "--cwd",
+    sourceRepo,
+    "--branch",
+    migrationBranch,
+    "--base",
+    "main",
+    "--output-dir",
+    outputDir,
+  );
+
+  const bundlePath = join(outputDir, "open-design-tauri-migration.bundle");
+  const manifestPath = join(outputDir, "open-design-tauri-migration-handoff.json");
+  const notePath = join(outputDir, "open-design-tauri-migration-handoff.md");
+  assert.match(result.stdout, new RegExp(`Bundle: ${escapeRegExp(bundlePath)}`));
+  assert.match(result.stdout, new RegExp(`Manifest: ${escapeRegExp(manifestPath)}`));
+  assert.match(result.stdout, new RegExp(`Note: ${escapeRegExp(notePath)}`));
+  await access(bundlePath);
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+    branchHead: string;
+    bundlePath: string;
+  };
+  assert.equal(manifest.branchHead, sourceHead);
+  assert.equal(manifest.bundlePath, bundlePath);
+  assert.match(await readFile(notePath, "utf8"), new RegExp(`Bundle: \`${escapeRegExp(bundlePath)}\``));
+});
+
 test("verify-tauri-migration-handoff rejects dirty source worktrees", async (t) => {
   const sourceRepo = await createFixtureRepo(t, "open-design-tauri-handoff-dirty-");
   await writeFile(join(sourceRepo, "feature.txt"), "dirty\n", "utf8");
