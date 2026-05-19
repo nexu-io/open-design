@@ -10534,11 +10534,11 @@ button.connector-action.is-loading {
   font-size: 12.5px;
   color: var(--text-muted);
   gap: 8px;
-  height: 44px;
+  min-height: 44px;
   flex-shrink: 0;
 }
 .viewer-toolbar-left { display: inline-flex; align-items: center; gap: 8px; }
-.viewer-toolbar-actions { display: inline-flex; gap: 2px; align-items: center; }
+.viewer-toolbar-actions { display: inline-flex; gap: 2px; align-items: center; flex-wrap: wrap; }
 .viewer-toolbar .icon-only,
 .viewer-toolbar-actions .icon-only {
   width: 28px;
