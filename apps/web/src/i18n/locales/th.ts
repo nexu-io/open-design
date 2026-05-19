@@ -442,6 +442,12 @@ export const th: Dict = {
   'newproj.savedTemplate': 'เทมเพลตที่บันทึกแล้ว',
   'newproj.fileSingular': 'ไฟล์',
   'newproj.filePlural': 'ไฟล์',
+  'newproj.deleteTemplateTitle': 'Delete template?',
+  'newproj.deleteTemplateBody':
+    'This will permanently remove "{name}" from your saved templates.',
+  'newproj.deleteTemplateConfirm': 'Delete',
+  'newproj.deleteTemplateError': 'Could not delete template. Try again.',
+  'newproj.deleteTemplateAria': 'Delete template {name}',
   'newproj.create': 'สร้าง',
   'newproj.createLiveArtifact': 'สร้าง live artifact',
   'newproj.createFromTemplate': 'สร้างจากเทมเพลต',

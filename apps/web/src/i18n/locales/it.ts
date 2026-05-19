@@ -446,6 +446,12 @@ export const it: Dict = {
   'newproj.savedTemplate': 'Modello salvato',
   'newproj.fileSingular': 'file',
   'newproj.filePlural': 'file',
+  'newproj.deleteTemplateTitle': 'Delete template?',
+  'newproj.deleteTemplateBody':
+    'This will permanently remove "{name}" from your saved templates.',
+  'newproj.deleteTemplateConfirm': 'Delete',
+  'newproj.deleteTemplateError': 'Could not delete template. Try again.',
+  'newproj.deleteTemplateAria': 'Delete template {name}',
   'newproj.create': 'Crea',
   'newproj.createFromTemplate': 'Crea dal modello',
   'newproj.createDisabledTitle':

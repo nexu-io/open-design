@@ -473,6 +473,12 @@ export const fr: Dict = {
   'newproj.savedTemplate': 'Modèle enregistré',
   'newproj.fileSingular': 'fichier',
   'newproj.filePlural': 'fichiers',
+  'newproj.deleteTemplateTitle': 'Delete template?',
+  'newproj.deleteTemplateBody':
+    'This will permanently remove "{name}" from your saved templates.',
+  'newproj.deleteTemplateConfirm': 'Delete',
+  'newproj.deleteTemplateError': 'Could not delete template. Try again.',
+  'newproj.deleteTemplateAria': 'Delete template {name}',
   'newproj.create': 'Créer',
   'newproj.createFromTemplate': 'Créer depuis le modèle',
   'newproj.createDisabledTitle':

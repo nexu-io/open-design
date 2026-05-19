@@ -485,6 +485,12 @@ export const uk: Dict = {
   'newproj.savedTemplate': 'Збережений шаблон',
   'newproj.fileSingular': 'файл',
   'newproj.filePlural': 'файли',
+  'newproj.deleteTemplateTitle': 'Delete template?',
+  'newproj.deleteTemplateBody':
+    'This will permanently remove "{name}" from your saved templates.',
+  'newproj.deleteTemplateConfirm': 'Delete',
+  'newproj.deleteTemplateError': 'Could not delete template. Try again.',
+  'newproj.deleteTemplateAria': 'Delete template {name}',
   'newproj.create': 'Створити',
   'newproj.createLiveArtifact': 'Створити live-артефакт',
   'newproj.createFromTemplate': 'Створити з шаблону',

@@ -473,6 +473,12 @@ export const pl: Dict = {
   'newproj.savedTemplate': 'Zapisany szablon',
   'newproj.fileSingular': 'plik',
   'newproj.filePlural': 'pliki',
+  'newproj.deleteTemplateTitle': 'Delete template?',
+  'newproj.deleteTemplateBody':
+    'This will permanently remove "{name}" from your saved templates.',
+  'newproj.deleteTemplateConfirm': 'Delete',
+  'newproj.deleteTemplateError': 'Could not delete template. Try again.',
+  'newproj.deleteTemplateAria': 'Delete template {name}',
   'newproj.create': 'Utwórz',
   'newproj.createFromTemplate': 'Utwórz z szablonu',
   'newproj.createDisabledTitle':

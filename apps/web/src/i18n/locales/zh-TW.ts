@@ -543,6 +543,12 @@ export const zhTW: Dict = {
   'newproj.savedTemplate': '已儲存的範本',
   'newproj.fileSingular': '個檔案',
   'newproj.filePlural': '個檔案',
+  'newproj.deleteTemplateTitle': '刪除範本？',
+  'newproj.deleteTemplateBody':
+    '這將永久從已儲存的範本中移除「{name}」。',
+  'newproj.deleteTemplateConfirm': '刪除',
+  'newproj.deleteTemplateError': '無法刪除範本，請重試。',
+  'newproj.deleteTemplateAria': '刪除範本 {name}',
   'newproj.create': '建立',
   'newproj.createLiveArtifact': '建立即時成品',
   'newproj.createFromTemplate': '基於範本建立',

@@ -371,6 +371,12 @@ export const esES: Dict = {
   'newproj.savedTemplate': 'Plantilla guardada',
   'newproj.fileSingular': 'archivo',
   'newproj.filePlural': 'archivos',
+  'newproj.deleteTemplateTitle': 'Delete template?',
+  'newproj.deleteTemplateBody':
+    'This will permanently remove "{name}" from your saved templates.',
+  'newproj.deleteTemplateConfirm': 'Delete',
+  'newproj.deleteTemplateError': 'Could not delete template. Try again.',
+  'newproj.deleteTemplateAria': 'Delete template {name}',
   'newproj.create': 'Crear',
   'newproj.createFromTemplate': 'Crear desde plantilla',
   'newproj.createDisabledTitle':

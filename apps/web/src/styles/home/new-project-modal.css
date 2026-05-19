@@ -2,6 +2,10 @@
    New project modal — wraps NewProjectPanel in a centered modal
    surface, triggered by the "+" button on the entry nav rail.
    ============================================================ */
+.template-delete-confirm-backdrop {
+  z-index: 940;
+}
+
 .new-project-modal-backdrop {
   position: fixed;
   inset: 0;

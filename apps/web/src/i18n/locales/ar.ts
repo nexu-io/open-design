@@ -473,6 +473,12 @@ export const ar: Dict = {
   'newproj.savedTemplate': 'قالب محفوظ',
   'newproj.fileSingular': 'ملف',
   'newproj.filePlural': 'ملفات',
+  'newproj.deleteTemplateTitle': 'Delete template?',
+  'newproj.deleteTemplateBody':
+    'This will permanently remove "{name}" from your saved templates.',
+  'newproj.deleteTemplateConfirm': 'Delete',
+  'newproj.deleteTemplateError': 'Could not delete template. Try again.',
+  'newproj.deleteTemplateAria': 'Delete template {name}',
   'newproj.create': 'إنشاء',
   'newproj.createFromTemplate': 'إنشاء من قالب',
   'newproj.createDisabledTitle':

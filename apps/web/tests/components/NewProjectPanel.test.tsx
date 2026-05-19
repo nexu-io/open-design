@@ -667,8 +667,64 @@ describe('NewProjectPanel template deletion', () => {
     Element.prototype.scrollIntoView = () => {};
   });
 
-  it('calls onDeleteTemplate when user clicks delete button', async () => {
+  function openTemplateTab() {
+    fireEvent.click(screen.getByRole('tab', { name: 'From template' }));
+  }
+
+  function clickTemplateDelete() {
+    fireEvent.click(screen.getByLabelText(/delete template landing page/i));
+  }
+
+  it('confirms before deleting and clears selection on success', async () => {
     const onDelete = vi.fn().mockResolvedValue(true);
+    const onCreate = vi.fn();
+    const { rerender } = render(
+      <NewProjectPanel
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={templates}
+        onDeleteTemplate={onDelete}
+        promptTemplates={[]}
+        onCreate={onCreate}
+      />,
+    );
+
+    openTemplateTab();
+    fireEvent.click(screen.getByText('Landing Page'));
+    clickTemplateDelete();
+    expect(screen.getByTestId('template-delete-confirm-dialog')).toBeTruthy();
+    expect(onDelete).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('template-delete-cancel'));
+    expect(screen.queryByTestId('template-delete-confirm-dialog')).toBeNull();
+    expect(screen.getByText('Landing Page')).toBeTruthy();
+    expect(onDelete).not.toHaveBeenCalled();
+
+    clickTemplateDelete();
+    fireEvent.click(screen.getByTestId('template-delete-confirm'));
+    expect(onDelete).toHaveBeenCalledWith('tmpl-landing');
+
+    rerender(
+      <NewProjectPanel
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={[]}
+        onDeleteTemplate={onDelete}
+        promptTemplates={[]}
+        onCreate={onCreate}
+      />,
+    );
+    expect(screen.queryByText('Landing Page')).toBeNull();
+    expect(screen.getByRole('button', { name: /create from template/i })).toHaveProperty(
+      'disabled',
+      true,
+    );
+  });
+
+  it('shows an error when delete fails and keeps the template', async () => {
+    const onDelete = vi.fn().mockResolvedValue(false);
     render(
       <NewProjectPanel
         skills={skills}
@@ -681,9 +737,12 @@ describe('NewProjectPanel template deletion', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('tab', { name: 'From template' }));
-    const deleteBtn = screen.getByLabelText(/delete template/i);
-    fireEvent.click(deleteBtn);
+    openTemplateTab();
+    clickTemplateDelete();
+    fireEvent.click(screen.getByTestId('template-delete-confirm'));
     expect(onDelete).toHaveBeenCalledWith('tmpl-landing');
+    expect(await screen.findByTestId('template-delete-error')).toBeTruthy();
+    expect(screen.getByText('Landing Page')).toBeTruthy();
+    expect(screen.getByTestId('template-delete-confirm-dialog')).toBeTruthy();
   });
 });

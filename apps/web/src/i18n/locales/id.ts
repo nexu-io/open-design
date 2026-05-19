@@ -583,6 +583,12 @@ export const id: Dict = {
   'newproj.savedTemplate': 'Templat tersimpan',
   'newproj.fileSingular': 'berkas',
   'newproj.filePlural': 'berkas',
+  'newproj.deleteTemplateTitle': 'Delete template?',
+  'newproj.deleteTemplateBody':
+    'This will permanently remove "{name}" from your saved templates.',
+  'newproj.deleteTemplateConfirm': 'Delete',
+  'newproj.deleteTemplateError': 'Could not delete template. Try again.',
+  'newproj.deleteTemplateAria': 'Delete template {name}',
   'newproj.create': 'Buat',
   'newproj.createLiveArtifact': 'Buat live artifact',
   'newproj.createFromTemplate': 'Buat dari templat',

@@ -483,6 +483,12 @@ export const ptBR: Dict = {
   'newproj.savedTemplate': 'Template salvo',
   'newproj.fileSingular': 'arquivo',
   'newproj.filePlural': 'arquivos',
+  'newproj.deleteTemplateTitle': 'Delete template?',
+  'newproj.deleteTemplateBody':
+    'This will permanently remove "{name}" from your saved templates.',
+  'newproj.deleteTemplateConfirm': 'Delete',
+  'newproj.deleteTemplateError': 'Could not delete template. Try again.',
+  'newproj.deleteTemplateAria': 'Delete template {name}',
   'newproj.create': 'Criar',
   'newproj.createLiveArtifact': 'Criar artefato live',
   'newproj.createFromTemplate': 'Criar a partir do template',

@@ -473,6 +473,12 @@ export const ko: Dict = {
   'newproj.savedTemplate': '저장된 템플릿',
   'newproj.fileSingular': '파일',
   'newproj.filePlural': '파일들',
+  'newproj.deleteTemplateTitle': 'Delete template?',
+  'newproj.deleteTemplateBody':
+    'This will permanently remove "{name}" from your saved templates.',
+  'newproj.deleteTemplateConfirm': 'Delete',
+  'newproj.deleteTemplateError': 'Could not delete template. Try again.',
+  'newproj.deleteTemplateAria': 'Delete template {name}',
   'newproj.create': '생성',
   'newproj.createFromTemplate': '템플릿으로 생성',
   'newproj.createDisabledTitle':

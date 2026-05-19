@@ -922,6 +922,12 @@ export const zhCN: Dict = {
   'newproj.savedTemplate': '已保存的模板',
   'newproj.fileSingular': '个文件',
   'newproj.filePlural': '个文件',
+  'newproj.deleteTemplateTitle': '删除模板？',
+  'newproj.deleteTemplateBody':
+    '这将永久从已保存的模板中移除“{name}”。',
+  'newproj.deleteTemplateConfirm': '删除',
+  'newproj.deleteTemplateError': '无法删除模板，请重试。',
+  'newproj.deleteTemplateAria': '删除模板 {name}',
   'newproj.create': '创建',
   'newproj.createLiveArtifact': '创建实时制品',
   'newproj.createFromTemplate': '基于模板创建',

@@ -1300,9 +1300,37 @@ function TemplatePicker({
   onDelete?: (id: string) => Promise<boolean>;
 }) {
   const t = useT();
+  const [confirmTarget, setConfirmTarget] = useState<ProjectTemplate | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleConfirmDelete() {
+    if (!confirmTarget || !onDelete) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const ok = await onDelete(confirmTarget.id);
+      if (!ok) {
+        setDeleteError(t('newproj.deleteTemplateError'));
+        return;
+      }
+      if (value === confirmTarget.id) onChange(null);
+      setConfirmTarget(null);
+    } catch {
+      setDeleteError(t('newproj.deleteTemplateError'));
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <div className="newproj-section">
       <label className="newproj-label">{t('newproj.templateLabel')}</label>
+      {deleteError ? (
+        <p className="prompt-template-error" role="alert" data-testid="template-delete-error">
+          <span className="prompt-template-error-msg">{deleteError}</span>
+        </p>
+      ) : null}
       {templates.length === 0 ? (
         <div className="template-howto">
           <span className="template-howto-title">
@@ -1325,10 +1353,14 @@ function TemplatePicker({
                 key={tpl.id}
                 active={value === tpl.id}
                 onClick={() => onChange(tpl.id)}
-                onDelete={onDelete ? async () => {
-                  const ok = await onDelete(tpl.id);
-                  if (ok && value === tpl.id) onChange(null);
-                } : () => {}}
+                onDelete={
+                  onDelete
+                    ? () => {
+                        setDeleteError(null);
+                        setConfirmTarget(tpl);
+                      }
+                    : () => {}
+                }
                 name={tpl.name}
                 description={tpl.description ?? fallbackDesc}
               />
@@ -1336,6 +1368,52 @@ function TemplatePicker({
           })}
         </div>
       )}
+      {confirmTarget ? (
+        <div
+          className="modal-backdrop template-delete-confirm-backdrop"
+          onClick={() => {
+            if (deleting) return;
+            setConfirmTarget(null);
+            setDeleteError(null);
+          }}
+        >
+          <div
+            className="modal modal-confirm"
+            onClick={(e) => e.stopPropagation()}
+            role="alertdialog"
+            aria-modal="true"
+            data-testid="template-delete-confirm-dialog"
+          >
+            <h2>{t('newproj.deleteTemplateTitle')}</h2>
+            <p className="modal-confirm-message">
+              {t('newproj.deleteTemplateBody', { name: confirmTarget.name })}
+            </p>
+            <div className="row">
+              <button
+                type="button"
+                disabled={deleting}
+                data-testid="template-delete-cancel"
+                onClick={() => {
+                  setConfirmTarget(null);
+                  setDeleteError(null);
+                }}
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                type="button"
+                className="primary danger"
+                autoFocus
+                disabled={deleting}
+                data-testid="template-delete-confirm"
+                onClick={() => void handleConfirmDelete()}
+              >
+                {t('newproj.deleteTemplateConfirm')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1649,6 +1727,7 @@ function TemplateOption({
   name: string;
   description: string;
 }) {
+  const t = useT();
   return (
     <div className={`template-option${active ? ' active' : ''}`}>
       <button
@@ -1667,8 +1746,8 @@ function TemplateOption({
         type="button"
         className="template-option-delete"
         onClick={(e) => { e.stopPropagation(); onDelete(); }}
-        title="Delete template"
-        aria-label={`Delete template ${name}`}
+        title={t('newproj.deleteTemplateAria', { name })}
+        aria-label={t('newproj.deleteTemplateAria', { name })}
       >
         ✕
       </button>

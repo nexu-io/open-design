@@ -924,6 +924,12 @@ export const en: Dict = {
   'newproj.savedTemplate': 'Saved template',
   'newproj.fileSingular': 'file',
   'newproj.filePlural': 'files',
+  'newproj.deleteTemplateTitle': 'Delete template?',
+  'newproj.deleteTemplateBody':
+    'This will permanently remove "{name}" from your saved templates.',
+  'newproj.deleteTemplateConfirm': 'Delete',
+  'newproj.deleteTemplateError': 'Could not delete template. Try again.',
+  'newproj.deleteTemplateAria': 'Delete template {name}',
   'newproj.create': 'Create',
   'newproj.createLiveArtifact': 'Create live artifact',
   'newproj.createFromTemplate': 'Create from template',

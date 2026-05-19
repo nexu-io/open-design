@@ -1166,6 +1166,11 @@ export interface Dict {
   'newproj.savedTemplate': string;
   'newproj.fileSingular': string;
   'newproj.filePlural': string;
+  'newproj.deleteTemplateTitle': string;
+  'newproj.deleteTemplateBody': string;
+  'newproj.deleteTemplateConfirm': string;
+  'newproj.deleteTemplateError': string;
+  'newproj.deleteTemplateAria': string;
   'newproj.create': string;
   'newproj.createLiveArtifact': string;
   'newproj.createFromTemplate': string;
