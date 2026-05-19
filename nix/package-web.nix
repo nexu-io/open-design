@@ -57,6 +57,7 @@ in
       runHook preBuild
       for target in \
         packages/contracts \
+        packages/host \
         packages/sidecar-proto \
         packages/sidecar \
         packages/platform
