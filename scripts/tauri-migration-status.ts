@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
@@ -21,10 +22,12 @@ import {
 const execFileAsync = promisify(execFile);
 const defaultRoot = resolve(import.meta.dirname, "..");
 const handoffManifestName = "open-design-tauri-migration-handoff.json";
+const noteName = "open-design-tauri-migration-handoff.md";
 
 type DesktopRuntime = "electron" | "tauri";
 
 type ParsedArgs = {
+  handoffArchive?: string;
   handoffDir?: string;
   json: boolean;
   linuxReport?: string;
@@ -61,6 +64,7 @@ type MigrationStatus = {
   };
   git: GitStatus;
   groups: ChecklistGroupStatus[];
+  handoffArchive?: HandoffArchiveStatus;
   handoff?: HandoffStatus;
   nextActions: string[];
   platformReports?: PlatformReportsStatus;
@@ -90,6 +94,16 @@ type HandoffManifest = {
   schemaVersion: 1;
 };
 
+type HandoffArchiveStatus = {
+  archive: string;
+  checksum: string;
+  current?: boolean;
+  expectedSha256?: string;
+  present: boolean;
+  problems: string[];
+  sha256?: string;
+};
+
 type RemoteStatus = {
   branch?: string;
   current?: boolean;
@@ -110,7 +124,14 @@ type PlatformReportsStatus = {
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
-  const status = await readMigrationStatus(args.root, args.handoffDir, args.remote, args.winReport, args.linuxReport);
+  const status = await readMigrationStatus(
+    args.root,
+    args.handoffDir,
+    args.handoffArchive,
+    args.remote,
+    args.winReport,
+    args.linuxReport,
+  );
   if (args.json) {
     process.stdout.write(`${JSON.stringify(status, null, 2)}\n`);
     return;
@@ -130,6 +151,12 @@ function parseArgs(argv: string[]): ParsedArgs {
     if (arg === "--handoff-dir") {
       if (value == null) throw new Error("--handoff-dir requires a path");
       parsed.handoffDir = resolve(value);
+      index += 1;
+      continue;
+    }
+    if (arg === "--handoff-archive") {
+      if (value == null) throw new Error("--handoff-archive requires a path");
+      parsed.handoffArchive = resolve(value);
       index += 1;
       continue;
     }
@@ -159,7 +186,7 @@ function parseArgs(argv: string[]): ParsedArgs {
     }
     if (arg === "--help" || arg === "-h") {
       process.stdout.write(
-        "usage: tsx scripts/tauri-migration-status.ts [--root <repo>] [--handoff-dir <dir>] [--remote <remote>] [--win-report <dir>] [--linux-report <dir>] [--json]\n",
+        "usage: tsx scripts/tauri-migration-status.ts [--root <repo>] [--handoff-dir <dir>] [--handoff-archive <tar.gz>] [--remote <remote>] [--win-report <dir>] [--linux-report <dir>] [--json]\n",
       );
       process.exit(0);
     }
@@ -171,6 +198,7 @@ function parseArgs(argv: string[]): ParsedArgs {
 async function readMigrationStatus(
   root: string,
   handoffDir?: string,
+  handoffArchiveArg?: string,
   remote?: string,
   winReport?: string,
   linuxReport?: string,
@@ -201,6 +229,10 @@ async function readMigrationStatus(
   ];
   const phase = currentPhase(groups);
   const handoff = handoffDir == null ? undefined : await readHandoffStatus(handoffDir, gitStatus);
+  const handoffArchive =
+    handoffDir == null
+      ? undefined
+      : await readHandoffArchiveStatus(handoffArchiveArg ?? handoffArchivePath(handoffDir), handoff);
   const remoteStatus = remote == null ? undefined : await readRemoteStatus(root, remote, gitStatus, handoff);
   const platformReports =
     winReport == null && linuxReport == null ? undefined : await readPlatformReportsStatus(winReport, linuxReport);
@@ -213,7 +245,8 @@ async function readMigrationStatus(
     git: gitStatus,
     groups,
     ...(handoff == null ? {} : { handoff }),
-    nextActions: nextActionsForPhase(phase, handoff, remoteStatus, platformReports),
+    ...(handoffArchive == null ? {} : { handoffArchive }),
+    nextActions: nextActionsForPhase(phase, handoff, handoffArchive, remoteStatus, platformReports),
     ...(platformReports == null ? {} : { platformReports }),
     phase,
     ...(remoteStatus == null ? {} : { remote: remoteStatus }),
@@ -242,17 +275,24 @@ function currentPhase(groups: ChecklistGroupStatus[]): MigrationStatus["phase"] 
 function nextActionsForPhase(
   phase: MigrationStatus["phase"],
   handoff?: HandoffStatus,
+  handoffArchive?: HandoffArchiveStatus,
   remote?: RemoteStatus,
   platformReports?: PlatformReportsStatus,
 ): string[] {
   if (phase === "M4") {
+    const handoffReady = handoff?.current === true;
+    const archiveReady = handoffArchive?.current === true;
     return [
-      handoff?.current === true
-        ? `Package the current verified handoff directory with scripts/package-tauri-migration-handoff.ts --handoff-dir ${handoff.dir}.`
-        : "Regenerate the verified handoff set with scripts/verify-tauri-migration-handoff.ts --output-dir /tmp/open-design-tauri-migration-handoff.",
+      archiveReady
+        ? `Copy the current packaged handoff archive ${handoffArchive.archive} and checksum ${handoffArchive.checksum} to a write-capable machine.`
+        : handoffReady
+          ? `Package the current verified handoff directory with scripts/package-tauri-migration-handoff.ts --handoff-dir ${handoff.dir}.`
+          : "Regenerate the verified handoff set with scripts/verify-tauri-migration-handoff.ts --output-dir /tmp/open-design-tauri-migration-handoff.",
       remote?.current === true
         ? `Remote ${remote.remote} already matches ${remote.branch ?? "the migration branch"} at ${remote.head ?? "the expected head"}.`
-        : "Copy the packaged handoff archive and .sha256 sidecar to a write-capable machine, extract it, then import, push, and verify the manifest with scripts/push-tauri-migration-handoff.ts --manifest /tmp/open-design-tauri-migration-handoff/open-design-tauri-migration-handoff.json --remote origin.",
+        : archiveReady
+          ? "On the receiving machine, verify the .sha256 sidecar, extract the archive, then import, push, and verify the manifest with scripts/push-tauri-migration-handoff.ts --manifest /tmp/open-design-tauri-migration-handoff/open-design-tauri-migration-handoff.json --remote origin."
+          : "Copy the packaged handoff archive and .sha256 sidecar to a write-capable machine, extract it, then import, push, and verify the manifest with scripts/push-tauri-migration-handoff.ts --manifest /tmp/open-design-tauri-migration-handoff/open-design-tauri-migration-handoff.json --remote origin.",
       platformReports?.current === true
         ? "Advance M4 evidence and M5 defaults with scripts/advance-tauri-migration-m4-m5.ts using the verified report paths shown above."
         : "Run the Windows and Linux Tauri package smoke jobs.",
@@ -373,6 +413,73 @@ async function readHandoffStatus(handoffDir: string, gitStatus: GitStatus): Prom
       problems: [error instanceof Error ? error.message : String(error)],
     };
   }
+}
+
+async function readHandoffArchiveStatus(archivePath: string, handoff?: HandoffStatus): Promise<HandoffArchiveStatus> {
+  const checksumPath = `${archivePath}.sha256`;
+  const problems: string[] = [];
+  let archiveSha256: string | undefined;
+  let expectedSha256: string | undefined;
+  try {
+    archiveSha256 = createHash("sha256").update(await readFile(archivePath)).digest("hex");
+  } catch (error) {
+    return {
+      archive: archivePath,
+      checksum: checksumPath,
+      present: false,
+      problems: [`archive unavailable: ${error instanceof Error ? error.message : String(error)}`],
+    };
+  }
+
+  try {
+    const checksum = await readFile(checksumPath, "utf8");
+    const match = checksum.match(/^([0-9a-f]{64})\s+\S+\s*$/);
+    if (match?.[1] == null) {
+      problems.push(`checksum sidecar has invalid format: ${checksumPath}`);
+    } else {
+      expectedSha256 = match[1];
+      if (expectedSha256 !== archiveSha256) {
+        problems.push(`archive SHA-256 mismatch: expected ${expectedSha256}, got ${archiveSha256}`);
+      }
+    }
+  } catch (error) {
+    problems.push(`checksum sidecar unavailable: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  const extractRoot = await mkdtemp(join(tmpdir(), "open-design-tauri-status-archive-"));
+  try {
+    await execFileAsync("tar", ["-xzf", archivePath, "-C", extractRoot], { maxBuffer: 1024 * 1024 });
+    const extractedHandoffDir = join(extractRoot, handoff == null ? basenameWithoutTarGz(archivePath) : basenameFromDir(handoff.dir));
+    const manifestPath = join(extractedHandoffDir, handoffManifestName);
+    const notePath = join(extractedHandoffDir, noteName);
+    const manifest = readHandoffManifest(JSON.parse(await readFile(manifestPath, "utf8")) as Partial<HandoffManifest>);
+    await readFile(notePath);
+    const bundlePath = resolve(dirname(manifestPath), manifest.bundlePath);
+    const bundleSha256 = createHash("sha256").update(await readFile(bundlePath)).digest("hex");
+    if (bundleSha256 !== manifest.bundleSha256) {
+      problems.push(`archived bundle SHA-256 mismatch: expected ${manifest.bundleSha256}, got ${bundleSha256}`);
+    }
+    if (handoff?.branchHead != null && manifest.branchHead !== handoff.branchHead) {
+      problems.push(`archived manifest branchHead is stale: expected ${handoff.branchHead}, got ${manifest.branchHead}`);
+    }
+    if (handoff?.bundleSha256 != null && manifest.bundleSha256 !== handoff.bundleSha256) {
+      problems.push(`archived manifest bundleSha256 is stale: expected ${handoff.bundleSha256}, got ${manifest.bundleSha256}`);
+    }
+  } catch (error) {
+    problems.push(`archive contents invalid: ${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    await rm(extractRoot, { force: true, recursive: true });
+  }
+
+  return {
+    archive: archivePath,
+    checksum: checksumPath,
+    current: problems.length === 0 && handoff?.current === true,
+    ...(expectedSha256 == null ? {} : { expectedSha256 }),
+    present: true,
+    problems,
+    sha256: archiveSha256,
+  };
 }
 
 async function readRemoteStatus(
@@ -521,6 +628,19 @@ function readHandoffManifest(value: Partial<HandoffManifest>): HandoffManifest {
   };
 }
 
+function handoffArchivePath(handoffDir: string): string {
+  return `${handoffDir}.tar.gz`;
+}
+
+function basenameFromDir(path: string): string {
+  return path.split(/[\\/]/).filter(Boolean).at(-1) ?? path;
+}
+
+function basenameWithoutTarGz(path: string): string {
+  const fileName = basenameFromDir(path);
+  return fileName.endsWith(".tar.gz") ? fileName.slice(0, -".tar.gz".length) : fileName;
+}
+
 function formatMigrationStatus(status: MigrationStatus): string {
   const lines = [
     "Tauri migration status",
@@ -552,6 +672,18 @@ function formatMigrationStatus(status: MigrationStatus): string {
       lines.push(`  Bundle: ${status.handoff.bundle}`);
     }
     for (const problem of status.handoff.problems) {
+      lines.push(`  - ${problem}`);
+    }
+  }
+  if (status.handoffArchive != null) {
+    lines.push(
+      `Handoff archive: ${status.handoffArchive.present ? (status.handoffArchive.current ? "current" : "needs attention") : "missing"} (${status.handoffArchive.archive})`,
+    );
+    if (status.handoffArchive.sha256 != null) {
+      lines.push(`  SHA-256: ${status.handoffArchive.sha256}`);
+    }
+    lines.push(`  Checksum: ${status.handoffArchive.checksum}`);
+    for (const problem of status.handoffArchive.problems) {
       lines.push(`  - ${problem}`);
     }
   }

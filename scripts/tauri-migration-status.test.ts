@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -99,6 +99,37 @@ test("tauri-migration-status reports current handoff artifacts", async (t) => {
   assert.equal(parsed.handoff.bundleSha256, bundleSha256);
   assert.deepEqual(parsed.handoff.problems, []);
   assert.match(parsed.nextActions.join("\n"), /Package the current verified handoff directory/);
+});
+
+test("tauri-migration-status reports current packaged handoff archives", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+  const { archivePath, archiveSha256 } = await writeHandoffArchive(handoffDir);
+
+  const result = await runStatus(fixture, "--handoff-dir", handoffDir);
+  const parsed = JSON.parse(result.stdout) as {
+    handoffArchive: {
+      archive: string;
+      checksum: string;
+      current: boolean;
+      problems: string[];
+      sha256: string;
+    };
+    nextActions: string[];
+  };
+
+  assert.equal(parsed.handoffArchive.archive, archivePath);
+  assert.equal(parsed.handoffArchive.checksum, `${archivePath}.sha256`);
+  assert.equal(parsed.handoffArchive.current, true);
+  assert.equal(parsed.handoffArchive.sha256, archiveSha256);
+  assert.deepEqual(parsed.handoffArchive.problems, []);
+  assert.match(parsed.nextActions.join("\n"), /Copy the current packaged handoff archive/);
+  assert.match(parsed.nextActions.join("\n"), /verify the \.sha256 sidecar/);
 });
 
 test("tauri-migration-status reports stale handoff artifacts", async (t) => {
@@ -255,7 +286,18 @@ async function writeHandoffFixture(handoffDir: string, options: { branchHead: st
     )}\n`,
     "utf8",
   );
+  await writeFile(join(handoffDir, "open-design-tauri-migration-handoff.md"), "# Tauri Migration Handoff\n", "utf8");
   return bundleSha256;
+}
+
+async function writeHandoffArchive(handoffDir: string): Promise<{ archivePath: string; archiveSha256: string }> {
+  const archivePath = `${handoffDir}.tar.gz`;
+  await execFileAsync("tar", ["-czf", archivePath, "-C", dirname(handoffDir), basename(handoffDir)], {
+    maxBuffer: 1024 * 1024,
+  });
+  const archiveSha256 = createHash("sha256").update(await readFile(archivePath)).digest("hex");
+  await writeFile(`${archivePath}.sha256`, `${archiveSha256}  ${basename(archivePath)}\n`, "utf8");
+  return { archivePath, archiveSha256 };
 }
 
 async function createRemoteFixture(root: string, branchHead: string): Promise<string> {
