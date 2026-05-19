@@ -17,6 +17,7 @@ async function main(): Promise<void> {
   if (args.winReport == null || args.linuxReport == null) {
     throw new Error("usage: tsx scripts/advance-tauri-migration-m4-m5.ts --win-report <dir> --linux-report <dir> [--root <repo>]");
   }
+  await assertTrackedWorktreeClean(args.root, "advancing M4 evidence and M5 defaults");
 
   const migrationDoc = join(args.root, "docs", "electron-to-tauri-migration.md");
   const platformResult = await runScript("verify-tauri-platform-gates.ts", [
@@ -27,7 +28,7 @@ async function main(): Promise<void> {
     "--update-migration-doc",
     migrationDoc,
   ]);
-  const m5Result = await runScript("apply-tauri-migration-m5.ts", ["--root", args.root]);
+  const m5Result = await runScript("apply-tauri-migration-m5.ts", ["--root", args.root, "--skip-clean-check"]);
 
   process.stdout.write(
     [
@@ -91,6 +92,29 @@ async function runScript(scriptName: string, args: string[]): Promise<{ stderr: 
     cwd: workspaceRoot,
     maxBuffer: 1024 * 1024 * 4,
   });
+}
+
+async function assertTrackedWorktreeClean(root: string, action: string): Promise<void> {
+  if (!(await isGitWorktree(root))) return;
+  const status = await execFileAsync("git", ["status", "--porcelain", "--untracked-files=no"], {
+    cwd: root,
+    maxBuffer: 1024 * 1024,
+  });
+  if (status.stdout.trim().length > 0) {
+    throw new Error(`tracked worktree changes are present; commit or stash them before ${action}`);
+  }
+}
+
+async function isGitWorktree(root: string): Promise<boolean> {
+  try {
+    const result = await execFileAsync("git", ["rev-parse", "--is-inside-work-tree"], {
+      cwd: root,
+      maxBuffer: 1024 * 1024,
+    });
+    return result.stdout.trim() === "true";
+  } catch {
+    return false;
+  }
 }
 
 function indent(value: string): string {

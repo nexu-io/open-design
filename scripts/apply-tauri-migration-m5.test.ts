@@ -28,6 +28,14 @@ test("apply-tauri-migration-m5 refuses to run before verified M4 evidence", asyn
   await assert.rejects(runM5Script(root), /M5 default flip requires verified M4 platform gate/);
 });
 
+test("apply-tauri-migration-m5 refuses to run with tracked worktree changes", async (t) => {
+  const root = await createFixtureRoot(t, { verifiedM4: true });
+  await initGitFixture(root);
+  await writeFile(join(root, "README.md"), `${readmeFixture()}\ntracked change\n`, "utf8");
+
+  await assert.rejects(runM5Script(root), /tracked worktree changes are present/);
+});
+
 test("apply-tauri-migration-m5 flips defaults, docs, and checklist after verified M4", async (t) => {
   const root = await createFixtureRoot(t, { verifiedM4: true });
 
@@ -108,6 +116,14 @@ async function createFixtureRoot(t: test.TestContext, options: { verifiedM4: boo
   );
 
   return root;
+}
+
+async function initGitFixture(root: string): Promise<void> {
+  await execFileAsync("git", ["init", "--initial-branch=main"], { cwd: root, maxBuffer: 1024 * 1024 });
+  await execFileAsync("git", ["config", "user.email", "codex@example.test"], { cwd: root, maxBuffer: 1024 * 1024 });
+  await execFileAsync("git", ["config", "user.name", "Codex Test"], { cwd: root, maxBuffer: 1024 * 1024 });
+  await execFileAsync("git", ["add", "."], { cwd: root, maxBuffer: 1024 * 1024 });
+  await execFileAsync("git", ["commit", "-m", "fixture"], { cwd: root, maxBuffer: 1024 * 1024 });
 }
 
 function migrationDoc(options: { verifiedM4: boolean }): string {

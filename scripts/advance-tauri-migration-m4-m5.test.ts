@@ -41,6 +41,17 @@ test("advance-tauri-migration-m4-m5 verifies platform reports and applies M5", a
   assert.match(await readFile(join(root, ".github", "workflows", "release-beta.yml"), "utf8"), /default: tauri/);
 });
 
+test("advance-tauri-migration-m4-m5 refuses to run with tracked worktree changes", async (t) => {
+  const { linuxReport, root, winReport } = await createFixture(t, "open-design-tauri-advance-dirty-");
+  await initGitFixture(root);
+  await writeFile(join(root, "README.md"), `${readmeFixture()}\ntracked change\n`, "utf8");
+
+  await assert.rejects(runAdvance(root, winReport, linuxReport), /tracked worktree changes are present/);
+
+  assert.match(await readFile(join(root, "tools", "dev", "src", "config.ts"), "utf8"), /DEFAULT_DESKTOP_RUNTIME = "electron"/);
+  assert.match(await readFile(join(root, "docs", "electron-to-tauri-migration.md"), "utf8"), new RegExp(`- \\[ \\] ${escapeRegExp(m5ToolsDevDefaultLabel)}`));
+});
+
 test("advance-tauri-migration-m4-m5 does not apply M5 when platform verification fails", async (t) => {
   const { linuxReport, root, winReport } = await createFixture(t, "open-design-tauri-advance-fail-", {
     winRemainingPids: [123],
@@ -125,6 +136,14 @@ async function createFixture(
   );
 
   return { linuxReport, root, winReport };
+}
+
+async function initGitFixture(root: string): Promise<void> {
+  await execFileAsync("git", ["init", "--initial-branch=main"], { cwd: root, maxBuffer: 1024 * 1024 });
+  await execFileAsync("git", ["config", "user.email", "codex@example.test"], { cwd: root, maxBuffer: 1024 * 1024 });
+  await execFileAsync("git", ["config", "user.name", "Codex Test"], { cwd: root, maxBuffer: 1024 * 1024 });
+  await execFileAsync("git", ["add", "."], { cwd: root, maxBuffer: 1024 * 1024 });
+  await execFileAsync("git", ["commit", "-m", "fixture"], { cwd: root, maxBuffer: 1024 * 1024 });
 }
 
 function migrationDoc(): string {

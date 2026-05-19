@@ -1,5 +1,7 @@
+import { execFile } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { promisify } from "node:util";
 
 import {
   m4EvidenceLogMarker,
@@ -12,6 +14,7 @@ import {
 } from "./tauri-migration-policy.ts";
 
 const workspaceRoot = resolve(import.meta.dirname, "..");
+const execFileAsync = promisify(execFile);
 
 const m5ChecklistLabels = [
   m5ToolsDevDefaultLabel,
@@ -24,6 +27,7 @@ const m5ChecklistLabels = [
 type Args = {
   dryRun: boolean;
   root: string;
+  skipCleanCheck: boolean;
 };
 
 type FileEdit = {
@@ -33,6 +37,9 @@ type FileEdit = {
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
+  if (!args.dryRun && !args.skipCleanCheck) {
+    await assertTrackedWorktreeClean(args.root, "applying the M5 default flip");
+  }
   const edits = await createM5Edits(args.root);
 
   if (!args.dryRun) {
@@ -54,6 +61,7 @@ function parseArgs(argv: string[]): Args {
   const parsed: Args = {
     dryRun: false,
     root: workspaceRoot,
+    skipCleanCheck: false,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -67,6 +75,10 @@ function parseArgs(argv: string[]): Args {
     }
     if (arg === "--dry-run") {
       parsed.dryRun = true;
+      continue;
+    }
+    if (arg === "--skip-clean-check") {
+      parsed.skipCleanCheck = true;
       continue;
     }
     if (arg === "--help" || arg === "-h") {
@@ -84,6 +96,29 @@ function parseArgs(argv: string[]): Args {
   }
 
   return parsed;
+}
+
+async function assertTrackedWorktreeClean(root: string, action: string): Promise<void> {
+  if (!(await isGitWorktree(root))) return;
+  const status = await execFileAsync("git", ["status", "--porcelain", "--untracked-files=no"], {
+    cwd: root,
+    maxBuffer: 1024 * 1024,
+  });
+  if (status.stdout.trim().length > 0) {
+    throw new Error(`tracked worktree changes are present; commit or stash them before ${action}`);
+  }
+}
+
+async function isGitWorktree(root: string): Promise<boolean> {
+  try {
+    const result = await execFileAsync("git", ["rev-parse", "--is-inside-work-tree"], {
+      cwd: root,
+      maxBuffer: 1024 * 1024,
+    });
+    return result.stdout.trim() === "true";
+  } catch {
+    return false;
+  }
 }
 
 async function createM5Edits(root: string): Promise<FileEdit[]> {
