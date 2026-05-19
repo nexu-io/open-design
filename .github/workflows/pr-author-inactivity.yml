@@ -27,7 +27,13 @@ name: PR author inactivity
 on:
   schedule:
     - cron: '0 */6 * * *'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Log planned actions without commenting or closing PRs"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   issues: write
@@ -49,6 +55,7 @@ jobs:
             const REMINDER_MARKER = '<!-- pr-author-inactivity:reminder -->';
             const REMINDER_MS = 72 * 60 * 60 * 1000;
             const CLOSE_MS = 120 * 60 * 60 * 1000;
+            const DRY_RUN = core.getBooleanInput('dry_run');
 
             function ts(value) {
               return value ? new Date(value).getTime() : 0;
@@ -183,8 +190,18 @@ jobs:
               });
 
               const inactiveFor = now - feedbackAt;
+              const inactiveHours = Math.floor(inactiveFor / 3600000);
 
               if (inactiveFor >= CLOSE_MS) {
+                const line = DRY_RUN
+                  ? `#${pr.number}: would close after ${inactiveHours}h of author inactivity`
+                  : `#${pr.number}: closed after ${inactiveHours}h of author inactivity`;
+
+                if (DRY_RUN) {
+                  summary.push(line);
+                  continue;
+                }
+
                 await github.rest.issues.createComment({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
@@ -203,11 +220,20 @@ jobs:
                   state: 'closed',
                 });
 
-                summary.push(`#${pr.number}: closed after ${Math.floor(inactiveFor / 3600000)}h of author inactivity`);
+                summary.push(line);
                 continue;
               }
 
               if (inactiveFor >= REMINDER_MS && !reminderSent) {
+                const line = DRY_RUN
+                  ? `#${pr.number}: would remind after ${inactiveHours}h of author inactivity`
+                  : `#${pr.number}: reminded after ${inactiveHours}h of author inactivity`;
+
+                if (DRY_RUN) {
+                  summary.push(line);
+                  continue;
+                }
+
                 await github.rest.issues.createComment({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
@@ -221,13 +247,14 @@ jobs:
                   ].join('\n'),
                 });
 
-                summary.push(`#${pr.number}: reminded after ${Math.floor(inactiveFor / 3600000)}h of author inactivity`);
+                summary.push(line);
               }
             }
 
             if (summary.length === 0) {
-              core.info('No inactive PRs needed action.');
-              await core.summary.addRaw('No inactive PRs needed action.').write();
+              const line = DRY_RUN ? 'Dry run: no inactive PRs would need action.' : 'No inactive PRs needed action.';
+              core.info(line);
+              await core.summary.addRaw(line).write();
               return;
             }
 
@@ -236,6 +263,6 @@ jobs:
             }
 
             await core.summary
-              .addHeading('PR author inactivity actions')
+              .addHeading(DRY_RUN ? 'PR author inactivity dry run' : 'PR author inactivity actions')
               .addList(summary)
               .write();
