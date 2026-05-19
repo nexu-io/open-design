@@ -1,4 +1,5 @@
 import type { Express } from 'express';
+import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import {
   defaultScenarioPluginIdForKind,
@@ -141,6 +142,23 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   ): boolean {
     if (!isProjectLocationProject(project)) return true;
     return locations.some((location) => !location.builtIn && projectBelongsToLocation(project, location));
+  }
+
+  async function resolveCreateProjectLocationId(explicitProjectLocationId: unknown): Promise<string> {
+    if (typeof explicitProjectLocationId === 'string' && explicitProjectLocationId.trim()) {
+      return explicitProjectLocationId.trim();
+    }
+    const config = await readAppConfig(ctx.paths.RUNTIME_DATA_DIR);
+    const configuredDefault = typeof config.defaultProjectLocationId === 'string'
+      ? config.defaultProjectLocationId.trim()
+      : '';
+    if (!configuredDefault || configuredDefault === BUILT_IN_PROJECT_LOCATION_ID) {
+      return BUILT_IN_PROJECT_LOCATION_ID;
+    }
+    const locations = await configuredProjectLocations();
+    return locations.some((location) => !location.builtIn && location.id === configuredDefault)
+      ? configuredDefault
+      : BUILT_IN_PROJECT_LOCATION_ID;
   }
 
   function unregisterProjectsForRemovedLocations(
@@ -353,9 +371,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       if (skipDiscoveryBrief !== undefined && typeof skipDiscoveryBrief !== 'boolean') {
         return sendApiError(res, 400, 'BAD_REQUEST', 'skipDiscoveryBrief must be a boolean');
       }
-      const selectedLocationId = typeof projectLocationId === 'string' && projectLocationId.trim()
-        ? projectLocationId.trim()
-        : BUILT_IN_PROJECT_LOCATION_ID;
+      const selectedLocationId = await resolveCreateProjectLocationId(projectLocationId);
       let externalProjectDir: string | null = null;
       if (selectedLocationId !== BUILT_IN_PROJECT_LOCATION_ID) {
         const location = (await configuredProjectLocations()).find((loc: any) => loc.id === selectedLocationId);
@@ -406,31 +422,39 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
                 }
               : null;
       const now = Date.now();
-      if (externalProjectDir) {
-        await writeProjectManifest(externalProjectDir, {
-          schemaVersion: 1,
+      let project;
+      try {
+        if (externalProjectDir) {
+          await writeProjectManifest(externalProjectDir, {
+            schemaVersion: 1,
+            id,
+            name: name.trim(),
+            createdAt: now,
+            updatedAt: now,
+            skillId: skillId ?? null,
+            designSystemId: designSystemId ?? null,
+          });
+        }
+        project = insertProject(db, {
           id,
           name: name.trim(),
-          createdAt: now,
-          updatedAt: now,
           skillId: skillId ?? null,
           designSystemId: designSystemId ?? null,
+          pendingPrompt: pendingPrompt || null,
+          metadata: projectMetadata,
+          customInstructions:
+            typeof customInstructions === 'string'
+              ? customInstructions
+              : null,
+          createdAt: now,
+          updatedAt: now,
         });
+      } catch (err) {
+        if (externalProjectDir) {
+          await rm(externalProjectDir, { recursive: true, force: true }).catch(() => {});
+        }
+        throw err;
       }
-      const project = insertProject(db, {
-        id,
-        name: name.trim(),
-        skillId: skillId ?? null,
-        designSystemId: designSystemId ?? null,
-        pendingPrompt: pendingPrompt || null,
-        metadata: projectMetadata,
-        customInstructions:
-          typeof customInstructions === 'string'
-            ? customInstructions
-            : null,
-        createdAt: now,
-        updatedAt: now,
-      });
       // Seed a default conversation so the UI always has somewhere to write.
       const cid = randomId();
       insertConversation(db, {

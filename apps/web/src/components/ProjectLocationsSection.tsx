@@ -73,6 +73,22 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
     () => locations.find((location) => location.builtIn),
     [locations],
   );
+  const effectiveDefaultLocationId = useMemo(() => {
+    const configured = cfg.defaultProjectLocationId ?? 'default';
+    return locations.some((location) => location.id === configured) ? configured : 'default';
+  }, [cfg.defaultProjectLocationId, locations]);
+
+  function defaultControlLabel(locationId: string): string {
+    return effectiveDefaultLocationId === locationId
+      ? t('settings.projectLocationsDefaultBadge')
+      : t('settings.projectLocationsMakeDefault');
+  }
+
+  function handleDefaultLocationChange(locationId: string) {
+    setError(null);
+    setStatus(t('settings.projectLocationsDefaultSaved'));
+    setCfg((current) => ({ ...current, defaultProjectLocationId: locationId }));
+  }
 
   async function save(nextDrafts: DraftLocation[]) {
     setSaving(true);
@@ -89,7 +105,17 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
       setLocations(saved);
       const external = externalLocations(saved);
       setDrafts(external);
-      setCfg((current) => ({ ...current, projectLocations: toConfigLocations(saved) }));
+      setCfg((current) => {
+        const configuredDefault = current.defaultProjectLocationId ?? 'default';
+        const nextDefault = saved.some((location) => location.id === configuredDefault)
+          ? configuredDefault
+          : 'default';
+        return {
+          ...current,
+          projectLocations: toConfigLocations(saved),
+          defaultProjectLocationId: nextDefault,
+        };
+      });
       setStatus(t('settings.projectLocationsSaved'));
       void onProjectsRefresh?.();
       return external;
@@ -155,7 +181,15 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
             <strong>{builtIn.name}</strong>
             <code>{builtIn.path}</code>
           </div>
-          <span>Default</span>
+          <label className="project-location-default-control">
+            <input
+              type="radio"
+              name="project-location-default"
+              checked={effectiveDefaultLocationId === builtIn.id}
+              onChange={() => handleDefaultLocationChange(builtIn.id)}
+            />
+            <span>{defaultControlLabel(builtIn.id)}</span>
+          </label>
         </div>
       ) : null}
 
@@ -170,6 +204,17 @@ export function ProjectLocationsSection({ cfg, setCfg, onProjectsRefresh }: Prop
             <button type="button" className="icon-btn danger" onClick={() => removeDraft(index)} disabled={saving}>
               Remove
             </button>
+            {draft.id ? (
+              <label className="project-location-default-control">
+                <input
+                  type="radio"
+                  name="project-location-default"
+                  checked={effectiveDefaultLocationId === draft.id}
+                  onChange={() => handleDefaultLocationChange(draft.id!)}
+                />
+                <span>{defaultControlLabel(draft.id)}</span>
+              </label>
+            ) : null}
           </div>
         ))}
       </div>

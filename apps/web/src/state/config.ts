@@ -83,6 +83,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   notifications: DEFAULT_NOTIFICATIONS,
   orbit: DEFAULT_ORBIT,
   projectLocations: [],
+  defaultProjectLocationId: 'default',
 };
 
 /** Well-known providers with pre-filled base URLs. */
@@ -642,6 +643,9 @@ export function mergeDaemonConfig(
   if (daemonConfig.projectLocations !== undefined) {
     next.projectLocations = daemonConfig.projectLocations;
   }
+  if (daemonConfig.defaultProjectLocationId !== undefined) {
+    next.defaultProjectLocationId = daemonConfig.defaultProjectLocationId ?? 'default';
+  }
   return next;
 }
 
@@ -747,6 +751,7 @@ export async function syncConfigToDaemon(
     privacyDecisionAt: config.privacyDecisionAt,
     customInstructions: config.customInstructions ?? null,
     projectLocations: config.projectLocations ?? [],
+    defaultProjectLocationId: config.defaultProjectLocationId ?? 'default',
   };
   try {
     const response = await fetch('/api/app-config', {

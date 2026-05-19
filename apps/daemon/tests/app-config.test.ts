@@ -648,6 +648,25 @@ describe('app-config projectLocations', () => {
     expect(ids.every((id) => /^loc_[A-Za-z0-9_-]{1,16}$/.test(id))).toBe(true);
   });
 
+  it('persists a defaultProjectLocationId preference', async () => {
+    await writeAppConfig(dataDir, {
+      projectLocations: [{ id: 'external-default', name: 'External', path: '/tmp/od-default-location' }],
+      defaultProjectLocationId: 'external-default',
+    });
+    const cfg = await readAppConfig(dataDir);
+    expect(cfg.defaultProjectLocationId).toBe('external-default');
+  });
+
+  it('normalizes invalid defaultProjectLocationId values', async () => {
+    await writeAppConfig(dataDir, { defaultProjectLocationId: '../bad' });
+    let cfg = await readAppConfig(dataDir);
+    expect(cfg.defaultProjectLocationId).toBe('default');
+
+    await writeAppConfig(dataDir, { defaultProjectLocationId: null });
+    cfg = await readAppConfig(dataDir);
+    expect(cfg.defaultProjectLocationId).toBeNull();
+  });
+
   it('drops invalid scalar projectLocations (not an array)', async () => {
     await writeAppConfig(dataDir, { projectLocations: 'not-array' } as any);
     const cfg = await readAppConfig(dataDir);

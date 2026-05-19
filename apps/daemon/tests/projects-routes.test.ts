@@ -252,6 +252,14 @@ describe('project locations routes', () => {
     });
   }
 
+  async function putAppConfig(config: Record<string, unknown>): Promise<Response> {
+    return fetch(`${baseUrl}/api/app-config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    });
+  }
+
   it('GET /api/project-locations returns built-in default plus empty external', async () => {
     const resp = await fetch(`${baseUrl}/api/project-locations`);
     expect(resp.status).toBe(200);
@@ -411,6 +419,62 @@ describe('project locations routes', () => {
     expect(detailResp.status).toBe(200);
     const detail = (await detailResp.json()) as { resolvedDir: string };
     expect(detail.resolvedDir).toBe(expectedProjectDir);
+  });
+
+  it('POST /api/projects uses the configured default project location when no location is supplied', async () => {
+    const extDir = makeTempDir();
+    const locationId = 'default-create-location';
+    await putProjectLocations([{ id: locationId, name: 'Default External', path: extDir }]);
+    const cfgResp = await putAppConfig({ defaultProjectLocationId: locationId });
+    expect(cfgResp.status).toBe(200);
+
+    const projectId = `default-location-project-${Date.now()}`;
+    const createResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Default location project',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(createResp.status).toBe(200);
+    const body = (await createResp.json()) as {
+      project: { metadata?: { baseDir?: string; projectLocationId?: string; importedFrom?: string } };
+    };
+    expect(body.project.metadata?.projectLocationId).toBe(locationId);
+    expect(body.project.metadata?.importedFrom).toBe('project-location');
+    expect(body.project.metadata?.baseDir).toBe(await realpath(path.join(extDir, projectId)));
+
+    await putAppConfig({ defaultProjectLocationId: null });
+    await putProjectLocations([]);
+  });
+
+  it('POST /api/projects falls back to built-in storage when configured default location is unavailable', async () => {
+    await putProjectLocations([]);
+    const cfgResp = await putAppConfig({ defaultProjectLocationId: 'missing-location' });
+    expect(cfgResp.status).toBe(200);
+
+    const projectId = `missing-default-project-${Date.now()}`;
+    const createResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Missing default project',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(createResp.status).toBe(200);
+    const body = (await createResp.json()) as {
+      project: { metadata?: { baseDir?: string; projectLocationId?: string } };
+    };
+    expect(body.project.metadata?.baseDir).toBeUndefined();
+    expect(body.project.metadata?.projectLocationId).toBeUndefined();
+
+    await putAppConfig({ defaultProjectLocationId: null });
   });
 
   it('PATCH /api/projects/:id preserves project-location provenance with baseDir', async () => {

@@ -3314,7 +3314,7 @@ a.avatar-item:visited {
   font-size: 11px;
   word-break: break-all;
 }
-.project-location-card span {
+.project-location-default-control span {
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
   padding: 3px 8px;
@@ -3322,13 +3322,23 @@ a.avatar-item:visited {
   font-size: 11px;
   font-weight: 700;
 }
+.project-location-default-control {
+  display: inline-flex;
+  align-items: center;
+  justify-self: end;
+  gap: 6px;
+  cursor: pointer;
+}
+.project-location-default-control input {
+  accent-color: var(--accent);
+}
 .project-location-list {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 .project-location-edit {
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   background: var(--bg-panel);
 }
@@ -3350,6 +3360,7 @@ a.avatar-item:visited {
 .project-location-add { align-self: flex-start; }
 @media (max-width: 720px) {
   .project-location-edit { grid-template-columns: 1fr; align-items: stretch; }
+  .project-location-default-control { justify-self: start; }
 }
 .settings-section-connectors { gap: 16px; }
 /* Credentials sit above the catalog now; the divider lives under the field

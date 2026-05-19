@@ -100,6 +100,7 @@ export interface AppConfigPrefs {
   orbit?: OrbitConfigPrefs;
   customInstructions?: string | null;
   projectLocations?: ProjectLocationPrefs[];
+  defaultProjectLocationId?: string | null;
 }
 
 const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
@@ -117,6 +118,7 @@ const ALLOWED_KEYS: ReadonlySet<keyof AppConfigPrefs> = new Set([
   'orbit',
   'customInstructions',
   'projectLocations',
+  'defaultProjectLocationId',
 ] as const);
 
 function configFile(dataDir: string): string {
@@ -366,6 +368,16 @@ function applyConfigValue(
     const validated = validateProjectLocations(value);
     if (validated !== undefined) {
       target[key] = validated;
+    } else {
+      delete target[key];
+    }
+    return;
+  }
+  if (key === 'defaultProjectLocationId') {
+    if (typeof value === 'string') {
+      target[key] = normalizeLocationId(value, 'default');
+    } else if (value === null) {
+      target[key] = null;
     } else {
       delete target[key];
     }

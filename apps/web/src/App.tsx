@@ -738,7 +738,6 @@ export function App() {
         kind === 'template' ? 'template' : 'blank';
       const result = await createProject({
         name: input.name,
-        ...(input.projectLocationId ? { projectLocationId: input.projectLocationId } : {}),
         skillId: input.skillId,
         designSystemId: input.designSystemId,
         pendingPrompt: derivedPendingPrompt,

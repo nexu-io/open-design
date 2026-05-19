@@ -283,6 +283,9 @@ export interface Dict {
   'settings.projectLocationsDuplicate': string;
   'settings.projectLocationsWorkBaseMeta': string;
   'settings.projectLocationsAddFolder': string;
+  'settings.projectLocationsDefaultBadge': string;
+  'settings.projectLocationsMakeDefault': string;
+  'settings.projectLocationsDefaultSaved': string;
   'settings.librarySkills': string;
   'settings.libraryDesignSystems': string;
   'settings.librarySearch': string;

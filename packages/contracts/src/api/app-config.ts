@@ -48,6 +48,8 @@ export interface AppConfigPrefs {
   customInstructions?: string | null;
   /** External project library roots. The daemon adds its built-in .od/projects location at read time. */
   projectLocations?: ProjectLocationPrefs[];
+  /** Project location id used for new projects when the create request does not choose one explicitly. */
+  defaultProjectLocationId?: string | null;
 }
 
 export interface AppConfigResponse {

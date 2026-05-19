@@ -341,6 +341,7 @@ export interface AppConfig {
   telemetry?: TelemetryConfig;
   customInstructions?: string;
   projectLocations?: ProjectLocationPrefs[];
+  defaultProjectLocationId?: string | null;
 }
 
 export interface TelemetryConfig {
