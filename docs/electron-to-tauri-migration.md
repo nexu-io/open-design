@@ -18,6 +18,7 @@ The migration stays parallel until parity is proven. Electron remains the defaul
 - macOS Tauri `.app` and `.dmg` packaging now pass build/install where applicable/start/inspect eval/inspect screenshot/stop smoke.
 - Windows NSIS and Linux AppImage Tauri packaging paths are wired and have lifecycle readiness tests, but remain platform smoke gates.
 - CI now has opt-in-by-change Tauri platform gates for Windows NSIS and Linux AppImage through `packaged_smoke_tauri_win` and `packaged_smoke_tauri_linux`; those jobs still need native runner evidence before the M4 boxes below can close.
+- `release-beta` has an explicit `desktop_runtime` workflow input, defaulting to `electron`, so maintainers can run beta packaging with `tauri` before the default flip without changing public defaults.
 - MSI and Windows/Linux unpacked `--to dir` are not default-flip blockers. Tauri officially supports MSI via WiX, but this repository still needs a namespace-scoped MSI install/uninstall lifecycle before treating MSI as release-grade. Tauri's documented bundle targets are `deb`, `rpm`, `appimage`, `nsis`, `msi`, `app`, and `dmg`, with no `dir` target; keep Electron `--to dir` during the transition and resolve the command shape during M6. Reference: https://v2.tauri.app/reference/config/#bundletype
 - Tauri versions are pinned to `tauri@2.11.2`, `@tauri-apps/cli@2.11.2`, and `@tauri-apps/api@2.11.0`.
 - Electron remains the default runtime for `tools-dev` and `tools-pack`.
@@ -227,6 +228,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Committed the migration implementation locally on branch `codex/electron-to-tauri-migration` at `e87d3109172ea0c4a9a9289f793b493bd3ebf4f8`, then added this native CI handoff note. Unrelated local files were left unstaged. Attempted `git push -u origin codex/electron-to-tauri-migration`, but the configured Git credential (`sunseol`) lacks write permission to `nexu-io/open-design` and GitHub returned 403. The GitHub connector also returned 403 for creating the same branch. Native Windows/Linux M4 evidence is therefore still pending a push/PR from a credential with repository write access or an equivalent native-host run.
 - 2026-05-20: Added `scripts/verify-tauri-platform-gates.ts` to mechanically validate extracted Windows/Linux release-smoke artifacts before closing M4. It rejects skipped reports, missing `summary.json`, missing screenshots, wrong specs, failed suite results, bad health evals, non-empty stop PID lists, Windows uninstall residue, and Linux headless regressions. Verified a synthetic passing report pair and confirmed the current macOS skip report fails with a missing `summary.json` error.
 - 2026-05-20: Added `scripts/verify-tauri-platform-gates.test.ts` and wired it into `pnpm guard`, so the report verifier is now part of the repository policy gate. The tests cover a complete Windows+Linux evidence pair, a skipped report with no runtime summary, and Windows stop residue. `pnpm guard` and `pnpm typecheck` passed after the wiring change.
+- 2026-05-20: Added `OD_PACKAGED_E2E_REUSE_BUILD=1` support to `e2e/specs/win-tauri.spec.ts` and `e2e/specs/linux.spec.ts`, allowing release workflows to smoke the artifact built in an earlier tools-pack step instead of rebuilding. `release-beta` now has a `desktop_runtime: electron|tauri` input, keeps Electron as the default, and wires Tauri beta runs through the runtime-specific tools-pack build flags, Rust/Tauri Linux prerequisites, Windows Tauri smoke, Linux Tauri smoke, and the existing mac packaged smoke with `OD_PACKAGED_E2E_DESKTOP_RUNTIME`.
 
 ### Platform Gate Runners
 
@@ -252,6 +254,8 @@ pnpm exec tsx scripts/release-smoke.ts linux specs/linux.spec.ts
 ```
 
 Reports are written under `.tmp/release-report/<platform>` by default, or `OD_PACKAGED_E2E_REPORT_DIR` when set. The same release-smoke wrapper supports `mac`, `win`, and `linux`; the Tauri migration gates use `specs/win-tauri.spec.ts` for Windows and `specs/linux.spec.ts` for Linux. `OD_PACKAGED_E2E_BUILD_JSON_REQUIRED=0` is only for these self-building platform specs; release workflows that build in an earlier step should keep the default strict build JSON requirement.
+
+When a workflow has already built the artifact and saved the tools-pack JSON, set `OD_PACKAGED_E2E_REUSE_BUILD=1` and `OD_PACKAGED_E2E_BUILD_JSON_PATH=<path>` so the Windows/Linux Tauri specs validate the existing artifact instead of rebuilding it. This is the mode used by the `release-beta` Tauri runtime option.
 
 CI equivalents live in `.github/workflows/ci.yml`:
 

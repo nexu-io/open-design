@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { execFile } from 'node:child_process';
-import { mkdir, stat } from 'node:fs/promises';
+import { mkdir, readFile, stat } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -21,6 +21,7 @@ const outputNamespaceRoot = join(toolsPackDir, 'out', 'linux', 'namespaces', nam
 const runtimeNamespaceRoot = join(toolsPackDir, 'runtime', 'linux', 'namespaces', namespace);
 const screenshotPath = process.env.OD_PACKAGED_E2E_SCREENSHOT_PATH ?? join(toolsPackDir, 'screenshots', `${namespace}.png`);
 const healthExpression = "fetch('/api/health').then(async response => ({ health: await response.json(), href: location.href, status: response.status, title: document.title }))";
+const reuseBuild = process.env.OD_PACKAGED_E2E_REUSE_BUILD === '1';
 
 type DesktopStatus = {
   state?: string;
@@ -138,8 +139,8 @@ linuxDescribe('packaged linux Tauri runtime smoke', () => {
         await runToolsPackJson<LinuxUninstallResult>('uninstall').catch(() => null);
       });
 
-      const build = await measureSmokeStep(timings, 'build appimage', async () =>
-        runToolsPackJson<LinuxPackResult>('build', ['--to', 'appimage']),
+      const build = await measureSmokeStep(timings, reuseBuild ? 'load build json' : 'build appimage', async () =>
+        reuseBuild ? readBuildJson<LinuxPackResult>() : runToolsPackJson<LinuxPackResult>('build', ['--to', 'appimage']),
       );
       expect(build.to).toBe('appimage');
       expect(build.appImagePath).toEqual(expect.any(String));
@@ -347,6 +348,18 @@ async function runToolsPackJson<T>(action: string, extraArgs: string[] = []): Pr
     return JSON.parse(result.stdout) as T;
   } catch (error) {
     throw new Error(`tools-pack linux ${action} did not print JSON: ${String(error)}\n${result.stdout}`);
+  }
+}
+
+async function readBuildJson<T>(): Promise<T> {
+  const path = process.env.OD_PACKAGED_E2E_BUILD_JSON_PATH;
+  if (path == null || path.length === 0) {
+    throw new Error('OD_PACKAGED_E2E_BUILD_JSON_PATH is required when OD_PACKAGED_E2E_REUSE_BUILD=1');
+  }
+  try {
+    return JSON.parse(await readFile(resolveFromWorkspace(path), 'utf8')) as T;
+  } catch (error) {
+    throw new Error(`failed to read tools-pack build JSON at ${path}: ${formatUnknown(error)}`);
   }
 }
 

@@ -23,6 +23,14 @@ on:
         required: true
         type: boolean
         default: false
+      desktop_runtime:
+        description: "Desktop runtime to package. Keep electron for public beta; use tauri for migration smoke."
+        required: true
+        type: choice
+        options:
+          - electron
+          - tauri
+        default: electron
 
 permissions:
   actions: write
@@ -75,6 +83,10 @@ jobs:
             echo "release-beta requires at least one platform to be enabled" >&2
             exit 1
           fi
+          if [ "${{ inputs.desktop_runtime }}" = "tauri" ] && [ "${{ inputs.enable_mac_intel }}" = "true" ]; then
+            echo "release-beta desktop_runtime=tauri does not publish mac Intel artifacts yet" >&2
+            exit 1
+          fi
 
       - name: Validate R2 release access
         env:
@@ -114,10 +126,15 @@ jobs:
         with:
           node-version: 24
 
+      - name: Setup Rust
+        if: ${{ inputs.desktop_runtime == 'tauri' }}
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Verify mac Electron framework symlinks
+        if: ${{ inputs.desktop_runtime == 'electron' }}
         run: |
           set -euo pipefail
           electron_dist="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "apps/desktop/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist"));')"
@@ -137,6 +154,7 @@ jobs:
           done
 
       - name: Prepare Apple signing certificate
+        if: ${{ inputs.desktop_runtime == 'electron' }}
         env:
           APPLE_SIGNING_CERTIFICATE_BASE64: ${{ secrets.APPLE_SIGNING_CERTIFICATE_BASE64 }}
           APPLE_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
@@ -167,13 +185,16 @@ jobs:
             exec tools-pack mac build
             --dir "$tools_pack_dir"
             --namespace release-beta
+            --desktop-runtime "${{ inputs.desktop_runtime }}"
             --portable
             --app-version "${{ needs.metadata.outputs.beta_version }}"
             --mac-compression normal
             --to dmg
             --json
-            --signed
           )
+          if [ "${{ inputs.desktop_runtime }}" = "electron" ]; then
+            build_args+=(--signed)
+          fi
           if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$build_log_path" >&2))"; then
             printf '%s\n' "$build_output" | tee "$build_json_path"
           else
@@ -183,7 +204,7 @@ jobs:
           fi
 
       - name: Capture mac framework diagnostics
-        if: ${{ failure() }}
+        if: ${{ failure() && inputs.desktop_runtime == 'electron' }}
         continue-on-error: true
         run: |
           set -euo pipefail
@@ -262,6 +283,7 @@ jobs:
         env:
           OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/mac-tools-pack-build.json
           OD_PACKAGED_E2E_BUILD_LOG_PATH: ${{ runner.temp }}/mac-tools-pack-build.log
+          OD_PACKAGED_E2E_DESKTOP_RUNTIME: ${{ inputs.desktop_runtime }}
           OD_PACKAGED_E2E_MAC: "1"
           OD_PACKAGED_E2E_NAMESPACE: release-beta
           OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/mac
@@ -329,6 +351,7 @@ jobs:
           pnpm exec tools-pack mac build \
             --dir "$RUNNER_TEMP/tools-pack" \
             --namespace release-beta-intel \
+            --desktop-runtime "${{ inputs.desktop_runtime }}" \
             --portable \
             --mac-compression maximum \
             --to all \
@@ -381,7 +404,8 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($env:WIN_TOOLS_PACK_ORIGIN_KEY)) {
             throw "Windows tools-pack cache origin key is empty"
           }
-          $prefix = "tools-pack-win-v7-beta-$env:RUNNER_OS-"
+          $desktopRuntime = "${{ inputs.desktop_runtime }}"
+          $prefix = "tools-pack-win-v7-beta-$desktopRuntime-$env:RUNNER_OS-"
           "origin=$env:WIN_TOOLS_PACK_ORIGIN_KEY" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "prefix=$prefix" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "key=$prefix$env:WIN_TOOLS_PACK_ORIGIN_KEY" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
@@ -398,6 +422,10 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Setup Rust
+        if: ${{ inputs.desktop_runtime == 'tauri' }}
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Setup NSIS
         shell: pwsh
@@ -420,6 +448,7 @@ jobs:
             "--dir", $toolsPackDir,
             "--cache-dir", $cacheDir,
             "--namespace", "release-beta-win",
+            "--desktop-runtime", "${{ inputs.desktop_runtime }}",
             "--portable",
             "--app-version", "${{ needs.metadata.outputs.beta_version }}",
             "--to", "nsis",
@@ -438,6 +467,7 @@ jobs:
             $buildOutput = pnpm exec tools-pack win build `
               --dir $toolsPackDir `
               --namespace release-beta-win `
+              --desktop-runtime "${{ inputs.desktop_runtime }}" `
               --portable `
               --app-version "${{ needs.metadata.outputs.beta_version }}" `
               --to nsis `
@@ -467,13 +497,22 @@ jobs:
         working-directory: e2e
         env:
           OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/windows-tools-pack-build.json
-          OD_PACKAGED_E2E_WIN: "1"
+          OD_PACKAGED_E2E_DESKTOP_RUNTIME: ${{ inputs.desktop_runtime }}
           OD_PACKAGED_E2E_NAMESPACE: release-beta-win
+          OD_PACKAGED_E2E_REUSE_BUILD: "1"
           OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/win
           OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
         run: |
           $ErrorActionPreference = "Stop"
-          pnpm exec tsx scripts/release-smoke.ts win specs/win.spec.ts
+          $desktopRuntime = "${{ inputs.desktop_runtime }}"
+          if ($desktopRuntime -eq "tauri") {
+            $env:OD_PACKAGED_E2E_WIN_TAURI = "1"
+            $spec = "specs/win-tauri.spec.ts"
+          } else {
+            $env:OD_PACKAGED_E2E_WIN = "1"
+            $spec = "specs/win.spec.ts"
+          }
+          pnpm exec tsx scripts/release-smoke.ts win $spec
           if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
           }
@@ -557,21 +596,76 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # `--containerized` builds the AppImage inside the electronuserland/builder
-      # Docker image (glibc 2.27 baseline) so the resulting binary runs on older
-      # distros than ubuntu-latest's glibc 2.39. Docker is preinstalled on the
-      # GitHub-hosted ubuntu-latest runner, so no extra setup is required.
+      - name: Setup Rust
+        if: ${{ inputs.desktop_runtime == 'tauri' }}
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Tauri Linux dependencies
+        if: ${{ inputs.desktop_runtime == 'tauri' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            libfuse2 \
+            libgtk-3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            patchelf \
+            wget \
+            xvfb
+
+      # Electron keeps the existing containerized AppImage path for glibc
+      # compatibility. Tauri Linux builds run directly on the GitHub runner
+      # because the current Tauri path needs host Rust/WebKitGTK tooling and
+      # does not implement tools-pack's legacy container mode.
       - name: Build beta linux artifacts
         run: |
           set -euo pipefail
-          pnpm exec tools-pack linux build \
-            --dir "$RUNNER_TEMP/tools-pack" \
-            --namespace release-beta-linux \
-            --portable \
-            --app-version "${{ needs.metadata.outputs.beta_version }}" \
-            --to appimage \
-            --containerized \
+          tools_pack_dir="$RUNNER_TEMP/tools-pack"
+          build_json_path="$RUNNER_TEMP/linux-tools-pack-build.json"
+          build_args=(
+            exec tools-pack linux build
+            --dir "$tools_pack_dir"
+            --namespace release-beta-linux
+            --desktop-runtime "${{ inputs.desktop_runtime }}"
+            --portable
+            --app-version "${{ needs.metadata.outputs.beta_version }}"
+            --to appimage
             --json
+          )
+          if [ "${{ inputs.desktop_runtime }}" = "electron" ]; then
+            build_args+=(--containerized)
+          fi
+          build_output="$(pnpm "${build_args[@]}")"
+          printf '%s\n' "$build_output" | tee "$build_json_path"
+
+      - name: Smoke beta linux Tauri packaged runtime
+        if: ${{ inputs.desktop_runtime == 'tauri' }}
+        working-directory: e2e
+        env:
+          OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/linux-tools-pack-build.json
+          OD_PACKAGED_E2E_DESKTOP_RUNTIME: tauri
+          OD_PACKAGED_E2E_LINUX: "1"
+          OD_PACKAGED_E2E_NAMESPACE: release-beta-linux
+          OD_PACKAGED_E2E_REUSE_BUILD: "1"
+          OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/linux
+          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+        run: |
+          set -euo pipefail
+          xvfb-run -a pnpm exec tsx scripts/release-smoke.ts linux specs/linux.spec.ts
+
+      - name: Upload linux Tauri e2e spec report
+        if: ${{ always() && inputs.desktop_runtime == 'tauri' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-beta-linux-tauri-e2e-report
+          path: ${{ runner.temp }}/release-report/linux
+          if-no-files-found: warn
 
       - name: Prepare linux beta assets
         env:
