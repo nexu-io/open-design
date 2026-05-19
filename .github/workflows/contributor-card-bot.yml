@@ -44,6 +44,7 @@ jobs:
   recognize:
     name: Render and post contributor card
     if: |
+      (github.event_name != 'workflow_dispatch' || contains(fromJSON('["development","test","main"]'), github.ref_name)) &&
       github.repository == 'nexu-io/open-design' &&
       (
         (github.event_name == 'pull_request_target' && github.event.pull_request.merged == true) ||

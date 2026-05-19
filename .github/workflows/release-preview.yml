@@ -22,6 +22,7 @@ env:
 
 jobs:
   metadata:
+    if: github.event_name != 'workflow_dispatch' || contains(fromJSON('["development","test","main"]'), github.ref_name)
     name: Prepare preview metadata
     runs-on: ubuntu-latest
     env:

@@ -28,6 +28,7 @@ concurrency:
 
 jobs:
   change_scopes:
+    if: github.event_name != 'workflow_dispatch' || contains(fromJSON('["development","test","main"]'), github.ref_name)
     name: Detect CI change scopes
     runs-on: ubuntu-latest
     outputs:

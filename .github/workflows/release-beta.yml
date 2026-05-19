@@ -45,7 +45,7 @@ env:
 jobs:
   metadata:
     name: Prepare beta metadata
-    if: github.repository == 'nexu-io/open-design'
+    if: (github.event_name != 'workflow_dispatch' || contains(fromJSON('["development","test","main"]'), github.ref_name)) && github.repository == 'nexu-io/open-design'
     runs-on: ubuntu-latest
     env:
       OPEN_DESIGN_BETA_METADATA_URL: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/beta/latest/metadata.json

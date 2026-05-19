@@ -35,7 +35,7 @@ concurrency:
 jobs:
   deploy:
     name: Deploy landing page
-    if: github.repository == 'nexu-io/open-design'
+    if: (github.event_name != 'workflow_dispatch' || contains(fromJSON('["development","test","main"]'), github.ref_name)) && github.repository == 'nexu-io/open-design'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 

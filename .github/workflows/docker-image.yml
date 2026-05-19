@@ -9,6 +9,7 @@ on:
 
 jobs:
   build-and-push:
+    if: github.event_name != 'workflow_dispatch' || contains(fromJSON('["development","test","main"]'), github.ref_name)
     runs-on: ubuntu-latest
     permissions:
       contents: read
