@@ -4369,7 +4369,13 @@ function HtmlViewer({
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, []);
+    // `file.name` is in the dep list so the handler's `firstEditMode-
+    // AvailableSeenForFileRef.current !== file.name` guard compares against
+    // the currently-displayed file. Without this, the listener would close
+    // over the first-render `file.name`; switching to another `.twk-panel`
+    // artifact would never re-mirror the new artifact's default-open state
+    // because the stale closure's comparison kept matching. PR #1643 review.
+  }, [file.name]);
 
   useEffect(() => {
     setActiveCommentTarget(null);
