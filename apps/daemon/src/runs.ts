@@ -56,9 +56,9 @@ interface AcpSession {
 
 interface ChildProcess {
   exitCode: number | null;
-  signalCode: number | null;
+  signalCode: string | null;
   killed: boolean;
-  kill(signal?: string): boolean;
+  kill(signal?: number | string): boolean;
   once?(event: string, listener: () => void): void;
   off?(event: string, listener: () => void): void;
 }
