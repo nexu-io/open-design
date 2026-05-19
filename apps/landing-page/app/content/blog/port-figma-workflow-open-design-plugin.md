@@ -60,16 +60,20 @@ Here is the minimum path for a plugin that ports one Figma landing-page workflow
 5. **Include one real example.** Save a generated artifact under `examples/` so reviewers can judge the output, not just the promise.
 6. **Validate and pack.** Run the plugin commands before opening a PR.
 
-The publishing docs give the current command path:
+The current CLI path uses a lowercase plugin id. Avoid slash-separated
+registry names at scaffold time; `od plugin scaffold` creates
+`<out>/<id>/...`, so the follow-up commands point at that generated folder:
 
 ```bash
-od plugin scaffold --id vendor/plugin-name --title "Plugin name" --out ./plugins/community
-od plugin validate ./plugins/community/plugin-name
-od plugin pack ./plugins/community/plugin-name --out ./dist
-od plugin publish vendor/plugin-name --to open-design --repo https://github.com/vendor/plugin-name
+od plugin scaffold --id figma-workflow --title "Figma workflow" --out ./plugins/community
+od plugin validate ./plugins/community/figma-workflow --no-daemon
+od plugin pack ./plugins/community/figma-workflow --out ./dist/figma-workflow-0.1.0.tgz
 ```
 
-Those commands are GitHub-backed in v1. `od plugin login` and `od plugin whoami --json` wrap GitHub CLI; Open Design does not store your GitHub credentials.
+When the plugin is ready for registry review, authenticate through GitHub
+with `od plugin login` and `od plugin whoami --json`, then follow the
+publishing docs for the current review path. Open Design does not store
+your GitHub credentials.
 
 ## What this looks like in a real design team
 
@@ -92,9 +96,9 @@ The team still needs taste. The plugin just stops making them re-explain the sam
 
 ## What to do next
 
-If your team has a Figma export, token sync, brand kit, or deck template that keeps coming back, port the smallest repeatable slice first. Start with a `SKILL.md`, add `open-design.json`, validate it, and open the PR before the workflow grows into a private tool nobody else can reuse.
+If your team has a Figma export, token sync, brand kit, or deck template that keeps coming back, port the smallest repeatable slice first. Start with a `SKILL.md`, add `open-design.json`, validate it, and open the PR before the workflow grows into a private tool nobody else can reuse. The screenshot-to-prototype example shows the plugin-shaped version: a portable skill plus an Open Design sidecar.
 
-[Try this workflow](https://github.com/nexu-io/open-design/tree/main/skills/figma-implement-design).
+[Try this workflow](https://github.com/nexu-io/open-design/tree/main/plugins/spec/examples/import-screenshot-to-prototype).
 
 ## Related reading
 
