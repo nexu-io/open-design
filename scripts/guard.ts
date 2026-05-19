@@ -14,6 +14,7 @@ import { collectCssHardcodedColorMatches, cssWideAndSpecialColorKeywords, realNa
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const migrationDocPath = path.join(repoRoot, "docs", "electron-to-tauri-migration.md");
+const pnpmLockPath = path.join(repoRoot, "pnpm-lock.yaml");
 const readmePath = path.join(repoRoot, "README.md");
 const appsAgentsPath = path.join(repoRoot, "apps", "AGENTS.md");
 const architectureDocPath = path.join(repoRoot, "docs", "architecture.md");
@@ -887,9 +888,32 @@ function readPackageDependencyNames(source: string, label: string): Set<string> 
   ]);
 }
 
+function readPnpmImporterDependencyNames(source: string, importer: string): Set<string> {
+  const lines = source.split(/\r?\n/);
+  const importerHeader = importer === "." ? "  .:" : `  ${importer}:`;
+  const startIndex = lines.indexOf(importerHeader);
+  if (startIndex < 0) {
+    throw new Error(`pnpm-lock.yaml must include importer ${importer}`);
+  }
+
+  const dependencyNames = new Set<string>();
+  for (const line of lines.slice(startIndex + 1)) {
+    if (/^  [^ ].*:$/.test(line)) {
+      break;
+    }
+
+    const match = line.match(/^      ('?[@/A-Za-z0-9._-]+'?):\s*$/);
+    if (match?.[1] != null) {
+      dependencyNames.add(match[1].replace(/^'|'$/g, ""));
+    }
+  }
+  return dependencyNames;
+}
+
 async function checkTauriMigrationOrder(): Promise<boolean> {
   const [
     migrationDoc,
+    pnpmLock,
     readme,
     appsAgents,
     architectureDoc,
@@ -905,6 +929,7 @@ async function checkTauriMigrationOrder(): Promise<boolean> {
     electronGuidanceReferenceFiles,
   ] = await Promise.all([
     readFile(migrationDocPath, "utf8"),
+    readFile(pnpmLockPath, "utf8"),
     readFile(readmePath, "utf8"),
     readFile(appsAgentsPath, "utf8"),
     readFile(architectureDocPath, "utf8"),
@@ -926,6 +951,11 @@ async function checkTauriMigrationOrder(): Promise<boolean> {
     ...readPackageDependencyNames(desktopPackageJson, "apps/desktop/package.json"),
     ...readPackageDependencyNames(packagedPackageJson, "apps/packaged/package.json"),
     ...readPackageDependencyNames(toolsPackPackageJson, "tools/pack/package.json"),
+  ]);
+  const lockfileDependencyNames = new Set([
+    ...readPnpmImporterDependencyNames(pnpmLock, "apps/desktop"),
+    ...readPnpmImporterDependencyNames(pnpmLock, "apps/packaged"),
+    ...readPnpmImporterDependencyNames(pnpmLock, "tools/pack"),
   ]);
   const m4PlatformGateStates = m4PlatformGateLabels.map((label) => isChecklistLineChecked(migrationDoc, label));
   const m4Complete = m4PlatformGateStates.every(Boolean);
@@ -1005,6 +1035,9 @@ async function checkTauriMigrationOrder(): Promise<boolean> {
   const electronDependenciesPresent = electronDependencyNames.filter((dependencyName) =>
     packageDependencyNames.has(dependencyName),
   );
+  const electronLockfileDependenciesPresent = electronDependencyNames.filter((dependencyName) =>
+    lockfileDependencyNames.has(dependencyName),
+  );
   if (electronDepsRemoved && electronDependenciesPresent.length > 0) {
     violations.push(
       `the M6 Electron dependency cleanup is checked, but package manifests still include: ${electronDependenciesPresent.join(", ")}.`,
@@ -1012,6 +1045,14 @@ async function checkTauriMigrationOrder(): Promise<boolean> {
   }
   if (!electronDepsRemoved && electronDependenciesPresent.length === 0) {
     violations.push("Electron dependencies were removed, but the M6 dependency cleanup checklist line is not checked.");
+  }
+  if (electronDepsRemoved && electronLockfileDependenciesPresent.length > 0) {
+    violations.push(
+      `the M6 Electron dependency cleanup is checked, but pnpm-lock.yaml importers still include: ${electronLockfileDependenciesPresent.join(", ")}.`,
+    );
+  }
+  if (!electronDepsRemoved && electronLockfileDependenciesPresent.length === 0) {
+    violations.push("Electron dependencies were removed from pnpm-lock.yaml importers, but the M6 dependency cleanup checklist line is not checked.");
   }
   const remainingElectronRuntimeFiles = electronRuntimeFiles.filter((_, index) => electronRuntimeFileExists[index]);
   if (electronRuntimeRemoved && remainingElectronRuntimeFiles.length > 0) {
