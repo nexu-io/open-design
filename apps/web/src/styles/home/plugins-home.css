@@ -485,6 +485,40 @@
     var(--bg-subtle);
   animation: plugins-home-shimmer 1.6s ease-in-out infinite;
 }
+.plugins-home__media-fallback {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 22% 18%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 34%),
+    linear-gradient(135deg, color-mix(in srgb, var(--accent-tint) 64%, white), var(--bg-subtle));
+}
+.plugins-home__media-fallback-glyph {
+  color: color-mix(in srgb, var(--accent) 74%, var(--text));
+  font-family: var(--serif);
+  font-size: 56px;
+  font-weight: 650;
+  line-height: 1;
+  opacity: 0.86;
+}
+.plugins-home__media-fallback-icon {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-panel) 74%, transparent);
+  color: var(--accent);
+  box-shadow: var(--shadow-xs);
+}
 @keyframes plugins-home-shimmer {
   to {
     background-position: -200% 0, 0 0;

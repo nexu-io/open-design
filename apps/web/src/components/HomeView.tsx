@@ -82,6 +82,7 @@ interface ActivePlugin {
   inputsValid: boolean;
   queryTemplate: string | null;
   lastRenderedPrompt: string | null;
+  populatePromptFromTemplate: boolean;
   // Stage B of plugin-driven-flow-plan: when the user applied this
   // plugin through the Home chip rail, the chip carries the project
   // kind we should stamp on the resulting create payload. `null` =
@@ -148,7 +149,7 @@ type HomeDesignSystemOption = {
 };
 
 const AUTO_DESIGN_SYSTEM_OPTION_ID = '__auto-design-system__';
-const AUTO_DESIGN_SYSTEM_OPTION_TITLE = '自动选择风格参考';
+const LEGACY_AUTO_DESIGN_SYSTEM_TITLES = new Set(['自动选择风格参考']);
 
 interface Props {
   projects: Project[];
@@ -414,11 +415,18 @@ export function HomeView({
   const activeBadgeTitle = useMemo(() => {
     if (!active) return null;
     if (active.chipId) {
+      const defaultPluginId = defaultPluginIdForChip(active.chipId);
       const chip = findChip(active.chipId);
-      if (chip) return homeHeroChipLabelForId(chip.id, t);
+      if (chip && defaultPluginId === active.record.id) {
+        return homeHeroChipLabelForId(chip.id, t);
+      }
     }
     return active.record.title;
   }, [active, t]);
+  const showActivePluginChip = useMemo(
+    () => shouldShowActivePluginChip(active),
+    [active],
+  );
 
   const selectableSkills = useMemo(
     () => skills.filter((skill) => !skill.aggregatesExamples),
@@ -466,8 +474,8 @@ export function HomeView({
   }, [designSystems]);
 
   const designSystemOptions = useMemo(
-    () => designSystemOptionsForHome(designSystems, defaultDesignSystemId, designSystemLogoById),
-    [defaultDesignSystemId, designSystemLogoById, designSystems],
+    () => designSystemOptionsForHome(designSystems, defaultDesignSystemId, designSystemLogoById, t),
+    [defaultDesignSystemId, designSystemLogoById, designSystems, t],
   );
 
   async function usePlugin(
@@ -484,6 +492,7 @@ export function HomeView({
       editableInputNames?: string[];
       preserveInputFields?: boolean;
       replaceWithoutConfirmation?: boolean;
+      populatePrompt?: boolean;
     },
   ) {
     const applyRequestId = activePluginApplyRequestRef.current + 1;
@@ -500,12 +509,14 @@ export function HomeView({
         : nextPrompt !== undefined && nextPrompt !== null
         ? null
         : resolvePluginQueryFallback(record.manifest?.od?.useCase?.query, locale) || null;
-    const optimisticPrompt =
-      nextPrompt !== undefined && nextPrompt !== null
+    const populatePrompt = options?.populatePrompt ?? true;
+    const optimisticPrompt = populatePrompt
+      ? nextPrompt !== undefined && nextPrompt !== null
         ? nextPrompt
         : queryTemplate
           ? renderPluginBriefTemplate(queryTemplate, optimisticInputs)
-          : null;
+          : null
+      : null;
     if (options?.chipId) setPendingChipId(options.chipId);
     setError(null);
     // Optimistic update: the chip already carries the inputs and the
@@ -524,6 +535,7 @@ export function HomeView({
       inputsValid,
       queryTemplate,
       lastRenderedPrompt: optimisticPrompt,
+      populatePromptFromTemplate: populatePrompt,
       projectKind: options?.projectKind ?? null,
       chipId: options?.chipId ?? null,
       mediaSurface: options?.mediaSurface ?? null,
@@ -591,7 +603,7 @@ export function HomeView({
     // user hasn't edited the prompt in the meantime — if they have,
     // current !== optimisticPrompt and the functional setter is a
     // no-op so their edits survive.
-    if (nextPrompt === undefined || nextPrompt === null) {
+    if (populatePrompt && (nextPrompt === undefined || nextPrompt === null)) {
       const reconciledQuery =
         options?.queryTemplate !== undefined
           ? options.queryTemplate
@@ -642,8 +654,13 @@ export function HomeView({
       editableInputNames?: string[];
       preserveInputFields?: boolean;
       replaceWithoutConfirmation?: boolean;
+      populatePrompt?: boolean;
     },
   ) {
+    if (options?.populatePrompt === false) {
+      void usePlugin(record, nextPrompt, options);
+      return;
+    }
     const replacement = previewPluginReplacement(record, nextPrompt, {
       inputs: withHomeDesignSystemDefault(options?.inputs, options?.inputFields ?? record.manifest?.od?.inputs ?? [], designSystemOptions),
       inputFields: options?.inputFields,
@@ -766,6 +783,19 @@ export function HomeView({
     requestAnimationFrame(() => inputRef.current?.focus());
   }
 
+  function useExamplePlugin(record: InstalledPluginRecord, chipId: string, promptText: string) {
+    const projectKind = projectKindForExamplePlugin(record, chipId);
+    requestActivePlugin(record, promptText, {
+      projectKind,
+      chipId,
+      inputs: {},
+      inputFields: [],
+      queryTemplate: null,
+      replaceWithoutConfirmation: true,
+      populatePrompt: true,
+    });
+  }
+
   function removePluginContext(pluginId: string) {
     const record = selectedPluginContexts.find((item) => item.record.id === pluginId)?.record ?? null;
     setSelectedPluginContexts((prev) => prev.filter((item) => item.record.id !== pluginId));
@@ -839,6 +869,7 @@ export function HomeView({
         ? renderPluginBriefTemplate(queryTemplate, normalized)
         : active.lastRenderedPrompt;
     if (
+      active.populatePromptFromTemplate &&
       queryTemplate !== null &&
       nextRendered !== null &&
       (prompt === active.lastRenderedPrompt || prompt.trim().length === 0)
@@ -855,15 +886,29 @@ export function HomeView({
       editableInputNames: mediaComposer?.editableFieldNames ?? active.editableInputNames,
       inputsValid,
       result: inputsEqual(active.result?.appliedPlugin?.inputs, normalized) ? active.result : null,
-      lastRenderedPrompt: nextRendered,
+      lastRenderedPrompt: active.populatePromptFromTemplate ? nextRendered : active.lastRenderedPrompt,
     });
   }
 
   function clearActivePlugin() {
+    activePluginApplyRequestRef.current += 1;
     setActive(null);
     setFallbackProjectKind(null);
+    setPendingApplyId(null);
+    setPendingChipId(null);
     setPrompt('');
     setPromptEditedByUser(false);
+  }
+
+  function clearActiveChipSelection() {
+    activePluginApplyRequestRef.current += 1;
+    setActive(null);
+    setFallbackProjectKind(null);
+    setPendingApplyId(null);
+    setPendingChipId(null);
+    setError(null);
+    setPromptEditedByUser(prompt.trim().length > 0);
+    requestAnimationFrame(() => inputRef.current?.focus());
   }
 
   function useSkill(skill: SkillSummary, nextPrompt: string | null) {
@@ -999,6 +1044,7 @@ export function HomeView({
             editableInputNames: composer.editableFieldNames,
             preserveInputFields: true,
             replaceWithoutConfirmation: Boolean(active?.mediaSurface),
+            populatePrompt: false,
           });
           return;
         }
@@ -1006,6 +1052,7 @@ export function HomeView({
           projectKind: chip.action.projectKind,
           chipId: chip.id,
           inputs: chip.action.inputs,
+          populatePrompt: chip.group !== 'create',
         });
         return;
       }
@@ -1049,13 +1096,29 @@ export function HomeView({
       setError('Fill the required plugin parameters before running.');
       return;
     }
-    if (submittedActive && !submittedActive.result) {
-      const result = await resolveActivePlugin(submittedActive.record, submittedActive.inputs);
+    const defaultInputs = { prompt: trimmed };
+    const submittedDesignSystemSelection = homeDesignSystemSelectionForInputs(
+      submittedActive?.inputs ?? null,
+      designSystemOptions,
+      trimmed,
+    );
+    const submittedPluginInputs = submittedActive
+      ? applyHomeDesignSystemSelectionToInputs(
+          submittedActive.inputs,
+          submittedDesignSystemSelection,
+          designSystemOptions,
+        )
+      : defaultInputs;
+    const activeInputsChangedForSubmit = submittedActive
+      ? !inputsEqual(submittedActive.inputs, submittedPluginInputs)
+      : false;
+    if (submittedActive && (!submittedActive.result || activeInputsChangedForSubmit)) {
+      const result = await resolveActivePlugin(submittedActive.record, submittedPluginInputs);
       if (!result) {
         setError(`Failed to apply ${submittedActive.record.title}. Check the plugin parameters and try again.`);
         return;
       }
-      submittedActive = { ...submittedActive, result };
+      submittedActive = { ...submittedActive, result, inputs: submittedPluginInputs };
       setActive(submittedActive);
     }
     const contextPlugins = selectedPluginContexts.map((item) => ({
@@ -1080,7 +1143,6 @@ export function HomeView({
       status: item.connector.status,
       ...(item.connector.accountLabel ? { accountLabel: item.connector.accountLabel } : {}),
     }));
-    const defaultInputs = { prompt: trimmed };
     const submittedProjectKind =
       submittedActive?.projectKind ?? fallbackProjectKind ?? projectKindForSkill(activeSkill) ?? 'other';
     const submittedProjectMetadata = submittedActive?.mediaSurface
@@ -1090,14 +1152,6 @@ export function HomeView({
           submittedActive?.inputs ?? null,
           submittedActive?.projectMetadata ?? null,
         );
-    const submittedDesignSystemSelection = homeDesignSystemSelectionForInputs(
-      submittedActive?.inputs ?? null,
-      designSystemOptions,
-      trimmed,
-    );
-    const submittedPluginInputs = submittedActive
-      ? applyHomeDesignSystemSelectionToInputs(submittedActive.inputs, submittedDesignSystemSelection)
-      : defaultInputs;
     onSubmit({
       prompt: trimmed,
       pluginId: submittedActive?.record.id ?? DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID,
@@ -1128,19 +1182,20 @@ export function HomeView({
         activeSkillId={activeSkill?.id ?? null}
         activeSkillTitle={activeSkill?.name ?? null}
         activeChipId={active?.chipId ?? null}
+        showActivePluginChip={showActivePluginChip}
         onClearActivePlugin={clearActivePlugin}
+        onClearActiveChip={clearActiveChipSelection}
         onClearActiveSkill={() => setActiveSkill(null)}
         selectedPluginContexts={selectedPluginContexts.map((item) => item.record)}
         onRemovePluginContext={removePluginContext}
         onOpenPluginDetails={setDetailsRecord}
         pluginInputFields={active?.inputFields ?? []}
         pluginInputValues={active?.inputs ?? {}}
-        pluginInputTemplate={active?.queryTemplate ?? null}
+        pluginInputTemplate={null}
         onPluginInputValuesChange={updateActiveInputs}
         inlineEditableInputNames={active?.editableInputNames ?? []}
         footerInputNames={footerInputNamesForChip(active?.chipId ?? null)}
         designSystemOptions={designSystemOptions}
-        showPluginInputsForm={!active?.mediaSurface}
         onPluginInputValidityChange={(valid) => {
           setActive((prev) => (
             prev && prev.inputsValid !== valid ? { ...prev, inputsValid: valid } : prev
@@ -1164,6 +1219,7 @@ export function HomeView({
           Boolean(active && !active.inputsValid)
         }
         onPickPlugin={(record, nextPrompt) => addPluginContext(record, nextPrompt)}
+        onPickExamplePlugin={useExamplePlugin}
         onPickSkill={useSkill}
         onPickMcp={useMcpServer}
         onPickConnector={useConnector}
@@ -1311,6 +1367,53 @@ function projectKindForSkill(skill: SkillSummary | null): ProjectKind | null {
   return 'other';
 }
 
+function projectKindForExamplePlugin(
+  record: InstalledPluginRecord,
+  chipId: string,
+): ProjectKind {
+  const mode = homePluginManifestField(record, 'mode');
+  const surface = homePluginManifestField(record, 'surface');
+  if (mode === 'deck') return 'deck';
+  if (mode === 'prototype') return 'prototype';
+  if (mode === 'image' || surface === 'image') return 'image';
+  if (mode === 'video' || surface === 'video') return 'video';
+  if (mode === 'audio' || surface === 'audio') return 'audio';
+  const chip = findChip(chipId);
+  if (
+    chip?.action.kind === 'apply-scenario' ||
+    chip?.action.kind === 'apply-figma-migration'
+  ) {
+    return chip.action.projectKind;
+  }
+  return 'other';
+}
+
+function homePluginManifestField(
+  record: InstalledPluginRecord,
+  key: string,
+): string | null {
+  const value = (record.manifest?.od ?? {})[key];
+  return typeof value === 'string' ? value.toLowerCase() : null;
+}
+
+function defaultPluginIdForChip(chipId: string | null): string | null {
+  if (!chipId) return null;
+  const chip = findChip(chipId);
+  if (
+    chip?.action.kind === 'apply-scenario' ||
+    chip?.action.kind === 'apply-figma-migration'
+  ) {
+    return chip.action.pluginId;
+  }
+  return null;
+}
+
+function shouldShowActivePluginChip(active: ActivePlugin | null): boolean {
+  if (!active) return false;
+  if (!active.chipId) return true;
+  return active.record.id !== defaultPluginIdForChip(active.chipId);
+}
+
 function homeHeroChipLabelForId(chipId: string, t: ReturnType<typeof useI18n>['t']): string {
   switch (chipId) {
     case 'prototype': return t('homeHero.chip.prototype');
@@ -1390,6 +1493,7 @@ function designSystemOptionsForHome(
   systems: DesignSystemSummary[],
   defaultDesignSystemId: string | null,
   logoById: Record<string, string>,
+  t: ReturnType<typeof useI18n>['t'],
 ): HomeDesignSystemOption[] {
   const selectable = systems.filter((system) => {
     if (!system.title) return false;
@@ -1416,10 +1520,10 @@ function designSystemOptionsForHome(
   return [
     {
       id: AUTO_DESIGN_SYSTEM_OPTION_ID,
-      title: AUTO_DESIGN_SYSTEM_OPTION_TITLE,
+      title: t('homeHero.footer.autoDesignSystem'),
       isDefault: false,
       auto: true,
-      summary: '根据当前 prompt 自动匹配最合适的设计体系和视觉风格。',
+      summary: t('homeHero.footer.autoDesignSystemSummary'),
     },
     ...systemOptions,
   ];
@@ -1482,21 +1586,33 @@ function homeDesignSystemSelectionForInputs(
   const selectedTitle = value.trim();
   if (!selectedTitle || selectedTitle === 'the active project design system') return null;
   const selected = designSystemOptions.find((option) => option.title === selectedTitle);
-  if (selected?.auto) return autoSelectHomeDesignSystem(prompt, designSystemOptions);
+  if (selected?.auto || isAutoDesignSystemTitle(selectedTitle, designSystemOptions)) {
+    return autoSelectHomeDesignSystem(prompt, designSystemOptions);
+  }
   return selected ?? null;
 }
 
 function applyHomeDesignSystemSelectionToInputs(
   inputs: Record<string, unknown>,
   selected: HomeDesignSystemOption | null,
+  designSystemOptions: HomeDesignSystemOption[],
 ): Record<string, unknown> {
   if (!selected) return inputs;
   const current = inputs.designSystem;
-  if (typeof current !== 'string' || current.trim() !== AUTO_DESIGN_SYSTEM_OPTION_TITLE) return inputs;
+  if (typeof current !== 'string' || !isAutoDesignSystemTitle(current, designSystemOptions)) return inputs;
   return {
     ...inputs,
     designSystem: selected.title,
   };
+}
+
+function isAutoDesignSystemTitle(
+  value: string,
+  designSystemOptions: HomeDesignSystemOption[],
+): boolean {
+  const title = value.trim();
+  if (LEGACY_AUTO_DESIGN_SYSTEM_TITLES.has(title)) return true;
+  return designSystemOptions.some((option) => option.auto && option.title === title);
 }
 
 function autoSelectHomeDesignSystem(

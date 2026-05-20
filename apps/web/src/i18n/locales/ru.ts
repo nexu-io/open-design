@@ -3,6 +3,18 @@ import { en } from './en';
 
 export const ru: Dict = {
   ...en,
+  'homeHero.promptExamples': "Примеры",
+  'homeHero.footer.designSystem': "Стиль",
+  'homeHero.footer.autoDesignSystem': "Авто",
+  'homeHero.footer.autoDesignSystemSummary': "Автоматически подбирает дизайн-систему и визуальный стиль для текущего промпта.",
+  'homeHero.footer.ratio': "Формат",
+  'homeHero.footer.duration': "Длительность",
+  'homeHero.footer.resolution': "Разрешение",
+  'homeHero.footer.speakerNotes': "Notes",
+  'homeHero.footer.noSpeakerNotes': "Без заметок",
+  'homeHero.footer.availableCount': "{n} available",
+  'homeHero.footer.noMatches': "No matches",
+  'homeHero.moreShortcuts': "Еще",
   'common.cancel': 'Отмена',
   'common.save': 'Сохранить',
   'common.close': 'Закрыть',

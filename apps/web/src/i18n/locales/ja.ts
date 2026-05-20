@@ -3,6 +3,18 @@ import { en } from './en';
 
 export const ja: Dict = {
   ...en,
+  'homeHero.promptExamples': "例",
+  'homeHero.footer.designSystem': "スタイル",
+  'homeHero.footer.autoDesignSystem': "自動",
+  'homeHero.footer.autoDesignSystemSummary': "現在のプロンプトに最適なデザインシステムと視覚スタイルを自動で選びます。",
+  'homeHero.footer.ratio': "比率",
+  'homeHero.footer.duration': "長さ",
+  'homeHero.footer.resolution': "解像度",
+  'homeHero.footer.speakerNotes': "Notes",
+  'homeHero.footer.noSpeakerNotes': "ノートなし",
+  'homeHero.footer.availableCount': "{n} available",
+  'homeHero.footer.noMatches': "No matches",
+  'homeHero.moreShortcuts': "その他",
   'common.cancel': 'キャンセル',
   'common.save': '保存',
   'common.close': '閉じる',

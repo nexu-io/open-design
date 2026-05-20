@@ -3,6 +3,18 @@ import type { Dict } from '../types';
 
 export const it: Dict = {
   ...en,
+  'homeHero.promptExamples': "Esempi",
+  'homeHero.footer.designSystem': "Stile",
+  'homeHero.footer.autoDesignSystem': "Auto",
+  'homeHero.footer.autoDesignSystemSummary': "Abbina automaticamente il design system e lo stile visivo più adatti al prompt attuale.",
+  'homeHero.footer.ratio': "Rapporto",
+  'homeHero.footer.duration': "Durata",
+  'homeHero.footer.resolution': "Risoluzione",
+  'homeHero.footer.speakerNotes': "Notes",
+  'homeHero.footer.noSpeakerNotes': "Senza note",
+  'homeHero.footer.availableCount': "{n} available",
+  'homeHero.footer.noMatches': "No matches",
+  'homeHero.moreShortcuts': "Altro",
   'common.cancel': 'Annulla',
   'common.save': 'Salva',
   'common.close': 'Chiudi',

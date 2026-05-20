@@ -3,6 +3,18 @@ import { en } from './en';
 
 export const fa: Dict = {
   ...en,
+  'homeHero.promptExamples': "نمونه‌ها",
+  'homeHero.footer.designSystem': "سبک",
+  'homeHero.footer.autoDesignSystem': "خودکار",
+  'homeHero.footer.autoDesignSystemSummary': "به‌صورت خودکار مناسب‌ترین سیستم طراحی و سبک بصری را برای پرامپت فعلی انتخاب می‌کند.",
+  'homeHero.footer.ratio': "نسبت",
+  'homeHero.footer.duration': "مدت",
+  'homeHero.footer.resolution': "وضوح",
+  'homeHero.footer.speakerNotes': "Notes",
+  'homeHero.footer.noSpeakerNotes': "بدون یادداشت",
+  'homeHero.footer.availableCount': "{n} available",
+  'homeHero.footer.noMatches': "No matches",
+  'homeHero.moreShortcuts': "بیشتر",
   'common.cancel': 'لغو',
   'common.save': 'ذخیره',
   'common.close': 'بستن',

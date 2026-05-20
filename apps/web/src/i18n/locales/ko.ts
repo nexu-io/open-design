@@ -3,6 +3,18 @@ import type { Dict } from '../types';
 
 export const ko: Dict = {
   ...en,
+  'homeHero.promptExamples': "예시",
+  'homeHero.footer.designSystem': "스타일",
+  'homeHero.footer.autoDesignSystem': "자동",
+  'homeHero.footer.autoDesignSystemSummary': "현재 프롬프트에 가장 알맞은 디자인 시스템과 비주얼 스타일을 자동으로 선택합니다.",
+  'homeHero.footer.ratio': "비율",
+  'homeHero.footer.duration': "길이",
+  'homeHero.footer.resolution': "해상도",
+  'homeHero.footer.speakerNotes': "Notes",
+  'homeHero.footer.noSpeakerNotes': "노트 없음",
+  'homeHero.footer.availableCount': "{n} available",
+  'homeHero.footer.noMatches': "No matches",
+  'homeHero.moreShortcuts': "더보기",
   'common.cancel': '취소',
   'common.save': '저장',
   'common.close': '닫기',

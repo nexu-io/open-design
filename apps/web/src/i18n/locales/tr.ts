@@ -3,6 +3,18 @@ import type { Dict } from '../types';
 
 export const tr: Dict = {
   ...en,
+  'homeHero.promptExamples': "Örnekler",
+  'homeHero.footer.designSystem': "Stil",
+  'homeHero.footer.autoDesignSystem': "Otomatik",
+  'homeHero.footer.autoDesignSystemSummary': "Geçerli istem için en uygun tasarım sistemini ve görsel stili otomatik eşler.",
+  'homeHero.footer.ratio': "Oran",
+  'homeHero.footer.duration': "Süre",
+  'homeHero.footer.resolution': "Çözünürlük",
+  'homeHero.footer.speakerNotes': "Notes",
+  'homeHero.footer.noSpeakerNotes': "Not yok",
+  'homeHero.footer.availableCount': "{n} available",
+  'homeHero.footer.noMatches': "No matches",
+  'homeHero.moreShortcuts': "Daha fazla",
   'common.cancel': 'İptal et',
   'common.save': 'Kaydet',
   'common.close': 'Kapat',

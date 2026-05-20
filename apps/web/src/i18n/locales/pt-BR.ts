@@ -3,6 +3,18 @@ import { en } from './en';
 
 export const ptBR: Dict = {
   ...en,
+  'homeHero.promptExamples': "Exemplos",
+  'homeHero.footer.designSystem': "Estilo",
+  'homeHero.footer.autoDesignSystem': "Auto",
+  'homeHero.footer.autoDesignSystemSummary': "Seleciona automaticamente o design system e o estilo visual mais adequados para o prompt atual.",
+  'homeHero.footer.ratio': "Proporção",
+  'homeHero.footer.duration': "Duração",
+  'homeHero.footer.resolution': "Resolução",
+  'homeHero.footer.speakerNotes': "Notes",
+  'homeHero.footer.noSpeakerNotes': "Sem notas",
+  'homeHero.footer.availableCount': "{n} available",
+  'homeHero.footer.noMatches': "No matches",
+  'homeHero.moreShortcuts': "Mais",
   'common.cancel': 'Cancelar',
   'common.save': 'Salvar',
   'common.close': 'Fechar',

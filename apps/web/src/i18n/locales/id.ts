@@ -3,6 +3,18 @@ import { en } from './en';
 
 export const id: Dict = {
   ...en,
+  'homeHero.promptExamples': "Contoh",
+  'homeHero.footer.designSystem': "Gaya",
+  'homeHero.footer.autoDesignSystem': "Auto",
+  'homeHero.footer.autoDesignSystemSummary': "Otomatis memilih sistem desain dan gaya visual yang paling cocok untuk prompt saat ini.",
+  'homeHero.footer.ratio': "Rasio",
+  'homeHero.footer.duration': "Durasi",
+  'homeHero.footer.resolution': "Resolusi",
+  'homeHero.footer.speakerNotes': "Notes",
+  'homeHero.footer.noSpeakerNotes': "Tanpa catatan",
+  'homeHero.footer.availableCount': "{n} available",
+  'homeHero.footer.noMatches': "No matches",
+  'homeHero.moreShortcuts': "Lainnya",
   'common.cancel': 'Batal',
   'common.save': 'Simpan',
   'common.close': 'Tutup',

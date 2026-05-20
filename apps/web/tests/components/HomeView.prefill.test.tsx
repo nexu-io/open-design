@@ -285,7 +285,7 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
-    fireEvent.click(await screen.findByTestId('home-hero-rail-create-plugin'));
+    await clickHomeShortcut('create-plugin');
 
     const input = await screen.findByTestId('home-hero-input');
     await waitFor(() => {
@@ -397,7 +397,7 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
-    fireEvent.click(await screen.findByTestId('home-hero-rail-create-plugin'));
+    await clickHomeShortcut('create-plugin');
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       '/api/plugins/od-new-generation/apply',
       expect.anything(),
@@ -481,34 +481,48 @@ describe('HomeView prompt handoff', () => {
         artifactKind: 'web prototype',
         fidelity: 'high-fidelity',
         audience: 'product evaluators',
-        designSystem: 'Refly Design System',
+        designSystem: 'Auto',
         template: 'the bundled web prototype seed',
       },
     });
     expect(
       screen.getByTestId('home-hero-footer-option-designSystem').textContent,
-    ).toContain('Refly Design System');
+    ).toContain('Auto');
     expect(screen.getByTestId('home-hero-footer-option-fidelity')).toBeTruthy();
     expect(screen.getByTestId('home-hero-footer-option-designSystem')).toBeTruthy();
+    expect((screen.getByTestId('home-hero-input') as HTMLTextAreaElement).value).toBe('');
+    expect(screen.getByTestId('home-hero-prompt-examples')).toBeTruthy();
     expect(screen.queryByTestId('home-hero-prompt-slot-fidelity')).toBeNull();
-    expect(screen.getByTestId('home-hero-prompt-slot-artifactKind')).toBeTruthy();
+    expect(screen.queryByTestId('home-hero-prompt-slot-artifactKind')).toBeNull();
     expect(screen.queryByTestId('home-hero-prompt-slot-designSystem')).toBeNull();
-    expect(screen.getByTestId('home-hero-prompt-slot-template')).toBeTruthy();
-    // Inline pills are read-only; the editable controls live in the
-    // PluginInputsForm below so caret positions in the textarea no
-    // longer drift away from where the user clicked in the overlay.
-    expect(screen.getByTestId('plugin-inputs-form')).toBeTruthy();
+    expect(screen.queryByTestId('home-hero-prompt-slot-template')).toBeNull();
+    expect(screen.queryByTestId('plugin-inputs-form')).toBeNull();
     expect(screen.queryByRole('alert')).toBeNull();
 
+    fireEvent.click(screen.getAllByTestId('home-hero-prompt-example')[0]!);
+    expect((screen.getByTestId('home-hero-input') as HTMLTextAreaElement).value).toBe(
+      'Design a high-converting website for an AI CRM',
+    );
+    await waitFor(() => {
+      expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(false);
+    });
     fireEvent.click(screen.getByTestId('home-hero-submit'));
-    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
-      projectKind: 'prototype',
-      designSystemId: 'ds-refly',
-      projectMetadata: expect.objectContaining({
-        kind: 'prototype',
-        fidelity: 'high-fidelity',
-      }),
-    }));
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([url, init]) => (
+        typeof url === 'string' &&
+        url.includes('/api/plugins/example-web-prototype/apply') &&
+        JSON.parse(String((init as RequestInit).body)).inputs.designSystem === 'Refly Design System'
+      ))).toBe(true);
+      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+        prompt: 'Design a high-converting website for an AI CRM',
+        projectKind: 'prototype',
+        designSystemId: 'ds-refly',
+        projectMetadata: expect.objectContaining({
+          kind: 'prototype',
+          fidelity: 'high-fidelity',
+        }),
+      }));
+    });
   });
 
   it('confirms before an explicit plugin use replaces an existing prompt', async () => {
@@ -644,7 +658,7 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
-    fireEvent.click(await screen.findByTestId('home-hero-rail-create-plugin'));
+    await clickHomeShortcut('create-plugin');
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       '/api/plugins/od-plugin-authoring/apply',
       expect.anything(),
@@ -697,7 +711,7 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
-    fireEvent.click(await screen.findByTestId('home-hero-rail-create-plugin'));
+    await clickHomeShortcut('create-plugin');
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       '/api/plugins/od-plugin-authoring/apply',
       expect.anything(),
@@ -770,7 +784,7 @@ describe('HomeView prompt handoff', () => {
       />,
     );
 
-    fireEvent.click(await screen.findByTestId('home-hero-rail-create-plugin'));
+    await clickHomeShortcut('create-plugin');
     fireEvent.click(await screen.findByTestId('home-hero-submit'));
     expect(onSubmit).not.toHaveBeenCalled();
 
@@ -789,3 +803,10 @@ describe('HomeView prompt handoff', () => {
     }));
   });
 });
+
+async function clickHomeShortcut(id: string) {
+  const trigger = await screen.findByTestId('home-hero-shortcuts-trigger');
+  await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(trigger);
+  fireEvent.click(await screen.findByTestId(`home-hero-rail-${id}`));
+}

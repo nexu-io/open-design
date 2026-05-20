@@ -3,6 +3,18 @@ import { en } from './en';
 
 export const uk: Dict = {
   ...en,
+  'homeHero.promptExamples': "Приклади",
+  'homeHero.footer.designSystem': "Стиль",
+  'homeHero.footer.autoDesignSystem': "Авто",
+  'homeHero.footer.autoDesignSystemSummary': "Автоматично добирає дизайн-систему й візуальний стиль для поточного промпта.",
+  'homeHero.footer.ratio': "Співвідношення",
+  'homeHero.footer.duration': "Тривалість",
+  'homeHero.footer.resolution': "Роздільність",
+  'homeHero.footer.speakerNotes': "Notes",
+  'homeHero.footer.noSpeakerNotes': "Без нотаток",
+  'homeHero.footer.availableCount': "{n} available",
+  'homeHero.footer.noMatches': "No matches",
+  'homeHero.moreShortcuts': "Більше",
   'common.cancel': 'Скасувати',
   'common.save': 'Зберегти',
   'common.close': 'Закрити',

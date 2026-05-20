@@ -698,6 +698,18 @@ export interface Dict {
   'homeHero.forNewLine': string;
   'homeHero.run': string;
   'homeHero.typeSomethingToRun': string;
+  'homeHero.promptExamples': string;
+  'homeHero.footer.designSystem': string;
+  'homeHero.footer.autoDesignSystem': string;
+  'homeHero.footer.autoDesignSystemSummary': string;
+  'homeHero.footer.ratio': string;
+  'homeHero.footer.duration': string;
+  'homeHero.footer.resolution': string;
+  'homeHero.footer.speakerNotes': string;
+  'homeHero.footer.noSpeakerNotes': string;
+  'homeHero.footer.availableCount': string;
+  'homeHero.footer.noMatches': string;
+  'homeHero.moreShortcuts': string;
   'homeHero.railAria': string;
   'homeHero.confirmReplaceTitle': string;
   'homeHero.confirmReplaceBody': string;

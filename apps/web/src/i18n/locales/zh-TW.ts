@@ -3,6 +3,18 @@ import { en } from './en';
 
 export const zhTW: Dict = {
   ...en,
+  'homeHero.promptExamples': "範例提示詞",
+  'homeHero.footer.designSystem': "風格",
+  'homeHero.footer.autoDesignSystem': "自動",
+  'homeHero.footer.autoDesignSystemSummary': "根據目前 Prompt 自動匹配合適的設計系統與視覺風格。",
+  'homeHero.footer.ratio': "比例",
+  'homeHero.footer.duration': "時長",
+  'homeHero.footer.resolution': "解析度",
+  'homeHero.footer.speakerNotes': "备注",
+  'homeHero.footer.noSpeakerNotes': "無備忘稿",
+  'homeHero.footer.availableCount': "{n} 个可用",
+  'homeHero.footer.noMatches': "无匹配结果",
+  'homeHero.moreShortcuts': "更多",
   'common.cancel': '取消',
   'common.save': '儲存',
   'common.close': '關閉',

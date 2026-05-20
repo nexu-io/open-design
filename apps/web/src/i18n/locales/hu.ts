@@ -3,6 +3,18 @@ import type { Dict } from '../types';
 
 export const hu: Dict = {
   ...en,
+  'homeHero.promptExamples': "Példák",
+  'homeHero.footer.designSystem': "Stílus",
+  'homeHero.footer.autoDesignSystem': "Auto",
+  'homeHero.footer.autoDesignSystemSummary': "Automatikusan kiválasztja az aktuális prompthoz illő designrendszert és vizuális stílust.",
+  'homeHero.footer.ratio': "Arány",
+  'homeHero.footer.duration': "Időtartam",
+  'homeHero.footer.resolution': "Felbontás",
+  'homeHero.footer.speakerNotes': "Notes",
+  'homeHero.footer.noSpeakerNotes': "Nincs jegyzet",
+  'homeHero.footer.availableCount': "{n} available",
+  'homeHero.footer.noMatches': "No matches",
+  'homeHero.moreShortcuts': "Továbbiak",
   'common.cancel': 'Mégse',
   'common.save': 'Mentés',
   'common.close': 'Bezárás',
