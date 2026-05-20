@@ -316,11 +316,14 @@ setImmediate(() => process.exit(0));
   it('returns sanitized stderr and at least one recovery hint when the Codex CLI exits non-zero with ANSI-laced stderr', async () => {
     await withFakeCodex(
       `
-process.stderr.write('\\u001b[31mError: authentication failed (sk-secret)\\u001b[0m\\n');
+process.stderr.write('\\u001b[31mError: authentication failed (sk-secret-cfg)\\u001b[0m\\n');
 setImmediate(() => process.exit(1));
 `,
       async () => {
-        const result = await testAgentConnection({ agentId: 'codex' });
+        const result = await testAgentConnection({
+          agentId: 'codex',
+          agentCliEnv: { codex: { CODEX_API_KEY: 'sk-secret-cfg' } },
+        });
         expect(result.ok).toBe(false);
         expect(result.diagnostics).toBeDefined();
         expect(result.diagnostics!.agentId).toBe('codex');
@@ -328,9 +331,42 @@ setImmediate(() => process.exit(1));
         expect(result.diagnostics!.binaryPath!.endsWith('codex')).toBe(true);
         expect(result.diagnostics!.stderrExcerpt).not.toBeNull();
         expect(result.diagnostics!.stderrExcerpt!).not.toContain('\x1b[');
+        expect(result.diagnostics!.stderrExcerpt!).not.toContain('sk-secret-cfg');
+        expect(result.diagnostics!.stderrExcerpt!).toContain('[REDACTED]');
         expect(result.diagnostics!.recoveryHints.length).toBeGreaterThanOrEqual(1);
       },
     );
+  });
+
+  it('scrubs bare secrets inherited from process.env (not just the user-configured agent env) from the diagnostics envelope', async () => {
+    const leakKey = `sk-from-process-env-${Date.now()}`;
+    const oldOpenAI = process.env.OPENAI_API_KEY;
+    process.env.OPENAI_API_KEY = leakKey;
+    try {
+      await withFakeCodex(
+        `
+if (process.argv.includes('--version')) {
+  process.stdout.write('codex 9.9.9 ' + (process.env.OPENAI_API_KEY || '') + '\\n');
+  process.exit(0);
+}
+process.stderr.write('boot failed using ' + (process.env.OPENAI_API_KEY || '') + '\\n');
+setImmediate(() => process.exit(1));
+`,
+        async () => {
+          const result = await testAgentConnection({ agentId: 'codex' });
+          expect(result.diagnostics).toBeDefined();
+          expect(result.diagnostics!.stderrExcerpt).not.toBeNull();
+          expect(result.diagnostics!.stderrExcerpt!).not.toContain(leakKey);
+          expect(result.diagnostics!.stderrExcerpt!).toContain('[REDACTED]');
+          if (result.diagnostics!.binaryVersion) {
+            expect(result.diagnostics!.binaryVersion).not.toContain(leakKey);
+          }
+        },
+      );
+    } finally {
+      if (oldOpenAI === undefined) delete process.env.OPENAI_API_KEY;
+      else process.env.OPENAI_API_KEY = oldOpenAI;
+    }
   });
 
   it('exposes the same diagnostics object through POST /api/test/connection', async () => {

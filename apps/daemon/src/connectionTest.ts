@@ -306,6 +306,25 @@ export function redactSecrets(
   return redacted;
 }
 
+const AGENT_SECRET_KEY_RE = /(_API_KEY|_TOKEN|_SECRET|_PASSWORD|_PRIVATE_KEY|_SECRET_KEY|_ACCESS_KEY)$/i;
+
+// Source the exact-secrets list from the env actually handed to the child
+// (process.env + def.env + user-configured agent env), not just the user
+// slice — otherwise an OPENAI_API_KEY inherited from the daemon's own
+// process.env reaches the agent CLI but stays off the redaction list.
+export function collectAgentSecretsFromEnv(
+  env: NodeJS.ProcessEnv | Record<string, string | undefined> | null | undefined,
+): string[] {
+  if (!env) return [];
+  const out: string[] = [];
+  for (const [k, v] of Object.entries(env)) {
+    if (typeof v !== 'string' || v.length === 0) continue;
+    if (!AGENT_SECRET_KEY_RE.test(k)) continue;
+    out.push(v);
+  }
+  return out;
+}
+
 // Diagnostics envelope helpers. Pure functions: no I/O, no
 // process.env reads, safe to exercise as plain unit tests. The agent
 // connection test attaches the result to every agent-mode response so the
@@ -1506,14 +1525,11 @@ async function testAgentConnectionInternal(
     );
     const env = applyAgentLaunchEnv(baseEnv, executableResolution);
     if (diagState) {
-      const agentSecrets = Object.entries(configuredAgentEnv ?? {})
-        .filter(([k]) => /(_API_KEY|_TOKEN|_SECRET|_PASSWORD|_PRIVATE_KEY|_SECRET_KEY|_ACCESS_KEY)$/i.test(k))
-        .map(([, v]) => v);
       diagState.binaryVersion = await probeAgentBinaryVersion(
         executableResolution.launchPath,
         env,
         AGENT_VERSION_PROBE_TIMEOUT_MS,
-        agentSecrets,
+        collectAgentSecretsFromEnv(env),
       );
     }
     const auth = await probeAgentAuthStatus(input.agentId, executableResolution.launchPath, env);
@@ -1841,9 +1857,17 @@ export async function testAgentConnection(
         diagnostic: null,
       };
 
-  const agentSecrets = Object.entries(configuredAgentEnv ?? {})
-    .filter(([k]) => /(_API_KEY|_TOKEN|_SECRET|_PASSWORD|_PRIVATE_KEY|_SECRET_KEY|_ACCESS_KEY)$/i.test(k))
-    .map(([, v]) => v);
+  const spawnedEnv = def
+    ? applyAgentLaunchEnv(
+        spawnEnvForAgent(
+          input.agentId,
+          { ...process.env, ...(def.env || {}) },
+          configuredAgentEnv,
+        ),
+        executableResolution,
+      )
+    : { ...process.env, ...configuredAgentEnv };
+  const agentSecrets = collectAgentSecretsFromEnv(spawnedEnv);
 
   const buildEnvelope = (
     finalKind: ConnectionTestKind,
