@@ -21,9 +21,18 @@ import path from 'node:path';
 // a `previewUrl` (or `null` when the underlying skill has no `example.html`).
 // ---------------------------------------------------------------------------
 
-const PREVIEWS_ROOT = path.resolve(
-  fileURLToPath(new URL('../../public/previews', import.meta.url)),
-);
+const PREVIEWS_ROOT_CANDIDATES = [
+  // `pnpm --filter @open-design/landing-page build` may keep cwd at the
+  // workspace root, while direct package scripts run from the app root.
+  path.resolve(process.cwd(), 'apps/landing-page/public/previews'),
+  path.resolve(process.cwd(), 'public/previews'),
+  // Keep the source-relative path as a final fallback for local dev.
+  path.resolve(fileURLToPath(new URL('../../public/previews', import.meta.url))),
+] as const;
+
+function previewRoot(): string | null {
+  return PREVIEWS_ROOT_CANDIDATES.find((dir) => existsSync(dir)) ?? null;
+}
 
 /**
  * Map of `slug → filename`, e.g. `'kami-deck' → 'kami-deck.webp'`.
@@ -36,7 +45,9 @@ const PREVIEWS_ROOT = path.resolve(
  * template asset).
  */
 function listPreviews(bucket: 'skills' | 'systems' | 'templates'): Map<string, string> {
-  const dir = path.join(PREVIEWS_ROOT, bucket);
+  const root = previewRoot();
+  if (!root) return new Map();
+  const dir = path.join(root, bucket);
   if (!existsSync(dir)) return new Map();
   const map = new Map<string, string>();
   for (const file of readdirSync(dir)) {
