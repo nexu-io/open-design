@@ -1,6 +1,6 @@
 import { spawn, type SpawnOptionsWithoutStdio } from "node:child_process";
 
-import { createPackageManagerInvocation } from "@open-design/platform";
+import { createCommandInvocation, createPackageManagerInvocation } from "@open-design/platform";
 
 import type { ToolPackConfig } from "../config.js";
 
@@ -66,9 +66,14 @@ export async function runPnpm(
 }
 
 export async function runNpmInstall(appRoot: string): Promise<void> {
-  await execFileAsync("npm", ["install", "--omit=dev", "--no-package-lock"], {
+  const invocation = createCommandInvocation({
+    args: ["install", "--omit=dev", "--no-package-lock"],
+    command: process.platform === "win32" ? "npm.cmd" : "npm",
+  });
+  await execFileAsync(invocation.command, invocation.args, {
     cwd: appRoot,
     env: process.env,
+    windowsVerbatimArguments: invocation.windowsVerbatimArguments,
   });
 }
 

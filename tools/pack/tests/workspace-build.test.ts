@@ -11,6 +11,7 @@ import { ensureWorkspaceBuildArtifacts } from "../src/workspace-build.js";
 const PACKAGE_DIRS = [
   "packages/contracts",
   "packages/registry-protocol",
+  "packages/host",
   "packages/sidecar-proto",
   "packages/sidecar",
   "packages/platform",
@@ -28,6 +29,8 @@ const OUTPUT_FILES = [
   "packages/contracts/dist/index.d.ts",
   "packages/registry-protocol/dist/index.mjs",
   "packages/registry-protocol/dist/index.d.ts",
+  "packages/host/dist/index.mjs",
+  "packages/host/dist/index.d.ts",
   "packages/sidecar-proto/dist/index.mjs",
   "packages/sidecar-proto/dist/index.d.ts",
   "packages/sidecar/dist/index.mjs",
@@ -154,6 +157,7 @@ describe("ensureWorkspaceBuildArtifacts", () => {
         await writeOutputs(root, `build-${builds}`);
       });
       await rm(join(root, "apps/web/dist/sidecar/index.js"), { force: true });
+      await rm(join(root, "packages/host/dist/index.mjs"), { force: true });
       await ensureWorkspaceBuildArtifacts(config, cache, async () => {
         builds += 1;
         await writeOutputs(root, `build-${builds}`);
@@ -162,6 +166,7 @@ describe("ensureWorkspaceBuildArtifacts", () => {
       expect(builds).toBe(1);
       expect(cache.report().entries.map((entry) => entry.status)).toEqual(["miss", "hit"]);
       expect(await readFile(join(root, "apps/web/dist/sidecar/index.js"), "utf8")).toBe("build-1\n");
+      expect(await readFile(join(root, "packages/host/dist/index.mjs"), "utf8")).toBe("build-1\n");
     } finally {
       await rm(root, { force: true, recursive: true });
     }
