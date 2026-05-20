@@ -48,8 +48,9 @@ test('captures the home plugin detail surface', async ({ page }) => {
   await expect(card).toBeVisible();
   await card.hover();
   await page.getByTestId('plugins-home-details-visual-deck-writer').click({ force: true });
-  await expect(page.getByTestId('plugin-details-modal')).toBeVisible();
+  await expect(page.getByRole('dialog', { name: /Deck Writer preview/i })).toBeVisible();
   await expect(page.getByTestId('plugin-details-use-visual-deck-writer')).toBeVisible();
+  await expect(page.locator('.ds-modal-stage-iframe-scaler iframe')).toBeVisible();
 
   await captureVisual(page, 'visual-plugin-details');
 });

@@ -77,6 +77,7 @@ const VISUAL_PLUGINS = [
     taskKind: 'new-generation',
     tags: ['slides'],
     query: 'Draft a {{topic}} deck.',
+    previewEntry: 'preview.html',
   }),
   makeVisualPlugin({
     id: 'visual-video-storyboard',
@@ -152,28 +153,20 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
     await fulfillGet(route, { plugins: VISUAL_PLUGINS });
   });
 
+  await page.route('**/api/plugins/*/preview', async (route) => {
+    const id = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-2) ?? 'plugin');
+    await route.fulfill({
+      contentType: 'text/html',
+      body: `<!doctype html><html><body><main><h1>${escapeHtml(id)} preview</h1></main></body></html>`,
+    });
+  });
+
   await page.route('**/api/marketplaces', async (route) => {
     await fulfillGet(route, { marketplaces: [] });
   });
 
   await page.route('**/api/design-systems', async (route) => {
     await fulfillGet(route, { designSystems: VISUAL_DESIGN_SYSTEMS });
-  });
-
-  await page.route('**/api/design-systems/*/showcase', async (route) => {
-    const id = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-2) ?? 'design-system');
-    await route.fulfill({
-      contentType: 'text/html',
-      body: `<!doctype html><html><body><main><h1>${escapeHtml(id)} showcase</h1></main></body></html>`,
-    });
-  });
-
-  await page.route('**/api/design-systems/*/preview', async (route) => {
-    const id = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-2) ?? 'design-system');
-    await route.fulfill({
-      contentType: 'text/html',
-      body: `<!doctype html><html><body><main><h1>${escapeHtml(id)} tokens</h1></main></body></html>`,
-    });
   });
 
   await page.route('**/api/design-systems/*', async (route) => {
@@ -190,6 +183,22 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
           body: `# ${system.title}\n\nDesign guidance for ${system.title}.`,
         },
       },
+    });
+  });
+
+  await page.route('**/api/design-systems/*/showcase', async (route) => {
+    const id = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-2) ?? 'design-system');
+    await route.fulfill({
+      contentType: 'text/html',
+      body: `<!doctype html><html><body><main><h1>${escapeHtml(id)} showcase</h1></main></body></html>`,
+    });
+  });
+
+  await page.route('**/api/design-systems/*/preview', async (route) => {
+    const id = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-2) ?? 'design-system');
+    await route.fulfill({
+      contentType: 'text/html',
+      body: `<!doctype html><html><body><main><h1>${escapeHtml(id)} tokens</h1></main></body></html>`,
     });
   });
 
@@ -288,6 +297,7 @@ function makeVisualPlugin(input: {
   featured?: boolean;
   tags?: string[];
   query?: string;
+  previewEntry?: string;
 }) {
   return {
     id: input.id,
@@ -315,6 +325,14 @@ function makeVisualPlugin(input: {
           ? {
               useCase: {
                 query: { en: input.query },
+              },
+            }
+          : {}),
+        ...(input.previewEntry
+          ? {
+              preview: {
+                type: 'html',
+                entry: input.previewEntry,
               },
             }
           : {}),
