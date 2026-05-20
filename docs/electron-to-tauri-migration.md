@@ -492,6 +492,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Tightened the no-write-access continuation output so `scripts/continue-tauri-migration.ts --dry-run` now prints the exact executable `.commands.sh <archive>` receiver command before the push-only fallback. This keeps the safest checksum-verified receiver path copy-pasteable when the local host can package the handoff but cannot push the branch.
 - 2026-05-20: Aligned the remaining status and package output with that receiver command contract. `scripts/tauri-migration-status.ts` next actions and `scripts/package-tauri-migration-handoff.ts` output now print the exact `.commands.sh <archive>` invocation, so the checksum-verified path is copy-pasteable from every handoff surface before falling back to push-only helper commands.
 - 2026-05-20: Quoted the `scripts/tauri-migration-status.ts` push-only fallback command for custom archive paths and remote names. This keeps status next actions copy-pasteable when the write-capable receiver uses paths or remotes containing spaces.
+- 2026-05-20: Preserved the configured platform report directory in `scripts/tauri-migration-status.ts` push-only fallback commands. A receiver following status output now keeps custom `--report-dir` values through the push helper, so the helper's post-push report download and advance guidance stays aligned with the status-verified report location.
 
 ### Platform Gate Runners
 

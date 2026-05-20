@@ -540,8 +540,8 @@ function nextActionsForPhase(
         : "the command script";
     const pushOnlyHandoffCommand =
       archiveReady && handoffArchive?.archive != null
-        ? `scripts/push-tauri-migration-handoff.ts --archive ${shellQuote(handoffArchive.archive)} --remote ${shellQuote(remoteName)}`
-        : `scripts/push-tauri-migration-handoff.ts --archive /path/to/open-design-tauri-migration-handoff.tar.gz --remote ${shellQuote(remoteName)}`;
+        ? `scripts/push-tauri-migration-handoff.ts --archive ${shellQuote(handoffArchive.archive)} --remote ${shellQuote(remoteName)} --report-dir ${shellQuote(reportDir)}`
+        : `scripts/push-tauri-migration-handoff.ts --archive /path/to/open-design-tauri-migration-handoff.tar.gz --remote ${shellQuote(remoteName)} --report-dir ${shellQuote(reportDir)}`;
     const rootOption = root === defaultRoot ? "" : ` --root ${shellQuote(root)}`;
     return [
       ...heartbeatActions,

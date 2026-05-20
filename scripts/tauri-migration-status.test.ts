@@ -309,7 +309,9 @@ test("tauri-migration-status prints continuation guidance for a custom handoff a
   assert.match(nextActions, new RegExp(`'${escapeRegExp(`${customArchivePath}.commands.sh`)}' '${escapeRegExp(customArchivePath)}'`));
   assert.match(
     nextActions,
-    new RegExp(`push-tauri-migration-handoff\\.ts --archive '${escapeRegExp(customArchivePath)}' --remote '${escapeRegExp(remotePath)}'`),
+    new RegExp(
+      `push-tauri-migration-handoff\\.ts --archive '${escapeRegExp(customArchivePath)}' --remote '${escapeRegExp(remotePath)}' --report-dir '${escapeRegExp(reportDir)}'`,
+    ),
   );
   assert.match(nextActions, /--dry-run/);
   assert.doesNotMatch(nextActions, new RegExp(escapeRegExp(`${handoffDir}.tar.gz`)));
