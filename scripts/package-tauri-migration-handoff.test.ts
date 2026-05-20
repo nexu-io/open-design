@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { access, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import test from "node:test";
@@ -471,6 +471,88 @@ test("package-tauri-migration-handoff command sidecar verifies bundle prerequisi
   await assert.rejects(git(targetRepo, "rev-parse", migrationBranch));
 });
 
+test("package-tauri-migration-handoff command sidecar imports, pushes, and verifies on a receiver checkout", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "open-design-tauri-package-handoff-receiver-"));
+  t.after(() => void rm(root, { force: true, recursive: true }));
+  const sourceRepo = join(root, "source");
+  const remotePath = join(root, "remote.git");
+  const targetRepo = join(root, "target");
+  const handoffDir = join(root, "handoff");
+  const bundlePath = join(handoffDir, "open-design-tauri-migration.bundle");
+  const output = join(root, "open-design-tauri-migration-handoff.tar.gz");
+  const binDir = join(root, "bin");
+  const fakePnpmLog = join(root, "pnpm.log");
+  const prBodyPath = join(root, "tauri-migration-pr-body.md");
+
+  await git(root, "init", "--initial-branch=main", sourceRepo);
+  await git(sourceRepo, "config", "user.email", "codex@example.test");
+  await git(sourceRepo, "config", "user.name", "Codex Test");
+  await writeFile(join(sourceRepo, "base.txt"), "base\n", "utf8");
+  await git(sourceRepo, "add", "base.txt");
+  await git(sourceRepo, "commit", "-m", "base");
+  await git(sourceRepo, "checkout", "-b", migrationBranch);
+  await writeFile(join(sourceRepo, "feature.txt"), "feature\n", "utf8");
+  await git(sourceRepo, "add", "feature.txt");
+  await git(sourceRepo, "commit", "-m", "feature");
+  const sourceHead = (await git(sourceRepo, "rev-parse", migrationBranch)).stdout.trim();
+  await git(root, "init", "--bare", remotePath);
+  await git(sourceRepo, "push", remotePath, "main:refs/heads/main");
+  await git(root, "clone", "--branch", "main", remotePath, targetRepo);
+  await mkdir(handoffDir, { recursive: true });
+  await git(sourceRepo, "bundle", "create", bundlePath, migrationBranch, "^main");
+  const bundleSha256 = createHash("sha256").update(await readFile(bundlePath)).digest("hex");
+  await writeFile(
+    join(handoffDir, "open-design-tauri-migration-handoff.json"),
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        branch: migrationBranch,
+        branchHead: sourceHead,
+        bundlePath: "open-design-tauri-migration.bundle",
+        bundleSha256,
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  await writeFile(join(handoffDir, "open-design-tauri-migration-handoff.md"), "# Tauri Migration Handoff\n", "utf8");
+  await runPackageHandoffScript("--handoff-dir", handoffDir, "--output", output);
+  await mkdir(binDir, { recursive: true });
+  await writeFile(
+    join(binDir, "pnpm"),
+    ["#!/usr/bin/env bash", `printf '%q ' "$@" >> ${shellQuote(fakePnpmLog)}`, `printf '\\n' >> ${shellQuote(fakePnpmLog)}`].join("\n"),
+    "utf8",
+  );
+  await chmod(join(binDir, "pnpm"), 0o755);
+
+  const result = await execFileAsync("bash", [`${output}.commands.sh`, output], {
+    cwd: targetRepo,
+    env: {
+      ...process.env,
+      PATH: `${binDir}:${process.env.PATH ?? ""}`,
+      REMOTE: remotePath,
+      TAURI_NATIVE_CI_TRIGGER: "0",
+      TAURI_PR_BODY_PATH: prBodyPath,
+    },
+    maxBuffer: 1024 * 1024 * 4,
+  });
+
+  assert.match(result.stdout, /Verified handoff package identity/);
+  assert.match(result.stdout, new RegExp(`Verified remote ${escapeRegExp(remotePath)} ${escapeRegExp(migrationBranch)} at ${sourceHead}`));
+  assert.match(result.stdout, /Remote push is complete/);
+  assert.match(result.stdout, /gh workflow run ci\.yml --ref codex\/electron-to-tauri-migration/);
+  assert.match(result.stdout, /gh pr create --draft/);
+  const remoteHead = (await git(targetRepo, "ls-remote", "--heads", remotePath, `refs/heads/${migrationBranch}`)).stdout
+    .trim()
+    .split(/\s+/, 1)[0];
+  assert.equal(remoteHead, sourceHead);
+  assert.equal((await git(targetRepo, "rev-parse", migrationBranch)).stdout.trim(), sourceHead);
+  assert.equal((await git(targetRepo, "symbolic-ref", "--short", "HEAD")).stdout.trim(), migrationBranch);
+  assert.match(await readFile(prBodyPath, "utf8"), /Pending native M4 evidence/);
+  assert.match(await readFile(fakePnpmLog, "utf8"), /tauri-migration-status\.ts/);
+});
+
 test("package-tauri-migration-handoff command sidecar restores the checked-out branch when push fails", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "open-design-tauri-package-handoff-push-restore-"));
   t.after(() => void rm(root, { force: true, recursive: true }));
@@ -628,4 +710,8 @@ async function git(cwd: string, ...args: string[]): Promise<{ stderr: string; st
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
 }
