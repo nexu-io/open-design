@@ -75,6 +75,7 @@ test("verify-tauri-migration-handoff round-trips a bundle through a receiving ch
   assert.doesNotMatch(note, /renamed or copied/);
   assert.match(note, /TAURI_NATIVE_CI_TRIGGER=0/);
   assert.match(note, /TAURI_NATIVE_CI_WAIT=1/);
+  assert.match(note, /REMOTE=<remote>/);
   assert.match(note, /GH_BIN=<path-to-gh>/);
   assert.match(note, /TAURI_PR_BODY_PATH=<path>/);
   assert.match(note, new RegExp(`--archive '${escapeRegExp(`${dirname(manifestPath)}.tar.gz`)}' \\\\`));
@@ -89,7 +90,8 @@ test("verify-tauri-migration-handoff round-trips a bundle through a receiving ch
   assert.match(note, /download-tauri-m4-reports/);
   assert.match(note, new RegExp(`--branch '${migrationBranch.replaceAll("/", "\\/")}' \\\\`));
   assert.match(note, new RegExp(`--expected-head ${sourceHead} \\\\`));
-  assert.match(note, /--remote origin \\/);
+  assert.match(note, /--remote "\$\{REMOTE:-origin\}" \\/);
+  assert.doesNotMatch(note, /--remote origin/);
   assert.match(note, /GITHUB_RUN_ID=<github-run-id>/);
   assert.match(note, /--advance/);
   assert.match(note, /advance-tauri-migration-m4-m5/);

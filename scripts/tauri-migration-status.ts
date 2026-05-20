@@ -755,8 +755,8 @@ function validateBranchBoundCommand(
   notePath: string,
   problems: string[],
 ): void {
-  if (!block.includes("--remote origin")) {
-    problems.push(`handoff note ${label} command is missing --remote origin: ${notePath}`);
+  if (!hasBranchBoundRemoteArgument(block)) {
+    problems.push(`handoff note ${label} command is missing --remote origin or --remote "\${REMOTE:-origin}": ${notePath}`);
   }
   if (!block.includes("--branch") || !block.includes(manifest.branch)) {
     problems.push(`handoff note ${label} command is missing branch ${manifest.branch}: ${notePath}`);
@@ -764,6 +764,15 @@ function validateBranchBoundCommand(
   if (!block.includes(`--expected-head ${manifest.branchHead}`)) {
     problems.push(`handoff note ${label} command is missing expected head ${manifest.branchHead}: ${notePath}`);
   }
+}
+
+function hasBranchBoundRemoteArgument(block: string): boolean {
+  return (
+    block.includes("--remote origin") ||
+    block.includes('--remote "${REMOTE:-origin}"') ||
+    block.includes("--remote '${REMOTE:-origin}'") ||
+    block.includes("--remote ${REMOTE:-origin}")
+  );
 }
 
 async function readHandoffArchiveStatus(archivePath: string, handoff?: HandoffStatus): Promise<HandoffArchiveStatus> {

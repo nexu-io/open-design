@@ -227,7 +227,7 @@ test("tauri-migration-status rejects stale handoff notes without remote-bound ad
   };
 
   assert.equal(parsed.handoff.current, false);
-  assert.match(parsed.handoff.problems.join("\n"), /handoff note direct M4 advance command is missing --remote origin/);
+  assert.match(parsed.handoff.problems.join("\n"), /handoff note direct M4 advance command is missing --remote origin or --remote "\$\{REMOTE:-origin\}"/);
 });
 
 test("tauri-migration-status reports current packaged handoff archives", async (t) => {
@@ -1704,7 +1704,7 @@ function handoffNoteFixture(branchHead: string, stale: boolean): string {
       ]
     : [
         "pnpm exec tsx scripts/advance-tauri-migration-m4-m5.ts \\",
-        "  --remote origin \\",
+        '  --remote "${REMOTE:-origin}" \\',
         "  --branch codex/electron-to-tauri-migration \\",
         `  --expected-head ${branchHead} \\`,
         "  --win-report /tmp/open-design-tauri-m4-reports/open-design-ci-win-tauri-e2e-report \\",
@@ -1717,7 +1717,7 @@ function handoffNoteFixture(branchHead: string, stale: boolean): string {
     "pnpm exec tsx scripts/download-tauri-m4-reports.ts \\",
     "  --branch codex/electron-to-tauri-migration \\",
     `  --expected-head ${branchHead} \\`,
-    "  --remote origin \\",
+    '  --remote "${REMOTE:-origin}" \\',
     "  --wait \\",
     "  --output-dir /tmp/open-design-tauri-m4-reports",
     "```",
