@@ -160,22 +160,6 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
     await fulfillGet(route, { designSystems: VISUAL_DESIGN_SYSTEMS });
   });
 
-  await page.route('**/api/design-systems/*/showcase', async (route) => {
-    const id = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-2) ?? 'design-system');
-    await route.fulfill({
-      contentType: 'text/html',
-      body: `<!doctype html><html><body><main><h1>${escapeHtml(id)} showcase</h1></main></body></html>`,
-    });
-  });
-
-  await page.route('**/api/design-systems/*/preview', async (route) => {
-    const id = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-2) ?? 'design-system');
-    await route.fulfill({
-      contentType: 'text/html',
-      body: `<!doctype html><html><body><main><h1>${escapeHtml(id)} tokens</h1></main></body></html>`,
-    });
-  });
-
   await page.route('**/api/design-systems/*', async (route) => {
     if (route.request().method() !== 'GET') {
       await route.continue();
@@ -190,6 +174,22 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
           body: `# ${system.title}\n\nDesign guidance for ${system.title}.`,
         },
       },
+    });
+  });
+
+  await page.route('**/api/design-systems/*/showcase', async (route) => {
+    const id = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-2) ?? 'design-system');
+    await route.fulfill({
+      contentType: 'text/html',
+      body: `<!doctype html><html><body><main><h1>${escapeHtml(id)} showcase</h1></main></body></html>`,
+    });
+  });
+
+  await page.route('**/api/design-systems/*/preview', async (route) => {
+    const id = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-2) ?? 'design-system');
+    await route.fulfill({
+      contentType: 'text/html',
+      body: `<!doctype html><html><body><main><h1>${escapeHtml(id)} tokens</h1></main></body></html>`,
     });
   });
 
