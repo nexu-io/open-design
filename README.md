@@ -131,7 +131,7 @@ Linux AppImage packaging is available through the optional release lane and is c
 
 **132 skills ship in the box.** Each is a folder under [`skills/`](skills/) following the Claude Code [`SKILL.md`][skill] convention with an extended `od:` frontmatter that the daemon parses verbatim — `mode`, `platform`, `scenario`, `preview.type`, `design_system.requires`, `default_for`, `featured`, `fidelity`, `speaker_notes`, `animations`, `example_prompt` ([`apps/daemon/src/skills.ts`](apps/daemon/src/skills.ts)).
 
-Two **modes** anchor the interactive catalog: **`prototype`** (32 skills — anything that renders as a single-page artifact, from a magazine landing to a phone screen to a PM spec doc) and **`deck`** (9 skills — horizontal-swipe presentations with deck-framework chrome). The catalog also ships `image`, `video`, `audio`, `template`, and `design-system` modes for media generation and catalog updaters. The **`scenario`** field is what the picker groups them by: `design` · `marketing` · `operation` · `engineering` · `product` · `finance` · `hr` · `sale` · `personal`.
+Two **modes** anchor the interactive catalog: **`prototype`** (32 skills — anything that renders as a single-page artifact, from a magazine landing to a phone screen to a PM spec doc) and **`deck`** (9 skills — horizontal-swipe presentations with deck-framework chrome). The catalog also ships `image`, `video`, `audio`, `template`, `design-system`, and `utility` modes for media generation, catalog updaters, and post-export audit helpers. The **`scenario`** field is what the picker groups them by: `design` · `marketing` · `operation` · `engineering` · `product` · `finance` · `hr` · `sale` · `personal`.
 
 ### Showcase examples
 
