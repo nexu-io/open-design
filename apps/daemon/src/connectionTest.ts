@@ -1040,7 +1040,7 @@ interface AgentSink {
   result: Promise<AgentSinkResult>;
   streamError: Promise<Error>;
   getText: () => string;
-  getStderrTail: () => string;
+  getStderrCapture: () => string;
   appendRawStdout: (chunk: string) => void;
   getRawStdoutTail: () => string;
   dispose: () => void;
@@ -1048,7 +1048,7 @@ interface AgentSink {
 
 export function createAgentSink(): AgentSink {
   let buffer = '';
-  let stderrTail = '';
+  let stderrCapture = '';
   let rawStdoutTail = '';
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   let resolveResult!: (value: AgentSinkResult) => void;
@@ -1139,11 +1139,12 @@ export function createAgentSink(): AgentSink {
     }
     if (event === 'stderr') {
       const chunk = data.chunk;
-      if (typeof chunk === 'string') {
-        // Keep more headroom than the sanitizer's truncation budget so an
-        // ANSI escape sequence straddling the previous chunk boundary still
-        // arrives intact for `sanitizeStderrExcerpt` to strip cleanly.
-        stderrTail = (stderrTail + chunk).slice(-(STDERR_EXCERPT_MAX_CHARS + 100));
+      if (typeof chunk === 'string' && chunk.length > 0) {
+        const budget = STDERR_EXCERPT_MAX_CHARS + 100;
+        const room = budget - stderrCapture.length;
+        if (room > 0) {
+          stderrCapture += chunk.length > room ? chunk.slice(0, room) : chunk;
+        }
       }
       return;
     }
@@ -1156,7 +1157,7 @@ export function createAgentSink(): AgentSink {
     result,
     streamError,
     getText: () => buffer,
-    getStderrTail: () => stderrTail,
+    getStderrCapture: () => stderrCapture,
     appendRawStdout,
     getRawStdoutTail: () => rawStdoutTail,
     dispose: () => {
@@ -1398,8 +1399,8 @@ async function testAgentConnectionInternal(
   const sink = createAgentSink();
   const recordStderr = () => {
     if (!diagState) return;
-    const tail = sink.getStderrTail();
-    diagState.stderrRaw = tail.length > 0 ? tail : null;
+    const capture = sink.getStderrCapture();
+    diagState.stderrRaw = capture.length > 0 ? capture : null;
   };
   const recordPhase = (phase: ConnectionTestPhase) => {
     if (diagState) diagState.phase = phase;
@@ -1662,13 +1663,13 @@ async function testAgentConnectionInternal(
         }
         if (exitedCleanly) return resultFromAgentText(buffered);
       }
-      const stderrTail = sink.getStderrTail().trim();
+      const stderrCapture = sink.getStderrCapture().trim();
       const rawStdoutTail = sink.getRawStdoutTail().trim();
       const acpFatal = Boolean(acpSession?.hasFatalError?.());
       const rawDetail = [
         winner.code != null ? `exit ${winner.code}` : null,
         winner.signal ? `signal ${winner.signal}` : null,
-        stderrTail ? `stderr: ${stderrTail.slice(-200)}` : null,
+        stderrCapture ? `stderr: ${stderrCapture.slice(-200)}` : null,
         rawStdoutTail || buffered
           ? `stdout: ${(rawStdoutTail || buffered).slice(-200)}`
           : null,
@@ -1693,7 +1694,7 @@ async function testAgentConnectionInternal(
         agentId: input.agentId,
         exitCode: winner.code,
         signal: winner.signal,
-        stderrTail,
+        stderrTail: stderrCapture,
         stdoutTail: rawStdoutTail || buffered,
         env,
       });

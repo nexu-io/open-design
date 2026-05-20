@@ -271,13 +271,24 @@ describe('createAgentSink stderr capture', () => {
     sink.send('stderr', { chunk: head });
     sink.send('stderr', { chunk: '\x1b[31m' });
     sink.send('stderr', { chunk: 'tail-text-tail-text-tail-text' });
-    const tail = sink.getStderrTail();
-    expect(tail.length).toBeGreaterThanOrEqual(STDERR_EXCERPT_MAX_CHARS);
-    const sanitized = sanitizeStderrExcerpt(tail);
+    const capture = sink.getStderrCapture();
+    expect(capture.length).toBeGreaterThanOrEqual(STDERR_EXCERPT_MAX_CHARS);
+    const sanitized = sanitizeStderrExcerpt(capture);
     expect(sanitized).not.toBeNull();
     expect(sanitized!).not.toContain('\x1b[');
     expect(sanitized!.length).toBeLessThanOrEqual(STDERR_EXCERPT_MAX_CHARS);
     expect(sanitized!.startsWith('HEAD-MARK')).toBe(true);
+    sink.dispose();
+  });
+
+  it('keeps the head of stderr when more than the buffer budget is pushed through the sink', () => {
+    const sink = createAgentSink();
+    sink.send('stderr', { chunk: 'HEAD-MARKER: Error line 1\n' });
+    sink.send('stderr', { chunk: 'x'.repeat(800) });
+    const capture = sink.getStderrCapture();
+    const sanitized = sanitizeStderrExcerpt(capture);
+    expect(sanitized).not.toBeNull();
+    expect(sanitized!.startsWith('HEAD-MARKER:')).toBe(true);
     sink.dispose();
   });
 });
