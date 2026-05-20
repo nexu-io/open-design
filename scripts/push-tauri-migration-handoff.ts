@@ -23,6 +23,7 @@ type Args = {
 type ResolvedArgs = {
   archive?: string;
   branch: string;
+  branchHead: string;
   bundle?: string;
   cwd: string;
   manifest: string;
@@ -66,7 +67,7 @@ async function main(): Promise<void> {
         `Manifest: ${args.manifest}`,
         ...(args.bundle == null ? [] : [`Bundle override: ${args.bundle}`]),
         `Remote: ${args.remote}`,
-        `Branch: ${args.branch}`,
+        `Branch: ${args.branch} @ ${args.branchHead}`,
         ...(extracted == null
           ? []
           : [
@@ -85,6 +86,22 @@ async function main(): Promise<void> {
         indent((pushOutput.stdout + pushOutput.stderr).trim()),
         "Verify:",
         indent(verifyOutput.stdout.trim()),
+        "Next:",
+        indent(
+          [
+            `Trigger native CI with: gh workflow run ci.yml --ref ${shellQuote(args.branch)}`,
+            "Then download, verify, record M4 evidence, and apply the guarded M5 default flip with:",
+            [
+              "pnpm exec tsx scripts/download-tauri-m4-reports.ts \\",
+              `  --branch ${shellQuote(args.branch)} \\`,
+              `  --expected-head ${args.branchHead} \\`,
+              `  --remote ${shellQuote(args.remote)} \\`,
+              "  --wait \\",
+              "  --output-dir /tmp/open-design-tauri-m4-reports \\",
+              "  --advance",
+            ].join("\n"),
+          ].join("\n"),
+        ),
         "",
       ].join("\n"),
     );
@@ -169,6 +186,7 @@ async function resolveArgs(parsed: Args, extractedManifest?: string): Promise<Re
   return {
     ...(parsed.archive == null ? {} : { archive: parsed.archive }),
     branch: manifest.branch,
+    branchHead: manifest.branchHead,
     ...(parsed.bundle == null ? {} : { bundle: parsed.bundle }),
     cwd: parsed.cwd,
     manifest: manifestPath,
@@ -290,6 +308,10 @@ function indent(value: string): string {
     .filter((line, index, lines) => line.length > 0 || index < lines.length - 1)
     .map((line) => `  ${line}`)
     .join("\n");
+}
+
+function shellQuote(value: string): string {
+  return /^[A-Za-z0-9_./:=@-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 try {

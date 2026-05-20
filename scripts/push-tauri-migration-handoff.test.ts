@@ -28,7 +28,13 @@ test("push-tauri-migration-handoff imports, pushes, and verifies a handoff manif
   assert.match(result.stdout, /Import:/);
   assert.match(result.stdout, /Push:/);
   assert.match(result.stdout, /Verify:/);
-  assert.match(result.stdout, new RegExp(`Branch: ${migrationBranch.replaceAll("/", "\\/")}`));
+  assert.match(result.stdout, new RegExp(`Branch: ${migrationBranch.replaceAll("/", "\\/")} @ ${sourceHead}`));
+  assert.match(result.stdout, /Next:/);
+  assert.match(result.stdout, /gh workflow run ci\.yml --ref codex\/electron-to-tauri-migration/);
+  assert.match(result.stdout, /download-tauri-m4-reports/);
+  assert.match(result.stdout, new RegExp(`--expected-head ${sourceHead}`));
+  assert.match(result.stdout, /--remote /);
+  assert.match(result.stdout, /--advance/);
   const remoteHead = (await git(targetRepo, "ls-remote", "--heads", remotePath, `refs/heads/${migrationBranch}`)).stdout
     .trim()
     .split(/\s+/, 1)[0];
@@ -50,6 +56,7 @@ test("push-tauri-migration-handoff can verify and push a packaged handoff archiv
   assert.match(result.stdout, new RegExp(`Archive: ${escapeRegExp(archivePath)}`));
   assert.match(result.stdout, /Archive verify:/);
   assert.match(result.stdout, /Extracted manifest:/);
+  assert.match(result.stdout, new RegExp(`--expected-head ${sourceHead}`));
   const remoteHead = (await git(targetRepo, "ls-remote", "--heads", remotePath, `refs/heads/${migrationBranch}`)).stdout
     .trim()
     .split(/\s+/, 1)[0];
