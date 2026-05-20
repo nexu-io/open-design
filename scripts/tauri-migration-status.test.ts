@@ -1637,6 +1637,9 @@ test("continue-tauri-migration reports transferable handoff paths when push fail
       assert.match(stderr, new RegExp(escapeRegExp(`${archivePath}.sha256`)));
       assert.match(stderr, new RegExp(escapeRegExp(`${archivePath}.commands.sh`)));
       assert.match(stderr, new RegExp(escapeRegExp(`${archivePath}.commands.sh.sha256`)));
+      assert.match(stderr, /Then run the command sidecar from that checkout/);
+      assert.match(stderr, new RegExp(`${escapeRegExp(`${archivePath}.commands.sh`)} ${escapeRegExp(archivePath)}`));
+      assert.match(stderr, /Or run the push-only fallback/);
       assert.match(stderr, /push-tauri-migration-handoff\.ts/);
       return true;
     },

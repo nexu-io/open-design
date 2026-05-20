@@ -315,7 +315,10 @@ async function continueM4(args: Args, status: MigrationStatus, log: string[]): P
             `  ${archive}.commands.sh`,
             `  ${archive}.commands.sh.sha256`,
             "",
-            "Then run the command sidecar from that checkout, or run:",
+            "Then run the command sidecar from that checkout:",
+            `  ${formatCommand(`${archive}.commands.sh`, [archive])}`,
+            "",
+            "Or run the push-only fallback:",
             `  ${formatScriptCommand("push-tauri-migration-handoff.ts", pushHandoffArgs(args, archive, { omitCwd: true }))}`,
           ].join("\n"),
         );
@@ -448,7 +451,9 @@ function appendTransferableHandoffHint(args: Args, archive: string, log: string[
   log.push(`  ${archive}.sha256`);
   log.push(`  ${archive}.commands.sh`);
   log.push(`  ${archive}.commands.sh.sha256`);
-  log.push("Then run the command sidecar from that checkout, or run:");
+  log.push("Then run the command sidecar from that checkout:");
+  log.push(`  ${formatCommand(`${archive}.commands.sh`, [archive])}`);
+  log.push("Or run the push-only fallback:");
   log.push(`  ${formatScriptCommand("push-tauri-migration-handoff.ts", pushHandoffArgs(args, archive, { omitCwd: true }))}`);
 }
 
