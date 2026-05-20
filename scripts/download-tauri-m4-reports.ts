@@ -118,7 +118,7 @@ async function main(): Promise<void> {
                 ...(args.root === workspaceRoot ? [] : [`  --root ${shellQuote(args.root)} \\`]),
                 `  --remote ${shellQuote(args.gitRemote)} \\`,
                 `  --branch ${shellQuote(args.branch)} \\`,
-                `  --expected-head ${args.expectedHead ?? "<migration-commit-sha>"} \\`,
+                `  --expected-head ${args.expectedHead!} \\`,
                 `  --win-report ${shellQuote(winReport)} \\`,
                 `  --linux-report ${shellQuote(linuxReport)}`,
               ].join("\n"),
@@ -254,10 +254,10 @@ function parseArgs(argv: string[]): Args {
     if (arg === "--help" || arg === "-h") {
       process.stdout.write(
         [
-          "usage: tsx scripts/download-tauri-m4-reports.ts [--run-id <id>] [--repo <owner/repo>] [--branch <ref>] [--expected-head <sha>] [--remote <git-remote>] [--output-dir <dir>] [--advance] [--root <repo>]",
+          "usage: tsx scripts/download-tauri-m4-reports.ts --expected-head <sha> [--run-id <id>] [--repo <owner/repo>] [--branch <ref>] [--remote <git-remote>] [--output-dir <dir>] [--advance] [--root <repo>]",
           "",
           "Downloads the Windows/Linux Tauri CI report artifacts with gh, verifies them with scripts/verify-tauri-platform-gates.ts, and optionally applies the guarded M4→M5 advance.",
-          "Use --expected-head <sha> to avoid stale branch runs, and --wait to poll until a matching completed run exists. --run-id and --advance require --expected-head.",
+          "Requires --expected-head <sha> to avoid stale branch runs; --wait polls until a matching completed run exists.",
           "",
           `defaults: --repo ${defaultRepo} --branch ${defaultBranch} --workflow ${defaultWorkflow} --output-dir ${defaultOutputDir}`,
           "env defaults: REMOTE, GH_BIN, TAURI_M4_REPORT_DIR",
@@ -269,11 +269,8 @@ function parseArgs(argv: string[]): Args {
     throw new Error(`unsupported argument: ${arg}`);
   }
 
-  if (parsed.advance && parsed.expectedHead == null) {
-    throw new Error("--advance requires --expected-head so M4 evidence is tied to the migration branch head");
-  }
-  if (parsed.runId != null && parsed.expectedHead == null) {
-    throw new Error("--run-id requires --expected-head so explicit M4 evidence is tied to the migration branch head");
+  if (parsed.expectedHead == null) {
+    throw new Error("--expected-head is required so M4 report downloads are tied to the migration branch head");
   }
 
   return parsed;

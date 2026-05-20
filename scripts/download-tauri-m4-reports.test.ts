@@ -33,10 +33,20 @@ const m5Labels = [
 test("download-tauri-m4-reports downloads latest completed artifacts and verifies them", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "open-design-tauri-download-reports-"));
   t.after(() => void rm(root, { force: true, recursive: true }));
-  const fakeGh = await writeFakeGh(root);
+  const fakeGh = await writeFakeGh(root, { viewHeadBranch: "feature" });
   const outputDir = join(root, "reports");
 
-  const result = await runDownload(fakeGh, "--output-dir", outputDir, "--repo", "example/open-design", "--branch", "feature");
+  const result = await runDownload(
+    fakeGh,
+    "--output-dir",
+    outputDir,
+    "--repo",
+    "example/open-design",
+    "--branch",
+    "feature",
+    "--expected-head",
+    "a".repeat(40),
+  );
 
   assert.match(result.stdout, /Downloaded and verified Tauri M4 platform reports/);
   assert.match(result.stdout, /Run: 12345/);
@@ -54,7 +64,7 @@ test("download-tauri-m4-reports downloads latest completed artifacts and verifie
 test("download-tauri-m4-reports keeps custom root in printed advance command", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "open-design-tauri-download-root-"));
   t.after(() => void rm(root, { force: true, recursive: true }));
-  const fakeGh = await writeFakeGh(root);
+  const fakeGh = await writeFakeGh(root, { viewHeadBranch: "feature" });
   const fixtureRoot = await writeM5Fixture(root);
 
   const result = await runDownload(
@@ -65,6 +75,8 @@ test("download-tauri-m4-reports keeps custom root in printed advance command", a
     "example/open-design",
     "--branch",
     "feature",
+    "--expected-head",
+    "a".repeat(40),
     "--root",
     fixtureRoot,
   );
@@ -96,14 +108,18 @@ test("download-tauri-m4-reports can use an explicit run id with expected head wi
   assert.match(calls, /run download 777/);
 });
 
-test("download-tauri-m4-reports requires expected head for explicit run ids", async (t) => {
+test("download-tauri-m4-reports requires expected head before gh calls", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "open-design-tauri-download-run-requires-head-"));
   t.after(() => void rm(root, { force: true, recursive: true }));
-  const fakeGh = await writeFakeGh(root);
+  const fakeGh = await writeFakeGh(root, { viewHeadBranch: "feature" });
 
   await assert.rejects(
+    runDownload(fakeGh, "--output-dir", join(root, "reports")),
+    /--expected-head is required so M4 report downloads are tied to the migration branch head/,
+  );
+  await assert.rejects(
     runDownload(fakeGh, "--run-id", "777", "--output-dir", join(root, "reports")),
-    /--run-id requires --expected-head so explicit M4 evidence is tied to the migration branch head/,
+    /--expected-head is required so M4 report downloads are tied to the migration branch head/,
   );
   await assert.rejects(readFile(join(root, "gh-calls.log"), "utf8"), /ENOENT/);
 });
@@ -200,7 +216,7 @@ test("download-tauri-m4-reports requires expected head when advancing", async (t
 
   await assert.rejects(
     runDownload(fakeGh, "--run-id", "777", "--output-dir", join(root, "reports"), "--advance"),
-    /--advance requires --expected-head/,
+    /--expected-head is required so M4 report downloads are tied to the migration branch head/,
   );
 });
 
@@ -401,7 +417,7 @@ test("download-tauri-m4-reports honors REMOTE env default when advancing", async
 test("download-tauri-m4-reports honors TAURI_M4_REPORT_DIR env default", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "open-design-tauri-download-report-env-"));
   t.after(() => void rm(root, { force: true, recursive: true }));
-  const fakeGh = await writeFakeGh(root);
+  const fakeGh = await writeFakeGh(root, { viewHeadBranch: "feature" });
   const outputDir = join(root, "env-reports");
 
   const result = await runDownloadWithEnv(
@@ -411,6 +427,8 @@ test("download-tauri-m4-reports honors TAURI_M4_REPORT_DIR env default", async (
     "example/open-design",
     "--branch",
     "feature",
+    "--expected-head",
+    "a".repeat(40),
   );
 
   assert.match(result.stdout, new RegExp(`Output: ${escapeRegExp(outputDir)}`));
