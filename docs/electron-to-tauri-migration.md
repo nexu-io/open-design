@@ -487,6 +487,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Aligned the repo-local continuation runner with the receiver PR fallback. When `scripts/continue-tauri-migration.ts` reaches a pushed branch but GitHub workflow dispatch is unavailable or denied, it now writes the shared template-complete `.tmp/tauri-migration-pr-body.md` before printing the draft PR fallback command; dry-runs report the target path without writing the file.
 - 2026-05-20: Tightened the M5 default-flip precondition so checked M4 platform gates require both the native Windows/Linux verifier marker and a pushed remote branch-head marker. `scripts/advance-tauri-migration-m4-m5.ts` now records the remote-head evidence after remote verification and before applying M5, while direct `scripts/apply-tauri-migration-m5.ts` refuses to run if that evidence is missing.
 - 2026-05-20: Surfaced missing M4 evidence markers directly in both `scripts/tauri-migration-status.ts` and `scripts/continue-tauri-migration.ts`. If the Windows/Linux M4 checkboxes are closed but the native verifier marker or pushed remote branch-head marker is absent, status remains in M4 and the continuation runner prints the exact missing marker before planning push, dispatch, report, or advance work.
+- 2026-05-20: Aligned `scripts/download-tauri-m4-reports.ts` with the other receiver-side handoff tools by honoring `REMOTE=<remote>` when `--remote` is omitted. This keeps the downloader's `--advance` remote-head verification on the same write-capable remote selected by the command sidecar, push helper, and continuation runner.
 
 ### Platform Gate Runners
 
@@ -613,7 +614,7 @@ pnpm exec tsx scripts/push-tauri-migration-handoff.ts \
   --remote origin
 ```
 
-Set `REMOTE=<remote>` instead of `--remote origin` if the receiving checkout uses a differently named write-capable remote. Add `--gh /path/to-gh` or set `GH_BIN=<path-to-gh>` if the receiving machine uses a non-default GitHub CLI binary and you want the printed workflow-dispatch and draft-PR fallback commands to use that binary.
+Set `REMOTE=<remote>` instead of `--remote origin` if the receiving checkout uses a differently named write-capable remote. The command sidecar, push helper, continuation runner, and report downloader all honor that environment default. Add `--gh /path/to-gh` or set `GH_BIN=<path-to-gh>` if the receiving machine uses a non-default GitHub CLI binary and you want the printed workflow-dispatch and draft-PR fallback commands to use that binary.
 
 That branch push alone does not trigger `ci.yml`, because this repository runs CI on pull requests, `main` pushes, and manual dispatches. The command script attempts the workflow dispatch automatically when `GH_BIN` or `gh` is available. If it cannot dispatch, either open a draft PR or manually dispatch the workflow for the migration branch:
 

@@ -372,6 +372,32 @@ test("download-tauri-m4-reports can advance M4 and M5 after verified downloads",
   assert.match(await readFile(join(fixtureRoot, ".github", "workflows", "release-beta.yml"), "utf8"), /default: tauri/);
 });
 
+test("download-tauri-m4-reports honors REMOTE env default when advancing", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "open-design-tauri-download-remote-env-"));
+  t.after(() => void rm(root, { force: true, recursive: true }));
+  const fixtureRoot = await writeM5Fixture(root);
+  const head = await initGitFixture(fixtureRoot);
+  const remotePath = await createRemoteFixture(fixtureRoot, head);
+  const fakeGh = await writeFakeGh(root, { viewHeadSha: head });
+
+  const result = await runDownloadWithEnv(
+    fakeGh,
+    { REMOTE: remotePath },
+    "--run-id",
+    "777",
+    "--expected-head",
+    head,
+    "--output-dir",
+    join(root, "reports"),
+    "--advance",
+    "--root",
+    fixtureRoot,
+  );
+
+  assert.match(result.stdout, /M4\/M5 advancement/);
+  assert.match(result.stdout, /Advanced Tauri migration from verified M4 platform evidence through M5 default flip/);
+});
+
 async function writeFakeGh(
   root: string,
   options: {
@@ -552,6 +578,18 @@ function readmeFixture(): string {
 async function runDownload(gh: string, ...args: string[]): Promise<{ stderr: string; stdout: string }> {
   return execFileAsync(process.execPath, ["--import", "tsx", downloadScript, "--gh", gh, ...args], {
     cwd: repoRoot,
+    maxBuffer: 1024 * 1024 * 8,
+  });
+}
+
+async function runDownloadWithEnv(
+  gh: string,
+  env: Record<string, string>,
+  ...args: string[]
+): Promise<{ stderr: string; stdout: string }> {
+  return execFileAsync(process.execPath, ["--import", "tsx", downloadScript, "--gh", gh, ...args], {
+    cwd: repoRoot,
+    env: { ...process.env, ...env },
     maxBuffer: 1024 * 1024 * 8,
   });
 }

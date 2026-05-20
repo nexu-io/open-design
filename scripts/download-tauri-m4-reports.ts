@@ -9,6 +9,7 @@ const workspaceRoot = resolve(scriptsRoot, "..");
 const defaultBranch = "codex/electron-to-tauri-migration";
 const defaultOutputDir = "/tmp/open-design-tauri-m4-reports";
 const defaultRepo = "nexu-io/open-design";
+const defaultRemote = "origin";
 const defaultWorkflow = "ci.yml";
 const linuxArtifactName = "open-design-ci-linux-tauri-e2e-report";
 const requiredTauriJobNames = ["Packaged windows Tauri smoke", "Packaged linux Tauri smoke"] as const;
@@ -157,7 +158,7 @@ function parseArgs(argv: string[]): Args {
     advance: false,
     branch: defaultBranch,
     ghBin: process.env.GH_BIN ?? "gh",
-    gitRemote: "origin",
+    gitRemote: process.env.REMOTE ?? defaultRemote,
     outputDir: defaultOutputDir,
     pollMs: 30_000,
     repo: defaultRepo,
@@ -259,6 +260,7 @@ function parseArgs(argv: string[]): Args {
           "Use --expected-head <sha> to avoid stale branch runs, and --wait to poll until a matching completed run exists. --run-id and --advance require --expected-head.",
           "",
           `defaults: --repo ${defaultRepo} --branch ${defaultBranch} --workflow ${defaultWorkflow} --output-dir ${defaultOutputDir}`,
+          "env defaults: REMOTE, GH_BIN",
           "",
         ].join("\n"),
       );
