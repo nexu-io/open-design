@@ -398,6 +398,26 @@ test("download-tauri-m4-reports honors REMOTE env default when advancing", async
   assert.match(result.stdout, /Advanced Tauri migration from verified M4 platform evidence through M5 default flip/);
 });
 
+test("download-tauri-m4-reports honors TAURI_M4_REPORT_DIR env default", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "open-design-tauri-download-report-env-"));
+  t.after(() => void rm(root, { force: true, recursive: true }));
+  const fakeGh = await writeFakeGh(root);
+  const outputDir = join(root, "env-reports");
+
+  const result = await runDownloadWithEnv(
+    fakeGh,
+    { TAURI_M4_REPORT_DIR: outputDir },
+    "--repo",
+    "example/open-design",
+    "--branch",
+    "feature",
+  );
+
+  assert.match(result.stdout, new RegExp(`Output: ${escapeRegExp(outputDir)}`));
+  assert.equal((await readJson(join(outputDir, winArtifactName, "manifest.json"))).platform, "win");
+  assert.equal((await readJson(join(outputDir, linuxArtifactName, "manifest.json"))).platform, "linux");
+});
+
 async function writeFakeGh(
   root: string,
   options: {

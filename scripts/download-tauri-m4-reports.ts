@@ -159,7 +159,7 @@ function parseArgs(argv: string[]): Args {
     branch: defaultBranch,
     ghBin: process.env.GH_BIN ?? "gh",
     gitRemote: process.env.REMOTE ?? defaultRemote,
-    outputDir: defaultOutputDir,
+    outputDir: resolve(process.env.TAURI_M4_REPORT_DIR ?? defaultOutputDir),
     pollMs: 30_000,
     repo: defaultRepo,
     root: workspaceRoot,
@@ -260,7 +260,7 @@ function parseArgs(argv: string[]): Args {
           "Use --expected-head <sha> to avoid stale branch runs, and --wait to poll until a matching completed run exists. --run-id and --advance require --expected-head.",
           "",
           `defaults: --repo ${defaultRepo} --branch ${defaultBranch} --workflow ${defaultWorkflow} --output-dir ${defaultOutputDir}`,
-          "env defaults: REMOTE, GH_BIN",
+          "env defaults: REMOTE, GH_BIN, TAURI_M4_REPORT_DIR",
           "",
         ].join("\n"),
       );
