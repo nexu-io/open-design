@@ -336,7 +336,15 @@ export async function buildDeployFilePlan(projectsRoot: string, projectId: strin
         contentType: rootVercel.mime,
         sourcePath: 'vercel.json',
       });
-    } catch {}
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException | undefined)?.code;
+      if (code !== 'ENOENT') {
+        const message = (err as Error | undefined)?.message ?? String(err);
+        console.warn(
+          `daemon: failed to read project vercel.json (${code ?? 'unknown'}): ${message} — continuing with generated cleanUrls config`,
+        );
+      }
+    }
   }
 
   const fileList = Array.from(files.values());
@@ -1483,27 +1491,29 @@ export function buildVercelRoutingConfig(files: DeployFile[]): VercelRoutingConf
   const routes: string[] = [];
   const pathToRoute = new Map<string, string>();
   for (const f of htmlFiles) {
-    const route = htmlPathToCleanRoute(f.file);
+    const fileKey = f.file.replace(/^\/+/, '');
+    const route = htmlPathToCleanRoute(fileKey);
     routes.push(route);
-    pathToRoute.set(f.file, route);
-    const source = f.sourcePath;
+    pathToRoute.set(fileKey, route);
+    const source = f.sourcePath ? f.sourcePath.replace(/^\/+/, '') : f.sourcePath;
     // First-writer-wins when two emitted files share a sourcePath: htmlFiles
     // is ordered by file insertion, so the earlier deploy path keeps the
     // alias. Overwriting silently would let a later duplicate steal an
     // anchor target the earlier file is rendering links to.
-    if (source && source !== f.file && !pathToRoute.has(source)) {
+    if (source && source !== fileKey && !pathToRoute.has(source)) {
       pathToRoute.set(source, route);
     }
   }
 
   const rewrittenHtml = new Map<string, string>();
   for (const f of htmlFiles) {
+    const fileKey = f.file.replace(/^\/+/, '');
     const original = Buffer.isBuffer(f.data) || f.data instanceof Uint8Array
       ? Buffer.from(f.data).toString('utf8')
       : String(f.data);
-    const rewritten = rewriteAnchorHrefsToCleanRoutes(original, pathToRoute, f.file);
+    const rewritten = rewriteAnchorHrefsToCleanRoutes(original, pathToRoute, fileKey);
     if (rewritten !== original) {
-      rewrittenHtml.set(f.file, rewritten);
+      rewrittenHtml.set(fileKey, rewritten);
     }
   }
 
@@ -1518,7 +1528,8 @@ export function buildVercelRoutingConfig(files: DeployFile[]): VercelRoutingConf
 }
 
 function htmlPathToCleanRoute(filePath: string) {
-  if (filePath === 'index.html') return '/';
+  if (/^index\.html?$/i.test(filePath)) return '/';
+  if (/\/index\.html?$/i.test(filePath)) return `/${filePath.replace(/\/index\.html?$/i, '')}`;
   const stripped = filePath.replace(/\.html?$/i, '');
   return `/${stripped}`;
 }
@@ -1531,7 +1542,7 @@ function rewriteAnchorHrefsToCleanRoutes(html: string, pathToRoute: Map<string, 
   // would silently be rewritten, changing runtime JS behavior or
   // mutating comment contents.
   const rawTextRanges = htmlRawTextRanges(html);
-  return html.replace(/<a\b([^<>]*?)\bhref\s*=\s*(["'])([^"']+)\2([^<>]*)>/gi, (match, pre, quote, href, post, offset) => {
+  return html.replace(/<a\b([^<>]*?\s)href\s*=\s*(["'])([^"']+)\2([^<>]*)>/gi, (match, pre, quote, href, post, offset) => {
     if (isOffsetInRanges(Number(offset), rawTextRanges)) return match;
     if (isExternalUrl(href)) return match;
     if (href.startsWith('#')) return match;

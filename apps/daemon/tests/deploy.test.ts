@@ -878,6 +878,39 @@ describe('deploy plan and analyzer', () => {
     expect(JSON.parse(Buffer.from(emitted!.data).toString('utf8'))).toEqual({ cleanUrls: true });
   });
 
+  it('warns once with the error code on a non-ENOENT vercel.json probe failure', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await writeFile(
+      path.join(dir, 'index.html'),
+      '<!doctype html><a href="about.html">about</a>',
+    );
+    await writeFile(path.join(dir, 'about.html'), '<!doctype html><h1>About</h1>');
+    await mkdir(path.join(dir, 'vercel.json'));
+    await writeFile(
+      path.join(dir, 'index.html.artifact.json'),
+      JSON.stringify({
+        version: 1,
+        kind: 'html',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+        supportingFiles: ['about.html'],
+      }),
+    );
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const plan = await buildDeployFilePlan(projectsRoot, projectId, 'index.html');
+      const emitted = plan.files.find((f) => f.file === 'vercel.json');
+      expect(emitted).toBeDefined();
+      expect(JSON.parse(Buffer.from(emitted!.data).toString('utf8'))).toEqual({ cleanUrls: true });
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy.mock.calls[0]?.[0]).toMatch(/EISDIR/);
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   it('flags missing assets as broken-reference warnings', () => {
     const { warnings } = analyzeDeployPlan({
       entryPath: 'index.html',
@@ -2613,6 +2646,57 @@ describe('vercel routing config for multi-page deploys', () => {
       '<a href="/docs/guide">Sibling dot</a>' +
       '<a href="/">Parent</a>' +
       '<a href="/docs/about">Absolute</a>',
+    );
+  });
+
+  it('collapses nested index.html to its parent directory route and rewrites sibling anchors to it', () => {
+    const docsAboutHtml =
+      '<a href="index.html">Docs Home</a>' +
+      '<a href="/docs/index.html">Abs Docs Home</a>';
+    const result = buildVercelRoutingConfig([
+      htmlFile('index.html', '<!doctype html><h1>Home</h1>'),
+      htmlFile('docs/index.html', '<!doctype html><h1>Docs</h1>'),
+      htmlFile('docs/about.html', docsAboutHtml),
+    ]);
+    expect(result).not.toBeNull();
+    expect(result!.routes.sort()).toEqual(['/', '/docs', '/docs/about']);
+    const rewrittenAbout = result!.rewrittenHtml.get('docs/about.html');
+    expect(rewrittenAbout).toBe(
+      '<a href="/docs">Docs Home</a>' +
+      '<a href="/docs">Abs Docs Home</a>',
+    );
+  });
+
+  it('collapses nested index.htm to its parent directory route', () => {
+    const result = buildVercelRoutingConfig([
+      htmlFile('index.html', '<!doctype html><h1>Home</h1>'),
+      htmlFile('docs/index.htm', '<!doctype html><h1>Docs</h1>'),
+      htmlFile('docs/about.html', '<!doctype html><h1>About</h1>'),
+    ]);
+    expect(result).not.toBeNull();
+    expect(result!.routes.sort()).toEqual(['/', '/docs', '/docs/about']);
+  });
+
+  it('collapses root-level index.htm to / symmetrically with index.html', () => {
+    const result = buildVercelRoutingConfig([
+      htmlFile('index.htm', '<!doctype html><h1>Home</h1>'),
+      htmlFile('about.html', '<!doctype html><h1>About</h1>'),
+    ]);
+    expect(result).not.toBeNull();
+    expect(result!.routes.sort()).toEqual(['/', '/about']);
+  });
+
+  it('rewrites only the real href when a sibling data-href attribute is present', () => {
+    const pricingHtml =
+      '<a class="x" data-href="page.html" href="about.html">click</a>';
+    const result = buildVercelRoutingConfig([
+      htmlFile('index.html', '<!doctype html><h1>Home</h1>'),
+      htmlFile('pricing.html', pricingHtml),
+      htmlFile('about.html', '<!doctype html><h1>About</h1>'),
+    ]);
+    const rewrittenPricing = result!.rewrittenHtml.get('pricing.html');
+    expect(rewrittenPricing).toBe(
+      '<a class="x" data-href="page.html" href="/about">click</a>',
     );
   });
 
