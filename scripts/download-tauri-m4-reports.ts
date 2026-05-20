@@ -50,6 +50,16 @@ async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   if (args.advance) {
     await assertTrackedWorktreeClean(args.root, "downloading M4 reports with --advance");
+    await runScript("verify-tauri-migration-remote.ts", [
+      "--cwd",
+      args.root,
+      "--remote",
+      args.gitRemote,
+      "--branch",
+      args.branch,
+      "--expected-head",
+      args.expectedHead!,
+    ]);
   }
   const runId = args.runId ?? (args.wait ? await waitForCompletedRun(args) : await findLatestCompletedRun(args));
   const viewedRun = args.expectedHead == null ? undefined : await assertRunMatchesExpectedHead(args, runId);

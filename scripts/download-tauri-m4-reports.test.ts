@@ -208,6 +208,34 @@ test("download-tauri-m4-reports refuses to advance with tracked worktree changes
   await assert.rejects(readFile(join(root, "gh-calls.log"), "utf8"), /ENOENT/);
 });
 
+test("download-tauri-m4-reports refuses to advance before remote head verification", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "open-design-tauri-download-advance-remote-"));
+  t.after(() => void rm(root, { force: true, recursive: true }));
+  const fakeGh = await writeFakeGh(root);
+  const fixtureRoot = await writeM5Fixture(root);
+  const head = await initGitFixture(fixtureRoot);
+  const remotePath = await createRemoteFixture(fixtureRoot, head);
+
+  await assert.rejects(
+    runDownload(
+      fakeGh,
+      "--run-id",
+      "777",
+      "--expected-head",
+      "0".repeat(40),
+      "--remote",
+      remotePath,
+      "--output-dir",
+      join(root, "reports"),
+      "--advance",
+      "--root",
+      fixtureRoot,
+    ),
+    /remote branch head mismatch/,
+  );
+  await assert.rejects(readFile(join(root, "gh-calls.log"), "utf8"), /ENOENT/);
+});
+
 test("download-tauri-m4-reports explains missing gh", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "open-design-tauri-download-missing-gh-"));
   t.after(() => void rm(root, { force: true, recursive: true }));
