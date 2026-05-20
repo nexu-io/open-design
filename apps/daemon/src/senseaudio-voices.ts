@@ -29,6 +29,7 @@ export type SenseAudioCatalogue = Record<string, SenseAudioPersonaEntry>;
 const SENSEAUDIO_DOCS_CATALOG_URL =
   'https://docs.senseaudio.cn/guides/voice/catalog.md';
 const VARIANT_LABEL_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const VARIANT_LABEL_FETCH_TIMEOUT_MS = 750;
 // `` `<voice_id>` (<label>) `` — captures suffix variants like
 // `female_0033_b` (开心). Tolerant of surrounding whitespace.
 const VARIANT_LABEL_PATTERN = /`([a-z]+_\d+_[a-z])`\s*\(([^)]+)\)/gi;
@@ -91,6 +92,28 @@ const BACKUP_VARIANT_LABELS: Record<string, string> = {
 let variantLabelsCache: { expiresAt: number; labels: Record<string, string> } | null = null;
 let variantLabelsInflight: Promise<Record<string, string>> | null = null;
 
+async function fetchDocsCatalogueWithTimeout(): Promise<Response> {
+  const controller = new AbortController();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const fetchPromise = fetch(SENSEAUDIO_DOCS_CATALOG_URL, {
+    headers: { accept: 'text/markdown,text/plain,*/*' },
+    signal: controller.signal,
+  });
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => {
+      controller.abort();
+      reject(new Error(`docs timed out after ${VARIANT_LABEL_FETCH_TIMEOUT_MS}ms`));
+    }, VARIANT_LABEL_FETCH_TIMEOUT_MS);
+  });
+
+  fetchPromise.catch(() => undefined);
+  try {
+    return await Promise.race([fetchPromise, timeoutPromise]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 async function fetchVariantLabelsFromDocs(): Promise<Record<string, string>> {
   const now = Date.now();
   if (variantLabelsCache && variantLabelsCache.expiresAt > now) {
@@ -100,9 +123,7 @@ async function fetchVariantLabelsFromDocs(): Promise<Record<string, string>> {
 
   variantLabelsInflight = (async () => {
     try {
-      const resp = await fetch(SENSEAUDIO_DOCS_CATALOG_URL, {
-        headers: { accept: 'text/markdown,text/plain,*/*' },
-      });
+      const resp = await fetchDocsCatalogueWithTimeout();
       if (!resp.ok) {
         throw new Error(`docs ${resp.status}`);
       }

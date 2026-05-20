@@ -45,6 +45,35 @@ describe('splitOnQuestionForms', () => {
     ]);
   });
 
+  it('preserves grouped option metadata from object question options', () => {
+    const input = [
+      '<question-form id="voice" title="Pick a voice">',
+      '{',
+      '  "questions": [',
+      '    {',
+      '      "id": "voice",',
+      '      "label": "Voice",',
+      '      "type": "radio",',
+      '      "options": [',
+      '        { "label": "Warm", "value": "warm", "group": "Recommended" },',
+      '        { "label": "Calm", "value": "calm", "group": "  " }',
+      '      ]',
+      '    }',
+      '  ]',
+      '}',
+      '</question-form>',
+    ].join('\n');
+
+    const segments = splitOnQuestionForms(input);
+    expect(segments[0]).toMatchObject({ kind: 'form' });
+    if (segments[0]?.kind !== 'form') throw new Error('expected parsed form segment');
+
+    expect(segments[0].form.questions[0]?.options).toEqual([
+      { label: 'Warm', value: 'warm', group: 'Recommended' },
+      { label: 'Calm', value: 'calm' },
+    ]);
+  });
+
   it('preserves stable option values when formatting object-option answers', () => {
     const text = formatFormAnswers(
       {

@@ -56,6 +56,36 @@ describe('SenseAudio catalogue', () => {
     });
   }
 
+  it('does not block the catalogue on a stalled docs label lookup', async () => {
+    await writeConfig({
+      providers: { senseaudio: { apiKey: 'sa-test-key', baseUrl: TEST_BASE_URL } },
+    });
+    vi.stubGlobal('fetch', vi.fn(async (input: FetchInput) => {
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof URL ? input.toString() : input.url;
+      if (url.includes('docs.senseaudio.cn')) {
+        return new Promise<Response>((resolve) => {
+          setTimeout(() => resolve(new Response('eventually', { status: 404 })), 2_000);
+        });
+      }
+      return senseAudioResponse([
+        { voice_id: 'male_0027_a', voice_name: '亢奋主播', description: ['多状态高能男声。'] },
+      ]);
+    }));
+
+    await expect(Promise.race([
+      listSenseAudioCatalogue(projectRoot),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timed out')), 1_000)),
+    ])).resolves.toMatchObject({
+      male_0027: {
+        variants: {
+          male_0027_a: '热情介绍',
+        },
+      },
+    });
+  });
+
   it('shapes API voices into a prefix-keyed catalogue with hardcoded variant labels', async () => {
     await writeConfig({
       providers: { senseaudio: { apiKey: 'sa-test-key', baseUrl: TEST_BASE_URL } },

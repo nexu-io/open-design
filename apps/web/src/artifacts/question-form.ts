@@ -252,10 +252,15 @@ function parseOption(raw: unknown): FormOption | null {
     typeof obj.description === 'string' && obj.description.trim().length > 0
       ? obj.description.trim()
       : undefined;
+  const group =
+    typeof obj.group === 'string' && obj.group.trim().length > 0
+      ? obj.group.trim()
+      : undefined;
   return {
     label,
     value,
     ...(description ? { description } : {}),
+    ...(group ? { group } : {}),
   };
 }
 
