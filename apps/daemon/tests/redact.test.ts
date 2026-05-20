@@ -134,6 +134,27 @@ describe('redactSecrets', () => {
     );
   });
 
+  it('redacts phone numbers followed by commas or other prose punctuation', () => {
+    expect(redactSecrets('call (415) 555-1234, today')).toBe(
+      'call [REDACTED:phone], today',
+    );
+    expect(redactSecrets('(415) 555-1234, (650) 555-5678')).toBe(
+      '[REDACTED:phone], [REDACTED:phone]',
+    );
+    expect(redactSecrets('dial (415) 555-1234. Then wait')).toBe(
+      'dial [REDACTED:phone]. Then wait',
+    );
+  });
+
+  it('redacts phone numbers in long inputs without a length-guard blind spot', () => {
+    const prefix = 'x'.repeat(10_001);
+    const input = `${prefix} call (415) 555-1234`;
+    const out = redactSecrets(input);
+    expect(out).toContain('[REDACTED:phone]');
+    // The prefix itself must not be touched.
+    expect(out.startsWith(prefix)).toBe(true);
+  });
+
   it('redacts a Luhn-valid credit-card number', () => {
     // 4111-1111-1111-1111 is a canonical Visa test number that satisfies Luhn.
     expect(redactSecrets('paid with 4111 1111 1111 1111 thanks')).toBe(
@@ -186,6 +207,22 @@ describe('redactSecretsWithCounts', () => {
     expect(counts.sk_key).toBe(2);
     expect(counts.email).toBe(1);
     expect(counts.ipv4).toBe(1);
+  });
+
+  it('counts comma-terminated phone numbers', () => {
+    const input = '(415) 555-1234, (650) 555-5678 end';
+    const { redacted, counts } = redactSecretsWithCounts(input);
+    expect(redacted).toBe('[REDACTED:phone], [REDACTED:phone] end');
+    expect(counts.phone).toBe(2);
+  });
+
+  it('counts phone numbers in long inputs', () => {
+    const prefix = 'x'.repeat(10_001);
+    const input = `${prefix} call (415) 555-1234`;
+    const { redacted, counts } = redactSecretsWithCounts(input);
+    expect(redacted).toContain('[REDACTED:phone]');
+    expect(counts.phone).toBe(1);
+    expect(redacted.startsWith(prefix)).toBe(true);
   });
 
   it('returns empty counts when nothing matched', () => {
