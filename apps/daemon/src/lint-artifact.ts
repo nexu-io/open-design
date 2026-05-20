@@ -445,6 +445,15 @@ export function lintArtifact(rawHtml: unknown): LintFinding[] {
     });
   }
 
+  // ── P1-4: CTA class mismatch across commerce regions ─────────────
+  // Group every commerce CTA (purchase/signup verb in <a> or <button>)
+  // across the page by class signature; if two or more distinct
+  // signatures coexist, the page's primary action style is ambiguous.
+  // Advisory P1 — outline / secondary variants are a legitimate design
+  // choice, so callers can ignore the warning when intentional.
+  const ctaFinding = detectCtaClassMismatch(html);
+  if (ctaFinding) out.push(ctaFinding);
+
   // ── P2-1: missing comment-mode anchor on <section> ────────────────
   // Either `data-od-id` (web/mobile prototypes) or `data-screen-label`
   // (decks) counts. Whichever the artifact uses, every <section> should
@@ -997,4 +1006,100 @@ function isGlobalThemeScopeSelector(s: string): boolean {
     return true;
   }
   return false;
+}
+
+const COMMERCE_CTA_VERBS = [
+  /\bbuy\b/i,
+  /\bpurchase\b/i,
+  /\bcheckout\b/i,
+  /\border\s+now\b/i,
+  /\bplace\s+order\b/i,
+  /\bplace\s+your\s+order\b/i,
+  /\bget\s+started\b/i,
+  /\bshop\s+now\b/i,
+  /\badd\s+to\s+cart\b/i,
+  /\bsubscribe\b/i,
+  /\bsign\s+up\b/i,
+  /\bstart\s+free\b/i,
+  /\bbook\s+now\b/i,
+  /\breserve\b/i,
+];
+
+function detectCtaClassMismatch(html: string): LintFinding | null {
+  const regions = [...extractCommerceRegions(html), ...extractMainBody(html)];
+  if (regions.length === 0) return null;
+  const ctas: { classes: Set<string>; signature: string; snippet: string }[] = [];
+  const ctaRe = /<(?:a|button)\b[^>]*\bclass\s*=\s*["']([^"']*)["'][^>]*>([\s\S]*?)<\/(?:a|button)>/gi;
+  const seen = new Set<number>();
+  for (const region of regions) {
+    for (const m of region.body.matchAll(ctaRe)) {
+      const text = stripTags(m[2] ?? '');
+      if (!isCommerceCtaText(text)) continue;
+      const tokens = (m[1] ?? '').split(/\s+/).filter(Boolean);
+      if (tokens.length === 0) continue;
+      const absolute = region.start + (m.index ?? 0);
+      if (seen.has(absolute)) continue;
+      seen.add(absolute);
+      const classes = new Set(tokens);
+      ctas.push({
+        classes,
+        signature: [...classes].sort().join(' '),
+        snippet: m[0],
+      });
+    }
+  }
+  if (ctas.length < 2) return null;
+  const signatures = new Set(ctas.map((c) => c.signature));
+  if (signatures.size < 2) return null;
+  const counts = new Map<string, number>();
+  for (const c of ctas) {
+    for (const cls of c.classes) counts.set(cls, (counts.get(cls) ?? 0) + 1);
+  }
+  const majority = [...counts.entries()].filter(([, n]) => n >= ctas.length - 1 && n < ctas.length);
+  const odd = ctas.find((c) => majority.some(([cls]) => !c.classes.has(cls))) ?? ctas[0];
+  if (!odd) return null;
+  return {
+    severity: 'P1',
+    id: 'cta-class-mismatch',
+    message: `${ctas.length} commerce CTAs across the page use ${signatures.size} different class signatures — the primary action style is inconsistent.`,
+    fix: 'Pick one button class set (e.g. `btn btn-primary`) and apply it to every purchase / signup CTA across header, hero, and main. Outline / secondary variants should use a different verb so they are not confused with the primary action.',
+    snippet: clip(odd.snippet),
+  };
+}
+
+function extractMainBody(html: string): { body: string; start: number }[] {
+  const out: { body: string; start: number }[] = [];
+  for (const m of html.matchAll(/<main\b[^>]*>([\s\S]*?)<\/main>/gi)) {
+    const body = m[1];
+    if (!body) continue;
+    const start = (m.index ?? 0) + m[0].indexOf(body);
+    out.push({ body, start });
+  }
+  return out;
+}
+
+function extractCommerceRegions(html: string): { body: string; start: number }[] {
+  const regions: { body: string; start: number }[] = [];
+  const patterns = [
+    /<header\b[^>]*>([\s\S]*?)<\/header>/gi,
+    /<nav\b[^>]*>([\s\S]*?)<\/nav>/gi,
+    /<section\b[^>]*\bclass\s*=\s*["'][^"']*\bhero\b[^"']*["'][^>]*>([\s\S]*?)<\/section>/gi,
+  ];
+  for (const re of patterns) {
+    for (const m of html.matchAll(re)) {
+      const body = m[1];
+      if (!body) continue;
+      const start = (m.index ?? 0) + m[0].indexOf(body);
+      regions.push({ body, start });
+    }
+  }
+  return regions;
+}
+
+function isCommerceCtaText(text: string): boolean {
+  return COMMERCE_CTA_VERBS.some((re) => re.test(text));
+}
+
+function stripTags(s: string): string {
+  return s.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 }

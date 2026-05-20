@@ -1222,3 +1222,96 @@ describe('trust-gradient', () => {
     expect(findings.find((f) => f.id === 'trust-gradient')).toBeDefined();
   });
 });
+
+describe('cta-class-mismatch', () => {
+  it('flags a header CTA on .btn when other CTAs use .btn .btn-primary', () => {
+    const html = `
+      <header><a class="btn" href="catalog.html">Buy now</a></header>
+      <main>
+        <a class="btn btn-primary" href="cart.html">Buy now</a>
+        <a class="btn btn-primary" href="signup.html">Sign up</a>
+      </main>
+    `;
+    const findings = lintArtifact(html);
+    const hit = requiredFinding(findings, 'cta-class-mismatch');
+    expect(hit.severity).toBe('P1');
+    expect(hit.snippet).toContain('btn');
+  });
+
+  it('does not fire when every commerce CTA shares the same class signature', () => {
+    const html = `
+      <header><a class="btn btn-primary">Buy now</a></header>
+      <main>
+        <a class="btn btn-primary">Buy now</a>
+        <a class="btn btn-primary">Sign up</a>
+      </main>
+    `;
+    const findings = lintArtifact(html);
+    expect(findings.find((f) => f.id === 'cta-class-mismatch')).toBeUndefined();
+  });
+
+  it('does not fire when only a single commerce CTA exists', () => {
+    const html = `
+      <header><a class="btn">Buy now</a></header>
+      <main><p>Read more about us</p></main>
+    `;
+    const findings = lintArtifact(html);
+    expect(findings.find((f) => f.id === 'cta-class-mismatch')).toBeUndefined();
+  });
+
+  it('fires when two CTAs in main use divergent button classes', () => {
+    const html = `
+      <main>
+        <a class="btn-primary">Buy now</a>
+        <button class="btn-outline">Sign up</button>
+      </main>
+    `;
+    const findings = lintArtifact(html);
+    const hit = requiredFinding(findings, 'cta-class-mismatch');
+    expect(hit.message).toContain('2 different class signatures');
+  });
+
+  it('ignores non-commerce CTAs even when they have divergent classes', () => {
+    const html = `
+      <header><a class="btn">About us</a></header>
+      <main>
+        <a class="btn btn-primary">Read more</a>
+        <a class="btn-outline">Contact</a>
+      </main>
+    `;
+    const findings = lintArtifact(html);
+    expect(findings.find((f) => f.id === 'cta-class-mismatch')).toBeUndefined();
+  });
+
+  it('skips CTAs that carry no class attribute tokens', () => {
+    const html = `
+      <header><a class="">Buy now</a></header>
+      <main><a class="btn btn-primary">Sign up</a></main>
+    `;
+    const findings = lintArtifact(html);
+    expect(findings.find((f) => f.id === 'cta-class-mismatch')).toBeUndefined();
+  });
+
+  it('treats class order as irrelevant when comparing signatures', () => {
+    const html = `
+      <header><a class="btn-primary btn">Buy now</a></header>
+      <main><a class="btn btn-primary">Sign up</a></main>
+    `;
+    const findings = lintArtifact(html);
+    expect(findings.find((f) => f.id === 'cta-class-mismatch')).toBeUndefined();
+  });
+
+  it('points the snippet at the divergent CTA when one is missing a class the others share', () => {
+    const html = `
+      <header><a class="btn">Buy now</a></header>
+      <main>
+        <a class="btn btn-primary">Buy now</a>
+        <a class="btn btn-primary">Sign up</a>
+      </main>
+    `;
+    const findings = lintArtifact(html);
+    const hit = requiredFinding(findings, 'cta-class-mismatch');
+    expect(hit.snippet).toContain('btn');
+    expect(hit.snippet).not.toContain('btn-primary');
+  });
+});
