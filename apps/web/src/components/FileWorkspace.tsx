@@ -383,17 +383,21 @@ export function FileWorkspace({
     // (size) and bucketed by the primary mime; mixed batches collapse
     // to `other` so the bucket stays interpretable.
     const totalBytes = picked.reduce((sum, file) => sum + (file.size || 0), 0);
-    const firstFile = picked[0];
-    const firstFileMime = firstFile?.type ?? '';
-    const firstFileName = firstFile?.name ?? '';
-    const isZip =
-      firstFileMime === 'application/zip' ||
-      firstFileName.toLowerCase().endsWith('.zip');
-    const trackingFileType = fileTypeToTracking({
-      mime: firstFileMime,
-      isFolder: false,
-      isZip,
+    const perFileTrackingTypes = picked.map((file) => {
+      const mime = file.type ?? '';
+      const name = file.name ?? '';
+      const isZip =
+        mime === 'application/zip' || name.toLowerCase().endsWith('.zip');
+      return fileTypeToTracking({ mime, isFolder: false, isZip });
     });
+    // Heterogeneous batch (more than one distinct tracking type) → 'other'
+    // so the breakdowns dashboards build off `file_type` do not get skewed
+    // by whichever file happened to land first.
+    const uniqueTrackingTypes = new Set(perFileTrackingTypes);
+    const trackingFileType =
+      uniqueTrackingTypes.size <= 1
+        ? perFileTrackingTypes[0] ?? 'other'
+        : 'other';
     const trackingFileSizeBucket = fileSizeBucketToTracking(totalBytes);
     let result: UploadProjectFilesResult;
     try {

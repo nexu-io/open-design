@@ -195,8 +195,9 @@ export function trackNewProjectModalTabClick(
 export function trackNewProjectModalElementClick(
   track: Track,
   props: NewProjectModalElementClickProps,
+  options?: { requestId?: string },
 ): void {
-  send(track, 'ui_click', props);
+  send(track, 'ui_click', props, options);
 }
 
 export function trackPluginReplacementModalClick(

@@ -101,7 +101,11 @@ interface SelectedConnectorContext {
 
 interface PendingReplacement {
   title: string;
-  confirm: () => void;
+  // Returns a promise resolving when the underlying plugin apply has
+  // finished (or rejecting on failure) so the modal's success/failure
+  // analytics fire on the real outcome, not on the synchronous
+  // queue-the-apply step.
+  confirm: () => Promise<void>;
   // Plugin ids surrounding the replacement so the result event can
   // report which plugin owned the existing prompt and which plugin is
   // about to take over. `pluginBefore` is null when nothing was active
@@ -555,11 +559,9 @@ export function HomeView({
       inputFields: options?.inputFields,
       queryTemplate: options?.queryTemplate,
     });
-    const confirm = () => {
-      void usePlugin(record, nextPrompt, options);
-    };
+    const confirm = () => usePlugin(record, nextPrompt, options);
     if (options?.replaceWithoutConfirmation) {
-      confirm();
+      void confirm();
       return;
     }
     runWithReplacementConfirmation(record.title, replacement, confirm, {
@@ -594,7 +596,7 @@ export function HomeView({
   function runWithReplacementConfirmation(
     title: string,
     replacementPrompt: string | null,
-    confirm: () => void,
+    confirm: () => Promise<void>,
     pluginIds: { before: string | null; after: string },
   ) {
     if (
@@ -610,7 +612,7 @@ export function HomeView({
       });
       return;
     }
-    confirm();
+    void confirm();
   }
 
   function previewPluginReplacement(
@@ -801,7 +803,7 @@ export function HomeView({
   function queuePluginAuthoring(chipId: string | null, goal?: string) {
     const nextInputs = buildPluginAuthoringInputs(goal);
     const nextPrompt = buildPluginAuthoringPromptForInputs(nextInputs);
-    runWithReplacementConfirmation('Plugin authoring', nextPrompt, () => {
+    runWithReplacementConfirmation('Plugin authoring', nextPrompt, async () => {
       setActive(null);
       setActiveSkill(null);
       setFallbackProjectKind('other');
@@ -1149,26 +1151,35 @@ export function HomeView({
                   const pluginAfter = pendingReplacement.pluginAfter;
                   const action = pendingReplacement.confirm;
                   setPendingReplacement(null);
-                  try {
-                    action();
-                    trackPluginReplacementResult(analytics.track, {
-                      page_name: 'home',
-                      area: 'plugin_replacement',
-                      plugin_before: pluginBefore ?? '',
-                      plugin_after: pluginAfter,
-                      result: 'success',
-                    });
-                  } catch (err) {
-                    trackPluginReplacementResult(analytics.track, {
-                      page_name: 'home',
-                      area: 'plugin_replacement',
-                      plugin_before: pluginBefore ?? '',
-                      plugin_after: pluginAfter,
-                      result: 'failed',
-                      error_code: err instanceof Error ? err.message : String(err),
-                    });
-                    throw err;
-                  }
+                  // `action()` now returns a promise that resolves when
+                  // the underlying plugin apply finishes (or rejects on
+                  // failure). Emitting the result event off the promise
+                  // settle is the only way to capture real success /
+                  // failure — the synchronous path used to mark every
+                  // attempt as a success and never observed the catch
+                  // branch.
+                  void (async () => {
+                    try {
+                      await action();
+                      trackPluginReplacementResult(analytics.track, {
+                        page_name: 'home',
+                        area: 'plugin_replacement',
+                        plugin_before: pluginBefore ?? '',
+                        plugin_after: pluginAfter,
+                        result: 'success',
+                      });
+                    } catch (err) {
+                      trackPluginReplacementResult(analytics.track, {
+                        page_name: 'home',
+                        area: 'plugin_replacement',
+                        plugin_before: pluginBefore ?? '',
+                        plugin_after: pluginAfter,
+                        result: 'failed',
+                        error_code:
+                          err instanceof Error ? err.message : String(err),
+                      });
+                    }
+                  })();
                 }}
               >
                 {t('homeHero.confirmReplace')}

@@ -528,12 +528,16 @@ export function NewProjectPanel({
     // project_create_result correlated through `requestId` carries the
     // project_kind / fidelity payload, so we no longer duplicate them
     // on the click event.
-    trackNewProjectModalElementClick(analytics.track, {
-      page_name: 'home',
-      area: 'new_project_modal',
-      element: 'create',
-      tab_name: createTabToTracking(tab),
-    });
+    trackNewProjectModalElementClick(
+      analytics.track,
+      {
+        page_name: 'home',
+        area: 'new_project_modal',
+        element: 'create',
+        tab_name: createTabToTracking(tab),
+      },
+      { requestId },
+    );
     onCreate({
       name: trimmedName || autoName(tab, mediaSurface, t),
       skillId: skillIdForTab,
