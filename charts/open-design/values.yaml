@@ -18,7 +18,6 @@ config:
   publicBaseUrl: ""
   nodeOptions: "--max-old-space-size=192"
   webPort: 7456
-  proxyPort: 8080
   bindHost: "127.0.0.1"
   apiToken: "" # Auto-generated if left empty
 

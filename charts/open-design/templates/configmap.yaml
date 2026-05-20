@@ -5,11 +5,10 @@ metadata:
   labels:
     {{- include "open-design.labels" . | nindent 4 }}
 data:
-  OD_BIND_HOST: {{ .Values.config.bindHost | quote }}
+  OD_BIND_HOST: {{ if .Values.authProxy.enabled }}{{ .Values.config.bindHost | quote }}{{ else }}"0.0.0.0"{{ end }}
   OD_PORT: {{ .Values.config.webPort | quote }}
   OD_WEB_PORT: {{ .Values.config.webPort | quote }}
-  PROXY_PORT: {{ .Values.config.proxyPort | quote }}
-
+  PROXY_PORT: {{ .Values.authProxy.port | quote }}
   NODE_ENV: {{ .Values.config.nodeEnv | quote }}
   NODE_OPTIONS: {{ .Values.config.nodeOptions | quote }}
 {{- if .Values.config.publicBaseUrl }}
