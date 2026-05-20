@@ -71,6 +71,35 @@ test("push-tauri-migration-handoff can verify and push a packaged handoff archiv
   assert.equal(remoteHead, sourceHead);
 });
 
+test("push-tauri-migration-handoff honors receiver workflow, report, and PR body paths", async (t) => {
+  const { manifestPath, remotePath, sourceHead, targetRepo } = await createHandoffFixture(
+    t,
+    "open-design-tauri-push-handoff-custom-paths-",
+  );
+  const reportDir = join(targetRepo, "custom reports");
+  const prBodyPath = join(targetRepo, "custom pr", "tauri-pr.md");
+
+  const result = await runPushHandoffScript(
+    targetRepo,
+    "--manifest",
+    manifestPath,
+    "--remote",
+    remotePath,
+    "--workflow",
+    "release beta.yml",
+    "--report-dir",
+    reportDir,
+    "--pr-body-path",
+    prBodyPath,
+  );
+
+  assert.match(result.stdout, /gh workflow run 'release beta\.yml' --ref codex\/electron-to-tauri-migration/);
+  assert.match(result.stdout, new RegExp(`--body-file '${escapeRegExp(prBodyPath)}'`));
+  assert.match(result.stdout, new RegExp(`--output-dir '${escapeRegExp(reportDir)}'`));
+  assert.match(result.stdout, new RegExp(`--expected-head ${sourceHead}`));
+  assert.match(await readFile(prBodyPath, "utf8"), /## Validation/);
+});
+
 test("push-tauri-migration-handoff can override a relocated bundle path", async (t) => {
   const { bundlePath, manifestPath, remotePath, sourceHead, targetRepo } = await createHandoffFixture(
     t,

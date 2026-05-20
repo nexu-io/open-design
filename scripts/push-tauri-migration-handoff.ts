@@ -9,6 +9,8 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 const scriptsRoot = import.meta.dirname;
 const defaultRemote = "origin";
+const defaultReportDir = "/tmp/open-design-tauri-m4-reports";
+const defaultWorkflow = "ci.yml";
 const manifestName = "open-design-tauri-migration-handoff.json";
 const noteName = "open-design-tauri-migration-handoff.md";
 
@@ -17,7 +19,10 @@ type Args = {
   bundle?: string;
   cwd: string;
   manifest?: string;
+  prBodyPath?: string;
   remote: string;
+  reportDir: string;
+  workflow: string;
 };
 
 type ResolvedArgs = {
@@ -27,7 +32,10 @@ type ResolvedArgs = {
   bundle?: string;
   cwd: string;
   manifest: string;
+  prBodyPath?: string;
   remote: string;
+  reportDir: string;
+  workflow: string;
 };
 
 type HandoffManifest = {
@@ -58,7 +66,7 @@ async function main(): Promise<void> {
       "--remote",
       args.remote,
     ]);
-    const prBodyPath = resolve(process.env.TAURI_PR_BODY_PATH ?? join(args.cwd, ".tmp/tauri-migration-pr-body.md"));
+    const prBodyPath = resolve(args.prBodyPath ?? join(args.cwd, ".tmp/tauri-migration-pr-body.md"));
     await mkdir(dirname(prBodyPath), { recursive: true });
     await writeFile(prBodyPath, prBody(), "utf8");
 
@@ -93,7 +101,7 @@ async function main(): Promise<void> {
         "Next:",
         indent(
           [
-            `Trigger native CI with: gh workflow run ci.yml --ref ${shellQuote(args.branch)}`,
+            `Trigger native CI with: gh workflow run ${shellQuote(args.workflow)} --ref ${shellQuote(args.branch)}`,
             "If workflow dispatch is unavailable, open a draft PR with:",
             [
               "gh pr create --draft \\",
@@ -109,7 +117,7 @@ async function main(): Promise<void> {
               `  --expected-head ${args.branchHead} \\`,
               `  --remote ${shellQuote(args.remote)} \\`,
               "  --wait \\",
-              "  --output-dir /tmp/open-design-tauri-m4-reports \\",
+              `  --output-dir ${shellQuote(args.reportDir)} \\`,
               "  --advance",
             ].join("\n"),
           ].join("\n"),
@@ -127,14 +135,24 @@ async function main(): Promise<void> {
 function parseArgs(argv: string[]): Args {
   const parsed: Args = {
     cwd: process.cwd(),
+    ...(process.env.TAURI_PR_BODY_PATH == null ? {} : { prBodyPath: resolve(process.env.TAURI_PR_BODY_PATH) }),
+    reportDir: resolve(process.env.TAURI_M4_REPORT_DIR ?? defaultReportDir),
     remote: defaultRemote,
+    workflow: process.env.GITHUB_WORKFLOW ?? defaultWorkflow,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const value = argv[index + 1];
     if (
-      (arg === "--archive" || arg === "--bundle" || arg === "--cwd" || arg === "--manifest" || arg === "--remote") &&
+      (arg === "--archive" ||
+        arg === "--bundle" ||
+        arg === "--cwd" ||
+        arg === "--manifest" ||
+        arg === "--pr-body-path" ||
+        arg === "--remote" ||
+        arg === "--report-dir" ||
+        arg === "--workflow") &&
       value == null
     ) {
       throw new Error(`${arg} requires a value`);
@@ -159,19 +177,35 @@ function parseArgs(argv: string[]): Args {
       index += 1;
       continue;
     }
+    if (arg === "--pr-body-path") {
+      parsed.prBodyPath = resolve(value!);
+      index += 1;
+      continue;
+    }
     if (arg === "--remote") {
       parsed.remote = value!;
+      index += 1;
+      continue;
+    }
+    if (arg === "--report-dir") {
+      parsed.reportDir = resolve(value!);
+      index += 1;
+      continue;
+    }
+    if (arg === "--workflow") {
+      parsed.workflow = value!;
       index += 1;
       continue;
     }
     if (arg === "--help" || arg === "-h") {
       process.stdout.write(
         [
-          "usage: tsx scripts/push-tauri-migration-handoff.ts --archive <handoff.tar.gz> [--remote <remote>] [--cwd <repo>]",
-          "       tsx scripts/push-tauri-migration-handoff.ts --manifest <path> [--remote <remote>] [--cwd <repo>]",
-          "       tsx scripts/push-tauri-migration-handoff.ts --manifest <path> --bundle <path> [--remote <remote>] [--cwd <repo>]",
+          "usage: tsx scripts/push-tauri-migration-handoff.ts --archive <handoff.tar.gz> [--remote <remote>] [--cwd <repo>] [--workflow <file>] [--report-dir <dir>] [--pr-body-path <path>]",
+          "       tsx scripts/push-tauri-migration-handoff.ts --manifest <path> [--remote <remote>] [--cwd <repo>] [--workflow <file>] [--report-dir <dir>] [--pr-body-path <path>]",
+          "       tsx scripts/push-tauri-migration-handoff.ts --manifest <path> --bundle <path> [--remote <remote>] [--cwd <repo>] [--workflow <file>] [--report-dir <dir>] [--pr-body-path <path>]",
           "",
-          `defaults: --cwd ${process.cwd()} --remote ${defaultRemote}`,
+          `defaults: --cwd ${process.cwd()} --remote ${defaultRemote} --workflow ${defaultWorkflow} --report-dir ${defaultReportDir}`,
+          "env defaults: GITHUB_WORKFLOW, TAURI_M4_REPORT_DIR, TAURI_PR_BODY_PATH",
           "",
         ].join("\n"),
       );
@@ -202,7 +236,10 @@ async function resolveArgs(parsed: Args, extractedManifest?: string): Promise<Re
     ...(parsed.bundle == null ? {} : { bundle: parsed.bundle }),
     cwd: parsed.cwd,
     manifest: manifestPath,
+    ...(parsed.prBodyPath == null ? {} : { prBodyPath: parsed.prBodyPath }),
     remote: parsed.remote,
+    reportDir: parsed.reportDir,
+    workflow: parsed.workflow,
   };
 }
 
