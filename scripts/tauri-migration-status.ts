@@ -488,12 +488,12 @@ function nextActionsForPhase(
       remote?.current === true
         ? `Remote ${remote.remote} already matches ${remote.branch ?? "the migration branch"} at ${remote.head ?? "the expected head"}.`
         : archiveReady
-          ? `On the receiving machine, run ${handoffArchive.commandScript} from the repository root to verify checksum, extract, push, verify the remote branch, and attempt native CI dispatch when gh is available; or run scripts/push-tauri-migration-handoff.ts --archive ${handoffArchive.archive} --remote ${remoteName} for push-only handoff.`
+          ? `On the receiving machine, run ${handoffArchive.commandScript} from the repository root to verify checksum, extract, push, verify the remote branch, and attempt native CI dispatch when GH_BIN/gh is available; or run scripts/push-tauri-migration-handoff.ts --archive ${handoffArchive.archive} --remote ${remoteName} for push-only handoff.`
           : `Copy the packaged handoff archive, .sha256 sidecar, .commands.sh sidecar, and .commands.sh.sha256 sidecar to a write-capable machine, then run the command script or scripts/push-tauri-migration-handoff.ts --archive /path/to/open-design-tauri-migration-handoff.tar.gz --remote ${remoteName}.`,
       reportsReadyForAdvance
         ? `Advance M4 evidence and M5 defaults with scripts/advance-tauri-migration-m4-m5.ts --remote ${remoteName} --branch ${migrationBranch} --expected-head ${expectedHead} using the verified report paths shown above.`
         : remoteReady
-          ? `Trigger native CI with gh workflow run ci.yml --ref ${migrationBranch} or open a draft PR, then download and verify artifacts with scripts/download-tauri-m4-reports.ts --branch ${migrationBranch} --expected-head ${expectedHead} --remote ${remoteName} --wait --output-dir /tmp/open-design-tauri-m4-reports; add --advance to apply M4 evidence and M5 defaults immediately after verification.`
+          ? `Trigger native CI with \${GH_BIN:-gh} workflow run ci.yml --ref ${migrationBranch} or open a draft PR, then download and verify artifacts with scripts/download-tauri-m4-reports.ts --branch ${migrationBranch} --expected-head ${expectedHead} --remote ${remoteName} --wait --output-dir /tmp/open-design-tauri-m4-reports; add --advance to apply M4 evidence and M5 defaults immediately after verification.`
           : remote == null
             ? "Run the Windows and Linux Tauri package smoke jobs."
             : `Remote ${remote.remote}/${migrationBranch} must match ${expectedHead} before native CI artifacts can be collected; current blocker: ${remote.problems.join("; ") || "remote branch is not current"}.`,
@@ -771,7 +771,8 @@ async function readHandoffArchiveStatus(archivePath: string, handoff?: HandoffSt
     if (
       !commandScriptSource.includes('gh_bin="${GH_BIN:-gh}"') ||
       !commandScriptSource.includes('command -v "$gh_bin"') ||
-      !commandScriptSource.includes('"$gh_bin" workflow run "$workflow" --ref "$branch"')
+      !commandScriptSource.includes('"$gh_bin" workflow run "$workflow" --ref "$branch"') ||
+      !commandScriptSource.includes("$gh_bin pr create --draft")
     ) {
       problems.push(`command script is missing configurable GitHub CLI dispatch: ${commandScriptPath}`);
     }
@@ -794,7 +795,7 @@ async function readHandoffArchiveStatus(archivePath: string, handoff?: HandoffSt
     ) {
       problems.push(`command script is missing branch-and-remote-bound explicit run guidance: ${commandScriptPath}`);
     }
-    if (!commandScriptSource.includes("gh workflow run") && !commandScriptSource.includes("gh pr create")) {
+    if (!commandScriptSource.includes("workflow run") && !commandScriptSource.includes("pr create")) {
       problems.push(`command script is missing native CI trigger guidance: ${commandScriptPath}`);
     }
     if (!commandScriptSource.includes("TAURI_PR_BODY_PATH") || !commandScriptSource.includes("--body-file")) {

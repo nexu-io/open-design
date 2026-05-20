@@ -450,6 +450,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Tightened `scripts/continue-tauri-migration.ts --dry-run` for no-write-access senders. When the non-mutating push preflight fails, the continuation runner now stops at the remote-branch blocker after printing the transferable handoff set, instead of printing native CI dispatch or report-download steps that cannot work before the branch exists. `node --import tsx --test scripts/tauri-migration-status.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `git diff --check` passed.
 - 2026-05-20: Hardened the packaged handoff command sidecar for receiver push failures. When the receiver is already on the migration branch, the sidecar now restores that checked-out branch if import succeeds but the remote push fails, and `scripts/tauri-migration-status.ts` rejects older command sidecars that lack this restoration guard. `node --import tsx --test scripts/package-tauri-migration-handoff.test.ts scripts/tauri-migration-status.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `git diff --check` passed.
 - 2026-05-20: Aligned the packaged handoff command sidecar with the other continuation scripts' GitHub CLI override. Receivers can now set `GH_BIN=<path-to-gh>` before running the `.commands.sh` sidecar, and `scripts/tauri-migration-status.ts` rejects older command sidecars that hardcode `gh` for workflow dispatch. `node --import tsx --test scripts/package-tauri-migration-handoff.test.ts scripts/tauri-migration-status.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `git diff --check` passed.
+- 2026-05-20: Propagated the same GitHub CLI override through the push-only receiver and repo-local continuation fallbacks. `scripts/push-tauri-migration-handoff.ts` now accepts `--gh` and honors `GH_BIN`, generated handoff notes and package output print `${GH_BIN:-gh}` workflow/PR fallback commands, and `scripts/continue-tauri-migration.ts --dry-run` carries custom `--gh` paths into transferable push commands and manual dispatch guidance. `node --import tsx --test scripts/package-tauri-migration-handoff.test.ts scripts/tauri-migration-status.test.ts scripts/push-tauri-migration-handoff.test.ts scripts/verify-tauri-migration-handoff.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, `git diff --check`, `pnpm guard`, and `pnpm typecheck` passed.
 
 ### Platform Gate Runners
 
@@ -563,16 +564,18 @@ pnpm exec tsx scripts/push-tauri-migration-handoff.ts \
   --remote origin
 ```
 
-That branch push alone does not trigger `ci.yml`, because this repository runs CI on pull requests, `main` pushes, and manual dispatches. The command script attempts the workflow dispatch automatically when `gh` is available. If it cannot dispatch, either open a draft PR or manually dispatch the workflow for the migration branch:
+Add `--gh /path/to-gh` or set `GH_BIN=<path-to-gh>` if the receiving machine uses a non-default GitHub CLI binary and you want the printed workflow-dispatch and draft-PR fallback commands to use that binary.
+
+That branch push alone does not trigger `ci.yml`, because this repository runs CI on pull requests, `main` pushes, and manual dispatches. The command script attempts the workflow dispatch automatically when `GH_BIN` or `gh` is available. If it cannot dispatch, either open a draft PR or manually dispatch the workflow for the migration branch:
 
 ```bash
-gh workflow run ci.yml --ref codex/electron-to-tauri-migration
+${GH_BIN:-gh} workflow run ci.yml --ref codex/electron-to-tauri-migration
 ```
 
 or:
 
 ```bash
-gh pr create --draft \
+${GH_BIN:-gh} pr create --draft \
   --base main \
   --head codex/electron-to-tauri-migration \
   --title "Migrate desktop runtime to Tauri" \

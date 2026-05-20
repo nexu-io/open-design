@@ -46,10 +46,10 @@ test("package-tauri-migration-handoff creates a tarball and checksum sidecar", a
   assert.match(result.stdout, /GITHUB_RUN_ID=<github-run-id>/);
   assert.match(result.stdout, /Native CI trigger after push:/);
   assert.match(result.stdout, /attempts this automatically when GH_BIN\/gh is available/);
-  assert.match(result.stdout, /gh workflow run ci\.yml --ref 'codex\/electron-to-tauri-migration'/);
+  assert.match(result.stdout, /\$\{GH_BIN:-gh\} workflow run ci\.yml --ref 'codex\/electron-to-tauri-migration'/);
   assert.match(result.stdout, /Fallback:/);
   assert.match(result.stdout, /template-complete PR body/);
-  assert.match(result.stdout, /gh pr create --draft/);
+  assert.match(result.stdout, /\$\{GH_BIN:-gh\} pr create --draft/);
   assert.match(result.stdout, /--body-file \.tmp\/tauri-migration-pr-body\.md/);
   assert.match(result.stdout, /download-tauri-m4-reports/);
   assert.match(result.stdout, /--branch 'codex\/electron-to-tauri-migration'/);
@@ -85,7 +85,7 @@ test("package-tauri-migration-handoff creates a tarball and checksum sidecar", a
   assert.match(commandScript, /"\$gh_bin" workflow run "\$workflow" --ref "\$branch"/);
   assert.match(commandScript, /Requested native CI dispatch/);
   assert.match(commandScript, /TAURI_NATIVE_CI_TRIGGER/);
-  assert.match(commandScript, /gh pr create --draft/);
+  assert.match(commandScript, /\$gh_bin pr create --draft/);
   assert.match(commandScript, /TAURI_PR_BODY_PATH/);
   assert.match(commandScript, /handoff_dir=/);
   assert.match(commandScript, /schema_version=/);

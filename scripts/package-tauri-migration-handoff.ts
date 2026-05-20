@@ -90,11 +90,11 @@ async function main(): Promise<void> {
       indent(
         [
           "The command script attempts this automatically when GH_BIN/gh is available:",
-          `gh workflow run ci.yml --ref ${shellQuote(handoff.manifest.branch)}`,
+          `\${GH_BIN:-gh} workflow run ci.yml --ref ${shellQuote(handoff.manifest.branch)}`,
           "Fallback:",
           "The command script writes a template-complete PR body to .tmp/tauri-migration-pr-body.md before printing this command:",
           [
-            "gh pr create --draft \\",
+            "${GH_BIN:-gh} pr create --draft \\",
             "  --base main \\",
             `  --head ${shellQuote(handoff.manifest.branch)} \\`,
             "  --title 'Migrate desktop runtime to Tauri' \\",
@@ -549,7 +549,7 @@ function commandScript(archivePath: string): string {
     `    printf '%s\\n' "Remote push is complete. Trigger native CI with one of:"`,
     `    printf '%s\\n' "  $gh_bin workflow run $workflow --ref $branch"`,
     `    printf '%s\\n' "or"`,
-    `    printf '%s\\n' "  gh pr create --draft --base main --head $branch --title 'Migrate desktop runtime to Tauri' --body-file $pr_body_path"`,
+    `    printf '%s\\n' "  $gh_bin pr create --draft --base main --head $branch --title 'Migrate desktop runtime to Tauri' --body-file $pr_body_path"`,
     "  fi",
     '  if [[ "$workflow_dispatched" == "true" && "${TAURI_NATIVE_CI_WAIT:-0}" == "1" ]]; then',
     '    pnpm exec tsx scripts/download-tauri-m4-reports.ts --branch "$branch" --expected-head "$expected_head" --remote "$remote" --wait --output-dir "$report_dir" --advance',

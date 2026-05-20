@@ -18,6 +18,7 @@ type Args = {
   archive?: string;
   bundle?: string;
   cwd: string;
+  ghBin: string;
   manifest?: string;
   prBodyPath?: string;
   remote: string;
@@ -31,6 +32,7 @@ type ResolvedArgs = {
   branchHead: string;
   bundle?: string;
   cwd: string;
+  ghBin: string;
   manifest: string;
   prBodyPath?: string;
   remote: string;
@@ -101,10 +103,10 @@ async function main(): Promise<void> {
         "Next:",
         indent(
           [
-            `Trigger native CI with: gh workflow run ${shellQuote(args.workflow)} --ref ${shellQuote(args.branch)}`,
+            `Trigger native CI with: ${shellQuote(args.ghBin)} workflow run ${shellQuote(args.workflow)} --ref ${shellQuote(args.branch)}`,
             "If workflow dispatch is unavailable, open a draft PR with:",
             [
-              "gh pr create --draft \\",
+              `${shellQuote(args.ghBin)} pr create --draft \\`,
               "  --base main \\",
               `  --head ${shellQuote(args.branch)} \\`,
               "  --title 'Migrate desktop runtime to Tauri' \\",
@@ -135,6 +137,7 @@ async function main(): Promise<void> {
 function parseArgs(argv: string[]): Args {
   const parsed: Args = {
     cwd: process.cwd(),
+    ghBin: process.env.GH_BIN ?? "gh",
     ...(process.env.TAURI_PR_BODY_PATH == null ? {} : { prBodyPath: resolve(process.env.TAURI_PR_BODY_PATH) }),
     reportDir: resolve(process.env.TAURI_M4_REPORT_DIR ?? defaultReportDir),
     remote: defaultRemote,
@@ -148,6 +151,7 @@ function parseArgs(argv: string[]): Args {
       (arg === "--archive" ||
         arg === "--bundle" ||
         arg === "--cwd" ||
+        arg === "--gh" ||
         arg === "--manifest" ||
         arg === "--pr-body-path" ||
         arg === "--remote" ||
@@ -169,6 +173,11 @@ function parseArgs(argv: string[]): Args {
     }
     if (arg === "--cwd") {
       parsed.cwd = resolve(value!);
+      index += 1;
+      continue;
+    }
+    if (arg === "--gh") {
+      parsed.ghBin = value!;
       index += 1;
       continue;
     }
@@ -200,12 +209,12 @@ function parseArgs(argv: string[]): Args {
     if (arg === "--help" || arg === "-h") {
       process.stdout.write(
         [
-          "usage: tsx scripts/push-tauri-migration-handoff.ts --archive <handoff.tar.gz> [--remote <remote>] [--cwd <repo>] [--workflow <file>] [--report-dir <dir>] [--pr-body-path <path>]",
-          "       tsx scripts/push-tauri-migration-handoff.ts --manifest <path> [--remote <remote>] [--cwd <repo>] [--workflow <file>] [--report-dir <dir>] [--pr-body-path <path>]",
-          "       tsx scripts/push-tauri-migration-handoff.ts --manifest <path> --bundle <path> [--remote <remote>] [--cwd <repo>] [--workflow <file>] [--report-dir <dir>] [--pr-body-path <path>]",
+          "usage: tsx scripts/push-tauri-migration-handoff.ts --archive <handoff.tar.gz> [--remote <remote>] [--cwd <repo>] [--gh <path-to-gh>] [--workflow <file>] [--report-dir <dir>] [--pr-body-path <path>]",
+          "       tsx scripts/push-tauri-migration-handoff.ts --manifest <path> [--remote <remote>] [--cwd <repo>] [--gh <path-to-gh>] [--workflow <file>] [--report-dir <dir>] [--pr-body-path <path>]",
+          "       tsx scripts/push-tauri-migration-handoff.ts --manifest <path> --bundle <path> [--remote <remote>] [--cwd <repo>] [--gh <path-to-gh>] [--workflow <file>] [--report-dir <dir>] [--pr-body-path <path>]",
           "",
           `defaults: --cwd ${process.cwd()} --remote ${defaultRemote} --workflow ${defaultWorkflow} --report-dir ${defaultReportDir}`,
-          "env defaults: GITHUB_WORKFLOW, TAURI_M4_REPORT_DIR, TAURI_PR_BODY_PATH",
+          "env defaults: GH_BIN, GITHUB_WORKFLOW, TAURI_M4_REPORT_DIR, TAURI_PR_BODY_PATH",
           "",
         ].join("\n"),
       );
@@ -235,6 +244,7 @@ async function resolveArgs(parsed: Args, extractedManifest?: string): Promise<Re
     branchHead: manifest.branchHead,
     ...(parsed.bundle == null ? {} : { bundle: parsed.bundle }),
     cwd: parsed.cwd,
+    ghBin: parsed.ghBin,
     manifest: manifestPath,
     ...(parsed.prBodyPath == null ? {} : { prBodyPath: parsed.prBodyPath }),
     remote: parsed.remote,

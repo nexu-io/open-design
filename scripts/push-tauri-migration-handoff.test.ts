@@ -78,6 +78,7 @@ test("push-tauri-migration-handoff honors receiver workflow, report, and PR body
   );
   const reportDir = join(targetRepo, "custom reports");
   const prBodyPath = join(targetRepo, "custom pr", "tauri-pr.md");
+  const ghBin = join(targetRepo, "custom gh", "gh");
 
   const result = await runPushHandoffScript(
     targetRepo,
@@ -85,6 +86,8 @@ test("push-tauri-migration-handoff honors receiver workflow, report, and PR body
     manifestPath,
     "--remote",
     remotePath,
+    "--gh",
+    ghBin,
     "--workflow",
     "release beta.yml",
     "--report-dir",
@@ -93,7 +96,11 @@ test("push-tauri-migration-handoff honors receiver workflow, report, and PR body
     prBodyPath,
   );
 
-  assert.match(result.stdout, /gh workflow run 'release beta\.yml' --ref codex\/electron-to-tauri-migration/);
+  assert.match(
+    result.stdout,
+    new RegExp(`${escapeRegExp(`'${ghBin}'`)} workflow run 'release beta\\.yml' --ref codex/electron-to-tauri-migration`),
+  );
+  assert.match(result.stdout, new RegExp(`${escapeRegExp(`'${ghBin}'`)} pr create --draft`));
   assert.match(result.stdout, new RegExp(`--body-file '${escapeRegExp(prBodyPath)}'`));
   assert.match(result.stdout, new RegExp(`--output-dir '${escapeRegExp(reportDir)}'`));
   assert.match(result.stdout, new RegExp(`--expected-head ${sourceHead}`));

@@ -394,6 +394,7 @@ function pushHandoffArgs(args: Args, archive: string, options: { omitCwd?: boole
     "--remote",
     args.remote,
     ...(options.omitCwd === true ? [] : ["--cwd", args.root]),
+    ...(args.ghBin === "gh" ? [] : ["--gh", args.ghBin]),
     "--workflow",
     args.workflow,
     "--report-dir",
@@ -426,10 +427,10 @@ function appendTransferableHandoffHint(args: Args, archive: string, log: string[
 }
 
 function appendManualNativeCiFallback(args: Args, log: string[]): void {
-  log.push(`Trigger it manually with: ${formatCommand("gh", ["workflow", "run", args.workflow, "--ref", args.branch])}`);
+  log.push(`Trigger it manually with: ${formatCommand(args.ghBin, ["workflow", "run", args.workflow, "--ref", args.branch])}`);
   log.push("If workflow dispatch is unavailable after the branch is pushed, open a draft PR with:");
   log.push(
-    formatCommand("gh", [
+    formatCommand(args.ghBin, [
       "pr",
       "create",
       "--draft",

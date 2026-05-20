@@ -447,7 +447,8 @@ test("tauri-migration-status rejects packaged handoff archives without configura
     commandScript
       .replace('gh_bin="${GH_BIN:-gh}"\n', "")
       .replace('command -v "$gh_bin"', "command -v gh")
-      .replace('"$gh_bin" workflow run "$workflow" --ref "$branch"', 'gh workflow run "$workflow" --ref "$branch"'),
+      .replace('"$gh_bin" workflow run "$workflow" --ref "$branch"', 'gh workflow run "$workflow" --ref "$branch"')
+      .replace("$gh_bin pr create --draft", "gh pr create --draft"),
     "utf8",
   );
   await writeCommandScriptChecksum(commandScriptPath);
@@ -536,7 +537,7 @@ test("tauri-migration-status reports a remote branch matching the handoff", asyn
   assert.equal(parsed.remote.expectedHead, head);
   assert.deepEqual(parsed.remote.problems, []);
   assert.match(parsed.nextActions.join("\n"), /already matches/);
-  assert.match(parsed.nextActions.join("\n"), /gh workflow run ci\.yml --ref codex\/electron-to-tauri-migration/);
+  assert.match(parsed.nextActions.join("\n"), /\$\{GH_BIN:-gh\} workflow run ci\.yml --ref codex\/electron-to-tauri-migration/);
   assert.match(parsed.nextActions.join("\n"), new RegExp(`--expected-head ${head}`));
   assert.match(parsed.nextActions.join("\n"), /--wait/);
   assert.match(parsed.nextActions.join("\n"), /download-tauri-m4-reports/);
@@ -1066,9 +1067,9 @@ test("continue-tauri-migration reports manual dispatch when gh workflow dispatch
   const result = await runContinue(fixture, "--handoff-dir", handoffDir, "--remote", remotePath, "--gh", ghBin);
 
   assert.match(result.stdout, /Native CI dispatch failed/);
-  assert.match(result.stdout, /Trigger it manually with: gh workflow run ci\.yml --ref codex\/electron-to-tauri-migration/);
+  assert.match(result.stdout, new RegExp(`Trigger it manually with: ${escapeRegExp(ghBin)} workflow run ci\\.yml --ref codex/electron-to-tauri-migration`));
   assert.match(result.stdout, /If workflow dispatch is unavailable after the branch is pushed, open a draft PR with:/);
-  assert.match(result.stdout, /gh pr create --draft --base main --head codex\/electron-to-tauri-migration/);
+  assert.match(result.stdout, new RegExp(`${escapeRegExp(ghBin)} pr create --draft --base main --head codex/electron-to-tauri-migration`));
   assert.match(result.stdout, /--body-file \.tmp\/tauri-migration-pr-body\.md/);
   assert.match(result.stdout, /download-tauri-m4-reports\.ts/);
   assert.match(result.stdout, new RegExp(`--expected-head ${head}`));
@@ -1092,9 +1093,12 @@ test("continue-tauri-migration dry-run reports manual dispatch when gh is unavai
   assert.doesNotMatch(result.stdout, /Would request native CI dispatch/);
   assert.match(result.stdout, /Native CI dispatch skipped/);
   assert.match(result.stdout, new RegExp(`${escapeRegExp(missingGh)} is not available on PATH`));
-  assert.match(result.stdout, /Trigger it manually with: gh workflow run ci\.yml --ref codex\/electron-to-tauri-migration/);
+  assert.match(
+    result.stdout,
+    new RegExp(`Trigger it manually with: ${escapeRegExp(missingGh)} workflow run ci\\.yml --ref codex/electron-to-tauri-migration`),
+  );
   assert.match(result.stdout, /If workflow dispatch is unavailable after the branch is pushed, open a draft PR with:/);
-  assert.match(result.stdout, /gh pr create --draft --base main --head codex\/electron-to-tauri-migration/);
+  assert.match(result.stdout, new RegExp(`${escapeRegExp(missingGh)} pr create --draft --base main --head codex/electron-to-tauri-migration`));
   assert.match(result.stdout, /--body-file \.tmp\/tauri-migration-pr-body\.md/);
   assert.match(result.stdout, /download-tauri-m4-reports\.ts/);
   assert.match(result.stdout, new RegExp(`--expected-head ${head}`));
@@ -1133,10 +1137,14 @@ test("continue-tauri-migration keeps receiver override paths aligned in dry-run"
   );
 
   assert.match(result.stdout, /push-tauri-migration-handoff\.ts/);
+  assert.match(result.stdout, new RegExp(`--gh ${escapeRegExp(missingGh)}`));
   assert.match(result.stdout, /--workflow 'release beta\.yml'/);
   assert.match(result.stdout, new RegExp(`--report-dir '${escapeRegExp(reportDir)}'`));
   assert.match(result.stdout, new RegExp(`--pr-body-path '${escapeRegExp(prBodyPath)}'`));
-  assert.match(result.stdout, /Trigger it manually with: gh workflow run 'release beta\.yml' --ref codex\/electron-to-tauri-migration/);
+  assert.match(
+    result.stdout,
+    new RegExp(`Trigger it manually with: ${escapeRegExp(missingGh)} workflow run 'release beta\\.yml' --ref codex/electron-to-tauri-migration`),
+  );
   assert.match(result.stdout, new RegExp(`--body-file '${escapeRegExp(prBodyPath)}'`));
   assert.match(result.stdout, new RegExp(`--output-dir '${escapeRegExp(reportDir)}'`));
   assert.match(result.stdout, new RegExp(`--expected-head ${head}`));
@@ -1280,6 +1288,7 @@ async function writeHandoffArchive(handoffDir: string): Promise<{ archivePath: s
       'gh_bin="${GH_BIN:-gh}"',
       'command -v "$gh_bin"',
       '"$gh_bin" workflow run "$workflow" --ref "$branch"',
+      "$gh_bin pr create --draft",
       'git fetch "$bundle" "$branch:$temp_ref"',
       'gh workflow run "$workflow" --ref "$branch"',
       "download-tauri-m4-reports.ts",
