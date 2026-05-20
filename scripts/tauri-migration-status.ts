@@ -88,11 +88,19 @@ type MigrationStatus = {
   handoffArchive?: HandoffArchiveStatus;
   handoff?: HandoffStatus;
   heartbeat?: HeartbeatStatus;
+  m4Evidence: M4EvidenceStatus;
   nextActions: string[];
   platformReports?: PlatformReportsStatus;
   phase: "M4" | "M5" | "M6" | "complete";
   remote?: RemoteStatus;
   root: string;
+};
+
+type M4EvidenceStatus = {
+  nativeEvidence: boolean;
+  platformGatesChecked: boolean;
+  problems: string[];
+  remoteEvidence: boolean;
 };
 
 type HandoffStatus = {
@@ -297,7 +305,8 @@ async function readMigrationStatus(
       m6ElectronGuidanceLabel,
     ]),
   ];
-  const phase = currentPhase(groups, migrationDoc);
+  const m4Evidence = readM4EvidenceStatus(groups, migrationDoc);
+  const phase = currentPhase(groups, m4Evidence);
   const handoff = handoffDir == null ? undefined : await readHandoffStatus(handoffDir, gitStatus);
   const handoffArchive =
     handoffDir == null
@@ -317,7 +326,8 @@ async function readMigrationStatus(
     ...(handoff == null ? {} : { handoff }),
     ...(handoffArchive == null ? {} : { handoffArchive }),
     ...(heartbeat == null ? {} : { heartbeat }),
-    nextActions: nextActionsForPhase(root, phase, handoff, handoffArchive, remoteStatus, platformReports, heartbeat),
+    m4Evidence,
+    nextActions: nextActionsForPhase(root, phase, handoff, handoffArchive, remoteStatus, platformReports, m4Evidence, heartbeat),
     ...(platformReports == null ? {} : { platformReports }),
     phase,
     ...(remoteStatus == null ? {} : { remote: remoteStatus }),
@@ -462,13 +472,28 @@ function checklistGroup(name: ChecklistGroupStatus["name"], source: string, labe
   };
 }
 
-function currentPhase(groups: ChecklistGroupStatus[], migrationDoc: string): MigrationStatus["phase"] {
+function readM4EvidenceStatus(groups: ChecklistGroupStatus[], migrationDoc: string): M4EvidenceStatus {
   const m4 = groups.find((group) => group.name === "M4");
-  if (
-    m4 != null &&
-    m4.checked === m4.total &&
-    (!migrationDoc.includes(m4EvidenceLogMarker) || !migrationDoc.includes(m4RemoteEvidenceLogMarker))
-  ) {
+  const platformGatesChecked = m4 != null && m4.checked === m4.total;
+  const nativeEvidence = migrationDoc.includes(m4EvidenceLogMarker);
+  const remoteEvidence = migrationDoc.includes(m4RemoteEvidenceLogMarker);
+  const problems: string[] = [];
+  if (platformGatesChecked && !nativeEvidence) {
+    problems.push("missing native Windows/Linux verifier evidence marker");
+  }
+  if (platformGatesChecked && !remoteEvidence) {
+    problems.push("missing pushed remote branch-head evidence marker");
+  }
+  return {
+    nativeEvidence,
+    platformGatesChecked,
+    problems,
+    remoteEvidence,
+  };
+}
+
+function currentPhase(groups: ChecklistGroupStatus[], m4Evidence: M4EvidenceStatus): MigrationStatus["phase"] {
+  if (m4Evidence.platformGatesChecked && m4Evidence.problems.length > 0) {
     return "M4";
   }
   for (const group of groups) {
@@ -484,6 +509,7 @@ function nextActionsForPhase(
   handoffArchive?: HandoffArchiveStatus,
   remote?: RemoteStatus,
   platformReports?: PlatformReportsStatus,
+  m4Evidence?: M4EvidenceStatus,
   heartbeat?: HeartbeatStatus,
 ): string[] {
   const heartbeatActions =
@@ -491,6 +517,12 @@ function nextActionsForPhase(
       ? []
       : [
           `Repair the ${expectedHeartbeatName} heartbeat under ${heartbeat.dir}; status currently reports: ${heartbeat.problems.join("; ")}`,
+        ];
+  const m4EvidenceActions =
+    m4Evidence == null || m4Evidence.problems.length === 0
+      ? []
+      : [
+          `M4 platform checkboxes are closed but evidence markers are incomplete: ${m4Evidence.problems.join("; ")}. Re-run scripts/advance-tauri-migration-m4-m5.ts with --remote/--expected-head and Windows/Linux reports, or scripts/continue-tauri-migration.ts --wait-reports --advance, so native verifier and pushed remote branch-head evidence are recorded together.`,
         ];
   if (phase === "M4") {
     const handoffReady = handoff?.current === true;
@@ -505,6 +537,7 @@ function nextActionsForPhase(
     const rootOption = root === defaultRoot ? "" : ` --root ${shellQuote(root)}`;
     return [
       ...heartbeatActions,
+      ...m4EvidenceActions,
       `Run ${continuationCommand} to print the next executable handoff/push/report sequence; add --wait-reports --advance after the remote branch and native CI are available.`,
       archiveReady
         ? `Copy the current packaged handoff archive ${handoffArchive.archive}, checksum ${handoffArchive.checksum}, command script ${handoffArchive.commandScript}, and command script checksum ${handoffArchive.commandScriptChecksum} to a write-capable machine.`
@@ -1081,6 +1114,12 @@ function formatMigrationStatus(status: MigrationStatus): string {
     lines.push(`${group.name}: ${group.checked}/${group.total}`);
     for (const item of group.items.filter((candidate) => !candidate.checked)) {
       lines.push(`  - [ ] ${item.label}`);
+    }
+  }
+  if (status.m4Evidence.problems.length > 0) {
+    lines.push("M4 evidence: needs attention");
+    for (const problem of status.m4Evidence.problems) {
+      lines.push(`  - ${problem}`);
     }
   }
   if (status.handoff != null) {

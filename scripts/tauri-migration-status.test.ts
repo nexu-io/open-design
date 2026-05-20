@@ -82,6 +82,7 @@ test("tauri-migration-status reports the current M4 blocker state", async (t) =>
   const parsed = JSON.parse(result.stdout) as {
     defaults: { releaseBeta: string; toolsDev: string; toolsPack: string };
     groups: Array<{ checked: number; name: string; total: number }>;
+    m4Evidence: { problems: string[] };
     nextActions: string[];
     phase: string;
   };
@@ -100,6 +101,7 @@ test("tauri-migration-status reports the current M4 blocker state", async (t) =>
   assert.match(parsed.nextActions.join("\n"), /packaged handoff archive/);
   assert.match(parsed.nextActions.join("\n"), /push-tauri-migration-handoff/);
   assert.match(parsed.nextActions.join("\n"), /advance-tauri-migration-m4-m5/);
+  assert.deepEqual(parsed.m4Evidence.problems, []);
 });
 
 test("tauri-migration-status advances to M5 after verified M4 checkboxes", async (t) => {
@@ -124,10 +126,56 @@ test("tauri-migration-status stays in M4 when remote head evidence is missing", 
   });
 
   const result = await runStatus(fixture);
-  const parsed = JSON.parse(result.stdout) as { phase: string; nextActions: string[] };
+  const parsed = JSON.parse(result.stdout) as {
+    m4Evidence: {
+      nativeEvidence: boolean;
+      platformGatesChecked: boolean;
+      problems: string[];
+      remoteEvidence: boolean;
+    };
+    nextActions: string[];
+    phase: string;
+  };
 
   assert.equal(parsed.phase, "M4");
+  assert.equal(parsed.m4Evidence.platformGatesChecked, true);
+  assert.equal(parsed.m4Evidence.nativeEvidence, true);
+  assert.equal(parsed.m4Evidence.remoteEvidence, false);
+  assert.deepEqual(parsed.m4Evidence.problems, ["missing pushed remote branch-head evidence marker"]);
   assert.doesNotMatch(parsed.nextActions.join("\n"), /apply-tauri-migration-m5/);
+  assert.match(parsed.nextActions.join("\n"), /M4 platform checkboxes are closed but evidence markers are incomplete/);
+  assert.match(parsed.nextActions.join("\n"), /missing pushed remote branch-head evidence marker/);
+});
+
+test("tauri-migration-status explains missing M4 evidence markers when checkboxes are closed", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [...m4PlatformGateLabels],
+    defaults: "electron",
+  });
+
+  const result = await runStatus(fixture);
+  const parsed = JSON.parse(result.stdout) as {
+    m4Evidence: {
+      nativeEvidence: boolean;
+      platformGatesChecked: boolean;
+      problems: string[];
+      remoteEvidence: boolean;
+    };
+    nextActions: string[];
+    phase: string;
+  };
+
+  assert.equal(parsed.phase, "M4");
+  assert.equal(parsed.m4Evidence.platformGatesChecked, true);
+  assert.equal(parsed.m4Evidence.nativeEvidence, false);
+  assert.equal(parsed.m4Evidence.remoteEvidence, false);
+  assert.deepEqual(parsed.m4Evidence.problems, [
+    "missing native Windows/Linux verifier evidence marker",
+    "missing pushed remote branch-head evidence marker",
+  ]);
+  assert.match(parsed.nextActions.join("\n"), /missing native Windows\/Linux verifier evidence marker/);
+  assert.match(parsed.nextActions.join("\n"), /missing pushed remote branch-head evidence marker/);
+  assert.match(parsed.nextActions.join("\n"), /continue-tauri-migration\.ts --wait-reports --advance/);
 });
 
 test("tauri-migration-status reports current handoff artifacts", async (t) => {
