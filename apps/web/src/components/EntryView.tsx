@@ -330,6 +330,7 @@ export function EntryView({
       designSystems={designSystems}
       projects={projects}
       templates={templates}
+      onDeleteTemplate={onDeleteTemplate}
       promptTemplates={promptTemplates}
       defaultDesignSystemId={defaultDesignSystemId}
       connectors={connectors}

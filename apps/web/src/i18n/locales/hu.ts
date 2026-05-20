@@ -538,6 +538,11 @@ export const hu: Dict = {
     'Bármit módosíthatsz — a változtatásaid beépülnek az ügynök briefjébe.',
   'newproj.promptTemplateBodyEmpty':
     'Üres törzs — az ügynök nem kap sablonhivatkozást.',
+  'newproj.deleteTemplateTitle': 'Delete template',
+  'newproj.deleteTemplateConfirm': 'Delete "{name}"? This cannot be undone.',
+  'newproj.deleteTemplateConfirmCta': 'Delete template',
+  'newproj.deleteTemplateError':
+    'Could not delete this template. Please try again.',
 
   'designs.subRecent': 'Legutóbbi',
   'designs.subYours': 'A te terveid',

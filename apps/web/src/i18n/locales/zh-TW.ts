@@ -608,6 +608,11 @@ export const zhTW: Dict = {
     '可隨意編輯 — 修改後的內容會作為 agent 生成時的參考。',
   'newproj.promptTemplateBodyEmpty': '內容為空 — agent 不會拿到範本參考。',
 
+  'newproj.deleteTemplateTitle': 'Delete template',
+  'newproj.deleteTemplateConfirm': 'Delete "{name}"? This cannot be undone.',
+  'newproj.deleteTemplateConfirmCta': 'Delete template',
+  'newproj.deleteTemplateError':
+    'Could not delete this template. Please try again.',
   'designs.subRecent': '最近',
   'designs.subYours': '我的設計',
   'designs.filterAria': '篩選專案',

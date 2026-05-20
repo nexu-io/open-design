@@ -427,6 +427,11 @@ export const esES: Dict = {
     'Edita lo que quieras — tus cambios se incorporan al briefing del agente.',
   'newproj.promptTemplateBodyEmpty':
     'Cuerpo vacío — el agente no recibirá ninguna referencia de plantilla.',
+  'newproj.deleteTemplateTitle': 'Delete template',
+  'newproj.deleteTemplateConfirm': 'Delete "{name}"? This cannot be undone.',
+  'newproj.deleteTemplateConfirmCta': 'Delete template',
+  'newproj.deleteTemplateError':
+    'Could not delete this template. Please try again.',
 
   'designs.subRecent': 'Recientes',
   'designs.subYours': 'Tus diseños',

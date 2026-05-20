@@ -1229,6 +1229,10 @@ export interface Dict {
   'newproj.promptTemplateBodyLabel': string;
   'newproj.promptTemplateOptimizeHint': string;
   'newproj.promptTemplateBodyEmpty': string;
+  'newproj.deleteTemplateTitle': string;
+  'newproj.deleteTemplateConfirm': string;
+  'newproj.deleteTemplateConfirmCta': string;
+  'newproj.deleteTemplateError': string;
 
   // Prompt templates
   'promptTemplates.searchPlaceholder': string;

@@ -426,6 +426,11 @@ export const ja: Dict = {
     '自由に編集できます — 変更内容はエージェントのブリーフに反映されます。',
   'newproj.promptTemplateBodyEmpty': '本文が空です — エージェントはテンプレート参照を受け取りません。',
 
+  'newproj.deleteTemplateTitle': 'Delete template',
+  'newproj.deleteTemplateConfirm': 'Delete "{name}"? This cannot be undone.',
+  'newproj.deleteTemplateConfirmCta': 'Delete template',
+  'newproj.deleteTemplateError':
+    'Could not delete this template. Please try again.',
   'designs.subRecent': '最近',
   'designs.subYours': 'あなたのデザイン',
   'designs.filterAria': 'プロジェクトをフィルター',

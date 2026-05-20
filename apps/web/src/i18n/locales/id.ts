@@ -647,6 +647,11 @@ export const id: Dict = {
   'newproj.promptTemplateOptimizeHint': 'Edit prompt sebelum membuat proyek agar sesuai dengan kebutuhanmu.',
   'newproj.promptTemplateBodyEmpty': 'Prompt kosong - agent tidak menerima referensi templat.',
 
+  'newproj.deleteTemplateTitle': 'Delete template',
+  'newproj.deleteTemplateConfirm': 'Delete "{name}"? This cannot be undone.',
+  'newproj.deleteTemplateConfirmCta': 'Delete template',
+  'newproj.deleteTemplateError':
+    'Could not delete this template. Please try again.',
   'designs.subRecent': 'Terbaru',
   'designs.subYours': 'Desainmu',
   'designs.filterAria': 'Filter proyek',

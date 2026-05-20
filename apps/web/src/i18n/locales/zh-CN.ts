@@ -987,6 +987,11 @@ export const zhCN: Dict = {
     '可以任意编辑 — 修改后的内容会作为 agent 生成时的参考。',
   'newproj.promptTemplateBodyEmpty': '正文为空 — agent 不会拿到模板参考。',
 
+  'newproj.deleteTemplateTitle': 'Delete template',
+  'newproj.deleteTemplateConfirm': 'Delete "{name}"? This cannot be undone.',
+  'newproj.deleteTemplateConfirmCta': 'Delete template',
+  'newproj.deleteTemplateError':
+    'Could not delete this template. Please try again.',
   'designs.subRecent': '最近',
   'designs.subYours': '我的设计',
   'designs.filterAria': '筛选项目',

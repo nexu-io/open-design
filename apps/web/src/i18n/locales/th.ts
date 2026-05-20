@@ -506,6 +506,11 @@ export const th: Dict = {
   'newproj.promptTemplateOptimizeHint': 'การปรับแก้ของคุณจะส่งผลต่อเอเจนต์ด้วย',
   'newproj.promptTemplateBodyEmpty': 'เนื้อหาว่างเปล่า เอเจนต์จะไม่ได้ข้อมูลอ้างอิง',
 
+  'newproj.deleteTemplateTitle': 'Delete template',
+  'newproj.deleteTemplateConfirm': 'Delete "{name}"? This cannot be undone.',
+  'newproj.deleteTemplateConfirmCta': 'Delete template',
+  'newproj.deleteTemplateError':
+    'Could not delete this template. Please try again.',
   'designs.subRecent': 'ล่าสุด',
   'designs.subYours': 'ดีไซน์ของคุณ',
   'designs.filterAria': 'ตัวกรอง',

@@ -550,6 +550,11 @@ export const ru: Dict = {
     'Меняйте всё что нужно — правки попадут в бриф агента.',
   'newproj.promptTemplateBodyEmpty':
     'Пустое тело — агент не получит шаблонную референцию.',
+  'newproj.deleteTemplateTitle': 'Delete template',
+  'newproj.deleteTemplateConfirm': 'Delete "{name}"? This cannot be undone.',
+  'newproj.deleteTemplateConfirmCta': 'Delete template',
+  'newproj.deleteTemplateError':
+    'Could not delete this template. Please try again.',
 
   'designs.subRecent': 'Недавние',
   'designs.subYours': 'Ваши дизайны',

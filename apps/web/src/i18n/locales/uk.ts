@@ -542,6 +542,11 @@ export const uk: Dict = {
     'Редагуйте що завгодно — ваші зміни переносяться в брифінг агента.',
   'newproj.promptTemplateBodyEmpty':
     'Порожній текст — агент не отримає посилання на шаблон.',
+  'newproj.deleteTemplateTitle': 'Delete template',
+  'newproj.deleteTemplateConfirm': 'Delete "{name}"? This cannot be undone.',
+  'newproj.deleteTemplateConfirmCta': 'Delete template',
+  'newproj.deleteTemplateError':
+    'Could not delete this template. Please try again.',
   'newproj.connectorsLabel': 'Конектори',
   'newproj.connectorsHint': 'Надайте агенту доступ до підключених джерел даних для цього live-артефакту.',
   'newproj.connectorsEmptyTitle': 'Поки що немає підключених конекторів',

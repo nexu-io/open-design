@@ -538,6 +538,11 @@ export const ko: Dict = {
     '내용을 수정할 수 있습니다. 변경된 내용은 에이전트의 브리프에 반영됩니다.',
   'newproj.promptTemplateBodyEmpty':
     '본문이 비어있습니다 — 에이전트에게 전달될 템플릿 참조가 없습니다.',
+  'newproj.deleteTemplateTitle': 'Delete template',
+  'newproj.deleteTemplateConfirm': 'Delete "{name}"? This cannot be undone.',
+  'newproj.deleteTemplateConfirmCta': 'Delete template',
+  'newproj.deleteTemplateError':
+    'Could not delete this template. Please try again.',
 
   'designs.subRecent': '최근 항목',
   'designs.subYours': '내 디자인',
