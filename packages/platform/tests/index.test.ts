@@ -309,6 +309,35 @@ describe("createPackageManagerInvocation", () => {
     ]);
   });
 
+  it("re-enters through corepack pnpm on Windows when pnpm exec omits npm_execpath", () => {
+    setPlatform("win32");
+    const invocation = createPackageManagerInvocation(["install"], {
+      COREPACK_ROOT: "C:\\Program Files\\nodejs\\node_modules\\corepack",
+      ComSpec: "cmd.exe",
+      npm_config_user_agent: "pnpm/10.33.2 npm/? node/v24.9.0 win32 x64",
+    } as NodeJS.ProcessEnv);
+    expect(invocation.command).toBe("cmd.exe");
+    expect(invocation.windowsVerbatimArguments).toBe(true);
+    expect(invocation.args).toEqual([
+      "/d",
+      "/s",
+      "/c",
+      '"corepack pnpm install"',
+    ]);
+  });
+
+  it("re-enters through corepack pnpm on POSIX when pnpm exec omits npm_execpath", () => {
+    setPlatform("linux");
+    const invocation = createPackageManagerInvocation(["install"], {
+      COREPACK_ROOT: "/usr/local/lib/node_modules/corepack",
+      npm_config_user_agent: "pnpm/10.33.2 npm/? node/v24.9.0 linux x64",
+    } as NodeJS.ProcessEnv);
+    expect(invocation).toEqual({
+      args: ["pnpm", "install"],
+      command: "corepack",
+    });
+  });
+
   it("returns plain pnpm invocation on POSIX without npm_execpath", () => {
     setPlatform("linux");
     const invocation = createPackageManagerInvocation(["install"], {} as NodeJS.ProcessEnv);

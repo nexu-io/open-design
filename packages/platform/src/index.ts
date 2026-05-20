@@ -195,6 +195,17 @@ function buildCmdShimInvocation(command: string, args: string[], env: NodeJS.Pro
 
 const nodeLoadablePackageManagerExtensions = new Set([".js", ".cjs", ".mjs"]);
 
+function isPnpmUserAgent(value: string | undefined): boolean {
+  return typeof value === "string" && /^pnpm\//i.test(value);
+}
+
+function createCorepackPnpmInvocation(args: string[], env: NodeJS.ProcessEnv): CommandInvocation {
+  if (process.platform === "win32") {
+    return buildCmdShimInvocation("corepack", ["pnpm", ...args], env);
+  }
+  return { args: ["pnpm", ...args], command: "corepack" };
+}
+
 export function createCommandInvocation({ args = [], command, env = process.env }: CommandInvocationRequest): CommandInvocation {
   if (process.platform === "win32" && /\.(bat|cmd)$/i.test(command)) {
     return buildCmdShimInvocation(command, args, env);
@@ -209,6 +220,9 @@ export function createPackageManagerInvocation(args: string[], env: NodeJS.Proce
       return { args: [execPath, ...args], command: process.execPath };
     }
     return createCommandInvocation({ args, command: execPath, env });
+  }
+  if (typeof env.COREPACK_ROOT === "string" && env.COREPACK_ROOT.length > 0 && isPnpmUserAgent(env.npm_config_user_agent)) {
+    return createCorepackPnpmInvocation(args, env);
   }
   if (process.platform === "win32") {
     return buildCmdShimInvocation("pnpm", args, env);
