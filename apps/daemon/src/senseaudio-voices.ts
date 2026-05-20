@@ -92,13 +92,19 @@ const BACKUP_VARIANT_LABELS: Record<string, string> = {
 let variantLabelsCache: { expiresAt: number; labels: Record<string, string> } | null = null;
 let variantLabelsInflight: Promise<Record<string, string>> | null = null;
 
-async function fetchDocsCatalogueWithTimeout(): Promise<Response> {
+async function fetchDocsCatalogueTextWithTimeout(): Promise<string> {
   const controller = new AbortController();
   let timeout: ReturnType<typeof setTimeout> | undefined;
-  const fetchPromise = fetch(SENSEAUDIO_DOCS_CATALOG_URL, {
-    headers: { accept: 'text/markdown,text/plain,*/*' },
-    signal: controller.signal,
-  });
+  const docsPromise = (async () => {
+    const resp = await fetch(SENSEAUDIO_DOCS_CATALOG_URL, {
+      headers: { accept: 'text/markdown,text/plain,*/*' },
+      signal: controller.signal,
+    });
+    if (!resp.ok) {
+      throw new Error(`docs ${resp.status}`);
+    }
+    return resp.text();
+  })();
   const timeoutPromise = new Promise<never>((_, reject) => {
     timeout = setTimeout(() => {
       controller.abort();
@@ -106,9 +112,9 @@ async function fetchDocsCatalogueWithTimeout(): Promise<Response> {
     }, VARIANT_LABEL_FETCH_TIMEOUT_MS);
   });
 
-  fetchPromise.catch(() => undefined);
+  docsPromise.catch(() => undefined);
   try {
-    return await Promise.race([fetchPromise, timeoutPromise]);
+    return await Promise.race([docsPromise, timeoutPromise]);
   } finally {
     if (timeout) clearTimeout(timeout);
   }
@@ -123,11 +129,7 @@ async function fetchVariantLabelsFromDocs(): Promise<Record<string, string>> {
 
   variantLabelsInflight = (async () => {
     try {
-      const resp = await fetchDocsCatalogueWithTimeout();
-      if (!resp.ok) {
-        throw new Error(`docs ${resp.status}`);
-      }
-      const markdown = await resp.text();
+      const markdown = await fetchDocsCatalogueTextWithTimeout();
       const labels: Record<string, string> = {};
       for (const match of markdown.matchAll(VARIANT_LABEL_PATTERN)) {
         const voiceId = match[1]?.trim();
@@ -325,17 +327,21 @@ export async function listSenseAudioCatalogue(
     }
   }
 
-  // Fetch variant labels in parallel with the catalogue shaping. Doc fetch
-  // failure (network, page-format drift) leaves labels empty — shapeCatalogue
-  // falls back to voice_name per variant, so this never blocks the catalogue.
+  const rawVoices = flattenApiVoices(payload);
+  if (rawVoices.length === 0) {
+    throw new Error('senseaudio voices response contained no usable voices');
+  }
+
+  // Fetch variant labels best-effort. Doc fetch failure, timeout, or page
+  // format drift falls back to BACKUP_VARIANT_LABELS, so the docs host cannot
+  // block the account-scoped voice catalogue.
   const variantLabels = await fetchVariantLabelsFromDocs();
 
-  // Shaping is wrapped in a try so an unexpected payload (missing arrays,
-  // renamed keys, etc.) does not crash the caller — at worst we return
-  // an empty catalogue and the prompt falls back to the error path.
+  // Shaping is wrapped in a try so an unexpected per-entry shape does not
+  // crash the caller after we know the upstream returned at least one voice.
   let catalogue: SenseAudioCatalogue = {};
   try {
-    catalogue = shapeCatalogue(flattenApiVoices(payload), variantLabels);
+    catalogue = shapeCatalogue(rawVoices, variantLabels);
   } catch (err) {
     console.warn('[senseaudio] catalogue shaping failed:', err);
   }

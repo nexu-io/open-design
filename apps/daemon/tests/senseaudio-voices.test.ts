@@ -56,6 +56,38 @@ describe('SenseAudio catalogue', () => {
     });
   }
 
+  it('does not block the catalogue when docs headers arrive but the body stalls', async () => {
+    await writeConfig({
+      providers: { senseaudio: { apiKey: 'sa-test-key', baseUrl: TEST_BASE_URL } },
+    });
+    vi.stubGlobal('fetch', vi.fn(async (input: FetchInput) => {
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof URL ? input.toString() : input.url;
+      if (url.includes('docs.senseaudio.cn')) {
+        return new Response(new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('partial docs body'));
+          },
+        }), { status: 200 });
+      }
+      return senseAudioResponse([
+        { voice_id: 'male_0027_a', voice_name: '亢奋主播', description: ['多状态高能男声。'] },
+      ]);
+    }));
+
+    await expect(Promise.race([
+      listSenseAudioCatalogue(projectRoot),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timed out')), 1_000)),
+    ])).resolves.toMatchObject({
+      male_0027: {
+        variants: {
+          male_0027_a: '热情介绍',
+        },
+      },
+    });
+  });
+
   it('does not block the catalogue on a stalled docs label lookup', async () => {
     await writeConfig({
       providers: { senseaudio: { apiKey: 'sa-test-key', baseUrl: TEST_BASE_URL } },
@@ -236,9 +268,10 @@ describe('SenseAudio catalogue', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('survives an API payload that drops the expected voice arrays', async () => {
+  it('surfaces an explicit error when the API payload drops usable voice arrays', async () => {
     // Defensive: if the API ever renames `system_voice`/`voice_cloning`/
-    // `voice_generation` we should return an empty catalogue, not crash.
+    // `voice_generation`, surface a lookup error instead of silently
+    // returning an empty catalogue that disables the picker.
     await writeConfig({
       providers: { senseaudio: { apiKey: 'sa-test-key', baseUrl: TEST_BASE_URL } },
     });
@@ -248,7 +281,8 @@ describe('SenseAudio catalogue', () => {
       base_resp: { status_code: 0, status_msg: 'success' },
     })));
 
-    const catalogue = await listSenseAudioCatalogue(projectRoot);
-    expect(catalogue).toEqual({});
+    await expect(listSenseAudioCatalogue(projectRoot)).rejects.toThrow(
+      'senseaudio voices response contained no usable voices',
+    );
   });
 });
