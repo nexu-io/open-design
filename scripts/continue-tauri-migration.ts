@@ -11,6 +11,7 @@ const defaultHandoffDir = "/tmp/open-design-tauri-migration-handoff";
 const defaultRemote = "origin";
 const defaultPrBodyPath = ".tmp/tauri-migration-pr-body.md";
 const defaultReportDir = "/tmp/open-design-tauri-m4-reports";
+const defaultWorkflow = "ci.yml";
 
 type Args = {
   advance: boolean;
@@ -20,11 +21,13 @@ type Args = {
   dryRun: boolean;
   ghBin: string;
   handoffDir: string;
+  prBodyPath: string;
   remote: string;
   reportDir: string;
   root: string;
   push: boolean;
   waitReports: boolean;
+  workflow: string;
 };
 
 type MigrationStatus = {
@@ -148,11 +151,13 @@ function parseArgs(argv: string[]): Args {
     dryRun: false,
     ghBin: process.env.GH_BIN ?? "gh",
     handoffDir: defaultHandoffDir,
+    prBodyPath: process.env.TAURI_PR_BODY_PATH ?? defaultPrBodyPath,
     remote: defaultRemote,
-    reportDir: defaultReportDir,
+    reportDir: resolve(process.env.TAURI_M4_REPORT_DIR ?? defaultReportDir),
     root: workspaceRoot,
     push: true,
     waitReports: false,
+    workflow: process.env.GITHUB_WORKFLOW ?? defaultWorkflow,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -184,9 +189,11 @@ function parseArgs(argv: string[]): Args {
         arg === "--automation-dir" ||
         arg === "--gh" ||
         arg === "--handoff-dir" ||
+        arg === "--pr-body-path" ||
         arg === "--remote" ||
         arg === "--report-dir" ||
-        arg === "--root") &&
+        arg === "--root" ||
+        arg === "--workflow") &&
       value == null
     ) {
       throw new Error(`${arg} requires a value`);
@@ -211,6 +218,11 @@ function parseArgs(argv: string[]): Args {
       index += 1;
       continue;
     }
+    if (arg === "--pr-body-path") {
+      parsed.prBodyPath = value!;
+      index += 1;
+      continue;
+    }
     if (arg === "--remote") {
       parsed.remote = value!;
       index += 1;
@@ -226,13 +238,20 @@ function parseArgs(argv: string[]): Args {
       index += 1;
       continue;
     }
+    if (arg === "--workflow") {
+      parsed.workflow = value!;
+      index += 1;
+      continue;
+    }
     if (arg === "--help" || arg === "-h") {
       process.stdout.write(
         [
-          "usage: tsx scripts/continue-tauri-migration.ts [--root <repo>] [--automation-dir <dir>] [--handoff-dir <dir>] [--remote <remote>] [--report-dir <dir>] [--wait-reports] [--advance] [--dry-run] [--skip-push] [--skip-dispatch]",
+          "usage: tsx scripts/continue-tauri-migration.ts [--root <repo>] [--automation-dir <dir>] [--handoff-dir <dir>] [--remote <remote>] [--workflow <file>] [--report-dir <dir>] [--pr-body-path <path>] [--wait-reports] [--advance] [--dry-run] [--skip-push] [--skip-dispatch]",
           "",
           "Continues the Electron→Tauri migration from the current phase without bypassing M4/M5/M6 guards.",
           "It refreshes stale handoff artifacts, pushes/verifies the migration branch when credentials allow, and can wait for native M4 reports before applying the guarded M5 advance.",
+          `defaults: --workflow ${defaultWorkflow} --report-dir ${defaultReportDir} --pr-body-path ${defaultPrBodyPath}`,
+          "env defaults: GITHUB_WORKFLOW, TAURI_M4_REPORT_DIR, TAURI_PR_BODY_PATH",
           "",
         ].join("\n"),
       );
@@ -256,7 +275,7 @@ async function continueM4(args: Args, status: MigrationStatus, log: string[]): P
   if (!remoteCurrent) {
     if (args.push) {
       try {
-        await runScript("push-tauri-migration-handoff.ts", ["--archive", archive, "--remote", args.remote, "--cwd", args.root], {
+        await runScript("push-tauri-migration-handoff.ts", pushHandoffArgs(args, archive), {
           cwd: args.root,
           dryRun: args.dryRun,
         });
@@ -272,7 +291,7 @@ async function continueM4(args: Args, status: MigrationStatus, log: string[]): P
             `  ${archive}.commands.sh.sha256`,
             "",
             "Then run the command sidecar from that checkout, or run:",
-            `  ${formatScriptCommand("push-tauri-migration-handoff.ts", ["--archive", archive, "--remote", args.remote])}`,
+            `  ${formatScriptCommand("push-tauri-migration-handoff.ts", pushHandoffArgs(args, archive, { omitCwd: true }))}`,
           ].join("\n"),
         );
       }
@@ -357,8 +376,24 @@ async function continueM4(args: Args, status: MigrationStatus, log: string[]): P
   );
 }
 
+function pushHandoffArgs(args: Args, archive: string, options: { omitCwd?: boolean } = {}): string[] {
+  return [
+    "--archive",
+    archive,
+    "--remote",
+    args.remote,
+    ...(options.omitCwd === true ? [] : ["--cwd", args.root]),
+    "--workflow",
+    args.workflow,
+    "--report-dir",
+    args.reportDir,
+    "--pr-body-path",
+    args.prBodyPath,
+  ];
+}
+
 function appendManualNativeCiFallback(args: Args, log: string[]): void {
-  log.push(`Trigger it manually with: gh workflow run ci.yml --ref ${args.branch}`);
+  log.push(`Trigger it manually with: ${formatCommand("gh", ["workflow", "run", args.workflow, "--ref", args.branch])}`);
   log.push("If workflow dispatch is unavailable after the branch is pushed, open a draft PR with:");
   log.push(
     formatCommand("gh", [
@@ -372,7 +407,7 @@ function appendManualNativeCiFallback(args: Args, log: string[]): void {
       "--title",
       "Migrate desktop runtime to Tauri",
       "--body-file",
-      defaultPrBodyPath,
+      args.prBodyPath,
     ]),
   );
 }
@@ -383,7 +418,7 @@ async function requestNativeCiDispatch(args: Args): Promise<
   | { status: "requested" }
   | { status: "unavailable"; message: string }
 > {
-  const commandArgs = ["workflow", "run", "ci.yml", "--ref", args.branch];
+  const commandArgs = ["workflow", "run", args.workflow, "--ref", args.branch];
   if (!(await commandExists(args.ghBin))) {
     return { status: "unavailable", message: `${args.ghBin} is not available on PATH` };
   }

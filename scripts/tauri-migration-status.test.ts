@@ -1006,6 +1006,48 @@ test("continue-tauri-migration dry-run reports manual dispatch when gh is unavai
   assert.match(result.stdout, new RegExp(`--expected-head ${head}`));
 });
 
+test("continue-tauri-migration keeps receiver override paths aligned in dry-run", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+  await writeHandoffArchive(handoffDir);
+  const remotePath = join(fixture, "empty.git");
+  await git(fixture, "init", "--bare", remotePath);
+  const missingGh = join(fixture, "missing-gh");
+  const reportDir = join(fixture, "custom reports");
+  const prBodyPath = join(fixture, "custom pr", "tauri-pr.md");
+
+  const result = await runContinue(
+    fixture,
+    "--handoff-dir",
+    handoffDir,
+    "--remote",
+    remotePath,
+    "--gh",
+    missingGh,
+    "--workflow",
+    "release beta.yml",
+    "--report-dir",
+    reportDir,
+    "--pr-body-path",
+    prBodyPath,
+    "--dry-run",
+  );
+
+  assert.match(result.stdout, /push-tauri-migration-handoff\.ts/);
+  assert.match(result.stdout, /--workflow 'release beta\.yml'/);
+  assert.match(result.stdout, new RegExp(`--report-dir '${escapeRegExp(reportDir)}'`));
+  assert.match(result.stdout, new RegExp(`--pr-body-path '${escapeRegExp(prBodyPath)}'`));
+  assert.match(result.stdout, /Trigger it manually with: gh workflow run 'release beta\.yml' --ref codex\/electron-to-tauri-migration/);
+  assert.match(result.stdout, new RegExp(`--body-file '${escapeRegExp(prBodyPath)}'`));
+  assert.match(result.stdout, new RegExp(`--output-dir '${escapeRegExp(reportDir)}'`));
+  assert.match(result.stdout, new RegExp(`--expected-head ${head}`));
+});
+
 test("continue-tauri-migration reports transferable handoff paths when push fails", async (t) => {
   const fixture = await createFixtureRoot(t, {
     checked: [],
