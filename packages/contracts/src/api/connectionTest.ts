@@ -220,7 +220,9 @@ export interface ConnectionTestResponse {
   usedExecutableSource?: 'configured' | 'path' | 'fallback_invalid' | 'fallback_failed';
   // Structured diagnostics for the local agent connection test path
   // (#2248). Optional and additive: existing consumers that only read
-  // `kind` and `detail` keep working unchanged. Populated only when the
-  // test actually spawned an agent CLI, so provider tests omit it.
+  // `kind` and `detail` keep working unchanged. Populated on local
+  // agent test responses — including early failures that never reach
+  // the spawn step (unknown agent id, unresolved binary, preflight
+  // auth probe). Provider tests omit it.
   diagnostics?: ConnectionTestDiagnostics;
 }
