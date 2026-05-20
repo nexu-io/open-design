@@ -378,6 +378,34 @@ test("tauri-migration-status rejects packaged handoff archives without bundle br
   assert.match(parsed.handoffArchive.problems.join("\n"), /command script is missing bundle branch-head validation/);
 });
 
+test("tauri-migration-status rejects packaged handoff archives without bundle preflight validation", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+  const { archivePath } = await writeHandoffArchive(handoffDir);
+  const commandScriptPath = `${archivePath}.commands.sh`;
+  const commandScript = await readFile(commandScriptPath, "utf8");
+  await writeFile(
+    commandScriptPath,
+    commandScript
+      .replace('git bundle verify "$bundle"\n', "")
+      .replace('bundle_heads="$(git bundle list-heads "$bundle")"\n', "")
+      .replace("bundle does not contain expected branch head\n", ""),
+    "utf8",
+  );
+  await writeCommandScriptChecksum(commandScriptPath);
+
+  const result = await runStatus(fixture, "--handoff-dir", handoffDir);
+  const parsed = JSON.parse(result.stdout) as { handoffArchive: { current: boolean; problems: string[] } };
+
+  assert.equal(parsed.handoffArchive.current, false);
+  assert.match(parsed.handoffArchive.problems.join("\n"), /command script is missing bundle preflight validation/);
+});
+
 test("tauri-migration-status rejects packaged handoff archives without manifest field validation", async (t) => {
   const fixture = await createFixtureRoot(t, {
     checked: [],
@@ -1110,6 +1138,9 @@ async function writeHandoffArchive(handoffDir: string): Promise<{ archivePath: s
       "bundle_sha=",
       'actual_bundle_sha="$(hash_file "$bundle")"',
       "bundle SHA-256 mismatch",
+      'git bundle verify "$bundle"',
+      'bundle_heads="$(git bundle list-heads "$bundle")"',
+      "bundle does not contain expected branch head",
       'bundle_head="$(git rev-parse --verify "$temp_ref^{commit}")"',
       "bundle branch head mismatch",
       "unsupported handoff manifest schemaVersion",

@@ -755,6 +755,13 @@ async function readHandoffArchiveStatus(archivePath: string, handoff?: HandoffSt
       problems.push(`command script is missing bundle branch-head validation: ${commandScriptPath}`);
     }
     if (
+      !commandScriptSource.includes('git bundle verify "$bundle"') ||
+      !commandScriptSource.includes('bundle_heads="$(git bundle list-heads "$bundle")"') ||
+      !commandScriptSource.includes("bundle does not contain expected branch head")
+    ) {
+      problems.push(`command script is missing bundle preflight validation: ${commandScriptPath}`);
+    }
+    if (
       !commandScriptSource.includes("handoff manifest branchHead must be a 40-character SHA-1") ||
       !commandScriptSource.includes("handoff manifest bundlePath must be relative and relocatable") ||
       !commandScriptSource.includes("handoff manifest bundleSha256 must be a 64-character SHA-256") ||

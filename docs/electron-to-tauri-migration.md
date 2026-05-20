@@ -443,6 +443,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Moved `scripts/download-tauri-m4-reports.ts --advance` remote-head verification ahead of all GitHub artifact reads. A receiver that asks the downloader to mutate M4/M5 now proves the configured remote branch matches `--expected-head` before `gh run view`, `gh run list`, or artifact download can consume native report evidence.
 - 2026-05-20: Tightened the receiver-side bundle import before remote push. `scripts/import-tauri-migration-bundle.ts` now requires manifest `branchHead` to match the bundle's `refs/heads/<migration-branch>` head before updating refs, and `scripts/push-tauri-migration-handoff.ts` now has regression coverage proving stale manifest heads fail before the remote branch is pushed.
 - 2026-05-20: Applied the same branch-head check to the executable handoff sidecar. The generated `.commands.sh` now compares the fetched bundle temp ref with manifest `branchHead` before moving the local branch or pushing the remote, and `scripts/tauri-migration-status.ts` rejects older command sidecars missing that validation.
+- 2026-05-20: Added bundle prerequisite preflight to the executable handoff sidecar. Before importing the branch, the generated `.commands.sh` now runs `git bundle verify` and checks `git bundle list-heads` for the manifest branch/head, so a write-capable checkout that lacks the required base commit fails before any local branch movement, PR-body write, or remote push.
 
 ### Platform Gate Runners
 
