@@ -548,13 +548,17 @@ function nextActionsForPhase(
       archiveReady && handoffArchive?.archive != null
         ? `scripts/push-tauri-migration-handoff.ts --archive ${shellQuote(handoffArchive.archive)} --remote ${shellQuote(remoteName)} --report-dir ${shellQuote(reportDir)}`
         : `scripts/push-tauri-migration-handoff.ts --archive /path/to/open-design-tauri-migration-handoff.tar.gz --remote ${shellQuote(remoteName)} --report-dir ${shellQuote(reportDir)}`;
+    const transferIdentity =
+      archiveReady && handoffArchive != null
+        ? handoffTransferIdentity(migrationBranch, expectedHead, handoffArchive)
+        : undefined;
     const rootOption = root === defaultRoot ? "" : ` --root ${shellQuote(root)}`;
     return [
       ...heartbeatActions,
       ...m4EvidenceActions,
       `Run ${continuationCommand} to print the next executable handoff/push/report sequence; add --wait-reports --advance after the remote branch and native CI are available.`,
       archiveReady
-        ? `Copy the current packaged handoff archive ${handoffArchive.archive}, checksum ${handoffArchive.checksum}, command script ${handoffArchive.commandScript}, and command script checksum ${handoffArchive.commandScriptChecksum} to a write-capable machine.`
+        ? `Copy the current packaged handoff archive ${handoffArchive.archive}, checksum ${handoffArchive.checksum}, command script ${handoffArchive.commandScript}, and command script checksum ${handoffArchive.commandScriptChecksum} to a write-capable machine. ${transferIdentity}`
         : handoffReady
           ? `Package the current verified handoff directory with scripts/package-tauri-migration-handoff.ts --handoff-dir ${handoff.dir}.`
           : "Regenerate the verified handoff set with scripts/verify-tauri-migration-handoff.ts --output-dir /tmp/open-design-tauri-migration-handoff.",
@@ -597,6 +601,19 @@ function nextActionsForPhase(
     ];
   }
   return [...heartbeatActions, "Run the full QA plan and archive the migration document as completed evidence."];
+}
+
+function handoffTransferIdentity(branch: string, expectedHead: string, archive: HandoffArchiveStatus): string {
+  const parts = [`Expected remote head: ${branch} @ ${expectedHead}.`];
+  const archiveSha256 = archive.sha256 ?? archive.expectedSha256;
+  const commandScriptSha256 = archive.commandScriptSha256 ?? archive.commandScriptExpectedSha256;
+  if (archiveSha256 != null) {
+    parts.push(`Archive SHA-256: ${archiveSha256}.`);
+  }
+  if (commandScriptSha256 != null) {
+    parts.push(`Command script SHA-256: ${commandScriptSha256}.`);
+  }
+  return parts.join(" ");
 }
 
 function continuationDryRunCommand(

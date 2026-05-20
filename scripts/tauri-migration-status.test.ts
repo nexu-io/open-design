@@ -295,6 +295,9 @@ test("tauri-migration-status reports current packaged handoff archives", async (
   assert.equal(parsed.handoffArchive.sha256, archiveSha256);
   assert.deepEqual(parsed.handoffArchive.problems, []);
   assert.match(parsed.nextActions.join("\n"), /command script/);
+  assert.match(parsed.nextActions.join("\n"), new RegExp(`Expected remote head: codex\\/electron-to-tauri-migration @ ${head}`));
+  assert.match(parsed.nextActions.join("\n"), new RegExp(`Archive SHA-256: ${archiveSha256}`));
+  assert.match(parsed.nextActions.join("\n"), new RegExp(`Command script SHA-256: ${parsed.handoffArchive.commandScriptSha256}`));
   assert.match(parsed.nextActions.join("\n"), new RegExp(`${escapeRegExp(`${archivePath}.commands.sh`)} ${escapeRegExp(archivePath)}`));
   assert.match(parsed.nextActions.join("\n"), new RegExp(`continue-tauri-migration\\.ts .*--handoff-archive ${escapeRegExp(archivePath)} .*--dry-run`));
   assert.match(parsed.nextActions.join("\n"), /push-tauri-migration-handoff\.ts --archive/);
