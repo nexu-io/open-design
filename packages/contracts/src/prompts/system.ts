@@ -790,12 +790,30 @@ function renderSenseAudioPickerInstructions(catalogue: SenseAudioCatalogue): str
   lines.push('  description: "Pick a voice for the read."');
   lines.push('  submitLabel: "Use voice"');
   lines.push('');
+  lines.push('Top-3 highlighting (REQUIRED — do this BEFORE composing the dropdown):');
+  lines.push(
+    '1. Read the user\'s brief and the `description` of every catalogue entry.',
+  );
+  lines.push(
+    '2. Score each persona for how well its description matches what the user described (gender, age, register, tone, scenario keywords). If the brief is silent on voice cues, fall back to gender match + neutral register.',
+  );
+  lines.push(
+    '3. Pick the top 3. Mark them with these medal emoji prefixes — INCLUDED in the localised label string, BEFORE the persona name (one space after the emoji):',
+  );
+  lines.push('     • #1 best match: prefix `🥇 ` (gold medal + space)');
+  lines.push('     • #2:           prefix `🥈 ` (silver medal + space)');
+  lines.push('     • #3:           prefix `🥉 ` (bronze medal + space)');
+  lines.push('     • Everyone else: NO prefix.');
+  lines.push(
+    '4. Put the top-3 options first in the dropdown (in 1→2→3 order); the rest follow in catalogue order.',
+  );
+  lines.push('');
   lines.push('For each dropdown option:');
   lines.push(
     '- `value`: the FIRST key in that entry\'s `variants` map (the persona\'s default voice_id), passed verbatim to `--voice`',
   );
   lines.push(
-    '- `label`: a single localised line in the form `<persona name> — <short gist>` (compress the catalogue description to ≤12 chars; do not copy it verbatim)',
+    '- `label`: a single localised line in the form `<rank-prefix><persona name> — <short gist>` (compress the catalogue description to ≤12 chars; do not copy it verbatim). The rank-prefix is the `🥇 `/`🥈 `/`🥉 ` from step 3 above, or empty for unranked options.',
   );
   lines.push('');
   lines.push(

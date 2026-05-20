@@ -42,7 +42,13 @@ describe('composeSystemPrompt — SenseAudio voice options', () => {
     expect(prompt).toContain('- **SenseAudio voice options**: Pick a voice via a `<question-form id="senseaudio-voice">`');
     expect(prompt).toContain('SenseAudio is multilingual');
     expect(prompt).toContain('do not propose switching to a different TTS model');
+    expect(prompt).toContain('Top-3 highlighting (REQUIRED');
+    expect(prompt).toContain('prefix `🥇 `');
+    expect(prompt).toContain('prefix `🥈 `');
+    expect(prompt).toContain('prefix `🥉 `');
+    expect(prompt).toContain('Put the top-3 options first in the dropdown');
     expect(prompt).toContain('the FIRST key in that entry\'s `variants` map');
+    expect(prompt).toContain('<rank-prefix><persona name> — <short gist>');
     // Catalogue gets JSON-stringified into the prompt.
     expect(prompt).toContain('"male_0028"');
     expect(prompt).toContain('"name": "Reliable Uncle"');

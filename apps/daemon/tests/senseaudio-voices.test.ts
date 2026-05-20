@@ -124,26 +124,43 @@ describe('SenseAudio catalogue', () => {
     expect(catalogue['female_0030_c']!.name).toBe('高能姐姐');
   });
 
-  it('falls back to "通用" label for voice_ids not in the hardcoded docs map', async () => {
+  it('falls back to voice_name (not "通用") for voice_ids missing from every label source', async () => {
     await writeConfig({
       providers: { senseaudio: { apiKey: 'sa-test-key', baseUrl: TEST_BASE_URL } },
     });
-    vi.stubGlobal('fetch', vi.fn(async () => Response.json({
-      system_voice: [],
-      voice_cloning: [
-        { voice_id: 'cloned_user_0001', voice_name: '我的克隆音', description: ['用户克隆音色。'] },
-      ],
-      voice_generation: [],
-      base_resp: { status_code: 0, status_msg: 'success' },
-    })));
+    // Single fetch mock that handles both the docs-catalog scrape AND
+    // the /v1/get_voice call. The docs URL is forced to 404 so the
+    // daemon falls through to BACKUP_VARIANT_LABELS, which also lacks
+    // `cloned_user_0001` (it is a runtime-cloned voice, not a system
+    // persona) — exercising the final per-voice fallback path.
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof URL ? input.toString() : input.url;
+      if (url.includes('docs.senseaudio.cn')) {
+        return new Response('not found', { status: 404 });
+      }
+      return Response.json({
+        system_voice: [],
+        voice_cloning: [
+          { voice_id: 'cloned_user_0001', voice_name: '我的克隆音', description: ['用户克隆音色。'] },
+        ],
+        voice_generation: [],
+        base_resp: { status_code: 0, status_msg: 'success' },
+      });
+    }));
 
     const catalogue = await listSenseAudioCatalogue(projectRoot);
     // No trailing `_[a-z]` suffix, so stripSuffix leaves the voice_id
-    // intact — the catalogue keys by the full id.
+    // intact — the catalogue keys by the full id. The variant label
+    // falls back to the persona's voice_name (not the static "通用"
+    // placeholder used by the original implementation) so the agent
+    // still has a meaningful anchor when neither label source covers
+    // this voice.
     expect(catalogue['cloned_user_0001']).toEqual({
       name: '我的克隆音',
       description: '用户克隆音色。',
-      variants: { cloned_user_0001: '通用' },
+      variants: { cloned_user_0001: '我的克隆音' },
     });
   });
 
