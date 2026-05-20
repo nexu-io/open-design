@@ -322,6 +322,7 @@ export const th: Dict = {
   'settings.cliEnvCodebuddyConfigDir': 'ไดเรกทอรีการตั้งค่า CodeBuddy',
   'settings.cliEnvCodebuddyBaseUrl': 'CodeBuddy proxy base URL',
   'settings.cliEnvCodebuddyApiKey': 'CodeBuddy proxy API key',
+  'settings.cliEnvCodebuddyInternetEnvironment': 'สภาพแวดล้อมอินเทอร์เน็ต CodeBuddy',
   'settings.cliEnvCodexHome': 'Codex home',
   'settings.cliEnvCodexBin': 'เส้นทางไฟล์เรียกทำงาน Codex',
   'settings.modelCustom': 'กำหนดเอง (พิมพ์ด้านล่าง)…',

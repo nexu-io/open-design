@@ -327,6 +327,7 @@ export const id: Dict = {
   'settings.cliEnvCodebuddyConfigDir': 'Direktori konfigurasi CodeBuddy',
   'settings.cliEnvCodebuddyBaseUrl': 'CodeBuddy proxy base URL',
   'settings.cliEnvCodebuddyApiKey': 'CodeBuddy proxy API key',
+  'settings.cliEnvCodebuddyInternetEnvironment': 'CodeBuddy internet environment',
   'settings.cliEnvCodexHome': 'Home Codex',
   'settings.cliEnvCodexBin': 'Path executable Codex',
   'settings.cliEnvCodexBaseUrl': 'Codex/OpenAI proxy base URL',

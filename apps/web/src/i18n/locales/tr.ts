@@ -325,6 +325,7 @@ export const tr: Dict = {
   'settings.cliEnvCodebuddyConfigDir': 'CodeBuddy config directory',
   'settings.cliEnvCodebuddyBaseUrl': 'CodeBuddy proxy base URL',
   'settings.cliEnvCodebuddyApiKey': 'CodeBuddy proxy API key',
+  'settings.cliEnvCodebuddyInternetEnvironment': 'CodeBuddy internet environment',
   'settings.cliEnvCodexHome': 'Codex home',
   'settings.cliEnvCodexBin': 'Codex executable path',
   'settings.modelPickerHint':

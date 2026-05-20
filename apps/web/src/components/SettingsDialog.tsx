@@ -514,6 +514,12 @@ const AGENT_CLI_ENV_FIELDS = [
     secret: true,
   },
   {
+    agentId: 'codebuddy',
+    envKey: 'CODEBUDDY_INTERNET_ENVIRONMENT',
+    labelKey: 'settings.cliEnvCodebuddyInternetEnvironment',
+    placeholder: 'internal / ioa',
+  },
+  {
     agentId: 'codex',
     envKey: 'CODEX_HOME',
     labelKey: 'settings.cliEnvCodexHome',

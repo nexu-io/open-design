@@ -1057,3 +1057,52 @@ test('spawnEnvForAgent does not mutate the input env', () => {
   assert.equal(original.ANTHROPIC_API_KEY, 'sk-leak');
   assert.notEqual(env, original);
 });
+
+// CodeBuddy's `-p` mode authenticates via CODEBUDDY_API_KEY; it must not be
+// stripped (unlike Claude, where /login OAuth is the primary auth path).
+test('spawnEnvForAgent preserves CODEBUDDY_API_KEY for the codebuddy adapter', () => {
+  const env = spawnEnvForAgent('codebuddy', {
+    CODEBUDDY_API_KEY: 'cb-test-key',
+    PATH: '/usr/bin',
+  });
+
+  assert.equal(env.CODEBUDDY_API_KEY, 'cb-test-key');
+  assert.equal(env.PATH, '/usr/bin');
+});
+
+test('spawnEnvForAgent preserves CODEBUDDY_API_KEY with CODEBUDDY_BASE_URL set', () => {
+  const env = spawnEnvForAgent('codebuddy', {
+    CODEBUDDY_API_KEY: 'cb-test-key',
+    CODEBUDDY_BASE_URL: 'https://proxy.example.com',
+    PATH: '/usr/bin',
+  });
+
+  assert.equal(env.CODEBUDDY_API_KEY, 'cb-test-key');
+  assert.equal(env.CODEBUDDY_BASE_URL, 'https://proxy.example.com');
+});
+
+test('spawnEnvForAgent passes CODEBUDDY_INTERNET_ENVIRONMENT to the codebuddy adapter', () => {
+  const env = spawnEnvForAgent('codebuddy', {
+    CODEBUDDY_API_KEY: 'cb-test-key',
+    CODEBUDDY_INTERNET_ENVIRONMENT: 'internal',
+    PATH: '/usr/bin',
+  });
+
+  assert.equal(env.CODEBUDDY_API_KEY, 'cb-test-key');
+  assert.equal(env.CODEBUDDY_INTERNET_ENVIRONMENT, 'internal');
+});
+
+test('spawnEnvForAgent applies configured CodeBuddy env including INTERNET_ENVIRONMENT', () => {
+  const env = spawnEnvForAgent(
+    'codebuddy',
+    { PATH: '/usr/bin' },
+    {
+      CODEBUDDY_CONFIG_DIR: '/tmp/codebuddy-alt',
+      CODEBUDDY_INTERNET_ENVIRONMENT: 'ioa',
+    },
+  );
+
+  assert.equal(env.CODEBUDDY_CONFIG_DIR, '/tmp/codebuddy-alt');
+  assert.equal(env.CODEBUDDY_INTERNET_ENVIRONMENT, 'ioa');
+  assert.equal(env.PATH, '/usr/bin');
+});

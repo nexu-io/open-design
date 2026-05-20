@@ -334,6 +334,7 @@ export const zhTW: Dict = {
   'settings.cliEnvCodebuddyConfigDir': 'CodeBuddy 設定目錄',
   'settings.cliEnvCodebuddyBaseUrl': 'CodeBuddy proxy base URL',
   'settings.cliEnvCodebuddyApiKey': 'CodeBuddy proxy API key',
+  'settings.cliEnvCodebuddyInternetEnvironment': 'CodeBuddy 網路環境',
   'settings.cliEnvCodexHome': 'Codex home',
   'settings.cliEnvCodexBin': 'Codex 可執行檔路徑',
   'settings.cliEnvCodexBaseUrl': 'Codex/OpenAI proxy base URL',

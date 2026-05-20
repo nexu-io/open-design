@@ -15,10 +15,11 @@ type RuntimeEnvMap = NodeJS.ProcessEnv | Record<string, string>;
 // launched from a shell that exported the key for SDK or scripting use.
 // See issue #398.
 //
-// The codebuddy adapter applies the same strategy for CODEBUDDY_API_KEY:
-// strip it by default so CodeBuddy Code's own auth resolution (codebuddy
-// login) wins, but preserve it when CODEBUDDY_BASE_URL is set because
-// the user is intentionally routing to a custom endpoint.
+// The codebuddy adapter does NOT strip CODEBUDDY_API_KEY. Unlike Claude Code,
+// where /login OAuth is the primary auth path and API-key billing is a
+// fallback, CodeBuddy's `-p` (non-interactive) mode always authenticates via
+// CODEBUDDY_API_KEY per the CLI docs. Stripping it would break every headless
+// CodeBuddy run. See https://www.codebuddy.cn/docs/cli/env-vars.
 //
 // However, when ANTHROPIC_BASE_URL is set the user is intentionally
 // routing Claude Code to a custom endpoint (e.g. a Kimi/Moonshot proxy).
@@ -76,12 +77,10 @@ export function spawnEnvForAgent(
     ]);
     return env;
   }
-  if (agentId === 'codebuddy') {
-    stripUnlessCustomBaseUrl(env, 'CODEBUDDY_BASE_URL', [
-      'CODEBUDDY_API_KEY',
-    ]);
-    return env;
-  }
+  // CodeBuddy's `-p` mode requires CODEBUDDY_API_KEY for authentication.
+  // Do not strip it — the key is the primary auth path, not a fallback.
+  // See https://www.codebuddy.cn/docs/cli/env-vars.
+  return env;
   return env;
 }
 

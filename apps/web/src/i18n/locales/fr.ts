@@ -323,6 +323,7 @@ export const fr: Dict = {
   'settings.cliEnvCodebuddyConfigDir': 'Dossier de configuration CodeBuddy',
   'settings.cliEnvCodebuddyBaseUrl': 'URL de base du proxy CodeBuddy',
   'settings.cliEnvCodebuddyApiKey': 'Clé API du proxy CodeBuddy',
+  'settings.cliEnvCodebuddyInternetEnvironment': 'Environnement internet CodeBuddy',
   'settings.cliEnvCodexHome': 'Dossier d’accueil Codex',
   'settings.cliEnvCodexBin': 'Chemin de l’exécutable Codex',
   'settings.cliEnvCodexBaseUrl': 'URL de base du proxy Codex/OpenAI',

@@ -327,6 +327,7 @@ export const it: Dict = {
   'settings.cliEnvCodebuddyConfigDir': 'Directory di configurazione CodeBuddy',
   'settings.cliEnvCodebuddyBaseUrl': 'Base URL CodeBuddy',
   'settings.cliEnvCodebuddyApiKey': 'Chiave API CodeBuddy',
+  'settings.cliEnvCodebuddyInternetEnvironment': 'Ambiente internet CodeBuddy',
   'settings.cliEnvCodexHome': 'Home di Codex',
   'settings.cliEnvCodexBin': 'Percorso eseguibile Codex',
   'settings.modelCustom': 'Personalizzato (inserisci sotto)…',
