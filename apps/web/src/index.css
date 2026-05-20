@@ -11724,6 +11724,9 @@ button.connector-action.is-loading {
   height: 100%;
   min-height: 0;
 }
+.live-artifact-preview-layer.preview-viewport[data-active='false'] {
+  display: none;
+}
 .preview-viewport:not(.preview-viewport-desktop) {
   overflow: auto;
   display: flex;
