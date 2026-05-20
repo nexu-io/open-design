@@ -20,7 +20,15 @@ const ext = {
 
 export interface HeaderProps {
   /** Nav highlight target. `'home'` is the default for `/`. */
-  active?: 'home' | 'skills' | 'systems' | 'templates' | 'craft' | 'tutorials' | 'blog';
+  active?:
+    | 'home'
+    | 'product'
+    | 'html-anything'
+    | 'skills'
+    | 'systems'
+    | 'templates'
+    | 'craft'
+    | 'blog';
   /**
    * Live counts from the Markdown catalogs. Required so we can never
    * silently render stale fallback numbers when a caller forgets to
@@ -62,8 +70,80 @@ export function Header({
             <b>Studio Nº 01</b>Berlin / Open / Earth
           </span>
         </a>
-        <nav>
+        {/*
+          Mobile / tablet hamburger. Hidden by CSS at ≥1100px (the desktop
+          breakpoint where the full nav fits). At narrower widths it toggles
+          `.is-open` on the parent <header> via a small handler in
+          `header-enhancer.astro` — when open, the `<nav>` element below
+          drops down underneath the header bar as a vertical list.
+        */}
+        <button
+          type='button'
+          className='nav-toggle'
+          aria-label='Toggle navigation menu'
+          aria-controls='primary-nav'
+          aria-expanded='false'
+          data-nav-toggle
+        >
+          <span className='nav-toggle-icon' aria-hidden='true' />
+        </button>
+        <nav id='primary-nav' data-nav-primary>
           <ul className='nav-links'>
+            <li className='has-dropdown'>
+              {/*
+                Product menu — top-level group exposing the Open Design family.
+                CSS-only dropdown via :hover / :focus-within (no JS), so this
+                still renders correctly under static export with no React
+                runtime on the client. The trigger is a focusable <a> rather
+                than a button so it remains a keyboard tab stop, with
+                aria-haspopup signaling the submenu to assistive tech.
+              */}
+              <a
+                href='/'
+                className={
+                  active === 'product' ||
+                  active === 'home' ||
+                  active === 'html-anything'
+                    ? 'is-active'
+                    : undefined
+                }
+                aria-haspopup='true'
+                aria-expanded='false'
+              >
+                Product
+                <span className='dropdown-caret' aria-hidden='true'>▾</span>
+              </a>
+              <ul className='nav-dropdown' role='menu'>
+                <li role='none'>
+                  <a
+                    role='menuitem'
+                    href='/'
+                    className={
+                      active === 'home' || active === 'product'
+                        ? 'is-active'
+                        : undefined
+                    }
+                  >
+                    <span className='dropdown-name'>Open Design</span>
+                    <span className='dropdown-blurb'>
+                      The agentic design surface — skills, systems, templates.
+                    </span>
+                  </a>
+                </li>
+                <li role='none'>
+                  <a
+                    role='menuitem'
+                    href='/html-anything/'
+                    className={linkClass('html-anything')}
+                  >
+                    <span className='dropdown-name'>HTML Anything</span>
+                    <span className='dropdown-blurb'>
+                      Markdown / data → ship-ready HTML, by your local agent.
+                    </span>
+                  </a>
+                </li>
+              </ul>
+            </li>
             <li>
               <a href='/skills/' className={linkClass('skills')}>
                 Skills<span className='num'>{counts.skills}</span>
@@ -82,11 +162,6 @@ export function Header({
             <li>
               <a href='/craft/' className={linkClass('craft')}>
                 Craft<span className='num'>{counts.craft}</span>
-              </a>
-            </li>
-            <li>
-              <a href='/tutorials/' className={linkClass('tutorials')}>
-                Tutorials
               </a>
             </li>
             <li>
