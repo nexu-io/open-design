@@ -20,6 +20,7 @@ const repoRoot = path.resolve(import.meta.dirname, "..");
 const allowedE2eScripts = new Set([
   "e2e/scripts/playwright.ts",
   "e2e/scripts/release-smoke.ts",
+  "e2e/scripts/visual-report.ts",
 ]);
 
 type GuardCheck = {
@@ -493,6 +494,7 @@ async function checkE2eLayout(): Promise<boolean> {
       repositoryPath === "e2e/tsconfig.json" ||
       repositoryPath === "e2e/vitest.config.ts" ||
       repositoryPath === "e2e/playwright.config.ts" ||
+      repositoryPath === "e2e/playwright.visual.config.ts" ||
       repositoryPath === "e2e/AGENTS.md"
     ) {
       continue;

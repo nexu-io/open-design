@@ -10,8 +10,12 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
+    "@aws-sdk/client-s3": "3.1050.0",
     "@playwright/test": "1.60.0",
     "@types/node": "20.19.39",
+    "@types/pngjs": "6.0.5",
+    "pixelmatch": "7.2.0",
+    "pngjs": "7.0.0",
     "tsx": "4.22.2",
     "typescript": "5.9.3",
     "vitest": "4.1.6"
