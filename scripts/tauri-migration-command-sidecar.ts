@@ -106,6 +106,16 @@ const commandSidecarRequirements: readonly CommandSidecarRequirement[] = [
       'read_checksum "$checksum" "$(basename -- "$archive")" "archive"',
     ],
   },
+  {
+    label: "receiver-visible handoff identity",
+    snippets: [
+      "Verified handoff package identity:",
+      "Expected remote head: $branch @ $expected_head",
+      "Archive SHA-256: $actual_sha",
+      "Command script SHA-256: $actual_command_sha",
+      "Bundle SHA-256: $actual_bundle_sha",
+    ],
+  },
 ];
 
 export function commandSidecarProblems(source: string): string[] {

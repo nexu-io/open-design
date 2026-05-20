@@ -109,6 +109,11 @@ test("package-tauri-migration-handoff creates a tarball and checksum sidecar", a
   assert.match(commandScript, /handoff manifest bundlePath must be relative and relocatable/);
   assert.match(commandScript, /actual_bundle_sha="\$\(hash_file "\$bundle"\)"/);
   assert.match(commandScript, /bundle SHA-256 mismatch/);
+  assert.match(commandScript, /Verified handoff package identity:/);
+  assert.match(commandScript, /Expected remote head: \$branch @ \$expected_head/);
+  assert.match(commandScript, /Archive SHA-256: \$actual_sha/);
+  assert.match(commandScript, /Command script SHA-256: \$actual_command_sha/);
+  assert.match(commandScript, /Bundle SHA-256: \$actual_bundle_sha/);
   assert.match(commandScript, /git bundle verify "\$bundle"/);
   assert.match(commandScript, /bundle_heads="\$\(git bundle list-heads "\$bundle"\)"/);
   assert.match(commandScript, /bundle does not contain expected branch head/);
