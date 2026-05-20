@@ -1,6 +1,6 @@
 import type { Express } from 'express';
 import {
-  defaultScenarioPluginIdForKind,
+  defaultScenarioPluginIdForProjectMetadata,
   type PluginManifest,
 } from '@open-design/contracts';
 import { createProjectArtifactFile } from './artifact-create.js';
@@ -227,9 +227,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       let resolveBody =
         explicitPlugin ? (req.body as Record<string, unknown>) : null;
       if (!resolveBody) {
-        const fallbackPluginId = defaultScenarioPluginIdForKind(
-          projectMetadata?.kind,
-        );
+        const fallbackPluginId = defaultScenarioPluginIdForProjectMetadata(projectMetadata);
         if (fallbackPluginId && getInstalledPlugin(db, fallbackPluginId)) {
           resolveBody = { ...(req.body || {}), pluginId: fallbackPluginId };
         }

@@ -10,7 +10,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-  defaultScenarioPluginIdForKind,
+  defaultScenarioPluginIdForProjectMetadata,
   type ConnectorDetail,
   type InstalledPluginRecord,
 } from '@open-design/contracts';
@@ -98,13 +98,13 @@ import { fetchProviderModels } from '../providers/provider-models';
 // markup — both surfaces are always present, and CSS toggles
 // `display` based on `--compact-topbar` breakpoint (900px).
 
-// Default scenario plugin for each project kind. The mapping lives in
-// `@open-design/contracts` so the daemon's `/api/projects` and
-// `/api/runs` fallbacks resolve to the same plugin id when no
+// Default scenario plugin for each project kind/intent. The mapping
+// lives in `@open-design/contracts` so the daemon's `/api/projects`
+// and `/api/runs` fallbacks resolve to the same plugin id when no
 // `pluginId` is on the request body — plan §3.3 of
 // `specs/current/plugin-driven-flow-plan.md`.
-function defaultPluginIdForKind(metadata: ProjectMetadata): string | null {
-  return defaultScenarioPluginIdForKind(metadata.kind);
+function defaultPluginIdForMetadata(metadata: ProjectMetadata): string | null {
+  return defaultScenarioPluginIdForProjectMetadata(metadata);
 }
 
 function defaultPluginInputsForCreate(
@@ -419,7 +419,7 @@ export function EntryShell({
     // is intentionally explicit so future kind-specific scenarios
     // (e.g. a deck- or image-specialized pipeline) can take over a
     // single row without touching the form.
-    const pluginId = defaultPluginIdForKind(input.metadata);
+    const pluginId = defaultPluginIdForMetadata(input.metadata);
     const pluginInputs = defaultPluginInputsForCreate(input, pluginId);
     return onCreateProject({
       ...input,
@@ -463,11 +463,12 @@ export function EntryShell({
       ...(payload.contextConnectors && payload.contextConnectors.length > 0
         ? { contextConnectors: payload.contextConnectors }
         : {}),
+      ...(payload.workingDir ? { userWorkingDir: payload.workingDir } : {}),
     };
     onCreateProject({
       name,
       skillId: payload.skillId ?? null,
-      designSystemId: null,
+      designSystemId: payload.designSystemId ?? null,
       metadata,
       pendingPrompt: payload.prompt,
       ...(payload.pluginId ? { pluginId: payload.pluginId } : {}),
@@ -622,6 +623,8 @@ export function EntryShell({
               <HomeView
                 projects={projects}
                 projectsLoading={projectsLoading}
+                designSystems={designSystems}
+                defaultDesignSystemId={defaultDesignSystemId}
                 onSubmit={handlePluginLoopSubmit}
                 onOpenProject={onOpenProject}
                 onViewAllProjects={() => changeView('projects')}
@@ -687,6 +690,7 @@ export function EntryShell({
                   </header>
                   <DesignSystemsTab
                     systems={designSystems}
+                    templates={templates}
                     selectedId={defaultDesignSystemId}
                     onSelect={onChangeDefaultDesignSystem}
                     onCreate={onCreateDesignSystem}

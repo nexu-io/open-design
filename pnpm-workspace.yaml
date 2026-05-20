@@ -3,3 +3,17 @@ packages:
   - apps/*
   - tools/*
   - e2e
+
+overrides:
+  brace-expansion: 5.0.6
+  devalue: 5.8.1
+  fast-uri: 3.1.2
+  hono: 4.12.19
+  ip-address: 10.2.0
+  postcss: 8.5.14
+  yaml: 2.9.0
+
+onlyBuiltDependencies:
+  - better-sqlite3
+  - electron
+  - esbuild

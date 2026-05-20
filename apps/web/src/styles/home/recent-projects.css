@@ -71,12 +71,51 @@
   box-shadow: var(--shadow-sm);
   transform: translateY(-1px);
 }
+.recent-projects__card.is-design-system-project {
+  border-color: color-mix(in srgb, var(--red) 62%, var(--border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--red) 42%, transparent);
+}
+.recent-projects__card.is-design-system-project:hover {
+  border-color: var(--red);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--red) 54%, transparent),
+    var(--shadow-sm);
+}
 .recent-projects__card-thumb {
   aspect-ratio: 16 / 9;
   background: linear-gradient(135deg, var(--accent-tint) 0%, var(--bg-subtle) 100%);
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+.recent-projects__card-thumb-html,
+.recent-projects__card-thumb-image,
+.recent-projects__card-thumb-video,
+.recent-projects__card-thumb-logo {
+  background: var(--bg-subtle);
+}
+.recent-projects__thumb-media,
+.recent-projects__thumb-iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+.recent-projects__thumb-media {
+  object-fit: cover;
+}
+.recent-projects__card-thumb-logo .recent-projects__thumb-media {
+  inset: 22%;
+  width: 56%;
+  height: 56%;
+  object-fit: contain;
+}
+.recent-projects__thumb-iframe {
+  pointer-events: none;
+  background: #fff;
 }
 .recent-projects__card-glyph {
   font-family: var(--serif);
@@ -88,7 +127,7 @@
 .recent-projects__card-meta {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   padding: 8px 10px 12px;
   min-width: 0;
 }
@@ -103,4 +142,48 @@
 .recent-projects__card-time {
   font-size: 11.5px;
   color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.recent-projects__card-sep {
+  color: var(--text-muted);
+}
+.recent-projects__card-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 500;
+}
+.recent-projects__card-status-running {
+  color: var(--accent);
+}
+.recent-projects__card-status-awaiting_input {
+  color: var(--amber);
+}
+.recent-projects__card-status-queued,
+.recent-projects__card-status-not_started,
+.recent-projects__card-status-canceled {
+  color: var(--text-muted);
+}
+.recent-projects__card-status-succeeded {
+  color: var(--green);
+}
+.recent-projects__card-status-failed {
+  color: var(--red);
+}
+.recent-projects__card-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.recent-projects__card-status-running .recent-projects__card-status-dot {
+  animation: recent-projects-pulse 1.4s ease-in-out infinite;
+}
+@keyframes recent-projects-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
 }

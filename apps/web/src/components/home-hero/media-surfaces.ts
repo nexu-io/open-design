@@ -28,6 +28,12 @@ export interface HomeMediaComposerState {
 export const HOME_MEDIA_CHIP_IDS = ['image', 'video', 'hyperframes', 'audio'] as const;
 const NO_TEMPLATE_PLACEHOLDER = 'No template';
 const SFX_AUDIO_DURATIONS_SEC = AUDIO_DURATIONS_SEC.filter((sec) => sec <= 30);
+const MEDIA_RESOLUTIONS = ['2k', '4k'] as const;
+const MEDIA_RESOLUTION_LABELS: Record<(typeof MEDIA_RESOLUTIONS)[number], string> = {
+  '2k': '2K',
+  '4k': '4K',
+};
+const DEFAULT_MEDIA_RESOLUTION = '2k';
 
 export function homeMediaSurfaceForChipId(chipId: string): HomeComposerMediaSurface | null {
   if (chipId === 'image') return 'image';
@@ -53,7 +59,7 @@ export function buildHomeMediaComposer(
     promptTemplates,
     voiceOptions,
   );
-  const fields = fieldsForSurface(surface, promptTemplates, inputs, voiceOptions, options);
+  const fields = fieldsForSurface(surface, inputs, voiceOptions, options);
   const editableFieldNames = fields.map((field) => field.name);
   const queryTemplate = queryTemplateForSurface(surface, inputs);
   return {
@@ -76,22 +82,25 @@ export function normalizeHomeMediaInputs(
     const ratio = validOption(stringValue(raw.ratio) || stringValue(raw.aspect), MEDIA_ASPECTS, '16:9');
     return {
       mediaKind: 'image',
-      subject: stringValue(raw.subject) || 'a polished product concept',
-      style: stringValue(raw.style) || 'cinematic, high-quality, on-brand',
+      subject: stringValue(raw.subject) || 'a premium product concept',
+      style: stringValue(raw.style) || 'premium product-studio, elegant composition, refined lighting, restrained color',
       aspect: ratio,
       template: validTemplateId(surface, stringValue(raw.template), promptTemplates),
+      designSystem: stringValue(raw.designSystem) || 'the active project design system',
       model: validOption(stringValue(raw.model), IMAGE_MODELS.map((m) => m.id), DEFAULT_IMAGE_MODEL),
       ratio,
+      resolution: validOption(stringValue(raw.resolution), MEDIA_RESOLUTIONS, DEFAULT_MEDIA_RESOLUTION),
     };
   }
   if (surface === 'video') {
     const ratio = validOption(stringValue(raw.ratio) || stringValue(raw.aspect), MEDIA_ASPECTS, '16:9');
     return {
       mediaKind: 'video',
-      subject: stringValue(raw.subject) || 'a short product reveal',
-      style: stringValue(raw.style) || 'cinematic, high-quality, on-brand',
+      subject: stringValue(raw.subject) || 'a premium product launch moment',
+      style: stringValue(raw.style) || 'cinematic product-studio, elegant motion, refined lighting, restrained pacing',
       aspect: ratio,
       template: validTemplateId(surface, stringValue(raw.template), promptTemplates),
+      designSystem: stringValue(raw.designSystem) || 'the active project design system',
       model: validOption(
         stringValue(raw.model),
         VIDEO_MODELS.filter((m) => m.id !== 'hyperframes-html').map((m) => m.id),
@@ -101,14 +110,15 @@ export function normalizeHomeMediaInputs(
       ),
       ratio,
       duration: validNumber(raw.duration, VIDEO_LENGTHS_SEC, 5),
+      resolution: validOption(stringValue(raw.resolution), MEDIA_RESOLUTIONS, DEFAULT_MEDIA_RESOLUTION),
     };
   }
   if (surface === 'hyperframes') {
     const ratio = validOption(stringValue(raw.ratio) || stringValue(raw.aspect), MEDIA_ASPECTS, '16:9');
     return {
       mediaKind: 'video',
-      subject: stringValue(raw.subject) || 'an HTML-driven motion composition',
-      style: stringValue(raw.style) || 'polished, kinetic, on-brand',
+      subject: stringValue(raw.subject) || 'a premium product motion concept',
+      style: stringValue(raw.style) || 'premium kinetic typography, elegant transitions, restrained motion language',
       aspect: ratio,
       template: validTemplateId(surface, stringValue(raw.template), promptTemplates),
       model: 'hyperframes-html',
@@ -132,7 +142,7 @@ export function normalizeHomeMediaInputs(
     ...(audioType === 'sfx'
       ? { prompt: source }
       : { text: source }),
-    style: stringValue(raw.style) || 'clear, polished, modern',
+    style: stringValue(raw.style) || 'polished, restrained, brand-ready',
     aspect: validOption(stringValue(raw.aspect), MEDIA_ASPECTS, '16:9'),
     audioType,
     model,
@@ -216,29 +226,29 @@ export function templatesForHomeMediaSurface(
 
 function fieldsForSurface(
   surface: HomeComposerMediaSurface,
-  promptTemplates: PromptTemplateSummary[],
   inputs: Record<string, unknown>,
   voiceOptions: Array<{ voiceId: string; name: string }>,
   options: { elevenLabsVoiceWarning?: string | null; elevenLabsVoicesLoading?: boolean },
 ): InputFieldSpec[] {
   if (surface === 'image') {
     return [
-      templateField(surface, promptTemplates),
+      stringField('designSystem', 'Design system', 'Design system'),
       selectField('model', 'Model', IMAGE_MODELS.map((m) => m.id), modelLabels(IMAGE_MODELS)),
       selectField('ratio', 'Ratio', MEDIA_ASPECTS),
+      selectField('resolution', 'Resolution', MEDIA_RESOLUTIONS, MEDIA_RESOLUTION_LABELS),
     ];
   }
   if (surface === 'video') {
     return [
-      templateField(surface, promptTemplates),
+      stringField('designSystem', 'Design system', 'Design system'),
       selectField('model', 'Model', VIDEO_MODELS.filter((m) => m.id !== 'hyperframes-html').map((m) => m.id), modelLabels(VIDEO_MODELS)),
       selectField('ratio', 'Ratio', MEDIA_ASPECTS),
       selectField('duration', 'Duration', VIDEO_LENGTHS_SEC.map(String), secondsLabels(VIDEO_LENGTHS_SEC)),
+      selectField('resolution', 'Resolution', MEDIA_RESOLUTIONS, MEDIA_RESOLUTION_LABELS),
     ];
   }
   if (surface === 'hyperframes') {
     return [
-      templateField(surface, promptTemplates),
       selectField('ratio', 'Ratio', MEDIA_ASPECTS),
       selectField('duration', 'Duration', VIDEO_LENGTHS_SEC.map(String), secondsLabels(VIDEO_LENGTHS_SEC)),
     ];
@@ -274,20 +284,20 @@ function fieldsForSurface(
 
 function queryTemplateForSurface(surface: HomeComposerMediaSurface, inputs: Record<string, unknown>): string {
   if (surface === 'image') {
-    return 'Create an image using {{template}}, with {{model}} at {{ratio}}.';
+    return 'Create a premium product-studio image using {{designSystem}}: elegant composition, refined lighting, restrained color, rich material detail, and commercial campaign-level polish. Render with {{model}} at {{ratio}} in {{resolution}} resolution.';
   }
   if (surface === 'video') {
-    return 'Create a video using {{template}}, with {{model}} at {{ratio}} for {{duration}} seconds.';
+    return 'Create a premium product-studio video using {{designSystem}}: cinematic product pacing, elegant motion, refined lighting, and a polished launch-film feel. Render with {{model}} at {{ratio}} for {{duration}} seconds in {{resolution}} resolution.';
   }
   if (surface === 'hyperframes') {
-    return 'Create a HyperFrames video using {{template}} at {{ratio}} for {{duration}} seconds.';
+    return 'Create a premium product-studio HyperFrames video at {{ratio}} for {{duration}} seconds: refined kinetic typography, elegant transitions, restrained motion language, and studio-grade timing.';
   }
   if (stringValue(inputs.audioType) === 'sfx') {
-    return 'Create {{audioType}} audio from {{prompt}} using {{model}} for {{duration}} seconds.';
+    return 'Create premium product-studio audio from {{prompt}} using {{model}} for {{duration}} seconds: crisp, elegant, memorable, and brand-ready.';
   }
   return stringValue(inputs.model) === 'elevenlabs-v3'
-    ? 'Create {{audioType}} audio from {{text}} using {{model}} for {{duration}} seconds with {{voice}}.'
-    : 'Create {{audioType}} audio from {{text}} using {{model}} for {{duration}} seconds.';
+    ? 'Create premium product-studio audio from {{text}} using {{model}} for {{duration}} seconds with {{voice}}: polished, restrained, clear, and brand-ready.'
+    : 'Create premium product-studio audio from {{text}} using {{model}} for {{duration}} seconds: polished, restrained, clear, and brand-ready.';
 }
 
 function defaultInputsForSurface(
@@ -295,16 +305,24 @@ function defaultInputsForSurface(
   promptTemplates: PromptTemplateSummary[],
 ): Record<string, unknown> {
   if (surface === 'image') {
-    return { template: firstTemplateId(surface, promptTemplates), model: DEFAULT_IMAGE_MODEL, ratio: '16:9' };
+    return {
+      template: firstTemplateId(surface, promptTemplates),
+      designSystem: 'the active project design system',
+      model: DEFAULT_IMAGE_MODEL,
+      ratio: '16:9',
+      resolution: DEFAULT_MEDIA_RESOLUTION,
+    };
   }
   if (surface === 'video') {
     return {
       template: firstTemplateId(surface, promptTemplates),
+      designSystem: 'the active project design system',
       model: DEFAULT_VIDEO_MODEL === 'hyperframes-html'
         ? VIDEO_MODELS.find((m) => m.id !== 'hyperframes-html')?.id ?? DEFAULT_VIDEO_MODEL
         : DEFAULT_VIDEO_MODEL,
       ratio: '16:9',
       duration: 5,
+      resolution: DEFAULT_MEDIA_RESOLUTION,
     };
   }
   if (surface === 'hyperframes') {
@@ -320,22 +338,6 @@ function stringField(name: string, label: string, placeholder?: string): InputFi
     type: 'string',
     ...(placeholder ? { placeholder } : {}),
   };
-}
-
-function templateField(
-  surface: HomeComposerMediaSurface,
-  promptTemplates: PromptTemplateSummary[],
-): InputFieldSpec {
-  const templates = templatesForHomeMediaSurface(surface, promptTemplates);
-  const labels: Record<string, string> = {};
-  for (const template of templates) labels[template.id] = template.title;
-  return selectField(
-    'template',
-    'Template',
-    templates.map((template) => template.id),
-    labels,
-    templates.length === 0 ? NO_TEMPLATE_PLACEHOLDER : undefined,
-  );
 }
 
 function selectField(

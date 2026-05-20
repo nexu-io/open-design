@@ -1065,6 +1065,18 @@ export function App() {
     if (projects.some((p) => p.id === route.projectId)) return;
     let cancelled = false;
     (async () => {
+      const project = await getProject(route.projectId);
+      if (cancelled) return;
+      if (project) {
+        setProjects((curr) => {
+          const existingIndex = curr.findIndex((candidate) => candidate.id === project.id);
+          if (existingIndex < 0) {
+            return [...curr, project];
+          }
+          return curr.map((candidate) => (candidate.id === project.id ? project : candidate));
+        });
+        return;
+      }
       const list = await listProjects();
       if (cancelled) return;
       setProjects(list);

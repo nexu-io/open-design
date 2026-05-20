@@ -843,7 +843,7 @@ export function FileWorkspace({
               title="Design System"
             >
               <span className="tab-icon" aria-hidden>
-                <Icon name="palette" size={13} />
+                <Icon name="blocks" size={13} />
               </span>
               <span className="ws-tab-label">Design System</span>
             </button>
@@ -1331,6 +1331,46 @@ function DesignSystemProjectPanel({
                 <Icon name="comment" size={13} />
                 Needs work...
               </button>
+              {feedbackSection === section.title ? (
+                <form
+                  className="ds-project-feedback-popover"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    submitNeedsWorkFeedback(section.title, section.files);
+                  }}
+                >
+                  <label htmlFor={`ds-feedback-${slugForTestId(section.title)}`}>
+                    Tell the agent what to change
+                  </label>
+                  <textarea
+                    id={`ds-feedback-${slugForTestId(section.title)}`}
+                    value={feedbackText}
+                    rows={3}
+                    placeholder={`e.g. tighten spacing in ${section.title}, regenerate this preview...`}
+                    onChange={(event) => setFeedbackText(event.target.value)}
+                    autoFocus
+                  />
+                  <div>
+                    <button
+                      type="button"
+                      className="ghost compact"
+                      onClick={() => {
+                        setFeedbackSection(null);
+                        setFeedbackText('');
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="primary compact"
+                      disabled={!feedbackText.trim()}
+                    >
+                      Send
+                    </button>
+                  </div>
+                </form>
+              ) : null}
             </div>
           ) : (
             <span
@@ -1389,45 +1429,6 @@ function DesignSystemProjectPanel({
                 <span>Generating preview...</span>
               </div>
             )}
-            {feedbackSection === section.title ? (
-              <form
-                className="ds-project-feedback-box"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  submitNeedsWorkFeedback(section.title, section.files);
-                }}
-              >
-                <label htmlFor={`ds-feedback-${slugForTestId(section.title)}`}>
-                  Tell the agent what to change in {section.title}
-                </label>
-                <textarea
-                  id={`ds-feedback-${slugForTestId(section.title)}`}
-                  value={feedbackText}
-                  rows={3}
-                  placeholder="e.g. make the color tokens closer to our product, tighten spacing, regenerate the preview..."
-                  onChange={(event) => setFeedbackText(event.target.value)}
-                />
-                <div>
-                  <button
-                    type="button"
-                    className="ghost compact"
-                    onClick={() => {
-                      setFeedbackSection(null);
-                      setFeedbackText('');
-                    }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="primary compact"
-                    disabled={!feedbackText.trim()}
-                  >
-                    Send feedback
-                  </button>
-                </div>
-              </form>
-            ) : null}
           </div>
         ) : null}
       </section>
@@ -1439,7 +1440,7 @@ function DesignSystemProjectPanel({
       <div className="ds-project-panel ds-project-panel--generating">
         <div className="ds-project-generation-stage">
           <span className="ds-project-generation-mark">
-            <Icon name="palette" size={24} />
+            <Icon name="blocks" size={24} />
           </span>
           <h1>Creating your design system...</h1>
           <p>Keep this tab open. You can come back in a few minutes.</p>

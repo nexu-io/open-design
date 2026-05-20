@@ -21,7 +21,7 @@
 // surface-specific seed. Media kinds keep od-media-generation, which
 // dispatches through the media contract instead of emitting HTML.
 
-import type { ProjectKind } from '../api/projects.js';
+import type { ProjectKind, ProjectMetadata } from '../api/projects.js';
 import type { AppliedPluginSnapshot } from './apply.js';
 
 export type TaskKind = AppliedPluginSnapshot['taskKind'];
@@ -44,6 +44,7 @@ export type DefaultScenarioPluginId =
   | 'od-figma-migration'
   | 'od-code-migration'
   | 'od-tune-collab'
+  | 'example-live-artifact'
   | 'example-simple-deck'
   | 'example-web-prototype';
 
@@ -78,6 +79,13 @@ export function defaultScenarioPluginIdForKind(
 ): DefaultScenarioPluginId | null {
   if (!kind) return null;
   return DEFAULT_SCENARIO_PLUGIN_BY_KIND[kind] ?? null;
+}
+
+export function defaultScenarioPluginIdForProjectMetadata(
+  metadata: Pick<ProjectMetadata, 'kind' | 'intent'> | null | undefined,
+): DefaultScenarioPluginId | null {
+  if (metadata?.intent === 'live-artifact') return 'example-live-artifact';
+  return defaultScenarioPluginIdForKind(metadata?.kind);
 }
 
 export function defaultScenarioPluginIdForTaskKind(

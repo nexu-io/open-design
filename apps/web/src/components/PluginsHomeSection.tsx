@@ -20,8 +20,11 @@ import { useT } from '../i18n';
 import type { PluginShareAction } from '../state/projects';
 import { Icon } from './Icon';
 import { PluginCard } from './plugins-home/PluginCard';
-import { usePluginFacets } from './plugins-home/usePluginFacets';
-import type { FacetOption } from './plugins-home/facets';
+import {
+  usePluginFacets,
+  type FilterMode,
+} from './plugins-home/usePluginFacets';
+import type { FacetOption, FacetSelection } from './plugins-home/facets';
 import type { PluginUseAction } from './plugins-home/useActions';
 
 interface Props {
@@ -39,6 +42,12 @@ interface Props {
   onCreatePlugin?: (goal?: string) => void;
   onBrowseRegistry?: () => void;
   preferDefaultFacet?: boolean;
+  // Optional external selection. When the Home chip rail picks
+  // "Slide deck", HomeView passes { category: 'create', subcategory:
+  // 'deck' } so the Official starters grid scrolls to the matching
+  // slice instead of staying on its default. The hook only re-applies
+  // when this identity changes, so manual facet clicks still win.
+  presetSelection?: FacetSelection | null;
   title?: string;
   subtitle?: string;
   emptyMessage?: string;
@@ -58,6 +67,7 @@ export function PluginsHomeSection({
   onCreatePlugin,
   onBrowseRegistry,
   preferDefaultFacet = true,
+  presetSelection = null,
   title,
   subtitle,
   emptyMessage,
@@ -77,7 +87,7 @@ export function PluginsHomeSection({
     query,
     setQuery,
     totalVisible,
-  } = usePluginFacets({ plugins, preferDefaultFacet });
+  } = usePluginFacets({ plugins, preferDefaultFacet, presetSelection });
   const contributionTarget = onCreatePlugin
     ? resolveContributionTarget(catalog, selection)
     : null;

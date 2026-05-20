@@ -118,7 +118,7 @@ export function EntryNavRail({ view, onViewChange, onNewProject }: Props) {
           onClick={() => onViewChange('design-systems')}
           testId="entry-nav-design-systems"
         >
-          <Icon name="palette" size={18} />
+          <Icon name="blocks" size={18} />
         </NavButton>
       </div>
       <div className="entry-nav-rail__footer">
