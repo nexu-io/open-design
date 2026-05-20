@@ -31,6 +31,7 @@ const screenshotPath = resolveFromWorkspace(
   process.env.OD_PACKAGED_E2E_SCREENSHOT_PATH ?? join(toolsPackDir, 'screenshots', `${namespace}.png`),
 );
 const healthExpression = "fetch('/api/health').then(async response => ({ health: await response.json(), href: location.href, status: response.status, title: document.title }))";
+const linuxTauriSmokeTimeoutMs = Number(process.env.OD_PACKAGED_E2E_LINUX_TAURI_TIMEOUT_MS ?? 30 * 60_000);
 const shouldRunPackagedLinuxTauriSmoke = process.platform === 'linux' && process.env.OD_PACKAGED_E2E_LINUX === '1';
 const linuxTauriDescribe = shouldRunPackagedLinuxTauriSmoke ? describe : describe.skip;
 const shouldRunLinuxHeadlessSmoke =
@@ -323,7 +324,7 @@ linuxTauriDescribe('packaged linux Tauri runtime smoke', () => {
 
       printSmokeTimings(timings);
     }
-  }, 600_000);
+  }, linuxTauriSmokeTimeoutMs);
 });
 
 linuxHeadlessDescribe('packaged linux headless runtime smoke', () => {

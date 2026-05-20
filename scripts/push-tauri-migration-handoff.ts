@@ -165,7 +165,7 @@ function parseArgs(argv: string[]): Args {
     ...(process.env.TAURI_PR_BODY_PATH == null ? {} : { prBodyPath: process.env.TAURI_PR_BODY_PATH }),
     reportDir: resolve(process.env.TAURI_M4_REPORT_DIR ?? defaultReportDir),
     remote: process.env.REMOTE ?? defaultRemote,
-    workflow: process.env.GITHUB_WORKFLOW ?? defaultWorkflow,
+    workflow: defaultWorkflowFromEnv(process.env.GITHUB_WORKFLOW),
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -248,6 +248,11 @@ function parseArgs(argv: string[]): Args {
   }
 
   return parsed;
+}
+
+function defaultWorkflowFromEnv(value: string | undefined): string {
+  if (value == null || value.length === 0) return defaultWorkflow;
+  return /\.ya?ml$/i.test(value) ? value : defaultWorkflow;
 }
 
 async function resolveArgs(parsed: Args, extractedManifest?: string): Promise<ResolvedArgs> {

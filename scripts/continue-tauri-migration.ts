@@ -187,7 +187,7 @@ function parseArgs(argv: string[]): Args {
     root: workspaceRoot,
     push: true,
     waitReports: false,
-    workflow: process.env.GITHUB_WORKFLOW ?? defaultWorkflow,
+    workflow: defaultWorkflowFromEnv(process.env.GITHUB_WORKFLOW),
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -297,6 +297,11 @@ function parseArgs(argv: string[]): Args {
   }
 
   return parsed;
+}
+
+function defaultWorkflowFromEnv(value: string | undefined): string {
+  if (value == null || value.length === 0) return defaultWorkflow;
+  return /\.ya?ml$/i.test(value) ? value : defaultWorkflow;
 }
 
 async function continueM4(args: Args, status: MigrationStatus, log: string[]): Promise<void> {

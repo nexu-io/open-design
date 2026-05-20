@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ToolPackConfig } from "../src/config.js";
 import { packLinux } from "../src/linux.js";
+import { resolveTauriMainBinaryName } from "../src/tauri.js";
 import { packWin } from "../src/win/build.js";
 
 function makeConfig(platform: "win" | "linux", to: ToolPackConfig["to"]): ToolPackConfig {
@@ -48,6 +49,15 @@ function makeConfig(platform: "win" | "linux", to: ToolPackConfig["to"]): ToolPa
 }
 
 describe("Tauri bundle target policy", () => {
+  it("uses a cargo-safe Linux binary name that does not collide with bundled resources", () => {
+    expect(resolveTauriMainBinaryName({ platform: "linux" })).toBe("open-design-desktop-tauri");
+  });
+
+  it("keeps the product binary name on app and installer platforms", () => {
+    expect(resolveTauriMainBinaryName({ platform: "mac" })).toBe("Open Design");
+    expect(resolveTauriMainBinaryName({ platform: "win" })).toBe("Open Design");
+  });
+
   it("keeps the Windows unpacked directory target Electron-only", async () => {
     await expect(packWin(makeConfig("win", "dir"))).rejects.toThrow(
       /--desktop-runtime tauri --to dir is not supported by Tauri.*--to nsis.*--desktop-runtime electron/,

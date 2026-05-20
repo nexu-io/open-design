@@ -30,6 +30,8 @@ type TauriResourcePaths = {
   resourceRoot: string;
 };
 
+const TAURI_LINUX_MAIN_BINARY_NAME = "open-design-desktop-tauri";
+
 function quoteCommandPart(value: string): string {
   if (!/[\s"'$`\\]/.test(value)) return value;
   return `'${value.replace(/'/g, "'\\''")}'`;
@@ -200,6 +202,10 @@ function tauriTargetRoot(config: ToolPackConfig): string {
   return join(config.workspaceRoot, "apps", "desktop", "src-tauri", "target", "release", "bundle");
 }
 
+export function resolveTauriMainBinaryName(config: Pick<ToolPackConfig, "platform">): string {
+  return config.platform === "linux" ? TAURI_LINUX_MAIN_BINARY_NAME : PRODUCT_NAME;
+}
+
 async function writeTauriMergeConfig(
   config: ToolPackConfig,
   paths: TauriResourcePaths,
@@ -210,7 +216,7 @@ async function writeTauriMergeConfig(
     paths.mergeConfigPath,
     `${JSON.stringify(
       {
-        mainBinaryName: PRODUCT_NAME,
+        mainBinaryName: resolveTauriMainBinaryName(config),
         bundle: {
           targets,
           resources: {

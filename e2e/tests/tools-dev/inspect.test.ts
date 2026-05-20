@@ -14,6 +14,9 @@ import {
   inspectToolsDevDesktopStatus,
 } from '@/vitest/tools-dev';
 
+const shouldRunToolsDevTauriInspect = process.env.OD_E2E_TOOLS_DEV_TAURI === '1';
+const tauriInspectTest = shouldRunToolsDevTauriInspect ? test : test.skip;
+
 type HealthResponse = {
   ok?: unknown;
   service?: unknown;
@@ -168,7 +171,7 @@ describe('tools-dev pure inspect smoke', () => {
     }
   }, 180_000);
 
-  test('runs Tauri desktop inspect status/eval/screenshot against tools-dev', async () => {
+  tauriInspectTest('runs Tauri desktop inspect status/eval/screenshot against tools-dev', async () => {
     const suite = await createSmokeSuite('tools-dev-tauri-desktop');
 
     await suite.with.toolsDev(

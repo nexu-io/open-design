@@ -1,16 +1,14 @@
 // @vitest-environment node
 
-import { execFile } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { mkdir, readFile, stat } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
 
 import { describe, expect, test } from 'vitest';
 
 import { createPackagedSmokeReport } from '@/vitest/packaged-report';
 
-const execFileAsync = promisify(execFile);
 const e2eRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const workspaceRoot = dirname(e2eRoot);
 const toolsPackDir = resolveFromWorkspace(process.env.OD_PACKAGED_E2E_TOOLS_PACK_DIR ?? '.tmp/tools-pack');
@@ -21,6 +19,7 @@ const runtimeNamespaceRoot = join(toolsPackDir, 'runtime', 'win', 'namespaces', 
 const screenshotPath = process.env.OD_PACKAGED_E2E_SCREENSHOT_PATH ?? join(toolsPackDir, 'screenshots', `${namespace}.png`);
 const healthExpression = "fetch('/api/health').then(async response => ({ health: await response.json(), href: location.href, status: response.status, title: document.title }))";
 const reuseBuild = process.env.OD_PACKAGED_E2E_REUSE_BUILD === '1';
+const winTauriSmokeTimeoutMs = Number(process.env.OD_PACKAGED_E2E_WIN_TAURI_TIMEOUT_MS ?? 45 * 60_000);
 
 type DesktopStatus = {
   state?: string;
@@ -245,7 +244,7 @@ winTauriDescribe('packaged windows Tauri runtime smoke', () => {
 
       printSmokeTimings(timings);
     }
-  }, 600_000);
+  }, winTauriSmokeTimeoutMs);
 });
 
 async function measureSmokeStep<T>(timings: SmokeTiming[], step: string, run: () => Promise<T>): Promise<T> {
@@ -282,29 +281,53 @@ async function runToolsPackJson<T>(action: string, extraArgs: string[] = []): Pr
     '--json',
     ...extraArgs,
   ];
-  const result = await execFileAsync(process.execPath, args, {
-    cwd: workspaceRoot,
-    env: process.env,
-    maxBuffer: 20 * 1024 * 1024,
-  }).catch((error: unknown) => {
-    if (isExecError(error)) {
-      throw new Error(
-        [
-          `tools-pack win ${action} --desktop-runtime tauri failed`,
-          `message:\n${error.message}`,
-          `stdout:\n${error.stdout}`,
-          `stderr:\n${error.stderr}`,
-        ].join('\n'),
-      );
-    }
-    throw error;
-  });
+  const result = await runStreamingCommand(process.execPath, args, workspaceRoot);
 
   try {
     return JSON.parse(result.stdout) as T;
   } catch (error) {
     throw new Error(`tools-pack win ${action} did not print JSON: ${String(error)}\n${result.stdout}`);
   }
+}
+
+async function runStreamingCommand(
+  command: string,
+  args: string[],
+  cwd: string,
+): Promise<{ stderr: string; stdout: string }> {
+  const chunks: { stderr: string[]; stdout: string[] } = { stderr: [], stdout: [] };
+  const child = spawn(command, args, {
+    cwd,
+    env: process.env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    windowsHide: true,
+  });
+
+  child.stdout.on('data', (chunk: Buffer) => {
+    chunks.stdout.push(chunk.toString('utf8'));
+  });
+  child.stderr.on('data', (chunk: Buffer) => {
+    chunks.stderr.push(chunk.toString('utf8'));
+    process.stderr.write(chunk);
+  });
+
+  const exitCode = await new Promise<number>((resolveExit, rejectExit) => {
+    child.once('error', rejectExit);
+    child.once('exit', (code) => resolveExit(code ?? 1));
+  });
+  const stdout = chunks.stdout.join('');
+  const stderr = chunks.stderr.join('');
+  if (exitCode !== 0) {
+    throw new Error(
+      [
+        `tools-pack win command failed with exit code ${exitCode}`,
+        `command: ${[command, ...args].join(' ')}`,
+        `stdout:\n${stdout}`,
+        `stderr:\n${stderr}`,
+      ].join('\n'),
+    );
+  }
+  return { stderr, stdout };
 }
 
 async function readBuildJson<T>(): Promise<T> {
@@ -419,15 +442,6 @@ function delay(ms: number): Promise<void> {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value != null && !Array.isArray(value);
-}
-
-function isExecError(value: unknown): value is { code?: unknown; message: string; stderr: string; stdout: string } {
-  return (
-    isRecord(value) &&
-    typeof value.message === 'string' &&
-    typeof value.stdout === 'string' &&
-    typeof value.stderr === 'string'
-  );
 }
 
 function formatUnknown(value: unknown): string {

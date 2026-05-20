@@ -11,24 +11,22 @@ const releaseBetaWorkflowPath = join(workspaceRoot, ".github", "workflows", "rel
 const releaseStableWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-stable.yml");
 
 describe("packaged smoke workflow", () => {
-  it("keeps packaged smoke outside the main CI gate", async () => {
+  it("keeps legacy packaged smoke outside the main CI gate", async () => {
     const workflow = await readFile(ciWorkflowPath, "utf8");
-    expect(workflow).not.toContain("packaged_smoke_");
     expect(workflow).not.toContain("Build PR mac artifacts");
     expect(workflow).not.toContain("Build PR windows artifacts");
     expect(workflow).not.toContain("Build PR linux headless artifacts");
     expect(workflow).not.toContain("Smoke PR mac packaged runtime");
     expect(workflow).not.toContain("Smoke PR windows packaged runtime");
     expect(workflow).not.toContain("Smoke PR linux headless packaged runtime");
-    expect(workflow).not.toContain("OD_PACKAGED_E2E_");
     expect(workflow).not.toContain("actions/cache/save");
+    expect(workflow).toContain("packaged_smoke_tauri_win");
+    expect(workflow).toContain("packaged_smoke_tauri_linux");
   });
 
   it("preserves beta linux AppImage smoke reports for platform publication", async () => {
     const workflow = await readFile(releaseBetaWorkflowPath, "utf8");
-    const linuxBuildStep = workflow.match(
-      /- name: Build beta linux artifacts\n(?:.+\n)+?(?=\n      - name: Smoke beta linux AppImage runtime)/m,
-    );
+    const linuxBuildStep = workflow.match(/- name: Build beta linux artifacts\n[\s\S]+?(?=\n      - name: Smoke beta linux AppImage runtime)/m);
     expect(linuxBuildStep?.[0]).toBeDefined();
     expect(linuxBuildStep?.[0]).toContain(
       'node -e \'const fs = require("node:fs"); JSON.parse(fs.readFileSync(process.argv[1], "utf8"));\' "$build_json_path"',
@@ -49,9 +47,7 @@ describe("packaged smoke workflow", () => {
 
   it("preserves stable linux AppImage smoke reports for release publication", async () => {
     const workflow = await readFile(releaseStableWorkflowPath, "utf8");
-    const linuxBuildStep = workflow.match(
-      /- name: Build release linux artifacts\n(?:.+\n)+?(?=\n      - name: Smoke release linux AppImage runtime)/m,
-    );
+    const linuxBuildStep = workflow.match(/- name: Build release linux artifacts\n[\s\S]+?(?=\n      - name: Smoke release linux AppImage runtime)/m);
     expect(linuxBuildStep?.[0]).toBeDefined();
     expect(linuxBuildStep?.[0]).toContain(
       'node -e \'const fs = require("node:fs"); JSON.parse(fs.readFileSync(process.argv[1], "utf8"));\' "$build_json_path"',
@@ -94,15 +90,13 @@ describe("packaged smoke workflow", () => {
     for (const expectedPath of expectedPaths) {
       const quotedPath = `"${expectedPath}"`;
       const occurrences = workflow.split(quotedPath).length - 1;
-      expect(occurrences, `${expectedPath} must be present in required and tools-pack CI scope detection`).toBeGreaterThanOrEqual(
-        2,
-      );
+      expect(occurrences, `${expectedPath} must be present in Tauri CI scope detection`).toBeGreaterThanOrEqual(1);
     }
   });
 });
 
 function expectReleaseLinuxBuildPreservesEvidence(workflow: string, stepName: string): void {
-  const step = workflow.match(new RegExp(`- name: ${stepName}\\n(?:.+\\n)+?(?=\\n      - name: Smoke .+ linux AppImage runtime)`, "m"))?.[0];
+  const step = workflow.match(new RegExp(`- name: ${stepName}\\n[\\s\\S]+?(?=\\n      - name: Smoke .+ linux AppImage runtime)`, "m"))?.[0];
   expect(step).toBeDefined();
   expect(step).toContain('report_dir="$RUNNER_TEMP/release-report/linux"');
   expect(step).toContain('mkdir -p "$report_dir"');
@@ -112,7 +106,7 @@ function expectReleaseLinuxBuildPreservesEvidence(workflow: string, stepName: st
 }
 
 function expectReleaseLinuxSmokePreservesEvidenceBeforeApt(workflow: string, stepName: string): void {
-  const step = workflow.match(new RegExp(`- name: ${stepName}\\n(?:.+\\n)+?(?=\\n      - name: Upload linux e2e spec report)`, "m"))?.[0];
+  const step = workflow.match(new RegExp(`- name: ${stepName}\\n[\\s\\S]+?(?=\\n      - name: Upload linux e2e spec report)`, "m"))?.[0];
   expect(step).toBeDefined();
   const aptIndex = step?.indexOf("sudo apt-get update") ?? -1;
   const reportDirIndex = step?.indexOf('report_dir="$RUNNER_TEMP/release-report/linux"') ?? -1;
