@@ -10,6 +10,8 @@
 // "daemon not reachable" error - the server itself still launches so
 // the client can list its tool schema.
 
+import { randomUUID } from 'node:crypto';
+
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -35,7 +37,7 @@ interface ProjectPayload { project?: ProjectSummary; id?: string; name?: string;
 interface ActiveContext { active?: boolean; projectId?: string; projectName?: string | null; fileName?: string | null; ageMs?: number | null }
 type ResolvedProject = { id: string; name: string; source: 'uuid' | 'id' | 'exact' | 'slug' | 'substring' };
 interface ProjectListCache { baseUrl: string; t: number; list: ProjectSummary[] }
-interface McpArgs extends JsonObject { project?: unknown; entry?: unknown; include?: unknown; maxBytes?: unknown; path?: unknown; offset?: unknown; limit?: unknown; since?: unknown; query?: unknown; pattern?: unknown; max?: unknown; name?: unknown; content?: unknown; encoding?: unknown; artifactManifest?: unknown; confirm?: unknown }
+interface McpArgs extends JsonObject { project?: unknown; entry?: unknown; include?: unknown; maxBytes?: unknown; path?: unknown; offset?: unknown; limit?: unknown; since?: unknown; query?: unknown; pattern?: unknown; max?: unknown; name?: unknown; content?: unknown; encoding?: unknown; artifactManifest?: unknown; confirm?: unknown; skillId?: unknown; designSystemId?: unknown; pendingPrompt?: unknown; customInstructions?: unknown }
 interface ProjectFileBundleEntry { name: string; mime: string; size: number | null; content: string | null; binary: boolean }
 interface BundleInput { project: ProjectPayload | ProjectSummary; entry: string; files: ProjectFileBundleEntry[]; truncated: boolean; active: ActiveContext | null; resolved?: ResolvedProject | null }
 interface ErrorWithCode { message?: string; code?: string; cause?: { code?: string } }
@@ -237,6 +239,43 @@ const TOOL_DEFS = [
     annotations: { ...WRITE_ANNOTATIONS, title: 'Create Open Design artifact' },
   },
   {
+    name: 'create_project',
+    description:
+      'Create a new empty Open Design project on this daemon and return its id and seeded conversation. Use this when the agent needs to start a fresh project before pulling/pushing files; existing-project workflows should keep using list_projects + get_project.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: {
+          type: 'string',
+          description: 'Human-readable project name. Shown in the Open Design sidebar.',
+        },
+        skillId: {
+          type: 'string',
+          description:
+            'Optional skill id to pin to the new project (matches an entry under od://skills/).',
+        },
+        designSystemId: {
+          type: 'string',
+          description:
+            'Optional design-system id to pin to the new project (matches an entry under od://design-systems/).',
+        },
+        pendingPrompt: {
+          type: 'string',
+          description:
+            'Optional initial prompt the user will see queued in the project on first open.',
+        },
+        customInstructions: {
+          type: 'string',
+          description:
+            'Optional project-scoped instructions appended to the agent system prompt (max 5000 chars).',
+        },
+      },
+      required: ['name'],
+      additionalProperties: false,
+    },
+    annotations: { ...WRITE_ANNOTATIONS, title: 'Create Open Design project' },
+  },
+  {
     name: 'write_file',
     description:
       'Write (or overwrite) a project file. Unlike create_artifact this does not require an ArtifactManifest and tolerates existing targets, so it is the right tool for iterating on a file the agent (or the user) already created. Project optional; defaults to the active project.',
@@ -347,6 +386,10 @@ export async function runMcpStdio({ daemonUrl }: RunMcpOptions): Promise<void> {
         ' - create_artifact(name, content) to create one normal artifact',
         '    entry file in the active or specified project. It rejects',
         '    existing targets and can accept an artifactManifest sidecar.',
+        ' - create_project(name) to start a brand-new empty Open Design',
+        '    project (returns id + seeded conversation). Use this only',
+        '    when no suitable existing project is available; prefer',
+        '    list_projects + the active context first.',
         ' - write_file(path, content) to overwrite or freshly create any',
         '    project file when an ArtifactManifest is not required.',
         '    Use this to iterate on a file create_artifact already wrote.',
@@ -567,6 +610,8 @@ async function handleMcpToolCall(baseUrl: string, name: unknown, args: McpArgs) 
       }
       case 'create_artifact':
         return await createArtifact(baseUrl, args);
+      case 'create_project':
+        return await createProject(baseUrl, args);
       case 'write_file':
         return await writeFile(baseUrl, args);
       case 'delete_file':
@@ -579,6 +624,43 @@ async function handleMcpToolCall(baseUrl: string, name: unknown, args: McpArgs) 
   } catch (err) {
     return errorResult(formatError(err, baseUrl));
   }
+}
+
+async function createProject(baseUrl: string, args: McpArgs) {
+  requireString(args.name, 'name');
+  // The daemon's POST /api/projects requires an id matching
+  // /^[A-Za-z0-9._-]{1,128}$/ — minting a UUID here matches what the
+  // web UI does (apps/web/src/state/projects.ts) and keeps agents from
+  // having to invent project ids.
+  const id = randomUUID();
+  const payload: JsonObject = { id, name: args.name.trim() };
+  if (typeof args.skillId === 'string' && args.skillId.length > 0) {
+    payload.skillId = args.skillId;
+  }
+  if (typeof args.designSystemId === 'string' && args.designSystemId.length > 0) {
+    payload.designSystemId = args.designSystemId;
+  }
+  if (typeof args.pendingPrompt === 'string' && args.pendingPrompt.length > 0) {
+    payload.pendingPrompt = args.pendingPrompt;
+  }
+  if (typeof args.customInstructions === 'string') {
+    payload.customInstructions = args.customInstructions;
+  }
+  // Intentionally NOT forwarded: metadata, pluginId, pluginInputs,
+  // appliedPluginSnapshotId. metadata.baseDir is server-rejected on
+  // this endpoint anyway, and the plugin-resolution path is a UI-side
+  // concern that doesn't belong in the agent tool surface.
+  const url = `${baseUrl}/api/projects`;
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!resp.ok) {
+    return errorResult(await formatDaemonError(resp, url));
+  }
+  const json = (await resp.json()) as JsonObject;
+  return ok(json);
 }
 
 async function writeFile(baseUrl: string, args: McpArgs) {
