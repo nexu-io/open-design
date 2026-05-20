@@ -342,9 +342,54 @@ describe('HomeHero plugin picker', () => {
     // look like it had grown a second composer.
     expect(screen.queryByTestId('plugin-inputs-form')).toBeNull();
 
+    // After #2090: appending literal text after the rendered template
+    // must NOT drop the slot pill — the slot's text is still present
+    // in the prompt at the same position, so the highlight overlay
+    // keeps the chip styled and folds the user's addition into the
+    // trailing text part.
     rerender(
       <HomeHero
         prompt={`${prompt} Extra user edit.`}
+        onPromptChange={() => undefined}
+        onSubmit={() => undefined}
+        activePluginTitle="Community Import Smoke Test"
+        activeChipId={null}
+        onClearActivePlugin={() => undefined}
+        pluginInputFields={fields}
+        pluginInputValues={{ source: 'marketplace' }}
+        pluginInputTemplate="Create a compact import receipt for community-import-smoke-test installed from {{source}}."
+        pluginOptions={[]}
+        pluginsLoading={false}
+        pendingPluginId={null}
+        pendingChipId={null}
+        onPickPlugin={() => undefined}
+        onPickChip={() => undefined}
+        contextItemCount={0}
+        error={null}
+      />,
+    );
+
+    const slotAfterEdit = screen.getByTestId('home-hero-prompt-slot-source');
+    expect(slotAfterEdit.textContent).toBe('marketplace');
+    expect(slotAfterEdit.getAttribute('data-filled')).toBe('true');
+  });
+
+  it('drops the slot pill when the user edits the slot value out of the prompt', () => {
+    const fields: InputFieldSpec[] = [
+      {
+        name: 'source',
+        label: 'Import source',
+        type: 'select',
+        options: ['folder', 'zip', 'github', 'marketplace'],
+        default: 'marketplace',
+      },
+    ];
+    // The slot's rendered value ('marketplace') has been removed from
+    // the prompt — the highlight overlay no longer has a stable
+    // anchor and gracefully falls back to plain text.
+    render(
+      <HomeHero
+        prompt="Create a compact import receipt for community-import-smoke-test installed from somewhere else."
         onPromptChange={() => undefined}
         onSubmit={() => undefined}
         activePluginTitle="Community Import Smoke Test"

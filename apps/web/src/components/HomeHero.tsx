@@ -27,6 +27,11 @@ import type { SkillSummary } from '../types';
 import { Icon, type IconName } from './Icon';
 import { PluginInputsForm } from './PluginInputsForm';
 import {
+  buildPromptHighlightParts,
+  INPUT_PLACEHOLDER_PATTERN,
+  type PromptHighlightPart,
+} from './prompt-overlay-parts';
+import {
   chipsForGroup,
   type ChipGroup,
   type HomeHeroChip,
@@ -967,56 +972,6 @@ type PromptOverlayPart =
       text: string;
     };
 
-interface PromptHighlightPart {
-  kind: 'text' | 'slot';
-  text: string;
-  key?: string;
-  filled?: boolean;
-}
-
-const INPUT_PLACEHOLDER_PATTERN = /\{\{\s*([a-zA-Z_][\w-]*)\s*\}\}/g;
-
-function buildPromptHighlightParts(
-  template: string | null,
-  values: Record<string, unknown>,
-  prompt: string,
-): PromptHighlightPart[] | null {
-  if (!template) return null;
-  INPUT_PLACEHOLDER_PATTERN.lastIndex = 0;
-  const parts: PromptHighlightPart[] = [];
-  let rendered = '';
-  let lastIndex = 0;
-  let slotCount = 0;
-  let match: RegExpExecArray | null;
-  while ((match = INPUT_PLACEHOLDER_PATTERN.exec(template)) !== null) {
-    const placeholder = match[0];
-    const key = match[1];
-    if (!key) continue;
-    const literal = template.slice(lastIndex, match.index);
-    if (literal) {
-      parts.push({ kind: 'text', text: literal });
-      rendered += literal;
-    }
-    const replacement = stringifyTemplateValue(values[key], placeholder);
-    parts.push({
-      kind: 'slot',
-      key,
-      text: replacement.text,
-      filled: replacement.filled,
-    });
-    rendered += replacement.text;
-    slotCount += 1;
-    lastIndex = match.index + placeholder.length;
-  }
-  const tail = template.slice(lastIndex);
-  if (tail) {
-    parts.push({ kind: 'text', text: tail });
-    rendered += tail;
-  }
-  if (slotCount === 0 || rendered !== prompt) return null;
-  return parts;
-}
-
 function buildPromptOverlayParts(
   template: string | null,
   values: Record<string, unknown>,
@@ -1056,16 +1011,6 @@ function injectMentionParts(
 
 function pluginMentionText(record: InstalledPluginRecord): string {
   return inlineMentionToken(record.title);
-}
-
-function stringifyTemplateValue(
-  value: unknown,
-  placeholder: string,
-): { text: string; filled: boolean } {
-  if (value === undefined || value === null || value === '') {
-    return { text: placeholder, filled: false };
-  }
-  return { text: String(value), filled: true };
 }
 
 function buildHomeMentionEntities({
