@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
 import { commandSidecarProblems, commandSidecarSyntaxProblem } from "./tauri-migration-command-sidecar.ts";
@@ -71,7 +71,7 @@ async function main(): Promise<void> {
       "--remote",
       args.remote,
     ]);
-    const prBodyPath = resolve(args.prBodyPath ?? join(args.cwd, ".tmp/tauri-migration-pr-body.md"));
+    const prBodyPath = args.prBodyPath ?? join(args.cwd, ".tmp/tauri-migration-pr-body.md");
     await mkdir(dirname(prBodyPath), { recursive: true });
     await writeFile(prBodyPath, tauriMigrationPrBody(), "utf8");
 
@@ -144,7 +144,7 @@ function parseArgs(argv: string[]): Args {
   const parsed: Args = {
     cwd: process.cwd(),
     ghBin: process.env.GH_BIN ?? "gh",
-    ...(process.env.TAURI_PR_BODY_PATH == null ? {} : { prBodyPath: resolve(process.env.TAURI_PR_BODY_PATH) }),
+    ...(process.env.TAURI_PR_BODY_PATH == null ? {} : { prBodyPath: process.env.TAURI_PR_BODY_PATH }),
     reportDir: resolve(process.env.TAURI_M4_REPORT_DIR ?? defaultReportDir),
     remote: process.env.REMOTE ?? defaultRemote,
     workflow: process.env.GITHUB_WORKFLOW ?? defaultWorkflow,
@@ -193,7 +193,7 @@ function parseArgs(argv: string[]): Args {
       continue;
     }
     if (arg === "--pr-body-path") {
-      parsed.prBodyPath = resolve(value!);
+      parsed.prBodyPath = value!;
       index += 1;
       continue;
     }
@@ -252,11 +252,15 @@ async function resolveArgs(parsed: Args, extractedManifest?: string): Promise<Re
     cwd: parsed.cwd,
     ghBin: parsed.ghBin,
     manifest: manifestPath,
-    ...(parsed.prBodyPath == null ? {} : { prBodyPath: parsed.prBodyPath }),
+    ...(parsed.prBodyPath == null ? {} : { prBodyPath: resolvePathFromCwd(parsed.cwd, parsed.prBodyPath) }),
     remote: parsed.remote,
     reportDir: parsed.reportDir,
     workflow: parsed.workflow,
   };
+}
+
+function resolvePathFromCwd(cwd: string, value: string): string {
+  return isAbsolute(value) ? value : resolve(cwd, value);
 }
 
 async function readManifest(path: string): Promise<HandoffManifest> {

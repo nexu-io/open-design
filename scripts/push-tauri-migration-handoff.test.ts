@@ -115,6 +115,29 @@ test("push-tauri-migration-handoff honors receiver workflow, report, and PR body
   assert.match(prBody, /scripts\/download-tauri-m4-reports\.test\.ts scripts\/package-tauri-migration-handoff\.test\.ts scripts\/tauri-migration-status\.test\.ts/);
 });
 
+test("push-tauri-migration-handoff resolves relative PR body paths from receiver cwd", async (t) => {
+  const { manifestPath, remotePath, targetRepo } = await createHandoffFixture(
+    t,
+    "open-design-tauri-push-handoff-relative-pr-body-",
+  );
+  const relativePrBodyPath = join("custom pr", "tauri-pr.md");
+  const expectedPrBodyPath = join(targetRepo, relativePrBodyPath);
+
+  const result = await runPushHandoffScript(
+    targetRepo,
+    "--manifest",
+    manifestPath,
+    "--remote",
+    remotePath,
+    "--pr-body-path",
+    relativePrBodyPath,
+  );
+
+  assert.match(result.stdout, new RegExp(`PR body: ${escapeRegExp(expectedPrBodyPath)}`));
+  assert.match(result.stdout, new RegExp(`--body-file '${escapeRegExp(expectedPrBodyPath)}'`));
+  assert.match(await readFile(expectedPrBodyPath, "utf8"), /## Validation/);
+});
+
 test("push-tauri-migration-handoff honors REMOTE env default", async (t) => {
   const { manifestPath, remotePath, sourceHead, targetRepo } = await createHandoffFixture(
     t,
