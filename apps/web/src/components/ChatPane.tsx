@@ -10,7 +10,7 @@ import {
   DESIGN_SYSTEM_WORKSPACE_DISPLAY_TITLE,
   isDesignSystemWorkspacePrompt,
 } from '../design-system-auto-prompt';
-import { latestTodoWriteInputFromMessages } from '../runtime/todos';
+import { latestTodoWriteInputForPinnedCard } from '../runtime/todos';
 import { TodoCard } from './ToolCard';
 import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, ChatMessageFeedbackChange, Conversation, PreviewComment, ProjectFile, ProjectMetadata, SkillSummary } from '../types';
 import { dayKey, dayLabel, exactDateTime, messageTime, relativeTimeLong } from '../utils/chatTime';
@@ -279,6 +279,12 @@ interface Props {
   // message" without forcing a separate side widget.
   activePluginSnapshot?: AppliedPluginSnapshot | null;
   onCollapse?: () => void;
+  // SenseAudio BYOK only — wired straight through to ChatComposer for the
+  // in-composer image-model picker. Active protocol is read so the picker
+  // hides when the user is on any other BYOK tab (azure / openai / …).
+  byokApiProtocol?: AppConfig['apiProtocol'];
+  byokImageModel?: string;
+  onChangeByokImageModel?: (model: string) => void;
 }
 
 type Tab = 'chat' | 'comments';
@@ -327,6 +333,9 @@ export function ChatPane({
   activePluginSnapshot,
   skills = [],
   onCollapse,
+  byokApiProtocol,
+  byokImageModel,
+  onChangeByokImageModel,
 }: Props) {
   const t = useT();
   const logRef = useRef<HTMLDivElement | null>(null);
@@ -872,6 +881,9 @@ export function ChatPane({
             researchAvailable={researchAvailable}
             projectMetadata={projectMetadata}
             onProjectMetadataChange={onProjectMetadataChange}
+            byokApiProtocol={byokApiProtocol}
+            byokImageModel={byokImageModel}
+            onChangeByokImageModel={onChangeByokImageModel}
             currentSkillId={currentSkillId}
             onProjectSkillChange={onProjectSkillChange}
             pinnedPluginId={activePluginSnapshot?.pluginId ?? null}
@@ -903,7 +915,7 @@ function PinnedTodoSlot({
   // the slot tears down. Without it React would unmount immediately and
   // the card would pop out without animation.
   const [exiting, setExiting] = useState(false);
-  const input = latestTodoWriteInputFromMessages(messages);
+  const input = latestTodoWriteInputForPinnedCard(messages);
   if (input == null) return null;
   let snapshotKey: string;
   try {

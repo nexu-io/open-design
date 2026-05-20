@@ -4789,6 +4789,57 @@ a.avatar-item:visited {
 .media-provider-reload-btn:hover {
   color: var(--text);
 }
+.settings-about-diagnostics {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.settings-about-diagnostics-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.settings-about-diagnostics h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.settings-about-diagnostics-text .hint {
+  margin: 0;
+  font-size: 12px;
+}
+.diagnostics-export-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex: 0 0 auto;
+  max-width: 220px;
+}
+.diagnostics-export-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.diagnostics-export-status {
+  margin: 0;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+.diagnostics-export-status.success { color: var(--text); }
+.diagnostics-export-status.error { color: var(--danger, #d4543b); }
+
 .media-provider-list {
   display: flex;
   flex-direction: column;
@@ -11586,7 +11637,7 @@ button.connector-action.is-loading {
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
   margin-top: 8px;
 }
 .comment-popover-actions > * {
@@ -11596,6 +11647,14 @@ button.connector-action.is-loading {
      past the popover's right edge instead of breaking onto a new line.
      Issue #779. */
   max-width: 100%;
+}
+.comment-popover-actions-end {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-width: 0;
 }
 .comment-popover-remove {
   color: var(--red);
@@ -13538,6 +13597,14 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   text-decoration-color: color-mix(in srgb, var(--text-muted) 60%, transparent);
   color: var(--text-muted);
 }
+
+/* Stopped — terminal fallback for a run that ended mid-task */
+.todo-stopped {
+  background: color-mix(in srgb, var(--red) 8%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--red) 24%, transparent);
+}
+.todo-stopped .todo-check { color: var(--red); font-weight: 700; }
+.todo-stopped .todo-text { color: var(--text); }
 
 /* Composer extras */
 .composer.drag-active {
@@ -18859,6 +18926,11 @@ body.desktop-pet-shell .pet-task-item {
   font-size: 11px;
   color: var(--text-muted);
   line-height: 1.35;
+}
+
+/* --- CJK (Chinese / Japanese / Korean) Comfort Pass --- */
+:lang(zh), :lang(zh-CN), :lang(zh-TW), :lang(ja), :lang(ko) {
+  --sans: "Inter", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", "Hiragino Sans GB", "Source Han Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
 /* --- Arabic & Persian Comfort Pass --- */

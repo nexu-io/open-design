@@ -11,7 +11,9 @@
 
 The report uses T-2 Search Analytics data and compares it with T-9, the same
 weekday one week earlier. GSC backfills recent dates, so T-2 is the stable daily
-reporting window.
+reporting window. The workflow explicitly requests Search Analytics
+`dataState: all` so recently collected data is included even before Google marks
+it final.
 
 ## Card contents
 

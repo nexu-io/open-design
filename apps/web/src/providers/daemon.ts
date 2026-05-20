@@ -538,6 +538,7 @@ async function consumeDaemonRun({
         serverDeclaredSuccess = status.status === 'succeeded';
         onRunStatus?.(endStatus);
       } else {
+        onRunStatus?.('failed');
         handlers.onError(new Error('daemon stream disconnected before run completed'));
         return;
       }

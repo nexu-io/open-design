@@ -20,6 +20,7 @@ import { LOCALE_LABEL, LOCALES, useI18n } from '../i18n';
 import type { Locale } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { AgentIcon } from './AgentIcon';
+import { ExportDiagnosticsRow } from './ExportDiagnosticsButton';
 import { Icon } from './Icon';
 import {
   CUSTOM_MODEL_SENTINEL,
@@ -68,7 +69,7 @@ import type {
 import { testAgent, testApiProvider } from '../providers/connection-test';
 import { fetchProviderModels } from '../providers/provider-models';
 import { fetchConnectors, fetchDesignTemplates } from '../providers/registry';
-import { MEDIA_PROVIDERS } from '../media/models';
+import { IMAGE_MODELS, MEDIA_PROVIDERS } from '../media/models';
 import { XaiOAuthControl } from './XaiOAuthControl';
 import type { MediaProvider } from '../media/models';
 import { Toast } from './Toast';
@@ -444,6 +445,7 @@ function currentApiProtocolConfig(config: AppConfig): ApiProtocolConfig {
     model: config.model,
     apiVersion: config.apiVersion ?? '',
     apiProviderBaseUrl: config.apiProviderBaseUrl ?? null,
+    byokImageModel: config.byokImageModel ?? '',
   };
 }
 
@@ -460,6 +462,11 @@ function applyApiProtocolConfig(
     model: apiConfig.model,
     apiProviderBaseUrl: apiConfig.apiProviderBaseUrl ?? null,
     apiVersion: protocol === 'azure' ? (apiConfig.apiVersion ?? '') : '',
+    // byokImageModel is SenseAudio-only — flipping to another BYOK tab
+    // shouldn't carry a SenseAudio image-model choice into, say, the
+    // OpenAI form. Mirrors the apiVersion guarding above.
+    byokImageModel:
+      protocol === 'senseaudio' ? (apiConfig.byokImageModel ?? '') : '',
   };
 }
 
@@ -2683,6 +2690,34 @@ export function SettingsDialog({
                   />
                 </label>
               ) : null}
+              {apiProtocol === 'senseaudio' ? (
+                <label className="field">
+                  <span className="field-label">{t('settings.byokImageModel')}</span>
+                  <select
+                    value={cfg.byokImageModel ?? ''}
+                    onChange={(e) =>
+                      updateApiConfig({ byokImageModel: e.target.value })
+                    }
+                  >
+                    {/* Default-empty option resolves to the registry default
+                        on the daemon side (senseaudio-image-2.0-260319 today).
+                        Listing it explicitly lets the picker show what the
+                        unconfigured state actually means. */}
+                    <option value="">
+                      {IMAGE_MODELS.find((m) => m.provider === 'senseaudio')?.label
+                        ?? 'senseaudio-image-2.0'}
+                      {' (default)'}
+                    </option>
+                    {IMAGE_MODELS.filter((m) => m.provider === 'senseaudio').map(
+                      (m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.label}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                </label>
+              ) : null}
               <p className="hint">{t('settings.apiHint')}</p>
             </section>
           )}
@@ -2877,6 +2912,13 @@ export function SettingsDialog({
               ) : (
                 <div className="empty-card">{t('settings.versionUnavailable')}</div>
               )}
+              <div className="settings-about-diagnostics">
+                <div className="settings-about-diagnostics-text">
+                  <h4>{t('diagnostics.exportTitle')}</h4>
+                  <p className="hint">{t('diagnostics.exportHint')}</p>
+                </div>
+                <ExportDiagnosticsRow />
+              </div>
             </section>
           ) : null}
           {aboutToast ? (

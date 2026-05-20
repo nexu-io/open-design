@@ -229,7 +229,7 @@ export interface SettingsClickByokProviderOptionProps {
   // Tracking doc names azure/google/ollama as azure_openai/google_gemini/
   // ollama_cloud — we forward the code value verbatim and let dashboards
   // map; see tracking-doc-issues.md §2.5.
-  provider_id: 'anthropic' | 'openai' | 'azure' | 'ollama' | 'google';
+  provider_id: 'anthropic' | 'openai' | 'azure' | 'ollama' | 'google' | 'senseaudio';
   // True when the clicked chip was already the active protocol (no-op
   // toggle); false when the click switches protocol.
   is_selected: boolean;
@@ -242,10 +242,10 @@ export interface SettingsClickByokFieldProps {
   action: 'focus_byok_field';
   field_id: 'api_key' | 'base_url' | 'model';
   // Code's `apiProtocol` is wider than the CSV's BYOK provider enum
-  // (anthropic|openai|azure|ollama|google). We forward the code value
-  // verbatim so dashboards can group by the actual protocol; the CSV enum
-  // is a strict subset the product team can revise.
-  provider_id: 'anthropic' | 'openai' | 'azure' | 'ollama' | 'google';
+  // (anthropic|openai|azure|ollama|google|senseaudio). We forward the code
+  // value verbatim so dashboards can group by the actual protocol; the CSV
+  // enum is a strict subset the product team can revise.
+  provider_id: 'anthropic' | 'openai' | 'azure' | 'ollama' | 'google' | 'senseaudio';
   has_value: boolean;
 }
 
@@ -261,7 +261,7 @@ export interface SettingsCliTestResultProps {
 export interface SettingsByokTestResultProps {
   page: 'settings';
   area: 'execution_model';
-  provider_id: 'anthropic' | 'openai' | 'azure' | 'ollama' | 'google';
+  provider_id: 'anthropic' | 'openai' | 'azure' | 'ollama' | 'google' | 'senseaudio';
   result: 'success' | 'failed' | 'timeout';
   error_code?: string;
   duration_ms: number;

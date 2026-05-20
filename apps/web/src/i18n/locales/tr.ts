@@ -202,6 +202,7 @@ export const tr: Dict = {
   'settings.azureDeploymentModelHint':
     'Azure OpenAI icin bu alan /openai/deployments/<model> icindeki dagitim adi olarak kullanilir. Azureda olusturdugunuz dagitim adini girin.',
   'settings.apiVersion': 'API sürümü',
+  'settings.byokImageModel': 'Görüntü oluşturma modeli',
   'settings.maxTokens': 'Maks. token (isteğe bağlı)',
   'settings.maxTokensHint':
     'Yanıt uzunluğu sınırı. Her modelin ayarlanmış bir varsayılanı vardır (yer tutucuda görünür); kullanmak için boş bırakın, üzerine yazmak için bir sayı girin.',
@@ -1543,4 +1544,11 @@ export const tr: Dict = {
   'liveArtifact.viewer.code.loading': 'Kod yükleniyor…',
   'liveArtifact.viewer.code.unavailable': 'Kod henüz kullanılamıyor.',
   'liveArtifact.viewer.code.empty': 'Bu kod dosyası boş.',
+  // Diagnostics export
+  'diagnostics.exportTitle': 'Tanılama dışa aktar',
+  'diagnostics.exportButton': 'Tanılama dışa aktar',
+  'diagnostics.exportHint': 'Son uygulama günlüklerini ve makine bilgilerini ekibe gönderebileceğiniz bir zip dosyasında paketler.',
+  'diagnostics.exporting': 'Dışa aktarılıyor…',
+  'diagnostics.exportSuccess': 'Tanılama {path} konumuna kaydedildi',
+  'diagnostics.exportFailed': 'Tanılama dışa aktarılamadı: {message}',
 };

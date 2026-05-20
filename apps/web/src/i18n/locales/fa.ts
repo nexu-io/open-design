@@ -202,6 +202,7 @@ export const fa: Dict = {
   'settings.azureDeploymentModelHint':
     'در Azure OpenAI، این فیلد به عنوان نام استقرار در /openai/deployments/<model> استفاده می‌شود. نام استقراری را که در Azure ساخته‌اید وارد کنید.',
   'settings.apiVersion': 'نسخه API',
+  'settings.byokImageModel': 'مدل تولید تصویر',
   'settings.maxTokens': 'حداکثر توکن (اختیاری)',
   'settings.maxTokensHint':
     'سقف طول پاسخ. هر مدل مقدار پیش‌فرض تنظیم‌شدهٔ خود را دارد (در placeholder نمایش داده می‌شود)؛ برای استفاده از آن خالی بگذارید، یا برای جایگزینی، عددی وارد کنید.',
@@ -1599,4 +1600,11 @@ export const fa: Dict = {
   'liveArtifact.viewer.code.loading': 'در حال بارگذاری کد…',
   'liveArtifact.viewer.code.unavailable': 'کد هنوز در دسترس نیست.',
   'liveArtifact.viewer.code.empty': 'این فایل کد خالی است.',
+  // Diagnostics export
+  'diagnostics.exportTitle': 'صادر کردن تشخیص',
+  'diagnostics.exportButton': 'صادر کردن تشخیص',
+  'diagnostics.exportHint': 'گزارش‌های اخیر برنامه و اطلاعات دستگاه را در یک فایل zip بسته‌بندی می‌کند تا برای تیم ارسال شود.',
+  'diagnostics.exporting': 'در حال صادر کردن…',
+  'diagnostics.exportSuccess': 'تشخیص در {path} ذخیره شد',
+  'diagnostics.exportFailed': 'صادر کردن تشخیص ناموفق بود: {message}',
 };

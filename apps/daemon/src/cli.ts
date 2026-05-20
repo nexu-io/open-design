@@ -220,6 +220,7 @@ const SUBCOMMAND_MAP = {
   skills: runSkills,
   'design-systems': runDesignSystems,
   craft: runCraft,
+  diagnostics: runDiagnostics,
   status: runStatus,
   version: runVersion,
   doctor: runDoctor,
@@ -316,6 +317,11 @@ function printRootHelp() {
 
   od ui <list|show|respond|revoke|prefill> [args]
       Read and answer GenUI surfaces (form / choice / confirmation / oauth-prompt) headlessly.
+
+  od diagnostics export [<path>] [--json]
+      Bundle daemon/web/desktop logs, machine info, and recent crash reports
+      into a zip for support tickets. Same output as Settings → About →
+      Export diagnostics.
 
   "$OD_NODE_BIN" "$OD_BIN" tools ...
       Recommended agent-runtime form; avoids relying on user PATH for od or node.
@@ -4492,6 +4498,82 @@ async function runCraft(args)         { return runLibraryList('craft', args); }
 async function runStatus(args) {
   // Alias of `od daemon status`.
   return runDaemon(['status', ...args]);
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand: od diagnostics export <path> [--json]
+//
+// CLI surface for the Settings → About “Export diagnostics” feature. The
+// daemon already exposes the bundle behind a local-loopback HTTP endpoint;
+// this command is a thin shell over that endpoint so headless callers (CI,
+// `od doctor` follow-ups, shell scripts) can collect a support bundle
+// without driving the web UI.
+// ---------------------------------------------------------------------------
+
+const DIAGNOSTICS_STRING_FLAGS = new Set(['daemon-url', 'output']);
+const DIAGNOSTICS_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
+
+async function runDiagnostics(args) {
+  const sub = args[0];
+  if (!sub || sub === 'help' || args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage:
+  od diagnostics export [<path>] [--output <path>] [--json] [--daemon-url <url>]
+
+Bundles daemon/web/desktop logs, machine info, and recent crash reports
+into a zip. The bundle is the same one Settings → About → Export
+diagnostics produces.
+
+  <path>                 Where to write the zip. Defaults to
+                         ./open-design-diagnostics-<timestamp>.zip in the
+                         current working directory. Alias: --output <path>.
+  --json                 Print {path, sizeBytes} on stdout instead of a
+                         human-readable summary. The file is still written
+                         to <path>.
+  --daemon-url <url>     Override the daemon HTTP base URL.`);
+    process.exit(0);
+  }
+  if (sub !== 'export') {
+    console.error(`unknown subcommand: od diagnostics ${sub}`);
+    process.exit(2);
+  }
+
+  const flags = parseFlags(args.slice(1), {
+    string: DIAGNOSTICS_STRING_FLAGS,
+    boolean: DIAGNOSTICS_BOOLEAN_FLAGS,
+  });
+  const positional = args.slice(1).filter((a) => !a.startsWith('-'));
+  const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
+
+  const { DIAGNOSTICS_EXPORT_PATH, DIAGNOSTICS_FILENAME_PREFIX, diagnosticsFileName } =
+    await import('@open-design/diagnostics');
+  const fs = await import('node:fs/promises');
+  const path = await import('node:path');
+
+  const explicitOutput = typeof flags.output === 'string' && flags.output.length > 0
+    ? flags.output
+    : positional[0];
+  const targetPath = path.resolve(explicitOutput ?? diagnosticsFileName(DIAGNOSTICS_FILENAME_PREFIX));
+
+  let resp;
+  try {
+    resp = await fetch(`${base}${DIAGNOSTICS_EXPORT_PATH}`);
+  } catch (err) {
+    return exitWithStructuredError({
+      code:    'daemon-not-running',
+      message: `Cannot reach daemon at ${base}: ${err?.message ?? err}`,
+    });
+  }
+  if (!resp.ok) return structuredHttpFailure(resp);
+
+  const buf = Buffer.from(await resp.arrayBuffer());
+  await fs.mkdir(path.dirname(targetPath), { recursive: true });
+  await fs.writeFile(targetPath, buf);
+
+  if (flags.json) {
+    process.stdout.write(JSON.stringify({ path: targetPath, sizeBytes: buf.length }) + '\n');
+    return;
+  }
+  console.log(`Wrote diagnostics bundle to ${targetPath} (${buf.length} bytes).`);
 }
 
 async function runVersion(args) {

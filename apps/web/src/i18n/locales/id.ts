@@ -202,6 +202,7 @@ export const id: Dict = {
   'settings.azureDeploymentModelHint':
     'Untuk Azure OpenAI, field ini digunakan sebagai nama deployment di /openai/deployments/<model>. Masukkan nama deployment yang kamu buat di Azure.',
   'settings.apiVersion': 'Versi API',
+  'settings.byokImageModel': 'Model pembuatan gambar',
   'settings.maxTokens': 'Token maks (opsional)',
   'settings.maxTokensHint':
     'Batas panjang respons. Setiap model punya default sendiri; kosongkan untuk memakainya, atau isi angka untuk menimpa.',
@@ -1601,4 +1602,12 @@ export const id: Dict = {
   'settings.memoryModelInlineHintByok': 'Optional. Reuses your chat API key on the same provider — picking a different (usually cheaper) model only changes the request body.',
   'settings.memoryModelInlineFlashSaved': 'Saved',
   'settings.memoryModelInlineFlashCleared': 'Cleared',
+
+  // Diagnostics export
+  'diagnostics.exportTitle': 'Ekspor diagnostik',
+  'diagnostics.exportButton': 'Ekspor diagnostik',
+  'diagnostics.exportHint': 'Mengemas log aplikasi terbaru dan info perangkat ke dalam zip untuk dibagikan ke tim.',
+  'diagnostics.exporting': 'Mengekspor…',
+  'diagnostics.exportSuccess': 'Diagnostik disimpan di {path}',
+  'diagnostics.exportFailed': 'Gagal mengekspor diagnostik: {message}',
 };

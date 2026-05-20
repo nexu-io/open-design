@@ -1872,9 +1872,10 @@ function workspaceActivityProgress(
   return 18;
 }
 
-function todoStatusClass(status: 'pending' | 'in_progress' | 'completed'): 'pending' | 'running' | 'succeeded' {
+function todoStatusClass(status: ReturnType<typeof latestTodosFromEvents>[number]['status']): 'pending' | 'running' | 'succeeded' | 'failed' {
   if (status === 'completed') return 'succeeded';
   if (status === 'in_progress') return 'running';
+  if (status === 'stopped') return 'failed';
   return 'pending';
 }
 

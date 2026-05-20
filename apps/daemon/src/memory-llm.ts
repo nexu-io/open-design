@@ -142,6 +142,15 @@ const PROVIDER_DEFAULTS = {
     model: 'gemma3:4b',
     baseUrl: 'https://ollama.com',
   },
+  // SenseAudio's chat API is OpenAI-compatible (POST /v1/chat/completions,
+  // Bearer auth), so the extractor falls through to callOpenAI with this
+  // base URL and the user's SenseAudio API key. The default model is the
+  // small/fast variant so auto-pick stays cheap; users can swap in
+  // senseaudio-s2 or any gateway model via the picker.
+  senseaudio: {
+    model: 'senseaudio-s2-flash',
+    baseUrl: 'https://api.senseaudio.cn',
+  },
 };
 
 // Map an explicit override provider to the env var the daemon should
@@ -168,6 +177,13 @@ function envKeyFor(provider) {
   }
   if (provider === 'ollama') {
     return process.env.OLLAMA_API_KEY?.trim() || '';
+  }
+  if (provider === 'senseaudio') {
+    return (
+      process.env.OD_SENSEAUDIO_API_KEY?.trim()
+      || process.env.SENSEAUDIO_API_KEY?.trim()
+      || ''
+    );
   }
   return '';
 }

@@ -389,7 +389,7 @@ export function TodoCard({ input, runStreaming, runSucceeded, onDismiss }: { inp
   // The user can flip it manually via the header button — that local
   // override sticks for the lifetime of this card.
   const hasInProgress = todos.some((todo) => todo.status === 'in_progress');
-  const hasPending = todos.some((todo) => todo.status !== 'completed');
+  const hasPending = todos.some((todo) => todo.status === 'pending' || todo.status === 'in_progress');
   const defaultExpanded = todos.length > 0 && (hasInProgress || hasPending || runStreaming);
   const [overrideExpanded, setOverrideExpanded] = useState<boolean | null>(null);
   const expanded = overrideExpanded ?? defaultExpanded;
@@ -449,7 +449,13 @@ export function TodoCard({ input, runStreaming, runSucceeded, onDismiss }: { inp
             {todos.map((todo, i) => (
               <li key={i} className={`todo-item todo-${todo.status}`}>
                 <span className="todo-check" aria-hidden>
-                  {todo.status === 'completed' ? '✓' : todo.status === 'in_progress' ? '◐' : '○'}
+                  {todo.status === 'completed'
+                    ? '✓'
+                    : todo.status === 'in_progress'
+                      ? '◐'
+                      : todo.status === 'stopped'
+                        ? '!'
+                        : '○'}
                 </span>
                 <span className="todo-text">
                   {todo.status === 'in_progress' && todo.activeForm ? todo.activeForm : todo.content}

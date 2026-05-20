@@ -87,6 +87,7 @@ export async function startDaemonSidecar(runtime: SidecarRuntimeContext<SidecarS
       );
     },
     port: parsePort(process.env[DAEMON_PORT_ENV]),
+    runtime,
   });
 
   // PR #974 round 6 (mrcfps): tools-dev's split-start hardening reads

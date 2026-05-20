@@ -262,6 +262,24 @@ function renderBlock(block: Block, key: number): ReactNode {
   return null;
 }
 
+// Allowed schemes / forms for image `src` attributes. The BYOK chat
+// tool loop emits relative URLs like `/api/byok-image/<id>.png` which
+// the web's Next.js rewrites proxy to the daemon — that's the common
+// case. data: + blob: cover inline / generated images. http(s):// is
+// allowed so a model can reference public images. Anything else
+// (javascript:, file:, vbscript:, …) is rejected so a hallucinated
+// or adversarial URL cannot exfiltrate or execute.
+function isSafeMarkdownImageSrc(src: string): boolean {
+  if (!src) return false;
+  if (src.startsWith('/') && !src.startsWith('//')) return true;
+  return (
+    src.startsWith('http://')
+    || src.startsWith('https://')
+    || src.startsWith('data:image/')
+    || src.startsWith('blob:')
+  );
+}
+
 // Inline pass: tokenize into runs of `code`, **bold**, *italic*, links,
 // and plain text. We walk the string with a regex that matches whichever
 // delimiter shows up next; everything between delimiters becomes a text
@@ -270,14 +288,19 @@ function renderInline(text: string): ReactNode {
   const out: ReactNode[] = [];
   // Order matters:
   //  1. inline code first so its contents are not re-tokenized as bold/italic.
-  //  2. explicit `[text](url)` markdown links before bare URL autolink so the
+  //  2. image syntax `![alt](url)` BEFORE the link branch. Both share
+  //     `[…](…)` and the image is only distinguished by the leading `!`;
+  //     letting the link branch win would render `[alt](url)` as a text
+  //     link with `!` stranded as a sibling text node and the user would
+  //     see the link copy but never the image.
+  //  3. explicit `[text](url)` markdown links before bare URL autolink so the
   //     autolink does not greedily swallow the closing paren.
-  //  3. bare http(s) URL autolink BEFORE italic markers — chat output often
+  //  4. bare http(s) URL autolink BEFORE italic markers — chat output often
   //     contains OAuth-style links with `_type=` / `_id=` query params, and
   //     leaving italic to win turns the URL into an italic-fragmented mess.
-  //  4. bold (**a** / __a__) before italic (*a* / _a_).
+  //  5. bold (**a** / __a__) before italic (*a* / _a_).
   const re =
-    /(`[^`]+`)|\[([^\]]+)\]\(([^)\s]+)\)|(https?:\/\/[^\s)<>]+)|(\*\*[^*]+\*\*)|(__[^_]+__)|(\*[^*\n]+\*)|(_[^_\n]+_)/g;
+    /(`[^`]+`)|!\[([^\]]*)\]\(([^)\s]+)\)|\[([^\]]+)\]\(([^)\s]+)\)|(https?:\/\/[^\s)<>]+)|(\*\*[^*]+\*\*)|(__[^_]+__)|(\*[^*\n]+\*)|(_[^_\n]+_)/g;
   let lastIndex = 0;
   let m: RegExpExecArray | null;
   let key = 0;
@@ -291,40 +314,61 @@ function renderInline(text: string): ReactNode {
           {m[1].slice(1, -1)}
         </code>,
       );
-    } else if (m[2] && m[3]) {
+    } else if (m[3] !== undefined) {
+      // Image: m[2] = alt (may be empty), m[3] = src
+      const src = m[3];
+      const alt = m[2] || '';
+      if (isSafeMarkdownImageSrc(src)) {
+        out.push(
+          <img
+            key={key++}
+            className="md-image"
+            src={src}
+            alt={alt}
+            loading="lazy"
+            referrerPolicy="no-referrer"
+            style={{ maxWidth: '100%', height: 'auto', borderRadius: 6 }}
+          />,
+        );
+      } else {
+        // Unsafe scheme — drop the image tag but keep the alt text so
+        // the user sees what the model meant to show.
+        pushText(out, alt, key++);
+      }
+    } else if (m[4] && m[5]) {
       out.push(
         <a
           key={key++}
           className="md-link"
-          href={m[3]}
-          target="_blank"
-          rel="noreferrer noopener"
-        >
-          {m[2]}
-        </a>,
-      );
-    } else if (m[4]) {
-      // Bare URL — autolink with the URL as both href and visible text,
-      // matching the Markdown `<https://…>` autolink convention.
-      out.push(
-        <a
-          key={key++}
-          className="md-link md-link-bare"
-          href={m[4]}
+          href={m[5]}
           target="_blank"
           rel="noreferrer noopener"
         >
           {m[4]}
         </a>,
       );
-    } else if (m[5]) {
-      out.push(<strong key={key++}>{m[5].slice(2, -2)}</strong>);
     } else if (m[6]) {
-      out.push(<strong key={key++}>{m[6].slice(2, -2)}</strong>);
+      // Bare URL — autolink with the URL as both href and visible text,
+      // matching the Markdown `<https://…>` autolink convention.
+      out.push(
+        <a
+          key={key++}
+          className="md-link md-link-bare"
+          href={m[6]}
+          target="_blank"
+          rel="noreferrer noopener"
+        >
+          {m[6]}
+        </a>,
+      );
     } else if (m[7]) {
-      out.push(<em key={key++}>{m[7].slice(1, -1)}</em>);
+      out.push(<strong key={key++}>{m[7].slice(2, -2)}</strong>);
     } else if (m[8]) {
-      out.push(<em key={key++}>{m[8].slice(1, -1)}</em>);
+      out.push(<strong key={key++}>{m[8].slice(2, -2)}</strong>);
+    } else if (m[9]) {
+      out.push(<em key={key++}>{m[9].slice(1, -1)}</em>);
+    } else if (m[10]) {
+      out.push(<em key={key++}>{m[10].slice(1, -1)}</em>);
     }
     lastIndex = re.lastIndex;
   }

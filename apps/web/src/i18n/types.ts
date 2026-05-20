@@ -252,6 +252,7 @@ export interface Dict {
   'settings.azureDeploymentModelHint': string;
   'settings.azureModelFetchHint': string;
   'settings.apiVersion': string;
+  'settings.byokImageModel': string;
   'settings.apiHint': string;
   'settings.skipForNow': string;
   'settings.getStarted': string;
@@ -2190,4 +2191,12 @@ export interface Dict {
   'critiqueTheater.settingsEnabledDescription': string;
   'critiqueTheater.settingsEnabledProjectHint': string;
   'critiqueTheater.settingsEnabledNoProjectHint': string;
+
+  // Diagnostics export
+  'diagnostics.exportTitle': string;
+  'diagnostics.exportButton': string;
+  'diagnostics.exportHint': string;
+  'diagnostics.exporting': string;
+  'diagnostics.exportSuccess': string;
+  'diagnostics.exportFailed': string;
 }

@@ -105,7 +105,10 @@ export function DesignSystemsTab({
     return editable.filter((system) => (system.status ?? 'draft') === userFilter);
   }, [systems, userFilter]);
 
-  const surfaceCounts = useMemo(() => {
+  // Total systems per surface, ignoring every active filter. Drives the
+  // "this surface is now empty" fallback below — that guard must react to
+  // the catalog itself, not to a transient style/search filter.
+  const surfaceTotals = useMemo(() => {
     const counts: Record<SurfaceFilter, number> = { all: librarySystems.length, web: 0, image: 0, video: 0, audio: 0 };
     for (const s of librarySystems) counts[surfaceOf(s)]++;
     return counts;
@@ -124,17 +127,21 @@ export function DesignSystemsTab({
   // If the currently selected surface has zero items, fall back to 'all'.
   // If the current category is no longer present in the filtered list, fall back to 'All'.
   useEffect(() => {
-    if (surfaceFilter !== 'all' && surfaceCounts[surfaceFilter] === 0) {
+    if (surfaceFilter !== 'all' && surfaceTotals[surfaceFilter] === 0) {
       setSurfaceFilter('all');
       setCategory('All');
     } else if (category !== 'All' && !categories.includes(category)) {
       setCategory('All');
     }
-  }, [systems, surfaceFilter, surfaceCounts, category, categories]);
+  }, [systems, surfaceFilter, surfaceTotals, category, categories]);
 
-  const filtered = useMemo(() => {
+  // Systems matching the active style category and search text, before the
+  // surface filter is applied. Both the surface pill counts and the visible
+  // grid derive from this so a surface chip always reports its own result
+  // set rather than the unfiltered catalog total.
+  const queryScoped = useMemo(() => {
     const q = filter.trim().toLowerCase();
-    return surfaceScoped.filter((s) => {
+    return librarySystems.filter((s) => {
       if (category !== 'All' && (s.category || 'Uncategorized') !== category) return false;
       if (!q) return true;
       const summary = localizeDesignSystemSummary(locale, s).toLowerCase();
@@ -149,7 +156,22 @@ export function DesignSystemsTab({
         categoryLabel.includes(q)
       );
     });
-  }, [surfaceScoped, filter, category, locale]);
+  }, [librarySystems, filter, category, locale]);
+
+  const surfaceCounts = useMemo(() => {
+    const counts: Record<SurfaceFilter, number> = {
+      all: queryScoped.length, web: 0, image: 0, video: 0, audio: 0,
+    };
+    for (const s of queryScoped) counts[surfaceOf(s)]++;
+    return counts;
+  }, [queryScoped]);
+
+  const filtered = useMemo(
+    () => surfaceFilter === 'all'
+      ? queryScoped
+      : queryScoped.filter((s) => surfaceOf(s) === surfaceFilter),
+    [queryScoped, surfaceFilter],
+  );
 
   // Category metadata is authored in English; keep raw values in state for
   // filtering while localizing the visible labels for the current UI locale.
@@ -363,7 +385,13 @@ export function DesignSystemsTab({
           aria-label={t('ds.surfaceLabel')}
         >
           <span className="examples-filter-label">{t('ds.surfaceLabel')}</span>
-          {SURFACE_PILLS.filter((p) => p.value === 'all' || surfaceCounts[p.value] > 0).map((p) => (
+          {/* Hide chips with no items in the active style/search filter, but
+              always keep "all" and the currently selected surface — otherwise a
+              transient search could remove the active chip and leave the grid
+              filtered with no chip showing aria-selected. */}
+          {SURFACE_PILLS.filter(
+            (p) => p.value === surfaceFilter || p.value === 'all' || surfaceCounts[p.value] > 0,
+          ).map((p) => (
             <button
               key={p.value}
               type="button"
@@ -371,10 +399,7 @@ export function DesignSystemsTab({
               aria-selected={surfaceFilter === p.value}
               data-testid={`design-systems-surface-${p.value}`}
               className={`filter-pill ${surfaceFilter === p.value ? 'active' : ''}`}
-              onClick={() => {
-                setSurfaceFilter(p.value);
-                setCategory('All');
-              }}
+              onClick={() => setSurfaceFilter(p.value)}
             >
               {t(p.labelKey)}
               <span className="filter-pill-count">{surfaceCounts[p.value]}</span>

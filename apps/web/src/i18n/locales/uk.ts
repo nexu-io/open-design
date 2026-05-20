@@ -203,6 +203,7 @@ export const uk: Dict = {
   'settings.azureDeploymentModelHint':
     'Для Azure OpenAI це поле використовується як назва розгортання в /openai/deployments/<model>. Введіть назву розгортання, створену в Azure.',
   'settings.apiVersion': 'Версія API',
+  'settings.byokImageModel': 'Модель генерації зображень',
   'settings.maxTokens': 'Макс. токенів (необов\'язково)',
   'settings.maxTokensHint':
     'Обмеження на довжину відповіді. Кожна модель має налаштовану за замовчуванням (показано в заповнювачі); залиште поле порожнім, щоб використовувати її, або введіть число, щоб переопрацювати.',
@@ -1598,4 +1599,12 @@ export const uk: Dict = {
   'liveArtifact.viewer.code.loading': 'Завантаження коду…',
   'liveArtifact.viewer.code.unavailable': 'Код ще недоступний.',
   'liveArtifact.viewer.code.empty': 'Цей файл коду порожній.',
+
+  // Diagnostics export
+  'diagnostics.exportTitle': 'Експорт діагностики',
+  'diagnostics.exportButton': 'Експорт діагностики',
+  'diagnostics.exportHint': 'Збирає останні журнали застосунку та інформацію про пристрій у zip для надсилання команді.',
+  'diagnostics.exporting': 'Експортування…',
+  'diagnostics.exportSuccess': 'Діагностику збережено: {path}',
+  'diagnostics.exportFailed': 'Не вдалося експортувати діагностику: {message}',
 };

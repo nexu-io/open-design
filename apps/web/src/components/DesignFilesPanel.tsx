@@ -1192,7 +1192,14 @@ export function DesignFilesPanel({
         </div>
       </div>
       {preview && previewFile ? (
+        // Key on the file name so React unmounts the previous DfPreview
+        // (and its iframe / image element) when the user clicks a
+        // different file. Without this, React diffing reuses the same
+        // iframe DOM node and the browser keeps showing the first
+        // file's contents — only the `src` prop changes but the iframe
+        // never actually navigates.
         <DfPreview
+          key={previewFile.name}
           projectId={projectId}
           file={previewFile}
           onOpen={() => onOpenFile(previewFile.name)}

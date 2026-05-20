@@ -205,6 +205,7 @@ export const ko: Dict = {
   'settings.azureDeploymentModelHint':
     'Azure OpenAI에서는 이 필드가 /openai/deployments/<model>의 배포 이름으로 사용됩니다. Azure에서 만든 배포 이름을 입력하세요.',
   'settings.apiVersion': 'API 버전',
+  'settings.byokImageModel': '이미지 생성 모델',
   'settings.apiHint': '요청은 로컬 daemon 프록시를 통해 설정한 Base URL로 전송됩니다. 키는 이 브라우저에만 저장되며 제공자 요청과 함께 전송됩니다.',
   'settings.skipForNow': '지금은 건너뛰기',
   'settings.getStarted': '시작하기',
@@ -1606,4 +1607,11 @@ export const ko: Dict = {
   'liveArtifact.viewer.code.loading': '코드 로드 중…',
   'liveArtifact.viewer.code.unavailable': '아직 코드를 사용할 수 없습니다.',
   'liveArtifact.viewer.code.empty': '이 코드 파일은 비어 있습니다.',
+  // Diagnostics export
+  'diagnostics.exportTitle': '진단 정보 내보내기',
+  'diagnostics.exportButton': '진단 정보 내보내기',
+  'diagnostics.exportHint': '최근 앱 로그와 기기 정보를 zip으로 묶어 팀에 공유할 수 있게 만듭니다.',
+  'diagnostics.exporting': '내보내는 중…',
+  'diagnostics.exportSuccess': '진단 정보를 {path}에 저장했습니다',
+  'diagnostics.exportFailed': '진단 정보 내보내기 실패: {message}',
 };

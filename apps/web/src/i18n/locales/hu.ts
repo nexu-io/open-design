@@ -202,6 +202,7 @@ export const hu: Dict = {
   'settings.azureDeploymentModelHint':
     'Azure OpenAI esetén ez a mező a /openai/deployments/<model> deployment neveként szerepel. Add meg az Azure-ban létrehozott deployment nevét.',
   'settings.apiVersion': 'API-verzió',
+  'settings.byokImageModel': 'Képgenerálási modell',
   'settings.maxTokens': 'Max tokenek (opcionális)',
   'settings.maxTokensHint':
     'A válasz hosszának felső határa. Minden modellnek van hangolt alapértelmezése (placeholderként látható); hagyd üresen az alkalmazásához, vagy adj meg számot a felülíráshoz.',
@@ -1566,4 +1567,11 @@ export const hu: Dict = {
   'liveArtifact.viewer.code.loading': 'Kód betöltése…',
   'liveArtifact.viewer.code.unavailable': 'A kód még nem érhető el.',
   'liveArtifact.viewer.code.empty': 'Ez a kódfájl üres.',
+  // Diagnostics export
+  'diagnostics.exportTitle': 'Diagnosztika exportálása',
+  'diagnostics.exportButton': 'Diagnosztika exportálása',
+  'diagnostics.exportHint': 'A legutóbbi alkalmazásnaplókat és gépinformációkat zip fájlba csomagolja a csapatnak való elküldéshez.',
+  'diagnostics.exporting': 'Exportálás…',
+  'diagnostics.exportSuccess': 'Diagnosztika mentve: {path}',
+  'diagnostics.exportFailed': 'Diagnosztika exportálása sikertelen: {message}',
 };

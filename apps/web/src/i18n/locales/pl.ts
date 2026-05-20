@@ -202,6 +202,7 @@ export const pl: Dict = {
   'settings.azureDeploymentModelHint':
       'Dla Azure OpenAI to pole jest używane jako nazwa wdrożenia w /openai/deployments/<model>. Wpisz nazwę wdrożenia utworzonego w Azure.',
   'settings.apiVersion': 'Wersja API',
+  'settings.byokImageModel': 'Model generowania obrazów',
   'settings.maxTokens': 'Maks. liczba tokenów (opcjonalnie)',
   'settings.maxTokensHint':
       'Limit długości odpowiedzi. Każdy model ma dostrojony domyślny limit (widoczny jako placeholder); pozostaw puste, aby go użyć, lub wpisz liczbę.',
@@ -1556,4 +1557,11 @@ export const pl: Dict = {
   'liveArtifact.viewer.code.loading': 'Ładowanie kodu…',
   'liveArtifact.viewer.code.unavailable': 'Kod nie jest jeszcze dostępny.',
   'liveArtifact.viewer.code.empty': 'Ten plik kodu jest pusty.',
+  // Diagnostics export
+  'diagnostics.exportTitle': 'Eksportuj diagnostykę',
+  'diagnostics.exportButton': 'Eksportuj diagnostykę',
+  'diagnostics.exportHint': 'Pakuje ostatnie logi aplikacji i informacje o urządzeniu w archiwum zip do wysłania zespołowi.',
+  'diagnostics.exporting': 'Eksportowanie…',
+  'diagnostics.exportSuccess': 'Diagnostyka zapisana w {path}',
+  'diagnostics.exportFailed': 'Nie udało się wyeksportować diagnostyki: {message}',
 };

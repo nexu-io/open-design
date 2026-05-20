@@ -1,7 +1,7 @@
 /*
  * Open Design — Atelier Zero landing page.
  *
- * Mirrors `skills/open-design-landing/example.html` 1:1. When the canonical
+ * Mirrors `design-templates/open-design-landing/example.html` 1:1. When the canonical
  * example.html changes, mirror the diff here and into `app/globals.css`.
  *
  * Static React component rendered by Astro. The Header and Wire components
@@ -54,7 +54,7 @@ const arrowPlus = (
 
 const NBSP = '\u00A0';
 
-// Canonical project URLs. Keep in sync with skills/open-design-landing/example.html.
+// Canonical project URLs. Keep in sync with design-templates/open-design-landing/example.html.
 //
 // `data-github-version` invariant: every wrapper must contain ONLY the version
 // string (e.g. `v0.3.0`), never any surrounding label or punctuation. The

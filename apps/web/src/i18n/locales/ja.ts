@@ -202,6 +202,7 @@ export const ja: Dict = {
   'settings.azureDeploymentModelHint':
     'Azure OpenAI では、このフィールドが /openai/deployments/<model> のデプロイ名として使われます。Azure で作成したデプロイ名を入力してください。',
   'settings.apiVersion': 'API バージョン',
+  'settings.byokImageModel': '画像生成モデル',
   'settings.maxTokens': '最大トークン（任意）',
   'settings.maxTokensHint':
     '応答長の上限。各モデルにチューニング済みのデフォルト値があります（プレースホルダーに表示）。空のままにすればそれを使用し、数値を入力すれば上書きされます。',
@@ -1493,4 +1494,11 @@ export const ja: Dict = {
   'liveArtifact.viewer.code.loading': 'コードを読み込み中…',
   'liveArtifact.viewer.code.unavailable': 'コードはまだ利用できません。',
   'liveArtifact.viewer.code.empty': 'このコードファイルは空です。',
+  // Diagnostics export
+  'diagnostics.exportTitle': '診断情報をエクスポート',
+  'diagnostics.exportButton': '診断情報をエクスポート',
+  'diagnostics.exportHint': '最近のアプリログとマシン情報を zip にまとめて、チームに共有できるようにします。',
+  'diagnostics.exporting': 'エクスポート中…',
+  'diagnostics.exportSuccess': '診断情報を {path} に保存しました',
+  'diagnostics.exportFailed': '診断情報のエクスポートに失敗しました: {message}',
 };

@@ -227,6 +227,7 @@ export const zhCN: Dict = {
   'settings.azureModelFetchHint':
     '对于 Azure OpenAI，请填写你在 Azure 中创建的部署名称。当前 BYOK 端点无法自动发现 deployment。',
   'settings.apiVersion': 'API 版本',
+  'settings.byokImageModel': '图片生成模型',
   'settings.maxTokens': '最大 tokens（可选）',
   'settings.maxTokensHint':
     '响应长度上限。每个 model 有调优过的默认值（在 placeholder 里显示），留空即使用，输入数字则覆盖。',
@@ -2149,4 +2150,11 @@ export const zhCN: Dict = {
   'liveArtifact.viewer.code.loading': '正在加载代码…',
   'liveArtifact.viewer.code.unavailable': '代码尚不可用。',
   'liveArtifact.viewer.code.empty': '此代码文件为空。',
+  // Diagnostics export
+  'diagnostics.exportTitle': '导出诊断日志',
+  'diagnostics.exportButton': '导出诊断日志',
+  'diagnostics.exportHint': '将近期的应用日志和机器信息打包成 zip,方便发给我们排查问题。',
+  'diagnostics.exporting': '导出中…',
+  'diagnostics.exportSuccess': '诊断日志已保存到 {path}',
+  'diagnostics.exportFailed': '导出诊断日志失败：{message}',
 };
