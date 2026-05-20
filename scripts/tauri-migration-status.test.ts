@@ -46,6 +46,23 @@ test("migration doc continuation command blocks keep verified handoff paths", as
   }
 });
 
+test("migration doc platform gate table includes verifier-required uninstall evidence", async () => {
+  const source = await readFile(join(repoRoot, "docs/electron-to-tauri-migration.md"), "utf8");
+  const windowsRow = source.split(/\r?\n/).find((line) => line.startsWith("| Windows NSIS smoke |"));
+  const linuxRow = source.split(/\r?\n/).find((line) => line.startsWith("| Linux AppImage smoke |"));
+
+  assert.ok(windowsRow);
+  assert.match(windowsRow, /tools-pack win uninstall/);
+  assert.match(windowsRow, /--remove-product-user-data/);
+  assert.match(windowsRow, /uninstall residue/);
+  assert.match(windowsRow, /registry residue/);
+
+  assert.ok(linuxRow);
+  assert.match(linuxRow, /tools-pack linux uninstall/);
+  assert.match(linuxRow, /AppImage, desktop file, and icon/);
+  assert.match(linuxRow, /skipped-process-running/);
+});
+
 test("tauri-migration-status reports the current M4 blocker state", async (t) => {
   const fixture = await createFixtureRoot(t, {
     checked: [],
