@@ -495,6 +495,7 @@ jobs:
       - name: Workspace unit tests
         run: |
           pnpm --filter @open-design/contracts test
+          pnpm --filter @open-design/diagnostics test
           pnpm --filter @open-design/host test
           pnpm --filter @open-design/platform test
           pnpm --filter @open-design/sidecar test
