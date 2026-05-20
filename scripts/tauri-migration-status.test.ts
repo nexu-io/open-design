@@ -90,6 +90,7 @@ test("tauri-migration-status reports current handoff artifacts", async (t) => {
       branchHead: string;
       bundleSha256: string;
       current: boolean;
+      note: string;
       present: boolean;
       problems: string[];
     };
@@ -100,8 +101,30 @@ test("tauri-migration-status reports current handoff artifacts", async (t) => {
   assert.equal(parsed.handoff.current, true);
   assert.equal(parsed.handoff.branchHead, head);
   assert.equal(parsed.handoff.bundleSha256, bundleSha256);
+  assert.equal(parsed.handoff.note, join(handoffDir, "open-design-tauri-migration-handoff.md"));
   assert.deepEqual(parsed.handoff.problems, []);
   assert.match(parsed.nextActions.join("\n"), /Package the current verified handoff directory/);
+});
+
+test("tauri-migration-status rejects stale handoff notes without remote-bound advance commands", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: head, staleNote: true });
+
+  const result = await runStatus(fixture, "--handoff-dir", handoffDir);
+  const parsed = JSON.parse(result.stdout) as {
+    handoff: {
+      current: boolean;
+      problems: string[];
+    };
+  };
+
+  assert.equal(parsed.handoff.current, false);
+  assert.match(parsed.handoff.problems.join("\n"), /handoff note direct M4 advance command is missing --remote origin/);
 });
 
 test("tauri-migration-status reports current packaged handoff archives", async (t) => {
@@ -954,7 +977,10 @@ async function initGitFixture(root: string): Promise<string> {
   return (await git(root, "rev-parse", "HEAD")).stdout.trim();
 }
 
-async function writeHandoffFixture(handoffDir: string, options: { branchHead: string; bundlePath?: string }): Promise<string> {
+async function writeHandoffFixture(
+  handoffDir: string,
+  options: { branchHead: string; bundlePath?: string; staleNote?: boolean },
+): Promise<string> {
   const bundlePath = join(handoffDir, "open-design-tauri-migration.bundle");
   const bundle = Buffer.from("bundle\n", "utf8");
   const bundleSha256 = createHash("sha256").update(bundle).digest("hex");
@@ -975,8 +1001,42 @@ async function writeHandoffFixture(handoffDir: string, options: { branchHead: st
     )}\n`,
     "utf8",
   );
-  await writeFile(join(handoffDir, "open-design-tauri-migration-handoff.md"), "# Tauri Migration Handoff\n", "utf8");
+  await writeFile(join(handoffDir, "open-design-tauri-migration-handoff.md"), handoffNoteFixture(options.branchHead, options.staleNote === true), "utf8");
   return bundleSha256;
+}
+
+function handoffNoteFixture(branchHead: string, stale: boolean): string {
+  const directAdvanceCommand = stale
+    ? [
+        "pnpm exec tsx scripts/advance-tauri-migration-m4-m5.ts \\",
+        "  --win-report /tmp/open-design-tauri-m4-reports/open-design-ci-win-tauri-e2e-report \\",
+        "  --linux-report /tmp/open-design-tauri-m4-reports/open-design-ci-linux-tauri-e2e-report",
+      ]
+    : [
+        "pnpm exec tsx scripts/advance-tauri-migration-m4-m5.ts \\",
+        "  --remote origin \\",
+        "  --branch codex/electron-to-tauri-migration \\",
+        `  --expected-head ${branchHead} \\`,
+        "  --win-report /tmp/open-design-tauri-m4-reports/open-design-ci-win-tauri-e2e-report \\",
+        "  --linux-report /tmp/open-design-tauri-m4-reports/open-design-ci-linux-tauri-e2e-report",
+      ];
+  return [
+    "# Tauri Migration Handoff",
+    "",
+    "```bash",
+    "pnpm exec tsx scripts/download-tauri-m4-reports.ts \\",
+    "  --branch codex/electron-to-tauri-migration \\",
+    `  --expected-head ${branchHead} \\`,
+    "  --remote origin \\",
+    "  --wait \\",
+    "  --output-dir /tmp/open-design-tauri-m4-reports",
+    "```",
+    "",
+    "```bash",
+    ...directAdvanceCommand,
+    "```",
+    "",
+  ].join("\n");
 }
 
 async function writeHandoffArchive(handoffDir: string): Promise<{ archivePath: string; archiveSha256: string }> {

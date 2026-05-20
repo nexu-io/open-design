@@ -88,9 +88,12 @@ test("verify-tauri-migration-handoff round-trips a bundle through a receiving ch
   assert.match(note, /download-tauri-m4-reports/);
   assert.match(note, new RegExp(`--branch '${migrationBranch.replaceAll("/", "\\/")}' \\\\`));
   assert.match(note, new RegExp(`--expected-head ${sourceHead} \\\\`));
+  assert.match(note, /--remote origin \\/);
   assert.match(note, /GITHUB_RUN_ID=<github-run-id>/);
   assert.match(note, /--advance/);
   assert.match(note, /advance-tauri-migration-m4-m5/);
+  assert.match(note, new RegExp(`advance-tauri-migration-m4-m5[\\s\\S]*--branch '${migrationBranch.replaceAll("/", "\\/")}' \\\\`));
+  assert.match(note, new RegExp(`advance-tauri-migration-m4-m5[\\s\\S]*--expected-head ${sourceHead} \\\\`));
   assert.match(note, /\/tmp\/open-design-tauri-m4-reports\/open-design-ci-win-tauri-e2e-report/);
 });
 

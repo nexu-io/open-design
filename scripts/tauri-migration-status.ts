@@ -91,6 +91,7 @@ type HandoffStatus = {
   current?: boolean;
   dir: string;
   manifest: string;
+  note: string;
   present: boolean;
   problems: string[];
 };
@@ -583,6 +584,7 @@ async function git(cwd: string, args: string[]): Promise<{ stderr: string; stdou
 
 async function readHandoffStatus(handoffDir: string, gitStatus: GitStatus): Promise<HandoffStatus> {
   const manifestPath = join(handoffDir, handoffManifestName);
+  const notePath = join(handoffDir, noteName);
   const problems: string[] = [];
   try {
     const manifest = readHandoffManifest(JSON.parse(await readFile(manifestPath, "utf8")) as Partial<HandoffManifest>);
@@ -605,6 +607,11 @@ async function readHandoffStatus(handoffDir: string, gitStatus: GitStatus): Prom
     if (gitStatus.head != null && manifest.branchHead !== gitStatus.head) {
       problems.push(`manifest branchHead is stale: expected ${gitStatus.head}, got ${manifest.branchHead}`);
     }
+    try {
+      problems.push(...validateHandoffNote(await readFile(notePath, "utf8"), notePath, manifest));
+    } catch (error) {
+      problems.push(`handoff note unavailable: ${error instanceof Error ? error.message : String(error)}`);
+    }
     return {
       branch: manifest.branch,
       branchHead: manifest.branchHead,
@@ -614,6 +621,7 @@ async function readHandoffStatus(handoffDir: string, gitStatus: GitStatus): Prom
       current: problems.length === 0 && gitStatus.head != null,
       dir: handoffDir,
       manifest: manifestPath,
+      note: notePath,
       present: true,
       problems,
     };
@@ -621,9 +629,56 @@ async function readHandoffStatus(handoffDir: string, gitStatus: GitStatus): Prom
     return {
       dir: handoffDir,
       manifest: manifestPath,
+      note: notePath,
       present: false,
       problems: [error instanceof Error ? error.message : String(error)],
     };
+  }
+}
+
+function validateHandoffNote(noteSource: string, notePath: string, manifest: HandoffManifest): string[] {
+  const problems: string[] = [];
+  const downloadBlocks = commandBlocksFor(noteSource, "scripts/download-tauri-m4-reports.ts");
+  const advanceBlocks = commandBlocksFor(noteSource, "scripts/advance-tauri-migration-m4-m5.ts");
+
+  if (downloadBlocks.length === 0) {
+    problems.push(`handoff note is missing report download commands: ${notePath}`);
+  }
+  if (advanceBlocks.length === 0) {
+    problems.push(`handoff note is missing direct M4 advance command: ${notePath}`);
+  }
+
+  for (const block of downloadBlocks) {
+    validateBranchBoundCommand(block, "report download", manifest, notePath, problems);
+  }
+  for (const block of advanceBlocks) {
+    validateBranchBoundCommand(block, "direct M4 advance", manifest, notePath, problems);
+  }
+
+  return problems;
+}
+
+function commandBlocksFor(noteSource: string, scriptName: string): string[] {
+  return [...noteSource.matchAll(/```bash\n([\s\S]*?)\n```/g)]
+    .map((match) => match[1] ?? "")
+    .filter((block) => block.includes(scriptName));
+}
+
+function validateBranchBoundCommand(
+  block: string,
+  label: string,
+  manifest: HandoffManifest,
+  notePath: string,
+  problems: string[],
+): void {
+  if (!block.includes("--remote origin")) {
+    problems.push(`handoff note ${label} command is missing --remote origin: ${notePath}`);
+  }
+  if (!block.includes("--branch") || !block.includes(manifest.branch)) {
+    problems.push(`handoff note ${label} command is missing branch ${manifest.branch}: ${notePath}`);
+  }
+  if (!block.includes(`--expected-head ${manifest.branchHead}`)) {
+    problems.push(`handoff note ${label} command is missing expected head ${manifest.branchHead}: ${notePath}`);
   }
 }
 
@@ -753,7 +808,7 @@ async function readHandoffArchiveStatus(archivePath: string, handoff?: HandoffSt
     const manifestPath = join(extractedHandoffDir, handoffManifestName);
     const notePath = join(extractedHandoffDir, noteName);
     const manifest = readHandoffManifest(JSON.parse(await readFile(manifestPath, "utf8")) as Partial<HandoffManifest>);
-    await readFile(notePath);
+    const noteSource = await readFile(notePath, "utf8");
     if (!isRelocatableManifestBundlePath(manifest.bundlePath)) {
       problems.push(`archived manifest bundlePath must be relative and relocatable: ${manifest.bundlePath}`);
     } else {
@@ -769,6 +824,7 @@ async function readHandoffArchiveStatus(archivePath: string, handoff?: HandoffSt
     if (handoff?.bundleSha256 != null && manifest.bundleSha256 !== handoff.bundleSha256) {
       problems.push(`archived manifest bundleSha256 is stale: expected ${handoff.bundleSha256}, got ${manifest.bundleSha256}`);
     }
+    problems.push(...validateHandoffNote(noteSource, notePath, manifest).map((problem) => `archived ${problem}`));
   } catch (error) {
     problems.push(`archive contents invalid: ${error instanceof Error ? error.message : String(error)}`);
   } finally {
