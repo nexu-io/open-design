@@ -1,0 +1,191 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/webflow/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by Webflow".
+ * The visual web builder: a white marketing-grade canvas, near-black
+ * ink, the signature Webflow Blue (#146ef5), conservative 4px corners,
+ * and a five-layer cascading shadow that gives every card a built-not-
+ * floating quality.
+ *
+ * Key brand decisions encoded here:
+ *   - White canvas with near-black (#080808) text — DESIGN.md §1 / §9.
+ *     The marketing site does NOT shift surfaces warm; section variation
+ *     comes from borders + the 5-layer shadow stack, not from tinting.
+ *   - Webflow Blue (#146ef5) as the single accent, with the documented
+ *     darker Button Hover Blue (#0055d4) as `--accent-hover` (not a
+ *     formulaic black-mix — Webflow's docs specify the hover value).
+ *   - Four-tier foreground ramp: #080808 → #363636 → #5a5a5a → #ababab,
+ *     matching the Near Black / Gray 700 / Mid Gray / Gray 300 scale
+ *     from DESIGN.md §2 so cross-brand components targeting --fg-2 and
+ *     --meta resolve to Webflow's actual gray ramp.
+ *   - Conservative radius (4px–8px). DESIGN.md §7 forbids rounding
+ *     beyond 8px for functional elements — sharp, precise, tool-like.
+ *   - Five-layer cascading shadow on --elev-raised, reproduced verbatim
+ *     from DESIGN.md §2 / §6: the stack is the depth signature and
+ *     should never be flattened to a single blur.
+ *   - WF Visual Sans Variable display + body, Inconsolata for code —
+ *     the dual identity DESIGN.md §3 calls out (design + code).
+ *   - Webflow Green / Yellow / Red bound to semantic tokens (DESIGN.md
+ *     §2 Secondary Accents) so semantic state stays inside the brand
+ *     palette rather than borrowing the schema's generic hues.
+ *
+ * Source contracts:
+ *   - Standard token names: design-systems/_schema/tokens.schema.ts
+ *   - A2 fallback parity:   design-systems/_schema/defaults.css
+ *   - Lint enforcement:     apps/daemon/src/lint-artifact.ts
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface (no warm tier) ───────────────────────────────────────
+   * Webflow's marketing canvas is pure white. Sections do not shift
+   * background color — depth comes from the 5-layer shadow stack and
+   * 1px borders, not from tinted surfaces. `--surface-warm` aliases
+   * to surface because the brand has no warmer tier. */
+  --bg: #ffffff;                      /* White — the page canvas */
+  --surface: #ffffff;                 /* White — cards stay flush with the canvas */
+  --surface-warm: var(--surface);     /* alias — Webflow has no warm tier */
+
+  /* ─── Foreground ramp (4 levels) ──────────────────────────────────
+   * Near Black → Gray 700 → Mid Gray → Gray 300, the four documented
+   * text tiers from DESIGN.md §2 (headings / body / captions / muted).
+   * `#080808` instead of `#000000` matters — DESIGN.md §1 / §9 names
+   * the near-black explicitly. The four tiers are independently bound
+   * (not aliased) because Webflow's marketing site genuinely uses all
+   * four: H1 black, body Gray 700, captions Mid Gray, placeholder /
+   * disabled Gray 300. */
+  --fg: #080808;                      /* Near Black — primary text */
+  --fg-2: #363636;                    /* Gray 700 — body description */
+  --muted: #5a5a5a;                   /* Mid Gray — captions, link text */
+  --meta: #ababab;                    /* Gray 300 — placeholder, disabled */
+
+  /* ─── Border (2 levels) ──────────────────────────────────────────
+   * Borders are visible and structural in Webflow — `1px solid #d8d8d8`
+   * is the documented card edge (DESIGN.md §4). `--border-soft` drops
+   * to a paler tint for inner row separators that must not visually
+   * compete with the card outline. */
+  --border: #d8d8d8;                  /* Border Gray — card / divider edge */
+  --border-soft: #ebebeb;             /* paler tint — inner row separator */
+
+  /* ─── Accent ─────────────────────────────────────────────────────
+   * Webflow Blue (#146ef5): primary CTA, link, focus ring, badge tint.
+   * `--accent-hover` is the documented Button Hover Blue (#0055d4),
+   * NOT a formulaic black-mix — Webflow's brand spec names the darker
+   * value, so we honor it verbatim instead of computing one. Hard cap
+   * of ≤2 visible uses per screen (schema lint). */
+  --accent: #146ef5;                  /* Webflow Blue — primary brand signal */
+  --accent-on: #ffffff;               /* white label on saturated blue */
+  --accent-hover: #0055d4;            /* Button Hover Blue — documented value */
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+  /* ─── Semantic ───────────────────────────────────────────────────
+   * Bound to Webflow's secondary palette (DESIGN.md §2) so state
+   * colors live inside the brand instead of borrowing the schema's
+   * generic semantic hues. Webflow Green / Yellow / Red are vivid
+   * enough to read as state without falling out of the system. */
+  --success: #00d722;                 /* Webflow Green */
+  --warn: #ffae13;                    /* Webflow Yellow */
+  --danger: #ee1d36;                  /* Webflow Red */
+
+  /* ─── Typography — fonts ─────────────────────────────────────────
+   * WF Visual Sans Variable is Webflow's custom variable face used at
+   * weight 500–600 throughout. Inter/Arial fall back so artifacts
+   * render legibly when the brand face is not loaded. Inconsolata is
+   * the companion monospace from DESIGN.md §3 — the "design + code"
+   * dual identity is part of the brand voice. */
+  --font-display: "WF Visual Sans Variable", "Inter", Arial, system-ui, sans-serif;
+  --font-body: "WF Visual Sans Variable", "Inter", Arial, system-ui, sans-serif;
+  --font-mono: "Inconsolata", ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale (px) — DESIGN.md §3 hierarchy table. Display hero is
+   * 80px (the big marketing-page number), section heading is 56px,
+   * sub-heading 32px, feature 24px, body 20px, body-standard 16px,
+   * caption 14px. The schema's 8 tiers map directly onto Webflow's
+   * documented sizes. */
+  --text-xs: 12px;                    /* badge uppercase / micro */
+  --text-sm: 14px;                    /* caption */
+  --text-base: 16px;                  /* body standard / button */
+  --text-lg: 20px;                    /* body */
+  --text-xl: 24px;                    /* feature title */
+  --text-2xl: 32px;                   /* sub-heading */
+  --text-3xl: 56px;                   /* section heading */
+  --text-4xl: 80px;                   /* display hero */
+
+  /* `--leading-tight` is 1.04 (DESIGN.md §3 display + section line-
+   * height). `--leading-body` is 1.6 (the documented body-standard
+   * ratio). `--tracking-display` is `-0.01em`, the em-relative form
+   * of Webflow's `-0.8px at 80px` display tracking — scales correctly
+   * with size. */
+  --leading-body: 1.6;
+  --leading-tight: 1.04;
+  --tracking-display: -0.01em;
+
+  /* ─── Spacing ────────────────────────────────────────────────────
+   * 4px-grid base. DESIGN.md §5's fractional scale (2.4 / 3.2 / 5.6 /
+   * 7.2 / 9.6) is component-internal micro-padding and is inlined
+   * per-component; the 4/8/12/16/20/24/32/48 tier carries the
+   * structural rhythm. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* Section rhythm — Webflow's marketing sections breathe but stay
+   * tighter than a gallery: 96px desktop, 64px tablet, 48px phone
+   * (matching the documented 992 / 768 / 479 breakpoints in §8). */
+  --section-y-desktop: 96px;
+  --section-y-tablet: 64px;
+  --section-y-phone: 48px;
+
+  /* ─── Radius ─────────────────────────────────────────────────────
+   * DESIGN.md §5: 2 / 4 / 8 / 50%. The "Do" list (§7) is explicit:
+   * 4px is the default, do NOT round beyond 8px for functional
+   * elements. We bind sm/md to 4px (buttons, inputs, cards), lg to
+   * 8px (featured containers), pill to 9999px (badges, avatars). */
+  --radius-sm: 4px;                   /* buttons, inputs, chips */
+  --radius-md: 4px;                   /* cards, modals — same conservative 4px */
+  --radius-lg: 8px;                   /* featured containers — the soft cap */
+  --radius-pill: 9999px;              /* badges, avatars */
+
+  /* ─── Elevation (3 levels, raised = 5-layer cascade) ─────────────
+   * The 5-layer shadow stack from DESIGN.md §2 / §6 is the depth
+   * signature. The outer layer at 84px is a "presence" cushion (alpha
+   * 0), the inner 3px layer is the contact shadow, and three middle
+   * layers create the smooth falloff. Never flatten this stack to a
+   * single blur — the cascade is what makes Webflow cards feel
+   * physically built rather than digitally floating. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised:
+    0px 84px 24px rgba(0, 0, 0, 0),
+    0px 54px 22px rgba(0, 0, 0, 0.01),
+    0px 30px 18px rgba(0, 0, 0, 0.04),
+    0px 13px 13px rgba(0, 0, 0, 0.08),
+    0px 3px 7px rgba(0, 0, 0, 0.09);
+
+  /* ─── Focus ring ─────────────────────────────────────────────────
+   * Webflow Blue at 30% — the accent is already the brand's focus
+   * color in product, so the schema default (alpha glow of accent)
+   * matches without override. */
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+
+  /* ─── Motion ─────────────────────────────────────────────────────
+   * 150 / 200ms with standard easing. Webflow's marketing site uses a
+   * 6px translate hover on buttons (DESIGN.md §4) — that micro-move
+   * runs at --motion-fast. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ─────────────────────────────────────────────────────
+   * 1200px max content width — Webflow's marketing pages cap around
+   * this width to keep line lengths readable. Breakpoints from
+   * DESIGN.md §8 (992 / 768 / 479) gate the gutter scale. */
+  --container-max: 1200px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 16px;
+  --container-gutter-phone: 12px;
+}

@@ -1,15 +1,31 @@
-import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ToolCard } from "./ToolCard";
+import { FileOpsSummary } from "./FileOpsSummary";
 import { renderMarkdown } from "../runtime/markdown";
 import { projectFileUrl } from "../providers/registry";
+import { submitChatRunToolResult } from "../providers/daemon";
+import { useAnalytics } from "../analytics/provider";
+import {
+  trackAssistantFeedbackButtonClick,
+  trackAssistantFeedbackReasonPanelSurfaceView,
+  trackAssistantFeedbackReasonSubmitClick,
+  trackFeedbackSubmitResult,
+} from "../analytics/events";
+import type { TrackingProjectKind } from "@open-design/contracts/analytics";
 import {
   splitOnQuestionForms,
   type QuestionForm,
 } from "../artifacts/question-form";
 import { stripArtifact } from "../artifacts/strip";
 import { QuestionFormView, parseSubmittedAnswers } from "./QuestionForm";
+import {
+  getPluginFolderCandidates,
+  type PluginFolderCandidate,
+} from "./design-files/pluginFolders";
+import type { PluginFolderAgentAction } from "./design-files/pluginFolderActions";
 import { Icon } from "./Icon";
 import { useT } from "../i18n";
+import { deriveFileOps, type FileOpEntry } from "../runtime/file-ops";
 import { unfinishedTodosFromEvents, type TodoItem } from "../runtime/todos";
 import type { Dict } from "../i18n/types";
 import { agentDisplayName, exactAgentDisplayName } from "../utils/agentLabels";
@@ -32,12 +48,24 @@ type TranslateFn = (
   vars?: Record<string, string | number>
 ) => string;
 
+const DISCORD_INVITE_URL = "https://discord.gg/mHAjSMV6gz";
+
 interface Props {
   message: ChatMessage;
   streaming: boolean;
   projectId: string | null;
+  // Analytics context for the assistant_feedback_* events. Defaults
+  // applied at the call site keep AssistantMessage usable in tests
+  // that don't care about telemetry.
+  projectKind?: TrackingProjectKind | null;
+  conversationId?: string | null;
+  projectFiles?: ProjectFile[];
   projectFileNames?: Set<string>;
   onRequestOpenFile?: (name: string) => void;
+  onRequestPluginFolderAgentAction?: (
+    relativePath: string,
+    action: PluginFolderAgentAction,
+  ) => Promise<void> | void;
   // True only for the most recent assistant message — gate question-form
   // interactivity on this so older forms render as a locked "answered"
   // capsule instead of being re-submittable.
@@ -51,6 +79,8 @@ interface Props {
   onSubmitForm?: (text: string) => void;
   onContinueRemainingTasks?: (todos: TodoItem[]) => void;
   onFeedback?: (change: ChatMessageFeedbackChange) => void;
+  suppressDirectionForms?: boolean;
+  hasDesignSystemContext?: boolean;
 }
 
 /**
@@ -66,21 +96,58 @@ export function AssistantMessage({
   message,
   streaming,
   projectId,
+  projectKind = null,
+  conversationId = null,
+  projectFiles = [],
   projectFileNames,
   onRequestOpenFile,
+  onRequestPluginFolderAgentAction,
   isLast,
   nextUserContent,
   onSubmitForm,
   onContinueRemainingTasks,
   onFeedback,
+  suppressDirectionForms = false,
+  hasDesignSystemContext = false,
 }: Props) {
   const t = useT();
   const events = message.events ?? [];
-  const blocks = buildBlocks(events);
+  // Claude sometimes hedges by emitting a markdown duplicate of the same
+  // questions alongside an `AskUserQuestion` tool call. The card already
+  // shows the questions + options, so suppressing the trailing prose
+  // avoids rendering the same content twice. The system prompt asks the
+  // model not to do this; this is the belt-and-suspenders.
+  // The chat-pane-level PinnedTodoBar renders the canonical TodoWrite card
+  // above the composer, so we strip any TodoWrite tool-groups out of the
+  // per-message flow to avoid the same task list rendering twice.
+  const blocks = stripTodoToolGroups(
+    suppressAskUserQuestionFallbackText(buildBlocks(events)),
+  );
+  const fileOps = useMemo(() => deriveFileOps(events), [events]);
+  const produced = message.producedFiles ?? [];
+  const displayedProduced = useMemo(
+    () =>
+      produced.length > 0
+        ? produced
+        : inferProducedFilesFromTurn({
+            message,
+            projectFiles,
+            blocks,
+            fileOps,
+            streaming,
+          }),
+    [blocks, fileOps, message, produced, projectFiles, streaming],
+  );
+  const pluginActionFolders = useMemo(
+    () =>
+      !streaming && isLast && projectId
+        ? pluginFoldersTouchedThisTurn(projectFiles, fileOps, displayedProduced, message.content)
+        : [],
+    [displayedProduced, fileOps, isLast, message.content, projectFiles, projectId, streaming],
+  );
   const usage = events.find((e) => e.kind === "usage") as
     | Extract<AgentEvent, { kind: "usage" }>
     | undefined;
-  const produced = message.producedFiles ?? [];
   const roleLabel = assistantRoleLabel(message, t);
   const hasEmptyResponse = events.some(
     (e) => e.kind === "status" && e.label === "empty_response"
@@ -116,6 +183,22 @@ export function AssistantMessage({
   const [locallySubmitted, setLocallySubmitted] = useState<Set<string>>(
     () => new Set()
   );
+  // Route interactive tool answers (currently AskUserQuestion) back to the
+  // still-open stream-json child via the daemon. We resolve to `true` on
+  // success so the card can flip into its answered state; on `false` (run
+  // already terminated, stdin closed, etc.) the card falls back to the
+  // plain-text `onSubmitForm` path so the user is never stuck. Only wire
+  // this when we have an active run id and the message is the latest turn
+  // — older messages whose run is gone use the fallback exclusively.
+  const onAnswerToolUse = useCallback(
+    async (toolUseId: string, content: string) => {
+      if (!isLast) return false;
+      if (!message.runId) return false;
+      const resp = await submitChatRunToolResult(message.runId, toolUseId, content);
+      return resp.ok;
+    },
+    [isLast, message.runId],
+  );
 
   return (
     <div className="msg assistant">
@@ -130,6 +213,14 @@ export function AssistantMessage({
             latestStatus={latestStatusLabel(events)}
           />
         ) : null}
+        {fileOps.length > 0 ? (
+          <FileOpsSummary
+            entries={fileOps}
+            streaming={streaming}
+            projectFileNames={projectFileNames}
+            onRequestOpenFile={onRequestOpenFile}
+          />
+        ) : null}
         {blocks.map((b, i) => {
           if (b.kind === "text")
             return (
@@ -140,6 +231,7 @@ export function AssistantMessage({
                 streaming={streaming}
                 nextUserContent={nextUserContent}
                 locallySubmitted={locallySubmitted}
+                suppressDirectionForms={suppressDirectionForms}
                 onSubmitForm={(formId, text) => {
                   setLocallySubmitted((prev) => {
                     const next = new Set(prev);
@@ -161,6 +253,9 @@ export function AssistantMessage({
                 runSucceeded={runSucceeded}
                 projectFileNames={projectFileNames}
                 onRequestOpenFile={onRequestOpenFile}
+                isLast={!!isLast}
+                onSubmitForm={onSubmitForm}
+                onAnswerToolUse={onAnswerToolUse}
               />
             );
           }
@@ -168,11 +263,18 @@ export function AssistantMessage({
             return <StatusPill key={i} label={b.label} detail={b.detail} />;
           return null;
         })}
-        {!streaming && produced.length > 0 && projectId ? (
+        {!streaming && displayedProduced.length > 0 && projectId ? (
           <ProducedFiles
-            files={produced}
+            files={displayedProduced}
             projectId={projectId}
             onRequestOpenFile={onRequestOpenFile}
+          />
+        ) : null}
+        {!streaming && projectId && pluginActionFolders.length > 0 ? (
+          <PluginActionPanel
+            folders={pluginActionFolders}
+            onRequestOpenFile={onRequestOpenFile}
+            onRequestPluginFolderAgentAction={onRequestPluginFolderAgentAction}
           />
         ) : null}
         {!streaming && unfinishedTodos.length > 0 ? (
@@ -188,6 +290,13 @@ export function AssistantMessage({
               <AssistantFeedback
                 feedback={message.feedback}
                 onFeedback={onFeedback}
+                projectId={projectId}
+                projectKind={projectKind}
+                conversationId={conversationId}
+                runId={message.runId ?? null}
+                assistantMessageId={message.id}
+                producedFileCount={displayedProduced.length}
+                hasDesignSystemContext={hasDesignSystemContext}
                 footerProps={{
                   streaming,
                   startedAt: message.startedAt,
@@ -213,6 +322,36 @@ export function AssistantMessage({
       </div>
     </div>
   );
+}
+
+function inferProducedFilesFromTurn({
+  message,
+  projectFiles,
+  blocks,
+  fileOps,
+  streaming,
+}: {
+  message: ChatMessage;
+  projectFiles: ProjectFile[];
+  blocks: Block[];
+  fileOps: FileOpEntry[];
+  streaming: boolean;
+}): ProjectFile[] {
+  if (streaming || message.role !== "assistant") return [];
+  if (message.runStatus !== "succeeded") return [];
+  if (!message.startedAt || !message.endedAt) return [];
+  if (blocks.some((block) => block.kind === "text" || block.kind === "tool-group")) return [];
+  if (fileOps.length > 0) return [];
+  const start = message.startedAt - 1_000;
+  const end = message.endedAt + 60_000;
+  return projectFiles
+    .filter((file) => {
+      if (file.type === "dir") return false;
+      if (!file.name || file.name.startsWith(".")) return false;
+      if (file.name.includes("/.")) return false;
+      return file.mtime >= start && file.mtime <= end;
+    })
+    .sort((a, b) => b.mtime - a.mtime);
 }
 
 function isFeedbackEligible({
@@ -389,13 +528,32 @@ function AssistantFooter({
 function AssistantFeedback({
   feedback,
   onFeedback,
+  hasDesignSystemContext,
   footerProps,
+  projectId,
+  projectKind,
+  conversationId,
+  runId,
+  assistantMessageId,
+  producedFileCount,
 }: {
   feedback: ChatMessage["feedback"];
   onFeedback: (change: ChatMessageFeedbackChange) => void;
+  hasDesignSystemContext: boolean;
   footerProps: AssistantFooterProps;
+  projectId: string | null;
+  projectKind: TrackingProjectKind | null;
+  conversationId: string | null;
+  runId: string | null;
+  assistantMessageId: string;
+  producedFileCount: number;
 }) {
   const t = useT();
+  const analytics = useAnalytics();
+  // P0 — analytics context the feedback events need. The four ids are
+  // either user-anchored (projectId / assistantMessageId) or run-anchored
+  // (runId), so we pass them down with a stable identity. `producedFileCount`
+  // feeds `has_produced_files` on assistant_feedback_button click.
   const [burstKey, setBurstKey] = useState(0);
   const [reasonRating, setReasonRating] =
     useState<ChatMessageFeedbackRating | null>(null);
@@ -412,13 +570,56 @@ function AssistantFeedback({
   useEffect(() => {
     if (!reasonRating) return;
     reasonsRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
-  }, [reasonRating]);
+    // P0 surface_view assistant_feedback_reason_panel — fires when the
+    // reason panel actually appears (reasonRating flips from null to
+    // truthy), not when the buttons render.
+    trackAssistantFeedbackReasonPanelSurfaceView(analytics.track, {
+      page_name: "chat_panel",
+      area: "chat_panel",
+      element: "assistant_feedback_reason_panel",
+      view_type: "panel",
+      project_id: projectId ?? "",
+      project_kind: projectKind,
+      conversation_id: conversationId,
+      assistant_message_id: assistantMessageId,
+      run_id: runId ?? "",
+      rating: reasonRating,
+    });
+  }, [
+    reasonRating,
+    analytics.track,
+    projectId,
+    projectKind,
+    conversationId,
+    assistantMessageId,
+    runId,
+  ]);
   const toggleFeedback = (rating: ChatMessageFeedbackRating) => {
     const nextRating = selected === rating ? null : rating;
     if (nextRating === "positive") setBurstKey((key) => key + 1);
     setDraftReasonCodes(new Set());
     setCustomReason("");
     setReasonRating(nextRating);
+    // P0 ui_click assistant_feedback_button. v1 emitted `rating: null` on
+    // the clear path, which lost the signal "user un-thumbed positive vs
+    // un-thumbed negative". v2 fixes this: when clearing, `rating` carries
+    // the rating that was cleared (the user's most recent gesture target),
+    // and `rating_before` records the previous selection state.
+    const ratingBefore: "positive" | "negative" | "none" = selected ?? "none";
+    trackAssistantFeedbackButtonClick(analytics.track, {
+      page_name: "chat_panel",
+      area: "chat_panel",
+      element: "assistant_feedback_button",
+      action: nextRating ? "submit_feedback_rating" : "clear_feedback_rating",
+      project_id: projectId ?? "",
+      project_kind: projectKind,
+      conversation_id: conversationId,
+      assistant_message_id: assistantMessageId,
+      run_id: runId ?? "",
+      rating,
+      rating_before: ratingBefore,
+      has_produced_files: producedFileCount > 0,
+    });
     onFeedback(nextRating ? { rating: nextRating } : null);
   };
   const toggleReasonCode = (code: ChatMessageFeedbackReasonCode) => {
@@ -434,9 +635,61 @@ function AssistantFeedback({
   const submitReasons = () => {
     if (!reasonRating) return;
     const trimmedCustomReason = customReason.trim();
+    const reasonCodes = [...draftReasonCodes];
+    const reasonJoined = reasonCodes.length > 0 ? reasonCodes.join(",") : undefined;
+    const hasCustomReason = draftReasonCodes.has("other") && trimmedCustomReason.length > 0;
+    const requestId = analytics.newRequestId();
+    // P0 ui_click element=assistant_feedback_reason_submit_button — fires
+    // synchronously on the user gesture so the click count never depends on
+    // the host's onFeedback persistence resolving.
+    trackAssistantFeedbackReasonSubmitClick(
+      analytics.track,
+      {
+        page_name: "chat_panel",
+        area: "chat_panel",
+        element: "assistant_feedback_reason_submit_button",
+        action: "click_submit_feedback_reason",
+        project_id: projectId ?? "",
+        project_kind: projectKind,
+        conversation_id: conversationId,
+        assistant_message_id: assistantMessageId,
+        run_id: runId ?? "",
+        rating: reasonRating,
+        ...(reasonJoined ? { reason: reasonJoined } : {}),
+        reason_count: reasonCodes.length,
+        has_custom_reason: hasCustomReason,
+        ...(hasCustomReason ? { custom_reason: trimmedCustomReason } : {}),
+      },
+      { requestId },
+    );
+    // P0 feedback_submit_result — paired with the click via requestId so
+    // PostHog dashboards can correlate intent → persistence. onFeedback in
+    // our app currently completes synchronously, so we emit `success`
+    // optimistically; a future error-aware host can flip this to `failed`.
+    trackFeedbackSubmitResult(
+      analytics.track,
+      {
+        page_name: "chat_panel",
+        area: "chat_panel",
+        element: "assistant_feedback_reason_submit",
+        action: "submit_feedback_reason",
+        project_id: projectId ?? "",
+        project_kind: projectKind,
+        conversation_id: conversationId,
+        assistant_message_id: assistantMessageId,
+        run_id: runId ?? "",
+        rating: reasonRating,
+        ...(reasonJoined ? { reason: reasonJoined } : {}),
+        reason_count: reasonCodes.length,
+        has_custom_reason: hasCustomReason,
+        ...(hasCustomReason ? { custom_reason: trimmedCustomReason } : {}),
+        result: "success",
+      },
+      { requestId },
+    );
     onFeedback({
       rating: reasonRating,
-      reasonCodes: [...draftReasonCodes],
+      reasonCodes,
       customReason:
         draftReasonCodes.has("other") && trimmedCustomReason
           ? trimmedCustomReason
@@ -446,7 +699,7 @@ function AssistantFeedback({
     setReasonRating(null);
   };
   const reasonOptions = reasonRating
-    ? feedbackReasonOptions(reasonRating, t)
+    ? feedbackReasonOptions(reasonRating, t, hasDesignSystemContext)
     : [];
   const reasonEmoji = reasonRating === "positive" ? "😊" : "😔";
   const showOtherInput = draftReasonCodes.has("other");
@@ -532,14 +785,39 @@ function AssistantFeedback({
               onChange={(event) => setCustomReason(event.target.value)}
             />
           ) : null}
-          <button
-            type="button"
-            className="assistant-feedback-submit"
-            disabled={!canSubmit}
-            onClick={submitReasons}
-          >
-            {t("assistant.feedbackReasonSubmit")}
-          </button>
+          {reasonRating === "positive" ? (
+            <p className="assistant-feedback-discord-note">
+              Share what you made with the{" "}
+              <a
+                href={DISCORD_INVITE_URL}
+                data-testid="assistant-feedback-discord-positive"
+              >
+                Discord
+              </a>{" "}
+              community, or drop a screenshot and tell us what worked well.
+            </p>
+          ) : (
+            <p className="assistant-feedback-discord-note">
+              Share more context in{" "}
+              <a
+                href={DISCORD_INVITE_URL}
+                data-testid="assistant-feedback-discord-negative"
+              >
+                Discord
+              </a>{" "}
+              so the team can understand what went wrong and follow up directly.
+            </p>
+          )}
+          <div className="assistant-feedback-actions">
+            <button
+              type="button"
+              className="assistant-feedback-submit"
+              disabled={!canSubmit}
+              onClick={submitReasons}
+            >
+              {t("assistant.feedbackReasonSubmit")}
+            </button>
+          </div>
         </div>
       ) : null}
     </div>
@@ -549,6 +827,7 @@ function AssistantFeedback({
 function feedbackReasonOptions(
   rating: ChatMessageFeedbackRating,
   t: TranslateFn,
+  hasDesignSystemContext: boolean,
 ): Array<{ code: ChatMessageFeedbackReasonCode; label: string }> {
   const codes: ChatMessageFeedbackReasonCode[] =
     rating === "positive"
@@ -557,6 +836,7 @@ function feedbackReasonOptions(
           "strong_visual",
           "useful_structure",
           "easy_to_continue",
+          ...(hasDesignSystemContext ? (["followed_design_system"] as const) : []),
           "other",
         ]
       : [
@@ -564,6 +844,7 @@ function feedbackReasonOptions(
           "weak_visual",
           "incomplete_output",
           "hard_to_use",
+          ...(hasDesignSystemContext ? (["missed_design_system"] as const) : []),
           "other",
         ];
   return codes.map((code) => ({ code, label: feedbackReasonLabel(code, t) }));
@@ -582,6 +863,8 @@ function feedbackReasonLabel(
       return t("assistant.feedbackReasonPositiveUseful");
     case "easy_to_continue":
       return t("assistant.feedbackReasonPositiveEasy");
+    case "followed_design_system":
+      return t("assistant.feedbackReasonPositiveDesignSystem");
     case "missed_request":
       return t("assistant.feedbackReasonNegativeMissed");
     case "weak_visual":
@@ -590,6 +873,8 @@ function feedbackReasonLabel(
       return t("assistant.feedbackReasonNegativeIncomplete");
     case "hard_to_use":
       return t("assistant.feedbackReasonNegativeHard");
+    case "missed_design_system":
+      return t("assistant.feedbackReasonNegativeDesignSystem");
     case "other":
       return t("assistant.feedbackReasonOther");
   }
@@ -690,6 +975,147 @@ function ProducedFiles({
   );
 }
 
+function PluginActionPanel({
+  folders,
+  onRequestOpenFile,
+  onRequestPluginFolderAgentAction,
+}: {
+  folders: PluginFolderCandidate[];
+  onRequestOpenFile?: (name: string) => void;
+  onRequestPluginFolderAgentAction?: (
+    relativePath: string,
+    action: PluginFolderAgentAction,
+  ) => Promise<void> | void;
+}) {
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [noticeByFolder, setNoticeByFolder] = useState<Record<string, string>>(
+    {},
+  );
+
+  async function runAction(
+    folder: PluginFolderCandidate,
+    action: PluginFolderAgentAction,
+  ) {
+    if (busyKey || !onRequestPluginFolderAgentAction) return;
+    const key = `${action}:${folder.path}`;
+    setBusyKey(key);
+    setNoticeByFolder((prev) => {
+      const next = { ...prev };
+      delete next[folder.path];
+      return next;
+    });
+    try {
+      await onRequestPluginFolderAgentAction(folder.path, action);
+      setNoticeByFolder((prev) => ({
+        ...prev,
+        [folder.path]: "Sent to the agent. The CLI run will continue in chat.",
+      }));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  return (
+    <div className="plugin-action-panel" aria-label="Plugin next actions">
+      <div className="plugin-action-panel__head">
+        <span className="plugin-action-panel__icon" aria-hidden>
+          <Icon name="sparkles" size={15} />
+        </span>
+        <div>
+          <div className="plugin-action-panel__title">Plugin ready</div>
+          <div className="plugin-action-panel__subtitle">
+            Send the next step to the agent so it can run the od CLI.
+          </div>
+        </div>
+      </div>
+      <div className="plugin-action-panel__list">
+        {folders.map((folder) => (
+          <div
+            key={folder.path}
+            className="plugin-action-card"
+            data-testid={`assistant-plugin-actions-${folder.path}`}
+          >
+            <div className="plugin-action-card__main">
+              <span className="plugin-action-card__folder-icon" aria-hidden>
+                <Icon name="folder" size={14} />
+              </span>
+              <div className="plugin-action-card__copy">
+                <code className="plugin-action-card__path">{folder.path}</code>
+                <span>{folder.fileCount} files ready for My plugins</span>
+              </div>
+            </div>
+            <div className="plugin-action-card__actions">
+              <button
+                type="button"
+                className="plugin-action-button plugin-action-button--primary"
+                data-testid={`assistant-plugin-install-${folder.path}`}
+                disabled={busyKey !== null || !onRequestPluginFolderAgentAction}
+                onClick={() => void runAction(folder, "install")}
+              >
+                <Icon
+                  name={busyKey === `install:${folder.path}` ? "spinner" : "plus"}
+                  size={13}
+                />
+                <span>
+                  {busyKey === `install:${folder.path}` ? "Sending..." : "Add to My plugins"}
+                </span>
+              </button>
+              <button
+                type="button"
+                className="plugin-action-button"
+                data-testid={`assistant-plugin-publish-${folder.path}`}
+                disabled={busyKey !== null || !onRequestPluginFolderAgentAction}
+                onClick={() => void runAction(folder, "publish")}
+              >
+                <Icon
+                  name={busyKey === `publish:${folder.path}` ? "spinner" : "github"}
+                  size={13}
+                />
+                <span>
+                  {busyKey === `publish:${folder.path}` ? "Sending..." : "Publish repo"}
+                </span>
+              </button>
+              <button
+                type="button"
+                className="plugin-action-button"
+                data-testid={`assistant-plugin-contribute-${folder.path}`}
+                disabled={busyKey !== null || !onRequestPluginFolderAgentAction}
+                onClick={() => void runAction(folder, "contribute")}
+              >
+                <Icon
+                  name={busyKey === `contribute:${folder.path}` ? "spinner" : "share"}
+                  size={13}
+                />
+                <span>
+                  {busyKey === `contribute:${folder.path}`
+                    ? "Sending..."
+                    : "Open Design PR"}
+                </span>
+              </button>
+              {onRequestOpenFile ? (
+                <button
+                  type="button"
+                  className="plugin-action-button"
+                  data-testid={`assistant-plugin-open-manifest-${folder.path}`}
+                  onClick={() => onRequestOpenFile(folder.manifestPath)}
+                >
+                  <Icon name="file-code" size={13} />
+                  <span>Open manifest</span>
+                </button>
+              ) : null}
+            </div>
+            {noticeByFolder[folder.path] ? (
+              <div className="plugin-action-card__notice" role="status">
+                {noticeByFolder[folder.path]}
+              </div>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function kindIconName(
   kind: ProjectFile["kind"]
 ): "file-code" | "image" | "pencil" | "file" {
@@ -704,6 +1130,64 @@ function humanBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function pluginFoldersTouchedThisTurn(
+  projectFiles: ProjectFile[],
+  fileOps: FileOpEntry[],
+  produced: ProjectFile[],
+  messageContent: string,
+): PluginFolderCandidate[] {
+  const candidates = getPluginFolderCandidates(projectFiles);
+  if (candidates.length === 0) return [];
+  const directTouchedPaths = [
+    ...fileOps.flatMap((entry) => [entry.path, entry.fullPath]),
+    ...produced.flatMap((file) => [file.name, file.path]),
+  ].filter((path): path is string => typeof path === "string" && path.length > 0);
+  const touchedPaths = [...directTouchedPaths, messageContent].filter(
+    (path): path is string => typeof path === "string" && path.length > 0,
+  );
+  const explicitFolders = candidates.filter((folder) =>
+    touchedPaths.some((path) => pathTouchesFolder(path, folder.path)),
+  );
+  if (explicitFolders.length > 0) return explicitFolders;
+  if (candidates.length !== 1) return [];
+  const candidate = candidates[0];
+  if (!candidate) return [];
+  if (
+    directTouchedPaths.some((path) =>
+      pathMatchesFolderFileBasename(path, candidate, projectFiles),
+    )
+  ) {
+    return [candidate];
+  }
+  return hasPluginFinalActionHint(messageContent) ? [candidate] : [];
+}
+
+function pathTouchesFolder(path: string, folderPath: string): boolean {
+  const normalized = path.replace(/\\/g, "/").replace(/^\.\//, "");
+  if (normalized === folderPath || normalized.startsWith(`${folderPath}/`)) {
+    return true;
+  }
+  return normalized.includes(`/${folderPath}/`) || normalized.includes(`${folderPath}/`);
+}
+
+function pathMatchesFolderFileBasename(
+  path: string,
+  folder: PluginFolderCandidate,
+  projectFiles: ProjectFile[],
+): boolean {
+  const basename = path.replace(/\\/g, "/").split("/").filter(Boolean).pop();
+  if (!basename) return false;
+  return projectFiles.some((file) =>
+    file.name.startsWith(`${folder.path}/`) && file.name.endsWith(`/${basename}`),
+  );
+}
+
+function hasPluginFinalActionHint(content: string): boolean {
+  return /\b(Add to My plugins|Open Design PR|Publish repo|plugin publish|ready to publish|ready to add)\b/i.test(
+    content,
+  );
 }
 
 /**
@@ -771,6 +1255,7 @@ function ProseBlock({
   streaming,
   nextUserContent,
   locallySubmitted,
+  suppressDirectionForms,
   onSubmitForm,
 }: {
   text: string;
@@ -778,6 +1263,7 @@ function ProseBlock({
   streaming: boolean;
   nextUserContent?: string;
   locallySubmitted: Set<string>;
+  suppressDirectionForms: boolean;
   onSubmitForm: (formId: string, text: string) => void;
 }) {
   const cleaned = useMemo(() => stripArtifact(text), [text]);
@@ -792,8 +1278,12 @@ function ProseBlock({
       | { key: string; kind: "text"; text: string }
       | { key: string; kind: "reminder"; text: string }
       | { key: string; kind: "form"; form: QuestionForm }
+      | { key: string; kind: "suppressed-direction" }
     > => {
       if (seg.kind === "form") {
+        if (suppressDirectionForms && isDirectionForm(seg.form)) {
+          return [{ key: `f-${idx}`, kind: "suppressed-direction" }];
+        }
         return [{ key: `f-${idx}`, kind: "form", form: seg.form }];
       }
       if (seg.text.trim().length === 0) return [];
@@ -815,6 +1305,15 @@ function ProseBlock({
         if (seg.kind === "text") {
           return <Fragment key={seg.key}>{renderMarkdown(seg.text)}</Fragment>;
         }
+        if (seg.kind === "suppressed-direction") {
+          return (
+            <div key={seg.key} className="status-pill">
+              <span className="status-label">
+                Active design system selected. Visual direction is already locked.
+              </span>
+            </div>
+          );
+        }
         return (
           <FormBlock
             key={seg.key}
@@ -829,6 +1328,12 @@ function ProseBlock({
       })}
     </div>
   );
+}
+
+function isDirectionForm(form: QuestionForm): boolean {
+  if (form.id.toLowerCase() === "direction") return true;
+  if (form.title.toLowerCase().includes("visual direction")) return true;
+  return form.questions.some((q) => q.type === "direction-cards");
 }
 
 function FormBlock({
@@ -943,21 +1448,87 @@ interface ToolItem {
   result?: Extract<AgentEvent, { kind: "tool_result" }>;
 }
 
+// Snapshot tools (the call IS the state, later calls supersede earlier
+// ones) and tools the model retries verbatim under headless-mode errors
+// are noisy when stacked. Collapse identical-input neighbors to the most
+// recent. Currently:
+//   - TodoWrite / todowrite: the input replaces the previous list, so the
+//     latest call is the only one worth showing; older identical or
+//     superseded snapshots are pure duplication.
+//   - AskUserQuestion / ask_user_question: claude-code -p auto-errors the
+//     tool and the model retries with identical input until it gives up.
+// Other tool names pass through untouched.
+const SNAPSHOT_TOOL_NAMES = new Set([
+  "AskUserQuestion",
+  "ask_user_question",
+  "TodoWrite",
+  "todowrite",
+]);
+
+function dedupeSnapshotToolRetries(items: ToolItem[]): ToolItem[] {
+  if (items.length <= 1) return items;
+  const allSnapshot = items.every((it) => SNAPSHOT_TOOL_NAMES.has(it.use.name));
+  if (!allSnapshot) return items;
+  // For TodoWrite specifically, the LATEST call always wins regardless of
+  // input — it is a state replace, not an append. For AskUserQuestion we
+  // group by input so a sequence of distinct questions (rare) renders as
+  // distinct cards. The cheap unifying behavior: keep the last item per
+  // `(name, JSON.stringify(input))` key; for TodoWrite a single name+input
+  // is the snapshot identity, for AskUserQuestion it's the question text.
+  const lastByKey = new Map<string, ToolItem>();
+  for (const it of items) {
+    let key: string;
+    try {
+      key = `${it.use.name}:${JSON.stringify(it.use.input)}`;
+    } catch {
+      key = it.use.id;
+    }
+    lastByKey.set(key, it);
+  }
+  // For TodoWrite groups, additionally collapse to just the most recent
+  // item overall (a later call supersedes an earlier one even when inputs
+  // differ). We detect by checking whether all items share a TodoWrite
+  // name after the input-key dedupe above.
+  const collapsed = Array.from(lastByKey.values());
+  const allTodoWrite = collapsed.every(
+    (it) => it.use.name === "TodoWrite" || it.use.name === "todowrite",
+  );
+  if (allTodoWrite && collapsed.length > 1) {
+    return [collapsed[collapsed.length - 1]!];
+  }
+  return collapsed;
+}
+
 function ToolGroupCard({
   items,
   runStreaming,
   runSucceeded,
   projectFileNames,
   onRequestOpenFile,
+  isLast,
+  onSubmitForm,
+  onAnswerToolUse,
 }: {
   items: ToolItem[];
   runStreaming: boolean;
   runSucceeded: boolean;
   projectFileNames?: Set<string>;
   onRequestOpenFile?: (name: string) => void;
+  isLast?: boolean;
+  onSubmitForm?: (text: string) => void;
+  onAnswerToolUse?: (toolUseId: string, content: string) => Promise<boolean> | boolean;
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
+
+  // `claude-code -p` (headless) auto errors `AskUserQuestion` because it
+  // cannot prompt the user, so the model retries the call up to ~4 times
+  // within a single turn. Each retry produces an identical tool_use event,
+  // which used to render as a stack of duplicate question cards. Collapse
+  // consecutive AskUserQuestion uses with identical input to the LAST one
+  // (it has the most up to date tool_use id, which is what we route the
+  // answer against if a backend tool_result wire is added later).
+  items = dedupeSnapshotToolRetries(items);
 
   // A run of one tool collapses to that tool's card directly so we don't
   // wrap a single child in a redundant disclosure.
@@ -970,6 +1541,9 @@ function ToolGroupCard({
         runSucceeded={runSucceeded}
         projectFileNames={projectFileNames}
         onRequestOpenFile={onRequestOpenFile}
+        isLast={isLast}
+        onSubmitForm={onSubmitForm}
+        onAnswerToolUse={onAnswerToolUse}
       />
     );
   }
@@ -994,21 +1568,26 @@ function ToolGroupCard({
           <Icon name={open ? "chevron-down" : "chevron-right"} size={11} />
         </span>
       </button>
-      {open ? (
-        <div className="action-card-body">
-          {items.map((it, i) => (
-            <ToolCard
-              key={i}
-              use={it.use}
-              result={it.result}
-              runStreaming={runStreaming}
-              runSucceeded={runSucceeded}
-              projectFileNames={projectFileNames}
-              onRequestOpenFile={onRequestOpenFile}
-            />
-          ))}
+      <div className={`accordion-collapsible${open ? ' open' : ''}`}>
+        <div className="accordion-collapsible-inner">
+          <div className="action-card-body">
+            {items.map((it, i) => (
+              <ToolCard
+                key={i}
+                use={it.use}
+                result={it.result}
+                runStreaming={runStreaming}
+                runSucceeded={runSucceeded}
+                projectFileNames={projectFileNames}
+                onRequestOpenFile={onRequestOpenFile}
+                isLast={isLast}
+                onSubmitForm={onSubmitForm}
+                onAnswerToolUse={onAnswerToolUse}
+              />
+            ))}
+          </div>
         </div>
-      ) : null}
+      </div>
     </div>
   );
 }
@@ -1115,6 +1694,45 @@ type Block =
  * single tool-group block so the chat surface stays compact during chains
  * of edits / reads.
  */
+// Drop any tool-group composed entirely of TodoWrite calls. ChatPane
+// renders one canonical TodoCard above the composer using
+// `latestTodosFromConversation`, so leaving the same task list inline in
+// each assistant message just duplicates the view.
+function stripTodoToolGroups(blocks: Block[]): Block[] {
+  return blocks.filter((block) => {
+    if (block.kind !== "tool-group") return true;
+    return !block.items.every(
+      (it) => it.use.name === "TodoWrite" || it.use.name === "todowrite",
+    );
+  });
+}
+
+// Hide text blocks that follow an `AskUserQuestion` tool use in the same
+// assistant message. Claude tends to also write the same questions as
+// markdown text alongside the tool call. The card already shows the
+// content; the prose is hedge that duplicates and confuses the user.
+function suppressAskUserQuestionFallbackText(blocks: Block[]): Block[] {
+  let seenAskUserQuestion = false;
+  const filtered: Block[] = [];
+  for (const block of blocks) {
+    if (block.kind === "tool-group") {
+      const hasAuq = block.items.some(
+        (it) =>
+          it.use.name === "AskUserQuestion" ||
+          it.use.name === "ask_user_question",
+      );
+      if (hasAuq) seenAskUserQuestion = true;
+      filtered.push(block);
+      continue;
+    }
+    if (seenAskUserQuestion && block.kind === "text") {
+      continue;
+    }
+    filtered.push(block);
+  }
+  return filtered;
+}
+
 function buildBlocks(events: AgentEvent[]): Block[] {
   const out: Block[] = [];
   const resultByToolId = new Map<

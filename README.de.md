@@ -1,5 +1,14 @@
 # Open Design
 
+> [!IMPORTANT]
+> ### 🔥 `0.8.0-preview` ist da. Hier endet die alte Welt des Designs.
+>
+> Eine Open-Source-, agent-native Alternative zu Claude Design / Figma — 40k Sterne in zwei Wochen haben uns hierher gebracht. **Wir brauchen dich für den Rest des Weges.**
+>
+> **Schnelle Iteration auf `main`** — 0.8.0 ist die nächste Phase von Open Design. Schick einen PR, wirf eine wilde Idee rein, melde einen Bug — was du mitbringst, dazu wird diese Bewegung.
+>
+> → [**Ankündigung lesen · Installer herunterladen · der Bewegung beitreten**](https://github.com/nexu-io/open-design/discussions/1727) · läuft parallel zu deinem aktuellen 0.7.
+
 > **Die Open-Source-Alternative zu [Claude Design][cd].** Local-first, web-deploybar, BYOK auf jeder Ebene: **16 coding-agent CLIs** werden automatisch in Ihrem `PATH` erkannt (Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI) und werden zur Design-Engine, gesteuert von **31 kombinierbaren Skills** und **72 brandreifen Design Systems**. Keine CLI? Ein OpenAI-kompatibler BYOK-Proxy ist dieselbe Schleife ohne Spawn.
 
 <p align="center">
@@ -21,8 +30,8 @@
   <a href="https://github.com/nexu-io/open-design/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/nexu-io/open-design?style=flat-square&color=blueviolet&label=release&include_prereleases&display_name=tag" /></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg?style=flat-square" /></a>
   <a href="#supported-coding-agents"><img alt="Agents" src="https://img.shields.io/badge/agents-16%20CLIs%20%2B%20BYOK%20proxy-black?style=flat-square" /></a>
-  <a href="#design-systems"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-72-orange?style=flat-square" /></a>
-  <a href="#skills"><img alt="Skills" src="https://img.shields.io/badge/skills-31-teal?style=flat-square" /></a>
+  <a href="#design-systems"><img alt="Design systems" src="https://img.shields.io/badge/design%20systems-149-orange?style=flat-square" /></a>
+  <a href="#skills"><img alt="Skills" src="https://img.shields.io/badge/skills-131-teal?style=flat-square" /></a>
   <a href="https://discord.gg/qhbcCH8Am4"><img alt="Discord" src="https://img.shields.io/badge/discord-join-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
   <a href="QUICKSTART.de.md"><img alt="Quickstart" src="https://img.shields.io/badge/quickstart-3%20commands-green?style=flat-square" /></a>
 </p>
@@ -320,6 +329,8 @@ pnpm tools-dev run web
 ```
 
 Umgebungsanforderungen: Node `~24` und pnpm `10.33.x`. `nvm`/`fnm` sind nur optionale Helfer; wenn Sie eines davon nutzen, führen Sie vor `pnpm install` `nvm install 24 && nvm use 24` oder `fnm install 24 && fnm use 24` aus.
+
+Windows-Nutzer:innen können [`docs/windows-troubleshooting.md`](docs/windows-troubleshooting.md) für den nativen Setup-Pfad und einen kleinen Doppelklick-Launcher folgen.
 
 Für Desktop-/Background-Start, Fixed-Port-Restarts und Media-Generation-Dispatcher-Checks (`OD_BIN`, `OD_DAEMON_URL`, `apps/daemon/dist/cli.js`) siehe [`QUICKSTART.de.md`](QUICKSTART.de.md).
 
@@ -715,7 +726,7 @@ Vollständiger Walkthrough, Merge-Messlatte, Code Style und was wir nicht annehm
 Danke an alle, die Open Design vorangebracht haben: durch Code, Docs, Feedback, neue Skills, neue Design Systems oder auch ein scharfes Issue. Jeder echte Beitrag zählt, und die Wand unten ist die einfachste Art, das laut zu sagen.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-13" alt="Open Design contributors" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-18" alt="Open Design contributors" />
 </a>
 
 Wenn Sie Ihren ersten PR gemergt haben: willkommen. Das Label [`good-first-issue`/`help-wanted`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22%2C%22help+wanted%22) ist der Einstiegspunkt.
@@ -732,9 +743,9 @@ Das SVG oben wird täglich von [`.github/workflows/metrics.yml`](.github/workflo
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-13" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-13" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-13" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-18" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-18" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-18" />
   </picture>
 </a>
 

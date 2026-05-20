@@ -1,0 +1,865 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Neo-Grid Bold — Slide Template</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<script src="assets/deck-stage.js"></script>
+<style>
+  :root {
+    --bg: #ECECE8;
+    --ink: #0A0A0A;
+    --paper: #F5F4EF;
+    --accent: #E6FF3D;        /* signature neon yellow */
+    --line: #0A0A0A;
+    --muted: #8A8A85;
+  }
+  html, body { margin: 0; padding: 0; background: #1a1a1a; }
+  body { font-family: "Space Grotesk", "Helvetica Neue", Helvetica, Arial, sans-serif; color: var(--ink); }
+  deck-stage { background: #1a1a1a; }
+
+  /* --- shared slide chrome ------------------------------------------ */
+  section.slide {
+    background: var(--bg);
+    color: var(--ink);
+    overflow: hidden;
+  }
+  .frame {
+    position: absolute; inset: 40px;
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    grid-template-rows: repeat(8, 1fr);
+    gap: 12px;
+  }
+  .card {
+    background: var(--paper);
+    position: relative;
+    overflow: hidden;
+  }
+  .card.ink   { background: var(--ink);   color: var(--paper); }
+  .card.lemon { background: var(--accent); color: var(--ink); }
+  .card.photo { background: #111; color: #fff; }
+
+  /* slide number tag, bottom-left of every slide */
+  .pagenum {
+    position: absolute;
+    left: 0; bottom: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 24px;
+    padding: 14px 22px;
+    letter-spacing: 0.04em;
+  }
+  .pagenum.invert { background: var(--ink); color: var(--paper); }
+  .pagenum.lemon  { background: var(--accent); color: var(--ink); }
+
+  .corner-mark {
+    position: absolute;
+    top: 22px; right: 22px;
+    width: 36px; height: 36px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 4px;
+  }
+  .corner-mark span { background: currentColor; }
+  .corner-mark span:nth-child(2) { background: transparent; }
+
+  .copyright {
+    position: absolute;
+    left: 22px; bottom: 22px;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 16px;
+    line-height: 1.4;
+    color: var(--ink);
+    opacity: 0.85;
+  }
+
+  .arrow {
+    width: 64px; height: 64px;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .arrow svg { width: 100%; height: 100%; }
+
+  /* --- typography utilities ---------------------------------------- */
+  h1, h2, h3, p { margin: 0; }
+  .display {
+    font-weight: 700;
+    font-size: 132px;
+    line-height: 0.92;
+    letter-spacing: -0.02em;
+    text-transform: uppercase;
+  }
+  .title {
+    font-weight: 700;
+    font-size: 88px;
+    line-height: 0.95;
+    letter-spacing: -0.015em;
+    text-transform: uppercase;
+  }
+  .subtitle {
+    font-weight: 700;
+    font-size: 56px;
+    line-height: 1;
+    letter-spacing: -0.01em;
+    text-transform: uppercase;
+  }
+  .body {
+    font-size: 28px;
+    line-height: 1.35;
+    font-weight: 400;
+  }
+  .label {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 24px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink);
+    opacity: 0.7;
+  }
+  .stat-num {
+    font-weight: 700;
+    font-size: 156px;
+    line-height: 0.9;
+    letter-spacing: -0.03em;
+  }
+  .stat-num.sm { font-size: 96px; }
+
+  /* --- slide 1: COVER ---------------------------------------------- */
+  .s-cover .panel-photo-l { grid-column: 1 / span 3; grid-row: 1 / span 8; background: #0a0a0a; position: relative; overflow: hidden; }
+  .s-cover .panel-photo-l .ph { position: absolute; inset: 0;
+    background:
+      radial-gradient(120% 80% at 30% 30%, #2a2a2a 0%, #0a0a0a 70%),
+      repeating-linear-gradient(135deg, rgba(255,255,255,.04) 0 2px, transparent 2px 8px);
+  }
+  .s-cover .panel-photo-l::after {
+    content: "PORTRAIT / B&W";
+    position: absolute; left: 16px; bottom: 56px;
+    font-family: "JetBrains Mono", monospace; font-size: 13px;
+    color: rgba(255,255,255,.55); letter-spacing: .12em;
+  }
+  .s-cover .panel-mid  { grid-column: 4 / span 5; grid-row: 1 / span 5; background: var(--accent); position: relative; }
+  .s-cover .panel-titletile { grid-column: 4 / span 5; grid-row: 6 / span 3; background: var(--accent); position: relative; }
+  .s-cover .panel-photo-r { grid-column: 9 / span 4; grid-row: 1 / span 5; background:#111; position: relative; overflow: hidden; }
+  .s-cover .panel-photo-r .ph { position: absolute; inset: 0;
+    background:
+      radial-gradient(80% 60% at 60% 40%, #1f1f1f 0%, #0b0b0b 80%),
+      repeating-linear-gradient(45deg, rgba(255,255,255,.05) 0 2px, transparent 2px 8px);
+  }
+  .s-cover .panel-photo-r::after {
+    content: "PORTRAIT / B&W";
+    position: absolute; left: 16px; bottom: 16px;
+    font-family: "JetBrains Mono", monospace; font-size: 13px;
+    color: rgba(255,255,255,.55); letter-spacing: .12em;
+  }
+  .s-cover .panel-cap   { grid-column: 9 / span 4; grid-row: 6 / span 3; background: var(--paper); position: relative; }
+  .s-cover .qr {
+    position: absolute; top: 28px; left: 28px;
+    width: 90px; height: 90px; background: var(--ink);
+    display: grid; grid-template-columns: repeat(5, 1fr); grid-template-rows: repeat(5, 1fr); gap: 0;
+  }
+  .s-cover .qr i { background: var(--ink); }
+  .s-cover .qr i.k { background: var(--accent); }
+  .s-cover .title-block {
+    position: absolute; left: 40px; right: 40px; bottom: 40px;
+  }
+  .s-cover .meta-l {
+    position: absolute; left: 40px; bottom: 40px;
+    font-family: "JetBrains Mono", monospace; font-size: 24px; line-height: 1.4;
+    letter-spacing: .04em;
+  }
+  .s-cover .blockmark {
+    position: absolute; right: 40px; bottom: 40px;
+    width: 56px; height: 56px;
+    display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 4px;
+  }
+  .s-cover .blockmark span:nth-child(1) { background: var(--ink); }
+  .s-cover .blockmark span:nth-child(2) { background: transparent; }
+  .s-cover .blockmark span:nth-child(3) { background: transparent; }
+  .s-cover .blockmark span:nth-child(4) { background: var(--ink); }
+
+  /* --- slide 2: CONTENTS ------------------------------------------- */
+  /* Contents (TOC) — head takes the top 2 grid rows, then 6 cards in a
+     3×2 grid where each card explicitly spans 3 grid rows. The 8-row
+     frame is fully used: head (2) + cards row 1 (3) + cards row 2 (3) = 8. */
+  .s-toc .frame   { gap: 18px; }
+  .s-toc .head    { grid-column: 1 / span 12; grid-row: 1 / span 2; padding: 36px 44px; display: flex; align-items: center; justify-content: space-between; }
+  .s-toc .head h1 { font-size: 92px; font-weight: 700; text-transform: uppercase; letter-spacing: -.015em; line-height: .95; }
+  .s-toc .row     { grid-column: span 4; grid-row: span 3; padding: 40px 44px; display: flex; flex-direction: column; justify-content: center; gap: 22px; min-height: 0; }
+  .s-toc .row .num{ font-family: "JetBrains Mono", monospace; font-size: 22px; letter-spacing: .08em; }
+  .s-toc .row h3  { font-size: 36px; font-weight: 700; text-transform: uppercase; letter-spacing: -.01em; line-height: 1.05; }
+  .s-toc .row p   { font-size: 20px; line-height: 1.5; opacity: .82; }
+  .s-toc .row[data-om-validate-skip] { display: none; }
+
+  /* --- slide 3: DIGITS IN NUMBERS ---------------------------------- */
+  .s-stats .accent-l    { grid-column: 1 / span 2; grid-row: 1 / span 8; background: var(--accent); position: relative; }
+  .s-stats .accent-l .plus { position: absolute; top: 28px; left: 28px; font-weight: 700; font-size: 48px; }
+  .s-stats .accent-l .lab  { position: absolute; bottom: 24px; left: 28px; font-family: "JetBrains Mono", monospace; font-size: 24px; letter-spacing: .08em; text-transform: uppercase; }
+  .s-stats .copy        { grid-column: 3 / span 4; grid-row: 1 / span 8; padding: 36px 32px; background: var(--paper); position: relative; display: flex; flex-direction: column; }
+  .s-stats .copy h2     { font-size: 76px; font-weight: 700; text-transform: uppercase; letter-spacing: -.015em; line-height: .95; }
+  .s-stats .copy h2 mark{ background: var(--accent); color: var(--ink); padding: 0 6px; }
+  .s-stats .copy p      { font-size: 24px; line-height: 1.45; margin-top: 24px; max-width: 36ch; }
+  .s-stats .stat-a      { grid-column: 7 / span 3; grid-row: 1 / span 2; background: var(--paper); padding: 24px 28px; }
+  .s-stats .stat-b      { grid-column: 10 / span 3; grid-row: 1 / span 2; background: var(--paper); padding: 24px 28px; }
+  .s-stats .stat-c      { grid-column: 7 / span 3; grid-row: 3 / span 2; background: var(--paper); padding: 24px 28px; }
+  .s-stats .stat-big    { grid-column: 7 / span 6; grid-row: 5 / span 4; background: var(--accent); padding: 28px 36px; position: relative; display: flex; flex-direction: column; justify-content: space-between; }
+  .s-stats .stat-big .v { font-size: 240px; font-weight: 700; line-height: .85; letter-spacing: -.04em; }
+  .s-stats .stat-big .arrow-out { position: absolute; right: 28px; bottom: 28px; }
+
+  /* --- slide 4: KEY FEATURES --------------------------------------- */
+  .s-features .head { grid-column: 1 / span 12; grid-row: 1 / span 2; padding: 28px 32px; display: flex; align-items: center; justify-content: space-between; background: var(--paper); }
+  .s-features .head h2 { font-size: 88px; font-weight: 700; text-transform: uppercase; letter-spacing: -.015em; }
+  .s-features .feat { grid-column: span 4; grid-row: span 6; background: var(--paper); padding: 28px; display: flex; flex-direction: column; gap: 18px; position: relative; }
+  .s-features .feat .pic { aspect-ratio: 16 / 10; background:#111; position: relative; overflow: hidden; }
+  .s-features .feat .pic .ph { position: absolute; inset: 0;
+    background:
+      radial-gradient(80% 60% at 50% 50%, #1f1f1f 0%, #0a0a0a 80%),
+      repeating-linear-gradient(45deg, rgba(255,255,255,.05) 0 2px, transparent 2px 8px);
+  }
+  .s-features .feat .pic .tag { position: absolute; left: 8px; top: 8px; background: var(--accent); color: var(--ink); font-family: "JetBrains Mono", monospace; font-size: 24px; padding: 4px 10px; letter-spacing: .08em; }
+  .s-features .feat h3 { font-size: 30px; font-weight: 700; text-transform: uppercase; letter-spacing: -.005em; }
+  .s-features .feat p  { font-size: 24px; line-height: 1.4; }
+
+  /* --- slide 5: MARKET PENETRATION (chart) ------------------------- */
+  .s-chart .pane-l { grid-column: 1 / span 5; grid-row: 1 / span 8; background: var(--ink); color: var(--paper); padding: 36px 32px; position: relative; display: flex; flex-direction: column; justify-content: space-between; }
+  .s-chart .pane-l h2 { font-size: 84px; font-weight: 700; text-transform: uppercase; letter-spacing: -.015em; line-height: .95; }
+  .s-chart .pane-l h2 em { font-style: normal; color: var(--accent); }
+  .s-chart .pane-l p  { font-size: 22px; line-height: 1.45; max-width: 32ch; opacity: .9; }
+  .s-chart .pane-l .yearlabel { font-family: "JetBrains Mono", monospace; font-size: 16px; letter-spacing: .08em; opacity: .7; }
+  .s-chart .pane-r { grid-column: 6 / span 7; grid-row: 1 / span 8; background: var(--paper); padding: 36px 32px; position: relative; display: flex; flex-direction: column; }
+  .s-chart .legend { display: flex; gap: 28px; margin-bottom: 18px; }
+  .s-chart .legend .li { display: flex; align-items: center; gap: 8px; font-family: "JetBrains Mono", monospace; font-size: 14px; letter-spacing: .08em; text-transform: uppercase; }
+  .s-chart .legend .li i { width: 18px; height: 12px; background: var(--ink); display: inline-block; }
+  .s-chart .legend .li.b i { background: var(--accent); border: 1.5px solid var(--ink); }
+  .s-chart .bars { flex: 1; display: grid; grid-template-columns: repeat(6, 1fr); gap: 18px; align-items: end; padding: 16px 0 28px 0; border-bottom: 2px solid var(--ink); }
+  .s-chart .bar  { display: flex; flex-direction: column; gap: 4px; align-items: stretch; height: 100%; justify-content: flex-end; }
+  .s-chart .bar .a { background: var(--ink); }
+  .s-chart .bar .b { background: var(--accent); border: 1.5px solid var(--ink); }
+  .s-chart .xaxis{ display: grid; grid-template-columns: repeat(6, 1fr); gap: 18px; padding-top: 8px; }
+  .s-chart .xaxis span { font-family: "JetBrains Mono", monospace; font-size: 14px; text-align: center; letter-spacing: .08em; }
+
+  /* --- slide 6: SECTION DIVIDER ------------------------------------ */
+  .s-section { background: var(--ink); color: var(--paper); }
+  .s-section .frame { gap: 12px; }
+  .s-section .pane-num { grid-column: 1 / span 4; grid-row: 1 / span 8; background: var(--accent); color: var(--ink); padding: 36px 32px; position: relative; display: flex; flex-direction: column; justify-content: space-between; }
+  .s-section .pane-num .n { font-size: 320px; font-weight: 700; line-height: .85; letter-spacing: -.05em; }
+  .s-section .pane-num .lab { font-family: "JetBrains Mono", monospace; font-size: 18px; letter-spacing: .12em; text-transform: uppercase; }
+  .s-section .pane-title { grid-column: 5 / span 8; grid-row: 1 / span 8; background: var(--ink); color: var(--paper); padding: 36px 32px; position: relative; display: flex; flex-direction: column; justify-content: space-between; }
+  .s-section .pane-title h2 { font-size: 132px; font-weight: 700; text-transform: uppercase; letter-spacing: -.02em; line-height: .9; }
+  .s-section .pane-title h2 mark { background: var(--accent); color: var(--ink); padding: 0 8px; }
+  .s-section .pane-title p { font-size: 24px; line-height: 1.45; max-width: 48ch; opacity: .85; }
+
+  /* --- slide 7: QUOTE ---------------------------------------------- */
+  .s-quote .photo { grid-column: 1 / span 5; grid-row: 1 / span 8; background:#111; position: relative; overflow: hidden; }
+  .s-quote .photo .ph { position: absolute; inset: 0;
+    background:
+      radial-gradient(70% 80% at 50% 35%, #2a2a2a 0%, #0a0a0a 80%),
+      repeating-linear-gradient(135deg, rgba(255,255,255,.04) 0 2px, transparent 2px 8px);
+  }
+  .s-quote .photo .tag { position: absolute; left: 16px; bottom: 16px; font-family: "JetBrains Mono", monospace; font-size: 13px; color: rgba(255,255,255,.55); letter-spacing: .12em; }
+  /* Quote — more breathing room around the headline, smaller decorative
+     mark so the actual quote leads, looser line-height for legibility. */
+  .s-quote .copy  { grid-column: 6 / span 7; grid-row: 1 / span 5; background: var(--paper); padding: 48px 52px; display: flex; flex-direction: column; justify-content: center; gap: 28px; }
+  .s-quote .copy .qmark { font-size: 96px; line-height: .8; font-weight: 700; color: var(--accent); -webkit-text-stroke: 2px var(--ink); }
+  .s-quote .copy blockquote { font-size: 38px; font-weight: 500; line-height: 1.28; letter-spacing: -.01em; margin: 0; }
+  .s-quote .attr  { grid-column: 6 / span 4; grid-row: 6 / span 3; background: var(--accent); padding: 36px 40px; display: flex; flex-direction: column; justify-content: space-between; gap: 8px; }
+  .s-quote .attr .who { font-size: 30px; font-weight: 700; text-transform: uppercase; letter-spacing: -.005em; }
+  .s-quote .attr .role { font-family: "JetBrains Mono", monospace; font-size: 14px; letter-spacing: .08em; text-transform: uppercase; }
+  .s-quote .mark  { grid-column: 10 / span 3; grid-row: 6 / span 3; background: var(--ink); color: var(--paper); padding: 28px 32px; display: flex; align-items: center; justify-content: center; }
+  .s-quote .mark .blockmark { width: 96px; height: 96px; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 6px; }
+  .s-quote .mark .blockmark span { background: var(--accent); }
+  .s-quote .mark .blockmark span:nth-child(2) { background: transparent; }
+  .s-quote .mark .blockmark span:nth-child(3) { background: transparent; }
+
+  /* --- slide 8: NEXT STEPS ----------------------------------------- */
+  .s-cta .head    { grid-column: 1 / span 8; grid-row: 1 / span 3; background: var(--accent); padding: 36px 32px; display: flex; flex-direction: column; justify-content: space-between; }
+  .s-cta .head h2 { font-size: 124px; font-weight: 700; text-transform: uppercase; letter-spacing: -.02em; line-height: .9; }
+  .s-cta .head .lab { font-family: "JetBrains Mono", monospace; font-size: 16px; letter-spacing: .08em; text-transform: uppercase; }
+  .s-cta .qr      { grid-column: 9 / span 4; grid-row: 1 / span 3; background: var(--ink); display: flex; align-items: center; justify-content: center; }
+  .s-cta .qr svg  { width: 60%; height: auto; }
+  .s-cta .step    { padding: 28px 32px; display: flex; flex-direction: column; justify-content: space-between; gap: 12px; background: var(--paper); }
+  .s-cta .step.a  { grid-column: 1 / span 4; grid-row: 4 / span 5; }
+  .s-cta .step.b  { grid-column: 5 / span 4; grid-row: 4 / span 5; }
+  .s-cta .step.c  { grid-column: 9 / span 4; grid-row: 4 / span 5; background: var(--ink); color: var(--paper); }
+  .s-cta .step .num { font-family: "JetBrains Mono", monospace; font-size: 16px; letter-spacing: .08em; }
+  .s-cta .step h3 { font-size: 44px; font-weight: 700; text-transform: uppercase; letter-spacing: -.01em; line-height: 1; }
+  .s-cta .step p  { font-size: 20px; line-height: 1.45; }
+  .s-cta .step.c .arrow svg path { stroke: var(--accent); }
+
+  /* --- CONSULT (text-dense) ----------------------------------------- */
+  /* Findings · Detail (action-title + 3 cols) — content vertically
+     distributed across each column so the colored boxes feel populated.
+     Typography lifted a notch + an extra line per column for density. */
+  .s-consult .frame { gap: 16px; }
+  .s-consult .head    { grid-column: 1 / span 12; grid-row: 1 / span 1; padding: 30px 36px; background: var(--ink); color: var(--paper); display: flex; align-items: center; gap: 32px; }
+  .s-consult .head .tag { font-family: "JetBrains Mono", monospace; font-size: 16px; letter-spacing: .12em; text-transform: uppercase; opacity: .7; flex-shrink: 0; border-right: 1px solid rgba(245,244,239,.25); padding-right: 32px; }
+  .s-consult .head h2 { font-weight: 700; font-size: 28px; line-height: 1.25; text-transform: uppercase; letter-spacing: -.005em; }
+  .s-consult .head h2 mark { background: var(--accent); color: var(--ink); padding: 0 6px; }
+  .s-consult .col     { grid-row: 2 / span 7; padding: 40px 40px; background: var(--paper); display: flex; flex-direction: column; gap: 24px; }
+  .s-consult .col.a   { grid-column: 1 / span 4; }
+  .s-consult .col.b   { grid-column: 5 / span 4; background: var(--accent); }
+  .s-consult .col.c   { grid-column: 9 / span 4; }
+  .s-consult .col h3  { font-size: 24px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; border-bottom: 2px solid var(--ink); padding-bottom: 14px; margin-bottom: 0; flex-shrink: 0; }
+  /* col-body: a flex-grow wrapper around the variable middle content.
+     justify-content: space-between distributes whatever is inside across
+     the full available height so paragraphs / lists / meta numbers
+     spread out instead of bunching at the top. */
+  .s-consult .col-body { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: space-between; gap: 24px; }
+  .s-consult .col .meta { font-size: 32px; font-weight: 700; line-height: 1.1; letter-spacing: -.005em; }
+  .s-consult .col p   { font-size: 21px; line-height: 1.55; }
+  .s-consult .col ul  { margin: 0; padding-left: 22px; font-size: 21px; line-height: 1.55; display: flex; flex-direction: column; gap: 14px; }
+  .s-consult .col ul li strong { font-weight: 700; text-transform: uppercase; letter-spacing: .02em; }
+  .s-consult .col .src { font-family: "JetBrains Mono", monospace; font-size: 14px; letter-spacing: .08em; text-transform: uppercase; opacity: .65; padding-top: 16px; border-top: 1px dashed rgba(10,10,10,.25); flex-shrink: 0; }
+
+  /* --- CHART -------------------------------------------------------- */
+  .s-chart2 .pane-l { grid-column: 1 / span 5; grid-row: 1 / span 8; background: var(--accent); padding: 32px 28px; display: flex; flex-direction: column; justify-content: space-between; }
+  .s-chart2 .pane-l .label { font-family: "JetBrains Mono", monospace; font-size: 14px; letter-spacing: .12em; text-transform: uppercase; }
+  .s-chart2 .pane-l h2 { font-weight: 700; font-size: 76px; line-height: .95; text-transform: uppercase; letter-spacing: -.015em; }
+  .s-chart2 .pane-l p { font-size: 20px; line-height: 1.45; max-width: 32ch; }
+  .s-chart2 .pane-l .legend { display: flex; flex-direction: column; gap: 10px; }
+  .s-chart2 .pane-l .legend .li { display: flex; align-items: center; gap: 12px; font-family: "JetBrains Mono", monospace; font-size: 14px; letter-spacing: .08em; text-transform: uppercase; }
+  .s-chart2 .pane-l .legend .li i { width: 24px; height: 4px; background: var(--ink); }
+  .s-chart2 .pane-r { grid-column: 6 / span 7; grid-row: 1 / span 8; background: var(--paper); padding: 32px 28px 28px 80px; position: relative; display: flex; flex-direction: column; overflow: hidden; }
+  .s-chart2 .pane-r .yhead { font-family: "JetBrains Mono", monospace; font-size: 14px; letter-spacing: .12em; text-transform: uppercase; opacity: .7; margin-bottom: 8px; }
+  .s-chart2 .plot { flex: 1; min-height: 0; position: relative; border-left: 2px solid var(--ink); border-bottom: 2px solid var(--ink); }
+  .s-chart2 .plot .gline { position: absolute; left: 0; right: 0; border-top: 1px dashed rgba(10,10,10,.18); }
+  .s-chart2 .plot .yticks { position: absolute; left: -56px; top: 0; bottom: 0; display: flex; flex-direction: column; justify-content: space-between; font-family: "JetBrains Mono", monospace; font-size: 14px; }
+  .s-chart2 .plot svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: visible; }
+  .s-chart2 .pane-r .xticks { display: flex; justify-content: space-between; padding-top: 10px; font-family: "JetBrains Mono", monospace; font-size: 14px; letter-spacing: .08em; }
+
+  /* --- PROCESS DIAGRAM --------------------------------------------- */
+  /* Process — head h2 dropped from 76 to 56 so the headline sits beside the
+     supporting line cleanly. Each node centers its content vertically and
+     uses larger typography so the column feels populated edge-to-edge. */
+  .s-process2 .head { grid-column: 1 / span 12; grid-row: 1 / span 2; padding: 36px 40px; display: flex; align-items: flex-start; justify-content: space-between; gap: 48px; background: var(--paper); }
+  .s-process2 .head h2 { font-weight: 700; font-size: 56px; line-height: 1; text-transform: uppercase; letter-spacing: -.015em; }
+  .s-process2 .head .sub { font-family: "JetBrains Mono", monospace; font-size: 15px; letter-spacing: .08em; text-transform: uppercase; max-width: 46ch; line-height: 1.55; opacity: .75; flex-shrink: 0; }
+  .s-process2 .node { padding: 32px 26px; background: var(--paper); display: flex; flex-direction: column; justify-content: center; gap: 18px; position: relative; }
+  .s-process2 .node.n1 { grid-column: 1 / span 2; grid-row: 3 / span 5; }
+  .s-process2 .node.n2 { grid-column: 3 / span 2; grid-row: 3 / span 5; background: var(--accent); }
+  .s-process2 .node.n3 { grid-column: 5 / span 2; grid-row: 3 / span 5; }
+  .s-process2 .node.n4 { grid-column: 7 / span 2; grid-row: 3 / span 5; background: var(--accent); }
+  .s-process2 .node.n5 { grid-column: 9 / span 2; grid-row: 3 / span 5; }
+  .s-process2 .node.out{ grid-column: 11 / span 2; grid-row: 3 / span 5; background: var(--ink); color: var(--paper); }
+  .s-process2 .node .n { font-family: "JetBrains Mono", monospace; font-size: 15px; letter-spacing: .12em; }
+  .s-process2 .node h3 { font-weight: 700; font-size: 30px; line-height: 1.05; text-transform: uppercase; letter-spacing: -.005em; }
+  .s-process2 .node p  { font-size: 17px; line-height: 1.55; }
+  .s-process2 .node .arr { position: absolute; right: -10px; top: 50%; transform: translateY(-50%); width: 24px; height: 24px; z-index: 2; color: var(--ink); pointer-events: none; }
+  .s-process2 .node.out .arr { display: none; }
+  .s-process2 .timeline { grid-column: 1 / span 12; grid-row: 8 / span 1; background: var(--paper); padding: 16px 28px; display: grid; grid-template-columns: repeat(6, 1fr); align-items: center; font-family: "JetBrains Mono", monospace; font-size: 14px; letter-spacing: .1em; text-transform: uppercase; }
+  .s-process2 .timeline span { border-right: 1px dashed rgba(10,10,10,.25); padding-right: 12px; }
+  .s-process2 .timeline span:last-child { border-right: 0; }
+
+  /* --- COMPARISON MATRIX ------------------------------------------ */
+  .s-matrix2 .head { grid-column: 1 / span 12; grid-row: 1 / span 2; padding: 26px 32px; background: var(--paper); display: flex; align-items: flex-start; justify-content: space-between; gap: 40px; }
+  .s-matrix2 .footrow { grid-column: 1 / span 12; grid-row: 8 / span 1; }
+  .s-matrix2 .head h2 { font-weight: 700; font-size: 76px; line-height: .95; text-transform: uppercase; letter-spacing: -.015em; }
+  .s-matrix2 .head .sub { font-family: "JetBrains Mono", monospace; font-size: 16px; letter-spacing: .08em; text-transform: uppercase; max-width: 46ch; line-height: 1.5; opacity: .75; flex-shrink: 0; }
+  .s-matrix2 .table { grid-column: 1 / span 12; grid-row: 3 / span 5; background: var(--paper); display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr; grid-auto-rows: 1fr; }
+  .s-matrix2 .table .cell { padding: 18px 22px; border-bottom: 1.5px solid var(--ink); border-right: 1.5px solid var(--ink); display: flex; align-items: center; font-size: 24px; line-height: 1.35; }
+  .s-matrix2 .table .cell:nth-child(4n) { border-right: 0; }
+  .s-matrix2 .table .last { border-bottom: 0; }
+  .s-matrix2 .table .head-row { background: var(--ink); color: var(--paper); font-family: "JetBrains Mono", monospace; font-size: 14px; letter-spacing: .12em; text-transform: uppercase; }
+  .s-matrix2 .table .row-label { font-weight: 700; font-size: 22px; text-transform: uppercase; letter-spacing: -.005em; }
+  .s-matrix2 .pill { display: inline-block; padding: 6px 14px; font-family: "JetBrains Mono", monospace; font-size: 16px; letter-spacing: .08em; text-transform: uppercase; font-weight: 500; line-height: 1.3; }
+  .s-matrix2 .pill.yes  { background: var(--accent); color: var(--ink); }
+  .s-matrix2 .pill.part { background: var(--paper); color: var(--ink); border: 1.5px solid var(--ink); }
+  .s-matrix2 .pill.no   { background: var(--ink); color: var(--paper); }
+  .s-matrix2 .pill.note { background: transparent; color: var(--ink); opacity: .7; padding-left: 0; }
+
+  /* Process slide compactness fixes */
+  .s-process2 .node h3 { font-weight: 700; font-size: 26px; line-height: 1; text-transform: uppercase; letter-spacing: -.005em; }
+  .s-process2 .node p  { font-size: 17px; line-height: 1.4; }
+  .s-process2 .timeline span { font-size: 14px; }
+  /* end fix */
+  /* Consult body sizing */
+  .s-consult .col p   { font-size: 18px; line-height: 1.45; }
+  .s-consult .col ul li { font-size: 18px; line-height: 1.5; margin-bottom: 6px; }
+  .s-system { background: var(--paper); }
+  .s-system .frame { gap: 16px; }
+  .s-system .head { grid-column: 1 / span 12; grid-row: 1 / span 1; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; background: transparent; }
+  .s-system .head h2 { font-size: 56px; font-weight: 700; text-transform: uppercase; letter-spacing: -.015em; }
+  .s-system .head .meta { font-family: "JetBrains Mono", monospace; font-size: 14px; letter-spacing: .08em; }
+  .s-system .panel { background: #fff; border: 1.5px solid var(--ink); padding: 22px 24px; display: flex; flex-direction: column; gap: 12px; }
+  .s-system .panel h4 { font-family: "JetBrains Mono", monospace; font-size: 14px; letter-spacing: .12em; text-transform: uppercase; opacity: .65; margin-bottom: 4px; }
+  .s-system .panel p, .s-system .panel li { font-size: 16px; line-height: 1.5; }
+  .s-system .panel ul { margin: 0; padding-left: 18px; }
+  .s-system .pal { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .s-system .pal .sw { aspect-ratio: 1.4 / 1; border: 1.5px solid var(--ink); display: flex; flex-direction: column; justify-content: flex-end; padding: 8px; font-family: "JetBrains Mono", monospace; font-size: 11px; }
+  .s-system .pal .sw.b1 { background: var(--bg); }
+  .s-system .pal .sw.b2 { background: var(--paper); }
+  .s-system .pal .sw.b3 { background: var(--ink); color: var(--paper); }
+  .s-system .pal .sw.b4 { background: var(--accent); }
+  .s-system .type-row { display: flex; align-items: baseline; gap: 16px; padding: 6px 0; border-bottom: 1px dashed rgba(0,0,0,.15); }
+  .s-system .type-row:last-child { border-bottom: 0; }
+  .s-system .type-row .sample { font-weight: 700; text-transform: uppercase; letter-spacing: -.01em; }
+  .s-system .type-row .lbl    { font-family: "JetBrains Mono", monospace; font-size: 12px; opacity: .65; margin-left: auto; }
+
+  .s-system .p-pal   { grid-column: 1 / span 4; grid-row: 2 / span 4; }
+  .s-system .p-type  { grid-column: 5 / span 5; grid-row: 2 / span 4; }
+  .s-system .p-grid  { grid-column: 10 / span 3; grid-row: 2 / span 4; }
+  .s-system .p-rules { grid-column: 1 / span 7; grid-row: 6 / span 3; }
+  .s-system .p-dont  { grid-column: 8 / span 5; grid-row: 6 / span 3; }
+  .s-system .gridviz { aspect-ratio: 1 / 1; border: 1.5px solid var(--ink); display: grid; grid-template-columns: repeat(12, 1fr); }
+  .s-system .gridviz span { border-right: 1px dashed rgba(0,0,0,.18); }
+  .s-system .gridviz span:last-child { border-right: 0; }
+</style>
+</head>
+<body>
+
+<deck-stage width="1920" height="1080">
+
+  <!-- ============== 1. COVER ================================== -->
+  <section class="slide s-cover" data-label="01 Cover" data-om-validate="false">
+    <div class="frame">
+      <div class="panel-photo-l">
+        <div class="ph"></div>
+      </div>
+      <div class="panel-mid">
+        <div class="qr" aria-hidden="true">
+          <i></i><i class="k"></i><i></i><i class="k"></i><i></i>
+          <i class="k"></i><i></i><i class="k"></i><i></i><i class="k"></i>
+          <i></i><i class="k"></i><i></i><i class="k"></i><i></i>
+          <i class="k"></i><i></i><i class="k"></i><i></i><i class="k"></i>
+          <i></i><i class="k"></i><i></i><i class="k"></i><i></i>
+        </div>
+      </div>
+      <div class="panel-titletile">
+        <div class="title-block">
+          <h1 class="title">The future of<br />data-driven<br />finance</h1>
+        </div>
+        <div class="blockmark" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+      </div>
+      <div class="panel-photo-r">
+        <div class="ph"></div>
+      </div>
+      <div class="panel-cap">
+        <div class="meta-l">
+          ©2025 DIGITS<br />All rights reserved.
+        </div>
+      </div>
+    </div>
+    <div class="pagenum">01 / 12</div>
+  </section>
+
+  <!-- ============== 2. CONTENTS =============================== -->
+  <section class="slide s-toc" data-label="02 Contents" data-om-validate="false">
+    <div class="frame">
+      <div class="head card">
+        <h1>Contents</h1>
+        <div class="corner-mark" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+      </div>
+      <div class="row card">
+        <div class="num">01 / Introduction</div>
+        <div>
+          <h3>Digits in numbers</h3>
+          <p>Where we are and what the platform handles today.</p>
+        </div>
+      </div>
+      <div class="row card lemon">
+        <div class="num">02 / Product</div>
+        <div>
+          <h3>Key features</h3>
+          <p>Three primitives that power decision-making at scale.</p>
+        </div>
+      </div>
+      <div class="row card">
+        <div class="num">03 / Market</div>
+        <div>
+          <h3>Penetration &amp; growth</h3>
+          <p>Where we are gaining ground, and where we are next.</p>
+        </div>
+      </div>
+      <div class="row card">
+        <div class="num">04 / Vision</div>
+        <div>
+          <h3>What comes next</h3>
+          <p>The roadmap for the next four quarters.</p>
+        </div>
+      </div>
+      <div class="row card ink">
+        <div class="num" style="opacity:.75">05 / Voice</div>
+        <div>
+          <h3>From our partners</h3>
+          <p style="opacity:.85">Why teams are choosing the platform.</p>
+        </div>
+      </div>
+      <div class="row card lemon">
+        <div class="num">06 / Action</div>
+        <div>
+          <h3>Next steps</h3>
+          <p>Three things to take away from today.</p>
+        </div>
+      </div>
+    </div>
+    <div class="pagenum">02 / 12</div>
+  </section>
+
+  <!-- ============== 3. DIGITS IN NUMBERS ====================== -->
+  <section class="slide s-stats" data-label="03 Digits in Numbers" data-om-validate="false">
+    <div class="frame">
+      <div class="accent-l">
+        <div class="plus">+98.7%</div>
+        <div class="lab">Market penetration</div>
+        <div class="corner-mark" style="top:auto; bottom:22px; right:22px; color:var(--ink)" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+      </div>
+      <div class="copy">
+        <h2>Digits<br />in <mark>numbers</mark></h2>
+        <p>Empowering businesses with data-driven financial insights. With over 10 million users and 75 million data points analyzed, the platform is reshaping real-time financial decision-making across markets.</p>
+        <div style="margin-top:auto" class="label">Snapshot · Q1 2026</div>
+      </div>
+      <div class="stat-a">
+        <div class="stat-num sm">12.8M</div>
+        <div class="label" style="margin-top:8px">Transactions processed</div>
+      </div>
+      <div class="stat-b">
+        <div class="stat-num sm">41M</div>
+        <div class="label" style="margin-top:8px">Total revenue impacted ($)</div>
+      </div>
+      <div class="stat-c">
+        <div class="stat-num sm">15.4M</div>
+        <div class="label" style="margin-top:8px">Users engaged</div>
+      </div>
+      <div class="stat-big">
+        <div class="label">Data points analyzed</div>
+        <div class="v">85.6M</div>
+        <div class="arrow-out arrow" aria-hidden="true">
+          <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="4"><path d="M8 32 H56 M40 16 L56 32 L40 48"/></svg>
+        </div>
+      </div>
+    </div>
+    <div class="pagenum lemon">03 / 12</div>
+  </section>
+
+  <!-- ============== 4. KEY FEATURES =========================== -->
+  <section class="slide s-features" data-label="04 Key Features" data-om-validate="false">
+    <div class="frame">
+      <div class="head">
+        <h2>Key features</h2>
+        <div class="label">Three primitives</div>
+      </div>
+      <div class="feat">
+        <div class="pic"><div class="ph"></div><div class="tag">01</div></div>
+        <h3>Seamless transactions</h3>
+        <p>Effortless and secure digital payments with real-time processing, ensuring a smooth experience for every user across every channel.</p>
+      </div>
+      <div class="feat">
+        <div class="pic"><div class="ph"></div><div class="tag">02</div></div>
+        <h3>Data insights</h3>
+        <p>Leverage advanced analytics to uncover patterns, surface anomalies, and unlock new opportunities for the business.</p>
+      </div>
+      <div class="feat">
+        <div class="pic"><div class="ph"></div><div class="tag">03</div></div>
+        <h3>Risk modelling</h3>
+        <p>Predictive models tuned on billions of events score risk in milliseconds, so teams can act before exposure compounds.</p>
+      </div>
+    </div>
+    <div class="pagenum">04 / 12</div>
+  </section>
+
+  <!-- ============== 5. MARKET PENETRATION ===================== -->
+  <section class="slide s-chart" data-label="05 Market Penetration" data-om-validate="false">
+    <div class="frame">
+      <div class="pane-l">
+        <div>
+          <div class="label" style="opacity:.7; color:var(--paper); margin-bottom:24px">Section 03 / Market</div>
+          <h2>Market<br />penetration<br /><em>doubled.</em></h2>
+        </div>
+        <p>Year-on-year reach across our six largest regions. The platform now touches roughly one in three small-business accounts in core markets.</p>
+        <div class="yearlabel">FY24 vs FY25 · Indexed (FY23 = 100)</div>
+      </div>
+      <div class="pane-r">
+        <div class="legend">
+          <div class="li"><i></i> FY24</div>
+          <div class="li b"><i></i> FY25</div>
+        </div>
+        <div class="bars">
+          <div class="bar"><div class="a" style="height:42%"></div><div class="b" style="height:78%"></div></div>
+          <div class="bar"><div class="a" style="height:55%"></div><div class="b" style="height:88%"></div></div>
+          <div class="bar"><div class="a" style="height:36%"></div><div class="b" style="height:62%"></div></div>
+          <div class="bar"><div class="a" style="height:64%"></div><div class="b" style="height:94%"></div></div>
+          <div class="bar"><div class="a" style="height:48%"></div><div class="b" style="height:72%"></div></div>
+          <div class="bar"><div class="a" style="height:30%"></div><div class="b" style="height:54%"></div></div>
+        </div>
+        <div class="xaxis">
+          <span>NA</span><span>EU</span><span>LATAM</span><span>APAC</span><span>MENA</span><span>SSA</span>
+        </div>
+      </div>
+    </div>
+    <div class="pagenum invert">05 / 12</div>
+  </section>
+
+  <!-- ============== 6. SECTION DIVIDER ======================== -->
+  <section class="slide s-section" data-label="06 Section · Vision" data-om-validate="false">
+    <div class="frame">
+      <div class="pane-num">
+        <div class="lab">Section · Vision</div>
+        <div class="n">02</div>
+        <div class="corner-mark" style="top:auto; bottom:22px; right:22px;" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+      </div>
+      <div class="pane-title">
+        <div class="label" style="color:var(--paper); opacity:.7">What comes next</div>
+        <h2>Build the<br />engine of<br /><mark>modern&nbsp;money.</mark></h2>
+        <p>We are betting that the next decade of finance is owned by platforms that can model the world in real time, then act on it without a human in the loop.</p>
+      </div>
+    </div>
+    <div class="pagenum lemon">06 / 12</div>
+  </section>
+
+  <!-- ============== 7. CLIENT VOICE / QUOTE =================== -->
+  <section class="slide s-quote" data-label="07 Client Voice" data-om-validate="false">
+    <div class="frame">
+      <div class="photo">
+        <div class="ph"></div>
+        <div class="tag">PORTRAIT / B&amp;W</div>
+      </div>
+      <div class="copy">
+        <div class="qmark">"</div>
+        <blockquote>The platform replaced four legacy systems and a quarterly committee. We now decide in minutes what used to take a month.</blockquote>
+      </div>
+      <div class="attr">
+        <div class="role">CFO · Mid-market retailer</div>
+        <div class="who">Marta Aguilar</div>
+      </div>
+      <div class="mark">
+        <div class="blockmark" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+      </div>
+    </div>
+    <div class="pagenum">07 / 12</div>
+  </section>
+
+  <!-- ============== 8. NEXT STEPS / CTA ======================= -->
+  <section class="slide s-cta" data-label="08 Next Steps" data-om-validate="false">
+    <div class="frame">
+      <div class="head">
+        <div class="lab">Take three things away</div>
+        <h2>Next<br />steps</h2>
+      </div>
+      <div class="qr">
+        <svg viewBox="0 0 9 9" shape-rendering="crispEdges" aria-hidden="true">
+          <rect width="9" height="9" fill="#0a0a0a"/>
+          <g fill="#E6FF3D">
+            <rect x="1" y="1" width="1" height="1"/><rect x="3" y="1" width="1" height="1"/><rect x="5" y="1" width="1" height="1"/><rect x="7" y="1" width="1" height="1"/>
+            <rect x="2" y="2" width="1" height="1"/><rect x="4" y="2" width="1" height="1"/><rect x="6" y="2" width="1" height="1"/>
+            <rect x="1" y="3" width="1" height="1"/><rect x="3" y="3" width="1" height="1"/><rect x="5" y="3" width="1" height="1"/><rect x="7" y="3" width="1" height="1"/>
+            <rect x="2" y="4" width="1" height="1"/><rect x="6" y="4" width="1" height="1"/>
+            <rect x="1" y="5" width="1" height="1"/><rect x="3" y="5" width="1" height="1"/><rect x="5" y="5" width="1" height="1"/><rect x="7" y="5" width="1" height="1"/>
+            <rect x="2" y="6" width="1" height="1"/><rect x="4" y="6" width="1" height="1"/><rect x="6" y="6" width="1" height="1"/>
+            <rect x="1" y="7" width="1" height="1"/><rect x="3" y="7" width="1" height="1"/><rect x="5" y="7" width="1" height="1"/><rect x="7" y="7" width="1" height="1"/>
+          </g>
+        </svg>
+      </div>
+      <div class="step a">
+        <div class="num">01 · Today</div>
+        <h3>Pilot one workflow</h3>
+        <p>Pick a single decision your team makes weekly. Wire it through the platform and benchmark against the current process.</p>
+        <div class="label">≈ 2 weeks</div>
+      </div>
+      <div class="step b">
+        <div class="num">02 · Next month</div>
+        <h3>Scale the wedge</h3>
+        <p>Expand the pilot to two adjacent workflows. Use the playbook the integrations team will share by Friday.</p>
+        <div class="label">≈ 6 weeks</div>
+      </div>
+      <div class="step c">
+        <div class="num" style="opacity:.7">03 · This quarter</div>
+        <h3>Make it the default</h3>
+        <p style="opacity:.85">Retire the legacy stack for that domain. Move the freed-up budget into the next bet.</p>
+        <div class="arrow" aria-hidden="true">
+          <svg viewBox="0 0 64 64" fill="none" stroke="#E6FF3D" stroke-width="4"><path d="M8 32 H56 M40 16 L56 32 L40 48"/></svg>
+        </div>
+      </div>
+    </div>
+    <div class="pagenum">08 / 12</div>
+  </section>
+
+  <!-- ============== 9. CONSULT (text-dense action title) ====== -->
+  <section class="slide s-consult" data-label="09 Findings · Detail" data-om-validate="false">
+    <div class="frame">
+      <div class="head">
+        <div class="tag">Action title · 09</div>
+        <h2>The trust gap is built in the first 72 hours, not the first 7 days — and the cost compounds for the rest of the lifecycle.</h2>
+      </div>
+      <div class="col a">
+        <h3>What we found</h3>
+        <div class="col-body">
+          <p><strong>Three behavioural signals</strong> in the first 72 hours predict 18-month retention better than any feature-usage metric we tracked.</p>
+          <ul>
+            <li><strong>Email open #2</strong> — opening the second lifecycle email lifts D90 retention by 19 points.</li>
+            <li><strong>Personal salutation</strong> — accounts that received a written welcome retained 2.4× the cohort.</li>
+            <li><strong>Reply received</strong> — a single human reply within 24 hours is the single largest lever measured.</li>
+            <li><strong>Mobile-first session</strong> — a same-day mobile sign-in doubled the chance of a second-week return visit.</li>
+          </ul>
+        </div>
+        <div class="src">N = 14,200 · Q1 2026</div>
+      </div>
+      <div class="col b">
+        <h3>Why it matters</h3>
+        <div class="col-body">
+          <div class="meta">$4.1M projected retained ARR — current cohort.</div>
+          <p>The first three days are the only window where customers are both paying attention and willing to write back. Every interaction here does the work of roughly four interactions in week three.</p>
+          <p>The cost of getting this wrong is not refunds — it is the long, quiet churn of an account that never returns to the inbox, never opens another email, never sees the product again.</p>
+          <p>Replicated on three independent cohorts. The signal is the same in every segment we have tested.</p>
+        </div>
+        <div class="src">Modelled on FY24 cohort behaviour</div>
+      </div>
+      <div class="col c">
+        <h3>What to do</h3>
+        <div class="col-body">
+          <ul>
+            <li><strong>Rewrite emails 1–3</strong> in human voice; ship behind a 50/50 holdout. Owner: lifecycle. Due: May 17.</li>
+            <li><strong>Route every signup</strong> to a named human for one personal reply within 24h, capped at the top 200 accounts/day. Owner: success. Due: May 24.</li>
+            <li><strong>Instrument the 72-hour window</strong> as a first-class metric in the weekly review. Owner: analytics. Due: June 1.</li>
+            <li><strong>Run a quarterly teardown</strong> of the bottom decile — the cohorts that never made it to email #2 — to find the next lever. Owner: research. Due: June 30.</li>
+          </ul>
+        </div>
+        <div class="src">Pilot scope: top-decile signups</div>
+      </div>
+    </div>
+    <div class="pagenum">09 / 12</div>
+  </section>
+
+  <!-- ============== 10. CHART (retention curve) ================ -->
+  <section class="slide s-chart2" data-label="10 Retention Curve" data-om-validate="false">
+    <div class="frame">
+      <div class="pane-l">
+        <div>
+          <div class="label" style="margin-bottom:18px">Section · Evidence</div>
+          <h2>The curve<br/>bends at<br/>day three.</h2>
+        </div>
+        <p>Cohorts that received a written welcome and a human reply within 24 hours retain at roughly 2× the rate of the templated cohort, and the gap holds for ninety days.</p>
+        <div class="legend">
+          <div class="li"><i style="background:var(--ink); height:2px"></i> Templated welcome (control)</div>
+          <div class="li"><i style="background:var(--ink); height:5px"></i> Written welcome</div>
+          <div class="li"><i style="background:var(--ink); height:8px"></i> Written + human reply</div>
+        </div>
+      </div>
+      <div class="pane-r">
+        <div class="yhead">% of cohort active, by day</div>
+        <div class="plot">
+          <div class="yticks">
+            <span>100</span><span>75</span><span>50</span><span>25</span><span>0</span>
+          </div>
+          <div class="gline" style="top:0%"></div>
+          <div class="gline" style="top:25%"></div>
+          <div class="gline" style="top:50%"></div>
+          <div class="gline" style="top:75%"></div>
+          <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+            <polyline fill="none" stroke="#0a0a0a" stroke-width="0.6" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="2,1.5"
+              points="0,4 16,30 32,50 48,64 64,76 80,84 100,90" />
+            <polyline fill="none" stroke="#0a0a0a" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"
+              points="0,4 16,18 32,28 48,38 64,46 80,52 100,56" />
+            <polyline fill="none" stroke="#0a0a0a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"
+              points="0,4 16,10 32,16 48,22 64,28 80,32 100,36" />
+            <circle cx="100" cy="36" r="2" fill="#E6FF3D" stroke="#0a0a0a" stroke-width="1"/>
+          </svg>
+        </div>
+        <div class="xticks">
+          <span>D0</span><span>D7</span><span>D14</span><span>D30</span><span>D45</span><span>D60</span><span>D90</span>
+        </div>
+      </div>
+    </div>
+    <div class="pagenum lemon">10 / 12</div>
+  </section>
+
+  <!-- ============== 11. PROCESS DIAGRAM ======================== -->
+  <section class="slide s-process2" data-label="11 Process" data-om-validate="false">
+    <div class="frame">
+      <div class="head">
+        <h2>From insight<br/>to default,<br/>in five moves.</h2>
+        <div class="sub">A repeatable path each pilot follows end-to-end before it is allowed to graduate to the default experience for every customer.</div>
+      </div>
+      <div class="node n1">
+        <div class="n">01 · Frame</div>
+        <h3>Hypothesise</h3>
+        <p>Translate the insight into a single behavioural hypothesis we can falsify within a sprint.</p>
+        <svg class="arr" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 16 H26 M20 9 L26 16 L20 23"/></svg>
+      </div>
+      <div class="node n2">
+        <div class="n">02 · Design</div>
+        <h3>Sketch</h3>
+        <p>Smallest end-to-end change that lets the hypothesis be tested cleanly.</p>
+        <svg class="arr" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 16 H26 M20 9 L26 16 L20 23"/></svg>
+      </div>
+      <div class="node n3">
+        <div class="n">03 · Pilot</div>
+        <h3>Ship 50/50</h3>
+        <p>Holdout in one segment. Hold the line for two cycles before reading.</p>
+        <svg class="arr" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 16 H26 M20 9 L26 16 L20 23"/></svg>
+      </div>
+      <div class="node n4">
+        <div class="n">04 · Read</div>
+        <h3>Decide</h3>
+        <p>Pre-registered metrics only. Kill, scale, or extend — not three of three.</p>
+        <svg class="arr" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 16 H26 M20 9 L26 16 L20 23"/></svg>
+      </div>
+      <div class="node n5">
+        <div class="n">05 · Default</div>
+        <h3>Graduate</h3>
+        <p>Promote to the default surface and retire the legacy path inside the same release.</p>
+        <svg class="arr" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 16 H26 M20 9 L26 16 L20 23"/></svg>
+      </div>
+      <div class="node out">
+        <div class="n" style="opacity:.7">Outcome</div>
+        <h3>New default</h3>
+        <p style="opacity:.85">A change every customer feels — backed by a result we can show.</p>
+      </div>
+      <div class="timeline">
+        <span>Week 1 · Frame</span>
+        <span>Week 2–3 · Design</span>
+        <span>Week 3–6 · Pilot</span>
+        <span>Week 7 · Read</span>
+        <span>Week 8 · Default</span>
+        <span style="border-right:0">Total · 8 weeks</span>
+      </div>
+    </div>
+    <div class="pagenum">11 / 12</div>
+  </section>
+
+  <!-- ============== 12. COMPARISON MATRIX ====================== -->
+  <section class="slide s-matrix2" data-label="12 Comparison" data-om-validate="false">
+    <div class="frame">
+      <div class="head">
+        <h2>Where each<br/>pilot earns<br/>its keep.</h2>
+        <div class="sub">Scored against the four levers that matter most this cycle. We will only carry forward bets that win on at least two.</div>
+      </div>
+      <div class="table">
+        <div class="cell head-row">Lever</div>
+        <div class="cell head-row">Rewrite welcome</div>
+        <div class="cell head-row">Quiet upgrades</div>
+        <div class="cell head-row">Inbox-as-search</div>
+
+        <div class="cell row-label">Time-to-impact</div>
+        <div class="cell"><span class="pill yes">≤ 4 weeks</span></div>
+        <div class="cell"><span class="pill part">6–8 weeks</span></div>
+        <div class="cell"><span class="pill yes">≤ 4 weeks</span></div>
+
+        <div class="cell row-label">Build cost</div>
+        <div class="cell"><span class="pill yes">Low</span></div>
+        <div class="cell"><span class="pill part">Medium</span></div>
+        <div class="cell"><span class="pill yes">Low</span></div>
+
+        <div class="cell row-label">Retention lift (model)</div>
+        <div class="cell"><span class="pill yes">+19 pts D90</span></div>
+        <div class="cell"><span class="pill part">+7 pts D90</span></div>
+        <div class="cell"><span class="pill part">+5 pts D90</span></div>
+
+        <div class="cell row-label last">Risk to power users</div>
+        <div class="cell last"><span class="pill yes">None</span></div>
+        <div class="cell last"><span class="pill no">Material</span></div>
+        <div class="cell last"><span class="pill note">Soft, reversible</span></div>
+      </div>
+    </div>
+    <div class="pagenum lemon">12 / 12</div>
+  </section>
+
+  <!-- ============== 9. DESIGN SYSTEM ANNOTATIONS ============== -->
+
+</deck-stage>
+
+</body>
+</html>

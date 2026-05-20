@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { lstat, mkdir, open, rm, symlink, writeFile, type FileHandle } from "node:fs/promises";
+import { lstat, mkdir, open, readdir, rm, symlink, writeFile, type FileHandle } from "node:fs/promises";
 import path from "node:path";
 
 import { cac } from "cac";
@@ -16,6 +16,7 @@ import {
   type DesktopEvalResult,
   type DesktopScreenshotResult,
   type DesktopStatusSnapshot,
+  type DesktopUpdateResult,
   type WebStatusSnapshot,
 } from "@open-design/sidecar-proto";
 import { createSidecarLaunchEnv, requestJsonIpc } from "@open-design/sidecar";
@@ -47,9 +48,11 @@ import {
 } from "./config.js";
 import {
   appendStartupLogDiagnostics,
+  createUnsupportedNodeRuntimeError,
   createStartupLogDiagnostics,
   detectLogDiagnostics,
   formatLogDiagnostics,
+  isSupportedNodeRuntime,
   type LogDiagnostic,
 } from "./diagnostics.js";
 import {
@@ -68,6 +71,7 @@ type CliOptions = ToolDevOptions & {
   path?: string;
   selector?: string;
   timeout?: string;
+  updateAction?: string;
 };
 
 const TOOLS_DEV_PARENT_PID_ENV = SIDECAR_ENV.TOOLS_DEV_PARENT_PID;
@@ -94,6 +98,10 @@ function output(payload: unknown, options: CliOptions = {}): void {
     return;
   }
   printJson(payload);
+}
+
+function assertSupportedNodeRuntimeForStart(): void {
+  if (!isSupportedNodeRuntime()) throw createUnsupportedNodeRuntimeError();
 }
 
 function normalizeDisplayUrl(url: string): string {
@@ -413,6 +421,7 @@ async function spawnDaemonRuntime(
   const logHandle = await openAppLog(config, APP_KEYS.DAEMON);
 
   try {
+    await ensureDaemonCliBuild(config, logHandle);
     await logHandle.write(`\n[tools-dev] launching daemon at ${new Date().toISOString()}\n`);
     if (webPort != null) await logHandle.write(`[tools-dev] trusting web origin port ${webPort}\n`);
     if (spawnOptions.requireDesktopAuth) {
@@ -482,6 +491,44 @@ async function spawnWebRuntime(config: ToolDevConfig, options: CliOptions): Prom
 async function buildDesktop(config: ToolDevConfig, logHandle: FileHandle): Promise<void> {
   await logHandle.write(`\n[tools-dev] building @open-design/desktop at ${new Date().toISOString()}\n`);
   const invocation = createPackageManagerInvocation(["--filter", "@open-design/desktop", "build"], process.env);
+  await runLoggedCommand({
+    args: invocation.args,
+    command: invocation.command,
+    cwd: config.workspaceRoot,
+    env: process.env,
+    logFd: logHandle.fd,
+    windowsVerbatimArguments: invocation.windowsVerbatimArguments,
+  });
+}
+
+async function latestMtimeMs(filePath: string): Promise<number> {
+  const entry = await lstat(filePath).catch(() => null);
+  if (entry == null) return 0;
+  if (!entry.isDirectory()) return entry.mtimeMs;
+
+  const children = await readdir(filePath, { withFileTypes: true }).catch(() => []);
+  let latest = entry.mtimeMs;
+  for (const child of children) {
+    if (child.name === "node_modules" || child.name === "dist" || child.name === ".tmp") continue;
+    latest = Math.max(latest, await latestMtimeMs(path.join(filePath, child.name)));
+  }
+  return latest;
+}
+
+async function ensureDaemonCliBuild(config: ToolDevConfig, logHandle: FileHandle): Promise<void> {
+  const daemonRoot = path.join(config.workspaceRoot, "apps/daemon");
+  const distCliPath = path.join(daemonRoot, "dist/cli.js");
+  const distMtime = await latestMtimeMs(distCliPath);
+  const sourceMtime = Math.max(
+    await latestMtimeMs(path.join(daemonRoot, "src")),
+    await latestMtimeMs(path.join(daemonRoot, "package.json")),
+    await latestMtimeMs(path.join(daemonRoot, "tsconfig.json")),
+  );
+  if (distMtime > 0 && distMtime >= sourceMtime) return;
+
+  const reason = distMtime > 0 ? "source is newer than apps/daemon/dist/cli.js" : "apps/daemon/dist/cli.js is missing";
+  await logHandle.write(`\n[tools-dev] building @open-design/daemon because ${reason} at ${new Date().toISOString()}\n`);
+  const invocation = createPackageManagerInvocation(["--filter", "@open-design/daemon", "build"], process.env);
   await runLoggedCommand({
     args: invocation.args,
     command: invocation.command,
@@ -911,6 +958,18 @@ async function inspectDesktop(config: ToolDevConfig, target: string | undefined,
       );
     case "console":
       return await requestJsonIpc<DesktopConsoleResult>(config.apps.desktop.ipcPath, { type: SIDECAR_MESSAGES.CONSOLE }, { timeoutMs });
+    case "update":
+      if (
+        options.updateAction != null &&
+        !["status", "check", "download", "install"].includes(options.updateAction)
+      ) {
+        throw new Error("--update-action must be status, check, download, or install");
+      }
+      return await requestJsonIpc<DesktopUpdateResult>(
+        config.apps.desktop.ipcPath,
+        { input: { action: options.updateAction ?? "status" }, type: SIDECAR_MESSAGES.UPDATE },
+        { timeoutMs },
+      );
     case "click":
       if (options.selector == null) throw new Error("--selector is required for desktop click");
       return await requestJsonIpc<DesktopClickResult>(
@@ -996,6 +1055,7 @@ function addPortOptions(command: ReturnType<typeof cli.command>) {
 
 addPortOptions(addSharedOptions(cli.command("start [app]", "Start daemon, web, desktop, or all when app is omitted"))).action(
   async (appName: string | undefined, options: CliOptions) => {
+    assertSupportedNodeRuntimeForStart();
     const config = resolveToolDevConfig(options);
     const targets = resolveStartApps(appName);
     const result = await runSequential(targets, (target) => startApp(config, target, options, { targets }));
@@ -1005,6 +1065,7 @@ addPortOptions(addSharedOptions(cli.command("start [app]", "Start daemon, web, d
 
 addPortOptions(addSharedOptions(cli.command("run [app]", "Start apps and keep this command alive until interrupted"))).action(
   async (appName: string | undefined, options: CliOptions) => {
+    assertSupportedNodeRuntimeForStart();
     await runForeground(resolveToolDevConfig(options), appName, options);
   },
 );
@@ -1026,6 +1087,7 @@ addSharedOptions(cli.command("stop [app]", "Stop daemon, web, desktop, or all wh
 
 addPortOptions(addSharedOptions(cli.command("restart [app]", "Restart daemon, web, desktop, or all when app is omitted"))).action(
   async (appName: string | undefined, options: CliOptions) => {
+    assertSupportedNodeRuntimeForStart();
     printRestartResult(await restartTargets(resolveToolDevConfig(options), appName, options), options);
   },
 );
@@ -1048,6 +1110,7 @@ addSharedOptions(
   .option("--path <file>", "Output path for desktop screenshot")
   .option("--selector <css>", "CSS selector for desktop click")
   .option("--timeout <seconds>", "Desktop inspect timeout in seconds")
+  .option("--update-action <action>", "Desktop update action: status|check|download|install")
   .action(async (appName: string, target: string | undefined, options: CliOptions) => {
     output(await inspect(resolveToolDevConfig(options), appName, target, options), options);
   });

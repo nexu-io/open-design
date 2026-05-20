@@ -27,6 +27,7 @@ import path from 'node:path';
 // minimal mirror in the daemon keeps the existing module-resolution shape
 // for the rest of the codebase intact. Both sides MUST stay in sync.
 export type McpTransport = 'stdio' | 'sse' | 'http';
+export type McpAuthMode = 'none' | 'oauth';
 
 export interface McpServerConfig {
   id: string;
@@ -34,6 +35,7 @@ export interface McpServerConfig {
   templateId?: string;
   transport: McpTransport;
   enabled: boolean;
+  authMode?: McpAuthMode;
   command?: string;
   args?: string[];
   env?: Record<string, string>;
@@ -71,6 +73,7 @@ export interface McpTemplate {
   label: string;
   description: string;
   transport: McpTransport;
+  authMode?: McpAuthMode;
   category: McpTemplateCategory;
   homepage?: string;
   // One-liner prompt shown in the UI so the user has a concrete starting
@@ -88,6 +91,7 @@ const VALID_TRANSPORTS: ReadonlySet<McpTransport> = new Set([
   'sse',
   'http',
 ]);
+const VALID_AUTH_MODES: ReadonlySet<McpAuthMode> = new Set(['none', 'oauth']);
 
 // Slug rule for server ids. The id flows into agent-facing config files
 // (Claude Code's `mcpServers` map keys, ACP `name`) and in some cases into
@@ -125,6 +129,41 @@ function sanitizeStringArray(raw: unknown): string[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   const out = raw.filter((v): v is string => typeof v === 'string');
   return out.length > 0 ? out : undefined;
+}
+
+function normalizeHost(hostname: string): string {
+  return hostname
+    .replace(/^\[|\]$/g, '')
+    .toLowerCase()
+    .replace(/\.+$/g, '');
+}
+
+function isLoopbackHost(hostname: string): boolean {
+  const host = normalizeHost(hostname);
+  if (host === 'localhost' || host === '::1') return true;
+  if (/^127(?:\.\d{1,3}){3}$/.test(host)) return true;
+  const mapped = /^::ffff:(127(?:\.\d{1,3}){3})$/i.exec(host)?.[1];
+  return Boolean(mapped);
+}
+
+export function inferMcpAuthModeForUrl(rawUrl: string | undefined): McpAuthMode {
+  if (!rawUrl) return 'oauth';
+  try {
+    return isLoopbackHost(new URL(rawUrl).hostname) ? 'none' : 'oauth';
+  } catch {
+    return 'oauth';
+  }
+}
+
+function sanitizeMcpAuthMode(raw: unknown): McpAuthMode | undefined {
+  return typeof raw === 'string' && VALID_AUTH_MODES.has(raw as McpAuthMode)
+    ? (raw as McpAuthMode)
+    : undefined;
+}
+
+function effectiveMcpAuthMode(server: McpServerConfig): McpAuthMode {
+  if (server.transport !== 'http' && server.transport !== 'sse') return 'none';
+  return server.authMode ?? inferMcpAuthModeForUrl(server.url);
 }
 
 /**
@@ -170,6 +209,7 @@ export function sanitizeMcpServer(raw: unknown): McpServerConfig | null {
     }
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
     next.url = parsed.toString();
+    next.authMode = sanitizeMcpAuthMode(raw.authMode) ?? inferMcpAuthModeForUrl(next.url);
     const headers = sanitizeStringMap(raw.headers);
     if (headers) next.headers = headers;
   }
@@ -286,7 +326,10 @@ export function buildClaudeMcpJson(
         type: s.transport, // 'sse' | 'http'
         url: s.url,
       };
-      const headers = mergeAuthHeader(s.headers, tokens[s.id]);
+      const headers = mergeAuthHeader(
+        s.headers,
+        effectiveMcpAuthMode(s) === 'oauth' ? tokens[s.id] : undefined,
+      );
       if (headers && Object.keys(headers).length > 0) entry.headers = headers;
       out[s.id] = entry;
     }
@@ -361,6 +404,87 @@ export function buildAcpMcpServers(servers: McpServerConfig[]): AcpMcpServer[] {
   return out;
 }
 
+/**
+ * OpenCode merges its config from multiple sources at boot — global
+ * `~/.config/opencode/opencode.json`, the `OPENCODE_CONFIG` file path, the
+ * project `opencode.json`, and the `OPENCODE_CONFIG_CONTENT` env var (an
+ * inline JSON string). The env-var path is what lets a launcher like the
+ * Open Design daemon hand servers to a single `opencode run` invocation
+ * without writing into the user's global config or leaving a temp file
+ * around on crash.
+ *
+ * Schema (verified against the dev branch of `sst/opencode`'s
+ * `packages/opencode/src/config/config.ts` and the public docs at
+ * <https://opencode.ai/docs/mcp-servers>):
+ *
+ *   {
+ *     "mcp": {
+ *       "<id>": {
+ *         "type": "local",
+ *         "command": ["<cmd>", "<arg1>", ...],
+ *         "environment"?: { ... },
+ *         "enabled": true
+ *       },
+ *       "<id>": {
+ *         "type": "remote",
+ *         "url": "...",
+ *         "headers"?: { ... },
+ *         "enabled": true
+ *       }
+ *     }
+ *   }
+ *
+ * Returns `null` when nothing would be emitted — the caller must NOT set
+ * `OPENCODE_CONFIG_CONTENT` to `null`/empty in that case, because doing so
+ * would override the user's saved global config with an empty object. A
+ * null return means "leave the env untouched and let OpenCode read the
+ * user's home-dir config as-is."
+ *
+ * The OAuth Bearer merge mirrors `buildClaudeMcpJson` so a remote MCP
+ * server the daemon already authenticated against (Higgsfield etc.)
+ * works the same way for OpenCode users without forcing them to
+ * re-authenticate inside OpenCode.
+ */
+export function buildOpenCodeMcpConfigContent(
+  servers: McpServerConfig[],
+  tokens: Record<string, string> = {},
+): string | null {
+  const enabled = servers.filter((s) => s.enabled);
+  if (enabled.length === 0) return null;
+  const mcp: Record<string, Record<string, unknown>> = {};
+  for (const s of enabled) {
+    if (s.transport === 'stdio') {
+      const cmd = typeof s.command === 'string' ? s.command.trim() : '';
+      if (!cmd) continue;
+      const entry: Record<string, unknown> = {
+        type: 'local',
+        command: [cmd, ...(Array.isArray(s.args) ? s.args : [])],
+      };
+      if (s.env && Object.keys(s.env).length > 0) {
+        entry.environment = { ...s.env };
+      }
+      entry.enabled = true;
+      mcp[s.id] = entry;
+    } else {
+      const url = typeof s.url === 'string' ? s.url.trim() : '';
+      if (!url) continue;
+      const entry: Record<string, unknown> = {
+        type: 'remote',
+        url: s.url,
+      };
+      const headers = mergeAuthHeader(
+        s.headers,
+        effectiveMcpAuthMode(s) === 'oauth' ? tokens[s.id] : undefined,
+      );
+      if (headers && Object.keys(headers).length > 0) entry.headers = headers;
+      entry.enabled = true;
+      mcp[s.id] = entry;
+    }
+  }
+  if (Object.keys(mcp).length === 0) return null;
+  return JSON.stringify({ mcp });
+}
+
 // ───────────────────────────────────────────────────────────────────────
 // Built-in templates surfaced in the Settings "Add MCP server" picker.
 // Picking one fills the form with defaults; the resulting McpServerConfig
@@ -375,6 +499,7 @@ export const MCP_TEMPLATES: McpTemplate[] = [
     description:
       'Image and video generation MCP from higgsfield.ai. Exposes Soul, Nano Banana, Flux, Kling, Veo, Seedance, and 25+ other models. Endpoint is streamable HTTP at /mcp; click "Connect" after saving — Open Design completes OAuth and stores the token server-side, so no terminal step is needed and the connection survives across chat turns and cloud deployments.',
     transport: 'http',
+    authMode: 'oauth',
     category: 'image-generation',
     homepage: 'https://higgsfield.ai/mcp?tab=openclaw',
     example:
@@ -481,6 +606,7 @@ export const MCP_TEMPLATES: McpTemplate[] = [
     description:
       'Hosted streamable-HTTP MCP wrapping Google Nano Banana for image generation, editing, virtual try-on and product placement. The endpoint is managed by AceDataCloud — no local install, just paste your platform API token as the Authorization header (acquire at platform.acedata.cloud). Complements Higgsfield by giving the agent virtual-try-on and "place product in scene" tools that the OpenClaw catalog does not expose directly.',
     transport: 'http',
+    authMode: 'none',
     category: 'image-generation',
     homepage: 'https://github.com/AceDataCloud/MCPNanoBanana',
     example:
@@ -502,6 +628,7 @@ export const MCP_TEMPLATES: McpTemplate[] = [
     description:
       'Hosted streamable-HTTP MCP wrapping ByteDance Seedream v3 / v4 / v4.5 / v5 (text-to-image) and SeedEdit v3 (image-to-image). Strongest free-form Chinese-prompt support of any image model in the picker, plus reproducible-seed control on v3. Use this when Higgsfield / Nano Banana misses the aesthetic you want.',
     transport: 'http',
+    authMode: 'none',
     category: 'image-generation',
     homepage: 'https://github.com/AceDataCloud/MCPSeedream',
     example:
@@ -749,6 +876,7 @@ export const MCP_TEMPLATES: McpTemplate[] = [
     description:
       'Companion to Figma-Context: where Framelink reads, figma-use *writes* — 90+ tools to create frames, text, components, variants, set layouts, render JSX into the canvas, export PNG/SVG, query nodes via XPath, lint for WCAG / auto-layout / hardcoded colors, and analyze design systems. Runs as a local HTTP MCP server on port 38451; no API key. Two prerequisites the user owns: (1) start Figma with remote debugging — macOS: `open -a Figma --args --remote-debugging-port=9222` (Figma 126+ needs `figma-use daemon start --pipe` instead), and (2) leave `npx figma-use mcp serve` running in a terminal. Then this template wires the daemon to that endpoint.',
     transport: 'http',
+    authMode: 'none',
     category: 'design-systems',
     homepage: 'https://github.com/dannote/figma-use',
     example:
@@ -962,6 +1090,7 @@ export const MCP_TEMPLATES: McpTemplate[] = [
     description:
       'Hosted MCP that converts Deckrun Markdown into pixel-perfect branded PDFs, narrated MP4 videos, and MP3 audio from one source. The free tier exposes `get_slide_format` + `generate_slide_deck` (PDF) with no API key required and no signup — just connect and go. Add a paid `DECKRUN_API_KEY` later for video / audio generation, themes, voices and async jobs.',
     transport: 'http',
+    authMode: 'none',
     category: 'publishing',
     homepage: 'https://agenticdecks.com',
     example:

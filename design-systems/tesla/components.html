@@ -1,0 +1,724 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tesla — reference components</title>
+    <meta
+      name="description"
+      content="Reference fixture for design-systems/tesla. Radical
+        subtraction: pure-white canvas, single Electric Blue accent,
+        Universal Sans typography capped at 40px, 0.33s universal
+        transitions, and viewport-scale whitespace as the dominant
+        composition device."
+    />
+
+    <style>
+      :root {
+        --bg: #ffffff;
+        --surface: #f4f4f4;
+        --surface-warm: var(--surface);
+
+        --fg: #171a20;
+        --fg-2: #393c41;
+        --muted: #5c5e62;
+        --meta: #8e8e8e;
+
+        --border: #d0d1d2;
+        --border-soft: #eeeeee;
+
+        --accent: #3e6ae1;
+        --accent-on: #ffffff;
+        --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+        --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+        --success: #16a34a;
+        --warn: #eab308;
+        --danger: #dc2626;
+
+        --font-display: "Universal Sans Display", -apple-system, Arial, sans-serif;
+        --font-body: "Universal Sans Text", -apple-system, Arial, sans-serif;
+        --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+        --text-xs: 11px;
+        --text-sm: 12px;
+        --text-base: 14px;
+        --text-lg: 16px;
+        --text-xl: 17px;
+        --text-2xl: 22px;
+        --text-3xl: 28px;
+        --text-4xl: 40px;
+
+        --leading-body: 1.43;
+        --leading-tight: 1.20;
+
+        --tracking-display: normal;
+
+        --space-1: 4px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-5: 20px;
+        --space-6: 24px;
+        --space-8: 32px;
+        --space-12: 48px;
+
+        --section-y-desktop: 120px;
+        --section-y-tablet: 72px;
+        --section-y-phone: 48px;
+
+        --radius-sm: 4px;
+        --radius-md: 12px;
+        --radius-lg: 12px;
+        --radius-pill: 9999px;
+
+        --elev-flat: none;
+        --elev-ring: 0 0 0 1px var(--border);
+        --elev-raised: 0 2px 8px rgba(0, 0, 0, 0.05);
+
+        --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+
+        --motion-fast: 250ms;
+        --motion-base: 330ms;
+        --ease-standard: cubic-bezier(0.5, 0, 0, 0.75);
+
+        --container-max: 1383px;
+        --container-gutter-desktop: 24px;
+        --container-gutter-tablet: 16px;
+        --container-gutter-phone: 12px;
+      }
+
+      /* ─── Reset (minimal) ───────────────────────────────────────── */
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        background: var(--bg);
+        color: var(--fg-2);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: var(--leading-body);
+        font-weight: 400;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+
+      /* ─── Layout primitives ─────────────────────────────────────── */
+      .container {
+        max-width: var(--container-max);
+        margin-inline: auto;
+        padding-inline: var(--container-gutter-desktop);
+      }
+      section { padding-block: var(--section-y-desktop); }
+      /* Tesla separates chapters by surface change, not borders
+         (DESIGN.md §7 — "Don't add borders to cards or containers"). */
+      .band-light { background: var(--bg); color: var(--fg-2); }
+      .band-soft  { background: var(--surface); color: var(--fg-2); }
+      @media (max-width: 1023px) {
+        .container { padding-inline: var(--container-gutter-tablet); }
+        section { padding-block: var(--section-y-tablet); }
+      }
+      @media (max-width: 639px) {
+        .container { padding-inline: var(--container-gutter-phone); }
+        section { padding-block: var(--section-y-phone); }
+      }
+
+      /* ─── Typography — weight 400/500 only; no bold ever ──────── */
+      h1, h2, h3 {
+        font-family: var(--font-display);
+        margin: 0;
+        color: var(--fg);
+        line-height: var(--leading-tight);
+        letter-spacing: var(--tracking-display);
+      }
+      h1 { font-size: var(--text-4xl); font-weight: 500; }
+      h2 { font-size: var(--text-3xl); font-weight: 500; }
+      h3 { font-size: var(--text-xl); font-weight: 500; }
+      p { margin: 0; }
+
+      .lead {
+        font-size: var(--text-2xl);
+        line-height: 1.35;
+        color: var(--fg);
+        font-weight: 400;
+        max-width: 52ch;
+      }
+      .body-muted { color: var(--muted); }
+      .body-meta  { color: var(--meta); font-size: var(--text-sm); }
+      .body-sm    { font-size: var(--text-sm); }
+
+      /* `.eyebrow` — tiny uppercase label. Tesla's marketing site
+         avoids text-transforms in the main nav and CTAs (DESIGN.md §3
+         Principles + §7 "Don't use uppercase text transforms"), so
+         the eyebrow is reserved exclusively for the small "Reference
+         fixture · tesla" stage-label above hero / section titles —
+         not a recurring component. */
+      .eyebrow {
+        font-family: var(--font-body);
+        font-size: var(--text-xs);
+        font-weight: 500;
+        line-height: 1;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .stack-3 > * + * { margin-block-start: var(--space-3); }
+      .stack-4 > * + * { margin-block-start: var(--space-4); }
+      .stack-6 > * + * { margin-block-start: var(--space-6); }
+      .stack-8 > * + * { margin-block-start: var(--space-8); }
+
+      /* ─── Buttons ─────────────────────────────────────────────────
+       * Tesla's CTA family is uniform: 200×40 minimum, 4px radius,
+       * weight 500 14px label, content centered via flexbox. The
+       * primary fills with Electric Blue; the secondary is a white
+       * fill on white surfaces (high-contrast against hero
+       * photography). DESIGN.md §4 documents the precise transition
+       * string `border-color 0.33s, background-color 0.33s, color
+       * 0.33s, box-shadow 0.25s` — we map that to var(--motion-base)
+       * / var(--motion-fast) so the timing is bound to tokens. No
+       * scale or translate on interaction (DESIGN.md §7). */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--space-2);
+        min-height: 40px;
+        min-width: 200px;
+        padding: 4px 16px;
+        border: 3px solid transparent;
+        border-radius: var(--radius-sm);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        font-weight: 500;
+        line-height: 1.2;
+        cursor: pointer;
+        text-decoration: none;
+        transition:
+          background-color var(--motion-base) var(--ease-standard),
+          border-color     var(--motion-base) var(--ease-standard),
+          color            var(--motion-base) var(--ease-standard),
+          box-shadow       var(--motion-fast) var(--ease-standard);
+      }
+      .btn:focus-visible {
+        outline: none;
+        box-shadow: var(--focus-ring);
+      }
+
+      .btn-primary {
+        background: var(--accent);
+        color: var(--accent-on);
+      }
+      .btn-primary:hover  { background: var(--accent-hover); }
+      .btn-primary:active { background: var(--accent-active); }
+
+      .btn-secondary {
+        background: var(--bg);
+        color: var(--fg-2);
+        border-color: var(--border);
+      }
+      .btn-secondary:hover {
+        background: var(--surface);
+        border-color: var(--meta);
+      }
+
+      /* ─── Nav link / text link ───────────────────────────────────
+       * Tertiary "Learn / Order / Experience" tier from DESIGN.md §4
+       * — 14px Pewter, no decoration at rest, underline on hover via
+       * the documented box-shadow transition. */
+      .text-link {
+        color: var(--muted);
+        font-size: var(--text-base);
+        font-weight: 400;
+        text-decoration: none;
+        transition:
+          box-shadow var(--motion-base) var(--ease-standard),
+          color      var(--motion-base) var(--ease-standard);
+      }
+      .text-link:hover {
+        color: var(--fg);
+        text-decoration: underline;
+        text-underline-offset: 4px;
+      }
+
+      /* ─── Inputs ────────────────────────────────────────────────
+       * DESIGN.md §4: transparent background, Carbon Dark text,
+       * Silver Fog placeholder. The fixture binds a faint --border
+       * box so the input is visible against the pale section
+       * background; focus tightens to --accent and adds the soft blue
+       * halo. Density is quiet — photography is supposed to dominate
+       * the page, not form chrome. */
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+      }
+      .field label {
+        font-size: var(--text-base);
+        font-weight: 500;
+        color: var(--fg);
+      }
+      .field input {
+        padding: 10px 12px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: 1.4;
+        outline: none;
+        transition:
+          border-color var(--motion-fast) var(--ease-standard),
+          box-shadow   var(--motion-fast) var(--ease-standard);
+      }
+      .field input::placeholder { color: var(--meta); }
+      .field input:hover { border-color: var(--muted); }
+      .field input:focus-visible {
+        border-color: var(--accent);
+        box-shadow: var(--focus-ring);
+      }
+      .field-help {
+        font-size: var(--text-sm);
+        color: var(--muted);
+      }
+
+      /* ─── Cards ─────────────────────────────────────────────────
+       * Vehicle card mirrors DESIGN.md §4: transparent background, no
+       * border, no shadow, content top-aligned. Categorically the
+       * "no chrome" card — interaction lives in the text links
+       * beneath the model name. */
+      .vehicle-card {
+        background: transparent;
+        border: none;
+        box-shadow: var(--elev-flat);
+        padding: var(--space-4);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: var(--space-3);
+        text-align: center;
+      }
+      .vehicle-card .vehicle-image {
+        width: 100%;
+        aspect-ratio: 16 / 10;
+        border-radius: var(--radius-md);
+        background:
+          radial-gradient(80% 50% at 50% 75%, color-mix(in oklab, var(--accent), transparent 70%), transparent 70%),
+          var(--surface);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--muted);
+      }
+      .vehicle-card .vehicle-image svg { width: 56%; height: auto; }
+      .vehicle-card .vehicle-name {
+        font-family: var(--font-display);
+        font-size: var(--text-xl);
+        font-weight: 500;
+        color: var(--fg);
+        margin: 0;
+      }
+      .vehicle-card .vehicle-links {
+        display: flex;
+        gap: var(--space-6);
+      }
+
+      /* ─── Badges ────────────────────────────────────────────────
+       * Used sparingly. Tesla's marketing site has no semantic chips,
+       * so we keep .badge present in the fixture for completeness
+       * (system-status indicator on the hero side panel) but bind it
+       * to the muted neutral tier by default. */
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: 4px var(--space-3);
+        border-radius: var(--radius-pill);
+        font-family: var(--font-body);
+        font-size: var(--text-xs);
+        font-weight: 500;
+        line-height: 1.4;
+      }
+      .badge-success {
+        color: var(--success);
+        background: color-mix(in oklab, var(--success), transparent 90%);
+      }
+      .badge-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+      }
+
+      /* ─── Links (inline) ────────────────────────────────────────
+       * Tesla's body links lean on the muted Pewter tier with the
+       * same hover treatment as .text-link — there's no separate
+       * "inline" tone. We keep the global `a` rule pointed at
+       * --muted so inline reading copy matches DESIGN.md §4. */
+      a {
+        color: var(--muted);
+        text-decoration: none;
+        transition: color var(--motion-base) var(--ease-standard);
+      }
+      a:hover {
+        color: var(--fg);
+        text-decoration: underline;
+        text-underline-offset: 4px;
+      }
+
+      /* ─── Kbd ─────────────────────────────────────────────────── */
+      kbd {
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+        font-weight: 500;
+        padding: 2px 6px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        background: var(--bg);
+        color: var(--fg);
+      }
+
+      /* ─── Distinctive: floating nav strip ───────────────────────
+       * DESIGN.md §4 — Tesla nav is "TESLA wordmark (spaced uppercase)
+       * on the left, five category buttons center-aligned" floating
+       * above the hero with no shadow, no border. The frosted-glass
+       * scroll state uses rgba(255,255,255,0.75) backdrop (DESIGN.md
+       * §6 Level 1 "Frost"); we implement that as the resting state
+       * so the fixture documents the canonical chrome. */
+      .nav {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background: rgba(255, 255, 255, 0.75);
+        -webkit-backdrop-filter: saturate(180%) blur(20px);
+        backdrop-filter:         saturate(180%) blur(20px);
+      }
+      .nav-inner {
+        max-width: var(--container-max);
+        margin-inline: auto;
+        padding-inline: var(--container-gutter-desktop);
+        height: 56px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-6);
+      }
+      .nav-brand {
+        font-family: var(--font-display);
+        font-size: var(--text-base);
+        font-weight: 500;
+        color: var(--fg);
+        letter-spacing: 0.4em;
+      }
+      .nav-links {
+        display: flex;
+        gap: var(--space-2);
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+      .nav-links a {
+        display: inline-flex;
+        align-items: center;
+        height: 32px;
+        padding: 4px 16px;
+        border-radius: var(--radius-sm);
+        font-size: var(--text-base);
+        font-weight: 500;
+        color: var(--fg);
+        transition:
+          color            var(--motion-base) var(--ease-standard),
+          background-color var(--motion-base) var(--ease-standard);
+      }
+      .nav-links a:hover {
+        text-decoration: none;
+        background: var(--surface);
+      }
+      @media (max-width: 639px) {
+        .nav-inner { gap: var(--space-3); padding-inline: var(--container-gutter-phone); height: 48px; }
+        .nav-links { gap: var(--space-1); }
+        .nav-links a { padding: 4px 8px; }
+      }
+
+      /* ─── Section-specific layout ───────────────────────────────
+       * Tesla heroes are full-viewport gallery moments — we lean into
+       * a 1:1 stacked composition with model name → subtitle → CTA
+       * pair (DESIGN.md §7 Do: "Center CTAs horizontally below model
+       * names — the vertical rhythm is model → subtitle → buttons").
+       * The right column is a quiet status card so the fixture
+       * exercises the secondary surface tier and badge. */
+      .hero-stage {
+        display: grid;
+        grid-template-columns: 1.4fr 1fr;
+        gap: var(--space-12);
+        align-items: center;
+        min-height: 60vh;
+      }
+      @media (max-width: 1023px) {
+        .hero-stage { grid-template-columns: 1fr; gap: var(--space-8); min-height: 0; }
+      }
+      .hero-canvas {
+        position: relative;
+        border-radius: var(--radius-md);
+        aspect-ratio: 16 / 10;
+        overflow: hidden;
+        background:
+          radial-gradient(70% 50% at 70% 30%, color-mix(in oklab, var(--fg), transparent 70%), transparent 60%),
+          linear-gradient(180deg, var(--surface) 0%, color-mix(in oklab, var(--surface), var(--accent) 6%) 100%);
+      }
+      .hero-canvas-label {
+        position: absolute;
+        top: var(--space-4);
+        left: var(--space-4);
+        font-family: var(--font-body);
+        font-size: var(--text-sm);
+        color: var(--muted);
+      }
+      .hero-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-3);
+        margin-block-start: var(--space-6);
+      }
+      .hero-meta {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+        padding: var(--space-5);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: var(--bg);
+      }
+
+      /* Features: three centered "vehicle" cards. Tesla's nav-panel
+         pattern from DESIGN.md §4 — 3 columns, transparent cards,
+         model name + text-link pair. */
+      .features-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: var(--space-8);
+      }
+      @media (max-width: 1023px) {
+        .features-grid { grid-template-columns: 1fr 1fr; }
+      }
+      @media (max-width: 639px) {
+        .features-grid { grid-template-columns: 1fr; }
+      }
+
+      .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--space-12);
+        align-items: start;
+      }
+      @media (max-width: 1023px) {
+        .form-row { grid-template-columns: 1fr; gap: var(--space-8); }
+      }
+      .form {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-4);
+        max-width: 420px;
+      }
+      .form-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-3);
+        margin-block-start: var(--space-2);
+      }
+      .icon { width: 16px; height: 16px; flex-shrink: 0; }
+      .row-between {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-3);
+      }
+    </style>
+  </head>
+  <body>
+    <!-- ════════════════════════════════════════════════════════════
+         NAV — TESLA wordmark left (spaced letters), five centered
+         category buttons, three icon-like links right. Floats over
+         the hero with a frosted-glass backdrop (DESIGN.md §4 §6).
+    ═══════════════════════════════════════════════════════════════ -->
+    <header class="nav" data-od-id="nav">
+      <div class="nav-inner">
+        <span class="nav-brand">TESLA</span>
+        <nav aria-label="Primary">
+          <ul class="nav-links">
+            <li><a href="#hero">Vehicles</a></li>
+            <li><a href="#features">Energy</a></li>
+            <li><a href="#form">Charging</a></li>
+          </ul>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <!-- ════════════════════════════════════════════════════════════
+           HERO — exercises: h1 (40px display, normal tracking),
+           .lead (22px promo tier), .btn-primary (Electric Blue) paired
+           with .btn-secondary (white), kbd, .badge-success. Stacked
+           composition with the rhythm DESIGN.md §7 prescribes:
+           model name → subtitle → CTA pair. Right column carries the
+           system-status card so the fixture exercises --surface,
+           --border, and the badge tier without polluting the hero
+           with chrome.
+      ═══════════════════════════════════════════════════════════════ -->
+      <section class="band-light" data-od-id="hero" id="hero">
+        <div class="container">
+          <div class="hero-stage">
+            <div class="stack-6">
+              <p class="eyebrow">Reference fixture · tesla</p>
+              <h1>Model Reference</h1>
+              <p class="lead">
+                Accelerating the world's transition to sustainable
+                energy — distilled into fifty-six tokens, one accent
+                color, and the white space between every section.
+              </p>
+              <div class="hero-actions">
+                <a href="./tokens.css" class="btn btn-primary">Order Now</a>
+                <a href="./DESIGN.md" class="btn btn-secondary">View Inventory</a>
+              </div>
+            </div>
+
+            <aside class="hero-canvas" aria-label="Hero photography placeholder">
+              <span class="hero-canvas-label">Photography canvas · 100vh</span>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════
+           FEATURES — band switches to Light Ash (--surface), three
+           transparent "vehicle" cards that mirror the DESIGN.md §4
+           nav-panel pattern: image placeholder, centered model name
+           in Universal Sans Display, two text links beneath. No
+           shadow, no border, no card background — interaction lives
+           in the .text-link tier only.
+      ═══════════════════════════════════════════════════════════════ -->
+      <section class="band-soft" data-od-id="features" id="features">
+        <div class="container">
+          <div class="stack-3" style="max-width: 640px">
+            <p class="eyebrow">The lineup</p>
+            <h2>Three vehicles. One typography stack. Zero shadows.</h2>
+          </div>
+
+          <div class="features-grid" style="margin-block-start: var(--space-12)">
+            <article class="vehicle-card">
+              <div class="vehicle-image" aria-hidden="true">
+                <svg viewBox="0 0 200 80" fill="none"
+                  stroke="currentColor" stroke-width="1.5"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 56h172l-14-22-26-12H46l-22 14L14 56z" />
+                  <circle cx="58" cy="60" r="10" fill="var(--bg)" />
+                  <circle cx="148" cy="60" r="10" fill="var(--bg)" />
+                </svg>
+              </div>
+              <h3 class="vehicle-name">Model S</h3>
+              <div class="vehicle-links">
+                <a href="./tokens.css" class="text-link">Learn</a>
+                <a href="./DESIGN.md" class="text-link">Order</a>
+              </div>
+            </article>
+
+            <article class="vehicle-card">
+              <div class="vehicle-image" aria-hidden="true">
+                <svg viewBox="0 0 200 80" fill="none"
+                  stroke="currentColor" stroke-width="1.5"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 56h172l-12-28-30-14H50l-24 18L14 56z" />
+                  <circle cx="58" cy="60" r="10" fill="var(--bg)" />
+                  <circle cx="148" cy="60" r="10" fill="var(--bg)" />
+                </svg>
+              </div>
+              <h3 class="vehicle-name">Model 3</h3>
+              <div class="vehicle-links">
+                <a href="./tokens.css" class="text-link">Learn</a>
+                <a href="./DESIGN.md" class="text-link">Order</a>
+              </div>
+            </article>
+
+            <article class="vehicle-card">
+              <div class="vehicle-image" aria-hidden="true">
+                <svg viewBox="0 0 200 80" fill="none"
+                  stroke="currentColor" stroke-width="1.5"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 56h172l-10-26-28-16H48l-22 18L14 56z" />
+                  <circle cx="58" cy="60" r="10" fill="var(--bg)" />
+                  <circle cx="148" cy="60" r="10" fill="var(--bg)" />
+                </svg>
+              </div>
+              <h3 class="vehicle-name">Model Y</h3>
+              <div class="vehicle-links">
+                <a href="./tokens.css" class="text-link">Learn</a>
+                <a href="./DESIGN.md" class="text-link">Order</a>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ════════════════════════════════════════════════════════════
+           FORM — exercises: .field, input :focus-visible (border
+           tightens to --accent + the soft Electric Blue halo),
+           .btn-primary (the same 200×40 CTA from the hero — no new
+           token introduced), .btn-secondary, .field-help. Band
+           returns to white so the form reads as a calm transactional
+           moment rather than a hero.
+      ═══════════════════════════════════════════════════════════════ -->
+      <section class="band-light" data-od-id="form" id="form">
+        <div class="container">
+          <div class="form-row">
+            <div class="stack-4">
+              <p class="eyebrow">Schedule a drive</p>
+              <h2>Quiet form. Loud product.</h2>
+              <p class="body-muted" style="max-width: 52ch">
+                Inputs inherit the same token block — a hairline Pale
+                Silver edge, Carbon Dark text, the focus halo at three
+                pixels of soft Electric Blue. Press
+                <kbd>↵</kbd> to confirm; the rest of the page stays
+                out of the way.
+              </p>
+              <div class="row-between" style="max-width: 360px">
+                <span class="body-sm">Test-drive availability</span>
+                <span class="badge badge-success">
+                  <span class="badge-dot" aria-hidden="true"></span>
+                  Open
+                </span>
+              </div>
+            </div>
+
+            <form class="form" onsubmit="event.preventDefault();">
+              <div class="field">
+                <label for="email">Work email</label>
+                <input
+                  id="email"
+                  type="email"
+                  placeholder="you@tesla.com"
+                  autocomplete="email"
+                  required
+                />
+                <p class="field-help">
+                  We'll only contact you to confirm the appointment.
+                </p>
+              </div>
+              <div class="form-actions">
+                <button type="submit" class="btn btn-primary">
+                  Schedule a Drive
+                  <svg class="icon" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="1.75"
+                    stroke-linecap="round" stroke-linejoin="round"
+                    aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                </button>
+                <button type="button" class="btn btn-secondary">
+                  View Inventory
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

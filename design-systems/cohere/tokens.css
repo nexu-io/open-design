@@ -1,0 +1,126 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/cohere/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by Cohere".
+ * Enterprise command deck: confident, clean, 22px signature roundness.
+ *
+ * Key brand decisions encoded here:
+ *   - Pure white canvas with cool gray containment borders
+ *   - 22px border-radius is THE Cohere visual signature — use on all cards
+ *   - Interaction Blue (#1863dc) only on hover/focus — never ambient
+ *   - CohereText serif for display (72px, negative tracking)
+ *   - Unica77 for all body and UI — Swiss geometric neutrality
+ *   - Ghost/transparent buttons as the default interaction style
+ *   - Deep purple sections for full-width visual breaks (via layout)
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ─────────────────────────────────────────────────────
+   * Bright white with Snow (#fafafa) for section differentiation.
+   * Enterprise clarity — no tinted surfaces in the main light mode. */
+  --bg: #ffffff;
+  --surface: #fafafa;        /* Snow — elevated surfaces, section backgrounds */
+  --surface-warm: var(--surface); /* no warm tier — palette is strictly cool-toned */
+
+  /* ─── Foreground ──────────────────────────────────────────────────
+   * Predominantly black/white. No warm grays. */
+  --fg: #000000;             /* Cohere Black — headline text, maximum emphasis */
+  --fg-2: #212121;           /* Near Black — standard body link, soft heading */
+  --muted: #93939f;          /* Muted Slate — de-emphasized text, cool violet tint */
+  --meta: var(--muted);      /* alias — same cool muted for metadata */
+
+  /* ─── Border ──────────────────────────────────────────────────────
+   * Cool-toned borders — the subtle blue-violet tint in Border Cool
+   * reinforces the enterprise/tech personality. */
+  --border: #d9d9dd;         /* Border Cool — standard section and list borders */
+  --border-soft: #f2f2f2;    /* Lightest Gray — card edge on white (barely visible) */
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * Interaction Blue — appears ONLY on hover/focus, never ambient.
+   * Default state of most interactive elements is transparent/ghost. */
+  --accent: #1863dc;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 16%);
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * Standard semantic palette — reserved for state, not decoration. */
+  --success: #16a34a;
+  --warn: #eab308;
+  --danger: #ef4444;
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * CohereText (custom display serif) + Unica77 (Swiss geometric sans).
+   * "Confident authority meets engineering clarity" personality.
+   * Negative tracking at display scale (-1.2px to -1.44px at 60–72px). */
+  --font-display: "CohereText", "Space Grotesk", Inter, ui-sans-serif, sans-serif;
+  --font-body: "Unica77 Cohere Web", Inter, Arial, ui-sans-serif, sans-serif;
+  --font-mono: "CohereMono", "JetBrains Mono", ui-monospace, monospace;
+
+  /* Type scale — DESIGN.md §3. 72px display, 60px secondary, 48px section. */
+  --text-xs: 12px;           /* Small / footer links */
+  --text-sm: 14px;           /* Caption / Uppercase Label */
+  --text-base: 16px;         /* Body / Button */
+  --text-lg: 18px;           /* Body Large — intro paragraphs */
+  --text-xl: 24px;           /* Feature Title */
+  --text-2xl: 32px;          /* Sub-heading */
+  --text-3xl: 60px;          /* Display Secondary */
+  --text-4xl: 72px;          /* Display / Hero — maximum serif authority */
+
+  --leading-body: 1.5;
+  --leading-tight: 1.0;      /* CohereText at display scale */
+  --tracking-display: -0.02em; /* ≈ -1.44px at 72px — dense impactful text blocks */
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * 8px base unit. Card internal padding 24–32px.
+   * Section rhythm 56–60px between sections. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  --section-y-desktop: 60px;
+  --section-y-tablet: 48px;
+  --section-y-phone: 32px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * The 22px radius IS the Cohere card — organic, cloud-like softness.
+   * DO NOT use other radii on primary cards. The signature matters.
+   *
+   * --radius-sm: small utility elements (dialog boxes, nav pills)
+   * --radius-md: THE PRIMARY COHERE CARD — always 22px
+   * --radius-lg: large featured containers — same 22px treatment */
+  --radius-sm: 8px;          /* Dialog, nav items, secondary elements */
+  --radius-md: 22px;         /* PRIMARY SIGNATURE — every main card and container */
+  --radius-lg: 22px;         /* Same 22px for large featured containers */
+  --radius-pill: 9999px;     /* Buttons, status tags */
+
+  /* ─── Elevation ───────────────────────────────────────────────────
+   * Cohere is nearly shadow-free. Depth via background color contrast
+   * (white on purple band) and cool gray borders, not shadows. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border-soft); /* 1px ring on white */
+  --elev-raised: 0 4px 16px rgba(0, 0, 0, 0.06); /* Minimal hover shadow */
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * Solid 2px Interaction Blue outline — enterprise-grade clarity. */
+  --focus-ring: 0 0 0 2px var(--accent);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * Standard durations — enterprise interfaces feel solid, not bouncy. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * Wide container (1440px for enterprise large-screen) with generous
+   * gutters. The 26-breakpoint system is handled component-side. */
+  --container-max: 1440px;
+  --container-gutter-desktop: 32px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

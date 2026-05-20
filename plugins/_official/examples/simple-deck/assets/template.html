@@ -1,0 +1,353 @@
+<!doctype html>
+<!--
+  OD simple-deck seed.
+
+  Single-file horizontal-swipe HTML deck. Each `<section class="slide">`
+  is one slide; the body uses CSS scroll-snap to lock to slide boundaries.
+  Keyboard nav (← / → / Space / Home / End) is wired in via the script at
+  the bottom — DO NOT replace it, it solves five iframe-specific problems
+  that the naive version silently breaks (see comments in the script).
+
+  Theme tokens at the top mirror the web-prototype seed; bind them to the
+  active DESIGN.md and stop. A deck has TWO surfaces — `.slide.light` and
+  `.slide.dark` — that swap fg / bg without touching the accent. Use both;
+  alternating creates the rhythm that prevents visual fatigue.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>[REPLACE] Deck title · subtitle</title>
+  <style>
+    :root {
+      --bg:      #fafaf7;
+      --surface: #ffffff;
+      --fg:      #1a1916;
+      --muted:   #6b6964;
+      --border:  #e8e5df;
+      --accent:  #c96442;
+
+      --accent-soft: color-mix(in oklch, var(--accent) 14%, transparent);
+
+      --font-display: 'Iowan Old Style', 'Charter', Georgia, serif;
+      --font-body:    -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      --font-mono:    ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: var(--font-body);
+      font-size: 18px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      display: flex;
+      overflow-x: auto;
+      overflow-y: hidden;
+      scroll-snap-type: x mandatory;
+      scroll-behavior: smooth;
+    }
+    body::-webkit-scrollbar { display: none; }
+    p { text-wrap: pretty; }
+    h1, h2, h3 { text-wrap: balance; }
+
+    /* ─── slide surface ─────────────────────────────────────────────── */
+    .slide {
+      flex: 0 0 100vw;
+      width: 100vw;
+      height: 100vh;
+      scroll-snap-align: start;
+      padding: clamp(48px, 7vw, 96px) clamp(48px, 8vw, 112px);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .slide.light { background: var(--bg); color: var(--fg); }
+    .slide.dark  { background: var(--fg); color: var(--bg); }
+    .slide.dark .muted    { color: rgba(250,250,247,0.7); }
+    .slide.dark .border   { border-color: rgba(250,250,247,0.18); }
+    .slide.hero { padding-block: clamp(64px, 9vw, 128px); }
+
+    /* center alignment variant — for cover, big-stat, big-quote */
+    .slide.center { align-items: center; text-align: center; justify-content: center; }
+    .slide.center .body { margin-inline: auto; }
+
+    /* ─── eyebrow / kicker ──────────────────────────────────────────── */
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin: 0 0 28px;
+    }
+
+    /* ─── type ──────────────────────────────────────────────────────── */
+    .h-hero {
+      font-family: var(--font-display);
+      font-size: clamp(56px, 8vw, 112px);
+      line-height: 1.02;
+      letter-spacing: -0.025em;
+      margin: 0 0 20px;
+      max-width: 16ch;
+    }
+    .h-xl {
+      font-family: var(--font-display);
+      font-size: clamp(40px, 5vw, 64px);
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+      margin: 0 0 20px;
+      max-width: 20ch;
+    }
+    .h-md {
+      font-family: var(--font-display);
+      font-size: clamp(28px, 3vw, 36px);
+      line-height: 1.2;
+      letter-spacing: -0.015em;
+      margin: 0 0 16px;
+    }
+    .lead {
+      font-size: clamp(20px, 1.6vw, 24px);
+      line-height: 1.55;
+      color: var(--muted);
+      max-width: 56ch;
+      margin: 0;
+    }
+    .slide.dark .lead { color: rgba(250,250,247,0.78); }
+    .meta { font-family: var(--font-mono); font-size: 13px; color: var(--muted); }
+
+    /* ─── big-stat layout ───────────────────────────────────────────── */
+    .stat-num {
+      font-family: var(--font-display);
+      font-size: clamp(140px, 22vw, 280px);
+      line-height: 0.9;
+      letter-spacing: -0.04em;
+      color: var(--accent);
+      font-weight: 600;
+      margin: 0 0 16px;
+    }
+    .stat-num .unit { font-size: 0.4em; opacity: 0.85; margin-left: 4px; }
+    .stat-caption {
+      font-size: clamp(20px, 1.7vw, 26px);
+      color: var(--muted);
+      max-width: 26ch;
+      margin: 0;
+    }
+
+    /* ─── big-quote layout ──────────────────────────────────────────── */
+    .quote-mark {
+      font-family: var(--font-display);
+      font-size: clamp(140px, 16vw, 200px);
+      line-height: 0.6;
+      color: var(--accent);
+      opacity: 0.18;
+      margin: 0 0 -32px;
+    }
+    .quote-text {
+      font-family: var(--font-display);
+      font-size: clamp(28px, 3vw, 44px);
+      line-height: 1.3;
+      letter-spacing: -0.01em;
+      max-width: 28ch;
+      margin: 0 0 28px;
+    }
+    .quote-author { font-size: 14px; color: var(--muted); }
+
+    /* ─── 3-column point layout ─────────────────────────────────────── */
+    .pt-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 32px;
+      margin-top: 40px;
+    }
+    .pt {
+      border-top: 2px solid var(--accent);
+      padding-top: 16px;
+    }
+    .pt h3 { font-size: 19px; font-weight: 500; margin: 0 0 8px; letter-spacing: -0.005em; }
+    .pt p  { color: var(--muted); margin: 0; font-size: 16px; line-height: 1.5; }
+    .slide.dark .pt p { color: rgba(250,250,247,0.7); }
+
+    /* ─── pipeline (numbered steps) ─────────────────────────────────── */
+    .pipeline {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 24px;
+      margin-top: 40px;
+    }
+    .step .nb { font-family: var(--font-mono); font-size: 13px; color: var(--accent); letter-spacing: 0.06em; }
+    .step h3 { font-family: var(--font-display); font-size: 22px; font-weight: 500; margin: 6px 0 6px; line-height: 1.2; }
+    .step p  { color: var(--muted); margin: 0; font-size: 14px; line-height: 1.5; }
+
+    /* ─── before/after ──────────────────────────────────────────────── */
+    .ba-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 64px; margin-top: 32px; }
+    .ba-col .ba-label { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0 0 12px; }
+    .ba-col h3 { font-family: var(--font-display); font-size: 32px; line-height: 1.15; margin: 0 0 16px; max-width: 16ch; }
+    .ba-col p  { color: var(--muted); font-size: 17px; line-height: 1.5; margin: 0; }
+
+    /* ─── image placeholder ─────────────────────────────────────────── */
+    .ph-img {
+      background:
+        linear-gradient(135deg, var(--accent-soft), color-mix(in oklch, var(--fg) 6%, transparent)),
+        var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      aspect-ratio: 16 / 10;
+      display: grid; place-items: center;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      letter-spacing: 0.04em;
+    }
+    .slide.dark .ph-img { border-color: rgba(250,250,247,0.18); color: rgba(250,250,247,0.5); }
+    .ph-img.wide { aspect-ratio: 16 / 9; }
+    .ph-img.tall { aspect-ratio: 3 / 4; }
+
+    /* ─── chrome (counter, hint, progress) — fixed, never scrolls ──── */
+    .deck-counter {
+      position: fixed;
+      bottom: 24px; right: 32px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--fg);
+      background: var(--surface);
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      letter-spacing: 0.04em;
+      z-index: 10;
+    }
+    .deck-hint {
+      position: fixed;
+      bottom: 24px; left: 32px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+      z-index: 10;
+    }
+    .deck-progress {
+      position: fixed;
+      top: 0; left: 0;
+      height: 3px;
+      background: var(--accent);
+      width: 0;
+      z-index: 10;
+      transition: width 0.18s ease;
+    }
+  </style>
+</head>
+<body>
+  <!--
+    ┌─────────────────────────────────────────────────────────────────┐
+    │  PASTE SLIDES FROM references/layouts.md HERE.                 │
+    │  ► Each `<section class="slide">` must include a class from:    │
+    │    light | dark | hero light | hero dark                        │
+    │  ► No 3+ same-theme in a row.                                   │
+    │  ► For 8+ slides: ≥ 1 `hero dark` AND ≥ 1 `hero light`.         │
+    │  ► End with a clear CTA / takeaway slide.                       │
+    └─────────────────────────────────────────────────────────────────┘
+  -->
+
+  <section class="slide hero light center" data-screen-label="01 Cover">
+    <div class="eyebrow">[REPLACE] Eyebrow · context · date</div>
+    <h1 class="h-hero">[REPLACE] One sharp sentence.</h1>
+    <p class="lead">[REPLACE] One subhead — concrete, not corporate.</p>
+  </section>
+
+  <section class="slide light" data-screen-label="02 Body">
+    <p class="eyebrow">[REPLACE] Section eyebrow</p>
+    <h2 class="h-xl">[REPLACE] Body slide headline.</h2>
+    <p class="lead">[REPLACE] Two sentences explaining the idea — no more.</p>
+  </section>
+
+  <section class="slide hero dark center" data-screen-label="03 Closing">
+    <div class="eyebrow">[REPLACE] Eyebrow</div>
+    <h2 class="h-hero">[REPLACE] The take-away.</h2>
+  </section>
+
+  <!-- chrome -->
+  <div class="deck-progress" id="deck-progress" aria-hidden></div>
+  <div class="deck-counter"  id="deck-counter">1 / 3</div>
+  <div class="deck-hint">← / → · scroll · swipe</div>
+
+  <script>
+    /*
+      Five hard rules for deck nav inside an iframe (the OD preview is one).
+      The naive `document.body.scrollLeft` pattern silently fails: clicks
+      register, but keyboard does nothing, and the counter freezes at "1 / N"
+      while the user is on slide 6.
+
+      1. Detect the real scroller — body OR documentElement, depending.
+      2. Listen for scroll on BOTH window and document, capture phase.
+      3. Listen for keydown on BOTH window and document, capture phase.
+      4. Auto-focus body so arrow keys work without an upfront click.
+      5. Never use Element.scrollIntoView — it can yank the host page.
+    */
+    (function () {
+      var slides   = document.querySelectorAll('.slide');
+      var counter  = document.getElementById('deck-counter');
+      var progress = document.getElementById('deck-progress');
+      var KEY      = 'od-deck-pos';
+      var active   = 0;
+
+      function scroller() {
+        if (document.body.scrollWidth > document.body.clientWidth + 1) return document.body;
+        return document.scrollingElement || document.documentElement;
+      }
+      function setActive(i) {
+        active = i;
+        if (counter)  counter.textContent  = (i + 1) + ' / ' + slides.length;
+        if (progress) progress.style.width = (((i + 1) / slides.length) * 100) + '%';
+        try { localStorage.setItem(KEY, String(i)); } catch (_) {}
+      }
+      function go(i) {
+        var next = Math.max(0, Math.min(slides.length - 1, i));
+        setActive(next);
+        scroller().scrollTo({ left: next * window.innerWidth, behavior: 'smooth' });
+      }
+      function syncFromScroll() {
+        var i = Math.round(scroller().scrollLeft / window.innerWidth);
+        if (i !== active && i >= 0 && i < slides.length) setActive(i);
+      }
+      function onKey(e) {
+        var t = e.target;
+        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
+        if      (e.key === 'ArrowRight' || e.key === ' '       || e.key === 'PageDown') { e.preventDefault(); go(active + 1); }
+        else if (e.key === 'ArrowLeft'  || e.key === 'PageUp')                            { e.preventDefault(); go(active - 1); }
+        else if (e.key === 'Home')                                                        { e.preventDefault(); go(0); }
+        else if (e.key === 'End')                                                         { e.preventDefault(); go(slides.length - 1); }
+      }
+
+      // listen on both surfaces, capture phase
+      window.addEventListener('keydown', onKey, true);
+      document.addEventListener('keydown', onKey, true);
+      document.addEventListener('scroll', syncFromScroll, { passive: true, capture: true });
+      window.addEventListener('scroll', syncFromScroll,   { passive: true });
+
+      // auto-focus
+      document.body.setAttribute('tabindex', '-1');
+      document.body.style.outline = 'none';
+      function focusDeck() { try { window.focus(); document.body.focus({ preventScroll: true }); } catch (_) {} }
+      document.addEventListener('mousedown', focusDeck);
+      window.addEventListener('load', focusDeck);
+      focusDeck();
+
+      // restore last-seen position
+      try {
+        var saved = parseInt(localStorage.getItem(KEY) || '0', 10);
+        if (!isNaN(saved) && saved >= 0 && saved < slides.length) {
+          setActive(saved);
+          scroller().scrollTo({ left: saved * window.innerWidth, behavior: 'instant' });
+        } else {
+          setActive(0);
+        }
+      } catch (_) { setActive(0); }
+    })();
+  </script>
+</body>
+</html>

@@ -11,6 +11,7 @@ import {
   resolveAppIpcPath,
 } from "@open-design/sidecar";
 import { readProcessStamp } from "@open-design/platform";
+import { join } from "node:path";
 import { app, dialog } from "electron";
 
 import { readPackagedConfig } from "./config.js";
@@ -116,6 +117,11 @@ async function main(): Promise<void> {
     // Electron's protocol handler.
     async discoverDaemonUrl() {
       return sidecars.daemon.url;
+    },
+    preloadPath: join(app.getAppPath(), "preload.cjs"),
+    update: {
+      currentVersion: config.appVersion,
+      downloadRoot: paths.updateRoot,
     },
   });
 }

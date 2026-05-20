@@ -826,6 +826,11 @@ const DE_PROMPT_TEMPLATE_COPY: Record<string, LocalizedPromptTemplateCopy> = {
     summary:
       'Ein 6-sekündiger vertikaler 1080×1920-HyperFrames-Hype-Clip – Apple-artiger $0 → $10.000-Counter mit grünem Flash, Money-Burst-Partikeln, Cash-Stack-Icon, Kicker-Headline. Aufgebaut auf dem HyperFrames-`apple-money-count`-Catalog-Block.',
   },
+  'weread-year-in-review-video-template': {
+    title: 'WeRead Year in Review Video Template',
+    summary:
+      'A 9:16 HyperFrames video template for WeRead-style annual reading reports: warm paper texture, editorial Chinese typography, book-page transitions, reading stats, note traces, interest keywords, and a final reading persona card.',
+  },
   'hyperframes-product-reveal-minimal': {
     title: 'HyperFrames: 5-Sekunden minimaler Product Reveal',
     summary:

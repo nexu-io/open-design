@@ -3,6 +3,19 @@ import { randomUUID } from 'node:crypto';
 
 export const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
 
+function readString(value) {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function extractErrorDetails(data) {
+  const payload = data && typeof data === 'object' ? data : {};
+  const nested = payload.error && typeof payload.error === 'object' ? payload.error : {};
+  return {
+    error: readString(nested.message) ?? readString(payload.message),
+    errorCode: readString(nested.code) ?? readString(payload.code),
+  };
+}
+
 export function createChatRunService({
   createSseResponse,
   createSseErrorPayload,
@@ -21,6 +34,17 @@ export function createChatRunService({
       assistantMessageId: typeof meta.assistantMessageId === 'string' && meta.assistantMessageId ? meta.assistantMessageId : null,
       clientRequestId: typeof meta.clientRequestId === 'string' && meta.clientRequestId ? meta.clientRequestId : null,
       agentId: typeof meta.agentId === 'string' && meta.agentId ? meta.agentId : null,
+      // Plan §3.A1 / spec §11.5. The applied plugin snapshot id pins
+      // every prompt fragment and tool gate to a frozen view so replay
+      // is byte-equal across plugin upgrades. Runs are in-memory in
+      // v1 — the id lives on the run object plus on the
+      // `applied_plugin_snapshots` row (FK back via run_id).
+      appliedPluginSnapshotId:
+        typeof meta.appliedPluginSnapshotId === 'string' && meta.appliedPluginSnapshotId
+          ? meta.appliedPluginSnapshotId
+          : null,
+      pluginId:
+        typeof meta.pluginId === 'string' && meta.pluginId ? meta.pluginId : null,
       status: 'queued',
       createdAt: now,
       updatedAt: now,
@@ -32,6 +56,8 @@ export function createChatRunService({
       acpSession: null,
       exitCode: null,
       signal: null,
+      error: null,
+      errorCode: null,
       cancelRequested: false,
     };
     runs.set(run.id, run);
@@ -47,6 +73,11 @@ export function createChatRunService({
   };
 
   const emit = (run, event, data) => {
+    if (event === 'error') {
+      const details = extractErrorDetails(data);
+      if (details.error) run.error = details.error;
+      if (details.errorCode) run.errorCode = details.errorCode;
+    }
     const id = run.nextEventId++;
     const record = { id, event, data, timestamp: Date.now() };
     run.events.push(record);
@@ -62,14 +93,18 @@ export function createChatRunService({
     conversationId: run.conversationId,
     assistantMessageId: run.assistantMessageId,
     agentId: run.agentId,
+    appliedPluginSnapshotId: run.appliedPluginSnapshotId ?? null,
+    pluginId: run.pluginId ?? null,
     status: run.status,
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,
     exitCode: run.exitCode,
     signal: run.signal,
+    error: run.error ?? null,
+    errorCode: run.errorCode ?? null,
   });
 
-  const finish = (run, status, code = null, signal = null) => {
+  const finish = (run, status, code: number | null = null, signal: string | null = null) => {
     if (TERMINAL_RUN_STATUSES.has(run.status)) return;
     run.status = status;
     run.exitCode = code;

@@ -1,0 +1,82 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-audio-jingle",
+  "title": "Audio Jingle",
+  "version": "0.1.0",
+  "description": "Audio generation skill — jingles, beds, voiceover, and sound effects.\nRoutes music requests to Suno V5 / Udio / Lyria, speech to MiniMax\nTTS / FishAudio / ElevenLabs V3, and SFX to ElevenLabs SFX or\nAudioCraft. Output is one MP3/WAV file saved to the project folder.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/audio-jingle",
+  "tags": [
+    "example",
+    "first-party",
+    "audio",
+    "marketing",
+    "music",
+    "jingle",
+    "bed",
+    "voiceover",
+    "tts",
+    "sound-effect",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "audio",
+    "scenario": "marketing",
+    "surface": "audio",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "A 30-second upbeat indie-pop jingle for a coffee shop launch — warm\nelectric piano lead, brushed drums, gentle bass, a single sun-soaked\n\"ahhh\" choir on the chorus. No vocals. Loop-friendly tail.",
+        "zh-CN": "使用这个插件完成以下任务：A 30-second upbeat indie-pop jingle for a coffee shop launch — warm\nelectric piano lead, brushed drums, gentle bass, a single sun-soaked\n\"ahhh\" choir on the chorus. No vocals. Loop-friendly tail."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Audio Jingle"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

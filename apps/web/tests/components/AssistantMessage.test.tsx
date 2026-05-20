@@ -8,10 +8,24 @@
  */
 
 import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AssistantMessage } from '../../src/components/AssistantMessage';
 import type { ChatMessage, ProjectFile } from '../../src/types';
+
+beforeAll(() => {
+  if (window.localStorage) return;
+  const store = new Map<string, string>();
+  Object.defineProperty(window, 'localStorage', {
+    configurable: true,
+    value: {
+      clear: () => store.clear(),
+      getItem: (key: string) => store.get(key) ?? null,
+      removeItem: (key: string) => store.delete(key),
+      setItem: (key: string, value: string) => store.set(key, value),
+    },
+  });
+});
 
 afterEach(() => {
   cleanup();
@@ -41,8 +55,9 @@ function producedFile(name: string): ProjectFile {
     name,
     path: name,
     size: 100,
-    updatedAt: 1700000005,
+    mtime: 1700000005,
     kind: 'html',
+    mime: 'text/html',
   } as ProjectFile;
 }
 
@@ -181,5 +196,36 @@ describe('AssistantMessage status badge updates (Bug A)', () => {
 
     const matches = screen.queryAllByText('claude-opus-4-7-max');
     expect(matches.length).toBe(1);
+  });
+});
+
+describe('AssistantMessage recovered produced files', () => {
+  it('shows files modified during a sparse completed assistant turn', () => {
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          content: '',
+          events: [
+            { kind: 'status', label: 'starting', detail: 'Claude' } as ChatMessage['events'][number],
+            { kind: 'status', label: 'initializing', detail: 'claude-opus' } as ChatMessage['events'][number],
+          ],
+          producedFiles: [],
+        })}
+        streaming={false}
+        projectId="proj-1"
+        projectFiles={[
+          {
+            name: 'iphone-device-reveal.mp4',
+            path: 'iphone-device-reveal.mp4',
+            size: 2328155,
+            mtime: 1700000004,
+            kind: 'video',
+            mime: 'video/mp4',
+          } as ProjectFile,
+        ]}
+      />,
+    );
+
+    expect(screen.getByText('iphone-device-reveal.mp4')).toBeTruthy();
   });
 });

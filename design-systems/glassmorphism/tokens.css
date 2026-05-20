@@ -1,0 +1,63 @@
+/* design-systems/glassmorphism/tokens.css
+ * Structured token bindings for Glassmorphism.
+ * glass interface language with translucent panels, airy borders, and luminous cyan-violet action.
+ */
+
+:root {
+  --bg: #eef6ff;
+  --surface: rgba(255, 255, 255, 0.74);
+  --surface-warm: rgba(238, 246, 255, 0.72);
+  --fg: #102033;
+  --fg-2: #34465f;
+  --muted: #60708a;
+  --meta: #4f8cff;
+  --border: rgba(255, 255, 255, 0.64);
+  --border-soft: rgba(255, 255, 255, 0.38);
+  --accent: #4f8cff;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #22c55e;
+  --warn: #f59e0b;
+  --danger: #ef4444;
+  --font-display: Inter, system-ui, sans-serif;
+  --font-body: Inter, system-ui, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 24px;
+  --text-2xl: 36px;
+  --text-3xl: 54px;
+  --text-4xl: 76px;
+  --leading-body: 1.55;
+  --leading-tight: 1.04;
+  --tracking-display: -0.025em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 104px;
+  --section-y-tablet: 72px;
+  --section-y-phone: 52px;
+  --radius-sm: 16px;
+  --radius-md: 24px;
+  --radius-lg: 36px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 24px 80px rgba(79, 140, 255, 0.18);
+  --focus-ring: 0 0 0 4px rgba(79, 140, 255, 0.28);
+  --motion-fast: 180ms;
+  --motion-base: 280ms;
+  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  --container-max: 1180px;
+  --container-gutter-desktop: 36px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

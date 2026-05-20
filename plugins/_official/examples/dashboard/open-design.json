@@ -1,0 +1,91 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-dashboard",
+  "title": "Dashboard",
+  "version": "0.1.0",
+  "description": "Admin / analytics dashboard in a single HTML file. Fixed left sidebar,\ntop bar with user/search, main grid of KPI cards and one or two charts.\nUse when the brief asks for a \"dashboard\", \"admin\", \"analytics\", or\n\"control panel\" screen.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/dashboard",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "operations",
+    "web",
+    "desktop",
+    "dashboard",
+    "admin-panel",
+    "analytics",
+    "control-panel",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "operations",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Admin / analytics dashboard in a single HTML file. Fixed left sidebar, top bar with user/search, main grid of KPI cards and one or two charts. Use when the brief asks for a \"dashboard\", \"admin\", \"analytics\", or \"control panel\" screen.",
+        "zh-CN": "使用这个插件完成以下任务：Admin / analytics dashboard in a single HTML file. Fixed left sidebar, top bar with user/search, main grid of KPI cards and one or two charts. Use when the brief asks for a \"dashboard\", \"admin\", \"analytics\", or \"control panel\" screen."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Dashboard"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "craft": [
+        "state-coverage",
+        "accessibility-baseline",
+        "laws-of-ux"
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

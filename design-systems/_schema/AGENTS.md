@@ -1,22 +1,52 @@
-# `_schema/` — the shared token contract
+# `_schema/` — design-system contracts
 
-This directory codifies the structural contract that every brand under
-`design-systems/<brand>/` must satisfy. It is the input to the drift
-guard (`scripts/check-tokens-fixture-sync.ts`) and the future derive
-script that will bulk-generate `tokens.css` for the ~140 brands that do
-not yet have hand-authored tokens.
+This directory codifies the structural contracts for design systems.
+`tokens.schema.ts` is the token contract that every tokenized brand under
+`design-systems/<brand>/` must satisfy. `manifest.schema.ts` is the
+project contract for folders that opt into the Design System Project
+shape by adding `manifest.json`; legacy `DESIGN.md`-only folders remain
+valid until they are migrated.
 
 ```
 _schema/
-├── tokens.schema.ts   ← canonical schema (TS, machine-enforced)
+├── manifest.schema.ts ← project manifest schema (TS, machine-enforced when present)
+├── tokens.schema.ts   ← canonical token schema (TS, machine-enforced)
 ├── defaults.css       ← A2 fallback values (CSS, human reference)
 └── AGENTS.md          ← this file
 ```
 
-The TypeScript schema is the source of truth. `defaults.css` is a
-human-readable mirror of the A2 `fallback` fields and exists so that
-reviewers can scan real CSS without parsing a TS array — drift between
-the two is enforced by the `design-system: A2 defaults parity` guard.
+The TypeScript schemas are the source of truth. `defaults.css` is a
+human-readable mirror of the A2 `fallback` fields in `tokens.schema.ts`
+and exists so that reviewers can scan real CSS without parsing a TS
+array — drift between the two is enforced by the `design-system: A2
+defaults parity` guard. Manifest shape is enforced by
+`scripts/check-design-system-manifests.ts` for any
+`design-systems/<brand>/manifest.json` that exists.
+
+## Project manifest contract
+
+Design System Project folders use fixed v1 file names:
+
+- `manifest.json` — machine-readable project entry.
+- `DESIGN.md` — canonical design prose.
+- `tokens.css` — canonical compiled tokens.
+- `components.html` — optional standalone component fixture.
+- `assets/` — optional brand assets.
+- `preview/` — optional static preview pages.
+- `USAGE.md` — optional agent-facing package guide.
+- `components.manifest.json` — optional rebuildable cache derived from
+  `components.html` and `tokens.css`.
+- `fonts/` — optional webfont files.
+- `source/` — optional importer evidence (`scanned-files.json`,
+  `evidence.md`, `tokens.source.json`, and `snippets/INDEX.json`).
+
+The manifest guard validates only folders that ship `manifest.json`; it
+does not require the bundled catalog to migrate all at once. Rich import
+fields are structural in PR0: when declared, paths must be safe and present,
+JSON indexes must parse, and committed `components.manifest.json` files must
+match a fresh derivation from `components.html` plus `tokens.css`. Runtime
+prompt composition and picker behavior are unchanged until later PRs consume
+those fields.
 
 ## Four layers, two questions
 

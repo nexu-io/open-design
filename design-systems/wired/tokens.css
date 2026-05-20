@@ -1,0 +1,64 @@
+/* design-systems/wired/tokens.css
+ *
+ * Structured token bindings for WIRED.
+ * authoritative technology journalism with monochrome discipline and sharp red alerts.
+ */
+
+:root {
+  --bg: #ffffff;
+  --surface: #f2f2f2;
+  --surface-warm: #fff0f0;
+  --fg: #000000;
+  --fg-2: #333333;
+  --muted: #666666;
+  --meta: #e10600;
+  --border: #d0d0d0;
+  --border-soft: #e8e8e8;
+  --accent: #e10600;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #0f8a3b;
+  --warn: #f5a400;
+  --danger: #c40000;
+  --font-display: "Druk Wide", "Arial Black", Impact, sans-serif;
+  --font-body: "Exchange", Georgia, serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 17px;
+  --text-lg: 20px;
+  --text-xl: 28px;
+  --text-2xl: 44px;
+  --text-3xl: 68px;
+  --text-4xl: 96px;
+  --leading-body: 1.55;
+  --leading-tight: 0.92;
+  --tracking-display: -0.02em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 88px;
+  --section-y-tablet: 64px;
+  --section-y-phone: 44px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 16px 40px rgba(0, 0, 0, 0.14);
+  --focus-ring: 0 0 0 4px rgba(225, 6, 0, 0.24);
+  --motion-fast: 120ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --container-max: 1180px;
+  --container-gutter-desktop: 34px;
+  --container-gutter-tablet: 26px;
+  --container-gutter-phone: 18px;
+}

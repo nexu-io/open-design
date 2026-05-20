@@ -32,7 +32,18 @@ import type { PackagedWebOutputMode } from "./config.js";
 import type { PackagedNamespacePaths } from "./paths.js";
 
 const require = createRequire(import.meta.url);
-const PACKAGED_CHILD_ENV_ALLOWLIST = ["HOME", "LANG", "LC_ALL", "LOGNAME", "TMPDIR", "USER", "VP_HOME"] as const;
+const PACKAGED_CHILD_ENV_ALLOWLIST = [
+  "HOME",
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "LANG",
+  "LC_ALL",
+  "LOGNAME",
+  "NO_PROXY",
+  "TMPDIR",
+  "USER",
+  "VP_HOME",
+] as const;
 
 function shouldForwardPackagedChildEnv(key: string, includeProviderSecrets = false): boolean {
   return (
@@ -375,6 +386,7 @@ export async function startPackagedSidecars(
   await mkdir(paths.logsRoot, { recursive: true });
   await mkdir(paths.desktopLogsRoot, { recursive: true });
   await mkdir(paths.runtimeRoot, { recursive: true });
+  await mkdir(paths.updateRoot, { recursive: true });
   await mkdir(paths.electronUserDataRoot, { recursive: true });
   await mkdir(paths.electronSessionDataRoot, { recursive: true });
 

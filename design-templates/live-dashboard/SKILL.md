@@ -20,7 +20,6 @@ od:
   mode: prototype
   platform: desktop
   scenario: operation
-  featured: 1
   fidelity: high
   preview:
     type: html

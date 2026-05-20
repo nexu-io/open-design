@@ -1,18 +1,33 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useAnalytics } from '../analytics/provider';
+import {
+  trackDesignSystemsTemplateCardClick,
+  trackDesignSystemsTopClick,
+  trackPageView,
+} from '../analytics/events';
 import { useI18n } from '../i18n';
 import {
   localizeDesignSystemCategory,
   localizeDesignSystemSummary,
 } from '../i18n/content';
-import { fetchDesignSystemShowcase } from '../providers/registry';
+import {
+  deleteDesignSystemDraft,
+  fetchDesignSystemShowcase,
+  updateDesignSystemDraft,
+} from '../providers/registry';
 import { buildSrcdoc } from '../runtime/srcdoc';
-import type { DesignSystemSummary, Surface } from '../types';
+import { Icon } from './Icon';
+import type { DesignSystemSummary, ProjectTemplate, Surface } from '../types';
 
 interface Props {
   systems: DesignSystemSummary[];
   selectedId: string | null;
   onSelect: (id: string) => void;
   onPreview: (id: string) => void;
+  onCreate?: () => void;
+  onOpenSystem?: (id: string) => void;
+  onSystemsRefresh?: () => Promise<void> | void;
+  templates?: ProjectTemplate[];
 }
 
 const CATEGORY_ORDER = [
@@ -29,6 +44,7 @@ const CATEGORY_ORDER = [
 ];
 
 type SurfaceFilter = 'all' | Surface;
+type UserListFilter = 'all' | 'published' | 'draft';
 
 const SURFACE_PILLS: { value: SurfaceFilter; labelKey: 'examples.modeAll' | 'ds.surfaceWeb' | 'ds.surfaceImage' | 'ds.surfaceVideo' | 'ds.surfaceAudio' }[] = [
   { value: 'all', labelKey: 'examples.modeAll' },
@@ -42,9 +58,55 @@ function surfaceOf(system: DesignSystemSummary): Surface {
   return system.surface ?? 'web';
 }
 
-export function DesignSystemsTab({ systems, selectedId, onSelect, onPreview }: Props) {
+function isUserSystem(system: DesignSystemSummary): boolean {
+  return system.source === 'user' || system.isEditable === true;
+}
+
+function formatShortDate(value: string | undefined): string {
+  if (!value) return 'just now';
+  const time = Date.parse(value);
+  if (!Number.isFinite(time)) return value;
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(time));
+}
+
+export function DesignSystemsTab({
+  systems,
+  selectedId,
+  onSelect,
+  onPreview,
+  onCreate,
+  onOpenSystem,
+  onSystemsRefresh,
+}: Props) {
   const { locale, t } = useI18n();
+  const analytics = useAnalytics();
+  const designSystemsPageViewFiredRef = useRef(false);
+  useEffect(() => {
+    if (designSystemsPageViewFiredRef.current) return;
+    designSystemsPageViewFiredRef.current = true;
+    // v2 doc: the DS list page also carries `area` / `view_type` /
+    // `entry_from` so it can stitch the cross-surface DS funnel.
+    // `entry_from` is `unknown` here because the tab is reached
+    // through the home nav rail; a router-aware entry mapper can
+    // refine this later.
+    trackPageView(analytics.track, {
+      page_name: 'design_systems',
+      area: 'design_system_list',
+      view_type: 'page',
+      entry_from: 'unknown',
+      available_design_system_count: systems.length,
+    });
+  }, [analytics.track, systems.length]);
+  const searchTrackedRef = useRef(false);
+  const categoryTrackedRef = useRef(false);
   const [filter, setFilter] = useState('');
+  const [userFilter, setUserFilter] = useState<UserListFilter>('all');
+  const [busyId, setBusyId] = useState<string | null>(null);
   const [surfaceFilter, setSurfaceFilter] = useState<SurfaceFilter>('all');
   const [category, setCategory] = useState<string>('All');
   // Cache fetched showcase HTML across re-renders so cards never re-flicker
@@ -52,16 +114,32 @@ export function DesignSystemsTab({ systems, selectedId, onSelect, onPreview }: P
   // "not yet requested". Mirrors the pattern used by ExamplesTab.
   const [thumbs, setThumbs] = useState<Record<string, string | null>>({});
 
-  const surfaceScoped = useMemo(
-    () => surfaceFilter === 'all' ? systems : systems.filter((s) => surfaceOf(s) === surfaceFilter),
-    [systems, surfaceFilter],
+  const librarySystems = useMemo(
+    () => systems.filter((system) => !isUserSystem(system)),
+    [systems],
   );
 
-  const surfaceCounts = useMemo(() => {
-    const counts: Record<SurfaceFilter, number> = { all: systems.length, web: 0, image: 0, video: 0, audio: 0 };
-    for (const s of systems) counts[surfaceOf(s)]++;
+  const surfaceScoped = useMemo(
+    () => surfaceFilter === 'all'
+      ? librarySystems
+      : librarySystems.filter((s) => surfaceOf(s) === surfaceFilter),
+    [librarySystems, surfaceFilter],
+  );
+
+  const userSystems = useMemo(() => {
+    const editable = systems.filter(isUserSystem);
+    if (userFilter === 'all') return editable;
+    return editable.filter((system) => (system.status ?? 'draft') === userFilter);
+  }, [systems, userFilter]);
+
+  // Total systems per surface, ignoring every active filter. Drives the
+  // "this surface is now empty" fallback below — that guard must react to
+  // the catalog itself, not to a transient style/search filter.
+  const surfaceTotals = useMemo(() => {
+    const counts: Record<SurfaceFilter, number> = { all: librarySystems.length, web: 0, image: 0, video: 0, audio: 0 };
+    for (const s of librarySystems) counts[surfaceOf(s)]++;
     return counts;
-  }, [systems]);
+  }, [librarySystems]);
 
   const categories = useMemo(() => {
     const cats = new Set<string>();
@@ -76,17 +154,21 @@ export function DesignSystemsTab({ systems, selectedId, onSelect, onPreview }: P
   // If the currently selected surface has zero items, fall back to 'all'.
   // If the current category is no longer present in the filtered list, fall back to 'All'.
   useEffect(() => {
-    if (surfaceFilter !== 'all' && surfaceCounts[surfaceFilter] === 0) {
+    if (surfaceFilter !== 'all' && surfaceTotals[surfaceFilter] === 0) {
       setSurfaceFilter('all');
       setCategory('All');
     } else if (category !== 'All' && !categories.includes(category)) {
       setCategory('All');
     }
-  }, [systems, surfaceFilter, surfaceCounts, category, categories]);
+  }, [systems, surfaceFilter, surfaceTotals, category, categories]);
 
-  const filtered = useMemo(() => {
+  // Systems matching the active style category and search text, before the
+  // surface filter is applied. Both the surface pill counts and the visible
+  // grid derive from this so a surface chip always reports its own result
+  // set rather than the unfiltered catalog total.
+  const queryScoped = useMemo(() => {
     const q = filter.trim().toLowerCase();
-    return surfaceScoped.filter((s) => {
+    return librarySystems.filter((s) => {
       if (category !== 'All' && (s.category || 'Uncategorized') !== category) return false;
       if (!q) return true;
       const summary = localizeDesignSystemSummary(locale, s).toLowerCase();
@@ -101,7 +183,22 @@ export function DesignSystemsTab({ systems, selectedId, onSelect, onPreview }: P
         categoryLabel.includes(q)
       );
     });
-  }, [surfaceScoped, filter, category, locale]);
+  }, [librarySystems, filter, category, locale]);
+
+  const surfaceCounts = useMemo(() => {
+    const counts: Record<SurfaceFilter, number> = {
+      all: queryScoped.length, web: 0, image: 0, video: 0, audio: 0,
+    };
+    for (const s of queryScoped) counts[surfaceOf(s)]++;
+    return counts;
+  }, [queryScoped]);
+
+  const filtered = useMemo(
+    () => surfaceFilter === 'all'
+      ? queryScoped
+      : queryScoped.filter((s) => surfaceOf(s) === surfaceFilter),
+    [queryScoped, surfaceFilter],
+  );
 
   // Category metadata is authored in English; keep raw values in state for
   // filtering while localizing the visible labels for the current UI locale.
@@ -121,62 +218,283 @@ export function DesignSystemsTab({ systems, selectedId, onSelect, onPreview }: P
     });
   }
 
+  async function refreshSystems() {
+    await onSystemsRefresh?.();
+  }
+
+  async function togglePublished(system: DesignSystemSummary) {
+    setBusyId(system.id);
+    try {
+      await updateDesignSystemDraft(system.id, {
+        status: system.status === 'published' ? 'draft' : 'published',
+      });
+      await refreshSystems();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function deleteSystem(system: DesignSystemSummary) {
+    const ok = window.confirm(`Delete "${system.title}"? This removes the draft design system from this device.`);
+    if (!ok) return;
+    setBusyId(system.id);
+    try {
+      const deleted = await deleteDesignSystemDraft(system.id);
+      if (!deleted) return;
+      if (selectedId === system.id) {
+        const fallback = systems.find((candidate) =>
+          candidate.id !== system.id && isUserSystem(candidate),
+        );
+        if (fallback) onSelect(fallback.id);
+      }
+      await refreshSystems();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
-    <div className="tab-panel">
-      <div className="tab-panel-toolbar">
-        <input
-          placeholder={t('ds.searchPlaceholder')}
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-        />
-        <select value={category} onChange={(e) => setCategory(e.target.value)}>
-          {categories.map((c) => (
-            <option key={c} value={c}>
-              {renderCategory(c)}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div
-        className="examples-filter-row"
-        role="tablist"
-        aria-label={t('ds.surfaceLabel')}
-      >
-        <span className="examples-filter-label">{t('ds.surfaceLabel')}</span>
-        {SURFACE_PILLS.filter((p) => p.value === 'all' || surfaceCounts[p.value] > 0).map((p) => (
-          <button
-            key={p.value}
-            type="button"
-            role="tab"
-            aria-selected={surfaceFilter === p.value}
-            className={`filter-pill ${surfaceFilter === p.value ? 'active' : ''}`}
-            onClick={() => {
-              setSurfaceFilter(p.value);
-              setCategory('All');
-            }}
+    <div className="tab-panel design-systems-manager" data-testid="design-systems-tab">
+      <section className="ds-settings-card" aria-label="Design Systems">
+        <div className="ds-settings-card__head">
+          <div>
+            <span className="ds-manager-eyebrow">Design Systems</span>
+            <h2>Your systems</h2>
+          </div>
+          <select
+            aria-label="Filter design systems"
+            value={userFilter}
+            onChange={(event) => setUserFilter(event.target.value as UserListFilter)}
           >
-            {t(p.labelKey)}
-            <span className="filter-pill-count">{surfaceCounts[p.value]}</span>
+            <option value="all">All</option>
+            <option value="published">Published</option>
+            <option value="draft">Draft</option>
+          </select>
+        </div>
+
+        {onCreate ? (
+          <button type="button" className="ds-create-row" onClick={onCreate}>
+            <span>
+              <strong>Create new design system</strong>
+              <small>Teach Open Design your brand, product, code, assets, and design references.</small>
+            </span>
+            <span className="ds-create-row__action">Create</span>
           </button>
-        ))}
-      </div>
-      {filtered.length === 0 ? (
-        <div className="tab-empty">{t('ds.emptyNoMatch')}</div>
-      ) : (
-        <div className="ds-grid">
-          {filtered.map((s) => (
-            <DesignSystemCard
-              key={s.id}
-              system={s}
-              active={s.id === selectedId}
-              thumbHtml={thumbs[s.id]}
-              onIntersect={() => loadThumb(s.id)}
-              onSelect={() => onSelect(s.id)}
-              onPreview={() => onPreview(s.id)}
-            />
+        ) : null}
+
+        {userSystems.length === 0 ? (
+          <div className="ds-user-empty">
+            No design systems yet. Create one from real product context, review the draft, then publish it for future projects.
+          </div>
+        ) : (
+          <div className="ds-user-list">
+            {userSystems.map((system) => {
+              const status = system.status ?? 'draft';
+              const canUseInProjects = status === 'published';
+              const selected = canUseInProjects && system.id === selectedId;
+              const busy = busyId === system.id;
+              return (
+                <div className="ds-user-row" key={system.id}>
+                  <button
+                    type="button"
+                    className="ds-user-row__open"
+                    onClick={() => onOpenSystem?.(system.id)}
+                  >
+                    <span className="ds-user-row__title">
+                      <span>{system.title}</span>
+                      {selected ? <span className="ds-card-badge">Default</span> : null}
+                    </span>
+                    <span className="ds-user-row__meta">
+                      You · updated {formatShortDate(system.updatedAt)}
+                    </span>
+                  </button>
+                  <div className="ds-user-row__actions">
+                    {onOpenSystem ? (
+                      <button
+                        type="button"
+                        className="ghost compact"
+                        onClick={() => onOpenSystem(system.id)}
+                        disabled={busy}
+                      >
+                        Edit
+                      </button>
+                    ) : null}
+                    {!selected && canUseInProjects ? (
+                      <button
+                        type="button"
+                        className="ghost compact"
+                        onClick={() => onSelect(system.id)}
+                        disabled={busy}
+                      >
+                        Make default
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className={`ds-status-toggle ${status === 'published' ? 'is-on' : ''}`}
+                      aria-pressed={status === 'published'}
+                      onClick={() => void togglePublished(system)}
+                      disabled={busy}
+                    >
+                      <span>{status === 'published' ? 'Published' : 'Draft'}</span>
+                      <i aria-hidden />
+                    </button>
+                    {onOpenSystem ? (
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        aria-label={`Open ${system.title}`}
+                        onClick={() => onOpenSystem(system.id)}
+                      >
+                        <Icon name="external-link" />
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="icon-btn danger"
+                      aria-label={`Delete ${system.title}`}
+                      onClick={() => void deleteSystem(system)}
+                      disabled={busy}
+                    >
+                      <Icon name="close" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <section className="ds-settings-card ds-templates-card" aria-label="Templates">
+        <div className="ds-settings-card__head">
+          <div>
+            <span className="ds-manager-eyebrow">Templates</span>
+            <h2>Templates</h2>
+          </div>
+        </div>
+        <div className="ds-user-empty">
+          No templates yet. Create one from any generated project via Share once template publishing is enabled.
+        </div>
+      </section>
+
+      <p className="ds-private-note">Only you can view these settings.</p>
+
+      <section className="ds-settings-card" aria-label="Built-in design systems">
+        <div className="ds-settings-card__head">
+          <div>
+            <span className="ds-manager-eyebrow">Library</span>
+            <h2>Built-in library</h2>
+          </div>
+        </div>
+        <div className="tab-panel-toolbar ds-manager-toolbar">
+          <input
+            data-testid="design-systems-search"
+            placeholder={t('ds.searchPlaceholder')}
+            value={filter}
+            onFocus={() => {
+              if (searchTrackedRef.current) return;
+              searchTrackedRef.current = true;
+              trackDesignSystemsTopClick(analytics.track, {
+                page_name: 'design_systems',
+                area: 'design_systems',
+                element: 'search_input',
+              });
+            }}
+            onChange={(e) => setFilter(e.target.value)}
+          />
+          <select
+            data-testid="design-systems-category-select"
+            value={category}
+            onFocus={() => {
+              if (categoryTrackedRef.current) return;
+              categoryTrackedRef.current = true;
+              trackDesignSystemsTopClick(analytics.track, {
+                page_name: 'design_systems',
+                area: 'design_systems',
+                element: 'search_dropdown',
+              });
+            }}
+            onChange={(e) => setCategory(e.target.value)}
+          >
+            {categories.map((c) => (
+              <option key={c} value={c}>
+                {renderCategory(c)}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div
+          className="examples-filter-row"
+          role="tablist"
+          aria-label={t('ds.surfaceLabel')}
+        >
+          <span className="examples-filter-label">{t('ds.surfaceLabel')}</span>
+          {/* Hide chips with no items in the active style/search filter, but
+              always keep "all" and the currently selected surface — otherwise a
+              transient search could remove the active chip and leave the grid
+              filtered with no chip showing aria-selected. */}
+          {SURFACE_PILLS.filter(
+            (p) => p.value === surfaceFilter || p.value === 'all' || surfaceCounts[p.value] > 0,
+          ).map((p) => (
+            <button
+              key={p.value}
+              type="button"
+              role="tab"
+              aria-selected={surfaceFilter === p.value}
+              data-testid={`design-systems-surface-${p.value}`}
+              className={`filter-pill ${surfaceFilter === p.value ? 'active' : ''}`}
+              onClick={() => {
+                trackDesignSystemsTopClick(analytics.track, {
+                  page_name: 'design_systems',
+                  area: 'design_systems',
+                  element: 'filter_chip',
+                  filter_name: p.value,
+                });
+                setSurfaceFilter(p.value);
+              }}
+            >
+              {t(p.labelKey)}
+              <span className="filter-pill-count">{surfaceCounts[p.value]}</span>
+            </button>
           ))}
         </div>
-      )}
+        {filtered.length === 0 ? (
+          <div className="tab-empty" data-testid="design-systems-empty">{t('ds.emptyNoMatch')}</div>
+        ) : (
+          <div className="ds-grid" data-testid="design-systems-grid">
+            {filtered.map((s) => (
+              <DesignSystemCard
+                key={s.id}
+                system={s}
+                active={s.id === selectedId}
+                thumbHtml={thumbs[s.id]}
+                onIntersect={() => loadThumb(s.id)}
+                onSelect={() => {
+                  trackDesignSystemsTemplateCardClick(analytics.track, {
+                    page_name: 'design_systems',
+                    area: 'templates_card',
+                    element: 'templates_card',
+                    templates_id: s.id,
+                    templates_type: s.source ?? 'library',
+                  });
+                  onSelect(s.id);
+                }}
+                onPreview={() => {
+                  trackDesignSystemsTemplateCardClick(analytics.track, {
+                    page_name: 'design_systems',
+                    area: 'templates_card',
+                    element: 'templates_card',
+                    templates_id: s.id,
+                    templates_type: s.source ?? 'library',
+                  });
+                  onPreview(s.id);
+                }}
+              />
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
@@ -240,6 +558,7 @@ function DesignSystemCard({
       className={`ds-card ${active ? 'active' : ''}`}
       role="button"
       tabIndex={0}
+      data-testid={`design-system-card-${system.id}`}
       onClick={onSelect}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -249,8 +568,9 @@ function DesignSystemCard({
       }}
     >
       <div
-        className="ds-card-thumb"
-        onClick={(e) => {
+      className="ds-card-thumb"
+      data-testid={`design-system-preview-${system.id}`}
+      onClick={(e) => {
           e.stopPropagation();
           onPreview();
         }}
@@ -292,7 +612,7 @@ function DesignSystemCard({
           {t('ds.preview')}
         </span>
       </div>
-      <div className="ds-card-meta">
+      <div className="ds-card-meta" data-testid={`design-system-select-${system.id}`}>
         <div className="ds-card-title-row">
           <span className="ds-card-title">{system.title}</span>
           {active ? (

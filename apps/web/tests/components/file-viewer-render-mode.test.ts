@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseForceInline, shouldUrlLoadHtmlPreview } from '../../src/components/file-viewer-render-mode';
+import {
+  hasTweaksTemplate,
+  hasUrlModeBridge,
+  htmlNeedsSandboxShim,
+  parseForceInline,
+  shouldUrlLoadHtmlPreview,
+} from '../../src/components/file-viewer-render-mode';
 
 describe('shouldUrlLoadHtmlPreview', () => {
   const base = { mode: 'preview' as const, isDeck: false, commentMode: false, forceInline: false };
@@ -13,8 +19,20 @@ describe('shouldUrlLoadHtmlPreview', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, isDeck: true })).toBe(false);
   });
 
-  it('falls back to srcDoc when comment mode is active (comment bridge required)', () => {
+  it('falls back to srcDoc when comment mode is active without an artifact-owned bridge', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, commentMode: true })).toBe(false);
+  });
+
+  it('keeps URL-load when comment mode is active and the artifact owns the bridge', () => {
+    expect(shouldUrlLoadHtmlPreview({ ...base, commentMode: true, urlModeBridge: true })).toBe(true);
+  });
+
+  it('falls back to srcDoc when direct edit mode is active without an artifact-owned bridge', () => {
+    expect(shouldUrlLoadHtmlPreview({ ...base, editMode: true })).toBe(false);
+  });
+
+  it('keeps URL-load when direct edit mode is active and the artifact owns the bridge', () => {
+    expect(shouldUrlLoadHtmlPreview({ ...base, editMode: true, urlModeBridge: true })).toBe(true);
   });
 
   it('falls back to srcDoc when inspect mode is active (selection bridge required)', () => {
@@ -23,6 +41,13 @@ describe('shouldUrlLoadHtmlPreview', () => {
 
   it('falls back to srcDoc when draw mode is active (snapshot bridge required)', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, drawMode: true })).toBe(false);
+  });
+
+  it('falls back to srcDoc when the artifact ships the class based tweaks template', () => {
+    // Without this, a plain `.tw-panel` artifact would URL load on first
+    // open, skip the tweaks bridge entirely, and leave the toolbar toggle
+    // disabled (no `od:tweaks-available` ever fires).
+    expect(shouldUrlLoadHtmlPreview({ ...base, tweaksBridge: true })).toBe(false);
   });
 
   it('falls back to srcDoc when the user opts in via forceInline', () => {
@@ -37,6 +62,51 @@ describe('shouldUrlLoadHtmlPreview', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, isDeck: true, commentMode: true })).toBe(false);
     expect(shouldUrlLoadHtmlPreview({ ...base, isDeck: true, forceInline: true })).toBe(false);
     expect(shouldUrlLoadHtmlPreview({ ...base, commentMode: true, forceInline: true })).toBe(false);
+    expect(shouldUrlLoadHtmlPreview({ ...base, tweaksBridge: true, forceInline: true })).toBe(false);
+    expect(shouldUrlLoadHtmlPreview({ ...base, commentMode: true, urlModeBridge: true, inspectMode: true })).toBe(false);
+  });
+});
+
+describe('hasTweaksTemplate', () => {
+  it('matches a plain `.tw-panel` artifact', () => {
+    const source = '<!doctype html><html><body><aside class="tw-panel"></aside></body></html>';
+    expect(hasTweaksTemplate(source)).toBe(true);
+  });
+
+  it('matches the `.tw-hidden` toggle class even without an explicit `.tw-panel`', () => {
+    // Defensive: the template ships both selectors and either one signals a
+    // tweaks-template artifact that needs the bridge.
+    const source = '<style>.tw-hidden { display: none; }</style>';
+    expect(hasTweaksTemplate(source)).toBe(true);
+  });
+
+  it('does not match unrelated identifiers that merely contain `tw`', () => {
+    expect(hasTweaksTemplate('<div class="container">tweet</div>')).toBe(false);
+    expect(hasTweaksTemplate('twk-panel, btw-panel, mtw-hidden')).toBe(false);
+  });
+
+  it('returns false for empty / null / undefined input', () => {
+    expect(hasTweaksTemplate('')).toBe(false);
+    expect(hasTweaksTemplate(null)).toBe(false);
+    expect(hasTweaksTemplate(undefined)).toBe(false);
+  });
+});
+
+describe('hasUrlModeBridge', () => {
+  it('detects an artifact-owned direct-edit bridge script', () => {
+    expect(hasUrlModeBridge('<script src="od-direct-edit.js"></script>')).toBe(true);
+    expect(hasUrlModeBridge('<script defer src="./assets/od-direct-edit.js?v=1"></script>')).toBe(true);
+  });
+
+  it('ignores comments, text nodes, and inline script bodies that only mention the bridge name', () => {
+    expect(hasUrlModeBridge('<!-- TODO: ship od-direct-edit.js -->')).toBe(false);
+    expect(hasUrlModeBridge('<p>Use od-direct-edit.js for editing</p>')).toBe(false);
+    expect(hasUrlModeBridge('<script>console.log("od-direct-edit.js")</script>')).toBe(false);
+  });
+
+  it('ignores unrelated script URLs', () => {
+    expect(hasUrlModeBridge('<script src="direct-edit.js"></script>')).toBe(false);
+    expect(hasUrlModeBridge(null)).toBe(false);
   });
 });
 
@@ -77,5 +147,71 @@ describe('parseForceInline', () => {
     const params = new URLSearchParams();
     params.set('forceInline', '  1  ');
     expect(parseForceInline(params)).toBe(true);
+  });
+});
+
+describe('htmlNeedsSandboxShim', () => {
+  it('returns false for plain static HTML', () => {
+    expect(htmlNeedsSandboxShim('<!doctype html><h1>hello</h1>')).toBe(false);
+  });
+
+  it('detects <script type="text/babel"> (Babel-standalone React prototypes)', () => {
+    // Real agent-emitted shape with src= and double-quoted attributes.
+    expect(
+      htmlNeedsSandboxShim(
+        '<script type="text/babel" src="components/Icon.jsx"></script>',
+      ),
+    ).toBe(true);
+    // Single quotes.
+    expect(htmlNeedsSandboxShim("<script type='text/babel'>const a = 1;</script>")).toBe(true);
+    // Extra attributes before type=.
+    expect(
+      htmlNeedsSandboxShim('<script defer type="text/babel" src="app.jsx"></script>'),
+    ).toBe(true);
+    // Whitespace around the equals sign.
+    expect(htmlNeedsSandboxShim('<script type = "text/babel"></script>')).toBe(true);
+    // Case-insensitive type value.
+    expect(htmlNeedsSandboxShim('<script type="TEXT/BABEL"></script>')).toBe(true);
+  });
+
+  it('detects unquoted <script type=text/babel> (HTML5 permits unquoted attrs)', () => {
+    // Bare unquoted type value, no other attributes.
+    expect(htmlNeedsSandboxShim('<script type=text/babel></script>')).toBe(true);
+    // Unquoted with an unquoted src= following — terminates on whitespace.
+    expect(
+      htmlNeedsSandboxShim('<script type=text/babel src=app.jsx></script>'),
+    ).toBe(true);
+    // Mixed: unquoted type=, then a quoted src=.
+    expect(
+      htmlNeedsSandboxShim('<script type=text/babel src="components/Icon.jsx"></script>'),
+    ).toBe(true);
+    // Trailing `\b` rejects word continuations: `type=text/babelish` does
+    // not match because `l`→`i` is a word-internal transition. Hyphenated
+    // variants like `type=text/babel-other` still match per the helper
+    // docstring (`l`→`-` is a word boundary) — that's the documented safe
+    // false-positive direction, so it is intentionally not asserted here.
+    expect(htmlNeedsSandboxShim('<script type=text/babelish></script>')).toBe(false);
+  });
+
+  it('does not match plain <script> tags or unrelated MIME types', () => {
+    expect(htmlNeedsSandboxShim('<script src="app.js"></script>')).toBe(false);
+    expect(htmlNeedsSandboxShim('<script type="module" src="app.js"></script>')).toBe(false);
+    expect(htmlNeedsSandboxShim('<script type="application/json">{}</script>')).toBe(false);
+    // Substring-only matches must not trigger (e.g. text/babel-like custom type).
+    expect(htmlNeedsSandboxShim('<script type="text/babelish"></script>')).toBe(false);
+  });
+
+  it('detects direct localStorage / sessionStorage references in the source', () => {
+    expect(htmlNeedsSandboxShim('<script>localStorage.getItem("k")</script>')).toBe(true);
+    expect(htmlNeedsSandboxShim('<script>sessionStorage.setItem("k","v")</script>')).toBe(true);
+    // Inside an external script tag's surrounding markup still trips the
+    // scan when the literal name appears in the document the iframe loads.
+    expect(htmlNeedsSandboxShim('// uses localStorage to persist theme')).toBe(true);
+  });
+
+  it('does not match incidental substrings that are not the storage globals', () => {
+    expect(htmlNeedsSandboxShim('Storage')).toBe(false);
+    expect(htmlNeedsSandboxShim('mylocalStorageWrapper')).toBe(false);
+    expect(htmlNeedsSandboxShim('SuperLocalStorage')).toBe(false);
   });
 });

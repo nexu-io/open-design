@@ -1,0 +1,82 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-design-brief",
+  "title": "Design Brief",
+  "version": "0.1.0",
+  "description": "Parse a structured design brief written in I-Lang protocol format into a\nconcrete design spec. Eliminates ambiguity from vague requests like\n\"make it professional\" by requiring explicit dimensions: palette, typography,\nlayout, mood, density, and constraints.\nTrigger keywords: \"design brief\", \"create a design brief\", \"ilang brief\", \"structured brief\".",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/design-brief",
+  "tags": [
+    "example",
+    "first-party",
+    "design-system",
+    "planning",
+    "web",
+    "desktop",
+    "design-brief",
+    "create-a-design-brief",
+    "ilang-brief",
+    "structured-brief"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "platform": "desktop",
+    "scenario": "planning",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./brief-preview.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Parse a structured design brief written in I-Lang protocol format into a concrete design spec. Eliminates ambiguity from vague requests like \"make it professional\" by requiring explicit dimensions: palette, typography, layout, mood, density, and constraints. Trigger keywords: \"design brief\", \"create a design brief\", \"i",
+        "zh-CN": "使用这个插件完成以下任务：Parse a structured design brief written in I-Lang protocol format into a concrete design spec. Eliminates ambiguity from vague requests like \"make it professional\" by requiring explicit dimensions: palette, typography, layout, mood, density, and constraints. Trigger keywords: \"design brief\", \"create a design brief\", \"i"
+      }
+    },
+    "inputs": [
+      {
+        "name": "brief",
+        "type": "string",
+        "required": true,
+        "description": "I-Lang formatted design brief or natural language description"
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": []
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

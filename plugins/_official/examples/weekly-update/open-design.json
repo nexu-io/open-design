@@ -1,0 +1,84 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-weekly-update",
+  "title": "Weekly Update",
+  "version": "0.1.0",
+  "description": "Single-file horizontal-swipe slide deck for a weekly team update —\nshipped, in flight, blocked, metrics, asks. 6–8 slides. Use when the\nbrief mentions \"weekly update\", \"team update slides\", \"weekly status\",\n\"周报演示\".",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/weekly-update",
+  "tags": [
+    "example",
+    "first-party",
+    "deck",
+    "operations",
+    "web",
+    "weekly-update",
+    "team-update-slides",
+    "weekly-status",
+    "weekly-review",
+    "untitled"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "operations",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Make a weekly update deck for the Growth squad — what shipped, in flight, blocked, metrics, asks for next week.",
+        "zh-CN": "使用这个插件完成以下任务：Make a weekly update deck for the Growth squad — what shipped, in flight, blocked, metrics, asks for next week."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Weekly Update"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

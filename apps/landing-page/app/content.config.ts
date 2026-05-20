@@ -36,6 +36,14 @@ const skills = defineCollection({
   schema: skillSchema,
 });
 
+const designTemplates = defineCollection({
+  loader: glob({
+    base: '../../design-templates',
+    pattern: '*/SKILL.md',
+  }),
+  schema: skillSchema,
+});
+
 // `design-systems/<slug>/DESIGN.md` files use plain Markdown without YAML
 // frontmatter. We treat them as untyped Markdown bundles and parse the
 // human-meaningful fields (H1, `> Category:`, palette hex codes) at
@@ -56,9 +64,10 @@ const craft = defineCollection({
   schema: z.object({}).passthrough(),
 });
 
-// `templates/live-artifacts/<slug>/README.md` — Live Artifact bundles.
-// We surface them under `/templates/` together with skills whose `od.mode`
-// is `template` (filtered at render time, not in the schema).
+// `templates/live-artifacts/<slug>/README.md` — legacy Live Artifact bundles.
+// The public `/templates/` catalog is primarily sourced from
+// `design-templates/*/SKILL.md`; these remain available as compatibility
+// records while older live-artifact bundles still exist in the repo.
 const templates = defineCollection({
   loader: glob({
     base: '../../templates/live-artifacts',
@@ -67,18 +76,45 @@ const templates = defineCollection({
   schema: z.object({}).passthrough(),
 });
 
+// Blog posts live in `app/content/blog/*.md`. Each post must declare a typed
+// frontmatter block matching the schema below. The list page reads the
+// collection via `getCollection('blog')` and the dynamic route renders each
+// entry via `getEntry('blog', slug)`. Underscore-prefixed files (e.g.
+// `_topics.md` — the topic backlog used by the blog-factory skill) are
+// excluded from the loader so they never get parsed as posts.
 const blog = defineCollection({
   loader: glob({
+    pattern: ['*.md', '!_*.md'],
     base: './app/content/blog',
-    pattern: '*.mdx',
   }),
   schema: z.object({
     title: z.string(),
     date: z.coerce.date(),
-    category: z.string(),
-    readingTime: z.string(),
+    category: z.enum(['Product', 'Guides', 'Use cases', 'Community']),
+    readingTime: z.number().int().positive(),
     summary: z.string(),
   }),
 });
 
-export const collections = { skills, systems, craft, templates, blog };
+// Tutorials live in `app/content/tutorials/*.md`. Each entry maps to a
+// single YouTube video and renders a click-through preview on
+// `/tutorials/<slug>/`.
+const tutorials = defineCollection({
+  loader: glob({
+    pattern: ['*.md', '!_*.md'],
+    base: './app/content/tutorials',
+  }),
+  schema: z.object({
+    title: z.string(),
+    youtubeId: z.string().regex(/^[\w-]{11}$/, 'youtubeId must be 11 chars'),
+    summary: z.string(),
+    date: z.coerce.date(),
+    category: z.enum(['Getting started', 'Tutorial', 'Demo', 'Review', 'Community']),
+    durationSeconds: z.number().int().positive(),
+    author: z.string(),
+    official: z.boolean().default(false),
+    thumbnail: z.string().url().optional(),
+  }),
+});
+
+export const collections = { skills, designTemplates, systems, craft, templates, blog, tutorials };

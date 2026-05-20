@@ -30,7 +30,7 @@ let
   # `nix build .#web` will fail with the expected hash printed; copy
   # that into `pnpmDepsHash` below. Bump it whenever pnpm-lock.yaml
   # changes.
-  pnpmDepsHash = "sha256-NtXbiRU0YZ4EVJVNC6N3sR1S0ozA3BvCwgXI0L0OMH4=";
+  pnpmDepsHash = "sha256-BqnA3aBPHiy+o04atLF6RCZGJKA24qneuqPzV0WH2G8=";
   # pnpmDepsHash = lib.fakeHash;
 in
   stdenv.mkDerivation (finalAttrs: {
@@ -57,6 +57,7 @@ in
       runHook preBuild
       for target in \
         packages/contracts \
+        packages/host \
         packages/sidecar-proto \
         packages/sidecar \
         packages/platform

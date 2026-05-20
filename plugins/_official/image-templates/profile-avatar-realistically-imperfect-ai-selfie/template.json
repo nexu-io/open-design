@@ -1,0 +1,21 @@
+{
+  "id": "profile-avatar-realistically-imperfect-ai-selfie",
+  "surface": "image",
+  "title": "Profile / Avatar - Realistically Imperfect AI Selfie",
+  "summary": "A creative prompt used with GPT Image 2 to generate a 'failed' selfie that looks like an accidental, low-quality smartphone snapshot.",
+  "category": "Profile / Avatar",
+  "tags": [
+    "portrait",
+    "fantasy"
+  ],
+  "model": "gpt-image-2",
+  "aspect": "1:1",
+  "prompt": "ChatGPT, you've been with me for a while now, and I want to see what you look like. Please generate a photo similar to an {argument name=\"shooting method\" default=\"accidental selfie\"} taken with an {argument name=\"phone model\" default=\"iPhone\"}: no clear subject, no intentional composition, just a very ordinary, even slightly failed snapshot. The photo should have slight motion blur, uneven lighting, light overexposure, an awkward angle, and chaotic composition, presenting an 'overly realistic candid' feeling, as if it were a selfie accidentally triggered while taking the phone out of a pocket.",
+  "previewImageUrl": "https://cms-assets.youmind.com/media/1777453151202_3usbgm_HHAkoXnaMAAFvsx.jpg",
+  "source": {
+    "repo": "YouMind-OpenLab/awesome-gpt-image-2",
+    "license": "CC-BY-4.0",
+    "author": "Tz",
+    "url": "https://x.com/Tz_2022/status/2049178230762934731"
+  }
+}
