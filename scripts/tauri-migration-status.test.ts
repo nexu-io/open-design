@@ -722,6 +722,40 @@ test("continue-tauri-migration dry-run with skip-push stops before native CI whe
   assert.doesNotMatch(result.stdout, /download-tauri-m4-reports\.ts/);
 });
 
+test("continue-tauri-migration does not advance from local reports before remote head verification", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+  await writeHandoffArchive(handoffDir);
+  const remotePath = join(fixture, "empty.git");
+  await git(fixture, "init", "--bare", remotePath);
+  const reportDir = join(fixture, "reports");
+  await writeWindowsReport(join(reportDir, winArtifactName));
+  await writeLinuxReport(join(reportDir, linuxArtifactName));
+
+  const result = await runContinue(
+    fixture,
+    "--handoff-dir",
+    handoffDir,
+    "--remote",
+    remotePath,
+    "--report-dir",
+    reportDir,
+    "--advance",
+    "--dry-run",
+    "--skip-push",
+    "--skip-dispatch",
+  );
+
+  assert.match(result.stdout, /Remote branch is not ready; native CI cannot be collected yet/);
+  assert.doesNotMatch(result.stdout, /advance-tauri-migration-m4-m5\.ts/);
+  assert.doesNotMatch(result.stdout, /Would record M4 evidence/);
+});
+
 test("continue-tauri-migration surfaces heartbeat problems before planning M4 work", async (t) => {
   const fixture = await createFixtureRoot(t, {
     checked: [],

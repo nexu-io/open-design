@@ -249,11 +249,7 @@ async function continueM4(args: Args, status: MigrationStatus, log: string[]): P
     throw new Error("cannot continue M4 without a git head or handoff branchHead");
   }
 
-  if (status.platformReports?.current === true) {
-    await maybeAdvanceFromReports(args, status, log);
-    return;
-  }
-
+  let currentStatus = status;
   let remoteCurrent = status.remote?.current === true;
   if (!remoteCurrent) {
     if (args.push) {
@@ -280,8 +276,8 @@ async function continueM4(args: Args, status: MigrationStatus, log: string[]): P
       }
       log.push(`${args.dryRun ? "Would push" : "Pushed"} ${args.branch} to ${args.remote} from ${archive}.`);
       if (!args.dryRun) {
-        const refreshed = await readStatus(args);
-        remoteCurrent = refreshed.remote?.current === true;
+        currentStatus = await readStatus(args);
+        remoteCurrent = currentStatus.remote?.current === true;
         if (!remoteCurrent) {
           throw new Error(`remote ${args.remote} still does not match ${args.branch} after push attempt`);
         }
@@ -296,6 +292,11 @@ async function continueM4(args: Args, status: MigrationStatus, log: string[]): P
 
   if (!remoteCurrent && (!args.dryRun || !args.push)) {
     log.push("Remote branch is not ready; native CI cannot be collected yet.");
+    return;
+  }
+
+  if (remoteCurrent && currentStatus.platformReports?.current === true) {
+    await maybeAdvanceFromReports(args, currentStatus, log);
     return;
   }
 
