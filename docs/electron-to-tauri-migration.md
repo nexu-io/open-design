@@ -153,11 +153,14 @@ Do not start this runbook until `scripts/verify-tauri-platform-gates.ts --update
 
 ```bash
 pnpm exec tsx scripts/advance-tauri-migration-m4-m5.ts \
+  --remote origin \
+  --branch codex/electron-to-tauri-migration \
+  --expected-head <migration-commit-sha> \
   --win-report /path/to/open-design-ci-win-tauri-e2e-report \
   --linux-report /path/to/open-design-ci-linux-tauri-e2e-report
 ```
 
-This verifies both native reports with `scripts/verify-tauri-platform-gates.ts --update-migration-doc`, updates the M4 evidence in this document, then runs the guarded M5 applicator.
+This verifies the pushed migration branch head first, then verifies both native reports with `scripts/verify-tauri-platform-gates.ts --update-migration-doc`, updates the M4 evidence in this document, and runs the guarded M5 applicator.
 
 2. If M4 has already been verified and recorded, run the guarded M5 applicator directly:
 
@@ -435,6 +438,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Tightened `scripts/tauri-migration-status.ts` next actions for missing remote branches. When `--remote` is checked and the migration branch is absent or stale, status now keeps native CI collection and M4→M5 advance behind the remote-head blocker instead of printing generic Windows/Linux smoke and advance steps.
 - 2026-05-20: Extended the M6 cleanup inventory and guard to include Electron-specific CI/release workflow references alongside `tools-pack` resources, so Electron-specific CI/release cache wiring cannot survive behind a checked resources box. `scripts/tauri-migration-inventory.ts --plan` now lists `.github/workflows/ci.yml`, `.github/workflows/release-beta.yml`, `.github/workflows/release-stable.yml`, and `.github/scripts/release/cache/win.ps1`. `node --import tsx --test scripts/tauri-migration-policy.test.ts scripts/tauri-migration-inventory.test.ts` and `tsc -p scripts/tsconfig.json --noEmit` passed.
 - 2026-05-20: Tightened `scripts/continue-tauri-migration.ts` so verified local report directories cannot bypass remote branch-head verification. Even when Windows/Linux reports are present, the continuation runner now refuses to record M4 evidence or apply M5 until the checked remote branch matches the handoff head. `node --import tsx --test scripts/tauri-migration-status.test.ts` and `tsc -p scripts/tsconfig.json --noEmit` passed.
+- 2026-05-20: Tightened the direct M4→M5 phase advance path so `scripts/advance-tauri-migration-m4-m5.ts` verifies the pushed remote migration branch before consuming local Windows/Linux report directories. The downloader, continuation runner, status next actions, and packaged handoff sidecar now pass the same `--remote`, `--branch`, and `--expected-head` contract into the mutating advance command.
 
 ### Platform Gate Runners
 
@@ -576,12 +580,13 @@ If both pass, download and verify their `open-design-ci-win-tauri-e2e-report` an
 pnpm exec tsx scripts/download-tauri-m4-reports.ts \
   --branch codex/electron-to-tauri-migration \
   --expected-head <migration-commit-sha> \
+  --remote origin \
   --wait \
   --output-dir /tmp/open-design-tauri-m4-reports
 ```
 
-When `--run-id` is omitted, the script uses `gh run list` to select a completed `ci.yml` run for `codex/electron-to-tauri-migration`; `--expected-head <migration-commit-sha> --wait` keeps it from consuming stale branch evidence. If you already know the completed run id, either set `GITHUB_RUN_ID=<github-run-id>` before rerunning the packaged command sidecar or pass `--run-id <github-run-id> --branch codex/electron-to-tauri-migration --expected-head <migration-commit-sha>` directly to `scripts/download-tauri-m4-reports.ts`. The explicit `--run-id` path verifies the run branch/head with `gh run view` before downloading. The Windows report must prove NSIS build/install/start/eval/screenshot/stop/uninstall. The Linux report must prove AppImage build/install/start/eval/screenshot/stop/uninstall plus headless install/start/stop. If you are ready to mutate the migration branch immediately after verified downloads, add `--advance`; the script will run `scripts/advance-tauri-migration-m4-m5.ts` against the downloaded reports and apply the guarded M5 default flip.
-Before downloading artifacts, the downloader also verifies that the selected run contains successful `Packaged windows Tauri smoke` and `Packaged linux Tauri smoke` jobs. This keeps M4 evidence tied to the native package-smoke jobs rather than to any completed workflow run that happens to expose similarly named artifacts. `--run-id` and `--advance` require `--expected-head`, because both explicit evidence selection and mutation must stay tied to the migration branch head.
+When `--run-id` is omitted, the script uses `gh run list` to select a completed `ci.yml` run for `codex/electron-to-tauri-migration`; `--expected-head <migration-commit-sha> --wait` keeps it from consuming stale branch evidence. If you already know the completed run id, either set `GITHUB_RUN_ID=<github-run-id>` before rerunning the packaged command sidecar or pass `--run-id <github-run-id> --branch codex/electron-to-tauri-migration --expected-head <migration-commit-sha> --remote origin` directly to `scripts/download-tauri-m4-reports.ts`. The explicit `--run-id` path verifies the run branch/head with `gh run view` before downloading. The Windows report must prove NSIS build/install/start/eval/screenshot/stop/uninstall. The Linux report must prove AppImage build/install/start/eval/screenshot/stop/uninstall plus headless install/start/stop. If you are ready to mutate the migration branch immediately after verified downloads, add `--advance`; the script will run `scripts/advance-tauri-migration-m4-m5.ts` against the downloaded reports and re-check the configured remote branch before applying the guarded M5 default flip.
+Before downloading artifacts, the downloader also verifies that the selected run contains successful `Packaged windows Tauri smoke` and `Packaged linux Tauri smoke` jobs. This keeps M4 evidence tied to the native package-smoke jobs rather than to any completed workflow run that happens to expose similarly named artifacts. `--run-id` and `--advance` require `--expected-head`, because both explicit evidence selection and mutation must stay tied to the migration branch head. `--advance` also passes `--remote` through to the phase advance script, so the receiver's remote name and the M4 evidence head stay coupled.
 
 After extracting the report artifacts, verify the required evidence mechanically:
 
@@ -604,6 +609,9 @@ To verify the reports, update M4, and immediately apply the guarded M5 default f
 
 ```bash
 pnpm exec tsx scripts/advance-tauri-migration-m4-m5.ts \
+  --remote origin \
+  --branch codex/electron-to-tauri-migration \
+  --expected-head <migration-commit-sha> \
   --win-report /tmp/open-design-tauri-m4-reports/open-design-ci-win-tauri-e2e-report \
   --linux-report /tmp/open-design-tauri-m4-reports/open-design-ci-linux-tauri-e2e-report
 ```

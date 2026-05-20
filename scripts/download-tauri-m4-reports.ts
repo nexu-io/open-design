@@ -19,6 +19,7 @@ type Args = {
   branch: string;
   expectedHead?: string;
   ghBin: string;
+  gitRemote: string;
   outputDir: string;
   pollMs: number;
   repo: string;
@@ -51,10 +52,7 @@ async function main(): Promise<void> {
     await assertTrackedWorktreeClean(args.root, "downloading M4 reports with --advance");
   }
   const runId = args.runId ?? (args.wait ? await waitForCompletedRun(args) : await findLatestCompletedRun(args));
-  let viewedRun: GithubRun | undefined;
-  if (args.runId != null && args.expectedHead != null) {
-    viewedRun = await assertRunMatchesExpectedHead(args, runId);
-  }
+  const viewedRun = args.expectedHead == null ? undefined : await assertRunMatchesExpectedHead(args, runId);
   await assertRunHasSuccessfulTauriJobs(args, runId, viewedRun);
   const winReport = join(args.outputDir, winArtifactName);
   const linuxReport = join(args.outputDir, linuxArtifactName);
@@ -74,6 +72,12 @@ async function main(): Promise<void> {
     ? await runScript("advance-tauri-migration-m4-m5.ts", [
         "--root",
         args.root,
+        "--remote",
+        args.gitRemote,
+        "--branch",
+        args.branch,
+        "--expected-head",
+        args.expectedHead!,
         "--win-report",
         winReport,
         "--linux-report",
@@ -100,6 +104,9 @@ async function main(): Promise<void> {
             indent(
               [
                 "pnpm exec tsx scripts/advance-tauri-migration-m4-m5.ts \\",
+                `  --remote ${shellQuote(args.gitRemote)} \\`,
+                `  --branch ${shellQuote(args.branch)} \\`,
+                `  --expected-head ${args.expectedHead ?? "<migration-commit-sha>"} \\`,
                 `  --win-report ${shellQuote(winReport)} \\`,
                 `  --linux-report ${shellQuote(linuxReport)}`,
               ].join("\n"),
@@ -139,6 +146,7 @@ function parseArgs(argv: string[]): Args {
     advance: false,
     branch: defaultBranch,
     ghBin: process.env.GH_BIN ?? "gh",
+    gitRemote: "origin",
     outputDir: defaultOutputDir,
     pollMs: 30_000,
     repo: defaultRepo,
@@ -163,6 +171,7 @@ function parseArgs(argv: string[]): Args {
       (arg === "--branch" ||
         arg === "--expected-head" ||
         arg === "--gh" ||
+        arg === "--remote" ||
         arg === "--output-dir" ||
         arg === "--poll-ms" ||
         arg === "--repo" ||
@@ -187,6 +196,11 @@ function parseArgs(argv: string[]): Args {
     }
     if (arg === "--gh") {
       parsed.ghBin = value!;
+      index += 1;
+      continue;
+    }
+    if (arg === "--remote") {
+      parsed.gitRemote = value!;
       index += 1;
       continue;
     }
@@ -228,7 +242,7 @@ function parseArgs(argv: string[]): Args {
     if (arg === "--help" || arg === "-h") {
       process.stdout.write(
         [
-          "usage: tsx scripts/download-tauri-m4-reports.ts [--run-id <id>] [--repo <owner/repo>] [--branch <ref>] [--expected-head <sha>] [--output-dir <dir>] [--advance] [--root <repo>]",
+          "usage: tsx scripts/download-tauri-m4-reports.ts [--run-id <id>] [--repo <owner/repo>] [--branch <ref>] [--expected-head <sha>] [--remote <git-remote>] [--output-dir <dir>] [--advance] [--root <repo>]",
           "",
           "Downloads the Windows/Linux Tauri CI report artifacts with gh, verifies them with scripts/verify-tauri-platform-gates.ts, and optionally applies the guarded M4→M5 advance.",
           "Use --expected-head <sha> to avoid stale branch runs, and --wait to poll until a matching completed run exists. --run-id and --advance require --expected-head.",

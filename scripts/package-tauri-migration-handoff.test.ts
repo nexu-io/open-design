@@ -45,6 +45,7 @@ test("package-tauri-migration-handoff creates a tarball and checksum sidecar", a
   assert.match(result.stdout, /download-tauri-m4-reports/);
   assert.match(result.stdout, /--branch 'codex\/electron-to-tauri-migration'/);
   assert.match(result.stdout, new RegExp(`--expected-head ${branchHead}`));
+  assert.match(result.stdout, /--remote origin/);
   assert.match(result.stdout, /--wait/);
   assert.match(result.stdout, /--advance/);
   assert.match(result.stdout, /Continuation runner:/);
@@ -88,8 +89,9 @@ test("package-tauri-migration-handoff creates a tarball and checksum sidecar", a
   assert.match(commandScript, /## Validation/);
   assert.match(commandScript, /GITHUB_RUN_ID/);
   assert.match(commandScript, /download-tauri-m4-reports/);
-  assert.match(commandScript, /--run-id "\$GITHUB_RUN_ID" --branch "\$branch" --expected-head "\$expected_head"/);
+  assert.match(commandScript, /--run-id "\$GITHUB_RUN_ID" --branch "\$branch" --expected-head "\$expected_head" --remote "\$remote"/);
   assert.match(commandScript, /--expected-head "\$expected_head"/);
+  assert.match(commandScript, /--remote "\$remote"/);
   assert.match(commandScript, /--wait/);
   assert.match(commandScript, /tauri-migration-status\.ts --handoff-dir "\$handoff_dir" --remote "\$remote" --report-dir "\$report_dir"/);
   assert.match(commandScript, /--output-dir \$report_dir --advance/);

@@ -7,7 +7,10 @@ const scriptsRoot = import.meta.dirname;
 const workspaceRoot = resolve(scriptsRoot, "..");
 
 type Args = {
+  branch: string;
+  expectedHead?: string;
   linuxReport?: string;
+  remote: string;
   root: string;
   winReport?: string;
 };
@@ -15,11 +18,26 @@ type Args = {
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   if (args.winReport == null || args.linuxReport == null) {
-    throw new Error("usage: tsx scripts/advance-tauri-migration-m4-m5.ts --win-report <dir> --linux-report <dir> [--root <repo>]");
+    throw new Error(
+      "usage: tsx scripts/advance-tauri-migration-m4-m5.ts --win-report <dir> --linux-report <dir> --expected-head <sha> [--remote <remote>] [--branch <ref>] [--root <repo>]",
+    );
+  }
+  if (args.expectedHead == null) {
+    throw new Error("--expected-head is required so M4 evidence is tied to the pushed migration branch head");
   }
   await assertTrackedWorktreeClean(args.root, "advancing M4 evidence and M5 defaults");
 
   const migrationDoc = join(args.root, "docs", "electron-to-tauri-migration.md");
+  const remoteResult = await runScript("verify-tauri-migration-remote.ts", [
+    "--cwd",
+    args.root,
+    "--remote",
+    args.remote,
+    "--branch",
+    args.branch,
+    "--expected-head",
+    args.expectedHead,
+  ]);
   const platformResult = await runScript("verify-tauri-platform-gates.ts", [
     "--win-report",
     args.winReport,
@@ -35,6 +53,8 @@ async function main(): Promise<void> {
       "Advanced Tauri migration from verified M4 platform evidence through M5 default flip.",
       `Root: ${args.root}`,
       `Migration doc: ${migrationDoc}`,
+      "Remote verification:",
+      indent(remoteResult.stdout.trim()),
       "Platform verification:",
       indent(platformResult.stdout.trim()),
       "M5 default flip:",
@@ -46,17 +66,43 @@ async function main(): Promise<void> {
 
 function parseArgs(argv: string[]): Args {
   const parsed: Args = {
+    branch: "codex/electron-to-tauri-migration",
+    remote: "origin",
     root: workspaceRoot,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     const value = argv[index + 1];
-    if ((arg === "--linux-report" || arg === "--root" || arg === "--win-report") && value == null) {
+    if (
+      (arg === "--branch" ||
+        arg === "--expected-head" ||
+        arg === "--linux-report" ||
+        arg === "--remote" ||
+        arg === "--root" ||
+        arg === "--win-report") &&
+      value == null
+    ) {
       throw new Error(`${arg} requires a value`);
+    }
+    if (arg === "--branch") {
+      parsed.branch = value!;
+      index += 1;
+      continue;
+    }
+    if (arg === "--expected-head") {
+      if (!/^[0-9a-f]{40}$/.test(value!)) throw new Error(`invalid --expected-head: ${value}`);
+      parsed.expectedHead = value!;
+      index += 1;
+      continue;
     }
     if (arg === "--linux-report") {
       parsed.linuxReport = resolve(value!);
+      index += 1;
+      continue;
+    }
+    if (arg === "--remote") {
+      parsed.remote = value!;
       index += 1;
       continue;
     }
@@ -73,9 +119,9 @@ function parseArgs(argv: string[]): Args {
     if (arg === "--help" || arg === "-h") {
       process.stdout.write(
         [
-          "usage: tsx scripts/advance-tauri-migration-m4-m5.ts --win-report <dir> --linux-report <dir> [--root <repo>]",
+          "usage: tsx scripts/advance-tauri-migration-m4-m5.ts --win-report <dir> --linux-report <dir> --expected-head <sha> [--remote <remote>] [--branch <ref>] [--root <repo>]",
           "",
-          "Verifies native Windows/Linux M4 reports, updates the migration document, then applies the guarded M5 default flip.",
+          "Verifies the pushed migration branch head and native Windows/Linux M4 reports, updates the migration document, then applies the guarded M5 default flip.",
           "",
         ].join("\n"),
       );

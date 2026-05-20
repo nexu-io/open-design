@@ -474,6 +474,8 @@ function nextActionsForPhase(
     const remoteReady = remote?.current === true;
     const migrationBranch = remote?.branch ?? handoff?.branch ?? "codex/electron-to-tauri-migration";
     const expectedHead = remote?.expectedHead ?? handoff?.branchHead ?? "<sha>";
+    const reportsReadyForAdvance = platformReports?.current === true && (remote == null || remoteReady);
+    const remoteName = remote?.remote ?? "origin";
     return [
       ...heartbeatActions,
       "Run scripts/continue-tauri-migration.ts --dry-run to print the next executable handoff/push/report sequence; add --wait-reports --advance after the remote branch and native CI are available.",
@@ -487,17 +489,19 @@ function nextActionsForPhase(
         : archiveReady
           ? `On the receiving machine, run ${handoffArchive.commandScript} from the repository root to verify checksum, extract, push, verify the remote branch, and attempt native CI dispatch when gh is available; or run scripts/push-tauri-migration-handoff.ts --archive ${handoffArchive.archive} --remote origin for push-only handoff.`
           : "Copy the packaged handoff archive, .sha256 sidecar, .commands.sh sidecar, and .commands.sh.sha256 sidecar to a write-capable machine, then run the command script or scripts/push-tauri-migration-handoff.ts --archive /path/to/open-design-tauri-migration-handoff.tar.gz --remote origin.",
-      platformReports?.current === true
-        ? "Advance M4 evidence and M5 defaults with scripts/advance-tauri-migration-m4-m5.ts using the verified report paths shown above."
+      reportsReadyForAdvance
+        ? `Advance M4 evidence and M5 defaults with scripts/advance-tauri-migration-m4-m5.ts --remote ${remoteName} --branch ${migrationBranch} --expected-head ${expectedHead} using the verified report paths shown above.`
         : remoteReady
-          ? `Trigger native CI with gh workflow run ci.yml --ref ${migrationBranch} or open a draft PR, then download and verify artifacts with scripts/download-tauri-m4-reports.ts --expected-head ${expectedHead} --wait --output-dir /tmp/open-design-tauri-m4-reports; add --advance to apply M4 evidence and M5 defaults immediately after verification.`
+          ? `Trigger native CI with gh workflow run ci.yml --ref ${migrationBranch} or open a draft PR, then download and verify artifacts with scripts/download-tauri-m4-reports.ts --branch ${migrationBranch} --expected-head ${expectedHead} --remote ${remoteName} --wait --output-dir /tmp/open-design-tauri-m4-reports; add --advance to apply M4 evidence and M5 defaults immediately after verification.`
           : remote == null
             ? "Run the Windows and Linux Tauri package smoke jobs."
             : `Remote ${remote.remote}/${migrationBranch} must match ${expectedHead} before native CI artifacts can be collected; current blocker: ${remote.problems.join("; ") || "remote branch is not current"}.`,
-      ...(platformReports?.current === true
+      ...(reportsReadyForAdvance
         ? []
         : remote == null || remoteReady
-          ? ["Advance M4 evidence and M5 defaults with scripts/advance-tauri-migration-m4-m5.ts --win-report <dir> --linux-report <dir>."]
+          ? [
+              `Advance M4 evidence and M5 defaults with scripts/advance-tauri-migration-m4-m5.ts --remote ${remoteName} --branch ${migrationBranch} --expected-head ${expectedHead} --win-report <dir> --linux-report <dir>.`,
+            ]
           : ["Do not run scripts/advance-tauri-migration-m4-m5.ts until the remote branch and Windows/Linux report manifests are verified for the expected head."]),
     ];
   }
@@ -703,9 +707,10 @@ async function readHandoffArchiveStatus(archivePath: string, handoff?: HandoffSt
     if (
       !commandScriptSource.includes('--run-id "$GITHUB_RUN_ID"') ||
       !commandScriptSource.includes('--branch "$branch"') ||
+      !commandScriptSource.includes('--remote "$remote"') ||
       !commandScriptSource.includes('--expected-head "$expected_head"')
     ) {
-      problems.push(`command script is missing branch-bound explicit run guidance: ${commandScriptPath}`);
+      problems.push(`command script is missing branch-and-remote-bound explicit run guidance: ${commandScriptPath}`);
     }
     if (!commandScriptSource.includes("gh workflow run") && !commandScriptSource.includes("gh pr create")) {
       problems.push(`command script is missing native CI trigger guidance: ${commandScriptPath}`);

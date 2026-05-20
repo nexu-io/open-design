@@ -24,10 +24,13 @@ const advanceScript = join(scriptsRoot, "advance-tauri-migration-m4-m5.ts");
 
 test("advance-tauri-migration-m4-m5 verifies platform reports and applies M5", async (t) => {
   const { linuxReport, root, winReport } = await createFixture(t, "open-design-tauri-advance-pass-");
+  const head = await initGitFixture(root);
+  const remotePath = await createRemoteFixture(root, head);
 
-  const result = await runAdvance(root, winReport, linuxReport);
+  const result = await runAdvance(root, winReport, linuxReport, "--expected-head", head, "--remote", remotePath);
 
   assert.match(result.stdout, /Advanced Tauri migration from verified M4 platform evidence through M5 default flip/);
+  assert.match(result.stdout, /Verified Tauri migration remote branch/);
   assert.match(result.stdout, /Tauri platform gate reports passed verification/);
   assert.match(result.stdout, /Applied Tauri migration M5 default flip/);
 
@@ -43,10 +46,37 @@ test("advance-tauri-migration-m4-m5 verifies platform reports and applies M5", a
 
 test("advance-tauri-migration-m4-m5 refuses to run with tracked worktree changes", async (t) => {
   const { linuxReport, root, winReport } = await createFixture(t, "open-design-tauri-advance-dirty-");
-  await initGitFixture(root);
+  const head = await initGitFixture(root);
+  const remotePath = await createRemoteFixture(root, head);
   await writeFile(join(root, "README.md"), `${readmeFixture()}\ntracked change\n`, "utf8");
 
-  await assert.rejects(runAdvance(root, winReport, linuxReport), /tracked worktree changes are present/);
+  await assert.rejects(
+    runAdvance(root, winReport, linuxReport, "--expected-head", head, "--remote", remotePath),
+    /tracked worktree changes are present/,
+  );
+
+  assert.match(await readFile(join(root, "tools", "dev", "src", "config.ts"), "utf8"), /DEFAULT_DESKTOP_RUNTIME = "electron"/);
+  assert.match(await readFile(join(root, "docs", "electron-to-tauri-migration.md"), "utf8"), new RegExp(`- \\[ \\] ${escapeRegExp(m5ToolsDevDefaultLabel)}`));
+});
+
+test("advance-tauri-migration-m4-m5 requires an expected pushed branch head", async (t) => {
+  const { linuxReport, root, winReport } = await createFixture(t, "open-design-tauri-advance-head-required-");
+
+  await assert.rejects(runAdvance(root, winReport, linuxReport), /--expected-head is required/);
+
+  assert.match(await readFile(join(root, "tools", "dev", "src", "config.ts"), "utf8"), /DEFAULT_DESKTOP_RUNTIME = "electron"/);
+  assert.match(await readFile(join(root, "docs", "electron-to-tauri-migration.md"), "utf8"), new RegExp(`- \\[ \\] ${escapeRegExp(m5ToolsDevDefaultLabel)}`));
+});
+
+test("advance-tauri-migration-m4-m5 refuses stale remote branch heads before editing", async (t) => {
+  const { linuxReport, root, winReport } = await createFixture(t, "open-design-tauri-advance-remote-stale-");
+  const head = await initGitFixture(root);
+  const remotePath = await createRemoteFixture(root, head);
+
+  await assert.rejects(
+    runAdvance(root, winReport, linuxReport, "--expected-head", "0".repeat(40), "--remote", remotePath),
+    /remote branch head mismatch/,
+  );
 
   assert.match(await readFile(join(root, "tools", "dev", "src", "config.ts"), "utf8"), /DEFAULT_DESKTOP_RUNTIME = "electron"/);
   assert.match(await readFile(join(root, "docs", "electron-to-tauri-migration.md"), "utf8"), new RegExp(`- \\[ \\] ${escapeRegExp(m5ToolsDevDefaultLabel)}`));
@@ -56,8 +86,13 @@ test("advance-tauri-migration-m4-m5 does not apply M5 when platform verification
   const { linuxReport, root, winReport } = await createFixture(t, "open-design-tauri-advance-fail-", {
     winRemainingPids: [123],
   });
+  const head = await initGitFixture(root);
+  const remotePath = await createRemoteFixture(root, head);
 
-  await assert.rejects(runAdvance(root, winReport, linuxReport), /win stop\.remainingPids must be an empty array/);
+  await assert.rejects(
+    runAdvance(root, winReport, linuxReport, "--expected-head", head, "--remote", remotePath),
+    /win stop\.remainingPids must be an empty array/,
+  );
 
   assert.match(await readFile(join(root, "tools", "dev", "src", "config.ts"), "utf8"), /DEFAULT_DESKTOP_RUNTIME = "electron"/);
   assert.match(await readFile(join(root, "docs", "electron-to-tauri-migration.md"), "utf8"), new RegExp(`- \\[ \\] ${escapeRegExp(m5ToolsDevDefaultLabel)}`));
@@ -138,12 +173,23 @@ async function createFixture(
   return { linuxReport, root, winReport };
 }
 
-async function initGitFixture(root: string): Promise<void> {
+async function initGitFixture(root: string): Promise<string> {
   await execFileAsync("git", ["init", "--initial-branch=main"], { cwd: root, maxBuffer: 1024 * 1024 });
   await execFileAsync("git", ["config", "user.email", "codex@example.test"], { cwd: root, maxBuffer: 1024 * 1024 });
   await execFileAsync("git", ["config", "user.name", "Codex Test"], { cwd: root, maxBuffer: 1024 * 1024 });
   await execFileAsync("git", ["add", "."], { cwd: root, maxBuffer: 1024 * 1024 });
   await execFileAsync("git", ["commit", "-m", "fixture"], { cwd: root, maxBuffer: 1024 * 1024 });
+  return (await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: root, maxBuffer: 1024 * 1024 })).stdout.trim();
+}
+
+async function createRemoteFixture(root: string, branchHead: string): Promise<string> {
+  const remotePath = join(root, "origin.git");
+  await execFileAsync("git", ["init", "--bare", remotePath], { cwd: root, maxBuffer: 1024 * 1024 });
+  await execFileAsync("git", ["push", remotePath, `${branchHead}:refs/heads/codex/electron-to-tauri-migration`], {
+    cwd: root,
+    maxBuffer: 1024 * 1024,
+  });
+  return remotePath;
 }
 
 function migrationDoc(): string {
@@ -304,10 +350,15 @@ async function writeJson(path: string, value: unknown): Promise<void> {
   await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
-async function runAdvance(root: string, winReport: string, linuxReport: string): Promise<{ stderr: string; stdout: string }> {
+async function runAdvance(
+  root: string,
+  winReport: string,
+  linuxReport: string,
+  ...args: string[]
+): Promise<{ stderr: string; stdout: string }> {
   return execFileAsync(
     process.execPath,
-    ["--import", "tsx", advanceScript, "--root", root, "--win-report", winReport, "--linux-report", linuxReport],
+    ["--import", "tsx", advanceScript, "--root", root, "--win-report", winReport, "--linux-report", linuxReport, ...args],
     {
       cwd: repoRoot,
       maxBuffer: 1024 * 1024 * 4,

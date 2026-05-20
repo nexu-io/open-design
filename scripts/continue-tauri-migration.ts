@@ -55,6 +55,7 @@ type MigrationStatus = {
   remote?: {
     branch?: string;
     current?: boolean;
+    expectedHead?: string;
     head?: string;
   };
 };
@@ -318,6 +319,8 @@ async function continueM4(args: Args, status: MigrationStatus, log: string[]): P
         args.branch,
         "--expected-head",
         expectedHead,
+        "--remote",
+        args.remote,
         "--wait",
         "--output-dir",
         args.reportDir,
@@ -343,6 +346,8 @@ async function continueM4(args: Args, status: MigrationStatus, log: string[]): P
       args.branch,
       "--expected-head",
       expectedHead,
+      "--remote",
+      args.remote,
       "--wait",
       "--output-dir",
       args.reportDir,
@@ -397,17 +402,47 @@ async function continueM5(args: Args, log: string[]): Promise<void> {
 async function maybeAdvanceFromReports(args: Args, status: MigrationStatus, log: string[]): Promise<void> {
   const winReport = status.platformReports?.winReport;
   const linuxReport = status.platformReports?.linuxReport;
+  const expectedHead = status.remote?.expectedHead ?? status.handoff?.branchHead;
   if (winReport == null || linuxReport == null) {
     throw new Error("platform reports are marked current but report paths are missing");
   }
+  if (expectedHead == null) {
+    throw new Error("remote branch head is required before advancing from platform reports");
+  }
   if (!args.advance) {
     log.push("Native M4 reports are verified. Run with --advance to record M4 evidence and apply M5 defaults.");
-    log.push(formatScriptCommand("advance-tauri-migration-m4-m5.ts", ["--win-report", winReport, "--linux-report", linuxReport]));
+    log.push(
+      formatScriptCommand("advance-tauri-migration-m4-m5.ts", [
+        "--remote",
+        args.remote,
+        "--branch",
+        args.branch,
+        "--expected-head",
+        expectedHead,
+        "--win-report",
+        winReport,
+        "--linux-report",
+        linuxReport,
+      ]),
+    );
     return;
   }
   await runScript(
     "advance-tauri-migration-m4-m5.ts",
-    ["--win-report", winReport, "--linux-report", linuxReport, "--root", args.root],
+    [
+      "--remote",
+      args.remote,
+      "--branch",
+      args.branch,
+      "--expected-head",
+      expectedHead,
+      "--win-report",
+      winReport,
+      "--linux-report",
+      linuxReport,
+      "--root",
+      args.root,
+    ],
     {
       cwd: args.root,
       dryRun: args.dryRun,

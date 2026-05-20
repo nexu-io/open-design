@@ -240,6 +240,8 @@ test("download-tauri-m4-reports waits for a completed run at the expected head",
   t.after(() => void rm(root, { force: true, recursive: true }));
   const expectedHead = "b".repeat(40);
   const fakeGh = await writeFakeGh(root, {
+    viewHeadBranch: "feature",
+    viewHeadSha: expectedHead,
     listResponses: [
       [
         { databaseId: 111, status: "completed", conclusion: "success", headSha: "a".repeat(40), createdAt: "2026-05-20T00:00:00Z" },
@@ -282,15 +284,19 @@ test("download-tauri-m4-reports waits for a completed run at the expected head",
 test("download-tauri-m4-reports can advance M4 and M5 after verified downloads", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "open-design-tauri-download-advance-"));
   t.after(() => void rm(root, { force: true, recursive: true }));
-  const fakeGh = await writeFakeGh(root);
   const fixtureRoot = await writeM5Fixture(root);
+  const head = await initGitFixture(fixtureRoot);
+  const remotePath = await createRemoteFixture(fixtureRoot, head);
+  const fakeGh = await writeFakeGh(root, { viewHeadSha: head });
 
   const result = await runDownload(
     fakeGh,
     "--run-id",
     "777",
     "--expected-head",
-    "a".repeat(40),
+    head,
+    "--remote",
+    remotePath,
     "--output-dir",
     join(root, "reports"),
     "--advance",
@@ -321,6 +327,7 @@ async function writeFakeGh(
     listResponses?: Array<Array<Record<string, unknown>>>;
     viewJobs?: Array<Record<string, unknown>>;
     viewHeadBranch?: string;
+    viewHeadSha?: string;
   } = {},
 ): Promise<string> {
   const fakeGh = join(root, "gh");
@@ -329,6 +336,7 @@ async function writeFakeGh(
     { name: "Packaged linux Tauri smoke", status: "completed", conclusion: "success" },
   ];
   const viewHeadBranch = options.viewHeadBranch ?? "codex/electron-to-tauri-migration";
+  const viewHeadSha = options.viewHeadSha ?? "a".repeat(40);
   const listResponses = options.listResponses ?? [
     [
       {
@@ -361,7 +369,8 @@ async function writeFakeGh(
       "if (args[0] === 'run' && args[1] === 'view') {",
       `  const viewJobs = ${JSON.stringify(viewJobs)};`,
       `  const viewHeadBranch = ${JSON.stringify(viewHeadBranch)};`,
-      "  process.stdout.write(JSON.stringify({ databaseId: Number(args[2]), status: 'completed', conclusion: 'success', headBranch: viewHeadBranch, headSha: 'a'.repeat(40), createdAt: '2026-05-20T00:00:00Z', jobs: viewJobs }));",
+      `  const viewHeadSha = ${JSON.stringify(viewHeadSha)};`,
+      "  process.stdout.write(JSON.stringify({ databaseId: Number(args[2]), status: 'completed', conclusion: 'success', headBranch: viewHeadBranch, headSha: viewHeadSha, createdAt: '2026-05-20T00:00:00Z', jobs: viewJobs }));",
       "  process.exit(0);",
       "}",
       "if (args[0] === 'run' && args[1] === 'download') {",
@@ -438,12 +447,23 @@ async function writeM5Fixture(root: string): Promise<string> {
   return fixtureRoot;
 }
 
-async function initGitFixture(root: string): Promise<void> {
+async function initGitFixture(root: string): Promise<string> {
   await execFileAsync("git", ["init", "--initial-branch=main"], { cwd: root, maxBuffer: 1024 * 1024 });
   await execFileAsync("git", ["config", "user.email", "codex@example.test"], { cwd: root, maxBuffer: 1024 * 1024 });
   await execFileAsync("git", ["config", "user.name", "Codex Test"], { cwd: root, maxBuffer: 1024 * 1024 });
   await execFileAsync("git", ["add", "."], { cwd: root, maxBuffer: 1024 * 1024 });
   await execFileAsync("git", ["commit", "-m", "fixture"], { cwd: root, maxBuffer: 1024 * 1024 });
+  return (await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: root, maxBuffer: 1024 * 1024 })).stdout.trim();
+}
+
+async function createRemoteFixture(root: string, branchHead: string): Promise<string> {
+  const remotePath = join(root, "origin.git");
+  await execFileAsync("git", ["init", "--bare", remotePath], { cwd: root, maxBuffer: 1024 * 1024 });
+  await execFileAsync("git", ["push", remotePath, `${branchHead}:refs/heads/codex/electron-to-tauri-migration`], {
+    cwd: root,
+    maxBuffer: 1024 * 1024,
+  });
+  return remotePath;
 }
 
 function migrationDocFixture(): string {

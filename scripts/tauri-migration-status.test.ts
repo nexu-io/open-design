@@ -443,6 +443,7 @@ test("tauri-migration-status reports verified platform reports", async (t) => {
   assert.equal(parsed.platformReports.linuxReport, linuxReport);
   assert.deepEqual(parsed.platformReports.problems, []);
   assert.match(parsed.nextActions.join("\n"), /using the verified report paths shown above/);
+  assert.match(parsed.nextActions.join("\n"), /--expected-head <sha>/);
 });
 
 test("tauri-migration-status discovers reports from a report directory", async (t) => {
@@ -472,6 +473,37 @@ test("tauri-migration-status discovers reports from a report directory", async (
   assert.equal(parsed.platformReports.linuxReport, linuxReport);
   assert.deepEqual(parsed.platformReports.problems, []);
   assert.match(parsed.nextActions.join("\n"), /using the verified report paths shown above/);
+  assert.match(parsed.nextActions.join("\n"), /--expected-head <sha>/);
+});
+
+test("tauri-migration-status keeps verified reports behind missing remote verification", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+  await writeHandoffArchive(handoffDir);
+  const remotePath = join(fixture, "empty.git");
+  await git(fixture, "init", "--bare", remotePath);
+  const reportDir = join(fixture, "reports");
+  await writeWindowsReport(join(reportDir, winArtifactName));
+  await writeLinuxReport(join(reportDir, linuxArtifactName));
+
+  const result = await runStatus(fixture, "--handoff-dir", handoffDir, "--remote", remotePath, "--report-dir", reportDir);
+  const parsed = JSON.parse(result.stdout) as {
+    nextActions: string[];
+    platformReports: { current: boolean };
+    remote: { current: boolean };
+  };
+  const nextActions = parsed.nextActions.join("\n");
+
+  assert.equal(parsed.platformReports.current, true);
+  assert.equal(parsed.remote.current, false);
+  assert.match(nextActions, /Remote .* must match/);
+  assert.match(nextActions, /Do not run scripts\/advance-tauri-migration-m4-m5\.ts/);
+  assert.doesNotMatch(nextActions, /using the verified report paths shown above/);
 });
 
 test("tauri-migration-status reports missing platform report manifests without verifier stacks", async (t) => {
@@ -977,6 +1009,7 @@ async function writeHandoffArchive(handoffDir: string): Promise<{ archivePath: s
       "handoff manifest bundleSha256 must be a 64-character SHA-256",
       '--run-id "$GITHUB_RUN_ID"',
       '--branch "$branch"',
+      '--remote "$remote"',
       '--expected-head "$expected_head"',
       "--wait",
       "TAURI_PR_BODY_PATH",
