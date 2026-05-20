@@ -410,7 +410,10 @@ async function gh(args: Args, commandArgs: string[]): Promise<{ stderr: string; 
         ...(detail.code === "ENOENT"
           ? [
               `GitHub CLI was not found at ${args.ghBin}. Install gh or pass --gh <path-to-gh>.`,
-              "If reports are already available locally, skip this downloader and run scripts/verify-tauri-platform-gates.ts or scripts/advance-tauri-migration-m4-m5.ts with the report directories.",
+              "If reports are already available locally, skip this downloader and run scripts/verify-tauri-platform-gates.ts with the report directories.",
+              args.expectedHead == null
+                ? "To mutate M4/M5 from local reports, run scripts/advance-tauri-migration-m4-m5.ts with --remote, --branch, --expected-head, --win-report, and --linux-report."
+                : `To mutate M4/M5 from local reports, run scripts/advance-tauri-migration-m4-m5.ts --remote ${args.gitRemote} --branch ${args.branch} --expected-head ${args.expectedHead} --win-report <win-report-dir> --linux-report <linux-report-dir>.`,
             ]
           : []),
         ...(detail.stdout == null || detail.stdout.trim() === "" ? [] : [`stdout:\n${detail.stdout.trimEnd()}`]),

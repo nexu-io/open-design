@@ -230,6 +230,7 @@ test("download-tauri-m4-reports explains missing gh", async (t) => {
       assert.match(stderr, /GitHub CLI was not found/);
       assert.match(stderr, /--gh <path-to-gh>/);
       assert.match(stderr, /advance-tauri-migration-m4-m5/);
+      assert.match(stderr, /--remote origin --branch codex\/electron-to-tauri-migration --expected-head a{40}/);
       return true;
     },
   );

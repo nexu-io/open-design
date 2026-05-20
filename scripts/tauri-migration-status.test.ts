@@ -165,6 +165,26 @@ test("tauri-migration-status reports current packaged handoff archives", async (
   assert.match(parsed.nextActions.join("\n"), /attempt native CI dispatch/);
 });
 
+test("tauri-migration-status honors remote overrides in handoff push guidance", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+  await writeHandoffArchive(handoffDir);
+  const remotePath = join(fixture, "empty.git");
+  await git(fixture, "init", "--bare", remotePath);
+
+  const result = await runStatus(fixture, "--handoff-dir", handoffDir, "--remote", remotePath);
+  const parsed = JSON.parse(result.stdout) as { nextActions: string[] };
+  const nextActions = parsed.nextActions.join("\n");
+
+  assert.match(nextActions, new RegExp(`push-tauri-migration-handoff\\.ts --archive .* --remote ${escapeRegExp(remotePath)}`));
+  assert.doesNotMatch(nextActions, /push-tauri-migration-handoff\.ts --archive .* --remote origin/);
+});
+
 test("tauri-migration-status rejects non-relocatable handoff bundle paths", async (t) => {
   const fixture = await createFixtureRoot(t, {
     checked: [],
