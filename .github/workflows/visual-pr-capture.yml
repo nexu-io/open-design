@@ -1,4 +1,4 @@
-name: Visual PR capture
+name: visual-pr-capture
 
 on:
   pull_request:

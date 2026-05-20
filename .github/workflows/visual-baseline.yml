@@ -1,4 +1,4 @@
-name: Visual baseline
+name: visual-baseline
 
 on:
   push:

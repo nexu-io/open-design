@@ -1,8 +1,8 @@
-name: Visual PR comment
+name: visual-pr-comment
 
 on:
   workflow_run:
-    workflows: [Visual PR capture]
+    workflows: [visual-pr-capture]
     types: [completed]
   workflow_dispatch:
     inputs:
