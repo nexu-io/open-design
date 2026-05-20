@@ -20,6 +20,7 @@ type Args = {
   dispatchCi: boolean;
   dryRun: boolean;
   ghBin: string;
+  handoffArchive?: string;
   handoffDir: string;
   prBodyPath: string;
   remote: string;
@@ -117,10 +118,14 @@ async function main(): Promise<void> {
         dryRun: args.dryRun,
       },
     );
-    await runScript("package-tauri-migration-handoff.ts", ["--handoff-dir", args.handoffDir], {
-      cwd: args.root,
-      dryRun: args.dryRun,
-    });
+    await runScript(
+      "package-tauri-migration-handoff.ts",
+      ["--handoff-dir", args.handoffDir, ...(args.handoffArchive == null ? [] : ["--output", args.handoffArchive])],
+      {
+        cwd: args.root,
+        dryRun: args.dryRun,
+      },
+    );
     log.push(`${args.dryRun ? "Would refresh" : "Refreshed"} verified handoff artifacts under ${args.handoffDir}.`);
     if (args.dryRun) {
       log.push("Rerun the continuation dry-run after refreshing handoff artifacts to plan push and report actions from current status.");
@@ -188,6 +193,7 @@ function parseArgs(argv: string[]): Args {
       (arg === "--branch" ||
         arg === "--automation-dir" ||
         arg === "--gh" ||
+        arg === "--handoff-archive" ||
         arg === "--handoff-dir" ||
         arg === "--pr-body-path" ||
         arg === "--remote" ||
@@ -210,6 +216,11 @@ function parseArgs(argv: string[]): Args {
     }
     if (arg === "--gh") {
       parsed.ghBin = value!;
+      index += 1;
+      continue;
+    }
+    if (arg === "--handoff-archive") {
+      parsed.handoffArchive = resolve(value!);
       index += 1;
       continue;
     }
@@ -246,7 +257,7 @@ function parseArgs(argv: string[]): Args {
     if (arg === "--help" || arg === "-h") {
       process.stdout.write(
         [
-          "usage: tsx scripts/continue-tauri-migration.ts [--root <repo>] [--automation-dir <dir>] [--handoff-dir <dir>] [--remote <remote>] [--workflow <file>] [--report-dir <dir>] [--pr-body-path <path>] [--wait-reports] [--advance] [--dry-run] [--skip-push] [--skip-dispatch]",
+          "usage: tsx scripts/continue-tauri-migration.ts [--root <repo>] [--automation-dir <dir>] [--handoff-dir <dir>] [--handoff-archive <tar.gz>] [--remote <remote>] [--workflow <file>] [--report-dir <dir>] [--pr-body-path <path>] [--wait-reports] [--advance] [--dry-run] [--skip-push] [--skip-dispatch]",
           "",
           "Continues the Electron→Tauri migration from the current phase without bypassing M4/M5/M6 guards.",
           "It refreshes stale handoff artifacts, pushes/verifies the migration branch when credentials allow, and can wait for native M4 reports before applying the guarded M5 advance.",
@@ -264,7 +275,7 @@ function parseArgs(argv: string[]): Args {
 }
 
 async function continueM4(args: Args, status: MigrationStatus, log: string[]): Promise<void> {
-  const archive = status.handoffArchive?.archive ?? `${args.handoffDir}.tar.gz`;
+  const archive = status.handoffArchive?.archive ?? args.handoffArchive ?? `${args.handoffDir}.tar.gz`;
   const expectedHead = status.git.head ?? status.handoff?.branchHead;
   if (expectedHead == null) {
     throw new Error("cannot continue M4 without a git head or handoff branchHead");
@@ -558,6 +569,7 @@ async function readStatus(args: Args): Promise<MigrationStatus> {
       ...(args.automationDir == null ? [] : ["--automation-dir", args.automationDir]),
       "--handoff-dir",
       args.handoffDir,
+      ...(args.handoffArchive == null ? [] : ["--handoff-archive", args.handoffArchive]),
       "--remote",
       args.remote,
       "--report-dir",

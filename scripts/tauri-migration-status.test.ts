@@ -886,6 +886,36 @@ test("continue-tauri-migration dry-run stops after a stale handoff refresh plan"
   assert.doesNotMatch(result.stdout, /download-tauri-m4-reports\.ts/);
 });
 
+test("continue-tauri-migration refreshes stale handoff artifacts to a custom archive path", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  const customArchivePath = join(fixture, "transfer", "custom-tauri-handoff.tar.gz");
+  const remotePath = join(fixture, "empty.git");
+  await git(fixture, "init", "--bare", remotePath);
+
+  const result = await runContinue(
+    fixture,
+    "--handoff-dir",
+    handoffDir,
+    "--handoff-archive",
+    customArchivePath,
+    "--remote",
+    remotePath,
+    "--dry-run",
+    "--skip-dispatch",
+  );
+
+  assert.match(result.stdout, /verify-tauri-migration-handoff\.ts/);
+  assert.match(result.stdout, /package-tauri-migration-handoff\.ts/);
+  assert.match(result.stdout, new RegExp(`--output ${escapeRegExp(customArchivePath)}`));
+  assert.match(result.stdout, /Rerun the continuation dry-run after refreshing handoff artifacts/);
+  assert.doesNotMatch(result.stdout, /push-tauri-migration-handoff\.ts/);
+});
+
 test("continue-tauri-migration forwards branch overrides when refreshing handoff artifacts", async (t) => {
   const fixture = await createFixtureRoot(t, {
     checked: [],
@@ -953,6 +983,42 @@ test("continue-tauri-migration dry-run plans a branch push from current handoff 
   assert.match(result.stdout, /--advance/);
   const remoteHead = await git(fixture, "ls-remote", "--heads", remotePath, "refs/heads/codex/electron-to-tauri-migration");
   assert.equal(remoteHead.stdout.trim(), "");
+});
+
+test("continue-tauri-migration can continue from a custom handoff archive path", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+  const customArchivePath = join(fixture, "transfer", "custom-tauri-handoff.tar.gz");
+  const { archivePath } = await writeHandoffArchive(handoffDir, customArchivePath);
+  const remotePath = join(fixture, "empty.git");
+  await git(fixture, "init", "--bare", remotePath);
+
+  const result = await runContinue(
+    fixture,
+    "--handoff-dir",
+    handoffDir,
+    "--handoff-archive",
+    customArchivePath,
+    "--remote",
+    remotePath,
+    "--dry-run",
+    "--skip-dispatch",
+  );
+
+  assert.equal(archivePath, customArchivePath);
+  assert.doesNotMatch(result.stdout, /verify-tauri-migration-handoff\.ts/);
+  assert.doesNotMatch(result.stdout, /package-tauri-migration-handoff\.ts/);
+  assert.match(result.stdout, new RegExp(`push-tauri-migration-handoff\\.ts --archive ${escapeRegExp(customArchivePath)}`));
+  assert.match(result.stdout, new RegExp(escapeRegExp(`${customArchivePath}.sha256`)));
+  assert.match(result.stdout, new RegExp(escapeRegExp(`${customArchivePath}.commands.sh`)));
+  assert.match(result.stdout, new RegExp(escapeRegExp(`${customArchivePath}.commands.sh.sha256`)));
+  assert.doesNotMatch(result.stdout, new RegExp(escapeRegExp(`${handoffDir}.tar.gz`)));
+  assert.match(result.stdout, new RegExp(`--expected-head ${head}`));
 });
 
 test("continue-tauri-migration dry-run stops after a failed push preflight", async (t) => {
@@ -1360,8 +1426,9 @@ function handoffNoteFixture(branchHead: string, stale: boolean): string {
   ].join("\n");
 }
 
-async function writeHandoffArchive(handoffDir: string): Promise<{ archivePath: string; archiveSha256: string }> {
-  const archivePath = `${handoffDir}.tar.gz`;
+async function writeHandoffArchive(handoffDir: string, output?: string): Promise<{ archivePath: string; archiveSha256: string }> {
+  const archivePath = output ?? `${handoffDir}.tar.gz`;
+  await mkdir(dirname(archivePath), { recursive: true });
   await execFileAsync("tar", ["-czf", archivePath, "-C", dirname(handoffDir), basename(handoffDir)], {
     maxBuffer: 1024 * 1024,
   });
