@@ -237,7 +237,7 @@ async function writeDiffPng(mainPath: string, prPath: string, diffPath: string):
   return diffPixels;
 }
 
-type DiffBox = {
+export type DiffBox = {
   minX: number;
   minY: number;
   maxX: number;
@@ -250,7 +250,7 @@ function clonePng(source: PNG): PNG {
   return target;
 }
 
-function diffBoxesFromMask(maskPng: PNG): DiffBox[] {
+export function diffBoxesFromMask(maskPng: PNG): DiffBox[] {
   const { width, height } = maskPng;
   const changed = new Uint8Array(width * height);
   let overall: DiffBox | null = null;
@@ -326,28 +326,62 @@ function enqueueChanged(changed: Uint8Array, queue: Int32Array, tail: number, in
   return tail + 1;
 }
 
-function mergeDiffBoxes(boxes: DiffBox[], distance: number): DiffBox[] {
-  const merged = boxes.map((box) => ({ ...box }));
-  let didMerge = true;
-  while (didMerge) {
-    didMerge = false;
-    for (let outer = 0; outer < merged.length; outer += 1) {
-      for (let inner = outer + 1; inner < merged.length; inner += 1) {
-        const first = merged[outer];
-        const second = merged[inner];
-        if (first == null || second == null || !boxesAreClose(first, second, distance)) continue;
-        first.minX = Math.min(first.minX, second.minX);
-        first.minY = Math.min(first.minY, second.minY);
-        first.maxX = Math.max(first.maxX, second.maxX);
-        first.maxY = Math.max(first.maxY, second.maxY);
-        merged.splice(inner, 1);
-        didMerge = true;
-        break;
-      }
-      if (didMerge) break;
+export function mergeDiffBoxes(boxes: DiffBox[], distance: number): DiffBox[] {
+  if (boxes.length < 2) {
+    return boxes.map((box) => ({ ...box }));
+  }
+
+  const parents = new Int32Array(boxes.length);
+  for (let index = 0; index < parents.length; index += 1) {
+    parents[index] = index;
+  }
+
+  for (let outer = 0; outer < boxes.length; outer += 1) {
+    for (let inner = outer + 1; inner < boxes.length; inner += 1) {
+      const first = boxes[outer];
+      const second = boxes[inner];
+      if (first == null || second == null || !boxesAreClose(first, second, distance)) continue;
+      unionBoxIndex(parents, outer, inner);
     }
   }
-  return merged;
+
+  const merged = new Map<number, DiffBox>();
+  for (let index = 0; index < boxes.length; index += 1) {
+    const box = boxes[index];
+    if (box == null) continue;
+    const root = findBoxRoot(parents, index);
+    const existing = merged.get(root);
+    if (existing == null) {
+      merged.set(root, { ...box });
+      continue;
+    }
+    existing.minX = Math.min(existing.minX, box.minX);
+    existing.minY = Math.min(existing.minY, box.minY);
+    existing.maxX = Math.max(existing.maxX, box.maxX);
+    existing.maxY = Math.max(existing.maxY, box.maxY);
+  }
+
+  return [...merged.values()];
+}
+
+function findBoxRoot(parents: Int32Array, index: number): number {
+  let root = index;
+  while (parents[root] !== root) {
+    root = parents[root] ?? root;
+  }
+  while (parents[index] !== index) {
+    const parent = parents[index] ?? index;
+    parents[index] = root;
+    index = parent;
+  }
+  return root;
+}
+
+function unionBoxIndex(parents: Int32Array, first: number, second: number): void {
+  const firstRoot = findBoxRoot(parents, first);
+  const secondRoot = findBoxRoot(parents, second);
+  if (firstRoot === secondRoot) return;
+  parents[secondRoot] = firstRoot;
 }
 
 function boxesAreClose(first: DiffBox, second: DiffBox, distance: number): boolean {
@@ -357,7 +391,7 @@ function boxesAreClose(first: DiffBox, second: DiffBox, distance: number): boole
     && first.maxY + distance >= second.minY;
 }
 
-function padBox(box: DiffBox, padding: number, width: number, height: number): DiffBox {
+export function padBox(box: DiffBox, padding: number, width: number, height: number): DiffBox {
   return {
     minX: Math.max(0, box.minX - padding),
     minY: Math.max(0, box.minY - padding),
@@ -366,7 +400,7 @@ function padBox(box: DiffBox, padding: number, width: number, height: number): D
   };
 }
 
-function drawBox(png: PNG, box: DiffBox, strokeWidth: number): void {
+export function drawBox(png: PNG, box: DiffBox, strokeWidth: number): void {
   for (let offset = 0; offset < strokeWidth; offset += 1) {
     const minX = Math.min(box.maxX, box.minX + offset);
     const minY = Math.min(box.maxY, box.minY + offset);
