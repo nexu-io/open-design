@@ -118,6 +118,10 @@ async function main(): Promise<void> {
       indent(
         [
           "pnpm exec tsx scripts/continue-tauri-migration.ts \\",
+          `  --handoff-dir ${shellQuote(args.handoffDir)} \\`,
+          `  --handoff-archive ${shellQuote(archivePath)} \\`,
+          "  --remote origin \\",
+          "  --report-dir /tmp/open-design-tauri-m4-reports \\",
           "  --wait-reports \\",
           "  --advance",
         ].join("\n"),
@@ -127,6 +131,7 @@ async function main(): Promise<void> {
         [
           "pnpm exec tsx scripts/tauri-migration-status.ts \\",
           `  --handoff-dir ${shellQuote(args.handoffDir)} \\`,
+          `  --handoff-archive ${shellQuote(archivePath)} \\`,
           "  --remote origin \\",
           "  --report-dir /tmp/open-design-tauri-m4-reports",
         ].join("\n"),

@@ -59,9 +59,14 @@ test("package-tauri-migration-handoff creates a tarball and checksum sidecar", a
   assert.match(result.stdout, /--advance/);
   assert.match(result.stdout, /Continuation runner:/);
   assert.match(result.stdout, /continue-tauri-migration/);
+  assert.match(result.stdout, new RegExp(`--handoff-dir '${escapeRegExp(handoffDir)}'`));
+  assert.match(result.stdout, new RegExp(`--handoff-archive '${escapeRegExp(output)}'`));
+  assert.match(result.stdout, /--remote origin/);
+  assert.match(result.stdout, /--report-dir \/tmp\/open-design-tauri-m4-reports/);
   assert.match(result.stdout, /--wait-reports/);
   assert.match(result.stdout, /tauri-migration-status/);
   assert.match(result.stdout, new RegExp(`--handoff-dir '${escapeRegExp(handoffDir)}'`));
+  assert.match(result.stdout, new RegExp(`--handoff-archive '${escapeRegExp(output)}'`));
   assert.match(result.stdout, /--report-dir \/tmp\/open-design-tauri-m4-reports/);
   await access(output);
   const commandScript = await readFile(`${output}.commands.sh`, "utf8");
