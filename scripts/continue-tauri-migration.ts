@@ -120,7 +120,13 @@ async function main(): Promise<void> {
     );
     await runScript(
       "package-tauri-migration-handoff.ts",
-      ["--handoff-dir", args.handoffDir, ...(args.handoffArchive == null ? [] : ["--output", args.handoffArchive])],
+      [
+        "--handoff-dir",
+        args.handoffDir,
+        "--root",
+        args.root,
+        ...(args.handoffArchive == null ? [] : ["--output", args.handoffArchive]),
+      ],
       {
         cwd: args.root,
         dryRun: args.dryRun,
