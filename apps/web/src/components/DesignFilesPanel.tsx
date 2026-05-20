@@ -222,7 +222,7 @@ export function DesignFilesPanel({
   );
   const rangeStart = safePage * effectivePageSize + 1;
   const rangeEnd = Math.min((safePage + 1) * effectivePageSize, sortedFiles.length);
-  const allPageSelected = pageFiles.every((f) => selected.has(f.name));
+  const allPageSelected = pageFiles.length > 0 && pageFiles.every((f) => selected.has(f.name));
   const somePageSelected = !allPageSelected && pageFiles.some((f) => selected.has(f.name));
   const hasMultiplePages = totalPages > 1;
   const showListControls = sortedFiles.length > 15 || selected.size > 0;
@@ -264,6 +264,23 @@ export function DesignFilesPanel({
     setSelected(new Set());
     setRenaming(null);
   }, [currentDir]);
+
+  // Navigate up to the nearest ancestor that still exists when files under
+  // currentDir disappear (e.g. after deleting the last file in a subfolder).
+  useEffect(() => {
+    if (currentDir === '') return;
+    const prefix = `${currentDir}/`;
+    if (files.some((f) => f.name.startsWith(prefix))) return;
+    const parts = currentDir.split('/');
+    for (let i = parts.length - 1; i > 0; i--) {
+      const ancestor = parts.slice(0, i).join('/');
+      if (files.some((f) => f.name.startsWith(`${ancestor}/`))) {
+        setCurrentDir(ancestor);
+        return;
+      }
+    }
+    setCurrentDir('');
+  }, [files, currentDir]);
 
   // Outside-click + escape to close the filter popover. Stops short of a
   // full focus trap because the popover hosts only checkboxes plus a
@@ -585,7 +602,7 @@ export function DesignFilesPanel({
               }}
             >
               <span className="df-row-name-wrap">
-                <span className="df-row-name">{f.name}</span>
+                <span className="df-row-name">{currentDir === '' ? f.name : f.name.slice(currentDir.length + 1)}</span>
                 <span className="df-row-sub">{humanBytes(f.size)}</span>
               </span>
             </button>
