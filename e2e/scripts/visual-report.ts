@@ -1,4 +1,4 @@
-import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client, S3ServiceException } from '@aws-sdk/client-s3';
 import { createReadStream } from 'node:fs';
 import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -378,9 +378,18 @@ async function objectExists(r2: R2Config, key: string): Promise<boolean> {
   try {
     await r2.client.send(new HeadObjectCommand({ Bucket: r2.bucket, Key: key }));
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    if (isMissingObjectError(error)) {
+      return false;
+    }
+
+    throw error;
   }
+}
+
+function isMissingObjectError(error: unknown): error is S3ServiceException {
+  return error instanceof S3ServiceException
+    && (error.name === 'NotFound' || error.name === 'NoSuchKey' || error.$metadata?.httpStatusCode === 404);
 }
 
 async function putFile(r2: R2Config, key: string, filePath: string): Promise<void> {
