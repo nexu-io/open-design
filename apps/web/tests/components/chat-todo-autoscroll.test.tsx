@@ -188,6 +188,28 @@ describe('chat-log autoscroll when pinned todo card grows', () => {
     expect(observedElements).toContain(pinnedTodoEl);
   });
 
+  it('re-observes the pinned-todo element when a TodoWrite snapshot first mounts', async () => {
+    // Start with no TodoWrite — PinnedTodoSlot should be absent.
+    const { rerender } = render(chatPaneEl([]));
+    await flushFrames();
+    expect(document.querySelector('.chat-pinned-todo')).toBeNull();
+
+    // Add messages with a TodoWrite — PinnedTodoSlot mounts for the first time.
+    await act(async () => {
+      rerender(chatPaneEl(messagesWithTodo(2)));
+      await Promise.resolve();
+    });
+    await flushFrames();
+
+    const pinnedTodoEl = document.querySelector('.chat-pinned-todo');
+    expect(pinnedTodoEl, 'PinnedTodoSlot should render when messages include a TodoWrite').not.toBeNull();
+
+    // The pane-level MutationObserver re-syncs the ResizeObserver when
+    // PinnedTodoSlot mounts. The new element must be registered so real-browser
+    // growth of the card triggers followLatestIfPinned.
+    expect(observedElements).toContain(pinnedTodoEl);
+  });
+
   it('scrolls to the bottom when pinned and the todo card grows', async () => {
     // Start pinned: scrollTop == scrollHeight (user is at the very bottom).
     geom = { scrollHeight: 1000, clientHeight: 400, scrollTop: 1000 };

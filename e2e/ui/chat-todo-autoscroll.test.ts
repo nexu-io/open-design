@@ -292,9 +292,29 @@ test.describe('chat pane autoscroll on TodoCard growth', () => {
     // Verify the PinnedTodoSlot rendered.
     await expect(page.locator('.chat-pinned-todo')).toBeVisible({ timeout: 5_000 });
 
+    // Capture clientHeight before growing so we can assert the grow step
+    // actually changed the layout this test is designed to protect against.
+    const clientHeightBeforeGrow = await page.evaluate(
+      () => document.querySelector<HTMLElement>('.chat-log')?.clientHeight ?? -1,
+    );
+
     // Grow the pinned-todo card by 80 px (simulates a new TodoWrite snapshot with
     // more items) and verify the chat-log snaps back to the bottom.
     await growPinnedTodo(page, 80);
+
+    // Hard precondition: the grow step must have reduced clientHeight. If a
+    // layout change stops .chat-pinned-todo from shrinking .chat-log.clientHeight,
+    // distanceAfterGrow < 20 passes vacuously and the regression detector is
+    // defeated — fail fast instead.
+    const clientHeightAfterGrow = await page.evaluate(
+      () => document.querySelector<HTMLElement>('.chat-log')?.clientHeight ?? -1,
+    );
+    expect(
+      clientHeightAfterGrow,
+      `expected grow step to reduce chat-log clientHeight ` +
+      `(before=${clientHeightBeforeGrow} after=${clientHeightAfterGrow}); ` +
+      `increase extraPx in growPinnedTodo or check the layout if this fires`,
+    ).toBeLessThan(clientHeightBeforeGrow);
 
     const distanceAfterGrow = await chatLogBottomDistance(page);
     expect(
