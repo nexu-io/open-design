@@ -73,4 +73,27 @@ describe('manifestSourceDigest', () => {
     });
     expect(a).not.toBe(b);
   });
+
+  it('returns the same digest for two identical invocations', () => {
+    const input = {
+      manifest: baseManifest,
+      inputs: { topic: 'design' },
+      resolvedContextRefs: [{ kind: 'skill', ref: 'sample-plugin' }],
+    };
+    expect(manifestSourceDigest(input)).toBe(manifestSourceDigest(input));
+  });
+
+  it('changes when a resolved context ref changes', () => {
+    const a = manifestSourceDigest({
+      manifest: baseManifest,
+      inputs: {},
+      resolvedContextRefs: [{ kind: 'craft', ref: 'typography' }],
+    });
+    const b = manifestSourceDigest({
+      manifest: baseManifest,
+      inputs: {},
+      resolvedContextRefs: [{ kind: 'craft', ref: 'motion' }],
+    });
+    expect(a).not.toBe(b);
+  });
 });
