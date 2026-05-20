@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import {
   m4EvidenceLogMarker,
   m4PlatformGateLabels,
-  hasM4RemoteEvidence,
+  hasM4RemoteEvidenceForHead,
   m4RemoteEvidenceLogMarker,
   m5ElectronFallbackLabel,
   m5PrimaryDocsLabel,
@@ -126,7 +126,8 @@ async function isGitWorktree(root: string): Promise<boolean> {
 async function createM5Edits(root: string): Promise<FileEdit[]> {
   const migrationDocPath = join(root, "docs", "electron-to-tauri-migration.md");
   const migrationDoc = await readFile(migrationDocPath, "utf8");
-  assertM4Complete(migrationDoc);
+  const expectedHead = await readCurrentGitHead(root);
+  assertM4Complete(migrationDoc, expectedHead);
 
   return [
     {
@@ -160,7 +161,7 @@ async function createM5Edits(root: string): Promise<FileEdit[]> {
   ];
 }
 
-function assertM4Complete(migrationDoc: string): void {
+function assertM4Complete(migrationDoc: string, expectedHead?: string): void {
   for (const label of m4PlatformGateLabels) {
     if (!migrationDoc.includes(`- [x] ${label}`)) {
       throw new Error(`M5 default flip requires verified M4 platform gate: ${label}`);
@@ -169,9 +170,22 @@ function assertM4Complete(migrationDoc: string): void {
   if (!migrationDoc.includes(m4EvidenceLogMarker)) {
     throw new Error("M5 default flip requires the verifier-applied native M4 evidence log marker");
   }
-  if (!hasM4RemoteEvidence(migrationDoc)) {
-    throw new Error("M5 default flip requires the pushed remote branch-head evidence log marker and matching branch/head detail");
+  if (!hasM4RemoteEvidenceForHead(migrationDoc, expectedHead)) {
+    throw new Error(
+      expectedHead == null
+        ? "M5 default flip requires the pushed remote branch-head evidence log marker and matching branch/head detail"
+        : `M5 default flip requires pushed remote branch-head evidence for current HEAD ${expectedHead}`,
+    );
   }
+}
+
+async function readCurrentGitHead(root: string): Promise<string | undefined> {
+  if (!(await isGitWorktree(root))) return undefined;
+  const result = await execFileAsync("git", ["rev-parse", "--verify", "HEAD"], {
+    cwd: root,
+    maxBuffer: 1024 * 1024,
+  });
+  return result.stdout.trim();
 }
 
 function checkM5Lines(migrationDoc: string): string {

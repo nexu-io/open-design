@@ -46,6 +46,13 @@ test("apply-tauri-migration-m5 refuses marker-only pushed remote head evidence",
   await assert.rejects(runM5Script(root), /matching branch\/head detail/);
 });
 
+test("apply-tauri-migration-m5 refuses stale pushed remote head evidence", async (t) => {
+  const root = await createFixtureRoot(t, { verifiedM4: true });
+  const head = await initGitFixture(root);
+
+  await assert.rejects(runM5Script(root), new RegExp(`current HEAD ${head}`));
+});
+
 test("apply-tauri-migration-m5 refuses to run with tracked worktree changes", async (t) => {
   const root = await createFixtureRoot(t, { verifiedM4: true });
   await initGitFixture(root);
@@ -139,12 +146,14 @@ async function createFixtureRoot(
   return root;
 }
 
-async function initGitFixture(root: string): Promise<void> {
+async function initGitFixture(root: string): Promise<string> {
   await execFileAsync("git", ["init", "--initial-branch=main"], { cwd: root, maxBuffer: 1024 * 1024 });
   await execFileAsync("git", ["config", "user.email", "codex@example.test"], { cwd: root, maxBuffer: 1024 * 1024 });
   await execFileAsync("git", ["config", "user.name", "Codex Test"], { cwd: root, maxBuffer: 1024 * 1024 });
   await execFileAsync("git", ["add", "."], { cwd: root, maxBuffer: 1024 * 1024 });
   await execFileAsync("git", ["commit", "-m", "fixture"], { cwd: root, maxBuffer: 1024 * 1024 });
+  const head = await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: root, maxBuffer: 1024 * 1024 });
+  return head.stdout.trim();
 }
 
 function migrationDoc(options: { verifiedM4: boolean; verifiedRemote?: boolean | "marker-only" }): string {

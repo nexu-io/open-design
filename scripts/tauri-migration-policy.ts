@@ -9,7 +9,7 @@ export const m4EvidenceLogMarker =
 export const m4RemoteEvidenceLogMarker =
   "Verified pushed migration branch head with `scripts/verify-tauri-migration-remote.ts` before M5.";
 const m4RemoteEvidenceDetailPattern =
-  /Remote `[^`\n]+` matched `[0-9a-f]{40}` before M4 evidence was recorded and M5 defaults were applied\./;
+  /Remote `[^`\n]+` matched `(?<head>[0-9a-f]{40})` before M4 evidence was recorded and M5 defaults were applied\./g;
 export const m5ToolsDevDefaultLabel = "Change `tools-dev` default desktop runtime to Tauri.";
 export const m5ToolsPackDefaultLabel = "Change `tools-pack` default desktop runtime to Tauri.";
 export const m5ReleaseBetaDefaultLabel = "Change `release-beta` desktop runtime workflow default to Tauri.";
@@ -26,7 +26,19 @@ export function formatM4RemoteEvidenceDetail(remote: string, branch: string, exp
 }
 
 export function hasM4RemoteEvidence(migrationDoc: string): boolean {
-  return migrationDoc.includes(m4RemoteEvidenceLogMarker) && m4RemoteEvidenceDetailPattern.test(migrationDoc);
+  return hasM4RemoteEvidenceForHead(migrationDoc);
+}
+
+export function hasM4RemoteEvidenceForHead(migrationDoc: string, expectedHead?: string): boolean {
+  if (!migrationDoc.includes(m4RemoteEvidenceLogMarker)) return false;
+  const heads = readM4RemoteEvidenceHeads(migrationDoc);
+  return expectedHead == null ? heads.length > 0 : heads.includes(expectedHead);
+}
+
+export function readM4RemoteEvidenceHeads(migrationDoc: string): string[] {
+  return [...migrationDoc.matchAll(m4RemoteEvidenceDetailPattern)]
+    .map((match) => match.groups?.head)
+    .filter((head): head is string => head != null);
 }
 
 type DesktopRuntime = "electron" | "tauri";

@@ -9,7 +9,7 @@ import { commandSidecarProblems, commandSidecarSyntaxProblem } from "./tauri-mig
 import {
   m4EvidenceLogMarker,
   m4PlatformGateLabels,
-  hasM4RemoteEvidence,
+  hasM4RemoteEvidenceForHead,
   m4RemoteEvidenceLogMarker,
   m5ElectronFallbackLabel,
   m5PrimaryDocsLabel,
@@ -314,7 +314,7 @@ async function readMigrationStatus(
       m6ElectronGuidanceLabel,
     ]),
   ];
-  const m4Evidence = readM4EvidenceStatus(groups, migrationDoc);
+  const m4Evidence = readM4EvidenceStatus(groups, migrationDoc, gitStatus.head);
   const phase = currentPhase(groups, m4Evidence);
   const handoff = handoffDir == null ? undefined : await readHandoffStatus(handoffDir, gitStatus);
   const handoffArchive =
@@ -481,17 +481,21 @@ function checklistGroup(name: ChecklistGroupStatus["name"], source: string, labe
   };
 }
 
-function readM4EvidenceStatus(groups: ChecklistGroupStatus[], migrationDoc: string): M4EvidenceStatus {
+function readM4EvidenceStatus(groups: ChecklistGroupStatus[], migrationDoc: string, expectedHead?: string): M4EvidenceStatus {
   const m4 = groups.find((group) => group.name === "M4");
   const platformGatesChecked = m4 != null && m4.checked === m4.total;
   const nativeEvidence = migrationDoc.includes(m4EvidenceLogMarker);
-  const remoteEvidence = hasM4RemoteEvidence(migrationDoc);
+  const remoteEvidence = hasM4RemoteEvidenceForHead(migrationDoc, expectedHead);
   const problems: string[] = [];
   if (platformGatesChecked && !nativeEvidence) {
     problems.push("missing native Windows/Linux verifier evidence marker");
   }
   if (platformGatesChecked && !remoteEvidence) {
-    problems.push("missing pushed remote branch-head evidence marker/detail");
+    problems.push(
+      expectedHead == null
+        ? "missing pushed remote branch-head evidence marker/detail"
+        : `missing pushed remote branch-head evidence marker/detail for current HEAD ${expectedHead}`,
+    );
   }
   return {
     nativeEvidence,

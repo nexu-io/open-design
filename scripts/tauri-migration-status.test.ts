@@ -132,6 +132,36 @@ test("tauri-migration-status advances to M5 after verified M4 checkboxes", async
   assert.match(parsed.nextActions.join("\n"), /apply-tauri-migration-m5/);
 });
 
+test("tauri-migration-status stays in M4 when remote head evidence is stale for current HEAD", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [...m4PlatformGateLabels],
+    defaults: "electron",
+    extraDocLines: [m4EvidenceLogMarker, ...verifiedRemoteEvidence],
+  });
+  const head = await initGitFixture(fixture);
+
+  const result = await runStatus(fixture);
+  const parsed = JSON.parse(result.stdout) as {
+    m4Evidence: {
+      nativeEvidence: boolean;
+      platformGatesChecked: boolean;
+      problems: string[];
+      remoteEvidence: boolean;
+    };
+    nextActions: string[];
+    phase: string;
+  };
+
+  assert.equal(parsed.phase, "M4");
+  assert.equal(parsed.m4Evidence.platformGatesChecked, true);
+  assert.equal(parsed.m4Evidence.nativeEvidence, true);
+  assert.equal(parsed.m4Evidence.remoteEvidence, false);
+  assert.deepEqual(parsed.m4Evidence.problems, [
+    `missing pushed remote branch-head evidence marker/detail for current HEAD ${head}`,
+  ]);
+  assert.doesNotMatch(parsed.nextActions.join("\n"), /apply-tauri-migration-m5/);
+});
+
 test("tauri-migration-status stays in M4 when remote head evidence is missing", async (t) => {
   const fixture = await createFixtureRoot(t, {
     checked: [...m4PlatformGateLabels],
