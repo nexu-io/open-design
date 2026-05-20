@@ -321,17 +321,20 @@ async function openDesignFile(page: Page, fileName: string) {
     .filter({ hasText: filePattern })
     .locator('.workspace-tab__main')
     .first();
+  let tabFound = true;
   try {
     await fileTabButton.waitFor({ state: 'visible', timeout: 2_000 });
   } catch {
-    // Tab not visible; open from the file list instead
+    tabFound = false;
+  }
+
+  if (tabFound) {
+    await fileTabButton.click();
+  } else {
     const fileButton = page.getByRole('button', { name: filePattern });
     await fileButton.click();
     await page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' }).click();
-    await expect(preview).toBeVisible();
-    return;
   }
-  await fileTabButton.click();
   await expect(preview).toBeVisible();
 }
 
