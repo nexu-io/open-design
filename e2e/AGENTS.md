@@ -2,6 +2,8 @@
 
 Follow the root `AGENTS.md` first. This package owns user-level end-to-end smoke tests and Playwright UI automation only.
 
+For the current coverage posture, recent hardening work, grouped-run status, and known intentional gaps, see [docs/testing/e2e-coverage/status.md](/Users/mac/open-design/open-design/docs/testing/e2e-coverage/status.md).
+
 ## Directory layout
 
 - `specs/`: highest-ROI, long-running core business capability regressions suitable for PR or release gating. Each spec should describe one nearly orthogonal product capability chain, such as main dialog generation, Pet, Orbit, or packaged runtime. Keep this layer small and expand it only when a core capability deserves always-on signal.

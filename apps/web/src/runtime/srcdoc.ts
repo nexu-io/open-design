@@ -75,6 +75,19 @@ export function buildSrcdoc(
   return injectSrcdocTransportActivationBridge(injectSnapshotBridge(withEdit));
 }
 
+/**
+ * Build the lazy transport shell.
+ *
+ * The shell does two things:
+ *   1. Register a listener for `od:srcdoc-transport-activate` that replaces
+ *      its own document with the real artifact HTML.
+ *   2. Post `od:srcdoc-transport-ready` to the parent as soon as the listener
+ *      is installed. This `ready` signal is the only reliable way for the
+ *      host to know the listener is live; without it, the host risks posting
+ *      `activate` before the iframe's script has executed (e.g. right after a
+ *      key-driven re-mount), in which case the message is dropped and the
+ *      iframe stays stuck on the empty shell. See #2253.
+ */
 export function buildLazySrcdocTransport(): string {
   return `<!doctype html>
 <html>
@@ -89,10 +102,48 @@ export function buildLazySrcdocTransport(): string {
         document.write(data.html);
         document.close();
       });
+      try {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({ type: 'od:srcdoc-transport-ready' }, '*');
+        }
+      } catch (_) { /* sandboxed parent — host falls back to onLoad */ }
     })();</script>
   </head>
   <body></body>
 </html>`;
+}
+
+export interface SrcDocActivationInputs {
+  /** The real artifact HTML the host wants to inject into the shell. */
+  srcDoc: string;
+  /** Host is currently showing the URL-loaded iframe (srcDoc iframe is hidden). */
+  useUrlLoadPreview: boolean;
+  /** Host's render pipeline is routing through the lazy transport shell. */
+  useLazySrcDocTransport: boolean;
+  /** The shell document has loaded AND posted `od:srcdoc-transport-ready`. */
+  shellReady: boolean;
+  /** Which artifact HTML has already been pushed into this shell (dedupe). */
+  activatedHtml: string | null;
+}
+
+/**
+ * Pure decision for whether the host should now post
+ * `od:srcdoc-transport-activate` to the shell iframe.
+ *
+ * Gating on `shellReady` is the fix for #2253: without it, an activation
+ * triggered by `useUrlLoadPreview` flipping to false (e.g. opening the
+ * Tweaks palette) can fire while the iframe's shell script has not yet
+ * registered its message listener. The message is dropped, the shell stays
+ * on its empty 536-byte body, and the dedupe check then suppresses the
+ * follow-up activation from the iframe's onLoad path.
+ */
+export function canActivateSrcDocTransport(state: SrcDocActivationInputs): boolean {
+  if (!state.srcDoc) return false;
+  if (state.useUrlLoadPreview) return false;
+  if (!state.useLazySrcDocTransport) return false;
+  if (!state.shellReady) return false;
+  if (state.activatedHtml === state.srcDoc) return false;
+  return true;
 }
 
 function injectSrcdocTransportActivationBridge(doc: string): string {
@@ -1293,11 +1344,24 @@ html[data-od-inspect-mode] body iframe { pointer-events: none !important; }
 // the scaled canvas ends up offset toward the bottom-right of any
 // preview that's smaller than 1920x1080 — exactly what users see in the
 // sandbox iframe. `place-content: center` centers the track itself.
+//
+// Framework decks (apps/daemon/src/prompts/deck-framework.ts) opt out:
+// their `fit()` already centers a `transform-origin: top left` stage with
+// an explicit `translate(tx, ty)` that assumes the stage's natural layout
+// position is (0, 0). If we force `place-content: center` on their
+// `.deck-shell` grid, the implicit track gets re-centered to
+// ((sw-1920)/2, (sh-1080)/2) and `fit()`'s translate stacks on top, so
+// the scaled stage lands ~1000px off-screen and the user sees a mostly-
+// black preview with a sliver of slide content in the top-left. Skip the
+// override whenever the framework's marker id is present.
 function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
   const safeInitialSlideIndex = Number.isFinite(initialSlideIndex)
     ? Math.max(0, Math.floor(initialSlideIndex))
     : 0;
-  const styleFix = `<style data-od-deck-fix>
+  const isFrameworkDeck = /\bid\s*=\s*["']deck-stage["']/i.test(doc);
+  const styleFix = isFrameworkDeck
+    ? ''
+    : `<style data-od-deck-fix>
 .stage, .deck-stage, .deck-shell { place-content: center !important; }
 </style>`;
   const script = `<script data-od-deck-bridge>(function(){

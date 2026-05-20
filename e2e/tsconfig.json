@@ -23,6 +23,7 @@
   },
   "include": [
     "playwright.config.ts",
+    "playwright.visual.config.ts",
     "vitest.config.ts",
     "lib/**/*.ts",
     "resources/**/*.ts",

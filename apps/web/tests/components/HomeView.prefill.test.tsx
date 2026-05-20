@@ -476,13 +476,14 @@ describe('HomeView prompt handoff', () => {
     expect(screen.getByTestId('home-hero-prompt-slot-artifactKind')).toBeTruthy();
     expect(screen.getByTestId('home-hero-prompt-slot-designSystem')).toBeTruthy();
     expect(screen.getByTestId('home-hero-prompt-slot-template')).toBeTruthy();
-    // Template-backed inputs are represented inline in the prompt, so
-    // the structured form below should not duplicate the same fields.
-    expect(screen.queryByTestId('plugin-inputs-form')).toBeNull();
+    // Inline pills are read-only; the editable controls live in the
+    // PluginInputsForm below so caret positions in the textarea no
+    // longer drift away from where the user clicked in the overlay.
+    expect(screen.getByTestId('plugin-inputs-form')).toBeTruthy();
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  it('applies output-type chips immediately when replacing an existing prompt', async () => {
+  it('confirms before an explicit plugin use replaces an existing prompt', async () => {
     const fetchMock = vi.fn<typeof fetch>(async (url) => {
       if (typeof url === 'string' && url === '/api/plugins') {
         return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }), {
@@ -517,11 +518,15 @@ describe('HomeView prompt handoff', () => {
     fireEvent.change(input, { target: { value: 'Keep my current brief' } });
     fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
 
+    expect(await screen.findByRole('dialog', { name: /replace current prompt/i })).toBeTruthy();
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/apply'))).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Replace' }));
+
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       '/api/plugins/example-web-prototype/apply',
       expect.anything(),
     ));
-    expect(screen.queryByRole('dialog', { name: /replace current prompt/i })).toBeNull();
   });
 
   it('appends a plugin-use query handoff without replacing an existing prompt', async () => {
@@ -670,18 +675,28 @@ describe('HomeView prompt handoff', () => {
       expect.anything(),
     ));
 
-    const rewrittenGoal = 'catalog internal research notes into a reusable knowledge workflow';
     const input = screen.getByTestId('home-hero-input') as HTMLTextAreaElement;
+    const goalInput = await screen.findByLabelText(/plugin goal/i);
+    fireEvent.change(goalInput, {
+      target: { value: 'turn support transcripts into triaged GitHub issues' },
+    });
+
+    await waitFor(() => {
+      expect(input.value).toContain('turn support transcripts into triaged GitHub issues');
+    });
+
+    const rewrittenGoal = 'catalog internal research notes into a reusable knowledge workflow';
     fireEvent.change(input, {
       target: {
         value: input.value.replace(
-          PLUGIN_AUTHORING_DEFAULT_GOAL,
+          'turn support transcripts into triaged GitHub issues',
           rewrittenGoal,
         ),
       },
     });
     await waitFor(() => {
-      expect(input.value).toContain(rewrittenGoal);
+      expect((screen.getByLabelText(/plugin goal/i) as HTMLInputElement).value)
+        .toBe(rewrittenGoal);
     });
     fireEvent.click(screen.getByTestId('home-hero-submit'));
 

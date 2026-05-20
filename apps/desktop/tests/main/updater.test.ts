@@ -28,6 +28,8 @@ type FixtureServer = {
   metadataUrl: string;
 };
 
+type FixturePlatform = "mac" | "win";
+
 function prereleaseCounterParts(version: string): { baseVersion: string; number: number } | null {
   const prerelease = /^(\d+\.\d+\.\d+)-.+\.(\d+)$/.exec(version);
   if (prerelease?.[1] != null && prerelease[2] != null) {
@@ -43,10 +45,20 @@ function prereleaseCounterParts(version: string): { baseVersion: string; number:
 async function createUpdaterFixture(options: {
   artifactBody?: string;
   channel?: "stable" | "beta";
+  platform?: FixturePlatform;
   version?: string;
 } = {}): Promise<FixtureServer> {
   const version = options.version ?? "1.0.1";
   const channel = options.channel ?? "stable";
+  const platform = options.platform ?? "mac";
+  const platformKey = platform === "win" ? "win" : "mac";
+  const artifactKey = platform === "win" ? "installer" : "dmg";
+  const artifactExt = platform === "win" ? "exe" : "dmg";
+  const arch = platform === "win" ? "x64" : "arm64";
+  const artifactName = platform === "win"
+    ? `open-design-${version}-win-x64-setup.exe`
+    : `open-design-${version}-mac-arm64.dmg`;
+  const artifactPath = `/artifact.${artifactExt}`;
   const artifactBody = options.artifactBody ?? "open design updater fixture";
   const digest = createHash("sha256").update(artifactBody).digest("hex");
   let artifactRequests = 0;
@@ -71,15 +83,15 @@ async function createUpdaterFixture(options: {
               stableVersion: version,
             }),
         platforms: {
-          mac: {
-            arch: "arm64",
+          [platformKey]: {
+            arch,
             enabled: true,
             artifacts: {
-              dmg: {
-                name: `open-design-${version}-mac-arm64.dmg`,
-                sha256Url: `http://${serverAddress(server)}/artifact.dmg.sha256`,
+              [artifactKey]: {
+                name: artifactName,
+                sha256Url: `http://${serverAddress(server)}${artifactPath}.sha256`,
                 size: Buffer.byteLength(artifactBody),
-                url: `http://${serverAddress(server)}/artifact.dmg`,
+                url: `http://${serverAddress(server)}${artifactPath}`,
               },
             },
           },
@@ -88,14 +100,14 @@ async function createUpdaterFixture(options: {
       }));
       return;
     }
-    if (url === "/artifact.dmg") {
+    if (url === artifactPath) {
       artifactRequests += 1;
       response.setHeader("content-length", String(Buffer.byteLength(artifactBody)));
       response.end(artifactBody);
       return;
     }
-    if (url === "/artifact.dmg.sha256") {
-      response.end(`${digest}  artifact.dmg\n`);
+    if (url === `${artifactPath}.sha256`) {
+      response.end(`${digest}  ${artifactName}\n`);
       return;
     }
     response.statusCode = 404;
@@ -128,14 +140,14 @@ function makeRoot(): string {
   return mkdtempSync(join(tmpdir(), "od-updater-test-"));
 }
 
-function updaterEnv(metadataUrl: string): NodeJS.ProcessEnv {
+function updaterEnv(metadataUrl: string, platform = "darwin"): NodeJS.ProcessEnv {
   return {
     [DESKTOP_UPDATE_ENV.AUTO_DOWNLOAD]: "1",
     [DESKTOP_UPDATE_ENV.CURRENT_VERSION]: "1.0.0",
     [DESKTOP_UPDATE_ENV.ENABLED]: "1",
     [DESKTOP_UPDATE_ENV.METADATA_URL]: metadataUrl,
     [DESKTOP_UPDATE_ENV.OPEN_DRY_RUN]: "1",
-    [DESKTOP_UPDATE_ENV.PLATFORM]: "darwin",
+    [DESKTOP_UPDATE_ENV.PLATFORM]: platform,
   };
 }
 
@@ -150,7 +162,7 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
 async function waitForRequestCount(requests: readonly unknown[], count: number): Promise<void> {
   for (let attempt = 0; attempt < 100; attempt += 1) {
     if (requests.length >= count) return;
-    await new Promise<void>((resolveWait) => setImmediate(resolveWait));
+    await new Promise<void>((resolveWait) => setTimeout(resolveWait, 5));
   }
   throw new Error(`expected ${count} update requests, saw ${requests.length}`);
 }
@@ -205,6 +217,37 @@ describe("desktop updater", () => {
       const restored = await updater.status();
       expect(restored.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
       expect(restored.downloadPath).toBe(checked.downloadPath);
+
+      const installed = await updater.installUpdate();
+      expect(installed.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+      expect(installed.installResult?.dryRun).toBe(true);
+      expect(installed.installResult?.path).toBe(checked.downloadPath);
+    } finally {
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("downloads, verifies, persists, and dry-runs opening a Windows installer", async () => {
+    const root = makeRoot();
+    const fixture = await createUpdaterFixture({ platform: "win" });
+    try {
+      const updater = createDesktopUpdater({
+        arch: "x64",
+        downloadRoot: root,
+        env: updaterEnv(fixture.metadataUrl, "win32"),
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      });
+
+      const checked = await updater.checkForUpdates();
+      expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+      expect(checked.platform).toBe("win32");
+      expect(checked.supported).toBe(true);
+      expect(checked.capabilities.canOpenInstaller).toBe(true);
+      expect(checked.artifact?.platformKey).toBe("win");
+      expect(checked.artifact?.type).toBe("installer");
+      expect(checked.downloadPath).toEqual(expect.stringMatching(/\.exe$/));
+      expect(await readFile(checked.downloadPath ?? "", "utf8")).toBe("open design updater fixture");
 
       const installed = await updater.installUpdate();
       expect(installed.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);

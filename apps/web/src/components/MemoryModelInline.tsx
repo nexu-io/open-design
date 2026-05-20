@@ -481,7 +481,7 @@ export function MemoryModelInline({
       ) : null}
       <p className="hint" style={{ marginTop: 4, fontSize: 11 }}>
         {mode === 'api'
-          ? t('settings.memoryModelInlineHintByok')
+          ? t('settings.memoryModelInlineHintByokNeutral')
           : effectiveChatProtocol
             ? t('settings.memoryModelInlineHintCliConstrained', {
                 provider: effectiveChatProtocol,

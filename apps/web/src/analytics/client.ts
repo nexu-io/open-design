@@ -8,6 +8,7 @@ import {
   EVENT_SCHEMA_VERSION,
   type AnalyticsClientType,
   type AnalyticsConfigResponse,
+  type AnalyticsConfigureGlobals,
 } from '@open-design/contracts/analytics';
 import { scrubBeforeSend } from './scrub';
 
@@ -21,14 +22,67 @@ interface AnalyticsContext {
 
 let client: PostHog | null = null;
 let initPromise: Promise<PostHog | null> | null = null;
-let resolvedAnonymousId: string | null = null;
+let resolvedDeviceId: string | null = null;
+// Latest configure-state triplet. Re-registered on the PostHog client as
+// soon as it changes so every subsequent event inherits the current values.
+let configureGlobals: AnalyticsConfigureGlobals = {
+  has_available_configure_cli: false,
+  configure_type: 'unknown',
+  configure_availability: 'unknown',
+};
+// Snapshot of the super-property payload sent on the most recent `loaded()`
+// init. `reset()` clears posthog-js's persisted super-properties as well as
+// the distinct_id, so privacy → metrics off → on, or a Delete-my-data
+// rotation (applyIdentity()), would otherwise resume capture without
+// `event_schema_version`, `device_id`, `session_id`, `locale`, or the
+// configure-state globals. We restash this on init and re-register it
+// after every reset()/identify() so every subsequent event keeps the
+// v2 schema contract.
+let lastRegisterPayload: Record<string, unknown> | null = null;
 
 // Returns the installationId the daemon stamped on /api/analytics/config
 // after the user opted in via Privacy → "Share usage data". The provider
 // uses this in preference to its locally-generated UUID so PostHog,
 // Langfuse, and any future sink share a single anonymous identity.
+//
+// Kept under the legacy name for callers that still import it; new code
+// should prefer `getResolvedDeviceId`.
 export function getResolvedAnonymousId(): string | null {
-  return resolvedAnonymousId;
+  return resolvedDeviceId;
+}
+
+export function getResolvedDeviceId(): string | null {
+  return resolvedDeviceId;
+}
+
+// Web-side accessor for the daemon header bridge: when the web client POSTs
+// to /api/runs the daemon needs to know what device_id to stamp on its
+// own server-side captures.
+export function getConfigureGlobals(): AnalyticsConfigureGlobals {
+  return configureGlobals;
+}
+
+// Called from the AnalyticsProvider when the configure-state triplet changes
+// (mode switch, BYOK key save, CLI rescan). The values are registered on the
+// PostHog client so every subsequent capture inherits them — no per-event
+// boilerplate needed.
+export function setConfigureGlobals(next: AnalyticsConfigureGlobals): void {
+  configureGlobals = { ...next };
+  // Keep the cached register payload aligned so a future reset/identify
+  // flow that calls `restoreSuperProperties()` uses the LATEST configure
+  // state, not the stale snapshot captured during the initial `loaded()`.
+  if (lastRegisterPayload) {
+    lastRegisterPayload = {
+      ...lastRegisterPayload,
+      ...(configureGlobals as unknown as Record<string, unknown>),
+    };
+  }
+  if (!client) return;
+  try {
+    client.register(configureGlobals as unknown as Record<string, unknown>);
+  } catch {
+    // best-effort — capture should never throw out of this path.
+  }
 }
 
 export async function getAnalyticsClient(
@@ -52,7 +106,7 @@ export async function getAnalyticsClient(
       const distinctId =
         (typeof cfg.installationId === 'string' && cfg.installationId) ||
         context.anonymousId;
-      resolvedAnonymousId = distinctId;
+      resolvedDeviceId = distinctId;
       const mod = await import('posthog-js');
       const posthog = mod.default;
       posthog.init(cfg.key, {
@@ -63,6 +117,14 @@ export async function getAnalyticsClient(
         // locally-generated UUID for the legacy / pre-consent path.
         bootstrap: { distinctID: distinctId },
         persistence: 'localStorage',
+        // PostHog's default UA filter silently drops captures whose
+        // user-agent matches its built-in bot list (HeadlessChrome,
+        // various automation flags). The list also rejects some real users
+        // — embedded webviews, fingerprinted browsers, e2e CI runs — which
+        // is unacceptable for product analytics that needs to count every
+        // session. We instead rely on the Privacy → "Share usage data"
+        // toggle as the single consent gate and treat every UA equally.
+        opt_out_useragent_filter: true,
 
         // --- Auto-capture layers --------------------------------------
         // Anonymous diagnostic features (click paths, page transitions,
@@ -104,15 +166,19 @@ export async function getAnalyticsClient(
         disable_session_recording: true,
 
         loaded: (instance) => {
-          instance.register({
+          lastRegisterPayload = {
             event_schema_version: EVENT_SCHEMA_VERSION,
             ui_version: context.appVersion,
             app_version: context.appVersion,
             client_type: context.clientType,
             locale: context.locale,
             session_id: context.sessionId,
-            anonymous_id: distinctId,
-          });
+            // v2 rename: was `anonymous_id`. Value is unchanged — the same
+            // installationId / local-UUID fallback.
+            device_id: distinctId,
+            ...(configureGlobals as unknown as Record<string, unknown>),
+          };
+          instance.register(lastRegisterPayload);
         },
       });
       client = posthog;
@@ -153,10 +219,18 @@ export function applyConsent(consentGranted: boolean): void {
   try {
     if (consentGranted) {
       client.opt_in_capturing();
+      // If the user previously toggled metrics off in this session, the
+      // earlier opt-out path called reset() and wiped the persisted
+      // super-properties. opt_in_capturing() only flips the consent flag
+      // and does not re-run init(), so without this restore the next
+      // capture would emit no event_schema_version / device_id /
+      // session_id / locale / configure-state. See PR #2285 review
+      // 2026-05-20 04:35.
+      restoreSuperProperties();
     } else {
       client.opt_out_capturing();
       client.reset();
-      resolvedAnonymousId = null;
+      resolvedDeviceId = null;
     }
   } catch {
     // best-effort — capture should never throw out of this path.
@@ -171,13 +245,33 @@ export function applyConsent(consentGranted: boolean): void {
 // session is fully decoupled from the deleted one.
 export function applyIdentity(installationId: string | null): void {
   if (!client || !installationId) return;
-  if (resolvedAnonymousId === installationId) return;
+  if (resolvedDeviceId === installationId) return;
   try {
     client.reset();
     client.identify(installationId);
-    resolvedAnonymousId = installationId;
+    resolvedDeviceId = installationId;
+    // reset() also clears the persisted super-properties from
+    // posthog-js's localStorage cache. Re-register them with the new
+    // distinct_id so the rest of this session keeps emitting v2-schema
+    // events. See PR #2285 review 2026-05-20 04:35.
+    restoreSuperProperties({ device_id: installationId });
   } catch {
     // best-effort — never propagate.
+  }
+}
+
+// Push the cached super-property payload back onto the PostHog client. Used
+// after reset()/identify() flows; takes an optional override patch so the
+// caller can swap fields (e.g. a rotated device_id) without re-deriving the
+// rest of the payload.
+function restoreSuperProperties(patch?: Record<string, unknown>): void {
+  if (!client || !lastRegisterPayload) return;
+  const next = patch ? { ...lastRegisterPayload, ...patch } : lastRegisterPayload;
+  lastRegisterPayload = next;
+  try {
+    client.register(next);
+  } catch {
+    // best-effort.
   }
 }
 

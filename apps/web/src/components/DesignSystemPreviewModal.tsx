@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useAnalytics } from '../analytics/provider';
+import {
+  trackDesignSystemsTemplatesModalClick,
+  trackDesignSystemsTemplatesModalSharePopoverClick,
+  trackDesignSystemsTemplatesModalSurfaceView,
+} from '../analytics/events';
 import { useT } from '../i18n';
 import {
   fetchDesignSystem,
@@ -21,14 +27,46 @@ interface Props {
 // the styles.refero.design layout.
 export function DesignSystemPreviewModal({ system, onClose }: Props) {
   const t = useT();
+  const analytics = useAnalytics();
+  const surfaceViewFiredRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (surfaceViewFiredRef.current === system.id) return;
+    surfaceViewFiredRef.current = system.id;
+    trackDesignSystemsTemplatesModalSurfaceView(analytics.track, {
+      page_name: 'design_systems',
+      area: 'templates_modal',
+      templates_id: system.id,
+      templates_type: system.source ?? 'library',
+    });
+  }, [analytics.track, system.id, system.source]);
   const [showcaseHtml, setShowcaseHtml] = useState<string | null | undefined>(undefined);
   const [tokensHtml, setTokensHtml] = useState<string | null | undefined>(undefined);
   const [specBody, setSpecBody] = useState<string | null | undefined>(undefined);
 
   // Lazy-load each view on first reveal. Both endpoints are cheap, but this
   // keeps the network panel quiet when the user only opens one tab.
+  // Also emits a templates_modal ui_click for showcase / tokens tab changes.
+  const initialViewIdRef = useRef<string | null>(null);
   const handleView = useCallback(
     (viewId: string) => {
+      // The first call comes from PreviewModal's mount with the initial
+      // view id; that's a surface_view, not a click. Skip the click
+      // tracking for the very first invocation and only emit on real
+      // user-driven tab changes.
+      if (initialViewIdRef.current === null) {
+        initialViewIdRef.current = viewId;
+      } else if (initialViewIdRef.current !== viewId) {
+        initialViewIdRef.current = viewId;
+        if (viewId === 'showcase' || viewId === 'tokens') {
+          trackDesignSystemsTemplatesModalClick(analytics.track, {
+            page_name: 'design_systems',
+            area: 'templates_modal',
+            element: viewId,
+            templates_id: system.id,
+            templates_type: system.source ?? 'library',
+          });
+        }
+      }
       if (viewId === 'showcase' && showcaseHtml === undefined) {
         setShowcaseHtml(null);
         void fetchDesignSystemShowcase(system.id).then((html) => setShowcaseHtml(html));
@@ -38,7 +76,7 @@ export function DesignSystemPreviewModal({ system, onClose }: Props) {
         void fetchDesignSystemPreview(system.id).then((html) => setTokensHtml(html));
       }
     },
-    [system.id, showcaseHtml, tokensHtml],
+    [analytics.track, system.id, system.source, showcaseHtml, tokensHtml],
   );
 
   // Fetch DESIGN.md the first time the side panel opens. Once we have it we
@@ -73,6 +111,42 @@ export function DesignSystemPreviewModal({ system, onClose }: Props) {
       onView={handleView}
       exportTitleFor={(viewId) => `${system.title} — ${viewId}`}
       onClose={onClose}
+      onFullscreenClick={() =>
+        trackDesignSystemsTemplatesModalClick(analytics.track, {
+          page_name: 'design_systems',
+          area: 'templates_modal',
+          element: 'fullscreen',
+          templates_id: system.id,
+          templates_type: system.source ?? 'library',
+        })
+      }
+      onShareClick={() =>
+        trackDesignSystemsTemplatesModalClick(analytics.track, {
+          page_name: 'design_systems',
+          area: 'templates_modal',
+          element: 'share',
+          templates_id: system.id,
+          templates_type: system.source ?? 'library',
+        })
+      }
+      onSidebarToggleClick={() =>
+        trackDesignSystemsTemplatesModalClick(analytics.track, {
+          page_name: 'design_systems',
+          area: 'templates_modal',
+          element: 'design_md',
+          templates_id: system.id,
+          templates_type: system.source ?? 'library',
+        })
+      }
+      onSharePopoverItemClick={(item) =>
+        trackDesignSystemsTemplatesModalSharePopoverClick(analytics.track, {
+          page_name: 'design_systems',
+          area: 'templates_modal_share_popover',
+          element: item,
+          templates_id: system.id,
+          templates_type: system.source ?? 'library',
+        })
+      }
       sidebar={{
         label: t('ds.specToggle'),
         defaultOpen: true,

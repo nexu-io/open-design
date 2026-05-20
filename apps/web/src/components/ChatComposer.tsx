@@ -11,8 +11,7 @@ import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { useAnalytics } from '../analytics/provider';
 import {
-  trackStudioClickChatComposer,
-  trackStudioViewChatPanel,
+  trackChatPanelClick,
 } from '../analytics/events';
 import { IMAGE_MODELS } from "../media/models";
 import { projectRawUrl, uploadProjectFiles, openFolderDialog, fetchConnectors } from "../providers/registry";
@@ -210,23 +209,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     const analytics = useAnalytics();
     const [draft, setDraft] = useState(initialDraft ?? "");
 
-    // studio_view chat_panel — fire once per ChatComposer mount per project.
-    // The composer is the dominant chat surface; firing here keeps the
-    // event close to where the user actually sees the panel rather than at
-    // the higher-level ProjectView layer which mounts before the composer.
-    const studioViewFiredRef = useRef<string | null>(null);
-    useEffect(() => {
-      if (studioViewFiredRef.current === projectId) return;
-      studioViewFiredRef.current = projectId;
-      trackStudioViewChatPanel(analytics.track, {
-        page: 'studio',
-        area: 'chat_panel',
-        element: 'chat_tab',
-        view_type: 'panel',
-        source: 'open_project',
-        conversation_id: null,
-      });
-    }, [projectId, analytics.track]);
+    // chat_panel page_view fires from ProjectView (which outlives
+    // conversation switches) so the event measures real chat-panel
+    // entries rather than ChatComposer remounts. See PR #2285 review
+    // 2026-05-20 04:08 for the rationale.
     const [staged, setStaged] = useState<ChatAttachment[]>([]);
     const [stagedVisualComments, setStagedVisualComments] = useState<ChatCommentAttachment[]>([]);
     // Skills the user has @-mentioned for this turn. We dedupe on id and
@@ -425,7 +411,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
 
     useEffect(() => {
       setComposerScrollTop(textareaRef.current?.scrollTop ?? 0);
-    }, [composerMentionParts, draft]);
+    }, [composerMentionParts]);
 
     // Resolve which tabs to surface in the consolidated tools popover.
     // Plugins is always visible while a project is active so users can
@@ -1400,7 +1386,23 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 ref={toolsTriggerRef}
                 type="button"
                 className={`icon-btn composer-tools-trigger${toolsOpen ? ' active' : ''}`}
-                onClick={() => setToolsOpen((v) => !v)}
+                onClick={() => {
+                  setToolsOpen((v) => {
+                    const next = !v;
+                    if (next) {
+                      // P0 ui_click resources_popover_trigger — only emit on
+                      // the open transition so accidental double-clicks
+                      // don't pair an open + close into a "double tap" the
+                      // dashboard can't interpret.
+                      trackChatPanelClick(analytics.track, {
+                        page_name: 'chat_panel',
+                        area: 'chat_panel',
+                        element: 'resources_popover_trigger',
+                      });
+                    }
+                    return next;
+                  });
+                }}
                 title={t('chat.cliSettingsTitle')}
                 aria-haspopup="menu"
                 aria-expanded={toolsOpen}
@@ -1553,6 +1555,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                       role="menuitem"
                       className="composer-tools-settings"
                       onClick={() => {
+                        trackChatPanelClick(analytics.track, {
+                          page_name: 'chat_panel',
+                          area: 'chat_panel',
+                          element: 'composer_settings',
+                        });
                         setToolsOpen(false);
                         onOpenSettings?.();
                       }}
@@ -1568,13 +1575,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               className="icon-btn"
               data-testid="chat-attach"
               onClick={() => {
-                trackStudioClickChatComposer(analytics.track, {
-                  page: 'studio',
-                  area: 'chat_composer',
-                  element: 'attachment_button',
-                  action: 'click_composer_control',
-                  user_query_tokens: Math.ceil(draft.length / 4),
-                  has_attachment: staged.length > 0 || commentAttachments.length > 0,
+                trackChatPanelClick(analytics.track, {
+                  page_name: 'chat_panel',
+                  area: 'chat_panel',
+                  element: 'attachment',
                 });
                 fileInputRef.current?.click();
               }}
@@ -1604,14 +1608,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 className="composer-send"
                 data-testid="chat-send"
                 onClick={() => {
-                  trackStudioClickChatComposer(analytics.track, {
-                    page: 'studio',
-                    area: 'chat_composer',
-                    element: 'send_button',
-                    action: 'click_composer_control',
-                    user_query_tokens: Math.ceil(draft.length / 4),
-                    has_attachment:
-                      staged.length > 0 || currentCommentAttachments().length > 0,
+                  trackChatPanelClick(analytics.track, {
+                    page_name: 'chat_panel',
+                    area: 'chat_panel',
+                    element: 'send',
                   });
                   void submit();
                 }}

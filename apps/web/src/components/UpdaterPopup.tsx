@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import type { OpenDesignHostUpdaterStatusSnapshot } from '@open-design/host';
 
 import { Icon } from './Icon';
 import {
@@ -9,28 +10,31 @@ import {
   subscribeToUpdaterStatus,
   type UpdaterModel,
 } from '../lib/updater';
-import type { OpenDesignHostUpdaterStatusSnapshot } from '@open-design/host';
+import { useT } from '../i18n';
+import type { Dict } from '../i18n/types';
 
 type InstallState = 'idle' | 'opening' | 'opened';
 type QuitState = 'idle' | 'quitting';
+type Translator = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
-function versionText(model: UpdaterModel): string {
+function versionText(t: Translator, model: UpdaterModel): string {
   const version = model.availableVersion;
-  return version == null ? 'A new version is ready.' : `Open Design ${version} is ready.`;
+  return version == null ? t('updater.readyGeneric') : t('updater.readyVersion', { version });
 }
 
-function navLabel(model: UpdaterModel): string {
-  if (model.errorMessage != null) return 'Update failed';
-  if (model.installerOpened) return 'Installer opened';
+function navLabel(t: Translator, model: UpdaterModel): string {
+  if (model.errorMessage != null) return t('updater.failed');
+  if (model.installerOpened) return t('updater.installerOpened');
   if (model.downloadProgress != null || model.busy) {
     const percent = model.downloadProgress?.percent;
-    return percent == null ? 'Downloading update' : `Downloading update ${percent}%`;
+    return percent == null ? t('updater.downloading') : t('updater.downloadingPercent', { percent });
   }
-  if (model.hasDownloadedInstaller) return 'Update ready';
-  return 'Update available';
+  if (model.hasDownloadedInstaller) return t('updater.ready');
+  return t('updater.available');
 }
 
 export function UpdaterPopup() {
+  const t = useT();
   const [model, setModel] = useState<UpdaterModel>(() => deriveUpdaterModel(null));
   const [dismissedPromptKey, setDismissedPromptKey] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -108,20 +112,26 @@ export function UpdaterPopup() {
   const opened = installState === 'opened' || model.installerOpened;
   const statusError = model.errorMessage;
   const failed = actionError != null || statusError != null;
-  const title = failed ? (opened ? 'Could not quit' : 'Update failed') : opened ? 'Installer opened' : 'Update ready';
+  const title = failed
+    ? opened
+      ? t('updater.quitFailedTitle')
+      : t('updater.failed')
+    : opened
+      ? t('updater.installerOpened')
+      : t('updater.ready');
   const body = failed
     ? opened
-      ? 'Open Design could not quit.'
-      : statusError ?? 'The installer could not be opened.'
+      ? t('updater.quitFailedBody')
+      : statusError ?? t('updater.openFailedFallback')
     : opened
-    ? 'The installer is open. Quit Open Design before replacing the app.'
-    : versionText(model);
+      ? t('updater.installerOpenBody')
+      : versionText(t, model);
   const progress = model.downloadProgress;
   const progressStyle = {
-    '--updater-progress': `${progress?.percent ?? 100}%`,
+    '--updater-progress': `${progress?.percent ?? 0}%`,
   } as CSSProperties;
   const controlDisabled = model.busy && !model.hasDownloadedInstaller && !model.installerOpened;
-  const controlLabel = navLabel(model);
+  const controlLabel = navLabel(t, model);
   const canOpenInstaller = model.canOpenInstaller && model.hasDownloadedInstaller;
 
   return (
@@ -172,7 +182,7 @@ export function UpdaterPopup() {
             {opened ? (
               <>
                 <button className="updater-popup__button" type="button" onClick={close}>
-                  Done
+                  {t('updater.done')}
                 </button>
                 <button
                   className="updater-popup__button updater-popup__button--primary"
@@ -183,17 +193,17 @@ export function UpdaterPopup() {
                     void quitOpenDesign();
                   }}
                 >
-                  {quitState === 'quitting' ? 'Quitting...' : 'Quit Open Design'}
+                  {quitState === 'quitting' ? t('updater.quitting') : t('updater.quitButton')}
                 </button>
               </>
             ) : failed ? (
               <button className="updater-popup__button" type="button" onClick={close}>
-                Done
+                {t('updater.done')}
               </button>
             ) : (
               <>
                 <button className="updater-popup__button" type="button" onClick={close}>
-                  Later
+                  {t('updater.later')}
                 </button>
                 <button
                   className="updater-popup__button updater-popup__button--primary"
@@ -204,7 +214,7 @@ export function UpdaterPopup() {
                     void openInstaller();
                   }}
                 >
-                  {installState === 'opening' ? 'Opening...' : 'Open installer'}
+                  {installState === 'opening' ? t('updater.opening') : t('updater.openInstaller')}
                 </button>
               </>
             )}

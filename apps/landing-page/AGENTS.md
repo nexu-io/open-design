@@ -96,6 +96,7 @@ Tightly coupled with:
 when **any** of these change:
 
 - `apps/landing-page/**`
+- `design-templates/open-design-landing/**`
 - `skills/**`
 - `design-systems/**`
 - `craft/**`
