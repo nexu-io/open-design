@@ -635,14 +635,19 @@ async function deleteProject(baseUrl: string, args: McpArgs) {
   if (args.confirm !== true) {
     return errorResult('confirm:true is required to delete a project (this cannot be undone).');
   }
-  const { id } = await resolveProjectArg(baseUrl, args.project);
+  const { id, resolved } = await resolveProjectArg(baseUrl, args.project);
   const url = `${baseUrl}/api/projects/${encodeURIComponent(id)}`;
   const resp = await fetch(url, { method: 'DELETE' });
   if (!resp.ok) {
     return errorResult(await formatDaemonError(resp, url));
   }
   const json = (await resp.json()) as JsonObject;
-  return ok(json);
+  // The tool accepts a name substring (see resolveProjectId), so the
+  // caller needs the resolvedProject echo to confirm which project was
+  // actually destroyed — same contract write_file/delete_file follow
+  // via withActiveEcho. active is always null here because the
+  // active-context fallback is intentionally disabled above.
+  return ok(withActiveEcho(json, null, resolved));
 }
 
 async function formatDaemonError(resp: Response, url: string): Promise<string> {

@@ -284,4 +284,116 @@ describe('public MCP delete_project', () => {
     expect(firstText(result)).toMatch(/project (id|is required)/i);
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it('echoes resolvedProject when the caller passed a name substring', async () => {
+    const base = nextBaseUrl();
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/api/projects') && (!init || init.method === undefined || init.method === 'GET')) {
+        return new Response(
+          JSON.stringify({ projects: [{ id: 'p1', name: 'Throwaway demo' }] }),
+          { status: 200 },
+        );
+      }
+      expect(init?.method).toBe('DELETE');
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    // 'throwaway' is a substring of 'Throwaway demo' — the tool accepts
+    // substrings per inputSchema, so the response must carry
+    // resolvedProject so the agent can confirm which row got destroyed.
+    const result = await handleMcpToolCall(base, 'delete_project', {
+      project: 'throwaway',
+      confirm: true,
+    });
+    expect(result).not.toMatchObject({ isError: true });
+    const body = JSON.parse(firstText(result as { content: Array<{ text: string }> }));
+    expect(body).toMatchObject({
+      ok: true,
+      resolvedProject: { id: 'p1', name: 'Throwaway demo' },
+    });
+  });
+});
+
+describe('formatDaemonError (shared error mapper)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    globalThis.fetch = originalFetch;
+  });
+
+  it('reformats a structured daemon error body as "code: message"', async () => {
+    const base = nextBaseUrl();
+    const fetchMock = vi.fn(async (url: string) =>
+      url.endsWith('/api/projects')
+        ? new Response(JSON.stringify({ projects: [{ id: 'p1', name: 'Demo' }] }), { status: 200 })
+        : new Response(
+            JSON.stringify({ error: { code: 'FILE_NOT_FOUND', message: 'no such file' } }),
+            { status: 404 },
+          ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await handleMcpToolCall(base, 'delete_file', {
+      project: 'Demo',
+      path: 'gone.html',
+    });
+    expect(result).toMatchObject({ isError: true });
+    const text = firstText(result as { content: Array<{ text: string }> });
+    // The mapper should fold the structured error into "code: message"
+    // and prefix the daemon status, so agents can branch on either.
+    expect(text).toContain('FILE_NOT_FOUND');
+    expect(text).toContain('no such file');
+    expect(text).toContain('404');
+  });
+
+  it('falls back to the raw body when the daemon does not return JSON', async () => {
+    const base = nextBaseUrl();
+    const fetchMock = vi.fn(async (url: string) =>
+      url.endsWith('/api/projects')
+        ? new Response(JSON.stringify({ projects: [{ id: 'p1', name: 'Demo' }] }), { status: 200 })
+        : new Response('upstream boom', { status: 502 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await handleMcpToolCall(base, 'delete_file', {
+      project: 'Demo',
+      path: 'gone.html',
+    });
+    expect(result).toMatchObject({ isError: true });
+    const text = firstText(result as { content: Array<{ text: string }> });
+    // JSON.parse throws on the non-JSON body and the catch fallthrough
+    // must preserve the raw text so the agent still sees the upstream
+    // signal.
+    expect(text).toContain('upstream boom');
+    expect(text).toContain('502');
+  });
+
+  it('surfaces a non-2xx that is also non-JSON on delete_project', async () => {
+    const base = nextBaseUrl();
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/api/projects') && (!init || init.method === undefined || init.method === 'GET')) {
+        return new Response(
+          JSON.stringify({ projects: [{ id: 'p1', name: 'Demo' }] }),
+          { status: 200 },
+        );
+      }
+      // 409 with structured body — verifies the irreversible tool's
+      // error path also flows through formatDaemonError.
+      return new Response(
+        JSON.stringify({ error: { code: 'PROJECT_LOCKED', message: 'in use' } }),
+        { status: 409 },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await handleMcpToolCall(base, 'delete_project', {
+      project: 'Demo',
+      confirm: true,
+    });
+    expect(result).toMatchObject({ isError: true });
+    const text = firstText(result as { content: Array<{ text: string }> });
+    expect(text).toContain('PROJECT_LOCKED');
+    expect(text).toContain('in use');
+    expect(text).toContain('409');
+  });
 });
