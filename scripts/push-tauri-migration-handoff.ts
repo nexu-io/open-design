@@ -54,6 +54,7 @@ async function main(): Promise<void> {
   const extracted = parsed.archive == null ? undefined : await extractArchive(parsed.archive);
   try {
     const args = await resolveArgs(parsed, extracted?.manifest);
+    process.stdout.write(`${handoffPushIdentity(args, extracted)}\n`);
     const importArgs = [
       "--cwd",
       args.cwd,
@@ -138,6 +139,23 @@ async function main(): Promise<void> {
       await rm(extracted.tempRoot, { force: true, recursive: true });
     }
   }
+}
+
+function handoffPushIdentity(
+  args: ResolvedArgs,
+  extracted?: {
+    archiveSha256: string;
+    commandScriptSha256: string;
+  },
+): string {
+  return [
+    "Prepared Tauri migration handoff push.",
+    `Remote: ${args.remote}`,
+    `Branch: ${args.branch} @ ${args.branchHead}`,
+    ...(extracted == null
+      ? []
+      : [`Archive SHA-256: ${extracted.archiveSha256}`, `Command script SHA-256: ${extracted.commandScriptSha256}`]),
+  ].join("\n");
 }
 
 function parseArgs(argv: string[]): Args {

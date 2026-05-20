@@ -77,6 +77,31 @@ test("push-tauri-migration-handoff can verify and push a packaged handoff archiv
   assert.equal(remoteHead, sourceHead);
 });
 
+test("push-tauri-migration-handoff prints handoff identity before remote push", async (t) => {
+  const { handoffDir, sourceHead, sourceRepo, targetRepo } = await createHandoffFixture(
+    t,
+    "open-design-tauri-push-handoff-pre-push-identity-",
+  );
+  const archivePath = join(dirname(handoffDir), "open-design-tauri-migration-handoff.tar.gz");
+  await runPackageHandoffScript("--root", sourceRepo, "--handoff-dir", handoffDir, "--output", archivePath);
+  const archiveSha256 = createHash("sha256").update(await readFile(archivePath)).digest("hex");
+  const commandScriptSha256 = createHash("sha256").update(await readFile(`${archivePath}.commands.sh`)).digest("hex");
+  const missingRemote = join(dirname(handoffDir), "missing.git");
+
+  await assert.rejects(
+    runPushHandoffScript(targetRepo, "--archive", archivePath, "--remote", missingRemote),
+    (error) => {
+      const detail = error as Error & { stdout?: string };
+      const stdout = detail.stdout ?? "";
+      assert.match(stdout, /Prepared Tauri migration handoff push/);
+      assert.match(stdout, new RegExp(`Branch: ${migrationBranch.replaceAll("/", "\\/")} @ ${sourceHead}`));
+      assert.match(stdout, new RegExp(`Archive SHA-256: ${archiveSha256}`));
+      assert.match(stdout, new RegExp(`Command script SHA-256: ${commandScriptSha256}`));
+      return true;
+    },
+  );
+});
+
 test("push-tauri-migration-handoff honors receiver workflow, report, and PR body paths", async (t) => {
   const { manifestPath, remotePath, sourceHead, targetRepo } = await createHandoffFixture(
     t,
