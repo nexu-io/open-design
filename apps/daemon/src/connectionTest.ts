@@ -48,7 +48,9 @@ import {
   validateBaseUrl,
   type AgentTestRequest,
   type BaseUrlValidationResult,
+  type ConnectionTestDiagnostics,
   type ConnectionTestKind,
+  type ConnectionTestPhase,
   type ConnectionTestProtocol,
   type ConnectionTestResponse,
   type ParsedBaseUrl,
@@ -1126,6 +1128,7 @@ async function testAgentConnectionInternal(
       model,
       agentName: input.agentId,
       detail: `Unknown agent id: ${input.agentId}`,
+      diagnostics: { phase: 'binary_resolution' },
     };
   }
   const configuredAgentEnv = agentCliEnvForAgent(
@@ -1141,6 +1144,7 @@ async function testAgentConnectionInternal(
       latencyMs: Date.now() - start,
       model,
       agentName: def.name,
+      diagnostics: { phase: 'binary_resolution' },
     };
   }
 
@@ -1151,6 +1155,33 @@ async function testAgentConnectionInternal(
   let timer: ReturnType<typeof setTimeout> | null = null;
   let abortHandler: (() => void) | null = null;
   const sink = createAgentSink();
+
+  // Phase tracker for structured diagnostics (#2248). The order matches
+  // the lifecycle: binary_resolution → spawn → connection_smoke_test →
+  // output_parse. Each result helper below stamps the *current* phase
+  // into the response so consumers don't have to scrape `detail` to
+  // know how far the test got. Phase is mutated at the points where
+  // the daemon meaningfully advances (just before spawn, when the
+  // child first produces stdout, etc.) — not on every event.
+  let phase: ConnectionTestPhase = 'binary_resolution';
+  const buildDiagnostics = (
+    overrides: Partial<ConnectionTestDiagnostics> = {},
+  ): ConnectionTestDiagnostics => {
+    const rawStderr = sink.getStderrTail().trim();
+    const rawStdout = sink.getRawStdoutTail().trim();
+    // `exactOptionalPropertyTypes: true` means we can't pass `undefined`
+    // to an optional field directly — conditionally spread instead so
+    // empty values just don't appear in the response.
+    return {
+      phase,
+      ...(executableResolution.launchPath
+        ? { binaryPath: executableResolution.launchPath }
+        : {}),
+      ...(rawStderr ? { stderrTail: redactSecrets(rawStderr) } : {}),
+      ...(rawStdout ? { stdoutTail: redactSecrets(rawStdout) } : {}),
+      ...overrides,
+    };
+  };
 
   const resultFromAgentText = (text: string): ConnectionTestResponse => {
     const latencyMs = Date.now() - start;
@@ -1168,6 +1199,7 @@ async function testAgentConnectionInternal(
         model,
         agentName: def.name,
         detail,
+        diagnostics: buildDiagnostics({ phase: 'output_parse' }),
       };
     }
     if (!isSmokeOkReply(text)) {
@@ -1183,6 +1215,7 @@ async function testAgentConnectionInternal(
       model,
       agentName: def.name,
       sample,
+      diagnostics: buildDiagnostics({ phase: 'connection_smoke_test', exitCode: 0 }),
     };
   };
 
@@ -1201,6 +1234,7 @@ async function testAgentConnectionInternal(
         model,
         agentName: def.name,
         detail: auth.message ?? cursorAuthGuidance(),
+        diagnostics: buildDiagnostics(),
       };
     }
     if (detail && isLikelyModelErrorText(detail)) {
@@ -1214,6 +1248,7 @@ async function testAgentConnectionInternal(
         model,
         agentName: def.name,
         detail,
+        diagnostics: buildDiagnostics({ phase: 'output_parse' }),
       };
     }
     console.warn(
@@ -1226,6 +1261,7 @@ async function testAgentConnectionInternal(
       model,
       agentName: def.name,
       detail,
+      diagnostics: buildDiagnostics(),
     };
   };
 
@@ -1240,6 +1276,7 @@ async function testAgentConnectionInternal(
       latencyMs,
       model,
       agentName: def.name,
+      diagnostics: buildDiagnostics(),
     };
   };
 
@@ -1291,6 +1328,12 @@ async function testAgentConnectionInternal(
       args,
       env,
     });
+    // We are about to hand off to child_process.spawn(). Any failure
+    // from here on (ENOENT, bad argv, non-zero exit) belongs to the
+    // 'spawn' phase rather than 'binary_resolution', so flip the tracker
+    // *before* spawning. resultFromAgentText flips it again to
+    // 'connection_smoke_test' / 'output_parse' once we get text out.
+    phase = 'spawn';
     child = spawn(invocation.command, invocation.args, {
       env,
       stdio: [stdinMode, 'pipe', 'pipe'],
@@ -1344,6 +1387,9 @@ async function testAgentConnectionInternal(
           model,
           agentName: def.name,
           detail: `${detail}${guidance}`,
+          diagnostics: buildDiagnostics({
+            phase: isMissing ? 'binary_resolution' : 'spawn',
+          }),
         };
       }
 
@@ -1401,6 +1447,11 @@ async function testAgentConnectionInternal(
           model,
           agentName: def.name,
           detail: auth.message ?? cursorAuthGuidance(),
+          diagnostics: buildDiagnostics({
+            phase: 'connection_smoke_test',
+            exitCode: winner.code,
+            signal: winner.signal,
+          }),
         };
       }
       const claudeDiagnostic = diagnoseClaudeCliFailure({
@@ -1422,6 +1473,11 @@ async function testAgentConnectionInternal(
           model,
           agentName: def.name,
           detail: claudeDiagnostic.detail,
+          diagnostics: buildDiagnostics({
+            phase: 'spawn',
+            exitCode: winner.code,
+            signal: winner.signal,
+          }),
         };
       }
       const detail = redactSecrets(
@@ -1446,6 +1502,11 @@ async function testAgentConnectionInternal(
         agentName: def.name,
         detail:
           `${detail || 'Agent exited without producing assistant text'}${guidance}`,
+        diagnostics: buildDiagnostics({
+          phase: buffered ? 'output_parse' : 'spawn',
+          exitCode: winner.code,
+          signal: winner.signal,
+        }),
       };
     };
 
