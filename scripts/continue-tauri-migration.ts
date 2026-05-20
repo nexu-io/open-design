@@ -46,7 +46,14 @@ type MigrationStatus = {
   };
   handoffArchive?: {
     archive: string;
+    checksum?: string;
+    commandScript?: string;
+    commandScriptChecksum?: string;
+    commandScriptExpectedSha256?: string;
+    commandScriptSha256?: string;
     current?: boolean;
+    expectedSha256?: string;
+    sha256?: string;
   };
   heartbeat?: {
     current: boolean;
@@ -306,7 +313,7 @@ async function continueM4(args: Args, status: MigrationStatus, log: string[]): P
         });
       } catch (error) {
         const hint: string[] = [];
-        appendTransferableHandoffHint(args, archive, hint);
+        appendTransferableHandoffHint(args, archive, hint, { archiveStatus: status.handoffArchive, expectedHead });
         throw new Error(
           [
             error instanceof Error ? error.message : String(error),
@@ -327,7 +334,7 @@ async function continueM4(args: Args, status: MigrationStatus, log: string[]): P
           log.push("The planned push is likely blocked on this host; use the transferable handoff path below.");
           remoteCurrent = false;
         }
-        appendTransferableHandoffHint(args, archive, log);
+        appendTransferableHandoffHint(args, archive, log, { archiveStatus: status.handoffArchive, expectedHead });
       }
       if (!args.dryRun) {
         currentStatus = await readStatus(args);
@@ -338,7 +345,7 @@ async function continueM4(args: Args, status: MigrationStatus, log: string[]): P
       }
     } else {
       log.push("Push skipped.");
-      appendTransferableHandoffHint(args, archive, log);
+      appendTransferableHandoffHint(args, archive, log, { archiveStatus: status.handoffArchive, expectedHead });
       remoteCurrent = false;
     }
   }
@@ -438,14 +445,36 @@ async function preflightDryRunPush(args: Args): Promise<{ ok: true } | { message
   }
 }
 
-function appendTransferableHandoffHint(args: Args, archive: string, log: string[]): void {
+function appendTransferableHandoffHint(
+  args: Args,
+  archive: string,
+  log: string[],
+  context: { archiveStatus?: MigrationStatus["handoffArchive"]; expectedHead?: string } = {},
+): void {
+  const archivePath = context.archiveStatus?.archive ?? archive;
+  const checksumPath = context.archiveStatus?.checksum ?? `${archive}.sha256`;
+  const commandScriptPath = context.archiveStatus?.commandScript ?? `${archive}.commands.sh`;
+  const commandScriptChecksumPath = context.archiveStatus?.commandScriptChecksum ?? `${archive}.commands.sh.sha256`;
+  const archiveSha256 = context.archiveStatus?.sha256 ?? context.archiveStatus?.expectedSha256;
+  const commandScriptSha256 =
+    context.archiveStatus?.commandScriptSha256 ?? context.archiveStatus?.commandScriptExpectedSha256;
+
   log.push("If this host lacks repository write access, transfer the current packaged handoff to a write-capable checkout:");
-  log.push(`  ${archive}`);
-  log.push(`  ${archive}.sha256`);
-  log.push(`  ${archive}.commands.sh`);
-  log.push(`  ${archive}.commands.sh.sha256`);
+  if (context.expectedHead != null) {
+    log.push(`  Expected remote head: ${args.branch} @ ${context.expectedHead}`);
+  }
+  if (archiveSha256 != null) {
+    log.push(`  Archive SHA-256: ${archiveSha256}`);
+  }
+  if (commandScriptSha256 != null) {
+    log.push(`  Command script SHA-256: ${commandScriptSha256}`);
+  }
+  log.push(`  ${archivePath}`);
+  log.push(`  ${checksumPath}`);
+  log.push(`  ${commandScriptPath}`);
+  log.push(`  ${commandScriptChecksumPath}`);
   log.push("Then run the command sidecar from that checkout:");
-  log.push(`  ${formatCommand(`${archive}.commands.sh`, [archive])}`);
+  log.push(`  ${formatCommand(commandScriptPath, [archivePath])}`);
   log.push("After the receiver push succeeds, native CI dispatch requires GH_BIN/gh or a manual draft PR from that receiver.");
   log.push(
     `The command sidecar prints the ${formatCommand(args.ghBin, ["workflow", "run", args.workflow, "--ref", args.branch])} and draft PR fallback commands if dispatch cannot run.`,

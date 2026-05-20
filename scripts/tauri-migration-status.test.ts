@@ -1297,7 +1297,7 @@ test("continue-tauri-migration dry-run plans a branch push from current handoff 
   const head = await initGitFixture(fixture);
   const handoffDir = join(fixture, "handoff");
   await writeHandoffFixture(handoffDir, { branchHead: head });
-  const { archivePath } = await writeHandoffArchive(handoffDir);
+  const { archivePath, archiveSha256 } = await writeHandoffArchive(handoffDir);
   const remotePath = join(fixture, "empty.git");
   await git(fixture, "init", "--bare", remotePath);
 
@@ -1318,6 +1318,9 @@ test("continue-tauri-migration dry-run plans a branch push from current handoff 
   assert.match(result.stdout, /Would push codex\/electron-to-tauri-migration/);
   assert.match(result.stdout, /Dry-run push preflight succeeded/);
   assert.match(result.stdout, /If this host lacks repository write access/);
+  assert.match(result.stdout, new RegExp(`Expected remote head: codex\\/electron-to-tauri-migration @ ${head}`));
+  assert.match(result.stdout, new RegExp(`Archive SHA-256: ${archiveSha256}`));
+  assert.match(result.stdout, /Command script SHA-256: [0-9a-f]{64}/);
   assert.match(result.stdout, new RegExp(escapeRegExp(archivePath)));
   assert.match(result.stdout, new RegExp(escapeRegExp(`${archivePath}.sha256`)));
   assert.match(result.stdout, new RegExp(escapeRegExp(`${archivePath}.commands.sh`)));
@@ -1374,7 +1377,7 @@ test("continue-tauri-migration dry-run stops after a failed push preflight", asy
   const head = await initGitFixture(fixture);
   const handoffDir = join(fixture, "handoff");
   await writeHandoffFixture(handoffDir, { branchHead: head });
-  const { archivePath } = await writeHandoffArchive(handoffDir);
+  const { archivePath, archiveSha256 } = await writeHandoffArchive(handoffDir);
   const remotePath = join(fixture, "missing.git");
 
   const result = await runContinue(fixture, "--handoff-dir", handoffDir, "--remote", remotePath, "--dry-run");
@@ -1382,6 +1385,9 @@ test("continue-tauri-migration dry-run stops after a failed push preflight", asy
   assert.match(result.stdout, /Would push codex\/electron-to-tauri-migration/);
   assert.match(result.stdout, /Dry-run push preflight failed/);
   assert.match(result.stdout, /The planned push is likely blocked on this host/);
+  assert.match(result.stdout, new RegExp(`Expected remote head: codex\\/electron-to-tauri-migration @ ${head}`));
+  assert.match(result.stdout, new RegExp(`Archive SHA-256: ${archiveSha256}`));
+  assert.match(result.stdout, /Command script SHA-256: [0-9a-f]{64}/);
   assert.match(result.stdout, new RegExp(escapeRegExp(archivePath)));
   assert.match(result.stdout, new RegExp(escapeRegExp(`${archivePath}.sha256`)));
   assert.match(result.stdout, new RegExp(escapeRegExp(`${archivePath}.commands.sh`)));
@@ -1699,7 +1705,7 @@ test("continue-tauri-migration reports transferable handoff paths when push fail
   const head = await initGitFixture(fixture);
   const handoffDir = join(fixture, "handoff");
   await writeHandoffFixture(handoffDir, { branchHead: head });
-  const { archivePath } = await writeHandoffArchive(handoffDir);
+  const { archivePath, archiveSha256 } = await writeHandoffArchive(handoffDir);
   const remotePath = join(fixture, "empty.git");
   await git(fixture, "init", "--bare", remotePath);
 
@@ -1709,6 +1715,9 @@ test("continue-tauri-migration reports transferable handoff paths when push fail
       const detail = error as Error & { stderr?: string };
       const stderr = detail.stderr ?? "";
       assert.match(stderr, /Remote handoff push failed/);
+      assert.match(stderr, new RegExp(`Expected remote head: codex\\/electron-to-tauri-migration @ ${head}`));
+      assert.match(stderr, new RegExp(`Archive SHA-256: ${archiveSha256}`));
+      assert.match(stderr, /Command script SHA-256: [0-9a-f]{64}/);
       assert.match(stderr, new RegExp(escapeRegExp(archivePath)));
       assert.match(stderr, new RegExp(escapeRegExp(`${archivePath}.sha256`)));
       assert.match(stderr, new RegExp(escapeRegExp(`${archivePath}.commands.sh`)));
