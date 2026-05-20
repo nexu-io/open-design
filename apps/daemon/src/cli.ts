@@ -3672,6 +3672,15 @@ function safeReadJsonFile(p) {
 }
 
 async function runProject(args) {
+  // Handoff owns its own help text (which lists the dedicated handoff
+  // flags) — dispatch it before the generic `od project` help gate so
+  // `od project handoff --help` reaches runProjectHandoff's USAGE rather
+  // than printing the generic project usage.
+  if (args[0] === 'handoff') {
+    const { exitCode } = await runProjectHandoff(args.slice(1));
+    if (exitCode !== 0) process.exit(exitCode);
+    return;
+  }
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
   od project create [--name "<title>"] [--skill <id>] [--design-system <id>]
@@ -3690,16 +3699,6 @@ Common options:
   }
   const sub = args[0];
   const rest = args.slice(1);
-  // Handoff owns its own flag parsing, daemon-URL resolution, and
-  // structured fail() output. Dispatch it before the generic project
-  // parser below so a malformed `od project handoff` invocation
-  // (`--unknown`, `--max-tokens` with no value) hits handoff-cli's
-  // machine-readable fail() path instead of throwing out of parseFlags.
-  if (sub === 'handoff') {
-    const { exitCode } = await runProjectHandoff(rest);
-    if (exitCode !== 0) process.exit(exitCode);
-    return;
-  }
   const flags = parseFlags(rest, { string: PROJECT_STRING_FLAGS, boolean: PROJECT_BOOLEAN_FLAGS });
   const base = (await projectDaemonUrl(flags)).replace(/\/$/, '');
   switch (sub) {

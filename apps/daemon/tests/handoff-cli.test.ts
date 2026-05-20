@@ -212,6 +212,21 @@ describe('od project handoff CLI', () => {
     expect(stderr.join('')).toContain('unknown option');
   });
 
+  it('prints the dedicated handoff usage on --help, not the generic od project help', async () => {
+    // The runProject entrypoint short-circuits `handoff` above its
+    // generic --help gate so this USAGE is what users actually see for
+    // `od project handoff --help`; the generic project help would hide
+    // the dedicated handoff flags entirely.
+    const result = await runProjectHandoff(['--help']);
+    expect(result.exitCode).toBe(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+    const out = stdout.join('');
+    expect(out).toContain('od project handoff');
+    expect(out).toContain('--conversation');
+    expect(out).toContain('--api-key');
+    expect(out).toContain('--model');
+  });
+
   it('fails fast when --max-tokens is given without a value', async () => {
     const result = await runProjectHandoff([
       'proj-1',
