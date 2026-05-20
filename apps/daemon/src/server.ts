@@ -10573,6 +10573,20 @@ export async function startServer({
           typeof reqBody.designSystemId === 'string'
             ? reqBody.designSystemId
             : undefined,
+        // `design_system_source` is required in the v2 contract
+        // (RunCreatedProps / RunFinishedProps). The daemon doesn't see
+        // whether the chosen design system was the workspace default,
+        // a user pick, or template-inherited — that signal lives only
+        // in the web client. Derive what we honestly know from the
+        // wire payload: 'not_applicable' when no design system was
+        // selected, 'unknown' otherwise. A follow-up that threads
+        // `designSystemSource` through `CreateRunRequest` can replace
+        // this with the precise value. See PR #2285 review 2026-05-20
+        // 04:35 for the rationale.
+        design_system_source:
+          typeof reqBody.designSystemId === 'string' && reqBody.designSystemId
+            ? 'unknown'
+            : 'not_applicable',
         has_attachment: Array.isArray(reqBody.attachments)
           ? (reqBody.attachments as unknown[]).length > 0
           : false,
