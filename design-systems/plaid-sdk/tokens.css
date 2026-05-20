@@ -1,0 +1,86 @@
+/* SHARED-SCHEMA-BLOCK - super-system, auto-added 2026-05-19 */
+:root {
+  --bg: var(--plaid-page);
+  --surface: #F4F5F7;
+  --fg: var(--plaid-ink);
+  --muted: var(--plaid-muted);
+  --border: var(--plaid-border);
+  --accent: var(--plaid-teal);
+  --font-display: var(--plaid-font);
+  --font-body: var(--plaid-font);
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-lg: 17px;
+  --text-xl: 19px;
+  --text-2xl: 24px;
+  --text-3xl: 32px;
+  --text-4xl: 44px;
+  --leading-body: 1.55;
+  --leading-tight: 1.20;
+  --tracking-display: -0.01em;
+  --section-y-desktop: 80px;
+  --section-y-tablet: 64px;
+  --section-y-phone: 48px;
+  --container-max: 1200px;
+  --container-gutter-desktop: 32px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #16a34a;
+  --warn: #eab308;
+  --danger: #dc2626;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 2px 8px color-mix(in oklab, var(--fg), transparent 92%);
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 60%);
+  --motion-fast: 120ms;
+  --motion-base: 220ms;
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --surface-warm: var(--surface);
+  --fg-2: var(--fg);
+  --meta: var(--muted);
+  --border-soft: var(--border);
+}
+
+:root {
+  --plaid-teal: #1AA39E;
+  --plaid-teal-soft: #D6F0EE;
+  --plaid-charcoal: #1F1F23;
+  --plaid-ink: #27272D;
+  --plaid-muted: #6E6E76;
+  --plaid-border: #E5E5E8;
+  --plaid-page: #FFFFFF;
+  --plaid-overlay: rgba(0,0,0,0.50);
+
+  --plaid-radius-card: 16px;
+  --plaid-radius-cta: 16px;
+  --plaid-radius-pill: 999px;
+
+  --plaid-shadow-sheet: 0 -8px 24px rgba(0,0,0,0.08);
+
+  --plaid-font: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+  --plaid-mono: "JetBrains Mono", "SF Mono", Menlo, monospace;
+
+  --plaid-text-title: 700 24px/28px var(--plaid-font);
+  --plaid-text-subtitle: 600 17px/24px var(--plaid-font);
+  --plaid-text-body: 400 16px/24px var(--plaid-font);
+  --plaid-text-label: 400 14px/18px var(--plaid-font);
+  --plaid-text-cta: 600 17px/22px var(--plaid-font);
+  --plaid-text-caps: 700 11px/14px var(--plaid-font);
+}

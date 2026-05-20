@@ -35,6 +35,15 @@ export interface ChatRequest {
   reasoning?: string | null;
   research?: ResearchOptions;
   context?: RunContextSelection;
+  /**
+   * Marks this run as part of a multi-CLI fan-out group. When the client
+   * fires the same brief at N agents in parallel, every POST /api/runs
+   * carries the same fanoutGroupId so the Compare view can list siblings.
+   * The daemon persists it as an opaque string and exposes a list filter
+   * `GET /api/runs?fanoutGroupId=...` — no orchestration logic on the
+   * daemon side; the web client coordinates the fan-out.
+   */
+  fanoutGroupId?: string | null;
 }
 
 export interface ChatRunCreateRequest extends ChatRequest {
@@ -89,10 +98,67 @@ export interface ChatRunStatusResponse {
   signal?: string | null;
   error?: string | null;
   errorCode?: string | null;
+  fanoutGroupId?: string | null;
+  /** Present on fan-out group responses so Compare can render completed output. */
+  outputText?: string | null;
+  /**
+   * `git stash create` hash captured immediately before the agent
+   * started writing files. Set when the project is a git repo. The
+   * web UI surfaces this as a one-click "Roll back to before this
+   * run" affordance via `git stash apply <hash>`.
+   */
+  preRunStashHash?: string | null;
 }
 
 export interface ChatRunListResponse {
   runs: ChatRunStatusResponse[];
+}
+
+/**
+ * Query filter for `GET /api/runs`. All fields are optional and ANDed.
+ * Extracted as a named shape so the daemon list-handler, the web Compare
+ * view, and `od fanout`'s status command can share a single source of
+ * truth for the query surface.
+ */
+export interface ChatRunListQuery {
+  projectId?: string;
+  conversationId?: string;
+  fanoutGroupId?: string;
+  limit?: number;
+}
+
+export interface FanoutGroupSummary {
+  fanoutGroupId: string;
+  /** First user-facing line of the shared brief, derived from any sibling's currentPrompt. */
+  brief: string;
+  createdAt: number;
+  /** Latest update timestamp across siblings — drives Compare list ordering. */
+  updatedAt: number;
+  /** Sibling runs ordered by createdAt asc. */
+  runs: ChatRunStatusResponse[];
+  /** Run id the user marked as the winner via the Compare view picker, if any. */
+  winnerRunId?: string | null;
+}
+
+export interface FanoutGroupListResponse {
+  groups: FanoutGroupSummary[];
+}
+
+/**
+ * Synthesizer "Suggest Winner" — picks one sibling as the best
+ * answer for the shared brief and returns a short rationale. The
+ * daemon also flips the winner flag on the run record so the
+ * Compare card's star badge stays in sync without a separate
+ * winner-set call from the client.
+ */
+export interface FanoutSuggestWinnerResponse {
+  winnerRunId: string;
+  rationale: string;
+  candidates: {
+    runId: string;
+    agentId: string | null;
+    textLength: number;
+  }[];
 }
 
 export interface ChatRunCancelResponse {
@@ -169,6 +235,10 @@ export interface ChatMessage {
   attachments?: ChatAttachment[];
   commentAttachments?: ChatCommentAttachment[];
   producedFiles?: ProjectFile[];
+  // When set, this assistant message was part of a multi-CLI fan-out
+  // group. The chat thread shows a "View in Compare" link that deep-
+  // links to /compare?group=<id> with the group pre-expanded.
+  fanoutGroupId?: string | null;
   feedback?: ChatMessageFeedback;
   /**
    * Request-only marker for the final assistant-message persistence pass.

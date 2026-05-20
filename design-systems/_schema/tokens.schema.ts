@@ -240,6 +240,21 @@ export const BRAND_EXTENSIONS: Readonly<Record<string, readonly string[]>> = {
  */
 export const BRAND_EXTENSION_PREFIXES: readonly string[] = [
   "--tag-bg-",
+  // Super-system added brands (2026-05-19). Each lives in its own
+  // namespace so the prefix only matches that brand's own tokens — see
+  // design-systems/{bumble,case-tracker,microsoft-outlook,monarch-money,plaid-sdk}.
+  // Listed as prefixes (not BRAND_EXTENSIONS members) because each brand
+  // ships 20-55 namespaced tokens and enumerating them line-by-line
+  // doesn't add safety once the namespace is unique to the brand.
+  "--bumble-",
+  "--ct-",
+  "--outlook-",
+  "--avatar-", // microsoft-outlook avatar tint palette
+  "--monarch-",
+  "--plaid-",
+  // User-imported internal design systems (2026-05-19).
+  "--multica-",
+  "--eos-",
 ];
 
 /**

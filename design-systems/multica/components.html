@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Multica — Components</title>
+<style>
+/* SHARED-SCHEMA-BLOCK - multica (internal), 2026-05-19 */
+:root {
+  /* Multica design system — imported from
+   * ~/Projects/multica/packages/ui/styles/tokens.css. Indigo/blue
+   * brand at oklch(0.55 0.16 255) ≈ #4F60D2 used across the web +
+   * desktop apps for the EOS-Command stack. */
+  --bg: #FFFFFF;
+  --surface: #F7F8FA;
+  --fg: #0F172A;
+  --muted: #64748B;
+  --border: #E2E8F0;
+  --accent: oklch(0.55 0.16 255);
+  --font-display: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-lg: 16px;
+  --text-xl: 18px;
+  --text-2xl: 22px;
+  --text-3xl: 30px;
+  --text-4xl: 42px;
+  --leading-body: 1.55;
+  --leading-tight: 1.20;
+  --tracking-display: -0.012em;
+  --section-y-desktop: 72px;
+  --section-y-tablet: 56px;
+  --section-y-phone: 40px;
+  --container-max: 1240px;
+  --container-gutter-desktop: 32px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #16a34a;
+  --warn: #eab308;
+  --danger: #dc2626;
+  --font-mono: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, monospace;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 1px 3px rgba(15, 23, 42, 0.08), 0 4px 12px rgba(15, 23, 42, 0.06);
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 60%);
+  --motion-fast: 120ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+
+  --surface-warm: var(--surface);
+  --fg-2: var(--muted);
+  --meta: var(--muted);
+  --border-soft: var(--border);
+
+  /* Brand-extensions: EOS Command stack uses these for sidebar +
+   * priority chips. Listed under BRAND_EXTENSION_PREFIXES in
+   * design-systems/_schema/tokens.schema.ts via `--multica-`. */
+  --multica-brand: oklch(0.55 0.16 255);
+  --multica-priority-low: #16a34a;
+  --multica-priority-med: #eab308;
+  --multica-priority-high: #dc2626;
+  --multica-sidebar: #F1F5F9;
+  --multica-chart-1: oklch(0.65 0.18 255);
+  --multica-chart-2: oklch(0.65 0.18 150);
+  --multica-chart-3: oklch(0.70 0.18 60);
+  --multica-chart-4: oklch(0.70 0.16 320);
+  --multica-chart-5: oklch(0.60 0.18 30);
+}
+* { box-sizing: border-box; }
+body { margin: 0; padding: 32px; background: var(--bg); color: var(--fg); font: var(--text-base)/var(--leading-body) var(--font-body); }
+.stage { max-width: 920px; margin: 0 auto; display: grid; gap: 18px; }
+h1 { font-size: var(--text-3xl); letter-spacing: var(--tracking-display); margin: 0 0 6px; }
+h2 { font-size: var(--text-lg); margin: 16px 0 6px; color: var(--fg); }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+.btn { padding: 8px 14px; border-radius: var(--radius-md); font: 600 13px/1 var(--font-body); border: 1px solid var(--border); background: var(--surface); color: var(--fg); cursor: pointer; }
+.btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.btn-primary { background: var(--accent); color: var(--accent-on); border-color: var(--accent); }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-secondary { background: var(--surface); }
+
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 18px; box-shadow: var(--elev-raised); }
+.card .title { font: 600 var(--text-base)/1.2 var(--font-display); }
+.card .meta { font: var(--text-xs)/1 var(--font-mono); color: var(--meta); margin-top: 4px; }
+
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field label { font: 600 var(--text-xs)/1 var(--font-display); color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+input { padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); font: var(--text-base)/1.4 var(--font-body); color: var(--fg); background: var(--bg); }
+input:focus { outline: none; border-color: var(--accent); box-shadow: var(--focus-ring); }
+
+.badge { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: var(--radius-pill); font: 600 var(--text-xs)/1 var(--font-mono); }
+.badge-low { background: color-mix(in srgb, var(--multica-priority-low) 14%, transparent); color: var(--multica-priority-low); }
+.badge-med { background: color-mix(in srgb, var(--multica-priority-med) 18%, transparent); color: #92400e; }
+.badge-high { background: color-mix(in srgb, var(--multica-priority-high) 14%, transparent); color: var(--multica-priority-high); }
+
+.sidebar { width: 240px; background: var(--multica-sidebar); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 12px; }
+.sidebar .item { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: var(--radius-sm); font: 500 var(--text-sm)/1 var(--font-body); color: var(--fg); cursor: pointer; }
+.sidebar .item.active { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); font-weight: 600; }
+
+kbd { font: var(--text-xs)/1 var(--font-mono); padding: 2px 6px; border-radius: 4px; background: var(--surface); border: 1px solid var(--border); color: var(--fg); }
+</style>
+</head>
+<body>
+<div class="stage">
+  <h1>Multica</h1>
+  <p style="color:var(--muted);margin:0">Multi-agent operator console — internal design system imported 2026-05-19.</p>
+
+  <h2>Buttons</h2>
+  <div class="row">
+    <button class="btn btn-primary">Run All</button>
+    <button class="btn btn-secondary">Pause</button>
+    <button class="btn">Cancel</button>
+  </div>
+
+  <h2>Priority chips</h2>
+  <div class="row">
+    <span class="badge badge-low">low</span>
+    <span class="badge badge-med">medium</span>
+    <span class="badge badge-high">high</span>
+  </div>
+
+  <h2>Card</h2>
+  <div class="card">
+    <div class="title">claude-stream-43d8</div>
+    <div class="meta">running · started 12s ago · agent=claude</div>
+  </div>
+
+  <h2>Field</h2>
+  <div class="field" style="max-width:320px">
+    <label>Brief</label>
+    <input type="text" placeholder="Build a hero with scroll-driven motion" />
+  </div>
+
+  <h2>Sidebar</h2>
+  <div class="sidebar">
+    <div class="item active">Dashboard <kbd>⌘1</kbd></div>
+    <div class="item">Runs</div>
+    <div class="item">Skills</div>
+    <div class="item">Settings</div>
+  </div>
+</div>
+</body>
+</html>

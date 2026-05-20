@@ -43,6 +43,32 @@ describe('chat run service shutdown', () => {
     ).toEqual([runB]);
   });
 
+  it('includes completed fan-out output in group summaries', () => {
+    const runs = createRuns();
+    const run = runs.create({
+      agentId: 'codex',
+      fanoutGroupId: 'group-1',
+      currentPrompt: 'Build a hero',
+    });
+
+    runs.emit(run, 'agent', { type: 'text_delta', delta: '<!doctype html>' });
+    runs.emit(run, 'agent', { type: 'text_delta', delta: '<html><body>Done</body></html>' });
+    runs.finish(run, 'succeeded', 0, null);
+
+    expect(runs.listFanoutGroups({ limit: 10 })).toMatchObject([
+      {
+        fanoutGroupId: 'group-1',
+        runs: [
+          {
+            agentId: 'codex',
+            status: 'succeeded',
+            outputText: '<!doctype html><html><body>Done</body></html>',
+          },
+        ],
+      },
+    ]);
+  });
+
   it('cancels active runs and terminates their child process during daemon shutdown', async () => {
     const runs = createRuns();
     const child = new FakeChildProcess({ closeOn: 'SIGTERM' });

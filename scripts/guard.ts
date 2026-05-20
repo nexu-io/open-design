@@ -36,6 +36,7 @@ const residualExtensions = new Set([".js", ".mjs", ".cjs"]);
 const residualSkippedDirectories = new Set([
   ".agents",
   ".astro",
+  ".browser-pilot", // Local-only daemon scratch; .gitignored, generated runtime JS.
   ".claude",
   ".claude-sessions",
   ".codex",

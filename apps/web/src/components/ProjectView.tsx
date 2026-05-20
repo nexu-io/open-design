@@ -19,7 +19,9 @@ import {
   listActiveChatRuns,
   reattachDaemonRun,
   streamViaDaemon,
+  type DaemonStreamHandlers,
 } from '../providers/daemon';
+import { getFanoutRoleSuffix } from './FanOutButton';
 import { fetchElevenLabsVoiceOptions } from '../providers/elevenlabs-voices';
 import {
   deletePreviewComment,
@@ -2249,6 +2251,221 @@ export function ProjectView({
     ],
   );
 
+  // Multi-CLI fan-out dispatcher. Deliberately a separate function from
+  // handleSend so its 350-line single-agent path stays unmodified.
+  // Trade-off: fan-out runs render basic assistant text in the Compare
+  // tab without the rich artifact/preview pipeline. That's the right
+  // default for "shoot one brief at 4 CLIs and compare" — the user picks
+  // a winner and re-opens it in a normal chat for full polish.
+  const handleFanout = useCallback(
+    async (
+      prompt: string,
+      attachments: ChatAttachment[],
+      commentAttachments: ChatCommentAttachment[],
+      agentIds: string[],
+      meta?: ChatSendMeta,
+    ) => {
+      if (!activeConversationId) return;
+      if (messagesConversationIdRef.current !== activeConversationId) return;
+      if (currentConversationBusy) return;
+      const ids = agentIds.filter((id) => agentsById.has(id));
+      if (ids.length < 2) {
+        // Degrade to single-agent when only one survives the install
+        // filter. Picking the first agent matches the user's intent more
+        // closely than silently failing.
+        if (ids.length === 1) {
+          await handleSend(prompt, attachments, commentAttachments, {
+            ...meta,
+            agentIds: undefined,
+          });
+        }
+        return;
+      }
+      const runConversationId = activeConversationId;
+      const startedAt = Date.now();
+      const fanoutGroupId = randomUUID();
+      const userMsg: ChatMessage = {
+        id: randomUUID(),
+        role: 'user',
+        content: prompt,
+        createdAt: startedAt,
+        attachments: attachments.length > 0 ? attachments : undefined,
+        commentAttachments: commentAttachments.length > 0 ? commentAttachments : undefined,
+      };
+      const nextHistory = [...messages, userMsg];
+
+      const siblings = ids.map((agentId) => {
+        const info = agentsById.get(agentId);
+        const choice = config.agentModels?.[agentId];
+        return {
+          agentId,
+          agentName: info?.name ?? agentId,
+          assistantId: randomUUID(),
+          model: choice?.model ?? null,
+          reasoning: choice?.reasoning ?? null,
+        };
+      });
+
+      const assistantMsgs: ChatMessage[] = siblings.map((s) => ({
+        id: s.assistantId,
+        role: 'assistant',
+        content: '',
+        agentId: s.agentId,
+        agentName: s.agentName,
+        events: [],
+        createdAt: startedAt,
+        runStatus: 'running',
+        startedAt,
+        fanoutGroupId,
+      }));
+
+      setMessages([...nextHistory, ...assistantMsgs]);
+      markStreamingConversation(runConversationId);
+      onTouchProject();
+      persistMessage(userMsg);
+      for (const m of assistantMsgs) persistMessage(m);
+
+      const updateSibling = (
+        assistantId: string,
+        updater: (prev: ChatMessage) => ChatMessage,
+      ) => {
+        setMessages((curr) => curr.map((m) => (m.id === assistantId ? updater(m) : m)));
+      };
+
+      // Dispatch every sibling in parallel. Each carries the shared
+      // fanoutGroupId, so the daemon's /api/runs/fanout-groups endpoint
+      // can list them together for the Compare tab. Failures are
+      // isolated per-agent — one CLI crashing doesn't take the others
+      // down.
+      await Promise.all(
+        siblings.map(async (s) => {
+          const controller = new AbortController();
+          const cancelController = new AbortController();
+          let buffered = '';
+          // Per-agent role suffix — borrowed from LobeHub's Agent Groups.
+          // Each CLI gets a soft instruction nudging it toward its
+          // documented strength (claude=taste, codex=logic, …). The
+          // suffix lives ONLY in this agent's run history; siblings
+          // never see each other's suffix, so we keep four distinct
+          // briefs derived from one user message.
+          const suffix = getFanoutRoleSuffix(s.agentId);
+          const perAgentHistory = suffix
+            ? nextHistory.map((m, i) =>
+                i === nextHistory.length - 1 && m.role === 'user'
+                  ? { ...m, content: `${m.content}\n\n[Role: ${s.agentId} — ${suffix}]` }
+                  : m,
+              )
+            : nextHistory;
+          await streamViaDaemon({
+            agentId: s.agentId,
+            history: perAgentHistory,
+            signal: controller.signal,
+            cancelSignal: cancelController.signal,
+            projectId: project.id,
+            conversationId: runConversationId,
+            assistantMessageId: s.assistantId,
+            clientRequestId: randomUUID(),
+            skillId: project.skillId ?? null,
+            skillIds: Array.isArray(meta?.skillIds) ? meta.skillIds : [],
+            context: meta?.context,
+            designSystemId: project.designSystemId ?? null,
+            fanoutGroupId,
+            attachments: attachments.map((a) => a.path),
+            commentAttachments,
+            research: meta?.research,
+            model: s.model,
+            reasoning: s.reasoning,
+            handlers: {
+              onDelta: (delta) => {
+                buffered += delta;
+                updateSibling(s.assistantId, (prev) => ({ ...prev, content: prev.content + delta }));
+              },
+              onAgentEvent: () => {
+                // Compare view renders assistant content only; events
+                // are intentionally suppressed to keep the side-by-side
+                // cards comparable. The full event stream is still on
+                // /api/runs/:id/events for deep dives.
+              },
+              onDone: () => {
+                const endedAt = Date.now();
+                updateSibling(s.assistantId, (prev) => ({
+                  ...prev,
+                  endedAt,
+                  runStatus: 'succeeded',
+                }));
+                persistMessageById(s.assistantId);
+              },
+              onError: (err) => {
+                const endedAt = Date.now();
+                updateSibling(s.assistantId, (prev) => ({
+                  ...prev,
+                  endedAt,
+                  runStatus: 'failed',
+                  content: prev.content || `(${err.message})`,
+                }));
+                persistMessageById(s.assistantId);
+              },
+            },
+            onRunCreated: (runId) => {
+              updateSibling(s.assistantId, (prev) => ({ ...prev, runId, runStatus: 'queued' }));
+            },
+            onRunStatus: (runStatus) => {
+              const endedAt = isTerminalRunStatus(runStatus) ? Date.now() : undefined;
+              updateSibling(s.assistantId, (prev) => ({
+                ...prev,
+                runStatus,
+                endedAt: endedAt === undefined ? prev.endedAt : prev.endedAt ?? endedAt,
+              }));
+            },
+          });
+          // Silence the unused-binding lint when bundled output strips
+          // the local. The buffer keeps last-known text for the
+          // persist-on-error branch above.
+          void buffered;
+        }),
+      );
+
+      clearStreamingMarker(runConversationId);
+    },
+    [
+      activeConversationId,
+      agentsById,
+      config.agentModels,
+      currentConversationBusy,
+      handleSend,
+      markStreamingConversation,
+      messages,
+      onTouchProject,
+      persistMessage,
+      persistMessageById,
+      project.designSystemId,
+      project.id,
+      project.skillId,
+      setMessages,
+      clearStreamingMarker,
+    ],
+  );
+
+  // Composer routes here. Multi-agent fan-out diverts to handleFanout;
+  // every other send (single-agent, research, hatched skills) keeps the
+  // existing handleSend path.
+  const handleSendOrFanout = useCallback(
+    async (
+      prompt: string,
+      attachments: ChatAttachment[],
+      commentAttachments: ChatCommentAttachment[],
+      meta?: ChatSendMeta,
+    ) => {
+      const ids = meta?.agentIds;
+      if (Array.isArray(ids) && ids.length >= 2) {
+        await handleFanout(prompt, attachments, commentAttachments, ids, meta);
+        return;
+      }
+      await handleSend(prompt, attachments, commentAttachments, meta);
+    },
+    [handleFanout, handleSend],
+  );
+
   useEffect(() => {
     if (!autoAuditRepairSeed) return;
     if (!activeConversationId) return;
@@ -3366,7 +3583,7 @@ export function ProjectView({
               onAttachComment={attachPreviewComment}
               onDetachComment={detachPreviewComment}
               onDeleteComment={(commentId) => void removePreviewComment(commentId)}
-              onSend={handleSend}
+              onSend={handleSendOrFanout}
               onStop={handleStop}
               onRequestOpenFile={requestOpenFile}
               onRequestPluginFolderAgentAction={handlePluginFolderAgentAction}
@@ -3391,6 +3608,14 @@ export function ProjectView({
               onTogglePet={onTogglePet}
               onOpenPetSettings={onOpenPetSettings}
               researchAvailable={config.mode === 'daemon'}
+              agents={agents}
+              currentAgentId={config.agentId ?? null}
+              fanoutSupported={config.mode === 'daemon'}
+              projectDesignSystemId={project.designSystemId ?? null}
+              onProjectDesignSystemChange={(nextId) => {
+                onProjectChange({ ...project, designSystemId: nextId });
+                void patchProject(project.id, { designSystemId: nextId });
+              }}
               byokApiProtocol={config.apiProtocol}
               byokImageModel={byokImageModelOverride}
               onChangeByokImageModel={setByokImageModelOverride}

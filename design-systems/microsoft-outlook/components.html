@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Microsoft Outlook iOS — Components Preview</title>
+  <link rel="stylesheet" href="tokens.css" />
+  <style>
+:root {
+  --bg: var(--outlook-surface);
+  --surface: var(--outlook-surface-sunken);
+  --fg: var(--outlook-ink);
+  --muted: var(--outlook-muted);
+  --border: var(--outlook-border);
+  --accent: var(--outlook-blue);
+  --font-display: var(--outlook-font);
+  --font-body: var(--outlook-font);
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-lg: 17px;
+  --text-xl: 19px;
+  --text-2xl: 24px;
+  --text-3xl: 32px;
+  --text-4xl: 44px;
+  --leading-body: 1.55;
+  --leading-tight: 1.20;
+  --tracking-display: -0.01em;
+  --section-y-desktop: 80px;
+  --section-y-tablet: 64px;
+  --section-y-phone: 48px;
+  --container-max: 1200px;
+  --container-gutter-desktop: 32px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #16a34a;
+  --warn: #eab308;
+  --danger: #dc2626;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 2px 8px color-mix(in oklab, var(--fg), transparent 92%);
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 60%);
+  --motion-fast: 120ms;
+  --motion-base: 220ms;
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --surface-warm: var(--surface);
+  --fg-2: var(--fg);
+  --meta: var(--muted);
+  --border-soft: var(--border);
+}
+</style>
+<style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 32px;
+      background: #F3F2F1;
+      font-family: var(--outlook-font);
+      color: var(--outlook-ink);
+      -webkit-font-smoothing: antialiased;
+    }
+    .stage {
+      max-width: 420px;
+      margin: 0 auto;
+      background: var(--outlook-surface);
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+    }
+    h2.section {
+      font: var(--outlook-text-headline);
+      letter-spacing: var(--outlook-tracking-headline);
+      margin: 32px 0 8px;
+      color: var(--outlook-ink);
+    }
+    p.caption {
+      font: var(--outlook-text-meta);
+      color: var(--outlook-muted);
+      margin: 0 0 16px;
+    }
+
+    /* === Header band ===================================================== */
+    .header {
+      background: var(--outlook-header-bg);
+      color: var(--outlook-ink-inverse);
+      padding: 18px 20px 16px;
+    }
+    .header-top {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .header-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: var(--outlook-radius-pill);
+      background: var(--avatar-pink);
+      color: white;
+      display: grid;
+      place-items: center;
+      font: 600 13px/1 var(--outlook-font);
+    }
+    .header-title {
+      font: var(--outlook-text-title);
+      letter-spacing: var(--outlook-tracking-tight);
+      flex: 1;
+    }
+    .header-actions {
+      display: flex;
+      gap: 18px;
+      color: var(--outlook-ink-inverse);
+      font-size: 18px;
+    }
+    .header-actions span {
+      opacity: 0.95;
+    }
+    /* Focused/Other segmented */
+    .segmented {
+      display: inline-flex;
+      align-items: center;
+      gap: 0;
+      background: var(--outlook-blue-dark);
+      border-radius: var(--outlook-radius-pill);
+      padding: 4px;
+    }
+    .seg {
+      font: 600 13px/1 var(--outlook-font);
+      padding: 8px 16px;
+      border-radius: var(--outlook-radius-pill);
+      color: var(--outlook-ink-inverse);
+      opacity: 0.85;
+      cursor: pointer;
+    }
+    .seg.active {
+      background: var(--outlook-surface);
+      color: var(--outlook-blue-dark);
+      opacity: 1;
+    }
+    .header-row-2 {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .filter {
+      font: 600 13px/1 var(--outlook-font);
+      color: var(--outlook-ink-inverse);
+      opacity: 0.9;
+    }
+
+    /* === Section label =================================================== */
+    .section-label {
+      font: var(--outlook-text-meta);
+      color: var(--outlook-muted);
+      padding: 12px 20px 6px;
+      background: var(--outlook-surface);
+    }
+
+    /* === List row ======================================================== */
+    .row {
+      display: grid;
+      grid-template-columns: 24px 40px 1fr auto;
+      align-items: start;
+      gap: 0;
+      padding: 14px 20px;
+      background: var(--outlook-surface);
+      border-bottom: 1px solid var(--outlook-divider);
+      position: relative;
+    }
+    .unread-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: var(--outlook-radius-pill);
+      background: var(--outlook-blue);
+      margin-top: 8px;
+      justify-self: center;
+    }
+    .row.read .unread-dot { background: transparent; }
+    .avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: var(--outlook-radius-pill);
+      display: grid;
+      place-items: center;
+      color: white;
+      font: 600 16px/1 var(--outlook-font);
+    }
+    .avatar.terracotta { background: var(--avatar-terracotta); }
+    .avatar.sage { background: var(--avatar-sage); }
+    .avatar.lilac { background: var(--avatar-lilac); }
+    .avatar.cobalt { background: var(--avatar-cobalt); }
+    .row-body {
+      padding: 0 12px;
+      min-width: 0;
+    }
+    .row-sender {
+      font: var(--outlook-text-sender);
+      letter-spacing: var(--outlook-tracking-snug);
+      color: var(--outlook-ink);
+    }
+    .row-subject {
+      font: var(--outlook-text-subject);
+      color: var(--outlook-ink);
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .row.read .row-subject { font: var(--outlook-text-subject-read); }
+    .row-preview {
+      font: var(--outlook-text-body);
+      color: var(--outlook-muted);
+      margin-top: 2px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .row-time {
+      font: var(--outlook-text-meta);
+      color: var(--outlook-muted);
+      white-space: nowrap;
+    }
+
+    /* === Quick reply chips =============================================== */
+    .chips {
+      display: flex;
+      gap: 8px;
+      padding: 12px 20px;
+      background: var(--outlook-surface);
+      overflow-x: auto;
+    }
+    .chip {
+      flex-shrink: 0;
+      background: var(--outlook-blue-light);
+      color: var(--outlook-blue);
+      font: var(--outlook-text-chip);
+      padding: 8px 14px;
+      border-radius: var(--outlook-radius-pill);
+      border: 1px solid rgba(31, 98, 176, 0.08);
+    }
+
+    /* === Compose pill ==================================================== */
+    .compose {
+      display: flex;
+      gap: 4px;
+      background: var(--outlook-surface);
+      border-radius: var(--outlook-radius-md);
+      padding: 8px;
+      box-shadow: var(--outlook-shadow-pill);
+      align-self: flex-end;
+      margin: 16px 20px 0 auto;
+      width: fit-content;
+    }
+    .compose .icon-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      color: var(--outlook-blue);
+      cursor: pointer;
+    }
+
+    /* === Bottom navigation =============================================== */
+    .bottom-nav {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      background: var(--outlook-surface);
+      border-top: 1px solid var(--outlook-divider);
+      padding: 12px 0 20px;
+    }
+    .nav-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      color: var(--outlook-muted);
+      font: 500 11px/1 var(--outlook-font);
+    }
+    .nav-item.active { color: var(--outlook-blue); font-weight: 600; }
+    .nav-icon { font-size: 20px; }
+
+    /* === Buttons ========================================================= */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 12px 18px;
+      border-radius: var(--outlook-radius-sm);
+      font: var(--outlook-text-button);
+      cursor: pointer;
+      border: none;
+    }
+    .btn-primary {
+      background: var(--outlook-blue);
+      color: var(--outlook-ink-inverse);
+    }
+    .btn-primary:active {
+      background: var(--outlook-blue-dark);
+    }
+    .btn-ghost {
+      background: transparent;
+      color: var(--outlook-blue);
+    }
+    .btn-destructive {
+      background: transparent;
+      color: var(--outlook-red);
+    }
+
+    /* === Action sheet ===================================================== */
+    .sheet {
+      background: var(--outlook-surface);
+      border-radius: 14px 14px 0 0;
+      padding: 8px;
+      box-shadow: var(--outlook-shadow-sheet);
+    }
+    .sheet-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 16px 12px;
+      font: var(--outlook-text-button);
+      color: var(--outlook-ink);
+      border-bottom: 1px solid var(--outlook-divider);
+    }
+    .sheet-row:last-child { border-bottom: none; }
+    .sheet-cancel {
+      background: var(--outlook-surface);
+      border-radius: 14px;
+      padding: 16px;
+      text-align: center;
+      margin-top: 8px;
+      color: var(--outlook-blue);
+      font: var(--outlook-text-button);
+      box-shadow: var(--outlook-shadow-pill);
+    }
+  </style>
+</head>
+<body>
+
+  <h2 class="section">Inbox stage</h2>
+  <p class="caption">Header + segmented + list rows + compose pill + bottom nav</p>
+
+  <div class="stage">
+    <div class="header">
+      <div class="header-top">
+        <div class="header-avatar">SL</div>
+        <div class="header-title">Inbox</div>
+        <div class="header-actions"><span>&#9432;</span><span>&#128269;</span></div>
+      </div>
+      <div class="header-row-2">
+        <div class="segmented">
+          <span class="seg active">Focused</span>
+          <span class="seg">Other</span>
+        </div>
+        <span class="filter">&#9776; Filter</span>
+      </div>
+    </div>
+
+    <div class="section-label">Yesterday</div>
+    <div class="row">
+      <div class="unread-dot"></div>
+      <div class="avatar terracotta">A</div>
+      <div class="row-body">
+        <div class="row-sender">Alex</div>
+        <div class="row-subject">Follow-Up on Work</div>
+        <div class="row-preview">Hi Sam, I wanted to follow up regarding our recent work discussion. Please let me know if there are updates...</div>
+      </div>
+      <div class="row-time">Wed</div>
+    </div>
+
+    <div class="section-label">This Week</div>
+    <div class="row">
+      <div class="unread-dot"></div>
+      <div class="avatar sage">A</div>
+      <div class="row-body">
+        <div class="row-sender">Amazon</div>
+        <div class="row-subject">Verify your new Amazon account</div>
+        <div class="row-preview">Verify your new Amazon account. To verify your email address, please use the following code...</div>
+      </div>
+      <div class="row-time">Tue</div>
+    </div>
+
+    <div class="row">
+      <div class="unread-dot"></div>
+      <div class="avatar lilac">I</div>
+      <div class="row-body">
+        <div class="row-sender">Ibotta</div>
+        <div class="row-subject">Please confirm your email address</div>
+        <div class="row-preview">Let's make it official. Hi Sam — are you ready to make it official? Confirm your email by clicking...</div>
+      </div>
+      <div class="row-time">Mon</div>
+    </div>
+
+    <div class="row read">
+      <div class="unread-dot"></div>
+      <div class="avatar cobalt">F</div>
+      <div class="row-body">
+        <div class="row-sender">Faire</div>
+        <div class="row-subject">Faire Market starts now</div>
+        <div class="row-preview">You can now shop the best deals of the season at the world's largest online wholesale market...</div>
+      </div>
+      <div class="row-time">21/1/26</div>
+    </div>
+
+    <div class="compose">
+      <div class="icon-btn">&#9998;</div>
+      <div class="icon-btn">&#9998;&#43;</div>
+    </div>
+
+    <div class="bottom-nav">
+      <div class="nav-item active">
+        <div class="nav-icon">&#9993;</div>
+        <div>Email</div>
+      </div>
+      <div class="nav-item">
+        <div class="nav-icon">&#128197;</div>
+        <div>Calendar</div>
+      </div>
+      <div class="nav-item">
+        <div class="nav-icon">&#9707;</div>
+        <div>Apps</div>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="section">Quick reply chips</h2>
+  <div class="stage">
+    <div class="chips">
+      <div class="chip">Not at this time. Thank you.</div>
+      <div class="chip">Thank you, I will let you know.</div>
+      <div class="chip">Sounds good.</div>
+    </div>
+  </div>
+
+  <h2 class="section">Buttons</h2>
+  <div class="stage" style="padding: 24px;">
+    <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+      <button class="btn btn-primary">Send</button>
+      <button class="btn btn-ghost">Cancel</button>
+      <button class="btn btn-destructive">Discard draft</button>
+    </div>
+  </div>
+
+  <h2 class="section">Action sheet</h2>
+  <div class="stage" style="padding: 16px;">
+    <div class="sheet">
+      <div class="sheet-row">&#128100; Send Availability</div>
+      <div class="sheet-row">&#128197; Convert to Event</div>
+    </div>
+    <div class="sheet-cancel">Cancel</div>
+  </div>
+
+</body>
+</html>

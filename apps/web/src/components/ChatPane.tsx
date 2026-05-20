@@ -12,7 +12,7 @@ import {
 } from '../design-system-auto-prompt';
 import { latestTodoWriteInputFromMessages } from '../runtime/todos';
 import { TodoCard } from './ToolCard';
-import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, ChatMessageFeedbackChange, Conversation, PreviewComment, ProjectFile, ProjectMetadata, SkillSummary } from '../types';
+import type { AgentInfo, AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, ChatMessageFeedbackChange, Conversation, PreviewComment, ProjectFile, ProjectMetadata, SkillSummary } from '../types';
 import { dayKey, dayLabel, exactDateTime, messageTime, relativeTimeLong } from '../utils/chatTime';
 import { commentsToAttachments, simplePositionLabel } from '../comments';
 import { AssistantMessage } from './AssistantMessage';
@@ -21,6 +21,7 @@ import {
   type ChatComposerHandle,
   type ChatSendMeta,
 } from './ChatComposer';
+import { DesignSystemQuickChips } from './DesignSystemQuickChips';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { Icon } from './Icon';
 
@@ -285,6 +286,20 @@ interface Props {
   byokApiProtocol?: AppConfig['apiProtocol'];
   byokImageModel?: string;
   onChangeByokImageModel?: (model: string) => void;
+  // Multi-CLI fan-out wiring forwarded straight through to ChatComposer.
+  // `agents` is the installed-CLI list (already fetched by App for the
+  // AvatarMenu); `currentAgentId` pre-checks the user's normal pick in
+  // FanOutButton; `fanoutSupported` mirrors `mode === 'daemon'` (BYOK
+  // mode can't run local CLIs in parallel).
+  agents?: AgentInfo[];
+  currentAgentId?: string | null;
+  fanoutSupported?: boolean;
+  // Design-system quick-pick chips above the composer. ProjectView owns
+  // the binding (`project.designSystemId`); ChatPane only renders the
+  // strip and routes the pick back up. Pass `undefined` to hide the
+  // strip entirely (e.g. on surfaces that don't have a project context).
+  projectDesignSystemId?: string | null;
+  onProjectDesignSystemChange?: (id: string | null) => void;
 }
 
 type Tab = 'chat' | 'comments';
@@ -336,6 +351,11 @@ export function ChatPane({
   byokApiProtocol,
   byokImageModel,
   onChangeByokImageModel,
+  agents = [],
+  currentAgentId = null,
+  fanoutSupported = false,
+  projectDesignSystemId = null,
+  onProjectDesignSystemChange,
 }: Props) {
   const t = useT();
   const logRef = useRef<HTMLDivElement | null>(null);
@@ -855,6 +875,12 @@ export function ChatPane({
             dismissedKey={dismissedPinnedTodoKey}
             onDismiss={setDismissedPinnedTodoKey}
           />
+          {onProjectDesignSystemChange ? (
+            <DesignSystemQuickChips
+              activeId={projectDesignSystemId}
+              onPick={onProjectDesignSystemChange}
+            />
+          ) : null}
           <ChatComposer
             ref={composerRef}
             projectId={projectId}
@@ -887,6 +913,9 @@ export function ChatPane({
             currentSkillId={currentSkillId}
             onProjectSkillChange={onProjectSkillChange}
             pinnedPluginId={activePluginSnapshot?.pluginId ?? null}
+            agents={agents}
+            currentAgentId={currentAgentId}
+            fanoutSupported={fanoutSupported}
           />
         </>
       ) : null}

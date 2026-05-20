@@ -19,6 +19,9 @@ import type {
   ChatSseEvent,
   ChatSseStartPayload,
   DaemonAgentPayload,
+  FanoutGroupListResponse,
+  FanoutGroupSummary,
+  FanoutSuggestWinnerResponse,
   ResearchOptions,
   RunContextSelection,
   SseErrorPayload,
@@ -169,6 +172,11 @@ export interface DaemonStreamOptions {
   // change the project's persistent `skillId`.
   skillIds?: string[];
   designSystemId?: string | null;
+  // Multi-CLI fan-out: when the user fires the same brief at N agents
+  // in parallel from the composer's Fan Out mode, every sibling call
+  // carries the same fanoutGroupId so the Compare tab can list them
+  // as one group. The daemon never sets this — the client does.
+  fanoutGroupId?: string | null;
   // Project-relative paths the user has staged for this turn. The
   // daemon resolves them inside the project folder, validates they
   // exist, and stitches them into the user message as `@<path>` hints.
@@ -230,6 +238,7 @@ export async function streamViaDaemon({
   skillId,
   skillIds,
   designSystemId,
+  fanoutGroupId,
   attachments,
   commentAttachments,
   model,
@@ -260,6 +269,7 @@ export async function streamViaDaemon({
     skillId: skillId ?? null,
     skillIds: Array.isArray(skillIds) ? skillIds : [],
     designSystemId: designSystemId ?? null,
+    fanoutGroupId: fanoutGroupId ?? null,
     attachments: attachments ?? [],
     commentAttachments: commentAttachments ?? [],
     model: model ?? null,
@@ -378,6 +388,110 @@ export async function listProjectRuns(): Promise<ChatRunStatusResponse[]> {
     return body.runs ?? [];
   } catch {
     return [];
+  }
+}
+
+// Compare view loader. Buckets runs by fanoutGroupId server-side so the
+// UI gets a ready-to-render list without re-coalescing. Errors swallow
+// to an empty list — the empty-state message is the right UX when the
+// daemon is asleep or the user hasn't fanned out yet.
+export async function listFanoutGroups(limit = 50): Promise<FanoutGroupSummary[]> {
+  try {
+    const qs = new URLSearchParams({ limit: String(limit) });
+    const resp = await fetch(`/api/runs/fanout-groups?${qs.toString()}`);
+    if (!resp.ok) return [];
+    const body = (await resp.json()) as FanoutGroupListResponse;
+    return body.groups ?? [];
+  } catch {
+    return [];
+  }
+}
+
+// Mark one sibling in a fan-out group as the winner. The daemon clears
+// the flag on every other sibling in the same group so the picker is
+// single-select. Returns the updated status row, or null on 404.
+export async function setRunWinner(runId: string): Promise<ChatRunStatusResponse | null> {
+  try {
+    const resp = await fetch(`/api/runs/${encodeURIComponent(runId)}/winner`, {
+      method: 'POST',
+    });
+    if (!resp.ok) return null;
+    return (await resp.json()) as ChatRunStatusResponse;
+  } catch {
+    return null;
+  }
+}
+
+// Save an agent's extracted-from-image design system to disk. Returns
+// the slug on success; the next /api/design-systems request surfaces
+// the new brand.
+export async function saveExtractedDesignSystem(payload: {
+  slug: string;
+  name: string;
+  tokensCss: string;
+  designMd: string;
+  componentsHtml?: string;
+}): Promise<{ slug: string; name: string } | null> {
+  try {
+    const resp = await fetch('/api/design-systems/save-from-extraction', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!resp.ok) return null;
+    return (await resp.json()) as { slug: string; name: string };
+  } catch {
+    return null;
+  }
+}
+
+// URL import — daemon fetches the URL server-side, strips JS noise,
+// returns a cleaned HTML snapshot. Composer stages the result as a
+// per-turn attachment so the agent has the reference in context.
+// Returns null on any failure (timeout, 4xx/5xx, non-HTML, too-large).
+export interface ImportedUrl {
+  url: string;
+  title: string;
+  host: string;
+  contentType: string;
+  byteLength: number;
+  html: string;
+  /** Set when projectId was supplied — the daemon wrote the cleaned
+   * HTML into <project>/.imports/<file>. The composer stages this path
+   * as a ChatAttachment so the agent reads it on the next turn. */
+  savedPath?: string | null;
+  savedName?: string | null;
+}
+export async function importUrl(url: string, projectId?: string | null): Promise<ImportedUrl | null> {
+  try {
+    const resp = await fetch('/api/import-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, projectId: projectId ?? undefined }),
+    });
+    if (!resp.ok) return null;
+    return (await resp.json()) as ImportedUrl;
+  } catch {
+    return null;
+  }
+}
+
+// Ask the daemon's synthesizer to pick a winner across the group's
+// succeeded siblings and return a short rationale. The daemon also
+// flips the winner flag on the chosen run record so the Compare view's
+// star badge stays in sync without a follow-up setRunWinner call.
+export async function suggestFanoutWinner(
+  groupId: string,
+): Promise<FanoutSuggestWinnerResponse | null> {
+  try {
+    const resp = await fetch(
+      `/api/runs/fanout-groups/${encodeURIComponent(groupId)}/suggest-winner`,
+      { method: 'POST' },
+    );
+    if (!resp.ok) return null;
+    return (await resp.json()) as FanoutSuggestWinnerResponse;
+  } catch {
+    return null;
   }
 }
 

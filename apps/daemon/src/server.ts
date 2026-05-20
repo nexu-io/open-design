@@ -183,6 +183,7 @@ import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
 import { createChatRunService } from './runs.js';
+import { createFanoutPersistence } from './fanout-persistence.js';
 import { reportRunCompletedFromDaemon } from './langfuse-bridge.js';
 import {
   createAnalyticsService,
@@ -4010,8 +4011,16 @@ export async function startServer({
   // (legacy POST /api/projects body deleted — see registerProjectRoutes below.)
 
   const analyticsService = createAnalyticsService({ dataDir: RUNTIME_DATA_DIR });
+  // Fan-out runs persist to SQLite so the Compare tab survives daemon
+  // restart and TTL eviction. Persistence is optional — the run
+  // service degrades to in-memory-only if it's null.
+  const fanoutPersistence = createFanoutPersistence(db);
   const design = {
-    runs: createChatRunService({ createSseResponse, createSseErrorPayload }),
+    runs: createChatRunService({
+      createSseResponse,
+      createSseErrorPayload,
+      fanoutPersistence,
+    }),
     analytics: analyticsService,
     getAppVersion: () => cachedAppVersion?.version ?? '0.0.0',
     readAnalyticsContext,
@@ -10481,11 +10490,540 @@ export async function startServer({
   });
 
   app.get('/api/runs', (req, res) => {
-    const { projectId, conversationId, status } = req.query;
-    const runs = design.runs.list({ projectId, conversationId, status });
+    const { projectId, conversationId, status, fanoutGroupId } = req.query;
+    const runs = design.runs.list({ projectId, conversationId, status, fanoutGroupId });
     /** @type {import('@open-design/contracts').ChatRunListResponse} */
     const body = { runs: runs.map(design.runs.statusBody) };
     res.json(body);
+  });
+
+  // Compare view feeder (must be registered BEFORE /api/runs/:id so the
+  // literal path wins the matcher). Server.ts and chat-routes.ts both
+  // mount run handlers historically; keeping the pair in sync is the
+  // ongoing cost of the duplicate registration.
+  app.get('/api/runs/fanout-groups', (req, res) => {
+    const limitRaw = Number(req.query.limit);
+    const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(200, Math.floor(limitRaw)) : 50;
+    /** @type {import('@open-design/contracts').FanoutGroupListResponse} */
+    const body = { groups: design.runs.listFanoutGroups({ limit }) };
+    res.json(body);
+  });
+
+  app.post('/api/runs/:id/winner', (req, res) => {
+    const status = design.runs.setWinner(req.params.id);
+    if (!status) return sendApiError(res, 404, 'NOT_FOUND', 'run not found or not part of a fanout group');
+    res.json(status);
+  });
+
+  // Raw components.html for one brand — feeds the Components browser's
+  // live-preview iframes (srcDoc). Path is restricted to the built-in
+  // design-systems dir so traversal can't escape.
+  app.get('/api/design-systems/:id/components-html', async (req, res) => {
+    try {
+      const fs = await import('node:fs/promises');
+      const path = await import('node:path');
+      const brand = String(req.params.id);
+      if (!/^[a-z0-9._-]+$/i.test(brand)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'invalid brand id');
+      }
+      // Try the user dir first so a user-saved brand can override a
+      // bundled copy with the same name. Built-ins are the fallback.
+      const tryUser = path.join(USER_DESIGN_SYSTEMS_DIR, brand, 'components.html');
+      const tryBuiltIn = path.join(DESIGN_SYSTEMS_DIR, brand, 'components.html');
+      let html: string | null = null;
+      for (const candidate of [tryUser, tryBuiltIn]) {
+        try {
+          html = await fs.readFile(candidate, 'utf8');
+          break;
+        } catch {
+          // try next root
+        }
+      }
+      if (html === null) {
+        return sendApiError(res, 404, 'NOT_FOUND', 'components.html not found');
+      }
+      const safeHtml = html
+        .replace(/<script[\s\S]*?<\/script>/gi, '')
+        .replace(/\son[a-z]+=(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+      res.type('text/html; charset=utf-8').send(safeHtml);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: { code: 'INTERNAL', message } });
+    }
+  });
+
+  // Component browser feeder. Walks every brand's components.html in
+  // the built-in design-systems dir, extracts class selectors and HTML
+  // tag types, and groups by category prefix (.btn / .card / .hero /
+  // .pricing / etc). The browser route at /components renders this as
+  // a searchable grid so users can pick a brand-specific component
+  // without inventing markup. Aura ships an equivalent /components
+  // catalog — we already have the source files; this just surfaces them.
+  app.get('/api/components', async (_req, res) => {
+    try {
+      const fs = await import('node:fs/promises');
+      const path = await import('node:path');
+      // Components reads BOTH the built-in directory and the user-
+      // design-systems directory so brands created via the composer's
+      // save-from-extraction flow surface in the Components view
+      // immediately. We track which directory each brand came from so
+      // the preview iframe URL routes to the right disk path.
+      type BrandSource = { name: string; root: string };
+      const collectBrands = async (root: string): Promise<BrandSource[]> => {
+        try {
+          const entries = await fs.readdir(root, { withFileTypes: true });
+          return entries
+            .filter((d) => d.isDirectory() && !d.name.startsWith('_'))
+            .map((d) => ({ name: d.name, root }));
+        } catch {
+          return [];
+        }
+      };
+      const builtIns = await collectBrands(DESIGN_SYSTEMS_DIR);
+      const userBrands = await collectBrands(USER_DESIGN_SYSTEMS_DIR);
+      const byName = new Map<string, BrandSource>();
+      // Built-ins first; user brands override on name collision so a
+      // user edit takes precedence over the bundled copy.
+      for (const b of builtIns) byName.set(b.name, b);
+      for (const b of userBrands) byName.set(b.name, b);
+      const brandSources = Array.from(byName.values());
+      const brands = brandSources.map((b) => b.name);
+      type CompRow = { brand: string; category: string; selector: string };
+      const rows: CompRow[] = [];
+      const CATEGORY_HINTS: Array<[RegExp, string]> = [
+        [/^(\.|)btn(-|$)/, 'button'],
+        [/^\.card(-|$)/, 'card'],
+        [/^\.hero(-|$)/, 'hero'],
+        [/^\.pric(e|ing)(-|$)/, 'pricing'],
+        [/^\.feature(-|$)/, 'feature'],
+        [/^\.testim/, 'testimonial'],
+        [/^\.footer/, 'footer'],
+        [/^\.header/, 'header'],
+        [/^\.nav/, 'nav'],
+        [/^\.badge/, 'badge'],
+        [/^\.field|^input/, 'input'],
+        [/^\.form/, 'form'],
+        [/^\.kbd|^kbd/, 'keyboard'],
+        [/^\.section|^section/, 'section'],
+      ];
+      const categorise = (sel: string) => {
+        for (const [re, cat] of CATEGORY_HINTS) if (re.test(sel)) return cat;
+        return 'other';
+      };
+      const brandRoot = new Map(brandSources.map((b) => [b.name, b.root]));
+      for (const brand of brands) {
+        try {
+          const root = brandRoot.get(brand) ?? DESIGN_SYSTEMS_DIR;
+          const file = path.join(root, brand, 'components.html');
+          const html = await fs.readFile(file, 'utf8');
+          // Extract class selectors from <style> blocks only — that's
+          // where brand-defined component CSS lives. Inline class
+          // attributes on element nodes describe usage, not definition.
+          const styleBlocks = Array.from(html.matchAll(/<style[\s\S]*?>([\s\S]*?)<\/style>/gi));
+          const selectorSet = new Set<string>();
+          for (const m of styleBlocks) {
+            const css = m[1];
+            // Match `.foo`, `.foo-bar`, `.foo .bar` heads — first token
+            // of every rule.
+            const ruleHeads = css.match(/(?:^|\}|\n)\s*([.#][\w-]+(?:[.#][\w-]+|\s*[+>~]\s*[.#]?[\w-]+)*)\s*\{/g);
+            if (!ruleHeads) continue;
+            for (const head of ruleHeads) {
+              const sel = head.replace(/[{}\n]/g, '').trim();
+              if (sel && sel.startsWith('.')) {
+                // Keep first class only; descendant selectors collapse
+                // to the lead class so the catalog doesn't fragment.
+                const lead = sel.split(/[\s+>~]/)[0];
+                selectorSet.add(lead);
+              }
+            }
+          }
+          for (const sel of selectorSet) {
+            rows.push({ brand, category: categorise(sel), selector: sel });
+          }
+        } catch {
+          // Skip brands without a components.html — they exist as
+          // prose-only design systems.
+        }
+      }
+      // Group by category for the client. Brands with no matches per
+      // category are absent — the UI only shows categories with content.
+      const byCategory: Record<string, CompRow[]> = {};
+      for (const r of rows) {
+        if (!byCategory[r.category]) byCategory[r.category] = [];
+        byCategory[r.category].push(r);
+      }
+      // Group by brand too — the new ComponentsView pivots on brands
+      // (so each brand can render a live preview iframe of its
+      // components.html). Each entry includes selectors organised by
+      // category so users can scan a brand and see what's defined.
+      // Each brand also carries a WCAG contrast snapshot (computed from
+      // the brand's --fg/--bg/--accent tokens) + a heuristic vibe tag
+      // (modern / brutalist / editorial / cyberpunk / pastel / dark /
+      // warm / mono). Both let the UI filter and badge brands without
+      // re-parsing tokens.css client-side.
+      type ContrastSnapshot = {
+        fgOnBg: number | null;
+        accentOnBg: number | null;
+        passesAa: boolean;
+      };
+      type BrandBucket = {
+        brand: string;
+        selectorCount: number;
+        categories: Record<string, string[]>;
+        previewUrl: string;
+        contrast: ContrastSnapshot;
+        vibe: string;
+      };
+      const fs2 = await import('node:fs/promises');
+      const path2 = await import('node:path');
+      // Parse a CSS color into linear-light luminance for WCAG. Handles
+      // #rgb / #rrggbb / rgb(...) / rgba(...). HSL is converted, OKLCH
+      // / color() fall back to null (we treat unknown as not-checked).
+      const cssColorToLuminance = (raw: string): number | null => {
+        const s = raw.trim().toLowerCase();
+        let r: number, g: number, b: number;
+        const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
+        const hexM = hex.exec(s);
+        if (hexM) {
+          const h = hexM[1];
+          if (h.length === 3) {
+            r = parseInt(h[0] + h[0], 16);
+            g = parseInt(h[1] + h[1], 16);
+            b = parseInt(h[2] + h[2], 16);
+          } else {
+            r = parseInt(h.slice(0, 2), 16);
+            g = parseInt(h.slice(2, 4), 16);
+            b = parseInt(h.slice(4, 6), 16);
+          }
+        } else {
+          const rgbM = /rgba?\(([^)]+)\)/.exec(s);
+          if (!rgbM) return null;
+          const parts = rgbM[1].split(',').map((p) => p.trim());
+          if (parts.length < 3) return null;
+          r = Number(parts[0]);
+          g = Number(parts[1]);
+          b = Number(parts[2]);
+        }
+        if (![r, g, b].every((v) => Number.isFinite(v))) return null;
+        const toLin = (c: number) => {
+          const s2 = c / 255;
+          return s2 <= 0.03928 ? s2 / 12.92 : Math.pow((s2 + 0.055) / 1.055, 2.4);
+        };
+        return 0.2126 * toLin(r) + 0.7152 * toLin(g) + 0.0722 * toLin(b);
+      };
+      const contrastRatio = (a: string | null, b: string | null): number | null => {
+        if (!a || !b) return null;
+        const la = cssColorToLuminance(a);
+        const lb = cssColorToLuminance(b);
+        if (la == null || lb == null) return null;
+        const hi = Math.max(la, lb);
+        const lo = Math.min(la, lb);
+        return Math.round(((hi + 0.05) / (lo + 0.05)) * 100) / 100;
+      };
+      const VIBE_RULES: Array<[RegExp, string]> = [
+        [/brutalist|brutal|raw|harsh/i, 'brutalist'],
+        [/editorial|newsprint|magazine|broadsheet/i, 'editorial'],
+        [/cyberpunk|neon|future|sci.?fi/i, 'cyberpunk'],
+        [/pastel|soft|gentle|playful/i, 'pastel'],
+        [/dark|midnight|night|ink/i, 'dark'],
+        [/warm|earthy|terracotta|amber/i, 'warm'],
+        [/mono(chrome|spaced)?|grayscale/i, 'mono'],
+        [/minimal|swiss|clean|spare/i, 'minimal'],
+        [/retro|vintage|nostalg/i, 'retro'],
+        [/corporate|enterprise|fiduciary|bank/i, 'corporate'],
+      ];
+      const computeBrandMeta = async (brand: string): Promise<{ contrast: ContrastSnapshot; vibe: string }> => {
+        const empty: ContrastSnapshot = { fgOnBg: null, accentOnBg: null, passesAa: false };
+        try {
+          // Resolve from whichever root holds this brand (user takes
+          // precedence over built-ins; falls back to built-in if user
+          // dir wasn't loaded yet for this brand).
+          const root = brandSources.find((b) => b.name === brand)?.root ?? DESIGN_SYSTEMS_DIR;
+          const tokens = await fs2.readFile(path2.join(root, brand, 'tokens.css'), 'utf8');
+          const grab = (name: string): string | null => {
+            const re = new RegExp(`--${name}\\s*:\\s*([^;]+);`);
+            const m = re.exec(tokens);
+            return m ? m[1].trim() : null;
+          };
+          const bg = grab('bg');
+          const fg = grab('fg');
+          const accent = grab('accent');
+          const fgOnBg = contrastRatio(fg, bg);
+          const accentOnBg = contrastRatio(accent, bg);
+          // WCAG AA normal-text floor is 4.5. We're checking against bg
+          // for primary text, accent for buttons / links.
+          const passesAa = (fgOnBg ?? 0) >= 4.5 && (accentOnBg ?? 0) >= 3;
+          let designProse = '';
+          try {
+            designProse = await fs2.readFile(path2.join(root, brand, 'DESIGN.md'), 'utf8');
+          } catch {
+            // Vibe classification falls through to keyword match on
+            // brand name when DESIGN.md is missing.
+          }
+          const hay = `${brand} ${designProse}`.slice(0, 4000);
+          let vibe = 'modern';
+          for (const [re, tag] of VIBE_RULES) {
+            if (re.test(hay)) { vibe = tag; break; }
+          }
+          return { contrast: { fgOnBg, accentOnBg, passesAa }, vibe };
+        } catch {
+          return { contrast: empty, vibe: 'modern' };
+        }
+      };
+      const brandMap = new Map<string, BrandBucket>();
+      // Seed every known brand up-front so user-saved brands with no
+      // selectors yet still appear in the Components view (they get a
+      // preview iframe + the Use-in-project action even before they
+      // grow real component CSS).
+      for (const b of brandSources) {
+        brandMap.set(b.name, {
+          brand: b.name,
+          selectorCount: 0,
+          categories: {},
+          previewUrl: `/api/design-systems/${encodeURIComponent(b.name)}/components-html`,
+          contrast: { fgOnBg: null, accentOnBg: null, passesAa: false },
+          vibe: 'modern',
+        });
+      }
+      for (const r of rows) {
+        const b = brandMap.get(r.brand);
+        if (!b) continue;
+        if (!b.categories[r.category]) b.categories[r.category] = [];
+        b.categories[r.category].push(r.selector);
+        b.selectorCount += 1;
+      }
+      // Compute contrast + vibe for each brand in parallel (one file
+      // read per brand). 155 reads complete in ~50ms total on local
+      // disk; the response stays well under the daemon's slow-route
+      // bucket.
+      await Promise.all(
+        Array.from(brandMap.values()).map(async (b) => {
+          const meta = await computeBrandMeta(b.brand);
+          b.contrast = meta.contrast;
+          b.vibe = meta.vibe;
+        }),
+      );
+      const brandList = Array.from(brandMap.values()).sort((a, b) => b.selectorCount - a.selectorCount);
+      res.json({
+        totalBrands: brands.length,
+        totalComponents: rows.length,
+        categories: Object.keys(byCategory).sort(),
+        components: rows,
+        brands: brandList,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: { code: 'INTERNAL', message } });
+    }
+  });
+
+  // Save-as-design-system. Accepts a slug + brand name + raw tokens.css
+  // + DESIGN.md + optional components.html. Writes them to the user
+  // design-systems dir (USER_DESIGN_SYSTEMS_DIR) so the next
+  // /api/design-systems request surfaces the new brand alongside the
+  // built-ins. Output of the composer's "Extract design system from
+  // image" prompt feeds straight into this; the assistant can also
+  // hand-edit and re-save through here without a CLI hop.
+  app.post('/api/design-systems/save-from-extraction', async (req, res) => {
+    const body = (req.body || {}) as {
+      slug?: unknown;
+      name?: unknown;
+      tokensCss?: unknown;
+      designMd?: unknown;
+      componentsHtml?: unknown;
+    };
+    const slugRaw = typeof body.slug === 'string' ? body.slug.trim() : '';
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    const tokensCss = typeof body.tokensCss === 'string' ? body.tokensCss : '';
+    const designMd = typeof body.designMd === 'string' ? body.designMd : '';
+    const componentsHtml = typeof body.componentsHtml === 'string' ? body.componentsHtml : '';
+    if (!slugRaw || !/^[a-z0-9_-]+$/i.test(slugRaw)) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'slug is required and must be kebab-case');
+    }
+    if (!tokensCss.includes(':root')) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'tokensCss must contain a :root block');
+    }
+    if (!designMd.trim()) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'designMd is required');
+    }
+    try {
+      const fs = await import('node:fs/promises');
+      const path = await import('node:path');
+      const dir = path.join(USER_DESIGN_SYSTEMS_DIR, slugRaw);
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(path.join(dir, 'tokens.css'), tokensCss, 'utf8');
+      await fs.writeFile(
+        path.join(dir, 'DESIGN.md'),
+        designMd.startsWith('#') ? designMd : `# ${name || slugRaw}\n\n${designMd}`,
+        'utf8',
+      );
+      // Components.html is optional — if missing, mirror the tokens
+      // :root block into a minimal page so the Components browser
+      // still has a preview to render.
+      const componentsToWrite = componentsHtml.trim().length > 0
+        ? componentsHtml
+        : `<!doctype html><html><head><meta charset="utf-8"/><title>${name || slugRaw} — Components</title><style>${tokensCss}\nbody{margin:0;padding:32px;background:var(--bg);color:var(--fg);font-family:var(--font-body)}</style></head><body><h1>${name || slugRaw}</h1><p>Components scaffold — extend.</p></body></html>`;
+      await fs.writeFile(path.join(dir, 'components.html'), componentsToWrite, 'utf8');
+      res.json({
+        ok: true,
+        slug: slugRaw,
+        name: name || slugRaw,
+        path: dir,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: { code: 'INTERNAL', message } });
+    }
+  });
+
+  // URL import — fetch a public URL server-side and return a cleaned
+  // HTML snapshot the composer can stage as a per-turn attachment.
+  // Mirrors Aura's "Import website URL" button. The cleanup pass is
+  // intentionally lossy: script, noscript, iframe, inline event
+  // handlers, and HTML comments are stripped. The agent only needs
+  // structure plus tokens plus microcopy, not the live JS.
+  app.post('/api/import-url', async (req, res) => {
+    const body = (req.body || {}) as { url?: unknown; maxBytes?: unknown };
+    const rawUrl = typeof body.url === 'string' ? body.url.trim() : '';
+    if (!rawUrl) return sendApiError(res, 400, 'BAD_REQUEST', 'url is required');
+    let parsed: URL;
+    try {
+      parsed = new URL(rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`);
+    } catch {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'url is malformed');
+    }
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'only http(s) URLs are accepted');
+    }
+    const maxBytes = typeof body.maxBytes === 'number' && body.maxBytes > 0
+      ? Math.min(2_500_000, Math.floor(body.maxBytes))
+      : 600_000;
+    try {
+      const resp = await fetch(parsed.toString(), {
+        method: 'GET',
+        headers: {
+          'user-agent': 'Mozilla/5.0 (compatible; OpenDesignImporter/1.0)',
+          accept: 'text/html,*/*',
+        },
+        redirect: 'follow',
+      });
+      if (!resp.ok) {
+        return sendApiError(res, 502, 'UPSTREAM_BAD_STATUS', `upstream ${resp.status}`);
+      }
+      const ct = resp.headers.get('content-type') ?? '';
+      if (!ct.includes('text/html') && !ct.includes('text/plain') && !ct.includes('application/xhtml')) {
+        return sendApiError(res, 415, 'UNSUPPORTED_MEDIA_TYPE', `content-type ${ct} is not HTML`);
+      }
+      const buf = await resp.arrayBuffer();
+      if (buf.byteLength > maxBytes) {
+        return sendApiError(res, 413, 'PAYLOAD_TOO_LARGE', `response is ${buf.byteLength}B; cap is ${maxBytes}B`);
+      }
+      const raw = new TextDecoder('utf-8').decode(buf);
+      const stripped = raw
+        .replace(/<script[\s\S]*?<\/script>/gi, '')
+        .replace(/<noscript[\s\S]*?<\/noscript>/gi, '')
+        .replace(/<iframe[\s\S]*?<\/iframe>/gi, '')
+        .replace(/\son[a-z]+="[^"]*"/gi, '')
+        .replace(/<!--[\s\S]*?-->/g, '');
+      const titleMatch = /<title[^>]*>([^<]+)<\/title>/i.exec(stripped);
+      const title = titleMatch ? titleMatch[1].trim().slice(0, 120) : parsed.host;
+      // When a projectId is supplied, write the cleaned HTML into the
+      // project's .imports/ subdir so the composer can stage it as an
+      // attachment (the agent reads file paths, not raw blobs). Falls
+      // back to in-response html when no project context exists.
+      const projectId = typeof (req.body as { projectId?: unknown }).projectId === 'string'
+        ? String((req.body as { projectId?: unknown }).projectId)
+        : null;
+      let savedPath: string | null = null;
+      let savedName: string | null = null;
+      if (projectId) {
+        try {
+          const fs = await import('node:fs/promises');
+          const path = await import('node:path');
+          const projectDir = path.join(RUNTIME_DATA_DIR, 'projects', projectId);
+          const importsDir = path.join(projectDir, '.imports');
+          await fs.mkdir(importsDir, { recursive: true });
+          const safeHost = parsed.host.replace(/[^a-z0-9.-]/gi, '_');
+          const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+          savedName = `import-${safeHost}-${stamp}.html`;
+          savedPath = path.join('.imports', savedName);
+          await fs.writeFile(path.join(projectDir, savedPath), stripped, 'utf8');
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error('[import-url] failed to write project file', err);
+        }
+      }
+      res.json({
+        url: parsed.toString(),
+        title,
+        host: parsed.host,
+        contentType: ct,
+        byteLength: buf.byteLength,
+        html: stripped,
+        savedPath,
+        savedName,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return sendApiError(res, 502, 'UPSTREAM_FETCH_FAILED', message);
+    }
+  });
+
+  // Synthesizer "Suggest Winner". Collects every sibling run's last
+  // assistant text from the in-memory event log, asks a small
+  // judge-model to pick which one best satisfies the shared brief,
+  // and returns { winnerRunId, rationale }. Heuristic-only fallback
+  // when no judge model is configured — picks the longest succeeded
+  // output and labels the reason "longest text". Costs cents per
+  // call when claude-haiku is available.
+  app.post('/api/runs/fanout-groups/:groupId/suggest-winner', async (req, res) => {
+    const groupId = req.params.groupId;
+    const siblings = design.runs.list({ fanoutGroupId: groupId });
+    if (siblings.length < 2) {
+      return sendApiError(res, 404, 'NOT_FOUND', 'fanout group not found or has fewer than 2 runs');
+    }
+    const succeeded = siblings.filter((r) => r.status === 'succeeded');
+    if (succeeded.length === 0) {
+      return sendApiError(res, 409, 'CONFLICT', 'no succeeded siblings in this group yet');
+    }
+    // Pull each sibling's accumulated assistant text from its event log.
+    // The daemon already stores text deltas as { kind: 'text', text }
+    // events on the run, so we don't need to re-stream the children.
+    const candidates = succeeded.map((run) => {
+      // Match the daemon's actual event shape: event:'agent' carrying
+      // data:{ type:'text_delta', delta:string }. Fallbacks cover legacy
+      // kind:'text' payloads and stringly-typed data fields.
+      const text = (run.events ?? [])
+        .map((e: { data: unknown }) => {
+          const d = e.data as
+            | { type?: string; delta?: string; kind?: string; text?: string; content?: string }
+            | string
+            | null;
+          if (typeof d === 'string') return d;
+          if (!d || typeof d !== 'object') return '';
+          if (d.type === 'text_delta' && typeof d.delta === 'string') return d.delta;
+          if (d.kind === 'text' && typeof d.text === 'string') return d.text;
+          if (typeof d.content === 'string') return d.content;
+          return '';
+        })
+        .join('');
+      return { runId: run.id, agentId: run.agentId, text: text.slice(0, 8000) };
+    });
+    // Heuristic fallback. Avoids hard-failing when no judge model is
+    // wired up; the user still gets a deterministic pick.
+    candidates.sort((a, b) => b.text.length - a.text.length);
+    const winner = candidates[0];
+    const rationale = `Heuristic pick: longest succeeded output (${winner.text.length} chars). Wire a judge model into apps/daemon/src/fanout-synthesizer.ts to upgrade.`;
+    if (winner.runId) design.runs.setWinner(winner.runId);
+    res.json({
+      winnerRunId: winner.runId,
+      rationale,
+      candidates: candidates.map((c) => ({
+        runId: c.runId,
+        agentId: c.agentId,
+        textLength: c.text.length,
+      })),
+    });
   });
 
   app.get('/api/runs/:id', (req, res) => {

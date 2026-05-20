@@ -21,6 +21,8 @@ import {
   DesignSystemCreationFlow,
   DesignSystemDetailView,
 } from './components/DesignSystemFlow';
+import { SkillDetailView } from './components/SkillDetailView';
+import { CommandPalette } from './components/CommandPalette';
 import {
   SettingsDialog,
   switchApiProtocolConfig,
@@ -1243,6 +1245,8 @@ export function App() {
         onProjectsRefresh={refreshProjects}
       />
     );
+  } else if (route.kind === 'skill-detail') {
+    appMain = <SkillDetailView skillId={route.skillId} />;
   } else if (activeProject) {
     appMain = (
       <ProjectView
@@ -1345,6 +1349,7 @@ export function App() {
   }
   return (
     <>
+      <CommandPalette />
       <div
         className={`workspace-shell workspace-shell--${clientType}`}
         data-client-type={clientType}

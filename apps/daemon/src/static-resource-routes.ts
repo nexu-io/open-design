@@ -216,6 +216,39 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     }
   });
 
+  // GET /api/skills/:id/files/* — read a specific text file from the
+  // skill directory. The detail page uses this for adjacent docs such
+  // as PATTERNS.md and RESEARCH.md, which are not under assets/.
+  app.get('/api/skills/:id/files/*', async (req, res) => {
+    try {
+      const skills = await listAllSkills();
+      const skill = findSkillById(skills, req.params.id);
+      if (!skill) {
+        return sendApiError(res, 404, 'NOT_FOUND', 'skill not found');
+      }
+      const relPath = String((req.params as any)[0] || '');
+      const root = path.resolve(skill.dir);
+      const target = path.resolve(root, relPath);
+      if (target !== root && !target.startsWith(root + path.sep)) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'invalid file path');
+      }
+      const stat = await fs.promises.stat(target);
+      if (!stat.isFile()) {
+        return sendApiError(res, 404, 'NOT_FOUND', 'skill file not found');
+      }
+      if (stat.size > 1_000_000) {
+        return sendApiError(res, 413, 'PAYLOAD_TOO_LARGE', 'skill file is too large to preview');
+      }
+      const body = await fs.promises.readFile(target, 'utf8');
+      res.type('text/plain; charset=utf-8').send(body);
+    } catch (err: any) {
+      if (err?.code === 'ENOENT') {
+        return sendApiError(res, 404, 'NOT_FOUND', 'skill file not found');
+      }
+      sendApiError(res, 500, 'INTERNAL_ERROR', String(err));
+    }
+  });
+
   // Codex hatch-pet registry — pets packaged by the upstream `hatch-pet`
   // skill under `${CODEX_HOME:-$HOME/.codex}/pets/`. Surfaced so the web
   // pet settings can offer one-click adoption of recently-hatched pets.

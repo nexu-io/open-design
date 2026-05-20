@@ -1905,6 +1905,42 @@ export interface Dict {
   'agentPicker.notInstalled': string;
   'agentPicker.rescan': string;
 
+  // Fan-out picker — composer button + popover
+  'fanout.title': string;
+  'fanout.popoverTitle': string;
+  'fanout.selectAll': string;
+  'fanout.confirmN': string;
+  'fanout.confirmHint': string;
+  'fanout.installAnother': string;
+  'fanout.installAnotherHint': string;
+  'fanout.usePlaybook': string;
+  'fanout.usePlaybookHint': string;
+  'compare.suggestWinner': string;
+  'compare.suggestWinnerHint': string;
+  'compare.researchLink': string;
+  'chat.importUrlTitle': string;
+  'chat.importUrlAria': string;
+  'chat.importUrlPrompt': string;
+  'chat.importUrlFailed': string;
+  'entry.navComponents': string;
+  'components.title': string;
+  'components.empty': string;
+  'components.copySelector': string;
+
+  // Compare view — left-rail nav + tab body
+  'entry.navCompare': string;
+  'compare.title': string;
+  'compare.empty': string;
+  'compare.groupHeader': string;
+  'compare.openGroup': string;
+  'compare.markWinner': string;
+  'compare.winnerBadge': string;
+
+  // Design-system quick chips (above composer)
+  'designSystemChips.label': string;
+  'designSystemChips.none': string;
+  'designSystemChips.cleared': string;
+
   // Tool cards (assistant action cards)
   'tool.openInTab': string;
   'tool.open': string;

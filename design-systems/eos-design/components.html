@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>EOS Design — Components</title>
+<style>
+/* SHARED-SCHEMA-BLOCK - eos-design (internal), 2026-05-19 */
+:root {
+  /* EOS Design System — imported from
+   * ~/Projects/EOS AGENCY/enoch-macos-portfolio/src/css/theme.css.
+   * Apple Action Blue (#007AFF) on a HSL grey ramp. The portfolio
+   * site that mimics macOS chrome — used as the foundation for any
+   * Apple-flavored internal tool. */
+  --bg: #FFFFFF;
+  --surface: #F5F5F7;
+  --fg: #1D1D1F;
+  --muted: #616161;
+  --border: #D2D2D7;
+  --accent: hsl(211, 100%, 50%);
+  --font-display: -apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", "Helvetica", "Arial", sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", "Helvetica", "Arial", sans-serif;
+
+  --text-xs: 11px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-lg: 17px;
+  --text-xl: 21px;
+  --text-2xl: 28px;
+  --text-3xl: 40px;
+  --text-4xl: 56px;
+  --leading-body: 1.47;
+  --leading-tight: 1.10;
+  --tracking-display: -0.015em;
+  --section-y-desktop: 100px;
+  --section-y-tablet: 72px;
+  --section-y-phone: 48px;
+  --container-max: 1280px;
+  --container-gutter-desktop: 32px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 20px;
+
+  --accent-on: #ffffff;
+  --accent-hover: hsl(211, 100%, 47%);
+  --accent-active: hsl(211, 100%, 42%);
+  --success: #34c759;
+  --warn: #ff9500;
+  --danger: #ff3b30;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Monaco, monospace;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-pill: 980px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 8px 30px rgba(0, 0, 0, 0.08);
+  --focus-ring: 0 0 0 3px hsla(211, 100%, 50%, 0.5);
+  --motion-fast: 100ms;
+  --motion-base: 180ms;
+  --ease-standard: cubic-bezier(0.28, 0, 0.22, 1);
+
+  --surface-warm: #FBFBFD;
+  --fg-2: #3F3F46;
+  --meta: var(--muted);
+  --border-soft: #E5E5EA;
+
+  /* Apple-flavored extensions — grey ramp 50→900 from the portfolio
+   * theme. Listed under BRAND_EXTENSION_PREFIXES via `--eos-`. */
+  --eos-grey-50: #FAFAFA;
+  --eos-grey-100: #F5F5F5;
+  --eos-grey-200: #EEEEEE;
+  --eos-grey-300: #E0E0E0;
+  --eos-grey-400: #BDBDBD;
+  --eos-grey-500: #9E9E9E;
+  --eos-grey-700: #616161;
+  --eos-grey-900: #212121;
+  --eos-window-shadow: 0 12px 48px rgba(0, 0, 0, 0.18), 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+* { box-sizing: border-box; }
+body { margin: 0; padding: 32px; background: var(--surface); color: var(--fg); font: var(--text-base)/var(--leading-body) var(--font-body); }
+.stage { max-width: 720px; margin: 0 auto; display: grid; gap: 22px; }
+h1 { font: 700 var(--text-3xl)/var(--leading-tight) var(--font-display); letter-spacing: var(--tracking-display); margin: 0; }
+h2 { font: 600 var(--text-lg)/1.2 var(--font-display); margin: 14px 0 4px; }
+
+.window { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--eos-window-shadow); overflow: hidden; }
+.window-bar { display: flex; align-items: center; gap: 8px; padding: 12px 16px; background: var(--surface-warm); border-bottom: 1px solid var(--border-soft); }
+.window-bar .dot { width: 12px; height: 12px; border-radius: 50%; }
+.window-bar .dot.r { background: var(--danger); }
+.window-bar .dot.y { background: var(--warn); }
+.window-bar .dot.g { background: var(--success); }
+.window-bar .title { flex: 1; text-align: center; font: 600 var(--text-sm)/1 var(--font-display); color: var(--fg-2); }
+.window-body { padding: 20px; }
+
+.btn { padding: 6px 16px; border-radius: var(--radius-pill); font: 600 var(--text-sm)/1 var(--font-body); border: 1px solid transparent; background: var(--surface); color: var(--fg); cursor: pointer; transition: background var(--motion-fast) var(--ease-standard); }
+.btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.btn-primary { background: var(--accent); color: var(--accent-on); }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-secondary { background: var(--bg); border-color: var(--border); }
+
+.card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 16px; }
+
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field label { font: 600 var(--text-xs)/1 var(--font-display); color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+input { padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); font: var(--text-base)/1.2 var(--font-body); color: var(--fg); background: var(--bg); }
+input:focus { outline: none; border-color: var(--accent); box-shadow: var(--focus-ring); }
+
+.badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: var(--radius-pill); font: 600 var(--text-xs)/1.4 var(--font-body); background: var(--surface); color: var(--fg-2); border: 1px solid var(--border-soft); }
+
+kbd { font: var(--text-xs)/1 var(--font-mono); padding: 2px 5px; border-radius: 4px; background: var(--surface); border: 1px solid var(--border); color: var(--fg-2); }
+</style>
+</head>
+<body>
+<div class="stage">
+  <h1>EOS Design</h1>
+  <p style="color:var(--muted);margin:0">macOS-chrome design system — imported from enochodu portfolio.</p>
+
+  <h2>Window</h2>
+  <div class="window">
+    <div class="window-bar">
+      <span class="dot r"></span>
+      <span class="dot y"></span>
+      <span class="dot g"></span>
+      <span class="title">Untitled</span>
+      <span style="width:36px"></span>
+    </div>
+    <div class="window-body">
+      <div class="card">
+        <div style="font:600 var(--text-base)/1.2 var(--font-display)">A Mac-flavored card</div>
+        <div style="margin-top:6px;color:var(--muted);font-size:var(--text-sm)">Soft border, large radius, no drop-shadow on the card itself — chrome lives on the window.</div>
+      </div>
+    </div>
+  </div>
+
+  <h2>Buttons</h2>
+  <div style="display:flex;gap:10px;flex-wrap:wrap">
+    <button class="btn btn-primary">Continue</button>
+    <button class="btn btn-secondary">Cancel</button>
+    <button class="btn">Help</button>
+  </div>
+
+  <h2>Field</h2>
+  <div class="field" style="max-width:320px">
+    <label>Project name</label>
+    <input type="text" value="Untitled" />
+  </div>
+
+  <h2>Badge + Keyboard</h2>
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <span class="badge">v0.7</span>
+    <span class="badge" style="background:color-mix(in srgb, var(--accent) 12%, transparent);color:var(--accent);border-color:transparent">beta</span>
+    <span>Press <kbd>⌘</kbd> + <kbd>S</kbd> to save</span>
+  </div>
+</div>
+</body>
+</html>

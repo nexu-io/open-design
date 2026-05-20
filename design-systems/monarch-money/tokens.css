@@ -1,0 +1,92 @@
+/* SHARED-SCHEMA-BLOCK - super-system, auto-added 2026-05-19 */
+:root {
+  --bg: var(--monarch-card);
+  --surface: var(--monarch-banding);
+  --fg: var(--monarch-ink);
+  --muted: var(--monarch-muted);
+  --border: var(--monarch-border);
+  --accent: var(--monarch-navy);
+  --font-display: var(--monarch-font);
+  --font-body: var(--monarch-font);
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-lg: 17px;
+  --text-xl: 19px;
+  --text-2xl: 24px;
+  --text-3xl: 32px;
+  --text-4xl: 44px;
+  --leading-body: 1.55;
+  --leading-tight: 1.20;
+  --tracking-display: -0.01em;
+  --section-y-desktop: 80px;
+  --section-y-tablet: 64px;
+  --section-y-phone: 48px;
+  --container-max: 1200px;
+  --container-gutter-desktop: 32px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #16a34a;
+  --warn: #eab308;
+  --danger: #dc2626;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 2px 8px color-mix(in oklab, var(--fg), transparent 92%);
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 60%);
+  --motion-fast: 120ms;
+  --motion-base: 220ms;
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --surface-warm: var(--surface);
+  --fg-2: var(--fg);
+  --meta: var(--muted);
+  --border-soft: var(--border);
+}
+
+:root {
+  --monarch-navy: #1A3158;
+  --monarch-navy-deep: #0F1F3C;
+  --monarch-coral: #E8748A;
+  --monarch-coral-soft: #FCDCE0;
+  --monarch-mint-soft: #DCEFE3;
+  --monarch-mint: #1F8B5C;
+
+  --monarch-ink: #0E1A2E;
+  --monarch-subhead: #3F4A5B;
+  --monarch-muted: #7E8694;
+  --monarch-border: #D8DCE3;
+  --monarch-banding: #F1F2F4;
+  --monarch-card: #FFFFFF;
+
+  --monarch-radius-sm: 6px;
+  --monarch-radius-md: 12px;
+  --monarch-radius-pill: 999px;
+
+  --monarch-font: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+  --monarch-mono: "SF Mono", "JetBrains Mono", Menlo, monospace;
+
+  --monarch-text-month: 600 17px/22px var(--monarch-font);
+  --monarch-text-alert: 700 17px/22px var(--monarch-font);
+  --monarch-text-category: 700 17px/22px var(--monarch-font);
+  --monarch-text-section: 600 13px/16px var(--monarch-font);
+  --monarch-text-cell: 600 17px/22px var(--monarch-mono);
+  --monarch-text-chip: 700 13px/16px var(--monarch-mono);
+  --monarch-text-row: 500 16px/22px var(--monarch-font);
+  --monarch-text-nav: 500 11px/14px var(--monarch-font);
+  --monarch-text-nav-active: 600 11px/14px var(--monarch-font);
+}
