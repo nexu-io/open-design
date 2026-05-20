@@ -104,7 +104,10 @@ describe('dialog artifact consistency', () => {
       const createRunResponse = await sendPrompt(page, PROMPT);
       const { runId } = (await createRunResponse.json()) as { runId: string };
 
-      const persistedFile = await waitForProjectFile(webUrl, project.project.id, FILE_NAME);
+      const persistedFile = await waitForProjectFile(webUrl, project.project.id, {
+        fileName: FILE_NAME,
+        title: HEADING,
+      });
       expect(persistedFile.name).toBe(FILE_NAME);
       expect(persistedFile.kind).toBe('html');
       expect(persistedFile.artifactManifest?.title).toBe(HEADING);
@@ -222,7 +225,7 @@ async function sendPrompt(page: Page, prompt: string) {
 async function waitForProjectFile(
   webUrl: string,
   projectId: string,
-  fileName: string,
+  expected: { fileName: string; title: string },
 ): Promise<ProjectFile> {
   let latest: ProjectFile[] = [];
   await expect.poll(async () => {
@@ -231,11 +234,18 @@ async function waitForProjectFile(
       `/api/projects/${encodeURIComponent(projectId)}/files`,
     );
     latest = response.files;
-    return response.files.some((file) => file.name === fileName);
-  }, { timeout: 30_000 }).toBe(true);
+    const file = response.files.find((candidate) => candidate.name === expected.fileName);
+    return {
+      exists: file !== undefined,
+      title: file?.artifactManifest?.title ?? null,
+    };
+  }, { timeout: 30_000 }).toEqual({
+    exists: true,
+    title: expected.title,
+  });
 
-  const file = latest.find((candidate) => candidate.name === fileName);
-  if (!file) throw new Error(`project file ${fileName} did not remain listed`);
+  const file = latest.find((candidate) => candidate.name === expected.fileName);
+  if (!file) throw new Error(`project file ${expected.fileName} did not remain listed`);
   return file;
 }
 

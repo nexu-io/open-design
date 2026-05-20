@@ -94,6 +94,8 @@ test("package-tauri-migration-handoff creates a tarball and checksum sidecar", a
   assert.match(commandScript, /git fetch "\$bundle" "\$branch:\$temp_ref"/);
   assert.match(commandScript, /git push "\$remote" "refs\/heads\/\$branch:refs\/heads\/\$branch"/);
   assert.match(commandScript, /gh_bin="\$\{GH_BIN:-gh\}"/);
+  assert.match(commandScript, /if \[\[ ! "\$workflow" =~ \\.ya\?ml\$ \]\]; then/);
+  assert.match(commandScript, /workflow="ci\.yml"/);
   assert.match(commandScript, /command -v "\$gh_bin"/);
   assert.match(commandScript, /"\$gh_bin" workflow run "\$workflow" --ref "\$branch"/);
   assert.match(commandScript, /Requested native CI dispatch/);
@@ -539,6 +541,7 @@ test("package-tauri-migration-handoff command sidecar imports, pushes, and verif
     env: {
       ...process.env,
       GITHUB_RUN_ID: "",
+      GITHUB_WORKFLOW: "ci",
       PATH: `${binDir}:${process.env.PATH ?? ""}`,
       REMOTE: remotePath,
       TAURI_NATIVE_CI_TRIGGER: "0",
@@ -596,6 +599,7 @@ test("package-tauri-migration-handoff command sidecar imports, pushes, and verif
     env: {
       ...process.env,
       GITHUB_RUN_ID: "",
+      GITHUB_WORKFLOW: "ci",
       PATH: `${binDir}:${process.env.PATH ?? ""}`,
       REMOTE: remotePath,
       TAURI_M4_REPORT_DIR: reportDir,
