@@ -52,6 +52,12 @@ const VISUAL_PROJECTS = [
   },
 ] as const;
 
+type VisualProject = (typeof VISUAL_PROJECTS)[number];
+
+type VisualPageOptions = {
+  projects?: readonly VisualProject[];
+};
+
 const VISUAL_PLUGINS = [
   makeVisualPlugin({
     id: 'visual-prototype-starter',
@@ -119,7 +125,9 @@ const VISUAL_DESIGN_SYSTEMS = [
   },
 ] as const;
 
-export async function configureVisualPage(page: Page): Promise<void> {
+export async function configureVisualPage(page: Page, options: VisualPageOptions = {}): Promise<void> {
+  const projects = options.projects ?? VISUAL_PROJECTS;
+
   await page.addInitScript(([key, config]) => {
     window.localStorage.setItem(key, JSON.stringify(config));
   }, [STORAGE_KEY, VISUAL_CONFIG] as const);
@@ -133,7 +141,7 @@ export async function configureVisualPage(page: Page): Promise<void> {
   });
 
   await page.route('**/api/projects', async (route) => {
-    await fulfillGet(route, { projects: VISUAL_PROJECTS });
+    await fulfillGet(route, { projects });
   });
 
   await page.route('**/api/plugins', async (route) => {
@@ -223,6 +231,15 @@ export async function waitForVisualReady(page: Page): Promise<void> {
   await page.evaluate(async () => {
     await document.fonts.ready;
   });
+}
+
+export async function waitForVisualProjects(page: Page, projects: readonly VisualProject[]): Promise<void> {
+  if (projects.length === 0) {
+    await expect(page.getByText('No projects yet — type a prompt to start one.')).toBeVisible();
+    return;
+  }
+
+  await expect(page.getByText(projects[0]?.name ?? '')).toBeVisible();
 }
 
 export async function gotoVisualHome(page: Page): Promise<void> {

@@ -4,14 +4,16 @@ import {
   configureVisualPage,
   gotoVisualHome,
   waitForVisualFonts,
+  waitForVisualProjects,
 } from '@/playwright/visual';
 
 test('captures the visual home harness', async ({ page }) => {
-  await configureVisualPage(page);
+  await configureVisualPage(page, { projects: [] });
   await gotoVisualHome(page);
 
   await expect(page.getByTestId('home-hero')).toBeVisible();
   await expect(page.getByTestId('home-hero-input')).toBeVisible();
+  await waitForVisualProjects(page, []);
 
   await captureVisual(page, 'visual-home');
 });
