@@ -3690,7 +3690,8 @@ async function runProject(args) {
   od project open-in <id> --editor <slug> Open the project's working directory
                                           in the chosen editor (cursor, zed,
                                           vscode, finder, terminal, …).
-  od project handoff <id> --conversation <id> --api-key <key> --model <model>
+  od project handoff <id> --conversation <id> --model <model>
+                    (--api-key-file <path|-> | --api-key <key> | $ANTHROPIC_API_KEY)
                     [--base-url <url>] [--max-tokens <n>]
                     Synthesize a resume-conversation handoff prompt.
 

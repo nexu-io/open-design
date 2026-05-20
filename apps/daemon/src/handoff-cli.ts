@@ -35,12 +35,19 @@ function isHandoffResponse(value: unknown): value is HandoffResponse {
 }
 
 const USAGE = `Usage:
-  od project handoff <projectId> --conversation <id> --api-key <key> --model <model>
+  od project handoff <projectId> --conversation <id> --model <model>
+                     (--api-key-file <path|-> | --api-key <key> | $ANTHROPIC_API_KEY)
                      [--base-url <url>] [--max-tokens <n>] [--daemon-url <url>] [--json]
 
 Synthesizes a "resume conversation" handoff prompt from one conversation's
 transcript via the local daemon. Prints the prompt to stdout; --json emits
 the full response (prompt + model + token usage).
+
+API key transport (one of, in precedence order):
+  --api-key-file <path|->   Read the key from a file or stdin ("-").  Safe.
+  ANTHROPIC_API_KEY env var Read from the environment.  Safe.
+  --api-key <key>           Pass the key directly.  DEPRECATED — leaks
+                            credentials into shell history, ps, and CI logs.
 `;
 
 function writeJson(value: unknown, stream: NodeJS.WriteStream = process.stdout): void {
@@ -59,10 +66,34 @@ function fail(message: string, code?: unknown, status?: number): HandoffCliResul
   return { exitCode: 1 };
 }
 
+/**
+ * Reads an API key from a file path or stdin. `'-'` means stdin; any other
+ * value is treated as a filesystem path read as UTF-8. Trims trailing
+ * whitespace so a key written with a final newline (the common case for
+ * `echo $KEY > key.txt`) still validates.
+ *
+ * Mirrors the `--prompt-file <path|->` / `--body-file <path|->` precedent
+ * documented in AGENTS.md (Capability exposure — UI/CLI dual-track) and
+ * implemented in cli.ts `readMemoryBodyFromFlags` / `readPromptFromFlags`.
+ */
+async function readApiKeyFromFile(path: string): Promise<string> {
+  if (path === '-') {
+    let buf = '';
+    for await (const chunk of process.stdin) {
+      buf += typeof chunk === 'string' ? chunk : (chunk as Buffer).toString('utf8');
+    }
+    return buf.trim();
+  }
+  const { readFile } = await import('node:fs/promises');
+  const raw = await readFile(path, 'utf8');
+  return raw.trim();
+}
+
 interface ParsedHandoffOptions {
   projectId?: string;
   conversationId?: string;
   apiKey?: string;
+  apiKeyFile?: string;
   model?: string;
   baseUrl?: string;
   maxTokens?: number;
@@ -88,6 +119,10 @@ function parseOptions(args: string[]): ParsedHandoffOptions | { error: string } 
       const value = args[++index];
       if (!value) return { error: '--api-key requires a value' };
       options.apiKey = value;
+    } else if (arg === '--api-key-file') {
+      const value = args[++index];
+      if (!value) return { error: '--api-key-file requires a value' };
+      options.apiKeyFile = value;
     } else if (arg === '--model') {
       const value = args[++index];
       if (!value) return { error: '--model requires a value' };
@@ -128,8 +163,44 @@ export async function runProjectHandoff(args: string[]): Promise<HandoffCliResul
   }
   if (!options.projectId) return fail('handoff requires <projectId>');
   if (!options.conversationId) return fail('handoff requires --conversation <id>');
-  if (!options.apiKey) return fail('handoff requires --api-key <key>');
   if (!options.model) return fail('handoff requires --model <model>');
+
+  // Resolve the API key from (in precedence order): --api-key, --api-key-file
+  // (file or stdin via '-'), then ANTHROPIC_API_KEY env var.
+  //
+  // --api-key in argv leaks credentials into shell history, `ps` output, CI
+  // logs, process accounting, and crash dumps. We keep it working for
+  // back-compat (the CLI shipped 2026-05-20 and may already be wired into
+  // local scripts) but emit a one-line stderr warning when used so the
+  // safer paths stay discoverable.
+  let apiKey = options.apiKey;
+  if (apiKey) {
+    process.stderr.write(
+      '[od handoff] warning: --api-key in argv leaks credentials via shell ' +
+        'history, ps, and CI logs. Prefer --api-key-file <path|-> or the ' +
+        'ANTHROPIC_API_KEY environment variable.\n',
+    );
+  } else if (options.apiKeyFile) {
+    try {
+      apiKey = await readApiKeyFromFile(options.apiKeyFile);
+    } catch (err) {
+      return fail(
+        `failed to read --api-key-file ${options.apiKeyFile}: ${(err as Error).message}`,
+      );
+    }
+    if (!apiKey) {
+      return fail(`--api-key-file ${options.apiKeyFile} produced an empty key`);
+    }
+  } else {
+    const envKey = process.env.ANTHROPIC_API_KEY?.trim();
+    if (envKey) apiKey = envKey;
+  }
+  if (!apiKey) {
+    return fail(
+      'handoff requires an API key — pass --api-key-file <path|->, set ' +
+        'ANTHROPIC_API_KEY in the environment, or (less safe) use --api-key <key>',
+    );
+  }
 
   try {
     const daemonUrl = (
@@ -137,7 +208,7 @@ export async function runProjectHandoff(args: string[]): Promise<HandoffCliResul
     ).replace(/\/$/, '');
     const body: HandoffRequest = {
       conversationId: options.conversationId,
-      apiKey: options.apiKey,
+      apiKey,
       model: options.model,
       ...(options.baseUrl === undefined ? {} : { baseUrl: options.baseUrl }),
       ...(options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens }),
