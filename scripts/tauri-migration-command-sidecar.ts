@@ -66,6 +66,14 @@ const commandSidecarRequirements: readonly CommandSidecarRequirement[] = [
     snippets: ["--expected-head", "--wait"],
   },
   {
+    label: "native CI wait-and-advance dispatch",
+    snippets: [
+      "TAURI_NATIVE_CI_WAIT",
+      "workflow_dispatched",
+      'pnpm exec tsx scripts/download-tauri-m4-reports.ts --branch "$branch" --expected-head "$expected_head" --remote "$remote" --wait --output-dir "$report_dir" --advance',
+    ],
+  },
+  {
     label: "source archive status guidance",
     snippets: ['--handoff-archive "$archive"'],
   },

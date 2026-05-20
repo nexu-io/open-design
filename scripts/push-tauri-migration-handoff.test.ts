@@ -285,6 +285,26 @@ test("push-tauri-migration-handoff rejects stale command script content", async 
   await assert.rejects(runPushHandoffScript(targetRepo, "--archive", archivePath), /command script is missing/);
 });
 
+test("push-tauri-migration-handoff rejects command scripts without native CI wait-and-advance dispatch", async (t) => {
+  const { handoffDir, sourceRepo, targetRepo } = await createHandoffFixture(
+    t,
+    "open-design-tauri-push-handoff-missing-wait-advance-",
+  );
+  const archivePath = join(dirname(handoffDir), "open-design-tauri-migration-handoff.tar.gz");
+  const commandScriptPath = `${archivePath}.commands.sh`;
+  await runPackageHandoffScript("--root", sourceRepo, "--handoff-dir", handoffDir, "--output", archivePath);
+  const commandScript = (await readFile(commandScriptPath, "utf8")).replaceAll(
+    "TAURI_NATIVE_CI_WAIT",
+    "TAURI_NATIVE_CI_SKIP_WAIT",
+  );
+  const commandScriptSha256 = createHash("sha256").update(commandScript).digest("hex");
+  await writeFile(commandScriptPath, commandScript, "utf8");
+  await chmod(commandScriptPath, 0o755);
+  await writeFile(`${commandScriptPath}.sha256`, `${commandScriptSha256}  ${commandScriptPath.split(/[\\/]/).at(-1)}\n`, "utf8");
+
+  await assert.rejects(runPushHandoffScript(targetRepo, "--archive", archivePath), /native CI wait-and-advance dispatch/);
+});
+
 test("push-tauri-migration-handoff rejects command scripts without the generated marker", async (t) => {
   const { handoffDir, sourceRepo, targetRepo } = await createHandoffFixture(
     t,

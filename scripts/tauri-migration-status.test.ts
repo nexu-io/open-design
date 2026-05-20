@@ -756,6 +756,27 @@ test("tauri-migration-status rejects packaged handoff archives without manifest 
   assert.match(parsed.handoffArchive.problems.join("\n"), /command script is missing handoff manifest field validation/);
 });
 
+test("tauri-migration-status rejects command sidecars without native CI wait-and-advance dispatch", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+  const { archivePath } = await writeHandoffArchive(handoffDir);
+  const commandScriptPath = `${archivePath}.commands.sh`;
+  const commandScript = await readFile(commandScriptPath, "utf8");
+  await writeFile(commandScriptPath, commandScript.replace("TAURI_NATIVE_CI_WAIT", "TAURI_NATIVE_CI_SKIP_WAIT"), "utf8");
+  await writeCommandScriptChecksum(commandScriptPath);
+
+  const result = await runStatus(fixture, "--handoff-dir", handoffDir);
+  const parsed = JSON.parse(result.stdout) as { handoffArchive: { current: boolean; problems: string[] } };
+
+  assert.equal(parsed.handoffArchive.current, false);
+  assert.match(parsed.handoffArchive.problems.join("\n"), /command script is missing native CI wait-and-advance dispatch/);
+});
+
 test("tauri-migration-status rejects command sidecars without source archive status guidance", async (t) => {
   const fixture = await createFixtureRoot(t, {
     checked: [],
@@ -2014,6 +2035,9 @@ async function writeHandoffArchive(handoffDir: string, output?: string): Promise
       '--remote "$remote"',
       '--expected-head "$expected_head"',
       '--handoff-archive "$archive"',
+      "workflow_dispatched",
+      "TAURI_NATIVE_CI_WAIT",
+      'pnpm exec tsx scripts/download-tauri-m4-reports.ts --branch "$branch" --expected-head "$expected_head" --remote "$remote" --wait --output-dir "$report_dir" --advance',
       "# GITHUB_RUN_ID=<github-run-id>",
       'print_shell_command "GITHUB_RUN_ID=<github-run-id>" "$script_path" "$archive"',
       "--wait",
