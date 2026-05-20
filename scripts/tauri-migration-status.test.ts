@@ -290,6 +290,7 @@ test("tauri-migration-status reports current packaged handoff archives", async (
   assert.match(parsed.nextActions.join("\n"), new RegExp(`continue-tauri-migration\\.ts .*--handoff-archive ${escapeRegExp(archivePath)} .*--dry-run`));
   assert.match(parsed.nextActions.join("\n"), /push-tauri-migration-handoff\.ts --archive/);
   assert.match(parsed.nextActions.join("\n"), /attempt native CI dispatch/);
+  assert.match(parsed.nextActions.join("\n"), /draft PR fallback printed by the command sidecar/);
 });
 
 test("tauri-migration-status prints continuation guidance for a custom handoff archive", async (t) => {
@@ -329,6 +330,7 @@ test("tauri-migration-status prints continuation guidance for a custom handoff a
   assert.match(nextActions, new RegExp(`--remote '${escapeRegExp(remotePath)}'`));
   assert.match(nextActions, new RegExp(`--report-dir '${escapeRegExp(reportDir)}'`));
   assert.match(nextActions, new RegExp(`'${escapeRegExp(`${customArchivePath}.commands.sh`)}' '${escapeRegExp(customArchivePath)}'`));
+  assert.match(nextActions, /draft PR fallback printed by the command sidecar/);
   assert.match(
     nextActions,
     new RegExp(

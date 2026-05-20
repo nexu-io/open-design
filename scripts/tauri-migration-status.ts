@@ -561,7 +561,7 @@ function nextActionsForPhase(
       remote?.current === true
         ? `Remote ${remote.remote} already matches ${remote.branch ?? "the migration branch"} at ${remote.head ?? "the expected head"}.`
         : archiveReady
-          ? `On the receiving machine, run ${commandSidecarCommand} from the repository root to verify checksum, extract, push, verify the remote branch, and attempt native CI dispatch when GH_BIN/gh is available; or run ${pushOnlyHandoffCommand} for push-only handoff.`
+          ? `On the receiving machine, run ${commandSidecarCommand} from the repository root to verify checksum, extract, push, verify the remote branch, and attempt native CI dispatch when GH_BIN/gh is available. If workflow dispatch is unavailable after the receiver push, use the draft PR fallback printed by the command sidecar; or run ${pushOnlyHandoffCommand} for push-only handoff.`
           : `Copy the packaged handoff archive, .sha256 sidecar, .commands.sh sidecar, and .commands.sh.sha256 sidecar to a write-capable machine, then run the command script or ${pushOnlyHandoffCommand}.`,
       reportsReadyForAdvance
         ? `Advance M4 evidence and M5 defaults with scripts/advance-tauri-migration-m4-m5.ts --remote ${remoteName} --branch ${migrationBranch} --expected-head ${expectedHead}${rootOption} using the verified report paths shown above.`
