@@ -4,6 +4,16 @@ on:
   workflow_run:
     workflows: [Visual PR capture]
     types: [completed]
+  workflow_dispatch:
+    inputs:
+      capture_run_id:
+        description: GitHub Actions run id for the Visual PR capture workflow to comment on.
+        required: true
+        type: string
+      pr_number:
+        description: Pull request number to upsert the visual comment on.
+        required: true
+        type: string
 
 permissions:
   actions: read
@@ -11,13 +21,13 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: visual-pr-comment-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
+  group: visual-pr-comment-${{ github.event.workflow_run.head_repository.full_name || github.repository }}-${{ github.event.workflow_run.head_branch || inputs.pr_number || github.run_id }}
   cancel-in-progress: false
 
 jobs:
   comment:
     name: Publish PR visual diff comment
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
 
@@ -55,7 +65,7 @@ jobs:
       - name: Download PR visual artifact
         uses: actions/download-artifact@v8
         with:
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ github.event.workflow_run.id || inputs.capture_run_id }}
           path: visual-artifact
           merge-multiple: true
           github-token: ${{ github.token }}
@@ -65,9 +75,9 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          WORKFLOW_PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
-          WORKFLOW_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
-          WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
+          WORKFLOW_PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number || inputs.pr_number }}
+          WORKFLOW_HEAD_SHA: ${{ github.event.workflow_run.head_sha || '' }}
+          WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id || inputs.capture_run_id }}
         run: |
           set -euo pipefail
           manifest="visual-artifact/visual-report/manifest.json"
@@ -116,7 +126,7 @@ jobs:
             echo "Invalid manifest head_sha: $manifest_head" >&2
             exit 1
           fi
-          if [ "$manifest_head" != "$WORKFLOW_HEAD_SHA" ]; then
+          if [ -n "$WORKFLOW_HEAD_SHA" ] && [ "$manifest_head" != "$WORKFLOW_HEAD_SHA" ]; then
             echo "Artifact manifest head_sha ($manifest_head) does not match workflow_run head_sha ($WORKFLOW_HEAD_SHA)." >&2
             exit 1
           fi
