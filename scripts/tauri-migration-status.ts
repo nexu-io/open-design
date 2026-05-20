@@ -791,6 +791,13 @@ async function readHandoffArchiveStatus(archivePath: string, handoff?: HandoffSt
       problems.push(`command script is missing source archive status guidance: ${commandScriptPath}`);
     }
     if (
+      !commandScriptSource.includes("GITHUB_RUN_ID=<github-run-id> ") ||
+      !commandScriptSource.includes("printf '%q' \"$script_path\"") ||
+      !commandScriptSource.includes("printf '%q' \"$archive\"")
+    ) {
+      problems.push(`command script is missing relocatable rerun guidance: ${commandScriptPath}`);
+    }
+    if (
       !commandScriptSource.includes('--run-id "$GITHUB_RUN_ID"') ||
       !commandScriptSource.includes('--branch "$branch"') ||
       !commandScriptSource.includes('--remote "$remote"') ||

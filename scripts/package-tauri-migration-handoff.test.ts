@@ -106,6 +106,10 @@ test("package-tauri-migration-handoff creates a tarball and checksum sidecar", a
   assert.match(commandScript, /## Surface area/);
   assert.match(commandScript, /## Validation/);
   assert.match(commandScript, /GITHUB_RUN_ID/);
+  assert.match(commandScript, /GITHUB_RUN_ID=<github-run-id>/);
+  assert.match(commandScript, /printf '%q' "\$script_path"/);
+  assert.match(commandScript, /printf '%q' "\$archive"/);
+  assert.doesNotMatch(commandScript, /\.\/\$\(basename "\$0"\)/);
   assert.match(commandScript, /download-tauri-m4-reports/);
   assert.match(commandScript, /--run-id "\$GITHUB_RUN_ID" --branch "\$branch" --expected-head "\$expected_head" --remote "\$remote"/);
   assert.match(commandScript, /--expected-head "\$expected_head"/);
