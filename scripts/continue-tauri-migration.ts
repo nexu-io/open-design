@@ -53,6 +53,9 @@ type MigrationStatus = {
     dir: string;
     problems: string[];
   };
+  m4Evidence?: {
+    problems: string[];
+  };
   phase: "M4" | "M5" | "M6" | "complete";
   platformReports?: {
     current: boolean;
@@ -82,6 +85,9 @@ async function main(): Promise<void> {
 
   if (status.heartbeat?.current === false) {
     log.push(`Heartbeat needs attention under ${status.heartbeat.dir}: ${status.heartbeat.problems.join("; ")}`);
+  }
+  if (status.m4Evidence?.problems != null && status.m4Evidence.problems.length > 0) {
+    log.push(`M4 evidence needs attention: ${status.m4Evidence.problems.join("; ")}`);
   }
 
   if (status.git.trackedClean !== true && !args.dryRun) {

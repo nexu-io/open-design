@@ -1451,6 +1451,26 @@ test("continue-tauri-migration surfaces heartbeat problems before planning M4 wo
   assert.match(result.stdout, /Would push codex\/electron-to-tauri-migration/);
 });
 
+test("continue-tauri-migration surfaces missing M4 evidence markers before planning M4 work", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [...m4PlatformGateLabels],
+    defaults: "electron",
+    extraDocLines: [m4EvidenceLogMarker],
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+  await writeHandoffArchive(handoffDir);
+  const remotePath = join(fixture, "empty.git");
+  await git(fixture, "init", "--bare", remotePath);
+
+  const result = await runContinue(fixture, "--handoff-dir", handoffDir, "--remote", remotePath, "--dry-run", "--skip-dispatch");
+
+  assert.match(result.stdout, /M4 evidence needs attention/);
+  assert.match(result.stdout, /missing pushed remote branch-head evidence marker/);
+  assert.match(result.stdout, /Would push codex\/electron-to-tauri-migration/);
+});
+
 test("continue-tauri-migration dry-run waits for reports when the remote already matches", async (t) => {
   const fixture = await createFixtureRoot(t, {
     checked: [],
