@@ -9,6 +9,7 @@ const workspaceRoot = resolve(scriptsRoot, "..");
 const defaultBranch = "codex/electron-to-tauri-migration";
 const defaultHandoffDir = "/tmp/open-design-tauri-migration-handoff";
 const defaultRemote = "origin";
+const defaultPrBodyPath = ".tmp/tauri-migration-pr-body.md";
 const defaultReportDir = "/tmp/open-design-tauri-m4-reports";
 
 type Args = {
@@ -307,7 +308,7 @@ async function continueM4(args: Args, status: MigrationStatus, log: string[]): P
       log.push(`${args.dryRun ? "Would request" : "Requested"} native CI dispatch for ${args.branch}.`);
     } else {
       log.push(`Native CI dispatch ${dispatch.status === "unavailable" ? "skipped" : "failed"}: ${dispatch.message}`);
-      log.push(`Trigger it manually with: gh workflow run ci.yml --ref ${args.branch}`);
+      appendManualNativeCiFallback(args, log);
     }
   }
 
@@ -352,6 +353,26 @@ async function continueM4(args: Args, status: MigrationStatus, log: string[]): P
       "--output-dir",
       args.reportDir,
       "--advance",
+    ]),
+  );
+}
+
+function appendManualNativeCiFallback(args: Args, log: string[]): void {
+  log.push(`Trigger it manually with: gh workflow run ci.yml --ref ${args.branch}`);
+  log.push("If workflow dispatch is unavailable after the branch is pushed, open a draft PR with:");
+  log.push(
+    formatCommand("gh", [
+      "pr",
+      "create",
+      "--draft",
+      "--base",
+      "main",
+      "--head",
+      args.branch,
+      "--title",
+      "Migrate desktop runtime to Tauri",
+      "--body-file",
+      defaultPrBodyPath,
     ]),
   );
 }

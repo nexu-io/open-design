@@ -973,6 +973,9 @@ test("continue-tauri-migration reports manual dispatch when gh workflow dispatch
 
   assert.match(result.stdout, /Native CI dispatch failed/);
   assert.match(result.stdout, /Trigger it manually with: gh workflow run ci\.yml --ref codex\/electron-to-tauri-migration/);
+  assert.match(result.stdout, /If workflow dispatch is unavailable after the branch is pushed, open a draft PR with:/);
+  assert.match(result.stdout, /gh pr create --draft --base main --head codex\/electron-to-tauri-migration/);
+  assert.match(result.stdout, /--body-file \.tmp\/tauri-migration-pr-body\.md/);
   assert.match(result.stdout, /download-tauri-m4-reports\.ts/);
   assert.match(result.stdout, new RegExp(`--expected-head ${head}`));
 });
@@ -996,6 +999,9 @@ test("continue-tauri-migration dry-run reports manual dispatch when gh is unavai
   assert.match(result.stdout, /Native CI dispatch skipped/);
   assert.match(result.stdout, new RegExp(`${escapeRegExp(missingGh)} is not available on PATH`));
   assert.match(result.stdout, /Trigger it manually with: gh workflow run ci\.yml --ref codex\/electron-to-tauri-migration/);
+  assert.match(result.stdout, /If workflow dispatch is unavailable after the branch is pushed, open a draft PR with:/);
+  assert.match(result.stdout, /gh pr create --draft --base main --head codex\/electron-to-tauri-migration/);
+  assert.match(result.stdout, /--body-file \.tmp\/tauri-migration-pr-body\.md/);
   assert.match(result.stdout, /download-tauri-m4-reports\.ts/);
   assert.match(result.stdout, new RegExp(`--expected-head ${head}`));
 });
