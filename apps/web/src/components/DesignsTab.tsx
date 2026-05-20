@@ -101,7 +101,8 @@ export function DesignsTab({
 	const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 	const [selectMode, setSelectMode] = useState(false);
 	const [selected, setSelected] = useState<Set<string>>(new Set());
-	const [deleteToast, setDeleteToast] = useState<string | null>(null);
+	const deleteToastIdRef = useRef(0);
+	const [deleteToast, setDeleteToast] = useState<{ id: number; message: string } | null>(null);
 	const menuContainerRef = useRef<HTMLDivElement | null>(null);
 	const [renameTarget, setRenameTarget] = useState<{ id: string; original: string } | null>(null);
 	const [renameInput, setRenameInput] = useState("");
@@ -372,11 +373,14 @@ export function DesignsTab({
 				const deleted = results.filter(Boolean).length;
 				const failed = results.length - deleted;
 				exitSelectMode();
-				setDeleteToast(
+				const message =
 					failed > 0
 						? t("designs.deleteSelectedPartial", { deleted, failed })
-						: t("designs.deleteSelectedSuccess", { n: deleted }),
-				);
+						: t("designs.deleteSelectedSuccess", { n: deleted });
+				setDeleteToast({
+					id: (deleteToastIdRef.current += 1),
+					message,
+				});
 			},
 		});
 	};
@@ -970,7 +974,11 @@ export function DesignsTab({
 				</div>
 			) : null}
 			{deleteToast ? (
-				<Toast message={deleteToast} onDismiss={() => setDeleteToast(null)} />
+				<Toast
+					key={deleteToast.id}
+					message={deleteToast.message}
+					onDismiss={() => setDeleteToast(null)}
+				/>
 			) : null}
 		</div>
 	);
