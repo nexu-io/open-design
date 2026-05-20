@@ -5,6 +5,8 @@ import { chmod, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 
+import { tauriMigrationPrBodyLines } from "./tauri-migration-pr-body.ts";
+
 const execFileAsync = promisify(execFile);
 const defaultRoot = resolve(import.meta.dirname, "..");
 const defaultHandoffDir = "/tmp/open-design-tauri-migration-handoff";
@@ -488,42 +490,7 @@ function commandScript(archivePath: string): string {
     "fi",
     'mkdir -p "$(dirname -- "$pr_body_path")"',
     "cat > \"$pr_body_path\" <<'PR_BODY'",
-    "## Why",
-    "",
-    "This PR carries the Electron to Tauri migration branch so native Windows and Linux package smoke can run against the exact handoff commit.",
-    "",
-    "It addresses the migration blocker where local macOS parity is available but M4 cannot close until NSIS, AppImage, and Linux headless evidence is collected from native runners.",
-    "",
-    "## What users will see",
-    "",
-    "No default desktop behavior changes until M5. Electron remains the default runtime while Tauri stays behind explicit migration flags.",
-    "",
-    "## Surface area",
-    "",
-    "- [ ] **UI** — new page / dialog / panel / menu item / setting / empty state in `apps/web` or `apps/desktop` (including Electron menu bar)",
-    "- [ ] **Keyboard shortcut** — new or changed",
-    "- [x] **CLI / env var** — new `od` subcommand or flag, new `tools-dev` / `tools-pack` / `tools-pr` flag, or new `OD_*` env var",
-    "- [ ] **API / contract** — new `/api/*` endpoint, new SSE event, or changed shape in `packages/contracts`",
-    "- [ ] **Extension point** — new entry under `skills/`, `design-systems/`, `design-templates/`, or `craft/`, or change to the skills protocol",
-    "- [ ] **i18n keys** — added new translation keys (see `TRANSLATIONS.md` for the locale workflow)",
-    "- [ ] **New top-level dependency** — adding any new entry to the **root** `package.json` (`dependencies` or `devDependencies`); workspace-package `package.json` files are out of scope. Include a paragraph on what we get vs. what bytes we ship (see `CONTRIBUTING.md` -> Code style)",
-    "- [ ] **Default behavior change** — changes what existing users experience without opting in (default model, default setting, file/SQLite schema, auto-network on startup, auto-install)",
-    "- [ ] **None** — internal refactor, docs, tests, or translation update only",
-    "",
-    "## Screenshots",
-    "",
-    "Not applicable for user-facing UI. Native package smoke screenshots are collected as CI artifacts for the M4 evidence gate.",
-    "",
-    "## Bug fix verification",
-    "",
-    "Not a bug fix.",
-    "",
-    "## Validation",
-    "",
-    "- `pnpm guard`",
-    "- `pnpm typecheck`",
-    "- `node --import tsx --test scripts/download-tauri-m4-reports.test.ts scripts/package-tauri-migration-handoff.test.ts scripts/tauri-migration-status.test.ts`",
-    "- Pending native M4 evidence: Windows NSIS, Linux AppImage, and Linux headless platform smoke.",
+    ...tauriMigrationPrBodyLines,
     "PR_BODY",
     "",
     'temp_ref="refs/heads/__open_design_tauri_import_$$"',

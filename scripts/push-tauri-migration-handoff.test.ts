@@ -42,6 +42,9 @@ test("push-tauri-migration-handoff imports, pushes, and verifies a handoff manif
   const prBody = await readFile(prBodyPath, "utf8");
   assert.match(prBody, /## Why/);
   assert.match(prBody, /## Surface area/);
+  assert.match(prBody, /## Bug fix verification/);
+  assert.match(prBody, /Not a bug fix/);
+  assert.match(prBody, /scripts\/download-tauri-m4-reports\.test\.ts scripts\/package-tauri-migration-handoff\.test\.ts scripts\/tauri-migration-status\.test\.ts/);
   assert.match(prBody, /Pending native M4 evidence: Windows NSIS, Linux AppImage, and Linux headless platform smoke/);
   const remoteHead = (await git(targetRepo, "ls-remote", "--heads", remotePath, `refs/heads/${migrationBranch}`)).stdout
     .trim()
@@ -104,7 +107,9 @@ test("push-tauri-migration-handoff honors receiver workflow, report, and PR body
   assert.match(result.stdout, new RegExp(`--body-file '${escapeRegExp(prBodyPath)}'`));
   assert.match(result.stdout, new RegExp(`--output-dir '${escapeRegExp(reportDir)}'`));
   assert.match(result.stdout, new RegExp(`--expected-head ${sourceHead}`));
-  assert.match(await readFile(prBodyPath, "utf8"), /## Validation/);
+  const prBody = await readFile(prBodyPath, "utf8");
+  assert.match(prBody, /## Validation/);
+  assert.match(prBody, /scripts\/download-tauri-m4-reports\.test\.ts scripts\/package-tauri-migration-handoff\.test\.ts scripts\/tauri-migration-status\.test\.ts/);
 });
 
 test("push-tauri-migration-handoff can override a relocated bundle path", async (t) => {
