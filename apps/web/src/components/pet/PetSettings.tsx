@@ -73,7 +73,7 @@ export function codexPreviewOffsetForViewport(
 
 function codexPreviewWidthFromThumb(thumb: HTMLElement) {
   const preview = thumb.querySelector<HTMLElement>('.pet-codex-thumb-preview');
-  const measuredWidth = preview?.getBoundingClientRect().width ?? 0;
+  const measuredWidth = preview?.offsetWidth ?? 0;
   if (measuredWidth > 0) return measuredWidth;
 
   const cssWidth = Number.parseFloat(

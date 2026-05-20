@@ -2276,10 +2276,25 @@ describe('SettingsDialog pets interactions', () => {
     const thumb = card.querySelector('.pet-codex-thumb') as HTMLElement;
     const preview = thumb.querySelector('.pet-codex-thumb-preview') as HTMLElement;
     const rectSpy = vi.spyOn(thumb, 'getBoundingClientRect');
+    const previewRectSpy = vi.spyOn(preview, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      width: 96,
+      height: 104,
+      right: 96,
+      bottom: 104,
+      toJSON: () => ({}),
+    });
     const originalInnerWidth = window.innerWidth;
 
     expect(preview).toBeTruthy();
     thumb.style.setProperty('--pet-codex-preview-width', '160px');
+    Object.defineProperty(preview, 'offsetWidth', {
+      configurable: true,
+      value: 160,
+    });
 
     const mockThumbRect = (left: number) =>
       rectSpy.mockReturnValue({
@@ -2317,6 +2332,8 @@ describe('SettingsDialog pets interactions', () => {
         value: originalInnerWidth,
       });
       rectSpy.mockRestore();
+      previewRectSpy.mockRestore();
+      Reflect.deleteProperty(preview, 'offsetWidth');
     }
   });
 
