@@ -1,0 +1,49 @@
+{
+  "name": "WF03 Working -> Review",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "ManualTrigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [180, 280]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ollama:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\":\"llama3.1:8b\",\"stream\":false,\"prompt\":\"You are Hermes-Creator. Generate a short TikTok script with hook, body, CTA for: {{$json.brief || 'new product launch'}}\"}"
+      },
+      "id": "GenerateDraft",
+      "name": "Generate Draft",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [460, 280]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            { "value1": "={{$json.response}}", "operation": "contains", "value2": "CTA" }
+          ]
+        }
+      },
+      "id": "Validate",
+      "name": "Validation Gate",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [700, 280]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [[{"node": "Generate Draft", "type": "main", "index": 0}]]
+    },
+    "Generate Draft": {
+      "main": [[{"node": "Validation Gate", "type": "main", "index": 0}]]
+    }
+  }
+}

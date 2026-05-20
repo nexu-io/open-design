@@ -1,0 +1,50 @@
+{
+  "name": "WF01 Intake -> Backlog Ticket",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "studio365/intake",
+        "httpMethod": "POST",
+        "responseMode": "lastNode"
+      },
+      "id": "Webhook",
+      "name": "Webhook Intake",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://api:8000/tickets",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"workspace_id\":\"{{$json.workspace_id}}\",\"title\":\"{{$json.title}}\",\"description\":\"{{$json.description || ''}}\",\"priority\":\"{{$json.priority || 'med'}}\"}"
+      },
+      "id": "HTTPCreateTicket",
+      "name": "Create Ticket API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [520, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}"
+      },
+      "id": "Respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [780, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Intake": {
+      "main": [[{"node": "Create Ticket API", "type": "main", "index": 0}]]
+    },
+    "Create Ticket API": {
+      "main": [[{"node": "Respond", "type": "main", "index": 0}]]
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "name": "WF02 Planning Agent",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "ManualTrigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [220, 260]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ollama:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"model\":\"llama3.1:8b\",\"stream\":false,\"prompt\":\"You are Hermes-Planner. Create task breakdown + DoD checklist for this ticket: {{$json.ticket_text || 'sample ticket'}}\"}"
+      },
+      "id": "CallOllama",
+      "name": "Call Planner Model",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [500, 260]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [[{"node": "Call Planner Model", "type": "main", "index": 0}]]
+    }
+  }
+}

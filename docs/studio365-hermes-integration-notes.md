@@ -36,6 +36,29 @@
   `C:\Users\bigz_\Documents\Codex\2026-05-16\hatch-pet-c-users-bigz-codex\standalone-dashboard\docs\obsidian-dashboard-spec.md`
 - That file is outside this Git repository and was used for analysis only.
 
+## Studio365 Starter Pack
+
+The recommended starter pack for a local Studio365 MVP includes:
+- `infra/docker-compose.yml` to run PostgreSQL, Redis, n8n, Ollama, API, and web app in one machine
+- `infra/postgres/init.sql` to seed workspace, ticket, agent, prompt, and RAG schema
+- `apps/api` for a minimal FastAPI service with ticket CRUD and audit events
+- `apps/web` for a minimal Next.js Kanban page and quick ticket creation
+- `infra/n8n/workflows` with three starter n8n workflows for intake, planning, and working/review
+- `packages/prompts` with starter prompt templates for planning, creator, and headlines
+- `docs/agent-policy.md` for MVP agent rules and safety
+
+### Quick start
+
+1. Open `open-design/infra`.
+2. Run `docker compose up -d`.
+3. Visit:
+   - web: `http://localhost:3000`
+   - api: `http://localhost:8000/docs`
+   - n8n: `http://localhost:5678`
+4. Verify `http://localhost:8000/health` returns `{ok:true}`.
+5. Import the starter workflow JSON files into n8n.
+6. Create a ticket via the web UI or API and move it across the Kanban board.
+
 ## Architecture review and plan alignment
 
 ### 1. Recommended production architecture
