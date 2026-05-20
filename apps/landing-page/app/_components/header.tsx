@@ -28,6 +28,7 @@ export interface HeaderProps {
     | 'systems'
     | 'templates'
     | 'craft'
+    | 'tutorials'
     | 'blog';
   /**
    * Live counts from the Markdown catalogs. Required so we can never
