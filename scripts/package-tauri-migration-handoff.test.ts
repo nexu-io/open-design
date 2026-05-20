@@ -538,6 +538,7 @@ test("package-tauri-migration-handoff command sidecar imports, pushes, and verif
     cwd: targetRepo,
     env: {
       ...process.env,
+      GITHUB_RUN_ID: "",
       PATH: `${binDir}:${process.env.PATH ?? ""}`,
       REMOTE: remotePath,
       TAURI_NATIVE_CI_TRIGGER: "0",
@@ -594,6 +595,7 @@ test("package-tauri-migration-handoff command sidecar imports, pushes, and verif
     cwd: targetRepo,
     env: {
       ...process.env,
+      GITHUB_RUN_ID: "",
       PATH: `${binDir}:${process.env.PATH ?? ""}`,
       REMOTE: remotePath,
       TAURI_M4_REPORT_DIR: reportDir,
