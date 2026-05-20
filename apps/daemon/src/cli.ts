@@ -155,6 +155,14 @@ const PROJECT_STRING_FLAGS = new Set([
   'title', 'against',
 ]);
 const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow']);
+// `od templates …` mirrors NewProjectPanel / ExamplesTab. Same surface,
+// same /api/templates store. The CLI form is the embeddability contract:
+// external agents (hermes-agent, openclaw, ...) can snapshot, list, or
+// remove user-saved project templates without going through the web UI.
+const TEMPLATES_STRING_FLAGS = new Set([
+  'daemon-url', 'name', 'description',
+]);
+const TEMPLATES_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 // `od automation …` mirrors the Automations tab. Same surface, same
 // /api/routines store. The CLI form is the embeddability contract:
 // external agents (hermes-agent, openclaw, etc.) can drive Open Design
@@ -222,6 +230,7 @@ const SUBCOMMAND_MAP = {
   memory: runMemory,
   run: runRun,
   files: runFiles,
+  templates: runTemplates,
   conversation: runConversation,
   daemon: runDaemon,
   atoms: runAtoms,
@@ -4969,6 +4978,104 @@ function diffLine(prefix, line) {
 
 function renderDiffLineContent(value) {
   return String(value).replace(/\r/g, '\\r');
+}
+
+// `od templates …` is the headless face of NewProjectPanel /
+// ExamplesTab — same /api/templates store, same DTO shapes. External
+// agents (hermes-agent, openclaw, custom bots) use these to snapshot a
+// project as a reusable starting point, list everything the user has
+// saved, or drop one that is no longer needed. The web UI and the CLI
+// share the daemon HTTP layer so neither can drift out of step.
+async function runTemplates(args) {
+  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    console.log(`Usage:
+  od templates list                                  List user-saved templates.
+  od templates save  <projectId> --name <name>      Snapshot a project's current
+                                                    files as a new template.
+                     [--description <text>]
+  od templates delete <id>                          Delete a saved template by id.
+
+Common options:
+  --daemon-url <url>   Open Design daemon HTTP base.
+  --json               Emit raw JSON.`);
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+  const sub = args[0];
+  const rest = args.slice(1);
+  let flags;
+  try {
+    flags = parseFlags(rest, { string: TEMPLATES_STRING_FLAGS, boolean: TEMPLATES_BOOLEAN_FLAGS });
+  } catch (err) {
+    console.error(err.message);
+    process.exit(2);
+  }
+  const base = (await cliDaemonBaseUrl(flags));
+  switch (sub) {
+    case 'list': {
+      const resp = await fetch(`${base}/api/templates`);
+      if (!resp.ok) return structuredHttpFailure(resp);
+      const data = await resp.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      const templates = Array.isArray(data?.templates) ? data.templates : [];
+      if (templates.length === 0) {
+        console.log('No templates. Save one with `od templates save <projectId> --name "..."`.');
+        return;
+      }
+      for (const t of templates) console.log(`${t.id}\t${t.name}`);
+      return;
+    }
+    case 'save': {
+      // Require <projectId> as the first positional. Scanning the
+      // whole `rest` would happily pick up the value of `--name`
+      // ("Cards") and silently use it as the project id, so we
+      // anchor on the head and bail out the moment it looks like a
+      // flag.
+      const projectId = rest.length > 0 && !rest[0].startsWith('-') ? rest[0] : '';
+      if (!projectId) {
+        console.error('Usage: od templates save <projectId> --name <name> [--description <text>]');
+        process.exit(2);
+      }
+      const name = typeof flags.name === 'string' ? flags.name.trim() : '';
+      if (!name) {
+        console.error('--name required');
+        process.exit(2);
+      }
+      const body = { name, sourceProjectId: projectId };
+      if (typeof flags.description === 'string' && flags.description.length > 0) {
+        body.description = flags.description;
+      }
+      const resp = await fetch(`${base}/api/templates`, {
+        method:  'POST',
+        headers: { 'content-type': 'application/json' },
+        body:    JSON.stringify(body),
+      });
+      if (!resp.ok) return structuredHttpFailure(resp);
+      const data = await resp.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      const id = data?.template?.id ?? '';
+      const savedName = data?.template?.name ?? name;
+      console.log(`[templates] saved ${savedName}${id ? ` (${id})` : ''}`);
+      return;
+    }
+    case 'delete': {
+      const id = rest.length > 0 && !rest[0].startsWith('-') ? rest[0] : '';
+      if (!id) {
+        console.error('Usage: od templates delete <id>');
+        process.exit(2);
+      }
+      const resp = await fetch(`${base}/api/templates/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (!resp.ok) return structuredHttpFailure(resp);
+      if (flags.json) {
+        const data = await resp.json().catch(() => ({ ok: true }));
+        return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      }
+      console.log(`[templates] deleted ${id}`);
+      return;
+    }
+    default:
+      console.error(`unknown subcommand: od templates ${sub}`);
+      process.exit(2);
+  }
 }
 
 async function runConversation(args) {
