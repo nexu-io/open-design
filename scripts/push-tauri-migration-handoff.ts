@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
-import { commandSidecarProblems } from "./tauri-migration-command-sidecar.ts";
+import { commandSidecarProblems, commandSidecarSyntaxProblem } from "./tauri-migration-command-sidecar.ts";
 import { tauriMigrationPrBody } from "./tauri-migration-pr-body.ts";
 
 const execFileAsync = promisify(execFile);
@@ -352,6 +352,10 @@ async function verifyCommandScriptCurrent(commandScriptPath: string): Promise<vo
   const problems = commandSidecarProblems(source);
   if (problems.length > 0) {
     throw new Error(`${problems[0]}: ${commandScriptPath}`);
+  }
+  const syntaxProblem = await commandSidecarSyntaxProblem(commandScriptPath, source);
+  if (syntaxProblem != null) {
+    throw new Error(syntaxProblem);
   }
 }
 

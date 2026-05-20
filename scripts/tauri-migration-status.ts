@@ -5,7 +5,7 @@ import { homedir, tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
-import { commandSidecarProblems } from "./tauri-migration-command-sidecar.ts";
+import { commandSidecarProblems, commandSidecarSyntaxProblem } from "./tauri-migration-command-sidecar.ts";
 import {
   m4PlatformGateLabels,
   m5ElectronFallbackLabel,
@@ -761,6 +761,10 @@ async function readHandoffArchiveStatus(archivePath: string, handoff?: HandoffSt
     }
     for (const problem of commandSidecarProblems(commandScriptSource)) {
       problems.push(`${problem}: ${commandScriptPath}`);
+    }
+    const syntaxProblem = await commandSidecarSyntaxProblem(commandScriptPath, commandScriptSource);
+    if (syntaxProblem != null) {
+      problems.push(syntaxProblem);
     }
   } catch (error) {
     problems.push(`command script unavailable: ${error instanceof Error ? error.message : String(error)}`);

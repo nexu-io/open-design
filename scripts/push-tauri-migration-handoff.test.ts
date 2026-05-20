@@ -237,6 +237,23 @@ test("push-tauri-migration-handoff rejects stale command script content", async 
   await assert.rejects(runPushHandoffScript(targetRepo, "--archive", archivePath), /command script is missing/);
 });
 
+test("push-tauri-migration-handoff rejects command scripts with invalid bash syntax", async (t) => {
+  const { handoffDir, sourceRepo, targetRepo } = await createHandoffFixture(
+    t,
+    "open-design-tauri-push-handoff-bad-command-syntax-",
+  );
+  const archivePath = join(dirname(handoffDir), "open-design-tauri-migration-handoff.tar.gz");
+  const commandScriptPath = `${archivePath}.commands.sh`;
+  await runPackageHandoffScript("--root", sourceRepo, "--handoff-dir", handoffDir, "--output", archivePath);
+  const commandScript = `${await readFile(commandScriptPath, "utf8")}\nif\n`;
+  const commandScriptSha256 = createHash("sha256").update(commandScript).digest("hex");
+  await writeFile(commandScriptPath, commandScript, "utf8");
+  await chmod(commandScriptPath, 0o755);
+  await writeFile(`${commandScriptPath}.sha256`, `${commandScriptSha256}  ${commandScriptPath.split(/[\\/]/).at(-1)}\n`, "utf8");
+
+  await assert.rejects(runPushHandoffScript(targetRepo, "--archive", archivePath), /command script syntax invalid/);
+});
+
 test("push-tauri-migration-handoff refuses stale manifest heads before pushing", async (t) => {
   const { bundlePath, manifestPath, remotePath, targetRepo } = await createHandoffFixture(
     t,

@@ -5,6 +5,7 @@ import { chmod, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 
+import { generatedCommandSidecarHeader } from "./tauri-migration-command-sidecar.ts";
 import { tauriMigrationPrBodyLines } from "./tauri-migration-pr-body.ts";
 
 const execFileAsync = promisify(execFile);
@@ -327,6 +328,7 @@ function shellQuote(value: string): string {
 function commandScript(archivePath: string): string {
   return [
     "#!/usr/bin/env bash",
+    generatedCommandSidecarHeader(),
     "set -euo pipefail",
     "",
     'script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"',
