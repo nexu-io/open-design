@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
@@ -206,6 +206,35 @@ test("push-tauri-migration-handoff rejects stale command script checksums", asyn
   await writeFile(`${commandScriptPath}.sha256`, `${"0".repeat(64)}  ${commandScriptPath.split(/[\\/]/).at(-1)}\n`, "utf8");
 
   await assert.rejects(runPushHandoffScript(targetRepo, "--archive", archivePath), /command script SHA-256 mismatch/);
+});
+
+test("push-tauri-migration-handoff rejects non-executable command scripts", async (t) => {
+  const { handoffDir, sourceRepo, targetRepo } = await createHandoffFixture(
+    t,
+    "open-design-tauri-push-handoff-non-executable-command-",
+  );
+  const archivePath = join(dirname(handoffDir), "open-design-tauri-migration-handoff.tar.gz");
+  await runPackageHandoffScript("--root", sourceRepo, "--handoff-dir", handoffDir, "--output", archivePath);
+  await chmod(`${archivePath}.commands.sh`, 0o644);
+
+  await assert.rejects(runPushHandoffScript(targetRepo, "--archive", archivePath), /command script is not executable/);
+});
+
+test("push-tauri-migration-handoff rejects stale command script content", async (t) => {
+  const { handoffDir, sourceRepo, targetRepo } = await createHandoffFixture(
+    t,
+    "open-design-tauri-push-handoff-stale-command-content-",
+  );
+  const archivePath = join(dirname(handoffDir), "open-design-tauri-migration-handoff.tar.gz");
+  const commandScriptPath = `${archivePath}.commands.sh`;
+  const staleCommandScript = "#!/usr/bin/env bash\nread_checksum()\n";
+  const staleCommandScriptSha256 = createHash("sha256").update(staleCommandScript).digest("hex");
+  await runPackageHandoffScript("--root", sourceRepo, "--handoff-dir", handoffDir, "--output", archivePath);
+  await writeFile(commandScriptPath, staleCommandScript, "utf8");
+  await chmod(commandScriptPath, 0o755);
+  await writeFile(`${commandScriptPath}.sha256`, `${staleCommandScriptSha256}  ${commandScriptPath.split(/[\\/]/).at(-1)}\n`, "utf8");
+
+  await assert.rejects(runPushHandoffScript(targetRepo, "--archive", archivePath), /command script is missing/);
 });
 
 test("push-tauri-migration-handoff refuses stale manifest heads before pushing", async (t) => {
