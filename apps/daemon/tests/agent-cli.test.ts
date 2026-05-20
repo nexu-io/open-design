@@ -80,4 +80,26 @@ describe('od agent test positional parsing', () => {
     expect(result.stderr).toContain('Usage: od agent test');
     expect(lastBody).toBeNull();
   });
+
+  it('exits with usage when an unknown flag is passed', async () => {
+    lastBody = null;
+    const result = await runCli(['agent', 'test', '--bogus', 'codex']);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain('od agent test:');
+    expect(result.stderr).toContain('unknown flag: --bogus');
+    expect(result.stderr).toContain('Usage:');
+    expect(result.stderr).toContain('od agent test <agentId>');
+    expect(lastBody).toBeNull();
+  });
+
+  it('exits with usage when a string flag is missing its value', async () => {
+    lastBody = null;
+    const result = await runCli(['agent', 'test', '--daemon-url']);
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain('od agent test:');
+    expect(result.stderr).toContain('flag --daemon-url requires a value');
+    expect(result.stderr).toContain('Usage:');
+    expect(result.stderr).toContain('od agent test <agentId>');
+    expect(lastBody).toBeNull();
+  });
 });

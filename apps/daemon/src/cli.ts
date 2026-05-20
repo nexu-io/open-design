@@ -3682,8 +3682,7 @@ async function projectDaemonUrl(flags) {
 }
 
 async function runAgent(args) {
-  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
-    console.log(`Usage:
+  const usage = `Usage:
   od agent test <agentId> [--model <id>] [--reasoning <effort>] [--json]
 
 Runs the same /api/test/connection probe the Settings dialog drives, against
@@ -3694,7 +3693,9 @@ external agents and pipelines can \`jq .diagnostics.recoveryHints\`.
 
 Common options:
   --daemon-url <url>   Open Design daemon HTTP base.
-  --json               Emit raw JSON envelope.`);
+  --json               Emit raw JSON envelope.`;
+  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    console.log(usage);
     process.exit(args.length === 0 ? 2 : 0);
   }
   const sub = args[0];
@@ -3703,7 +3704,14 @@ Common options:
     process.exit(2);
   }
   const rest = args.slice(1);
-  const flags = parseFlags(rest, { string: AGENT_STRING_FLAGS, boolean: AGENT_BOOLEAN_FLAGS });
+  let flags;
+  try {
+    flags = parseFlags(rest, { string: AGENT_STRING_FLAGS, boolean: AGENT_BOOLEAN_FLAGS });
+  } catch (err) {
+    console.error(`od agent test: ${err.message}`);
+    console.error(usage);
+    process.exit(2);
+  }
   const agentId = positionalArgs(rest, AGENT_STRING_FLAGS)[0];
   if (!agentId) {
     console.error('Usage: od agent test <agentId> [--model <id>] [--reasoning <effort>] [--json]');
