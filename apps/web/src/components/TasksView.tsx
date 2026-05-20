@@ -22,6 +22,8 @@ import type {
 import { Icon, type IconName } from './Icon';
 import { navigate } from '../router';
 import type { SkillSummary } from '../types';
+import { useAnalytics } from '../analytics/provider';
+import { trackAutomationsClick, trackPageView } from '../analytics/events';
 import {
   NewAutomationModal,
   describeScheduleSummary,
@@ -385,6 +387,15 @@ function proposalActionLabel(action: AutomationEvolutionProposal['action']): str
 }
 
 export function TasksView({ skills = [], designTemplates = [], connectors = [] }: Props) {
+  const analytics = useAnalytics();
+  // P2 page_view page_name=automations. Ref-keyed so re-renders don't
+  // double-fire while the user is on the page.
+  const pageViewFiredRef = useState<{ fired: boolean }>(() => ({ fired: false }))[0];
+  useEffect(() => {
+    if (pageViewFiredRef.fired) return;
+    pageViewFiredRef.fired = true;
+    trackPageView(analytics.track, { page_name: 'automations' });
+  }, [analytics.track, pageViewFiredRef]);
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [loading, setLoading] = useState(true);

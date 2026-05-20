@@ -141,6 +141,7 @@ in
         packages/sidecar-proto \
         packages/sidecar \
         packages/platform \
+        packages/diagnostics \
         apps/daemon
       do
         pnpm -C "$target" run --if-present build

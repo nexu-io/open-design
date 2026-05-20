@@ -155,69 +155,71 @@ export function DesignSystemsSection({ cfg, setCfg }: Props) {
   return (
     <section className="settings-section settings-design-systems">
       <form className="library-install-form" onSubmit={handleLocalImport}>
-        <div className="seg-control">
-          <button
-            type="button"
-            className={importSource === 'local' ? 'active' : ''}
-            onClick={() => setImportSource('local')}
-          >
-            Local
-          </button>
-          <button
-            type="button"
-            className={importSource === 'github' ? 'active' : ''}
-            onClick={() => setImportSource('github')}
-          >
-            GitHub
-          </button>
-        </div>
-        <div className="library-import-options">
-          <div className="library-import-option-group">
-            <span className="library-import-option-label">Structure</span>
-            <div className="seg-control library-import-mode-control">
-              <button
-                type="button"
-                className={packageImportMode === 'hybrid' ? 'active' : ''}
-                onClick={() => setPackageImportMode('hybrid')}
-              >
-                Hybrid
-              </button>
-              <button
-                type="button"
-                className={packageImportMode === 'normalized' ? 'active' : ''}
-                onClick={() => setPackageImportMode('normalized')}
-              >
-                Normalized
-              </button>
-              <button
-                type="button"
-                className={packageImportMode === 'verbatim' ? 'active' : ''}
-                onClick={() => setPackageImportMode('verbatim')}
-              >
-                Verbatim
-              </button>
-            </div>
+        <div className="library-import-controls">
+          <div className="seg-control library-import-source-control">
+            <button
+              type="button"
+              className={importSource === 'local' ? 'active' : ''}
+              onClick={() => setImportSource('local')}
+            >
+              Local
+            </button>
+            <button
+              type="button"
+              className={importSource === 'github' ? 'active' : ''}
+              onClick={() => setImportSource('github')}
+            >
+              GitHub
+            </button>
           </div>
-          <div className="library-import-option-group">
-            <span className="library-import-option-label">Craft</span>
-            <label className="library-import-checkbox">
-              <input
-                type="checkbox"
-                checked={craftApplies.includes('color')}
-                onChange={(e) => setCraftApplies((current) => toggleCraftSlug(current, 'color', e.target.checked))}
-              />
-              <span>Color</span>
-            </label>
-            <label className="library-import-checkbox">
-              <input
-                type="checkbox"
-                checked={craftApplies.includes('accessibility-baseline')}
-                onChange={(e) =>
-                  setCraftApplies((current) => toggleCraftSlug(current, 'accessibility-baseline', e.target.checked))
-                }
-              />
-              <span>Accessibility</span>
-            </label>
+          <div className="library-import-options">
+            <div className="library-import-option-group">
+              <span className="library-import-option-label">Structure</span>
+              <div className="seg-control library-import-mode-control">
+                <button
+                  type="button"
+                  className={packageImportMode === 'hybrid' ? 'active' : ''}
+                  onClick={() => setPackageImportMode('hybrid')}
+                >
+                  Hybrid
+                </button>
+                <button
+                  type="button"
+                  className={packageImportMode === 'normalized' ? 'active' : ''}
+                  onClick={() => setPackageImportMode('normalized')}
+                >
+                  Normalized
+                </button>
+                <button
+                  type="button"
+                  className={packageImportMode === 'verbatim' ? 'active' : ''}
+                  onClick={() => setPackageImportMode('verbatim')}
+                >
+                  Verbatim
+                </button>
+              </div>
+            </div>
+            <div className="library-import-option-group">
+              <span className="library-import-option-label">Craft</span>
+              <label className="library-import-checkbox">
+                <input
+                  type="checkbox"
+                  checked={craftApplies.includes('color')}
+                  onChange={(e) => setCraftApplies((current) => toggleCraftSlug(current, 'color', e.target.checked))}
+                />
+                <span>Color</span>
+              </label>
+              <label className="library-import-checkbox">
+                <input
+                  type="checkbox"
+                  checked={craftApplies.includes('accessibility-baseline')}
+                  onChange={(e) =>
+                    setCraftApplies((current) => toggleCraftSlug(current, 'accessibility-baseline', e.target.checked))
+                  }
+                />
+                <span>Accessibility</span>
+              </label>
+            </div>
           </div>
         </div>
         <div className="library-install-row">

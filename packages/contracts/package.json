@@ -26,6 +26,10 @@
       "types": "./dist/api/finalize.d.ts",
       "default": "./dist/api/finalize.mjs"
     },
+    "./api/handoff": {
+      "types": "./dist/api/handoff.d.ts",
+      "default": "./dist/api/handoff.mjs"
+    },
     "./api/providerModels": {
       "types": "./dist/api/providerModels.d.ts",
       "default": "./dist/api/providerModels.mjs"

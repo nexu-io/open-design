@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  composeChatUserRequestForAgent,
   createFinalizedMessageTelemetryReporter,
   shouldReportRunCompletedFromMessage,
   telemetryPromptFromRunRequest,
@@ -55,6 +56,37 @@ describe('Langfuse message finalization gate', () => {
     expect(telemetryPromptFromRunRequest('legacy prompt', undefined)).toBe(
       'legacy prompt',
     );
+  });
+
+  it('promotes discovery form answers above the transcript with a build-now instruction', () => {
+    const currentPrompt = [
+      '[form answers \u2014 discovery]',
+      '- output: Dashboard / tool UI',
+      '- brand: Pick a direction for me [value: pick_direction]',
+    ].join('\n');
+    const prompt = composeChatUserRequestForAgent(
+      '## user\ninitial brief\n\n## assistant\n<form/>',
+      currentPrompt,
+    );
+
+    expect(prompt).toContain('## Latest user turn - form answers submitted');
+    expect(prompt).toContain(currentPrompt);
+    expect(prompt).toContain('The user has answered the discovery form.');
+    expect(prompt).toContain('For Branch B answers, build now instead of asking another brief.');
+    expect(prompt.indexOf('## Full conversation transcript')).toBeGreaterThan(
+      prompt.indexOf(currentPrompt),
+    );
+  });
+
+  it('keeps non-discovery form answers active without forcing the build transition', () => {
+    const prompt = composeChatUserRequestForAgent(
+      '## user\ninitial brief',
+      '[form answers - task-type]\n- taskType: Slide deck',
+    );
+
+    expect(prompt).toContain('The user has answered the task-type form.');
+    expect(prompt).toContain('Treat these form answers as the active user turn');
+    expect(prompt).not.toContain('build now instead of asking another brief');
   });
 
   it('invokes Langfuse reporting once when the final message write is marked', () => {

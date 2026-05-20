@@ -7,8 +7,11 @@ import { describe, expect, it, vi } from "vitest";
 import {
   OPEN_DESIGN_HOST_GLOBAL,
   OPEN_DESIGN_HOST_VERSION,
+  checkHostUpdater,
   detectOpenDesignHostClientType,
+  getHostUpdaterStatus,
   getOpenDesignHost,
+  installHostUpdater,
   isOpenDesignHostAvailable,
   isOpenDesignHostBridge,
   normalizeOpenDesignHostProjectImportResult,
@@ -16,7 +19,9 @@ import {
   pickAndImportHostProject,
   printHostPdf,
   openHostProjectPath,
+  quitHostAfterUpdaterInstallerOpen,
   setHostPetVisible,
+  subscribeHostUpdater,
 } from "../src/index.js";
 import { createMockOpenDesignHost, installMockOpenDesignHost } from "../src/testing.js";
 
@@ -64,6 +69,10 @@ describe("open-design host contract", () => {
     expect(isOpenDesignHostBridge({
       ...createMockOpenDesignHost(),
       shell: { openExternal: async () => ({ ok: true }) },
+    })).toBe(false);
+    expect(isOpenDesignHostBridge({
+      ...createMockOpenDesignHost(),
+      updater: { status: async () => createMockOpenDesignHost().updater.status() },
     })).toBe(false);
   });
 
@@ -186,6 +195,77 @@ describe("open-design host contract", () => {
     expect(pickAndImport).toHaveBeenCalledWith({ skillId: "skill-1" });
     expect(print).toHaveBeenCalledWith("<html></html>", "nonce", { deck: true });
     expect(setVisible).toHaveBeenCalledWith(true);
+  });
+
+  it("routes updater status, actions, and subscriptions through package-owned helpers", async () => {
+    const status = {
+      arch: "arm64",
+      availableVersion: "1.0.1-beta.1",
+      capabilities: {
+        canApplyInPlace: false,
+        canDownload: true,
+        canOpenInstaller: true,
+        requiresManualInstall: true,
+      },
+      channel: "beta" as const,
+      currentVersion: "1.0.0-beta.0",
+      downloadPath: "/tmp/Open Design Beta.dmg",
+      enabled: true,
+      mode: "package-launcher" as const,
+      platform: "darwin",
+      state: "downloaded" as const,
+      supported: true,
+    };
+    const check = vi.fn(async () => status);
+    const install = vi.fn(async () => status);
+    const quit = vi.fn(async () => ({ ok: true as const }));
+    const statusFn = vi.fn(async () => status);
+    const unsubscribe = vi.fn();
+    const subscribe = vi.fn(() => unsubscribe);
+    const scope: Record<string, unknown> = {};
+    scope[OPEN_DESIGN_HOST_GLOBAL] = createMockOpenDesignHost({
+      updater: { check, install, quit, status: statusFn, subscribe },
+    });
+
+    await expect(getHostUpdaterStatus({ payload: { source: "mount" } }, scope)).resolves.toEqual({
+      ok: true,
+      status,
+    });
+    await expect(checkHostUpdater({ payload: { source: "button" } }, scope)).resolves.toEqual({
+      ok: true,
+      status,
+    });
+    await expect(installHostUpdater({ payload: { source: "popup" } }, scope)).resolves.toEqual({
+      ok: true,
+      status,
+    });
+    await expect(quitHostAfterUpdaterInstallerOpen({ payload: { source: "opened-popup" } }, scope)).resolves.toEqual({
+      ok: true,
+    });
+
+    const listener = vi.fn();
+    expect(subscribeHostUpdater(listener, scope)).toBe(unsubscribe);
+    expect(statusFn).toHaveBeenCalledWith({ payload: { source: "mount" } });
+    expect(check).toHaveBeenCalledWith({ payload: { source: "button" } });
+    expect(install).toHaveBeenCalledWith({ payload: { source: "popup" } });
+    expect(quit).toHaveBeenCalledWith({ payload: { source: "opened-popup" } });
+    expect(subscribe).toHaveBeenCalledWith(listener);
+  });
+
+  it("wraps updater action throws into structured failures", async () => {
+    const scope: Record<string, unknown> = {};
+    scope[OPEN_DESIGN_HOST_GLOBAL] = createMockOpenDesignHost({
+      updater: {
+        check: vi.fn(async () => {
+          throw new Error("updater failed");
+        }),
+      },
+    });
+
+    await expect(checkHostUpdater(undefined, scope)).resolves.toEqual({
+      ok: false,
+      reason: "updater failed",
+    });
   });
 
   it("installs and restores test hosts without exposing callers to the global key", () => {

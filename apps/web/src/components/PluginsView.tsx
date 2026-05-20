@@ -1,10 +1,19 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   PLUGIN_SHARE_ACTION_PLUGIN_IDS,
   type ApplyResult,
   type InstalledPluginRecord,
   type PluginSourceKind,
 } from '@open-design/contracts';
+import { useAnalytics } from '../analytics/provider';
+import {
+  trackPageView,
+  trackPluginsAvailableTabClick,
+  trackPluginsInstalledTabClick,
+  trackPluginsSourcesTabClick,
+  trackPluginsTemplatesDropdownClick,
+  trackPluginsTopClick,
+} from '../analytics/events';
 import {
   addPluginMarketplace,
   applyPlugin,
@@ -101,6 +110,13 @@ export function PluginsView({
   onCreatePluginShareProject,
 }: PluginsViewProps) {
   const { locale, t } = useI18n();
+  const analytics = useAnalytics();
+  const pluginsPageViewFiredRef = useRef(false);
+  useEffect(() => {
+    if (pluginsPageViewFiredRef.current) return;
+    pluginsPageViewFiredRef.current = true;
+    trackPageView(analytics.track, { page_name: 'plugins' });
+  }, [analytics.track]);
   const [plugins, setPlugins] = useState<InstalledPluginRecord[]>([]);
   const [allInstalledPlugins, setAllInstalledPlugins] = useState<InstalledPluginRecord[]>([]);
   const [marketplaces, setMarketplaces] = useState<PluginMarketplace[]>([]);
@@ -273,7 +289,14 @@ export function PluginsView({
           <button
             type="button"
             className="plugins-view__primary"
-            onClick={() => onCreatePlugin?.()}
+            onClick={() => {
+              trackPluginsTopClick(analytics.track, {
+                page_name: 'plugins',
+                area: 'plugins',
+                element: 'create_plugin',
+              });
+              onCreatePlugin?.();
+            }}
             data-testid="plugins-create-button"
           >
             <Icon name="edit" size={13} />
@@ -282,7 +305,14 @@ export function PluginsView({
           <button
             type="button"
             className="plugins-view__secondary"
-            onClick={() => setImportOpen(true)}
+            onClick={() => {
+              trackPluginsTopClick(analytics.track, {
+                page_name: 'plugins',
+                area: 'plugins',
+                element: 'import_plugin',
+              });
+              setImportOpen(true);
+            }}
             aria-haspopup="dialog"
             data-testid="plugins-import-button"
           >
@@ -317,7 +347,14 @@ export function PluginsView({
               ]
                 .filter(Boolean)
                 .join('')}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => {
+                trackPluginsTopClick(analytics.track, {
+                  page_name: 'plugins',
+                  area: 'plugins',
+                  element: `${tab.id}_tab` as const,
+                });
+                setActiveTab(tab.id);
+              }}
               data-testid={`plugins-tab-${tab.id}`}
             >
               <span className="plugins-view__tab-label">{pluginTabLabel(tab.id, t)}</span>
@@ -339,12 +376,61 @@ export function PluginsView({
             activePluginId={activePlugin?.record.id ?? null}
             pendingApplyId={pendingApplyId}
             pendingShareAction={pendingShareAction}
-            onUse={(record, action) => void handleUsePlugin(record, action)}
-            onOpenDetails={setDetailsRecord}
-            onPluginShareAction={(record, action) =>
-              requestPluginShareTask(record, action)
-            }
-            onCreatePlugin={onCreatePlugin}
+            onUse={(record, action) => {
+              trackPluginsInstalledTabClick(analytics.track, {
+                page_name: 'plugins',
+                area: 'installed_tab',
+                element: action === 'use-with-query' ? 'templates_use_dropdown' : 'templates_use',
+                template_id: record.id,
+                template_type: record.sourceKind,
+              });
+              if (action === 'use-with-query') {
+                trackPluginsTemplatesDropdownClick(analytics.track, {
+                  page_name: 'plugins',
+                  area: 'templates_dropdown',
+                  element: 'use_with_query',
+                  template_id: record.id,
+                  template_type: record.sourceKind,
+                });
+              } else {
+                trackPluginsTemplatesDropdownClick(analytics.track, {
+                  page_name: 'plugins',
+                  area: 'templates_dropdown',
+                  element: 'use',
+                  template_id: record.id,
+                  template_type: record.sourceKind,
+                });
+              }
+              void handleUsePlugin(record, action);
+            }}
+            onOpenDetails={(record) => {
+              trackPluginsInstalledTabClick(analytics.track, {
+                page_name: 'plugins',
+                area: 'installed_tab',
+                element: 'templates_details',
+                template_id: record.id,
+                template_type: record.sourceKind,
+              });
+              setDetailsRecord(record);
+            }}
+            onPluginShareAction={(record, action) => {
+              trackPluginsInstalledTabClick(analytics.track, {
+                page_name: 'plugins',
+                area: 'installed_tab',
+                element: action === 'publish-github' ? 'templates_publish' : 'templates_contribute',
+                template_id: record.id,
+                template_type: record.sourceKind,
+              });
+              requestPluginShareTask(record, action);
+            }}
+            onCreatePlugin={(goal) => {
+              trackPluginsInstalledTabClick(analytics.track, {
+                page_name: 'plugins',
+                area: 'installed_tab',
+                element: 'create_plugin',
+              });
+              onCreatePlugin?.(goal);
+            }}
             preferDefaultFacet={false}
             title={t('pluginsView.installedTitle')}
             subtitle={t('pluginsView.installedSubtitle')}
@@ -356,8 +442,40 @@ export function PluginsView({
           <AvailablePluginsPanel
             plugins={availablePlugins}
             pendingKey={pendingInstallEntry}
-            onOpenDetails={setAvailableDetails}
-            onInstall={(plugin) => void handleInstallAvailable(plugin)}
+            onOpenDetails={(plugin) => {
+              trackPluginsAvailableTabClick(analytics.track, {
+                page_name: 'plugins',
+                area: 'available_tab',
+                element: 'details',
+                plugin_id: plugin.entry.name,
+                plugin_type: plugin.marketplace.trust,
+              });
+              setAvailableDetails(plugin);
+            }}
+            onInstall={(plugin) => {
+              trackPluginsAvailableTabClick(analytics.track, {
+                page_name: 'plugins',
+                area: 'available_tab',
+                element: 'install',
+                plugin_id: plugin.entry.name,
+                plugin_type: plugin.marketplace.trust,
+              });
+              void handleInstallAvailable(plugin);
+            }}
+            onSearchInput={() =>
+              trackPluginsAvailableTabClick(analytics.track, {
+                page_name: 'plugins',
+                area: 'available_tab',
+                element: 'search_input',
+              })
+            }
+            onSourceDropdown={() =>
+              trackPluginsAvailableTabClick(analytics.track, {
+                page_name: 'plugins',
+                area: 'available_tab',
+                element: 'source_dropdown',
+              })
+            }
             t={t}
           />
         ) : null}
@@ -366,19 +484,41 @@ export function PluginsView({
           <SourcesPanel
             marketplaces={marketplaces}
             pendingAction={pendingSourceAction}
-            onAdd={(url, trust) =>
-              void handleMarketplaceMutation('add', () => addPluginMarketplace({ url, trust }))
+            onAdd={(url, trust) => {
+              trackPluginsSourcesTabClick(analytics.track, {
+                page_name: 'plugins',
+                area: 'sources_tab',
+                element: 'add_source',
+              });
+              void handleMarketplaceMutation('add', () => addPluginMarketplace({ url, trust }));
+            }}
+            onSourceUrlInput={() =>
+              trackPluginsSourcesTabClick(analytics.track, {
+                page_name: 'plugins',
+                area: 'sources_tab',
+                element: 'source_url_input',
+              })
             }
-            onRefresh={(marketplace) =>
+            onRefresh={(marketplace) => {
+              trackPluginsSourcesTabClick(analytics.track, {
+                page_name: 'plugins',
+                area: 'sources_tab',
+                element: 'refresh',
+              });
               void handleMarketplaceMutation(`refresh:${marketplace.id}`, () =>
                 refreshPluginMarketplace(marketplace.id),
-              )
-            }
-            onRemove={(marketplace) =>
+              );
+            }}
+            onRemove={(marketplace) => {
+              trackPluginsSourcesTabClick(analytics.track, {
+                page_name: 'plugins',
+                area: 'sources_tab',
+                element: 'remove',
+              });
               void handleMarketplaceMutation(`remove:${marketplace.id}`, () =>
                 removePluginMarketplace(marketplace.id),
-              )
-            }
+              );
+            }}
             onTrust={(marketplace, trust) =>
               void handleMarketplaceMutation(`trust:${marketplace.id}:${trust}`, () =>
                 setPluginMarketplaceTrust(marketplace.id, trust),
@@ -689,16 +829,22 @@ function AvailablePluginsPanel({
   pendingKey,
   onOpenDetails,
   onInstall,
+  onSearchInput,
+  onSourceDropdown,
   t,
 }: {
   plugins: AvailableMarketplacePlugin[];
   pendingKey: string | null;
   onOpenDetails: (plugin: AvailableMarketplacePlugin) => void;
   onInstall: (plugin: AvailableMarketplacePlugin) => void;
+  onSearchInput?: () => void;
+  onSourceDropdown?: () => void;
   t: ReturnType<typeof useI18n>['t'];
 }) {
   const [query, setQuery] = useState('');
   const [sourceFilter, setSourceFilter] = useState('all');
+  const searchTrackedRef = useRef(false);
+  const sourceTrackedRef = useRef(false);
   const sourceOptions = useMemo(() => buildAvailableSourceOptions(plugins), [plugins]);
   const filteredPlugins = useMemo(
     () => filterAvailablePlugins(plugins, { query, sourceFilter }),
@@ -728,6 +874,11 @@ function AvailablePluginsPanel({
               type="search"
               aria-label={t('pluginsView.searchAvailableAria')}
               value={query}
+              onFocus={() => {
+                if (searchTrackedRef.current) return;
+                searchTrackedRef.current = true;
+                onSearchInput?.();
+              }}
               onChange={(event) => setQuery(event.target.value)}
               placeholder={t('pluginsView.searchAvailablePlaceholder')}
             />
@@ -748,6 +899,11 @@ function AvailablePluginsPanel({
             <select
               id="plugins-available-source"
               value={sourceFilter}
+              onFocus={() => {
+                if (sourceTrackedRef.current) return;
+                sourceTrackedRef.current = true;
+                onSourceDropdown?.();
+              }}
               onChange={(event) => setSourceFilter(event.target.value)}
             >
               <option value="all">{t('promptTemplates.allSources')}</option>
@@ -1168,6 +1324,7 @@ function SourcesPanel({
   marketplaces,
   pendingAction,
   onAdd,
+  onSourceUrlInput,
   onRefresh,
   onRemove,
   onTrust,
@@ -1176,6 +1333,7 @@ function SourcesPanel({
   marketplaces: PluginMarketplace[];
   pendingAction: string | null;
   onAdd: (url: string, trust: PluginMarketplaceTrust) => void;
+  onSourceUrlInput?: () => void;
   onRefresh: (marketplace: PluginMarketplace) => void;
   onRemove: (marketplace: PluginMarketplace) => void;
   onTrust: (marketplace: PluginMarketplace, trust: PluginMarketplaceTrust) => void;
@@ -1184,6 +1342,7 @@ function SourcesPanel({
   const [url, setUrl] = useState('');
   const [trust, setTrust] = useState<PluginMarketplaceTrust>('restricted');
   const trimmedUrl = url.trim();
+  const sourceUrlTrackedRef = useRef(false);
   return (
     <section className="plugins-view__section" aria-labelledby="plugins-sources-title">
       <div className="plugins-view__section-head">
@@ -1208,6 +1367,11 @@ function SourcesPanel({
           <input
             id="plugin-marketplace-url"
             value={url}
+            onFocus={() => {
+              if (sourceUrlTrackedRef.current) return;
+              sourceUrlTrackedRef.current = true;
+              onSourceUrlInput?.();
+            }}
             onChange={(event) => setUrl(event.target.value)}
             placeholder="https://example.com/open-design-marketplace.json"
             disabled={pendingAction === 'add'}

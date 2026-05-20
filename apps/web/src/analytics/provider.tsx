@@ -12,7 +12,7 @@ import {
 } from 'react';
 import { useI18n } from '../i18n';
 import {
-  ANALYTICS_HEADER_ANONYMOUS_ID,
+  ANALYTICS_HEADER_DEVICE_ID,
   ANALYTICS_HEADER_CLIENT_TYPE,
   ANALYTICS_HEADER_LOCALE,
   ANALYTICS_HEADER_REQUEST_ID,
@@ -24,7 +24,9 @@ import {
   capture,
   getAnalyticsClient,
   getResolvedAnonymousId,
+  setConfigureGlobals,
 } from './client';
+import type { AnalyticsConfigureGlobals } from '@open-design/contracts/analytics';
 import {
   detectClientType,
   getAnonymousId,
@@ -50,6 +52,12 @@ interface AnalyticsContextValue {
   // state is reset() then identify()'d to the new id so the next event
   // batch is fully decoupled from the deleted identity.
   setIdentity: (installationId: string | null) => void;
+  // Push the configure-state triplet (has_available_configure_cli /
+  // configure_type / configure_availability) to the PostHog global
+  // register so every subsequent capture inherits it. Called from
+  // App.tsx whenever the user's execution-mode config changes (mode
+  // switch, agent select, BYOK save, CLI rescan).
+  setConfigureGlobals: (next: AnalyticsConfigureGlobals) => void;
   anonymousId: string;
   sessionId: string;
   newRequestId: () => string;
@@ -157,7 +165,7 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
     if (!resolvedAnonId) return;
     const original = window.fetch;
     const baseHeaders: Record<string, string> = {
-      [ANALYTICS_HEADER_ANONYMOUS_ID]: resolvedAnonId,
+      [ANALYTICS_HEADER_DEVICE_ID]: resolvedAnonId,
       [ANALYTICS_HEADER_SESSION_ID]: identity.sessionId,
       [ANALYTICS_HEADER_CLIENT_TYPE]: identity.clientType,
     };
@@ -282,6 +290,9 @@ export function AnalyticsProvider({ children }: { children: ReactNode }) {
         // start using the new id immediately, not after the next reload.
         if (installationId) setResolvedAnonId(installationId);
       },
+      setConfigureGlobals: (next: AnalyticsConfigureGlobals) => {
+        setConfigureGlobals(next);
+      },
       anonymousId: identity.anonymousId,
       sessionId: identity.sessionId,
       newRequestId: () => randomUUID(),
@@ -302,6 +313,7 @@ export function useAnalytics(): AnalyticsContextValue {
       track: () => undefined,
       setConsent: () => undefined,
       setIdentity: () => undefined,
+      setConfigureGlobals: () => undefined,
       anonymousId: 'unmounted',
       sessionId: 'unmounted',
       newRequestId: () => randomUUID(),

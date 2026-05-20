@@ -5,10 +5,14 @@ import type {
   OpenDesignHostActionResult,
   OpenDesignHostFailure,
   OpenDesignHostProjectImportResult,
+  OpenDesignHostUpdaterActionOptions,
+  OpenDesignHostUpdaterStatusListener,
+  OpenDesignHostUpdaterStatusSnapshot,
 } from '@open-design/host';
 
 const OPEN_DESIGN_HOST_GLOBAL: typeof import('@open-design/host').OPEN_DESIGN_HOST_GLOBAL = '__od__';
 const OPEN_DESIGN_HOST_VERSION: typeof import('@open-design/host').OPEN_DESIGN_HOST_VERSION = 1;
+const UPDATER_STATUS_EVENT = 'od:update:status-changed';
 
 type PrintPdfOptions = {
   deck?: boolean;
@@ -77,6 +81,18 @@ function normalizeProjectImportResult(input: unknown): OpenDesignHostProjectImpo
 // arbitrary baseDir even indirectly because the picker dialog is the
 // single source of paths crossing into the daemon, and it lives in the
 // main process.
+
+// Keep this file dependency-free at runtime: in sandbox: true preloads only
+// the `electron` module is safe to require. The diagnostics channel name is
+// duplicated from main/diagnostics.ts on purpose so the preload bundle does
+// not pull in node-only modules transitively.
+const DESKTOP_DIAGNOSTICS_IPC_CHANNEL = 'diagnostics:export-to-file';
+
+type DesktopDiagnosticsExportResult =
+  | { ok: true; path: string }
+  | { ok: false; cancelled: true }
+  | { ok: false; cancelled: false; message: string };
+
 const project = {
   pickAndImport: (
     init?: { name?: string; skillId?: string | null; designSystemId?: string | null },
@@ -116,6 +132,40 @@ const shell = {
   },
 };
 
+function invokeUpdater(
+  action: 'check' | 'download' | 'install' | 'status',
+  options?: OpenDesignHostUpdaterActionOptions,
+): Promise<OpenDesignHostUpdaterStatusSnapshot> {
+  return ipcRenderer.invoke(`od:update:${action}`, options ?? null);
+}
+
+const updater = {
+  check: (options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot> =>
+    invokeUpdater('check', options),
+  download: (options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot> =>
+    invokeUpdater('download', options),
+  install: (options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot> =>
+    invokeUpdater('install', options),
+  quit: async (options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostActionResult> => {
+    try {
+      return await ipcRenderer.invoke('od:update:quit', options ?? null);
+    } catch (error) {
+      return actionFailure(reasonFromError(error));
+    }
+  },
+  status: (options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot> =>
+    invokeUpdater('status', options),
+  subscribe: (listener: OpenDesignHostUpdaterStatusListener): (() => void) => {
+    const handler = (_event: unknown, status: OpenDesignHostUpdaterStatusSnapshot): void => {
+      listener(status);
+    };
+    ipcRenderer.on(UPDATER_STATUS_EVENT, handler);
+    return () => {
+      ipcRenderer.removeListener(UPDATER_STATUS_EVENT, handler);
+    };
+  },
+};
+
 const hostBridge = {
   version: OPEN_DESIGN_HOST_VERSION,
   client: {
@@ -138,6 +188,12 @@ const hostBridge = {
     setVisible: (visible: boolean): void =>
       ipcRenderer.send('desktop-pet:set-visible', Boolean(visible)),
   },
+  updater,
 } satisfies OpenDesignHostBridge;
 
 contextBridge.exposeInMainWorld(OPEN_DESIGN_HOST_GLOBAL, hostBridge);
+
+contextBridge.exposeInMainWorld('openDesignDesktop', {
+  exportDiagnostics: (): Promise<DesktopDiagnosticsExportResult> =>
+    ipcRenderer.invoke(DESKTOP_DIAGNOSTICS_IPC_CHANNEL) as Promise<DesktopDiagnosticsExportResult>,
+});

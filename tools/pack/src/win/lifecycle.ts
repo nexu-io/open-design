@@ -51,6 +51,7 @@ import type {
 } from "./types.js";
 
 const PACKAGED_CONFIG_PATH_ENV = "OD_PACKAGED_CONFIG_PATH";
+const UPDATE_ACTION_TIMEOUT_MS = 10 * 60 * 1000;
 
 function desktopStamp(config: ToolPackConfig): SidecarStamp {
   return {
@@ -436,7 +437,7 @@ export async function inspectPackedWinApp(config: ToolPackConfig, options: { exp
       update: await requestJsonIpc<DesktopUpdateResult>(
         stamp.ipc,
         { input: { action: updateAction }, type: SIDECAR_MESSAGES.UPDATE },
-        { timeoutMs: 60000 },
+        { timeoutMs: UPDATE_ACTION_TIMEOUT_MS },
       ),
     }),
     status,

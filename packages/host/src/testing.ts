@@ -3,14 +3,16 @@ import {
   OPEN_DESIGN_HOST_VERSION,
   type OpenDesignHostBridge,
   type OpenDesignHostGlobalScope,
+  type OpenDesignHostUpdaterStatusSnapshot,
 } from "./index.js";
 
-export type MockOpenDesignHost = Partial<Omit<OpenDesignHostBridge, "client" | "pdf" | "pet" | "project" | "shell">> & {
+export type MockOpenDesignHost = Partial<Omit<OpenDesignHostBridge, "client" | "pdf" | "pet" | "project" | "shell" | "updater">> & {
   client?: Partial<OpenDesignHostBridge["client"]>;
   pdf?: Partial<OpenDesignHostBridge["pdf"]>;
   pet?: Partial<OpenDesignHostBridge["pet"]>;
   project?: Partial<OpenDesignHostBridge["project"]>;
   shell?: Partial<OpenDesignHostBridge["shell"]>;
+  updater?: Partial<OpenDesignHostBridge["updater"]>;
 };
 
 export type MockOpenDesignHostOptions = {
@@ -19,6 +21,22 @@ export type MockOpenDesignHostOptions = {
 };
 
 function defaultHost(): OpenDesignHostBridge {
+  const updaterStatus: OpenDesignHostUpdaterStatusSnapshot = {
+    arch: "arm64",
+    capabilities: {
+      canApplyInPlace: false,
+      canDownload: true,
+      canOpenInstaller: true,
+      requiresManualInstall: true,
+    },
+    channel: "beta",
+    currentVersion: "1.0.0-beta.0",
+    enabled: true,
+    mode: "package-launcher",
+    platform: "darwin",
+    state: "idle",
+    supported: true,
+  };
   return {
     version: OPEN_DESIGN_HOST_VERSION,
     client: {
@@ -43,6 +61,14 @@ function defaultHost(): OpenDesignHostBridge {
     pet: {
       setVisible: () => undefined,
     },
+    updater: {
+      check: async () => updaterStatus,
+      download: async () => updaterStatus,
+      install: async () => updaterStatus,
+      quit: async () => ({ ok: true }),
+      status: async () => updaterStatus,
+      subscribe: () => () => undefined,
+    },
   };
 }
 
@@ -56,6 +82,7 @@ export function createMockOpenDesignHost(overrides: MockOpenDesignHost = {}): Op
     project: { ...base.project, ...overrides.project },
     pdf: { ...base.pdf, ...overrides.pdf },
     pet: { ...base.pet, ...overrides.pet },
+    updater: { ...base.updater, ...overrides.updater },
   };
 }
 

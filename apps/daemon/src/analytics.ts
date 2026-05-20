@@ -5,14 +5,14 @@
 // Web-side captures (apps/web/src/analytics) carry the matching identity in
 // HTTP headers (see x-od-analytics-* constants in @open-design/contracts);
 // daemon reads those headers off the request and reuses the same
-// anonymous_id as the PostHog distinct_id so events from both sides land on
-// the same person.
+// device_id as the PostHog distinct_id so events from both sides land on
+// the same person. (v2: renamed from `anonymous_id`.)
 
 import crypto from 'node:crypto';
 import { PostHog } from 'posthog-node';
 import type { Request } from 'express';
 import {
-  ANALYTICS_HEADER_ANONYMOUS_ID,
+  ANALYTICS_HEADER_DEVICE_ID,
   ANALYTICS_HEADER_CLIENT_TYPE,
   ANALYTICS_HEADER_LOCALE,
   ANALYTICS_HEADER_REQUEST_ID,
@@ -27,7 +27,7 @@ import { readAppConfig } from './app-config.js';
 const DEFAULT_HOST = 'https://us.i.posthog.com';
 
 export interface AnalyticsContext {
-  anonymousId: string;
+  deviceId: string;
   sessionId: string;
   clientType: AnalyticsClientType;
   locale: string;
@@ -39,15 +39,15 @@ export interface AnalyticsContext {
 // web side too). Daemon-internal capture sites (e.g. background sweeps with
 // no request) should not invoke this path.
 export function readAnalyticsContext(req: Request): AnalyticsContext | null {
-  const anonymousId = headerString(req, ANALYTICS_HEADER_ANONYMOUS_ID);
-  if (!anonymousId) return null;
-  const sessionId = headerString(req, ANALYTICS_HEADER_SESSION_ID) ?? anonymousId;
+  const deviceId = headerString(req, ANALYTICS_HEADER_DEVICE_ID);
+  if (!deviceId) return null;
+  const sessionId = headerString(req, ANALYTICS_HEADER_SESSION_ID) ?? deviceId;
   const clientHeader = headerString(req, ANALYTICS_HEADER_CLIENT_TYPE);
   const clientType: AnalyticsClientType =
     clientHeader === 'desktop' ? 'desktop' : 'web';
   const locale = headerString(req, ANALYTICS_HEADER_LOCALE) ?? 'en';
   const requestId = headerString(req, ANALYTICS_HEADER_REQUEST_ID);
-  return { anonymousId, sessionId, clientType, locale, requestId };
+  return { deviceId, sessionId, clientType, locale, requestId };
 }
 
 function headerString(req: Request, name: string): string | null {
@@ -140,7 +140,7 @@ export function createAnalyticsService(args: {
           const appCfg = await readAppConfig(args.dataDir);
           if (appCfg.telemetry?.metrics !== true) return;
           client.capture({
-            distinctId: context.anonymousId,
+            distinctId: context.deviceId,
             event: eventName,
             properties: {
               ...properties,
@@ -149,7 +149,8 @@ export function createAnalyticsService(args: {
               ui_version: appVersion,
               app_version: appVersion,
               session_id: context.sessionId,
-              anonymous_id: context.anonymousId,
+              // v2 rename: was `anonymous_id`. Value unchanged.
+              device_id: context.deviceId,
               client_type: context.clientType,
               locale: context.locale,
               ...(context.requestId ? { request_id: context.requestId } : {}),

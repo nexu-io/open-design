@@ -48,6 +48,141 @@ export type OpenDesignHostPdfPrintOptions = {
   deck?: boolean;
 };
 
+export const OPEN_DESIGN_HOST_UPDATER_ACTIONS = Object.freeze({
+  CHECK: "check",
+  DOWNLOAD: "download",
+  INSTALL: "install",
+  QUIT: "quit",
+  STATUS: "status",
+} as const);
+
+export type OpenDesignHostUpdaterAction =
+  (typeof OPEN_DESIGN_HOST_UPDATER_ACTIONS)[keyof typeof OPEN_DESIGN_HOST_UPDATER_ACTIONS];
+type OpenDesignHostUpdaterStatusAction = Exclude<
+  OpenDesignHostUpdaterAction,
+  typeof OPEN_DESIGN_HOST_UPDATER_ACTIONS.QUIT
+>;
+
+export const OPEN_DESIGN_HOST_UPDATER_STATES = Object.freeze({
+  AVAILABLE: "available",
+  CHECKING: "checking",
+  DOWNLOADED: "downloaded",
+  DOWNLOADING: "downloading",
+  ERROR: "error",
+  IDLE: "idle",
+  INSTALLING: "installing",
+  NOT_AVAILABLE: "not-available",
+  UNSUPPORTED: "unsupported",
+} as const);
+
+export type OpenDesignHostUpdaterState =
+  (typeof OPEN_DESIGN_HOST_UPDATER_STATES)[keyof typeof OPEN_DESIGN_HOST_UPDATER_STATES];
+
+export type OpenDesignHostUpdaterMode = "js-incremental" | "package-launcher";
+export type OpenDesignHostUpdaterChannel = "beta" | "stable";
+
+export type OpenDesignHostUpdaterActionOptions = {
+  payload?: Record<string, unknown>;
+};
+
+export type OpenDesignHostUpdaterCapabilitySet = {
+  canApplyInPlace: boolean;
+  canDownload: boolean;
+  canOpenInstaller: boolean;
+  requiresManualInstall: boolean;
+};
+
+export type OpenDesignHostUpdaterPathSnapshot = {
+  downloadRoot?: string;
+  manifestPath?: string;
+};
+
+export type OpenDesignHostUpdaterChecksumSnapshot = {
+  algorithm: "sha256" | "sha512";
+  url?: string;
+  value?: string;
+};
+
+export type OpenDesignHostUpdaterArtifactSnapshot = {
+  name?: string;
+  platformKey?: string;
+  size?: number;
+  type?: string;
+  url: string;
+};
+
+export type OpenDesignHostUpdaterProgressSnapshot = {
+  receivedBytes: number;
+  totalBytes?: number;
+};
+
+export type OpenDesignHostUpdaterErrorSnapshot = {
+  code: string;
+  details?: unknown;
+  message: string;
+};
+
+export type OpenDesignHostUpdaterInstallResult = {
+  dryRun?: boolean;
+  openedAt: string;
+  path: string;
+};
+
+export type OpenDesignHostUpdaterReleaseSnapshot = {
+  arch: string;
+  artifact: OpenDesignHostUpdaterArtifactSnapshot;
+  checksum: OpenDesignHostUpdaterChecksumSnapshot;
+  channel: OpenDesignHostUpdaterChannel;
+  downloadedAt: string;
+  key: string;
+  metadata?: Record<string, unknown>;
+  path: string;
+  platformKey: string;
+  version: string;
+};
+
+export type OpenDesignHostUpdaterIncomingSnapshot = {
+  arch: string;
+  artifact: OpenDesignHostUpdaterArtifactSnapshot;
+  channel: OpenDesignHostUpdaterChannel;
+  key?: string;
+  metadata?: Record<string, unknown>;
+  progress?: OpenDesignHostUpdaterProgressSnapshot;
+  startedAt: string;
+  version: string;
+};
+
+export type OpenDesignHostUpdaterStatusSnapshot = {
+  active?: OpenDesignHostUpdaterReleaseSnapshot;
+  arch: string;
+  artifact?: OpenDesignHostUpdaterArtifactSnapshot;
+  artifactUrl?: string;
+  availableVersion?: string;
+  capabilities: OpenDesignHostUpdaterCapabilitySet;
+  channel: OpenDesignHostUpdaterChannel;
+  checksum?: OpenDesignHostUpdaterChecksumSnapshot;
+  currentVersion: string;
+  downloadPath?: string;
+  enabled: boolean;
+  error?: OpenDesignHostUpdaterErrorSnapshot;
+  incoming?: OpenDesignHostUpdaterIncomingSnapshot;
+  installResult?: OpenDesignHostUpdaterInstallResult;
+  lastCheckedAt?: string;
+  metadata?: Record<string, unknown>;
+  mode: OpenDesignHostUpdaterMode;
+  paths?: OpenDesignHostUpdaterPathSnapshot;
+  platform: string;
+  progress?: OpenDesignHostUpdaterProgressSnapshot;
+  state: OpenDesignHostUpdaterState;
+  supported: boolean;
+};
+
+export type OpenDesignHostUpdaterResult =
+  | { ok: true; status: OpenDesignHostUpdaterStatusSnapshot }
+  | OpenDesignHostFailure;
+
+export type OpenDesignHostUpdaterStatusListener = (status: OpenDesignHostUpdaterStatusSnapshot) => void;
+
 export type OpenDesignHostBridge = {
   client: OpenDesignHostClient;
   pdf: {
@@ -62,6 +197,14 @@ export type OpenDesignHostBridge = {
   shell: {
     openExternal(url: string): Promise<OpenDesignHostActionResult>;
     openPath(projectId: string): Promise<OpenDesignHostActionResult>;
+  };
+  updater: {
+    check(options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot>;
+    download(options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot>;
+    install(options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot>;
+    quit(options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostActionResult>;
+    status(options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot>;
+    subscribe(listener: OpenDesignHostUpdaterStatusListener): () => void;
   };
   version: typeof OPEN_DESIGN_HOST_VERSION;
 };
@@ -104,6 +247,19 @@ export function isOpenDesignHostBridge(value: unknown): value is OpenDesignHostB
 
   const pet = value.pet;
   if (!isRecord(pet) || !hasFunction(pet, "setVisible")) return false;
+
+  const updater = value.updater;
+  if (
+    !isRecord(updater) ||
+    !hasFunction(updater, "status") ||
+    !hasFunction(updater, "check") ||
+    !hasFunction(updater, "download") ||
+    !hasFunction(updater, "install") ||
+    !hasFunction(updater, "quit") ||
+    !hasFunction(updater, "subscribe")
+  ) {
+    return false;
+  }
 
   return true;
 }
@@ -228,5 +384,76 @@ export function setHostPetVisible(visible: boolean, scope: OpenDesignHostGlobalS
     return { ok: true };
   } catch (error) {
     return unavailable(error instanceof Error ? error.message : String(error));
+  }
+}
+
+async function runHostUpdaterAction(
+  action: OpenDesignHostUpdaterStatusAction,
+  options?: OpenDesignHostUpdaterActionOptions,
+  scope: OpenDesignHostGlobalScope = globalThis,
+): Promise<OpenDesignHostUpdaterResult> {
+  const host = getOpenDesignHost(scope);
+  if (host == null) return unavailable("Open Design host is not available");
+  try {
+    return {
+      ok: true,
+      status: await host.updater[action](options),
+    };
+  } catch (error) {
+    return unavailable(error instanceof Error ? error.message : String(error));
+  }
+}
+
+export async function getHostUpdaterStatus(
+  options?: OpenDesignHostUpdaterActionOptions,
+  scope: OpenDesignHostGlobalScope = globalThis,
+): Promise<OpenDesignHostUpdaterResult> {
+  return await runHostUpdaterAction(OPEN_DESIGN_HOST_UPDATER_ACTIONS.STATUS, options, scope);
+}
+
+export async function checkHostUpdater(
+  options?: OpenDesignHostUpdaterActionOptions,
+  scope: OpenDesignHostGlobalScope = globalThis,
+): Promise<OpenDesignHostUpdaterResult> {
+  return await runHostUpdaterAction(OPEN_DESIGN_HOST_UPDATER_ACTIONS.CHECK, options, scope);
+}
+
+export async function downloadHostUpdater(
+  options?: OpenDesignHostUpdaterActionOptions,
+  scope: OpenDesignHostGlobalScope = globalThis,
+): Promise<OpenDesignHostUpdaterResult> {
+  return await runHostUpdaterAction(OPEN_DESIGN_HOST_UPDATER_ACTIONS.DOWNLOAD, options, scope);
+}
+
+export async function installHostUpdater(
+  options?: OpenDesignHostUpdaterActionOptions,
+  scope: OpenDesignHostGlobalScope = globalThis,
+): Promise<OpenDesignHostUpdaterResult> {
+  return await runHostUpdaterAction(OPEN_DESIGN_HOST_UPDATER_ACTIONS.INSTALL, options, scope);
+}
+
+export async function quitHostAfterUpdaterInstallerOpen(
+  options?: OpenDesignHostUpdaterActionOptions,
+  scope: OpenDesignHostGlobalScope = globalThis,
+): Promise<OpenDesignHostActionResult> {
+  const host = getOpenDesignHost(scope);
+  if (host == null) return unavailable("Open Design host is not available");
+  try {
+    return await host.updater.quit(options);
+  } catch (error) {
+    return unavailable(error instanceof Error ? error.message : String(error));
+  }
+}
+
+export function subscribeHostUpdater(
+  listener: OpenDesignHostUpdaterStatusListener,
+  scope: OpenDesignHostGlobalScope = globalThis,
+): () => void {
+  const host = getOpenDesignHost(scope);
+  if (host == null) return () => undefined;
+  try {
+    return host.updater.subscribe(listener);
+  } catch {
+    return () => undefined;
   }
 }

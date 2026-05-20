@@ -234,7 +234,7 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
   {
     id: 'senseaudio',
     label: 'SenseAudio',
-    hint: 'TTS · 70+ system voices · clone',
+    hint: '',
     integrated: true,
     defaultBaseUrl: 'https://api.senseaudio.cn',
     docsUrl: 'https://docs.senseaudio.cn',
@@ -342,6 +342,29 @@ export const IMAGE_MODELS: MediaModel[] = [
     hint: 'ByteDance · image edit',
     provider: 'volcengine',
     caps: ['i2i'],
+  },
+
+  // SenseAudio — synchronous /v1/image/sync, Bearer auth, reference URL or data URI.
+  {
+    id: 'senseaudio-image-2.0-260319',
+    label: 'senseaudio-image-2.0',
+    hint: 'SenseAudio · multi-aspect, latest',
+    provider: 'senseaudio',
+    caps: ['t2i', 'i2i'],
+  },
+  {
+    id: 'senseaudio-image-1.0-260319',
+    label: 'senseaudio-image-1.0',
+    hint: 'SenseAudio · standard',
+    provider: 'senseaudio',
+    caps: ['t2i', 'i2i'],
+  },
+  {
+    id: 'doubao-seedream-5-0-260128',
+    label: 'seedream-5.0',
+    hint: 'SenseAudio · ByteDance Seedream 5.0 hi-res',
+    provider: 'senseaudio',
+    caps: ['t2i', 'i2i'],
   },
 
   // xAI Grok Imagine — text-to-image (1k/2k, 11+ aspect ratios).

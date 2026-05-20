@@ -23,4 +23,5 @@ export const kimiAgentDef = {
     buildArgs: () => ['acp'],
     streamFormat: 'acp-json-rpc',
     mcpDiscovery: 'mature-acp',
+    externalMcpInjection: 'acp-merge',
 } satisfies RuntimeAgentDef;

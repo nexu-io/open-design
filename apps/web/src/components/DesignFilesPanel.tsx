@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useAnalytics } from '../analytics/provider';
+import { trackFileManagerClick } from '../analytics/events';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { projectFileUrl } from '../providers/registry';
@@ -90,6 +92,7 @@ export function DesignFilesPanel({
   onPluginFolderAgentAction,
 }: Props) {
   const t = useT();
+  const analytics = useAnalytics();
   const [refreshing, setRefreshing] = useState(false);
   const [draggingFiles, setDraggingFiles] = useState(false);
   const dragDepthRef = useRef(0);
@@ -729,7 +732,14 @@ export function DesignFilesPanel({
       <div className="df-actions">
         <button
           type="button"
-          onClick={() => void handleBatchDownload()}
+          onClick={() => {
+            trackFileManagerClick(analytics.track, {
+              page_name: 'file_manager',
+              area: 'file_manager',
+              element: 'download_as_zip',
+            });
+            void handleBatchDownload();
+          }}
           title={t('designFiles.downloadSelected', { n: selected.size })}
         >
           <Icon name="download" size={13} />
@@ -1192,7 +1202,14 @@ export function DesignFilesPanel({
         </div>
       </div>
       {preview && previewFile ? (
+        // Key on the file name so React unmounts the previous DfPreview
+        // (and its iframe / image element) when the user clicks a
+        // different file. Without this, React diffing reuses the same
+        // iframe DOM node and the browser keeps showing the first
+        // file's contents — only the `src` prop changes but the iframe
+        // never actually navigates.
         <DfPreview
+          key={previewFile.name}
           projectId={projectId}
           file={previewFile}
           onOpen={() => onOpenFile(previewFile.name)}

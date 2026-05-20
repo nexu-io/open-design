@@ -4,7 +4,7 @@
 // Layout (under <dataDir>/memory/):
 //   MEMORY.md            ← short index; one bullet per fact file
 //   <type>_<slug>.md     ← per-fact body + frontmatter
-//   .config.json         ← single boolean: { "enabled": true }
+//   .config.json         ← switches: { "enabled": true, "chatExtractionEnabled": true }
 //
 // Frontmatter format (matches Claude Code's auto-memory pattern):
 //   ---
@@ -175,18 +175,19 @@ export async function readMemoryConfig(dataDir) {
     const parsed = JSON.parse(raw);
     return {
       enabled: parsed?.enabled !== false,
+      chatExtractionEnabled: parsed?.chatExtractionEnabled !== false,
       extraction: normalizeExtractionPatch(parsed?.extraction),
     };
   } catch {
     // Default-on. The whole point of the feature is to surface user
     // context across runs; making it opt-in would mean the first 3
     // chats happen with no memory and no warning.
-    return { enabled: true, extraction: null };
+    return { enabled: true, chatExtractionEnabled: true, extraction: null };
   }
 }
 
 // Patch shape:
-//   { enabled?: boolean, extraction?: object | null }
+//   { enabled?: boolean, chatExtractionEnabled?: boolean, extraction?: object | null }
 // `extraction: null` clears the override (reverting to auto-pick); an
 // object replaces it whole; an absent key leaves the existing override
 // untouched.
@@ -195,6 +196,10 @@ export async function writeMemoryConfig(dataDir, patch) {
   const next = {
     enabled:
       typeof patch?.enabled === 'boolean' ? patch.enabled : current.enabled,
+    chatExtractionEnabled:
+      typeof patch?.chatExtractionEnabled === 'boolean'
+        ? patch.chatExtractionEnabled
+        : current.chatExtractionEnabled,
     extraction: current.extraction,
   };
   if (Object.prototype.hasOwnProperty.call(patch || {}, 'extraction')) {
@@ -203,9 +208,15 @@ export async function writeMemoryConfig(dataDir, patch) {
       : normalizeExtractionPatch(patch.extraction);
   }
   if (typeof next.enabled !== 'boolean') next.enabled = true;
+  if (typeof next.chatExtractionEnabled !== 'boolean') {
+    next.chatExtractionEnabled = true;
+  }
   await ensureDir(memoryDir(dataDir));
   await fsp.writeFile(configPath(dataDir), JSON.stringify(next, null, 2));
-  if (current.enabled !== next.enabled) {
+  if (
+    current.enabled !== next.enabled
+    || current.chatExtractionEnabled !== next.chatExtractionEnabled
+  ) {
     emitChange({ kind: 'config', enabled: next.enabled });
   }
   // We don't emit a separate change event for extraction overrides — the
@@ -763,6 +774,9 @@ export async function extractFromMessage(dataDir, userMessage) {
   const cfg = await readMemoryConfig(dataDir);
   if (!cfg.enabled) {
     recordSkip({ userMessage, reason: 'memory-disabled', kind: 'heuristic' });
+    return [];
+  }
+  if (!cfg.chatExtractionEnabled) {
     return [];
   }
   const seen = new Set();

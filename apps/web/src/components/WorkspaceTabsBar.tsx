@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useT } from '../i18n';
 import { navigate, type EntryHomeView, type Route } from '../router';
 import type { Project } from '../types';
@@ -48,10 +49,19 @@ interface Props {
 }
 
 const STORAGE_KEY = 'open-design:workspace-tabs:v1';
+const OPEN_WORKSPACE_TAB_EVENT = 'open-design:workspace-tabs:open';
 const MAX_VISIBLE_CHROME_TABS = 16;
 const MAX_SEARCH_RESULTS = 80;
 const TAB_STRIP_CONTROL_WIDTH = 112;
 const MIN_VISIBLE_TAB_WIDTH = 76;
+
+export function openWorkspaceTab(route: Route): void {
+  window.dispatchEvent(
+    new CustomEvent<{ route: Route }>(OPEN_WORKSPACE_TAB_EVENT, {
+      detail: { route },
+    }),
+  );
+}
 
 function nowId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -252,6 +262,7 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
   const [maxVisibleTabs, setMaxVisibleTabs] = useState(MAX_VISIBLE_CHROME_TABS);
   const stripRef = useRef<HTMLDivElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   const projectById = useMemo(
@@ -289,6 +300,26 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
   useEffect(() => {
     setState((current) => syncStateToRoute(current, route));
   }, [route]);
+
+  useEffect(() => {
+    function onOpenWorkspaceTab(event: Event) {
+      const detail = (event as CustomEvent<{ route?: Route }>).detail;
+      const nextRoute = detail?.route;
+      if (!nextRoute) return;
+      const nextTab = tabFromRoute(nextRoute);
+      setState((current) => {
+        const normalized = normalizeTabsState(current);
+        return normalizeTabsState({
+          tabs: [...normalized.tabs, nextTab],
+          activeTabId: nextTab.id,
+        });
+      });
+      setTabsMenuOpen(false);
+    }
+
+    window.addEventListener(OPEN_WORKSPACE_TAB_EVENT, onOpenWorkspaceTab);
+    return () => window.removeEventListener(OPEN_WORKSPACE_TAB_EVENT, onOpenWorkspaceTab);
+  }, []);
 
   useEffect(() => {
     const stripElement = stripRef.current;
@@ -335,7 +366,16 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
   useEffect(() => {
     if (!tabsMenuOpen) return;
     function onPointerDown(event: MouseEvent) {
-      if (!menuRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+      const insideTrigger = menuRef.current?.contains(target) ?? false;
+      // The popover is rendered through a portal into document.body to
+      // escape the `contain: layout` containment block on
+      // `.workspace-tabs-strip` (which would otherwise resolve our
+      // fixed positioning against the strip instead of the viewport).
+      // The portaled node is outside menuRef's subtree, so we also have
+      // to count clicks inside it as "inside the menu".
+      const insidePopover = popoverRef.current?.contains(target) ?? false;
+      if (!insideTrigger && !insidePopover) {
         setTabsMenuOpen(false);
       }
     }
@@ -469,8 +509,14 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
           >
             <Icon name="search" size={15} />
           </button>
-          {tabsMenuOpen ? (
-            <div className="workspace-tabs-popover" role="dialog" aria-label="Search tabs">
+          {tabsMenuOpen && typeof document !== 'undefined'
+            ? createPortal(
+                <div
+                  className="workspace-tabs-popover"
+                  role="dialog"
+                  aria-label="Search tabs"
+                  ref={popoverRef}
+                >
               <div className="workspace-tabs-search">
                 <Icon name="search" size={14} />
                 <input
@@ -525,8 +571,10 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
                   <div className="workspace-tabs-empty">No tabs found</div>
                 )}
               </div>
-            </div>
-          ) : null}
+                </div>,
+                document.body,
+              )
+            : null}
         </div>
       </div>
       <div className="workspace-tabs-drag" aria-hidden />
@@ -560,6 +608,7 @@ function displayTabFor(
   }
   const entryTitle: Record<EntryHomeView, string> = {
     home: t('entry.navHome'),
+    onboarding: t('settings.welcomeTitle'),
     projects: t('entry.navProjects'),
     tasks: t('entry.navTasks'),
     plugins: t('entry.navPlugins'),
@@ -568,6 +617,7 @@ function displayTabFor(
   };
   const entryIcon: Record<EntryHomeView, IconName> = {
     home: 'home',
+    onboarding: 'sparkles',
     projects: 'folder',
     tasks: 'kanban',
     plugins: 'grid',

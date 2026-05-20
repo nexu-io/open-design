@@ -1,13 +1,22 @@
 import { createHmac, randomBytes } from "node:crypto";
-import { mkdir, writeFile, realpath, stat } from "node:fs/promises";
+import { appendFile, mkdir, realpath, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { BrowserWindow, dialog, ipcMain, screen, shell } from "electron";
-import type { DesktopExportPdfInput, DesktopExportPdfResult } from "@open-design/sidecar-proto";
+import {
+  DESKTOP_UPDATE_CHANNELS,
+  DESKTOP_UPDATE_MODES,
+  DESKTOP_UPDATE_STATES,
+  type DesktopExportPdfInput,
+  type DesktopExportPdfResult,
+  type DesktopUpdateStatusSnapshot,
+} from "@open-design/sidecar-proto";
+import type { OpenDesignHostActionResult, OpenDesignHostUpdaterActionOptions } from "@open-design/host";
 
 import { createElectronPdfTarget, exportPdfFromHtml, savePrintReadyDocumentAsPdf } from "./pdf-export.js";
 import type { PrintReadyPdfOptions } from "./pdf-export.js";
+import type { DesktopUpdater } from "./updater.js";
 
 /**
  * Result of validating a candidate path before exposing it to a
@@ -208,6 +217,14 @@ const MAX_CONSOLE_ENTRIES = 200;
 const DESKTOP_PET_WINDOW_WIDTH = 360;
 const DESKTOP_PET_WINDOW_HEIGHT = 300;
 const DESKTOP_PET_WINDOW_MARGIN = 24;
+const UPDATER_STATUS_EVENT = "od:update:status-changed";
+const UPDATER_IPC_CHANNELS = [
+  "od:update:status",
+  "od:update:check",
+  "od:update:download",
+  "od:update:install",
+  "od:update:quit",
+] as const;
 
 export type DesktopEvalInput = {
   expression: string;
@@ -300,6 +317,14 @@ export type DesktopRuntimeOptions = {
    * skip it (the lazy retry then collapses into a single attempt).
    */
   registerDesktopAuthWithDaemon?: () => Promise<boolean>;
+  /**
+   * Optional file path to append renderer-process error/warning console
+   * messages to. Lets the diagnostics export pick up UI errors that would
+   * otherwise only live in DevTools.
+   */
+  rendererLogPath?: string | null;
+  requestQuit?: () => void;
+  updater?: DesktopUpdater;
 };
 
 const DESKTOP_IMPORT_TOKEN_HEADER = "X-OD-Desktop-Import-Token";
@@ -776,6 +801,36 @@ function parsePrintReadyPdfOptions(value: unknown): PrintReadyPdfOptions {
   return deck === true ? { deck: true } : {};
 }
 
+function unavailableUpdaterStatus(): DesktopUpdateStatusSnapshot {
+  return {
+    arch: process.arch,
+    capabilities: {
+      canApplyInPlace: false,
+      canDownload: false,
+      canOpenInstaller: false,
+      requiresManualInstall: false,
+    },
+    channel: DESKTOP_UPDATE_CHANNELS.BETA,
+    currentVersion: "0.0.0",
+    enabled: false,
+    error: {
+      code: "updater-unavailable",
+      message: "Desktop updater is not available.",
+    },
+    mode: DESKTOP_UPDATE_MODES.PACKAGE_LAUNCHER,
+    platform: process.platform,
+    state: DESKTOP_UPDATE_STATES.UNSUPPORTED,
+    supported: false,
+  };
+}
+
+function checkOptionsFromHost(options: unknown): { autoDownload?: boolean } | undefined {
+  const input = options as OpenDesignHostUpdaterActionOptions | null | undefined;
+  const payload = input?.payload;
+  if (payload == null || typeof payload.autoDownload !== "boolean") return undefined;
+  return { autoDownload: payload.autoDownload };
+}
+
 export async function createDesktopRuntime(options: DesktopRuntimeOptions): Promise<DesktopRuntime> {
   const preloadPath = options.preloadPath ?? join(dirname(fileURLToPath(import.meta.url)), "preload.cjs");
 
@@ -788,6 +843,9 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   ipcMain.removeHandler("dialog:pick-and-import");
   ipcMain.removeHandler("shell:open-external");
   ipcMain.removeHandler("shell:open-path");
+  for (const channel of UPDATER_IPC_CHANNELS) {
+    ipcMain.removeHandler(channel);
+  }
   ipcMain.handle("shell:open-external", async (_event, url: string) => {
     if (!isHttpUrl(url)) return false;
     try {
@@ -931,6 +989,53 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   showWindowButtons(window);
   attachDownloadSaveAsDialog(window);
 
+  const sendUpdaterStatus = (status = options.updater?.snapshot() ?? unavailableUpdaterStatus()) => {
+    if (window.isDestroyed()) return;
+    window.webContents.send(UPDATER_STATUS_EVENT, status);
+  };
+  const unsubscribeUpdater = options.updater?.subscribe(() => sendUpdaterStatus()) ?? (() => undefined);
+  const requireMainWindowSender = (event: Electron.IpcMainInvokeEvent): void => {
+    if (event.sender !== window.webContents) {
+      throw new Error("updater IPC is only available to the main Open Design window");
+    }
+  };
+  ipcMain.handle("od:update:status", async (event) => {
+    requireMainWindowSender(event);
+    const status = await (options.updater?.status() ?? unavailableUpdaterStatus());
+    sendUpdaterStatus(status);
+    return status;
+  });
+  ipcMain.handle("od:update:check", async (event, updaterOptions: unknown) => {
+    requireMainWindowSender(event);
+    const status = await (options.updater?.checkForUpdates(checkOptionsFromHost(updaterOptions)) ?? unavailableUpdaterStatus());
+    sendUpdaterStatus(status);
+    return status;
+  });
+  ipcMain.handle("od:update:download", async (event) => {
+    requireMainWindowSender(event);
+    const status = await (options.updater?.downloadUpdate() ?? unavailableUpdaterStatus());
+    sendUpdaterStatus(status);
+    return status;
+  });
+  ipcMain.handle("od:update:install", async (event) => {
+    requireMainWindowSender(event);
+    const status = await (options.updater?.installUpdate() ?? unavailableUpdaterStatus());
+    sendUpdaterStatus(status);
+    return status;
+  });
+  ipcMain.handle("od:update:quit", async (event): Promise<OpenDesignHostActionResult> => {
+    requireMainWindowSender(event);
+    const status = await (options.updater?.status() ?? unavailableUpdaterStatus());
+    if (status.installResult == null) {
+      return { ok: false, reason: "installer has not been opened" };
+    }
+    if (options.requestQuit == null) {
+      return { ok: false, reason: "desktop quit is not available" };
+    }
+    setTimeout(() => options.requestQuit?.(), 0);
+    return { ok: true };
+  });
+
   ipcMain.removeAllListeners("desktop-pet:set-visible");
   ipcMain.on("desktop-pet:set-visible", (event, visible: unknown) => {
     if (petWindow.isDestroyed() || event.sender !== petWindow.webContents) return;
@@ -1028,16 +1133,39 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     });
   }
 
+  const rendererLogPath = options.rendererLogPath ?? null;
+  let rendererLogReady: Promise<void> | null = null;
+  const ensureRendererLogDir = async (): Promise<void> => {
+    if (rendererLogPath == null) return;
+    if (rendererLogReady == null) {
+      rendererLogReady = mkdir(dirname(rendererLogPath), { recursive: true }).then(() => undefined);
+    }
+    await rendererLogReady;
+  };
+  const persistRendererEntry = async (entry: DesktopConsoleEntry): Promise<void> => {
+    if (rendererLogPath == null) return;
+    if (entry.level !== "error" && entry.level !== "warn") return;
+    try {
+      await ensureRendererLogDir();
+      const line = `${JSON.stringify({ timestamp: entry.timestamp, level: entry.level, text: entry.text })}\n`;
+      await appendFile(rendererLogPath, line, "utf8");
+    } catch (error) {
+      console.error("desktop renderer log append failed", error);
+    }
+  };
+
   (window.webContents as any).on("console-message", (event: { level?: number | string; message?: string }) => {
     const level = typeof event.level === "number" ? mapConsoleLevel(event.level) : (event.level ?? "log");
-    consoleEntries.push({
+    const entry: DesktopConsoleEntry = {
       level,
       text: event.message ?? "",
       timestamp: new Date().toISOString(),
-    });
+    };
+    consoleEntries.push(entry);
     if (consoleEntries.length > MAX_CONSOLE_ENTRIES) {
       consoleEntries.splice(0, consoleEntries.length - MAX_CONSOLE_ENTRIES);
     }
+    void persistRendererEntry(entry);
   });
 
   await window.loadURL(createPendingHtml());
@@ -1100,7 +1228,11 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
         clearTimeout(timer);
         timer = null;
       }
+      unsubscribeUpdater();
       ipcMain.removeAllListeners("desktop-pet:set-visible");
+      for (const channel of UPDATER_IPC_CHANNELS) {
+        ipcMain.removeHandler(channel);
+      }
       if (!petWindow.isDestroyed()) petWindow.close();
       if (!window.isDestroyed()) window.close();
     },

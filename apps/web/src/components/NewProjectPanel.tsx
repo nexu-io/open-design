@@ -1,15 +1,16 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import {
-  createTabToTracking,
-  projectKindToTracking,
-} from '@open-design/contracts/analytics';
+import { createTabToTracking } from '@open-design/contracts/analytics';
 import {
   isOpenDesignHostAvailable,
   pickAndImportHostProject,
   type OpenDesignHostProjectImportSuccess,
 } from '@open-design/host';
 import { useAnalytics } from '../analytics/provider';
-import { trackHomeClickCreateButton } from '../analytics/events';
+import {
+  trackNewProjectModalElementClick,
+  trackNewProjectModalSurfaceView,
+  trackNewProjectModalTabClick,
+} from '../analytics/events';
 import type { ConnectorDetail } from '@open-design/contracts';
 
 import { useT } from '../i18n';
@@ -205,6 +206,20 @@ export function NewProjectPanel({
     { message: string; details?: string } | null
   >(null);
   const [tab, setTab] = useState<CreateTab>(initialTab);
+  // P0 analytics — fire surface_view once per (panel mount, tab) pair so the
+  // funnel sees both initial open and tab switches without double-counting on
+  // unrelated re-renders. Ref keys on a tab string because the panel is a
+  // long-lived component the modal mounts/unmounts as the user opens/closes it.
+  const newProjectViewedTabRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (newProjectViewedTabRef.current === tab) return;
+    newProjectViewedTabRef.current = tab;
+    trackNewProjectModalSurfaceView(analytics.track, {
+      page_name: 'home',
+      area: 'new_project_modal',
+      tab_name: createTabToTracking(tab),
+    });
+  }, [tab, analytics.track]);
   // Media tab consolidates image / video / audio. The active surface picks
   // which set of options + skill resolution applies; submission still maps
   // back to the existing image/video/audio ProjectKind branches so the
@@ -509,17 +524,17 @@ export function NewProjectPanel({
     // Generate the click→result correlation id here so the home_click and
     // the eventual project_create_result share request_id.
     const requestId = analytics.newRequestId();
-    const trackedKind = projectKindToTracking(metadata?.kind ?? null) ?? 'prototype';
-    trackHomeClickCreateButton(
+    // v2 emits ui_click element=create on the New project modal; the
+    // project_create_result correlated through `requestId` carries the
+    // project_kind / fidelity payload, so we no longer duplicate them
+    // on the click event.
+    trackNewProjectModalElementClick(
       analytics.track,
       {
-        page: 'home',
-        area: 'create_panel',
-        element: 'create_button',
-        action: 'create_project',
-        source_tab: createTabToTracking(tab),
-        project_kind: trackedKind,
-        has_project_name: name.trim().length > 0,
+        page_name: 'home',
+        area: 'new_project_modal',
+        element: 'create',
+        tab_name: createTabToTracking(tab),
       },
       { requestId },
     );
@@ -622,7 +637,17 @@ export function NewProjectPanel({
               data-testid={`new-project-tab-${entry}`}
               aria-selected={tab === entry}
               className={`newproj-tab ${tab === entry ? 'active' : ''}`}
-              onClick={() => setTab(entry)}
+              onClick={() => {
+                if (entry !== tab) {
+                  trackNewProjectModalTabClick(analytics.track, {
+                    page_name: 'home',
+                    area: 'new_project_modal',
+                    element: 'tab',
+                    tab_name: createTabToTracking(entry),
+                  });
+                }
+                setTab(entry);
+              }}
             >
               {t(TAB_LABEL_KEYS[entry])}
             </button>
@@ -1300,6 +1325,37 @@ function TemplatePicker({
   onDelete?: (id: string) => Promise<boolean>;
 }) {
   const t = useT();
+  const [confirmDelete, setConfirmDelete] = useState<
+    { id: string; name: string } | null
+  >(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState(false);
+
+  function closeConfirm() {
+    setConfirmDelete(null);
+    setDeleting(false);
+    setDeleteError(false);
+  }
+
+  async function runDelete() {
+    if (!confirmDelete || !onDelete) return;
+    setDeleting(true);
+    setDeleteError(false);
+    let ok = false;
+    try {
+      ok = await onDelete(confirmDelete.id);
+    } catch {
+      ok = false;
+    }
+    if (ok) {
+      if (value === confirmDelete.id) onChange(null);
+      closeConfirm();
+    } else {
+      setDeleting(false);
+      setDeleteError(true);
+    }
+  }
+
   return (
     <div className="newproj-section">
       <label className="newproj-label">{t('newproj.templateLabel')}</label>
@@ -1325,10 +1381,7 @@ function TemplatePicker({
                 key={tpl.id}
                 active={value === tpl.id}
                 onClick={() => onChange(tpl.id)}
-                onDelete={onDelete ? async () => {
-                  const ok = await onDelete(tpl.id);
-                  if (ok && value === tpl.id) onChange(null);
-                } : () => {}}
+                onDelete={onDelete ? () => setConfirmDelete({ id: tpl.id, name: tpl.name }) : () => {}}
                 name={tpl.name}
                 description={tpl.description ?? fallbackDesc}
               />
@@ -1336,6 +1389,43 @@ function TemplatePicker({
           })}
         </div>
       )}
+      {confirmDelete ? (
+        <div
+          className="modal-backdrop"
+          onClick={deleting ? undefined : closeConfirm}
+        >
+          <div
+            className="modal modal-confirm"
+            onClick={(e) => e.stopPropagation()}
+            role="alertdialog"
+            aria-modal="true"
+          >
+            <h2>{t('newproj.deleteTemplateTitle')}</h2>
+            <p className="modal-confirm-message">
+              {t('newproj.deleteTemplateConfirm', { name: confirmDelete.name })}
+            </p>
+            {deleteError ? (
+              <p className="modal-confirm-error" role="alert">
+                {t('newproj.deleteTemplateError')}
+              </p>
+            ) : null}
+            <div className="row">
+              <button type="button" onClick={closeConfirm} disabled={deleting}>
+                {t('common.cancel')}
+              </button>
+              <button
+                type="button"
+                className="primary danger"
+                autoFocus
+                disabled={deleting}
+                onClick={runDelete}
+              >
+                {t('newproj.deleteTemplateConfirmCta')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

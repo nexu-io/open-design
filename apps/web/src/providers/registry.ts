@@ -744,6 +744,32 @@ function popupBlockedMessage(): string {
   return 'Popup blocked. Allow popups for Open Design and try again.';
 }
 
+export async function openExternalUrl(url: string): Promise<boolean> {
+  if (isOpenDesignHostAvailable()) {
+    const opened = await openHostExternalUrl(url);
+    if (opened.ok) return true;
+  }
+  try {
+    const resp = await fetch('/api/system/open-external', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    if (resp.ok) {
+      const json = (await resp.json().catch(() => null)) as { ok?: unknown } | null;
+      if (json?.ok === true) return true;
+    }
+  } catch {
+    // Fall through to current-tab navigation below.
+  }
+  try {
+    window.location.assign(url);
+  } catch {
+    return false;
+  }
+  return false;
+}
+
 async function decodeConnectorError(resp: Response): Promise<string> {
   try {
     const payload = (await resp.json()) as { error?: { message?: string } } | null;
@@ -795,14 +821,11 @@ export async function connectConnector(connectorId: string): Promise<ConnectorAc
       } else if (authWindow) {
         openConnectorAuthRedirect(authWindow, json.auth.redirectUrl);
       } else {
-        const redirected = window.open(json.auth.redirectUrl, '_blank');
-        if (!redirected) {
-          return {
-            connector: json.connector ?? null,
-            auth: json.auth,
-            error: popupBlockedMessage(),
-          };
-        }
+        // The embedded browser can block even the synchronous placeholder
+        // popup. Ask the local daemon to open the system browser; if that
+        // route is unavailable, openExternalUrl falls back to current-tab
+        // navigation.
+        await openExternalUrl(json.auth.redirectUrl);
       }
     } else if (json.auth?.kind === 'connected') {
       renderConnectorAuthInfo(authWindow, {
