@@ -8,6 +8,7 @@ import type {
 } from '@open-design/contracts';
 
 import { TasksView } from '../../src/components/TasksView';
+import { I18nProvider } from '../../src/i18n';
 
 const originalFetch = globalThis.fetch;
 
@@ -159,6 +160,171 @@ describe('TasksView automation templates', () => {
     await waitFor(() => {
       expect(applyCalls).toEqual(['/api/automation-proposals/proposal-memory-1/apply']);
       expect(screen.queryByText('Project memory from connector digest')).toBeNull();
+    });
+  });
+
+  it('localizes zh-CN proposal review policy labels for contract values', async () => {
+    const proposals: AutomationEvolutionProposal[] = [
+      {
+        ...memoryProposal,
+        id: 'proposal-trusted-source-1',
+        title: 'Trusted connector update',
+        reviewPolicy: 'trusted-source',
+      },
+      {
+        ...memoryProposal,
+        id: 'proposal-auto-apply-1',
+        title: 'Auto-apply release note',
+        reviewPolicy: 'auto-apply',
+      },
+    ];
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/routines' && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ routines: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/projects' && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ projects: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/automation-templates' && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ templates: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/automation-proposals?status=pending-review' && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ proposals }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    }) as typeof fetch;
+
+    render(
+      <I18nProvider initial="zh-CN">
+        <TasksView />
+      </I18nProvider>,
+    );
+
+    expect(await screen.findByText('Trusted connector update')).toBeTruthy();
+    expect(screen.getByText('Auto-apply release note')).toBeTruthy();
+    expect(screen.getByText('可信来源')).toBeTruthy();
+    expect(screen.getByText('自动应用')).toBeTruthy();
+    expect(screen.queryByText('trusted-source')).toBeNull();
+    expect(screen.queryByText('auto-apply')).toBeNull();
+  });
+
+  it('ingests pasted source content into source packets and proposals', async () => {
+    const postBodies: unknown[] = [];
+    let proposals: AutomationEvolutionProposal[] = [];
+    let packets = [] as Array<{
+      id: string;
+      sourceKind: string;
+      title: string;
+      capturedAt: string;
+      tokenStats: { originalTokens: number };
+    }>;
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/routines' && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ routines: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/projects' && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ projects: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/automation-templates' && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ templates: [daemonTemplate] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/automation-proposals?status=pending-review' && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ proposals }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/automation-source-packets?limit=3' && (!init || init.method === undefined)) {
+        return new Response(JSON.stringify({ packets }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === '/api/automation-ingestions' && init?.method === 'POST') {
+        postBodies.push(JSON.parse(String(init.body)));
+        const packet = {
+          id: 'packet-1',
+          sourceKind: 'repo',
+          sourceRef: 'https://github.com/acme/design',
+          title: 'Acme source',
+          capturedAt: '2026-05-18T00:00:00.000Z',
+          bodyMarkdown: 'Primary color #335CFF',
+          provenance: [],
+          attachments: [],
+          sensitivity: 'workspace',
+          capabilityHints: [],
+          tokenStats: { originalTokens: 6 },
+          candidateSinks: ['memory', 'design-system'],
+        };
+        proposals = [{ ...memoryProposal, id: 'proposal-ingested-1', title: 'Memory: Acme source' }];
+        packets = [packet];
+        return new Response(JSON.stringify({
+          packet,
+          compressionReport: {
+            mode: 'balanced',
+            status: 'skipped',
+            beforeTokens: 6,
+            afterTokens: 6,
+            summary: 'Already compact',
+            preservedSourcePacketId: 'packet-1',
+          },
+          proposals,
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    }) as typeof fetch;
+
+    render(<TasksView />);
+
+    await screen.findByText('Ingest source');
+    fireEvent.change(screen.getByLabelText('Title'), {
+      target: { value: 'Acme source' },
+    });
+    fireEvent.change(screen.getByLabelText('Source ref'), {
+      target: { value: 'https://github.com/acme/design' },
+    });
+    fireEvent.change(screen.getByLabelText('Content'), {
+      target: { value: 'Primary color #335CFF' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^Ingest$/i }));
+
+    await waitFor(() => {
+      expect(postBodies).toHaveLength(1);
+      expect(postBodies[0]).toMatchObject({
+        templateId: 'ingest-source-memory-tree',
+        sourceKind: 'connector',
+        title: 'Acme source',
+        sourceRef: 'https://github.com/acme/design',
+        bodyMarkdown: 'Primary color #335CFF',
+      });
+      expect(screen.getByText('Memory: Acme source')).toBeTruthy();
+      expect(screen.getByText('Acme source')).toBeTruthy();
     });
   });
 

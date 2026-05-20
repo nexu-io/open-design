@@ -7,6 +7,7 @@ import type {
   AutomationContentPacket,
   AutomationEvolutionProposal,
   AutomationEvolutionProposalListResponse,
+  AutomationReviewPolicy,
   AutomationSourceIngestionResponse,
   AutomationSourceKind,
   AutomationSourcePacketListResponse,
@@ -538,10 +539,10 @@ function compressionLabel(locale: Locale, mode: AutomationTokenCompressionMode, 
   return zhCN(locale, fallback, '关闭');
 }
 
-function reviewPolicyLabel(locale: Locale, policy: string): string {
+function reviewPolicyLabel(locale: Locale, policy: AutomationReviewPolicy): string {
   if (policy === 'always') return zhCN(locale, policy, '总是审核');
-  if (policy === 'manual') return zhCN(locale, policy, '手动审核');
-  if (policy === 'auto') return zhCN(locale, policy, '自动审核');
+  if (policy === 'trusted-source') return zhCN(locale, policy, '可信来源');
+  if (policy === 'auto-apply') return zhCN(locale, policy, '自动应用');
   return policy;
 }
 
