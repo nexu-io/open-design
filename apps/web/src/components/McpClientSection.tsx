@@ -1383,16 +1383,39 @@ function McpAgentSupportBanner({ agents }: { agents: AgentInfo[] }) {
     (a) => !a.externalMcpInjection,
   );
   if (supported.length === 0 && unsupported.length === 0) return null;
+  // ACP adapters (Hermes / Kimi / Kilo / Kiro / Vibe / Devin) currently
+  // accept stdio MCP servers only — `buildAcpMcpServers()` in
+  // `apps/daemon/src/mcp-config.ts` filters to `transport === 'stdio'`
+  // because the ACP `mcpServers` descriptor itself has no slot for
+  // HTTP / SSE entries. Tag those runtimes inline so the banner does
+  // not silently claim full forwarding for HTTP MCP servers, which
+  // would re-introduce the very silent-failure UX we are removing.
   const renderNames = (list: AgentInfo[]) =>
     list
-      .map((a) => a.name)
-      .sort((a, b) => a.localeCompare(b))
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((a) =>
+        a.externalMcpInjection === 'acp-merge'
+          ? `${a.name} (stdio only)`
+          : a.name,
+      )
       .join(' · ');
+  const hasAcpSupported = supported.some(
+    (a) => a.externalMcpInjection === 'acp-merge',
+  );
   return (
     <div className="mcp-agent-support">
       {supported.length > 0 ? (
         <p className="hint mcp-agent-support-line">
           <strong>Forwarded to:</strong> {renderNames(supported)}.
+          {hasAcpSupported ? (
+            <>
+              {' '}
+              ACP adapters marked <em>stdio only</em> receive
+              <code>stdio</code> MCP servers from this list; HTTP and SSE
+              entries are dropped at spawn time.
+            </>
+          ) : null}
         </p>
       ) : null}
       {unsupported.length > 0 ? (
