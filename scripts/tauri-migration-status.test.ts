@@ -351,6 +351,33 @@ test("tauri-migration-status rejects packaged handoff archives without bundle SH
   assert.match(parsed.handoffArchive.problems.join("\n"), /command script is missing extracted bundle SHA-256 validation/);
 });
 
+test("tauri-migration-status rejects packaged handoff archives without bundle branch-head validation", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+  const { archivePath } = await writeHandoffArchive(handoffDir);
+  const commandScriptPath = `${archivePath}.commands.sh`;
+  const commandScript = await readFile(commandScriptPath, "utf8");
+  await writeFile(
+    commandScriptPath,
+    commandScript
+      .replace('bundle_head="$(git rev-parse --verify "$temp_ref^{commit}")"\n', "")
+      .replace("bundle branch head mismatch\n", ""),
+    "utf8",
+  );
+  await writeCommandScriptChecksum(commandScriptPath);
+
+  const result = await runStatus(fixture, "--handoff-dir", handoffDir);
+  const parsed = JSON.parse(result.stdout) as { handoffArchive: { current: boolean; problems: string[] } };
+
+  assert.equal(parsed.handoffArchive.current, false);
+  assert.match(parsed.handoffArchive.problems.join("\n"), /command script is missing bundle branch-head validation/);
+});
+
 test("tauri-migration-status rejects packaged handoff archives without manifest field validation", async (t) => {
   const fixture = await createFixtureRoot(t, {
     checked: [],
@@ -1083,6 +1110,8 @@ async function writeHandoffArchive(handoffDir: string): Promise<{ archivePath: s
       "bundle_sha=",
       'actual_bundle_sha="$(hash_file "$bundle")"',
       "bundle SHA-256 mismatch",
+      'bundle_head="$(git rev-parse --verify "$temp_ref^{commit}")"',
+      "bundle branch head mismatch",
       "unsupported handoff manifest schemaVersion",
       "handoff manifest branchHead must be a 40-character SHA-1",
       "handoff manifest bundlePath must be relative and relocatable",
