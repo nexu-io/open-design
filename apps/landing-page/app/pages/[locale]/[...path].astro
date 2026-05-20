@@ -1,0 +1,316 @@
+---
+import { getCollection, render } from 'astro:content';
+import Layout from '../../_components/sub-page-layout.astro';
+import type { HeaderProps } from '../../_components/header';
+import LazyImg from '../../_components/lazy-img.astro';
+import {
+  getCraftRecords,
+  getSkillModeIndex,
+  getSkillRecords,
+  getSkillScenarioIndex,
+  getSystemCategoryIndex,
+  getSystemRecords,
+  getTemplateRecords,
+  tally,
+} from '../../_lib/catalog';
+import {
+  PREFIXED_LOCALES,
+  getCopy,
+  isLocale,
+  localePath,
+  localizeCategory,
+  localizedDate,
+  type Locale,
+} from '../../_lib/i18n';
+import { getPublicPlugins, getRegistryCounts } from '../../plugin-registry';
+import '../../globals.css';
+import '../../sub-pages.css';
+
+export async function getStaticPaths() {
+  const [skills, systems, craft, templates, posts] = await Promise.all([
+    getSkillRecords(),
+    getSystemRecords(),
+    getCraftRecords(),
+    getTemplateRecords(),
+    getCollection('blog'),
+  ]);
+  const plugins = getPublicPlugins();
+  const skillModes = await getSkillModeIndex();
+  const skillScenarios = await getSkillScenarioIndex();
+  const systemCategories = await getSystemCategoryIndex();
+
+  const paths = [
+    'skills',
+    'systems',
+    'craft',
+    'templates',
+    'blog',
+    'plugins',
+    ...skills.map((item) => `skills/${item.slug}`),
+    ...skillModes.map((item) => `skills/mode/${item.slug}`),
+    ...skillScenarios.map((item) => `skills/scenario/${item.slug}`),
+    ...systems.map((item) => `systems/${item.slug}`),
+    ...systemCategories.map((item) => `systems/category/${item.slug}`),
+    ...craft.map((item) => `craft/${item.slug}`),
+    ...templates.map((item) => `templates/${item.slug}`),
+    ...posts.map((item) => `blog/${item.id}`),
+    ...plugins.map((item) => `plugins/${item.slug}`),
+  ];
+
+  return PREFIXED_LOCALES.flatMap((locale) =>
+    paths.map((path) => ({
+      params: { locale, path },
+    })),
+  );
+}
+
+const localeParam = Astro.params.locale;
+const locale: Locale = isLocale(localeParam) ? localeParam : 'en';
+const prefixDefaultLocale = true;
+const copy = getCopy(locale);
+const pathParam = Astro.params.path ?? '';
+const segments = pathParam.split('/').filter(Boolean);
+
+const [skills, systems, craft, templates, posts] = await Promise.all([
+  getSkillRecords(),
+  getSystemRecords(),
+  getCraftRecords(),
+  getTemplateRecords(),
+  getCollection('blog'),
+]);
+const plugins = getPublicPlugins();
+
+const href = (path: string) => localePath(path, locale, { prefixDefault: true });
+const titleSuffix = 'Open Design';
+const routeRoot = segments[0] ?? '';
+const routeSecond = segments[1] ?? '';
+const routeThird = segments[2] ?? '';
+
+const sortedPosts = posts.sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
+const selectedPost = routeRoot === 'blog' && routeSecond
+  ? sortedPosts.find((post) => post.id === routeSecond)
+  : undefined;
+const renderedPost = selectedPost ? await render(selectedPost) : null;
+const BlogContent = renderedPost?.Content;
+
+const selectedSkill = routeRoot === 'skills' && routeSecond && routeSecond !== 'mode' && routeSecond !== 'scenario'
+  ? skills.find((skill) => skill.slug === routeSecond)
+  : undefined;
+const selectedSystem = routeRoot === 'systems' && routeSecond && routeSecond !== 'category'
+  ? systems.find((system) => system.slug === routeSecond)
+  : undefined;
+const selectedCraft = routeRoot === 'craft' && routeSecond
+  ? craft.find((item) => item.slug === routeSecond)
+  : undefined;
+const selectedTemplate = routeRoot === 'templates' && routeSecond
+  ? templates.find((item) => item.slug === routeSecond)
+  : undefined;
+const selectedPlugin = routeRoot === 'plugins' && routeSecond
+  ? plugins.find((item) => item.slug === pathParam.replace(/^plugins\//, ''))
+  : undefined;
+
+const modeTags = await getSkillModeIndex();
+const scenarioTags = await getSkillScenarioIndex();
+const systemCategories = await getSystemCategoryIndex();
+const platformTally = tally(skills.map((skill) => skill.platform).filter((item): item is string => Boolean(item)));
+const pluginCounts = getRegistryCounts(plugins);
+
+const pageTitle = selectedPost
+  ? `${selectedPost.data.title} — ${titleSuffix}`
+  : selectedSkill
+    ? `${selectedSkill.name} — Open Design skill`
+    : selectedSystem
+      ? `${selectedSystem.name} — Open Design design system`
+      : selectedCraft
+        ? `${selectedCraft.name} — Open Design craft`
+        : selectedTemplate
+          ? `${selectedTemplate.name} — Open Design template`
+          : selectedPlugin
+            ? `${selectedPlugin.title} — Open Design Plugin`
+            : routeRoot === 'skills'
+              ? `${copy.skillsTitle} — ${skills.length} | ${titleSuffix}`
+              : routeRoot === 'systems'
+                ? `${copy.systemsTitle} — ${systems.length} | ${titleSuffix}`
+                : routeRoot === 'templates'
+                  ? `${copy.templatesTitle} — ${templates.length} | ${titleSuffix}`
+                  : routeRoot === 'craft'
+                    ? `${copy.craftTitle} — ${craft.length} | ${titleSuffix}`
+                    : routeRoot === 'plugins'
+                      ? `${copy.pluginsTitle} — ${pluginCounts.all} | ${titleSuffix}`
+                      : `${copy.blog} — ${titleSuffix}`;
+
+const pageDescription =
+  selectedPost?.data.summary ??
+  selectedSkill?.description ??
+  selectedSystem?.tagline ??
+  selectedCraft?.summary ??
+  selectedTemplate?.summary ??
+  selectedPlugin?.description ??
+  `Open Design ${routeRoot || 'landing'} page.`;
+---
+
+<Layout title={pageTitle} description={pageDescription} active={routeRoot as HeaderProps['active']} locale={locale} prefixDefaultLocale={prefixDefaultLocale}>
+    {selectedPost && (
+      <article class='post'>
+        <div class='container'>
+          <a class='post-back' href={href('/blog/')}>← {copy.backToBlog}</a>
+          <h1 class='post-title'>{selectedPost.data.title}</h1>
+          <p class='post-summary'>{selectedPost.data.summary}</p>
+          <div class='post-meta'>
+            <span>{localizedDate(selectedPost.data.date, locale)}</span>
+            <span>{selectedPost.data.readingTime} {copy.minRead}</span>
+            <span>{localizeCategory(selectedPost.data.category, locale)}</span>
+          </div>
+          <hr class='post-rule' />
+          <div class='post-body'>{BlogContent && <BlogContent />}</div>
+          <hr class='post-rule' />
+          <div class='post-foot'>
+            <a class='post-back' href={href('/blog/')}>← {copy.backToBlog}</a>
+            <a class='post-github' href={`https://github.com/nexu-io/open-design/blob/main/apps/landing-page/app/content/blog/${selectedPost.id}.md`} target='_blank' rel='noreferrer noopener'>{copy.viewSource} ↗</a>
+          </div>
+        </div>
+      </article>
+    )}
+    {routeRoot === 'blog' && !selectedPost && (
+      <>
+        <header class='catalog-head'>
+          <span class='label'>{copy.blog}</span>
+          <h1 class='display'>{copy.blog}<span class='dot'>.</span></h1>
+          <p class='lead'>Notes to help you understand, explore, and build with Open Design.</p>
+        </header>
+        <section class='catalog-grid'>
+          <ol>
+            {sortedPosts.map((post, index) => (
+              <li class='catalog-row'>
+                <a href={href(`/blog/${post.id}/`)}>
+                  <span class='row-index'>{String(index + 1).padStart(2, '0')}</span>
+                  <span class='row-body'>
+                    <span class='row-name'>{post.data.title}</span>
+                    <span class='row-desc'>{post.data.summary}</span>
+                  </span>
+                  <span class='meta-tag'>{localizeCategory(post.data.category, locale)}</span>
+                </a>
+              </li>
+            ))}
+          </ol>
+        </section>
+      </>
+    )}
+
+    {routeRoot === 'skills' && !selectedSkill && (
+      <>
+        <header class='catalog-head'>
+          <span class='label'>{copy.catalog} · Nº 01</span>
+          <h1 class='display'><em>{copy.skillsTitle}</em> — {skills.length} composable design capabilities<span class='dot'>.</span></h1>
+          <p class='lead'>Each skill is a folder with one <code>SKILL.md</code>. Drop it in, restart the daemon, and the picker shows it.</p>
+        </header>
+        {routeSecond === '' && (
+          <section class='filter-strip' aria-label='Skill filters'>
+            <div class='filter-group'>
+              <span class='filter-label'>{copy.mode}</span>
+              <ul>{modeTags.map((tag) => <li><a class='chip chip-link' href={href(`/skills/mode/${tag.slug}/`)}>{tag.label}<span class='chip-num'>{tag.count}</span></a></li>)}</ul>
+            </div>
+            <div class='filter-group'>
+              <span class='filter-label'>{copy.scenario}</span>
+              <ul>{scenarioTags.slice(0, 12).map((tag) => <li><a class='chip chip-link' href={href(`/skills/scenario/${tag.slug}/`)}>{tag.label}<span class='chip-num'>{tag.count}</span></a></li>)}</ul>
+            </div>
+            <div class='filter-group'>
+              <span class='filter-label'>{copy.platform}</span>
+              <ul>{platformTally.map(([key, count]) => <li><span class='chip'>{key}<span class='chip-num'>{count}</span></span></li>)}</ul>
+            </div>
+          </section>
+        )}
+        <section class='catalog-grid catalog-grid-skills'>
+          <ol>
+            {skills
+              .filter((skill) => routeSecond === 'mode' ? skill.mode === routeThird : routeSecond === 'scenario' ? skill.scenario === routeThird : true)
+              .map((skill, index) => (
+                <li class='catalog-row'>
+                  <a href={href(`/skills/${skill.slug}/`)}>
+                    <span class='row-index'>{String(index + 1).padStart(2, '0')}</span>
+                    <span class='row-body'><span class='row-name'>{skill.name}</span><span class='row-desc'>{skill.description}</span></span>
+                    {skill.mode && <span class='meta-tag'>{skill.mode}</span>}
+                  </a>
+                </li>
+              ))}
+          </ol>
+        </section>
+      </>
+    )}
+
+    {selectedSkill && (
+      <article class='detail'>
+        <nav class='breadcrumb' aria-label={copy.breadcrumbLabel}><a href={href('/')}>Open Design</a><span>/</span><a href={href('/skills/')}>{copy.skillsTitle}</a><span>/</span><span aria-current='page'>{selectedSkill.name}</span></nav>
+        <header class='detail-head'>
+          <span class='label'>Skill{typeof selectedSkill.featured === 'number' && <span class='ix'> · Featured Nº {String(selectedSkill.featured).padStart(2, '0')}</span>}</span>
+          <h1 class='display'>{selectedSkill.name}<span class='dot'>.</span></h1>
+          <p class='lead'>{selectedSkill.description}</p>
+          <div class='detail-actions'><a class='btn btn-primary' href={selectedSkill.source} target='_blank' rel='noopener'>{copy.viewOnGithub}</a></div>
+        </header>
+        {selectedSkill.previewUrl && <figure class='detail-preview'><LazyImg src={selectedSkill.previewUrl} alt={`${selectedSkill.name} example output`} loading='priority' /></figure>}
+        <dl class='detail-meta'>
+          {selectedSkill.mode && <><dt>{copy.mode}</dt><dd>{selectedSkill.mode}</dd></>}
+          {selectedSkill.scenario && <><dt>{copy.scenario}</dt><dd>{selectedSkill.scenario}</dd></>}
+          {selectedSkill.platform && <><dt>{copy.platform}</dt><dd>{selectedSkill.platform}</dd></>}
+          {selectedSkill.category && <><dt>{copy.category}</dt><dd>{selectedSkill.category}</dd></>}
+        </dl>
+        {selectedSkill.triggers.length > 0 && <section class='detail-block'><h2>{copy.triggers}</h2><ul class='trigger-list'>{selectedSkill.triggers.map((trigger) => <li><code>{trigger}</code></li>)}</ul></section>}
+        {selectedSkill.examplePrompt && <section class='detail-block'><h2>{copy.examplePrompt}</h2><pre class='example-prompt'>{selectedSkill.examplePrompt}</pre></section>}
+      </article>
+    )}
+
+    {routeRoot === 'systems' && !selectedSystem && (
+      <>
+        <header class='catalog-head'>
+          <span class='label'>{copy.catalog} · Nº 02</span>
+          <h1 class='display'><em>{copy.systemsTitle}</em> — {systems.length} portable visual systems<span class='dot'>.</span></h1>
+          <p class='lead'>Each system is a single <code>DESIGN.md</code> token spec that keeps colors, type, spacing, and components consistent.</p>
+        </header>
+        {routeSecond === '' && <section class='filter-strip'><div class='filter-group'><span class='filter-label'>{copy.category}</span><ul>{systemCategories.map((tag) => <li><a class='chip chip-link' href={href(`/systems/category/${tag.slug}/`)}>{tag.label}<span class='chip-num'>{tag.count}</span></a></li>)}</ul></div></section>}
+        <section class='catalog-grid systems-grid'>
+          <ul>{systems.filter((system) => routeSecond === 'category' ? system.category === routeThird : true).map((system) => <li class='system-card'><a href={href(`/systems/${system.slug}/`)}><span class='system-name'>{system.name}</span><p>{system.tagline}</p><span class='meta-tag'>{system.category}</span></a></li>)}</ul>
+        </section>
+      </>
+    )}
+
+    {selectedSystem && (
+      <article class='detail'>
+        <nav class='breadcrumb' aria-label={copy.breadcrumbLabel}><a href={href('/')}>Open Design</a><span>/</span><a href={href('/systems/')}>{copy.systemsTitle}</a><span>/</span><span>{selectedSystem.name}</span></nav>
+        <header class='detail-head'><span class='label'>Design System</span><h1 class='display'>{selectedSystem.name}<span class='dot'>.</span></h1><p class='lead'>{selectedSystem.tagline}</p><div class='detail-actions'><a class='btn btn-primary' href={selectedSystem.source} target='_blank' rel='noopener'>{copy.viewOnGithub}</a></div></header>
+        <dl class='detail-meta'><dt>{copy.category}</dt><dd>{selectedSystem.category}</dd></dl>
+        <section class='detail-block'><h2>Atmosphere</h2><p class='block-lead'>{selectedSystem.atmosphere}</p></section>
+      </article>
+    )}
+
+    {routeRoot === 'craft' && !selectedCraft && (
+      <>
+        <header class='catalog-head'><span class='label'>{copy.catalog} · Nº 03</span><h1 class='display'><em>{copy.craftTitle}</em> — {craft.length} rendering principles<span class='dot'>.</span></h1><p class='lead'>Quality rules for accessibility, motion, color, type, and state coverage.</p></header>
+        <section class='catalog-grid'><ol>{craft.map((item, index) => <li class='catalog-row'><a href={href(`/craft/${item.slug}/`)}><span class='row-index'>{String(index + 1).padStart(2, '0')}</span><span class='row-body'><span class='row-name'>{item.name}</span><span class='row-desc'>{item.summary}</span></span></a></li>)}</ol></section>
+      </>
+    )}
+
+    {selectedCraft && <article class='detail'><header class='detail-head'><span class='label'>{copy.craftTitle}</span><h1 class='display'>{selectedCraft.name}<span class='dot'>.</span></h1><p class='lead'>{selectedCraft.summary}</p><div class='detail-actions'><a class='btn btn-primary' href={selectedCraft.source} target='_blank' rel='noopener'>{copy.viewOnGithub}</a></div></header></article>}
+
+    {routeRoot === 'templates' && !selectedTemplate && (
+      <>
+        <header class='catalog-head'><span class='label'>{copy.catalog} · Nº 04</span><h1 class='display'><em>{copy.templatesTitle}</em> — {templates.length} ready-to-fork artifacts<span class='dot'>.</span></h1><p class='lead'>Pre-wired artifact bundles with examples, visual language, and agent instructions.</p></header>
+        <section class='template-grid'><ul>{templates.map((template, index) => <li class='template-card'><a href={href(template.detailHref)}>{template.previewUrl && <span class='template-thumb'><LazyImg src={template.previewUrl} alt='' loading={index < 4 ? 'eager' : 'precise'} /></span>}<span class='template-name'>{template.name}</span><p class='template-summary'>{template.summary}</p></a></li>)}</ul></section>
+      </>
+    )}
+
+    {selectedTemplate && <article class='detail'><header class='detail-head'><span class='label'>Template</span><h1 class='display'>{selectedTemplate.name}<span class='dot'>.</span></h1><p class='lead'>{selectedTemplate.summary}</p><div class='detail-actions'><a class='btn btn-primary' href={selectedTemplate.source} target='_blank' rel='noopener'>{copy.viewOnGithub}</a></div></header>{selectedTemplate.previewUrl && <figure class='detail-preview'><LazyImg src={selectedTemplate.previewUrl} alt='' loading='priority' /></figure>}</article>}
+
+    {routeRoot === 'plugins' && !selectedPlugin && (
+      <>
+        <header class='catalog-head'><span class='label'>Plugin Registry</span><h1 class='display'><em>{copy.pluginsTitle}</em> — {pluginCounts.all} installable entries<span class='dot'>.</span></h1><p class='lead'>Discover installable workflows, decks, image templates, design systems, and agent-native capabilities.</p></header>
+        <section class='catalog-grid'><ol>{plugins.map((plugin, index) => <li class='catalog-row'><a href={href(plugin.detailHref)}><span class='row-index'>{String(index + 1).padStart(2, '0')}</span><span class='row-body'><span class='row-name'>{plugin.title}</span><span class='row-desc'>{plugin.description}</span></span><span class='meta-tag'>{plugin.registryName}</span></a></li>)}</ol></section>
+      </>
+    )}
+
+    {selectedPlugin && (
+      <article class='detail'>
+        <header class='detail-head'><span class='label'>Plugin · {selectedPlugin.registryName}</span><h1 class='display'>{selectedPlugin.title}<span class='dot'>.</span></h1><p class='lead'>{selectedPlugin.description}</p><div class='detail-actions'><a class='btn btn-primary' href={selectedPlugin.sourceUrl ?? selectedPlugin.registryUrl} target='_blank' rel='noopener'>{copy.viewOnGithub}</a></div></header>
+        <section class='detail-block'><h2>Install</h2><pre class='example-prompt'>{selectedPlugin.installCommand}</pre></section>
+      </article>
+    )}
+  </Layout>

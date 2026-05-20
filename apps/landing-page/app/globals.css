@@ -167,6 +167,119 @@ body::before {
   transition: color 160ms ease, border-color 160ms ease;
 }
 .topbar-link:hover { color: var(--coral); border-bottom-color: var(--coral); }
+/*
+ * Site-level locale switcher in the main nav.
+ *
+ * Sits in `.nav-side` next to Download/Star so it carries the same visual
+ * weight as the primary CTAs (the previous attempt buried it in the small
+ * topbar metadata strip where users missed it). Built on `<details>` so
+ * the dropdown works without JavaScript — the close-on-outside-click
+ * behaviour is a tiny inline script attached by `header-enhancer.astro`.
+ */
+.nav-locale {
+  position: relative;
+}
+.nav-locale > summary {
+  list-style: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(21, 20, 15, 0.18);
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+.nav-locale > summary::-webkit-details-marker { display: none; }
+.nav-locale > summary::marker { display: none; content: ''; }
+.nav-locale > summary:hover,
+.nav-locale[open] > summary {
+  background: rgba(21, 20, 15, 0.04);
+  border-color: rgba(21, 20, 15, 0.36);
+}
+.nav-locale-current {
+  /* Cap unusually long native labels (e.g. "Português (Brasil)") so the
+   * pill stays close to the width of Download / Star and the nav row
+   * doesn't reflow when the active locale changes. */
+  max-width: 11ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nav-locale-glyph { flex: 0 0 auto; opacity: 0.7; }
+.nav-locale-chevron {
+  flex: 0 0 auto;
+  opacity: 0.55;
+  transition: transform 180ms ease;
+}
+.nav-locale[open] .nav-locale-chevron { transform: rotate(180deg); opacity: 0.9; }
+
+.nav-locale-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 30;
+  width: 280px;
+  max-height: min(560px, calc(100vh - 140px));
+  overflow-y: auto;
+  display: grid;
+  gap: 2px;
+  padding: 10px;
+  border: 1px solid rgba(21, 20, 15, 0.16);
+  border-radius: 14px;
+  background: var(--paper);
+  box-shadow:
+    0 1px 0 rgba(21, 20, 15, 0.02),
+    0 20px 50px -12px rgba(21, 20, 15, 0.22);
+  letter-spacing: 0;
+  text-transform: none;
+  animation: nav-locale-pop 160ms ease;
+}
+@keyframes nav-locale-pop {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.nav-locale-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  text-decoration: none;
+  transition: background 140ms ease, color 140ms ease;
+}
+.nav-locale-item:hover {
+  background: rgba(21, 20, 15, 0.06);
+  color: var(--ink);
+}
+.nav-locale-item.is-current {
+  background: var(--ink);
+  color: var(--paper);
+  font-weight: 600;
+  cursor: default;
+  pointer-events: none;
+}
+.nav-locale-item .nav-locale-check { opacity: 0.95; }
+.nav-locale-name { line-height: 1.2; }
+
+/* RTL locales: keep the panel anchored right but flip item alignment so
+ * the script reads naturally. The Header runs LTR but each item carries
+ * `lang="ar"` etc., so individual rows still render in their own script. */
+[dir='rtl'] .nav-locale-panel { left: 0; right: auto; }
+
+/* On narrow screens the responsive cleanup at the bottom of this file
+ * hides `.nav-cta` (Download / Star) but keeps `.nav-locale` visible,
+ * so a mobile user always has a one-tap way to change language without
+ * scrolling to the footer. */
 .topbar .pulse {
   width: 6px; height: 6px;
   border-radius: 50%;
