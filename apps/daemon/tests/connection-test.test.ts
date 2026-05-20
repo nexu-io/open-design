@@ -1589,6 +1589,49 @@ process.stdin.on('end', () => {
     );
   });
 
+  it('reports the PATH Codex binary as usedExecutablePath when a configured CODEX_BIN fails', async () => {
+    await withFakeCodex(
+      `console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'ok' } }));\n`,
+      async () => {
+        const pathDir = (process.env.PATH ?? '').split(path.delimiter)[0]!;
+        const expectedFallbackBin = path.join(
+          pathDir,
+          process.platform === 'win32' ? 'codex.cmd' : 'codex',
+        );
+        const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-codex-usedpath-'));
+        try {
+          const bin = path.join(dir, 'codex-bad');
+          await fsp.writeFile(
+            bin,
+            `#!/usr/bin/env node\nconsole.error('macOS blocked this Codex binary');\nprocess.exit(1);\n`,
+          );
+          await fsp.chmod(bin, 0o755);
+
+          const result = await testAgentConnection({
+            agentId: 'codex',
+            agentCliEnv: {
+              codex: {
+                CODEX_BIN: bin,
+              },
+            },
+          });
+
+          expect(result).toMatchObject({
+            ok: true,
+            kind: 'success',
+            usedExecutableSource: 'fallback_failed',
+            configuredExecutablePath: bin,
+            usedExecutablePath: expectedFallbackBin,
+          });
+          expect(result.diagnostics?.binaryPath).toBe(expectedFallbackBin);
+          expect(result.usedExecutablePath).not.toBe(bin);
+        } finally {
+          await fsp.rm(dir, { recursive: true, force: true });
+        }
+      },
+    );
+  });
+
   it('falls back to PATH Codex when a configured shim spawns ENOENT', async () => {
     await withFakeCodex(
       `console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'ok' } }));\n`,

@@ -1930,7 +1930,9 @@ export async function testAgentConnection(
     return attachDiagnostics(primaryResult, envelope);
   }
   const usedPath =
-    executableResolution.launchPath ?? executableResolution.pathResolvedPath;
+    fallbackDiag.binaryPath ??
+    executableResolution.launchPath ??
+    executableResolution.pathResolvedPath;
   const envelope = buildEnvelope(fallbackResult.kind, fallbackDiag, usedPath);
   return attachDiagnostics({
     ...fallbackResult,
