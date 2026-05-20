@@ -461,7 +461,6 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
         activeChipId={activeChipId}
         pendingChipId={pendingChipId}
         pendingPluginId={pendingPluginId}
-        pluginsLoading={pluginsLoading}
         onPickChip={onPickChip}
       />
 
@@ -888,7 +887,6 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
           activeChipId={activeChipId}
           pendingChipId={pendingChipId}
           pendingPluginId={pendingPluginId}
-          pluginsLoading={pluginsLoading}
           onPickChip={onPickChip}
         />
       </div>
@@ -1499,7 +1497,6 @@ interface TypeTabBarProps {
   activeChipId: string | null;
   pendingChipId: string | null;
   pendingPluginId: string | null;
-  pluginsLoading: boolean;
   onPickChip: (chip: HomeHeroChip) => void;
 }
 
@@ -1507,7 +1504,6 @@ function TypeTabBar({
   activeChipId,
   pendingChipId,
   pendingPluginId,
-  pluginsLoading,
   onPickChip,
 }: TypeTabBarProps) {
   const chips = useMemo(() => chipsForGroup('create'), []);
@@ -1528,7 +1524,7 @@ function TypeTabBar({
             data-chip-id={chip.id}
             data-testid={`home-hero-rail-${chip.id}`}
             onClick={() => onPickChip(chip)}
-            disabled={pluginsLoading || isPending || pendingPluginId !== null}
+            disabled={isPending || pendingPluginId !== null}
             aria-selected={isActive}
             title={chip.hint ?? chip.label}
           >
@@ -1545,7 +1541,6 @@ interface RailGroupProps {
   activeChipId: string | null;
   pendingChipId: string | null;
   pendingPluginId: string | null;
-  pluginsLoading: boolean;
   onPickChip: (chip: HomeHeroChip) => void;
 }
 
@@ -1554,7 +1549,6 @@ function RailGroup({
   activeChipId,
   pendingChipId,
   pendingPluginId,
-  pluginsLoading,
   onPickChip,
 }: RailGroupProps) {
   const t = useT();
@@ -1578,7 +1572,7 @@ function RailGroup({
             data-chip-id={chip.id}
             data-testid={`home-hero-rail-${chip.id}`}
             onClick={() => onPickChip(chip)}
-            disabled={pluginsLoading || isPending || pendingPluginId !== null}
+            disabled={isPending || pendingPluginId !== null}
             aria-pressed={isActive}
             title={homeHeroChipTitle(chip, t)}
           >

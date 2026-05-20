@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import type {
   ConnectorDetail,
   ConnectorStatusResponse,
+  InstalledPluginRecord,
 } from '@open-design/contracts';
 import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
 import {
@@ -76,12 +77,13 @@ interface Props {
   // user can flip light/dark/system without opening the full Settings
   // dialog. Persistence happens in `App`; this component just forwards.
   onThemeChange: (theme: AppTheme) => void;
-  // Per-resource loading flags. Each tab gates its own content on whichever
-  // flag matches the data it renders, so a slow `/api/agents` probe does
-  // not block tabs that don't need agents. Templates are not gated here —
-  // the New project modal renders an empty state until they arrive (fast
-  // fetch), which keeps the prop surface narrower.
-  skillsLoading?: boolean;
+  // Per-resource loading flags. Home clears functional skills independently
+  // of design templates so the hero can render while the template catalog
+  // is still loading. Plugins load with the App bootstrap wave.
+  functionalSkillsLoading?: boolean;
+  designTemplatesLoading?: boolean;
+  plugins?: InstalledPluginRecord[];
+  pluginsLoading?: boolean;
   designSystemsLoading?: boolean;
   projectsLoading?: boolean;
   promptTemplatesLoading?: boolean;
@@ -252,7 +254,10 @@ export function EntryView({
   onConfigPersist,
   onRefreshAgents,
   onThemeChange,
-  skillsLoading = false,
+  functionalSkillsLoading = false,
+  designTemplatesLoading = false,
+  plugins = [],
+  pluginsLoading = false,
   designSystemsLoading = false,
   projectsLoading = false,
   promptTemplatesLoading: _promptTemplatesLoading = false,
@@ -336,7 +341,10 @@ export function EntryView({
       connectorsLoading={connectorsLoading}
       {...(integrationInitialTab ? { integrationInitialTab } : {})}
       composioConfigLoading={composioConfigLoading}
-      skillsLoading={skillsLoading}
+      functionalSkillsLoading={functionalSkillsLoading}
+      designTemplatesLoading={designTemplatesLoading}
+      plugins={plugins}
+      pluginsLoading={pluginsLoading}
       designSystemsLoading={designSystemsLoading}
       projectsLoading={projectsLoading}
       config={config}

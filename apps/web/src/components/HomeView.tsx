@@ -31,6 +31,22 @@ import type { Project, ProjectMetadata, PromptTemplateSummary, SkillSummary } fr
 import { inlineMentionToken } from '../utils/inlineMentions';
 import { HomeHero } from './HomeHero';
 import { findChip, type HomeHeroChip } from './home-hero/chips';
+
+function scheduleIdleTask(task: () => void): () => void {
+  if (typeof window === 'undefined') return () => undefined;
+  const idle = (
+    window as Window & {
+      requestIdleCallback?: (cb: IdleRequestCallback, opts?: IdleRequestOptions) => number;
+      cancelIdleCallback?: (id: number) => void;
+    }
+  );
+  if (idle.requestIdleCallback) {
+    const id = idle.requestIdleCallback(() => task(), { timeout: 2000 });
+    return () => idle.cancelIdleCallback?.(id);
+  }
+  const id = window.setTimeout(task, 0);
+  return () => window.clearTimeout(id);
+}
 import {
   buildHomeMediaComposer,
   homeMediaSurfaceForChipId,
@@ -120,7 +136,10 @@ interface Props {
   onOpenNewProject?: (tab: 'template') => void;
   promptHandoff?: HomePromptHandoff | null;
   skills?: SkillSummary[];
-  skillsLoading?: boolean;
+  /** When omitted, HomeView loads `/api/plugins` locally (tests). App passes the bootstrap catalog. */
+  plugins?: InstalledPluginRecord[];
+  pluginsLoading?: boolean;
+  functionalSkillsLoading?: boolean;
   connectors?: ConnectorDetail[];
   promptTemplates?: PromptTemplateSummary[];
 }
@@ -136,13 +155,18 @@ export function HomeView({
   onOpenNewProject,
   promptHandoff,
   skills = [],
-  skillsLoading = false,
+  plugins: pluginsFromParent,
+  pluginsLoading: pluginsLoadingFromParent = false,
+  functionalSkillsLoading = false,
   connectors = [],
   promptTemplates = [],
 }: Props) {
   const { locale, t } = useI18n();
-  const [plugins, setPlugins] = useState<InstalledPluginRecord[]>([]);
-  const [pluginsLoading, setPluginsLoading] = useState(true);
+  const ownsPluginCatalog = pluginsFromParent === undefined;
+  const [localPlugins, setLocalPlugins] = useState<InstalledPluginRecord[]>([]);
+  const [localPluginsLoading, setLocalPluginsLoading] = useState(ownsPluginCatalog);
+  const plugins = pluginsFromParent ?? localPlugins;
+  const pluginsLoading = pluginsLoadingFromParent || (ownsPluginCatalog && localPluginsLoading);
   const [pendingApplyId, setPendingApplyId] = useState<string | null>(null);
   const [pendingChipId, setPendingChipId] = useState<string | null>(null);
   const [pendingAuthoringChipId, setPendingAuthoringChipId] = useState<string | null>(null);
@@ -160,7 +184,8 @@ export function HomeView({
   const [selectedConnectorContexts, setSelectedConnectorContexts] = useState<SelectedConnectorContext[]>([]);
   const [stagedFiles, setStagedFiles] = useState<File[]>([]);
   const [mcpServers, setMcpServers] = useState<McpServerConfig[]>([]);
-  const [mcpLoading, setMcpLoading] = useState(true);
+  const [mcpLoading, setMcpLoading] = useState(false);
+  const [pendingScenarioChip, setPendingScenarioChip] = useState<HomeHeroChip | null>(null);
   const [prompt, setPrompt] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [elevenLabsVoices, setElevenLabsVoices] = useState<AudioVoiceOption[]>([]);
@@ -175,12 +200,13 @@ export function HomeView({
   const activePluginApplyRequestRef = useRef(0);
 
   useEffect(() => {
+    if (!ownsPluginCatalog) return;
     let cancelled = false;
     const load = () => {
       void listPlugins().then((rows) => {
         if (cancelled) return;
-        setPlugins(rows);
-        setPluginsLoading(false);
+        setLocalPlugins(rows);
+        setLocalPluginsLoading(false);
       });
     };
     load();
@@ -189,19 +215,34 @@ export function HomeView({
       cancelled = true;
       window.removeEventListener('open-design:plugins-changed', load);
     };
-  }, []);
+  }, [ownsPluginCatalog]);
 
   useEffect(() => {
     let cancelled = false;
-    void fetchMcpServers().then((result) => {
+    const cancelIdle = scheduleIdleTask(() => {
       if (cancelled) return;
-      setMcpServers(result?.servers ?? []);
-      setMcpLoading(false);
+      setMcpLoading(true);
+      void fetchMcpServers().then((result) => {
+        if (cancelled) return;
+        setMcpServers(result?.servers ?? []);
+        setMcpLoading(false);
+      });
     });
     return () => {
       cancelled = true;
+      cancelIdle();
     };
   }, []);
+
+  useEffect(() => {
+    if (!pendingScenarioChip || pluginsLoading) return;
+    const chip = pendingScenarioChip;
+    setPendingScenarioChip(null);
+    pickChip(chip);
+    // pickChip closes over the latest plugins list; only replay once
+    // the bootstrap catalog has landed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingScenarioChip, pluginsLoading, plugins]);
 
   useEffect(() => {
     if (active?.mediaSurface !== 'audio' || active.inputs.model !== 'elevenlabs-v3') return;
@@ -797,6 +838,11 @@ export function HomeView({
         const targetId = chip.action.pluginId;
         const record = plugins.find((p) => p.id === targetId);
         if (!record) {
+          if (pluginsLoading) {
+            setPendingScenarioChip(chip);
+            setPendingChipId(chip.id);
+            return;
+          }
           setError(
             `Bundled scenario "${targetId}" is not installed. Reinstall the daemon to restore the default plugin set.`,
           );
@@ -962,7 +1008,7 @@ export function HomeView({
         pluginOptions={plugins}
         pluginsLoading={pluginsLoading}
         skillOptions={selectableSkills}
-        skillsLoading={skillsLoading}
+        skillsLoading={functionalSkillsLoading}
         mcpOptions={enabledMcpServers}
         mcpLoading={mcpLoading}
         connectorOptions={connectors.filter((connector) => connector.status === 'connected')}

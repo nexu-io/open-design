@@ -138,7 +138,10 @@ interface Props {
   connectorsLoading: boolean;
   integrationInitialTab?: IntegrationTab;
   composioConfigLoading?: boolean;
-  skillsLoading?: boolean;
+  functionalSkillsLoading?: boolean;
+  designTemplatesLoading?: boolean;
+  plugins?: InstalledPluginRecord[];
+  pluginsLoading?: boolean;
   designSystemsLoading?: boolean;
   projectsLoading?: boolean;
   // Execution / model-switching context. Threaded down from `App` so the
@@ -221,7 +224,10 @@ export function EntryShell({
   connectorsLoading,
   integrationInitialTab = 'mcp',
   composioConfigLoading = false,
-  skillsLoading = false,
+  functionalSkillsLoading = false,
+  designTemplatesLoading = false,
+  plugins = [],
+  pluginsLoading = false,
   designSystemsLoading = false,
   projectsLoading = false,
   config,
@@ -254,6 +260,7 @@ export function EntryShell({
   onCompleteOnboarding,
 }: Props) {
   const t = useT();
+  const skillsCatalogLoading = functionalSkillsLoading || designTemplatesLoading;
   // Each entry sub-view (home / projects / design-systems) is its own
   // URL now, so the browser back/forward buttons work and a deep link
   // to /design-systems lands on that section. We derive the active
@@ -519,13 +526,15 @@ export function EntryShell({
                 }}
                 promptHandoff={homePromptHandoff}
                 skills={skills}
-                skillsLoading={skillsLoading}
+                plugins={plugins}
+                pluginsLoading={pluginsLoading}
+                functionalSkillsLoading={functionalSkillsLoading}
                 connectors={connectors}
                 promptTemplates={promptTemplates}
               />
             ) : null}
             {view === 'projects' ? (
-              projectsLoading || skillsLoading || designSystemsLoading ? (
+              projectsLoading || skillsCatalogLoading || designSystemsLoading ? (
                 <CenteredLoader label={t('common.loading')} />
               ) : (
                 <div className="entry-section">
@@ -606,7 +615,7 @@ export function EntryShell({
         promptTemplates={promptTemplates}
         connectors={connectors}
         connectorsLoading={connectorsLoading}
-        loading={skillsLoading}
+        loading={skillsCatalogLoading}
         onCreate={handleCreate}
         onImportClaudeDesign={onImportClaudeDesign}
         {...(onImportFolder ? { onImportFolder } : {})}

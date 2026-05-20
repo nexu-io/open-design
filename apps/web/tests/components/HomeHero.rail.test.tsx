@@ -78,6 +78,14 @@ describe('HomeHero intent rail', () => {
     expect(screen.getByTestId('home-hero-rail-figma').className).toContain('is-pending');
   });
 
+  it('keeps intent-rail chips clickable while the plugin catalog is still loading', () => {
+    renderHero({ pluginsLoading: true });
+    for (const chip of HOME_HERO_CHIPS) {
+      const node = screen.getByTestId(`home-hero-rail-${chip.id}`) as HTMLButtonElement;
+      expect(node.disabled).toBe(false);
+    }
+  });
+
   it('groups plugin authoring with the lower starter shortcuts', () => {
     renderHero();
     const createPluginGroup = screen

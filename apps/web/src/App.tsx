@@ -64,6 +64,7 @@ import {
   getProject,
   importClaudeDesignZip,
   importFolderProject,
+  listPlugins,
   listProjects,
   listTemplates,
   deleteTemplate,
@@ -73,6 +74,7 @@ import type {
   PluginShareAction,
   PluginShareProjectOutcome,
 } from './state/projects';
+import type { InstalledPluginRecord } from '@open-design/contracts';
 import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
 import { useI18n } from './i18n';
 import { liveArtifactTabId } from './types';
@@ -212,7 +214,10 @@ export function App() {
   // which probes CLI versions and can take seconds on cold start). The entry
   // view picks the right flag for whichever tab the user is currently on.
   const [agentsLoading, setAgentsLoading] = useState(true);
-  const [skillsLoading, setSkillsLoading] = useState(true);
+  const [functionalSkillsLoading, setFunctionalSkillsLoading] = useState(true);
+  const [designTemplatesLoading, setDesignTemplatesLoading] = useState(true);
+  const [plugins, setPlugins] = useState<InstalledPluginRecord[]>([]);
+  const [pluginsLoading, setPluginsLoading] = useState(true);
   const [dsLoading, setDsLoading] = useState(true);
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [promptTemplatesLoading, setPromptTemplatesLoading] = useState(true);
@@ -317,7 +322,9 @@ export function App() {
         // No daemon — clear every loading flag so empty states render
         // instead of the entry view sitting on indefinite spinners.
         setAgentsLoading(false);
-        setSkillsLoading(false);
+        setFunctionalSkillsLoading(false);
+        setDesignTemplatesLoading(false);
+        setPluginsLoading(false);
         setDsLoading(false);
         setProjectsLoading(false);
         setPromptTemplatesLoading(false);
@@ -335,27 +342,22 @@ export function App() {
         setAgentsLoading(false);
       });
 
-      // Functional skills + design templates land independently. Both
-      // gate `skillsLoading` together so the EntryView stops rendering
-      // its loader once both registries respond — neither tab would have
-      // a complete picture if we cleared the flag on the first reply.
-      let functionalReady = false;
-      let templatesReady = false;
-      const maybeClearLoading = () => {
-        if (functionalReady && templatesReady) setSkillsLoading(false);
-      };
       void fetchSkills().then((list) => {
         if (cancelled) return;
         setSkills(list);
-        functionalReady = true;
-        maybeClearLoading();
+        setFunctionalSkillsLoading(false);
       });
 
       void fetchDesignTemplates().then((list) => {
         if (cancelled) return;
         setDesignTemplates(list);
-        templatesReady = true;
-        maybeClearLoading();
+        setDesignTemplatesLoading(false);
+      });
+
+      void listPlugins().then((list) => {
+        if (cancelled) return;
+        setPlugins(list);
+        setPluginsLoading(false);
       });
 
       void fetchDesignSystems().then((list) => {
@@ -460,6 +462,14 @@ export function App() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    const refreshPlugins = () => {
+      void listPlugins().then((list) => setPlugins(list));
+    };
+    window.addEventListener('open-design:plugins-changed', refreshPlugins);
+    return () => window.removeEventListener('open-design:plugins-changed', refreshPlugins);
   }, []);
 
   // Auto-pick the first available agent once both the daemon-stored config
@@ -1296,7 +1306,10 @@ export function App() {
         onConfigPersist={handleConfigPersist}
         onRefreshAgents={refreshAgents}
         onThemeChange={handleThemeChange}
-        skillsLoading={skillsLoading}
+        functionalSkillsLoading={functionalSkillsLoading}
+        designTemplatesLoading={designTemplatesLoading}
+        plugins={plugins}
+        pluginsLoading={pluginsLoading}
         designSystemsLoading={dsLoading}
         projectsLoading={projectsLoading}
         promptTemplatesLoading={promptTemplatesLoading}
