@@ -165,9 +165,13 @@ export interface ConnectionTestDiagnostics {
   binaryVersion?: string | null;
   // Child process exit metadata. Both fields keep the raw `code` /
   // `signal` shape from `child_process` so consumers can distinguish
-  // a clean non-zero exit from a SIGTERM teardown.
+  // a clean non-zero exit from a SIGTERM teardown. `signal` is typed as
+  // `string | null` (not `NodeJS.Signals`) so the generated `.d.ts`
+  // stays browser-safe — the daemon writes one of the
+  // `NodeJS.Signals` literals here but consumers never need to import
+  // ambient Node namespaces just to read an HTTP response shape.
   exitCode?: number | null;
-  signal?: NodeJS.Signals | string | null;
+  signal?: string | null;
   // Last ~400 bytes of the child's streams, already passed through
   // the daemon's secret redactor.
   stdoutTail?: string;

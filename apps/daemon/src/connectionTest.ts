@@ -1338,10 +1338,16 @@ async function testAgentConnectionInternal(
     const auth = await probeAgentAuthStatus(input.agentId, executableResolution.launchPath, env);
     if (auth?.status === 'missing') {
       // Preflight auth probe runs after binary resolution but before the
-      // smoke spawn — phase is still 'binary_resolution'. Without
-      // diagnostics here, Cursor-style auth failures never get the
-      // binaryPath/stderrTail context the rest of the local agent
-      // surface promises.
+      // smoke spawn — phase is still 'binary_resolution'. The smoke
+      // sink is empty here (no spawn happened), so the probe itself is
+      // the only source of stderr/stdout/exit context. Fold what the
+      // probe captured into the diagnostics block; `...overrides` in
+      // buildDiagnostics() lets these win over the empty sink tails.
+      const probeOverrides: Partial<ConnectionTestDiagnostics> = {};
+      if (auth.stdoutTail) probeOverrides.stdoutTail = redactSecrets(auth.stdoutTail);
+      if (auth.stderrTail) probeOverrides.stderrTail = redactSecrets(auth.stderrTail);
+      if (auth.exitCode !== undefined) probeOverrides.exitCode = auth.exitCode;
+      if (auth.signal !== undefined) probeOverrides.signal = auth.signal;
       return {
         ok: false,
         kind: 'agent_auth_required',
@@ -1349,7 +1355,7 @@ async function testAgentConnectionInternal(
         model,
         agentName: def.name,
         detail: auth.message ?? cursorAuthGuidance(),
-        diagnostics: buildDiagnostics(),
+        diagnostics: buildDiagnostics(probeOverrides),
       };
     }
     const invocation = createCommandInvocation({

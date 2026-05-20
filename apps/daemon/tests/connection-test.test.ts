@@ -2202,7 +2202,11 @@ process.stdin.on('end', () => {
     // smoke run before the daemon ever spawns the smoke prompt. The
     // initial #2248 pass forgot to stamp diagnostics on that return
     // path, which contradicted the "Always set on local agent test
-    // responses" contract in packages/contracts. Lock the contract.
+    // responses" contract in packages/contracts. Lock the contract,
+    // and additionally lock the probe's own stderr/exit metadata —
+    // without those, the diagnostics block would drop the only context
+    // a caller has on a missing-auth failure (no smoke spawn ever ran,
+    // so the smoke sink is empty).
     await withFakeCursorAgent(
       `
 const args = process.argv.slice(2);
@@ -2232,6 +2236,11 @@ process.exit(1);
         // spawn, so phase should still be 'binary_resolution'.
         expect(result.diagnostics?.phase).toBe('binary_resolution');
         expect(result.diagnostics?.binaryPath ?? '').toMatch(/cursor-agent/);
+        // The probe child wrote "Not logged in" on stderr and exited
+        // 1; both must propagate into diagnostics so Settings/CLI can
+        // render the structured auth-failure context.
+        expect(result.diagnostics?.stderrTail ?? '').toContain('Not logged in');
+        expect(result.diagnostics?.exitCode).toBe(1);
       },
     );
   });
