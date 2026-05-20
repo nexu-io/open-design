@@ -479,9 +479,10 @@ function nextActionsForPhase(
     const reportsReadyForAdvance = platformReports?.current === true && (remote == null || remoteReady);
     const remoteName = remote?.remote ?? "origin";
     const reportDir = platformReports?.reportDir ?? defaultReportDir;
+    const continuationCommand = continuationDryRunCommand(handoff, handoffArchive, remoteName, reportDir);
     return [
       ...heartbeatActions,
-      "Run scripts/continue-tauri-migration.ts --dry-run to print the next executable handoff/push/report sequence; add --wait-reports --advance after the remote branch and native CI are available.",
+      `Run ${continuationCommand} to print the next executable handoff/push/report sequence; add --wait-reports --advance after the remote branch and native CI are available.`,
       archiveReady
         ? `Copy the current packaged handoff archive ${handoffArchive.archive}, checksum ${handoffArchive.checksum}, command script ${handoffArchive.commandScript}, and command script checksum ${handoffArchive.commandScriptChecksum} to a write-capable machine.`
         : handoffReady
@@ -526,6 +527,23 @@ function nextActionsForPhase(
     ];
   }
   return [...heartbeatActions, "Run the full QA plan and archive the migration document as completed evidence."];
+}
+
+function continuationDryRunCommand(
+  handoff: HandoffStatus | undefined,
+  handoffArchive: HandoffArchiveStatus | undefined,
+  remoteName: string,
+  reportDir: string,
+): string {
+  const parts = ["scripts/continue-tauri-migration.ts"];
+  if (handoff?.dir != null) {
+    parts.push("--handoff-dir", shellQuote(handoff.dir));
+  }
+  if (handoffArchive?.archive != null) {
+    parts.push("--handoff-archive", shellQuote(handoffArchive.archive));
+  }
+  parts.push("--remote", shellQuote(remoteName), "--report-dir", shellQuote(reportDir), "--dry-run");
+  return parts.join(" ");
 }
 
 function isChecklistLineChecked(content: string, label: string): boolean {

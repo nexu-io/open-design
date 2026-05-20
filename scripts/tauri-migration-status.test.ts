@@ -161,8 +161,49 @@ test("tauri-migration-status reports current packaged handoff archives", async (
   assert.equal(parsed.handoffArchive.sha256, archiveSha256);
   assert.deepEqual(parsed.handoffArchive.problems, []);
   assert.match(parsed.nextActions.join("\n"), /command script/);
+  assert.match(parsed.nextActions.join("\n"), new RegExp(`continue-tauri-migration\\.ts .*--handoff-archive ${escapeRegExp(archivePath)} .*--dry-run`));
   assert.match(parsed.nextActions.join("\n"), /push-tauri-migration-handoff\.ts --archive/);
   assert.match(parsed.nextActions.join("\n"), /attempt native CI dispatch/);
+});
+
+test("tauri-migration-status prints continuation guidance for a custom handoff archive", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+  const customArchivePath = join(fixture, "transfer archive", "open-design-tauri-migration-handoff.tar.gz");
+  await writeHandoffArchive(handoffDir, customArchivePath);
+  const remotePath = join(fixture, "empty remote.git");
+  await git(fixture, "init", "--bare", remotePath);
+  const reportDir = join(fixture, "reports with space");
+
+  const result = await runStatus(
+    fixture,
+    "--handoff-dir",
+    handoffDir,
+    "--handoff-archive",
+    customArchivePath,
+    "--remote",
+    remotePath,
+    "--report-dir",
+    reportDir,
+  );
+  const parsed = JSON.parse(result.stdout) as {
+    handoffArchive: { archive: string; current: boolean };
+    nextActions: string[];
+  };
+  const nextActions = parsed.nextActions.join("\n");
+
+  assert.equal(parsed.handoffArchive.current, true);
+  assert.equal(parsed.handoffArchive.archive, customArchivePath);
+  assert.match(nextActions, new RegExp(`continue-tauri-migration\\.ts .*--handoff-archive '${escapeRegExp(customArchivePath)}'`));
+  assert.match(nextActions, new RegExp(`--remote '${escapeRegExp(remotePath)}'`));
+  assert.match(nextActions, new RegExp(`--report-dir '${escapeRegExp(reportDir)}'`));
+  assert.match(nextActions, /--dry-run/);
+  assert.doesNotMatch(nextActions, new RegExp(escapeRegExp(`${handoffDir}.tar.gz`)));
 });
 
 test("tauri-migration-status honors remote overrides in handoff push guidance", async (t) => {
