@@ -35,6 +35,7 @@ jobs:
       web_tests_required: ${{ steps.detect.outputs.web_tests_required }}
       tools_dev_tests_required: ${{ steps.detect.outputs.tools_dev_tests_required }}
       tools_pack_tests_required: ${{ steps.detect.outputs.tools_pack_tests_required }}
+      tools_pr_tests_required: ${{ steps.detect.outputs.tools_pr_tests_required }}
       workspace_validation_required: ${{ steps.detect.outputs.workspace_validation_required }}
 
     steps:
@@ -49,6 +50,7 @@ jobs:
           web_tests_required=false
           tools_dev_tests_required=false
           tools_pack_tests_required=false
+          tools_pr_tests_required=false
           workspace_validation_required=false
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             gh api --paginate \
@@ -71,11 +73,15 @@ jobs:
               if [[ "$file" == "tools/pack/"* || "$file" == "apps/packaged/"* || "$file" == "apps/desktop/"* || "$file" == "packages/host/"* || "$file" == "packages/platform/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/sidecar-proto/"* ]]; then
                 tools_pack_tests_required=true
               fi
+              if [[ "$file" == "tools/pr/"* ]]; then
+                tools_pr_tests_required=true
+              fi
               if [[ "$file" == "package.json" || "$file" == "pnpm-lock.yaml" || "$file" == "pnpm-workspace.yaml" || "$file" == ".github/workflows/ci.yml" ]]; then
                 daemon_tests_required=true
                 web_tests_required=true
                 tools_dev_tests_required=true
                 tools_pack_tests_required=true
+                tools_pr_tests_required=true
               fi
               case "$file" in
                 *.md|*.mdx|*.txt|LICENSE|.gitignore|.editorconfig|.vscode/*|.idea/*|docs/*|.github/ISSUE_TEMPLATE/*|.github/CODEOWNERS)
@@ -90,6 +96,7 @@ jobs:
                 && [ "$web_tests_required" = "true" ] \
                 && [ "$tools_dev_tests_required" = "true" ] \
                 && [ "$tools_pack_tests_required" = "true" ] \
+                && [ "$tools_pr_tests_required" = "true" ] \
                 && [ "$workspace_validation_required" = "true" ]; then
                 break
               fi
@@ -97,7 +104,8 @@ jobs:
             if [ "$daemon_tests_required" = "true" ] \
               || [ "$web_tests_required" = "true" ] \
               || [ "$tools_dev_tests_required" = "true" ] \
-              || [ "$tools_pack_tests_required" = "true" ]; then
+              || [ "$tools_pack_tests_required" = "true" ] \
+              || [ "$tools_pr_tests_required" = "true" ]; then
               workspace_validation_required=true
             fi
           else
@@ -105,6 +113,7 @@ jobs:
             web_tests_required=true
             tools_dev_tests_required=true
             tools_pack_tests_required=true
+            tools_pr_tests_required=true
             workspace_validation_required=true
           fi
           {
@@ -112,6 +121,7 @@ jobs:
             echo "web_tests_required=$web_tests_required"
             echo "tools_dev_tests_required=$tools_dev_tests_required"
             echo "tools_pack_tests_required=$tools_pack_tests_required"
+            echo "tools_pr_tests_required=$tools_pr_tests_required"
             echo "workspace_validation_required=$workspace_validation_required"
           } >> "$GITHUB_OUTPUT"
 
@@ -230,7 +240,7 @@ jobs:
   tools_workspace_tests:
     name: Tools workspace tests
     needs: [change_scopes]
-    if: ${{ needs.change_scopes.outputs.tools_dev_tests_required == 'true' || needs.change_scopes.outputs.tools_pack_tests_required == 'true' }}
+    if: ${{ needs.change_scopes.outputs.tools_dev_tests_required == 'true' || needs.change_scopes.outputs.tools_pack_tests_required == 'true' || needs.change_scopes.outputs.tools_pr_tests_required == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -270,6 +280,9 @@ jobs:
           fi
           if [ "${{ needs.change_scopes.outputs.tools_pack_tests_required }}" = "true" ]; then
             pnpm --filter @open-design/tools-pack test
+          fi
+          if [ "${{ needs.change_scopes.outputs.tools_pr_tests_required }}" = "true" ]; then
+            pnpm --filter @open-design/tools-pr test
           fi
 
   daemon_workspace_tests:
@@ -367,7 +380,7 @@ jobs:
       - tools_workspace_tests
       - daemon_workspace_tests
       - web_workspace_tests
-    if: ${{ always() && needs.change_scopes.result == 'success' && (needs.change_scopes.outputs.tools_dev_tests_required == 'true' || needs.change_scopes.outputs.tools_pack_tests_required == 'true' || needs.change_scopes.outputs.daemon_tests_required == 'true' || needs.change_scopes.outputs.web_tests_required == 'true') }}
+    if: ${{ always() && needs.change_scopes.result == 'success' && (needs.change_scopes.outputs.tools_dev_tests_required == 'true' || needs.change_scopes.outputs.tools_pack_tests_required == 'true' || needs.change_scopes.outputs.tools_pr_tests_required == 'true' || needs.change_scopes.outputs.daemon_tests_required == 'true' || needs.change_scopes.outputs.web_tests_required == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -375,7 +388,7 @@ jobs:
       - name: Check app workspace test jobs
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
-          TOOLS_REQUIRED: ${{ needs.change_scopes.outputs.tools_dev_tests_required == 'true' || needs.change_scopes.outputs.tools_pack_tests_required == 'true' }}
+          TOOLS_REQUIRED: ${{ needs.change_scopes.outputs.tools_dev_tests_required == 'true' || needs.change_scopes.outputs.tools_pack_tests_required == 'true' || needs.change_scopes.outputs.tools_pr_tests_required == 'true' }}
           DAEMON_REQUIRED: ${{ needs.change_scopes.outputs.daemon_tests_required }}
           WEB_REQUIRED: ${{ needs.change_scopes.outputs.web_tests_required }}
         run: |
