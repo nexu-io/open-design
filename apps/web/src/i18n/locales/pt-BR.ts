@@ -3,6 +3,18 @@ import { en } from './en';
 
 export const ptBR: Dict = {
   ...en,
+  'workingDirPicker.title': "Folder",
+  'workingDirPicker.homeTitle': "Choose where this project should live",
+  'workingDirPicker.processing': "Processing…",
+  'workingDirPicker.select': "Choose working directory",
+  'workingDirPicker.clearAria': "Clear working directory",
+  'workingDirPicker.replaceFailed': "Could not replace working directory",
+  'workingDirPicker.unavailable': "Folder picker is unavailable in this build. Run the desktop app to pick a folder.",
+  'workingDirPicker.openUnavailable': "Open this project in the desktop app to show the folder.",
+  'workingDirPicker.openFailed': "Could not show this folder",
+  'workingDirPicker.showInFileManager': "Show in file manager",
+  'workingDirPicker.replace': "Clear and replace directory…",
+  'workingDirPicker.recent': "Recent directories",
   'homeHero.promptExamples': "Exemplos",
   'homeHero.footer.designSystem': "Estilo",
   'homeHero.footer.autoDesignSystem': "Auto",

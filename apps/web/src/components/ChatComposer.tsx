@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
 } from "react";
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
@@ -145,6 +146,7 @@ interface Props {
   // ActivePluginChip on each user message (see UserMessage in
   // ChatPane). Pass `null` (or omit) to render the full rail.
   pinnedPluginId?: string | null;
+  footerAccessory?: ReactNode;
 }
 
 // Imperative handle so ancestors (e.g. example chips in ChatPane) can
@@ -201,6 +203,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       currentSkillId = null,
       onProjectSkillChange,
       pinnedPluginId = null,
+      footerAccessory,
     },
     ref
   ) {
@@ -1544,6 +1547,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 <Icon name="attach" size={15} />
               )}
             </button>
+            {footerAccessory}
             <span className="composer-spacer" />
             {streaming ? (
               <button

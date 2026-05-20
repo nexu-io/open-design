@@ -489,6 +489,7 @@ export function EntryShell({
       ...(payload.contextConnectors && payload.contextConnectors.length > 0
         ? { contextConnectors: payload.contextConnectors }
         : {}),
+      ...(payload.workingDir ? { userWorkingDir: payload.workingDir } : {}),
     };
     onCreateProject({
       name,

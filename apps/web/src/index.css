@@ -25519,7 +25519,6 @@ body.desktop-pet-shell .pet-task-item {
 }
 .app .split-chat-slot > .pane {
   border: none;
-  border-right: 1px solid var(--border);
   border-radius: 0;
   box-shadow: none;
   background: var(--bg-panel);
@@ -25830,6 +25829,109 @@ body.desktop-pet-shell .pet-task-item {
   border-color: var(--border);
   color: var(--text-faint);
   cursor: default;
+}
+.app .working-dir-pill {
+  position: relative;
+  display: inline-flex;
+  margin-top: 0;
+  font-size: 11.5px;
+}
+.app .working-dir-pill-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  height: 28px;
+  padding: 3px 9px 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.app .working-dir-pill-trigger:hover {
+  background: color-mix(in srgb, var(--text-muted) 6%, var(--bg-panel));
+  border-color: var(--border-strong, var(--border));
+}
+.app .working-dir-pill-trigger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.app .working-dir-pill-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.app .working-dir-pill-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  min-width: 260px;
+  max-width: 340px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-md, 0 12px 32px rgba(0, 0, 0, 0.12));
+}
+.app .working-dir-pill-menu-path {
+  padding: 4px 10px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  word-break: break-all;
+}
+.app .working-dir-pill-menu-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+}
+.app .working-dir-pill-menu-item.small {
+  font-size: 11.5px;
+}
+.app .working-dir-pill-menu-item:hover {
+  background: color-mix(in srgb, var(--text-muted) 8%, transparent);
+}
+.app .working-dir-pill-menu-item:disabled {
+  color: var(--text-faint);
+  cursor: not-allowed;
+}
+.app .working-dir-pill-menu-item:disabled:hover {
+  background: transparent;
+}
+.app .working-dir-pill-menu-divider {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border);
+}
+.app .working-dir-pill-menu-section {
+  padding: 4px 10px;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+.app .working-dir-pill-menu-recent {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.app .working-dir-pill-menu-error {
+  padding: 4px 10px 6px;
+  color: var(--red, #c0392b);
+  font-size: 11.5px;
 }
 .app .composer-hint {
   margin: 4px 8px 0;

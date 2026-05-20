@@ -3,6 +3,18 @@ import { en } from './en';
 
 export const zhTW: Dict = {
   ...en,
+  'workingDirPicker.title': "目錄",
+  'workingDirPicker.homeTitle': "選擇專案要放在哪個目錄下",
+  'workingDirPicker.processing': "處理中…",
+  'workingDirPicker.select': "選擇工作目錄",
+  'workingDirPicker.clearAria': "清除工作目錄",
+  'workingDirPicker.replaceFailed': "替換工作目錄失敗",
+  'workingDirPicker.unavailable': "未選擇目錄 — 啟動桌面版以使用原生選擇器",
+  'workingDirPicker.openUnavailable': "請在桌面版中開啟此專案以顯示資料夾。",
+  'workingDirPicker.openFailed': "無法顯示此資料夾",
+  'workingDirPicker.showInFileManager': "在檔案管理器中顯示",
+  'workingDirPicker.replace': "清空並替換目錄…",
+  'workingDirPicker.recent': "最近使用的目錄",
   'homeHero.promptExamples': "範例提示詞",
   'homeHero.footer.designSystem': "風格",
   'homeHero.footer.autoDesignSystem': "自動",

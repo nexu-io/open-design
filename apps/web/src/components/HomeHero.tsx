@@ -33,6 +33,7 @@ import { useI18n, useT } from '../i18n';
 import type { Locale } from '../i18n/types';
 import { PreviewSurface } from './plugins-home/cards/PreviewSurface';
 import { inferPluginPreview } from './plugins-home/preview';
+import { openFolderDialog } from '../providers/registry';
 
 export interface HomeHeroSubmitHandler {
   (): void;
@@ -64,6 +65,8 @@ interface Props {
   stagedFiles?: File[];
   onAddFiles?: (files: File[]) => void;
   onRemoveFile?: (index: number) => void;
+  workingDir?: string | null;
+  onChangeWorkingDir?: (dir: string | null) => void;
   pluginOptions: InstalledPluginRecord[];
   pluginsLoading: boolean;
   skillOptions?: SkillSummary[];
@@ -142,6 +145,8 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
     stagedFiles = [],
     onAddFiles = () => undefined,
     onRemoveFile = () => undefined,
+    workingDir = null,
+    onChangeWorkingDir,
     pluginOptions,
     pluginsLoading,
     skillOptions = [],
@@ -172,6 +177,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
   const [dragActive, setDragActive] = useState(false);
   const [openInlineInputName, setOpenInlineInputName] = useState<string | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [workingDirError, setWorkingDirError] = useState<string | null>(null);
   const composingRef = useRef(false);
   const inputElementRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -372,6 +378,10 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
       : [],
     [activeChipId, activeExamplePlugins.length, locale],
   );
+  const workingDirLabel = useMemo(() => {
+    if (!workingDir) return null;
+    return workingDir.split(/[\\/]/).filter(Boolean).slice(-1)[0] ?? workingDir;
+  }, [workingDir]);
 
   useEffect(() => {
     if (selectedIndex >= visiblePickerOptions.length) setSelectedIndex(0);
@@ -476,6 +486,17 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
   function handleFiles(files: File[]) {
     if (files.length === 0) return;
     onAddFiles(files);
+  }
+
+  async function handlePickWorkingDir() {
+    if (!onChangeWorkingDir) return;
+    setWorkingDirError(null);
+    const picked = await openFolderDialog();
+    if (!picked) {
+      setWorkingDirError(t('workingDirPicker.unavailable'));
+      return;
+    }
+    onChangeWorkingDir(picked);
   }
 
   function usePromptExample(example: string) {
@@ -960,8 +981,37 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
               title={t('chat.attachAria')}
               aria-label={t('chat.attachAria')}
             >
-              <Icon name="attach" size={19} />
+              <Icon name="attach" size={15} />
             </button>
+            {onChangeWorkingDir ? (
+              <div className="home-hero__working-dir-wrap">
+                <button
+                  type="button"
+                  className={`home-hero__working-dir${workingDir ? ' picked' : ''}`}
+                  data-testid="home-hero-working-dir-chip"
+                  onClick={() => void handlePickWorkingDir()}
+                  title={workingDir ?? t('workingDirPicker.homeTitle')}
+                  aria-label={t('workingDirPicker.select')}
+                >
+                  <Icon name="folder" size={13} />
+                  <span>{workingDirLabel ?? t('workingDirPicker.title')}</span>
+                </button>
+                {workingDir ? (
+                  <button
+                    type="button"
+                    className="home-hero__working-dir-clear"
+                    onClick={() => {
+                      setWorkingDirError(null);
+                      onChangeWorkingDir(null);
+                    }}
+                    title={t('workingDirPicker.clearAria')}
+                    aria-label={t('workingDirPicker.clearAria')}
+                  >
+                    <Icon name="close" size={10} />
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
             {activeCreateChip ? (
               <ActiveTypeChip chip={activeCreateChip} onClear={onClearActiveChip} />
             ) : null}
@@ -994,7 +1044,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
             title={canSubmit ? t('homeHero.run') : t('homeHero.typeSomethingToRun')}
             aria-label={t('homeHero.run')}
           >
-            <Icon name="arrow-up" size={21} strokeWidth={2.2} />
+            <Icon name="arrow-up" size={17} />
           </button>
         </div>
       </div>
@@ -1062,6 +1112,11 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
       {error ? (
         <div role="alert" className="home-hero__error">
           {error}
+        </div>
+      ) : null}
+      {workingDirError ? (
+        <div role="alert" className="home-hero__error">
+          {workingDirError}
         </div>
       ) : null}
     </section>
@@ -1897,7 +1952,22 @@ interface FooterSelectItemOption {
 
 interface ModelOptionIconSpec {
   label: string;
-  tone: 'openai' | 'dalle' | 'seed' | 'sense' | 'grok' | 'google' | 'router' | 'flux' | 'audio' | 'custom';
+  tone:
+    | 'openai'
+    | 'dalle'
+    | 'seed'
+    | 'sense'
+    | 'grok'
+    | 'google'
+    | 'router'
+    | 'flux'
+    | 'elevenlabs'
+    | 'fishaudio'
+    | 'minimax'
+    | 'suno'
+    | 'audio'
+    | 'custom';
+  src?: string;
 }
 
 interface RatioOptionIconSpec {
@@ -1918,7 +1988,7 @@ function FooterOptionIcon({
       className={`home-hero__footer-option-icon${compact ? ' home-hero__footer-option-icon--compact' : ''}`}
       aria-hidden
     >
-      <Icon name={name} size={compact ? 11 : 13} />
+      <Icon name={name} size={13} />
     </span>
   );
 }
@@ -1935,7 +2005,7 @@ function ModelOptionIcon({
       className={`home-hero__model-option-icon home-hero__model-option-icon--${icon.tone}${compact ? ' home-hero__model-option-icon--compact' : ''}`}
       aria-hidden
     >
-      {icon.label}
+      {icon.src ? <img src={icon.src} alt="" draggable={false} /> : icon.label}
     </span>
   );
 }
@@ -2039,23 +2109,36 @@ function footerInputValueIcon(field: InputFieldSpec, value: string): IconName | 
 
 function modelOptionIcon(value: string, label: string): ModelOptionIconSpec {
   const normalized = `${value} ${label}`.toLowerCase();
-  if (normalized.includes('dall-e')) return { label: 'D', tone: 'dalle' };
-  if (normalized.includes('gpt-image') || normalized.includes('openai')) return { label: 'AI', tone: 'openai' };
+  if (normalized.includes('dall-e')) return { label: 'OpenAI', tone: 'dalle', src: '/model-icons/openai.svg' };
+  if (normalized.includes('gpt-image') || normalized.includes('openai') || normalized.includes('sora')) {
+    return { label: 'OpenAI', tone: 'openai', src: '/model-icons/openai.svg' };
+  }
   if (normalized.includes('seedream') || normalized.includes('seededit') || normalized.includes('seedance') || normalized.includes('doubao') || normalized.includes('bytedance')) {
-    return { label: '豆', tone: 'seed' };
+    return { label: 'ByteDance', tone: 'seed', src: '/model-icons/bytedance.svg' };
   }
   if (normalized.includes('senseaudio')) return { label: 'SA', tone: 'sense' };
-  if (normalized.includes('grok') || normalized.includes('xai') || normalized.includes('xai/')) return { label: 'x', tone: 'grok' };
-  if (normalized.includes('gemini') || normalized.includes('imagen') || normalized.includes('veo') || normalized.includes('google') || normalized.includes('nano-banana')) {
-    return { label: 'G', tone: 'google' };
+  if (normalized.includes('grok') || normalized.includes('xai') || normalized.includes('xai/')) {
+    return { label: 'xAI', tone: 'grok', src: '/model-icons/x.svg' };
   }
+  if (normalized.includes('gemini') || normalized.includes('imagen') || normalized.includes('veo') || normalized.includes('google') || normalized.includes('nano-banana')) {
+    return { label: 'Google Gemini', tone: 'google', src: '/model-icons/google-gemini.svg' };
+  }
+  if (normalized.includes('flux') || normalized.includes('bfl') || normalized.includes('black-forest')) {
+    return { label: 'FLUX', tone: 'flux', src: '/model-icons/flux.svg' };
+  }
+  if (normalized.includes('openrouter')) return { label: 'OpenRouter', tone: 'router', src: '/model-icons/openrouter.svg' };
   if (normalized.includes('imagerouter') || normalized.includes('/')) return { label: 'IR', tone: 'router' };
-  if (normalized.includes('flux') || normalized.includes('bfl') || normalized.includes('black-forest')) return { label: 'FL', tone: 'flux' };
+  if (normalized.includes('eleven')) {
+    return { label: 'ElevenLabs', tone: 'elevenlabs', src: '/model-icons/elevenlabs.svg' };
+  }
+  if (normalized.includes('fish')) {
+    return { label: 'Fish Audio', tone: 'fishaudio', src: '/model-icons/fishaudio.svg' };
+  }
+  if (normalized.includes('minimax')) {
+    return { label: 'MiniMax', tone: 'minimax', src: '/model-icons/minimax.svg' };
+  }
+  if (normalized.includes('suno')) return { label: 'Suno', tone: 'suno', src: '/model-icons/suno.svg' };
   if (
-    normalized.includes('eleven') ||
-    normalized.includes('fish') ||
-    normalized.includes('minimax') ||
-    normalized.includes('suno') ||
     normalized.includes('udio') ||
     normalized.includes('audio') ||
     normalized.includes('voice')
@@ -2358,7 +2441,7 @@ function ActiveTypeChip({ chip, onClear }: { chip: HomeHeroChip; onClear: () => 
       onClick={onClear}
     >
       <span className="home-hero__active-type-chip-icon" aria-hidden>
-        <Icon name={chip.icon} size={14} />
+        <Icon name={chip.icon} size={13} />
       </span>
       <span>{homeHeroChipLabel(chip.id, t)}</span>
       <Icon name="close" size={12} className="home-hero__active-type-chip-close" />

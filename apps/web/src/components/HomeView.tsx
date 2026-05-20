@@ -217,6 +217,7 @@ export function HomeView({
   const [selectedMcpContexts, setSelectedMcpContexts] = useState<SelectedMcpContext[]>([]);
   const [selectedConnectorContexts, setSelectedConnectorContexts] = useState<SelectedConnectorContext[]>([]);
   const [stagedFiles, setStagedFiles] = useState<File[]>([]);
+  const [workingDir, setWorkingDir] = useState<string | null>(null);
   const [mcpServers, setMcpServers] = useState<McpServerConfig[]>([]);
   const [mcpLoading, setMcpLoading] = useState(true);
   const [prompt, setPrompt] = useState('');
@@ -376,7 +377,7 @@ export function HomeView({
         ...(promptHandoff.inputs ? { inputs: promptHandoff.inputs } : {}),
       });
       if (promptHandoff.focus) {
-        requestAnimationFrame(() => inputRef.current?.focus());
+        focusPromptAtEnd();
       }
       return;
     }
@@ -392,7 +393,7 @@ export function HomeView({
     setPendingAuthoringPrompt(promptHandoff.prompt);
     setPendingAuthoringInputs(promptHandoff.inputs);
     if (promptHandoff.focus) {
-      requestAnimationFrame(() => inputRef.current?.focus());
+      focusPromptAtEnd();
     }
     setPendingAuthoringChipId('create-plugin');
   }, [promptHandoff]);
@@ -478,6 +479,17 @@ export function HomeView({
     [defaultDesignSystemId, designSystemLogoById, designSystems, t],
   );
 
+  function focusPromptAtEnd() {
+    requestAnimationFrame(() => {
+      const input = inputRef.current;
+      if (!input) return;
+      input.focus();
+      const position = input.value.length;
+      input.setSelectionRange(position, position);
+      input.scrollTop = input.scrollHeight;
+    });
+  }
+
   async function usePlugin(
     record: InstalledPluginRecord,
     nextPrompt?: string | null,
@@ -553,7 +565,7 @@ export function HomeView({
       setPrompt(optimisticPrompt);
       setPromptEditedByUser(false);
     }
-    requestAnimationFrame(() => inputRef.current?.focus());
+    focusPromptAtEnd();
 
     if (!inputsValid) {
       setPendingChipId(null);
@@ -698,7 +710,7 @@ export function HomeView({
     }
     setError(null);
     setDetailsRecord(null);
-    if (shouldFocusOnly) requestAnimationFrame(() => inputRef.current?.focus());
+    if (shouldFocusOnly) focusPromptAtEnd();
   }
 
   function runWithReplacementConfirmation(
@@ -780,7 +792,7 @@ export function HomeView({
     });
     if (nextPrompt !== null) setPrompt(nextPrompt);
     setError(null);
-    requestAnimationFrame(() => inputRef.current?.focus());
+    focusPromptAtEnd();
   }
 
   function useExamplePlugin(record: InstalledPluginRecord, chipId: string, promptText: string) {
@@ -840,7 +852,7 @@ export function HomeView({
     if (files.length === 0) return;
     setStagedFiles((current) => [...current, ...files]);
     setError(null);
-    requestAnimationFrame(() => inputRef.current?.focus());
+    focusPromptAtEnd();
   }
 
   function removeStagedFile(index: number) {
@@ -908,7 +920,7 @@ export function HomeView({
     setPendingChipId(null);
     setError(null);
     setPromptEditedByUser(prompt.trim().length > 0);
-    requestAnimationFrame(() => inputRef.current?.focus());
+    focusPromptAtEnd();
   }
 
   function useSkill(skill: SkillSummary, nextPrompt: string | null) {
@@ -919,7 +931,7 @@ export function HomeView({
       setPrompt(replacement);
       setPromptEditedByUser(false);
     }
-    requestAnimationFrame(() => inputRef.current?.focus());
+    focusPromptAtEnd();
   }
 
   function useMcpServer(_server: McpServerConfig, nextPrompt: string) {
@@ -930,7 +942,7 @@ export function HomeView({
     ));
     setPrompt(nextPrompt);
     setError(null);
-    requestAnimationFrame(() => inputRef.current?.focus());
+    focusPromptAtEnd();
   }
 
   function useConnector(connector: ConnectorDetail, nextPrompt: string) {
@@ -942,7 +954,7 @@ export function HomeView({
     setPrompt(nextPrompt);
     setPromptEditedByUser(false);
     setError(null);
-    requestAnimationFrame(() => inputRef.current?.focus());
+    focusPromptAtEnd();
   }
 
   function queuePluginAuthoring(chipId: string | null, goal?: string) {
@@ -958,7 +970,7 @@ export function HomeView({
       setPendingAuthoringPrompt(nextPrompt);
       setPendingAuthoringInputs(nextInputs);
       setPendingAuthoringChipId(chipId ?? 'create-plugin');
-      requestAnimationFrame(() => inputRef.current?.focus());
+      focusPromptAtEnd();
     }, {
       before: active?.record.id ?? null,
       after: 'od-plugin-authoring',
@@ -1163,6 +1175,7 @@ export function HomeView({
       projectKind: submittedProjectKind,
       projectMetadata: submittedProjectMetadata,
       designSystemId: submittedDesignSystemSelection?.id ?? null,
+      workingDir,
       contextPlugins,
       contextMcpServers,
       contextConnectors,
@@ -1204,6 +1217,8 @@ export function HomeView({
         stagedFiles={stagedFiles}
         onAddFiles={stageFiles}
         onRemoveFile={removeStagedFile}
+        workingDir={workingDir}
+        onChangeWorkingDir={setWorkingDir}
         pluginOptions={plugins}
         pluginsLoading={pluginsLoading}
         skillOptions={selectableSkills}

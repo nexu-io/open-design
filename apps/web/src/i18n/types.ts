@@ -731,6 +731,18 @@ export interface Dict {
   'homeHero.chip.figmaHint': string;
   'homeHero.chip.folderHint': string;
   'homeHero.chip.templateHint': string;
+  'workingDirPicker.title': string;
+  'workingDirPicker.homeTitle': string;
+  'workingDirPicker.processing': string;
+  'workingDirPicker.select': string;
+  'workingDirPicker.clearAria': string;
+  'workingDirPicker.replaceFailed': string;
+  'workingDirPicker.unavailable': string;
+  'workingDirPicker.openUnavailable': string;
+  'workingDirPicker.openFailed': string;
+  'workingDirPicker.showInFileManager': string;
+  'workingDirPicker.replace': string;
+  'workingDirPicker.recent': string;
   'recentProjects.title': string;
   'recentProjects.viewAll': string;
   'recentProjects.empty': string;
