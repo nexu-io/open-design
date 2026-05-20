@@ -778,6 +778,9 @@ function validateBranchBoundCommand(
   if (!block.includes(`--expected-head ${manifest.branchHead}`)) {
     problems.push(`handoff note ${label} command is missing expected head ${manifest.branchHead}: ${notePath}`);
   }
+  if (!hasReceiverReportDirFallback(block)) {
+    problems.push(`handoff note ${label} command is missing TAURI_M4_REPORT_DIR report path fallback: ${notePath}`);
+  }
 }
 
 function hasBranchBoundRemoteArgument(block: string): boolean {
@@ -787,6 +790,10 @@ function hasBranchBoundRemoteArgument(block: string): boolean {
     block.includes("--remote '${REMOTE:-origin}'") ||
     block.includes("--remote ${REMOTE:-origin}")
   );
+}
+
+function hasReceiverReportDirFallback(block: string): boolean {
+  return block.includes("${TAURI_M4_REPORT_DIR:-/tmp/open-design-tauri-m4-reports}");
 }
 
 async function readHandoffArchiveStatus(archivePath: string, handoff?: HandoffStatus): Promise<HandoffArchiveStatus> {

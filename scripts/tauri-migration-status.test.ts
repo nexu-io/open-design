@@ -230,6 +230,28 @@ test("tauri-migration-status rejects stale handoff notes without remote-bound ad
   assert.match(parsed.handoff.problems.join("\n"), /handoff note direct M4 advance command is missing --remote origin or --remote "\$\{REMOTE:-origin\}"/);
 });
 
+test("tauri-migration-status rejects stale handoff notes with fixed report paths", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: head, fixedReportNote: true });
+
+  const result = await runStatus(fixture, "--handoff-dir", handoffDir);
+  const parsed = JSON.parse(result.stdout) as {
+    handoff: {
+      current: boolean;
+      problems: string[];
+    };
+  };
+
+  assert.equal(parsed.handoff.current, false);
+  assert.match(parsed.handoff.problems.join("\n"), /handoff note report download command is missing TAURI_M4_REPORT_DIR report path fallback/);
+  assert.match(parsed.handoff.problems.join("\n"), /handoff note direct M4 advance command is missing TAURI_M4_REPORT_DIR report path fallback/);
+});
+
 test("tauri-migration-status reports current packaged handoff archives", async (t) => {
   const fixture = await createFixtureRoot(t, {
     checked: [],
@@ -1711,7 +1733,7 @@ async function initGitFixture(root: string): Promise<string> {
 
 async function writeHandoffFixture(
   handoffDir: string,
-  options: { branchHead: string; bundlePath?: string; staleNote?: boolean },
+  options: { branchHead: string; bundlePath?: string; fixedReportNote?: boolean; staleNote?: boolean },
 ): Promise<string> {
   const bundlePath = join(handoffDir, "open-design-tauri-migration.bundle");
   const bundle = Buffer.from("bundle\n", "utf8");
@@ -1733,24 +1755,38 @@ async function writeHandoffFixture(
     )}\n`,
     "utf8",
   );
-  await writeFile(join(handoffDir, "open-design-tauri-migration-handoff.md"), handoffNoteFixture(options.branchHead, options.staleNote === true), "utf8");
+  await writeFile(
+    join(handoffDir, "open-design-tauri-migration-handoff.md"),
+    handoffNoteFixture(options.branchHead, {
+      fixedReportNote: options.fixedReportNote === true,
+      stale: options.staleNote === true,
+    }),
+    "utf8",
+  );
   return bundleSha256;
 }
 
-function handoffNoteFixture(branchHead: string, stale: boolean): string {
-  const directAdvanceCommand = stale
+function handoffNoteFixture(branchHead: string, options: { fixedReportNote: boolean; stale: boolean }): string {
+  const reportDirArg = options.fixedReportNote ? "/tmp/open-design-tauri-m4-reports" : '"${TAURI_M4_REPORT_DIR:-/tmp/open-design-tauri-m4-reports}"';
+  const winReportArg = options.fixedReportNote
+    ? "/tmp/open-design-tauri-m4-reports/open-design-ci-win-tauri-e2e-report"
+    : '"${TAURI_M4_REPORT_DIR:-/tmp/open-design-tauri-m4-reports}/open-design-ci-win-tauri-e2e-report"';
+  const linuxReportArg = options.fixedReportNote
+    ? "/tmp/open-design-tauri-m4-reports/open-design-ci-linux-tauri-e2e-report"
+    : '"${TAURI_M4_REPORT_DIR:-/tmp/open-design-tauri-m4-reports}/open-design-ci-linux-tauri-e2e-report"';
+  const directAdvanceCommand = options.stale
     ? [
         "pnpm exec tsx scripts/advance-tauri-migration-m4-m5.ts \\",
-        "  --win-report /tmp/open-design-tauri-m4-reports/open-design-ci-win-tauri-e2e-report \\",
-        "  --linux-report /tmp/open-design-tauri-m4-reports/open-design-ci-linux-tauri-e2e-report",
+        `  --win-report ${winReportArg} \\`,
+        `  --linux-report ${linuxReportArg}`,
       ]
     : [
         "pnpm exec tsx scripts/advance-tauri-migration-m4-m5.ts \\",
         '  --remote "${REMOTE:-origin}" \\',
         "  --branch codex/electron-to-tauri-migration \\",
         `  --expected-head ${branchHead} \\`,
-        "  --win-report /tmp/open-design-tauri-m4-reports/open-design-ci-win-tauri-e2e-report \\",
-        "  --linux-report /tmp/open-design-tauri-m4-reports/open-design-ci-linux-tauri-e2e-report",
+        `  --win-report ${winReportArg} \\`,
+        `  --linux-report ${linuxReportArg}`,
       ];
   return [
     "# Tauri Migration Handoff",
@@ -1761,7 +1797,7 @@ function handoffNoteFixture(branchHead: string, stale: boolean): string {
     `  --expected-head ${branchHead} \\`,
     '  --remote "${REMOTE:-origin}" \\',
     "  --wait \\",
-    "  --output-dir /tmp/open-design-tauri-m4-reports",
+    `  --output-dir ${reportDirArg}`,
     "```",
     "",
     "```bash",
