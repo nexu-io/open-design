@@ -157,7 +157,7 @@ function parseArgs(argv: string[]): Args {
     ghBin: process.env.GH_BIN ?? "gh",
     handoffDir: defaultHandoffDir,
     prBodyPath: process.env.TAURI_PR_BODY_PATH ?? defaultPrBodyPath,
-    remote: defaultRemote,
+    remote: process.env.REMOTE ?? defaultRemote,
     reportDir: resolve(process.env.TAURI_M4_REPORT_DIR ?? defaultReportDir),
     root: workspaceRoot,
     push: true,
@@ -262,7 +262,7 @@ function parseArgs(argv: string[]): Args {
           "Continues the Electron→Tauri migration from the current phase without bypassing M4/M5/M6 guards.",
           "It refreshes stale handoff artifacts, pushes/verifies the migration branch when credentials allow, and can wait for native M4 reports before applying the guarded M5 advance.",
           `defaults: --workflow ${defaultWorkflow} --report-dir ${defaultReportDir} --pr-body-path ${defaultPrBodyPath}`,
-          "env defaults: GITHUB_WORKFLOW, GH_BIN, TAURI_M4_REPORT_DIR, TAURI_PR_BODY_PATH",
+          "env defaults: REMOTE, GITHUB_WORKFLOW, GH_BIN, TAURI_M4_REPORT_DIR, TAURI_PR_BODY_PATH",
           "",
         ].join("\n"),
       );

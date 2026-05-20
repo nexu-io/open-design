@@ -901,7 +901,43 @@ test("continue-tauri-migration help documents GitHub CLI override", async () => 
   const result = await runContinue(repoRoot, "--help");
 
   assert.match(result.stdout, /--gh <path>/);
-  assert.match(result.stdout, /env defaults: GITHUB_WORKFLOW, GH_BIN, TAURI_M4_REPORT_DIR, TAURI_PR_BODY_PATH/);
+  assert.match(result.stdout, /env defaults: REMOTE, GITHUB_WORKFLOW, GH_BIN, TAURI_M4_REPORT_DIR, TAURI_PR_BODY_PATH/);
+});
+
+test("continue-tauri-migration honors REMOTE env default", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+  await writeHandoffArchive(handoffDir);
+  const remotePath = join(fixture, "env-remote.git");
+  await git(fixture, "init", "--bare", remotePath);
+
+  const result = await execFileAsync(
+    process.execPath,
+    [
+      "--import",
+      "tsx",
+      continueScript,
+      "--root",
+      fixture,
+      "--handoff-dir",
+      handoffDir,
+      "--dry-run",
+      "--skip-dispatch",
+    ],
+    {
+      cwd: repoRoot,
+      env: { ...process.env, REMOTE: remotePath },
+      maxBuffer: 1024 * 1024,
+    },
+  );
+
+  assert.match(result.stdout, new RegExp(`--remote ${escapeRegExp(remotePath)}`));
+  assert.match(result.stdout, /Dry-run push preflight succeeded/);
 });
 
 test("continue-tauri-migration dry-run stops after a stale handoff refresh plan", async (t) => {

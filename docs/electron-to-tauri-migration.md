@@ -460,6 +460,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Tightened `scripts/package-tauri-migration-handoff.ts` output so the printed continuation runner and status check include the generated `--handoff-archive` path, plus the handoff directory, remote, and report directory. This keeps package output aligned with status output and avoids dropping a custom or copied archive path when a receiver follows the printed commands. `node --import tsx --test scripts/package-tauri-migration-handoff.test.ts scripts/tauri-migration-status.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `git diff --check` passed.
 - 2026-05-20: Centralized the generated Tauri migration draft PR body in `scripts/tauri-migration-pr-body.ts` so the push-only helper and executable handoff sidecar produce the same template-complete PR body. The shared body keeps the receiver PR aligned with the repository template sections and records the concrete local validation plus pending native M4 evidence. `node --import tsx --test scripts/package-tauri-migration-handoff.test.ts scripts/push-tauri-migration-handoff.test.ts scripts/tauri-migration-status.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, `git diff --check`, `pnpm guard`, and `pnpm typecheck` passed.
 - 2026-05-20: Documented `scripts/continue-tauri-migration.ts --gh <path>` and the `GH_BIN` environment default in the continuation runner help output, so receivers without a `gh` binary on `PATH` can discover the supported override before trying native CI dispatch. `node --import tsx --test scripts/tauri-migration-status.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `git diff --check` passed.
+- 2026-05-20: Aligned receiver remote overrides across the executable handoff sidecar, push-only helper, and repo-local continuation runner. `scripts/push-tauri-migration-handoff.ts` and `scripts/continue-tauri-migration.ts` now honor `REMOTE=<remote>` when `--remote` is omitted, matching the command sidecar behavior for write-capable checkouts whose push remote is not named `origin`. `node --import tsx --test scripts/tauri-migration-status.test.ts scripts/push-tauri-migration-handoff.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `git diff --check` passed.
 
 ### Platform Gate Runners
 
@@ -573,7 +574,7 @@ pnpm exec tsx scripts/push-tauri-migration-handoff.ts \
   --remote origin
 ```
 
-Add `--gh /path/to-gh` or set `GH_BIN=<path-to-gh>` if the receiving machine uses a non-default GitHub CLI binary and you want the printed workflow-dispatch and draft-PR fallback commands to use that binary.
+Set `REMOTE=<remote>` instead of `--remote origin` if the receiving checkout uses a differently named write-capable remote. Add `--gh /path/to-gh` or set `GH_BIN=<path-to-gh>` if the receiving machine uses a non-default GitHub CLI binary and you want the printed workflow-dispatch and draft-PR fallback commands to use that binary.
 
 That branch push alone does not trigger `ci.yml`, because this repository runs CI on pull requests, `main` pushes, and manual dispatches. The command script attempts the workflow dispatch automatically when `GH_BIN` or `gh` is available. If it cannot dispatch, either open a draft PR or manually dispatch the workflow for the migration branch:
 

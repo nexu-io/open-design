@@ -142,7 +142,7 @@ function parseArgs(argv: string[]): Args {
     ghBin: process.env.GH_BIN ?? "gh",
     ...(process.env.TAURI_PR_BODY_PATH == null ? {} : { prBodyPath: resolve(process.env.TAURI_PR_BODY_PATH) }),
     reportDir: resolve(process.env.TAURI_M4_REPORT_DIR ?? defaultReportDir),
-    remote: defaultRemote,
+    remote: process.env.REMOTE ?? defaultRemote,
     workflow: process.env.GITHUB_WORKFLOW ?? defaultWorkflow,
   };
 
@@ -216,7 +216,7 @@ function parseArgs(argv: string[]): Args {
           "       tsx scripts/push-tauri-migration-handoff.ts --manifest <path> --bundle <path> [--remote <remote>] [--cwd <repo>] [--gh <path-to-gh>] [--workflow <file>] [--report-dir <dir>] [--pr-body-path <path>]",
           "",
           `defaults: --cwd ${process.cwd()} --remote ${defaultRemote} --workflow ${defaultWorkflow} --report-dir ${defaultReportDir}`,
-          "env defaults: GH_BIN, GITHUB_WORKFLOW, TAURI_M4_REPORT_DIR, TAURI_PR_BODY_PATH",
+          "env defaults: REMOTE, GH_BIN, GITHUB_WORKFLOW, TAURI_M4_REPORT_DIR, TAURI_PR_BODY_PATH",
           "",
         ].join("\n"),
       );

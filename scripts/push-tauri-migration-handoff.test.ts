@@ -112,6 +112,29 @@ test("push-tauri-migration-handoff honors receiver workflow, report, and PR body
   assert.match(prBody, /scripts\/download-tauri-m4-reports\.test\.ts scripts\/package-tauri-migration-handoff\.test\.ts scripts\/tauri-migration-status\.test\.ts/);
 });
 
+test("push-tauri-migration-handoff honors REMOTE env default", async (t) => {
+  const { manifestPath, remotePath, sourceHead, targetRepo } = await createHandoffFixture(
+    t,
+    "open-design-tauri-push-handoff-remote-env-",
+  );
+
+  const result = await execFileAsync(
+    process.execPath,
+    ["--import", "tsx", pushHandoffScript, "--cwd", targetRepo, "--manifest", manifestPath],
+    {
+      cwd: repoRoot,
+      env: { ...process.env, REMOTE: remotePath },
+      maxBuffer: 1024 * 1024 * 4,
+    },
+  );
+
+  assert.match(result.stdout, new RegExp(`Remote: ${escapeRegExp(remotePath)}`));
+  const remoteHead = (await git(targetRepo, "ls-remote", "--heads", remotePath, `refs/heads/${migrationBranch}`)).stdout
+    .trim()
+    .split(/\s+/, 1)[0];
+  assert.equal(remoteHead, sourceHead);
+});
+
 test("push-tauri-migration-handoff can override a relocated bundle path", async (t) => {
   const { bundlePath, manifestPath, remotePath, sourceHead, targetRepo } = await createHandoffFixture(
     t,
