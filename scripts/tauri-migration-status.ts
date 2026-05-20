@@ -203,6 +203,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   const parsed: ParsedArgs = {
     ...(defaultAutomation == null ? {} : { automationDir: defaultAutomation }),
     json: false,
+    ...(process.env.TAURI_M4_REPORT_DIR == null ? {} : { reportDir: resolve(process.env.TAURI_M4_REPORT_DIR) }),
     root: defaultRoot,
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -262,7 +263,12 @@ function parseArgs(argv: string[]): ParsedArgs {
     }
     if (arg === "--help" || arg === "-h") {
       process.stdout.write(
-        "usage: tsx scripts/tauri-migration-status.ts [--root <repo>] [--automation-dir <dir>] [--handoff-dir <dir>] [--handoff-archive <tar.gz>] [--remote <remote>] [--report-dir <dir>] [--win-report <dir>] [--linux-report <dir>] [--json]\n",
+        [
+          "usage: tsx scripts/tauri-migration-status.ts [--root <repo>] [--automation-dir <dir>] [--handoff-dir <dir>] [--handoff-archive <tar.gz>] [--remote <remote>] [--report-dir <dir>] [--win-report <dir>] [--linux-report <dir>] [--json]",
+          "",
+          "env defaults: TAURI_M4_REPORT_DIR",
+          "",
+        ].join("\n"),
       );
       process.exit(0);
     }

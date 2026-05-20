@@ -921,6 +921,37 @@ test("tauri-migration-status discovers reports from a report directory", async (
   assert.match(parsed.nextActions.join("\n"), /--expected-head <sha>/);
 });
 
+test("tauri-migration-status honors TAURI_M4_REPORT_DIR env default", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const reportDir = join(fixture, "env reports");
+  const winReport = join(reportDir, winArtifactName);
+  const linuxReport = join(reportDir, linuxArtifactName);
+  await writeWindowsReport(winReport);
+  await writeLinuxReport(linuxReport);
+
+  const result = await runStatusWithEnv(fixture, { TAURI_M4_REPORT_DIR: reportDir });
+  const parsed = JSON.parse(result.stdout) as {
+    nextActions: string[];
+    platformReports: {
+      current: boolean;
+      linuxReport: string;
+      reportDir: string;
+      winReport: string;
+    };
+  };
+  const nextActions = parsed.nextActions.join("\n");
+
+  assert.equal(parsed.platformReports.current, true);
+  assert.equal(parsed.platformReports.reportDir, reportDir);
+  assert.equal(parsed.platformReports.winReport, winReport);
+  assert.equal(parsed.platformReports.linuxReport, linuxReport);
+  assert.match(nextActions, new RegExp(`--report-dir '${escapeRegExp(reportDir)}'`));
+  assert.doesNotMatch(nextActions, /--report-dir \/tmp\/open-design-tauri-m4-reports/);
+});
+
 test("tauri-migration-status keeps verified reports behind missing remote verification", async (t) => {
   const fixture = await createFixtureRoot(t, {
     checked: [],
@@ -2024,6 +2055,18 @@ async function writeFixtureFile(root: string, relativePath: string, content: str
 async function runStatus(root: string, ...args: string[]): Promise<{ stderr: string; stdout: string }> {
   return execFileAsync(process.execPath, ["--import", "tsx", statusScript, "--root", root, ...args, "--json"], {
     cwd: repoRoot,
+    maxBuffer: 1024 * 1024,
+  });
+}
+
+async function runStatusWithEnv(
+  root: string,
+  env: Record<string, string>,
+  ...args: string[]
+): Promise<{ stderr: string; stdout: string }> {
+  return execFileAsync(process.execPath, ["--import", "tsx", statusScript, "--root", root, ...args, "--json"], {
+    cwd: repoRoot,
+    env: { ...process.env, ...env },
     maxBuffer: 1024 * 1024,
   });
 }
