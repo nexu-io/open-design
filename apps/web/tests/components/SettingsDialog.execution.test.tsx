@@ -2241,6 +2241,65 @@ describe('SettingsDialog pets interactions', () => {
     expect(screen.getByText('Voidling')).toBeTruthy();
   });
 
+  it('keeps Codex pet hover previews inside viewport edges', async () => {
+    fetchCodexPetsMock.mockResolvedValue({
+      pets: sampleBundledPets,
+      rootDir: '/Users/test/.codex/pets',
+    });
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      { initialSection: 'pet' },
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Dario')).toBeTruthy();
+    });
+
+    const card = screen.getByText('Dario').closest('.pet-codex-card') as HTMLElement;
+    const thumb = card.querySelector('.pet-codex-thumb') as HTMLElement;
+    const rectSpy = vi.spyOn(thumb, 'getBoundingClientRect');
+    const originalInnerWidth = window.innerWidth;
+
+    const mockThumbRect = (left: number) =>
+      rectSpy.mockReturnValue({
+        x: left,
+        y: 0,
+        left,
+        top: 0,
+        width: 56,
+        height: 56,
+        right: left + 56,
+        bottom: 56,
+        toJSON: () => ({}),
+      });
+
+    try {
+      Object.defineProperty(window, 'innerWidth', {
+        configurable: true,
+        value: 320,
+      });
+
+      mockThumbRect(0);
+      fireEvent.mouseEnter(card);
+      expect(thumb.style.getPropertyValue('--pet-codex-preview-offset')).toBe('48px');
+
+      mockThumbRect(270);
+      fireEvent.mouseEnter(card);
+      expect(thumb.style.getPropertyValue('--pet-codex-preview-offset')).toBe('-54px');
+
+      mockThumbRect(100);
+      fireEvent.mouseEnter(card);
+      expect(thumb.style.getPropertyValue('--pet-codex-preview-offset')).toBe('0px');
+    } finally {
+      Object.defineProperty(window, 'innerWidth', {
+        configurable: true,
+        value: originalInnerWidth,
+      });
+      rectSpy.mockRestore();
+    }
+  });
+
   it('supports editing and persisting a custom pet', async () => {
     const { onPersist } = renderSettingsDialog(
       { mode: 'daemon', agentId: 'codex' },

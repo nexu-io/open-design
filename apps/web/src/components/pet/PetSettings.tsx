@@ -51,6 +51,24 @@ const ACCENT_SWATCHES = [
   '#0d0c0a',
 ];
 
+const CODEX_PREVIEW_WIDTH = 128;
+const CODEX_PREVIEW_VIEWPORT_MARGIN = 12;
+
+function codexPreviewOffsetForViewport(
+  anchorRect: Pick<DOMRect, 'left' | 'width'>,
+  viewportWidth: number,
+) {
+  const anchorCenter = anchorRect.left + anchorRect.width / 2;
+  const preferredLeft = anchorCenter - CODEX_PREVIEW_WIDTH / 2;
+  const minLeft = CODEX_PREVIEW_VIEWPORT_MARGIN;
+  const maxLeft = Math.max(
+    minLeft,
+    viewportWidth - CODEX_PREVIEW_WIDTH - CODEX_PREVIEW_VIEWPORT_MARGIN,
+  );
+  const clampedLeft = Math.min(Math.max(preferredLeft, minLeft), maxLeft);
+  return Math.round(clampedLeft + CODEX_PREVIEW_WIDTH / 2 - anchorCenter);
+}
+
 export function PetSettings({ cfg, setCfg }: Props) {
   const t = useT();
   const analytics = useAnalytics();
@@ -100,6 +118,7 @@ export function PetSettings({ cfg, setCfg }: Props) {
     | { kind: 'error'; error: string }
     | null
   >(null);
+  const [codexPreviewOffsets, setCodexPreviewOffsets] = useState<Record<string, number>>({});
 
   // Tab routing — split the panel into three exclusive surfaces
   // (built-in / custom / community) so each "where do my pets come
@@ -164,6 +183,18 @@ export function PetSettings({ cfg, setCfg }: Props) {
       setCommunitySyncing(false);
     }
   }, [refreshCodexPets]);
+
+  const clampCodexPreview = useCallback((petId: string, card: HTMLElement) => {
+    const thumb = card.querySelector<HTMLElement>('.pet-codex-thumb');
+    if (!thumb) return;
+    const nextOffset = codexPreviewOffsetForViewport(
+      thumb.getBoundingClientRect(),
+      window.innerWidth,
+    );
+    setCodexPreviewOffsets((curr) =>
+      curr[petId] === nextOffset ? curr : { ...curr, [petId]: nextOffset },
+    );
+  }, []);
 
   useEffect(() => {
     void refreshCodexPets();
@@ -473,10 +504,15 @@ export function PetSettings({ cfg, setCfg }: Props) {
       <div
         className={`pet-codex-card${isActive ? ' active' : ''}`}
         key={p.id}
+        onFocus={(event) => clampCodexPreview(p.id, event.currentTarget)}
+        onMouseEnter={(event) => clampCodexPreview(p.id, event.currentTarget)}
       >
         <div
           className="pet-codex-thumb"
-          style={{ ['--pet-codex-src' as string]: spritesheet }}
+          style={{
+            ['--pet-codex-src' as string]: spritesheet,
+            ['--pet-codex-preview-offset' as string]: `${codexPreviewOffsets[p.id] ?? 0}px`,
+          }}
           aria-hidden
         >
           <span className="pet-codex-thumb-preview" aria-hidden />

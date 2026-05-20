@@ -19144,8 +19144,8 @@ body.desktop-pet-shell .pet-task-item {
   box-shadow: 0 14px 28px rgba(0, 0, 0, 0.22);
   opacity: 0;
   pointer-events: none;
-  transform: translate(-50%, 6px) scale(0.82);
-  transform-origin: 50% 100%;
+  transform: translate(calc(-50% + var(--pet-codex-preview-offset, 0px)), 6px) scale(0.82);
+  transform-origin: calc(50% - var(--pet-codex-preview-offset, 0px)) 100%;
   transition:
     opacity 140ms ease,
     transform 160ms ease;
@@ -19155,7 +19155,7 @@ body.desktop-pet-shell .pet-task-item {
 .pet-codex-card:hover .pet-codex-thumb-preview,
 .pet-codex-card:focus-within .pet-codex-thumb-preview {
   opacity: 1;
-  transform: translate(-50%, 0) scale(1);
+  transform: translate(calc(-50% + var(--pet-codex-preview-offset, 0px)), 0) scale(1);
   /* 8 column steps (1 row) in 0.6s → ~13 fps per animation, then the row
      index advances every 0.6s for a full 5.4s sweep through all 9 rows.
      Animating background-position-x + -y as two independent animations
