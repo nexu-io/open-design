@@ -897,6 +897,13 @@ test("tauri-migration-status reports incomplete platform report inputs", async (
   assert.deepEqual(parsed.platformReports.problems, ["Linux report not provided"]);
 });
 
+test("continue-tauri-migration help documents GitHub CLI override", async () => {
+  const result = await runContinue(repoRoot, "--help");
+
+  assert.match(result.stdout, /--gh <path>/);
+  assert.match(result.stdout, /env defaults: GITHUB_WORKFLOW, GH_BIN, TAURI_M4_REPORT_DIR, TAURI_PR_BODY_PATH/);
+});
+
 test("continue-tauri-migration dry-run stops after a stale handoff refresh plan", async (t) => {
   const fixture = await createFixtureRoot(t, {
     checked: [],

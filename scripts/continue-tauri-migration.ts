@@ -257,12 +257,12 @@ function parseArgs(argv: string[]): Args {
     if (arg === "--help" || arg === "-h") {
       process.stdout.write(
         [
-          "usage: tsx scripts/continue-tauri-migration.ts [--root <repo>] [--automation-dir <dir>] [--handoff-dir <dir>] [--handoff-archive <tar.gz>] [--remote <remote>] [--workflow <file>] [--report-dir <dir>] [--pr-body-path <path>] [--wait-reports] [--advance] [--dry-run] [--skip-push] [--skip-dispatch]",
+          "usage: tsx scripts/continue-tauri-migration.ts [--root <repo>] [--automation-dir <dir>] [--handoff-dir <dir>] [--handoff-archive <tar.gz>] [--remote <remote>] [--workflow <file>] [--gh <path>] [--report-dir <dir>] [--pr-body-path <path>] [--wait-reports] [--advance] [--dry-run] [--skip-push] [--skip-dispatch]",
           "",
           "Continues the Electron→Tauri migration from the current phase without bypassing M4/M5/M6 guards.",
           "It refreshes stale handoff artifacts, pushes/verifies the migration branch when credentials allow, and can wait for native M4 reports before applying the guarded M5 advance.",
           `defaults: --workflow ${defaultWorkflow} --report-dir ${defaultReportDir} --pr-body-path ${defaultPrBodyPath}`,
-          "env defaults: GITHUB_WORKFLOW, TAURI_M4_REPORT_DIR, TAURI_PR_BODY_PATH",
+          "env defaults: GITHUB_WORKFLOW, GH_BIN, TAURI_M4_REPORT_DIR, TAURI_PR_BODY_PATH",
           "",
         ].join("\n"),
       );
