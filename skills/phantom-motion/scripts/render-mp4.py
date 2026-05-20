@@ -16,16 +16,17 @@ def main():
 
     html_path = os.path.abspath(a.html)
     output_path = os.path.abspath(a.output)
-    temp_dir = Path(output_path).parent / "frames"
-    
-    # 安全删除旧帧目录
-    if temp_dir.exists():
-        shutil.rmtree(temp_dir, ignore_errors=True)
-    temp_dir.mkdir(parents=True, exist_ok=True)
     
     # 1. 启动本地代理 (确保根目录能覆盖到 HTML 与 node_modules 资源)
     port = find_free_port()
     skill_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    # 使用 tempfile 在专属 scratch 目录中创建唯一的帧存储目录，防止误删用户数据
+    import tempfile
+    scratch_dir = Path(skill_dir) / "scratch"
+    scratch_dir.mkdir(parents=True, exist_ok=True)
+    temp_dir = Path(tempfile.mkdtemp(prefix="frames_", dir=scratch_dir))
+
     project_root = skill_dir
     html_rel_path = os.path.relpath(html_path, project_root)
     
@@ -153,6 +154,9 @@ module.paths.push('SKILL_DIR/node_modules');
         
     finally:
         server.shutdown()
+        # 清理由引擎生成的唯一临时帧目录
+        if 'temp_dir' in locals() and temp_dir.exists():
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
 if __name__ == "__main__":
     main()

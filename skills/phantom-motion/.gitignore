@@ -11,9 +11,10 @@ venv/
 # Workspace data (avoid uploading user output)
 phantom-output/
 animation.html
-subtitles.json
+/subtitles.json
 scripts/record.js
 proofshot-artifacts/
+scratch/
 
 
 # System

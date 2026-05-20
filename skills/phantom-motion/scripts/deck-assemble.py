@@ -32,7 +32,12 @@ def main():
     timings_data = "{}"
     if args.timings and os.path.exists(args.timings):
         with open(args.timings, 'r', encoding='utf-8') as f:
-            timings_data = f.read()
+            try:
+                data = json.load(f)
+                timings_data = json.dumps(data, ensure_ascii=False).replace("</script>", "<\\/script>").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
+            except Exception:
+                f.seek(0)
+                timings_data = f.read().replace("</script>", "<\\/script>").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
 
     injected_assets = f"""
     <!-- Phantom Deck Runtime Injections -->

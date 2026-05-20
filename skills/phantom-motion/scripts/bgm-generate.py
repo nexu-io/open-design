@@ -203,6 +203,9 @@ def main():
     else:
         bgm_path = out / "bgm.mp3"
         gen_silent_mp3(a.duration, str(bgm_path))
+        if bgm_path.exists():
+            with open(bgm_path, "rb") as f_in:
+                audio_bytes = f_in.read()
         print("❌ 已回退至静默音频 (bgm.mp3)")
 
     with open(out / "bgm_b64.txt", "w") as f:
