@@ -1720,7 +1720,7 @@
   outline-offset: 1px;
 }
 .entry-star-badge__icon {
-  color: var(--text-muted);
+  color: var(--text-strong);
   flex: 0 0 auto;
 }
 .entry-star-badge:hover .entry-star-badge__icon {
@@ -1742,11 +1742,60 @@
   opacity: 0.55;
 }
 
+.entry-discord-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: var(--shadow-xs);
+  transition: background-color 120ms ease, border-color 120ms ease,
+    color 120ms ease, transform 120ms ease;
+  white-space: nowrap;
+}
+.entry-discord-badge:hover {
+  background: var(--bg-subtle);
+  border-color: var(--border-strong);
+  color: var(--text-strong);
+}
+.entry-discord-badge:active {
+  transform: scale(0.98);
+}
+.entry-discord-badge:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.entry-discord-badge__icon {
+  color: #5865f2;
+  flex: 0 0 auto;
+}
+.entry-discord-badge:hover .entry-discord-badge__icon {
+  color: #5865f2;
+}
+.entry-discord-badge__label {
+  white-space: nowrap;
+}
+
 @media (max-width: 700px) {
   .entry-star-badge__label {
     display: none;
   }
   .entry-star-badge__sep {
+    display: none;
+  }
+  .entry-discord-badge {
+    padding: 0 9px;
+  }
+  .entry-discord-badge__label {
     display: none;
   }
 }

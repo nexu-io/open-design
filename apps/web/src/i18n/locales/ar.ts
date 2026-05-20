@@ -137,7 +137,7 @@ export const ar: Dict = {
   'settings.onboardingSkip': "Skip for now",
   'settings.kicker': 'الإعدادات',
   'settings.title': 'وضع التنفيذ',
-  'settings.subtitle': 'اختر بين CLI المحلي و BYOK. يتم حفظ مفتاح API في هذا المتصفح فقط.',
+  'settings.subtitle': 'اختر بين CLI المحلي و BYOK.',
   'settings.modeAria': 'وضع التنفيذ',
   'settings.protocolAria': 'بروتوكول API',
   'settings.modeDaemon': 'CLI محلي',
@@ -183,6 +183,8 @@ export const ar: Dict = {
   'settings.agentInstall.stepSelect': 'اختر بطاقة الوكيل عندما يظهر كأنه مثبت.',
   'settings.noAgentsDetected':
     'لم يتم اكتشاف أي وكلاء بعد. قم بتثبيت Claude Code أو Codex أو Devin أو Gemini CLI أو OpenCode أو Cursor Agent أو Qwen أو GitHub Copilot CLI، ثم اضغط على إعادة المسح.',
+  'settings.agentInstalledGroup': 'واجهات CLI لديك ({count})',
+  'settings.agentInstallGroup': 'متاحة للتثبيت ({count})',
   'settings.agentAuthRequired': 'المصادقة مطلوبة',
   'settings.agentAuthUnknown': 'حالة المصادقة غير معروفة',
   'settings.apiSection': 'Anthropic API',
@@ -198,6 +200,10 @@ export const ar: Dict = {
     'هذه نماذج مقترحة لهذا البروتوكول. قد يدعم مزوّدك نماذج مختلفة.',
   'settings.baseUrl': 'رابط القاعدة',
   'settings.baseUrlInvalid': 'أدخل رابط http:// أو https:// عام وصالح. يُسمح بـ localhost؛ ويتم حظر عناوين IP للشبكات الخاصة.',
+  'settings.baseUrlCustomize': 'تخصيص',
+  'settings.baseUrlDefaultHint': 'نقطة النهاية الافتراضية. عادة لا تحتاج إلى تغييرها.',
+  'settings.azureBaseUrlPlaceholder': 'https://my-resource.openai.azure.com',
+  'settings.azureBaseUrlHint': 'Find this in Azure portal → your resource → Endpoint.',
   'settings.azureDeploymentModel': 'اسم النشر',
   'settings.azureDeploymentModelHint':
     'في Azure OpenAI، يُستخدم هذا الحقل كاسم النشر في /openai/deployments/<model>. أدخل اسم النشر الذي أنشأته في Azure.',
@@ -222,15 +228,15 @@ export const ar: Dict = {
   'settings.themeDark': 'داكن',
   'settings.agentModelHead': 'النموذج لـ:',
   'settings.modelPicker': 'النموذج',
-  'settings.modelSourceLive': 'Live from CLI',
-  'settings.modelSourceFallback': 'Fallback list',
+  'settings.modelSourceLive': 'مباشر من CLI',
+  'settings.modelSourceFallback': 'القائمة المضمنة',
   'settings.reasoningPicker': 'جهد التفكير',
   'settings.modelPickerHint':
     'يتم جلبه من CLI عندما يعرض أمر `models`. "الافتراضي" يترك الخيار لإعدادات CLI؛ "مخصص..." يسمح لك بكتابة أي معرف نموذج يقبله CLI.',
   'settings.modelPickerLiveHint':
-    'Models were refreshed from the installed CLI. Default still uses the CLI config.',
+    'تم تحديث النماذج من CLI المثبت. لا يزال الخيار الافتراضي يستخدم إعدادات CLI.',
   'settings.modelPickerFallbackHint':
-    'Using Open Design fallback models because the installed CLI did not return live model metadata. Rescan after updating or logging in to the CLI.',
+    'يتم عرض الإعدادات الافتراضية المضمنة. انقر على إعادة المسح لجلب النماذج المباشرة من CLI.',
   'settings.cliEnvTitle': 'CLI config locations',
   'settings.cliEnvHint':
     'Set non-secret config directories for packaged app runs and agent detection.',
@@ -538,6 +544,11 @@ export const ar: Dict = {
     'عدل أي شيء - تغييراتك تنتقل إلى موجز الوكيل.',
   'newproj.promptTemplateBodyEmpty':
     'جسم فارغ - لن يحصل الوكيل على مرجع قالب.',
+  'newproj.deleteTemplateTitle': 'حذف القالب',
+  'newproj.deleteTemplateConfirm': 'هل تريد حذف "{name}"؟ لا يمكن التراجع عن هذا الإجراء.',
+  'newproj.deleteTemplateConfirmCta': 'حذف القالب',
+  'newproj.deleteTemplateError':
+    'تعذر حذف هذا القالب. يرجى المحاولة مرة أخرى.',
 
   'designs.subRecent': 'الأخيرة',
   'designs.subYours': 'تصاميمك',
@@ -986,7 +997,7 @@ export const ar: Dict = {
   'fileViewer.presentFullscreen': 'ملء الشاشة',
   'fileViewer.presentNewTab': 'علامة تبويب جديدة',
   'fileViewer.exitPresentation': 'الخروج من العرض',
-  'fileViewer.shareLabel': 'مشاركة',
+  'fileViewer.shareLabel': 'تصدير',
   'fileViewer.exportPdf': 'تصدير كـ PDF',
   'fileViewer.exportPdfAllSlides': 'تصدير كـ PDF (كل الشرائح)',
   'fileViewer.exportPptxBusy': 'انتظر انتهاء الدور الحالي.',

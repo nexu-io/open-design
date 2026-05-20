@@ -204,6 +204,9 @@ export interface Dict {
   'settings.testTitle': string;
   'settings.testRunning': string;
   'settings.testCancel': string;
+  'settings.testRetry': string;
+  'settings.required': string;
+  'settings.testMissingFields': string;
   'settings.testSuccessApi': string;
   'settings.testSuccessCli': string;
   'settings.testAuthFailed': string;
@@ -225,20 +228,30 @@ export interface Dict {
   'settings.agentInstall.stepRescan': string;
   'settings.agentInstall.stepSelect': string;
   'settings.noAgentsDetected': string;
+  'settings.agentInstalledGroup': string;
+  'settings.agentInstallGroup': string;
   'settings.agentAuthRequired': string;
   'settings.agentAuthUnknown': string;
+  'settings.advanced': string;
   'settings.apiSection': string;
   'settings.quickFillProvider': string;
   'settings.customProvider': string;
   'settings.apiKey': string;
+  'settings.apiKeyGetLink': string;
   'settings.showKey': string;
   'settings.hideKey': string;
   'settings.show': string;
   'settings.hide': string;
   'settings.model': string;
+  'settings.apiKeyInvalid': string;
+  'settings.modelsLoadedFromAccount': string;
   'settings.fetchModels': string;
   'settings.fetchModelsTitle': string;
   'settings.fetchModelsRunning': string;
+  'settings.fetchModelsMissingFields': string;
+  'settings.fetchModelsInvalidBaseUrl': string;
+  'settings.fetchModelsUnsupportedAzure': string;
+  'settings.fetchModelsUnsupportedOllama': string;
   'settings.fetchModelsSuccess': string;
   'settings.fetchModelsEmpty': string;
   'settings.fetchModelsUnsupported': string;
@@ -248,6 +261,10 @@ export interface Dict {
   'settings.maxTokensHint': string;
   'settings.baseUrl': string;
   'settings.baseUrlInvalid': string;
+  'settings.baseUrlCustomize': string;
+  'settings.baseUrlDefaultHint': string;
+  'settings.azureBaseUrlPlaceholder': string;
+  'settings.azureBaseUrlHint': string;
   'settings.azureDeploymentModel': string;
   'settings.azureDeploymentModelHint': string;
   'settings.azureModelFetchHint': string;
@@ -564,6 +581,7 @@ export interface Dict {
   'settings.memoryModelInlineHintCli': string;
   'settings.memoryModelInlineHintCliConstrained': string;
   'settings.memoryModelInlineHintByok': string;
+  'settings.memoryModelInlineHintByokNeutral': string;
   'settings.memoryModelInlineFlashSaved': string;
   'settings.memoryModelInlineFlashCleared': string;
 
@@ -1249,6 +1267,10 @@ export interface Dict {
   'newproj.promptTemplateBodyLabel': string;
   'newproj.promptTemplateOptimizeHint': string;
   'newproj.promptTemplateBodyEmpty': string;
+  'newproj.deleteTemplateTitle': string;
+  'newproj.deleteTemplateConfirm': string;
+  'newproj.deleteTemplateConfirmCta': string;
+  'newproj.deleteTemplateError': string;
 
   // Prompt templates
   'promptTemplates.searchPlaceholder': string;

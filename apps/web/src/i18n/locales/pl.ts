@@ -137,7 +137,7 @@ export const pl: Dict = {
   'settings.onboardingSkip': "Skip for now",
   'settings.kicker': 'Ustawienia',
   'settings.title': 'Tryb wykonywania',
-  'settings.subtitle': 'Wybierz lokalne CLI albo BYOK. Klucz API jest przechowywany tylko w tej przeglądarce.',
+  'settings.subtitle': 'Wybierz lokalne CLI albo BYOK.',
   'settings.modeAria': 'Tryb wykonywania',
   'settings.protocolAria': 'Protokół API',
   'settings.modeDaemon': 'Lokalne CLI',
@@ -183,6 +183,8 @@ export const pl: Dict = {
   'settings.agentInstall.stepSelect': 'Wybierz kartę agenta, gdy pojawi się jako zainstalowany.',
   'settings.noAgentsDetected':
       'Nie wykryto jeszcze żadnych agentów. Zainstaluj Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen lub GitHub Copilot CLI, a następnie kliknij Ponów skanowanie.',
+  'settings.agentInstalledGroup': 'Twoje CLI ({count})',
+  'settings.agentInstallGroup': 'Dostępne do instalacji ({count})',
   'settings.agentAuthRequired': 'Wymagane uwierzytelnienie',
   'settings.agentAuthUnknown': 'Stan uwierzytelnienia nieznany',
   'settings.apiSection': 'Anthropic API',
@@ -198,6 +200,10 @@ export const pl: Dict = {
       'To sugerowane modele dla tego protokołu. Twój dostawca może obsługiwać inne modele.',
   'settings.baseUrl': 'Bazowy URL',
   'settings.baseUrlInvalid': 'Wpisz poprawny publiczny URL http:// lub https://. Localhost jest dozwolony; prywatne adresy IP są blokowane.',
+  'settings.baseUrlCustomize': 'Dostosuj',
+  'settings.baseUrlDefaultHint': 'Domyślny punkt końcowy. Zwykle nie trzeba go zmieniać.',
+  'settings.azureBaseUrlPlaceholder': 'https://my-resource.openai.azure.com',
+  'settings.azureBaseUrlHint': 'Find this in Azure portal → your resource → Endpoint.',
   'settings.azureDeploymentModel': 'Nazwa wdrożenia',
   'settings.azureDeploymentModelHint':
       'Dla Azure OpenAI to pole jest używane jako nazwa wdrożenia w /openai/deployments/<model>. Wpisz nazwę wdrożenia utworzonego w Azure.',
@@ -222,15 +228,15 @@ export const pl: Dict = {
   'settings.themeDark': 'Ciemny',
   'settings.agentModelHead': 'Model dla:',
   'settings.modelPicker': 'Model',
-  'settings.modelSourceLive': 'Live from CLI',
-  'settings.modelSourceFallback': 'Fallback list',
+  'settings.modelSourceLive': 'Na żywo z CLI',
+  'settings.modelSourceFallback': 'Lista wbudowana',
   'settings.reasoningPicker': 'Poziom rozumowania',
   'settings.modelPickerHint':
       'Pobierane z CLI, gdy obsługuje ono polecenie `models`. „Domyślne” pozostawia wybór konfiguracji CLI; „Własne…” pozwala wpisać dowolne ID modelu akceptowane przez CLI.',
   'settings.modelPickerLiveHint':
-    'Models were refreshed from the installed CLI. Default still uses the CLI config.',
+    'Modele zostały odświeżone z zainstalowanego CLI. Domyślny wybór nadal używa konfiguracji CLI.',
   'settings.modelPickerFallbackHint':
-    'Using Open Design fallback models because the installed CLI did not return live model metadata. Rescan after updating or logging in to the CLI.',
+    'Wyświetlane są wbudowane wartości domyślne. Kliknij Ponów skanowanie, aby pobrać modele na żywo z CLI.',
   'settings.cliEnvTitle': 'CLI config locations',
   'settings.cliEnvHint':
     'Set non-secret config directories for packaged app runs and agent detection.',
@@ -538,6 +544,11 @@ export const pl: Dict = {
       'Możesz edytować wszystko — Twoje zmiany zostaną uwzględnione w instrukcjach dla agenta.',
   'newproj.promptTemplateBodyEmpty':
       'Pusta treść — agent nie otrzyma referencji do szablonu.',
+  'newproj.deleteTemplateTitle': 'Usuń szablon',
+  'newproj.deleteTemplateConfirm': 'Usunąć „{name}"? Tej operacji nie można cofnąć.',
+  'newproj.deleteTemplateConfirmCta': 'Usuń szablon',
+  'newproj.deleteTemplateError':
+    'Nie udało się usunąć tego szablonu. Spróbuj ponownie.',
 
   'designs.subRecent': 'Ostatnie',
   'designs.subYours': 'Twoje projekty',
@@ -986,7 +997,7 @@ export const pl: Dict = {
   'fileViewer.presentFullscreen': 'Pełny ekran',
   'fileViewer.presentNewTab': 'Nowa karta',
   'fileViewer.exitPresentation': 'Wyjdź z prezentacji',
-  'fileViewer.shareLabel': 'Udostępnij',
+  'fileViewer.shareLabel': 'Eksportuj',
   'fileViewer.exportPdf': 'Eksportuj jako PDF',
   'fileViewer.exportPdfAllSlides': 'Eksportuj jako PDF (wszystkie slajdy)',
   'fileViewer.exportPptxBusy': 'Poczekaj, aż bieżąca tura zostanie zakończona.',

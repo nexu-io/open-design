@@ -94,7 +94,7 @@ interface Props {
       autoSendFirstMessage?: boolean;
       pendingFiles?: File[];
     },
-  ) => void;
+  ) => Promise<boolean> | boolean | void;
   onCreatePluginShareProject: (
     pluginId: string,
     action: PluginShareAction,
@@ -330,6 +330,7 @@ export function EntryView({
       designSystems={designSystems}
       projects={projects}
       templates={templates}
+      onDeleteTemplate={onDeleteTemplate}
       promptTemplates={promptTemplates}
       defaultDesignSystemId={defaultDesignSystemId}
       connectors={connectors}

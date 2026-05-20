@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import { useAnalytics } from './analytics/provider';
 import { trackProjectCreateResult } from './analytics/events';
 import { detectClientType } from './analytics/identity';
@@ -17,7 +18,7 @@ import { PetOverlay, type PetTaskCenter } from './components/pet/PetOverlay';
 import { buildPetTaskCenter } from './components/pet/taskCenter';
 import { migrateCustomPetAtlas } from './components/pet/pets';
 import { ProjectView } from './components/ProjectView';
-import { WorkspaceTabsBar } from './components/WorkspaceTabsBar';
+import { openWorkspaceTab, WorkspaceTabsBar } from './components/WorkspaceTabsBar';
 import {
   DesignSystemCreationFlow,
   DesignSystemDetailView,
@@ -769,7 +770,7 @@ export function App() {
         requestId?: string;
         pendingFiles?: File[];
       },
-    ) => {
+    ): Promise<boolean> => {
       // Honor an explicit `null` design system — the create panel defaults
       // to "None" for every kind now, and the user expects that to land
       // as a no-design-system project rather than silently inheriting the
@@ -809,7 +810,7 @@ export function App() {
           },
           { requestId: input.requestId },
         );
-        return;
+        return false;
       }
       const pendingFiles = Array.isArray(input.pendingFiles)
         ? input.pendingFiles.filter((file): file is File => file instanceof File)
@@ -870,15 +871,20 @@ export function App() {
             appliedPluginSnapshotId: result.appliedPluginSnapshotId,
           }
         : result.project;
-      setProjects((curr) => [
-        project,
-        ...curr.filter((p) => p.id !== project.id),
-      ]);
-      navigate({
+      flushSync(() => {
+        setProjects((curr) => [
+          project,
+          ...curr.filter((p) => p.id !== project.id),
+        ]);
+      });
+      const projectRoute = {
         kind: 'project',
         projectId: project.id,
         fileName: null,
-      });
+      } as const;
+      openWorkspaceTab(projectRoute);
+      navigate(projectRoute);
+      return true;
     },
     [analytics.track],
   );

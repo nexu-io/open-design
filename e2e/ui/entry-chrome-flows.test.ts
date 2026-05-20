@@ -401,7 +401,7 @@ test('entry avatar menu exposes homepage quick actions and routes Use everywhere
   );
   await expect(menu.getByRole('link', { name: /Join Discord/i })).toHaveAttribute(
     'href',
-    'https://discord.gg/BYShPgWpq',
+    'https://discord.gg/mHAjSMV6gz',
   );
 
   await menu.getByTestId('entry-avatar-language').click();

@@ -2,10 +2,10 @@
   "latest": {
     "https://open-design.ai/blog/31-skills-72-systems-how-the-library-works/": {
       "url": "https://open-design.ai/blog/31-skills-72-systems-how-the-library-works/",
-      "inspectedAt": "2026-05-19T10:11:43.001Z",
+      "inspectedAt": "2026-05-20T03:03:52.390Z",
       "result": {
         "verdict": "NEUTRAL",
-        "coverageState": "URL is unknown to Google",
+        "coverageState": "Discovered - currently not indexed",
         "pageFetchState": "PAGE_FETCH_STATE_UNSPECIFIED",
         "indexingState": "INDEXING_STATE_UNSPECIFIED",
         "robotsTxtState": "ROBOTS_TXT_STATE_UNSPECIFIED",
@@ -14,7 +14,7 @@
     },
     "https://open-design.ai/blog/byok-design-workflow-claude-codex-qwen/": {
       "url": "https://open-design.ai/blog/byok-design-workflow-claude-codex-qwen/",
-      "inspectedAt": "2026-05-19T10:11:49.516Z",
+      "inspectedAt": "2026-05-20T03:03:58.782Z",
       "result": {
         "verdict": "NEUTRAL",
         "coverageState": "Discovered - currently not indexed",
@@ -83,7 +83,7 @@
     },
     "https://open-design.ai/blog/why-we-built-open-design-as-a-skill-layer/": {
       "url": "https://open-design.ai/blog/why-we-built-open-design-as-a-skill-layer/",
-      "inspectedAt": "2026-05-19T10:12:21.077Z",
+      "inspectedAt": "2026-05-20T03:04:04.911Z",
       "result": {
         "verdict": "NEUTRAL",
         "coverageState": "Discovered - currently not indexed",
@@ -95,6 +95,42 @@
     }
   },
   "history": [
+    {
+      "url": "https://open-design.ai/blog/why-we-built-open-design-as-a-skill-layer/",
+      "inspectedAt": "2026-05-20T03:04:04.911Z",
+      "result": {
+        "verdict": "NEUTRAL",
+        "coverageState": "Discovered - currently not indexed",
+        "pageFetchState": "PAGE_FETCH_STATE_UNSPECIFIED",
+        "indexingState": "INDEXING_STATE_UNSPECIFIED",
+        "robotsTxtState": "ROBOTS_TXT_STATE_UNSPECIFIED",
+        "isIndexed": false
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/byok-design-workflow-claude-codex-qwen/",
+      "inspectedAt": "2026-05-20T03:03:58.782Z",
+      "result": {
+        "verdict": "NEUTRAL",
+        "coverageState": "Discovered - currently not indexed",
+        "pageFetchState": "PAGE_FETCH_STATE_UNSPECIFIED",
+        "indexingState": "INDEXING_STATE_UNSPECIFIED",
+        "robotsTxtState": "ROBOTS_TXT_STATE_UNSPECIFIED",
+        "isIndexed": false
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/31-skills-72-systems-how-the-library-works/",
+      "inspectedAt": "2026-05-20T03:03:52.390Z",
+      "result": {
+        "verdict": "NEUTRAL",
+        "coverageState": "Discovered - currently not indexed",
+        "pageFetchState": "PAGE_FETCH_STATE_UNSPECIFIED",
+        "indexingState": "INDEXING_STATE_UNSPECIFIED",
+        "robotsTxtState": "ROBOTS_TXT_STATE_UNSPECIFIED",
+        "isIndexed": false
+      }
+    },
     {
       "url": "https://open-design.ai/blog/why-we-built-open-design-as-a-skill-layer/",
       "inspectedAt": "2026-05-19T10:12:21.077Z",
@@ -193,10 +229,10 @@
     "https://open-design.ai/blog/31-skills-72-systems-how-the-library-works/": {
       "7": {
         "url": "https://open-design.ai/blog/31-skills-72-systems-how-the-library-works/",
-        "queriedAt": "2026-05-19T10:12:28.274Z",
+        "queriedAt": "2026-05-20T03:04:12.017Z",
         "windowDays": 7,
-        "startDate": "2026-05-11",
-        "endDate": "2026-05-17",
+        "startDate": "2026-05-12",
+        "endDate": "2026-05-18",
         "clicks": 0,
         "impressions": 0,
         "ctr": 0,
@@ -204,10 +240,10 @@
       },
       "28": {
         "url": "https://open-design.ai/blog/31-skills-72-systems-how-the-library-works/",
-        "queriedAt": "2026-05-19T10:12:28.398Z",
+        "queriedAt": "2026-05-20T03:04:12.131Z",
         "windowDays": 28,
-        "startDate": "2026-04-20",
-        "endDate": "2026-05-17",
+        "startDate": "2026-04-21",
+        "endDate": "2026-05-18",
         "clicks": 0,
         "impressions": 0,
         "ctr": 0,
@@ -217,10 +253,10 @@
     "https://open-design.ai/blog/byok-design-workflow-claude-codex-qwen/": {
       "7": {
         "url": "https://open-design.ai/blog/byok-design-workflow-claude-codex-qwen/",
-        "queriedAt": "2026-05-19T10:12:28.704Z",
+        "queriedAt": "2026-05-20T03:04:12.241Z",
         "windowDays": 7,
-        "startDate": "2026-05-11",
-        "endDate": "2026-05-17",
+        "startDate": "2026-05-12",
+        "endDate": "2026-05-18",
         "clicks": 0,
         "impressions": 0,
         "ctr": 0,
@@ -228,10 +264,10 @@
       },
       "28": {
         "url": "https://open-design.ai/blog/byok-design-workflow-claude-codex-qwen/",
-        "queriedAt": "2026-05-19T10:12:28.850Z",
+        "queriedAt": "2026-05-20T03:04:12.348Z",
         "windowDays": 28,
-        "startDate": "2026-04-20",
-        "endDate": "2026-05-17",
+        "startDate": "2026-04-21",
+        "endDate": "2026-05-18",
         "clicks": 0,
         "impressions": 0,
         "ctr": 0,
@@ -337,10 +373,10 @@
     "https://open-design.ai/blog/why-we-built-open-design-as-a-skill-layer/": {
       "7": {
         "url": "https://open-design.ai/blog/why-we-built-open-design-as-a-skill-layer/",
-        "queriedAt": "2026-05-19T10:12:30.091Z",
+        "queriedAt": "2026-05-20T03:04:12.457Z",
         "windowDays": 7,
-        "startDate": "2026-05-11",
-        "endDate": "2026-05-17",
+        "startDate": "2026-05-12",
+        "endDate": "2026-05-18",
         "clicks": 0,
         "impressions": 0,
         "ctr": 0,
@@ -348,10 +384,10 @@
       },
       "28": {
         "url": "https://open-design.ai/blog/why-we-built-open-design-as-a-skill-layer/",
-        "queriedAt": "2026-05-19T10:12:30.205Z",
+        "queriedAt": "2026-05-20T03:04:12.540Z",
         "windowDays": 28,
-        "startDate": "2026-04-20",
-        "endDate": "2026-05-17",
+        "startDate": "2026-04-21",
+        "endDate": "2026-05-18",
         "clicks": 0,
         "impressions": 0,
         "ctr": 0,

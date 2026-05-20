@@ -137,7 +137,7 @@ export const ptBR: Dict = {
   'settings.onboardingSkip': "Skip for now",
   'settings.kicker': 'Configurações',
   'settings.title': 'Modo de execução',
-  'settings.subtitle': 'Escolha entre CLI local e BYOK. Sua chave de API fica armazenada apenas neste navegador.',
+  'settings.subtitle': 'Escolha entre CLI local e BYOK.',
   'settings.modeAria': 'Modo de execução',
   'settings.protocolAria': 'Protocolo de API',
   'settings.modeDaemon': 'CLI local',
@@ -183,6 +183,8 @@ export const ptBR: Dict = {
   'settings.agentInstall.stepSelect': 'Selecione o cartão do agente quando ele aparecer como instalado.',
   'settings.noAgentsDetected':
     'Nenhum agente detectado ainda. Instale Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen ou GitHub Copilot CLI e clique em Reescanear.',
+  'settings.agentInstalledGroup': 'Suas CLIs ({count})',
+  'settings.agentInstallGroup': 'Disponíveis para instalar ({count})',
   'settings.agentAuthRequired': 'Autenticação necessária',
   'settings.agentAuthUnknown': 'Status de autenticação desconhecido',
   'settings.apiSection': 'API da Anthropic',
@@ -198,6 +200,10 @@ export const ptBR: Dict = {
     'Estes são modelos sugeridos para este protocolo. Seu provedor pode oferecer suporte a modelos diferentes.',
   'settings.baseUrl': 'URL base',
   'settings.baseUrlInvalid': 'Informe uma URL pública http:// ou https:// válida. Localhost é permitido; IPs de rede privada são bloqueados.',
+  'settings.baseUrlCustomize': 'Personalizar',
+  'settings.baseUrlDefaultHint': 'Endpoint padrão. Normalmente não é necessário alterar.',
+  'settings.azureBaseUrlPlaceholder': 'https://my-resource.openai.azure.com',
+  'settings.azureBaseUrlHint': 'Find this in Azure portal → your resource → Endpoint.',
   'settings.azureDeploymentModel': 'Nome do deployment',
   'settings.azureDeploymentModelHint':
     'No Azure OpenAI, este campo e usado como nome do deployment em /openai/deployments/<model>. Informe o nome do deployment criado no Azure.',
@@ -222,15 +228,15 @@ export const ptBR: Dict = {
   'settings.themeDark': 'Escuro',
   'settings.agentModelHead': 'Modelo para:',
   'settings.modelPicker': 'Modelo',
-  'settings.modelSourceLive': 'Live from CLI',
-  'settings.modelSourceFallback': 'Fallback list',
+  'settings.modelSourceLive': 'Ao vivo da CLI',
+  'settings.modelSourceFallback': 'Lista integrada',
   'settings.reasoningPicker': 'Esforço de raciocínio',
   'settings.modelPickerHint':
     'Buscado na CLI quando ela expõe um comando `models`. "Padrão" deixa a escolha para a configuração da própria CLI; "Personalizado…" permite digitar qualquer id de modelo aceito pela CLI.',
   'settings.modelPickerLiveHint':
-    'Models were refreshed from the installed CLI. Default still uses the CLI config.',
+    'Os modelos foram atualizados a partir da CLI instalada. O padrão ainda usa a configuração da CLI.',
   'settings.modelPickerFallbackHint':
-    'Using Open Design fallback models because the installed CLI did not return live model metadata. Rescan after updating or logging in to the CLI.',
+    'Mostrando padrões integrados. Clique em Reescanear para buscar modelos ao vivo da CLI.',
   'settings.cliEnvTitle': 'CLI config locations',
   'settings.cliEnvHint':
     'Set non-secret config directories for packaged app runs and agent detection.',
@@ -550,6 +556,11 @@ export const ptBR: Dict = {
     'Edite o que quiser — suas alterações entram no briefing do agente.',
   'newproj.promptTemplateBodyEmpty':
     'Corpo vazio — o agente não receberá nenhuma referência de modelo.',
+  'newproj.deleteTemplateTitle': 'Excluir template',
+  'newproj.deleteTemplateConfirm': 'Excluir "{name}"? Esta ação não pode ser desfeita.',
+  'newproj.deleteTemplateConfirmCta': 'Excluir template',
+  'newproj.deleteTemplateError':
+    'Não foi possível excluir este template. Tente novamente.',
 
   'designs.subRecent': 'Recentes',
   'designs.subYours': 'Seus designs',
@@ -1009,7 +1020,7 @@ export const ptBR: Dict = {
   'fileViewer.presentFullscreen': 'Tela cheia',
   'fileViewer.presentNewTab': 'Nova aba',
   'fileViewer.exitPresentation': 'Sair da apresentação',
-  'fileViewer.shareLabel': 'Compartilhar',
+  'fileViewer.shareLabel': 'Exportar',
   'fileViewer.exportPdf': 'Exportar como PDF',
   'fileViewer.exportPdfAllSlides': 'Exportar como PDF (todos os slides)',
   'fileViewer.exportPptxBusy': 'Aguarde o turno atual terminar.',

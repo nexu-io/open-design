@@ -99,6 +99,9 @@ jobs:
           FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
           FEISHU_WEBHOOK_SECRET: ${{ secrets.FEISHU_WEBHOOK_SECRET }}
           REPORT_DELAY_DAYS: '2'
+          OPP_MIN_IMPRESSIONS: '30'
+          OPP_LOW_CTR: '0.01'
+          OPP_MOBILE_DESKTOP_CTR_GAP: '0.30'
         run: |
           flags=""
           if [ -n "${{ github.event.inputs.today }}" ]; then

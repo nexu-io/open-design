@@ -185,6 +185,7 @@ const PREVIEW_VIEWPORT_PRESETS: PreviewViewportPreset[] = [
     titleKey: 'fileViewer.viewportMobileTitle',
   },
 ];
+const EXPORT_READY_NUDGE_STORAGE_PREFIX = 'open-design:export-ready-nudge:';
 
 // The five basic style facets the inspect panel exposes. Kept narrow on
 // purpose — open-slide's design tokens panel only edits global tokens, so
@@ -1428,6 +1429,26 @@ function formatDurationMs(ms: number | undefined): string | null {
   const minutes = Math.floor(ms / 60_000);
   const seconds = Math.round((ms % 60_000) / 1000);
   return seconds === 0 ? `${minutes}m` : `${minutes}m ${seconds}s`;
+}
+
+function exportReadyNudgeKey(projectId: string, fileName: string): string {
+  return `${EXPORT_READY_NUDGE_STORAGE_PREFIX}${projectId}:${fileName}`;
+}
+
+function hasSeenExportReadyNudge(projectId: string, fileName: string): boolean {
+  try {
+    return window.sessionStorage.getItem(exportReadyNudgeKey(projectId, fileName)) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function markExportReadyNudgeSeen(projectId: string, fileName: string) {
+  try {
+    window.sessionStorage.setItem(exportReadyNudgeKey(projectId, fileName), '1');
+  } catch {
+    // Ignore storage-denied contexts; the in-memory state still prevents loops.
+  }
 }
 
 interface RefreshStatusDescriptor {
@@ -3215,11 +3236,12 @@ function ReactComponentViewer({
               <div className="share-menu" ref={shareRef}>
                 <button
                   type="button"
-                  className="viewer-action primary"
+                  className="viewer-action primary viewer-action-export"
                   aria-haspopup="menu"
                   aria-expanded={shareMenuOpen}
                   onClick={() => setShareMenuOpen((v) => !v)}
                 >
+                  <Icon name="download" size={13} />
                   <span>{t('fileViewer.shareLabel')}</span>
                   <Icon name="chevron-down" size={11} />
                 </button>
@@ -3533,6 +3555,8 @@ function HtmlViewer({
   const zoomMenuRef = useRef<HTMLDivElement | null>(null);
   const [presentMenuOpen, setPresentMenuOpen] = useState(false);
   const [shareMenuOpen, setShareMenuOpen] = useState(false);
+  const [exportReadyNudge, setExportReadyNudge] = useState(false);
+  const exportReadyNudgeSeenRef = useRef<Set<string>>(new Set());
   // Template save UX. We surface a transient "Saved" pill in the share
   // menu so the user gets feedback without a noisy toast layer.
   const [savingTemplate, setSavingTemplate] = useState(false);
@@ -5342,6 +5366,23 @@ function HtmlViewer({
   const canShare = source !== null;
   const exportTitle = file.name.replace(/\.html?$/i, '') || file.name;
   const canPptx = canShare && Boolean(onExportAsPptx) && !streaming;
+  useEffect(() => {
+    const nudgeKey = `${projectId}\n${file.name}`;
+    if (!canShare || exportReadyNudgeSeenRef.current.has(nudgeKey)) return;
+    exportReadyNudgeSeenRef.current.add(nudgeKey);
+    if (hasSeenExportReadyNudge(projectId, file.name)) return;
+    markExportReadyNudgeSeen(projectId, file.name);
+    setExportReadyNudge(true);
+    const timeout = window.setTimeout(() => setExportReadyNudge(false), 1800);
+    return () => window.clearTimeout(timeout);
+  }, [canShare, file.name, projectId]);
+
+  const openExportMenu = () => {
+    fireArtifactHeaderClick('share_dropdown');
+    setExportReadyNudge(false);
+    markExportReadyNudgeSeen(projectId, file.name);
+    setShareMenuOpen((v) => !v);
+  };
   const visibleSideComments = useMemo(
     () => previewComments
       .filter((comment) => comment.filePath === file.name && comment.status === 'open')
@@ -5835,15 +5876,15 @@ function HtmlViewer({
           {canShare ? (
             <div className="share-menu chrome-share-menu" ref={shareRef}>
               <button
-                className="chrome-action chrome-action-primary"
+                className={
+                  'chrome-action chrome-action-primary chrome-action-export' +
+                  (exportReadyNudge ? ' export-ready-nudge' : '')
+                }
                 aria-haspopup="menu"
                 aria-expanded={shareMenuOpen}
-                onClick={() => {
-                  fireArtifactHeaderClick('share_dropdown');
-                  setShareMenuOpen((v) => !v);
-                }}
+                onClick={openExportMenu}
               >
-                <Icon name="share" size={13} />
+                <Icon name="download" size={13} />
                 <span>{t('fileViewer.shareLabel')}</span>
                 <Icon name="chevron-down" size={11} />
               </button>

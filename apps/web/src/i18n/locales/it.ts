@@ -136,7 +136,7 @@ export const it: Dict = {
   'settings.onboardingSkip': "Skip for now",
   'settings.kicker': 'Impostazioni',
   'settings.title': 'Esecuzione e modello',
-  'settings.subtitle': 'Scegli tra CLI locale e BYOK. La tua chiave API è memorizzata solo in questo browser.',
+  'settings.subtitle': 'Scegli tra CLI locale e BYOK.',
   'settings.modeAria': 'Modalità di esecuzione',
   'settings.protocolAria': 'Protocollo API',
   'settings.modeDaemon': 'CLI locale',
@@ -182,6 +182,8 @@ export const it: Dict = {
   'settings.agentInstall.stepSelect': 'Seleziona la scheda dell\'agente una volta che appare come installato.',
   'settings.noAgentsDetected':
     'Nessun agente rilevato per ora. Installa Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen o GitHub Copilot CLI, poi clicca su Rianalizza.',
+  'settings.agentInstalledGroup': 'Le tue CLI ({count})',
+  'settings.agentInstallGroup': 'Disponibili per l\'installazione ({count})',
   'settings.apiSection': 'API Anthropic',
   'settings.quickFillProvider': 'Compilazione rapida del provider',
   'settings.customProvider': 'Provider personalizzato',
@@ -195,6 +197,10 @@ export const it: Dict = {
     'Questi sono modelli suggeriti per questo protocollo. Il tuo provider potrebbe supportare altri modelli.',
   'settings.baseUrl': 'URL di base',
   'settings.baseUrlInvalid': 'Inserisci un URL pubblico http:// o https:// valido. Localhost è consentito; gli IP di rete privata sono bloccati.',
+  'settings.baseUrlCustomize': 'Personalizza',
+  'settings.baseUrlDefaultHint': 'Endpoint predefinito. Di solito non serve modificarlo.',
+  'settings.azureBaseUrlPlaceholder': 'https://my-resource.openai.azure.com',
+  'settings.azureBaseUrlHint': 'Find this in Azure portal → your resource → Endpoint.',
   'settings.azureDeploymentModel': 'Nome del deployment',
   'settings.azureDeploymentModelHint':
     'Per Azure OpenAI, questo campo viene utilizzato come nome del deployment in /openai/deployments/<model>. Inserisci il nome del deployment creato in Azure.',
@@ -206,7 +212,7 @@ export const it: Dict = {
   'settings.apiHint': 'Le chiamate passano attraverso il proxy del daemon locale verso l\'URL di base definito. La chiave è memorizzata solo in questo browser e inviata con le richieste al provider.',
   'settings.skipForNow': 'Salta per ora',
   'settings.getStarted': 'Inizia',
-  'settings.envConfigure': 'Configura modalità di esecuzione',
+  'settings.envConfigure': 'Modalità di esecuzione',
   'settings.localCli': 'CLI locale',
   'settings.anthropicApi': 'API Anthropic',
   'settings.noAgentSelected': 'nessun agente selezionato',
@@ -218,15 +224,15 @@ export const it: Dict = {
   'settings.themeLight': 'Chiaro',
   'settings.themeDark': 'Scuro',
   'settings.modelPicker': 'Modello',
-  'settings.modelSourceLive': 'Live from CLI',
-  'settings.modelSourceFallback': 'Fallback list',
+  'settings.modelSourceLive': 'Live dalla CLI',
+  'settings.modelSourceFallback': 'Elenco integrato',
   'settings.reasoningPicker': 'Sforzo di ragionamento',
   'settings.modelPickerHint':
     'Recuperato dalla CLI quando espone un comando `models`. "Predefinito" lascia la scelta alla configurazione della CLI; "Personalizzato…" ti permette di inserire qualsiasi identificatore di modello accettato dalla CLI.',
   'settings.modelPickerLiveHint':
-    'Models were refreshed from the installed CLI. Default still uses the CLI config.',
+    'I modelli sono stati aggiornati dalla CLI installata. Predefinito usa ancora la configurazione della CLI.',
   'settings.modelPickerFallbackHint':
-    'Using Open Design fallback models because the installed CLI did not return live model metadata. Rescan after updating or logging in to the CLI.',
+    'Mostra i valori predefiniti integrati. Clicca su Rianalizza per recuperare i modelli live dalla CLI.',
   'settings.cliEnvTitle': 'Posizioni di configurazione CLI',
   'settings.cliEnvHint':
     'Imposta directory di configurazione non segrete per esecuzioni di app impacchettate e rilevamento agenti.',
@@ -506,6 +512,11 @@ export const it: Dict = {
     'Modifica ciò che vuoi — le tue modifiche vengono trasmesse al brief dell\'agente.',
   'newproj.promptTemplateBodyEmpty':
     'Corpo vuoto — l\'agente non riceverà alcun riferimento di modello.',
+  'newproj.deleteTemplateTitle': 'Elimina modello',
+  'newproj.deleteTemplateConfirm': 'Eliminare « {name} » ? Questa operazione non può essere annullata.',
+  'newproj.deleteTemplateConfirmCta': 'Elimina modello',
+  'newproj.deleteTemplateError':
+    'Impossibile eliminare questo modello. Riprova.',
 
   'designs.subRecent': 'Recenti',
   'designs.subYours': 'I tuoi design',
@@ -897,7 +908,7 @@ export const it: Dict = {
   'fileViewer.presentFullscreen': 'Schermo intero',
   'fileViewer.presentNewTab': 'Nuova scheda',
   'fileViewer.exitPresentation': 'Esci dalla presentazione',
-  'fileViewer.shareLabel': 'Condividi',
+  'fileViewer.shareLabel': 'Esporta',
   'fileViewer.exportPdf': 'Esporta in PDF',
   'fileViewer.exportPdfAllSlides': 'Esporta in PDF (tutte le diapositive)',
   'fileViewer.exportPptxBusy': 'Attendi la fine del turno in corso.',

@@ -137,7 +137,7 @@ export const id: Dict = {
   'settings.onboardingSkip': "Skip for now",
   'settings.kicker': 'Pengaturan',
   'settings.title': 'Mode eksekusi',
-  'settings.subtitle': 'Pilih antara CLI code-agent lokal dan Anthropic API (BYOK). API key hanya disimpan di browser ini.',
+  'settings.subtitle': 'Pilih antara CLI lokal dan BYOK.',
   'settings.modeAria': 'Mode eksekusi',
   'settings.protocolAria': 'Protokol API',
   'settings.modeDaemon': 'CLI lokal',
@@ -183,6 +183,8 @@ export const id: Dict = {
   'settings.agentInstall.stepSelect': 'Pilih kartu agen setelah statusnya terpasang.',
   'settings.noAgentsDetected':
     'Belum ada agent terdeteksi. Pasang salah satu dari Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen, atau GitHub Copilot CLI, lalu klik pindai ulang.',
+  'settings.agentInstalledGroup': 'CLI Anda ({count})',
+  'settings.agentInstallGroup': 'Tersedia untuk dipasang ({count})',
   'settings.agentAuthRequired': 'Autentikasi diperlukan',
   'settings.agentAuthUnknown': 'Status autentikasi tidak diketahui',
   'settings.apiSection': 'Anthropic API',
@@ -223,15 +225,15 @@ export const id: Dict = {
   'settings.themeDark': 'Gelap',
   'settings.agentModelHead': 'Model untuk:',
   'settings.modelPicker': 'Model',
-  'settings.modelSourceLive': 'Live from CLI',
-  'settings.modelSourceFallback': 'Fallback list',
+  'settings.modelSourceLive': 'Langsung dari CLI',
+  'settings.modelSourceFallback': 'Daftar bawaan',
   'settings.reasoningPicker': 'Kekuatan penalaran',
   'settings.modelPickerHint':
     'Diambil dari CLI jika tersedia. "Default" mengikuti konfigurasi CLI; "Custom..." untuk mengetik model id sendiri.',
   'settings.modelPickerLiveHint':
-    'Models were refreshed from the installed CLI. Default still uses the CLI config.',
+    'Model diperbarui dari CLI yang terpasang. Default tetap memakai konfigurasi CLI.',
   'settings.modelPickerFallbackHint':
-    'Using Open Design fallback models because the installed CLI did not return live model metadata. Rescan after updating or logging in to the CLI.',
+    'Menampilkan default bawaan. Klik Pindai ulang untuk mengambil model langsung dari CLI.',
   'settings.cliEnvTitle': 'Lokasi konfigurasi CLI',
   'settings.cliEnvHint': 'Atur direktori konfigurasi non-rahasia untuk menjalankan aplikasi paket dan deteksi agent.',
   'settings.cliEnvClaudeConfigDir': 'Direktori konfigurasi Claude Code',
@@ -647,6 +649,11 @@ export const id: Dict = {
   'newproj.promptTemplateOptimizeHint': 'Edit prompt sebelum membuat proyek agar sesuai dengan kebutuhanmu.',
   'newproj.promptTemplateBodyEmpty': 'Prompt kosong - agent tidak menerima referensi templat.',
 
+  'newproj.deleteTemplateTitle': 'Hapus templat',
+  'newproj.deleteTemplateConfirm': 'Hapus "{name}"? Tindakan ini tidak dapat dibatalkan.',
+  'newproj.deleteTemplateConfirmCta': 'Hapus templat',
+  'newproj.deleteTemplateError':
+    'Tidak dapat menghapus templat ini. Silakan coba lagi.',
   'designs.subRecent': 'Terbaru',
   'designs.subYours': 'Desainmu',
   'designs.filterAria': 'Filter proyek',
@@ -1107,7 +1114,7 @@ export const id: Dict = {
   'fileViewer.presentFullscreen': 'Presentasi layar penuh',
   'fileViewer.presentNewTab': 'Presentasi di tab baru',
   'fileViewer.exitPresentation': 'Keluar presentasi',
-  'fileViewer.shareLabel': 'Bagikan',
+  'fileViewer.shareLabel': 'Ekspor',
   'fileViewer.exportPdf': 'Ekspor PDF',
   'fileViewer.exportPdfAllSlides': 'Ekspor PDF semua slide',
   'fileViewer.exportPptxBusy': 'Mengekspor PPTX...',

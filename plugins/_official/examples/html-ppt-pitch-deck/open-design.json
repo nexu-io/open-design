@@ -54,6 +54,29 @@
         }
       ]
     },
+    "inputs": [
+      {
+        "name": "one_line_pitch",
+        "label": "Name + one-line pitch",
+        "type": "text",
+        "required": true,
+        "placeholder": "Company name and one sentence explaining what it does"
+      },
+      {
+        "name": "key_traction_numbers",
+        "label": "Key traction numbers",
+        "type": "text",
+        "required": true,
+        "placeholder": "Revenue, growth, users, pilots, retention, pipeline, or other investor proof"
+      },
+      {
+        "name": "ask_and_use_of_funds",
+        "label": "Ask + use of funds",
+        "type": "text",
+        "required": true,
+        "placeholder": "Round size and how the capital will be used"
+      }
+    ],
     "context": {
       "skills": [
         {

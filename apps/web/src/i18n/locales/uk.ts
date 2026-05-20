@@ -137,7 +137,7 @@ export const uk: Dict = {
   'settings.onboardingSkip': "Skip for now",
   'settings.kicker': 'Налаштування',
   'settings.title': 'Режим виконання',
-  'settings.subtitle': 'Виберіть локальний CLI або BYOK. Ваш API-ключ зберігається лише в цьому браузері.',
+  'settings.subtitle': 'Виберіть локальний CLI або BYOK.',
   'settings.modeAria': 'Режим виконання',
   'settings.protocolAria': 'Протокол API',
   'settings.modeDaemon': 'Локальний CLI',
@@ -184,6 +184,8 @@ export const uk: Dict = {
   'settings.agentInstall.stepSelect': 'Виберіть картку агента, коли він з\'явиться як встановлений.',
   'settings.noAgentsDetected':
     'Агентів ще не виявлено. Встановіть один з: Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen або GitHub Copilot CLI, а потім натисніть Переканувати.',
+  'settings.agentInstalledGroup': 'Ваші CLI ({count})',
+  'settings.agentInstallGroup': 'Доступні для встановлення ({count})',
   'settings.agentAuthRequired': 'Потрібна автентифікація',
   'settings.agentAuthUnknown': 'Стан автентифікації невідомий',
   'settings.apiSection': 'Anthropic API',
@@ -199,6 +201,10 @@ export const uk: Dict = {
     'Це рекомендовані моделі для цього протоколу. Ваш провайдер може підтримувати інші моделі.',
   'settings.baseUrl': 'Базовий URL',
   'settings.baseUrlInvalid': 'Введіть дійсний публічний URL з http:// або https://. Localhost дозволено; IP приватних мереж блокуються.',
+  'settings.baseUrlCustomize': 'Налаштувати',
+  'settings.baseUrlDefaultHint': 'Типовий кінцевий пункт. Зазвичай його не потрібно змінювати.',
+  'settings.azureBaseUrlPlaceholder': 'https://my-resource.openai.azure.com',
+  'settings.azureBaseUrlHint': 'Find this in Azure portal → your resource → Endpoint.',
   'settings.azureDeploymentModel': 'Назва розгортання',
   'settings.azureDeploymentModelHint':
     'Для Azure OpenAI це поле використовується як назва розгортання в /openai/deployments/<model>. Введіть назву розгортання, створену в Azure.',
@@ -223,15 +229,15 @@ export const uk: Dict = {
   'settings.themeDark': 'Темна',
   'settings.agentModelHead': 'Модель для:',
   'settings.modelPicker': 'Модель',
-  'settings.modelSourceLive': 'Live from CLI',
-  'settings.modelSourceFallback': 'Fallback list',
+  'settings.modelSourceLive': 'Наживо з CLI',
+  'settings.modelSourceFallback': 'Вбудований список',
   'settings.reasoningPicker': 'Інтенсивність міркувань',
   'settings.modelPickerHint':
     'Отримується з CLI, коли він виявляє команду `models`. «За замовчуванням» залишає вибір конфігурації CLI; «Власна…» дозволяє ввести будь-яке ID моделі, яке приймає CLI.',
   'settings.modelPickerLiveHint':
-    'Models were refreshed from the installed CLI. Default still uses the CLI config.',
+    'Моделі оновлено з установленого CLI. Типовий варіант і далі використовує конфігурацію CLI.',
   'settings.modelPickerFallbackHint':
-    'Using Open Design fallback models because the installed CLI did not return live model metadata. Rescan after updating or logging in to the CLI.',
+    'Показано вбудовані типові значення. Натисніть Переканувати, щоб отримати актуальні моделі з CLI.',
   'settings.cliEnvTitle': 'CLI config locations',
   'settings.cliEnvHint':
     'Set non-secret config directories for packaged app runs and agent detection.',
@@ -542,6 +548,11 @@ export const uk: Dict = {
     'Редагуйте що завгодно — ваші зміни переносяться в брифінг агента.',
   'newproj.promptTemplateBodyEmpty':
     'Порожній текст — агент не отримає посилання на шаблон.',
+  'newproj.deleteTemplateTitle': 'Видалити шаблон',
+  'newproj.deleteTemplateConfirm': 'Видалити «{name}»? Цю дію не можна скасувати.',
+  'newproj.deleteTemplateConfirmCta': 'Видалити шаблон',
+  'newproj.deleteTemplateError':
+    'Не вдалося видалити цей шаблон. Спробуйте ще раз.',
   'newproj.connectorsLabel': 'Конектори',
   'newproj.connectorsHint': 'Надайте агенту доступ до підключених джерел даних для цього live-артефакту.',
   'newproj.connectorsEmptyTitle': 'Поки що немає підключених конекторів',
@@ -1028,7 +1039,7 @@ export const uk: Dict = {
   'fileViewer.presentFullscreen': 'Повноекранний режим',
   'fileViewer.presentNewTab': 'Нова вкладка',
   'fileViewer.exitPresentation': 'Вийти з режиму презентації',
-  'fileViewer.shareLabel': 'Поділитися',
+  'fileViewer.shareLabel': 'Експортувати',
   'fileViewer.exportPdf': 'Експортувати як PDF',
   'fileViewer.exportPdfAllSlides': 'Експортувати як PDF (усі слайди)',
   'fileViewer.exportPptxBusy': 'Чекайте, поки поточна черга завершиться.',

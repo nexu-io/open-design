@@ -137,7 +137,7 @@ export const fr: Dict = {
   'settings.onboardingSkip': "Skip for now",
   'settings.kicker': 'Paramètres',
   'settings.title': 'Mode d\'exécution',
-  'settings.subtitle': 'Choisissez entre CLI local et BYOK. Votre clé API est stockée uniquement dans ce navigateur.',
+  'settings.subtitle': 'Choisissez entre CLI local et BYOK.',
   'settings.modeAria': 'Mode d\'exécution',
   'settings.protocolAria': 'Protocole d\'API',
   'settings.modeDaemon': 'CLI local',
@@ -183,6 +183,8 @@ export const fr: Dict = {
   'settings.agentInstall.stepSelect': 'Sélectionnez la carte de l\'agent une fois qu\'elle apparaît comme installée.',
   'settings.noAgentsDetected':
     'Aucun agent détecté pour l\'instant. Installez Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen ou GitHub Copilot CLI, puis cliquez sur Réanalyser.',
+  'settings.agentInstalledGroup': 'Vos CLI ({count})',
+  'settings.agentInstallGroup': 'Disponibles à installer ({count})',
   'settings.agentAuthRequired': 'Authentification requise',
   'settings.agentAuthUnknown': 'Statut d’authentification inconnu',
   'settings.apiSection': 'API Anthropic',
@@ -198,6 +200,10 @@ export const fr: Dict = {
     'Ce sont des modèles suggérés pour ce protocole. Votre fournisseur peut prendre en charge d\'autres modèles.',
   'settings.baseUrl': 'URL de base',
   'settings.baseUrlInvalid': 'Saisissez une URL publique http:// ou https:// valide. Localhost est autorisé ; les IP de réseau privé sont bloquées.',
+  'settings.baseUrlCustomize': 'Personnaliser',
+  'settings.baseUrlDefaultHint': 'Point de terminaison par défaut. Inutile de le modifier dans la plupart des cas.',
+  'settings.azureBaseUrlPlaceholder': 'https://my-resource.openai.azure.com',
+  'settings.azureBaseUrlHint': 'Find this in Azure portal → your resource → Endpoint.',
   'settings.azureDeploymentModel': 'Nom du déploiement',
   'settings.azureDeploymentModelHint':
     'Pour Azure OpenAI, ce champ est utilisé comme nom du déploiement dans /openai/deployments/<model>. Saisissez le nom du déploiement créé dans Azure.',
@@ -223,14 +229,14 @@ export const fr: Dict = {
   'settings.agentModelHead': 'Modèle pour :',
   'settings.modelPicker': 'Modèle',
   'settings.modelSourceLive': 'En direct depuis la CLI',
-  'settings.modelSourceFallback': 'Liste de secours',
+  'settings.modelSourceFallback': 'Liste intégrée',
   'settings.reasoningPicker': 'Effort de raisonnement',
   'settings.modelPickerHint':
     'Par défaut utilise la configuration propre de la CLI. Personnalisé… vous permet de saisir n’importe quel identifiant de modèle.',
   'settings.modelPickerLiveHint':
     'Les modèles ont été actualisés depuis la CLI installée. Par défaut utilise toujours la configuration propre de la CLI.',
   'settings.modelPickerFallbackHint':
-    'Utilisation de la liste de modèles de secours d’Open Design, car la CLI installée n’a pas renvoyé de métadonnées de modèle en direct. Relancez l’analyse après avoir mis à jour la CLI ou vous y être connecté.',
+    'Valeurs par défaut intégrées affichées. Cliquez sur Réanalyser pour récupérer les modèles en direct depuis la CLI.',
   'settings.cliEnvTitle': 'Avancé : proxy et chemins personnalisés',
   'settings.cliEnvHint':
     'Utilisez ces réglages uniquement si vous routez le trafic CLI via votre propre proxy ou si le binaire est installé à un emplacement non standard. Les secrets restent dans la configuration locale de l’app et seule la CLI sélectionnée les voit.',
@@ -538,6 +544,11 @@ export const fr: Dict = {
     'Modifiez ce que vous voulez — vos modifications sont transmises au brief de l\'agent.',
   'newproj.promptTemplateBodyEmpty':
     'Corps vide — l\'agent ne recevra aucune référence de modèle.',
+  'newproj.deleteTemplateTitle': 'Supprimer le modèle',
+  'newproj.deleteTemplateConfirm': 'Supprimer « {name} » ? Cette action est irréversible.',
+  'newproj.deleteTemplateConfirmCta': 'Supprimer le modèle',
+  'newproj.deleteTemplateError':
+    'Impossible de supprimer ce modèle. Veuillez réessayer.',
 
   'designs.subRecent': 'Récents',
   'designs.subYours': 'Vos designs',
@@ -986,7 +997,7 @@ export const fr: Dict = {
   'fileViewer.presentFullscreen': 'Plein écran',
   'fileViewer.presentNewTab': 'Nouvel onglet',
   'fileViewer.exitPresentation': 'Quitter la présentation',
-  'fileViewer.shareLabel': 'Partager',
+  'fileViewer.shareLabel': 'Exporter',
   'fileViewer.exportPdf': 'Exporter en PDF',
   'fileViewer.exportPdfAllSlides': 'Exporter en PDF (toutes les diapos)',
   'fileViewer.exportPptxBusy': 'Attendez la fin du tour en cours.',

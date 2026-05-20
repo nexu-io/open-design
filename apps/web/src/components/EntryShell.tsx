@@ -23,7 +23,17 @@ import { useAnalytics } from '../analytics/provider';
 import {
   trackHomeNavClick,
   trackHomeToolbarClick,
+  trackPageView,
 } from '../analytics/events';
+import {
+  clearOnboardingSessionId,
+  getOrCreateOnboardingSessionId,
+} from '../analytics/onboarding-session';
+import type {
+  TrackingOnboardingArea,
+  TrackingOnboardingStepIndex,
+  TrackingOnboardingStepName,
+} from '@open-design/contracts/analytics';
 import { LOCALE_LABEL, LOCALES, useI18n, useT, type Locale } from '../i18n';
 import { navigate, useRoute } from '../router';
 import type {
@@ -103,14 +113,56 @@ function defaultPluginInputsForCreate(
   input: CreateInput,
   pluginId: string | null,
 ): Record<string, unknown> | null {
-  if (pluginId !== 'od-media-generation') return null;
   const kind = input.metadata.kind;
+  const projectName = input.name.trim();
+
+  if (pluginId === 'example-web-prototype') {
+    return {
+      artifactKind: input.metadata.includeLandingPage
+        ? 'landing page'
+        : 'web prototype',
+      fidelity: input.metadata.fidelity ?? 'high-fidelity',
+      audience: 'product evaluators',
+      designSystem: 'the active project design system',
+      template: input.metadata.templateLabel ?? 'the bundled web prototype seed',
+    };
+  }
+
+  if (pluginId === 'example-simple-deck') {
+    return {
+      deckType: 'pitch deck',
+      topic: projectName || 'the user brief',
+      audience: 'decision makers',
+      slideCount: 10,
+      speakerNotes: input.metadata.speakerNotes
+        ? 'include speaker notes'
+        : 'no speaker notes',
+      designSystem: 'the active project design system',
+    };
+  }
+
+  if (pluginId === 'od-new-generation') {
+    const templateLabel = input.metadata.templateLabel?.trim();
+    const artifactKind =
+      kind === 'template'
+        ? 'artifact based on a saved template'
+        : kind === 'other'
+          ? 'custom design artifact'
+          : `${kind} artifact`;
+    return {
+      artifactKind,
+      audience: 'product and design reviewers',
+      topic: templateLabel || projectName || 'the user brief',
+    };
+  }
+
+  if (pluginId !== 'od-media-generation') return null;
   if (kind !== 'image' && kind !== 'video' && kind !== 'audio') return null;
 
   const promptTemplate = input.metadata.promptTemplate;
   const subject =
     promptTemplate?.prompt?.trim()
-    || input.name.trim()
+    || projectName
     || promptTemplate?.title?.trim()
     || `${kind} concept`;
   const style =
@@ -201,6 +253,7 @@ interface Props {
   designSystems: DesignSystemSummary[];
   projects: Project[];
   templates: ProjectTemplate[];
+  onDeleteTemplate?: (id: string) => Promise<boolean>;
   promptTemplates: PromptTemplateSummary[];
   defaultDesignSystemId: string | null;
   connectors: ConnectorDetail[];
@@ -239,7 +292,7 @@ interface Props {
       autoSendFirstMessage?: boolean;
       pendingFiles?: File[];
     },
-  ) => void;
+  ) => Promise<boolean> | boolean | void;
   onCreatePluginShareProject: (
     pluginId: string,
     action: PluginShareAction,
@@ -316,6 +369,7 @@ export function EntryShell({
   designSystems,
   projects,
   templates,
+  onDeleteTemplate,
   promptTemplates,
   defaultDesignSystemId,
   connectors,
@@ -447,7 +501,7 @@ export function EntryShell({
     // single row without touching the form.
     const pluginId = defaultPluginIdForKind(input.metadata);
     const pluginInputs = defaultPluginInputsForCreate(input, pluginId);
-    onCreateProject({
+    return onCreateProject({
       ...input,
       ...(pluginId ? { pluginId } : {}),
       ...(pluginInputs ? { pluginInputs } : {}),
@@ -647,13 +701,11 @@ export function EntryShell({
           </a>
           <a
             className="avatar-item"
-            href="https://discord.gg/BYShPgWpq"
-            target="_blank"
-            rel="noreferrer noopener"
+            href="https://discord.gg/mHAjSMV6gz"
             onClick={() => setAvatarMenuOpen(false)}
           >
             <span className="avatar-item-icon" aria-hidden>
-              <Icon name="external-link" size={14} />
+              <Icon name="discord" size={14} />
             </span>
             <span>Join Discord</span>
           </a>
@@ -839,6 +891,16 @@ export function EntryShell({
           <div className="entry-main__topbar">
             <div className="entry-main__topbar-chips">
               <GithubStarBadge />
+              <a
+                className="entry-discord-badge"
+                href="https://discord.gg/mHAjSMV6gz"
+                aria-label="Join the Open Design Discord"
+                title="Join the Open Design Discord"
+                data-testid="entry-discord-badge"
+              >
+                <Icon name="discord" size={14} className="entry-discord-badge__icon" />
+                <span className="entry-discord-badge__label">Join Discord</span>
+              </a>
               <InlineModelSwitcher
                 config={config}
                 agents={agents}
@@ -983,6 +1045,7 @@ export function EntryShell({
         designSystems={designSystems}
         defaultDesignSystemId={defaultDesignSystemId}
         templates={templates}
+        {...(onDeleteTemplate ? { onDeleteTemplate } : {})}
         promptTemplates={promptTemplates}
         connectors={connectors}
         connectorsLoading={connectorsLoading}
@@ -1039,6 +1102,7 @@ function OnboardingView({
   onFinish: () => void;
 }) {
   const t = useT();
+  const analytics = useAnalytics();
   const [step, setStep] = useState(0);
   const [runtime, setRuntime] = useState<'local' | 'byok' | null>(null);
   const [designSource, setDesignSource] = useState<'github' | 'upload' | 'prompt' | null>(null);
@@ -1117,6 +1181,50 @@ function OnboardingView({
       agentRevealTimersRef.current = [];
     };
   }, []);
+
+  // Onboarding 4-step funnel (v2 doc). Fires one `page_view` per step
+  // exposure. The fourth step (`generation`) lives in
+  // `DesignSystemDetailView` because the user navigates out of this
+  // component once the design system project opens; that emission
+  // reads the same `onboarding_session_id` from sessionStorage.
+  // `clearOnboardingSessionId` runs on `onFinish` / unmount so a
+  // later DS visit unrelated to onboarding doesn't inherit the id.
+  const onboardingSessionIdRef = useRef<string>('');
+  if (!onboardingSessionIdRef.current) {
+    onboardingSessionIdRef.current = getOrCreateOnboardingSessionId();
+  }
+  useEffect(() => {
+    return () => {
+      clearOnboardingSessionId();
+    };
+  }, []);
+  useEffect(() => {
+    const onboardingSessionId = onboardingSessionIdRef.current;
+    if (!onboardingSessionId) return;
+    let area: TrackingOnboardingArea;
+    let stepIndex: TrackingOnboardingStepIndex;
+    let stepName: TrackingOnboardingStepName;
+    if (step === 0) {
+      area = 'runtime';
+      stepIndex = '1';
+      stepName = 'connect';
+    } else if (step === 1) {
+      area = 'about_you';
+      stepIndex = '2';
+      stepName = 'about_you';
+    } else {
+      area = 'design_system';
+      stepIndex = '3';
+      stepName = 'design_system';
+    }
+    trackPageView(analytics.track, {
+      page_name: 'onboarding',
+      area,
+      step_index: stepIndex,
+      step_name: stepName,
+      onboarding_session_id: onboardingSessionId,
+    });
+  }, [analytics.track, step]);
 
   const steps = [
     t('settings.onboardingStepConnect'),

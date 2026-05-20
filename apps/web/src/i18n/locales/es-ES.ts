@@ -137,7 +137,7 @@ export const esES: Dict = {
   'settings.onboardingSkip': "Skip for now",
   'settings.kicker': 'Ajustes',
   'settings.title': 'Modo de ejecución',
-  'settings.subtitle': 'Elige entre CLI local y BYOK. Tu clave de API se guarda solo en este navegador.',
+  'settings.subtitle': 'Elige entre CLI local y BYOK.',
   'settings.modeAria': 'Modo de ejecución',
   'settings.protocolAria': 'Protocolo de API',
   'settings.modeDaemon': 'CLI local',
@@ -183,6 +183,8 @@ export const esES: Dict = {
   'settings.agentInstall.stepSelect': 'Selecciona la tarjeta del agente cuando aparezca como instalado.',
   'settings.noAgentsDetected':
     'Aún no se ha detectado ningún agente. Instala Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen o GitHub Copilot CLI y pulsa Reescanear.',
+  'settings.agentInstalledGroup': 'Tus CLI ({count})',
+  'settings.agentInstallGroup': 'Disponibles para instalar ({count})',
   'settings.agentAuthRequired': 'Autenticación requerida',
   'settings.agentAuthUnknown': 'Estado de autenticación desconocido',
   'settings.apiSection': 'API de Anthropic',
@@ -198,6 +200,10 @@ export const esES: Dict = {
     'Estos son modelos sugeridos para este protocolo. Tu proveedor puede admitir modelos diferentes.',
   'settings.baseUrl': 'URL base',
   'settings.baseUrlInvalid': 'Introduce una URL pública http:// o https:// válida. Localhost está permitido; las IPs de red privada se bloquean.',
+  'settings.baseUrlCustomize': 'Personalizar',
+  'settings.baseUrlDefaultHint': 'Endpoint predeterminado. Normalmente no hace falta cambiarlo.',
+  'settings.azureBaseUrlPlaceholder': 'https://my-resource.openai.azure.com',
+  'settings.azureBaseUrlHint': 'Find this in Azure portal → your resource → Endpoint.',
   'settings.azureDeploymentModel': 'Nombre del despliegue',
   'settings.azureDeploymentModelHint':
     'Para Azure OpenAI, este campo se usa como nombre del despliegue en /openai/deployments/<model>. Introduce el nombre del despliegue que creaste en Azure.',
@@ -222,15 +228,15 @@ export const esES: Dict = {
   'settings.themeDark': 'Oscuro',
   'settings.agentModelHead': 'Modelo para:',
   'settings.modelPicker': 'Modelo',
-  'settings.modelSourceLive': 'Live from CLI',
-  'settings.modelSourceFallback': 'Fallback list',
+  'settings.modelSourceLive': 'En vivo desde la CLI',
+  'settings.modelSourceFallback': 'Lista integrada',
   'settings.reasoningPicker': 'Esfuerzo de razonamiento',
   'settings.modelPickerHint':
     'Se obtiene de la CLI cuando expone un comando `models`. «Predeterminado» deja la elección a la propia configuración de la CLI; «Personalizado…» permite escribir cualquier id de modelo aceptado por la CLI.',
   'settings.modelPickerLiveHint':
-    'Models were refreshed from the installed CLI. Default still uses the CLI config.',
+    'Los modelos se actualizaron desde la CLI instalada. Predeterminado sigue usando la configuración de la CLI.',
   'settings.modelPickerFallbackHint':
-    'Using Open Design fallback models because the installed CLI did not return live model metadata. Rescan after updating or logging in to the CLI.',
+    'Mostrando valores predeterminados integrados. Pulsa Reescanear para obtener modelos en vivo desde la CLI.',
   'settings.cliEnvTitle': 'CLI config locations',
   'settings.cliEnvHint':
     'Set non-secret config directories for packaged app runs and agent detection.',
@@ -427,6 +433,11 @@ export const esES: Dict = {
     'Edita lo que quieras — tus cambios se incorporan al briefing del agente.',
   'newproj.promptTemplateBodyEmpty':
     'Cuerpo vacío — el agente no recibirá ninguna referencia de plantilla.',
+  'newproj.deleteTemplateTitle': 'Eliminar plantilla',
+  'newproj.deleteTemplateConfirm': '¿Eliminar «{name}»? Esta acción no se puede deshacer.',
+  'newproj.deleteTemplateConfirmCta': 'Eliminar plantilla',
+  'newproj.deleteTemplateError':
+    'No se pudo eliminar esta plantilla. Inténtalo de nuevo.',
 
   'designs.subRecent': 'Recientes',
   'designs.subYours': 'Tus diseños',
@@ -875,7 +886,7 @@ export const esES: Dict = {
   'fileViewer.presentFullscreen': 'Pantalla completa',
   'fileViewer.presentNewTab': 'Pestaña nueva',
   'fileViewer.exitPresentation': 'Salir de la presentación',
-  'fileViewer.shareLabel': 'Compartir',
+  'fileViewer.shareLabel': 'Exportar',
   'fileViewer.exportPdf': 'Exportar como PDF',
   'fileViewer.exportPdfAllSlides': 'Exportar como PDF (todas las diapositivas)',
   'fileViewer.exportPptxBusy': 'Espera a que termine el turno actual.',

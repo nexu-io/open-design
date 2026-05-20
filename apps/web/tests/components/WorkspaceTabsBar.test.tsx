@@ -3,7 +3,10 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { WorkspaceTabsBar } from '../../src/components/WorkspaceTabsBar';
+import {
+  openWorkspaceTab,
+  WorkspaceTabsBar,
+} from '../../src/components/WorkspaceTabsBar';
 import { navigate, type Route } from '../../src/router';
 import type { Project } from '../../src/types';
 
@@ -81,6 +84,19 @@ describe('WorkspaceTabsBar navigation semantics', () => {
       const labels = tabs.map((tab) => tab.textContent ?? '');
       expect(tabs).toHaveLength(3);
       expect(labels.filter((label) => label.includes('Home'))).toHaveLength(2);
+      expect(labels.some((label) => label.includes('Project Alpha'))).toBe(true);
+    });
+  });
+
+  it('can append and focus a project tab for create-project flows', async () => {
+    render(<WorkspaceTabsBar route={homeRoute} projects={[project]} />);
+
+    openWorkspaceTab(projectRoute);
+
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels).toHaveLength(2);
+      expect(labels.some((label) => label.includes('Home'))).toBe(true);
       expect(labels.some((label) => label.includes('Project Alpha'))).toBe(true);
     });
   });

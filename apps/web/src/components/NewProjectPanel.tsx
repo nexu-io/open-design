@@ -1325,6 +1325,37 @@ function TemplatePicker({
   onDelete?: (id: string) => Promise<boolean>;
 }) {
   const t = useT();
+  const [confirmDelete, setConfirmDelete] = useState<
+    { id: string; name: string } | null
+  >(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState(false);
+
+  function closeConfirm() {
+    setConfirmDelete(null);
+    setDeleting(false);
+    setDeleteError(false);
+  }
+
+  async function runDelete() {
+    if (!confirmDelete || !onDelete) return;
+    setDeleting(true);
+    setDeleteError(false);
+    let ok = false;
+    try {
+      ok = await onDelete(confirmDelete.id);
+    } catch {
+      ok = false;
+    }
+    if (ok) {
+      if (value === confirmDelete.id) onChange(null);
+      closeConfirm();
+    } else {
+      setDeleting(false);
+      setDeleteError(true);
+    }
+  }
+
   return (
     <div className="newproj-section">
       <label className="newproj-label">{t('newproj.templateLabel')}</label>
@@ -1350,10 +1381,7 @@ function TemplatePicker({
                 key={tpl.id}
                 active={value === tpl.id}
                 onClick={() => onChange(tpl.id)}
-                onDelete={onDelete ? async () => {
-                  const ok = await onDelete(tpl.id);
-                  if (ok && value === tpl.id) onChange(null);
-                } : () => {}}
+                onDelete={onDelete ? () => setConfirmDelete({ id: tpl.id, name: tpl.name }) : () => {}}
                 name={tpl.name}
                 description={tpl.description ?? fallbackDesc}
               />
@@ -1361,6 +1389,43 @@ function TemplatePicker({
           })}
         </div>
       )}
+      {confirmDelete ? (
+        <div
+          className="modal-backdrop"
+          onClick={deleting ? undefined : closeConfirm}
+        >
+          <div
+            className="modal modal-confirm"
+            onClick={(e) => e.stopPropagation()}
+            role="alertdialog"
+            aria-modal="true"
+          >
+            <h2>{t('newproj.deleteTemplateTitle')}</h2>
+            <p className="modal-confirm-message">
+              {t('newproj.deleteTemplateConfirm', { name: confirmDelete.name })}
+            </p>
+            {deleteError ? (
+              <p className="modal-confirm-error" role="alert">
+                {t('newproj.deleteTemplateError')}
+              </p>
+            ) : null}
+            <div className="row">
+              <button type="button" onClick={closeConfirm} disabled={deleting}>
+                {t('common.cancel')}
+              </button>
+              <button
+                type="button"
+                className="primary danger"
+                autoFocus
+                disabled={deleting}
+                onClick={runDelete}
+              >
+                {t('newproj.deleteTemplateConfirmCta')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

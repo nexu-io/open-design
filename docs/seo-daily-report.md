@@ -19,9 +19,17 @@ it final.
 
 - Site totals: clicks, impressions, CTR, average position
 - Week-over-week deltas
+- Device breakdown over the latest stable 7-day window
+- Country / region Top 5 over the latest stable 7-day window
+- Search appearance breakdown when GSC returns rich-result rows
 - Top 5 page risers by click delta
 - Top 5 page fallers by click delta
 - Top 5 query risers by click delta
+- Optimization opportunities from the latest stable 7-day window:
+  - doorway queries ranking in positions 11-20
+  - high-impression, low-CTR queries
+  - high-ranking, low-CTR pages
+  - mobile / desktop CTR gaps
 
 ## Required GitHub Secrets
 
@@ -41,6 +49,31 @@ Feishu posting requires:
 | --- | --- | --- |
 | `FEISHU_WEBHOOK_URL` | Yes | Custom bot webhook URL from the target Feishu group. |
 | `FEISHU_WEBHOOK_SECRET` | No | Required only if signing verification is enabled for the custom bot. |
+
+## Data windows
+
+The report uses two windows:
+
+| Section | Window | Why |
+| --- | --- | --- |
+| Site totals and Top 5 movers | T-2 vs T-9 | Same-weekday daily comparison. |
+| Device, country, search appearance, optimization opportunities | T-8 through T-2 | A 7-day window smooths daily noise and gives enough volume for action candidates. |
+
+All Search Analytics calls use `dataState: all` so recent GSC rows are included
+before Google marks them final.
+
+## Opportunity thresholds
+
+These environment variables tune the optimization section:
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `OPP_MIN_IMPRESSIONS` | `30` | Minimum impressions before a query/page is considered actionable. |
+| `OPP_LOW_CTR` | `0.01` | CTR below this value is treated as low CTR. |
+| `OPP_MOBILE_DESKTOP_CTR_GAP` | `0.30` | Relative CTR gap between mobile and desktop before surfacing a device issue. |
+
+The current defaults are intentionally low because `open-design.ai` is still
+building GSC history. Tighten them as traffic grows.
 
 ## Manual test
 
