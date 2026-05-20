@@ -35,6 +35,14 @@ test("package-tauri-migration-handoff creates a tarball and checksum sidecar", a
   assert.match(result.stdout, /Receiver push command:/);
   assert.match(result.stdout, /push-tauri-migration-handoff/);
   assert.match(result.stdout, new RegExp(`--archive '${escapeRegExp(output)}'`));
+  assert.match(result.stdout, /Receiver environment overrides:/);
+  assert.match(result.stdout, /REMOTE=<remote>/);
+  assert.match(result.stdout, /GITHUB_WORKFLOW=<workflow-file>/);
+  assert.match(result.stdout, /TAURI_M4_REPORT_DIR=<report-dir>/);
+  assert.match(result.stdout, /TAURI_PR_BODY_PATH=<pr-body-path>/);
+  assert.match(result.stdout, /TAURI_NATIVE_CI_TRIGGER=0/);
+  assert.match(result.stdout, /TAURI_NATIVE_CI_WAIT=1/);
+  assert.match(result.stdout, /GITHUB_RUN_ID=<github-run-id>/);
   assert.match(result.stdout, /Native CI trigger after push:/);
   assert.match(result.stdout, /attempts this automatically when gh is available/);
   assert.match(result.stdout, /gh workflow run ci\.yml --ref 'codex\/electron-to-tauri-migration'/);

@@ -73,6 +73,18 @@ async function main(): Promise<void> {
           "  --remote origin",
         ].join("\n"),
       ),
+      "Receiver environment overrides:",
+      indent(
+        [
+          "REMOTE=<remote>",
+          "GITHUB_WORKFLOW=<workflow-file>",
+          "TAURI_M4_REPORT_DIR=<report-dir>",
+          "TAURI_PR_BODY_PATH=<pr-body-path>",
+          "TAURI_NATIVE_CI_TRIGGER=0",
+          "TAURI_NATIVE_CI_WAIT=1",
+          "GITHUB_RUN_ID=<github-run-id>",
+        ].join("\n"),
+      ),
       "Native CI trigger after push:",
       indent(
         [
