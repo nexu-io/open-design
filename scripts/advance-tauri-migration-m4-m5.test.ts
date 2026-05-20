@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 import {
+  formatM4RemoteEvidenceDetail,
   m4EvidenceLogMarker,
   m4PlatformGateLabels,
   m4RemoteEvidenceLogMarker,
@@ -45,6 +46,25 @@ test("advance-tauri-migration-m4-m5 verifies platform reports and applies M5", a
   assert.match(await readFile(join(root, "tools", "dev", "src", "config.ts"), "utf8"), /DEFAULT_DESKTOP_RUNTIME = "tauri"/);
   assert.match(await readFile(join(root, "tools", "pack", "src", "config.ts"), "utf8"), /DEFAULT_DESKTOP_RUNTIME = "tauri"/);
   assert.match(await readFile(join(root, ".github", "workflows", "release-beta.yml"), "utf8"), /default: tauri/);
+});
+
+test("advance-tauri-migration-m4-m5 appends current remote evidence when stale detail exists", async (t) => {
+  const { linuxReport, root, winReport } = await createFixture(t, "open-design-tauri-advance-stale-evidence-", {
+    extraMigrationDocLines: [
+      `- 2026-05-19: ${m4RemoteEvidenceLogMarker}`,
+      `  ${formatM4RemoteEvidenceDetail("origin", "codex/electron-to-tauri-migration", "0".repeat(40))}`,
+    ],
+  });
+  const head = await initGitFixture(root);
+  const remotePath = await createRemoteFixture(root, head);
+
+  const result = await runAdvance(root, winReport, linuxReport, "--expected-head", head, "--remote", remotePath);
+
+  assert.match(result.stdout, /Advanced Tauri migration from verified M4 platform evidence through M5 default flip/);
+  const migrationDoc = await readFile(join(root, "docs", "electron-to-tauri-migration.md"), "utf8");
+  assert.match(migrationDoc, new RegExp(`Remote \`origin/codex/electron-to-tauri-migration\` matched \`${"0".repeat(40)}\``));
+  assert.match(migrationDoc, new RegExp(`Remote \`${escapeRegExp(remotePath)}/codex/electron-to-tauri-migration\` matched \`${head}\``));
+  assert.match(await readFile(join(root, "tools", "dev", "src", "config.ts"), "utf8"), /DEFAULT_DESKTOP_RUNTIME = "tauri"/);
 });
 
 test("advance-tauri-migration-m4-m5 refuses to run with tracked worktree changes", async (t) => {
@@ -112,7 +132,7 @@ const m5Labels = [
 async function createFixture(
   t: test.TestContext,
   prefix: string,
-  options: { winRemainingPids?: number[] } = {},
+  options: { extraMigrationDocLines?: string[]; winRemainingPids?: number[] } = {},
 ): Promise<{ linuxReport: string; root: string; winReport: string }> {
   const root = await mkdtemp(join(tmpdir(), prefix));
   t.after(() => void rm(root, { force: true, recursive: true }));
@@ -130,7 +150,7 @@ async function createFixture(
     options.winRemainingPids == null ? {} : { remainingPids: options.winRemainingPids },
   );
   await writeLinuxReport(linuxReport);
-  await writeFile(join(root, "docs", "electron-to-tauri-migration.md"), migrationDoc(), "utf8");
+  await writeFile(join(root, "docs", "electron-to-tauri-migration.md"), migrationDoc(options.extraMigrationDocLines), "utf8");
   await writeFile(
     join(root, "tools", "dev", "src", "config.ts"),
     [
@@ -195,7 +215,7 @@ async function createRemoteFixture(root: string, branchHead: string): Promise<st
   return remotePath;
 }
 
-function migrationDoc(): string {
+function migrationDoc(extraLines: string[] = []): string {
   return [
     "Last updated: 2026-05-20",
     "",
@@ -210,6 +230,7 @@ function migrationDoc(): string {
     "## Execution Log",
     "",
     "- 2026-05-20: Existing entry.",
+    ...extraLines,
     "",
     "### Platform Gate Runners",
     "",

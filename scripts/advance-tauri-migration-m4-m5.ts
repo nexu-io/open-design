@@ -3,7 +3,11 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 
-import { formatM4RemoteEvidenceDetail, hasM4RemoteEvidence, m4RemoteEvidenceLogMarker } from "./tauri-migration-policy.ts";
+import {
+  formatM4RemoteEvidenceDetail,
+  hasM4RemoteEvidenceForHead,
+  m4RemoteEvidenceLogMarker,
+} from "./tauri-migration-policy.ts";
 
 const execFileAsync = promisify(execFile);
 const scriptsRoot = import.meta.dirname;
@@ -70,7 +74,7 @@ async function main(): Promise<void> {
 
 async function appendRemoteEvidenceMarker(migrationDoc: string, args: Args): Promise<void> {
   let content = await readFile(migrationDoc, "utf8");
-  if (hasM4RemoteEvidence(content)) return;
+  if (hasM4RemoteEvidenceForHead(content, args.expectedHead)) return;
   const date = new Date().toISOString().slice(0, 10);
   const summary = [
     `- ${date}: ${m4RemoteEvidenceLogMarker}`,
