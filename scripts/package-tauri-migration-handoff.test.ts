@@ -37,6 +37,7 @@ test("package-tauri-migration-handoff creates a tarball and checksum sidecar", a
   assert.match(result.stdout, /Receiver push command:/);
   assert.match(result.stdout, /push-tauri-migration-handoff/);
   assert.match(result.stdout, new RegExp(`--archive '${escapeRegExp(output)}'`));
+  assert.match(result.stdout, /push-tauri-migration-handoff\.ts[\s\S]*--report-dir \/tmp\/open-design-tauri-m4-reports/);
   assert.match(result.stdout, /Receiver environment overrides:/);
   assert.match(result.stdout, /REMOTE=<remote>/);
   assert.match(result.stdout, /GITHUB_WORKFLOW=<workflow-file>/);

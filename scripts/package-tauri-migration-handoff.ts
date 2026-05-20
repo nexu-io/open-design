@@ -75,7 +75,8 @@ async function main(): Promise<void> {
         [
           "pnpm exec tsx scripts/push-tauri-migration-handoff.ts \\",
           `  --archive ${shellQuote(archivePath)} \\`,
-          '  --remote "${REMOTE:-origin}"',
+          '  --remote "${REMOTE:-origin}" \\',
+          "  --report-dir /tmp/open-design-tauri-m4-reports",
         ].join("\n"),
       ),
       "Receiver environment overrides:",

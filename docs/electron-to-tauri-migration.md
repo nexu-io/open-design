@@ -493,6 +493,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Aligned the remaining status and package output with that receiver command contract. `scripts/tauri-migration-status.ts` next actions and `scripts/package-tauri-migration-handoff.ts` output now print the exact `.commands.sh <archive>` invocation, so the checksum-verified path is copy-pasteable from every handoff surface before falling back to push-only helper commands.
 - 2026-05-20: Quoted the `scripts/tauri-migration-status.ts` push-only fallback command for custom archive paths and remote names. This keeps status next actions copy-pasteable when the write-capable receiver uses paths or remotes containing spaces.
 - 2026-05-20: Preserved the configured platform report directory in `scripts/tauri-migration-status.ts` push-only fallback commands. A receiver following status output now keeps custom `--report-dir` values through the push helper, so the helper's post-push report download and advance guidance stays aligned with the status-verified report location.
+- 2026-05-20: Made `scripts/package-tauri-migration-handoff.ts` print the same explicit `--report-dir /tmp/open-design-tauri-m4-reports` on its receiver push command. This keeps package output, status output, and continuation output aligned about where native M4 reports should be downloaded and verified.
 
 ### Platform Gate Runners
 
