@@ -84,7 +84,7 @@ export function PrivacySection({ cfg, setCfg }: Props): JSX.Element {
               checked={telemetry.metrics === true}
               onChange={(v) => {
                 trackSettingsPrivacyClick(analytics.track, {
-                  page: 'settings',
+                  page_name: 'settings',
                   area: 'privacy',
                   element: 'anonymous_metrics',
                   anonymous_metrics_status: v ? 'on' : 'off',
@@ -98,7 +98,7 @@ export function PrivacySection({ cfg, setCfg }: Props): JSX.Element {
               checked={telemetry.content === true}
               onChange={(v) => {
                 trackSettingsPrivacyClick(analytics.track, {
-                  page: 'settings',
+                  page_name: 'settings',
                   area: 'privacy',
                   element: 'conversation_and_tool_content',
                   conversation_and_tool_content_status: v ? 'on' : 'off',
@@ -112,7 +112,7 @@ export function PrivacySection({ cfg, setCfg }: Props): JSX.Element {
               checked={telemetry.artifactManifest === true}
               onChange={(v) => {
                 trackSettingsPrivacyClick(analytics.track, {
-                  page: 'settings',
+                  page_name: 'settings',
                   area: 'privacy',
                   element: 'project_artifacts_manifest',
                   project_artifacts_manifest_status: v ? 'on' : 'off',
@@ -142,7 +142,7 @@ export function PrivacySection({ cfg, setCfg }: Props): JSX.Element {
               className="ghost"
               onClick={() => {
                 trackSettingsPrivacyClick(analytics.track, {
-                  page: 'settings',
+                  page_name: 'settings',
                   area: 'privacy',
                   element: 'delete_my_data',
                 });

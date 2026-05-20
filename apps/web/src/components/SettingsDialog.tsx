@@ -933,7 +933,7 @@ export function SettingsDialog({
     // tagged onto every view now lives in the configure-state global
     // properties (registered once and inherited by every event).
     trackSettingsView(analytics.track, {
-      page: 'settings',
+      page_name: 'settings',
       area: settingsSectionToTracking(activeSection),
     });
   }, [activeSection, analytics.track]);
@@ -1031,7 +1031,7 @@ export function SettingsDialog({
       const modeAfter = executionModeToTracking(mode);
       if (modeBefore !== modeAfter) {
         trackSettingsExecutionModeTabClick(analytics.track, {
-          page: 'settings',
+          page_name: 'settings',
           area: 'configure_execution_mode',
           element: 'execution_mode_tab',
           action: 'switch_execution_mode',
@@ -1124,7 +1124,7 @@ export function SettingsDialog({
       }
       setAgentTestState({ status: 'done', result });
       trackSettingsCliTestResult(analytics.track, {
-        page: 'settings',
+        page_name: 'settings',
         area: 'configure_execution_mode',
         cli_provider_id: cliProviderId,
         result: result.ok ? 'success' : 'failed',
@@ -1148,7 +1148,7 @@ export function SettingsDialog({
         },
       });
       trackSettingsCliTestResult(analytics.track, {
-        page: 'settings',
+        page_name: 'settings',
         area: 'configure_execution_mode',
         cli_provider_id: cliProviderId,
         result: 'failed',
@@ -1179,7 +1179,7 @@ export function SettingsDialog({
       const byokProviderId = byokProtocolToTracking(apiProtocol);
       if (byokProviderId) {
         trackSettingsByokTestResult(analytics.track, {
-          page: 'settings',
+          page_name: 'settings',
           area: 'execution_model',
           provider_id: byokProviderId,
           result: 'not_ready',
@@ -1221,7 +1221,7 @@ export function SettingsDialog({
       const byokProviderId = byokProtocolToTracking(apiProtocol);
       if (byokProviderId) {
         trackSettingsByokTestResult(analytics.track, {
-          page: 'settings',
+          page_name: 'settings',
           area: 'execution_model',
           provider_id: byokProviderId,
           result: result.ok ? 'success' : 'failed',
@@ -1248,7 +1248,7 @@ export function SettingsDialog({
       const byokProviderId = byokProtocolToTracking(apiProtocol);
       if (byokProviderId) {
         trackSettingsByokTestResult(analytics.track, {
-          page: 'settings',
+          page_name: 'settings',
           area: 'execution_model',
           provider_id: byokProviderId,
           result: 'failed',
@@ -1840,7 +1840,7 @@ export function SettingsDialog({
             const byokProviderId = byokProtocolToTracking(apiProtocol);
             if (byokProviderId) {
               trackSettingsByokFieldClick(analytics.track, {
-                page: 'settings',
+                page_name: 'settings',
                 area: 'configure_execution_mode_byok',
                 element: 'base_url',
                 provider_id: byokProviderId,
@@ -2257,7 +2257,7 @@ export function SettingsDialog({
                         const byokProviderId = byokProtocolToTracking(tab.id);
                         if (byokProviderId) {
                           trackSettingsByokProviderOptionClick(analytics.track, {
-                            page: 'settings',
+                            page_name: 'settings',
                             area: 'configure_execution_mode_byok',
                             element: 'byok_provider_option',
                             action: 'select_byok_provider',
@@ -2362,7 +2362,7 @@ export function SettingsDialog({
                                 className="agent-card-select"
                                 onClick={() => {
                                   trackSettingsLocalCliClick(analytics.track, {
-                                    page: 'settings',
+                                    page_name: 'settings',
                                     area: 'configure_execution_mode_local_cli',
                                     element: 'cli_provider',
                                     cli_provider_id: agentIdToTracking(a.id),
@@ -2993,7 +2993,7 @@ export function SettingsDialog({
                       const byokProviderId = byokProtocolToTracking(apiProtocol);
                       if (byokProviderId) {
                         trackSettingsByokFieldClick(analytics.track, {
-                          page: 'settings',
+                          page_name: 'settings',
                           area: 'configure_execution_mode_byok',
                           element: 'api_key',
                           provider_id: byokProviderId,
@@ -3097,7 +3097,7 @@ export function SettingsDialog({
                     const byokProviderId = byokProtocolToTracking(apiProtocol);
                     if (byokProviderId) {
                       trackSettingsByokFieldClick(analytics.track, {
-                        page: 'settings',
+                        page_name: 'settings',
                         area: 'configure_execution_mode_byok',
                         element: 'model',
                         provider_id: byokProviderId,
@@ -3246,7 +3246,7 @@ export function SettingsDialog({
               onPersistComposioKey={onPersistComposioKey}
               onConnectorAuthResult={({ connectorId, action, result, errorCode }) =>
                 trackSettingsConnectorAuthResult(analytics.track, {
-                  page: 'settings',
+                  page_name: 'settings',
                   area: 'connectors',
                   connector_id: connectorId,
                   action,
@@ -3297,7 +3297,7 @@ export function SettingsDialog({
                       // that was picked, regardless of whether it differs
                       // from the current one (user clicked = signal).
                       trackSettingsLanguageClick(analytics.track, {
-                        page: 'settings',
+                        page_name: 'settings',
                         area: 'language',
                         element: code,
                       });
@@ -5720,7 +5720,7 @@ function AppearanceSection({
               // use `accent_color` with the swatch hex below.
               if (value === 'system' || value === 'light' || value === 'dark') {
                 trackSettingsAppearanceClick(analytics.track, {
-                  page: 'settings',
+                  page_name: 'settings',
                   area: 'appearance',
                   element: value,
                 });
@@ -5749,7 +5749,7 @@ function AppearanceSection({
                 role="radio"
                 onClick={() => {
                   trackSettingsAppearanceClick(analytics.track, {
-                    page: 'settings',
+                    page_name: 'settings',
                     area: 'appearance',
                     element: 'accent_color',
                     color,
@@ -5910,7 +5910,7 @@ function NotificationsSection({
     // emits the post-click state on `completion_sound_status` so a single
     // event captures intent + outcome.
     trackSettingsNotificationsClick(analytics.track, {
-      page: 'settings',
+      page_name: 'settings',
       area: 'notifications',
       element: 'completion_sound',
       completion_sound_status: next ? 'on' : 'off',
@@ -5925,7 +5925,7 @@ function NotificationsSection({
   const toggleDesktop = async () => {
     if (notif.desktopEnabled) {
       trackSettingsNotificationsClick(analytics.track, {
-        page: 'settings',
+        page_name: 'settings',
         area: 'notifications',
         element: 'desktop_notification',
         desktop_notification_status: 'off',
@@ -5937,7 +5937,7 @@ function NotificationsSection({
     setPermission(result);
     if (result === 'granted') {
       trackSettingsNotificationsClick(analytics.track, {
-        page: 'settings',
+        page_name: 'settings',
         area: 'notifications',
         element: 'desktop_notification',
         desktop_notification_status: 'on',
@@ -5945,7 +5945,7 @@ function NotificationsSection({
       updateNotif({ desktopEnabled: true });
     } else {
       trackSettingsNotificationsClick(analytics.track, {
-        page: 'settings',
+        page_name: 'settings',
         area: 'notifications',
         element: 'desktop_notification',
         desktop_notification_status: 'off',
@@ -6000,7 +6000,7 @@ function NotificationsSection({
                     onClick={() => {
                       const trackingSoundId = soundIdToTracking(sound.id);
                       trackSettingsNotificationsClick(analytics.track, {
-                        page: 'settings',
+                        page_name: 'settings',
                         area: 'notifications',
                         element: 'success_sound',
                         ...(trackingSoundId ? { sound_id: trackingSoundId } : {}),
@@ -6027,7 +6027,7 @@ function NotificationsSection({
                     onClick={() => {
                       const trackingSoundId = soundIdToTracking(sound.id);
                       trackSettingsNotificationsClick(analytics.track, {
-                        page: 'settings',
+                        page_name: 'settings',
                         area: 'notifications',
                         element: 'failure_sound',
                         ...(trackingSoundId ? { sound_id: trackingSoundId } : {}),
@@ -6075,7 +6075,7 @@ function NotificationsSection({
           <>
             <button type="button" className="ghost" onClick={() => {
               trackSettingsNotificationsClick(analytics.track, {
-                page: 'settings',
+                page_name: 'settings',
                 area: 'notifications',
                 element: 'send_test',
               });

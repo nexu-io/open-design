@@ -23,7 +23,17 @@ import { useAnalytics } from '../analytics/provider';
 import {
   trackHomeNavClick,
   trackHomeToolbarClick,
+  trackPageView,
 } from '../analytics/events';
+import {
+  clearOnboardingSessionId,
+  getOrCreateOnboardingSessionId,
+} from '../analytics/onboarding-session';
+import type {
+  TrackingOnboardingArea,
+  TrackingOnboardingStepIndex,
+  TrackingOnboardingStepName,
+} from '@open-design/contracts/analytics';
 import { LOCALE_LABEL, LOCALES, useI18n, useT, type Locale } from '../i18n';
 import { navigate, useRoute } from '../router';
 import type {
@@ -1042,6 +1052,7 @@ function OnboardingView({
   onFinish: () => void;
 }) {
   const t = useT();
+  const analytics = useAnalytics();
   const [step, setStep] = useState(0);
   const [runtime, setRuntime] = useState<'local' | 'byok' | null>(null);
   const [designSource, setDesignSource] = useState<'github' | 'upload' | 'prompt' | null>(null);
@@ -1120,6 +1131,50 @@ function OnboardingView({
       agentRevealTimersRef.current = [];
     };
   }, []);
+
+  // Onboarding 4-step funnel (v2 doc). Fires one `page_view` per step
+  // exposure. The fourth step (`generation`) lives in
+  // `DesignSystemDetailView` because the user navigates out of this
+  // component once the design system project opens; that emission
+  // reads the same `onboarding_session_id` from sessionStorage.
+  // `clearOnboardingSessionId` runs on `onFinish` / unmount so a
+  // later DS visit unrelated to onboarding doesn't inherit the id.
+  const onboardingSessionIdRef = useRef<string>('');
+  if (!onboardingSessionIdRef.current) {
+    onboardingSessionIdRef.current = getOrCreateOnboardingSessionId();
+  }
+  useEffect(() => {
+    return () => {
+      clearOnboardingSessionId();
+    };
+  }, []);
+  useEffect(() => {
+    const onboardingSessionId = onboardingSessionIdRef.current;
+    if (!onboardingSessionId) return;
+    let area: TrackingOnboardingArea;
+    let stepIndex: TrackingOnboardingStepIndex;
+    let stepName: TrackingOnboardingStepName;
+    if (step === 0) {
+      area = 'runtime';
+      stepIndex = '1';
+      stepName = 'connect';
+    } else if (step === 1) {
+      area = 'about_you';
+      stepIndex = '2';
+      stepName = 'about_you';
+    } else {
+      area = 'design_system';
+      stepIndex = '3';
+      stepName = 'design_system';
+    }
+    trackPageView(analytics.track, {
+      page_name: 'onboarding',
+      area,
+      step_index: stepIndex,
+      step_name: stepName,
+      onboarding_session_id: onboardingSessionId,
+    });
+  }, [analytics.track, step]);
 
   const steps = [
     t('settings.onboardingStepConnect'),
