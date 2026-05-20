@@ -38,13 +38,14 @@ test("package-tauri-migration-handoff creates a tarball and checksum sidecar", a
   assert.match(result.stdout, /Receiver environment overrides:/);
   assert.match(result.stdout, /REMOTE=<remote>/);
   assert.match(result.stdout, /GITHUB_WORKFLOW=<workflow-file>/);
+  assert.match(result.stdout, /GH_BIN=<path-to-gh>/);
   assert.match(result.stdout, /TAURI_M4_REPORT_DIR=<report-dir>/);
   assert.match(result.stdout, /TAURI_PR_BODY_PATH=<pr-body-path>/);
   assert.match(result.stdout, /TAURI_NATIVE_CI_TRIGGER=0/);
   assert.match(result.stdout, /TAURI_NATIVE_CI_WAIT=1/);
   assert.match(result.stdout, /GITHUB_RUN_ID=<github-run-id>/);
   assert.match(result.stdout, /Native CI trigger after push:/);
-  assert.match(result.stdout, /attempts this automatically when gh is available/);
+  assert.match(result.stdout, /attempts this automatically when GH_BIN\/gh is available/);
   assert.match(result.stdout, /gh workflow run ci\.yml --ref 'codex\/electron-to-tauri-migration'/);
   assert.match(result.stdout, /Fallback:/);
   assert.match(result.stdout, /template-complete PR body/);
@@ -79,8 +80,9 @@ test("package-tauri-migration-handoff creates a tarball and checksum sidecar", a
   assert.match(commandScript, /tracked worktree changes are present/);
   assert.match(commandScript, /git fetch "\$bundle" "\$branch:\$temp_ref"/);
   assert.match(commandScript, /git push "\$remote" "refs\/heads\/\$branch:refs\/heads\/\$branch"/);
-  assert.match(commandScript, /command -v gh/);
-  assert.match(commandScript, /gh workflow run "\$workflow" --ref "\$branch"/);
+  assert.match(commandScript, /gh_bin="\$\{GH_BIN:-gh\}"/);
+  assert.match(commandScript, /command -v "\$gh_bin"/);
+  assert.match(commandScript, /"\$gh_bin" workflow run "\$workflow" --ref "\$branch"/);
   assert.match(commandScript, /Requested native CI dispatch/);
   assert.match(commandScript, /TAURI_NATIVE_CI_TRIGGER/);
   assert.match(commandScript, /gh pr create --draft/);

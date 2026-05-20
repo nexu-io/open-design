@@ -769,6 +769,13 @@ async function readHandoffArchiveStatus(archivePath: string, handoff?: HandoffSt
       problems.push(`command script is missing checked-out branch restoration: ${commandScriptPath}`);
     }
     if (
+      !commandScriptSource.includes('gh_bin="${GH_BIN:-gh}"') ||
+      !commandScriptSource.includes('command -v "$gh_bin"') ||
+      !commandScriptSource.includes('"$gh_bin" workflow run "$workflow" --ref "$branch"')
+    ) {
+      problems.push(`command script is missing configurable GitHub CLI dispatch: ${commandScriptPath}`);
+    }
+    if (
       !commandScriptSource.includes("handoff manifest branchHead must be a 40-character SHA-1") ||
       !commandScriptSource.includes("handoff manifest bundlePath must be relative and relocatable") ||
       !commandScriptSource.includes("handoff manifest bundleSha256 must be a 64-character SHA-256") ||

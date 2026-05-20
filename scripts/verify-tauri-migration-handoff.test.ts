@@ -75,6 +75,7 @@ test("verify-tauri-migration-handoff round-trips a bundle through a receiving ch
   assert.doesNotMatch(note, /renamed or copied/);
   assert.match(note, /TAURI_NATIVE_CI_TRIGGER=0/);
   assert.match(note, /TAURI_NATIVE_CI_WAIT=1/);
+  assert.match(note, /GH_BIN=<path-to-gh>/);
   assert.match(note, /TAURI_PR_BODY_PATH=<path>/);
   assert.match(note, new RegExp(`--archive '${escapeRegExp(`${dirname(manifestPath)}.tar.gz`)}' \\\\`));
   assert.match(note, /gh pr create --draft/);

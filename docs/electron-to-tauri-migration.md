@@ -449,6 +449,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Added receiver environment overrides to the push-only handoff path. `scripts/push-tauri-migration-handoff.ts` now accepts `--workflow`, `--report-dir`, and `--pr-body-path` and honors `GITHUB_WORKFLOW`, `TAURI_M4_REPORT_DIR`, and `TAURI_PR_BODY_PATH`, keeping custom CI/report locations branch-head-bound in the printed continuation commands.
 - 2026-05-20: Tightened `scripts/continue-tauri-migration.ts --dry-run` for no-write-access senders. When the non-mutating push preflight fails, the continuation runner now stops at the remote-branch blocker after printing the transferable handoff set, instead of printing native CI dispatch or report-download steps that cannot work before the branch exists. `node --import tsx --test scripts/tauri-migration-status.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `git diff --check` passed.
 - 2026-05-20: Hardened the packaged handoff command sidecar for receiver push failures. When the receiver is already on the migration branch, the sidecar now restores that checked-out branch if import succeeds but the remote push fails, and `scripts/tauri-migration-status.ts` rejects older command sidecars that lack this restoration guard. `node --import tsx --test scripts/package-tauri-migration-handoff.test.ts scripts/tauri-migration-status.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `git diff --check` passed.
+- 2026-05-20: Aligned the packaged handoff command sidecar with the other continuation scripts' GitHub CLI override. Receivers can now set `GH_BIN=<path-to-gh>` before running the `.commands.sh` sidecar, and `scripts/tauri-migration-status.ts` rejects older command sidecars that hardcode `gh` for workflow dispatch. `node --import tsx --test scripts/package-tauri-migration-handoff.test.ts scripts/tauri-migration-status.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `git diff --check` passed.
 
 ### Platform Gate Runners
 
@@ -578,7 +579,7 @@ gh pr create --draft \
   --body-file .tmp/tauri-migration-pr-body.md
 ```
 
-The command script writes `.tmp/tauri-migration-pr-body.md` before printing that fallback. Set `TAURI_PR_BODY_PATH=<path>` if the receiving checkout should write the template-complete draft PR body somewhere else. Set `TAURI_NATIVE_CI_TRIGGER=0` to skip automatic workflow dispatch, or `TAURI_NATIVE_CI_WAIT=1` to let the command script wait for matching native CI reports and run the guarded M4→M5 advance after dispatch.
+The command script writes `.tmp/tauri-migration-pr-body.md` before printing that fallback. Set `GH_BIN=<path-to-gh>` if the GitHub CLI is not named `gh` on the receiving machine. Set `TAURI_PR_BODY_PATH=<path>` if the receiving checkout should write the template-complete draft PR body somewhere else. Set `TAURI_NATIVE_CI_TRIGGER=0` to skip automatic workflow dispatch, or `TAURI_NATIVE_CI_WAIT=1` to let the command script wait for matching native CI reports and run the guarded M4→M5 advance after dispatch.
 
 If the bundle is copied outside the extracted handoff directory, use the manifest form instead and add `--bundle /path/to/open-design-tauri-migration.bundle` to override only the file location.
 
