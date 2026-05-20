@@ -12838,7 +12838,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
 .status-pill {
   display: inline-flex;
   align-self: flex-start;
-  align-items: center;
+  align-items: flex-start;
   flex-wrap: wrap;
   gap: 6px;
   max-width: 100%;
@@ -14348,7 +14348,7 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
 .op-waiting {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   max-width: 100%;
   padding: 8px 12px;
