@@ -169,12 +169,14 @@ test('entry top navigation matches the current home tab structure', async ({ pag
   await expect(page.getByTestId('entry-nav-plugins')).toBeVisible();
   await expect(page.getByTestId('entry-nav-design-systems')).toBeVisible();
   await expect(page.getByTestId('entry-nav-integrations')).toBeVisible();
-  await expect(page.getByTestId('home-hero-rail')).toBeVisible();
-  await expect(page.getByTestId('home-hero-rail-prototype')).toBeVisible();
-  await expect(page.getByTestId('home-hero-rail-live-artifact')).toBeVisible();
-  await expect(page.getByTestId('home-hero-rail-deck')).toBeVisible();
-  await expect(page.getByTestId('home-hero-rail-image')).toBeVisible();
-  await expect(page.getByTestId('home-hero-rail-video')).toBeVisible();
+  await expect(page.getByTestId('home-hero-type-tabs')).toHaveCount(0);
+  const activeTypeChip = page.getByTestId('home-hero-active-type-chip');
+  await expect(activeTypeChip).toBeVisible();
+  await expect(activeTypeChip).toHaveAttribute('data-chip-id', 'prototype');
+  await expect(page.getByTestId('home-hero-footer-options')).toBeVisible();
+  await expect(page.getByTestId('home-hero-footer-option-designSystem')).toBeVisible();
+  await expect(page.getByTestId('home-hero-footer-option-fidelity')).toBeVisible();
+  await expect(page.getByTestId('home-hero-plugin-presets')).toBeVisible();
 });
 
 test('home view exposes the redesigned hero, recent projects, starters, and modal entry points', async ({ page }) => {
