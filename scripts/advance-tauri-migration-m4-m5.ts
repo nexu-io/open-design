@@ -1,6 +1,9 @@
 import { execFile } from "node:child_process";
+import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
+
+import { m4RemoteEvidenceLogMarker } from "./tauri-migration-policy.ts";
 
 const execFileAsync = promisify(execFile);
 const scriptsRoot = import.meta.dirname;
@@ -46,6 +49,7 @@ async function main(): Promise<void> {
     "--update-migration-doc",
     migrationDoc,
   ]);
+  await appendRemoteEvidenceMarker(migrationDoc, args);
   const m5Result = await runScript("apply-tauri-migration-m5.ts", ["--root", args.root, "--skip-clean-check"]);
 
   process.stdout.write(
@@ -62,6 +66,22 @@ async function main(): Promise<void> {
       "",
     ].join("\n"),
   );
+}
+
+async function appendRemoteEvidenceMarker(migrationDoc: string, args: Args): Promise<void> {
+  let content = await readFile(migrationDoc, "utf8");
+  if (content.includes(m4RemoteEvidenceLogMarker)) return;
+  const date = new Date().toISOString().slice(0, 10);
+  const summary = [
+    `- ${date}: ${m4RemoteEvidenceLogMarker}`,
+    `  Remote \`${args.remote}/${args.branch}\` matched \`${args.expectedHead}\` before M4 evidence was recorded and M5 defaults were applied.`,
+  ].join("\n");
+  const marker = "\n### Platform Gate Runners";
+  if (!content.includes(marker)) {
+    throw new Error(`could not find Platform Gate Runners marker in ${migrationDoc}`);
+  }
+  content = content.replace(marker, `\n${summary}\n${marker}`);
+  await writeFile(migrationDoc, content, "utf8");
 }
 
 function parseArgs(argv: string[]): Args {

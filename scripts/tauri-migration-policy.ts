@@ -6,6 +6,8 @@ export const m4PlatformGateLabels = [
 
 export const m4EvidenceLogMarker =
   "Verified native Windows/Linux M4 package smoke with `scripts/verify-tauri-platform-gates.ts --update-migration-doc`.";
+export const m4RemoteEvidenceLogMarker =
+  "Verified pushed migration branch head with `scripts/verify-tauri-migration-remote.ts` before M5.";
 export const m5ToolsDevDefaultLabel = "Change `tools-dev` default desktop runtime to Tauri.";
 export const m5ToolsPackDefaultLabel = "Change `tools-pack` default desktop runtime to Tauri.";
 export const m5ReleaseBetaDefaultLabel = "Change `release-beta` desktop runtime workflow default to Tauri.";
@@ -73,6 +75,7 @@ export function evaluateTauriMigrationOrder(input: TauriMigrationPolicyInputs): 
   const m4Complete = m4PlatformGateStates.every(Boolean);
   const m4PartiallyComplete = m4PlatformGateStates.some(Boolean) && !m4Complete;
   const m4EvidenceLogMarked = input.migrationDoc.includes(m4EvidenceLogMarker);
+  const m4RemoteEvidenceLogMarked = input.migrationDoc.includes(m4RemoteEvidenceLogMarker);
   const toolsDevDefaultFlipped = isChecklistLineChecked(input.migrationDoc, m5ToolsDevDefaultLabel);
   const toolsPackDefaultFlipped = isChecklistLineChecked(input.migrationDoc, m5ToolsPackDefaultLabel);
   const releaseBetaDefaultFlipped = isChecklistLineChecked(input.migrationDoc, m5ReleaseBetaDefaultLabel);
@@ -104,6 +107,11 @@ export function evaluateTauriMigrationOrder(input: TauriMigrationPolicyInputs): 
   if (m4Complete && !m4EvidenceLogMarked) {
     violations.push(
       "M4 platform gates are checked, but the migration doc is missing the verifier-applied native evidence log marker.",
+    );
+  }
+  if (m4Complete && !m4RemoteEvidenceLogMarked) {
+    violations.push(
+      "M4 platform gates are checked, but the migration doc is missing the pushed remote branch-head evidence log marker.",
     );
   }
   if (!m4Complete && (toolsDevDefault === "tauri" || toolsPackDefault === "tauri" || releaseBetaDefault === "tauri")) {

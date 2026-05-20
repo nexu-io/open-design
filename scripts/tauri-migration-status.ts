@@ -7,7 +7,9 @@ import { promisify } from "node:util";
 
 import { commandSidecarProblems, commandSidecarSyntaxProblem } from "./tauri-migration-command-sidecar.ts";
 import {
+  m4EvidenceLogMarker,
   m4PlatformGateLabels,
+  m4RemoteEvidenceLogMarker,
   m5ElectronFallbackLabel,
   m5PrimaryDocsLabel,
   m5ReleaseBetaDefaultLabel,
@@ -295,7 +297,7 @@ async function readMigrationStatus(
       m6ElectronGuidanceLabel,
     ]),
   ];
-  const phase = currentPhase(groups);
+  const phase = currentPhase(groups, migrationDoc);
   const handoff = handoffDir == null ? undefined : await readHandoffStatus(handoffDir, gitStatus);
   const handoffArchive =
     handoffDir == null
@@ -460,7 +462,15 @@ function checklistGroup(name: ChecklistGroupStatus["name"], source: string, labe
   };
 }
 
-function currentPhase(groups: ChecklistGroupStatus[]): MigrationStatus["phase"] {
+function currentPhase(groups: ChecklistGroupStatus[], migrationDoc: string): MigrationStatus["phase"] {
+  const m4 = groups.find((group) => group.name === "M4");
+  if (
+    m4 != null &&
+    m4.checked === m4.total &&
+    (!migrationDoc.includes(m4EvidenceLogMarker) || !migrationDoc.includes(m4RemoteEvidenceLogMarker))
+  ) {
+    return "M4";
+  }
   for (const group of groups) {
     if (group.checked < group.total) return group.name;
   }

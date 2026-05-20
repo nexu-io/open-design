@@ -156,7 +156,7 @@ Do not create duplicate reminders for the same work. If the continuation sequenc
 
 ## Post-M4 Execution Runbook
 
-Do not start this runbook until `scripts/verify-tauri-platform-gates.ts --update-migration-doc docs/electron-to-tauri-migration.md` has updated the three Windows/Linux M4 checkboxes and appended the verified native evidence log entry.
+Do not start this runbook until `scripts/advance-tauri-migration-m4-m5.ts` or `scripts/continue-tauri-migration.ts --wait-reports --advance` has verified the pushed remote migration branch head, verified the Windows/Linux reports with `scripts/verify-tauri-platform-gates.ts --update-migration-doc docs/electron-to-tauri-migration.md`, updated the three Windows/Linux M4 checkboxes, and appended both the native evidence and remote branch-head evidence log entries.
 
 ### M5 default flip procedure
 
@@ -173,13 +173,13 @@ pnpm exec tsx scripts/advance-tauri-migration-m4-m5.ts \
 
 This verifies the pushed migration branch head first, then verifies both native reports with `scripts/verify-tauri-platform-gates.ts --update-migration-doc`, updates the M4 evidence in this document, and runs the guarded M5 applicator.
 
-2. If M4 has already been verified and recorded, run the guarded M5 applicator directly:
+2. If M4 has already been verified and both the native evidence and pushed remote branch-head evidence entries are recorded, run the guarded M5 applicator directly:
 
 ```bash
 pnpm exec tsx scripts/apply-tauri-migration-m5.ts
 ```
 
-The script refuses to run until the M4 Windows/Linux checkboxes and native evidence marker have been written by `scripts/verify-tauri-platform-gates.ts --update-migration-doc`. When allowed, it changes `DEFAULT_DESKTOP_RUNTIME` from `electron` to `tauri` in both `tools/dev/src/config.ts` and `tools/pack/src/config.ts`, keeps `DESKTOP_RUNTIME_KINDS` accepting both runtimes for the explicit Electron fallback, flips `.github/workflows/release-beta.yml` `desktop_runtime.default`, updates Tauri-primary wording in `README.md`, `apps/AGENTS.md`, and `docs/architecture.md`, and marks all five M5 checklist items together.
+The script refuses to run until the M4 Windows/Linux checkboxes, native evidence marker, and pushed remote branch-head evidence marker have been recorded. When allowed, it changes `DEFAULT_DESKTOP_RUNTIME` from `electron` to `tauri` in both `tools/dev/src/config.ts` and `tools/pack/src/config.ts`, keeps `DESKTOP_RUNTIME_KINDS` accepting both runtimes for the explicit Electron fallback, flips `.github/workflows/release-beta.yml` `desktop_runtime.default`, updates Tauri-primary wording in `README.md`, `apps/AGENTS.md`, and `docs/architecture.md`, and marks all five M5 checklist items together.
 
 3. Review the applicator diff. If any surrounding docs have changed enough that an exact replacement fails, update the script and its fixture test rather than manually checking partial M5 lines.
 4. Run:
@@ -485,6 +485,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Kept custom receiver roots in printed post-push commands. `scripts/tauri-migration-status.ts`, `scripts/continue-tauri-migration.ts`, and `scripts/download-tauri-m4-reports.ts` now preserve non-default `--root` values in follow-up download, advance, M5, and inventory guidance instead of printing commands that would fall back to the script checkout.
 - 2026-05-20: Tightened the push-only receiver PR fallback path. `scripts/push-tauri-migration-handoff.ts --pr-body-path <relative>` now resolves that path from the receiving checkout `--cwd`, so fallback draft PR bodies are written beside the imported branch instead of whichever checkout launched the helper.
 - 2026-05-20: Aligned the repo-local continuation runner with the receiver PR fallback. When `scripts/continue-tauri-migration.ts` reaches a pushed branch but GitHub workflow dispatch is unavailable or denied, it now writes the shared template-complete `.tmp/tauri-migration-pr-body.md` before printing the draft PR fallback command; dry-runs report the target path without writing the file.
+- 2026-05-20: Tightened the M5 default-flip precondition so checked M4 platform gates require both the native Windows/Linux verifier marker and a pushed remote branch-head marker. `scripts/advance-tauri-migration-m4-m5.ts` now records the remote-head evidence after remote verification and before applying M5, while direct `scripts/apply-tauri-migration-m5.ts` refuses to run if that evidence is missing.
 
 ### Platform Gate Runners
 
@@ -665,6 +666,8 @@ pnpm exec tsx scripts/verify-tauri-platform-gates.ts \
   --linux-report /tmp/open-design-tauri-m4-reports/open-design-ci-linux-tauri-e2e-report \
   --update-migration-doc docs/electron-to-tauri-migration.md
 ```
+
+This direct verifier path records only native platform evidence. It does not record pushed remote branch-head evidence and therefore does not unlock `scripts/apply-tauri-migration-m5.ts` by itself. Prefer the phase advance command below when the goal is to move from M4 into M5.
 
 To verify the reports, update M4, and immediately apply the guarded M5 default flip, use the phase advance command instead:
 

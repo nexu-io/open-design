@@ -11,6 +11,7 @@ import { promisify } from "node:util";
 import {
   m4EvidenceLogMarker,
   m4PlatformGateLabels,
+  m4RemoteEvidenceLogMarker,
   m5ElectronFallbackLabel,
   m5PrimaryDocsLabel,
   m5ReleaseBetaDefaultLabel,
@@ -105,7 +106,7 @@ test("tauri-migration-status advances to M5 after verified M4 checkboxes", async
   const fixture = await createFixtureRoot(t, {
     checked: [...m4PlatformGateLabels],
     defaults: "electron",
-    extraDocLines: [m4EvidenceLogMarker],
+    extraDocLines: [m4EvidenceLogMarker, m4RemoteEvidenceLogMarker],
   });
 
   const result = await runStatus(fixture);
@@ -113,6 +114,20 @@ test("tauri-migration-status advances to M5 after verified M4 checkboxes", async
 
   assert.equal(parsed.phase, "M5");
   assert.match(parsed.nextActions.join("\n"), /apply-tauri-migration-m5/);
+});
+
+test("tauri-migration-status stays in M4 when remote head evidence is missing", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [...m4PlatformGateLabels],
+    defaults: "electron",
+    extraDocLines: [m4EvidenceLogMarker],
+  });
+
+  const result = await runStatus(fixture);
+  const parsed = JSON.parse(result.stdout) as { phase: string; nextActions: string[] };
+
+  assert.equal(parsed.phase, "M4");
+  assert.doesNotMatch(parsed.nextActions.join("\n"), /apply-tauri-migration-m5/);
 });
 
 test("tauri-migration-status reports current handoff artifacts", async (t) => {

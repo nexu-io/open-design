@@ -10,6 +10,7 @@ import { promisify } from "node:util";
 import {
   m4EvidenceLogMarker,
   m4PlatformGateLabels,
+  m4RemoteEvidenceLogMarker,
   m5ElectronFallbackLabel,
   m5PrimaryDocsLabel,
   m5ReleaseBetaDefaultLabel,
@@ -39,6 +40,8 @@ test("advance-tauri-migration-m4-m5 verifies platform reports and applies M5", a
     assert.match(migrationDoc, new RegExp(`- \\[x\\] ${escapeRegExp(label)}`));
   }
   assert.match(migrationDoc, new RegExp(escapeRegExp(m4EvidenceLogMarker)));
+  assert.match(migrationDoc, new RegExp(escapeRegExp(m4RemoteEvidenceLogMarker)));
+  assert.match(migrationDoc, new RegExp(`Remote \`${escapeRegExp(remotePath)}/codex/electron-to-tauri-migration\` matched \`${head}\``));
   assert.match(await readFile(join(root, "tools", "dev", "src", "config.ts"), "utf8"), /DEFAULT_DESKTOP_RUNTIME = "tauri"/);
   assert.match(await readFile(join(root, "tools", "pack", "src", "config.ts"), "utf8"), /DEFAULT_DESKTOP_RUNTIME = "tauri"/);
   assert.match(await readFile(join(root, ".github", "workflows", "release-beta.yml"), "utf8"), /default: tauri/);

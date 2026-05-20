@@ -10,6 +10,7 @@ import { promisify } from "node:util";
 import {
   m4EvidenceLogMarker,
   m4PlatformGateLabels,
+  m4RemoteEvidenceLogMarker,
   m5ElectronFallbackLabel,
   m5PrimaryDocsLabel,
   m5ReleaseBetaDefaultLabel,
@@ -26,6 +27,12 @@ test("apply-tauri-migration-m5 refuses to run before verified M4 evidence", asyn
   const root = await createFixtureRoot(t, { verifiedM4: false });
 
   await assert.rejects(runM5Script(root), /M5 default flip requires verified M4 platform gate/);
+});
+
+test("apply-tauri-migration-m5 refuses to run before pushed remote head evidence", async (t) => {
+  const root = await createFixtureRoot(t, { verifiedM4: true, verifiedRemote: false });
+
+  await assert.rejects(runM5Script(root), /pushed remote branch-head evidence log marker/);
 });
 
 test("apply-tauri-migration-m5 refuses to run with tracked worktree changes", async (t) => {
@@ -62,7 +69,10 @@ test("apply-tauri-migration-m5 flips defaults, docs, and checklist after verifie
   assert.doesNotMatch(await readFile(join(root, "apps", "AGENTS.md"), "utf8"), /Electron remains the default/);
 });
 
-async function createFixtureRoot(t: test.TestContext, options: { verifiedM4: boolean }): Promise<string> {
+async function createFixtureRoot(
+  t: test.TestContext,
+  options: { verifiedM4: boolean; verifiedRemote?: boolean },
+): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "open-design-tauri-m5-"));
   t.after(() => void rm(root, { force: true, recursive: true }));
 
@@ -126,7 +136,7 @@ async function initGitFixture(root: string): Promise<void> {
   await execFileAsync("git", ["commit", "-m", "fixture"], { cwd: root, maxBuffer: 1024 * 1024 });
 }
 
-function migrationDoc(options: { verifiedM4: boolean }): string {
+function migrationDoc(options: { verifiedM4: boolean; verifiedRemote?: boolean }): string {
   const checked = new Set<string>(options.verifiedM4 ? m4PlatformGateLabels : []);
   return [
     "# Electron to Tauri Migration",
@@ -141,6 +151,7 @@ function migrationDoc(options: { verifiedM4: boolean }): string {
     ].map((label) => `- [${checked.has(label) ? "x" : " "}] ${label}`),
     "",
     ...(options.verifiedM4 ? [m4EvidenceLogMarker] : []),
+    ...(options.verifiedM4 && options.verifiedRemote !== false ? [m4RemoteEvidenceLogMarker] : []),
   ].join("\n");
 }
 

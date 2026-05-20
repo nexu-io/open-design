@@ -5,6 +5,7 @@ import {
   evaluateTauriMigrationOrder,
   m4EvidenceLogMarker,
   m4PlatformGateLabels,
+  m4RemoteEvidenceLogMarker,
   m5ElectronFallbackLabel,
   m5PrimaryDocsLabel,
   m5ReleaseBetaDefaultLabel,
@@ -44,6 +45,16 @@ test("evaluateTauriMigrationOrder rejects checked M4 gates without verifier evid
   assertContains(violations, "missing the verifier-applied native evidence log marker");
 });
 
+test("evaluateTauriMigrationOrder rejects checked M4 gates without pushed remote evidence", () => {
+  const violations = evaluateTauriMigrationOrder(
+    baseInput({
+      migrationDoc: migrationDoc({ checked: [...m4PlatformGateLabels], extra: [m4EvidenceLogMarker] }),
+    }),
+  );
+
+  assertContains(violations, "missing the pushed remote branch-head evidence log marker");
+});
+
 test("evaluateTauriMigrationOrder rejects default flips before M4 is complete", () => {
   const violations = evaluateTauriMigrationOrder(
     baseInput({
@@ -61,7 +72,7 @@ test("evaluateTauriMigrationOrder rejects divergent tools-dev and tools-pack def
     baseInput({
       migrationDoc: migrationDoc({
         checked: [...m4PlatformGateLabels, m5ToolsDevDefaultLabel],
-        extra: [m4EvidenceLogMarker],
+        extra: [m4EvidenceLogMarker, m4RemoteEvidenceLogMarker],
       }),
       toolsDevConfig: toolsConfig("tauri"),
     }),
@@ -283,14 +294,14 @@ function postM5MigrationDoc(options: { m6Checked?: readonly string[] } = {}): st
       m5PrimaryDocsLabel,
       ...(options.m6Checked ?? []),
     ],
-    extra: [m4EvidenceLogMarker],
+    extra: [m4EvidenceLogMarker, m4RemoteEvidenceLogMarker],
   });
 }
 
 function verifiedM4MigrationDoc(): string {
   return migrationDoc({
     checked: [...m4PlatformGateLabels],
-    extra: [m4EvidenceLogMarker],
+    extra: [m4EvidenceLogMarker, m4RemoteEvidenceLogMarker],
   });
 }
 
