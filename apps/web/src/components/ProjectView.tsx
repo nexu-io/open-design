@@ -1862,9 +1862,12 @@ export function ProjectView({
               clearActiveRunRefs(reattachConversationId, controller, cancelController);
               clearStreamingMarker(reattachConversationId);
               void (async () => {
-                const beforeFiles = await refreshProjectFiles();
-                const beforeFileNames = new Set(beforeFiles.map((f) => f.name));
-                let nextFiles = beforeFiles;
+                const preTurn = message.preTurnFileNames;
+                let nextFiles = await refreshProjectFiles();
+                // Use the turn-start snapshot when available so reload
+                // recovers files produced before the artifact write too;
+                // fall back to the current list for legacy messages.
+                const beforeFileNames = new Set(preTurn ?? nextFiles.map((f) => f.name));
                 let recoveredExistingArtifact: ProjectFile | null = null;
                 if (parsedArtifact?.html) {
                   const runStartedAt = status.createdAt || message.startedAt || message.createdAt;
@@ -2035,6 +2038,7 @@ export function ProjectView({
             )
           : apiProtocolModelLabel(config.apiProtocol, config.model);
       const assistantId = randomUUID();
+      const preTurnFileNames = projectFiles.map((f) => f.name);
       const assistantMsg: ChatMessage = {
         id: assistantId,
         role: 'assistant',
@@ -2045,6 +2049,7 @@ export function ProjectView({
         createdAt: startedAt,
         runStatus: config.mode === 'daemon' ? 'running' : undefined,
         startedAt,
+        preTurnFileNames,
       };
       let latestAssistantMsg: ChatMessage = assistantMsg;
       const updateConversationLatestRun = (
@@ -2130,10 +2135,7 @@ export function ProjectView({
         }
       }
 
-      // Snapshot the file list at turn-start so we can diff after the
-      // agent finishes and surface anything new (e.g. a generated .pptx)
-      // as download chips on the assistant message.
-      const beforeFileNames = new Set(projectFiles.map((f) => f.name));
+      const beforeFileNames = new Set(preTurnFileNames);
 
       const parser = createArtifactParser();
       let parsedArtifact: Artifact | null = null;
@@ -3957,6 +3959,15 @@ export function resolveSucceededRunStatus(status: ChatMessage['runStatus']): Cha
   return status === 'failed' || status === 'canceled' ? status : 'succeeded';
 }
 
+export function computeProducedFiles(
+  beforeNames: ReadonlySet<string> | readonly string[] | undefined,
+  next: readonly ProjectFile[],
+): ProjectFile[] | undefined {
+  if (!beforeNames) return undefined;
+  const set = beforeNames instanceof Set ? beforeNames : new Set(beforeNames);
+  return next.filter((f) => !set.has(f.name));
+}
+
 export function clearStreamingConversationMarker(
   currentConversationId: string | null,
   completedConversationId?: string | null,
@@ -4017,6 +4028,7 @@ function createBufferedTextUpdates({
   let flushing = false;
   let needsFlush = false;
   const hasDocument = typeof document !== 'undefined';
+  const hasWindow = typeof window !== 'undefined';
 
   const cancelScheduledFlush = () => {
     if (flushFrame !== null) {
@@ -4108,6 +4120,9 @@ function createBufferedTextUpdates({
     if (hasDocument) {
       document.removeEventListener('visibilitychange', onVisibilityChange);
     }
+    if (hasWindow) {
+      window.removeEventListener('pagehide', onPageHide);
+    }
   };
 
   function onVisibilityChange() {
@@ -4116,8 +4131,15 @@ function createBufferedTextUpdates({
     }
   }
 
+  function onPageHide() {
+    flush();
+  }
+
   if (hasDocument) {
     document.addEventListener('visibilitychange', onVisibilityChange);
+  }
+  if (hasWindow) {
+    window.addEventListener('pagehide', onPageHide);
   }
 
   return { appendContent, appendTextEvent, appendEvent, flush, cancel };
