@@ -37,7 +37,15 @@ import {
 import { fetchMcpServers } from '../state/mcp';
 import { useI18n } from '../i18n';
 import { fetchElevenLabsVoiceOptions } from '../providers/elevenlabs-voices';
-import type { Project, ProjectMetadata, PromptTemplateSummary, SkillSummary } from '../types';
+import { fetchProjectFiles, projectFileUrl } from '../providers/registry';
+import type {
+  DesignSystemSummary,
+  Project,
+  ProjectFile,
+  ProjectMetadata,
+  PromptTemplateSummary,
+  SkillSummary,
+} from '../types';
 import { inlineMentionToken } from '../utils/inlineMentions';
 import { HomeHero, type ExampleSuggestion } from './HomeHero';
 import { findChip, HOME_HERO_CHIPS, type HomeHeroChip } from './home-hero/chips';
@@ -145,9 +153,26 @@ const AUTHORING_DEFAULT_SCENARIO_INPUTS = {
   topic: 'packaging a reusable workflow as an Open Design plugin',
 };
 
+type HomeDesignSystemOption = {
+  id: string;
+  title: string;
+  isDefault: boolean;
+  auto?: boolean;
+  group?: 'Personal' | 'Official preset' | 'Enterprise';
+  category?: string;
+  summary?: string;
+  swatches?: string[];
+  logoUrl?: string;
+};
+
+const AUTO_DESIGN_SYSTEM_OPTION_ID = '__auto-design-system__';
+const AUTO_DESIGN_SYSTEM_OPTION_TITLE = '自动选择风格参考';
+
 interface Props {
   projects: Project[];
   projectsLoading?: boolean;
+  designSystems?: DesignSystemSummary[];
+  defaultDesignSystemId?: string | null;
   onSubmit: (payload: PluginLoopSubmit) => void;
   onOpenProject: (id: string) => void;
   onViewAllProjects: () => void;
@@ -167,6 +192,8 @@ interface Props {
 export function HomeView({
   projects,
   projectsLoading,
+  designSystems = [],
+  defaultDesignSystemId = null,
   onSubmit,
   onOpenProject,
   onViewAllProjects,
@@ -210,7 +237,9 @@ export function HomeView({
   const [mcpServers, setMcpServers] = useState<McpServerConfig[]>([]);
   const [mcpLoading, setMcpLoading] = useState(true);
   const [prompt, setPrompt] = useState('');
+  const [promptEditedByUser, setPromptEditedByUser] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [designSystemLogoById, setDesignSystemLogoById] = useState<Record<string, string>>({});
   const [elevenLabsVoices, setElevenLabsVoices] = useState<AudioVoiceOption[]>([]);
   const [elevenLabsVoicesLoading, setElevenLabsVoicesLoading] = useState(false);
   const [elevenLabsVoicesLoaded, setElevenLabsVoicesLoaded] = useState(false);
@@ -333,6 +362,7 @@ export function HomeView({
       (prompt === active.lastRenderedPrompt || prompt.trim().length === 0)
     ) {
       setPrompt(nextRendered);
+      setPromptEditedByUser(false);
     }
     setActive((prev) => {
       if (!prev?.mediaSurface) return prev;
@@ -385,6 +415,7 @@ export function HomeView({
     setSelectedConnectorContexts([]);
     setFallbackProjectKind('other');
     setPrompt(promptHandoff.prompt);
+    setPromptEditedByUser(false);
     setPendingAuthoringPrompt(promptHandoff.prompt);
     setPendingAuthoringInputs(promptHandoff.inputs);
     if (promptHandoff.focus) {
@@ -507,6 +538,46 @@ export function HomeView({
     [mcpServers],
   );
 
+  useEffect(() => {
+    let cancelled = false;
+    const personalSystems = designSystems.filter((system) => (
+      system.projectId &&
+      designSystemOptionGroup(system) === 'Personal' &&
+      (system.status ?? 'draft') === 'published'
+    ));
+    if (personalSystems.length === 0) {
+      setDesignSystemLogoById({});
+      return;
+    }
+
+    void Promise.all(
+      personalSystems.map(async (system) => {
+        const projectId = system.projectId;
+        if (!projectId) return [system.id, null] as const;
+        const files = await fetchProjectFiles(projectId);
+        const logo = findDesignSystemLogoFile(files);
+        if (!logo) return [system.id, null] as const;
+        return [system.id, projectFileUrl(projectId, logo.path ?? logo.name)] as const;
+      }),
+    ).then((entries) => {
+      if (cancelled) return;
+      const next: Record<string, string> = {};
+      for (const [id, logoUrl] of entries) {
+        if (logoUrl) next[id] = logoUrl;
+      }
+      setDesignSystemLogoById(next);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [designSystems]);
+
+  const designSystemOptions = useMemo(
+    () => designSystemOptionsForHome(designSystems, defaultDesignSystemId, designSystemLogoById),
+    [defaultDesignSystemId, designSystemLogoById, designSystems],
+  );
+
   async function usePlugin(
     record: InstalledPluginRecord,
     nextPrompt?: string | null,
@@ -539,7 +610,10 @@ export function HomeView({
     activePluginApplyRequestRef.current = applyRequestId;
     const shouldResolveImmediately = options?.deferApply !== true;
     const inputFields = options?.inputFields ?? record.manifest?.od?.inputs ?? [];
-    const optimisticInputs = hydratePluginInputs(inputFields, options?.inputs);
+    const optimisticInputs = hydratePluginInputs(
+      inputFields,
+      withHomeDesignSystemDefault(options?.inputs, inputFields, designSystemOptions),
+    );
     const inputsValid = pluginInputsAreValid(inputFields, optimisticInputs);
     const queryTemplate =
       options?.queryTemplate !== undefined
@@ -578,14 +652,21 @@ export function HomeView({
       projectKind: options?.projectKind ?? null,
       chipId: options?.chipId ?? null,
       mediaSurface: options?.mediaSurface ?? null,
-      projectMetadata: options?.projectMetadata ?? null,
+      projectMetadata: homeCreateProjectMetadata(
+        options?.projectKind ?? null,
+        optimisticInputs,
+        options?.projectMetadata ?? null,
+      ),
       editableInputNames: options?.editableInputNames ?? [],
       preserveInputFields: options?.preserveInputFields === true,
       suppressPromptSync: suppressPromptUpdate,
     });
     setFallbackProjectKind(null);
     setDetailsRecord(null);
-    if (!suppressPromptUpdate && optimisticPrompt !== null) setPrompt(optimisticPrompt);
+    if (!suppressPromptUpdate && optimisticPrompt !== null) {
+      setPrompt(optimisticPrompt);
+      setPromptEditedByUser(false);
+    }
     requestAnimationFrame(() => inputRef.current?.focus());
 
     if (!inputsValid) {
@@ -622,6 +703,11 @@ export function HomeView({
               options?.preserveInputFields ? inputFields : result.inputs ?? inputFields,
               reconciledInputs,
             ),
+            projectMetadata: homeCreateProjectMetadata(
+              prev.projectKind,
+              reconciledInputs,
+              prev.projectMetadata,
+            ),
           }
         : prev,
     );
@@ -640,7 +726,11 @@ export function HomeView({
       if (reconciledQuery) {
         const reconciledPrompt = renderPluginBriefTemplate(reconciledQuery, reconciledInputs);
         if (reconciledPrompt !== optimisticPrompt) {
-          setPrompt((current) => (current === optimisticPrompt ? reconciledPrompt : current));
+          setPrompt((current) => {
+            if (current !== optimisticPrompt) return current;
+            setPromptEditedByUser(false);
+            return reconciledPrompt;
+          });
           setActive((prev) =>
             prev && prev.record.id === record.id
               ? { ...prev, lastRenderedPrompt: reconciledPrompt }
@@ -684,7 +774,7 @@ export function HomeView({
     },
   ) {
     const replacement = previewPluginReplacement(record, nextPrompt, {
-      inputs: options?.inputs,
+      inputs: withHomeDesignSystemDefault(options?.inputs, options?.inputFields ?? record.manifest?.od?.inputs ?? [], designSystemOptions),
       inputFields: options?.inputFields,
       queryTemplate: options?.queryTemplate,
     });
@@ -714,6 +804,7 @@ export function HomeView({
       if (queryPrompt) {
         shouldFocusOnly = false;
         pendingPromptFocusEndRef.current = true;
+        setPromptEditedByUser(true);
         setPrompt((current) => appendPromptQuery(current, queryPrompt));
       }
     }
@@ -730,6 +821,7 @@ export function HomeView({
   ) {
     if (
       replacementPrompt !== null &&
+      promptEditedByUser &&
       prompt.trim().length > 0 &&
       prompt.trim() !== replacementPrompt.trim()
     ) {
@@ -808,11 +900,13 @@ export function HomeView({
     setSelectedPluginContexts((prev) => prev.filter((item) => item.record.id !== pluginId));
     if (record) {
       setPrompt((current) => removePluginMentionFromPrompt(current, record));
+      setPromptEditedByUser(true);
     }
   }
 
   function handlePromptChange(nextPrompt: string) {
     setPrompt(nextPrompt);
+    setPromptEditedByUser(true);
     if (!active?.queryTemplate) return;
     const extracted = extractPluginInputsFromPrompt(
       active.queryTemplate,
@@ -832,7 +926,7 @@ export function HomeView({
       inputsValid,
       projectMetadata: active.mediaSurface
         ? metadataForHomeMediaComposer(active.mediaSurface, normalizedInputs, promptTemplates)
-        : active.projectMetadata,
+        : homeCreateProjectMetadata(active.projectKind, normalizedInputs, active.projectMetadata),
       result:
         inputsChanged && !inputsEqual(active.result?.appliedPlugin?.inputs, normalizedInputs)
           ? null
@@ -867,7 +961,7 @@ export function HomeView({
     const queryTemplate = mediaComposer?.queryTemplate ?? active.queryTemplate;
     const projectMetadata = active.mediaSurface
       ? metadataForHomeMediaComposer(active.mediaSurface, normalized, promptTemplates)
-      : active.projectMetadata;
+      : homeCreateProjectMetadata(active.projectKind, normalized, active.projectMetadata);
     const inputsValid = pluginInputsAreValid(inputFields, normalized);
     const nextRendered =
       queryTemplate !== null
@@ -880,6 +974,7 @@ export function HomeView({
       (prompt === active.lastRenderedPrompt || prompt.trim().length === 0)
     ) {
       setPrompt(nextRendered);
+      setPromptEditedByUser(false);
     }
     setActive({
       ...active,
@@ -898,13 +993,17 @@ export function HomeView({
     setActive(null);
     setFallbackProjectKind(null);
     setPrompt('');
+    setPromptEditedByUser(false);
   }
 
   function useSkill(skill: SkillSummary, nextPrompt: string | null) {
     setActiveSkill(skill);
     setError(null);
     const replacement = nextPrompt ?? skill.examplePrompt ?? '';
-    if (replacement.trim().length > 0) setPrompt(replacement);
+    if (replacement.trim().length > 0) {
+      setPrompt(replacement);
+      setPromptEditedByUser(false);
+    }
     requestAnimationFrame(() => inputRef.current?.focus());
   }
 
@@ -926,6 +1025,7 @@ export function HomeView({
         : [...current, { connector }]
     ));
     setPrompt(nextPrompt);
+    setPromptEditedByUser(false);
     setError(null);
     requestAnimationFrame(() => inputRef.current?.focus());
   }
@@ -939,6 +1039,7 @@ export function HomeView({
       setFallbackProjectKind('other');
       setError(null);
       setPrompt(nextPrompt);
+      setPromptEditedByUser(false);
       setPendingAuthoringPrompt(nextPrompt);
       setPendingAuthoringInputs(nextInputs);
       setPendingAuthoringChipId(chipId ?? 'create-plugin');
@@ -1150,9 +1251,23 @@ export function HomeView({
       ...(item.connector.accountLabel ? { accountLabel: item.connector.accountLabel } : {}),
     }));
     const defaultInputs = { prompt: trimmed };
+    const submittedProjectKind =
+      submittedActive?.projectKind ?? fallbackProjectKind ?? projectKindForSkill(activeSkill) ?? 'other';
     const submittedProjectMetadata = submittedActive?.mediaSurface
       ? metadataForHomeMediaComposer(submittedActive.mediaSurface, submittedActive.inputs, promptTemplates)
-      : submittedActive?.projectMetadata ?? null;
+      : homeCreateProjectMetadata(
+          submittedProjectKind,
+          submittedActive?.inputs ?? null,
+          submittedActive?.projectMetadata ?? null,
+        );
+    const submittedDesignSystemSelection = homeDesignSystemSelectionForInputs(
+      submittedActive?.inputs ?? null,
+      designSystemOptions,
+      trimmed,
+    );
+    const submittedPluginInputs = submittedActive
+      ? applyHomeDesignSystemSelectionToInputs(submittedActive.inputs, submittedDesignSystemSelection)
+      : defaultInputs;
     onSubmit({
       prompt: trimmed,
       pluginId: submittedActive?.record.id ?? DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID,
@@ -1160,9 +1275,10 @@ export function HomeView({
       appliedPluginSnapshotId: submittedActive?.result?.appliedPlugin?.snapshotId ?? null,
       pluginTitle: submittedActive?.record.title ?? null,
       taskKind: submittedActive?.result?.appliedPlugin?.taskKind ?? null,
-      pluginInputs: submittedActive ? submittedActive.inputs : defaultInputs,
-      projectKind: submittedActive?.projectKind ?? fallbackProjectKind ?? projectKindForSkill(activeSkill) ?? 'other',
+      pluginInputs: submittedPluginInputs,
+      projectKind: submittedProjectKind,
       projectMetadata: submittedProjectMetadata,
+      designSystemId: submittedDesignSystemSelection?.id ?? null,
       contextPlugins,
       contextMcpServers,
       contextConnectors,
@@ -1192,6 +1308,8 @@ export function HomeView({
         pluginInputTemplate={active?.queryTemplate ?? null}
         onPluginInputValuesChange={updateActiveInputs}
         inlineEditableInputNames={active?.editableInputNames ?? []}
+        footerInputNames={footerInputNamesForChip(active?.chipId ?? null)}
+        designSystemOptions={designSystemOptions}
         showPluginInputsForm={!active?.mediaSurface}
         onPluginInputValidityChange={(valid) => {
           setActive((prev) => (
@@ -1425,6 +1543,249 @@ function estimatePluginContextItemCount(
   const craftCount = context.craft?.length ?? 0;
   return assetCount + mcpCount + claudePluginCount + atomCount + craftCount;
 }
+
+function footerInputNamesForChip(chipId: string | null): string[] {
+  if (chipId === 'prototype') return ['designSystem', 'fidelity'];
+  if (chipId === 'deck') return ['designSystem', 'speakerNotes'];
+  if (chipId === 'image') return ['designSystem', 'model', 'ratio', 'resolution'];
+  if (chipId === 'video') return ['designSystem', 'model', 'ratio', 'duration', 'resolution'];
+  if (chipId === 'audio') return ['model', 'duration'];
+  if (chipId === 'hyperframes') return ['ratio', 'duration'];
+  return [];
+}
+
+function homeCreateProjectMetadata(
+  projectKind: ProjectKind | null,
+  inputs: Record<string, unknown> | null,
+  existing: ProjectMetadata | null,
+): ProjectMetadata | null {
+  const kind = projectKind ?? existing?.kind ?? null;
+  if (!kind) return existing;
+
+  const next: ProjectMetadata = {
+    ...(existing ?? {}),
+    kind,
+  };
+  const fidelity = normalizeHomeFidelity(inputs?.fidelity);
+  if (fidelity) next.fidelity = fidelity;
+  const speakerNotes = normalizeHomeSpeakerNotes(inputs?.speakerNotes);
+  if (speakerNotes !== null) next.speakerNotes = speakerNotes;
+  return next;
+}
+
+function normalizeHomeFidelity(value: unknown): ProjectMetadata['fidelity'] | null {
+  if (value === 'wireframe' || value === 'high-fidelity') return value;
+  return null;
+}
+
+function normalizeHomeSpeakerNotes(value: unknown): boolean | null {
+  if (typeof value === 'boolean') return value;
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return null;
+  if (
+    normalized === 'true' ||
+    normalized === 'yes' ||
+    normalized === 'include' ||
+    normalized.includes('include')
+  ) {
+    return true;
+  }
+  if (
+    normalized === 'false' ||
+    normalized === 'no' ||
+    normalized === 'none' ||
+    normalized.includes('no speaker')
+  ) {
+    return false;
+  }
+  return null;
+}
+
+function designSystemOptionsForHome(
+  systems: DesignSystemSummary[],
+  defaultDesignSystemId: string | null,
+  logoById: Record<string, string>,
+): HomeDesignSystemOption[] {
+  const selectable = systems.filter((system) => {
+    if (!system.title) return false;
+    if (system.source === 'user') return (system.status ?? 'draft') === 'published';
+    return true;
+  });
+  const systemOptions = selectable
+    .map((system) => ({
+      id: system.id,
+      title: system.title,
+      isDefault: system.id === defaultDesignSystemId,
+      group: designSystemOptionGroup(system),
+      category: system.category,
+      summary: system.summary,
+      swatches: system.swatches,
+      logoUrl: logoById[system.id],
+    }))
+    .sort((a, b) => {
+      const groupDelta = designSystemGroupOrder(a.group) - designSystemGroupOrder(b.group);
+      if (groupDelta !== 0) return groupDelta;
+      if (a.isDefault !== b.isDefault) return a.isDefault ? -1 : 1;
+      return a.title.localeCompare(b.title);
+    });
+  return [
+    {
+      id: AUTO_DESIGN_SYSTEM_OPTION_ID,
+      title: AUTO_DESIGN_SYSTEM_OPTION_TITLE,
+      isDefault: false,
+      auto: true,
+      summary: '根据当前 prompt 自动匹配最合适的设计体系和视觉风格。',
+    },
+    ...systemOptions,
+  ];
+}
+
+function designSystemOptionGroup(
+  system: DesignSystemSummary,
+): 'Personal' | 'Official preset' | 'Enterprise' {
+  if (system.source === 'user' || system.isEditable === true) return 'Personal';
+  if (system.source === 'installed') return 'Enterprise';
+  return 'Official preset';
+}
+
+function designSystemGroupOrder(group: 'Personal' | 'Official preset' | 'Enterprise'): number {
+  if (group === 'Personal') return 0;
+  if (group === 'Official preset') return 1;
+  return 2;
+}
+
+function findDesignSystemLogoFile(files: ProjectFile[]): ProjectFile | null {
+  const logoCandidates = files
+    .filter((file) => file.type !== 'dir')
+    .filter((file) => {
+      const name = file.path ?? file.name;
+      return file.kind === 'image' || /\.(svg|png|jpe?g|webp|gif)$/iu.test(name);
+    });
+  return (
+    logoCandidates.find((file) => (file.path ?? file.name).toLowerCase() === 'assets/logo.svg') ??
+    logoCandidates.find((file) => /(^|\/)(logo|wordmark|brand-mark|brandmark|mark|icon|favicon)[^/]*\.(svg|png|jpe?g|webp|gif)$/iu.test(file.path ?? file.name)) ??
+    null
+  );
+}
+
+function withHomeDesignSystemDefault(
+  provided: Record<string, unknown> | undefined,
+  fields: InputFieldSpec[],
+  designSystemOptions: HomeDesignSystemOption[],
+): Record<string, unknown> | undefined {
+  if (!fields.some((field) => field.name === 'designSystem')) return provided;
+  const current = provided?.designSystem;
+  const currentText = current === undefined || current === null ? '' : String(current).trim();
+  if (currentText.length > 0 && currentText !== 'the active project design system') {
+    return provided;
+  }
+  const selected = designSystemOptions[0];
+  if (!selected) return provided;
+  return {
+    ...(provided ?? {}),
+    designSystem: selected.title,
+  };
+}
+
+function homeDesignSystemSelectionForInputs(
+  inputs: Record<string, unknown> | null,
+  designSystemOptions: HomeDesignSystemOption[],
+  prompt: string,
+): HomeDesignSystemOption | null {
+  const value = inputs?.designSystem;
+  if (typeof value !== 'string') return null;
+  const selectedTitle = value.trim();
+  if (!selectedTitle || selectedTitle === 'the active project design system') return null;
+  const selected = designSystemOptions.find((option) => option.title === selectedTitle);
+  if (selected?.auto) return autoSelectHomeDesignSystem(prompt, designSystemOptions);
+  return selected ?? null;
+}
+
+function applyHomeDesignSystemSelectionToInputs(
+  inputs: Record<string, unknown>,
+  selected: HomeDesignSystemOption | null,
+): Record<string, unknown> {
+  if (!selected) return inputs;
+  const current = inputs.designSystem;
+  if (typeof current !== 'string' || current.trim() !== AUTO_DESIGN_SYSTEM_OPTION_TITLE) return inputs;
+  return {
+    ...inputs,
+    designSystem: selected.title,
+  };
+}
+
+function autoSelectHomeDesignSystem(
+  prompt: string,
+  designSystemOptions: HomeDesignSystemOption[],
+): HomeDesignSystemOption | null {
+  const candidates = designSystemOptions.filter((option) => !option.auto);
+  if (candidates.length === 0) return null;
+  const promptText = normalizeAutoDesignSystemText(prompt);
+  const promptTokens = autoDesignSystemTokens(promptText);
+  let best: { option: HomeDesignSystemOption; score: number } | null = null;
+  for (const option of candidates) {
+    const title = normalizeAutoDesignSystemText(option.title);
+    const category = normalizeAutoDesignSystemText(option.category ?? '');
+    const summary = normalizeAutoDesignSystemText(option.summary ?? '');
+    const haystack = `${title} ${category} ${summary}`;
+    let score = 0;
+    if (title && promptText.includes(title)) score += 18;
+    if (category && promptText.includes(category)) score += 8;
+    for (const token of promptTokens) {
+      if (title.includes(token)) score += 5;
+      if (category.includes(token)) score += 3;
+      if (summary.includes(token)) score += 2;
+      if (haystack.includes(token)) score += 1;
+    }
+    if (!best || score > best.score) best = { option, score };
+  }
+  if (best && best.score > 0) return best.option;
+  return candidates.find((option) => option.isDefault) ?? candidates[0] ?? null;
+}
+
+function normalizeAutoDesignSystemText(value: string): string {
+  return value.toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function autoDesignSystemTokens(value: string): string[] {
+  const seen = new Set<string>();
+  const tokens = value
+    .split(/[^a-z0-9\u4e00-\u9fff]+/iu)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 2 && !AUTO_DESIGN_SYSTEM_STOP_WORDS.has(token));
+  return tokens.filter((token) => {
+    if (seen.has(token)) return false;
+    seen.add(token);
+    return true;
+  });
+}
+
+const AUTO_DESIGN_SYSTEM_STOP_WORDS = new Set([
+  'the',
+  'and',
+  'for',
+  'with',
+  'using',
+  'create',
+  'make',
+  'build',
+  'page',
+  'site',
+  'app',
+  'web',
+  'design',
+  'system',
+  'style',
+  '一个',
+  '这个',
+  '使用',
+  '生成',
+  '设计',
+  '页面',
+  '网站',
+  '应用',
+]);
 
 function hydratePluginInputs(
   fields: InputFieldSpec[],

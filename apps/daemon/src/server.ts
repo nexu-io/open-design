@@ -300,6 +300,7 @@ import { validateArtifactManifestInput } from './artifact-manifest.js';
 import { ArtifactPublicationBlockedError } from './artifact-publication-guard.js';
 import { readCurrentAppVersionInfo } from './app-version.js';
 import {
+  appendMessageAgentEvent,
   appendMessageStatusEvent,
   deleteConversation,
   deletePreviewComment,
@@ -1896,6 +1897,122 @@ function pinAssistantMessageOnRunCreate(db, run) {
     runStatus: run.status,
     startedAt: run.createdAt,
   });
+}
+
+function persistRunEventToAssistantMessage(db, run, event, data) {
+  if (!run.assistantMessageId) return;
+  const persisted = runSseEventToPersistedAgentEvent(event, data);
+  if (!persisted) return;
+  try {
+    appendMessageAgentEvent(db, run.assistantMessageId, persisted);
+  } catch (err) {
+    console.warn('[runs] message event persistence failed', err);
+  }
+}
+
+function runSseEventToPersistedAgentEvent(event, data) {
+  if (event === 'start') {
+    return {
+      kind: 'status',
+      label: 'starting',
+      ...(typeof data?.bin === 'string' ? { detail: data.bin } : {}),
+    };
+  }
+  if (event === 'stdout') {
+    const chunk = typeof data?.chunk === 'string' ? data.chunk : '';
+    return chunk ? { kind: 'text', text: chunk } : null;
+  }
+  if (event === 'error') {
+    const message = typeof data?.error?.message === 'string'
+      ? data.error.message
+      : typeof data?.message === 'string'
+        ? data.message
+        : '';
+    return {
+      kind: 'status',
+      label: 'error',
+      ...(message ? { detail: message } : {}),
+    };
+  }
+  if (event !== 'agent') return null;
+  return daemonAgentPayloadToPersistedAgentEvent(data);
+}
+
+function daemonAgentPayloadToPersistedAgentEvent(data) {
+  const type = data?.type;
+  if (type === 'status' && typeof data.label === 'string') {
+    const detail =
+      typeof data.detail === 'string'
+        ? data.detail
+        : typeof data.model === 'string'
+          ? data.model
+          : typeof data.ttftMs === 'number'
+            ? `first token in ${Math.round(data.ttftMs / 100) / 10}s`
+            : undefined;
+    return { kind: 'status', label: data.label, ...(detail ? { detail } : {}) };
+  }
+  if (type === 'text_delta' && typeof data.delta === 'string') {
+    return { kind: 'text', text: data.delta };
+  }
+  if (type === 'thinking_delta' && typeof data.delta === 'string') {
+    return { kind: 'thinking', text: data.delta };
+  }
+  if (type === 'thinking_start') return { kind: 'status', label: 'thinking' };
+  if (type === 'live_artifact') {
+    return {
+      kind: 'live_artifact',
+      action: data.action,
+      projectId: data.projectId,
+      artifactId: data.artifactId,
+      title: data.title,
+      ...(data.refreshStatus ? { refreshStatus: data.refreshStatus } : {}),
+    };
+  }
+  if (type === 'live_artifact_refresh') {
+    return {
+      kind: 'live_artifact_refresh',
+      phase: data.phase,
+      projectId: data.projectId,
+      artifactId: data.artifactId,
+      ...(data.refreshId ? { refreshId: data.refreshId } : {}),
+      ...(data.title ? { title: data.title } : {}),
+      ...(typeof data.refreshedSourceCount === 'number'
+        ? { refreshedSourceCount: data.refreshedSourceCount }
+        : {}),
+      ...(data.error ? { error: data.error } : {}),
+    };
+  }
+  if (type === 'tool_use' && typeof data.id === 'string' && typeof data.name === 'string') {
+    return { kind: 'tool_use', id: data.id, name: data.name, input: normalizePersistedToolInput(data.input) };
+  }
+  if (type === 'tool_result' && typeof data.toolUseId === 'string') {
+    return {
+      kind: 'tool_result',
+      toolUseId: data.toolUseId,
+      content: String(data.content ?? ''),
+      isError: Boolean(data.isError),
+    };
+  }
+  if (type === 'usage') {
+    const usage = data.usage && typeof data.usage === 'object' ? data.usage : {};
+    return {
+      kind: 'usage',
+      inputTokens: usage.input_tokens,
+      outputTokens: usage.output_tokens,
+      ...(typeof data.costUsd === 'number' ? { costUsd: data.costUsd } : {}),
+      ...(typeof data.durationMs === 'number' ? { durationMs: data.durationMs } : {}),
+    };
+  }
+  if (type === 'raw' && typeof data.line === 'string') return { kind: 'raw', line: data.line };
+  return null;
+}
+
+function normalizePersistedToolInput(input) {
+  if (!input || typeof input !== 'object') return input;
+  if ('filePath' in input && typeof input.filePath === 'string') {
+    return { ...input, file_path: input.filePath };
+  }
+  return input;
 }
 
 export function shouldReportRunCompletedFromMessage(saved, body = {}) {
@@ -9591,7 +9708,10 @@ export async function startServer({
       return design.runs.finish(run, 'failed', 1, null);
     }
 
-    const send = (event, data) => design.runs.emit(run, event, data);
+    const send = (event, data) => {
+      persistRunEventToAssistantMessage(db, run, event, data);
+      design.runs.emit(run, event, data);
+    };
     const inactivityTimeoutMs = resolveChatRunInactivityTimeoutMs();
     const inactivityKillGraceMs = 3_000;
     let inactivityTimer = null;

@@ -2007,10 +2007,12 @@ export interface Dict {
   'assistant.feedbackReasonPositiveVisual': string;
   'assistant.feedbackReasonPositiveUseful': string;
   'assistant.feedbackReasonPositiveEasy': string;
+  'assistant.feedbackReasonPositiveDesignSystem': string;
   'assistant.feedbackReasonNegativeMissed': string;
   'assistant.feedbackReasonNegativeVisual': string;
   'assistant.feedbackReasonNegativeIncomplete': string;
   'assistant.feedbackReasonNegativeHard': string;
+  'assistant.feedbackReasonNegativeDesignSystem': string;
   'assistant.feedbackReasonOther': string;
   'assistant.feedbackReasonPlaceholder': string;
   'assistant.feedbackReasonSubmit': string;

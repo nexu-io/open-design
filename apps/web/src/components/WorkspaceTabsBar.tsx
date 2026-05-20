@@ -684,7 +684,7 @@ function displayTabFor(
     projects: 'folder',
     tasks: 'kanban',
     plugins: 'grid',
-    'design-systems': 'palette',
+    'design-systems': 'blocks',
     integrations: 'link',
   };
   return {

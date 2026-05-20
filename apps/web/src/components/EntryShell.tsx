@@ -467,7 +467,7 @@ export function EntryShell({
     onCreateProject({
       name,
       skillId: payload.skillId ?? null,
-      designSystemId: null,
+      designSystemId: payload.designSystemId ?? null,
       metadata,
       pendingPrompt: payload.prompt,
       ...(payload.pluginId ? { pluginId: payload.pluginId } : {}),
@@ -622,6 +622,8 @@ export function EntryShell({
               <HomeView
                 projects={projects}
                 projectsLoading={projectsLoading}
+                designSystems={designSystems}
+                defaultDesignSystemId={defaultDesignSystemId}
                 onSubmit={handlePluginLoopSubmit}
                 onOpenProject={onOpenProject}
                 onViewAllProjects={() => changeView('projects')}
@@ -687,6 +689,7 @@ export function EntryShell({
                   </header>
                   <DesignSystemsTab
                     systems={designSystems}
+                    templates={templates}
                     selectedId={defaultDesignSystemId}
                     onSelect={onChangeDefaultDesignSystem}
                     onCreate={onCreateDesignSystem}

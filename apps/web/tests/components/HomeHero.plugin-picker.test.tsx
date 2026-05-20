@@ -377,7 +377,7 @@ describe('HomeHero plugin picker', () => {
         onSubmit={() => undefined}
         activePluginTitle="Prototype"
         activePluginRecord={active}
-        activeChipId="prototype"
+        activeChipId={null}
         onClearActivePlugin={() => undefined}
         onOpenPluginDetails={onOpenPluginDetails}
         pluginOptions={[]}

@@ -6,6 +6,7 @@ import { HomeView } from '../../src/components/HomeView';
 import type { PromptTemplateSummary } from '../../src/types';
 
 const MEDIA_PLUGIN = pluginRecord('od-media-generation', 'Media generation');
+const PROTOTYPE_PLUGIN = pluginRecord('example-web-prototype', 'Web prototype');
 const HYPERFRAMES_PLUGIN = pluginRecord('example-hyperframes', 'HyperFrames');
 
 const PROMPT_TEMPLATES: PromptTemplateSummary[] = [
@@ -87,6 +88,39 @@ describe('HomeView media composer options', () => {
     expect(screen.getByTestId('home-hero-prompt-slot-model')).toBeTruthy();
     expect(screen.getByTestId('home-hero-prompt-slot-duration')).toBeTruthy();
     expect(screen.queryByTestId('home-hero-prompt-slot-voice')).toBeNull();
+  });
+
+  it('only asks before replacing a prompt after the user edits it', async () => {
+    stubFetch();
+    renderHome();
+
+    fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
+    await waitFor(() => {
+      expect((screen.getByTestId('home-hero-input') as HTMLTextAreaElement).value).toContain(
+        'Create media.',
+      );
+    });
+
+    fireEvent.click(screen.getByTestId('home-hero-rail-image'));
+    await waitFor(() => expect(screen.getByTestId('home-hero-prompt-slot-template')).toBeTruthy());
+    expect(screen.queryByRole('dialog', { name: /replace current prompt/i })).toBeNull();
+
+    cleanup();
+    stubFetch();
+    renderHome();
+
+    fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
+    await waitFor(() => {
+      expect((screen.getByTestId('home-hero-input') as HTMLTextAreaElement).value).toContain(
+        'Create media.',
+      );
+    });
+    fireEvent.change(screen.getByTestId('home-hero-input'), {
+      target: { value: 'Make this prompt personally tuned.' },
+    });
+
+    fireEvent.click(screen.getByTestId('home-hero-rail-image'));
+    expect(await screen.findByRole('dialog', { name: /replace current prompt/i })).toBeTruthy();
   });
 
   it('exposes only Speech and Sound effect in the Home Audio workflow', async () => {
@@ -424,7 +458,7 @@ function stubFetch(options: { elevenLabsVoices?: Array<{ voiceId: string; name: 
   });
   const fetchMock = vi.fn<typeof fetch>(async (url, init) => {
     if (typeof url === 'string' && url === '/api/plugins') {
-      return json({ plugins: [MEDIA_PLUGIN, HYPERFRAMES_PLUGIN] });
+      return json({ plugins: [MEDIA_PLUGIN, PROTOTYPE_PLUGIN, HYPERFRAMES_PLUGIN] });
     }
     if (typeof url === 'string' && url === '/api/mcp/servers') {
       return json({ servers: [], templates: [] });

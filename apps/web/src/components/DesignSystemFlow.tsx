@@ -459,7 +459,7 @@ export function DesignSystemCreationFlow({
             Back
           </button>
           <span className="ds-setup-mark">
-            <Icon name="palette" />
+            <Icon name="blocks" />
           </span>
           <button
             type="button"
@@ -473,7 +473,7 @@ export function DesignSystemCreationFlow({
               setStep('confirm');
             }}
           >
-            Generate
+            Continue to generation
             <Icon name="chevron-right" />
           </button>
         </header>

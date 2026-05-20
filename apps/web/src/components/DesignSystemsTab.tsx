@@ -17,7 +17,7 @@ import {
 } from '../providers/registry';
 import { buildSrcdoc } from '../runtime/srcdoc';
 import { Icon } from './Icon';
-import type { DesignSystemSummary, Surface } from '../types';
+import type { DesignSystemSummary, ProjectTemplate, Surface } from '../types';
 
 interface Props {
   systems: DesignSystemSummary[];
@@ -27,6 +27,7 @@ interface Props {
   onCreate?: () => void;
   onOpenSystem?: (id: string) => void;
   onSystemsRefresh?: () => Promise<void> | void;
+  templates?: ProjectTemplate[];
 }
 
 const CATEGORY_ORDER = [
@@ -44,6 +45,9 @@ const CATEGORY_ORDER = [
 
 type SurfaceFilter = 'all' | Surface;
 type UserListFilter = 'all' | 'published' | 'draft';
+type ResourceType = 'design-system' | 'template';
+type DesignSystemResourceTab = 'personal' | 'official' | 'enterprise';
+type TemplateResourceTab = 'personal' | 'enterprise';
 
 const SURFACE_PILLS: { value: SurfaceFilter; labelKey: 'examples.modeAll' | 'ds.surfaceWeb' | 'ds.surfaceImage' | 'ds.surfaceVideo' | 'ds.surfaceAudio' }[] = [
   { value: 'all', labelKey: 'examples.modeAll' },
@@ -81,6 +85,7 @@ export function DesignSystemsTab({
   onCreate,
   onOpenSystem,
   onSystemsRefresh,
+  templates = [],
 }: Props) {
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
@@ -106,6 +111,11 @@ export function DesignSystemsTab({
   const [filter, setFilter] = useState('');
   const [userFilter, setUserFilter] = useState<UserListFilter>('all');
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [resourceType, setResourceType] = useState<ResourceType>('design-system');
+  const [designSystemResourceTab, setDesignSystemResourceTab] =
+    useState<DesignSystemResourceTab>('personal');
+  const [templateResourceTab, setTemplateResourceTab] =
+    useState<TemplateResourceTab>('personal');
   const [surfaceFilter, setSurfaceFilter] = useState<SurfaceFilter>('all');
   const [category, setCategory] = useState<string>('All');
   // Cache fetched showcase HTML across re-renders so cards never re-flicker
@@ -254,246 +264,317 @@ export function DesignSystemsTab({
 
   return (
     <div className="tab-panel design-systems-manager" data-testid="design-systems-tab">
-      <section className="ds-settings-card" aria-label="Design Systems">
-        <div className="ds-settings-card__head">
-          <div>
-            <span className="ds-manager-eyebrow">Design Systems</span>
-            <h2>Your systems</h2>
-          </div>
-          <select
-            aria-label="Filter design systems"
-            value={userFilter}
-            onChange={(event) => setUserFilter(event.target.value as UserListFilter)}
+      <div className="ds-type-switch" role="tablist" aria-label="Resource type">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={resourceType === 'design-system'}
+          className={resourceType === 'design-system' ? 'active' : ''}
+          onClick={() => setResourceType('design-system')}
+        >
+          Design System
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={resourceType === 'template'}
+          className={resourceType === 'template' ? 'active' : ''}
+          onClick={() => setResourceType('template')}
+        >
+          Template
+        </button>
+      </div>
+
+      {resourceType === 'design-system' ? (
+      <section className="ds-resource-group" aria-label="Design System resources">
+        <div className="ds-subtype-tabs" role="tablist" aria-label="Design System type">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={designSystemResourceTab === 'personal'}
+            className={designSystemResourceTab === 'personal' ? 'active' : ''}
+            onClick={() => setDesignSystemResourceTab('personal')}
           >
-            <option value="all">All</option>
-            <option value="published">Published</option>
-            <option value="draft">Draft</option>
-          </select>
+            Personal
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={designSystemResourceTab === 'official'}
+            className={designSystemResourceTab === 'official' ? 'active' : ''}
+            onClick={() => setDesignSystemResourceTab('official')}
+          >
+            Official preset
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={designSystemResourceTab === 'enterprise'}
+            className={designSystemResourceTab === 'enterprise' ? 'active' : ''}
+            onClick={() => setDesignSystemResourceTab('enterprise')}
+          >
+            Enterprise
+          </button>
         </div>
 
-        {onCreate ? (
-          <button type="button" className="ds-create-row" onClick={onCreate}>
-            <span>
-              <strong>Create new design system</strong>
-              <small>Teach Open Design your brand, product, code, assets, and design references.</small>
-            </span>
-            <span className="ds-create-row__action">Create</span>
-          </button>
+        {designSystemResourceTab === 'personal' ? (
+        <section className="ds-settings-card" aria-label="Personal design systems">
+          <div className="ds-settings-card__head">
+            <div>
+              <span className="ds-manager-eyebrow">Personal</span>
+              <h3>Your design systems</h3>
+            </div>
+            <select
+              aria-label="Filter design systems"
+              value={userFilter}
+              onChange={(event) => setUserFilter(event.target.value as UserListFilter)}
+            >
+              <option value="all">All</option>
+              <option value="published">Published</option>
+              <option value="draft">Draft</option>
+            </select>
+          </div>
+
+          {onCreate ? (
+            <button type="button" className="ds-create-row" onClick={onCreate}>
+              <span>
+                <strong>Create new design system</strong>
+                <small>Teach Open Design your brand, product, code, assets, and design references.</small>
+              </span>
+              <span className="ds-create-row__action">Create</span>
+            </button>
+          ) : null}
+
+          {userSystems.length === 0 ? (
+            <div className="ds-user-empty">
+              No personal design systems yet. Create one from brand, product, code, assets, and design references.
+            </div>
+          ) : (
+            <div className="ds-user-list">
+              {userSystems.map((system) => {
+                const status = system.status ?? 'draft';
+                const canUseInProjects = status === 'published';
+                const selected = canUseInProjects && system.id === selectedId;
+                const busy = busyId === system.id;
+                return (
+                  <div className="ds-user-row" key={system.id}>
+                    <button
+                      type="button"
+                      className="ds-user-row__open"
+                      onClick={() => onOpenSystem?.(system.id)}
+                    >
+                      <span className="ds-user-row__title">
+                        <span>{system.title}</span>
+                        {selected ? <span className="ds-card-badge">Default</span> : null}
+                      </span>
+                      <span className="ds-user-row__meta">
+                        You · updated {formatShortDate(system.updatedAt)}
+                      </span>
+                    </button>
+                    <div className="ds-user-row__actions">
+                      {onOpenSystem ? (
+                        <button
+                          type="button"
+                          className="ghost compact"
+                          onClick={() => onOpenSystem(system.id)}
+                          disabled={busy}
+                        >
+                          Edit
+                        </button>
+                      ) : null}
+                      {!selected && canUseInProjects ? (
+                        <button
+                          type="button"
+                          className="ghost compact"
+                          onClick={() => onSelect(system.id)}
+                          disabled={busy}
+                        >
+                          Make default
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        className={`ds-status-toggle ${status === 'published' ? 'is-on' : ''}`}
+                        aria-pressed={status === 'published'}
+                        onClick={() => void togglePublished(system)}
+                        disabled={busy}
+                      >
+                        <span>{status === 'published' ? 'Published' : 'Draft'}</span>
+                        <i aria-hidden />
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-btn danger"
+                        aria-label={`Delete ${system.title}`}
+                        onClick={() => void deleteSystem(system)}
+                        disabled={busy}
+                      >
+                        <Icon name="close" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
         ) : null}
 
-        {userSystems.length === 0 ? (
-          <div className="ds-user-empty">
-            No design systems yet. Create one from real product context, review the draft, then publish it for future projects.
+        {designSystemResourceTab === 'official' ? (
+        <section className="ds-settings-card" aria-label="Official preset design systems">
+          <div className="ds-settings-card__head">
+            <div>
+              <span className="ds-manager-eyebrow">Official preset</span>
+              <h3>Open Design presets</h3>
+            </div>
           </div>
-        ) : (
-          <div className="ds-user-list">
-            {userSystems.map((system) => {
-              const status = system.status ?? 'draft';
-              const canUseInProjects = status === 'published';
-              const selected = canUseInProjects && system.id === selectedId;
-              const busy = busyId === system.id;
-              return (
-                <div className="ds-user-row" key={system.id}>
-                  <button
-                    type="button"
-                    className="ds-user-row__open"
-                    onClick={() => onOpenSystem?.(system.id)}
-                  >
+          <div className="tab-panel-toolbar ds-manager-toolbar">
+            <input
+              data-testid="design-systems-search"
+              placeholder={t('ds.searchPlaceholder')}
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+            />
+            <select
+              data-testid="design-systems-category-select"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+            >
+              {categories.map((c) => (
+                <option key={c} value={c}>
+                  {renderCategory(c)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div
+            className="examples-filter-row ds-presets-surface-row"
+            role="tablist"
+            aria-label={t('ds.surfaceLabel')}
+          >
+            <span className="examples-filter-label">{t('ds.surfaceLabel')}</span>
+            {SURFACE_PILLS.filter(
+              (p) => p.value === surfaceFilter || p.value === 'all' || surfaceCounts[p.value] > 0,
+            ).map((p) => (
+              <button
+                key={p.value}
+                type="button"
+                role="tab"
+                aria-selected={surfaceFilter === p.value}
+                data-testid={`design-systems-surface-${p.value}`}
+                className={`filter-pill ${surfaceFilter === p.value ? 'active' : ''}`}
+                onClick={() => {
+                  setSurfaceFilter(p.value);
+                }}
+              >
+                {t(p.labelKey)}
+                <span className="filter-pill-count">{surfaceCounts[p.value]}</span>
+              </button>
+            ))}
+          </div>
+          {filtered.length === 0 ? (
+            <div className="tab-empty" data-testid="design-systems-empty">{t('ds.emptyNoMatch')}</div>
+          ) : (
+            <div className="ds-grid" data-testid="design-systems-grid">
+              {filtered.map((s) => (
+                <DesignSystemCard
+                  key={s.id}
+                  system={s}
+                  active={s.id === selectedId}
+                  thumbHtml={thumbs[s.id]}
+                  onIntersect={() => loadThumb(s.id)}
+                  onSelect={() => onSelect(s.id)}
+                  onPreview={() => onPreview(s.id)}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+        ) : null}
+
+        {designSystemResourceTab === 'enterprise' ? (
+        <section className="ds-settings-card" aria-label="Enterprise design systems">
+          <div className="ds-settings-card__head">
+            <div>
+              <span className="ds-manager-eyebrow">Enterprise</span>
+              <h3>Company design systems</h3>
+            </div>
+            <span className="ds-suite-badge">Custom Suite</span>
+          </div>
+          <div className="ds-user-empty">No enterprise design systems yet.</div>
+        </section>
+        ) : null}
+      </section>
+      ) : null}
+
+      {resourceType === 'template' ? (
+      <section className="ds-resource-group" aria-label="Template resources">
+        <div className="ds-subtype-tabs" role="tablist" aria-label="Template type">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={templateResourceTab === 'personal'}
+            className={templateResourceTab === 'personal' ? 'active' : ''}
+            onClick={() => setTemplateResourceTab('personal')}
+          >
+            Personal
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={templateResourceTab === 'enterprise'}
+            className={templateResourceTab === 'enterprise' ? 'active' : ''}
+            onClick={() => setTemplateResourceTab('enterprise')}
+          >
+            Enterprise
+          </button>
+        </div>
+
+        {templateResourceTab === 'personal' ? (
+        <section className="ds-settings-card" aria-label="Personal templates">
+          <div className="ds-settings-card__head">
+            <div>
+              <span className="ds-manager-eyebrow">Personal</span>
+              <h3>Your templates</h3>
+            </div>
+          </div>
+          {templates.length === 0 ? (
+            <div className="ds-user-empty">
+              No personal templates yet. Save the current project as a template to see it here.
+            </div>
+          ) : (
+            <div className="ds-user-list">
+              {templates.map((template) => (
+                <div className="ds-user-row ds-template-row" key={template.id}>
+                  <div className="ds-user-row__open">
                     <span className="ds-user-row__title">
-                      <span>{system.title}</span>
-                      {selected ? <span className="ds-card-badge">Default</span> : null}
+                      <span>{template.name}</span>
                     </span>
                     <span className="ds-user-row__meta">
-                      You · updated {formatShortDate(system.updatedAt)}
+                      {template.description || `${template.files.length} files`} · saved {formatShortDate(new Date(template.createdAt).toISOString())}
                     </span>
-                  </button>
-                  <div className="ds-user-row__actions">
-                    {onOpenSystem ? (
-                      <button
-                        type="button"
-                        className="ghost compact"
-                        onClick={() => onOpenSystem(system.id)}
-                        disabled={busy}
-                      >
-                        Edit
-                      </button>
-                    ) : null}
-                    {!selected && canUseInProjects ? (
-                      <button
-                        type="button"
-                        className="ghost compact"
-                        onClick={() => onSelect(system.id)}
-                        disabled={busy}
-                      >
-                        Make default
-                      </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      className={`ds-status-toggle ${status === 'published' ? 'is-on' : ''}`}
-                      aria-pressed={status === 'published'}
-                      onClick={() => void togglePublished(system)}
-                      disabled={busy}
-                    >
-                      <span>{status === 'published' ? 'Published' : 'Draft'}</span>
-                      <i aria-hidden />
-                    </button>
-                    {onOpenSystem ? (
-                      <button
-                        type="button"
-                        className="icon-btn"
-                        aria-label={`Open ${system.title}`}
-                        onClick={() => onOpenSystem(system.id)}
-                      >
-                        <Icon name="external-link" />
-                      </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      className="icon-btn danger"
-                      aria-label={`Delete ${system.title}`}
-                      onClick={() => void deleteSystem(system)}
-                      disabled={busy}
-                    >
-                      <Icon name="close" />
-                    </button>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
+              ))}
+            </div>
+          )}
+        </section>
+        ) : null}
 
-      <section className="ds-settings-card ds-templates-card" aria-label="Templates">
-        <div className="ds-settings-card__head">
-          <div>
-            <span className="ds-manager-eyebrow">Templates</span>
-            <h2>Templates</h2>
+        {templateResourceTab === 'enterprise' ? (
+        <section className="ds-settings-card" aria-label="Enterprise templates">
+          <div className="ds-settings-card__head">
+            <div>
+              <span className="ds-manager-eyebrow">Enterprise</span>
+              <h3>Company templates</h3>
+            </div>
+            <span className="ds-suite-badge">Custom Suite</span>
           </div>
-        </div>
-        <div className="ds-user-empty">
-          No templates yet. Create one from any generated project via Share once template publishing is enabled.
-        </div>
+          <div className="ds-user-empty">No enterprise templates yet.</div>
+        </section>
+        ) : null}
       </section>
-
-      <p className="ds-private-note">Only you can view these settings.</p>
-
-      <section className="ds-settings-card" aria-label="Built-in design systems">
-        <div className="ds-settings-card__head">
-          <div>
-            <span className="ds-manager-eyebrow">Library</span>
-            <h2>Built-in library</h2>
-          </div>
-        </div>
-        <div className="tab-panel-toolbar ds-manager-toolbar">
-          <input
-            data-testid="design-systems-search"
-            placeholder={t('ds.searchPlaceholder')}
-            value={filter}
-            onFocus={() => {
-              if (searchTrackedRef.current) return;
-              searchTrackedRef.current = true;
-              trackDesignSystemsTopClick(analytics.track, {
-                page_name: 'design_systems',
-                area: 'design_systems',
-                element: 'search_input',
-              });
-            }}
-            onChange={(e) => setFilter(e.target.value)}
-          />
-          <select
-            data-testid="design-systems-category-select"
-            value={category}
-            onFocus={() => {
-              if (categoryTrackedRef.current) return;
-              categoryTrackedRef.current = true;
-              trackDesignSystemsTopClick(analytics.track, {
-                page_name: 'design_systems',
-                area: 'design_systems',
-                element: 'search_dropdown',
-              });
-            }}
-            onChange={(e) => setCategory(e.target.value)}
-          >
-            {categories.map((c) => (
-              <option key={c} value={c}>
-                {renderCategory(c)}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div
-          className="examples-filter-row"
-          role="tablist"
-          aria-label={t('ds.surfaceLabel')}
-        >
-          <span className="examples-filter-label">{t('ds.surfaceLabel')}</span>
-          {/* Hide chips with no items in the active style/search filter, but
-              always keep "all" and the currently selected surface — otherwise a
-              transient search could remove the active chip and leave the grid
-              filtered with no chip showing aria-selected. */}
-          {SURFACE_PILLS.filter(
-            (p) => p.value === surfaceFilter || p.value === 'all' || surfaceCounts[p.value] > 0,
-          ).map((p) => (
-            <button
-              key={p.value}
-              type="button"
-              role="tab"
-              aria-selected={surfaceFilter === p.value}
-              data-testid={`design-systems-surface-${p.value}`}
-              className={`filter-pill ${surfaceFilter === p.value ? 'active' : ''}`}
-              onClick={() => {
-                trackDesignSystemsTopClick(analytics.track, {
-                  page_name: 'design_systems',
-                  area: 'design_systems',
-                  element: 'filter_chip',
-                  filter_name: p.value,
-                });
-                setSurfaceFilter(p.value);
-              }}
-            >
-              {t(p.labelKey)}
-              <span className="filter-pill-count">{surfaceCounts[p.value]}</span>
-            </button>
-          ))}
-        </div>
-        {filtered.length === 0 ? (
-          <div className="tab-empty" data-testid="design-systems-empty">{t('ds.emptyNoMatch')}</div>
-        ) : (
-          <div className="ds-grid" data-testid="design-systems-grid">
-            {filtered.map((s) => (
-              <DesignSystemCard
-                key={s.id}
-                system={s}
-                active={s.id === selectedId}
-                thumbHtml={thumbs[s.id]}
-                onIntersect={() => loadThumb(s.id)}
-                onSelect={() => {
-                  trackDesignSystemsTemplateCardClick(analytics.track, {
-                    page_name: 'design_systems',
-                    area: 'templates_card',
-                    element: 'templates_card',
-                    templates_id: s.id,
-                    templates_type: s.source ?? 'library',
-                  });
-                  onSelect(s.id);
-                }}
-                onPreview={() => {
-                  trackDesignSystemsTemplateCardClick(analytics.track, {
-                    page_name: 'design_systems',
-                    area: 'templates_card',
-                    element: 'templates_card',
-                    templates_id: s.id,
-                    templates_type: s.source ?? 'library',
-                  });
-                  onPreview(s.id);
-                }}
-              />
-            ))}
-          </div>
-        )}
-      </section>
+      ) : null}
     </div>
   );
 }

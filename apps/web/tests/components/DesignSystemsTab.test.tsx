@@ -79,6 +79,8 @@ describe('DesignSystemsTab', () => {
 
     expect(screen.getByText('Create')).toBeTruthy();
     expect(screen.getByText('Acme Design System')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Official preset' }));
     expect(screen.getByText('Linear')).toBeTruthy();
   });
 
@@ -117,12 +119,63 @@ describe('DesignSystemsTab', () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole('tab', { name: 'Official preset' }));
+
     expect(screen.queryByRole('button', { name: 'Open' })).toBeNull();
 
     fireEvent.click(screen.getByTestId('design-system-preview-linear'));
 
     expect(onPreview).toHaveBeenCalledWith('linear');
     expect(onOpenSystem).not.toHaveBeenCalledWith('linear');
+  });
+
+  it('lists saved project templates under personal templates', () => {
+    render(
+      <DesignSystemsTab
+        systems={systems}
+        templates={[
+          {
+            id: 'template:landing',
+            name: 'Landing Page Template',
+            files: [{ name: 'index.html', content: '<main />' }],
+            createdAt: Date.UTC(2026, 4, 19, 7, 0),
+          },
+        ]}
+        selectedId={null}
+        onSelect={() => {}}
+        onPreview={() => {}}
+        onCreate={() => {}}
+        onOpenSystem={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Template' }));
+
+    expect(screen.getByRole('tab', { name: 'Personal' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByText('Landing Page Template')).toBeTruthy();
+  });
+
+  it('switches between design-system resource subtypes as horizontal tabs', () => {
+    render(
+      <DesignSystemsTab
+        systems={systems}
+        selectedId={null}
+        onSelect={() => {}}
+        onPreview={() => {}}
+        onCreate={() => {}}
+        onOpenSystem={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole('tab', { name: 'Personal' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByText('Acme Design System')).toBeTruthy();
+    expect(screen.queryByText('Open Design presets')).toBeNull();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Official preset' }));
+
+    expect(screen.getByRole('tab', { name: 'Official preset' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByText('Open Design presets')).toBeTruthy();
+    expect(screen.queryByText('Acme Design System')).toBeNull();
   });
 });
 
@@ -153,7 +206,7 @@ const librarySystems: DesignSystemSummary[] = [
 ];
 
 function renderTab(items: DesignSystemSummary[] = librarySystems) {
-  return render(
+  const rendered = render(
     <DesignSystemsTab
       systems={items}
       selectedId={null}
@@ -161,6 +214,8 @@ function renderTab(items: DesignSystemSummary[] = librarySystems) {
       onPreview={vi.fn()}
     />,
   );
+  fireEvent.click(screen.getByRole('tab', { name: 'Official preset' }));
+  return rendered;
 }
 
 // The surface pill renders its label and a `.filter-pill-count` span; read

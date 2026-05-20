@@ -67,6 +67,8 @@ interface Props {
   onPluginInputValuesChange?: (values: Record<string, unknown>) => void;
   onPluginInputValidityChange?: (valid: boolean) => void;
   inlineEditableInputNames?: string[];
+  footerInputNames?: string[];
+  designSystemOptions?: HomeHeroDesignSystemOption[];
   showPluginInputsForm?: boolean;
   stagedFiles?: File[];
   onAddFiles?: (files: File[]) => void;
@@ -101,6 +103,18 @@ interface Props {
   onDismissExamples?: () => void;
   contextItemCount: number;
   error: string | null;
+}
+
+interface HomeHeroDesignSystemOption {
+  id: string;
+  title: string;
+  isDefault?: boolean;
+  auto?: boolean;
+  group?: string;
+  category?: string;
+  summary?: string;
+  swatches?: string[];
+  logoUrl?: string;
 }
 
 type HomeMentionTab = 'all' | 'plugins' | 'skills' | 'mcp' | 'connectors';
@@ -143,6 +157,8 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
     onPluginInputValuesChange = () => undefined,
     onPluginInputValidityChange = () => undefined,
     inlineEditableInputNames = [],
+    footerInputNames = [],
+    designSystemOptions = [],
     showPluginInputsForm = true,
     stagedFiles = [],
     onAddFiles = () => undefined,
@@ -341,6 +357,10 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
     () => new Set(inlineEditableInputNames),
     [inlineEditableInputNames],
   );
+  const footerInputNameSet = useMemo(
+    () => new Set(footerInputNames),
+    [footerInputNames],
+  );
   const openInlineInputField = openInlineInputName
     ? fieldByName.get(openInlineInputName) ?? null
     : null;
@@ -363,8 +383,14 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
     return keys;
   }, [pluginInputTemplate]);
   const remainingInputFields = useMemo(
-    () => pluginInputFields.filter((field) => !templateFieldKeys.has(field.name)),
-    [pluginInputFields, templateFieldKeys],
+    () => pluginInputFields.filter((field) => !templateFieldKeys.has(field.name) && !footerInputNameSet.has(field.name)),
+    [footerInputNameSet, pluginInputFields, templateFieldKeys],
+  );
+  const footerInputFields = useMemo(
+    () => footerInputNames
+      .map((name) => fieldByName.get(name))
+      .filter((field): field is InputFieldSpec => Boolean(field)),
+    [fieldByName, footerInputNames],
   );
 
   useEffect(() => {
@@ -395,7 +421,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
     if (!el) return;
     el.style.height = 'auto';
     el.style.height = `${el.scrollHeight}px`;
-  }, [prompt]);
+  }, [pluginInputValues, prompt, promptOverlayParts]);
 
   const setInputRef = useCallback(
     (node: HTMLTextAreaElement | null) => {
@@ -469,6 +495,10 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
     if (activePluginRecord) onOpenPluginDetails(activePluginRecord);
   }
 
+  const showActiveContextRow =
+    !activeChipId &&
+    (activePluginTitle || activeSkillTitle || selectedPluginContexts.length > 0);
+
   let optionRenderIndex = 0;
 
   return (
@@ -501,7 +531,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
         }}
         onDrop={handleDrop}
       >
-        {activePluginTitle || activeSkillTitle || selectedPluginContexts.length > 0 ? (
+        {showActiveContextRow ? (
           <div className="home-hero__active">
             {selectedPluginContexts.map((plugin) => (
               <span
@@ -600,17 +630,23 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
                 <div className="home-hero__prompt-highlight-inner">
                   {promptOverlayParts.map((part, index) => (
                     part.kind === 'slot' ? (
-                      <InlinePromptInput
-                        key={`${part.key}-${index}`}
-                        field={part.key ? fieldByName.get(part.key) ?? null : null}
-                        name={part.key ?? ''}
-                        value={part.key ? pluginInputValues[part.key] : undefined}
-                        fallbackText={part.text}
-                        filled={part.filled === true}
-                        editable={Boolean(part.key && editableInputNames.has(part.key))}
-                        open={part.key === openInlineInputName}
-                        onOpenChange={(open) => setOpenInlineInputName(open ? part.key ?? null : null)}
-                      />
+                      part.key && footerInputNameSet.has(part.key) ? (
+                        <span key={`footer-slot-${part.key}-${index}`} aria-hidden>
+                          {formatPromptInputValue(fieldByName.get(part.key) ?? null, pluginInputValues[part.key], part.text, t)}
+                        </span>
+                      ) : (
+                        <InlinePromptInput
+                          key={`${part.key}-${index}`}
+                          field={part.key ? fieldByName.get(part.key) ?? null : null}
+                          name={part.key ?? ''}
+                          value={part.key ? pluginInputValues[part.key] : undefined}
+                          fallbackText={part.text}
+                          filled={part.filled === true}
+                          editable={Boolean(part.key && editableInputNames.has(part.key))}
+                          open={part.key === openInlineInputName}
+                          onOpenChange={(open) => setOpenInlineInputName(open ? part.key ?? null : null)}
+                        />
+                      )
                     ) : (
                       part.kind === 'mention' ? (
                         <InlineMentionToken
@@ -876,11 +912,27 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
               title={t('chat.attachAria')}
               aria-label={t('chat.attachAria')}
             >
-              <Icon name="attach" size={18} />
+              <Icon name="attach" size={19} />
             </button>
-            <span className="home-hero__hint">
-              <kbd>↵</kbd> {t('homeHero.toRun')} · <kbd>Shift</kbd>+<kbd>↵</kbd> {t('homeHero.forNewLine')}
-            </span>
+            {footerInputFields.length > 0 ? (
+              <div className="home-hero__footer-options" data-testid="home-hero-footer-options">
+                {footerInputFields.map((field) => (
+                  <FooterInputOption
+                    key={field.name}
+                    field={field}
+                    value={pluginInputValues[field.name]}
+                    designSystemOptions={designSystemOptions}
+                    onChange={(value) => {
+                      onPluginInputValuesChange({
+                        ...pluginInputValues,
+                        [field.name]: value,
+                      });
+                    }}
+                    t={t}
+                  />
+                ))}
+              </div>
+            ) : null}
           </div>
           <button
             type="button"
@@ -1365,6 +1417,358 @@ function InlinePromptOptionPopover({
   );
 }
 
+function FooterInputOption({
+  field,
+  value,
+  designSystemOptions,
+  onChange,
+  t,
+}: {
+  field: InputFieldSpec;
+  value: unknown;
+  designSystemOptions: HomeHeroDesignSystemOption[];
+  onChange: (value: unknown) => void;
+  t: ReturnType<typeof useT>;
+}) {
+  const label = footerInputLabel(field, t);
+  if (field.name === 'speakerNotes') {
+    const checked = footerSpeakerNotesEnabled(value);
+    return (
+      <button
+        type="button"
+        className={`home-hero__footer-switch${checked ? ' is-on' : ''}`}
+        aria-label={label}
+        aria-pressed={checked}
+        data-testid="home-hero-footer-option-speakerNotes"
+        onClick={() => onChange(checked ? 'no speaker notes' : 'include speaker notes')}
+      >
+        <span>{t('newproj.toggleSpeakerNotes')}</span>
+        <i aria-hidden />
+      </button>
+    );
+  }
+  if (field.name === 'designSystem' && designSystemOptions.length > 0) {
+    const selectedValue = value === undefined || value === null ? '' : String(value);
+    const hasSelectedValue = selectedValue.length > 0 && designSystemOptions.some((option) => option.title === selectedValue);
+    const currentValue = hasSelectedValue ? selectedValue : designSystemOptions[0]?.title ?? '';
+    return (
+      <FooterSelectOption
+        fieldName={field.name}
+        label={label}
+        value={currentValue}
+        options={designSystemOptions.map((option) => ({
+          value: option.title,
+          label: option.isDefault ? `${option.title} (Default)` : option.title,
+          group: option.group,
+          icon: option.auto ? 'sparkles' : undefined,
+          description: option.summary,
+          meta: option.category,
+          preview: option.auto
+            ? undefined
+            : {
+                title: option.title,
+                swatches: option.swatches,
+                logoUrl: option.logoUrl,
+              },
+        }))}
+        searchable
+        searchPlaceholder={t('ds.searchPlaceholder')}
+        onChange={onChange}
+      />
+    );
+  }
+  if (field.type === 'select' && Array.isArray(field.options)) {
+    return (
+      <FooterSelectOption
+        fieldName={field.name}
+        label={label}
+        value={value === undefined || value === null ? '' : String(value)}
+        options={[
+          ...(field.placeholder ? [{ value: '', label: field.placeholder }] : []),
+          ...field.options.map((option) => ({
+            value: option,
+            label: footerInputValueLabel(field, option, t),
+            icon: footerInputValueIcon(field, option),
+          })),
+        ]}
+        onChange={onChange}
+      />
+    );
+  }
+  return (
+    <label className="home-hero__footer-option home-hero__footer-option--text" data-field-name={field.name}>
+      <span>{label}</span>
+      <input
+        value={value === undefined || value === null ? '' : String(value)}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={field.placeholder ?? ''}
+        aria-label={label}
+        data-testid={`home-hero-footer-option-${field.name}`}
+      />
+    </label>
+  );
+}
+
+function FooterSelectOption({
+  fieldName,
+  label,
+  value,
+  options,
+  searchable = false,
+  searchPlaceholder,
+  onChange,
+}: {
+  fieldName: string;
+  label: string;
+  value: string;
+  options: FooterSelectItemOption[];
+  searchable?: boolean;
+  searchPlaceholder?: string;
+  onChange: (value: unknown) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const ref = useRef<HTMLDivElement | null>(null);
+  const selected = options.find((option) => option.value === value) ?? options[0];
+  const visibleOptions = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return options;
+    return options.filter((option) => (
+      option.label.toLowerCase().includes(query) ||
+      option.value.toLowerCase().includes(query) ||
+      (option.description ?? '').toLowerCase().includes(query) ||
+      (option.meta ?? '').toLowerCase().includes(query) ||
+      (option.group ?? '').toLowerCase().includes(query)
+    ));
+  }, [options, search]);
+  const groupedOptions = useMemo(() => {
+    const groups: { label: string | null; options: FooterSelectItemOption[] }[] = [];
+    for (const option of visibleOptions) {
+      const groupLabel = option.group ?? null;
+      const last = groups[groups.length - 1];
+      if (last && last.label === groupLabel) {
+        last.options.push(option);
+      } else {
+        groups.push({ label: groupLabel, options: [option] });
+      }
+    }
+    return groups;
+  }, [visibleOptions]);
+  useEffect(() => {
+    if (!open) return;
+    const closeOnPointer = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && ref.current?.contains(target)) return;
+      setOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOnPointer);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnPointer);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [open]);
+  useEffect(() => {
+    if (!open) setSearch('');
+  }, [open]);
+
+  return (
+    <div
+      ref={ref}
+      className={`home-hero__footer-option home-hero__footer-option--select${open ? ' is-open' : ''}`}
+      data-field-name={fieldName}
+    >
+      <span>{label}</span>
+      <button
+        type="button"
+        className="home-hero__footer-select-trigger"
+        aria-label={label}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        data-testid={`home-hero-footer-option-${fieldName}`}
+        onClick={() => setOpen((prev) => !prev)}
+      >
+        {selected?.preview ? <DesignSystemOptionPreview option={selected.preview} compact /> : null}
+        {selected?.icon ? <FooterOptionIcon name={selected.icon} compact /> : null}
+        <span className="home-hero__footer-select-label">{selected?.label ?? value}</span>
+        <Icon name="chevron-down" size={12} aria-hidden />
+      </button>
+      {open ? (
+        <div
+          className={`home-hero__footer-select-menu${searchable ? ' home-hero__footer-select-menu--searchable' : ''}`}
+          role="listbox"
+          data-testid={`home-hero-footer-option-${fieldName}-menu`}
+        >
+          {searchable ? (
+            <div className="home-hero__footer-select-search">
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder={searchPlaceholder}
+                aria-label={searchPlaceholder ?? label}
+                autoFocus
+                data-testid={`home-hero-footer-option-${fieldName}-search`}
+              />
+              <div className="home-hero__footer-select-count">
+                {visibleOptions.length} available
+              </div>
+            </div>
+          ) : null}
+          {groupedOptions.length === 0 ? (
+            <div className="home-hero__footer-select-empty">No matches</div>
+          ) : (
+            groupedOptions.map((group) => (
+              <div className="home-hero__footer-select-group" key={group.label ?? 'ungrouped'}>
+                {group.label ? (
+                  <div className="home-hero__footer-select-group-label">{group.label}</div>
+                ) : null}
+                {group.options.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="option"
+                    aria-selected={option.value === value}
+                    className={`home-hero__footer-select-item${option.value === value ? ' is-selected' : ''}`}
+                    onClick={() => {
+                      onChange(option.value);
+                      setOpen(false);
+                    }}
+                  >
+                    {option.preview ? <DesignSystemOptionPreview option={option.preview} /> : null}
+                    {option.icon ? <FooterOptionIcon name={option.icon} /> : null}
+                    <span className="home-hero__footer-select-copy">
+                      <span className="home-hero__footer-select-label">{option.label}</span>
+                      {option.description ? (
+                        <span className="home-hero__footer-select-description">{option.description}</span>
+                      ) : null}
+                    </span>
+                    {option.meta ? <span className="home-hero__footer-select-meta">{option.meta}</span> : null}
+                    {option.value === value ? <Icon name="check" size={14} aria-hidden /> : null}
+                  </button>
+                ))}
+              </div>
+            ))
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+interface FooterSelectItemOption {
+  value: string;
+  label: string;
+  group?: string;
+  icon?: IconName;
+  description?: string;
+  meta?: string;
+  preview?: {
+    title: string;
+    swatches?: string[];
+    logoUrl?: string;
+  };
+}
+
+function FooterOptionIcon({
+  name,
+  compact = false,
+}: {
+  name: IconName;
+  compact?: boolean;
+}) {
+  return (
+    <span
+      className={`home-hero__footer-option-icon${compact ? ' home-hero__footer-option-icon--compact' : ''}`}
+      aria-hidden
+    >
+      <Icon name={name} size={compact ? 11 : 13} />
+    </span>
+  );
+}
+
+function DesignSystemOptionPreview({
+  option,
+  compact = false,
+}: {
+  option: { title: string; swatches?: string[]; logoUrl?: string };
+  compact?: boolean;
+}) {
+  const swatches = (option.swatches ?? []).filter(Boolean).slice(0, compact ? 2 : 3);
+  const initial = option.title.trim().charAt(0).toUpperCase() || 'D';
+  return (
+    <span
+      className={`home-hero__ds-option-preview${compact ? ' home-hero__ds-option-preview--compact' : ''}`}
+      aria-hidden
+    >
+      {option.logoUrl ? (
+        <img src={option.logoUrl} alt="" loading="lazy" />
+      ) : swatches.length > 0 ? (
+        swatches.map((swatch, index) => (
+          <i key={`${swatch}-${index}`} style={{ background: swatch }} />
+        ))
+      ) : (
+        <b>{initial}</b>
+      )}
+    </span>
+  );
+}
+
+function footerInputLabel(field: InputFieldSpec, t: ReturnType<typeof useT>): string {
+  switch (field.name) {
+    case 'designSystem':
+      return t('newproj.designSystem');
+    case 'fidelity':
+      return t('newproj.fidelityLabel');
+    case 'speakerNotes':
+      return t('newproj.toggleSpeakerNotes');
+    case 'model':
+      return t('newproj.modelLabel');
+    case 'ratio':
+      return '比例';
+    case 'duration':
+      return '时长';
+    case 'resolution':
+      return '分辨率';
+    default:
+      return field.label ?? field.name;
+  }
+}
+
+function footerInputValueLabel(field: InputFieldSpec, value: string, t: ReturnType<typeof useT>): string {
+  if (field.name === 'fidelity') {
+    if (value === 'wireframe') return t('newproj.fidelityWireframe');
+    if (value === 'high-fidelity') return t('newproj.fidelityHigh');
+  }
+  if (field.name === 'speakerNotes') {
+    return footerSpeakerNotesEnabled(value) ? t('newproj.toggleSpeakerNotes') : '无演讲备注';
+  }
+  return optionLabelMap(field)[value] ?? value;
+}
+
+function footerSpeakerNotesEnabled(value: unknown): boolean {
+  if (typeof value === 'boolean') return value;
+  if (value === undefined || value === null) return false;
+  const normalized = String(value).trim().toLowerCase();
+  if (!normalized) return false;
+  return !(
+    normalized === 'false' ||
+    normalized === 'no' ||
+    normalized === 'none' ||
+    normalized.includes('no speaker')
+  );
+}
+
+function footerInputValueIcon(field: InputFieldSpec, value: string): IconName | undefined {
+  if (field.name === 'fidelity') {
+    if (value === 'wireframe') return 'grid';
+    if (value === 'high-fidelity') return 'sparkles';
+  }
+  return undefined;
+}
+
 function renderInlinePromptEditor(
   field: InputFieldSpec,
   value: unknown,
@@ -1404,10 +1808,12 @@ function formatPromptInputValue(
   field: InputFieldSpec | null,
   value: unknown,
   fallbackText: string,
+  t?: ReturnType<typeof useT>,
 ): string {
   if (value === undefined || value === null || value === '') return fallbackText;
   const raw = String(value);
-  return field ? optionLabelMap(field)[raw] ?? raw : raw;
+  if (!field) return raw;
+  return t ? footerInputValueLabel(field, raw, t) : optionLabelMap(field)[raw] ?? raw;
 }
 
 function optionLabelMap(field: InputFieldSpec): Record<string, string> {
