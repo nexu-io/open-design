@@ -205,6 +205,7 @@ function agentTimeoutMs(): number {
 }
 const AGENT_COMPLETION_DEBOUNCE_MS = 500;
 const AGENT_KILL_GRACE_MS = 2_000;
+const AGENT_VERSION_PROBE_TIMEOUT_MS = 2_000;
 // Truncates the assistant reply we surface in the success copy so a
 // chatty model can't dump kilobytes into the inline status node.
 const SAMPLE_MAX_CHARS = 120;
@@ -319,13 +320,14 @@ const ANSI_ESCAPE_RE = /\x1b\[[0-9;?]*[A-Za-z]/g;
 
 export function sanitizeStderrExcerpt(
   raw: string | null | undefined,
+  exactSecrets: Array<string | undefined | null> = [],
 ): string | null {
   if (typeof raw !== 'string') return null;
   const stripped = raw.replace(ANSI_ESCAPE_RE, '').replace(/\r/g, '');
-  const redacted = redactSecrets(stripped).trim();
+  const redacted = redactSecrets(stripped, exactSecrets).trim();
   if (redacted.length === 0) return null;
   if (redacted.length <= STDERR_EXCERPT_MAX_CHARS) return redacted;
-  return redacted.slice(redacted.length - STDERR_EXCERPT_MAX_CHARS);
+  return redacted.slice(0, STDERR_EXCERPT_MAX_CHARS);
 }
 
 interface RecoveryHintInput {
@@ -407,6 +409,7 @@ interface BuildAgentDiagnosticsInput {
   binaryPath: string | null;
   binaryVersion: string | null;
   stderrRaw: string | null;
+  agentSecrets?: Array<string | undefined | null>;
 }
 
 export function buildAgentDiagnostics(
@@ -418,7 +421,7 @@ export function buildAgentDiagnostics(
     phase: input.phase,
     binaryPath: input.binaryPath,
     binaryVersion: input.binaryVersion,
-    stderrExcerpt: sanitizeStderrExcerpt(input.stderrRaw),
+    stderrExcerpt: sanitizeStderrExcerpt(input.stderrRaw, input.agentSecrets),
     recoveryHints: recoveryHintsFor({
       phase: input.phase,
       kind: input.kind,
@@ -1236,6 +1239,64 @@ function delay(ms: number): Promise<void> {
   });
 }
 
+async function probeAgentBinaryVersion(
+  launchPath: string,
+  env: NodeJS.ProcessEnv,
+  timeoutMs: number,
+  exactSecrets: Array<string | undefined | null> = [],
+): Promise<string | null> {
+  return new Promise<string | null>((resolve) => {
+    let settled = false;
+    const finish = (value: string | null) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawn(launchPath, ['--version'], {
+        env,
+        stdio: ['ignore', 'pipe', 'ignore'],
+        shell: false,
+      });
+    } catch {
+      finish(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      try {
+        child.kill('SIGKILL');
+      } catch {
+        // Already gone — nothing to do.
+      }
+      finish(null);
+    }, timeoutMs);
+    timer.unref?.();
+    let stdout = '';
+    child.stdout?.setEncoding('utf8');
+    child.stdout?.on('data', (chunk: string) => {
+      stdout += chunk;
+      if (stdout.length > 4_096) stdout = stdout.slice(0, 4_096);
+    });
+    child.once('error', () => {
+      clearTimeout(timer);
+      finish(null);
+    });
+    child.once('close', () => {
+      clearTimeout(timer);
+      const firstLine = stdout
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .find((line) => line.length > 0);
+      if (!firstLine) {
+        finish(null);
+        return;
+      }
+      finish(redactSecrets(firstLine, exactSecrets).slice(0, 200));
+    });
+  });
+}
+
 interface AgentDiagState {
   phase: ConnectionTestPhase;
   binaryPath: string | null;
@@ -1444,6 +1505,17 @@ async function testAgentConnectionInternal(
       configuredAgentEnv,
     );
     const env = applyAgentLaunchEnv(baseEnv, executableResolution);
+    if (diagState) {
+      const agentSecrets = Object.entries(configuredAgentEnv ?? {})
+        .filter(([k]) => /(_API_KEY|_TOKEN|_SECRET|_PASSWORD|_PRIVATE_KEY|_SECRET_KEY|_ACCESS_KEY)$/i.test(k))
+        .map(([, v]) => v);
+      diagState.binaryVersion = await probeAgentBinaryVersion(
+        executableResolution.launchPath,
+        env,
+        AGENT_VERSION_PROBE_TIMEOUT_MS,
+        agentSecrets,
+      );
+    }
     const auth = await probeAgentAuthStatus(input.agentId, executableResolution.launchPath, env);
     if (auth?.status === 'missing') {
       recordPhase('auth_probe');
@@ -1769,6 +1841,10 @@ export async function testAgentConnection(
         diagnostic: null,
       };
 
+  const agentSecrets = Object.entries(configuredAgentEnv ?? {})
+    .filter(([k]) => /(_API_KEY|_TOKEN|_SECRET|_PASSWORD|_PRIVATE_KEY|_SECRET_KEY|_ACCESS_KEY)$/i.test(k))
+    .map(([, v]) => v);
+
   const buildEnvelope = (
     finalKind: ConnectionTestKind,
     diag: AgentDiagState,
@@ -1783,6 +1859,7 @@ export async function testAgentConnection(
       binaryPath,
       binaryVersion: diag.binaryVersion,
       stderrRaw: diag.stderrRaw,
+      agentSecrets,
     });
   };
 

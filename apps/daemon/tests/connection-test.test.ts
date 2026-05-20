@@ -1917,6 +1917,10 @@ console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_messag
       await withFakeCodex(
         `
 const fs = require('node:fs');
+if (process.argv.includes('--version')) {
+  process.stdout.write('codex 0.0.0-test\\n');
+  process.exit(0);
+}
 fs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
 process.on('SIGTERM', () => {
   fs.writeFileSync(${JSON.stringify(termFile)}, 'term');

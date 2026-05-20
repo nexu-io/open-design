@@ -74,11 +74,22 @@ describe('sanitizeStderrExcerpt', () => {
     expect(sanitizeStderrExcerpt('start\x1b[?25lend')).toBe('startend');
   });
 
-  it('truncates output to the configured max length by character count', () => {
-    const long = 'x'.repeat(800);
+  it('head-truncates output to the configured max length by character count', () => {
+    const head = 'HEAD-MARK-';
+    const long = head + 'x'.repeat(800);
     const out = sanitizeStderrExcerpt(long);
     expect(out).not.toBeNull();
     expect(out!.length).toBe(STDERR_EXCERPT_MAX_CHARS);
+    expect(out!.startsWith(head)).toBe(true);
+  });
+
+  it('keeps the actionable head of stderr when the input overflows the budget', () => {
+    const head = 'Error: actionable cause\n';
+    const long = head + 'x'.repeat(STDERR_EXCERPT_MAX_CHARS + 200);
+    const out = sanitizeStderrExcerpt(long);
+    expect(out).not.toBeNull();
+    expect(out!.length).toBe(STDERR_EXCERPT_MAX_CHARS);
+    expect(out!.startsWith('Error: actionable cause')).toBe(true);
   });
 
   it('returns null for null, undefined, and empty inputs', () => {
@@ -93,6 +104,22 @@ describe('sanitizeStderrExcerpt', () => {
     expect(out).not.toBeNull();
     expect(out!).toContain('[REDACTED]');
     expect(out!).not.toContain('sk-xyz123');
+  });
+
+  it('redacts bare configured secret values when the caller threads exactSecrets', () => {
+    const out = sanitizeStderrExcerpt(
+      'Error: invalid api key sk-rotateMe',
+      ['sk-rotateMe'],
+    );
+    expect(out).not.toBeNull();
+    expect(out!).not.toContain('sk-rotateMe');
+    expect(out!).toContain('[REDACTED]');
+  });
+
+  it('leaves bare tokens with no header/query context unredacted when exactSecrets is omitted', () => {
+    const out = sanitizeStderrExcerpt('Error: invalid api key sk-rotateMe');
+    expect(out).not.toBeNull();
+    expect(out!).toContain('sk-rotateMe');
   });
 });
 
@@ -183,12 +210,64 @@ describe('buildAgentDiagnostics', () => {
     expect(d.stderrExcerpt!).not.toContain('sk-abc');
     expect(d.stderrExcerpt!).toContain('[REDACTED]');
   });
+
+  it('scrubs the exact agent secret values supplied by the caller', () => {
+    const d = buildAgentDiagnostics({
+      agentId: 'codex',
+      agentName: 'Codex CLI',
+      kind: 'agent_spawn_failed',
+      phase: 'spawn',
+      binaryPath: '/usr/local/bin/codex',
+      binaryVersion: '0.1.2',
+      stderrRaw: 'Error: api key sk-xyz rejected at https://api.example.com',
+      agentSecrets: ['sk-xyz'],
+    });
+    expect(d.stderrExcerpt).not.toBeNull();
+    expect(d.stderrExcerpt!).not.toContain('sk-xyz');
+    expect(d.stderrExcerpt!).toContain('[REDACTED]');
+  });
+
+  it('scrubs AWS/GCP-style cloud-provider secrets when the caller filters configuredAgentEnv through the broadened regex', () => {
+    const configuredAgentEnv = {
+      OPENAI_API_KEY: 'sk-openai-rotateMe',
+      GITHUB_TOKEN: 'ghp_tokenvalue',
+      AWS_SECRET_ACCESS_KEY: 'awsSecret/+ABC123',
+      GCP_PRIVATE_KEY: '-----BEGIN PRIVATE KEY-----abc',
+      DB_PASSWORD: 'hunter2',
+      AZURE_CLIENT_SECRET: 'azureSecretValue',
+      CODEX_BIN: '/usr/local/bin/codex',
+    };
+    const agentSecrets = Object.entries(configuredAgentEnv)
+      .filter(([k]) => /(_API_KEY|_TOKEN|_SECRET|_PASSWORD|_PRIVATE_KEY|_SECRET_KEY|_ACCESS_KEY)$/i.test(k))
+      .map(([, v]) => v);
+    expect(agentSecrets).toContain('awsSecret/+ABC123');
+    expect(agentSecrets).toContain('-----BEGIN PRIVATE KEY-----abc');
+    expect(agentSecrets).toContain('hunter2');
+    expect(agentSecrets).toContain('azureSecretValue');
+    expect(agentSecrets).not.toContain('/usr/local/bin/codex');
+    const d = buildAgentDiagnostics({
+      agentId: 'codex',
+      agentName: 'Codex CLI',
+      kind: 'agent_spawn_failed',
+      phase: 'spawn',
+      binaryPath: '/usr/local/bin/codex',
+      binaryVersion: '0.1.2',
+      stderrRaw:
+        'Error: AWS rejected key awsSecret/+ABC123; also DB_PASSWORD=hunter2 leaked; private key -----BEGIN PRIVATE KEY-----abc; binary /usr/local/bin/codex still resolves',
+      agentSecrets,
+    });
+    expect(d.stderrExcerpt).not.toBeNull();
+    expect(d.stderrExcerpt!).not.toContain('awsSecret/+ABC123');
+    expect(d.stderrExcerpt!).not.toContain('hunter2');
+    expect(d.stderrExcerpt!).not.toContain('-----BEGIN PRIVATE KEY-----abc');
+    expect(d.stderrExcerpt!).toContain('/usr/local/bin/codex');
+  });
 });
 
 describe('createAgentSink stderr capture', () => {
-  it('preserves enough trailing bytes for the sanitizer to truncate cleanly when stderr arrives across multiple chunks containing an ANSI escape on the boundary', () => {
+  it('preserves enough leading bytes for the sanitizer to head-truncate cleanly when stderr arrives across multiple chunks containing an ANSI escape on the boundary', () => {
     const sink = createAgentSink();
-    const head = 'a'.repeat(STDERR_EXCERPT_MAX_CHARS - 5);
+    const head = 'HEAD-MARK' + 'a'.repeat(STDERR_EXCERPT_MAX_CHARS - 14);
     sink.send('stderr', { chunk: head });
     sink.send('stderr', { chunk: '\x1b[31m' });
     sink.send('stderr', { chunk: 'tail-text-tail-text-tail-text' });
@@ -198,7 +277,7 @@ describe('createAgentSink stderr capture', () => {
     expect(sanitized).not.toBeNull();
     expect(sanitized!).not.toContain('\x1b[');
     expect(sanitized!.length).toBeLessThanOrEqual(STDERR_EXCERPT_MAX_CHARS);
-    expect(sanitized!).toContain('tail-text');
+    expect(sanitized!.startsWith('HEAD-MARK')).toBe(true);
     sink.dispose();
   });
 });
