@@ -399,6 +399,7 @@ async function continueM4(args: Args, status: MigrationStatus, log: string[]): P
       "--wait",
       "--output-dir",
       args.reportDir,
+      ...rootArgs(args),
       "--advance",
     ]),
   );
@@ -507,7 +508,7 @@ function conciseErrorMessage(error: unknown): string {
 async function continueM5(args: Args, log: string[]): Promise<void> {
   if (!args.advance) {
     log.push("M4 is recorded and M5 is open. Run with --advance to apply the guarded default flip.");
-    log.push(formatScriptCommand("apply-tauri-migration-m5.ts", []));
+    log.push(formatScriptCommand("apply-tauri-migration-m5.ts", rootArgs(args)));
     return;
   }
   await runScript("apply-tauri-migration-m5.ts", ["--root", args.root], { cwd: args.root, dryRun: args.dryRun });
@@ -538,6 +539,7 @@ async function maybeAdvanceFromReports(args: Args, status: MigrationStatus, log:
         winReport,
         "--linux-report",
         linuxReport,
+        ...rootArgs(args),
       ]),
     );
     return;
@@ -564,6 +566,10 @@ async function maybeAdvanceFromReports(args: Args, status: MigrationStatus, log:
     },
   );
   log.push(`${args.dryRun ? "Would record" : "Recorded"} M4 evidence and applied guarded M5 default flip.`);
+}
+
+function rootArgs(args: Args): string[] {
+  return args.root === workspaceRoot ? [] : ["--root", args.root];
 }
 
 async function readStatus(args: Args): Promise<MigrationStatus> {

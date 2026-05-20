@@ -114,6 +114,7 @@ async function main(): Promise<void> {
             indent(
               [
                 "pnpm exec tsx scripts/advance-tauri-migration-m4-m5.ts \\",
+                ...(args.root === workspaceRoot ? [] : [`  --root ${shellQuote(args.root)} \\`]),
                 `  --remote ${shellQuote(args.gitRemote)} \\`,
                 `  --branch ${shellQuote(args.branch)} \\`,
                 `  --expected-head ${args.expectedHead ?? "<migration-commit-sha>"} \\`,

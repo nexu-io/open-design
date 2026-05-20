@@ -315,7 +315,7 @@ async function readMigrationStatus(
     ...(handoff == null ? {} : { handoff }),
     ...(handoffArchive == null ? {} : { handoffArchive }),
     ...(heartbeat == null ? {} : { heartbeat }),
-    nextActions: nextActionsForPhase(phase, handoff, handoffArchive, remoteStatus, platformReports, heartbeat),
+    nextActions: nextActionsForPhase(root, phase, handoff, handoffArchive, remoteStatus, platformReports, heartbeat),
     ...(platformReports == null ? {} : { platformReports }),
     phase,
     ...(remoteStatus == null ? {} : { remote: remoteStatus }),
@@ -468,6 +468,7 @@ function currentPhase(groups: ChecklistGroupStatus[]): MigrationStatus["phase"] 
 }
 
 function nextActionsForPhase(
+  root: string,
   phase: MigrationStatus["phase"],
   handoff?: HandoffStatus,
   handoffArchive?: HandoffArchiveStatus,
@@ -490,7 +491,8 @@ function nextActionsForPhase(
     const reportsReadyForAdvance = platformReports?.current === true && (remote == null || remoteReady);
     const remoteName = remote?.remote ?? "origin";
     const reportDir = platformReports?.reportDir ?? defaultReportDir;
-    const continuationCommand = continuationDryRunCommand(handoff, handoffArchive, remoteName, reportDir);
+    const continuationCommand = continuationDryRunCommand(root, handoff, handoffArchive, remoteName, reportDir);
+    const rootOption = root === defaultRoot ? "" : ` --root ${shellQuote(root)}`;
     return [
       ...heartbeatActions,
       `Run ${continuationCommand} to print the next executable handoff/push/report sequence; add --wait-reports --advance after the remote branch and native CI are available.`,
@@ -505,9 +507,9 @@ function nextActionsForPhase(
           ? `On the receiving machine, run ${handoffArchive.commandScript} from the repository root to verify checksum, extract, push, verify the remote branch, and attempt native CI dispatch when GH_BIN/gh is available; or run scripts/push-tauri-migration-handoff.ts --archive ${handoffArchive.archive} --remote ${remoteName} for push-only handoff.`
           : `Copy the packaged handoff archive, .sha256 sidecar, .commands.sh sidecar, and .commands.sh.sha256 sidecar to a write-capable machine, then run the command script or scripts/push-tauri-migration-handoff.ts --archive /path/to/open-design-tauri-migration-handoff.tar.gz --remote ${remoteName}.`,
       reportsReadyForAdvance
-        ? `Advance M4 evidence and M5 defaults with scripts/advance-tauri-migration-m4-m5.ts --remote ${remoteName} --branch ${migrationBranch} --expected-head ${expectedHead} using the verified report paths shown above.`
+        ? `Advance M4 evidence and M5 defaults with scripts/advance-tauri-migration-m4-m5.ts --remote ${remoteName} --branch ${migrationBranch} --expected-head ${expectedHead}${rootOption} using the verified report paths shown above.`
         : remoteReady
-          ? `Trigger native CI with \${GH_BIN:-gh} workflow run ci.yml --ref ${migrationBranch} or open a draft PR, then download and verify artifacts with scripts/download-tauri-m4-reports.ts --branch ${migrationBranch} --expected-head ${expectedHead} --remote ${shellQuote(remoteName)} --wait --output-dir ${shellQuote(reportDir)}; add --advance to apply M4 evidence and M5 defaults immediately after verification.`
+          ? `Trigger native CI with \${GH_BIN:-gh} workflow run ci.yml --ref ${migrationBranch} or open a draft PR, then download and verify artifacts with scripts/download-tauri-m4-reports.ts --branch ${migrationBranch} --expected-head ${expectedHead} --remote ${shellQuote(remoteName)} --wait --output-dir ${shellQuote(reportDir)}${rootOption}; add --advance to apply M4 evidence and M5 defaults immediately after verification.`
           : remote == null
             ? "Run the Windows and Linux Tauri package smoke jobs."
             : `Remote ${remote.remote}/${migrationBranch} must match ${expectedHead} before native CI artifacts can be collected; current blocker: ${remote.problems.join("; ") || "remote branch is not current"}.`,
@@ -515,7 +517,7 @@ function nextActionsForPhase(
         ? []
         : remote == null || remoteReady
           ? [
-              `Advance M4 evidence and M5 defaults with scripts/advance-tauri-migration-m4-m5.ts --remote ${remoteName} --branch ${migrationBranch} --expected-head ${expectedHead} --win-report <dir> --linux-report <dir>.`,
+              `Advance M4 evidence and M5 defaults with scripts/advance-tauri-migration-m4-m5.ts --remote ${remoteName} --branch ${migrationBranch} --expected-head ${expectedHead} --win-report <dir> --linux-report <dir>${rootOption}.`,
             ]
           : ["Do not run scripts/advance-tauri-migration-m4-m5.ts until the remote branch and Windows/Linux report manifests are verified for the expected head."]),
     ];
@@ -523,7 +525,7 @@ function nextActionsForPhase(
   if (phase === "M5") {
     return [
       ...heartbeatActions,
-      "Run scripts/apply-tauri-migration-m5.ts if M4 evidence is already recorded but M5 is still open.",
+      `Run scripts/apply-tauri-migration-m5.ts${rootOptionForStatus(root)} if M4 evidence is already recorded but M5 is still open.`,
       "Keep electron in DESKTOP_RUNTIME_KINDS for the fallback window.",
       "Run pnpm guard, pnpm typecheck, and the tools-dev/tools-pack tests after the M5 applicator diff.",
     ];
@@ -531,7 +533,7 @@ function nextActionsForPhase(
   if (phase === "M6") {
     return [
       ...heartbeatActions,
-      "Run scripts/tauri-migration-inventory.ts --plan to get the current Electron cleanup plan.",
+      `Run scripts/tauri-migration-inventory.ts --plan${rootOptionForStatus(root)} to get the current Electron cleanup plan.`,
       "Remove Electron dependencies, runtime files, pack hooks, tests, and guidance together.",
       "Run pnpm install so pnpm-lock.yaml importer entries match the removed dependencies.",
       "Remove electron from DESKTOP_RUNTIME_KINDS only when the M6 cleanup checkboxes move together.",
@@ -541,12 +543,16 @@ function nextActionsForPhase(
 }
 
 function continuationDryRunCommand(
+  root: string,
   handoff: HandoffStatus | undefined,
   handoffArchive: HandoffArchiveStatus | undefined,
   remoteName: string,
   reportDir: string,
 ): string {
   const parts = ["scripts/continue-tauri-migration.ts"];
+  if (root !== defaultRoot) {
+    parts.push("--root", shellQuote(root));
+  }
   if (handoff?.dir != null) {
     parts.push("--handoff-dir", shellQuote(handoff.dir));
   }
@@ -555,6 +561,10 @@ function continuationDryRunCommand(
   }
   parts.push("--remote", shellQuote(remoteName), "--report-dir", shellQuote(reportDir), "--dry-run");
   return parts.join(" ");
+}
+
+function rootOptionForStatus(root: string): string {
+  return root === defaultRoot ? "" : ` --root ${shellQuote(root)}`;
 }
 
 function isChecklistLineChecked(content: string, label: string): boolean {

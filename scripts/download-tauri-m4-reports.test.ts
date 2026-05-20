@@ -51,6 +51,28 @@ test("download-tauri-m4-reports downloads latest completed artifacts and verifie
   assert.match(calls, new RegExp(`run download 12345[\\s\\S]*--name ${linuxArtifactName}`));
 });
 
+test("download-tauri-m4-reports keeps custom root in printed advance command", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "open-design-tauri-download-root-"));
+  t.after(() => void rm(root, { force: true, recursive: true }));
+  const fakeGh = await writeFakeGh(root);
+  const fixtureRoot = await writeM5Fixture(root);
+
+  const result = await runDownload(
+    fakeGh,
+    "--output-dir",
+    join(root, "reports"),
+    "--repo",
+    "example/open-design",
+    "--branch",
+    "feature",
+    "--root",
+    fixtureRoot,
+  );
+
+  assert.match(result.stdout, /advance-tauri-migration-m4-m5/);
+  assert.match(result.stdout, new RegExp(`--root '${escapeRegExp(fixtureRoot)}'`));
+});
+
 test("download-tauri-m4-reports can use an explicit run id with expected head without listing runs", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "open-design-tauri-download-run-"));
   t.after(() => void rm(root, { force: true, recursive: true }));

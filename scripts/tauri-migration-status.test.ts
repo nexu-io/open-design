@@ -731,6 +731,7 @@ test("tauri-migration-status reports a remote branch matching the handoff", asyn
   assert.match(parsed.nextActions.join("\n"), /already matches/);
   assert.match(parsed.nextActions.join("\n"), /\$\{GH_BIN:-gh\} workflow run ci\.yml --ref codex\/electron-to-tauri-migration/);
   assert.match(parsed.nextActions.join("\n"), new RegExp(`--expected-head ${head}`));
+  assert.match(parsed.nextActions.join("\n"), new RegExp(`--root ${escapeRegExp(fixture)}`));
   assert.match(parsed.nextActions.join("\n"), /--wait/);
   assert.match(parsed.nextActions.join("\n"), /download-tauri-m4-reports/);
 });
@@ -757,6 +758,7 @@ test("tauri-migration-status keeps custom report directory in remote-ready downl
   assert.equal(parsed.remote.current, true);
   assert.equal(parsed.platformReports.reportDir, reportDir);
   assert.match(nextActions, new RegExp(`--output-dir '${escapeRegExp(reportDir)}'`));
+  assert.match(nextActions, new RegExp(`--root ${escapeRegExp(fixture)}`));
   assert.doesNotMatch(nextActions, /--output-dir \/tmp\/open-design-tauri-m4-reports/);
 });
 
@@ -781,6 +783,7 @@ test("tauri-migration-status reports a missing remote branch", async (t) => {
   assert.equal(parsed.remote.current, false);
   assert.equal(parsed.remote.expectedHead, head);
   assert.match(parsed.remote.problems.join("\n"), /remote branch not found/);
+  assert.match(parsed.nextActions.join("\n"), new RegExp(`--root ${escapeRegExp(fixture)}`));
   assert.match(parsed.nextActions.join("\n"), new RegExp(`Remote ${escapeRegExp(remotePath)}\\/codex\\/electron-to-tauri-migration must match ${head}`));
   assert.match(parsed.nextActions.join("\n"), /Do not run scripts\/advance-tauri-migration-m4-m5\.ts/);
   assert.doesNotMatch(parsed.nextActions.join("\n"), /Run the Windows and Linux Tauri package smoke jobs/);
@@ -1413,6 +1416,7 @@ test("continue-tauri-migration dry-run waits for reports when the remote already
   assert.match(result.stdout, /download-tauri-m4-reports\.ts/);
   assert.match(result.stdout, new RegExp(`--expected-head ${head}`));
   assert.match(result.stdout, new RegExp(`--output-dir ${escapeRegExp(reportDir)}`));
+  assert.match(result.stdout, new RegExp(`--root ${escapeRegExp(fixture)}`));
   assert.match(result.stdout, /--advance/);
   assert.match(result.stdout, /Would wait for native M4 reports and advance M4→M5/);
 });
@@ -1440,6 +1444,7 @@ test("continue-tauri-migration reports manual dispatch when gh workflow dispatch
   assert.match(result.stdout, /--body-file \.tmp\/tauri-migration-pr-body\.md/);
   assert.match(result.stdout, /download-tauri-m4-reports\.ts/);
   assert.match(result.stdout, new RegExp(`--expected-head ${head}`));
+  assert.match(result.stdout, new RegExp(`--root ${escapeRegExp(fixture)}`));
 });
 
 test("continue-tauri-migration dry-run reports manual dispatch when gh is unavailable", async (t) => {
@@ -1469,6 +1474,7 @@ test("continue-tauri-migration dry-run reports manual dispatch when gh is unavai
   assert.match(result.stdout, /--body-file \.tmp\/tauri-migration-pr-body\.md/);
   assert.match(result.stdout, /download-tauri-m4-reports\.ts/);
   assert.match(result.stdout, new RegExp(`--expected-head ${head}`));
+  assert.match(result.stdout, new RegExp(`--root ${escapeRegExp(fixture)}`));
 });
 
 test("continue-tauri-migration keeps receiver override paths aligned in dry-run", async (t) => {
