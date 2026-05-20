@@ -59,6 +59,38 @@ describe('testApiProvider', () => {
     });
   });
 
+  it('POSTs kimi protocol to the OpenAI-compatible proxy endpoint', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({
+        ok: true,
+        kind: 'success',
+        latencyMs: 42,
+        model: 'moonshot-v1-8k',
+        sample: 'ok',
+      }));
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const result = await testApiProvider({
+      protocol: 'kimi',
+      baseUrl: 'https://api.moonshot.ai',
+      apiKey: 'sk-kimi-test',
+      model: 'moonshot-v1-8k',
+    });
+
+    expect(result).toMatchObject({ ok: true, kind: 'success', model: 'moonshot-v1-8k' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe('/api/test/connection');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body)).toMatchObject({
+      mode: 'provider',
+      protocol: 'kimi',
+      apiKey: 'sk-kimi-test',
+      model: 'moonshot-v1-8k',
+    });
+  });
+
   it('synthesizes a kind=unknown envelope when the daemon returns 5xx', async () => {
     globalThis.fetch = vi
       .fn()

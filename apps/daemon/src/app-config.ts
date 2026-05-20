@@ -143,7 +143,7 @@ const AGENT_CLI_ENV_KEYS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ['devin', new Set(['DEVIN_BIN'])],
   ['gemini', new Set(['GEMINI_BIN'])],
   ['hermes', new Set(['HERMES_BIN'])],
-  ['kimi', new Set(['KIMI_BIN'])],
+  ['kimi', new Set(['KIMI_BIN', 'KIMI_API_KEY', 'MOONSHOT_API_KEY'])],
   ['kiro', new Set(['KIRO_BIN'])],
   ['kilo', new Set(['KILO_BIN'])],
   ['opencode', new Set(['OPENCODE_BIN'])],

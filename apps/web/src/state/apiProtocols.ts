@@ -1,4 +1,4 @@
-// Shared metadata for the four API protocols the BYOK pickers offer.
+// Shared metadata for the seven API protocols the BYOK pickers offer.
 //
 // Originally these tables lived inline in `SettingsDialog.tsx`. The
 // memory-extraction picker needs the exact same lists (so it can mirror
@@ -122,6 +122,13 @@ export const SUGGESTED_MODELS_BY_PROTOCOL: Record<ApiProtocol, readonly string[]
     'qwen3.5:397b',
     'rnj-1:8b',
   ],
+  kimi: [
+    'moonshot-v1-8k',
+    'moonshot-v1-32k',
+    'moonshot-v1-128k',
+    'kimi-latest',
+    'kimi-k2-turbo-preview',
+  ],
 };
 
 // "Fast / cheap" model recommendation for each protocol. Used by the
@@ -140,6 +147,7 @@ export const FAST_MODEL_BY_PROTOCOL: Record<ApiProtocol, string> = {
   // through the Memory model picker.
   ollama: 'gemma3:4b',
   senseaudio: 'senseaudio-s2-flash',
+  kimi: 'moonshot-v1-8k',
 };
 
 export const API_PROTOCOL_TABS: ReadonlyArray<{
@@ -152,6 +160,7 @@ export const API_PROTOCOL_TABS: ReadonlyArray<{
   { id: 'google', title: 'Google Gemini' },
   { id: 'ollama', title: 'Ollama Cloud' },
   { id: 'senseaudio', title: 'SenseAudio' },
+  { id: 'kimi', title: 'Kimi Code' },
 ];
 
 export const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
@@ -161,6 +170,7 @@ export const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
   google: 'Google Gemini',
   ollama: 'Ollama Cloud API',
   senseaudio: 'SenseAudio API',
+  kimi: 'Kimi Code API',
 };
 
 export const API_KEY_PLACEHOLDERS: Record<ApiProtocol, string> = {
@@ -170,6 +180,7 @@ export const API_KEY_PLACEHOLDERS: Record<ApiProtocol, string> = {
   google: 'AIza...',
   ollama: 'Ollama API key',
   senseaudio: 'SenseAudio API key',
+  kimi: 'sk-kimi-...',
 };
 
 // Default base URL the daemon assumes when the user leaves the field
@@ -182,4 +193,5 @@ export const DEFAULT_BASE_URL_BY_PROTOCOL: Record<ApiProtocol, string> = {
   google: 'https://generativelanguage.googleapis.com',
   ollama: 'https://ollama.com',
   senseaudio: 'https://api.senseaudio.cn',
+  kimi: 'https://api.moonshot.ai',
 };
