@@ -1,6 +1,11 @@
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { resolveDaemonCliPath, resolveDaemonResourceRoot, resolveProjectRoot } from '../src/server.js';
+import {
+  resolveDaemonCliPath,
+  resolveDaemonResourceRoot,
+  resolveProcessResourcesPath,
+  resolveProjectRoot,
+} from '../src/server.js';
 
 describe('resolveProjectRoot', () => {
   it('resolves the repository root from the source daemon directory', () => {
@@ -69,5 +74,21 @@ describe('resolveDaemonResourceRoot', () => {
     expect(() => resolveDaemonResourceRoot({ configured, safeBases: [safeBase] })).toThrow(
       /OD_RESOURCE_ROOT must be under/,
     );
+  });
+});
+
+describe('resolveProcessResourcesPath', () => {
+  it('infers Linux AppImage resources from the bundled node path', () => {
+    const resourcesPath = path.join(
+      path.sep,
+      'tmp',
+      'appimage_extracted',
+      'usr',
+      'lib',
+      'Open Design',
+    );
+    const execPath = path.join(resourcesPath, 'open-design', 'bin', 'node');
+
+    expect(resolveProcessResourcesPath({ execPath, resourcesPath: undefined })).toBe(resourcesPath);
   });
 });

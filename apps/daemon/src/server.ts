@@ -923,34 +923,43 @@ export function resolveSafeProjectAttachments(cwd, attachments, opts = {}) {
   return out;
 }
 
-function resolveProcessResourcesPath() {
+export function resolveProcessResourcesPath({
+  execPath = process.execPath,
+  resourcesPath = process.resourcesPath,
+} = {}) {
   if (
-    typeof process.resourcesPath === 'string' &&
-    process.resourcesPath.length > 0
+    typeof resourcesPath === 'string' &&
+    resourcesPath.length > 0
   ) {
-    return process.resourcesPath;
+    return resourcesPath;
   }
 
   // Packaged daemon sidecars run under the bundled Node binary rather than the
   // Electron root process, so `process.resourcesPath` is unavailable there.
   // Infer the macOS app Resources directory from that bundled Node path.
   const resourcesMarker = `${path.sep}Contents${path.sep}Resources${path.sep}`;
-  const markerIndex = process.execPath.indexOf(resourcesMarker);
+  const markerIndex = execPath.indexOf(resourcesMarker);
   if (markerIndex !== -1) {
-    return process.execPath.slice(0, markerIndex + resourcesMarker.length - 1);
+    return execPath.slice(0, markerIndex + resourcesMarker.length - 1);
   }
 
-  const normalizedExecPath = process.execPath.toLowerCase();
+  const normalizedExecPath = execPath.toLowerCase();
   const windowsResourceBinMarker =
     `${path.sep}resources${path.sep}open-design${path.sep}bin${path.sep}`.toLowerCase();
   const windowsMarkerIndex = normalizedExecPath.indexOf(
     windowsResourceBinMarker,
   );
   if (windowsMarkerIndex !== -1) {
-    return process.execPath.slice(
+    return execPath.slice(
       0,
       windowsMarkerIndex + `${path.sep}resources`.length,
     );
+  }
+
+  const linuxResourceBinMarker = `${path.sep}open-design${path.sep}bin${path.sep}`;
+  const linuxMarkerIndex = execPath.indexOf(linuxResourceBinMarker);
+  if (linuxMarkerIndex !== -1) {
+    return execPath.slice(0, linuxMarkerIndex);
   }
 
   return null;

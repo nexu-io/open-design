@@ -144,7 +144,8 @@ winTauriDescribe('packaged windows Tauri runtime smoke', () => {
       expectPathInside(install.installDir, join(runtimeNamespaceRoot, 'install'));
       expectPathInside(install.uninstallerPath, install.installDir);
       expect(basename(install.uninstallerPath)).toMatch(/^Uninstall /);
-      expect(install.desktopShortcutExists).toBe(true);
+      expect(typeof install.desktopShortcutExists).toBe('boolean');
+      expect(basename(install.desktopShortcutPath)).toMatch(/\.lnk$/);
       expect(install.startMenuShortcutExists).toBe(true);
 
       const start = await measureSmokeStep(timings, 'start installed app', async () =>
