@@ -93,7 +93,7 @@ interface ChatRunService {
   start(run: RunRecord, starter: (run: RunRecord) => Promise<void>): RunRecord;
   get(id: string): RunRecord | null;
   list(filter?: { projectId?: string; conversationId?: string; status?: string }): RunRecord[];
-  stream(run: RunRecord, req: { get(name: string): string | undefined; query: Record<string, string> }, res: unknown): void;
+  stream(run: RunRecord, req: { get(name: string): string | undefined; query: Record<string, unknown> }, res: unknown): void;
   cancel(run: RunRecord): void;
   shutdownActive(opts?: { graceMs?: number }): Promise<void>;
   wait(run: RunRecord): Promise<RunStatusBody>;
@@ -226,7 +226,7 @@ export function createChatRunService({
     return run;
   };
 
-  const stream = (run: RunRecord, req: { get(name: string): string | undefined; query: Record<string, string> }, res: unknown): void => {
+  const stream = (run: RunRecord, req: { get(name: string): string | undefined; query: Record<string, unknown> }, res: unknown): void => {
     const sse = createSseResponse(res);
     const lastEventId = Number(req.get('Last-Event-ID') || req.query.after || 0);
     for (const record of run.events) {
