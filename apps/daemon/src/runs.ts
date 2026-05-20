@@ -56,7 +56,7 @@ interface AcpSession {
 
 interface ChildProcess {
   exitCode: number | null;
-  signalCode: string | null;
+  signalCode: NodeJS.Signals | null;
   killed: boolean;
   kill(signal?: number | string): boolean;
   once?(event: string, listener: () => void): void;
