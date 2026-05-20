@@ -22,7 +22,6 @@ import { projectKindToTracking } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackHomeChatComposerClick,
-  trackPageView,
   trackPluginReplacementModalClick,
   trackPluginReplacementModalSurfaceView,
   trackPluginReplacementResult,
@@ -41,22 +40,6 @@ import type { Project, ProjectMetadata, PromptTemplateSummary, SkillSummary } fr
 import { inlineMentionToken } from '../utils/inlineMentions';
 import { HomeHero } from './HomeHero';
 import { findChip, type HomeHeroChip } from './home-hero/chips';
-
-function scheduleIdleTask(task: () => void): () => void {
-  if (typeof window === 'undefined') return () => undefined;
-  const idle = (
-    window as Window & {
-      requestIdleCallback?: (cb: IdleRequestCallback, opts?: IdleRequestOptions) => number;
-      cancelIdleCallback?: (id: number) => void;
-    }
-  );
-  if (idle.requestIdleCallback) {
-    const id = idle.requestIdleCallback(() => task(), { timeout: 2000 });
-    return () => idle.cancelIdleCallback?.(id);
-  }
-  const id = window.setTimeout(task, 0);
-  return () => window.clearTimeout(id);
-}
 import {
   buildHomeMediaComposer,
   homeMediaSurfaceForChipId,
@@ -76,6 +59,22 @@ import { PluginsHomeSection } from './PluginsHomeSection';
 import type { PluginLoopSubmit } from './PluginLoopHome';
 import type { PluginUseAction } from './plugins-home/useActions';
 import { RecentProjectsStrip } from './RecentProjectsStrip';
+
+function scheduleIdleTask(task: () => void): () => void {
+  if (typeof window === 'undefined') return () => undefined;
+  const idle = (
+    window as Window & {
+      requestIdleCallback?: (cb: IdleRequestCallback, opts?: IdleRequestOptions) => number;
+      cancelIdleCallback?: (id: number) => void;
+    }
+  );
+  if (idle.requestIdleCallback) {
+    const id = idle.requestIdleCallback(() => task(), { timeout: 2000 });
+    return () => idle.cancelIdleCallback?.(id);
+  }
+  const id = window.setTimeout(task, 0);
+  return () => window.clearTimeout(id);
+}
 
 interface ActivePlugin {
   record: InstalledPluginRecord;
@@ -183,6 +182,12 @@ export function HomeView({
   promptTemplates = [],
 }: Props) {
   const { locale, t } = useI18n();
+  const analytics = useAnalytics();
+  const ownsPluginCatalog = pluginsFromParent === undefined;
+  const [localPlugins, setLocalPlugins] = useState<InstalledPluginRecord[]>([]);
+  const [localPluginsLoading, setLocalPluginsLoading] = useState(ownsPluginCatalog);
+  const plugins = pluginsFromParent ?? localPlugins;
+  const pluginsLoading = pluginsLoadingFromParent || (ownsPluginCatalog && localPluginsLoading);
 
   const [pendingApplyId, setPendingApplyId] = useState<string | null>(null);
   const [pendingChipId, setPendingChipId] = useState<string | null>(null);
