@@ -760,6 +760,124 @@ describe('deploy plan and analyzer', () => {
     expect(JSON.parse(Buffer.from(emitted!.data).toString('utf8'))).toEqual({ cleanUrls: true });
   });
 
+  it('preserves a root vercel.json that the manifest omits from supportingFiles', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await writeFile(
+      path.join(dir, 'index.html'),
+      '<!doctype html><a href="about.html">about</a>',
+    );
+    await writeFile(path.join(dir, 'about.html'), '<!doctype html><h1>About</h1>');
+    const userVercel = {
+      headers: [{ source: '/(.*)', headers: [{ key: 'X-Frame-Options', value: 'DENY' }] }],
+      redirects: [{ source: '/old', destination: '/about', permanent: true }],
+    };
+    await writeFile(path.join(dir, 'vercel.json'), JSON.stringify(userVercel));
+    await writeFile(
+      path.join(dir, 'index.html.artifact.json'),
+      JSON.stringify({
+        version: 1,
+        kind: 'html',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+        supportingFiles: ['about.html'],
+      }),
+    );
+
+    const plan = await buildDeployFilePlan(projectsRoot, projectId, 'index.html');
+    const emitted = plan.files.find((f) => f.file === 'vercel.json');
+    expect(emitted).toBeDefined();
+    const parsed = JSON.parse(Buffer.from(emitted!.data).toString('utf8'));
+    expect(parsed.cleanUrls).toBe(true);
+    expect(parsed.headers).toEqual(userVercel.headers);
+    expect(parsed.redirects).toEqual(userVercel.redirects);
+  });
+
+  it('falls back to cleanUrls vercel.json when the root file is malformed JSON and absent from supportingFiles', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await writeFile(
+      path.join(dir, 'index.html'),
+      '<!doctype html><a href="about.html">about</a>',
+    );
+    await writeFile(path.join(dir, 'about.html'), '<!doctype html><h1>About</h1>');
+    await writeFile(path.join(dir, 'vercel.json'), 'not json');
+    await writeFile(
+      path.join(dir, 'index.html.artifact.json'),
+      JSON.stringify({
+        version: 1,
+        kind: 'html',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+        supportingFiles: ['about.html'],
+      }),
+    );
+
+    const plan = await buildDeployFilePlan(projectsRoot, projectId, 'index.html');
+    const emitted = plan.files.find((f) => f.file === 'vercel.json');
+    expect(emitted).toBeDefined();
+    const parsed = JSON.parse(Buffer.from(emitted!.data).toString('utf8'));
+    expect(parsed.cleanUrls).toBe(true);
+    expect(parsed.headers).toBeUndefined();
+    expect(parsed.redirects).toBeUndefined();
+  });
+
+  it('falls back to cleanUrls vercel.json when the root file is a JSON array and absent from supportingFiles', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await writeFile(
+      path.join(dir, 'index.html'),
+      '<!doctype html><a href="about.html">about</a>',
+    );
+    await writeFile(path.join(dir, 'about.html'), '<!doctype html><h1>About</h1>');
+    await writeFile(path.join(dir, 'vercel.json'), JSON.stringify(['not', 'an', 'object']));
+    await writeFile(
+      path.join(dir, 'index.html.artifact.json'),
+      JSON.stringify({
+        version: 1,
+        kind: 'html',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+        supportingFiles: ['about.html'],
+      }),
+    );
+
+    const plan = await buildDeployFilePlan(projectsRoot, projectId, 'index.html');
+    const emitted = plan.files.find((f) => f.file === 'vercel.json');
+    expect(emitted).toBeDefined();
+    const parsed = JSON.parse(Buffer.from(emitted!.data).toString('utf8'));
+    expect(parsed.cleanUrls).toBe(true);
+    expect(parsed.headers).toBeUndefined();
+    expect(parsed.redirects).toBeUndefined();
+  });
+
+  it('tolerates a non-ENOENT read error on the root vercel.json probe', async () => {
+    const { projectsRoot, projectId, dir } = await setupProject();
+    await writeFile(
+      path.join(dir, 'index.html'),
+      '<!doctype html><a href="about.html">about</a>',
+    );
+    await writeFile(path.join(dir, 'about.html'), '<!doctype html><h1>About</h1>');
+    await mkdir(path.join(dir, 'vercel.json'));
+    await writeFile(
+      path.join(dir, 'index.html.artifact.json'),
+      JSON.stringify({
+        version: 1,
+        kind: 'html',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+        supportingFiles: ['about.html'],
+      }),
+    );
+
+    const plan = await buildDeployFilePlan(projectsRoot, projectId, 'index.html');
+    expect(plan.invalid).not.toContain('vercel.json');
+    const emitted = plan.files.find((f) => f.file === 'vercel.json');
+    expect(emitted).toBeDefined();
+    expect(JSON.parse(Buffer.from(emitted!.data).toString('utf8'))).toEqual({ cleanUrls: true });
+  });
+
   it('flags missing assets as broken-reference warnings', () => {
     const { warnings } = analyzeDeployPlan({
       entryPath: 'index.html',

@@ -327,6 +327,18 @@ export async function buildDeployFilePlan(projectsRoot: string, projectId: strin
     }
   }
 
+  if (!files.has('vercel.json') && !visited.has('vercel.json')) {
+    try {
+      const rootVercel = await readProjectFile(projectsRoot, projectId, 'vercel.json', options.metadata);
+      files.set('vercel.json', {
+        file: 'vercel.json',
+        data: rootVercel.buffer,
+        contentType: rootVercel.mime,
+        sourcePath: 'vercel.json',
+      });
+    } catch {}
+  }
+
   const fileList = Array.from(files.values());
   const routing = buildVercelRoutingConfig(fileList);
   if (routing) {
