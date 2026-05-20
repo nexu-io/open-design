@@ -43,7 +43,8 @@ Synthesizes a "resume conversation" handoff prompt from one conversation's
 transcript via the local daemon. Prints the prompt to stdout; --json emits
 the full response (prompt + model + token usage).
 
-API key transport (one of, in precedence order):
+API key transport (one of — listed safest-first; when more than one is
+given, --api-key wins, then --api-key-file, then the env var):
   --api-key-file <path|->   Read the key from a file or stdin ("-").  Safe.
   ANTHROPIC_API_KEY env var Read from the environment.  Safe.
   --api-key <key>           Pass the key directly.  DEPRECATED — leaks
