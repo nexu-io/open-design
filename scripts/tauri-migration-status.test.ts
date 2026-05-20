@@ -1588,6 +1588,37 @@ test("continue-tauri-migration does not advance from local reports before remote
   assert.doesNotMatch(result.stdout, /Would record M4 evidence/);
 });
 
+test("continue-tauri-migration surfaces missing platform reports before planning M4 work", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+  await writeHandoffArchive(handoffDir);
+  const remotePath = join(fixture, "empty.git");
+  await git(fixture, "init", "--bare", remotePath);
+  const reportDir = join(fixture, "missing reports");
+
+  const result = await runContinue(
+    fixture,
+    "--handoff-dir",
+    handoffDir,
+    "--remote",
+    remotePath,
+    "--report-dir",
+    reportDir,
+    "--dry-run",
+    "--skip-push",
+    "--skip-dispatch",
+  );
+
+  assert.match(result.stdout, /Platform reports need attention/);
+  assert.match(result.stdout, new RegExp(`platform report directory missing: ${escapeRegExp(reportDir)}`));
+  assert.match(result.stdout, /Remote branch is not ready; native CI cannot be collected yet/);
+});
+
 test("continue-tauri-migration surfaces heartbeat problems before planning M4 work", async (t) => {
   const fixture = await createFixtureRoot(t, {
     checked: [],

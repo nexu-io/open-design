@@ -67,6 +67,7 @@ type MigrationStatus = {
   platformReports?: {
     current: boolean;
     linuxReport?: string;
+    problems: string[];
     winReport?: string;
   };
   remote?: {
@@ -95,6 +96,9 @@ async function main(): Promise<void> {
   }
   if (status.m4Evidence?.problems != null && status.m4Evidence.problems.length > 0) {
     log.push(`M4 evidence needs attention: ${status.m4Evidence.problems.join("; ")}`);
+  }
+  if (status.platformReports?.current === false && status.platformReports.problems.length > 0) {
+    log.push(`Platform reports need attention: ${status.platformReports.problems.join("; ")}`);
   }
 
   if (status.git.trackedClean !== true && !args.dryRun) {
