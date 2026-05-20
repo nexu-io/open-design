@@ -346,6 +346,7 @@ describe('ManualEditPanel', () => {
 
     act(() => {
       lineInput.value = '49px';
+      lineInput.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
       lineInput.dispatchEvent(new dom.window.FocusEvent('focusout', { bubbles: true }));
     });
 
