@@ -319,6 +319,8 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 | Linux headless regression | Linux host after a successful Tauri Linux build | `pnpm tools-pack linux install --headless --desktop-runtime tauri --namespace tauri-linux-smoke --json`; `pnpm tools-pack linux start --headless --desktop-runtime tauri --namespace tauri-linux-smoke --json`; `pnpm tools-pack linux stop --headless --desktop-runtime tauri --namespace tauri-linux-smoke --json` | Headless launcher path, status URL or marker, `remainingPids: []` on stop. |
 | MSI follow-up | Windows host / release owner decision | MSI is not a default-flip blocker. If release ownership later makes MSI mandatory, add `--to msi` support plus a namespace-scoped install/uninstall lifecycle before running the same inspect smoke as NSIS. | Follow-up issue or code change and Windows smoke result. |
 
+M4 closes from two native CI report artifacts, not from three manually gathered snippets. `open-design-ci-win-tauri-e2e-report` must pass the `Windows NSIS M4 evidence` verifier section and closes the Windows NSIS checkbox. `open-design-ci-linux-tauri-e2e-report` must pass the `Linux AppImage/headless M4 evidence` verifier section and closes both the Linux AppImage and Linux headless checkboxes because the Linux report's `summary.headless.install`, `summary.headless.start`, and `summary.headless.stop` fields prove the headless regression after the AppImage path succeeds.
+
 ## Execution Log
 
 - 2026-05-19: Added Tauri dev runtime MVP, web desktop bridge abstraction, `tools-dev --desktop-runtime tauri`, and regression tests.

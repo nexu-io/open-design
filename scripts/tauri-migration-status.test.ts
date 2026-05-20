@@ -70,6 +70,15 @@ test("migration doc platform gate table includes verifier-required uninstall evi
   assert.match(linuxRow, /tools-pack linux uninstall/);
   assert.match(linuxRow, /AppImage, desktop file, and icon/);
   assert.match(linuxRow, /skipped-process-running/);
+
+  assert.match(source, /M4 closes from two native CI report artifacts, not from three manually gathered snippets/);
+  assert.match(source, /open-design-ci-win-tauri-e2e-report/);
+  assert.match(source, /Windows NSIS M4 evidence/);
+  assert.match(source, /open-design-ci-linux-tauri-e2e-report/);
+  assert.match(source, /Linux AppImage\/headless M4 evidence/);
+  assert.match(source, /summary\.headless\.install/);
+  assert.match(source, /summary\.headless\.start/);
+  assert.match(source, /summary\.headless\.stop/);
 });
 
 test("tauri-migration-status reports the current M4 blocker state", async (t) => {
