@@ -1344,11 +1344,24 @@ html[data-od-inspect-mode] body iframe { pointer-events: none !important; }
 // the scaled canvas ends up offset toward the bottom-right of any
 // preview that's smaller than 1920x1080 — exactly what users see in the
 // sandbox iframe. `place-content: center` centers the track itself.
+//
+// Framework decks (apps/daemon/src/prompts/deck-framework.ts) opt out:
+// their `fit()` already centers a `transform-origin: top left` stage with
+// an explicit `translate(tx, ty)` that assumes the stage's natural layout
+// position is (0, 0). If we force `place-content: center` on their
+// `.deck-shell` grid, the implicit track gets re-centered to
+// ((sw-1920)/2, (sh-1080)/2) and `fit()`'s translate stacks on top, so
+// the scaled stage lands ~1000px off-screen and the user sees a mostly-
+// black preview with a sliver of slide content in the top-left. Skip the
+// override whenever the framework's marker id is present.
 function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
   const safeInitialSlideIndex = Number.isFinite(initialSlideIndex)
     ? Math.max(0, Math.floor(initialSlideIndex))
     : 0;
-  const styleFix = `<style data-od-deck-fix>
+  const isFrameworkDeck = /\bid\s*=\s*["']deck-stage["']/i.test(doc);
+  const styleFix = isFrameworkDeck
+    ? ''
+    : `<style data-od-deck-fix>
 .stage, .deck-stage, .deck-shell { place-content: center !important; }
 </style>`;
   const script = `<script data-od-deck-bridge>(function(){

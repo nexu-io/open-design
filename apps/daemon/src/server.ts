@@ -295,6 +295,7 @@ import {
   writeProjectFile,
 } from './projects.js';
 import { validateArtifactManifestInput } from './artifact-manifest.js';
+import { ArtifactPublicationBlockedError } from './artifact-publication-guard.js';
 import { readCurrentAppVersionInfo } from './app-version.js';
 import {
   appendMessageStatusEvent,
@@ -8098,6 +8099,11 @@ export async function startServer({
         const body = { file: meta };
         res.json(body);
       } catch (err) {
+        if (err instanceof ArtifactPublicationBlockedError) {
+          return sendApiError(res, 422, 'ARTIFACT_PUBLICATION_BLOCKED', err.message, {
+            details: { placeholders: err.placeholders },
+          });
+        }
         sendApiError(res, 500, 'INTERNAL_ERROR', 'upload failed');
       }
     },
