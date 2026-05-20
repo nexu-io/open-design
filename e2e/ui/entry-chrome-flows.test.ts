@@ -416,7 +416,7 @@ test('entry help menu exposes community links and topbar routes Use everywhere',
   );
   await expect(menu.getByRole('menuitem', { name: /Join Discord/i })).toHaveAttribute(
     'href',
-    'https://discord.gg/BYShPgWpq',
+    'https://discord.gg/mHAjSMV6gz',
   );
 
   await page.getByTestId('entry-use-everywhere-button').click();

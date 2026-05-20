@@ -1,4 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useAnalytics } from '../analytics/provider';
+import {
+  trackDesignSystemsTemplateCardClick,
+  trackDesignSystemsTopClick,
+  trackPageView,
+} from '../analytics/events';
 import { useI18n } from '../i18n';
 import {
   localizeDesignSystemCategory,
@@ -77,6 +83,26 @@ export function DesignSystemsTab({
   onSystemsRefresh,
 }: Props) {
   const { locale, t } = useI18n();
+  const analytics = useAnalytics();
+  const designSystemsPageViewFiredRef = useRef(false);
+  useEffect(() => {
+    if (designSystemsPageViewFiredRef.current) return;
+    designSystemsPageViewFiredRef.current = true;
+    // v2 doc: the DS list page also carries `area` / `view_type` /
+    // `entry_from` so it can stitch the cross-surface DS funnel.
+    // `entry_from` is `unknown` here because the tab is reached
+    // through the home nav rail; a router-aware entry mapper can
+    // refine this later.
+    trackPageView(analytics.track, {
+      page_name: 'design_systems',
+      area: 'design_system_list',
+      view_type: 'page',
+      entry_from: 'unknown',
+      available_design_system_count: systems.length,
+    });
+  }, [analytics.track, systems.length]);
+  const searchTrackedRef = useRef(false);
+  const categoryTrackedRef = useRef(false);
   const [filter, setFilter] = useState('');
   const [userFilter, setUserFilter] = useState<UserListFilter>('all');
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -365,11 +391,29 @@ export function DesignSystemsTab({
             data-testid="design-systems-search"
             placeholder={t('ds.searchPlaceholder')}
             value={filter}
+            onFocus={() => {
+              if (searchTrackedRef.current) return;
+              searchTrackedRef.current = true;
+              trackDesignSystemsTopClick(analytics.track, {
+                page_name: 'design_systems',
+                area: 'design_systems',
+                element: 'search_input',
+              });
+            }}
             onChange={(e) => setFilter(e.target.value)}
           />
           <select
             data-testid="design-systems-category-select"
             value={category}
+            onFocus={() => {
+              if (categoryTrackedRef.current) return;
+              categoryTrackedRef.current = true;
+              trackDesignSystemsTopClick(analytics.track, {
+                page_name: 'design_systems',
+                area: 'design_systems',
+                element: 'search_dropdown',
+              });
+            }}
             onChange={(e) => setCategory(e.target.value)}
           >
             {categories.map((c) => (
@@ -399,7 +443,15 @@ export function DesignSystemsTab({
               aria-selected={surfaceFilter === p.value}
               data-testid={`design-systems-surface-${p.value}`}
               className={`filter-pill ${surfaceFilter === p.value ? 'active' : ''}`}
-              onClick={() => setSurfaceFilter(p.value)}
+              onClick={() => {
+                trackDesignSystemsTopClick(analytics.track, {
+                  page_name: 'design_systems',
+                  area: 'design_systems',
+                  element: 'filter_chip',
+                  filter_name: p.value,
+                });
+                setSurfaceFilter(p.value);
+              }}
             >
               {t(p.labelKey)}
               <span className="filter-pill-count">{surfaceCounts[p.value]}</span>
@@ -417,9 +469,27 @@ export function DesignSystemsTab({
                 active={s.id === selectedId}
                 thumbHtml={thumbs[s.id]}
                 onIntersect={() => loadThumb(s.id)}
-                onSelect={() => onSelect(s.id)}
+                onSelect={() => {
+                  trackDesignSystemsTemplateCardClick(analytics.track, {
+                    page_name: 'design_systems',
+                    area: 'templates_card',
+                    element: 'templates_card',
+                    templates_id: s.id,
+                    templates_type: s.source ?? 'library',
+                  });
+                  onSelect(s.id);
+                }}
                 onOpenSystem={onOpenSystem ? () => onOpenSystem(s.id) : undefined}
-                onPreview={() => onPreview(s.id)}
+                onPreview={() => {
+                  trackDesignSystemsTemplateCardClick(analytics.track, {
+                    page_name: 'design_systems',
+                    area: 'templates_card',
+                    element: 'templates_card',
+                    templates_id: s.id,
+                    templates_type: s.source ?? 'library',
+                  });
+                  onPreview(s.id);
+                }}
               />
             ))}
           </div>

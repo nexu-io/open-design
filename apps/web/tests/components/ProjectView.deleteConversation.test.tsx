@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, render, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProjectView } from '../../src/components/ProjectView';
 
 const listConversations = vi.fn();
@@ -15,6 +15,7 @@ const fetchDesignSystem = vi.fn();
 const getTemplate = vi.fn();
 const fetchChatRunStatus = vi.fn();
 const listActiveChatRuns = vi.fn();
+const listProjectRuns = vi.fn();
 const reattachDaemonRun = vi.fn();
 const deleteConversation = vi.fn();
 const createConversation = vi.fn();
@@ -41,6 +42,7 @@ vi.mock('../../src/providers/anthropic', () => ({
 vi.mock('../../src/providers/daemon', () => ({
   fetchChatRunStatus: (...args: unknown[]) => fetchChatRunStatus(...args),
   listActiveChatRuns: (...args: unknown[]) => listActiveChatRuns(...args),
+  listProjectRuns: (...args: unknown[]) => listProjectRuns(...args),
   reattachDaemonRun: (...args: unknown[]) => reattachDaemonRun(...args),
   streamViaDaemon: vi.fn(),
 }));
@@ -123,6 +125,10 @@ function renderProjectView(onProjectsRefresh: () => void) {
 }
 
 describe('ProjectView conversation delete', () => {
+  beforeEach(() => {
+    listProjectRuns.mockResolvedValue([]);
+  });
+
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();

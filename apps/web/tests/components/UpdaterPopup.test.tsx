@@ -7,6 +7,7 @@ import type { OpenDesignHostUpdaterStatusListener, OpenDesignHostUpdaterStatusSn
 import { installMockOpenDesignHost } from '@open-design/host/testing';
 
 import { UpdaterPopup } from '../../src/components/UpdaterPopup';
+import { I18nProvider } from '../../src/i18n';
 
 function idleStatus(): OpenDesignHostUpdaterStatusSnapshot {
   return {
@@ -106,6 +107,26 @@ describe('UpdaterPopup', () => {
     expect(screen.getByTestId('entry-nav-updater')).toBeTruthy();
   });
 
+  it('uses localized updater copy from the app i18n provider', async () => {
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          status: vi.fn(async () => downloadedStatus()),
+        },
+      },
+    });
+
+    render(
+      <I18nProvider initial="zh-CN">
+        <UpdaterPopup />
+      </I18nProvider>,
+    );
+
+    expect(await screen.findByRole('dialog', { name: '更新已就绪' })).toBeTruthy();
+    expect(screen.getByTestId('updater-install-button').textContent).toBe('打开安装器');
+    expect(screen.getByText('Open Design 1.2.3-beta.4 已就绪。')).toBeTruthy();
+  });
+
   it('shows disabled left-rail progress while an update is downloading', async () => {
     restoreHost = installMockOpenDesignHost({
       host: {
@@ -126,7 +147,29 @@ describe('UpdaterPopup', () => {
     const trigger = await screen.findByTestId('entry-nav-updater');
     expect(trigger.getAttribute('aria-disabled')).toBe('true');
     expect(screen.queryByTestId('updater-popup')).toBeNull();
-    expect(screen.getByRole('progressbar', { name: 'Downloading update 50%' }).getAttribute('aria-valuenow')).toBe('50');
+    const progress = screen.getByRole('progressbar', { name: 'Downloading update 50%' });
+    expect(progress.getAttribute('aria-valuenow')).toBe('50');
+    expect(progress.getAttribute('style')).toContain('--updater-progress: 50%');
+  });
+
+  it('starts indeterminate download progress at zero width', async () => {
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          status: vi.fn(async () => downloadedStatus({
+            state: 'downloading',
+          })),
+        },
+      },
+    });
+
+    render(<UpdaterPopup />);
+
+    const trigger = await screen.findByTestId('entry-nav-updater');
+    expect(trigger.getAttribute('aria-disabled')).toBe('true');
+    const progress = screen.getByRole('progressbar', { name: 'Downloading update' });
+    expect(progress.hasAttribute('aria-valuenow')).toBe(false);
+    expect(progress.getAttribute('style')).toContain('--updater-progress: 0%');
   });
 
   it('keeps the popup open when opening the installer returns an updater error state', async () => {
