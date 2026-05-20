@@ -35,6 +35,7 @@ import {
   writeProjectTextFile,
 } from '../providers/registry';
 import { useProjectFileEvents, type ProjectEvent } from '../providers/project-events';
+import { useCoalescedCallback } from '../hooks/useCoalescedCallback';
 import {
   composeSystemPrompt,
   type AudioVoiceOption,
@@ -992,13 +993,28 @@ export function ProjectView({
   // bump filesRefresh so the file list refetches with new mtimes — which
   // propagates through to FileViewer iframes via PR #384's ?v=${mtime}
   // cache-bust, triggering an automatic preview reload without a click.
+  //
+  // Coalesce the refresh: agent rewrites surface to chokidar as an
+  // `unlink` + `add` (+ later `change`) burst within a single tick (#2195).
+  // Refreshing the file list on the intermediate `unlink` makes the open
+  // tab's active file vanish for one frame before the `add` restores it,
+  // and FileWorkspace's "tab no longer on disk" path then drops the user
+  // out of their preview. A short trailing wait absorbs the burst; the
+  // maxWait cap stops a sustained edit storm from starving the UI.
+  const refreshFilesAndDesignMd = useCallback(() => {
+    setFilesRefresh((n) => n + 1);
+    // Round 7 (mrcfps): file mutations are the dominant staleness signal
+    // post-finalize — bump the refresh key so DESIGN.md staleness
+    // recomputes against the new mtimes.
+    setDesignMdRefreshKey((n) => n + 1);
+  }, []);
+  const coalescedFileChangedRefresh = useCoalescedCallback(
+    refreshFilesAndDesignMd,
+    { wait: 80, maxWait: 250 },
+  );
   const handleProjectEvent = useCallback((evt: ProjectEvent) => {
     if (evt.type === 'file-changed') {
-      setFilesRefresh((n) => n + 1);
-      // Round 7 (mrcfps): file mutations are the dominant staleness
-      // signal post-finalize — bump the refresh key so DESIGN.md
-      // staleness recomputes against the new mtimes.
-      setDesignMdRefreshKey((n) => n + 1);
+      coalescedFileChangedRefresh();
       return;
     }
     if (evt.type === 'conversation-created') {
@@ -1046,7 +1062,7 @@ export function ProjectView({
     // Live artifact events come from chat-turn-emitted artifacts; they
     // also imply the conversation transcript changed.
     setDesignMdRefreshKey((n) => n + 1);
-  }, [onProjectsRefresh, refreshLiveArtifacts, project.id]);
+  }, [onProjectsRefresh, refreshLiveArtifacts, project.id, coalescedFileChangedRefresh]);
   useProjectFileEvents(project.id, daemonLive, handleProjectEvent);
 
   // When the URL points at a specific file, fire an open request so the
