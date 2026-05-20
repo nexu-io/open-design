@@ -24,3 +24,4 @@ docker compose up -d
 - The API uses `DATABASE_URL`, `REDIS_URL`, and `OLLAMA_BASE_URL`.
 - `infra/postgres/init.sql` initializes the schema for tickets, agents, prompts, and RAG.
 - `infra/n8n/workflows` contains starter workflow JSON files.
+- See `docs/studio365-product-blueprint.md` for the studio product blueprint and MVP implementation path.

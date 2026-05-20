@@ -2,6 +2,8 @@
 
 This quickstart file captures the practical, lean approach for the current Studio365 MVP.
 
+See `docs/studio365-product-blueprint.md` for the full Studio365 product blueprint, roadmap, and MVP scope.
+
 ## TL;DR
 
 Use this approach:
@@ -191,3 +193,9 @@ Focus on:
 - `E:\FINAL\Secrets`
 - lean core: Kanban, n8n, approval, fallback, budget guard
 - Waterfall free-tier routing as standard for every agent
+
+## Today
+- Confirm one MVP use case, such as short video script generation.
+- Use stack: Next.js + FastAPI + n8n + PostgreSQL.
+- Define Ticket DoD clearly before automating.
+- Build one full workflow and validate it from intake to done.
