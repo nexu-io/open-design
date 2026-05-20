@@ -759,6 +759,8 @@ export const de: Dict = {
   'designFiles.kindPresentation': 'Präsentation',
   'designFiles.kindSpreadsheet': 'Tabellenblatt',
   'designFiles.kindBinary': 'Binärdatei',
+  'designFiles.kindFolder': 'Ordner',
+  'designFiles.folderCount': '{n} Dateien',
   'designFiles.colName': 'Name',
   'designFiles.colKind': 'Art',
   'designFiles.colModified': 'Geändert',

@@ -1344,6 +1344,8 @@ export const zhCN: Dict = {
   'designFiles.kindSpreadsheet': '电子表格',
   'designFiles.kindLiveArtifact': '实时制品',
   'designFiles.kindBinary': '二进制',
+  'designFiles.kindFolder': '文件夹',
+  'designFiles.folderCount': '{n} 个文件',
   'designFiles.colName': '名称',
   'designFiles.colKind': '类型',
   'designFiles.colModified': '修改时间',

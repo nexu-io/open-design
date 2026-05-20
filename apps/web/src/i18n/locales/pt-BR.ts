@@ -894,6 +894,8 @@ export const ptBR: Dict = {
   'designFiles.kindSpreadsheet': 'Planilha',
   'designFiles.kindLiveArtifact': 'Artefato live',
   'designFiles.kindBinary': 'Binário',
+  'designFiles.kindFolder': 'Pasta',
+  'designFiles.folderCount': '{n} arquivos',
   'designFiles.colName': 'Nome',
   'designFiles.colKind': 'Tipo',
   'designFiles.colModified': 'Modificado',
