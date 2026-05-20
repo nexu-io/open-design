@@ -1,7 +1,9 @@
 import { execFile } from "node:child_process";
-import { access } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { access, mkdir, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
+
+import { tauriMigrationPrBody } from "./tauri-migration-pr-body.ts";
 
 const execFileAsync = promisify(execFile);
 const scriptsRoot = import.meta.dirname;
@@ -355,7 +357,7 @@ async function continueM4(args: Args, status: MigrationStatus, log: string[]): P
       log.push(`${args.dryRun ? "Would request" : "Requested"} native CI dispatch for ${args.branch}.`);
     } else {
       log.push(`Native CI dispatch ${dispatch.status === "unavailable" ? "skipped" : "failed"}: ${dispatch.message}`);
-      appendManualNativeCiFallback(args, log);
+      await appendManualNativeCiFallback(args, log);
     }
   }
 
@@ -444,7 +446,15 @@ function appendTransferableHandoffHint(args: Args, archive: string, log: string[
   log.push(`  ${formatScriptCommand("push-tauri-migration-handoff.ts", pushHandoffArgs(args, archive, { omitCwd: true }))}`);
 }
 
-function appendManualNativeCiFallback(args: Args, log: string[]): void {
+async function appendManualNativeCiFallback(args: Args, log: string[]): Promise<void> {
+  const prBodyPath = resolvePathFromRoot(args.root, args.prBodyPath);
+  if (args.dryRun) {
+    log.push(`Would write draft PR body: ${prBodyPath}`);
+  } else {
+    await mkdir(dirname(prBodyPath), { recursive: true });
+    await writeFile(prBodyPath, tauriMigrationPrBody(), "utf8");
+    log.push(`Draft PR body: ${prBodyPath}`);
+  }
   log.push(`Trigger it manually with: ${formatCommand(args.ghBin, ["workflow", "run", args.workflow, "--ref", args.branch])}`);
   log.push("If workflow dispatch is unavailable after the branch is pushed, open a draft PR with:");
   log.push(
@@ -459,9 +469,13 @@ function appendManualNativeCiFallback(args: Args, log: string[]): void {
       "--title",
       "Migrate desktop runtime to Tauri",
       "--body-file",
-      args.prBodyPath,
+      prBodyPath,
     ]),
   );
+}
+
+function resolvePathFromRoot(root: string, path: string): string {
+  return resolve(root, path);
 }
 
 async function requestNativeCiDispatch(args: Args): Promise<

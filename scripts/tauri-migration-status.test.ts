@@ -1438,13 +1438,17 @@ test("continue-tauri-migration reports manual dispatch when gh workflow dispatch
   const result = await runContinue(fixture, "--handoff-dir", handoffDir, "--remote", remotePath, "--gh", ghBin);
 
   assert.match(result.stdout, /Native CI dispatch failed/);
+  const prBodyPath = join(fixture, ".tmp", "tauri-migration-pr-body.md");
+  assert.match(result.stdout, new RegExp(`Draft PR body: ${escapeRegExp(prBodyPath)}`));
   assert.match(result.stdout, new RegExp(`Trigger it manually with: ${escapeRegExp(ghBin)} workflow run ci\\.yml --ref codex/electron-to-tauri-migration`));
   assert.match(result.stdout, /If workflow dispatch is unavailable after the branch is pushed, open a draft PR with:/);
   assert.match(result.stdout, new RegExp(`${escapeRegExp(ghBin)} pr create --draft --base main --head codex/electron-to-tauri-migration`));
-  assert.match(result.stdout, /--body-file \.tmp\/tauri-migration-pr-body\.md/);
+  assert.match(result.stdout, new RegExp(`--body-file ${escapeRegExp(prBodyPath)}`));
   assert.match(result.stdout, /download-tauri-m4-reports\.ts/);
   assert.match(result.stdout, new RegExp(`--expected-head ${head}`));
   assert.match(result.stdout, new RegExp(`--root ${escapeRegExp(fixture)}`));
+  assert.match(await readFile(prBodyPath, "utf8"), /## Validation/);
+  assert.match(await readFile(prBodyPath, "utf8"), /Pending native M4 evidence/);
 });
 
 test("continue-tauri-migration dry-run reports manual dispatch when gh is unavailable", async (t) => {
@@ -1460,21 +1464,24 @@ test("continue-tauri-migration dry-run reports manual dispatch when gh is unavai
   const missingGh = join(fixture, "missing-gh");
 
   const result = await runContinue(fixture, "--handoff-dir", handoffDir, "--remote", remotePath, "--gh", missingGh, "--dry-run");
+  const prBodyPath = join(fixture, ".tmp", "tauri-migration-pr-body.md");
 
   assert.doesNotMatch(result.stdout, new RegExp(`Would run: ${escapeRegExp(missingGh)}`));
   assert.doesNotMatch(result.stdout, /Would request native CI dispatch/);
   assert.match(result.stdout, /Native CI dispatch skipped/);
   assert.match(result.stdout, new RegExp(`${escapeRegExp(missingGh)} is not available on PATH`));
+  assert.match(result.stdout, new RegExp(`Would write draft PR body: ${escapeRegExp(prBodyPath)}`));
   assert.match(
     result.stdout,
     new RegExp(`Trigger it manually with: ${escapeRegExp(missingGh)} workflow run ci\\.yml --ref codex/electron-to-tauri-migration`),
   );
   assert.match(result.stdout, /If workflow dispatch is unavailable after the branch is pushed, open a draft PR with:/);
   assert.match(result.stdout, new RegExp(`${escapeRegExp(missingGh)} pr create --draft --base main --head codex/electron-to-tauri-migration`));
-  assert.match(result.stdout, /--body-file \.tmp\/tauri-migration-pr-body\.md/);
+  assert.match(result.stdout, new RegExp(`--body-file ${escapeRegExp(prBodyPath)}`));
   assert.match(result.stdout, /download-tauri-m4-reports\.ts/);
   assert.match(result.stdout, new RegExp(`--expected-head ${head}`));
   assert.match(result.stdout, new RegExp(`--root ${escapeRegExp(fixture)}`));
+  await assert.rejects(readFile(prBodyPath, "utf8"), /ENOENT/);
 });
 
 test("continue-tauri-migration keeps receiver override paths aligned in dry-run", async (t) => {
