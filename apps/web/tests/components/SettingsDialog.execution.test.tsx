@@ -65,6 +65,7 @@ vi.mock('../../src/providers/provider-models', () => ({
 
 import { SettingsDialog } from '../../src/components/SettingsDialog';
 import type { AgentRefreshOptions, SettingsSection } from '../../src/components/SettingsDialog';
+import { codexPreviewOffsetForViewport } from '../../src/components/pet/PetSettings';
 import { I18nProvider } from '../../src/i18n';
 import { LOCALES } from '../../src/i18n/types';
 import type { AgentInfo, AppConfig, AppVersionInfo } from '../../src/types';
@@ -2241,6 +2242,21 @@ describe('SettingsDialog pets interactions', () => {
     expect(screen.getByText('Voidling')).toBeTruthy();
   });
 
+  it('clamps Codex pet preview offsets to the viewport', () => {
+    const viewportWidth = 320;
+    const previewWidth = 160;
+
+    expect(
+      codexPreviewOffsetForViewport({ left: 0, width: 56 }, viewportWidth, previewWidth),
+    ).toBe(64);
+    expect(
+      codexPreviewOffsetForViewport({ left: 270, width: 56 }, viewportWidth, previewWidth),
+    ).toBe(-70);
+    expect(
+      codexPreviewOffsetForViewport({ left: 100, width: 56 }, viewportWidth, previewWidth),
+    ).toBe(0);
+  });
+
   it('keeps Codex pet hover previews inside viewport edges', async () => {
     fetchCodexPetsMock.mockResolvedValue({
       pets: sampleBundledPets,
@@ -2258,8 +2274,12 @@ describe('SettingsDialog pets interactions', () => {
 
     const card = screen.getByText('Dario').closest('.pet-codex-card') as HTMLElement;
     const thumb = card.querySelector('.pet-codex-thumb') as HTMLElement;
+    const preview = thumb.querySelector('.pet-codex-thumb-preview') as HTMLElement;
     const rectSpy = vi.spyOn(thumb, 'getBoundingClientRect');
     const originalInnerWidth = window.innerWidth;
+
+    expect(preview).toBeTruthy();
+    thumb.style.setProperty('--pet-codex-preview-width', '160px');
 
     const mockThumbRect = (left: number) =>
       rectSpy.mockReturnValue({
@@ -2282,11 +2302,11 @@ describe('SettingsDialog pets interactions', () => {
 
       mockThumbRect(0);
       fireEvent.mouseEnter(card);
-      expect(thumb.style.getPropertyValue('--pet-codex-preview-offset')).toBe('48px');
+      expect(thumb.style.getPropertyValue('--pet-codex-preview-offset')).toBe('64px');
 
       mockThumbRect(270);
       fireEvent.mouseEnter(card);
-      expect(thumb.style.getPropertyValue('--pet-codex-preview-offset')).toBe('-54px');
+      expect(thumb.style.getPropertyValue('--pet-codex-preview-offset')).toBe('-70px');
 
       mockThumbRect(100);
       fireEvent.mouseEnter(card);

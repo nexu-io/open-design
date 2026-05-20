@@ -51,22 +51,35 @@ const ACCENT_SWATCHES = [
   '#0d0c0a',
 ];
 
-const CODEX_PREVIEW_WIDTH = 128;
+const CODEX_PREVIEW_WIDTH_CSS_VAR = '--pet-codex-preview-width';
+const CODEX_PREVIEW_WIDTH_FALLBACK = 128;
 const CODEX_PREVIEW_VIEWPORT_MARGIN = 12;
 
-function codexPreviewOffsetForViewport(
+export function codexPreviewOffsetForViewport(
   anchorRect: Pick<DOMRect, 'left' | 'width'>,
   viewportWidth: number,
+  previewWidth = CODEX_PREVIEW_WIDTH_FALLBACK,
 ) {
   const anchorCenter = anchorRect.left + anchorRect.width / 2;
-  const preferredLeft = anchorCenter - CODEX_PREVIEW_WIDTH / 2;
+  const preferredLeft = anchorCenter - previewWidth / 2;
   const minLeft = CODEX_PREVIEW_VIEWPORT_MARGIN;
   const maxLeft = Math.max(
     minLeft,
-    viewportWidth - CODEX_PREVIEW_WIDTH - CODEX_PREVIEW_VIEWPORT_MARGIN,
+    viewportWidth - previewWidth - CODEX_PREVIEW_VIEWPORT_MARGIN,
   );
   const clampedLeft = Math.min(Math.max(preferredLeft, minLeft), maxLeft);
-  return Math.round(clampedLeft + CODEX_PREVIEW_WIDTH / 2 - anchorCenter);
+  return Math.round(clampedLeft + previewWidth / 2 - anchorCenter);
+}
+
+function codexPreviewWidthFromThumb(thumb: HTMLElement) {
+  const preview = thumb.querySelector<HTMLElement>('.pet-codex-thumb-preview');
+  const measuredWidth = preview?.getBoundingClientRect().width ?? 0;
+  if (measuredWidth > 0) return measuredWidth;
+
+  const cssWidth = Number.parseFloat(
+    window.getComputedStyle(thumb).getPropertyValue(CODEX_PREVIEW_WIDTH_CSS_VAR),
+  );
+  return Number.isFinite(cssWidth) && cssWidth > 0 ? cssWidth : CODEX_PREVIEW_WIDTH_FALLBACK;
 }
 
 export function PetSettings({ cfg, setCfg }: Props) {
@@ -190,6 +203,7 @@ export function PetSettings({ cfg, setCfg }: Props) {
     const nextOffset = codexPreviewOffsetForViewport(
       thumb.getBoundingClientRect(),
       window.innerWidth,
+      codexPreviewWidthFromThumb(thumb),
     );
     setCodexPreviewOffsets((curr) =>
       curr[petId] === nextOffset ? curr : { ...curr, [petId]: nextOffset },

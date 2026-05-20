@@ -19104,6 +19104,7 @@ body.desktop-pet-shell .pet-task-item {
 }
 
 .pet-codex-thumb {
+  --pet-codex-preview-width: 128px;
   position: relative;
   width: 56px;
   height: 56px;
@@ -19130,9 +19131,8 @@ body.desktop-pet-shell .pet-task-item {
   position: absolute;
   bottom: calc(100% + 8px);
   left: 50%;
-  width: 128px;
-  /* 128 * (208/192) ≈ 138.7 — matches a single atlas cell aspect. */
-  height: 139px;
+  width: var(--pet-codex-preview-width);
+  aspect-ratio: 192 / 208;
   border-radius: 10px;
   border: 1px solid var(--border);
   background-color: var(--surface-2, #f6f4ee);
