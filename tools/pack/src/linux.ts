@@ -51,6 +51,7 @@ const INTERNAL_PACKAGES = [
   { directory: "packages/platform", name: "@open-design/platform" },
   { directory: "packages/agui-adapter", name: "@open-design/agui-adapter" },
   { directory: "packages/plugin-runtime", name: "@open-design/plugin-runtime" },
+  { directory: "packages/diagnostics", name: "@open-design/diagnostics" },
   { directory: "apps/daemon", name: "@open-design/daemon" },
   { directory: "apps/web", name: "@open-design/web" },
   { directory: "apps/desktop", name: "@open-design/desktop" },
@@ -376,6 +377,7 @@ async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
   await runPnpm(config, ["--filter", "@open-design/platform", "build"]);
   await runPnpm(config, ["--filter", "@open-design/agui-adapter", "build"]);
   await runPnpm(config, ["--filter", "@open-design/plugin-runtime", "build"]);
+  await runPnpm(config, ["--filter", "@open-design/diagnostics", "build"]);
   await runPnpm(config, ["--filter", "@open-design/daemon", "build"]);
   try {
     await runPnpm(config, ["--filter", "@open-design/web", "build"], { OD_WEB_OUTPUT_MODE: "server" });
@@ -440,6 +442,10 @@ async function writeAssembledApp(
 ): Promise<void> {
   await rm(paths.assembledAppRoot, { force: true, recursive: true });
   await mkdir(paths.assembledAppRoot, { recursive: true });
+  await cp(
+    join(config.workspaceRoot, "apps", "desktop", "dist", "main", "preload.cjs"),
+    join(paths.assembledAppRoot, "preload.cjs"),
+  );
 
   const dependencies: Record<string, string> = {};
   for (const tarball of packed) {

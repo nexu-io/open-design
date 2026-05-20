@@ -33,9 +33,20 @@ Design System Project folders use fixed v1 file names:
 - `components.html` — optional standalone component fixture.
 - `assets/` — optional brand assets.
 - `preview/` — optional static preview pages.
+- `USAGE.md` — optional agent-facing package guide.
+- `components.manifest.json` — optional rebuildable cache derived from
+  `components.html` and `tokens.css`.
+- `fonts/` — optional webfont files.
+- `source/` — optional importer evidence (`scanned-files.json`,
+  `evidence.md`, `tokens.source.json`, and `snippets/INDEX.json`).
 
 The manifest guard validates only folders that ship `manifest.json`; it
-does not require the bundled catalog to migrate all at once.
+does not require the bundled catalog to migrate all at once. Rich import
+fields are structural in PR0: when declared, paths must be safe and present,
+JSON indexes must parse, and committed `components.manifest.json` files must
+match a fresh derivation from `components.html` plus `tokens.css`. Runtime
+prompt composition and picker behavior are unchanged until later PRs consume
+those fields.
 
 ## Four layers, two questions
 

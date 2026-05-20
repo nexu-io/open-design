@@ -273,7 +273,7 @@ describe('App connectors settings flows', () => {
     const banner = container.querySelector('.privacy-consent-banner');
     expect(banner?.querySelector('.seg-control')).toBeNull();
     expect(banner?.querySelector('.seg-btn.active')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Share usage data' }).className).toContain(
+    expect(screen.getByRole('button', { name: 'I get it' }).className).toContain(
       'privacy-consent-action',
     );
   });

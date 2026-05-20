@@ -325,6 +325,31 @@ describe('composeSystemPrompt', () => {
       expect(prompt).toContain('class="btn btn-primary"');
     });
 
+    it('places USAGE.md before DESIGN.md so it acts as the package router', () => {
+      const prompt = composeSystemPrompt({
+        designSystemTitle: 'default',
+        designSystemBody: 'PROSE_BODY_MARKER',
+        designSystemUsageMd: 'Read Order: inspect the manifest cache before source evidence.',
+      });
+
+      const usageAt = prompt.indexOf('## How to use this design system — default');
+      const proseAt = prompt.indexOf('## Active design system — default');
+      expect(usageAt).toBeGreaterThan(0);
+      expect(proseAt).toBeGreaterThan(usageAt);
+      expect(prompt).toContain('Read Order: inspect the manifest cache before source evidence.');
+    });
+
+    it('injects a small default usage router for legacy brands with no USAGE.md', () => {
+      const prompt = composeSystemPrompt({
+        designSystemTitle: 'legacy',
+        designSystemBody: '# Legacy\n\nProse description.',
+      });
+
+      expect(prompt).toContain('## How to use this design system — legacy');
+      expect(prompt).toContain('Read DESIGN.md for visual principles');
+      expect(prompt).toContain('do not assume those files have already been loaded');
+    });
+
     it('prefers the component manifest over the full fixture when both are present', () => {
       const prompt = composeSystemPrompt({
         designSystemTitle: 'default',
@@ -384,6 +409,32 @@ describe('composeSystemPrompt', () => {
       });
       expect(manifestOnly).not.toContain('## Active design system tokens');
       expect(manifestOnly).toContain('## Reference component manifest — default');
+    });
+
+    it('adds the pull-layer index without loading pull-layer file contents', () => {
+      const prompt = composeSystemPrompt({
+        designSystemTitle: 'default',
+        designSystemBody: '# x\n\nbody',
+        designSystemPullIndex:
+          'Additional design-system files declared by manifest.json:\n- preview/colors.html: Colors; colors\n- source/evidence.md: import evidence notes',
+      });
+
+      expect(prompt).toContain('## Pull-layer files available on demand — default');
+      expect(prompt).toContain('preview/colors.html: Colors; colors');
+      expect(prompt).toContain('source/evidence.md: import evidence notes');
+      expect(prompt).toContain('Keep the push prompt light');
+    });
+
+    it('adds importMode guidance when the manifest declares consumption semantics', () => {
+      const prompt = composeSystemPrompt({
+        designSystemTitle: 'source-heavy',
+        designSystemBody: '# x\n\nbody',
+        designSystemImportMode: 'verbatim',
+      });
+
+      expect(prompt).toContain('## Design system import mode — source-heavy');
+      expect(prompt).toContain('Preserve source semantics and source naming');
+      expect(prompt).toContain('pull-layer source evidence or snippets');
     });
 
     it('places the tokens + component manifest blocks AFTER the DESIGN.md prose block (prose sets voice, structured form binds names)', () => {

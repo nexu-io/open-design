@@ -274,6 +274,7 @@ jobs:
           add-paths: |
             docs/blog-indexing-status.md
             docs/blog-indexing-status.json
+          base: main
           branch: automation/blog-indexing-status
           delete-branch: true
           commit-message: 'docs(blog): refresh daily indexing status'

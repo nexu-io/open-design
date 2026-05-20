@@ -21,6 +21,13 @@ async function useTempComposioStore(): Promise<string> {
   return dir;
 }
 
+function composioJson(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
 function composioDefinition(id = 'github'): ConnectorCatalogDefinition {
   return {
     id,
@@ -205,6 +212,74 @@ describe('composio config', () => {
       });
     } finally {
       await rm(defaultCachePath, { force: true });
+    }
+  });
+
+  it('treats the current Notion search action as read-only despite broad response-size wording', async () => {
+    await useTempComposioStore();
+    writeComposioConfig({ apiKey: 'cmp_test' });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (input: Parameters<typeof fetch>[0]) => {
+      const parsed = new URL(input.toString(), 'https://backend.composio.dev');
+      if (parsed.pathname === '/api/v3/auth_configs') {
+        return composioJson({
+          items: [
+            { id: 'ac_notion', status: 'ENABLED', toolkit: { slug: 'notion' } },
+          ],
+        });
+      }
+      if (parsed.pathname === '/api/v3.1/toolkits') {
+        return composioJson({
+          items: [
+            { slug: 'notion', name: 'Notion', categories: [{ name: 'Productivity' }] },
+          ],
+        });
+      }
+      if (
+        parsed.pathname === '/api/v3.1/tools'
+        && parsed.searchParams.get('toolkit_slug') === 'notion'
+      ) {
+        return composioJson({
+          items: [
+            {
+              slug: 'NOTION_SEARCH_NOTION_PAGE',
+              name: 'Search Notion pages and databases',
+              description:
+                'Searches Notion pages and databases by title. Database pages can create large responses for databases with many properties.',
+              toolkit: { slug: 'notion' },
+              input_parameters: {
+                type: 'object',
+                properties: {
+                  query: { type: 'string' },
+                  page_size: { type: 'integer', minimum: 1, maximum: 100 },
+                },
+                additionalProperties: false,
+              },
+              tags: [],
+            },
+          ],
+          total_items: 1,
+        });
+      }
+      return composioJson({ items: [] });
+    }) as typeof fetch;
+
+    try {
+      const definition = await composioConnectorProvider.getPreviewDefinition('notion', {
+        toolsLimit: 1000,
+      });
+      const tool = definition?.tools.find(
+        (candidate) => candidate.name === 'notion.notion_search_notion_page',
+      );
+
+      expect(definition?.allowedToolNames).toContain('notion.notion_search_notion_page');
+      expect(tool).toMatchObject({
+        refreshEligible: true,
+        safety: { sideEffect: 'read', approval: 'auto' },
+        curation: expect.objectContaining({ useCases: ['personal_daily_digest'] }),
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
     }
   });
 });

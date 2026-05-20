@@ -12,6 +12,7 @@ import {
   type DesktopEvalResult,
   type DesktopScreenshotResult,
   type DesktopStatusSnapshot,
+  type DesktopUpdateResult,
   type SidecarStamp,
 } from "@open-design/sidecar-proto";
 import { createSidecarLaunchEnv, requestJsonIpc, resolveAppIpcPath } from "@open-design/sidecar";
@@ -675,13 +676,20 @@ export async function readPackedMacLogs(config: ToolPackConfig) {
   };
 }
 
-export async function inspectPackedMacApp(config: ToolPackConfig, options: { expr?: string; path?: string }): Promise<MacInspectResult> {
+function resolveUpdateAction(value: string | undefined): "status" | "check" | "download" | "install" | null {
+  if (value == null) return null;
+  if (value === "status" || value === "check" || value === "download" || value === "install") return value;
+  throw new Error("--update-action must be status, check, download, or install");
+}
+
+export async function inspectPackedMacApp(config: ToolPackConfig, options: { expr?: string; path?: string; updateAction?: string }): Promise<MacInspectResult> {
   const stamp = desktopStamp(config);
   const status = await requestJsonIpc<DesktopStatusSnapshot>(
     stamp.ipc,
     { type: SIDECAR_MESSAGES.STATUS },
     { timeoutMs: 2000 },
   ).catch(() => null);
+  const updateAction = resolveUpdateAction(options.updateAction);
 
   return {
     ...(options.expr == null ? {} : {
@@ -696,6 +704,13 @@ export async function inspectPackedMacApp(config: ToolPackConfig, options: { exp
         stamp.ipc,
         { input: { path: options.path }, type: SIDECAR_MESSAGES.SCREENSHOT },
         { timeoutMs: 10000 },
+      ),
+    }),
+    ...(updateAction == null ? {} : {
+      update: await requestJsonIpc<DesktopUpdateResult>(
+        stamp.ipc,
+        { input: { action: updateAction }, type: SIDECAR_MESSAGES.UPDATE },
+        { timeoutMs: 60000 },
       ),
     }),
     status,

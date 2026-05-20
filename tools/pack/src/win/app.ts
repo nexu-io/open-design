@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import { promisify } from "node:util";
 
@@ -122,6 +122,7 @@ async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
   await runPnpm(config, ["--filter", "@open-design/platform", "build"]);
   await runPnpm(config, ["--filter", "@open-design/agui-adapter", "build"]);
   await runPnpm(config, ["--filter", "@open-design/plugin-runtime", "build"]);
+  await runPnpm(config, ["--filter", "@open-design/diagnostics", "build"]);
   await runPnpm(config, ["--filter", "@open-design/daemon", "build"]);
   try {
     await runPnpm(config, ["--filter", "@open-design/web", "build"], { OD_WEB_OUTPUT_MODE: config.webOutputMode });
@@ -235,6 +236,10 @@ async function writeAssembledAppEntrypoints(
   options: { dependencies?: Record<string, string>; usePrebundle?: boolean } = {},
 ): Promise<void> {
   await mkdir(paths.assembledAppRoot, { recursive: true });
+  await cp(
+    join(config.workspaceRoot, "apps", "desktop", "dist", "main", "preload.cjs"),
+    join(paths.assembledAppRoot, "preload.cjs"),
+  );
   await writeFile(
     paths.assembledPackageJsonPath,
     `${JSON.stringify(

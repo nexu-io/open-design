@@ -17,6 +17,7 @@ const toolsPackDir = resolveFromWorkspace(process.env.OD_PACKAGED_E2E_TOOLS_PACK
 const namespace = process.env.OD_PACKAGED_E2E_NAMESPACE ?? 'release-beta-win';
 const toolsPackBin = join(workspaceRoot, 'tools', 'pack', 'bin', 'tools-pack.mjs');
 const maxInstallDurationMs = Number.parseInt(process.env.OD_PACKAGED_E2E_WIN_MAX_INSTALL_MS ?? '120000', 10);
+const verifyReinstallWhileRunning = process.env.OD_PACKAGED_E2E_WIN_VERIFY_REINSTALL !== '0';
 const installIdentity = resolveInstallIdentity(namespace);
 
 const outputNamespaceRoot = join(toolsPackDir, 'out', 'win', 'namespaces', namespace);
@@ -196,26 +197,29 @@ winDescribe('packaged windows runtime smoke', () => {
       expect(value.health.ok).toBe(true);
       expect(value.health.version).toEqual(expect.any(String));
 
-      const reinstall = await measureSmokeStep(timings, 'direct reinstall while running', async () =>
-        runDirectInstaller(install.installerPath, install.installDir),
-      );
-      started = false;
-      expect(reinstall.code).toBe(0);
-      expect(reinstall.nsisLogTail.join('\n')).toContain('running instances detected before silent install');
-      expect(reinstall.nsisLogTail.join('\n')).toContain('running instances close exit=0');
+      let reinstall: DirectInstallerResult | { skipped: true } = { skipped: true };
+      if (verifyReinstallWhileRunning) {
+        reinstall = await measureSmokeStep(timings, 'direct reinstall while running', async () =>
+          runDirectInstaller(install.installerPath, install.installDir),
+        );
+        started = false;
+        expect(reinstall.code).toBe(0);
+        expect(reinstall.nsisLogTail.join('\n')).toContain('running instances detected before silent install');
+        expect(reinstall.nsisLogTail.join('\n')).toContain('running instances close exit=0');
 
-      start = await measureSmokeStep(timings, 'restart after direct reinstall', async () =>
-        runToolsPackJson<WinStartResult>('start'),
-      );
-      started = true;
-      expect(start.namespace).toBe(namespace);
-      expect(start.source).toBe('installed');
-      expectPathInside(start.executablePath, install.installDir);
+        start = await measureSmokeStep(timings, 'restart after direct reinstall', async () =>
+          runToolsPackJson<WinStartResult>('start'),
+        );
+        started = true;
+        expect(start.namespace).toBe(namespace);
+        expect(start.source).toBe('installed');
+        expectPathInside(start.executablePath, install.installDir);
 
-      const postReinstallInspect = await measureSmokeStep(timings, 'wait healthy inspect after reinstall', async () =>
-        waitForHealthyDesktop(),
-      );
-      expect(postReinstallInspect.status?.state).toBe('running');
+        const postReinstallInspect = await measureSmokeStep(timings, 'wait healthy inspect after reinstall', async () =>
+          waitForHealthyDesktop(),
+        );
+        expect(postReinstallInspect.status?.state).toBe('running');
+      }
 
       await mkdir(dirname(screenshotPath), { recursive: true });
       const screenshot = await measureSmokeStep(timings, 'inspect screenshot', async () =>

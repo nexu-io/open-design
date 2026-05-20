@@ -11,14 +11,14 @@ export function buildContinueInCliToast(
   projectDir: string,
   launched: TerminalLaunchResult,
 ): ContinueInCliToast {
-  if (launched.kind === 'electron' && launched.ok) {
+  if (launched.kind === 'host' && launched.ok) {
     return {
       message: `${CLIPBOARD_PREFIX}Folder opened. Run \`claude\` in your terminal here and paste the prompt.`,
       details: null,
     };
   }
 
-  if (launched.kind === 'electron' && !launched.ok) {
+  if (launched.kind === 'host' && !launched.ok) {
     return {
       message: `${CLIPBOARD_PREFIX}Couldn't open the folder. Open your terminal at ${projectDir}, run \`claude\`, and paste the prompt.`,
       details: null,

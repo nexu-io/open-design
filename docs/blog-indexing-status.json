@@ -1,6 +1,371 @@
 {
-  "latest": {},
-  "history": [],
-  "performance": {},
-  "firstInspectedAt": {}
+  "latest": {
+    "https://open-design.ai/blog/31-skills-72-systems-how-the-library-works/": {
+      "url": "https://open-design.ai/blog/31-skills-72-systems-how-the-library-works/",
+      "inspectedAt": "2026-05-19T10:11:43.001Z",
+      "result": {
+        "verdict": "NEUTRAL",
+        "coverageState": "URL is unknown to Google",
+        "pageFetchState": "PAGE_FETCH_STATE_UNSPECIFIED",
+        "indexingState": "INDEXING_STATE_UNSPECIFIED",
+        "robotsTxtState": "ROBOTS_TXT_STATE_UNSPECIFIED",
+        "isIndexed": false
+      }
+    },
+    "https://open-design.ai/blog/byok-design-workflow-claude-codex-qwen/": {
+      "url": "https://open-design.ai/blog/byok-design-workflow-claude-codex-qwen/",
+      "inspectedAt": "2026-05-19T10:11:49.516Z",
+      "result": {
+        "verdict": "NEUTRAL",
+        "coverageState": "Discovered - currently not indexed",
+        "pageFetchState": "PAGE_FETCH_STATE_UNSPECIFIED",
+        "indexingState": "INDEXING_STATE_UNSPECIFIED",
+        "robotsTxtState": "ROBOTS_TXT_STATE_UNSPECIFIED",
+        "isIndexed": false
+      }
+    },
+    "https://open-design.ai/blog/byok-reality-check-5-things-that-break/": {
+      "url": "https://open-design.ai/blog/byok-reality-check-5-things-that-break/",
+      "inspectedAt": "2026-05-19T10:11:55.870Z",
+      "result": {
+        "verdict": "NEUTRAL",
+        "coverageState": "Discovered - currently not indexed",
+        "pageFetchState": "PAGE_FETCH_STATE_UNSPECIFIED",
+        "indexingState": "INDEXING_STATE_UNSPECIFIED",
+        "robotsTxtState": "ROBOTS_TXT_STATE_UNSPECIFIED",
+        "isIndexed": false
+      }
+    },
+    "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/": {
+      "url": "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/",
+      "inspectedAt": "2026-05-19T10:12:02.175Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-05-19T09:20:42Z",
+        "googleCanonical": "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/",
+        "userCanonical": "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/open-source-alternative-to-claude-design/": {
+      "url": "https://open-design.ai/blog/open-source-alternative-to-claude-design/",
+      "inspectedAt": "2026-05-19T10:12:08.472Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-05-15T12:22:17Z",
+        "googleCanonical": "https://open-design.ai/blog/open-source-alternative-to-claude-design/",
+        "userCanonical": "https://open-design.ai/blog/open-source-alternative-to-claude-design/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/port-figma-workflow-open-design-plugin/": {
+      "url": "https://open-design.ai/blog/port-figma-workflow-open-design-plugin/",
+      "inspectedAt": "2026-05-19T10:12:14.760Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-05-19T09:20:41Z",
+        "googleCanonical": "https://open-design.ai/blog/port-figma-workflow-open-design-plugin/",
+        "userCanonical": "https://open-design.ai/blog/port-figma-workflow-open-design-plugin/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    "https://open-design.ai/blog/why-we-built-open-design-as-a-skill-layer/": {
+      "url": "https://open-design.ai/blog/why-we-built-open-design-as-a-skill-layer/",
+      "inspectedAt": "2026-05-19T10:12:21.077Z",
+      "result": {
+        "verdict": "NEUTRAL",
+        "coverageState": "Discovered - currently not indexed",
+        "pageFetchState": "PAGE_FETCH_STATE_UNSPECIFIED",
+        "indexingState": "INDEXING_STATE_UNSPECIFIED",
+        "robotsTxtState": "ROBOTS_TXT_STATE_UNSPECIFIED",
+        "isIndexed": false
+      }
+    }
+  },
+  "history": [
+    {
+      "url": "https://open-design.ai/blog/why-we-built-open-design-as-a-skill-layer/",
+      "inspectedAt": "2026-05-19T10:12:21.077Z",
+      "result": {
+        "verdict": "NEUTRAL",
+        "coverageState": "Discovered - currently not indexed",
+        "pageFetchState": "PAGE_FETCH_STATE_UNSPECIFIED",
+        "indexingState": "INDEXING_STATE_UNSPECIFIED",
+        "robotsTxtState": "ROBOTS_TXT_STATE_UNSPECIFIED",
+        "isIndexed": false
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/port-figma-workflow-open-design-plugin/",
+      "inspectedAt": "2026-05-19T10:12:14.760Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-05-19T09:20:41Z",
+        "googleCanonical": "https://open-design.ai/blog/port-figma-workflow-open-design-plugin/",
+        "userCanonical": "https://open-design.ai/blog/port-figma-workflow-open-design-plugin/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/open-source-alternative-to-claude-design/",
+      "inspectedAt": "2026-05-19T10:12:08.472Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-05-15T12:22:17Z",
+        "googleCanonical": "https://open-design.ai/blog/open-source-alternative-to-claude-design/",
+        "userCanonical": "https://open-design.ai/blog/open-source-alternative-to-claude-design/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/",
+      "inspectedAt": "2026-05-19T10:12:02.175Z",
+      "result": {
+        "verdict": "PASS",
+        "coverageState": "Submitted and indexed",
+        "pageFetchState": "SUCCESSFUL",
+        "indexingState": "INDEXING_ALLOWED",
+        "lastCrawlTime": "2026-05-19T09:20:42Z",
+        "googleCanonical": "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/",
+        "userCanonical": "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/",
+        "robotsTxtState": "ALLOWED",
+        "isIndexed": true
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/byok-reality-check-5-things-that-break/",
+      "inspectedAt": "2026-05-19T10:11:55.870Z",
+      "result": {
+        "verdict": "NEUTRAL",
+        "coverageState": "Discovered - currently not indexed",
+        "pageFetchState": "PAGE_FETCH_STATE_UNSPECIFIED",
+        "indexingState": "INDEXING_STATE_UNSPECIFIED",
+        "robotsTxtState": "ROBOTS_TXT_STATE_UNSPECIFIED",
+        "isIndexed": false
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/byok-design-workflow-claude-codex-qwen/",
+      "inspectedAt": "2026-05-19T10:11:49.516Z",
+      "result": {
+        "verdict": "NEUTRAL",
+        "coverageState": "Discovered - currently not indexed",
+        "pageFetchState": "PAGE_FETCH_STATE_UNSPECIFIED",
+        "indexingState": "INDEXING_STATE_UNSPECIFIED",
+        "robotsTxtState": "ROBOTS_TXT_STATE_UNSPECIFIED",
+        "isIndexed": false
+      }
+    },
+    {
+      "url": "https://open-design.ai/blog/31-skills-72-systems-how-the-library-works/",
+      "inspectedAt": "2026-05-19T10:11:43.001Z",
+      "result": {
+        "verdict": "NEUTRAL",
+        "coverageState": "URL is unknown to Google",
+        "pageFetchState": "PAGE_FETCH_STATE_UNSPECIFIED",
+        "indexingState": "INDEXING_STATE_UNSPECIFIED",
+        "robotsTxtState": "ROBOTS_TXT_STATE_UNSPECIFIED",
+        "isIndexed": false
+      }
+    }
+  ],
+  "performance": {
+    "https://open-design.ai/blog/31-skills-72-systems-how-the-library-works/": {
+      "7": {
+        "url": "https://open-design.ai/blog/31-skills-72-systems-how-the-library-works/",
+        "queriedAt": "2026-05-19T10:12:28.274Z",
+        "windowDays": 7,
+        "startDate": "2026-05-11",
+        "endDate": "2026-05-17",
+        "clicks": 0,
+        "impressions": 0,
+        "ctr": 0,
+        "position": 0
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/31-skills-72-systems-how-the-library-works/",
+        "queriedAt": "2026-05-19T10:12:28.398Z",
+        "windowDays": 28,
+        "startDate": "2026-04-20",
+        "endDate": "2026-05-17",
+        "clicks": 0,
+        "impressions": 0,
+        "ctr": 0,
+        "position": 0
+      }
+    },
+    "https://open-design.ai/blog/byok-design-workflow-claude-codex-qwen/": {
+      "7": {
+        "url": "https://open-design.ai/blog/byok-design-workflow-claude-codex-qwen/",
+        "queriedAt": "2026-05-19T10:12:28.704Z",
+        "windowDays": 7,
+        "startDate": "2026-05-11",
+        "endDate": "2026-05-17",
+        "clicks": 0,
+        "impressions": 0,
+        "ctr": 0,
+        "position": 0
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/byok-design-workflow-claude-codex-qwen/",
+        "queriedAt": "2026-05-19T10:12:28.850Z",
+        "windowDays": 28,
+        "startDate": "2026-04-20",
+        "endDate": "2026-05-17",
+        "clicks": 0,
+        "impressions": 0,
+        "ctr": 0,
+        "position": 0
+      }
+    },
+    "https://open-design.ai/blog/byok-reality-check-5-things-that-break/": {
+      "7": {
+        "url": "https://open-design.ai/blog/byok-reality-check-5-things-that-break/",
+        "queriedAt": "2026-05-19T10:12:28.984Z",
+        "windowDays": 7,
+        "startDate": "2026-05-11",
+        "endDate": "2026-05-17",
+        "clicks": 0,
+        "impressions": 0,
+        "ctr": 0,
+        "position": 0
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/byok-reality-check-5-things-that-break/",
+        "queriedAt": "2026-05-19T10:12:29.090Z",
+        "windowDays": 28,
+        "startDate": "2026-04-20",
+        "endDate": "2026-05-17",
+        "clicks": 0,
+        "impressions": 0,
+        "ctr": 0,
+        "position": 0
+      }
+    },
+    "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/": {
+      "7": {
+        "url": "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/",
+        "queriedAt": "2026-05-19T10:12:29.196Z",
+        "windowDays": 7,
+        "startDate": "2026-05-11",
+        "endDate": "2026-05-17",
+        "clicks": 0,
+        "impressions": 0,
+        "ctr": 0,
+        "position": 0
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/",
+        "queriedAt": "2026-05-19T10:12:29.334Z",
+        "windowDays": 28,
+        "startDate": "2026-04-20",
+        "endDate": "2026-05-17",
+        "clicks": 0,
+        "impressions": 0,
+        "ctr": 0,
+        "position": 0
+      }
+    },
+    "https://open-design.ai/blog/open-source-alternative-to-claude-design/": {
+      "7": {
+        "url": "https://open-design.ai/blog/open-source-alternative-to-claude-design/",
+        "queriedAt": "2026-05-19T10:12:29.443Z",
+        "windowDays": 7,
+        "startDate": "2026-05-11",
+        "endDate": "2026-05-17",
+        "clicks": 1,
+        "impressions": 50,
+        "ctr": 0.02,
+        "position": 8.86
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/open-source-alternative-to-claude-design/",
+        "queriedAt": "2026-05-19T10:12:29.568Z",
+        "windowDays": 28,
+        "startDate": "2026-04-20",
+        "endDate": "2026-05-17",
+        "clicks": 1,
+        "impressions": 50,
+        "ctr": 0.02,
+        "position": 8.86
+      }
+    },
+    "https://open-design.ai/blog/port-figma-workflow-open-design-plugin/": {
+      "7": {
+        "url": "https://open-design.ai/blog/port-figma-workflow-open-design-plugin/",
+        "queriedAt": "2026-05-19T10:12:29.818Z",
+        "windowDays": 7,
+        "startDate": "2026-05-11",
+        "endDate": "2026-05-17",
+        "clicks": 0,
+        "impressions": 0,
+        "ctr": 0,
+        "position": 0
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/port-figma-workflow-open-design-plugin/",
+        "queriedAt": "2026-05-19T10:12:29.947Z",
+        "windowDays": 28,
+        "startDate": "2026-04-20",
+        "endDate": "2026-05-17",
+        "clicks": 0,
+        "impressions": 0,
+        "ctr": 0,
+        "position": 0
+      }
+    },
+    "https://open-design.ai/blog/why-we-built-open-design-as-a-skill-layer/": {
+      "7": {
+        "url": "https://open-design.ai/blog/why-we-built-open-design-as-a-skill-layer/",
+        "queriedAt": "2026-05-19T10:12:30.091Z",
+        "windowDays": 7,
+        "startDate": "2026-05-11",
+        "endDate": "2026-05-17",
+        "clicks": 0,
+        "impressions": 0,
+        "ctr": 0,
+        "position": 0
+      },
+      "28": {
+        "url": "https://open-design.ai/blog/why-we-built-open-design-as-a-skill-layer/",
+        "queriedAt": "2026-05-19T10:12:30.205Z",
+        "windowDays": 28,
+        "startDate": "2026-04-20",
+        "endDate": "2026-05-17",
+        "clicks": 0,
+        "impressions": 0,
+        "ctr": 0,
+        "position": 0
+      }
+    }
+  },
+  "firstInspectedAt": {
+    "https://open-design.ai/blog/31-skills-72-systems-how-the-library-works/": "2026-05-19T10:11:43.001Z",
+    "https://open-design.ai/blog/byok-design-workflow-claude-codex-qwen/": "2026-05-19T10:11:49.516Z",
+    "https://open-design.ai/blog/byok-reality-check-5-things-that-break/": "2026-05-19T10:11:55.870Z",
+    "https://open-design.ai/blog/layout-layer-canvas-used-to-hide/": "2026-05-19T10:12:02.175Z",
+    "https://open-design.ai/blog/open-source-alternative-to-claude-design/": "2026-05-19T10:12:08.472Z",
+    "https://open-design.ai/blog/port-figma-workflow-open-design-plugin/": "2026-05-19T10:12:14.760Z",
+    "https://open-design.ai/blog/why-we-built-open-design-as-a-skill-layer/": "2026-05-19T10:12:21.077Z"
+  }
 }

@@ -105,4 +105,67 @@ describe('renderMarkdown', () => {
     const bodyTd = (out.match(/<tbody>[\s\S]*<\/tbody>/)?.[0] ?? '').match(/<td/g) ?? [];
     expect(bodyTd.length).toBe(2);
   });
+
+  it('renders ![alt](url) as <img> for relative BYOK image URLs', () => {
+    const out = html('Here is your cat: ![cute kitten](/api/byok-image/abc-123.png)');
+    expect(out).toContain('<img');
+    expect(out).toContain('class="md-image"');
+    expect(out).toContain('src="/api/byok-image/abc-123.png"');
+    expect(out).toContain('alt="cute kitten"');
+    expect(out).toContain('loading="lazy"');
+    expect(out).toContain('referrerPolicy="no-referrer"');
+    // Image syntax must NOT be turned into an <a> link — `[alt](url)`
+    // with a leading `!` is image, not link.
+    expect(out).not.toContain('<a class="md-link"');
+  });
+
+  it('renders ![](url) with empty alt text', () => {
+    const out = html('![](/api/byok-image/abc.png)');
+    expect(out).toContain('<img');
+    expect(out).toContain('alt=""');
+  });
+
+  it('renders https image URLs', () => {
+    const out = html('![logo](https://example.com/logo.png)');
+    expect(out).toContain('<img');
+    expect(out).toContain('src="https://example.com/logo.png"');
+  });
+
+  it('renders data: image URIs', () => {
+    const out = html('![inline](data:image/png;base64,iVBORw0KGgo=)');
+    expect(out).toContain('<img');
+    expect(out).toContain('src="data:image/png;base64,iVBORw0KGgo="');
+  });
+
+  it('drops image tags with unsafe schemes and keeps alt text as plain text', () => {
+    const out = html('![hacked](javascript:alert(1))');
+    expect(out).not.toContain('<img');
+    expect(out).not.toContain('javascript:');
+    expect(out).toContain('hacked');
+  });
+
+  it('rejects protocol-relative image URLs (could load cross-origin)', () => {
+    // `//evil.com/track.png` would inherit the page protocol; not in our
+    // allowlist. Should fall through to alt-as-text.
+    const out = html('![track](//evil.com/track.png)');
+    expect(out).not.toContain('<img');
+    expect(out).toContain('track');
+  });
+
+  it('keeps regular [text](url) links working alongside image syntax', () => {
+    const out = html('Click [here](https://example.com) and look ![image](/api/byok-image/a.png)');
+    expect(out).toContain('<a class="md-link"');
+    expect(out).toContain('href="https://example.com"');
+    expect(out).toContain('>here</a>');
+    expect(out).toContain('<img');
+    expect(out).toContain('src="/api/byok-image/a.png"');
+  });
+
+  it('preserves bold + italic + code after the image regex addition', () => {
+    const out = html('**b** and *i* and `c` and ![a](/p.png)');
+    expect(out).toContain('<strong>b</strong>');
+    expect(out).toContain('<em>i</em>');
+    expect(out).toContain('<code class="md-inline-code">c</code>');
+    expect(out).toContain('<img');
+  });
 });

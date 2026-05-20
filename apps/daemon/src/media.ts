@@ -57,6 +57,7 @@ import {
   findProvider,
   modelsForSurface,
 } from './media-models.js';
+import { assertExternalAssetUrl } from './connectionTest.js';
 import { resolveModelAlias, resolveProviderConfig } from './media-config.js';
 import {
   ensureProject,
@@ -481,6 +482,15 @@ export async function generateMedia(args: {
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
+    } else if (
+      def.provider === 'grok'
+      && surface === 'audio'
+      && ctx.audioKind === 'speech'
+    ) {
+      const result = await renderXAITTS(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
     } else if (def.provider === 'nanobanana' && surface === 'image') {
       const result = await renderNanoBananaImage(ctx, credentials);
       bytes = result.bytes;
@@ -547,6 +557,11 @@ export async function generateMedia(args: {
       suggestedExt = result.suggestedExt;
     } else if (def.provider === 'senseaudio' && surface === 'audio') {
       const result = await renderSenseAudioTTS(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'senseaudio' && surface === 'image') {
+      const result = await renderSenseAudioImage(ctx, credentials);
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
@@ -1348,7 +1363,7 @@ async function renderVolcengineImage(ctx: MediaContext, credentials: ProviderCon
 async function renderGrokImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
-      'no xAI API key — configure it in Settings or set XAI_API_KEY',
+      'no xAI credentials — sign in with your SuperGrok subscription (in OD or via `hermes auth add xai-oauth`), set XAI_API_KEY, or configure a key in Settings',
     );
   }
   const baseUrl = (credentials.baseUrl || 'https://api.x.ai/v1').replace(/\/$/, '');
@@ -1650,7 +1665,7 @@ async function renderLeonardoImage(ctx: MediaContext, credentials: ProviderConfi
 async function renderGrokVideo(ctx: MediaContext, credentials: ProviderConfig, onProgress?: ProgressFn): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
-      'no xAI API key — configure it in Settings or set XAI_API_KEY',
+      'no xAI credentials — sign in with your SuperGrok subscription (in OD or via `hermes auth add xai-oauth`), set XAI_API_KEY, or configure a key in Settings',
     );
   }
   const baseUrl = (credentials.baseUrl || 'https://api.x.ai/v1').replace(/\/$/, '');
@@ -1796,6 +1811,71 @@ function grokAspectFor(aspect?: string): string {
     return aspect;
   }
   return '16:9';
+}
+
+// ---------------------------------------------------------------------------
+// Provider: xAI Grok TTS — POST /v1/tts.
+//
+// xAI exposes a dedicated /tts endpoint that returns audio bytes directly,
+// not the OpenAI /audio/speech shape. Docs:
+//   https://docs.x.ai/developers/model-capabilities/audio/text-to-speech
+// Credentials come through the same OAuth-aware path as Grok image / video,
+// so a SuperGrok subscriber gets TTS for free once they have authorized.
+// ---------------------------------------------------------------------------
+
+const XAI_TTS_DEFAULT_BASE_URL = 'https://api.x.ai/v1';
+const XAI_TTS_DEFAULT_VOICE_ID = 'eve';
+const XAI_TTS_DEFAULT_LANGUAGE = 'en';
+
+async function renderXAITTS(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no xAI credentials — sign in with your SuperGrok subscription (in OD or via `hermes auth add xai-oauth`), set XAI_API_KEY, or configure a key in Settings',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || XAI_TTS_DEFAULT_BASE_URL).replace(
+    /\/$/,
+    '',
+  );
+  const text = (ctx.prompt && ctx.prompt.trim()) || 'This is a test.';
+  const voiceId = (ctx.voice && ctx.voice.trim()) || XAI_TTS_DEFAULT_VOICE_ID;
+  const language =
+    typeof ctx.language === 'string' && ctx.language.trim()
+      ? ctx.language.trim()
+      : XAI_TTS_DEFAULT_LANGUAGE;
+
+  // Stick to the documented minimal POST /v1/tts shape; the server
+  // defaults output_format to mp3 / 24kHz / 128kbps which matches what
+  // we want. Future work: surface sample_rate / bit_rate / codec via
+  // ctx so the agent can request wav for high-fidelity workflows.
+  const body = {
+    text,
+    voice_id: voiceId,
+    language,
+  };
+
+  const resp = await fetch(`${baseUrl}/tts`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) {
+    const errText = await resp.text().catch(() => '');
+    throw new Error(`xai tts ${resp.status}: ${truncate(errText, 240)}`);
+  }
+  const arrayBuffer = await resp.arrayBuffer();
+  const bytes = Buffer.from(arrayBuffer);
+  if (bytes.length === 0) {
+    throw new Error('xai tts response had zero bytes');
+  }
+  return {
+    bytes,
+    providerNote: `xai/${ctx.wireModel} · voice=${voiceId} · ${language} · ${bytes.length} bytes`,
+    suggestedExt: '.mp3',
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -2166,6 +2246,131 @@ async function renderSenseAudioTTS(ctx: MediaContext, credentials: ProviderConfi
     bytes,
     providerNote: `senseaudio/${wireModel} · ${voiceId} · ${seconds}s · ${bytes.length} bytes`,
     suggestedExt: '.mp3',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Provider: SenseAudio image — POST /v1/image/sync (synchronous text-to-image).
+//
+// Docs: https://docs.senseaudio.cn/guides/image/overview
+//   * Models: senseaudio-image-2.0-260319 (multi-aspect), senseaudio-image-1.0-260319
+//     (standard), doubao-seedream-5-0-260128 (hi-res). The wire `model` field
+//     accepts the catalog id directly so no alias map is needed.
+//   * Body: { model, prompt (≤2000 chars), size (WxH, required when no
+//     reference), reference (URL or data URI, optional), seed (optional int) }.
+//   * Response: { url: string } pointing at the rendered PNG; we fetch it
+//     once to materialise bytes the dispatcher can write to disk.
+//   * Auth: Authorization: Bearer <API_KEY>; shares the senseaudio provider
+//     slot with the TTS path (OD_SENSEAUDIO_API_KEY / SENSEAUDIO_API_KEY).
+// We default to the /sync endpoint because the chat runtime already streams
+// progress and a single round-trip keeps the dispatcher contract identical
+// to OpenAI / Volcengine image. Switching to /v1/image/async + GET
+// /v1/image/pending is a future option if the upstream model latency
+// outgrows the daemon's request timeout.
+// ---------------------------------------------------------------------------
+
+const SENSEAUDIO_IMAGE_PROMPT_LIMIT = 2000;
+
+// SenseAudio's image gateway rejects non-standard pixel sizes with a 400
+// `参数错误：size`. Keep this table in sync with byok-tools.ts's
+// ASPECT_TO_SIZE — both paths hit the same /v1/image/sync endpoint.
+function senseAudioImageSize(aspect?: string): string {
+  if (aspect === '16:9') return '1280x720';
+  if (aspect === '9:16') return '720x1280';
+  if (aspect === '4:3') return '1024x768';
+  if (aspect === '3:4') return '768x1024';
+  return '1024x1024';
+}
+
+async function renderSenseAudioImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no SenseAudio API key — configure it in Settings or set OD_SENSEAUDIO_API_KEY',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || SENSEAUDIO_DEFAULT_BASE_URL).replace(
+    /\/$/,
+    '',
+  );
+  const promptRaw = (ctx.prompt && ctx.prompt.trim()) || 'A high-quality reference image.';
+  // SenseAudio rejects >2000-char prompts with a 4xx; trim defensively so a
+  // verbose agent plan doesn't dead-end the generation. The truncated tail
+  // surfaces in providerNote so the user sees what was actually sent.
+  const prompt =
+    promptRaw.length > SENSEAUDIO_IMAGE_PROMPT_LIMIT
+      ? promptRaw.slice(0, SENSEAUDIO_IMAGE_PROMPT_LIMIT)
+      : promptRaw;
+  const size = senseAudioImageSize(ctx.aspect);
+  const reference = ctx.imageRef?.dataUrl;
+
+  const body: Record<string, unknown> = {
+    model: ctx.wireModel,
+    prompt,
+    size,
+  };
+  if (reference) {
+    // When a reference image is supplied the API documents `size` as
+    // optional; we still send it so the output dimensions stay
+    // deterministic across t2i / i2i runs of the same project.
+    body.reference = reference;
+  }
+
+  const resp = await fetch(`${baseUrl}/v1/image/sync`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  const respText = await resp.text();
+  if (!resp.ok) {
+    throw new Error(`senseaudio image ${resp.status}: ${truncate(respText, 240)}`);
+  }
+  let data: any;
+  try {
+    data = JSON.parse(respText);
+  } catch {
+    throw new Error(`senseaudio image non-JSON: ${truncate(respText, 200)}`);
+  }
+  // Mirror the TTS base_resp envelope check: HTTP 200 can still encode an
+  // upstream logical failure. The image API uses the same shape on the
+  // failure path documented for /v1/image/pending (status=failed +
+  // error_message), so surface either source verbatim.
+  if (data?.base_resp && data.base_resp.status_code !== 0) {
+    throw new Error(
+      `senseaudio image api error ${data.base_resp.status_code}: ${data.base_resp.status_msg || 'unknown'}`,
+    );
+  }
+  if (typeof data?.error_message === 'string' && data.error_message) {
+    throw new Error(`senseaudio image api error: ${data.error_message}`);
+  }
+  const url = typeof data?.url === 'string' ? data.url : '';
+  if (!url) {
+    throw new Error('senseaudio image response missing url');
+  }
+  // Mirror the chat-tool SSRF guard (byok-tools.ts): the gateway-returned
+  // `url` is attacker-controllable inside a successful response, so DNS-
+  // resolve it through validateBaseUrlResolved and refuse loopback /
+  // RFC1918 / metadata-service hosts. Pair with `redirect: 'error'` so a
+  // 3xx hop into private space is also blocked.
+  const urlCheck = await assertExternalAssetUrl(url);
+  if (!urlCheck.ok) {
+    throw new Error(`senseaudio image ${urlCheck.error}`);
+  }
+  const imgResp = await fetch(url, { redirect: 'error' });
+  if (!imgResp.ok) {
+    throw new Error(`senseaudio image fetch ${imgResp.status}`);
+  }
+  const bytes = Buffer.from(await imgResp.arrayBuffer());
+  if (bytes.length === 0) {
+    throw new Error('senseaudio image fetch returned zero bytes');
+  }
+
+  return {
+    bytes,
+    providerNote: `senseaudio/${ctx.wireModel} · ${size}${reference ? ' · i2i' : ''} · ${bytes.length} bytes`,
+    suggestedExt: '.png',
   };
 }
 

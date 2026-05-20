@@ -1,5 +1,6 @@
 ---
 import Layout from '../../_components/sub-page-layout.astro';
+import LazyImg from '../../_components/lazy-img.astro';
 import { getTemplateRecords } from '../../_lib/catalog';
 
 const templates = await getTemplateRecords();
@@ -33,12 +34,12 @@ const jsonLd = {
 
   <section class="template-grid" aria-label="All templates">
     <ul>
-      {templates.map((t) => (
+      {templates.map((t, i) => (
         <li class="template-card">
           <a href={t.detailHref}>
             {t.previewUrl ? (
               <span class="template-thumb">
-                <img src={t.previewUrl} alt="" loading="lazy" decoding="async" />
+                <LazyImg src={t.previewUrl} alt="" loading={i < 4 ? 'eager' : 'precise'} />
               </span>
             ) : (
               <span class="template-thumb template-thumb-empty" aria-hidden="true" />

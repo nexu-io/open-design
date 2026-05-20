@@ -4,7 +4,7 @@
 // Layout (under <dataDir>/memory/):
 //   MEMORY.md            ← short index; one bullet per fact file
 //   <type>_<slug>.md     ← per-fact body + frontmatter
-//   .config.json         ← single boolean: { "enabled": true }
+//   .config.json         ← switches: { "enabled": true, "chatExtractionEnabled": true }
 //
 // Frontmatter format (matches Claude Code's auto-memory pattern):
 //   ---
@@ -175,18 +175,19 @@ export async function readMemoryConfig(dataDir) {
     const parsed = JSON.parse(raw);
     return {
       enabled: parsed?.enabled !== false,
+      chatExtractionEnabled: parsed?.chatExtractionEnabled !== false,
       extraction: normalizeExtractionPatch(parsed?.extraction),
     };
   } catch {
     // Default-on. The whole point of the feature is to surface user
     // context across runs; making it opt-in would mean the first 3
     // chats happen with no memory and no warning.
-    return { enabled: true, extraction: null };
+    return { enabled: true, chatExtractionEnabled: true, extraction: null };
   }
 }
 
 // Patch shape:
-//   { enabled?: boolean, extraction?: object | null }
+//   { enabled?: boolean, chatExtractionEnabled?: boolean, extraction?: object | null }
 // `extraction: null` clears the override (reverting to auto-pick); an
 // object replaces it whole; an absent key leaves the existing override
 // untouched.
@@ -195,6 +196,10 @@ export async function writeMemoryConfig(dataDir, patch) {
   const next = {
     enabled:
       typeof patch?.enabled === 'boolean' ? patch.enabled : current.enabled,
+    chatExtractionEnabled:
+      typeof patch?.chatExtractionEnabled === 'boolean'
+        ? patch.chatExtractionEnabled
+        : current.chatExtractionEnabled,
     extraction: current.extraction,
   };
   if (Object.prototype.hasOwnProperty.call(patch || {}, 'extraction')) {
@@ -203,9 +208,15 @@ export async function writeMemoryConfig(dataDir, patch) {
       : normalizeExtractionPatch(patch.extraction);
   }
   if (typeof next.enabled !== 'boolean') next.enabled = true;
+  if (typeof next.chatExtractionEnabled !== 'boolean') {
+    next.chatExtractionEnabled = true;
+  }
   await ensureDir(memoryDir(dataDir));
   await fsp.writeFile(configPath(dataDir), JSON.stringify(next, null, 2));
-  if (current.enabled !== next.enabled) {
+  if (
+    current.enabled !== next.enabled
+    || current.chatExtractionEnabled !== next.chatExtractionEnabled
+  ) {
     emitChange({ kind: 'config', enabled: next.enabled });
   }
   // We don't emit a separate change event for extraction overrides — the
@@ -293,6 +304,86 @@ export async function listMemoryEntries(dataDir) {
   return out;
 }
 
+const MEMORY_TREE_TYPES = ['user', 'feedback', 'project', 'reference'];
+
+function memoryTreeFolderId(type) {
+  return `folder:${type}`;
+}
+
+function memoryTreeScopeForType(type) {
+  return type === 'project' ? 'project' : 'global';
+}
+
+function toIsoTime(ms) {
+  return new Date(Number.isFinite(ms) ? ms : 0).toISOString();
+}
+
+function extractAutomationRefs(body, label) {
+  const refs = new Set();
+  const re = new RegExp(`^${label}:\\s*([A-Za-z0-9_-]+)\\s*$`, 'gim');
+  let match;
+  while ((match = re.exec(String(body || ''))) !== null) {
+    if (match[1]) refs.add(match[1]);
+  }
+  return Array.from(refs);
+}
+
+export async function buildMemoryTree(dataDir) {
+  const entries = await listMemoryEntries(dataDir);
+  const byType = new Map();
+  for (const type of MEMORY_TREE_TYPES) byType.set(type, []);
+  for (const entry of entries) {
+    const list = byType.get(entry.type) ?? [];
+    list.push(entry);
+    byType.set(entry.type, list);
+  }
+
+  const nodes = [];
+  for (const type of MEMORY_TREE_TYPES) {
+    const children = byType.get(type) ?? [];
+    const folderUpdatedAt = children.reduce(
+      (latest, entry) => Math.max(latest, entry.updatedAt ?? 0),
+      0,
+    );
+    const folderId = memoryTreeFolderId(type);
+    nodes.push({
+      id: folderId,
+      parentId: null,
+      path: `/${type}`,
+      name: capitalize(type),
+      description: `${capitalize(type)} memory`,
+      kind: 'folder',
+      type,
+      scope: memoryTreeScopeForType(type),
+      sourcePacketIds: [],
+      proposalIds: [],
+      createdAt: toIsoTime(folderUpdatedAt),
+      updatedAt: toIsoTime(folderUpdatedAt),
+      childrenCount: children.length,
+    });
+    for (const entry of children) {
+      const detail = await readMemoryEntry(dataDir, entry.id);
+      const detailBody = detail?.body ?? '';
+      nodes.push({
+        id: entry.id,
+        parentId: folderId,
+        path: `/${type}/${entry.id}`,
+        name: entry.name,
+        description: entry.description,
+        kind: 'entry',
+        type: entry.type,
+        scope: memoryTreeScopeForType(entry.type),
+        sourcePacketIds: extractAutomationRefs(detailBody, 'Source packet'),
+        proposalIds: extractAutomationRefs(detailBody, 'Proposal'),
+        createdAt: toIsoTime(entry.updatedAt),
+        updatedAt: toIsoTime(entry.updatedAt),
+        childrenCount: 0,
+      });
+    }
+  }
+  return nodes;
+}
+
 export async function readMemoryEntry(dataDir, id) {
   let raw;
   let stat;
@@ -315,6 +406,28 @@ function renderEntryFile(name, description, type, body) {
   const safeType = isValidType(type) ? type : 'user';
   const trimmedBody = String(body || '').replace(/^\s+/, '');
   return `---\nname: ${safeName}\ndescription: ${safeDesc}\ntype: ${safeType}\n---\n\n${trimmedBody}\n`;
+}
+
+export async function updateMemoryTreeNode(dataDir, id, patch) {
+  if (typeof id !== 'string' || id.startsWith('folder:')) {
+    throw new Error('memory tree folders are derived and cannot be edited');
+  }
+  const current = await readMemoryEntry(dataDir, id);
+  if (!current) throw new Error('memory not found');
+  const nextType = isValidType(patch?.type) ? patch.type : current.type;
+  return upsertMemoryEntry(dataDir, {
+    id,
+    name:
+      typeof patch?.name === 'string' && patch.name.trim()
+        ? patch.name
+        : current.name,
+    description:
+      typeof patch?.description === 'string'
+        ? patch.description
+        : current.description,
+    type: nextType,
+    body: typeof patch?.body === 'string' ? patch.body : current.body,
+  });
 }
 
 export async function upsertMemoryEntry(dataDir, input, options) {
@@ -661,6 +774,9 @@ export async function extractFromMessage(dataDir, userMessage) {
   const cfg = await readMemoryConfig(dataDir);
   if (!cfg.enabled) {
     recordSkip({ userMessage, reason: 'memory-disabled', kind: 'heuristic' });
+    return [];
+  }
+  if (!cfg.chatExtractionEnabled) {
     return [];
   }
   const seen = new Set();

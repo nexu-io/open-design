@@ -16,6 +16,7 @@ const listMessages = vi.fn();
 const fetchPreviewComments = vi.fn();
 const loadTabs = vi.fn();
 const fetchProjectFiles = vi.fn();
+const fetchProjectDesignSystemPackageAudit = vi.fn();
 const fetchLiveArtifacts = vi.fn();
 const fetchSkill = vi.fn();
 const fetchDesignSystem = vi.fn();
@@ -49,6 +50,7 @@ vi.mock('../../src/providers/registry', () => ({
   deletePreviewComment: vi.fn(),
   fetchPreviewComments: (...args: unknown[]) => fetchPreviewComments(...args),
   fetchDesignSystem: (...args: unknown[]) => fetchDesignSystem(...args),
+  fetchProjectDesignSystemPackageAudit: (...args: unknown[]) => fetchProjectDesignSystemPackageAudit(...args),
   fetchLiveArtifacts: (...args: unknown[]) => fetchLiveArtifacts(...args),
   fetchProjectFiles: (...args: unknown[]) => fetchProjectFiles(...args),
   fetchSkill: (...args: unknown[]) => fetchSkill(...args),
@@ -117,6 +119,7 @@ describe('ProjectView daemon cleanup', () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    window.sessionStorage.clear();
   });
 
   it('does not abort daemon cancel reattach controllers during unmount cleanup', async () => {
@@ -402,6 +405,170 @@ describe('ProjectView daemon cleanup', () => {
       window.sessionStorage.removeItem('od:auto-send-first:project-files');
       window.sessionStorage.removeItem('od:auto-send-attachments:project-files');
     }
+  });
+
+  it('audits design-system workspace output after first auto-send and auto-sends bounded repair prompts', async () => {
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue({
+      ok: false,
+      projectPath: '/tmp/ds',
+      filesInspected: 12,
+      errors: [{
+        severity: 'error',
+        code: 'ui_kit_index_missing_runtime_bootstrap',
+        message: 'ui_kits/app/index.html must mount the kit.',
+        path: 'ui_kits/app/index.html',
+      }],
+      warnings: [],
+    });
+    streamViaDaemon.mockImplementation(async (options: {
+      handlers: { onDone: () => void };
+      onRunCreated?: (runId: string) => void;
+    }) => {
+      options.onRunCreated?.('run-ds-1');
+      options.handlers.onDone();
+    });
+
+    chatPaneSpy.mockClear();
+    window.sessionStorage.setItem('od:auto-send-first:project-ds', '1');
+
+    render(
+      <ProjectView
+        project={{
+          id: 'project-ds',
+          name: 'Cherry Studio Design System',
+          skillId: null,
+          designSystemId: 'user:cherry-studio',
+          pendingPrompt: 'Create this project as a design system.',
+          metadata: {
+            importedFrom: 'design-system',
+            entryFile: 'DESIGN.md',
+            sourceFileName: 'user:cherry-studio',
+          },
+        } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => expect(fetchProjectDesignSystemPackageAudit).toHaveBeenCalledWith('project-ds'));
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(3));
+    const repairMessages = saveMessage.mock.calls.filter((call) =>
+      call[2]?.role === 'user'
+      && typeof call[2]?.content === 'string'
+      && call[2].content.includes('Fix the design-system package audit findings below.')
+      && call[2].content.includes('ui_kit_index_missing_runtime_bootstrap'),
+    );
+    expect(repairMessages).toHaveLength(2);
+    expect(window.sessionStorage.getItem('od:design-system-audit-auto-repair:project-ds')).toBeNull();
+    await waitFor(() => {
+      const repairSeed = chatPaneSpy.mock.calls.find(
+        (call) => typeof call[0]?.initialDraft === 'string'
+          && call[0].initialDraft.includes('Fix the design-system package audit findings below.')
+          && call[0].initialDraft.includes('ui_kit_index_missing_runtime_bootstrap'),
+      );
+      expect(repairSeed).toBeTruthy();
+    });
+    expect(saveMessage.mock.calls.some((call) =>
+      call[2]?.role === 'assistant'
+      && call[2]?.events?.some((event: { kind?: string; label?: string; detail?: string }) =>
+        event.kind === 'status'
+        && event.label === 'audit'
+        && event.detail?.includes('Package audit found 1 error'),
+      ),
+    )).toBe(true);
+  });
+
+  it('clears design-system auto-repair budget when the first audit passes', async () => {
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue({
+      ok: true,
+      projectPath: '/tmp/ds',
+      filesInspected: 24,
+      errors: [],
+      warnings: [],
+    });
+    streamViaDaemon.mockImplementation(async (options: {
+      handlers: { onDone: () => void };
+      onRunCreated?: (runId: string) => void;
+    }) => {
+      options.onRunCreated?.('run-ds-pass');
+      options.handlers.onDone();
+    });
+
+    chatPaneSpy.mockClear();
+    window.sessionStorage.setItem('od:auto-send-first:project-ds-pass', '1');
+
+    render(
+      <ProjectView
+        project={{
+          id: 'project-ds-pass',
+          name: 'Passing Design System',
+          skillId: null,
+          designSystemId: 'user:passing-ds',
+          pendingPrompt: 'Create this project as a design system.',
+          metadata: {
+            importedFrom: 'design-system',
+            entryFile: 'DESIGN.md',
+            sourceFileName: 'user:passing-ds',
+          },
+        } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => expect(fetchProjectDesignSystemPackageAudit).toHaveBeenCalledWith('project-ds-pass'));
+    expect(streamViaDaemon).toHaveBeenCalledTimes(1);
+    expect(window.sessionStorage.getItem('od:design-system-audit-auto-repair:project-ds-pass')).toBeNull();
   });
 
   // Sister check: without the auto-send flag, the composer should still

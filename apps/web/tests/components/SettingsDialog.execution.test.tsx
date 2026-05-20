@@ -64,7 +64,7 @@ vi.mock('../../src/providers/provider-models', () => ({
 }));
 
 import { SettingsDialog } from '../../src/components/SettingsDialog';
-import type { SettingsSection } from '../../src/components/SettingsDialog';
+import type { AgentRefreshOptions, SettingsSection } from '../../src/components/SettingsDialog';
 import { I18nProvider } from '../../src/i18n';
 import { LOCALES } from '../../src/i18n/types';
 import type { AgentInfo, AppConfig, AppVersionInfo } from '../../src/types';
@@ -97,6 +97,10 @@ const availableAgents: AgentInfo[] = [
     models: [{ id: 'default', label: 'Default' }],
   },
 ];
+
+type OnRefreshAgents = (
+  options?: AgentRefreshOptions,
+) => void | AgentInfo[] | Promise<void | AgentInfo[]>;
 
 const sampleBundledPets = [
   {
@@ -184,15 +188,16 @@ function renderSettingsDialog(
   options: {
     agents?: AgentInfo[];
     daemonLive?: boolean;
-    onRefreshAgents?: ReturnType<typeof vi.fn>;
+    onRefreshAgents?: OnRefreshAgents;
     initialSection?: SettingsSection;
     appVersionInfo?: AppVersionInfo | null;
+    welcome?: boolean;
   } = {},
 ) {
   const onPersist = vi.fn();
   const onPersistComposioKey = vi.fn();
   const onClose = vi.fn();
-  const onRefreshAgents = options.onRefreshAgents ?? vi.fn();
+  const onRefreshAgents = options.onRefreshAgents ?? vi.fn<OnRefreshAgents>();
 
   const view = render(
     <SettingsDialog
@@ -201,6 +206,7 @@ function renderSettingsDialog(
       daemonLive={options.daemonLive ?? true}
       appVersionInfo={options.appVersionInfo ?? null}
       initialSection={options.initialSection ?? 'execution'}
+      welcome={options.welcome}
       onPersist={onPersist}
       onPersistComposioKey={onPersistComposioKey}
       onClose={onClose}
@@ -816,6 +822,41 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*0 installed/i }));
     expect(screen.getByText(/No agents detected yet/i)).toBeTruthy();
+  });
+
+  it('labels the memory model default with the selected Local CLI', async () => {
+    const agents: AgentInfo[] = [
+      ...availableAgents,
+      {
+        id: 'claude',
+        name: 'Claude Code',
+        bin: 'claude',
+        available: true,
+        version: '1.2.3',
+        models: [{ id: 'default', label: 'Default (CLI config)' }],
+      },
+    ];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    }));
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'claude' },
+      { agents },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*2 installed/i }));
+
+    const memoryModel = await screen.findByRole('combobox', { name: 'Memory model' }) as HTMLSelectElement;
+    expect(memoryModel.options[memoryModel.selectedIndex]?.textContent).toBe('Same as chat (Claude Code)');
+    expect(screen.getByText(/anthropic is only the fallback provider family/i)).toBeTruthy();
   });
 
   it('shows rescan loading, avoids duplicate rescans, and renders the success notice', async () => {
@@ -1890,7 +1931,7 @@ describe('SettingsDialog pets interactions', () => {
       { initialSection: 'pet' },
     );
 
-    expect((screen.getByRole('button', { name: 'Wake' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Show pet' }) as HTMLButtonElement).disabled).toBe(false);
 
     await waitFor(() => {
       expect(screen.getByText('Dario')).toBeTruthy();
@@ -1969,9 +2010,10 @@ describe('SettingsDialog pets interactions', () => {
       { initialSection: 'pet' },
     );
 
-    const toggle = screen.getByRole('button', { name: 'Tuck away' });
+    const toggle = screen.getByRole('button', { name: 'Hide pet' });
     fireEvent.click(toggle);
-    expect(screen.getByRole('button', { name: 'Wake' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Show pet' })).toBeTruthy();
+    expect(screen.getByText('Hide pet')).toBeTruthy();
 
     await waitForPersist(
       onPersist,

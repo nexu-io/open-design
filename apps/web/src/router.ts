@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react';
 // state isn't trapped behind a `useState` boundary.
 export type EntryHomeView =
   | 'home'
+  | 'onboarding'
   | 'projects'
   | 'tasks'
   | 'plugins'
@@ -19,6 +20,8 @@ export type EntryHomeView =
 
 export type Route =
   | { kind: 'home'; view: EntryHomeView }
+  | { kind: 'design-system-create' }
+  | { kind: 'design-system-detail'; designSystemId: string }
   | {
       kind: 'project';
       projectId: string;
@@ -38,6 +41,9 @@ export type Route =
 export function parseRoute(pathname: string): Route {
   const parts = pathname.replace(/\/+$/, '').split('/').filter(Boolean);
   if (parts.length === 0) return { kind: 'home', view: 'home' };
+  if (parts[0] === 'onboarding') {
+    return { kind: 'home', view: 'onboarding' };
+  }
   if (parts[0] === 'projects') {
     if (parts[1]) {
       const projectId = decodeURIComponent(parts[1]);
@@ -68,6 +74,12 @@ export function parseRoute(pathname: string): Route {
     return { kind: 'home', view: 'projects' };
   }
   if (parts[0] === 'design-systems') {
+    if (parts[1] === 'create') {
+      return { kind: 'design-system-create' };
+    }
+    if (parts[1]) {
+      return { kind: 'design-system-detail', designSystemId: decodeURIComponent(parts[1]) };
+    }
     return { kind: 'home', view: 'design-systems' };
   }
   if (parts[0] === 'automations' || parts[0] === 'tasks') {
@@ -95,6 +107,7 @@ export function parseRoute(pathname: string): Route {
 
 export function buildPath(route: Route): string {
   if (route.kind === 'home') {
+    if (route.view === 'onboarding') return '/onboarding';
     if (route.view === 'projects') return '/projects';
     if (route.view === 'tasks') return '/automations';
     if (route.view === 'plugins') return '/plugins';
@@ -104,6 +117,10 @@ export function buildPath(route: Route): string {
   }
   if (route.kind === 'marketplace') return '/marketplace';
   if (route.kind === 'marketplace-detail') return `/marketplace/${encodeURIComponent(route.pluginId)}`;
+  if (route.kind === 'design-system-create') return '/design-systems/create';
+  if (route.kind === 'design-system-detail') {
+    return `/design-systems/${encodeURIComponent(route.designSystemId)}`;
+  }
   const id = encodeURIComponent(route.projectId);
   const file = route.fileName
     ? route.fileName.split('/').map((s) => encodeURIComponent(s)).join('/')

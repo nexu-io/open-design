@@ -10,8 +10,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
-    "typescript": "^5.6.3",
-    "vitest": "^2.1.8"
+    "typescript": "5.9.3",
+    "vitest": "4.1.6"
   },
   "engines": {
     "node": "~24"

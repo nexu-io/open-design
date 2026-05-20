@@ -5,6 +5,11 @@ import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { projectRawUrl } from '../providers/registry';
 import type { TodoItem } from '../runtime/todos';
 import type { AppliedPluginSnapshot } from '@open-design/contracts';
+import {
+  DESIGN_SYSTEM_WORKSPACE_DISPLAY_DESCRIPTION,
+  DESIGN_SYSTEM_WORKSPACE_DISPLAY_TITLE,
+  isDesignSystemWorkspacePrompt,
+} from '../design-system-auto-prompt';
 import { latestTodoWriteInputFromMessages } from '../runtime/todos';
 import { TodoCard } from './ToolCard';
 import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, ChatMessageFeedbackChange, Conversation, PreviewComment, ProjectFile, ProjectMetadata, SkillSummary } from '../types';
@@ -274,6 +279,12 @@ interface Props {
   // message" without forcing a separate side widget.
   activePluginSnapshot?: AppliedPluginSnapshot | null;
   onCollapse?: () => void;
+  // SenseAudio BYOK only — wired straight through to ChatComposer for the
+  // in-composer image-model picker. Active protocol is read so the picker
+  // hides when the user is on any other BYOK tab (azure / openai / …).
+  byokApiProtocol?: AppConfig['apiProtocol'];
+  byokImageModel?: string;
+  onChangeByokImageModel?: (model: string) => void;
 }
 
 type Tab = 'chat' | 'comments';
@@ -322,6 +333,9 @@ export function ChatPane({
   activePluginSnapshot,
   skills = [],
   onCollapse,
+  byokApiProtocol,
+  byokImageModel,
+  onChangeByokImageModel,
 }: Props) {
   const t = useT();
   const logRef = useRef<HTMLDivElement | null>(null);
@@ -732,9 +746,6 @@ export function ChatPane({
                     <span className="chat-empty-title">
                       {t('chat.startTitle')}
                     </span>
-                    <span className="chat-empty-hint">
-                      {t('chat.startHint')}
-                    </span>
                   </div>
                   <div className="chat-examples" role="list">
                     {pickStarters(projectMetadata, t).map((ex, i) => (
@@ -870,6 +881,9 @@ export function ChatPane({
             researchAvailable={researchAvailable}
             projectMetadata={projectMetadata}
             onProjectMetadataChange={onProjectMetadataChange}
+            byokApiProtocol={byokApiProtocol}
+            byokImageModel={byokImageModel}
+            onChangeByokImageModel={onChangeByokImageModel}
             currentSkillId={currentSkillId}
             onProjectSkillChange={onProjectSkillChange}
             pinnedPluginId={activePluginSnapshot?.pluginId ?? null}
@@ -1183,6 +1197,8 @@ function UserMessage({
     }, 2000);
   }
 
+  const isDesignSystemWorkspaceRequest = isDesignSystemWorkspacePrompt(message.content);
+
   return (
     <div className="msg user">
       <div className="role">
@@ -1234,7 +1250,19 @@ function UserMessage({
           ))}
         </div>
       ) : null}
-      {message.content ? (
+      {message.content && isDesignSystemWorkspaceRequest ? (
+        <div className="user-text-wrap user-status-wrap">
+          <div className="user-status-card design-system-generation-status">
+            <span className="user-status-card__icon">
+              <Icon name="palette" size={15} />
+            </span>
+            <span className="user-status-card__copy">
+              <strong>{DESIGN_SYSTEM_WORKSPACE_DISPLAY_TITLE}</strong>
+              <span>{DESIGN_SYSTEM_WORKSPACE_DISPLAY_DESCRIPTION}</span>
+            </span>
+          </div>
+        </div>
+      ) : message.content ? (
         <div className="user-text-wrap">
           <div className="user-text user-bubble">{message.content}</div>
           <button
