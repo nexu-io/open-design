@@ -80,6 +80,8 @@ test("verify-tauri-migration-handoff round-trips a bundle through a receiving ch
   assert.match(note, /TAURI_M4_REPORT_DIR=<report-dir>/);
   assert.match(note, /TAURI_PR_BODY_PATH=<path>/);
   assert.match(note, new RegExp(`--archive '${escapeRegExp(`${dirname(manifestPath)}.tar.gz`)}' \\\\`));
+  assert.match(note, /--workflow "\$\{GITHUB_WORKFLOW:-ci\.yml\}" \\/);
+  assert.match(note, /--pr-body-path "\$\{TAURI_PR_BODY_PATH:-\.tmp\/tauri-migration-pr-body\.md\}"/);
   assert.match(note, /\$\{GH_BIN:-gh\} pr create --draft/);
   assert.match(note, /--body-file \.tmp\/tauri-migration-pr-body\.md/);
   assert.match(note, new RegExp(`--manifest '${escapeRegExp(manifestPath)}' \\\\`));

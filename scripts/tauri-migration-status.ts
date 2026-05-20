@@ -28,6 +28,8 @@ const defaultReportDir = "/tmp/open-design-tauri-m4-reports";
 const handoffManifestName = "open-design-tauri-migration-handoff.json";
 const linuxReportName = "open-design-ci-linux-tauri-e2e-report";
 const noteName = "open-design-tauri-migration-handoff.md";
+const pushOnlyPrBodyPathArg = '"${TAURI_PR_BODY_PATH:-.tmp/tauri-migration-pr-body.md}"';
+const pushOnlyWorkflowArg = '"${GITHUB_WORKFLOW:-ci.yml}"';
 const winReportName = "open-design-ci-win-tauri-e2e-report";
 const expectedHeartbeatId = "tauri-migration-follow-up";
 const expectedHeartbeatName = "Tauri migration follow-up";
@@ -546,8 +548,8 @@ function nextActionsForPhase(
         : "the command script";
     const pushOnlyHandoffCommand =
       archiveReady && handoffArchive?.archive != null
-        ? `scripts/push-tauri-migration-handoff.ts --archive ${shellQuote(handoffArchive.archive)} --remote ${shellQuote(remoteName)} --report-dir ${shellQuote(reportDir)}`
-        : `scripts/push-tauri-migration-handoff.ts --archive /path/to/open-design-tauri-migration-handoff.tar.gz --remote ${shellQuote(remoteName)} --report-dir ${shellQuote(reportDir)}`;
+        ? `scripts/push-tauri-migration-handoff.ts --archive ${shellQuote(handoffArchive.archive)} --remote ${shellQuote(remoteName)} --workflow ${pushOnlyWorkflowArg} --report-dir ${shellQuote(reportDir)} --pr-body-path ${pushOnlyPrBodyPathArg}`
+        : `scripts/push-tauri-migration-handoff.ts --archive /path/to/open-design-tauri-migration-handoff.tar.gz --remote ${shellQuote(remoteName)} --workflow ${pushOnlyWorkflowArg} --report-dir ${shellQuote(reportDir)} --pr-body-path ${pushOnlyPrBodyPathArg}`;
     const transferIdentity =
       archiveReady && handoffArchive != null
         ? handoffTransferIdentity(migrationBranch, expectedHead, handoffArchive)

@@ -11,7 +11,9 @@ import { tauriMigrationPrBodyLines } from "./tauri-migration-pr-body.ts";
 const execFileAsync = promisify(execFile);
 const defaultRoot = resolve(import.meta.dirname, "..");
 const defaultHandoffDir = "/tmp/open-design-tauri-migration-handoff";
+const receiverPrBodyPathArg = '"${TAURI_PR_BODY_PATH:-.tmp/tauri-migration-pr-body.md}"';
 const receiverReportDirArg = '"${TAURI_M4_REPORT_DIR:-/tmp/open-design-tauri-m4-reports}"';
+const receiverWorkflowArg = '"${GITHUB_WORKFLOW:-ci.yml}"';
 const manifestName = "open-design-tauri-migration-handoff.json";
 const noteName = "open-design-tauri-migration-handoff.md";
 
@@ -77,7 +79,9 @@ async function main(): Promise<void> {
           "pnpm exec tsx scripts/push-tauri-migration-handoff.ts \\",
           `  --archive ${shellQuote(archivePath)} \\`,
           '  --remote "${REMOTE:-origin}" \\',
-          `  --report-dir ${receiverReportDirArg}`,
+          `  --workflow ${receiverWorkflowArg} \\`,
+          `  --report-dir ${receiverReportDirArg} \\`,
+          `  --pr-body-path ${receiverPrBodyPathArg}`,
         ].join("\n"),
       ),
       "Receiver environment overrides:",

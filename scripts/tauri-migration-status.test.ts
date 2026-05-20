@@ -346,7 +346,7 @@ test("tauri-migration-status prints continuation guidance for a custom handoff a
   assert.match(
     nextActions,
     new RegExp(
-      `push-tauri-migration-handoff\\.ts --archive '${escapeRegExp(customArchivePath)}' --remote '${escapeRegExp(remotePath)}' --report-dir '${escapeRegExp(reportDir)}'`,
+      `push-tauri-migration-handoff\\.ts --archive '${escapeRegExp(customArchivePath)}' --remote '${escapeRegExp(remotePath)}' --workflow "\\$\\{GITHUB_WORKFLOW:-ci\\.yml\\}" --report-dir '${escapeRegExp(reportDir)}' --pr-body-path "\\$\\{TAURI_PR_BODY_PATH:-\\.tmp/tauri-migration-pr-body\\.md\\}"`,
     ),
   );
   assert.match(nextActions, /--dry-run/);
