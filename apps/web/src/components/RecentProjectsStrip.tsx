@@ -6,9 +6,10 @@
 // onOpen / onViewAll) so the strip can be reused later by other
 // surfaces (e.g. an in-project quick-switcher pane).
 
-import type { Project } from '../types';
-import { Icon } from './Icon';
 import { useT } from '../i18n';
+import type { Project, ProjectDisplayStatus } from '../types';
+import { Icon } from './Icon';
+import { STATUS_LABEL_KEYS } from './DesignsTab';
 
 interface Props {
   projects: Project[];
@@ -55,29 +56,43 @@ export function RecentProjectsStrip({
         </button>
       </header>
       <div className="recent-projects__row" role="list">
-        {recent.map((project) => (
-          <button
-            key={project.id}
-            type="button"
-            role="listitem"
-            className="recent-projects__card"
-            onClick={() => onOpen(project.id)}
-            title={project.name}
-            data-project-id={project.id}
-          >
-            <div className="recent-projects__card-thumb" aria-hidden>
-              <span className="recent-projects__card-glyph">
-                {projectGlyph(project.name)}
-              </span>
-            </div>
-            <div className="recent-projects__card-meta">
-              <div className="recent-projects__card-name">{project.name}</div>
-              <div className="recent-projects__card-time">
-                {relativeTime(project.updatedAt, t)}
+        {recent.map((project) => {
+          const status: ProjectDisplayStatus = project.status?.value ?? 'not_started';
+          const isActive =
+            status === 'running' || status === 'queued' || status === 'awaiting_input';
+          return (
+            <button
+              key={project.id}
+              type="button"
+              role="listitem"
+              className="recent-projects__card"
+              onClick={() => onOpen(project.id)}
+              title={project.name}
+              data-project-id={project.id}
+            >
+              <div className="recent-projects__card-thumb" aria-hidden>
+                <span className="recent-projects__card-glyph">
+                  {projectGlyph(project.name)}
+                </span>
               </div>
-            </div>
-          </button>
-        ))}
+              <div className="recent-projects__card-meta">
+                <div className="recent-projects__card-name">{project.name}</div>
+                <div className="recent-projects__card-time">
+                  <span
+                    className={`recent-projects__card-status recent-projects__card-status-${status}`}
+                  >
+                    {isActive ? (
+                      <span className="recent-projects__card-status-dot" aria-hidden />
+                    ) : null}
+                    {statusLabel(status, t)}
+                  </span>
+                  <span className="recent-projects__card-sep" aria-hidden>·</span>
+                  {relativeTime(project.updatedAt, t)}
+                </div>
+              </div>
+            </button>
+          );
+        })}
       </div>
     </section>
   );
@@ -89,6 +104,13 @@ function projectGlyph(name: string): string {
   const codePoint = trimmed.codePointAt(0);
   if (!codePoint) return '·';
   return String.fromCodePoint(codePoint).toUpperCase();
+}
+
+function statusLabel(
+  status: ProjectDisplayStatus,
+  t: ReturnType<typeof useT>,
+): string {
+  return t(STATUS_LABEL_KEYS[status]);
 }
 
 function relativeTime(ts: number, t: ReturnType<typeof useT>): string {

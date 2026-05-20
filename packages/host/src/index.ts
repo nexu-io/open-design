@@ -240,7 +240,9 @@ export function isOpenDesignHostBridge(value: unknown): value is OpenDesignHostB
   if (!isRecord(shell) || !hasFunction(shell, "openExternal") || !hasFunction(shell, "openPath")) return false;
 
   const project = value.project;
-  if (!isRecord(project) || !hasFunction(project, "pickAndImport")) return false;
+  if (!isRecord(project) || !hasFunction(project, "pickAndImport")) {
+    return false;
+  }
 
   const pdf = value.pdf;
   if (!isRecord(pdf) || !hasFunction(pdf, "print")) return false;

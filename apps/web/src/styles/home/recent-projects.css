@@ -103,4 +103,48 @@
 .recent-projects__card-time {
   font-size: 11.5px;
   color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.recent-projects__card-sep {
+  color: var(--text-muted);
+}
+.recent-projects__card-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 500;
+}
+.recent-projects__card-status-running {
+  color: var(--accent);
+}
+.recent-projects__card-status-awaiting_input {
+  color: var(--amber);
+}
+.recent-projects__card-status-queued,
+.recent-projects__card-status-not_started,
+.recent-projects__card-status-canceled {
+  color: var(--text-muted);
+}
+.recent-projects__card-status-succeeded {
+  color: var(--green);
+}
+.recent-projects__card-status-failed {
+  color: var(--red);
+}
+.recent-projects__card-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.recent-projects__card-status-running .recent-projects__card-status-dot {
+  animation: recent-projects-pulse 1.4s ease-in-out infinite;
+}
+@keyframes recent-projects-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
 }

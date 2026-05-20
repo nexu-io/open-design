@@ -65,6 +65,11 @@ function artifactProjectFile(name: string, mtime: number): ProjectFile {
 }
 
 vi.mock('../../src/i18n', () => ({
+  useI18n: () => ({
+    locale: 'en',
+    setLocale: () => undefined,
+    t: (key: string) => key,
+  }),
   useT: () => ((value: string) => value),
 }));
 
@@ -638,12 +643,16 @@ describe('ProjectView daemon cleanup', () => {
       }],
       warnings: [],
     });
+    let streamCallCount = 0;
     streamViaDaemon.mockImplementation(async (options: {
       handlers: { onDone: () => void };
       onRunCreated?: (runId: string) => void;
     }) => {
-      options.onRunCreated?.('run-ds-1');
-      options.handlers.onDone();
+      streamCallCount += 1;
+      options.onRunCreated?.(`run-ds-${streamCallCount}`);
+      if (streamCallCount === 1) {
+        options.handlers.onDone();
+      }
     });
 
     chatPaneSpy.mockClear();

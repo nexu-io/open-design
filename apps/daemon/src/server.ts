@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import net from 'node:net';
 import {
-  defaultScenarioPluginIdForKind,
+  defaultScenarioPluginIdForProjectMetadata,
   PLUGIN_SHARE_ACTION_PLUGIN_IDS,
 } from '@open-design/contracts';
 import {
@@ -183,6 +183,7 @@ import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
 import { createChatRunService } from './runs.js';
+import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
 import { reportRunCompletedFromDaemon } from './langfuse-bridge.js';
 import {
   createAnalyticsService,
@@ -358,6 +359,7 @@ import { LiveArtifactRefreshUnavailableError, refreshLiveArtifact } from './live
 import { LiveArtifactRefreshAbortError } from './live-artifacts/refresh.js';
 import { registerConnectorRoutes } from './connectors/routes.js';
 import { registerActiveContextRoutes } from './active-context-routes.js';
+import { registerHostToolsRoutes } from './host-tools-routes.js';
 import { registerMcpRoutes } from './mcp-routes.js';
 import { registerXaiRoutes } from './xai-routes.js';
 import { registerLiveArtifactRoutes } from './live-artifact-routes.js';
@@ -4404,6 +4406,13 @@ export async function startServer({
     db,
     http: httpDeps,
     projectStore: projectStoreDeps,
+  });
+  registerHostToolsRoutes(app, {
+    db,
+    http: httpDeps,
+    paths: pathDeps,
+    projectStore: projectStoreDeps,
+    projectFiles: projectFileDeps,
   });
   registerProjectRoutes(app, {
     db,
@@ -10561,11 +10570,11 @@ export async function startServer({
     //
     // Stage A of plugin-driven-flow-plan: when neither the body nor the
     // project carries plugin info we fall back to the bundled scenario
-    // plugin for the project's `metadata.kind` so direct callers (CLI /
-    // SDK / agent-headless runs) get the same auto-binding the web
-    // create flow already produces. The fallback is silent — a bundled
-    // scenario that is not installed leaves the run plugin-less, which
-    // matches the legacy path.
+    // plugin for the project's metadata kind/intent so direct callers
+    // (CLI / SDK / agent-headless runs) get the same auto-binding the
+    // web create flow already produces. The fallback is silent — a
+    // bundled scenario that is not installed leaves the run plugin-less,
+    // which matches the legacy path.
     let resolvedSnapshot = null;
     if (typeof req.body?.projectId === 'string' && req.body.projectId) {
       let registryView;
@@ -10583,9 +10592,7 @@ export async function startServer({
           typeof projectRow?.appliedPluginSnapshotId === 'string'
           && projectRow.appliedPluginSnapshotId.length > 0;
         if (!hasPin) {
-          const fallbackPluginId = defaultScenarioPluginIdForKind(
-            projectRow?.metadata?.kind,
-          );
+          const fallbackPluginId = defaultScenarioPluginIdForProjectMetadata(projectRow?.metadata);
           if (fallbackPluginId && getInstalledPlugin(db, fallbackPluginId)) {
             runResolveBody = { ...req.body, pluginId: fallbackPluginId };
           }
@@ -10799,26 +10806,13 @@ export async function startServer({
         exitCode?: number | null;
         signal?: string | null;
       }) => {
-        const result =
-          status.status === 'succeeded'
-            ? 'success'
-            : status.status === 'canceled'
-              ? 'cancelled'
-              : 'failed';
-        let errorCode: string | undefined;
-        if (result === 'failed') {
-          errorCode = status.errorCode ?? undefined;
-          if (!errorCode) {
-            if (status.signal) errorCode = `AGENT_SIGNAL_${status.signal}`;
-            else if (typeof status.exitCode === 'number' && status.exitCode !== 0) {
-              errorCode = `AGENT_EXIT_${status.exitCode}`;
-            } else {
-              errorCode = 'AGENT_TERMINATED_UNKNOWN';
-            }
-          }
-        } else if (result === 'cancelled') {
-          errorCode = status.errorCode ?? undefined;
-        }
+        // `deriveRunErrorCode` is the invariant: when `result === 'failed'`
+        // it always returns a non-empty string so dashboards keyed on
+        // `error_code` never see a blank cell. Live in `run-result.ts`
+        // with unit coverage for the fall-through cases (ACP fatal,
+        // child close without error event, etc.).
+        const result = runResultFromStatus(status.status);
+        const errorCode = deriveRunErrorCode(status);
         let inputTokens: number | undefined;
         let outputTokens: number | undefined;
         for (let i = run.events.length - 1; i >= 0; i -= 1) {

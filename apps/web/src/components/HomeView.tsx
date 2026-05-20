@@ -39,8 +39,8 @@ import { useI18n } from '../i18n';
 import { fetchElevenLabsVoiceOptions } from '../providers/elevenlabs-voices';
 import type { Project, ProjectMetadata, PromptTemplateSummary, SkillSummary } from '../types';
 import { inlineMentionToken } from '../utils/inlineMentions';
-import { HomeHero } from './HomeHero';
-import { findChip, type HomeHeroChip } from './home-hero/chips';
+import { HomeHero, type ExampleSuggestion } from './HomeHero';
+import { findChip, HOME_HERO_CHIPS, type HomeHeroChip } from './home-hero/chips';
 import {
   buildHomeMediaComposer,
   homeMediaSurfaceForChipId,
@@ -58,8 +58,16 @@ import {
 import { PluginDetailsModal } from './PluginDetailsModal';
 import { PluginsHomeSection } from './PluginsHomeSection';
 import type { PluginLoopSubmit } from './PluginLoopHome';
+import {
+  applyFacetSelection,
+  isFeaturedPlugin,
+  type FacetSelection,
+} from './plugins-home/facets';
 import type { PluginUseAction } from './plugins-home/useActions';
+import { sortByVisualAppeal } from './plugins-home/visualScore';
 import { RecentProjectsStrip } from './RecentProjectsStrip';
+
+const EXAMPLE_PROMPT_LIMIT = 4;
 
 interface ActivePlugin {
   record: InstalledPluginRecord;
@@ -85,6 +93,16 @@ interface ActivePlugin {
   projectMetadata: ProjectMetadata | null;
   editableInputNames: string[];
   preserveInputFields: boolean;
+  // True when the active plugin was bound through a type chip.
+  // In that mode we never push the rendered useCase.query into the
+  // textarea — the user keeps full control over the prompt and the
+  // example-prompt panel below the composer is the explicit opt-in
+  // for a starter sentence. Without this flag the media composer
+  // effect (which fires on external list reloads like ElevenLabs
+  // voices) and updateActiveInputs (fires on inline form edits)
+  // would back-fill the textarea, defeating the suppression that
+  // the chip click set up.
+  suppressPromptSync: boolean;
 }
 
 interface SelectedPluginContext {
@@ -220,6 +238,7 @@ export function HomeView({
   const consumedHandoffIdRef = useRef<number | null>(null);
   const pendingPromptFocusEndRef = useRef(false);
   const activePluginApplyRequestRef = useRef(0);
+  const defaultedPrototypeRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -303,7 +322,16 @@ export function HomeView({
       },
     );
     const nextRendered = renderPluginBriefTemplate(composer.queryTemplate, composer.inputs);
-    if (prompt === active.lastRenderedPrompt || prompt.trim().length === 0) {
+    // When the plugin was bound through a type chip the user owns the
+    // textarea; never back-fill from this effect even if external
+    // lists (ElevenLabs voices, prompt templates) reload after the
+    // chip click. lastRenderedPrompt stays null in that mode so we
+    // don't mis-detect "the user hasn't typed" via the empty-string
+    // branch either.
+    if (
+      !active.suppressPromptSync &&
+      (prompt === active.lastRenderedPrompt || prompt.trim().length === 0)
+    ) {
       setPrompt(nextRendered);
     }
     setActive((prev) => {
@@ -316,7 +344,7 @@ export function HomeView({
         editableInputNames: composer.editableFieldNames,
         inputsValid: pluginInputsAreValid(composer.fields, composer.inputs),
         result: inputsEqual(prev.result?.appliedPlugin?.inputs, composer.inputs) ? prev.result : null,
-        lastRenderedPrompt: nextRendered,
+        lastRenderedPrompt: prev.suppressPromptSync ? prev.lastRenderedPrompt : nextRendered,
         projectMetadata: metadataForHomeMediaComposer(prev.mediaSurface, composer.inputs, promptTemplates),
       };
     });
@@ -365,15 +393,95 @@ export function HomeView({
     setPendingAuthoringChipId('create-plugin');
   }, [promptHandoff]);
 
+  const activeContextItemCount = useMemo(
+    () =>
+      active
+        ? active.result?.contextItems?.length ??
+          estimatePluginContextItemCount(active.record)
+        : 0,
+    [active],
+  );
   const contextItemCount = useMemo(
     () =>
-      (active?.result?.contextItems?.length ?? 0) +
+      activeContextItemCount +
       selectedPluginContexts.length +
       selectedMcpContexts.length +
       selectedConnectorContexts.length +
       stagedFiles.length,
-    [active, selectedConnectorContexts.length, selectedMcpContexts.length, selectedPluginContexts, stagedFiles.length],
+    [
+      activeContextItemCount,
+      selectedConnectorContexts.length,
+      selectedMcpContexts.length,
+      selectedPluginContexts.length,
+      stagedFiles.length,
+    ],
   );
+
+  // The Home chip rail and the Official starters grid share a mental
+  // model — "Prototype" up top is the same artifact intent as the
+  // `create / prototype` slice down below. When the user picks a chip,
+  // we drive the starters' FacetSelection from it so they get a
+  // pre-filtered shelf of templates for the same intent without having
+  // to scroll and re-pick. `pendingChipId` (set on click, before apply
+  // resolves) is preferred over `active?.chipId` so the filter snaps on
+  // the same frame as the click.
+  const presetStartersSelection = useMemo<FacetSelection | null>(() => {
+    const chipId = pendingChipId ?? active?.chipId ?? null;
+    if (!chipId) return null;
+    return facetSelectionForChip(chipId);
+  }, [pendingChipId, active?.chipId]);
+
+  const rankedExamplePlugins = useMemo(() => {
+    if (plugins.length === 0) return [];
+    const visible = plugins.filter(
+      (plugin) =>
+        plugin.manifest?.od?.kind !== 'atom' && Boolean(plugin.manifest?.od?.useCase?.query),
+    );
+    return sortByVisualAppeal(visible);
+  }, [plugins]);
+
+  // Manus-style example-prompt suggestions for the panel that appears
+  // below the composer after a type chip is picked. We surface the
+  // top-N visually-strong plugins from the matching facet slice (e.g.
+  // picking "Slide deck" shows four polished deck templates) and
+  // pre-render each plugin's useCase.query through the same renderer
+  // submit uses, so the card body is the actual sentence that hits
+  // the textarea on click. Sparse slices are topped up with featured
+  // picks so the row never collapses to a single dim example.
+  const exampleSuggestions = useMemo<ExampleSuggestion[]>(() => {
+    if (rankedExamplePlugins.length === 0) return [];
+    const sliceFor = (selection: FacetSelection | null) => {
+      if (!selection) return rankedExamplePlugins;
+      return applyFacetSelection(rankedExamplePlugins, selection);
+    };
+    const primary = sliceFor(presetStartersSelection);
+    const featuredBackfill = rankedExamplePlugins.filter(
+      (plugin) => isFeaturedPlugin(plugin) && !primary.some((p) => p.id === plugin.id),
+    );
+    const records = [...primary, ...featuredBackfill].slice(0, EXAMPLE_PROMPT_LIMIT);
+    return records
+      .map((plugin) => {
+        const template = resolvePluginQueryFallback(plugin.manifest?.od?.useCase?.query, locale);
+        if (!template) return null;
+        const preview = renderPluginBriefTemplate(
+          template,
+          hydratePluginInputs(plugin.manifest?.od?.inputs ?? [], undefined),
+        );
+        return { plugin, preview };
+      })
+      .filter((entry): entry is ExampleSuggestion => entry !== null);
+  }, [rankedExamplePlugins, presetStartersSelection, locale]);
+
+  // Per-chip dismissal: once the user closes the panel for a given
+  // chip, we keep it hidden until they pick a different chip (which
+  // makes dismissedExampleChipId stale and lets the panel open
+  // again). This matches Manus' close-once-then-quiet behavior.
+  const [dismissedExampleChipId, setDismissedExampleChipId] = useState<string | null>(null);
+  const currentExampleChipId = pendingChipId ?? active?.chipId ?? null;
+  const showExamples =
+    Boolean(currentExampleChipId) &&
+    exampleSuggestions.length > 0 &&
+    dismissedExampleChipId !== currentExampleChipId;
 
   // When the active plugin was bound through a chip, the badge shows
   // the chip label (e.g. "Prototype") instead of the underlying plugin
@@ -413,10 +521,23 @@ export function HomeView({
       editableInputNames?: string[];
       preserveInputFields?: boolean;
       replaceWithoutConfirmation?: boolean;
+      // When true, applying the plugin updates the active badge +
+      // context items but does NOT push the rendered useCase.query
+      // into the textarea. The user keeps whatever they had typed
+      // (or empty); the example-prompt panel below the composer is
+      // the surfaced opt-in to seed the textarea instead. Used by
+      // the top type-chip rail: picking Slide deck binds the plugin
+      // context, leaving the user's draft alone.
+      suppressPromptUpdate?: boolean;
+      // Type chips are a mode switch, not a commitment to run. Keeping
+      // their apply deferred makes Prototype <-> Deck <-> Media changes
+      // feel instant; submit() still resolves the snapshot before sending.
+      deferApply?: boolean;
     },
   ) {
     const applyRequestId = activePluginApplyRequestRef.current + 1;
     activePluginApplyRequestRef.current = applyRequestId;
+    const shouldResolveImmediately = options?.deferApply !== true;
     const inputFields = options?.inputFields ?? record.manifest?.od?.inputs ?? [];
     const optimisticInputs = hydratePluginInputs(inputFields, options?.inputs);
     const inputsValid = pluginInputsAreValid(inputFields, optimisticInputs);
@@ -432,7 +553,7 @@ export function HomeView({
         : queryTemplate
           ? renderPluginBriefTemplate(queryTemplate, optimisticInputs)
           : null;
-    if (options?.chipId) setPendingChipId(options.chipId);
+    if (options?.chipId && shouldResolveImmediately) setPendingChipId(options.chipId);
     setError(null);
     // Optimistic update: the chip already carries the inputs and the
     // plugin record's manifest already carries the query template, so
@@ -442,6 +563,7 @@ export function HomeView({
     // items in the background and we reconcile in place. Without this
     // the user sees a ~100-500ms freeze before the input back-fills,
     // which feels like the UI is jammed.
+    const suppressPromptUpdate = options?.suppressPromptUpdate === true;
     setActive({
       record,
       result: null,
@@ -449,23 +571,28 @@ export function HomeView({
       inputFields,
       inputsValid,
       queryTemplate,
-      lastRenderedPrompt: optimisticPrompt,
+      // When prompt updates are suppressed we leave lastRenderedPrompt
+      // null so the inline pattern-extraction in handlePromptChange
+      // doesn't claim ownership of the user's typed text.
+      lastRenderedPrompt: suppressPromptUpdate ? null : optimisticPrompt,
       projectKind: options?.projectKind ?? null,
       chipId: options?.chipId ?? null,
       mediaSurface: options?.mediaSurface ?? null,
       projectMetadata: options?.projectMetadata ?? null,
       editableInputNames: options?.editableInputNames ?? [],
       preserveInputFields: options?.preserveInputFields === true,
+      suppressPromptSync: suppressPromptUpdate,
     });
     setFallbackProjectKind(null);
     setDetailsRecord(null);
-    if (optimisticPrompt !== null) setPrompt(optimisticPrompt);
+    if (!suppressPromptUpdate && optimisticPrompt !== null) setPrompt(optimisticPrompt);
     requestAnimationFrame(() => inputRef.current?.focus());
 
     if (!inputsValid) {
       setPendingChipId(null);
       return;
     }
+    if (!shouldResolveImmediately) return;
 
     const result = await resolveActivePlugin(record, optimisticInputs, applyRequestId);
     if (activePluginApplyRequestRef.current !== applyRequestId) return;
@@ -505,7 +632,7 @@ export function HomeView({
     // user hasn't edited the prompt in the meantime — if they have,
     // current !== optimisticPrompt and the functional setter is a
     // no-op so their edits survive.
-    if (nextPrompt === undefined || nextPrompt === null) {
+    if (!suppressPromptUpdate && (nextPrompt === undefined || nextPrompt === null)) {
       const reconciledQuery =
         options?.queryTemplate !== undefined
           ? options.queryTemplate
@@ -552,6 +679,8 @@ export function HomeView({
       editableInputNames?: string[];
       preserveInputFields?: boolean;
       replaceWithoutConfirmation?: boolean;
+      suppressPromptUpdate?: boolean;
+      deferApply?: boolean;
     },
   ) {
     const replacement = previewPluginReplacement(record, nextPrompt, {
@@ -745,6 +874,7 @@ export function HomeView({
         ? renderPluginBriefTemplate(queryTemplate, normalized)
         : active.lastRenderedPrompt;
     if (
+      !active.suppressPromptSync &&
       queryTemplate !== null &&
       nextRendered !== null &&
       (prompt === active.lastRenderedPrompt || prompt.trim().length === 0)
@@ -760,7 +890,7 @@ export function HomeView({
       editableInputNames: mediaComposer?.editableFieldNames ?? active.editableInputNames,
       inputsValid,
       result: inputsEqual(active.result?.appliedPlugin?.inputs, normalized) ? active.result : null,
-      lastRenderedPrompt: nextRendered,
+      lastRenderedPrompt: active.suppressPromptSync ? active.lastRenderedPrompt : nextRendered,
     });
   }
 
@@ -897,7 +1027,11 @@ export function HomeView({
             projectMetadata: metadataForHomeMediaComposer(mediaSurface, composer.inputs, promptTemplates),
             editableInputNames: composer.editableFieldNames,
             preserveInputFields: true,
-            replaceWithoutConfirmation: Boolean(active?.mediaSurface),
+            // Media chips are an editable generation form: the prompt
+            // slots are where users adjust model, duration, ratio, and
+            // audio text before running. Keep this path eager so the
+            // inline options and required plugin inputs stay visible.
+            replaceWithoutConfirmation: true,
           });
           return;
         }
@@ -905,14 +1039,21 @@ export function HomeView({
           projectKind: chip.action.projectKind,
           chipId: chip.id,
           inputs: chip.action.inputs,
+          projectMetadata: chip.action.projectMetadata ?? null,
         };
         // Output-type tabs (create group) are mode-selection gestures:
         // switching between them should never prompt for confirmation,
-        // even when the input already has template text from a previous
-        // tab. Migrate-group chips (From Figma, etc.) still go through
-        // the replacement guard because they carry a meaningful prompt.
+        // and they should NOT pre-fill the textarea with the rendered
+        // useCase.query — the example-prompt panel below the composer
+        // is the explicit opt-in for that. Migrate-group chips (From
+        // Figma, etc.) still carry a meaningful prompt the user wants
+        // dropped in, so they keep the historical behavior.
         if (chip.group === 'create') {
-          void usePlugin(record, undefined, pluginOptions);
+          void usePlugin(record, undefined, {
+            ...pluginOptions,
+            suppressPromptUpdate: true,
+            deferApply: true,
+          });
         } else {
           requestActivePlugin(record, undefined, pluginOptions);
         }
@@ -940,6 +1081,25 @@ export function HomeView({
       }
     }
   }
+
+  // Default-select the Prototype tab on first mount so the active
+  // tab + composer always read as one joined surface instead of a
+  // naked composer under a row of unselected tabs. Runs once after
+  // plugins finish loading; skips if the user already has a chip
+  // bound (handoff, restored session, manual pick).
+  useEffect(() => {
+    if (pluginsLoading) return;
+    if (defaultedPrototypeRef.current) return;
+    if (active?.chipId || pendingChipId) {
+      defaultedPrototypeRef.current = true;
+      return;
+    }
+    const prototypeChip = HOME_HERO_CHIPS.find((c) => c.id === 'prototype');
+    if (!prototypeChip) return;
+    defaultedPrototypeRef.current = true;
+    pickChip(prototypeChip);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pluginsLoading, active?.chipId, pendingChipId]);
 
   async function submit() {
     const trimmed = prompt.trim();
@@ -1060,6 +1220,14 @@ export function HomeView({
         onPickMcp={useMcpServer}
         onPickConnector={useConnector}
         onPickChip={pickChip}
+        exampleSuggestions={exampleSuggestions}
+        showExamples={showExamples}
+        onPickExample={(record) => requestPluginContextUse(record, 'use-with-query')}
+        onDismissExamples={() => {
+          if (currentExampleChipId) {
+            setDismissedExampleChipId(currentExampleChipId);
+          }
+        }}
         contextItemCount={contextItemCount}
         error={error}
       />
@@ -1101,6 +1269,7 @@ export function HomeView({
         onOpenDetails={setDetailsRecord}
         onCreatePlugin={(goal) => queuePluginAuthoring(null, goal)}
         onBrowseRegistry={onBrowseRegistry}
+        presetSelection={presetStartersSelection}
       />
 
       {detailsRecord ? (
@@ -1203,6 +1372,30 @@ function projectKindForSkill(skill: SkillSummary | null): ProjectKind | null {
   return 'other';
 }
 
+// Maps a Home hero chip id to the Official starters facet slice the
+// user most likely wants to browse next. The chip rail is intent
+// ("I want to design a slide deck"); the starters grid is the catalog
+// for that intent, so pinning the same `create / deck` slice lets the
+// user keep scanning examples without re-picking the same artifact
+// kind in a different control. The list mirrors the `apply-scenario`
+// and `apply-figma-migration` chip ids in `home-hero/chips.ts`; any
+// new chip there should add a row here too.
+function facetSelectionForChip(chipId: string): FacetSelection | null {
+  switch (chipId) {
+    case 'prototype': return { category: 'create', subcategory: 'prototype' };
+    case 'live-artifact': return { category: 'create', subcategory: 'live-artifact' };
+    case 'deck': return { category: 'create', subcategory: 'deck' };
+    case 'image': return { category: 'create', subcategory: 'image' };
+    case 'video': return { category: 'create', subcategory: 'video' };
+    case 'hyperframes': return { category: 'create', subcategory: 'hyperframes' };
+    case 'audio': return { category: 'create', subcategory: 'audio' };
+    case 'figma': return { category: 'import', subcategory: 'from-figma' };
+    case 'folder': return { category: 'import', subcategory: 'from-code' };
+    case 'create-plugin': return { category: 'extend', subcategory: 'plugin-authoring' };
+    default: return null;
+  }
+}
+
 function homeHeroChipLabelForId(chipId: string, t: ReturnType<typeof useI18n>['t']): string {
   switch (chipId) {
     case 'prototype': return t('homeHero.chip.prototype');
@@ -1218,6 +1411,19 @@ function homeHeroChipLabelForId(chipId: string, t: ReturnType<typeof useI18n>['t
     case 'template': return t('homeHero.chip.template');
     default: return chipId;
   }
+}
+
+function estimatePluginContextItemCount(
+  record: InstalledPluginRecord,
+): number {
+  const context = record.manifest?.od?.context;
+  if (!context) return 0;
+  const assetCount = context.assets?.length ?? 0;
+  const mcpCount = context.mcp?.length ?? 0;
+  const claudePluginCount = context.claudePlugins?.length ?? 0;
+  const atomCount = context.atoms?.length ?? 0;
+  const craftCount = context.craft?.length ?? 0;
+  return assetCount + mcpCount + claudePluginCount + atomCount + craftCount;
 }
 
 function hydratePluginInputs(

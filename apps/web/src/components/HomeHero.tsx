@@ -22,7 +22,12 @@ import type {
   ForwardedRef,
   KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
-import type { ConnectorDetail, InputFieldSpec, InstalledPluginRecord, McpServerConfig } from '@open-design/contracts';
+import type {
+  ConnectorDetail,
+  InputFieldSpec,
+  InstalledPluginRecord,
+  McpServerConfig,
+} from '@open-design/contracts';
 import type { SkillSummary } from '../types';
 import { Icon, type IconName } from './Icon';
 import { PluginInputsForm } from './PluginInputsForm';
@@ -81,6 +86,19 @@ interface Props {
   onPickMcp?: (server: McpServerConfig, nextPrompt: string) => void;
   onPickConnector?: (connector: ConnectorDetail, nextPrompt: string) => void;
   onPickChip: (chip: HomeHeroChip) => void;
+  // Manus-style example-prompt suggestions. Each entry carries both
+  // the source plugin (we still dispatch the existing
+  // `requestPluginContextUse(record, 'use-with-query')` path on click)
+  // and a pre-resolved, locale-aware preview of the prompt the
+  // textarea will receive, so the card body shows the actual sentence
+  // the user is about to send. HomeView decides the slice (matching
+  // the active chip), how many, and whether the panel should be
+  // visible (chip selected + not dismissed). The panel stays mounted
+  // either way so the accordion exit animation runs on close.
+  exampleSuggestions?: ExampleSuggestion[];
+  showExamples?: boolean;
+  onPickExample?: (record: InstalledPluginRecord) => void;
+  onDismissExamples?: () => void;
   contextItemCount: number;
   error: string | null;
 }
@@ -144,6 +162,10 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
     onPickMcp = () => undefined,
     onPickConnector = () => undefined,
     onPickChip,
+    exampleSuggestions = [],
+    showExamples = false,
+    onPickExample = () => undefined,
+    onDismissExamples = () => undefined,
     contextItemCount,
     error,
   },
@@ -451,19 +473,16 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
 
   return (
     <section className="home-hero" data-testid="home-hero">
+      <div className="home-hero__brand" aria-hidden>
+        <span className="home-hero__brand-mark">
+          <img src="/app-icon.svg" alt="" draggable={false} />
+        </span>
+        <span className="home-hero__brand-name">Open Design</span>
+      </div>
       <h1 className="home-hero__title">{t('homeHero.title')}</h1>
       <p className="home-hero__subtitle">
-        {t('homeHero.subtitlePrefix')}{' '}
-        <kbd>Enter</kbd>.
+        {t('homeHero.subtitlePrefix')} <kbd>Enter</kbd>.
       </p>
-
-      <TypeTabBar
-        activeChipId={activeChipId}
-        pendingChipId={pendingChipId}
-        pendingPluginId={pendingPluginId}
-        pluginsLoading={pluginsLoading}
-        onPickChip={onPickChip}
-      />
 
       <div
         className={`home-hero__input-card${dragActive ? ' is-drag-active' : ''}`}
@@ -497,7 +516,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
                   title={t('homeHero.pluginTitle', { title: plugin.title })}
                 >
                   <span className="home-hero__active-dot" aria-hidden />
-                  <span>@{plugin.title}</span>
+                  <span>{plugin.title}</span>
                 </button>
                 <button
                   type="button"
@@ -528,7 +547,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
                   title={activePluginRecord ? t('homeHero.pluginTitle', { title: activePluginRecord.title }) : undefined}
                 >
                   <span className="home-hero__active-dot" aria-hidden />
-                  <span>{t('homeHero.pluginPrefix', { title: activePluginTitle })}</span>
+                  <span>{activePluginTitle}</span>
                 </button>
                 <button
                   type="button"
@@ -884,6 +903,15 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
         data-testid="home-hero-rail"
       >
         <RailGroup
+          group="create"
+          activeChipId={activeChipId}
+          pendingChipId={pendingChipId}
+          pendingPluginId={pendingPluginId}
+          pluginsLoading={pluginsLoading}
+          onPickChip={onPickChip}
+        />
+        <span className="home-hero__rail-divider" aria-hidden />
+        <RailGroup
           group="migrate"
           activeChipId={activeChipId}
           pendingChipId={pendingChipId}
@@ -892,6 +920,18 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
           onPickChip={onPickChip}
         />
       </div>
+
+      {/* Always render the panel; toggle visibility via accordion class
+          so the exit animation runs on dismiss/chip-change. Hidden
+          when no chip is picked or when the user closed it for the
+          current chip. */}
+      <ExamplePromptPanel
+        suggestions={exampleSuggestions}
+        open={showExamples}
+        onPick={onPickExample}
+        onDismiss={onDismissExamples}
+        disabled={pluginsLoading || pendingPluginId !== null}
+      />
 
       {error ? (
         <div role="alert" className="home-hero__error">
@@ -1495,47 +1535,86 @@ function getPluginQueryPreview(plugin: InstalledPluginRecord): string {
   return trimmed.length > 96 ? `${trimmed.slice(0, 96)}…` : trimmed;
 }
 
-interface TypeTabBarProps {
-  activeChipId: string | null;
-  pendingChipId: string | null;
-  pendingPluginId: string | null;
-  pluginsLoading: boolean;
-  onPickChip: (chip: HomeHeroChip) => void;
+// Each suggestion carries both the source plugin (so click can route
+// through the same `requestPluginContextUse(record, 'use-with-query')`
+// path the plugin card menu uses) and a pre-rendered, locale-aware
+// preview the card displays. HomeView resolves the preview through
+// the same renderer it'd use on submit, so the card body is exactly
+// the sentence the user is about to send.
+export interface ExampleSuggestion {
+  plugin: InstalledPluginRecord;
+  preview: string;
 }
 
-function TypeTabBar({
-  activeChipId,
-  pendingChipId,
-  pendingPluginId,
-  pluginsLoading,
-  onPickChip,
-}: TypeTabBarProps) {
-  const chips = useMemo(() => chipsForGroup('create'), []);
+interface ExamplePromptPanelProps {
+  suggestions: ExampleSuggestion[];
+  open: boolean;
+  onPick: (record: InstalledPluginRecord) => void;
+  onDismiss: () => void;
+  disabled: boolean;
+}
+
+// Manus-style suggestion panel. Sits below the composer card + migrate
+// rail and surfaces 3-4 representative `useCase.query` previews as
+// content-bearing cards (not chip pills). The panel stays mounted so
+// the accordion exit animation runs on dismiss; `.accordion-collapsible
+// .open` toggles visibility per the shared motion contract in
+// `apps/web/src/index.css`. A small close button hides the panel for
+// the current chip; switching chips re-arms it (state lives in
+// HomeView).
+function ExamplePromptPanel({
+  suggestions,
+  open,
+  onPick,
+  onDismiss,
+  disabled,
+}: ExamplePromptPanelProps) {
+  const hasContent = suggestions.length > 0;
+  const isOpen = open && hasContent;
   return (
-    <div className="home-hero__type-tabs" role="tablist" aria-label="Output type">
-      {chips.map((chip) => {
-        const isActive = activeChipId === chip.id;
-        const isPending = pendingChipId === chip.id;
-        const cls = ['home-hero__type-tab'];
-        if (isActive) cls.push('is-active');
-        if (isPending) cls.push('is-pending');
-        return (
-          <button
-            key={chip.id}
-            type="button"
-            role="tab"
-            className={cls.join(' ')}
-            data-chip-id={chip.id}
-            data-testid={`home-hero-rail-${chip.id}`}
-            onClick={() => onPickChip(chip)}
-            disabled={pluginsLoading || isPending || pendingPluginId !== null}
-            aria-selected={isActive}
-            title={chip.hint ?? chip.label}
-          >
-            <span>{chip.label}</span>
-          </button>
-        );
-      })}
+    <div
+      className={`home-hero__examples accordion-collapsible${isOpen ? ' open' : ''}`}
+      aria-hidden={isOpen ? undefined : true}
+      data-testid="home-hero-example-prompts"
+    >
+      <div className="accordion-collapsible-inner">
+        <section className="home-hero__examples-panel">
+          <header className="home-hero__examples-head">
+            <span className="home-hero__examples-title">Example prompts</span>
+            <button
+              type="button"
+              className="home-hero__examples-close"
+              onClick={onDismiss}
+              aria-label="Dismiss example prompts"
+              data-testid="home-hero-example-dismiss"
+              disabled={disabled || !isOpen}
+            >
+              <Icon name="close" size={12} />
+            </button>
+          </header>
+          <div className="home-hero__examples-grid" role="list">
+            {suggestions.map(({ plugin, preview }) => (
+              <button
+                key={plugin.id}
+                type="button"
+                role="listitem"
+                className="home-hero__example-card"
+                data-testid={`home-hero-example-${plugin.id}`}
+                onClick={() => onPick(plugin)}
+                disabled={disabled || !isOpen}
+                title={preview}
+              >
+                <span className="home-hero__example-card-body">{preview}</span>
+                <Icon
+                  name="arrow-up"
+                  size={12}
+                  className="home-hero__example-card-arrow"
+                />
+              </button>
+            ))}
+          </div>
+        </section>
+      </div>
     </div>
   );
 }
@@ -1580,6 +1659,7 @@ function RailGroup({
             onClick={() => onPickChip(chip)}
             disabled={pluginsLoading || isPending || pendingPluginId !== null}
             aria-pressed={isActive}
+            aria-selected={isActive}
             title={homeHeroChipTitle(chip, t)}
           >
             <Icon name={chip.icon} size={14} className="home-hero__rail-chip-icon" />

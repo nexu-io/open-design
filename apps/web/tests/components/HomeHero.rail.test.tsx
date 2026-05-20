@@ -133,6 +133,15 @@ describe('HomeHero intent rail', () => {
       pluginId: 'example-hyperframes',
       projectKind: 'video',
     });
-    expect(findChip('live-artifact')).toBeUndefined();
+    expect(findChip('live-artifact')?.action).toMatchObject({
+      kind: 'apply-scenario',
+      pluginId: 'example-live-artifact',
+      projectKind: 'prototype',
+      projectMetadata: {
+        kind: 'prototype',
+        intent: 'live-artifact',
+        fidelity: 'high-fidelity',
+      },
+    });
   });
 });
