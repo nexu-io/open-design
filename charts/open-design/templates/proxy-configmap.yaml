@@ -1,0 +1,36 @@
+{{- if .Values.authProxy.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "open-design.fullname" . }}-proxy
+  labels:
+    {{- include "open-design.labels" . | nindent 4 }}
+data:
+  default.conf.template: |
+    server {
+        listen ${PROXY_PORT};
+        
+        location /nginx-health {
+            return 200 "healthy\n";
+            add_header Content-Type text/plain;
+        }
+        
+        location / {
+            proxy_pass http://${OD_BIND_HOST}:${OD_WEB_PORT};
+            proxy_set_header Host $host;
+        }
+
+        location /api/ {
+            proxy_pass http://${OD_BIND_HOST}:${OD_WEB_PORT};
+            proxy_set_header Host $host;
+            proxy_set_header Authorization "Bearer ${PROXY_API_TOKEN}";
+            
+            # Critical for Server-Sent Events (SSE)
+            proxy_buffering off;
+            proxy_read_timeout 600s;
+            proxy_send_timeout 600s;
+            proxy_set_header Connection '';
+            http2_push_preload on;
+        }
+    }
+{{- end }}

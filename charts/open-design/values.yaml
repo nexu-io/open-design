@@ -18,6 +18,8 @@ config:
   publicBaseUrl: "http://localhost:7456"
   nodeOptions: "--max-old-space-size=192"
   webPort: 7456
+  proxyPort: 8080
+  bindHost: "127.0.0.1"
   apiToken: "" # Auto-generated if left empty
 
 service:
@@ -76,11 +78,21 @@ podSecurityContext:
   supplementalGroups: []
   fsGroup: 1001
 
+authProxy:
+  enabled: true
+  image: "nginxinc/nginx-unprivileged:1.25-alpine-slim"
+  port: 8080
+  securityContext:
+    runAsUser: 101
+    runAsGroup: 101
+    runAsNonRoot: true
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+
 livenessProbe:
   enabled: true
-  httpGet:
-    path: /api/health
-    port: http
   initialDelaySeconds: 20
   periodSeconds: 30
   timeoutSeconds: 5
@@ -88,9 +100,6 @@ livenessProbe:
 
 readinessProbe:
   enabled: true
-  httpGet:
-    path: /api/health
-    port: http
   initialDelaySeconds: 5
   periodSeconds: 10
   timeoutSeconds: 5

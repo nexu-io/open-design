@@ -26,10 +26,35 @@ spec:
       securityContext:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.initContainers }}
       initContainers:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+        {{- if .Values.initContainers }}
+        {{- toYaml .Values.initContainers | nindent 8 }}
+        {{- end }}
+        {{- if .Values.authProxy.enabled }}
+        - name: auth-proxy-init
+          image: {{ .Values.authProxy.image }}
+          securityContext:
+            {{- toYaml .Values.authProxy.securityContext | nindent 12 }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - envsubst '$PROXY_PORT $OD_BIND_HOST $OD_WEB_PORT $PROXY_API_TOKEN' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf
+          envFrom:
+            - configMapRef:
+                name: {{ include "open-design.fullname" . }}
+          env:
+            - name: PROXY_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "open-design.fullname" . }}
+                  key: OD_API_TOKEN
+          volumeMounts:
+            - name: proxy-template
+              mountPath: /etc/nginx/templates
+            - name: proxy-config
+              mountPath: /etc/nginx/conf.d
+            - name: proxy-tmp
+              mountPath: /tmp
+        {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           securityContext:
@@ -38,7 +63,7 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http
-              containerPort: 7456
+              containerPort: {{ .Values.config.webPort }}
               protocol: TCP
           envFrom:
             - configMapRef:
@@ -51,11 +76,21 @@ spec:
                   key: OD_API_TOKEN
           {{- if .Values.livenessProbe.enabled }}
           livenessProbe:
-            {{- omit .Values.livenessProbe "enabled" | toYaml | nindent 12 }}
+            exec:
+              command: ["wget", "-qO-", "http://{{ .Values.config.bindHost }}:{{ .Values.config.webPort }}/api/health"]
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
           {{- end }}
           {{- if .Values.readinessProbe.enabled }}
           readinessProbe:
-            {{- omit .Values.readinessProbe "enabled" | toYaml | nindent 12 }}
+            exec:
+              command: ["wget", "-qO-", "http://{{ .Values.config.bindHost }}:{{ .Values.config.webPort }}/api/health"]
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
           {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
@@ -64,9 +99,38 @@ spec:
               mountPath: /app/.od
             - name: tmp
               mountPath: /tmp
-      {{- with .Values.sidecars }}
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+{{- if .Values.authProxy.enabled }}
+        - name: auth-proxy
+          image: {{ .Values.authProxy.image }}
+          securityContext:
+            {{- toYaml .Values.authProxy.securityContext | nindent 12 }}
+          ports:
+            - name: http-proxy
+              containerPort: {{ .Values.authProxy.port }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /nginx-health
+              port: http-proxy
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http-proxy
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+          volumeMounts:
+            - name: proxy-config
+              mountPath: /etc/nginx/conf.d
+              readOnly: true
+            - name: proxy-tmp
+              mountPath: /tmp
+        {{- end }}
       volumes:
         - name: storage
           {{- if .Values.persistence.enabled }}
@@ -77,6 +141,15 @@ spec:
           {{- end }}
         - name: tmp
           emptyDir: {}
+      {{- if .Values.authProxy.enabled }}
+        - name: proxy-template
+          configMap:
+            name: {{ include "open-design.fullname" . }}-proxy
+        - name: proxy-config
+          emptyDir: {}
+        - name: proxy-tmp
+          emptyDir: {}
+        {{- end }}
 {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

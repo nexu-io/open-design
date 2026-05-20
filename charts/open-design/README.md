@@ -35,6 +35,9 @@ nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
 nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
 ```
 
+#### Authentication Proxy
+An authentication proxy (NGINX) is introduced to front the application. By default (`authProxy.enabled: true`), this proxy runs as a sidecar container alongside the main application. The Kubernetes Service routes traffic to the proxy, which handles authentication for the API and health checks, proxying valid requests to the application.
+
 #### Security Context
 This chart adheres to strict security defaults:
 - Runs as non-root user `1001`.
@@ -62,7 +65,33 @@ This chart adheres to strict security defaults:
 | `config.publicBaseUrl` | Public base URL used by the application                    | `http://localhost:7456` |
 | `config.nodeOptions`   | V8 engine memory optimizations                             | `--max-old-space-size=192`|
 | `config.webPort`       | Web server listening port                                  | `7456`                  |
-| `config.apiToken`      | API authentication token (auto-generated if left empty)    | `""`                    |
+| `config.proxyPort`     | Proxy server listening port                                | `8080`                  |
+| `config.bindHost`      | Host to bind the web server to                             | `"127.0.0.1"`           |
+| `config.apiToken`      | API authentication token (auto-generated and persisted if empty) | `""`                    |
+
+### Auth Proxy Parameters
+
+| Name                                   | Description                                       | Value                                            |
+| -------------------------------------- | ------------------------------------------------- | ------------------------------------------------ |
+| `authProxy.enabled`                    | Enable the NGINX authentication proxy             | `true`                                           |
+| `authProxy.image`                      | NGINX proxy image                                 | `nginxinc/nginx-unprivileged:1.25-alpine-slim`   |
+| `authProxy.port`                       | Proxy server port inside the container            | `8080`                                           |
+| `authProxy.securityContext`            | Security context for the proxy container          | `{...}`                                          |
+
+### Health Check Parameters
+
+| Name                                        | Description                                        | Value  |
+| ------------------------------------------- | -------------------------------------------------- | ------ |
+| `livenessProbe.enabled`                     | Enable liveness probe                              | `true` |
+| `livenessProbe.initialDelaySeconds`         | Initial delay seconds for liveness probe           | `20`   |
+| `livenessProbe.periodSeconds`               | Period seconds for liveness probe                  | `30`   |
+| `livenessProbe.timeoutSeconds`              | Timeout seconds for liveness probe                 | `5`    |
+| `livenessProbe.failureThreshold`            | Failure threshold for liveness probe               | `3`    |
+| `readinessProbe.enabled`                    | Enable readiness probe                             | `true` |
+| `readinessProbe.initialDelaySeconds`        | Initial delay seconds for readiness probe          | `5`    |
+| `readinessProbe.periodSeconds`              | Period seconds for readiness probe                 | `10`   |
+| `readinessProbe.timeoutSeconds`             | Timeout seconds for readiness probe                | `5`    |
+| `readinessProbe.failureThreshold`           | Failure threshold for readiness probe              | `3`    |
 
 ### Network & Ingress Parameters
 
