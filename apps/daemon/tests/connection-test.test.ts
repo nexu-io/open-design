@@ -2006,6 +2006,45 @@ setInterval(() => {}, 1000);
     }
   }, 10_000);
 
+  it('aborts a hanging --version probe without waiting for the probe timeout', async () => {
+    const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-probe-'));
+    const pidFile = path.join(markerDir, 'pid');
+    try {
+      await withFakeCodex(
+        `
+const fs = require('node:fs');
+fs.writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
+setInterval(() => {}, 1000);
+`,
+        async () => {
+          const controller = new AbortController();
+          const pending = testAgentConnection({
+            agentId: 'codex',
+            signal: controller.signal,
+          });
+          await waitForFile(pidFile, 15_000);
+          setTimeout(() => controller.abort(), 100);
+          const start = Date.now();
+          const result = await pending;
+          const elapsed = Date.now() - start;
+          expect(elapsed).toBeLessThan(1_500);
+          expect(result).toMatchObject({
+            ok: false,
+            kind: 'timeout',
+            diagnostics: { phase: 'version_probe' },
+          });
+        },
+      );
+      if (process.platform !== 'win32') {
+        const pid = Number(await fsp.readFile(pidFile, 'utf8'));
+        await waitForPidToExit(pid);
+        expect(() => process.kill(pid, 0)).toThrow();
+      }
+    } finally {
+      await fsp.rm(markerDir, { recursive: true, force: true });
+    }
+  }, 10_000);
+
   it('reports agent_not_installed for an unknown agent id', async () => {
     const res = await realFetch(`${baseUrl}/api/test/connection`, {
       method: 'POST',

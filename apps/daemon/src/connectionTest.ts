@@ -1263,12 +1263,16 @@ async function probeAgentBinaryVersion(
   env: NodeJS.ProcessEnv,
   timeoutMs: number,
   exactSecrets: Array<string | undefined | null> = [],
+  signal?: AbortSignal,
 ): Promise<string | null> {
+  if (signal?.aborted) return null;
   return new Promise<string | null>((resolve) => {
     let settled = false;
+    let abortHandler: (() => void) | null = null;
     const finish = (value: string | null) => {
       if (settled) return;
       settled = true;
+      if (abortHandler && signal) signal.removeEventListener('abort', abortHandler);
       resolve(value);
     };
     let child: ReturnType<typeof spawn>;
@@ -1291,6 +1295,18 @@ async function probeAgentBinaryVersion(
       finish(null);
     }, timeoutMs);
     timer.unref?.();
+    if (signal) {
+      abortHandler = () => {
+        clearTimeout(timer);
+        try {
+          child.kill('SIGKILL');
+        } catch {
+          // Already gone — nothing to do.
+        }
+        finish(null);
+      };
+      signal.addEventListener('abort', abortHandler, { once: true });
+    }
     let stdout = '';
     child.stdout?.setEncoding('utf8');
     child.stdout?.on('data', (chunk: string) => {
@@ -1479,7 +1495,9 @@ async function testAgentConnectionInternal(
     const latencyMs = Date.now() - start;
     recordStderr();
     const hasStreamOutput = sink.getText().trim().length > 0;
-    recordPhase(hasStreamOutput ? 'stream' : 'spawn');
+    if (diagState?.phase !== 'version_probe') {
+      recordPhase(hasStreamOutput ? 'stream' : 'spawn');
+    }
     console.warn(`[test:agent] ${def.name} → ${kind} in ${(latencyMs / 1000).toFixed(1)}s`);
     return {
       ok: false,
@@ -1525,12 +1543,17 @@ async function testAgentConnectionInternal(
     );
     const env = applyAgentLaunchEnv(baseEnv, executableResolution);
     if (diagState) {
+      recordPhase('version_probe');
       diagState.binaryVersion = await probeAgentBinaryVersion(
         executableResolution.launchPath,
         env,
         AGENT_VERSION_PROBE_TIMEOUT_MS,
         collectAgentSecretsFromEnv(env),
+        input.signal,
       );
+    }
+    if (input.signal?.aborted) {
+      return resultFromCancellation('aborted');
     }
     const auth = await probeAgentAuthStatus(input.agentId, executableResolution.launchPath, env);
     if (auth?.status === 'missing') {
