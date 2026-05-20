@@ -628,12 +628,19 @@ async function handleMcpToolCall(baseUrl: string, name: unknown, args: McpArgs) 
 
 async function createProject(baseUrl: string, args: McpArgs) {
   requireString(args.name, 'name');
+  // Whitespace-only names would be trimmed to "" before the daemon ever
+  // sees them; rather than burn an HTTP round-trip to learn that, reject
+  // locally with the same shape requireString uses for missing input.
+  const trimmedName = args.name.trim();
+  if (!trimmedName) {
+    throw new Error('name is required (string).');
+  }
   // The daemon's POST /api/projects requires an id matching
   // /^[A-Za-z0-9._-]{1,128}$/ — minting a UUID here matches what the
   // web UI does (apps/web/src/state/projects.ts) and keeps agents from
   // having to invent project ids.
   const id = randomUUID();
-  const payload: JsonObject = { id, name: args.name.trim() };
+  const payload: JsonObject = { id, name: trimmedName };
   if (typeof args.skillId === 'string' && args.skillId.length > 0) {
     payload.skillId = args.skillId;
   }
@@ -660,6 +667,11 @@ async function createProject(baseUrl: string, args: McpArgs) {
     return errorResult(await formatDaemonError(resp, url));
   }
   const json = (await resp.json()) as JsonObject;
+  // Keep projectListCache consistent: without this, an agent session
+  // that already primed the cache via list_projects/get_project would
+  // fail to resolve the brand-new project by name or substring for up
+  // to PROJECT_LIST_TTL_MS.
+  recordCreatedProject(baseUrl, json);
   return ok(json);
 }
 
@@ -744,6 +756,20 @@ async function formatDaemonError(resp: Response, url: string): Promise<string> {
     // body wasn't JSON; fall through with the raw text.
   }
   return `daemon ${resp.status} on ${url}: ${detail}`;
+}
+
+function recordCreatedProject(baseUrl: string, payload: JsonObject): void {
+  if (!projectListCache || projectListCache.baseUrl !== baseUrl) return;
+  const raw = (payload as { project?: unknown }).project;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return;
+  const obj = raw as Record<string, unknown>;
+  if (typeof obj.id !== 'string' || typeof obj.name !== 'string') return;
+  if (projectListCache.list.some((p) => p.id === obj.id)) return;
+  const summary: ProjectSummary = { id: obj.id, name: obj.name };
+  if (obj.metadata && typeof obj.metadata === 'object' && !Array.isArray(obj.metadata)) {
+    summary.metadata = obj.metadata as JsonObject;
+  }
+  projectListCache.list.push(summary);
 }
 
 async function createArtifact(baseUrl: string, args: McpArgs) {

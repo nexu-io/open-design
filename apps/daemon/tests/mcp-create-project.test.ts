@@ -136,18 +136,88 @@ describe('public MCP create_project (#2356)', () => {
     const fetchMock = vi.fn(
       async (_url: string, _init?: RequestInit) =>
         new Response(
-          JSON.stringify({ error: { code: 'BAD_REQUEST', message: 'name required' } }),
-          { status: 400 },
+          JSON.stringify({ error: { code: 'NAME_TAKEN', message: 'duplicate name' } }),
+          { status: 409 },
         ),
     );
     vi.stubGlobal('fetch', fetchMock);
 
     const result = await handleMcpToolCall('http://127.0.0.1:17456', 'create_project', {
-      name: ' ',
+      name: 'Workshop',
     });
 
     expect(result).toMatchObject({ isError: true });
     // Should expose the daemon's reason rather than a bare HTTP code.
-    expect(firstText(result)).toMatch(/name required|BAD_REQUEST|400/);
+    expect(firstText(result)).toMatch(/duplicate name|NAME_TAKEN|409/);
+  });
+
+  it('rejects whitespace-only names locally without contacting the daemon', async () => {
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await handleMcpToolCall('http://127.0.0.1:17456', 'create_project', {
+      name: '   ',
+    });
+
+    expect(result).toMatchObject({ isError: true });
+    expect(firstText(result)).toContain('name is required');
+    // Whitespace-only input must short-circuit before the HTTP layer
+    // so the agent gets the same fast-fail shape as a missing name.
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('primes the project list cache so the new project resolves by name on the same session', async () => {
+    // Use a unique base URL so any leftover cache from sibling tests
+    // cannot bleed into this assertion.
+    const baseUrl = 'http://127.0.0.1:17457';
+    let createdId = '';
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      // 1. Prime the project list cache with one existing project so
+      //    fetchProjectList() stores a non-empty list keyed to baseUrl.
+      if (url === `${baseUrl}/api/projects` && (!init || init.method === undefined || init.method === 'GET')) {
+        return new Response(
+          JSON.stringify({
+            projects: [{ id: '11111111-1111-1111-1111-111111111111', name: 'Alpha' }],
+          }),
+          { status: 200 },
+        );
+      }
+      // 2. create_project for Beta — must NOT trigger a refetch of /api/projects.
+      if (url === `${baseUrl}/api/projects` && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body)) as { id: string; name: string };
+        createdId = body.id;
+        return new Response(
+          JSON.stringify({ project: { id: body.id, name: body.name }, conversationId: 'c' }),
+          { status: 200 },
+        );
+      }
+      // 3. Detail lookup for the newly-created Beta — only reached if
+      //    resolveProjectId() found Beta in the cached list.
+      if (url === `${baseUrl}/api/projects/${createdId}`) {
+        return new Response(
+          JSON.stringify({ project: { id: createdId, name: 'Beta' } }),
+          { status: 200 },
+        );
+      }
+      return new Response('not found', { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    // Warm the cache via a substring resolve that requires fetchProjectList().
+    await handleMcpToolCall(baseUrl, 'get_project', { project: 'Alpha' });
+    await handleMcpToolCall(baseUrl, 'create_project', { name: 'Beta' });
+    const after = await handleMcpToolCall(baseUrl, 'get_project', { project: 'Beta' });
+
+    // Beta must resolve without a second GET /api/projects round-trip:
+    // the cached list now contains Beta because createProject pushed it
+    // into projectListCache.
+    const listFetches = fetchMock.mock.calls.filter(
+      ([url, init]) =>
+        url === `${baseUrl}/api/projects` && (!init || init.method === undefined || init.method === 'GET'),
+    );
+    expect(listFetches).toHaveLength(1);
+    expect(after).not.toMatchObject({ isError: true });
+    const body = JSON.parse(firstText(after as { content: Array<{ text: string }> }));
+    expect(body).toMatchObject({ id: createdId, name: 'Beta' });
   });
 });
