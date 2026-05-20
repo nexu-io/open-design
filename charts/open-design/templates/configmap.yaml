@@ -23,5 +23,10 @@ data:
       {{- $hostList = append $hostList (printf "%s%s" $scheme .host) }}
     {{- end }}
     {{- $origins = join "," $hostList }}
+  {{- else if not $origins }}
+    {{- /* Synthesize default local origins for port-forwarding when Ingress is disabled */ -}}
+    {{- $localProxy := printf "http://localhost:%v" .Values.authProxy.port }}
+    {{- $localSvc := printf "http://localhost:%v" .Values.service.port }}
+    {{- $origins = printf "%s,%s" $localProxy $localSvc }}
   {{- end }}
   OD_ALLOWED_ORIGINS: {{ $origins | quote }}
