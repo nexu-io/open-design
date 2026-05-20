@@ -772,7 +772,7 @@ async function readHandoffArchiveStatus(archivePath: string, handoff?: HandoffSt
       !commandScriptSource.includes('gh_bin="${GH_BIN:-gh}"') ||
       !commandScriptSource.includes('command -v "$gh_bin"') ||
       !commandScriptSource.includes('"$gh_bin" workflow run "$workflow" --ref "$branch"') ||
-      !commandScriptSource.includes("$gh_bin pr create --draft")
+      !commandScriptSource.includes('print_shell_command "$gh_bin" pr create --draft')
     ) {
       problems.push(`command script is missing configurable GitHub CLI dispatch: ${commandScriptPath}`);
     }
@@ -791,7 +791,7 @@ async function readHandoffArchiveStatus(archivePath: string, handoff?: HandoffSt
       problems.push(`command script is missing source archive status guidance: ${commandScriptPath}`);
     }
     if (
-      !commandScriptSource.includes("GITHUB_RUN_ID=<github-run-id> ") ||
+      !commandScriptSource.includes("GITHUB_RUN_ID=<github-run-id>") ||
       !commandScriptSource.includes("print_shell_command()") ||
       !commandScriptSource.includes("printf '%q' \"$word\"") ||
       !commandScriptSource.includes('print_shell_command "GITHUB_RUN_ID=<github-run-id>" "$script_path" "$archive"')
