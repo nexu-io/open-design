@@ -957,6 +957,7 @@ export const ru: Dict = {
   'fileViewer.preview': 'Предпросмотр',
   'fileViewer.source': 'Исходный код',
   'fileViewer.tweaks': 'Настройки',
+  'fileViewer.tweaksUnavailable': 'В этом артефакте нет панели настроек',
   'fileViewer.comment': 'Комментарий',
   'fileViewer.edit': 'Редактировать',
   'fileViewer.draw': 'Рисовать',

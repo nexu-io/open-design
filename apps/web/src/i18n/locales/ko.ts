@@ -934,6 +934,7 @@ export const ko: Dict = {
   'fileViewer.preview': '미리보기',
   'fileViewer.source': '소스 코드',
   'fileViewer.tweaks': '조정 (Tweaks)',
+  'fileViewer.tweaksUnavailable': '이 아티팩트에 조정 패널이 없습니다',
   'fileViewer.comment': '댓글',
   'fileViewer.edit': '편집',
   'fileViewer.draw': '그리기',

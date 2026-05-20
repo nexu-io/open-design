@@ -934,6 +934,7 @@ export const pl: Dict = {
   'fileViewer.preview': 'Podgląd',
   'fileViewer.source': 'Źródło',
   'fileViewer.tweaks': 'Poprawki',
+  'fileViewer.tweaksUnavailable': 'Brak panelu poprawek w tym artefakcie',
   'fileViewer.comment': 'Komentarz',
   'fileViewer.edit': 'Edytuj',
   'fileViewer.draw': 'Rysuj',

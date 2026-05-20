@@ -852,6 +852,7 @@ export const it: Dict = {
   'fileViewer.preview': 'Anteprima',
   'fileViewer.source': 'Sorgente',
   'fileViewer.tweaks': 'Modifiche',
+  'fileViewer.tweaksUnavailable': 'Nessun pannello di modifiche in questo artefatto',
   'fileViewer.comment': 'Commenta',
   'fileViewer.edit': 'Modifica',
   'fileViewer.draw': 'Disegna',

@@ -950,6 +950,7 @@ export const fr: Dict = {
   'fileViewer.preview': 'Aperçu',
   'fileViewer.source': 'Source',
   'fileViewer.tweaks': 'Ajustements',
+  'fileViewer.tweaksUnavailable': "Aucun panneau d'ajustements dans cet artefact",
   'fileViewer.comment': 'Commenter',
   'fileViewer.edit': 'Modifier',
   'fileViewer.draw': 'Dessiner',

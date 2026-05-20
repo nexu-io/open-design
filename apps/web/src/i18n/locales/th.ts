@@ -871,6 +871,7 @@ export const th: Dict = {
   'fileViewer.preview': 'หน้าพรีวิว',
   'fileViewer.source': 'ซอร์สไฟล์',
   'fileViewer.tweaks': 'ตั้งปรับแต่ง',
+  'fileViewer.tweaksUnavailable': 'ไม่มีพาเนลตั้งปรับแต่งในชิ้นงานนี้',
   'fileViewer.comment': 'ช่วยคอมเมนต์',
   'fileViewer.edit': 'จัดการแก้ไข',
   'fileViewer.draw': 'วาดรูป',

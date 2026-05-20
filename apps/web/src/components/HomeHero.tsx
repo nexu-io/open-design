@@ -344,10 +344,28 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
   const openInlineInputField = openInlineInputName
     ? fieldByName.get(openInlineInputName) ?? null
     : null;
-  // Surface every field, not just the ones the template references
-  // inline. The inline popover handles Home media slots; the form
-  // remains available for non-inline plugin inputs.
-  const remainingInputFields = pluginInputFields;
+  // Filter out inputs whose values are already shown (and editable
+  // by clicking into the textarea or the inline pill) inline in the
+  // prompt template. Otherwise the structured form below duplicates
+  // every slot pill above it — five identical labelled inputs for a
+  // plugin like Prototype, which made the chat box look like it had
+  // grown a second composer. Keep the form for plugin inputs that
+  // are NOT in the template (e.g. a "Run in background" toggle that
+  // never appears in the prompt text).
+  const templateFieldKeys = useMemo(() => {
+    if (!pluginInputTemplate) return new Set<string>();
+    const keys = new Set<string>();
+    INPUT_PLACEHOLDER_PATTERN.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = INPUT_PLACEHOLDER_PATTERN.exec(pluginInputTemplate)) !== null) {
+      if (match[1]) keys.add(match[1]);
+    }
+    return keys;
+  }, [pluginInputTemplate]);
+  const remainingInputFields = useMemo(
+    () => pluginInputFields.filter((field) => !templateFieldKeys.has(field.name)),
+    [pluginInputFields, templateFieldKeys],
+  );
 
   useEffect(() => {
     if (selectedIndex >= visiblePickerOptions.length) setSelectedIndex(0);
@@ -1641,6 +1659,7 @@ function RailGroup({
             onClick={() => onPickChip(chip)}
             disabled={pluginsLoading || isPending || pendingPluginId !== null}
             aria-pressed={isActive}
+            aria-selected={isActive}
             title={homeHeroChipTitle(chip, t)}
           >
             <Icon name={chip.icon} size={14} className="home-hero__rail-chip-icon" />

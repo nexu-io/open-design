@@ -957,6 +957,7 @@ export const ptBR: Dict = {
   'fileViewer.preview': 'Prévia',
   'fileViewer.source': 'Código-fonte',
   'fileViewer.tweaks': 'Ajustes',
+  'fileViewer.tweaksUnavailable': 'Sem painel de ajustes neste artefato',
   'fileViewer.comment': 'Comentar',
   'fileViewer.edit': 'Editar',
   'fileViewer.draw': 'Desenhar',

@@ -822,6 +822,7 @@ export const de: Dict = {
   'fileViewer.preview': 'Vorschau',
   'fileViewer.source': 'Quelle',
   'fileViewer.tweaks': 'Tweaks',
+  'fileViewer.tweaksUnavailable': 'Kein Tweaks-Panel in diesem Artefakt',
   'fileViewer.comment': 'Kommentieren',
   'fileViewer.edit': 'Bearbeiten',
   'fileViewer.draw': 'Zeichnen',

@@ -934,6 +934,7 @@ export const ar: Dict = {
   'fileViewer.preview': 'معاينة',
   'fileViewer.source': 'المصدر',
   'fileViewer.tweaks': 'تعديلات',
+  'fileViewer.tweaksUnavailable': 'لا توجد لوحة تعديلات في هذا العمل',
   'fileViewer.comment': 'تعليق',
   'fileViewer.edit': 'تعديل',
   'fileViewer.draw': 'رسم',

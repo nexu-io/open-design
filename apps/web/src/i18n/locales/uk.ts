@@ -976,6 +976,7 @@ export const uk: Dict = {
   'fileViewer.preview': 'Попередній перегляд',
   'fileViewer.source': 'Джерело',
   'fileViewer.tweaks': 'Настройки',
+  'fileViewer.tweaksUnavailable': 'Немає панелі налаштувань у цьому артефакті',
   'fileViewer.comment': 'Коментар',
   'fileViewer.edit': 'Редагувати',
   'fileViewer.draw': 'Малювати',

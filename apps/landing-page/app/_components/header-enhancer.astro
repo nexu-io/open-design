@@ -41,6 +41,35 @@
       );
     }
 
+    // Hamburger menu toggle. Active only at narrow viewports (CSS hides
+    // the toggle button at ≥1100px). Click toggles `.is-open` on the
+    // header; outside-click, Escape, and clicking any link inside the
+    // menu close it again. Keeps `aria-expanded` in sync.
+    const toggle = document.querySelector('[data-nav-toggle]');
+    const primaryNav = document.querySelector('[data-nav-primary]');
+    if (toggle && primaryNav && nav) {
+      const setOpen = (open) => {
+        nav.classList.toggle('is-open', open);
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      };
+      toggle.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        setOpen(!nav.classList.contains('is-open'));
+      });
+      // Close when clicking any actual nav link (but not the Product
+      // parent trigger — its href='/' is a real page link, so we let it
+      // navigate which closes the menu naturally).
+      primaryNav.querySelectorAll('a').forEach((link) => {
+        link.addEventListener('click', () => setOpen(false));
+      });
+      document.addEventListener('click', (ev) => {
+        if (!nav.contains(ev.target)) setOpen(false);
+      });
+      document.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Escape') setOpen(false);
+      });
+    }
+
     const starSlots = document.querySelectorAll('[data-github-stars]');
     if (starSlots.length > 0) {
       fetch(REPO_API, {

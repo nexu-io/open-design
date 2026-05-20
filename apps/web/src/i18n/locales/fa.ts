@@ -958,6 +958,7 @@ export const fa: Dict = {
   'fileViewer.preview': 'پیش‌نمایش',
   'fileViewer.source': 'منبع',
   'fileViewer.tweaks': 'تنظیمات جزئی',
+  'fileViewer.tweaksUnavailable': 'پنل تنظیمات در این مصنوع وجود ندارد',
   'fileViewer.comment': 'نظر',
   'fileViewer.edit': 'ویرایش',
   'fileViewer.draw': 'رسم',

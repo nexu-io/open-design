@@ -13,6 +13,8 @@ import { STATUS_LABEL_KEYS } from './DesignsTab';
 
 interface Props {
   projects: Project[];
+  /** Retained for call-site compatibility; the strip skips rendering
+   *  while the list is loading so we never need a loading state. */
   loading?: boolean;
   onOpen: (id: string) => void;
   onViewAll: () => void;
@@ -21,7 +23,6 @@ interface Props {
 
 export function RecentProjectsStrip({
   projects,
-  loading,
   onOpen,
   onViewAll,
   limit = 6,
@@ -30,6 +31,15 @@ export function RecentProjectsStrip({
   const recent = [...projects]
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, limit);
+
+  // First-run home shouldn't reserve space for an empty "Recent
+  // projects" rail — the dashed empty box just adds visual noise
+  // above the plugin gallery. We also skip rendering during the
+  // load window so the section doesn't pop in and then collapse;
+  // the prompt hero is enough chrome on its own.
+  if (recent.length === 0) {
+    return null;
+  }
 
   return (
     <section className="recent-projects" data-testid="recent-projects-strip">
@@ -45,17 +55,12 @@ export function RecentProjectsStrip({
           <Icon name="chevron-right" size={12} />
         </button>
       </header>
-      {loading && recent.length === 0 ? (
-        <div className="recent-projects__empty">{t('common.loading')}</div>
-      ) : recent.length === 0 ? (
-        <div className="recent-projects__empty">{t('recentProjects.empty')}</div>
-      ) : (
-        <div className="recent-projects__row" role="list">
-          {recent.map((project) => {
-            const status = project.status?.value ?? 'not_started';
-            const isActive =
-              status === 'running' || status === 'queued' || status === 'awaiting_input';
-            return (
+      <div className="recent-projects__row" role="list">
+        {recent.map((project) => {
+          const status: ProjectDisplayStatus = project.status?.value ?? 'not_started';
+          const isActive =
+            status === 'running' || status === 'queued' || status === 'awaiting_input';
+          return (
             <button
               key={project.id}
               type="button"
@@ -86,10 +91,9 @@ export function RecentProjectsStrip({
                 </div>
               </div>
             </button>
-            );
-          })}
-        </div>
-      )}
+          );
+        })}
+      </div>
     </section>
   );
 }

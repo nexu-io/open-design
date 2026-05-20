@@ -823,6 +823,7 @@ export const esES: Dict = {
   'fileViewer.preview': 'Vista previa',
   'fileViewer.source': 'Código fuente',
   'fileViewer.tweaks': 'Ajustes',
+  'fileViewer.tweaksUnavailable': 'Sin panel de ajustes en este artefacto',
   'fileViewer.comment': 'Comentar',
   'fileViewer.edit': 'Editar',
   'fileViewer.draw': 'Dibujar',

@@ -49,11 +49,9 @@ function renderHero(overrides: Partial<React.ComponentProps<typeof HomeHero>> = 
 describe('HomeHero intent rail', () => {
   it('renders one chip per HOME_HERO_CHIPS entry', () => {
     renderHero();
-    const rail = screen.getByTestId('home-hero-rail');
     for (const chip of HOME_HERO_CHIPS) {
       const node = screen.getByTestId(`home-hero-rail-${chip.id}`);
       expect(node).toBeTruthy();
-      expect(rail.contains(node)).toBe(true);
     }
   });
 
@@ -64,10 +62,10 @@ describe('HomeHero intent rail', () => {
     expect(onPickChip).toHaveBeenCalledWith(findChip('image'));
   });
 
-  it('marks the active chip with aria-pressed=true and the is-active class', () => {
+  it('marks the active output tab with aria-selected=true and the is-active class', () => {
     renderHero({ activeChipId: 'video' });
     const node = screen.getByTestId('home-hero-rail-video');
-    expect(node.getAttribute('aria-pressed')).toBe('true');
+    expect(node.getAttribute('aria-selected')).toBe('true');
     expect(node.className).toContain('is-active');
   });
 

@@ -821,6 +821,7 @@ export const ja: Dict = {
   'fileViewer.preview': 'プレビュー',
   'fileViewer.source': 'ソース',
   'fileViewer.tweaks': '調整',
+  'fileViewer.tweaksUnavailable': 'このアーティファクトには調整パネルがありません',
   'fileViewer.comment': 'コメント',
   'fileViewer.edit': '編集',
   'fileViewer.draw': '描画',

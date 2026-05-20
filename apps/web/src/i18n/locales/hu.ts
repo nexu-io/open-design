@@ -934,6 +934,7 @@ export const hu: Dict = {
   'fileViewer.preview': 'Előnézet',
   'fileViewer.source': 'Forrás',
   'fileViewer.tweaks': 'Finomhangolás',
+  'fileViewer.tweaksUnavailable': 'Nincs finomhangolási panel ebben az artefaktumban',
   'fileViewer.comment': 'Megjegyzés',
   'fileViewer.edit': 'Szerkesztés',
   'fileViewer.draw': 'Rajz',

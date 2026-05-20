@@ -34,7 +34,7 @@ import type {
   TrackingOnboardingStepIndex,
   TrackingOnboardingStepName,
 } from '@open-design/contracts/analytics';
-import { LOCALE_LABEL, LOCALES, useI18n, useT, type Locale } from '../i18n';
+import { useT } from '../i18n';
 import { navigate, useRoute } from '../router';
 import type {
   AgentInfo,
@@ -53,7 +53,6 @@ import type {
   ProviderModelsResponse,
   SkillSummary,
 } from '../types';
-import { apiProtocolLabel } from '../utils/apiProtocol';
 import { formatPickAndImportFailure } from '../utils/pickAndImportError';
 import { CenteredLoader } from './Loading';
 import { DesignsTab } from './DesignsTab';
@@ -61,7 +60,6 @@ import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { DesignSystemsTab } from './DesignSystemsTab';
 import { EntryNavRail, type EntryView as EntryViewKind } from './EntryNavRail';
 import { GithubStarBadge } from './GithubStarBadge';
-import { formatStars, GITHUB_REPO_URL, useGithubStars } from './useGithubStars';
 import { HomeView } from './HomeView';
 import {
   createPluginAuthoringHandoff,
@@ -184,68 +182,6 @@ function defaultPluginInputsForCreate(
 }
 
 // Theme options exposed in the avatar-popover appearance submenu.
-// Mirrors the segmented control in `SettingsDialog` so the same three
-// choices (System / Light / Dark) are available from both surfaces.
-type AppearanceThemeLabel =
-  | 'settings.themeSystem'
-  | 'settings.themeLight'
-  | 'settings.themeDark';
-
-const APPEARANCE_THEMES: ReadonlyArray<{
-  value: AppTheme;
-  labelKey: AppearanceThemeLabel;
-}> = [
-  { value: 'system', labelKey: 'settings.themeSystem' },
-  { value: 'light', labelKey: 'settings.themeLight' },
-  { value: 'dark', labelKey: 'settings.themeDark' },
-];
-
-const APPEARANCE_LABEL: Record<AppTheme, AppearanceThemeLabel> = {
-  system: 'settings.themeSystem',
-  light: 'settings.themeLight',
-  dark: 'settings.themeDark',
-};
-
-type Translator = ReturnType<typeof useT>;
-
-// Mirrors the chip text the InlineModelSwitcher renders, so the
-// collapsed menu item inside the settings dropdown can advertise
-// the same active mode/agent/model without duplicating the
-// labelling logic. Returned as a structured tuple so the menu can
-// style the primary text and meta independently.
-function describeModelChip(
-  config: AppConfig,
-  agents: AgentInfo[],
-  t: Translator,
-): { mode: string; primary: string; model: string } {
-  const currentAgent = agents.find((a) => a.id === config.agentId) ?? null;
-  const currentChoice =
-    (config.agentId && config.agentModels?.[config.agentId]) || {};
-  const currentModelId =
-    currentChoice.model ?? currentAgent?.models?.[0]?.id ?? null;
-  const currentModelLabel =
-    currentAgent?.models?.find((m) => m.id === currentModelId)?.label ?? null;
-
-  if (config.mode === 'daemon') {
-    return {
-      mode: t('inlineSwitcher.chipCli'),
-      primary: currentAgent?.name ?? t('inlineSwitcher.noAgent'),
-      model:
-        currentModelLabel && currentModelId !== 'default'
-          ? currentModelLabel
-          : t('inlineSwitcher.modelDefault'),
-    };
-  }
-  const apiProtocol = config.apiProtocol ?? 'anthropic';
-  // KNOWN_PROVIDERS is consulted indirectly via apiProtocolLabel —
-  // looking it up here for the menu meta would diverge from the
-  // chip, so we keep the surface identical to InlineModelSwitcher.
-  return {
-    mode: t('inlineSwitcher.chipByok'),
-    primary: apiProtocolLabel(apiProtocol),
-    model: config.model.trim() || t('inlineSwitcher.modelDefault'),
-  };
-}
 
 interface Props {
   skills: SkillSummary[];
@@ -409,7 +345,6 @@ export function EntryShell({
   onCompleteOnboarding,
 }: Props) {
   const t = useT();
-  const { locale, setLocale } = useI18n();
   // Each entry sub-view (home / projects / design-systems) is its own
   // URL now, so the browser back/forward buttons work and a deep link
   // to /design-systems lands on that section. We derive the active
@@ -417,9 +352,6 @@ export function EntryShell({
   const route = useRoute();
   const view: EntryViewKind = route.kind === 'home' ? route.view : 'home';
   const [previewSystemId, setPreviewSystemId] = useState<string | null>(null);
-  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
-  const [languageExpanded, setLanguageExpanded] = useState(false);
-  const [appearanceExpanded, setAppearanceExpanded] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [newProjectInitialTab, setNewProjectInitialTab] =
     useState<CreateTab>('prototype');
@@ -431,18 +363,6 @@ export function EntryShell({
   const [integrationTab, setIntegrationTab] = useState<IntegrationTab>(integrationInitialTab);
   const [homePromptHandoff, setHomePromptHandoff] = useState<HomePromptHandoff | null>(null);
   const analytics = useAnalytics();
-  const avatarMenuRef = useRef<HTMLDivElement | null>(null);
-  // Star count + active-model summary are kept in render scope so
-  // the dropdown's collapsed rows can mirror what the chips show
-  // when CSS unhides them on narrow viewports. Both surfaces are
-  // always rendered; only `display` flips per the media query.
-  const starCount = useGithubStars();
-  const modelSummary = useMemo(
-    () => describeModelChip(config, agents, t),
-    [config, agents, t],
-  );
-
-
   function changeView(next: EntryViewKind) {
     const navElement = navElementForView(next);
     if (navElement) {
@@ -599,262 +519,18 @@ export function EntryShell({
     changeView('home');
   }
 
-  // Dismiss the avatar dropdown on outside-click / Escape so it
-  // behaves like the project-view AvatarMenu (which uses the same
-  // shell CSS). Collapse the inline language list whenever the
-  // dropdown is closed, so the next open starts compact again.
-  useEffect(() => {
-    if (!avatarMenuOpen) {
-      setLanguageExpanded(false);
-      setAppearanceExpanded(false);
-      return;
-    }
-    const onClick = (e: MouseEvent) => {
-      if (!avatarMenuRef.current) return;
-      if (!avatarMenuRef.current.contains(e.target as Node)) {
-        setAvatarMenuOpen(false);
-      }
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setAvatarMenuOpen(false);
-    };
-    document.addEventListener('mousedown', onClick);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onClick);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [avatarMenuOpen]);
-
   const avatarMenu = (
-    <div className="avatar-menu" ref={avatarMenuRef}>
-      <button
-        type="button"
-        className="settings-icon-btn"
-        onClick={() => setAvatarMenuOpen((v) => !v)}
-        title={t('entry.openSettingsTitle')}
-        aria-label={t('entry.openSettingsAria')}
-        aria-haspopup="menu"
-        aria-expanded={avatarMenuOpen}
-      >
-        <Icon name="settings" size={17} />
-      </button>
-      {avatarMenuOpen ? (
-        <div className="avatar-popover" role="menu">
-          {/* Collapsed-topbar rows. Always rendered so SSR and the
-              client agree on the markup; CSS @media (max-width: 900px)
-              flips their `display` so they only show when the
-              matching topbar chips are themselves hidden. */}
-          <a
-            className="avatar-item avatar-item--compact-only"
-            href={GITHUB_REPO_URL}
-            target="_blank"
-            rel="noreferrer noopener"
-            onClick={() => setAvatarMenuOpen(false)}
-            data-testid="entry-avatar-github"
-          >
-            <span className="avatar-item-icon" aria-hidden>
-              <Icon name="github" size={14} />
-            </span>
-            <span>{t('entry.githubStarLabel')}</span>
-            <span className="avatar-item-meta">
-              {starCount === null ? '—' : formatStars(starCount)}
-            </span>
-          </a>
-          <button
-            type="button"
-            className="avatar-item avatar-item--compact-only"
-            onClick={() => {
-              setAvatarMenuOpen(false);
-              onOpenSettings('execution');
-            }}
-            data-testid="entry-avatar-model"
-            title={t('inlineSwitcher.chipTitle')}
-          >
-            <span className="avatar-item-icon" aria-hidden>
-              <Icon name="sparkles" size={14} />
-            </span>
-            <span className="avatar-item-stack">
-              <span className="avatar-item-stack__top">
-                {modelSummary.mode} · {modelSummary.primary}
-              </span>
-              <span className="avatar-item-stack__sub">
-                {modelSummary.model}
-              </span>
-            </span>
-          </button>
-          <div
-            className="avatar-popover__divider avatar-popover__divider--compact-only"
-            aria-hidden
-          />
-          <a
-            className="avatar-item"
-            href="https://x.com/nexudotio"
-            target="_blank"
-            rel="noreferrer noopener"
-            onClick={() => setAvatarMenuOpen(false)}
-          >
-            <span className="avatar-item-icon" aria-hidden>
-              <Icon name="external-link" size={14} />
-            </span>
-            <span>Follow @nexudotio on X</span>
-          </a>
-          <a
-            className="avatar-item"
-            href="https://discord.gg/mHAjSMV6gz"
-            onClick={() => setAvatarMenuOpen(false)}
-          >
-            <span className="avatar-item-icon" aria-hidden>
-              <Icon name="discord" size={14} />
-            </span>
-            <span>Join Discord</span>
-          </a>
-          <div style={{ height: 1, background: 'var(--border-soft)', margin: '4px 6px' }} />
-          <button
-            type="button"
-            className="avatar-item"
-            aria-haspopup="menu"
-            aria-expanded={languageExpanded}
-            onClick={() => setLanguageExpanded((v) => !v)}
-            data-testid="entry-avatar-language"
-          >
-            <span className="avatar-item-icon" aria-hidden>
-              <Icon name="languages" size={14} />
-            </span>
-            <span>{t('settings.language')}</span>
-            <span className="avatar-item-meta">{LOCALE_LABEL[locale]}</span>
-            <Icon
-              name={languageExpanded ? 'chevron-down' : 'chevron-right'}
-              size={11}
-              className="avatar-item-chevron"
-            />
-          </button>
-          {languageExpanded ? (
-            <div className="avatar-language-list" role="group" aria-label={t('settings.language')}>
-              {LOCALES.map((code) => {
-                const active = locale === code;
-                return (
-                  <button
-                    key={code}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={active}
-                    className={`avatar-item avatar-item--lang${active ? ' is-active' : ''}`}
-                    onClick={() => {
-                      setLocale(code as Locale);
-                      setAvatarMenuOpen(false);
-                    }}
-                  >
-                    <span className="avatar-item-icon" aria-hidden>
-                      {active ? <Icon name="check" size={14} /> : null}
-                    </span>
-                    <span>{LOCALE_LABEL[code]}</span>
-                    <span className="avatar-item-meta">{code}</span>
-                  </button>
-                );
-              })}
-            </div>
-          ) : null}
-          {/* Appearance — system / light / dark. Mirrors the language
-              picker: a toggle row that expands a nested radio group so
-              the dropdown can host quick theme switching without
-              opening the full Settings dialog. The active theme is
-              echoed in the meta slot so the row reads as status when
-              collapsed. */}
-          <button
-            type="button"
-            className="avatar-item"
-            aria-haspopup="menu"
-            aria-expanded={appearanceExpanded}
-            onClick={() => setAppearanceExpanded((v) => !v)}
-            data-testid="entry-avatar-appearance"
-          >
-            <span className="avatar-item-icon" aria-hidden>
-              <Icon name="sun-moon" size={14} />
-            </span>
-            <span>{t('settings.appearance')}</span>
-            <span className="avatar-item-meta">
-              {t(APPEARANCE_LABEL[config.theme ?? 'system'])}
-            </span>
-            <Icon
-              name={appearanceExpanded ? 'chevron-down' : 'chevron-right'}
-              size={11}
-              className="avatar-item-chevron"
-            />
-          </button>
-          {appearanceExpanded ? (
-            <div
-              className="avatar-language-list"
-              role="group"
-              aria-label={t('settings.appearance')}
-            >
-              {APPEARANCE_THEMES.map(({ value, labelKey }) => {
-                const active = (config.theme ?? 'system') === value;
-                return (
-                  <button
-                    key={value}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={active}
-                    className={`avatar-item avatar-item--lang${active ? ' is-active' : ''}`}
-                    onClick={() => {
-                      onThemeChange(value);
-                      setAvatarMenuOpen(false);
-                    }}
-                  >
-                    <span className="avatar-item-icon" aria-hidden>
-                      {active ? <Icon name="check" size={14} /> : null}
-                    </span>
-                    <span>{t(labelKey)}</span>
-                  </button>
-                );
-              })}
-            </div>
-          ) : null}
-          <div style={{ height: 1, background: 'var(--border-soft)', margin: '4px 6px' }} />
-          <button
-            type="button"
-            className="avatar-item"
-            onClick={() => {
-              setAvatarMenuOpen(false);
-              openIntegrationTab('use-everywhere');
-            }}
-            data-testid="entry-avatar-use-everywhere"
-          >
-            <span className="avatar-item-icon" aria-hidden>
-              <Icon name="hammer" size={14} />
-            </span>
-            <span>{t('entry.useEverywhereTitle')}</span>
-          </button>
-          <button
-            type="button"
-            className="avatar-item"
-            onClick={() => {
-              setAvatarMenuOpen(false);
-              // Toolbar→settings telemetry (CSV row "home_toolbar_click /
-              // element=settings") fires here rather than on the avatar
-              // icon: that icon now toggles the popover (a navigation
-              // step), and the Settings dialog only opens from this row.
-              // Co-locating the event with the dialog-opening side effect
-              // keeps the funnel honest against the prior single-click
-              // behavior.
-              trackHomeToolbarClick(analytics.track, {
-                page_name: 'home',
-                area: 'toolbar',
-                element: 'settings',
-              });
-              onOpenSettings();
-            }}
-          >
-            <span className="avatar-item-icon" aria-hidden>
-              <Icon name="settings" size={14} />
-            </span>
-            <span>{t('avatar.settings')}</span>
-          </button>
-        </div>
-      ) : null}
-    </div>
+    <button
+      type="button"
+      className="settings-icon-btn"
+      onClick={() => onOpenSettings()}
+      title={t('entry.openSettingsTitle')}
+      aria-label={t('entry.openSettingsAria')}
+    >
+      <Icon name="settings" size={17} />
+    </button>
   );
+
 
   if (view === 'onboarding') {
     return (

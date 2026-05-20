@@ -283,6 +283,140 @@ body::before {
   right: -16px;
   letter-spacing: 0.04em;
 }
+
+/*
+ * Product dropdown — CSS-only, no JS. The submenu is hidden by default and
+ * revealed on `:hover` of the parent `li.has-dropdown`, or on `:focus-within`
+ * for keyboard navigation. This keeps the static export self-contained.
+ */
+.nav-links li.has-dropdown {
+  position: relative;
+}
+.nav-links .dropdown-caret {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 10px;
+  color: var(--ink-faint);
+  transition: transform 0.18s ease;
+}
+.nav-links li.has-dropdown:hover .dropdown-caret,
+.nav-links li.has-dropdown:focus-within .dropdown-caret {
+  transform: translateY(1px);
+  color: var(--coral);
+}
+.nav-dropdown {
+  position: absolute;
+  top: 100%;
+  left: -16px;
+  margin: 0;
+  padding: 10px;
+  list-style: none;
+  min-width: 320px;
+  background: var(--paper);
+  border: 1px solid rgba(26, 26, 26, 0.12);
+  border-radius: 8px;
+  box-shadow: 0 12px 36px rgba(26, 26, 26, 0.08);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s;
+  z-index: 50;
+}
+.nav-links li.has-dropdown:hover .nav-dropdown,
+.nav-links li.has-dropdown:focus-within .nav-dropdown {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+/* invisible bridge so cursor can travel from trigger to menu without
+ * crossing a gap that closes the menu mid-traverse */
+.nav-dropdown::before {
+  content: '';
+  position: absolute;
+  top: -10px;
+  left: 0;
+  right: 0;
+  height: 10px;
+}
+.nav-dropdown a {
+  display: block;
+  padding: 10px 12px;
+  border-radius: 6px;
+  color: var(--ink);
+  text-decoration: none;
+  transition: background 0.12s ease;
+}
+.nav-dropdown a:hover {
+  background: rgba(255, 122, 89, 0.08);
+  color: var(--ink);
+}
+.nav-dropdown a.is-active {
+  background: rgba(26, 26, 26, 0.04);
+}
+.nav-dropdown .dropdown-name {
+  display: block;
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.nav-dropdown .dropdown-blurb {
+  display: block;
+  font-size: 12px;
+  color: var(--ink-faint);
+  line-height: 1.4;
+}
+
+/*
+ * Hamburger toggle. Hidden at desktop widths (≥1080px). At narrower
+ * viewports it replaces the inline nav-links and toggles a panel
+ * underneath the header bar via a small handler in `header-enhancer`.
+ */
+.nav-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  margin-left: auto;
+  padding: 0;
+  background: transparent;
+  border: 1px solid rgba(26, 26, 26, 0.18);
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--ink);
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+.nav-toggle:hover {
+  background: rgba(26, 26, 26, 0.04);
+  border-color: rgba(26, 26, 26, 0.32);
+}
+.nav-toggle-icon,
+.nav-toggle-icon::before,
+.nav-toggle-icon::after {
+  display: block;
+  width: 18px;
+  height: 2px;
+  background: currentColor;
+  border-radius: 2px;
+  transition: transform 0.18s ease, opacity 0.18s ease;
+}
+.nav-toggle-icon {
+  position: relative;
+}
+.nav-toggle-icon::before,
+.nav-toggle-icon::after {
+  content: '';
+  position: absolute;
+  left: 0;
+}
+.nav-toggle-icon::before { top: -6px; }
+.nav-toggle-icon::after  { top:  6px; }
+/* When open, morph into an "X" */
+.nav.is-open .nav-toggle-icon { background: transparent; }
+.nav.is-open .nav-toggle-icon::before { top: 0; transform: rotate(45deg); }
+.nav.is-open .nav-toggle-icon::after  { top: 0; transform: rotate(-45deg); }
+
 .nav-side {
   display: inline-flex;
   align-items: center;
@@ -1936,13 +2070,93 @@ footer {
 @media (max-width: 1200px) {
   .topbar-inner .mid { display: none; }
 }
-/* nav: between 1080 and 1180 the brand tail + 5 nav links + 2 CTAs + dot
+/* nav: between 1080 and 1180 the brand tail + nav links + 2 CTAs + dot
  * crowd the row. Drop the brand sub-meta first, then tighten link spacing,
  * so the Star CTA never has to compress. */
 @media (max-width: 1180px) {
   .nav-inner { gap: 18px; }
   .brand-meta { display: none; }
   .nav-links { gap: 28px; }
+}
+
+/* nav: at ≤1080px there's no clean way to fit Product · Skills · Systems ·
+ * Templates · Craft · Blog · Contact + Download + Star + dot in one row,
+ * so swap to a hamburger panel. Star CTA stays visible in the bar (it's
+ * the social-proof CTA); Download moves into the panel. The Product
+ * submenu flattens from a hover-popup to an always-expanded inline list,
+ * since hover doesn't translate to touch.
+ */
+@media (max-width: 1080px) {
+  .nav-toggle { display: inline-flex; }
+  .brand { white-space: nowrap; }
+  /* Hide Download from the bar (Star stays). */
+  .nav-side .nav-cta.ghost { display: none; }
+  /* Collapse the nav <ul> into a panel that drops below the header bar.
+   * The header is `position: sticky`, so absolute-positioning the panel
+   * relative to the header element keeps it pinned correctly. */
+  .nav { position: sticky; }
+  .nav > .nav-inner > nav[data-nav-primary] {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin: 0;
+    padding: 0;
+    pointer-events: none;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-6px);
+    transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
+    background: var(--paper);
+    border-top: 1px solid rgba(26, 26, 26, 0.08);
+    box-shadow: 0 12px 32px rgba(26, 26, 26, 0.06);
+  }
+  .nav.is-open > .nav-inner > nav[data-nav-primary] {
+    pointer-events: auto;
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+  }
+  .nav-links {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    padding: 12px 24px 20px 24px;
+  }
+  .nav-links li {
+    border-bottom: 1px solid rgba(26, 26, 26, 0.06);
+  }
+  .nav-links li:last-child { border-bottom: none; }
+  .nav-links a {
+    display: block;
+    padding: 14px 0;
+    font-size: 16px;
+  }
+  .nav-links a .num {
+    position: static;
+    margin-left: 6px;
+    font-size: 11px;
+  }
+  /* Product dropdown flattens — always show OD + HA as nested static items. */
+  .nav-links li.has-dropdown { position: static; }
+  .nav-links .dropdown-caret { display: none; }
+  .nav-dropdown {
+    position: static;
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+    margin: 0 0 4px 0;
+    padding: 0 0 4px 16px;
+    border: none;
+    border-left: 2px solid rgba(26, 26, 26, 0.08);
+    border-radius: 0;
+    box-shadow: none;
+    background: transparent;
+    min-width: 0;
+  }
+  .nav-dropdown::before { display: none; }
+  .nav-dropdown a { padding: 8px 8px; border-radius: 4px; }
+  .nav-dropdown .dropdown-blurb { display: none; }
 }
 @media (max-width: 1080px) {
   .container { padding: 0 32px; }
@@ -2024,9 +2238,12 @@ footer {
   .foot-grid { grid-template-columns: 1fr 1fr; gap: 32px; }
   .foot-bottom { flex-direction: column; align-items: flex-start; gap: 12px; }
   .foot-bottom .right { flex-wrap: wrap; gap: 12px 20px; }
-  /* nav */
+  /* nav — at ≤880px tighten padding; nav-links stay reachable through
+   * the hamburger panel introduced at ≤1080px. Brand meta and Download
+   * stay hidden; Star CTA still pings in the bar. */
   .nav { padding: 16px 0; }
-  .nav-links, .brand-meta, .nav-cta { display: none; }
+  .brand-meta { display: none; }
+  .nav-side .nav-cta.ghost { display: none; }
 }
 @media (max-width: 640px) {
   .topbar-inner { gap: 14px; }
