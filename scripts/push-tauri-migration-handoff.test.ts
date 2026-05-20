@@ -66,6 +66,9 @@ test("push-tauri-migration-handoff can verify and push a packaged handoff archiv
   assert.match(result.stdout, /Pushed Tauri migration handoff/);
   assert.match(result.stdout, new RegExp(`Archive: ${escapeRegExp(archivePath)}`));
   assert.match(result.stdout, /Archive verify:/);
+  assert.match(result.stdout, new RegExp(`Command script: ${escapeRegExp(`${archivePath}.commands.sh`)}`));
+  assert.match(result.stdout, /Command script SHA-256: [0-9a-f]{64}/);
+  assert.match(result.stdout, new RegExp(`Command script checksum: ${escapeRegExp(`${archivePath}.commands.sh.sha256`)}`));
   assert.match(result.stdout, /Extracted manifest:/);
   assert.match(result.stdout, new RegExp(`--expected-head ${sourceHead}`));
   const remoteHead = (await git(targetRepo, "ls-remote", "--heads", remotePath, `refs/heads/${migrationBranch}`)).stdout
@@ -178,6 +181,31 @@ test("push-tauri-migration-handoff rejects archive checksum mismatches", async (
   await writeFile(`${archivePath}.sha256`, `${"0".repeat(64)}  ${archivePath.split(/[\\/]/).at(-1)}\n`, "utf8");
 
   await assert.rejects(runPushHandoffScript(targetRepo, "--archive", archivePath), /archive SHA-256 mismatch/);
+});
+
+test("push-tauri-migration-handoff rejects packaged archives without command scripts", async (t) => {
+  const { handoffDir, sourceRepo, targetRepo } = await createHandoffFixture(
+    t,
+    "open-design-tauri-push-handoff-missing-command-",
+  );
+  const archivePath = join(dirname(handoffDir), "open-design-tauri-migration-handoff.tar.gz");
+  await runPackageHandoffScript("--root", sourceRepo, "--handoff-dir", handoffDir, "--output", archivePath);
+  await rm(`${archivePath}.commands.sh`);
+
+  await assert.rejects(runPushHandoffScript(targetRepo, "--archive", archivePath), /command script not found/);
+});
+
+test("push-tauri-migration-handoff rejects stale command script checksums", async (t) => {
+  const { handoffDir, sourceRepo, targetRepo } = await createHandoffFixture(
+    t,
+    "open-design-tauri-push-handoff-bad-command-checksum-",
+  );
+  const archivePath = join(dirname(handoffDir), "open-design-tauri-migration-handoff.tar.gz");
+  const commandScriptPath = `${archivePath}.commands.sh`;
+  await runPackageHandoffScript("--root", sourceRepo, "--handoff-dir", handoffDir, "--output", archivePath);
+  await writeFile(`${commandScriptPath}.sha256`, `${"0".repeat(64)}  ${commandScriptPath.split(/[\\/]/).at(-1)}\n`, "utf8");
+
+  await assert.rejects(runPushHandoffScript(targetRepo, "--archive", archivePath), /command script SHA-256 mismatch/);
 });
 
 test("push-tauri-migration-handoff refuses stale manifest heads before pushing", async (t) => {

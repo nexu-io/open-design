@@ -91,6 +91,9 @@ async function main(): Promise<void> {
                 [
                   `SHA-256: ${extracted.archiveSha256}`,
                   `Checksum: ${extracted.checksum}`,
+                  `Command script: ${extracted.commandScript}`,
+                  `Command script SHA-256: ${extracted.commandScriptSha256}`,
+                  `Command script checksum: ${extracted.commandScriptChecksum}`,
                   `Extracted manifest: ${extracted.manifest}`,
                 ].join("\n"),
               ),
@@ -276,12 +279,17 @@ async function readManifest(path: string): Promise<HandoffManifest> {
 async function extractArchive(archive: string): Promise<{
   archiveSha256: string;
   checksum: string;
+  commandScript: string;
+  commandScriptChecksum: string;
+  commandScriptSha256: string;
   manifest: string;
   tempRoot: string;
 }> {
   const checksumPath = `${archive}.sha256`;
-  const archiveSha256 = await sha256File(archive);
-  await verifyChecksumSidecar(checksumPath, archiveSha256, archive);
+  const commandScriptPath = `${archive}.commands.sh`;
+  const commandScriptChecksumPath = `${commandScriptPath}.sha256`;
+  const archiveSha256 = await verifyChecksumSidecar(checksumPath, archive, "archive");
+  const commandScriptSha256 = await verifyChecksumSidecar(commandScriptChecksumPath, commandScriptPath, "command script");
   const entries = await listTarEntries(archive);
   validateArchiveEntries(entries);
   const manifestEntries = entries.filter((entry) => entry.endsWith(`/${manifestName}`) || entry === manifestName);
@@ -298,6 +306,9 @@ async function extractArchive(archive: string): Promise<{
     return {
       archiveSha256,
       checksum: checksumPath,
+      commandScript: commandScriptPath,
+      commandScriptChecksum: commandScriptChecksumPath,
+      commandScriptSha256,
       manifest: join(tempRoot, manifestEntries[0]!),
       tempRoot,
     };
@@ -307,18 +318,28 @@ async function extractArchive(archive: string): Promise<{
   }
 }
 
-async function verifyChecksumSidecar(checksumPath: string, actualSha256: string, archive: string): Promise<void> {
+async function verifyChecksumSidecar(checksumPath: string, targetPath: string, label: string): Promise<string> {
+  let actualSha256: string;
+  try {
+    actualSha256 = await sha256File(targetPath);
+  } catch (error) {
+    if (error instanceof Error && "code" in error && (error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new Error(`${label} not found: ${targetPath}`);
+    }
+    throw error;
+  }
   const checksum = await readFile(checksumPath, "utf8");
   const match = checksum.match(/^([0-9a-f]{64})\s+(\S+)\s*$/);
   if (match?.[1] == null || match[2] == null) {
-    throw new Error(`checksum sidecar has invalid format: ${checksumPath}`);
+    throw new Error(`${label} checksum sidecar has invalid format: ${checksumPath}`);
   }
   if (match[1] !== actualSha256) {
-    throw new Error(`archive SHA-256 mismatch: expected ${match[1]}, got ${actualSha256}`);
+    throw new Error(`${label} SHA-256 mismatch: expected ${match[1]}, got ${actualSha256}`);
   }
-  if (match[2] !== basename(archive)) {
-    throw new Error(`checksum sidecar filename mismatch: expected ${basename(archive)}, got ${match[2]}`);
+  if (match[2] !== basename(targetPath)) {
+    throw new Error(`${label} checksum sidecar filename mismatch: expected ${basename(targetPath)}, got ${match[2]}`);
   }
+  return actualSha256;
 }
 
 async function listTarEntries(archive: string): Promise<string[]> {
