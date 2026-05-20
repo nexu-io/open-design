@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { projectKindToTracking } from "@open-design/contracts/analytics";
 import { useAnalytics } from "../analytics/provider";
 import {
+  trackPageView,
   trackProjectsListClick,
   trackProjectsListControlsClick,
   trackProjectsMorePopoverClick,
@@ -77,6 +78,16 @@ export function DesignsTab({
 }: Props) {
 	const t = useT();
 	const analytics = useAnalytics();
+	// P0 page_view page_name=projects — fire once when the tab mounts so
+	// `/projects` landings register even before the user clicks anything.
+	// ref-keyed to survive re-renders that flip parent state without
+	// remounting DesignsTab, mirroring the pattern in HomeView.
+	const projectsPageViewFiredRef = useRef(false);
+	useEffect(() => {
+		if (projectsPageViewFiredRef.current) return;
+		projectsPageViewFiredRef.current = true;
+		trackPageView(analytics.track, { page_name: 'projects' });
+	}, [analytics.track]);
 	const [filter, setFilter] = useState("");
 	const [sub, setSub] = useState<SubTab>("recent");
 	const [liveArtifactsByProject, setLiveArtifactsByProject] = useState<

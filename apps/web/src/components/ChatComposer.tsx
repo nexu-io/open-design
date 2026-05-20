@@ -218,13 +218,16 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     useEffect(() => {
       if (studioViewFiredRef.current === projectId) return;
       studioViewFiredRef.current = projectId;
+      // `source` records which entry surface launched the studio
+      // (new_project / recent_project / template / projects_list / …).
+      // The web router currently only stores `projectId` / `conversationId`
+      // / `fileName`, so we cannot tell a New-project launch apart from a
+      // template-pick or a Recent-projects click from here. Until the
+      // router gets a launch-source channel we omit the field rather than
+      // stamp a false constant — better-no-source-than-wrong-source so
+      // dashboards do not over-attribute to a single bucket.
       trackPageView(analytics.track, {
         page_name: 'chat_panel',
-        // `source` records which entry surface launched the studio. The
-        // ProjectView path defaults to 'recent_project'; helpers that
-        // navigate from the New project modal pass 'new_project' through
-        // the route state instead.
-        source: 'recent_project',
       });
     }, [projectId, analytics.track]);
     const [staged, setStaged] = useState<ChatAttachment[]>([]);
