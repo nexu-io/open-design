@@ -161,7 +161,7 @@ export const fa: Dict = {
   'settings.onboardingSkip': "Skip for now",
   'settings.kicker': 'تنظیمات',
   'settings.title': 'حالت اجرا',
-  'settings.subtitle': 'بین CLI محلی و BYOK انتخاب کنید. کلید API فقط در همین مرورگر ذخیره می‌شود.',
+  'settings.subtitle': 'بین CLI محلی و BYOK انتخاب کنید.',
   'settings.modeAria': 'حالت اجرا',
   'settings.protocolAria': 'پروتکل API',
   'settings.modeDaemon': 'CLI محلی',
@@ -207,6 +207,8 @@ export const fa: Dict = {
   'settings.agentInstall.stepSelect': 'وقتی عامل به‌صورت نصب‌شده نمایش داده شد، کارت آن را انتخاب کنید.',
   'settings.noAgentsDetected':
     'هنوز هیچ عاملی شناسایی نشده. یکی از Claude Code، Codex، Gemini CLI، OpenCode، Cursor Agent، Qwen یا GitHub Copilot CLI را نصب کنید، سپس روی اسکن مجدد کلیک کنید.',
+  'settings.agentInstalledGroup': 'CLIهای شما ({count})',
+  'settings.agentInstallGroup': 'آماده نصب ({count})',
   'settings.agentAuthRequired': 'احراز هویت لازم است',
   'settings.agentAuthUnknown': 'وضعیت احراز هویت نامشخص است',
   'settings.apiSection': 'Anthropic API',
@@ -222,6 +224,10 @@ export const fa: Dict = {
     'این‌ها مدل‌های پیشنهادی برای این پروتکل هستند. ارائه‌دهنده شما ممکن است مدل‌های دیگری را پشتیبانی کند.',
   'settings.baseUrl': 'آدرس پایه',
   'settings.baseUrlInvalid': 'یک URL عمومی معتبر با http:// یا https:// وارد کنید. localhost مجاز است؛ IPهای شبکه خصوصی مسدود می‌شوند.',
+  'settings.baseUrlCustomize': 'سفارشی‌سازی',
+  'settings.baseUrlDefaultHint': 'نقطه پایانی پیش‌فرض. معمولاً نیازی به تغییر آن نیست.',
+  'settings.azureBaseUrlPlaceholder': 'https://my-resource.openai.azure.com',
+  'settings.azureBaseUrlHint': 'Find this in Azure portal → your resource → Endpoint.',
   'settings.azureDeploymentModel': 'نام استقرار',
   'settings.azureDeploymentModelHint':
     'در Azure OpenAI، این فیلد به عنوان نام استقرار در /openai/deployments/<model> استفاده می‌شود. نام استقراری را که در Azure ساخته‌اید وارد کنید.',
@@ -246,15 +252,15 @@ export const fa: Dict = {
   'settings.themeDark': 'تاریک',
   'settings.agentModelHead': 'مدل برای:',
   'settings.modelPicker': 'مدل',
-  'settings.modelSourceLive': 'Live from CLI',
-  'settings.modelSourceFallback': 'Fallback list',
+  'settings.modelSourceLive': 'زنده از CLI',
+  'settings.modelSourceFallback': 'فهرست داخلی',
   'settings.reasoningPicker': 'سطح استدلال',
   'settings.modelPickerHint':
     'هنگامی که CLI یک دستور `models` را ارائه می‌دهد از آن دریافت می‌شود. «پیش‌فرض» انتخاب را به پیکربندی خود CLI واگذار می‌کند؛ «سفارشی…» به شما امکان می‌دهد هر شناسه مدلی را که CLI می‌پذیرد تایپ کنید.',
   'settings.modelPickerLiveHint':
-    'Models were refreshed from the installed CLI. Default still uses the CLI config.',
+    'مدل‌ها از CLI نصب‌شده به‌روزرسانی شدند. گزینه پیش‌فرض همچنان از تنظیمات CLI استفاده می‌کند.',
   'settings.modelPickerFallbackHint':
-    'Using Open Design fallback models because the installed CLI did not return live model metadata. Rescan after updating or logging in to the CLI.',
+    'پیش‌فرض‌های داخلی نمایش داده می‌شوند. برای دریافت مدل‌های زنده از CLI روی اسکن مجدد کلیک کنید.',
   'settings.cliEnvTitle': 'CLI config locations',
   'settings.cliEnvHint':
     'Set non-secret config directories for packaged app runs and agent detection.',
@@ -565,6 +571,11 @@ export const fa: Dict = {
   'newproj.promptTemplateOptimizeHint':
     'هر چیزی را می‌توانید ویرایش کنید — تغییرات شما به بریف ایجنت اضافه می‌شود.',
   'newproj.promptTemplateBodyEmpty': 'متن خالی است — ایجنت هیچ مرجع قالبی دریافت نمی‌کند.',
+  'newproj.deleteTemplateTitle': 'حذف قالب',
+  'newproj.deleteTemplateConfirm': 'آیا «{name}» حذف شود؟ این عمل قابل بازگشت نیست.',
+  'newproj.deleteTemplateConfirmCta': 'حذف قالب',
+  'newproj.deleteTemplateError':
+    'حذف این قالب ممکن نشد. لطفاً دوباره تلاش کنید.',
   'newproj.dsModeSingle': 'تکی',
   'newproj.dsModeMulti': 'چندگانه',
   'newproj.dsNoneTitle': 'هیچ — آزاد',
@@ -971,6 +982,7 @@ export const fa: Dict = {
   'fileViewer.preview': 'پیش‌نمایش',
   'fileViewer.source': 'منبع',
   'fileViewer.tweaks': 'تنظیمات جزئی',
+  'fileViewer.tweaksUnavailable': 'پنل تنظیمات در این مصنوع وجود ندارد',
   'fileViewer.comment': 'نظر',
   'fileViewer.edit': 'ویرایش',
   'fileViewer.draw': 'رسم',
@@ -1034,7 +1046,7 @@ export const fa: Dict = {
   'fileViewer.presentFullscreen': 'تمام صفحه',
   'fileViewer.presentNewTab': 'تب جدید',
   'fileViewer.exitPresentation': 'خروج از ارائه',
-  'fileViewer.shareLabel': 'اشتراک‌گذاری',
+  'fileViewer.shareLabel': 'خروجی گرفتن',
   'fileViewer.exportPdf': 'صادرکردن به PDF',
   'fileViewer.exportPdfAllSlides': 'صادرکردن به PDF (همه اسلایدها)',
   'fileViewer.exportPptxBusy': 'منتظر پایان نوبت فعلی باشید.',

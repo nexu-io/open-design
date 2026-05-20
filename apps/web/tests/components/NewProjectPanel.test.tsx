@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -667,7 +667,7 @@ describe('NewProjectPanel template deletion', () => {
     Element.prototype.scrollIntoView = () => {};
   });
 
-  it('calls onDeleteTemplate when user clicks delete button', async () => {
+  it('calls onDeleteTemplate only after the user confirms in the dialog', async () => {
     const onDelete = vi.fn().mockResolvedValue(true);
     render(
       <NewProjectPanel
@@ -682,8 +682,92 @@ describe('NewProjectPanel template deletion', () => {
     );
 
     fireEvent.click(screen.getByRole('tab', { name: 'From template' }));
-    const deleteBtn = screen.getByLabelText(/delete template/i);
-    fireEvent.click(deleteBtn);
+    fireEvent.click(screen.getByLabelText(/delete template/i));
+    expect(onDelete).not.toHaveBeenCalled();
+
+    const dialog = await screen.findByRole('alertdialog');
+    expect(dialog.textContent).toContain('Landing Page');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete template' }));
     expect(onDelete).toHaveBeenCalledWith('tmpl-landing');
+  });
+
+  it('does not call onDeleteTemplate when the user cancels the confirmation', async () => {
+    const onDelete = vi.fn().mockResolvedValue(true);
+    render(
+      <NewProjectPanel
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={templates}
+        onDeleteTemplate={onDelete}
+        promptTemplates={[]}
+        onCreate={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'From template' }));
+    fireEvent.click(screen.getByLabelText(/delete template/i));
+    await screen.findByRole('alertdialog');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(onDelete).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+  });
+
+  it('keeps the confirm dialog open with an inline error when onDeleteTemplate returns false', async () => {
+    const onDelete = vi.fn().mockResolvedValue(false);
+    render(
+      <NewProjectPanel
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={templates}
+        onDeleteTemplate={onDelete}
+        promptTemplates={[]}
+        onCreate={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'From template' }));
+    fireEvent.click(screen.getByLabelText(/delete template/i));
+    await screen.findByRole('alertdialog');
+    fireEvent.click(screen.getByRole('button', { name: 'Delete template' }));
+
+    await screen.findByText('Could not delete this template. Please try again.');
+    expect(screen.queryByRole('alertdialog')).not.toBeNull();
+    expect(onDelete).toHaveBeenCalledWith('tmpl-landing');
+  });
+
+  it('does not close the confirm dialog when the backdrop is clicked mid-delete', async () => {
+    let resolveDelete: (value: boolean) => void = () => {};
+    const onDelete = vi.fn(
+      () => new Promise<boolean>((resolve) => { resolveDelete = resolve; }),
+    );
+    render(
+      <NewProjectPanel
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={templates}
+        onDeleteTemplate={onDelete}
+        promptTemplates={[]}
+        onCreate={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'From template' }));
+    fireEvent.click(screen.getByLabelText(/delete template/i));
+    const dialog = await screen.findByRole('alertdialog');
+    fireEvent.click(screen.getByRole('button', { name: 'Delete template' }));
+
+    const backdrop = dialog.parentElement!;
+    fireEvent.click(backdrop);
+
+    expect(screen.queryByRole('alertdialog')).not.toBeNull();
+    expect(onDelete).toHaveBeenCalledTimes(1);
+
+    resolveDelete(true);
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
   });
 });

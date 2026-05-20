@@ -433,6 +433,25 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Some Vitest-based smoke tests drive the browser directly through
+      # @playwright/test. Restore browser binaries without saving from CI runs;
+      # the key follows the @playwright/test version so browser revisions
+      # update with package bumps.
+      - name: Resolve Playwright version
+        id: playwright-version
+        run: |
+          version=$(node -p "require('./e2e/package.json').devDependencies['@playwright/test'].replace(/[^0-9.]/g,'')")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Restore Playwright browser cache
+        uses: actions/cache/restore@v5.0.5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Install Playwright browsers
+        run: pnpm -C e2e exec playwright install --with-deps chromium
+
       - name: E2E vitest
         run: pnpm --filter @open-design/e2e test
 

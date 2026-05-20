@@ -137,7 +137,7 @@ export function IntegrationsView({
             }
             onConnectorAuthResult={({ connectorId, action, result, errorCode }) =>
               trackSettingsConnectorAuthResult(analytics.track, {
-                page: 'settings',
+                page_name: 'settings',
                 area: 'connectors',
                 connector_id: connectorId,
                 action,

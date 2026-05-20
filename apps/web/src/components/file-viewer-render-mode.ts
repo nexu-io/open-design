@@ -37,8 +37,26 @@ export interface UrlLoadDecision {
   paletteActive?: boolean;
   /** Draw annotations need the srcDoc snapshot bridge for screenshot export. */
   drawMode?: boolean;
+  /**
+   * Artifact ships the class based tweaks template (`.tw-panel` / `.tw-hidden`)
+   * and therefore needs the srcDoc tweaks bridge so the toolbar toggle can
+   * detect availability and drive panel visibility. The bridge is injected by
+   * buildSrcdoc and has no equivalent on the URL load path.
+   */
+  tweaksBridge?: boolean;
   /** User explicitly opted into the inline path via ?forceInline=1. */
   forceInline: boolean;
+}
+
+/**
+ * Detect the class based tweaks template in an artifact source string.
+ * Looks for the fixed `.tw-panel` / `.tw-hidden` selectors the skill ships in
+ * `design-templates/tweaks/assets/wrap.html`. Returns false for null / empty
+ * input so callers can pass `source` directly without a guard.
+ */
+export function hasTweaksTemplate(source: string | null | undefined): boolean {
+  if (!source) return false;
+  return /\btw-(?:panel|hidden)\b/.test(source);
 }
 
 /**
@@ -59,6 +77,11 @@ export function shouldUrlLoadHtmlPreview(d: UrlLoadDecision): boolean {
   // no parent-injected listener to recolor against.
   if (d.paletteActive) return false;
   if (d.drawMode) return false;
+  // The class based tweaks template relies on the srcDoc tweaks bridge
+  // emitting `od:tweaks-available` on mount; on the URL load path the bridge
+  // is never injected, so the toolbar toggle would stay disabled even though
+  // the artifact ships a `.tw-panel`.
+  if (d.tweaksBridge) return false;
   if (d.forceInline) return false;
   return true;
 }

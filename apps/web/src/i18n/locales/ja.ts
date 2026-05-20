@@ -161,7 +161,7 @@ export const ja: Dict = {
   'settings.onboardingSkip': "Skip for now",
   'settings.kicker': '設定',
   'settings.title': '実行モード',
-  'settings.subtitle': 'ローカル CLI と BYOK のどちらを使うか選択します。API キーはこのブラウザ内にのみ保存されます。',
+  'settings.subtitle': 'ローカル CLI と BYOK のどちらを使うか選択します。',
   'settings.modeAria': '実行モード',
   'settings.protocolAria': 'API プロトコル',
   'settings.modeDaemon': 'ローカル CLI',
@@ -207,6 +207,8 @@ export const ja: Dict = {
   'settings.agentInstall.stepSelect': 'インストール済みとして表示されたらエージェントカードを選択します。',
   'settings.noAgentsDetected':
     'エージェントが検出されませんでした。Claude Code、Codex、Gemini CLI、OpenCode、Cursor Agent、Qwen、または GitHub Copilot CLI のいずれかをインストールして、再スキャンをクリックしてください。',
+  'settings.agentInstalledGroup': 'あなたの CLI（{count}）',
+  'settings.agentInstallGroup': 'インストール可能（{count}）',
   'settings.agentAuthRequired': '認証が必要です',
   'settings.agentAuthUnknown': '認証状態は不明です',
   'settings.apiSection': 'Anthropic API',
@@ -222,6 +224,10 @@ export const ja: Dict = {
     'これはこのプロトコル向けの推奨モデルです。プロバイダーによっては別のモデルをサポートしている場合があります。',
   'settings.baseUrl': 'ベース URL',
   'settings.baseUrlInvalid': '有効な公開 http:// または https:// URL を入力してください。localhost は許可され、プライベートネットワーク IP はブロックされます。',
+  'settings.baseUrlCustomize': 'カスタマイズ',
+  'settings.baseUrlDefaultHint': 'デフォルトのエンドポイントです。通常は変更不要です。',
+  'settings.azureBaseUrlPlaceholder': 'https://my-resource.openai.azure.com',
+  'settings.azureBaseUrlHint': 'Find this in Azure portal → your resource → Endpoint.',
   'settings.azureDeploymentModel': 'デプロイ名',
   'settings.azureDeploymentModelHint':
     'Azure OpenAI では、このフィールドが /openai/deployments/<model> のデプロイ名として使われます。Azure で作成したデプロイ名を入力してください。',
@@ -246,15 +252,15 @@ export const ja: Dict = {
   'settings.themeDark': 'ダーク',
   'settings.agentModelHead': 'モデル：',
   'settings.modelPicker': 'モデル',
-  'settings.modelSourceLive': 'Live from CLI',
-  'settings.modelSourceFallback': 'Fallback list',
+  'settings.modelSourceLive': 'CLI から取得',
+  'settings.modelSourceFallback': '組み込みリスト',
   'settings.reasoningPicker': '推論の強さ',
   'settings.modelPickerHint':
     'CLI が `models` コマンドを公開している場合に取得されます。「デフォルト」は CLI 自身の設定に委ね、「カスタム…」は CLI が受け付ける任意のモデル ID を入力できます。',
   'settings.modelPickerLiveHint':
-    'Models were refreshed from the installed CLI. Default still uses the CLI config.',
+    'インストール済みの CLI からモデルを更新しました。デフォルトは引き続き CLI 設定を使用します。',
   'settings.modelPickerFallbackHint':
-    'Using Open Design fallback models because the installed CLI did not return live model metadata. Rescan after updating or logging in to the CLI.',
+    '組み込みのデフォルトを表示しています。再スキャンをクリックすると CLI から最新モデルを取得します。',
   'settings.cliEnvTitle': 'CLI config locations',
   'settings.cliEnvHint':
     'Set non-secret config directories for packaged app runs and agent detection.',
@@ -450,6 +456,11 @@ export const ja: Dict = {
     '自由に編集できます — 変更内容はエージェントのブリーフに反映されます。',
   'newproj.promptTemplateBodyEmpty': '本文が空です — エージェントはテンプレート参照を受け取りません。',
 
+  'newproj.deleteTemplateTitle': 'テンプレートを削除',
+  'newproj.deleteTemplateConfirm': '"{name}" を削除しますか？この操作は取り消せません。',
+  'newproj.deleteTemplateConfirmCta': 'テンプレートを削除',
+  'newproj.deleteTemplateError':
+    'テンプレートを削除できませんでした。もう一度お試しください。',
   'designs.subRecent': '最近',
   'designs.subYours': 'あなたのデザイン',
   'designs.filterAria': 'プロジェクトをフィルター',
@@ -834,6 +845,7 @@ export const ja: Dict = {
   'fileViewer.preview': 'プレビュー',
   'fileViewer.source': 'ソース',
   'fileViewer.tweaks': '調整',
+  'fileViewer.tweaksUnavailable': 'このアーティファクトには調整パネルがありません',
   'fileViewer.comment': 'コメント',
   'fileViewer.edit': '編集',
   'fileViewer.draw': '描画',
@@ -897,7 +909,7 @@ export const ja: Dict = {
   'fileViewer.presentFullscreen': 'フルスクリーン',
   'fileViewer.presentNewTab': '新しいタブ',
   'fileViewer.exitPresentation': 'プレゼンを終了',
-  'fileViewer.shareLabel': '共有',
+  'fileViewer.shareLabel': 'エクスポート',
   'fileViewer.exportPdf': 'PDFとしてエクスポート',
   'fileViewer.exportPdfAllSlides': 'PDFとしてエクスポート（全スライド）',
   'fileViewer.exportPptxBusy': '現在のターンが終わるまでお待ちください。',

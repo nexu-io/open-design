@@ -1306,100 +1306,6 @@
 .design-systems-manager {
   gap: 20px;
 }
-.ds-type-switch {
-  width: fit-content;
-  display: inline-grid;
-  grid-template-columns: repeat(2, minmax(132px, 1fr));
-  gap: 3px;
-  padding: 4px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--bg-subtle);
-}
-.ds-type-switch button {
-  min-height: 34px;
-  padding: 7px 14px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.ds-type-switch button:hover:not(:disabled) {
-  background: transparent;
-  border-color: transparent;
-  color: var(--text);
-}
-.ds-type-switch button.active {
-  background: var(--bg-panel);
-  color: var(--text);
-  box-shadow: var(--shadow-xs);
-}
-.ds-type-switch button.active:hover:not(:disabled) {
-  background: var(--bg-panel);
-  border-color: transparent;
-  color: var(--text);
-}
-.ds-resource-group {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.ds-subtype-tabs {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: fit-content;
-  max-width: 100%;
-  min-height: 42px;
-  padding: 4px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--bg-subtle);
-}
-.ds-subtype-tabs button {
-  min-width: 132px;
-  min-height: 34px;
-  padding: 7px 16px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.ds-subtype-tabs button:hover:not(:disabled) {
-  background: transparent;
-  border-color: transparent;
-  color: var(--text);
-}
-.ds-subtype-tabs button.active {
-  background: var(--bg-panel);
-  color: var(--text);
-  box-shadow: var(--shadow-xs);
-}
-.ds-subtype-tabs button.active:hover:not(:disabled) {
-  background: var(--bg-panel);
-  border-color: transparent;
-  color: var(--text);
-}
-.ds-resource-group__head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 0 2px;
-}
-.ds-resource-group__head h2 {
-  margin: 4px 0 0;
-  color: var(--text);
-  font-size: 24px;
-  line-height: 1.2;
-  letter-spacing: 0;
-}
 .ds-settings-page {
   gap: 16px;
 }
@@ -1418,14 +1324,10 @@
   padding: 16px 18px;
   border-bottom: 1px solid var(--border);
 }
-.ds-settings-card__head h2,
-.ds-settings-card__head h3 {
+.ds-settings-card__head h2 {
   margin: 4px 0 0;
   font-size: 18px;
   line-height: 1.25;
-}
-.ds-settings-card__head h3 {
-  font-size: 16px;
 }
 .ds-settings-card__head select {
   width: min(160px, 35vw);
@@ -1441,32 +1343,26 @@
 }
 .ds-manager-toolbar {
   align-items: stretch;
-  gap: 10px;
-  padding: 14px 18px 10px;
-  border-bottom: 1px solid var(--border);
-  position: relative;
-  top: auto;
-  z-index: 1;
+  width: min(100% - 36px, 1280px);
+  margin: 14px auto 0;
+  padding: 0;
 }
 .ds-manager-toolbar > input {
   min-height: 38px;
 }
-.ds-manager-toolbar > select {
-  min-height: 38px;
+.design-systems-manager .examples-filter-row {
+  width: min(100% - 36px, 1280px);
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 14px;
+  padding: 0;
+  margin-bottom: 28px;
 }
-.ds-presets-surface-row {
-  padding: 10px 18px 16px;
-  border-bottom: 1px solid var(--border);
-}
-.ds-presets-surface-row .examples-filter-label {
-  flex: 0 0 100%;
-  margin: 0 0 2px;
-}
-.ds-settings-card > .ds-grid {
-  padding: 18px;
-}
-.ds-settings-card > .tab-empty {
-  margin: 18px;
+.design-systems-manager .ds-grid {
+  width: min(100% - 36px, 1280px);
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 0;
 }
 .ds-manager-eyebrow {
   display: block;
@@ -1475,20 +1371,6 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-}
-.ds-suite-badge {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  padding: 4px 9px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--bg-subtle);
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0;
 }
 .ds-create-row {
   width: 100%;
@@ -1548,11 +1430,6 @@
   gap: 16px;
   padding: 14px 18px;
   border-top: 1px solid var(--border);
-  transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-.ds-user-row:hover,
-.ds-user-row:focus-within {
-  background: color-mix(in srgb, var(--bg-subtle) 55%, transparent);
 }
 .ds-user-row__open {
   appearance: none;
@@ -1566,19 +1443,6 @@
   color: inherit;
   cursor: pointer;
   text-align: left;
-}
-.ds-user-row__open:hover:not(:disabled),
-.ds-user-row__open:focus-visible {
-  background: transparent;
-  border-color: transparent;
-  box-shadow: none;
-}
-.ds-user-row__open:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-.ds-template-row .ds-user-row__open {
-  cursor: default;
 }
 .ds-create-row + .ds-user-list .ds-user-row:first-child {
   border-top: 0;
@@ -1708,15 +1572,7 @@
   }
 }
 @media (max-width: 760px) {
-  .ds-subtype-tabs {
-    width: 100%;
-    overflow-x: auto;
-  }
-  .ds-subtype-tabs button {
-    flex: 0 0 auto;
-  }
-  .ds-resource-group__head,
-  .ds-settings-card__head,
+  .ds-manager-card__head,
   .ds-user-row {
     align-items: stretch;
     flex-direction: column;
@@ -2114,9 +1970,6 @@
   gap: 7px;
   white-space: nowrap;
 }
-.ds-project-warning-card + .ds-project-sections {
-  margin-top: 18px;
-}
 .ds-context-strip {
   margin: 22px 0 30px;
   border: 1px solid var(--border);
@@ -2243,12 +2096,10 @@
   color: var(--amber);
 }
 .ds-project-review-actions {
-  position: relative;
   display: inline-flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
-  z-index: 5;
 }
 .ds-project-review-actions button {
   display: inline-flex;
@@ -2267,60 +2118,6 @@
   border-color: color-mix(in srgb, var(--red) 42%, var(--border));
   background: color-mix(in srgb, var(--red) 9%, var(--bg-panel));
   color: var(--red);
-}
-.ds-project-feedback-popover {
-  position: absolute;
-  top: calc(100% + 10px);
-  right: 0;
-  z-index: 60;
-  width: min(360px, calc(100vw - 56px));
-  border: 1px solid color-mix(in srgb, var(--red) 28%, var(--border));
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--red) 5%, var(--bg-panel));
-  box-shadow: var(--shadow-lg);
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-  padding: 12px;
-}
-.ds-project-feedback-popover::before {
-  content: "";
-  position: absolute;
-  top: -6px;
-  right: 28px;
-  width: 11px;
-  height: 11px;
-  border-left: 1px solid color-mix(in srgb, var(--red) 28%, var(--border));
-  border-top: 1px solid color-mix(in srgb, var(--red) 28%, var(--border));
-  background: color-mix(in srgb, var(--red) 5%, var(--bg-panel));
-  transform: rotate(45deg);
-}
-.ds-project-feedback-popover label {
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 600;
-}
-.ds-project-feedback-popover textarea {
-  width: 100%;
-  min-height: 82px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg);
-  color: var(--text);
-  font: inherit;
-  font-size: 12.5px;
-  line-height: 1.45;
-  padding: 9px 10px;
-  resize: vertical;
-}
-.ds-project-feedback-popover textarea:focus {
-  outline: 2px solid color-mix(in srgb, var(--red) 24%, transparent);
-  outline-offset: 1px;
-}
-.ds-project-feedback-popover > div {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
 }
 .ds-project-section-body {
   display: flex;
@@ -2559,9 +2356,6 @@
   box-shadow: var(--shadow-sm);
 }
 .ds-project-review-item .ds-project-section-head {
-  position: relative;
-}
-.ds-project-review-item .ds-project-section-head {
   min-height: 58px;
   margin: 0;
   padding: 14px 20px;
@@ -2622,7 +2416,8 @@
   background: #d8d8d8;
 }
 .ds-project-review-item .ds-project-review-notice,
-.ds-project-review-item .ds-project-last-feedback {
+.ds-project-review-item .ds-project-last-feedback,
+.ds-project-review-item .ds-project-feedback-box {
   margin: 12px 16px;
 }
 .ds-project-preview-placeholder,
@@ -2662,12 +2457,6 @@
   }
   .ds-project-warning-card {
     grid-template-columns: 1fr;
-  }
-  .ds-project-feedback-popover {
-    right: 0;
-  }
-  .ds-project-feedback-popover::before {
-    right: 28px;
   }
   .ds-project-badges {
     justify-content: flex-start;

@@ -831,6 +831,72 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
         ) : null}
       </section>
 
+      {proposals.length > 0 ? (
+        <section className="automations-saved" aria-label="Automation evolution proposals">
+          <div className="automations-section-head">
+            <div>
+              <h2 className="automations-section__label">Evolution proposals</h2>
+              <p className="automations-section__sub">
+                Review automation output before it changes memory, skills, or design systems.
+              </p>
+            </div>
+            <span className="automations-section__meta">{proposals.length} pending</span>
+          </div>
+          <ul className="automations-saved__list">
+            {proposals.map((proposal) => {
+              const isBusy = proposalBusyId === proposal.id;
+              return (
+                <li key={proposal.id} className="automation-row">
+                  <div className="automation-row__main">
+                    <span className="automation-row__icon">
+                      <Icon
+                        name={proposal.targetKind === 'design-system' ? 'sliders' : 'sparkles'}
+                        size={15}
+                      />
+                    </span>
+                    <span className="automation-row__content">
+                      <span className="automation-row__title">{proposal.title}</span>
+                      <span className="automation-row__meta">
+                        <span>{proposalTargetLabel(proposal.targetKind)}</span>
+                        <span aria-hidden="true">·</span>
+                        <span>{proposalActionLabel(proposal.action)}</span>
+                        <span aria-hidden="true">·</span>
+                        <span>{proposal.reviewPolicy}</span>
+                      </span>
+                      <span className="automation-row__prompt">{proposal.summary}</span>
+                      {proposal.patch.diffSummary ? (
+                        <span className="automation-row__last-run">
+                          {proposal.patch.diffSummary}
+                        </span>
+                      ) : null}
+                    </span>
+                  </div>
+                  <div className="automation-row__actions">
+                    <button
+                      type="button"
+                      className="automation-row__btn"
+                      onClick={() => reviewProposal(proposal.id, 'apply')}
+                      disabled={isBusy}
+                    >
+                      <Icon name="check" size={12} />
+                      <span>Apply</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="automation-row__btn automation-row__btn--danger"
+                      onClick={() => reviewProposal(proposal.id, 'reject')}
+                      disabled={isBusy}
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
+
       <section className="automations-ingest" aria-label="Source ingestion">
         <div className="automations-section-head">
           <div>
@@ -963,96 +1029,53 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
         </div>
       </section>
 
-      {proposals.length > 0 ? (
-        <section className="automations-saved" aria-label="Automation evolution proposals">
-          <div className="automations-section-head">
-            <div>
-              <h2 className="automations-section__label">Evolution proposals</h2>
-              <p className="automations-section__sub">
-                Review automation output before it changes memory, skills, or design systems.
-              </p>
-            </div>
-            <span className="automations-section__meta">{proposals.length} pending</span>
-          </div>
-          <ul className="automations-saved__list">
-            {proposals.map((proposal) => {
-              const isBusy = proposalBusyId === proposal.id;
-              return (
-                <li key={proposal.id} className="automation-row">
-                  <div className="automation-row__main">
-                    <span className="automation-row__icon">
-                      <Icon
-                        name={proposal.targetKind === 'design-system' ? 'sliders' : 'sparkles'}
-                        size={15}
-                      />
-                    </span>
-                    <span className="automation-row__content">
-                      <span className="automation-row__title">{proposal.title}</span>
-                      <span className="automation-row__meta">
-                        <span>{proposalTargetLabel(proposal.targetKind)}</span>
-                        <span aria-hidden="true">·</span>
-                        <span>{proposalActionLabel(proposal.action)}</span>
-                        <span aria-hidden="true">·</span>
-                        <span>{proposal.reviewPolicy}</span>
-                      </span>
-                      <span className="automation-row__prompt">{proposal.summary}</span>
-                      {proposal.patch.diffSummary ? (
-                        <span className="automation-row__last-run">
-                          {proposal.patch.diffSummary}
-                        </span>
-                      ) : null}
-                    </span>
-                  </div>
-                  <div className="automation-row__actions">
-                    <button
-                      type="button"
-                      className="automation-row__btn"
-                      onClick={() => reviewProposal(proposal.id, 'apply')}
-                      disabled={isBusy}
-                    >
-                      <Icon name="check" size={12} />
-                      <span>Apply</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="automation-row__btn automation-row__btn--danger"
-                      onClick={() => reviewProposal(proposal.id, 'reject')}
-                      disabled={isBusy}
-                    >
-                      Reject
-                    </button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      ) : null}
-
       <section className="automations-templates" aria-label="Automation templates">
-        <div className="automations-section-head">
-          <div>
+        <div className="automations-templates__head">
+          <div className="automations-templates__head-copy">
             <h2 className="automations-section__label">Templates</h2>
             <p className="automations-section__sub">
               Orbit and live artifacts are templates inside the same automation flow.
             </p>
           </div>
-          <div className="automations-template-tabs" role="tablist" aria-label="Template filters">
-            {TEMPLATE_FILTERS.map((filter) => (
+          <span className="automations-section__meta">
+            {filteredTemplates.length} of {templates.length}
+          </span>
+        </div>
+        <div
+          className="automations-template-tabs"
+          role="tablist"
+          aria-label="Template filters"
+        >
+          {TEMPLATE_FILTERS.map((filter) => {
+            const count = filterTemplates(templates, filter.id).length;
+            const isActive = templateFilter === filter.id;
+            return (
               <button
                 key={filter.id}
                 type="button"
                 role="tab"
-                aria-selected={templateFilter === filter.id}
-                className={`automations-template-tab${templateFilter === filter.id ? ' is-active' : ''}`}
+                aria-selected={isActive}
+                className={`automations-template-tab${isActive ? ' is-active' : ''}`}
                 onClick={() => setTemplateFilter(filter.id)}
               >
-                {filter.label}
+                <span className="automations-template-tab__label">{filter.label}</span>
+                <span className="automations-template-tab__count">{count}</span>
               </button>
-            ))}
-          </div>
+            );
+          })}
         </div>
 
+        {filteredTemplates.length === 0 ? (
+          <div className="automations-templates__empty" role="status">
+            <span className="automations-templates__empty-icon" aria-hidden="true">
+              <Icon name="sparkles" size={16} />
+            </span>
+            <div>
+              <strong>No templates in this category yet.</strong>
+              <p>Try a different filter, or start from a blank automation.</p>
+            </div>
+          </div>
+        ) : null}
         <div className="automations-templates__grid">
           {filteredTemplates.map((template) => (
             <button

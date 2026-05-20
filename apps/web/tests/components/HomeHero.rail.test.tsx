@@ -105,6 +105,7 @@ describe('HomeHero intent rail', () => {
     const menu = screen.getByTestId('home-hero-shortcuts-menu');
     for (const chip of HOME_HERO_CHIPS.filter((item) => item.group === 'migrate')) {
       const node = screen.getByTestId(`home-hero-rail-${chip.id}`);
+      expect(node).toBeTruthy();
       expect(menu.contains(node)).toBe(true);
     }
   });
@@ -233,6 +234,15 @@ describe('HomeHero intent rail', () => {
       pluginId: 'example-hyperframes',
       projectKind: 'video',
     });
-    expect(findChip('live-artifact')).toBeUndefined();
+    expect(findChip('live-artifact')?.action).toMatchObject({
+      kind: 'apply-scenario',
+      pluginId: 'example-live-artifact',
+      projectKind: 'prototype',
+      projectMetadata: {
+        kind: 'prototype',
+        intent: 'live-artifact',
+        fidelity: 'high-fidelity',
+      },
+    });
   });
 });

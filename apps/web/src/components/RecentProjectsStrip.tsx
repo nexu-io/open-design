@@ -10,11 +10,14 @@ import type { CSSProperties } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useT } from '../i18n';
 import { fetchProjectFiles, projectFileUrl } from '../providers/registry';
-import type { Project, ProjectFile } from '../types';
+import type { Project, ProjectDisplayStatus, ProjectFile } from '../types';
 import { Icon } from './Icon';
+import { STATUS_LABEL_KEYS } from './DesignsTab';
 
 interface Props {
   projects: Project[];
+  /** Retained for call-site compatibility; the strip skips rendering
+   *  while the list is loading so we never need a loading state. */
   loading?: boolean;
   onOpen: (id: string) => void;
   onViewAll: () => void;
@@ -23,7 +26,6 @@ interface Props {
 
 export function RecentProjectsStrip({
   projects,
-  loading,
   onOpen,
   onViewAll,
   limit = 6,
@@ -107,6 +109,15 @@ export function RecentProjectsStrip({
     };
   }, [recent]);
 
+  // First-run home shouldn't reserve space for an empty "Recent
+  // projects" rail — the dashed empty box just adds visual noise
+  // above the plugin gallery. We also skip rendering during the
+  // load window so the section doesn't pop in and then collapse;
+  // the prompt hero is enough chrome on its own.
+  if (recent.length === 0) {
+    return null;
+  }
+
   return (
     <section className="recent-projects" data-testid="recent-projects-strip">
       <header className="recent-projects__head">
@@ -121,15 +132,13 @@ export function RecentProjectsStrip({
           <Icon name="chevron-right" size={12} />
         </button>
       </header>
-      {loading && recent.length === 0 ? (
-        <div className="recent-projects__empty">{t('common.loading')}</div>
-      ) : recent.length === 0 ? (
-        <div className="recent-projects__empty">{t('recentProjects.empty')}</div>
-      ) : (
-        <div className="recent-projects__row" role="list">
-          {recent.map((project) => {
+      <div className="recent-projects__row" role="list">
+        {recent.map((project) => {
           const cover = projectCover(project, coverByProject[project.id] ?? null);
           const designSystemProject = isDesignSystemProject(project);
+          const status: ProjectDisplayStatus = project.status?.value ?? 'not_started';
+          const isActive =
+            status === 'running' || status === 'queued' || status === 'awaiting_input';
           return (
             <button
               key={project.id}
@@ -183,16 +192,31 @@ export function RecentProjectsStrip({
                 </div>
                 <div className="recent-projects__card-name">{project.name}</div>
                 <div className="recent-projects__card-time">
+                  <span
+                    className={`recent-projects__card-status recent-projects__card-status-${status}`}
+                  >
+                    {isActive ? (
+                      <span className="recent-projects__card-status-dot" aria-hidden />
+                    ) : null}
+                    {statusLabel(status, t)}
+                  </span>
+                  <span className="recent-projects__card-sep" aria-hidden>·</span>
                   {relativeTime(project.updatedAt, t)}
                 </div>
               </div>
             </button>
           );
-          })}
-        </div>
-      )}
+        })}
+      </div>
     </section>
   );
+}
+
+function statusLabel(
+  status: ProjectDisplayStatus,
+  t: ReturnType<typeof useT>,
+): string {
+  return t(STATUS_LABEL_KEYS[status]);
 }
 
 function relativeTime(ts: number, t: ReturnType<typeof useT>): string {

@@ -79,11 +79,11 @@ const HIDDEN_DEFAULT_PLUGIN = {
   },
 };
 
-// The Prototype / Live-artifact chips now bind to the bundled
-// `example-web-prototype` plugin (which ships its own seed +
-// layouts + checklist) instead of the generic od-new-generation
-// router. Mirror that here so the chip-applies test can find a
-// matching plugin record and the apply call resolves to the new id.
+// The Prototype chip binds to the bundled `example-web-prototype`
+// plugin (which ships its own seed + layouts + checklist) instead of
+// the generic od-new-generation router. Mirror that here so the
+// chip-applies test can find a matching plugin record and the apply
+// call resolves to the new id.
 const WEB_PROTOTYPE_PLUGIN = {
   ...DEFAULT_PLUGIN,
   id: 'example-web-prototype',
@@ -137,6 +137,35 @@ const WEB_PROTOTYPE_PLUGIN = {
           label: 'Template',
         },
       ],
+    },
+  },
+};
+
+const LIVE_ARTIFACT_PLUGIN = {
+  ...DEFAULT_PLUGIN,
+  id: 'example-live-artifact',
+  title: 'Live Artifact',
+  source: '/tmp/live-artifact',
+  fsPath: '/tmp/live-artifact',
+  manifest: {
+    ...DEFAULT_PLUGIN.manifest,
+    name: 'example-live-artifact',
+    title: 'Live Artifact',
+    description: 'Create refreshable, auditable Open Design artifacts.',
+    od: {
+      kind: 'scenario',
+      taskKind: 'new-generation',
+      mode: 'prototype',
+      scenario: 'live',
+      useCase: {
+        query: 'Create refreshable, auditable Open Design artifacts backed by connector or local data.',
+      },
+      context: {
+        skills: [{ path: './SKILL.md' }],
+      },
+      pipeline: {
+        stages: [{ id: 'generate', atoms: ['file-write', 'live-artifact'] }],
+      },
     },
   },
 };
@@ -212,6 +241,21 @@ const WEB_PROTOTYPE_APPLY_RESULT = {
       designSystem: 'the active project design system',
       template: 'the bundled web prototype seed',
     },
+  },
+};
+
+const LIVE_ARTIFACT_APPLY_RESULT = {
+  ...AUTHORING_APPLY_RESULT,
+  query: LIVE_ARTIFACT_PLUGIN.manifest.od.useCase.query,
+  inputs: [],
+  appliedPlugin: {
+    ...AUTHORING_APPLY_RESULT.appliedPlugin,
+    snapshotId: 'snap-live-artifact',
+    pluginId: 'example-live-artifact',
+    inputs: {},
+  },
+  projectMetadata: {
+    skillId: 'live-artifact',
   },
 };
 
@@ -433,7 +477,7 @@ describe('HomeView prompt handoff', () => {
     }));
   });
 
-  it('applies Home rail Prototype chip against the bundled web-prototype scenario plugin', async () => {
+  it('binds the Home rail Prototype chip locally and applies it on submit', async () => {
     const fetchMock = vi.fn<typeof fetch>(async (url) => {
       if (typeof url === 'string' && url === '/api/plugins') {
         return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }), {
@@ -469,6 +513,30 @@ describe('HomeView prompt handoff', () => {
 
     fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
 
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-active-type-chip').textContent).toContain('Prototype');
+    });
+    expect(fetchMock.mock.calls.some(([url]) => (
+      typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply')
+    ))).toBe(false);
+    expect(
+      screen.getByTestId('home-hero-footer-option-designSystem').textContent,
+    ).toContain('Auto');
+    expect(screen.getByTestId('home-hero-footer-option-fidelity')).toBeTruthy();
+    expect(screen.getByTestId('home-hero-footer-option-designSystem')).toBeTruthy();
+    expect((screen.getByTestId('home-hero-input') as HTMLTextAreaElement).value).toBe('');
+    expect(screen.getByTestId('home-hero-plugin-presets')).toBeTruthy();
+    expect(screen.queryByTestId('home-hero-prompt-slot-fidelity')).toBeNull();
+    expect(screen.queryByTestId('home-hero-prompt-slot-artifactKind')).toBeNull();
+    expect(screen.queryByTestId('home-hero-prompt-slot-designSystem')).toBeNull();
+    expect(screen.queryByTestId('home-hero-prompt-slot-template')).toBeNull();
+    expect(screen.queryByTestId('plugin-inputs-form')).toBeNull();
+
+    fireEvent.change(screen.getByTestId('home-hero-input'), {
+      target: { value: 'Build a pricing-page prototype.' },
+    });
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       '/api/plugins/example-web-prototype/apply',
       expect.anything(),
@@ -481,51 +549,93 @@ describe('HomeView prompt handoff', () => {
         artifactKind: 'web prototype',
         fidelity: 'high-fidelity',
         audience: 'product evaluators',
-        designSystem: 'Auto',
+        designSystem: 'Refly Design System',
         template: 'the bundled web prototype seed',
       },
     });
-    expect(
-      screen.getByTestId('home-hero-footer-option-designSystem').textContent,
-    ).toContain('Auto');
-    expect(screen.getByTestId('home-hero-footer-option-fidelity')).toBeTruthy();
-    expect(screen.getByTestId('home-hero-footer-option-designSystem')).toBeTruthy();
-    expect((screen.getByTestId('home-hero-input') as HTMLTextAreaElement).value).toBe('');
-    expect(screen.getByTestId('home-hero-prompt-examples')).toBeTruthy();
-    expect(screen.queryByTestId('home-hero-prompt-slot-fidelity')).toBeNull();
-    expect(screen.queryByTestId('home-hero-prompt-slot-artifactKind')).toBeNull();
-    expect(screen.queryByTestId('home-hero-prompt-slot-designSystem')).toBeNull();
-    expect(screen.queryByTestId('home-hero-prompt-slot-template')).toBeNull();
-    expect(screen.queryByTestId('plugin-inputs-form')).toBeNull();
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      pluginId: 'example-web-prototype',
+      projectKind: 'prototype',
+      prompt: 'Build a pricing-page prototype.',
+      designSystemId: 'ds-refly',
+      projectMetadata: expect.objectContaining({
+        kind: 'prototype',
+        fidelity: 'high-fidelity',
+      }),
+    })));
     expect(screen.queryByRole('alert')).toBeNull();
-
-    fireEvent.click(screen.getAllByTestId('home-hero-prompt-example')[0]!);
-    expect((screen.getByTestId('home-hero-input') as HTMLTextAreaElement).value).toBe(
-      'Design a high-converting website for an AI CRM',
-    );
-    await waitFor(() => {
-      expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(false);
-    });
-    fireEvent.click(screen.getByTestId('home-hero-submit'));
-    await waitFor(() => {
-      expect(fetchMock.mock.calls.some(([url, init]) => (
-        typeof url === 'string' &&
-        url.includes('/api/plugins/example-web-prototype/apply') &&
-        JSON.parse(String((init as RequestInit).body)).inputs.designSystem === 'Refly Design System'
-      ))).toBe(true);
-      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
-        prompt: 'Design a high-converting website for an AI CRM',
-        projectKind: 'prototype',
-        designSystemId: 'ds-refly',
-        projectMetadata: expect.objectContaining({
-          kind: 'prototype',
-          fidelity: 'high-fidelity',
-        }),
-      }));
-    });
   });
 
-  it('confirms before an explicit plugin use replaces an existing prompt', async () => {
+  it('binds the Home rail Live artifact chip with live-artifact metadata and applies it on submit', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN, LIVE_ARTIFACT_PLUGIN] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (typeof url === 'string' && url.includes('/api/plugins/example-live-artifact/apply')) {
+        return new Response(JSON.stringify(LIVE_ARTIFACT_APPLY_RESULT), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      cb(0);
+      return 0;
+    });
+    const onSubmit = vi.fn();
+
+    render(
+      <HomeView
+        projects={[]}
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+      />,
+    );
+
+    fireEvent.click(await screen.findByTestId('home-hero-rail-live-artifact'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-active-plugin').textContent).toContain('Live artifact');
+    });
+    expect(fetchMock.mock.calls.some(([url]) => (
+      typeof url === 'string' && url.includes('/api/plugins/example-live-artifact/apply')
+    ))).toBe(false);
+    fireEvent.change(screen.getByTestId('home-hero-input'), {
+      target: { value: 'Build a refreshable Stripe revenue dashboard.' },
+    });
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/plugins/example-live-artifact/apply',
+      expect.anything(),
+    ));
+    const applyCall = fetchMock.mock.calls.find(([url]) => (
+      typeof url === 'string' && url.includes('/api/plugins/example-live-artifact/apply')
+    ));
+    expect(JSON.parse(String((applyCall?.[1] as RequestInit).body))).toMatchObject({
+      inputs: {},
+    });
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      pluginId: 'example-live-artifact',
+      appliedPluginSnapshotId: 'snap-live-artifact',
+      projectKind: 'prototype',
+      projectMetadata: expect.objectContaining({
+        kind: 'prototype',
+        intent: 'live-artifact',
+        fidelity: 'high-fidelity',
+      }),
+      prompt: 'Build a refreshable Stripe revenue dashboard.',
+    })));
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('switches output-type chips without replacing an existing prompt', async () => {
     const fetchMock = vi.fn<typeof fetch>(async (url) => {
       if (typeof url === 'string' && url === '/api/plugins') {
         return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }), {
@@ -560,15 +670,14 @@ describe('HomeView prompt handoff', () => {
     fireEvent.change(input, { target: { value: 'Keep my current brief' } });
     fireEvent.click(await screen.findByTestId('home-hero-rail-prototype'));
 
-    expect(await screen.findByRole('dialog', { name: /replace current prompt/i })).toBeTruthy();
-    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/apply'))).toBe(false);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Replace' }));
-
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-      '/api/plugins/example-web-prototype/apply',
-      expect.anything(),
-    ));
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-active-plugin').textContent).toContain('Prototype');
+    });
+    expect(fetchMock.mock.calls.some(([url]) => (
+      typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply')
+    ))).toBe(false);
+    expect((input as HTMLTextAreaElement).value).toBe('Keep my current brief');
+    expect(screen.queryByRole('dialog', { name: /replace current prompt/i })).toBeNull();
   });
 
   it('appends a plugin-use query handoff without replacing an existing prompt', async () => {
@@ -717,28 +826,18 @@ describe('HomeView prompt handoff', () => {
       expect.anything(),
     ));
 
-    const input = screen.getByTestId('home-hero-input') as HTMLTextAreaElement;
-    const goalInput = await screen.findByLabelText(/plugin goal/i);
-    fireEvent.change(goalInput, {
-      target: { value: 'turn support transcripts into triaged GitHub issues' },
-    });
-
-    await waitFor(() => {
-      expect(input.value).toContain('turn support transcripts into triaged GitHub issues');
-    });
-
     const rewrittenGoal = 'catalog internal research notes into a reusable knowledge workflow';
+    const input = screen.getByTestId('home-hero-input') as HTMLTextAreaElement;
     fireEvent.change(input, {
       target: {
         value: input.value.replace(
-          'turn support transcripts into triaged GitHub issues',
+          PLUGIN_AUTHORING_DEFAULT_GOAL,
           rewrittenGoal,
         ),
       },
     });
     await waitFor(() => {
-      expect((screen.getByLabelText(/plugin goal/i) as HTMLInputElement).value)
-        .toBe(rewrittenGoal);
+      expect(input.value).toContain(rewrittenGoal);
     });
     fireEvent.click(screen.getByTestId('home-hero-submit'));
 

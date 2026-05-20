@@ -161,7 +161,7 @@ export const ru: Dict = {
   'settings.onboardingSkip': "Skip for now",
   'settings.kicker': 'Настройки',
   'settings.title': 'Режим выполнения',
-  'settings.subtitle': 'Выберите локальный CLI или BYOK. Ваш API-ключ хранится только в этом браузере.',
+  'settings.subtitle': 'Выберите локальный CLI или BYOK.',
   'settings.modeAria': 'Режим выполнения',
   'settings.protocolAria': 'Протокол API',
   'settings.modeDaemon': 'Локальный CLI',
@@ -207,6 +207,8 @@ export const ru: Dict = {
   'settings.agentInstall.stepSelect': 'Выберите карточку агента, когда он появится как установленный.',
   'settings.noAgentsDetected':
     'Агенты ещё не обнаружены. Установите один из следующих инструментов: Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen или GitHub Copilot CLI, затем нажмите «Пересканировать».',
+  'settings.agentInstalledGroup': 'Ваши CLI ({count})',
+  'settings.agentInstallGroup': 'Доступно для установки ({count})',
   'settings.agentAuthRequired': 'Требуется аутентификация',
   'settings.agentAuthUnknown': 'Статус аутентификации неизвестен',
   'settings.apiSection': 'Anthropic API',
@@ -222,6 +224,10 @@ export const ru: Dict = {
     'Это рекомендуемые модели для этого протокола. Ваш провайдер может поддерживать другие модели.',
   'settings.baseUrl': 'Базовый URL',
   'settings.baseUrlInvalid': 'Введите корректный публичный URL с http:// или https://. Localhost разрешен; IP частных сетей блокируются.',
+  'settings.baseUrlCustomize': 'Настроить',
+  'settings.baseUrlDefaultHint': 'Эндпоинт по умолчанию. Обычно его не нужно менять.',
+  'settings.azureBaseUrlPlaceholder': 'https://my-resource.openai.azure.com',
+  'settings.azureBaseUrlHint': 'Find this in Azure portal → your resource → Endpoint.',
   'settings.azureDeploymentModel': 'Имя развертывания',
   'settings.azureDeploymentModelHint':
     'Для Azure OpenAI это поле используется как имя развертывания в /openai/deployments/<model>. Укажите имя развертывания, созданного в Azure.',
@@ -246,15 +252,15 @@ export const ru: Dict = {
   'settings.themeDark': 'Тёмная',
   'settings.agentModelHead': 'Модель для:',
   'settings.modelPicker': 'Модель',
-  'settings.modelSourceLive': 'Live from CLI',
-  'settings.modelSourceFallback': 'Fallback list',
+  'settings.modelSourceLive': 'Из CLI в реальном времени',
+  'settings.modelSourceFallback': 'Встроенный список',
   'settings.reasoningPicker': 'Сложность рассуждений',
   'settings.modelPickerHint':
     'Получается из CLI, если он поддерживает команду `models`. «По умолчанию» оставляет выбор конфигурации CLI, а «Пользовательская…» позволяет ввести любой ID модели, который CLI принимает.',
   'settings.modelPickerLiveHint':
-    'Models were refreshed from the installed CLI. Default still uses the CLI config.',
+    'Модели обновлены из установленного CLI. Вариант по умолчанию по-прежнему использует конфигурацию CLI.',
   'settings.modelPickerFallbackHint':
-    'Using Open Design fallback models because the installed CLI did not return live model metadata. Rescan after updating or logging in to the CLI.',
+    'Показаны встроенные значения по умолчанию. Нажмите «Пересканировать», чтобы получить актуальные модели из CLI.',
   'settings.cliEnvTitle': 'CLI config locations',
   'settings.cliEnvHint':
     'Set non-secret config directories for packaged app runs and agent detection.',
@@ -574,6 +580,11 @@ export const ru: Dict = {
     'Меняйте всё что нужно — правки попадут в бриф агента.',
   'newproj.promptTemplateBodyEmpty':
     'Пустое тело — агент не получит шаблонную референцию.',
+  'newproj.deleteTemplateTitle': 'Удалить шаблон',
+  'newproj.deleteTemplateConfirm': 'Удалить «{name}»? Это действие невозможно отменить.',
+  'newproj.deleteTemplateConfirmCta': 'Удалить шаблон',
+  'newproj.deleteTemplateError':
+    'Не удалось удалить шаблон. Попробуйте ещё раз.',
 
   'designs.subRecent': 'Недавние',
   'designs.subYours': 'Ваши дизайны',
@@ -970,6 +981,7 @@ export const ru: Dict = {
   'fileViewer.preview': 'Предпросмотр',
   'fileViewer.source': 'Исходный код',
   'fileViewer.tweaks': 'Настройки',
+  'fileViewer.tweaksUnavailable': 'В этом артефакте нет панели настроек',
   'fileViewer.comment': 'Комментарий',
   'fileViewer.edit': 'Редактировать',
   'fileViewer.draw': 'Рисовать',
@@ -1033,7 +1045,7 @@ export const ru: Dict = {
   'fileViewer.presentFullscreen': 'Полноэкранный',
   'fileViewer.presentNewTab': 'Новая вкладка',
   'fileViewer.exitPresentation': 'Выйти из презентации',
-  'fileViewer.shareLabel': 'Поделиться',
+  'fileViewer.shareLabel': 'Экспорт',
   'fileViewer.exportPdf': 'Экспорт в PDF',
   'fileViewer.exportPdfAllSlides': 'Экспорт в PDF (все слайды)',
   'fileViewer.exportPptxBusy': 'Дождитесь окончания текущего хода.',

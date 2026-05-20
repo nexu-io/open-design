@@ -11,7 +11,7 @@
 // override rather than AND-compose so a featured pick is never
 // accidentally hidden behind a still-selected category pill.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { InstalledPluginRecord } from '@open-design/contracts';
 import {
   applyFacetSelection,
@@ -29,6 +29,13 @@ export type FilterMode = 'all' | 'featured';
 interface UsePluginFacetsArgs {
   plugins: InstalledPluginRecord[];
   preferDefaultFacet?: boolean;
+  // External selection driven by the Home hero chip rail. When this
+  // value changes to a new (non-null) selection, the hook applies it,
+  // overriding both the user's manual pick and the default-facet
+  // bootstrap. We track the last-applied identity so the user can
+  // still click a different category afterwards without the effect
+  // snapping back on every re-render.
+  presetSelection?: FacetSelection | null;
 }
 
 export interface UsePluginFacetsResult {
@@ -56,6 +63,7 @@ const EMPTY_SELECTION: FacetSelection = {
 export function usePluginFacets({
   plugins,
   preferDefaultFacet = true,
+  presetSelection = null,
 }: UsePluginFacetsArgs): UsePluginFacetsResult {
   const [mode, setMode] = useState<FilterMode>('all');
   const [selection, setSelection] = useState<FacetSelection>(EMPTY_SELECTION);
@@ -65,6 +73,7 @@ export function usePluginFacets({
   // initializer) handles the realistic case where `args.plugins` is
   // empty at first paint and arrives a tick later.
   const [bootstrapped, setBootstrapped] = useState(false);
+  const lastAppliedPresetKeyRef = useRef<string | null>(null);
 
   // Atoms are infrastructure pieces (`code-import`, `patch-edit`) that
   // are not user-facing on the home grid; the original section already
@@ -101,6 +110,22 @@ export function usePluginFacets({
     }
     setBootstrapped(true);
   }, [bootstrapped, preferDefaultFacet, visiblePlugins.length, catalog]);
+
+  // Sync an externally-driven selection (the Home chip rail) into the
+  // facet state. We only apply a preset once per identity so the user
+  // can still click a different facet pill afterwards without the
+  // effect snapping back. Setting `bootstrapped` here also prevents
+  // the default-facet effect above from overriding the preset on the
+  // first non-empty render.
+  useEffect(() => {
+    if (!presetSelection) return;
+    const key = `${presetSelection.category ?? ''}::${presetSelection.subcategory ?? ''}`;
+    if (lastAppliedPresetKeyRef.current === key) return;
+    lastAppliedPresetKeyRef.current = key;
+    setSelection(presetSelection);
+    setMode((current) => (current === 'featured' ? 'all' : current));
+    setBootstrapped(true);
+  }, [presetSelection]);
 
   // The visual-appeal sort is applied at `visiblePlugins` derivation
   // (above), so any downstream `applyFacetSelection` slice preserves

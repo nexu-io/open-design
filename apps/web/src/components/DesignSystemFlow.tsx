@@ -58,6 +58,16 @@ import { decideAutoOpenAfterWrite } from './auto-open-file';
 import { ChatPane } from './ChatPane';
 import { FileWorkspace } from './FileWorkspace';
 import { Icon, type IconName } from './Icon';
+import { useAnalytics } from '../analytics/provider';
+import { trackPageView } from '../analytics/events';
+import {
+  clearOnboardingSessionId,
+  peekOnboardingSessionId,
+} from '../analytics/onboarding-session';
+import type {
+  TrackingDesignSystemStatus,
+  TrackingDesignSystemsEntryFrom,
+} from '@open-design/contracts/analytics';
 
 interface CreationProps {
   onBack: () => void;
@@ -204,6 +214,24 @@ export function DesignSystemCreationFlow({
   const githubConnectorRefreshId = useRef(0);
   const githubConnectorRequestInFlight = useRef(false);
   const embedded = chrome === 'embedded';
+
+  // DS create page_view (v2 doc). Only fires for the standalone
+  // /design-systems/create route — the embedded variant lives inside
+  // OnboardingView, which owns the `area=design_system` step page_view.
+  const analytics = useAnalytics();
+  const creationPageViewFiredRef = useRef(false);
+  useEffect(() => {
+    if (embedded) return;
+    if (creationPageViewFiredRef.current) return;
+    creationPageViewFiredRef.current = true;
+    const onboardingSessionId = peekOnboardingSessionId();
+    trackPageView(analytics.track, {
+      page_name: 'design_systems',
+      area: 'design_system_create',
+      view_type: 'page',
+      entry_from: onboardingSessionId ? 'onboarding' : 'design_systems_page',
+    });
+  }, [analytics.track, embedded]);
 
   const refreshGithubConnector = useCallback(async () => {
     if (!composioConfigured) {
@@ -858,6 +886,62 @@ export function DesignSystemDetailView({
   const recentRevisions = revisions.slice(0, 5);
   const generationActive =
     activeJob?.status === 'queued' || activeJob?.status === 'running';
+
+  // Multi-surface DS page_view (v2 doc). One emission per
+  // (system, generationActive) transition: while generation is
+  // running we surface `area=design_system_generation`; once it
+  // settles we surface `area=design_system_preview`. The fourth
+  // onboarding step (`area=generation_progress`) piggy-backs on the
+  // generation emission when an onboarding session id is present.
+  const analytics = useAnalytics();
+  const designSystemStatus: TrackingDesignSystemStatus = generationActive
+    ? 'generating'
+    : (system?.status as TrackingDesignSystemStatus | undefined) ?? 'unknown';
+  useEffect(() => {
+    if (!system) return;
+    const onboardingSessionId = peekOnboardingSessionId();
+    const entryFrom: TrackingDesignSystemsEntryFrom = onboardingSessionId
+      ? 'onboarding'
+      : 'unknown';
+    if (generationActive) {
+      trackPageView(analytics.track, {
+        page_name: 'design_system_project',
+        area: 'design_system_generation',
+        view_type: 'page',
+        entry_from: entryFrom,
+        design_system_id: system.id,
+        // Origin is the DS's provenance-style source. We don't yet
+        // have a precise mapping from `system.source` / provenance
+        // metadata to the v2 enum, so we report `unknown` rather
+        // than mis-tag — dashboards still see the funnel via
+        // `entry_from`. A follow-up can derive this honestly.
+        design_system_source: 'unknown',
+        design_system_status: 'generating',
+      });
+      if (onboardingSessionId) {
+        trackPageView(analytics.track, {
+          page_name: 'onboarding',
+          area: 'generation_progress',
+          step_index: 'progress',
+          step_name: 'generation',
+          onboarding_session_id: onboardingSessionId,
+        });
+        // Generation is the last onboarding step; clear so a later
+        // DS visit unrelated to onboarding doesn't re-attribute.
+        clearOnboardingSessionId();
+      }
+    } else {
+      trackPageView(analytics.track, {
+        page_name: 'design_system_project',
+        area: 'design_system_preview',
+        view_type: 'page',
+        entry_from: entryFrom,
+        design_system_id: system.id,
+        design_system_source: 'unknown',
+        design_system_status: designSystemStatus,
+      });
+    }
+  }, [analytics.track, system?.id, generationActive, designSystemStatus, system]);
   const introChatMessages = useMemo(
     () => buildDesignSystemChatMessages({
       system,

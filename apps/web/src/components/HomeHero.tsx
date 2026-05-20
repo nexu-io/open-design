@@ -7,7 +7,15 @@
 // composed with the recent-projects strip and plugins section
 // without owning their data lifecycles.
 
-import { forwardRef, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type {
   ClipboardEvent as ReactClipboardEvent,
   DragEvent as ReactDragEvent,
@@ -16,9 +24,15 @@ import type {
   RefObject,
   ReactNode,
 } from 'react';
-import type { ConnectorDetail, InputFieldSpec, InstalledPluginRecord, McpServerConfig } from '@open-design/contracts';
+import type {
+  ConnectorDetail,
+  InputFieldSpec,
+  InstalledPluginRecord,
+  McpServerConfig,
+} from '@open-design/contracts';
 import type { SkillSummary } from '../types';
 import { Icon, type IconName } from './Icon';
+import { PluginInputsForm } from './PluginInputsForm';
 import {
   chipsForGroup,
   type ChipGroup,
@@ -60,6 +74,7 @@ interface Props {
   onPluginInputValuesChange?: (values: Record<string, unknown>) => void;
   onPluginInputValidityChange?: (valid: boolean) => void;
   inlineEditableInputNames?: string[];
+  showPluginInputsForm?: boolean;
   footerInputNames?: string[];
   designSystemOptions?: HomeHeroDesignSystemOption[];
   stagedFiles?: File[];
@@ -83,6 +98,19 @@ interface Props {
   onPickMcp?: (server: McpServerConfig, nextPrompt: string) => void;
   onPickConnector?: (connector: ConnectorDetail, nextPrompt: string) => void;
   onPickChip: (chip: HomeHeroChip) => void;
+  // Manus-style example-prompt suggestions. Each entry carries both
+  // the source plugin (we still dispatch the existing
+  // `requestPluginContextUse(record, 'use-with-query')` path on click)
+  // and a pre-resolved, locale-aware preview of the prompt the
+  // textarea will receive, so the card body shows the actual sentence
+  // the user is about to send. HomeView decides the slice (matching
+  // the active chip), how many, and whether the panel should be
+  // visible (chip selected + not dismissed). The panel stays mounted
+  // either way so the accordion exit animation runs on close.
+  exampleSuggestions?: ExampleSuggestion[];
+  showExamples?: boolean;
+  onPickExample?: (record: InstalledPluginRecord) => void;
+  onDismissExamples?: () => void;
   contextItemCount: number;
   error: string | null;
   showActivePluginChip?: boolean;
@@ -139,7 +167,9 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
     pluginInputValues = {},
     pluginInputTemplate = null,
     onPluginInputValuesChange = () => undefined,
+    onPluginInputValidityChange = () => undefined,
     inlineEditableInputNames = [],
+    showPluginInputsForm = true,
     footerInputNames = [],
     designSystemOptions = [],
     stagedFiles = [],
@@ -163,6 +193,10 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
     onPickMcp = () => undefined,
     onPickConnector = () => undefined,
     onPickChip,
+    exampleSuggestions = [],
+    showExamples = false,
+    onPickExample = () => undefined,
+    onDismissExamples = () => undefined,
     contextItemCount,
     error,
     showActivePluginChip = true,
@@ -353,11 +387,29 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
   const openInlineInputField = openInlineInputName
     ? fieldByName.get(openInlineInputName) ?? null
     : null;
+  // Filter out inputs whose values are already shown inline in the
+  // prompt template, plus fields promoted into the compact footer.
+  const templateFieldKeys = useMemo(() => {
+    if (!pluginInputTemplate) return new Set<string>();
+    const keys = new Set<string>();
+    INPUT_PLACEHOLDER_PATTERN.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = INPUT_PLACEHOLDER_PATTERN.exec(pluginInputTemplate)) !== null) {
+      if (match[1]) keys.add(match[1]);
+    }
+    return keys;
+  }, [pluginInputTemplate]);
   const footerInputFields = useMemo(
     () => footerInputNames
       .map((name) => fieldByName.get(name))
       .filter((field): field is InputFieldSpec => Boolean(field)),
     [fieldByName, footerInputNames],
+  );
+  const remainingInputFields = useMemo(
+    () => pluginInputFields.filter(
+      (field) => !templateFieldKeys.has(field.name) && !footerInputNameSet.has(field.name),
+    ),
+    [footerInputNameSet, pluginInputFields, templateFieldKeys],
   );
   const activeCreateChip = useMemo(
     () => activeChipId
@@ -619,7 +671,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
                   title={t('homeHero.pluginTitle', { title: plugin.title })}
                 >
                   <span className="home-hero__active-dot" aria-hidden />
-                  <span>@{plugin.title}</span>
+                  <span>{plugin.title}</span>
                 </button>
                 <button
                   type="button"
@@ -650,7 +702,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
                   title={activePluginRecord ? t('homeHero.pluginTitle', { title: activePluginRecord.title }) : undefined}
                 >
                   <span className="home-hero__active-dot" aria-hidden />
-                  <span>{t('homeHero.pluginPrefix', { title: activePluginTitle })}</span>
+                  <span>{activePluginTitle}</span>
                 </button>
                 <button
                   type="button"
@@ -820,6 +872,14 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
                   setOpenInlineInputName(null);
                 }
               }}
+            />
+          ) : null}
+          {showPluginInputsForm && remainingInputFields.length > 0 ? (
+            <PluginInputsForm
+              fields={remainingInputFields}
+              values={pluginInputValues}
+              onChange={onPluginInputValuesChange}
+              onValidityChange={onPluginInputValidityChange}
             />
           ) : null}
         </div>
@@ -1108,6 +1168,18 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
           </div>
         </div>
       ) : null}
+
+      {/* Always render the panel; toggle visibility via accordion class
+          so the exit animation runs on dismiss/chip-change. Hidden
+          when no chip is picked or when the user closed it for the
+          current chip. */}
+      <ExamplePromptPanel
+        suggestions={exampleSuggestions}
+        open={showExamples}
+        onPick={onPickExample}
+        onDismiss={onDismissExamples}
+        disabled={pluginsLoading || pendingPluginId !== null}
+      />
 
       {error ? (
         <div role="alert" className="home-hero__error">
@@ -2352,6 +2424,90 @@ function getPluginQueryPreview(plugin: InstalledPluginRecord): string {
         : '';
   const trimmed = value.replace(/\s+/g, ' ').trim();
   return trimmed.length > 96 ? `${trimmed.slice(0, 96)}…` : trimmed;
+}
+
+// Each suggestion carries both the source plugin (so click can route
+// through the same `requestPluginContextUse(record, 'use-with-query')`
+// path the plugin card menu uses) and a pre-rendered, locale-aware
+// preview the card displays. HomeView resolves the preview through
+// the same renderer it'd use on submit, so the card body is exactly
+// the sentence the user is about to send.
+export interface ExampleSuggestion {
+  plugin: InstalledPluginRecord;
+  preview: string;
+}
+
+interface ExamplePromptPanelProps {
+  suggestions: ExampleSuggestion[];
+  open: boolean;
+  onPick: (record: InstalledPluginRecord) => void;
+  onDismiss: () => void;
+  disabled: boolean;
+}
+
+// Manus-style suggestion panel. Sits below the composer card + migrate
+// rail and surfaces 3-4 representative `useCase.query` previews as
+// content-bearing cards (not chip pills). The panel stays mounted so
+// the accordion exit animation runs on dismiss; `.accordion-collapsible
+// .open` toggles visibility per the shared motion contract in
+// `apps/web/src/index.css`. A small close button hides the panel for
+// the current chip; switching chips re-arms it (state lives in
+// HomeView).
+function ExamplePromptPanel({
+  suggestions,
+  open,
+  onPick,
+  onDismiss,
+  disabled,
+}: ExamplePromptPanelProps) {
+  const hasContent = suggestions.length > 0;
+  const isOpen = open && hasContent;
+  return (
+    <div
+      className={`home-hero__examples accordion-collapsible${isOpen ? ' open' : ''}`}
+      aria-hidden={isOpen ? undefined : true}
+      data-testid="home-hero-example-prompts"
+    >
+      <div className="accordion-collapsible-inner">
+        <section className="home-hero__examples-panel">
+          <header className="home-hero__examples-head">
+            <span className="home-hero__examples-title">Example prompts</span>
+            <button
+              type="button"
+              className="home-hero__examples-close"
+              onClick={onDismiss}
+              aria-label="Dismiss example prompts"
+              data-testid="home-hero-example-dismiss"
+              disabled={disabled || !isOpen}
+            >
+              <Icon name="close" size={12} />
+            </button>
+          </header>
+          <div className="home-hero__examples-grid" role="list">
+            {suggestions.map(({ plugin, preview }) => (
+              <button
+                key={plugin.id}
+                type="button"
+                role="listitem"
+                className="home-hero__example-card"
+                data-testid={`home-hero-example-${plugin.id}`}
+                onClick={() => onPick(plugin)}
+                disabled={disabled || !isOpen}
+                title={preview}
+              >
+                <span className="home-hero__example-card-body">{preview}</span>
+                <Icon
+                  name="arrow-up"
+                  size={12}
+                  className="home-hero__example-card-arrow"
+                />
+              </button>
+            ))}
+          </div>
+        </section>
+      </div>
+    </div>
+  );
 }
 
 interface RailGroupProps {

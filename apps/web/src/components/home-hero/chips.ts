@@ -19,7 +19,7 @@
 //   - `action` — discriminated union the HomeView dispatcher matches
 //     on. The rail component itself stays presentational.
 
-import type { ProjectKind } from '@open-design/contracts';
+import type { ProjectKind, ProjectMetadata } from '@open-design/contracts';
 import type { DefaultScenarioPluginId } from '@open-design/contracts';
 import type { IconName } from '../Icon';
 
@@ -41,12 +41,14 @@ export type ChipAction =
       pluginId: ChipScenarioPluginId;
       projectKind: ProjectKind;
       inputs?: Record<string, unknown>;
+      projectMetadata?: ProjectMetadata;
     }
   | {
       kind: 'apply-figma-migration';
       pluginId: 'od-figma-migration';
       projectKind: ProjectKind;
       inputs?: Record<string, unknown>;
+      projectMetadata?: ProjectMetadata;
     }
   | { kind: 'create-plugin' }
   | { kind: 'import-folder' }
@@ -87,6 +89,23 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
       kind: 'apply-scenario',
       pluginId: 'example-web-prototype',
       projectKind: 'prototype',
+    },
+  },
+  {
+    id: 'live-artifact',
+    label: 'Live artifact',
+    icon: 'refresh',
+    group: 'create',
+    hint: 'Build a refreshable artifact backed by connector or local data.',
+    action: {
+      kind: 'apply-scenario',
+      pluginId: 'example-live-artifact',
+      projectKind: 'prototype',
+      projectMetadata: {
+        kind: 'prototype',
+        intent: 'live-artifact',
+        fidelity: 'high-fidelity',
+      },
     },
   },
   {
