@@ -1373,6 +1373,8 @@ export interface Dict {
   'designs.deleteSelected': string;
   'designs.selectedCount': string;
   'designs.deleteSelectedConfirm': string;
+  'designs.deleteSelectedSuccess': string;
+  'designs.deleteSelectedPartial': string;
   'designs.tagPrototype': string;
   'designs.tagLiveArtifact': string;
   'designs.tagSlide': string;

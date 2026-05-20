@@ -1090,6 +1090,8 @@ export const zhCN: Dict = {
   'designs.deleteSelected': '删除所选',
   'designs.selectedCount': '已选择 {n} 项',
   'designs.deleteSelectedConfirm': '确定删除选中的 {n} 个项目？',
+  'designs.deleteSelectedSuccess': '已成功删除 {n} 个项目。',
+  'designs.deleteSelectedPartial': '已删除 {deleted} 个项目；{failed} 个失败。',
   'designs.tagPrototype': '原型',
   'designs.tagLiveArtifact': 'Live Artifact',
   'designs.tagSlide': 'Slide',

@@ -698,6 +698,8 @@ export const zhTW: Dict = {
   'designs.deleteSelected': '刪除所選',
   'designs.selectedCount': '已選擇 {n} 項',
   'designs.deleteSelectedConfirm': '確定刪除選取的 {n} 個專案？',
+  'designs.deleteSelectedSuccess': '已成功刪除 {n} 個專案。',
+  'designs.deleteSelectedPartial': '已刪除 {deleted} 個專案；{failed} 個失敗。',
   'designs.tagPrototype': '原型',
   'designs.tagLiveArtifact': 'Live Artifact',
   'designs.tagSlide': 'Slide',
