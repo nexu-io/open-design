@@ -1607,4 +1607,11 @@ export const ko: Dict = {
   'liveArtifact.viewer.code.loading': '코드 로드 중…',
   'liveArtifact.viewer.code.unavailable': '아직 코드를 사용할 수 없습니다.',
   'liveArtifact.viewer.code.empty': '이 코드 파일은 비어 있습니다.',
+  // Diagnostics export
+  'diagnostics.exportTitle': '진단 정보 내보내기',
+  'diagnostics.exportButton': '진단 정보 내보내기',
+  'diagnostics.exportHint': '최근 앱 로그와 기기 정보를 zip으로 묶어 팀에 공유할 수 있게 만듭니다.',
+  'diagnostics.exporting': '내보내는 중…',
+  'diagnostics.exportSuccess': '진단 정보를 {path}에 저장했습니다',
+  'diagnostics.exportFailed': '진단 정보 내보내기 실패: {message}',
 };

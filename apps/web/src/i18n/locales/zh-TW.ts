@@ -1717,4 +1717,11 @@ export const zhTW: Dict = {
   'liveArtifact.viewer.code.loading': '正在載入程式碼…',
   'liveArtifact.viewer.code.unavailable': '程式碼尚不可用。',
   'liveArtifact.viewer.code.empty': '此程式碼檔案是空的。',
+  // Diagnostics export
+  'diagnostics.exportTitle': '匯出診斷日誌',
+  'diagnostics.exportButton': '匯出診斷日誌',
+  'diagnostics.exportHint': '將近期的應用日誌與機器資訊打包成 zip,方便傳給我們排查問題。',
+  'diagnostics.exporting': '匯出中…',
+  'diagnostics.exportSuccess': '診斷日誌已儲存至 {path}',
+  'diagnostics.exportFailed': '匯出診斷日誌失敗：{message}',
 };

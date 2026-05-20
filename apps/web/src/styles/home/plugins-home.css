@@ -53,7 +53,7 @@
   position: relative;
   display: inline-flex;
   align-items: center;
-  width: 200px;
+  width: 220px;
   max-width: 100%;
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -132,15 +132,10 @@
     align-items: stretch;
   }
   .plugins-home__head-tools {
-    justify-content: flex-end;
-  }
-  .plugins-home__facet-tools {
-    width: 100%;
-    justify-content: flex-start;
+    justify-content: space-between;
   }
   .plugins-home__search {
-    flex: 1;
-    min-width: 0;
+    width: 100%;
   }
 }
 .plugins-home__empty {
@@ -159,12 +154,22 @@
 }
 
 /* ============================================================
-   Faceted filter — a single combined bar. Featured / category
-   pills live on the left, the search field + result count +
-   clear-filters affordance live on the right. Folding the old
-   "mode strip + header search + category row" into one keeps the
-   eye on a single horizontal control surface.
+   Faceted filter — single curated workflow bar. The Featured chip
+   lives in a smaller mode strip above the row so it reads as
+   orthogonal to the category selection it overrides.
    ============================================================ */
+.plugins-home__mode {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-bottom: 2px;
+}
+.plugins-home__mode-total {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
 .plugins-home__chip {
   appearance: none;
   display: inline-flex;
@@ -243,18 +248,8 @@
 .plugins-home__facet-row--inline {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 4px 0;
-}
-/* Right-aligned cluster paired with the chip strip on the same row.
-   Hosts the search input, the filtered-count, and a clear-filters
-   link when at least one facet is active. `flex: 0 0 auto` keeps
-   it from being squashed when the chip strip starts scrolling. */
-.plugins-home__facet-tools {
-  display: flex;
-  align-items: center;
   gap: 8px;
-  flex: 0 0 auto;
+  padding: 4px 0;
 }
 .plugins-home__facet-row--sub {
   padding-top: 0;
@@ -273,8 +268,7 @@
 .plugins-home__facet-row--inline .plugins-home__facet-pills::-webkit-scrollbar {
   height: 0;
 }
-.plugins-home__facet-row--inline .plugins-home__pill,
-.plugins-home__facet-row--inline .plugins-home__chip {
+.plugins-home__facet-row--inline .plugins-home__pill {
   flex: 0 0 auto;
   scroll-snap-align: start;
 }
@@ -341,33 +335,6 @@
 .plugins-home__pill--sub-all {
   background: var(--bg-subtle);
   color: var(--text-muted);
-}
-/*
- * Empty lanes ("contribute" invites): the chip is intentionally kept
- * in the strip so the workflow shape stays visible, but it's faded
- * so users can tell at a glance which lanes are populated vs which
- * are open-invite buckets. We keep it clickable (a click opens the
- * "Contribute a X plugin" card) — disabling would hide that flow.
- */
-.plugins-home__pill[data-empty='true']:not(.is-active) {
-  opacity: 0.45;
-  border-style: dashed;
-}
-.plugins-home__pill[data-empty='true']:not(.is-active):hover {
-  opacity: 0.75;
-}
-.plugins-home__pill[data-empty='true']:not(.is-active) .plugins-home__pill-count {
-  color: var(--text-faint);
-}
-/*
- * "All" pills always reflect the catalog's full size (or full lane
- * size in the sub-row's case) and should not pick up the empty
- * treatment even when an unrelated category happens to be zero.
- */
-.plugins-home__pill--all[data-empty='true'],
-.plugins-home__pill--sub-all[data-empty='true'] {
-  opacity: 1;
-  border-style: solid;
 }
 
 .plugins-home__empty--filtered {

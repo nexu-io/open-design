@@ -1599,4 +1599,12 @@ export const uk: Dict = {
   'liveArtifact.viewer.code.loading': 'Завантаження коду…',
   'liveArtifact.viewer.code.unavailable': 'Код ще недоступний.',
   'liveArtifact.viewer.code.empty': 'Цей файл коду порожній.',
+
+  // Diagnostics export
+  'diagnostics.exportTitle': 'Експорт діагностики',
+  'diagnostics.exportButton': 'Експорт діагностики',
+  'diagnostics.exportHint': 'Збирає останні журнали застосунку та інформацію про пристрій у zip для надсилання команді.',
+  'diagnostics.exporting': 'Експортування…',
+  'diagnostics.exportSuccess': 'Діагностику збережено: {path}',
+  'diagnostics.exportFailed': 'Не вдалося експортувати діагностику: {message}',
 };

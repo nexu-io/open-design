@@ -83,6 +83,7 @@ async function buildReport(args: Args): Promise<DailyReport> {
   const today = args.today ?? todayInShanghai();
   const reportDate = addDays(today, -args.delayDays);
   const comparisonDate = addDays(reportDate, -7);
+  const dataState = 'all';
 
   const [currentTotals, previousTotals, currentPages, previousPages, currentQueries, previousQueries] =
     await Promise.all([
@@ -90,33 +91,55 @@ async function buildReport(args: Args): Promise<DailyReport> {
         startDate: reportDate,
         endDate: reportDate,
         dimensions: [],
+        dataState,
       }),
       querySearchAnalyticsRows({
         startDate: comparisonDate,
         endDate: comparisonDate,
         dimensions: [],
+        dataState,
       }),
       querySearchAnalyticsRows({
         startDate: reportDate,
         endDate: reportDate,
         dimensions: ['page'],
+        dataState,
       }),
       querySearchAnalyticsRows({
         startDate: comparisonDate,
         endDate: comparisonDate,
         dimensions: ['page'],
+        dataState,
       }),
       querySearchAnalyticsRows({
         startDate: reportDate,
         endDate: reportDate,
         dimensions: ['query'],
+        dataState,
       }),
       querySearchAnalyticsRows({
         startDate: comparisonDate,
         endDate: comparisonDate,
         dimensions: ['query'],
+        dataState,
       }),
     ]);
+  const rowCounts = {
+    currentTotals: currentTotals.length,
+    previousTotals: previousTotals.length,
+    currentPages: currentPages.length,
+    previousPages: previousPages.length,
+    currentQueries: currentQueries.length,
+    previousQueries: previousQueries.length,
+  };
+  console.log(
+    `GSC rows for ${reportDate} vs ${comparisonDate} (${dataState}): ${JSON.stringify(rowCounts)}`,
+  );
+  if (Object.values(rowCounts).every((count) => count === 0)) {
+    throw new Error(
+      `GSC returned zero rows for ${reportDate} and ${comparisonDate}; refusing to post an all-zero SEO report.`,
+    );
+  }
 
   const metrics = rowToMetrics(currentTotals[0]);
   const previousMetrics = rowToMetrics(previousTotals[0]);

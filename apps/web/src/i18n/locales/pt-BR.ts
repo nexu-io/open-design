@@ -1598,4 +1598,11 @@ export const ptBR: Dict = {
   'liveArtifact.viewer.code.loading': 'Carregando código…',
   'liveArtifact.viewer.code.unavailable': 'O código ainda não está disponível.',
   'liveArtifact.viewer.code.empty': 'Este arquivo de código está vazio.',
+  // Diagnostics export
+  'diagnostics.exportTitle': 'Exportar diagnósticos',
+  'diagnostics.exportButton': 'Exportar diagnósticos',
+  'diagnostics.exportHint': 'Empacota logs recentes do app e informações do dispositivo em um zip para enviar à equipe.',
+  'diagnostics.exporting': 'Exportando…',
+  'diagnostics.exportSuccess': 'Diagnósticos salvos em {path}',
+  'diagnostics.exportFailed': 'Falha ao exportar diagnósticos: {message}',
 };

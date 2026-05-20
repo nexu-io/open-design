@@ -1495,4 +1495,11 @@ export const de: Dict = {
   'liveArtifact.viewer.code.loading': 'Code wird geladen…',
   'liveArtifact.viewer.code.unavailable': 'Code ist noch nicht verfügbar.',
   'liveArtifact.viewer.code.empty': 'Diese Codedatei ist leer.',
+  // Diagnostics export
+  'diagnostics.exportTitle': 'Diagnose exportieren',
+  'diagnostics.exportButton': 'Diagnose exportieren',
+  'diagnostics.exportHint': 'Bündelt die aktuellen App-Logs und Geräteinformationen in ein Zip-Archiv, das du mit dem Team teilen kannst.',
+  'diagnostics.exporting': 'Exportiere…',
+  'diagnostics.exportSuccess': 'Diagnose gespeichert: {path}',
+  'diagnostics.exportFailed': 'Diagnose-Export fehlgeschlagen: {message}',
 };

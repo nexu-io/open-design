@@ -1766,4 +1766,12 @@ export const fr: Dict = {
     'Instructions persistantes appliquées à chaque projet. Utilisez-les pour définir les préférences que le modèle doit toujours suivre.',
   'settings.customInstructionsPlaceholder':
     'ex. "Utilise toujours TypeScript. Préfère les composants fonctionnels. Réponds de façon concise."',
+
+  // Diagnostics export
+  'diagnostics.exportTitle': 'Exporter le diagnostic',
+  'diagnostics.exportButton': 'Exporter le diagnostic',
+  'diagnostics.exportHint': 'Compresse les journaux récents et les informations machine dans un zip à partager avec l\'équipe.',
+  'diagnostics.exporting': 'Exportation…',
+  'diagnostics.exportSuccess': 'Diagnostic enregistré dans {path}',
+  'diagnostics.exportFailed': 'Impossible d\'exporter le diagnostic: {message}',
 };

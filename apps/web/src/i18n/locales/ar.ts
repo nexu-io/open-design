@@ -1557,4 +1557,12 @@ export const ar: Dict = {
   'liveArtifact.viewer.code.loading': 'جارٍ تحميل الكود…',
   'liveArtifact.viewer.code.unavailable': 'الكود غير متاح بعد.',
   'liveArtifact.viewer.code.empty': 'ملف الكود هذا فارغ.',
+
+  // Diagnostics export
+  'diagnostics.exportTitle': 'تصدير التشخيص',
+  'diagnostics.exportButton': 'تصدير التشخيص',
+  'diagnostics.exportHint': 'يحزم سجلات التطبيق الأخيرة ومعلومات الجهاز في ملف zip لمشاركته مع الفريق.',
+  'diagnostics.exporting': 'جارٍ التصدير…',
+  'diagnostics.exportSuccess': 'تم حفظ التشخيص في {path}',
+  'diagnostics.exportFailed': 'تعذّر تصدير التشخيص: {message}',
 };

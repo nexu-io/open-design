@@ -1446,4 +1446,11 @@ export const esES: Dict = {
   'liveArtifact.viewer.code.loading': 'Cargando código…',
   'liveArtifact.viewer.code.unavailable': 'El código aún no está disponible.',
   'liveArtifact.viewer.code.empty': 'Este archivo de código está vacío.',
+  // Diagnostics export
+  'diagnostics.exportTitle': 'Exportar diagnósticos',
+  'diagnostics.exportButton': 'Exportar diagnósticos',
+  'diagnostics.exportHint': 'Empaqueta los registros recientes y la información del equipo en un zip para enviar al soporte.',
+  'diagnostics.exporting': 'Exportando…',
+  'diagnostics.exportSuccess': 'Diagnósticos guardados en {path}',
+  'diagnostics.exportFailed': 'No se pudieron exportar los diagnósticos: {message}',
 };

@@ -35,7 +35,6 @@ test('opencode args deliver prompts via stdin without passing a literal dash pro
     'run',
     '--format',
     'json',
-    '--dangerously-skip-permissions',
   ]);
 
   const withModel = opencode.buildArgs(
@@ -48,10 +47,11 @@ test('opencode args deliver prompts via stdin without passing a literal dash pro
     'run',
     '--format',
     'json',
-    '--dangerously-skip-permissions',
-    '--model',
+    '-m',
     'anthropic/claude-sonnet-4-5',
   ]);
+  assert.equal(withModel.includes('--dangerously-skip-permissions'), false);
+  assert.equal(withModel.includes('--model'), false);
 });
 
 // Copilot reads the prompt from stdin when `-p` is omitted entirely

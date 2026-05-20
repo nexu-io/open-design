@@ -901,21 +901,11 @@ export function HomeView({
           });
           return;
         }
-        const pluginOptions = {
+        requestActivePlugin(record, undefined, {
           projectKind: chip.action.projectKind,
           chipId: chip.id,
           inputs: chip.action.inputs,
-        };
-        // Output-type tabs (create group) are mode-selection gestures:
-        // switching between them should never prompt for confirmation,
-        // even when the input already has template text from a previous
-        // tab. Migrate-group chips (From Figma, etc.) still go through
-        // the replacement guard because they carry a meaningful prompt.
-        if (chip.group === 'create') {
-          void usePlugin(record, undefined, pluginOptions);
-        } else {
-          requestActivePlugin(record, undefined, pluginOptions);
-        }
+        });
         return;
       }
       case 'create-plugin': {

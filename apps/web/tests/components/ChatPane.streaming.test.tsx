@@ -131,6 +131,60 @@ Expected output:
     expect(screen.getByTestId('composer-streaming').textContent).toBe('idle');
     expect(screen.getByTestId('assistant-streaming-assistant-1').textContent).toBe('streaming');
   });
+
+  it('renders a stopped pinned todo after a terminal run without a final TodoWrite', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '',
+        createdAt: 1,
+        startedAt: 1,
+        endedAt: 2,
+        runStatus: 'failed',
+        events: [
+          {
+            kind: 'tool_use',
+            id: 'todo-1',
+            name: 'TodoWrite',
+            input: {
+              todos: [
+                {
+                  content: 'Build prototype',
+                  status: 'in_progress',
+                  activeForm: 'Building prototype',
+                },
+                { content: 'Run QA', status: 'pending' },
+              ],
+            },
+          },
+        ],
+      },
+    ];
+
+    const { container } = render(
+      <ChatPane
+        messages={messages}
+        streaming={false}
+        error={null}
+        projectId="project-1"
+        projectFiles={[]}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+        conversations={conversations}
+        activeConversationId="conv-1"
+        onSelectConversation={vi.fn()}
+        onDeleteConversation={vi.fn()}
+        projectMetadata={projectMetadata}
+      />,
+    );
+
+    expect(screen.getByText('0/2')).toBeTruthy();
+    expect(container.querySelector('.todo-stopped')?.textContent).toContain('Build prototype');
+    expect(container.querySelector('.todo-in_progress')).toBeNull();
+    expect(container.querySelector('.op-todo-current')).toBeNull();
+  });
 });
 
 const conversations: Conversation[] = [

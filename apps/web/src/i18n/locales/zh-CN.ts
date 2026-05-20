@@ -2150,4 +2150,11 @@ export const zhCN: Dict = {
   'liveArtifact.viewer.code.loading': '正在加载代码…',
   'liveArtifact.viewer.code.unavailable': '代码尚不可用。',
   'liveArtifact.viewer.code.empty': '此代码文件为空。',
+  // Diagnostics export
+  'diagnostics.exportTitle': '导出诊断日志',
+  'diagnostics.exportButton': '导出诊断日志',
+  'diagnostics.exportHint': '将近期的应用日志和机器信息打包成 zip,方便发给我们排查问题。',
+  'diagnostics.exporting': '导出中…',
+  'diagnostics.exportSuccess': '诊断日志已保存到 {path}',
+  'diagnostics.exportFailed': '导出诊断日志失败：{message}',
 };

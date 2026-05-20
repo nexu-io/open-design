@@ -1494,4 +1494,11 @@ export const ja: Dict = {
   'liveArtifact.viewer.code.loading': 'コードを読み込み中…',
   'liveArtifact.viewer.code.unavailable': 'コードはまだ利用できません。',
   'liveArtifact.viewer.code.empty': 'このコードファイルは空です。',
+  // Diagnostics export
+  'diagnostics.exportTitle': '診断情報をエクスポート',
+  'diagnostics.exportButton': '診断情報をエクスポート',
+  'diagnostics.exportHint': '最近のアプリログとマシン情報を zip にまとめて、チームに共有できるようにします。',
+  'diagnostics.exporting': 'エクスポート中…',
+  'diagnostics.exportSuccess': '診断情報を {path} に保存しました',
+  'diagnostics.exportFailed': '診断情報のエクスポートに失敗しました: {message}',
 };

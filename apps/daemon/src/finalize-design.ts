@@ -36,6 +36,7 @@ import { readDesignSystem } from './design-systems.js';
 import {
   listFiles,
   readProjectFile,
+  reconcileHtmlArtifactManifest,
   resolveProjectDir,
   validateProjectPath,
 } from './projects.js';
@@ -183,6 +184,14 @@ export async function resolveCurrentArtifact(
     }
     if (safeTabName) {
       const sidecarPath = path.join(dir, `${safeTabName}.artifact.json`);
+      if (!fs.existsSync(sidecarPath)) {
+        await reconcileHtmlArtifactManifest(
+          projectsRoot,
+          projectId,
+          safeTabName,
+          metadata ?? undefined,
+        );
+      }
       if (fs.existsSync(sidecarPath)) {
         const file = await readProjectFile(
           projectsRoot,
@@ -202,7 +211,21 @@ export async function resolveCurrentArtifact(
   }
 
   const files = await listFiles(projectsRoot, projectId, { metadata: metadata ?? undefined });
-  const candidates = files
+  await Promise.all(
+    files.map((f) => {
+      if (fs.existsSync(path.join(dir, `${f.name}.artifact.json`))) return null;
+      return reconcileHtmlArtifactManifest(
+        projectsRoot,
+        projectId,
+        f.name,
+        metadata ?? undefined,
+      );
+    }),
+  );
+  const reconciledFiles = await listFiles(projectsRoot, projectId, {
+    metadata: metadata ?? undefined,
+  });
+  const candidates = reconciledFiles
     .filter((f) => {
       // Require a real sidecar on disk; an inferred manifest does not count.
       return fs.existsSync(path.join(dir, `${f.name}.artifact.json`));

@@ -1557,4 +1557,11 @@ export const pl: Dict = {
   'liveArtifact.viewer.code.loading': 'Ładowanie kodu…',
   'liveArtifact.viewer.code.unavailable': 'Kod nie jest jeszcze dostępny.',
   'liveArtifact.viewer.code.empty': 'Ten plik kodu jest pusty.',
+  // Diagnostics export
+  'diagnostics.exportTitle': 'Eksportuj diagnostykę',
+  'diagnostics.exportButton': 'Eksportuj diagnostykę',
+  'diagnostics.exportHint': 'Pakuje ostatnie logi aplikacji i informacje o urządzeniu w archiwum zip do wysłania zespołowi.',
+  'diagnostics.exporting': 'Eksportowanie…',
+  'diagnostics.exportSuccess': 'Diagnostyka zapisana w {path}',
+  'diagnostics.exportFailed': 'Nie udało się wyeksportować diagnostyki: {message}',
 };

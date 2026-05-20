@@ -35,6 +35,7 @@
     "@modelcontextprotocol/sdk": "1.29.0",
     "@open-design/agui-adapter": "workspace:*",
     "@open-design/contracts": "workspace:*",
+    "@open-design/diagnostics": "workspace:*",
     "@open-design/platform": "workspace:*",
     "@open-design/plugin-runtime": "workspace:*",
     "@open-design/registry-protocol": "workspace:*",

@@ -1567,4 +1567,11 @@ export const hu: Dict = {
   'liveArtifact.viewer.code.loading': 'Kód betöltése…',
   'liveArtifact.viewer.code.unavailable': 'A kód még nem érhető el.',
   'liveArtifact.viewer.code.empty': 'Ez a kódfájl üres.',
+  // Diagnostics export
+  'diagnostics.exportTitle': 'Diagnosztika exportálása',
+  'diagnostics.exportButton': 'Diagnosztika exportálása',
+  'diagnostics.exportHint': 'A legutóbbi alkalmazásnaplókat és gépinformációkat zip fájlba csomagolja a csapatnak való elküldéshez.',
+  'diagnostics.exporting': 'Exportálás…',
+  'diagnostics.exportSuccess': 'Diagnosztika mentve: {path}',
+  'diagnostics.exportFailed': 'Diagnosztika exportálása sikertelen: {message}',
 };

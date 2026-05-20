@@ -1598,4 +1598,11 @@ export const ru: Dict = {
   'liveArtifact.viewer.code.loading': 'Загрузка кода…',
   'liveArtifact.viewer.code.unavailable': 'Код пока недоступен.',
   'liveArtifact.viewer.code.empty': 'Этот файл кода пуст.',
+  // Diagnostics export
+  'diagnostics.exportTitle': 'Экспорт диагностики',
+  'diagnostics.exportButton': 'Экспорт диагностики',
+  'diagnostics.exportHint': 'Упаковывает недавние журналы приложения и сведения о машине в zip для отправки команде.',
+  'diagnostics.exporting': 'Экспортирование…',
+  'diagnostics.exportSuccess': 'Диагностика сохранена: {path}',
+  'diagnostics.exportFailed': 'Не удалось экспортировать диагностику: {message}',
 };

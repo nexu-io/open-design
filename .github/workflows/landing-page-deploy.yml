@@ -10,6 +10,8 @@ on:
       - .github/workflows/landing-page-ci.yml
       # Landing page sources
       - apps/landing-page/**
+      # Design template source of truth for the homepage.
+      - design-templates/open-design-landing/**
       # Content sources — Astro content collections glob these at build
       # time. Adding/removing a SKILL.md, DESIGN.md, craft principle, or
       # live-artifact template MUST trigger a redeploy or the published

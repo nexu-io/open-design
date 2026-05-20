@@ -70,13 +70,6 @@
   width: 100%;
   padding-bottom: 4px;
 }
-.entry-nav-rail__divider {
-  width: 28px;
-  height: 1px;
-  background: var(--border);
-  margin: 3px 0;
-  flex-shrink: 0;
-}
 
 /* ---------- Right-side hover tooltip (rail items only) ----------
    The rail is icon-only, so each button advertises its label via a
@@ -251,13 +244,6 @@
 .entry-nav-rail__logo:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
-}
-/* The logo doubles as the Home destination; when the home view is
-   active it gets the same accent treatment as a primary nav button
-   so users still see "you are here" without a dedicated Home icon. */
-.entry-nav-rail__logo.is-active {
-  background: var(--accent-tint);
-  border-color: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 .entry-nav-rail__logo-img {
   width: 100%;

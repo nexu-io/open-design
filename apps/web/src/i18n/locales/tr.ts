@@ -1544,4 +1544,11 @@ export const tr: Dict = {
   'liveArtifact.viewer.code.loading': 'Kod yükleniyor…',
   'liveArtifact.viewer.code.unavailable': 'Kod henüz kullanılamıyor.',
   'liveArtifact.viewer.code.empty': 'Bu kod dosyası boş.',
+  // Diagnostics export
+  'diagnostics.exportTitle': 'Tanılama dışa aktar',
+  'diagnostics.exportButton': 'Tanılama dışa aktar',
+  'diagnostics.exportHint': 'Son uygulama günlüklerini ve makine bilgilerini ekibe gönderebileceğiniz bir zip dosyasında paketler.',
+  'diagnostics.exporting': 'Dışa aktarılıyor…',
+  'diagnostics.exportSuccess': 'Tanılama {path} konumuna kaydedildi',
+  'diagnostics.exportFailed': 'Tanılama dışa aktarılamadı: {message}',
 };

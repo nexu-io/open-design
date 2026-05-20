@@ -75,6 +75,19 @@ export function buildSrcdoc(
   return injectSrcdocTransportActivationBridge(injectSnapshotBridge(withEdit));
 }
 
+/**
+ * Build the lazy transport shell.
+ *
+ * The shell does two things:
+ *   1. Register a listener for `od:srcdoc-transport-activate` that replaces
+ *      its own document with the real artifact HTML.
+ *   2. Post `od:srcdoc-transport-ready` to the parent as soon as the listener
+ *      is installed. This `ready` signal is the only reliable way for the
+ *      host to know the listener is live; without it, the host risks posting
+ *      `activate` before the iframe's script has executed (e.g. right after a
+ *      key-driven re-mount), in which case the message is dropped and the
+ *      iframe stays stuck on the empty shell. See #2253.
+ */
 export function buildLazySrcdocTransport(): string {
   return `<!doctype html>
 <html>
@@ -89,10 +102,48 @@ export function buildLazySrcdocTransport(): string {
         document.write(data.html);
         document.close();
       });
+      try {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({ type: 'od:srcdoc-transport-ready' }, '*');
+        }
+      } catch (_) { /* sandboxed parent — host falls back to onLoad */ }
     })();</script>
   </head>
   <body></body>
 </html>`;
+}
+
+export interface SrcDocActivationInputs {
+  /** The real artifact HTML the host wants to inject into the shell. */
+  srcDoc: string;
+  /** Host is currently showing the URL-loaded iframe (srcDoc iframe is hidden). */
+  useUrlLoadPreview: boolean;
+  /** Host's render pipeline is routing through the lazy transport shell. */
+  useLazySrcDocTransport: boolean;
+  /** The shell document has loaded AND posted `od:srcdoc-transport-ready`. */
+  shellReady: boolean;
+  /** Which artifact HTML has already been pushed into this shell (dedupe). */
+  activatedHtml: string | null;
+}
+
+/**
+ * Pure decision for whether the host should now post
+ * `od:srcdoc-transport-activate` to the shell iframe.
+ *
+ * Gating on `shellReady` is the fix for #2253: without it, an activation
+ * triggered by `useUrlLoadPreview` flipping to false (e.g. opening the
+ * Tweaks palette) can fire while the iframe's shell script has not yet
+ * registered its message listener. The message is dropped, the shell stays
+ * on its empty 536-byte body, and the dedupe check then suppresses the
+ * follow-up activation from the iframe's onLoad path.
+ */
+export function canActivateSrcDocTransport(state: SrcDocActivationInputs): boolean {
+  if (!state.srcDoc) return false;
+  if (state.useUrlLoadPreview) return false;
+  if (!state.useLazySrcDocTransport) return false;
+  if (!state.shellReady) return false;
+  if (state.activatedHtml === state.srcDoc) return false;
+  return true;
 }
 
 function injectSrcdocTransportActivationBridge(doc: string): string {

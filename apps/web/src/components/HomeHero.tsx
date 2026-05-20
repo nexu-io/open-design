@@ -7,15 +7,7 @@
 // composed with the recent-projects strip and plugins section
 // without owning their data lifecycles.
 
-import {
-  forwardRef,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   ClipboardEvent as ReactClipboardEvent,
   DragEvent as ReactDragEvent,
@@ -322,28 +314,10 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
   const openInlineInputField = openInlineInputName
     ? fieldByName.get(openInlineInputName) ?? null
     : null;
-  // Filter out inputs whose values are already shown (and editable
-  // by clicking into the textarea or the inline pill) inline in the
-  // prompt template. Otherwise the structured form below duplicates
-  // every slot pill above it — five identical labelled inputs for a
-  // plugin like Prototype, which made the chat box look like it had
-  // grown a second composer. Keep the form for plugin inputs that
-  // are NOT in the template (e.g. a "Run in background" toggle that
-  // never appears in the prompt text).
-  const templateFieldKeys = useMemo(() => {
-    if (!pluginInputTemplate) return new Set<string>();
-    const keys = new Set<string>();
-    INPUT_PLACEHOLDER_PATTERN.lastIndex = 0;
-    let match: RegExpExecArray | null;
-    while ((match = INPUT_PLACEHOLDER_PATTERN.exec(pluginInputTemplate)) !== null) {
-      if (match[1]) keys.add(match[1]);
-    }
-    return keys;
-  }, [pluginInputTemplate]);
-  const remainingInputFields = useMemo(
-    () => pluginInputFields.filter((field) => !templateFieldKeys.has(field.name)),
-    [pluginInputFields, templateFieldKeys],
-  );
+  // Surface every field, not just the ones the template references
+  // inline. The inline popover handles Home media slots; the form
+  // remains available for non-inline plugin inputs.
+  const remainingInputFields = pluginInputFields;
 
   useEffect(() => {
     if (selectedIndex >= visiblePickerOptions.length) setSelectedIndex(0);
@@ -360,20 +334,6 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
   useEffect(() => {
     setPromptScrollTop(inputElementRef.current?.scrollTop ?? 0);
   }, [prompt, promptOverlayParts]);
-
-  // Auto-grow the prompt textarea so the chat box height tracks the
-  // number of lines the user has typed. We never scroll the textarea
-  // internally (CSS sets `overflow: hidden` and `resize: none`), so
-  // the only height source of truth is `scrollHeight`. Resetting to
-  // `auto` before measuring forces the browser to recompute against
-  // the actual content, otherwise shrinking the prompt would leave
-  // the textarea stuck at its previous taller size.
-  useLayoutEffect(() => {
-    const el = inputElementRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${el.scrollHeight}px`;
-  }, [prompt]);
 
   const setInputRef = useCallback(
     (node: HTMLTextAreaElement | null) => {
@@ -451,19 +411,16 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
 
   return (
     <section className="home-hero" data-testid="home-hero">
+      <div className="home-hero__brand" aria-hidden>
+        <span className="home-hero__brand-mark">
+          <img src="/app-icon.svg" alt="" draggable={false} />
+        </span>
+        <span className="home-hero__brand-name">Open Design</span>
+      </div>
       <h1 className="home-hero__title">{t('homeHero.title')}</h1>
       <p className="home-hero__subtitle">
-        {t('homeHero.subtitlePrefix')}{' '}
-        <kbd>Enter</kbd>.
+        {t('homeHero.subtitlePrefix')} <kbd>Enter</kbd>.
       </p>
-
-      <TypeTabBar
-        activeChipId={activeChipId}
-        pendingChipId={pendingChipId}
-        pendingPluginId={pendingPluginId}
-        pluginsLoading={pluginsLoading}
-        onPickChip={onPickChip}
-      />
 
       <div
         className={`home-hero__input-card${dragActive ? ' is-drag-active' : ''}`}
@@ -857,7 +814,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
               title={t('chat.attachAria')}
               aria-label={t('chat.attachAria')}
             >
-              <Icon name="attach" size={18} />
+              <Icon name="attach" size={14} />
             </button>
             <span className="home-hero__hint">
               <kbd>↵</kbd> {t('homeHero.toRun')} · <kbd>Shift</kbd>+<kbd>↵</kbd> {t('homeHero.forNewLine')}
@@ -872,7 +829,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
             title={canSubmit ? t('homeHero.run') : t('homeHero.typeSomethingToRun')}
             aria-label={t('homeHero.run')}
           >
-            <Icon name="arrow-up" size={22} />
+            <Icon name="arrow-up" size={18} />
           </button>
         </div>
       </div>
@@ -883,6 +840,15 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
         aria-label={t('homeHero.railAria')}
         data-testid="home-hero-rail"
       >
+        <RailGroup
+          group="create"
+          activeChipId={activeChipId}
+          pendingChipId={pendingChipId}
+          pendingPluginId={pendingPluginId}
+          pluginsLoading={pluginsLoading}
+          onPickChip={onPickChip}
+        />
+        <span className="home-hero__rail-divider" aria-hidden />
         <RailGroup
           group="migrate"
           activeChipId={activeChipId}
@@ -1493,51 +1459,6 @@ function getPluginQueryPreview(plugin: InstalledPluginRecord): string {
         : '';
   const trimmed = value.replace(/\s+/g, ' ').trim();
   return trimmed.length > 96 ? `${trimmed.slice(0, 96)}…` : trimmed;
-}
-
-interface TypeTabBarProps {
-  activeChipId: string | null;
-  pendingChipId: string | null;
-  pendingPluginId: string | null;
-  pluginsLoading: boolean;
-  onPickChip: (chip: HomeHeroChip) => void;
-}
-
-function TypeTabBar({
-  activeChipId,
-  pendingChipId,
-  pendingPluginId,
-  pluginsLoading,
-  onPickChip,
-}: TypeTabBarProps) {
-  const chips = useMemo(() => chipsForGroup('create'), []);
-  return (
-    <div className="home-hero__type-tabs" role="tablist" aria-label="Output type">
-      {chips.map((chip) => {
-        const isActive = activeChipId === chip.id;
-        const isPending = pendingChipId === chip.id;
-        const cls = ['home-hero__type-tab'];
-        if (isActive) cls.push('is-active');
-        if (isPending) cls.push('is-pending');
-        return (
-          <button
-            key={chip.id}
-            type="button"
-            role="tab"
-            className={cls.join(' ')}
-            data-chip-id={chip.id}
-            data-testid={`home-hero-rail-${chip.id}`}
-            onClick={() => onPickChip(chip)}
-            disabled={pluginsLoading || isPending || pendingPluginId !== null}
-            aria-selected={isActive}
-            title={chip.hint ?? chip.label}
-          >
-            <span>{chip.label}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
 }
 
 interface RailGroupProps {

@@ -81,6 +81,18 @@ function normalizeProjectImportResult(input: unknown): OpenDesignHostProjectImpo
 // arbitrary baseDir even indirectly because the picker dialog is the
 // single source of paths crossing into the daemon, and it lives in the
 // main process.
+
+// Keep this file dependency-free at runtime: in sandbox: true preloads only
+// the `electron` module is safe to require. The diagnostics channel name is
+// duplicated from main/diagnostics.ts on purpose so the preload bundle does
+// not pull in node-only modules transitively.
+const DESKTOP_DIAGNOSTICS_IPC_CHANNEL = 'diagnostics:export-to-file';
+
+type DesktopDiagnosticsExportResult =
+  | { ok: true; path: string }
+  | { ok: false; cancelled: true }
+  | { ok: false; cancelled: false; message: string };
+
 const project = {
   pickAndImport: (
     init?: { name?: string; skillId?: string | null; designSystemId?: string | null },
@@ -180,3 +192,8 @@ const hostBridge = {
 } satisfies OpenDesignHostBridge;
 
 contextBridge.exposeInMainWorld(OPEN_DESIGN_HOST_GLOBAL, hostBridge);
+
+contextBridge.exposeInMainWorld('openDesignDesktop', {
+  exportDiagnostics: (): Promise<DesktopDiagnosticsExportResult> =>
+    ipcRenderer.invoke(DESKTOP_DIAGNOSTICS_IPC_CHANNEL) as Promise<DesktopDiagnosticsExportResult>,
+});

@@ -31,10 +31,9 @@ export const opencodeAgentDef = {
         'run',
         '--format',
         'json',
-        '--dangerously-skip-permissions',
       ];
       if (options.model && options.model !== 'default') {
-        args.push('--model', options.model);
+        args.push('-m', options.model);
       }
       return args;
     },

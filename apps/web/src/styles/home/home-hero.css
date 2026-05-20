@@ -23,6 +23,38 @@
   gap: 14px;
   padding: 32px 0 8px;
 }
+.home-hero__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.home-hero__brand-mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 2px;
+}
+.home-hero__brand-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.home-hero__brand-name {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--text-strong);
+}
 .home-hero__title {
   margin: 0;
   font-family: var(--serif);
@@ -33,10 +65,7 @@
   text-align: center;
 }
 .home-hero__subtitle {
-  /* Pair tightly with the title above; the larger separation
-     belongs between this subtitle and the type tab bar / chat
-     box that follow. */
-  margin: -8px 0 0;
+  margin: 0;
   color: var(--text-muted);
   font-size: 13.5px;
   text-align: center;
@@ -51,85 +80,6 @@
   border-radius: 3px;
   background: var(--bg-subtle);
 }
-/* ---------- Output-type tab bar ----------
-   Sits above the input card and lets the user pick a creation
-   mode (Prototype, Slide deck, Image, Video, etc.) before typing.
-   Folder-tab visual: the bar itself has no baseline border; the
-   input card's top edge serves as the baseline. The active tab
-   borrows the card's panel color and border so it reads as a
-   continuous "flap" attached to the card top — this gives the
-   strong "tabs belong to this chat box" cue that a free-floating
-   underline cannot. Labels are text-only; icons were removed
-   because the seven labels (Prototype, Live artifact, Slide deck,
-   Image, Video, HyperFrames, Audio) already disambiguate at the
-   sizes used here and the icons added visual noise without an
-   information gain. */
-.home-hero__type-tabs {
-  width: 100%;
-  max-width: 720px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 2px;
-  position: relative;
-  z-index: 1;
-  /* The parent .home-hero uses `gap: 14px`; pulling the bottom
-     margin back by 14px collapses that gap so the active tab can
-     sit flush against the card top (with its own -1px margin
-     covering the card's top border). The top margin restores the
-     breathing room above the bar after the title/subtitle pair. */
-  margin: 14px 0 -14px;
-  padding: 0 12px;
-}
-.home-hero__type-tab {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  padding: 8px 14px;
-  border: 1px solid transparent;
-  border-radius: 8px 8px 0 0;
-  /* Reach 1px past the bar baseline so an active tab's bottom edge
-     overlays the input card's top border, hiding it for the width
-     of the tab and producing the folder-tab merge. */
-  margin-bottom: -1px;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.3;
-  letter-spacing: -0.005em;
-  cursor: pointer;
-  transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease;
-}
-.home-hero__type-tab:hover:not(:disabled) {
-  color: var(--text);
-  background: color-mix(in srgb, var(--bg-subtle) 70%, transparent);
-}
-.home-hero__type-tab.is-active {
-  background: var(--bg-panel);
-  border-color: var(--border);
-  /* Paint the bottom border with the panel color so it visually
-     erases the input card's own top border for the width of this
-     tab, completing the folder-tab merge. */
-  border-bottom-color: var(--bg-panel);
-  color: var(--text-strong);
-  font-weight: 600;
-}
-.home-hero__type-tab.is-active:hover:not(:disabled) {
-  background: var(--bg-panel);
-}
-.home-hero__type-tab.is-pending {
-  opacity: 0.65;
-}
-.home-hero__type-tab:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-.home-hero__type-tab:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px var(--accent-tint);
-}
-
 .home-hero__input-card {
   position: relative;
   width: 100%;
@@ -142,11 +92,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  /* Card top sits exactly at the tab bar bottom (tab bar margin
-     cancels the parent flex gap) so the active folder-tab can
-     overlap the card border by 1px and read as one continuous
-     surface with the chat box. */
-  margin-top: 0;
+  margin-top: 8px;
   transition: border-color 120ms ease, box-shadow 120ms ease;
 }
 .home-hero__input-card:focus-within {
@@ -251,14 +197,7 @@
   color: var(--text);
   font: inherit;
   font-size: 15px;
-  /* Generous line-height so adjacent slot/mention pills do not
-     collide vertically when the prompt wraps. Each pill paints a
-     2px ring via `box-shadow`; with a tight line-height the rings
-     from line N and line N+1 visually merge into a single bar.
-     Bumping the line-height leaves ~8px of clear space between
-     pill rows. The textarea below mirrors this value so the
-     overlay and the editable text stay pixel-aligned. */
-  line-height: 1.85;
+  line-height: 1.55;
   pointer-events: none;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -397,20 +336,10 @@
   z-index: 1;
   width: 100%;
   min-height: 84px;
-  /* The textarea height is driven by the auto-grow effect in
-     HomeHero.tsx, which writes an explicit pixel height after every
-     keystroke. We disable the native resize grip and internal
-     scrollbar so users cannot accidentally shrink the box, and so
-     content never disappears behind a scroll — the box just grows
-     to fit. The outer page handles overflow when the prompt is
-     very long. */
-  resize: none;
-  overflow: hidden;
+  resize: vertical;
   font: inherit;
   font-size: 15px;
-  /* Must match `.home-hero__prompt-highlight` so the editable
-     textarea and the highlight overlay wrap identically. */
-  line-height: 1.85;
+  line-height: 1.55;
   padding: 6px 6px;
   border: none;
   outline: none;
@@ -788,12 +717,8 @@
 }
 .home-hero__attach {
   appearance: none;
-  /* Match the submit button size and make the paper-clip glyph
-     readable at typical viewing distance. The previous 32px / 14px
-     glyph combo rendered the icon at roughly 11–12px after stroke
-     antialiasing and washed out against the white card. */
-  width: 38px;
-  height: 38px;
+  width: 32px;
+  height: 32px;
   flex: 0 0 auto;
   border: 1px solid var(--border);
   border-radius: 50%;
@@ -826,11 +751,8 @@
 }
 .home-hero__submit {
   appearance: none;
-  /* Larger send button so the arrow glyph reads at typical viewing
-     distance and the primary call-to-action carries enough visual
-     weight against the surrounding muted controls. */
-  width: 38px;
-  height: 38px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   border: none;
   background: var(--accent);
