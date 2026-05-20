@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { listSenseAudioCatalogue } from '../src/senseaudio-voices.js';
 
 const TEST_BASE_URL = 'https://senseaudio-gateway.example.test';
+type FetchInput = Parameters<typeof fetch>[0];
 
 describe('SenseAudio catalogue', () => {
   let root: string;
@@ -133,7 +134,7 @@ describe('SenseAudio catalogue', () => {
     // daemon falls through to BACKUP_VARIANT_LABELS, which also lacks
     // `cloned_user_0001` (it is a runtime-cloned voice, not a system
     // persona) — exercising the final per-voice fallback path.
-    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+    vi.stubGlobal('fetch', vi.fn(async (input: FetchInput) => {
       const url = typeof input === 'string'
         ? input
         : input instanceof URL ? input.toString() : input.url;
