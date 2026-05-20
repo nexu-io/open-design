@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -737,5 +737,37 @@ describe('NewProjectPanel template deletion', () => {
     await screen.findByText('Could not delete this template. Please try again.');
     expect(screen.queryByRole('alertdialog')).not.toBeNull();
     expect(onDelete).toHaveBeenCalledWith('tmpl-landing');
+  });
+
+  it('does not close the confirm dialog when the backdrop is clicked mid-delete', async () => {
+    let resolveDelete: (value: boolean) => void = () => {};
+    const onDelete = vi.fn(
+      () => new Promise<boolean>((resolve) => { resolveDelete = resolve; }),
+    );
+    render(
+      <NewProjectPanel
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={templates}
+        onDeleteTemplate={onDelete}
+        promptTemplates={[]}
+        onCreate={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'From template' }));
+    fireEvent.click(screen.getByLabelText(/delete template/i));
+    const dialog = await screen.findByRole('alertdialog');
+    fireEvent.click(screen.getByRole('button', { name: 'Delete template' }));
+
+    const backdrop = dialog.parentElement!;
+    fireEvent.click(backdrop);
+
+    expect(screen.queryByRole('alertdialog')).not.toBeNull();
+    expect(onDelete).toHaveBeenCalledTimes(1);
+
+    resolveDelete(true);
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
   });
 });

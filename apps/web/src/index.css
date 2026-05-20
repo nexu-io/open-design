@@ -2701,6 +2701,12 @@ a.avatar-item:visited {
   color: var(--text-strong);
   line-height: 1.55;
 }
+.modal-confirm-error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--red);
+  line-height: 1.55;
+}
 .modal-confirm .row { margin-top: 8px; }
 .modal-confirm .row button {
   padding: 8px 18px;

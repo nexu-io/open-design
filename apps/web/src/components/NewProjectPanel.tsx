@@ -1365,7 +1365,10 @@ function TemplatePicker({
         </div>
       )}
       {confirmDelete ? (
-        <div className="modal-backdrop" onClick={closeConfirm}>
+        <div
+          className="modal-backdrop"
+          onClick={deleting ? undefined : closeConfirm}
+        >
           <div
             className="modal modal-confirm"
             onClick={(e) => e.stopPropagation()}
