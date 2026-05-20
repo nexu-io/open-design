@@ -78,6 +78,12 @@ describe('validateHtmlArtifact', () => {
     expect(result.ok).toBe(false);
   });
 
+  it('rejects CSS import references to reserved storage', () => {
+    const html = '<!doctype html><html><head><style>@import "/.od/foo.css";@import url(./.tmp/theme.css);</style></head><body><p>Enough content to look like a real document.</p></body></html>';
+    const result = validateHtmlArtifact(html);
+    expect(result.ok).toBe(false);
+  });
+
   it('rejects inline style url references to reserved storage', () => {
     const html = '<!doctype html><html><body><div style="background-image:url(./.tmp/preview.png)">Preview</div><p>Enough content to look like a real document.</p></body></html>';
     const result = validateHtmlArtifact(html);
@@ -98,6 +104,12 @@ describe('validateHtmlArtifact', () => {
 
   it('accepts external URLs with reserved-looking path segments', () => {
     const html = '<!doctype html><html><body><a href="https://example.test/.od/reference.html">External docs</a><p>Enough content to look like a real document.</p></body></html>';
+    const result = validateHtmlArtifact(html);
+    expect(result.ok).toBe(true);
+  });
+
+  it('accepts local URLs that only mention reserved paths in query or hash', () => {
+    const html = '<!doctype html><html><head><style>.card{background-image:url("/docs?example=/.od/ref")}</style></head><body><a href="/docs?example=/.od/ref">Query docs</a><a href="/docs#/.tmp/ref">Hash docs</a><p>Enough content to look like a real document.</p></body></html>';
     const result = validateHtmlArtifact(html);
     expect(result.ok).toBe(true);
   });

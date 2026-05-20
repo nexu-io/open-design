@@ -14,8 +14,8 @@
  * - the *first* non-whitespace token is `<!doctype html>` or `<html`
  *   (anchored at the start; mid-string mentions of these tags do NOT count —
  *   AI prose like "Updated the <html lang> attribute…" must be rejected)
- * - URL-bearing attributes or CSS url(...) values do not point at internal
- *   project storage paths such as `.live-artifacts/`, `.od/`, or `.tmp/`
+ * - URL-bearing attributes or CSS `url(...)` / `@import` values do not point at
+ *   internal project storage paths such as `.live-artifacts/`, `.od/`, or `.tmp/`
  *
  * What this gate is NOT:
  * - It is **not** an HTML linter or validator. Malformed but recognizably
@@ -47,6 +47,8 @@ const STYLE_ATTRIBUTE_RE =
 const HTML_TAG_RE = /<[a-z][^>]*>/gi;
 const STYLE_BLOCK_RE = /<style\b[^>]*>([\s\S]*?)<\/style>/gi;
 const CSS_URL_RE = /\burl\(\s*(?:"([^"]*)"|'([^']*)'|([^)]*?))\s*\)/gi;
+const CSS_IMPORT_RE =
+  /@import\s+(?:url\(\s*(?:"([^"]*)"|'([^']*)'|([^)]*?))\s*\)|"([^"]*)"|'([^']*)')/gi;
 
 export type HtmlArtifactValidationResult =
   | { ok: true }
@@ -124,12 +126,14 @@ function hasReservedProjectPathInStyleBlocks(content: string): boolean {
 }
 
 function cssTextReferencesReservedProjectPath(cssText: string): boolean {
-  CSS_URL_RE.lastIndex = 0;
-  let match: RegExpExecArray | null;
-  while ((match = CSS_URL_RE.exec(cssText)) !== null) {
-    const candidate = match[1] ?? match[2] ?? match[3] ?? '';
-    if (candidateReferencesReservedProjectPath(candidate, false)) {
-      return true;
+  for (const pattern of [CSS_URL_RE, CSS_IMPORT_RE]) {
+    pattern.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(cssText)) !== null) {
+      const candidate = match.slice(1).find((value) => value !== undefined) ?? '';
+      if (candidateReferencesReservedProjectPath(candidate, false)) {
+        return true;
+      }
     }
   }
   return false;
@@ -138,8 +142,19 @@ function cssTextReferencesReservedProjectPath(cssText: string): boolean {
 function candidateReferencesReservedProjectPath(candidate: string, splitCandidates: boolean): boolean {
   const paths = splitCandidates ? srcsetCandidateUrls(candidate) : [firstUrlToken(candidate)];
   return paths.some((path) => {
-    return isLocalPathLike(path) && RESERVED_PROJECT_PATH_RE.test(path);
+    if (!isLocalPathLike(path)) {
+      return false;
+    }
+    return RESERVED_PROJECT_PATH_RE.test(pathnameOnly(path));
   });
+}
+
+function pathnameOnly(path: string): string {
+  const separator = path.search(/[?#]/);
+  if (separator === -1) {
+    return path;
+  }
+  return path.slice(0, separator);
 }
 
 function srcsetCandidateUrls(srcset: string): string[] {
