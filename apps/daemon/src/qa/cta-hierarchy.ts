@@ -248,9 +248,22 @@ function computeContainerKey($: CheerioAPI, el: CheerioCollection): string {
       }
     }
   }
+  // Keyed by parent-node identity, not just tag name: two sibling <div>s
+  // each holding one .btn-primary CTA must NOT collapse into the same
+  // bucket, otherwise detectMultiplePrimary() reports a shared-section
+  // conflict on a flat layout where each card has only one CTA.
   const parent = el.parent();
-  const parentTag = parent.length > 0 ? ((parent[0] as { tagName?: string; name?: string }).tagName ?? (parent[0] as { name?: string }).name ?? 'root') : 'root';
-  return `parent:${parentTag}`;
+  if (parent.length > 0) {
+    const parentNode = parent[0];
+    if (parentNode) {
+      const parentTag =
+        (parentNode as { tagName?: string }).tagName ?? (parentNode as { name?: string }).name ?? 'root';
+      const all = $(parentTag).toArray();
+      const index = all.indexOf(parentNode);
+      return `parent:${parentTag}:${index}`;
+    }
+  }
+  return 'parent:root';
 }
 
 function detectMultiplePrimary(candidates: CtaCandidate[]): CtaHierarchyIssue[] {
@@ -282,22 +295,35 @@ function detectMultiplePrimary(candidates: CtaCandidate[]): CtaHierarchyIssue[] 
 
 function detectAmbiguousWeight(candidates: CtaCandidate[]): CtaHierarchyIssue[] {
   if (candidates.length < 2) return [];
-  const first = candidates[0];
-  if (!first) return [];
-  const reference = signature(first);
-  const allIdentical = candidates.every((cta) => signature(cta) === reference);
-  if (!allIdentical) return [];
-  // Report the second one (the first is the natural anchor; subsequent
-  // identical CTAs are the ones a reviewer would diff against).
-  const cta = candidates[1];
-  if (!cta) return [];
-  return [
-    {
+  // Bucket by containerKey first: comparing signatures across the
+  // entire document yields false positives when two unrelated sections
+  // happen to share the same `.btn` styling but each holds only one
+  // CTA. The rule is "every CTA in a container shares the same class +
+  // inline style", so the container boundary must hold.
+  const byContainer = new Map<string, CtaCandidate[]>();
+  for (const cta of candidates) {
+    const bucket = byContainer.get(cta.containerKey) ?? [];
+    bucket.push(cta);
+    byContainer.set(cta.containerKey, bucket);
+  }
+  const issues: CtaHierarchyIssue[] = [];
+  for (const bucket of byContainer.values()) {
+    if (bucket.length < 2) continue;
+    const first = bucket[0];
+    if (!first) continue;
+    const reference = signature(first);
+    if (!bucket.every((cta) => signature(cta) === reference)) continue;
+    // Report the second one (the first is the natural anchor; subsequent
+    // identical CTAs are the ones a reviewer would diff against).
+    const cta = bucket[1];
+    if (!cta) continue;
+    issues.push({
       kind: 'ambiguous-weight',
       selector: cta.selector,
       message: `All CTAs share identical class and inline style; the visual hierarchy is ambiguous.`,
-    },
-  ];
+    });
+  }
+  return issues;
 }
 
 function detectMisleadingProminence(candidates: CtaCandidate[]): CtaHierarchyIssue[] {

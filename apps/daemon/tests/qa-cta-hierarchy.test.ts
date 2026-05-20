@@ -113,4 +113,39 @@ describe('analyseCtaHierarchy', () => {
     expect(report.primaryCount).toBe(0);
     expect(report.secondaryCount).toBe(0);
   });
+
+  it('does not collapse sibling <div> wrappers without a landmark ancestor', () => {
+    // Flat card-grid layout with no landmark ancestor: two sibling
+    // <div>s each carry one primary CTA. With a tag-only parent
+    // fallback ("parent:div") both CTAs land in the same bucket and
+    // detectMultiplePrimary() reports a fake shared-section conflict.
+    // The container key must include the parent's identity, not just
+    // its tag name.
+    const html = `
+      <div>
+        <div><a class="btn btn-primary" href="/a">Get started</a></div>
+        <div><a class="btn btn-primary" href="/b">Sign up</a></div>
+      </div>
+    `;
+    const report = analyseCtaHierarchy(html);
+    const kinds = report.issues.map((issue) => issue.kind);
+    expect(kinds).not.toContain('multiple-primary');
+    expect(report.primaryCount).toBe(2);
+  });
+
+  it('does not flag ambiguous-weight when two unrelated sections each contain a single .btn CTA', () => {
+    // Cross-section signature coincidence should not be a hierarchy
+    // warning: each section has only one CTA, so there is no
+    // "everything in this container looks the same" condition to
+    // satisfy. The rule must respect container boundaries.
+    const html = `
+      <article>
+        <section><a class="btn" href="/a">Get started</a></section>
+        <section><a class="btn" href="/b">Subscribe</a></section>
+      </article>
+    `;
+    const report = analyseCtaHierarchy(html);
+    const kinds = report.issues.map((issue) => issue.kind);
+    expect(kinds).not.toContain('ambiguous-weight');
+  });
 });
