@@ -7,6 +7,11 @@
 // register in `apps/web/src/analytics/client.ts`; it does NOT appear in the
 // per-event prop types below.
 
+import type {
+  TrackingConfigureAvailability,
+  TrackingConfigureType,
+} from './public-params.js';
+
 // ---- Event names ---------------------------------------------------------
 
 export type AnalyticsEventName =
@@ -1319,3 +1324,77 @@ export function fileTypeToTracking(args: {
   if (m === 'application/pdf') return 'pdf';
   return 'other';
 }
+
+// Pure helper deriving the v2 configure-state triplet from the execution
+// config + detected agent list. Used both by the web client (to re-register
+// the PostHog globals when the user switches mode / agent / BYOK
+// credentials) and by the daemon `/api/runs` handler (so the
+// authoritative run_created/finished captures carry consistent values).
+//
+// Inputs are intentionally narrow — caller passes only the bits that
+// matter for analytics — so the helper has no coupling to the web's
+// `AppConfig` shape or the daemon's `detectAgents` return type.
+export interface DeriveConfigureGlobalsInput {
+  // 'daemon' = Local CLI execution mode; 'api' = BYOK execution mode.
+  // Anything else is treated as unknown.
+  mode?: string | null;
+  // Currently selected CLI agent id, if any.
+  agentId?: string | null;
+  // Available CLI agents detected on the user's machine. Only the
+  // `available` flag is read; the helper does not care about ids.
+  agents?: ReadonlyArray<{ id: string; available?: boolean }>;
+  // Whether a BYOK key/url has been saved (web client only — daemon
+  // can leave this undefined).
+  byokConfigured?: boolean;
+}
+
+export function deriveConfigureGlobals(
+  input: DeriveConfigureGlobalsInput,
+): {
+  has_available_configure_cli: boolean;
+  configure_type: TrackingConfigureType;
+  configure_availability: TrackingConfigureAvailability;
+} {
+  const agents = input.agents ?? [];
+  const hasAvailableCli = agents.some((a) => a.available === true);
+  const selectedAgent = input.agentId
+    ? agents.find((a) => a.id === input.agentId)
+    : undefined;
+  const selectedAgentAvailable = selectedAgent?.available === true;
+  const byokConfigured = input.byokConfigured === true;
+
+  let configureType: TrackingConfigureType;
+  if (input.mode === 'daemon') {
+    configureType = byokConfigured ? 'both' : 'local_cli';
+  } else if (input.mode === 'api') {
+    configureType = hasAvailableCli ? 'both' : 'byok';
+  } else if (hasAvailableCli && byokConfigured) {
+    configureType = 'both';
+  } else if (hasAvailableCli) {
+    configureType = 'local_cli';
+  } else if (byokConfigured) {
+    configureType = 'byok';
+  } else {
+    configureType = 'none';
+  }
+
+  let configureAvailability: TrackingConfigureAvailability;
+  if (input.mode === 'daemon') {
+    configureAvailability = selectedAgentAvailable
+      ? 'available'
+      : 'unavailable';
+  } else if (input.mode === 'api') {
+    configureAvailability = byokConfigured ? 'available' : 'unavailable';
+  } else if (hasAvailableCli || byokConfigured) {
+    configureAvailability = 'available';
+  } else {
+    configureAvailability = 'unknown';
+  }
+
+  return {
+    has_available_configure_cli: hasAvailableCli,
+    configure_type: configureType,
+    configure_availability: configureAvailability,
+  };
+}
+

@@ -3,6 +3,7 @@ import { useAnalytics } from './analytics/provider';
 import { trackProjectCreateResult } from './analytics/events';
 import { detectClientType } from './analytics/identity';
 import {
+  deriveConfigureGlobals,
   projectKindToTracking,
   fidelityToTracking,
 } from '@open-design/contracts/analytics';
@@ -257,6 +258,36 @@ export function App() {
     if (config.telemetry?.metrics !== true) return;
     analytics.setIdentity(config.installationId ?? null);
   }, [analytics.setIdentity, config.installationId, config.telemetry?.metrics]);
+
+  // v2 analytics requires every event to carry the configure-state
+  // triplet (has_available_configure_cli / configure_type /
+  // configure_availability). We push it into the PostHog global register
+  // whenever the user's execution-mode config or the detected agent list
+  // changes; the next capture inherits the fresh values, so dashboards
+  // can segment by execution setup without per-helper boilerplate.
+  useEffect(() => {
+    const byokConfigured = (() => {
+      const protocols = config.apiProtocolConfigs;
+      if (!protocols) return Boolean(config.apiKey?.trim());
+      return Object.values(protocols).some(
+        (cfg) => Boolean(cfg?.apiKey?.trim()),
+      );
+    })();
+    const globals = deriveConfigureGlobals({
+      mode: config.mode,
+      agentId: config.agentId,
+      agents: agents.map((a) => ({ id: a.id, available: a.available })),
+      byokConfigured,
+    });
+    analytics.setConfigureGlobals(globals);
+  }, [
+    analytics.setConfigureGlobals,
+    config.mode,
+    config.agentId,
+    config.apiKey,
+    config.apiProtocolConfigs,
+    agents,
+  ]);
 
   // Sync theme preference to the <html> element so CSS variables pick it up.
   // useLayoutEffect (vs useEffect) fires before the browser paints, so a

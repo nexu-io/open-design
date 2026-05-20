@@ -190,7 +190,10 @@ import {
   readAnalyticsContext,
   readPublicConfigResponse,
 } from './analytics.js';
-import { agentIdToTracking } from '@open-design/contracts/analytics';
+import {
+  agentIdToTracking,
+  deriveConfigureGlobals,
+} from '@open-design/contracts/analytics';
 import {
   redactSecrets,
   testAgentConnection,
@@ -10523,24 +10526,15 @@ export async function startServer({
       const detectedAgentsForAnalytics = await detectAgents(
         (appCfgForAnalytics as { agentCliEnv?: Record<string, unknown> }).agentCliEnv ?? {},
       ).catch(() => [] as Array<{ id: string; available: boolean }>);
-      const requestedAgentId =
-        typeof reqBody.agentId === 'string' ? reqBody.agentId : null;
-      const requestedAgentRecord = requestedAgentId
-        ? detectedAgentsForAnalytics.find((a) => a.id === requestedAgentId)
-        : undefined;
-      const hasAvailableConfigureCli = detectedAgentsForAnalytics.some(
-        (a) => a.available,
-      );
-      const configureType: 'local_cli' | 'byok' | 'both' | 'none' | 'unknown' =
-        requestedAgentRecord?.available ? 'local_cli' : 'unknown';
-      const configureAvailability: 'available' | 'unavailable' | 'unknown' =
-        requestedAgentRecord
-          ? requestedAgentRecord.available
-            ? 'available'
-            : 'unavailable'
-          : hasAvailableConfigureCli
-            ? 'available'
-            : 'unknown';
+      // BYOK credentials live in the web client (localStorage / store) and
+      // are not visible to the daemon at this layer, so we pass
+      // `byokConfigured: undefined` and let the helper fall back to the
+      // installed-CLI signal. Web-side captures use the same helper with
+      // the full credential view to keep dashboards aligned.
+      const configureGlobals = deriveConfigureGlobals({
+        agentId: typeof reqBody.agentId === 'string' ? reqBody.agentId : null,
+        agents: detectedAgentsForAnalytics,
+      });
       const promptText =
         typeof reqBody.currentPrompt === 'string'
           ? reqBody.currentPrompt
@@ -10557,9 +10551,7 @@ export async function startServer({
       const baseProps: Record<string, unknown> = {
         page_name: 'chat_panel',
         area: 'chat_composer',
-        has_available_configure_cli: hasAvailableConfigureCli,
-        configure_type: configureType,
-        configure_availability: configureAvailability,
+        ...configureGlobals,
         project_id: typeof reqBody.projectId === 'string' ? reqBody.projectId : null,
         conversation_id:
           typeof reqBody.conversationId === 'string' ? reqBody.conversationId : null,
