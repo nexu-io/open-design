@@ -1,0 +1,554 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Suivi — Design System Components</title>
+    <meta name="description" content="Reference fixture for Suivi design system: lavender-teal identity, pill buttons, Inter typography, professional SaaS aesthetic." />
+    <link rel="stylesheet" href="tokens.css" />
+    <style>
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        font-weight: var(--weight-regular);
+        line-height: var(--leading-body);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* Page shell */
+      .page { min-height: 100vh; }
+      .container { max-width: var(--container-max); margin-inline: auto; padding-inline: var(--container-gutter-desktop); }
+      section { padding-block: var(--section-y-desktop); }
+      section + section { border-top: 1px solid var(--border-soft); }
+      @media (max-width: 1023px) { .container { padding-inline: var(--container-gutter-tablet); } section { padding-block: var(--section-y-tablet); } }
+      @media (max-width: 639px) { .container { padding-inline: var(--container-gutter-phone); } section { padding-block: var(--section-y-phone); } }
+
+      /* Typography */
+      h1, h2, h3, h4, h5, h6, p { margin: 0; }
+      h1 { font-size: var(--text-2xl); font-weight: var(--weight-medium); line-height: var(--leading-body); letter-spacing: var(--tracking-normal); }
+      h2 { font-size: var(--text-xl); font-weight: var(--weight-medium); line-height: var(--leading-body); letter-spacing: var(--tracking-tight); }
+      h3 { font-size: var(--text-lg); font-weight: var(--weight-medium); line-height: var(--leading-body); letter-spacing: var(--tracking-normal); }
+      h4 { font-size: var(--text-md); font-weight: var(--weight-medium); line-height: var(--leading-body); letter-spacing: var(--tracking-h4); }
+      h5 { font-size: var(--text-base); font-weight: var(--weight-regular); line-height: var(--leading-body); }
+      h6 { font-size: var(--text-xs); font-weight: var(--weight-medium); line-height: var(--leading-body); text-transform: uppercase; letter-spacing: 0.05em; }
+      .text-muted { color: var(--muted); }
+      .text-accent { color: var(--accent); }
+      .eyebrow { color: var(--meta); font-size: var(--text-xs); font-weight: var(--weight-medium); letter-spacing: 0.08em; text-transform: uppercase; }
+      .lead { max-width: 640px; color: var(--fg-2); font-size: var(--text-md); }
+      .section-title { margin-block-end: var(--space-6); }
+
+      /* Header */
+      .header {
+        display: flex; align-items: center; gap: var(--space-4);
+        height: var(--header-height); padding-inline: var(--space-4);
+        background: var(--surface-nav); color: var(--teal-on);
+      }
+      .header-logo { font-size: var(--text-lg); font-weight: var(--weight-medium); }
+      .header-breadcrumb { font-size: var(--text-sm); opacity: 0.85; display: flex; align-items: center; gap: var(--space-1); }
+      .header-search {
+        flex: 1; max-width: 320px; margin-inline: auto;
+        height: 32px; padding: 0 var(--space-3);
+        background: rgba(255,255,255,0.12); border: none; border-radius: var(--radius-sm);
+        color: var(--teal-on); font: inherit; font-size: var(--text-sm);
+      }
+      .header-search::placeholder { color: rgba(255,255,255,0.6); }
+      .header-actions { display: flex; align-items: center; gap: var(--space-3); margin-inline-start: auto; }
+      .header-icon { width: 20px; height: 20px; border-radius: 4px; background: rgba(255,255,255,0.2); }
+      .header-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--teal-light); }
+
+      /* Buttons */
+      .btn {
+        display: inline-flex; align-items: center; justify-content: center;
+        min-height: 36px; padding: 0 var(--space-5);
+        border: 2px solid transparent; border-radius: var(--radius-pill);
+        font: var(--weight-medium) var(--text-base) / 1 var(--font-body);
+        text-decoration: none; cursor: pointer;
+        transition: background-color var(--motion-fast) var(--ease-standard),
+                    border-color var(--motion-fast) var(--ease-standard),
+                    color var(--motion-fast) var(--ease-standard),
+                    transform var(--motion-fast) var(--ease-standard),
+                    box-shadow var(--motion-fast) var(--ease-standard);
+      }
+      .btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+      .btn-primary { background: var(--accent); color: var(--accent-on); }
+      .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
+      .btn-primary:active { background: var(--accent-active); transform: none; }
+      .btn-primary.disabled { background: var(--silver); color: var(--muted); cursor: not-allowed; }
+      .btn-primary.danger { background: var(--danger); }
+      .btn-secondary { background: transparent; color: var(--accent); border-color: var(--accent); }
+      .btn-secondary:hover { background: var(--accent-surface); }
+      .btn-secondary.disabled { color: var(--muted); border-color: var(--border); cursor: not-allowed; }
+      .btn-tertiary { background: transparent; color: var(--accent); border: none; padding: 0; min-height: auto; font-size: var(--text-sm); }
+      .btn-tertiary:hover { text-decoration: underline; }
+      .btn-tertiary.disabled { color: var(--muted); cursor: not-allowed; }
+      .btn-icon { padding: 0 var(--space-3); gap: var(--space-2); }
+      .btn-icon::before { content: "+"; font-weight: var(--weight-medium); }
+
+      /* Cards */
+      .card {
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: var(--radius-lg); overflow: hidden;
+        box-shadow: var(--elev-flat);
+        transition: box-shadow var(--motion-base) var(--ease-standard);
+      }
+      .card:hover { box-shadow: var(--elev-hover); }
+      .card-thumb { height: 120px; background: linear-gradient(135deg, var(--brand-brilliant-lavender), var(--brand-caribbean)); }
+      .card-body { padding: var(--space-4); }
+      .card-body h4 { margin-block-end: var(--space-1); }
+      .card-body p { color: var(--muted); font-size: var(--text-sm); }
+      .card-footer { display: flex; align-items: center; justify-content: space-between; padding: var(--space-3) var(--space-4); border-top: 1px solid var(--border-soft); }
+      .avatar-group { display: flex; }
+      .avatar-group .avatar { width: 24px; height: 24px; border-radius: 50%; background: var(--mauve); border: 2px solid var(--surface); margin-inline-start: -8px; }
+      .avatar-group .avatar:first-child { margin-inline-start: 0; }
+
+      /* Tags */
+      .tag {
+        display: inline-flex; align-items: center; padding: var(--space-1) var(--space-2);
+        border-radius: var(--radius-xs); font-size: var(--text-sm); font-weight: var(--weight-medium);
+      }
+      .tag-lavender { background: var(--tag-lavender-mist-bg); color: var(--tag-lavender-mist-fg); }
+      .tag-mint { background: var(--tag-mint-bg); color: var(--tag-mint-fg); }
+      .tag-pink { background: var(--tag-pink-bg); color: var(--tag-pink-fg); }
+      .tag-blue { background: var(--tag-blue-bg); color: var(--tag-blue-fg); }
+      .tag-yellow { background: var(--tag-yellow-bg); color: var(--tag-yellow-fg); }
+      .tag-neutral { background: var(--tag-neutral-bg); color: var(--tag-neutral-fg); }
+      .tag-gray { background: var(--tag-gray-bg); color: var(--tag-gray-fg); }
+
+      /* Progress bars */
+      .progress { height: 8px; border-radius: var(--radius-pill); background: var(--border-soft); overflow: hidden; }
+      .progress-fill { height: 100%; border-radius: var(--radius-pill); transition: width var(--motion-base) var(--ease-standard); }
+      .progress-fill.teal { background: var(--brand-shamrock); }
+      .progress-fill.lavender { background: var(--accent); }
+      .progress-segmented { display: flex; gap: 2px; height: 8px; }
+      .progress-segmented .seg { flex: 1; border-radius: var(--radius-xs); }
+      .progress-segmented .seg-1 { background: var(--teal-surface); }
+      .progress-segmented .seg-2 { background: var(--teal-light); }
+      .progress-segmented .seg-3 { background: var(--brand-shamrock); }
+      .progress-segmented .seg-4 { background: var(--brand-caribbean); }
+
+      /* Text fields */
+      .field { display: grid; gap: var(--space-1); }
+      .field label { color: var(--fg-2); font-size: var(--text-sm); font-weight: var(--weight-medium); }
+      .field input, .field textarea {
+        width: 100%; min-height: 40px; padding: var(--space-2) var(--space-3);
+        border: 1px solid var(--border); border-radius: var(--radius-sm);
+        background: var(--surface); color: var(--fg); font: inherit; font-size: var(--text-base);
+        transition: border-color var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard);
+      }
+      .field input:focus, .field textarea:focus { outline: none; box-shadow: var(--focus-ring); border-color: var(--accent); }
+      .field input.disabled { background: var(--bg); color: var(--muted); cursor: not-allowed; }
+      .field input.prefilled { background: var(--accent-surface); color: var(--accent); border-color: var(--accent-light); }
+      .field textarea { min-height: 80px; resize: vertical; }
+
+      /* Switch & Checkbox */
+      .switch { position: relative; width: 36px; height: 20px; border-radius: var(--radius-pill); background: var(--border); cursor: pointer; transition: background var(--motion-fast); }
+      .switch.active { background: var(--brand-caribbean); }
+      .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--surface); transition: transform var(--motion-fast); }
+      .switch.active::after { transform: translateX(16px); }
+      .switch.disabled { opacity: 0.4; cursor: not-allowed; }
+      .checkbox { width: 18px; height: 18px; border: 2px solid var(--border); border-radius: var(--radius-xs); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+      .checkbox.active { background: var(--brand-caribbean); border-color: var(--brand-caribbean); color: white; }
+      .checkbox.active::after { content: "✓"; font-size: 11px; color: white; }
+      .checkbox.disabled { opacity: 0.4; cursor: not-allowed; }
+
+      /* Tabs */
+      .tabs { display: flex; gap: var(--space-4); border-bottom: 1px solid var(--border); padding-block-end: 0; }
+      .tab {
+        padding: var(--space-2) 0; font-size: var(--text-base); font-weight: var(--weight-regular);
+        color: var(--muted); border-bottom: 2px solid transparent; cursor: pointer;
+        transition: color var(--motion-fast), border-color var(--motion-fast);
+      }
+      .tab.active { color: var(--fg); font-weight: var(--weight-medium); border-color: var(--fg); }
+      .tab:hover { color: var(--fg-2); }
+
+      /* Dropdown / Context menu */
+      .dropdown {
+        min-width: 200px; background: var(--surface); border: 1px solid var(--border);
+        border-radius: var(--radius-md); box-shadow: var(--elev-hover); padding: var(--space-2) 0;
+      }
+      .dropdown-item { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); font-size: var(--text-base); cursor: pointer; }
+      .dropdown-item:hover { background: var(--accent-surface); }
+      .dropdown-item .icon-placeholder { width: 16px; height: 16px; border-radius: 3px; background: var(--muted); opacity: 0.3; }
+      .dropdown-divider { height: 1px; background: var(--border-soft); margin: var(--space-1) 0; }
+      .dropdown-header { padding: var(--space-2) var(--space-3); font-size: var(--text-sm); font-weight: var(--weight-medium); color: var(--muted); }
+
+      /* Popup / Modal */
+      .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; }
+      .modal {
+        width: 90%; max-width: 480px; background: var(--surface);
+        border-radius: var(--radius-xl); box-shadow: var(--elev-modal); overflow: hidden;
+      }
+      .modal-dark { background: var(--surface-nav); color: var(--teal-on); padding: var(--space-8); text-align: center; }
+      .modal-dark h2 { color: var(--teal-on); margin-block-end: var(--space-3); }
+      .modal-body { padding: var(--space-6); }
+
+      /* Color picker */
+      .color-picker { padding: var(--space-4); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); }
+      .color-swatches { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-block-start: var(--space-3); }
+      .color-swatch { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--border-soft); cursor: pointer; }
+      .color-swatch:hover { border-color: var(--accent); }
+      .color-hex-input { display: flex; align-items: center; gap: var(--space-2); margin-block-start: var(--space-3); }
+      .color-hex-input input { width: 100px; min-height: 32px; font-family: var(--font-mono); font-size: var(--text-sm); }
+
+      /* Avatars */
+      .avatar { border-radius: 50%; background: var(--mauve); display: flex; align-items: center; justify-content: center; color: white; font-weight: var(--weight-medium); }
+      .avatar-sm { width: 24px; height: 24px; font-size: 10px; }
+      .avatar-md { width: 32px; height: 32px; font-size: 12px; }
+      .avatar-lg { width: 40px; height: 40px; font-size: 14px; }
+
+      /* Utilities */
+      .stack > * + * { margin-block-start: var(--space-4); }
+      .stack-sm > * + * { margin-block-start: var(--space-2); }
+      .row { display: flex; align-items: center; gap: var(--space-3); }
+      .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
+      .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-4); }
+      .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-4); }
+      @media (max-width: 860px) { .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; } }
+
+      /* Demo layout helpers */
+      .demo-section { margin-block-end: var(--space-8); }
+      .demo-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-block-start: var(--space-4); }
+      .demo-box { padding: var(--space-4); border: 1px dashed var(--border); border-radius: var(--radius-md); }
+      .swatch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--space-3); }
+      .swatch-item { display: flex; align-items: center; gap: var(--space-2); }
+      .swatch-color { width: 32px; height: 32px; border-radius: var(--radius-sm); border: 1px solid var(--border); }
+      .swatch-label { font-size: var(--text-sm); }
+      .swatch-label small { display: block; color: var(--muted); font-size: var(--text-xs); }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+
+      <!-- Header Component -->
+      <header class="header">
+        <span class="header-logo">Suivi.</span>
+        <span class="header-breadcrumb">Workspace <span>›</span> Board</span>
+        <input class="header-search" type="search" placeholder="Search..." />
+        <div class="header-actions">
+          <span class="header-icon"></span>
+          <span class="header-icon"></span>
+          <span class="header-icon"></span>
+          <span class="header-avatar"></span>
+        </div>
+      </header>
+
+      <!-- Color Palette -->
+      <section>
+        <div class="container">
+          <div class="section-title">
+            <p class="eyebrow">Foundation</p>
+            <h1>Color Palette</h1>
+            <p class="lead">Lavender-teal identity with paired tag themes and semantic colors.</p>
+          </div>
+
+          <h3>Primary Colors</h3>
+          <div class="swatch-grid demo-row">
+            <div class="swatch-item"><span class="swatch-color" style="background: var(--brand-lavender);"></span><span class="swatch-label">Lavender<small>#BB8FF0</small></span></div>
+            <div class="swatch-item"><span class="swatch-color" style="background: var(--brand-shamrock);"></span><span class="swatch-label">Shamrock Green<small>#0E9E6E</small></span></div>
+            <div class="swatch-item"><span class="swatch-color" style="background: var(--brand-brilliant-lavender);"></span><span class="swatch-label">Brilliant Lavender<small>#F1B1F0</small></span></div>
+            <div class="swatch-item"><span class="swatch-color" style="background: var(--brand-caribbean);"></span><span class="swatch-label">Caribbean Current<small>#006677</small></span></div>
+            <div class="swatch-item"><span class="swatch-color" style="background: var(--brand-maize);"></span><span class="swatch-label">Maize<small>#F8EA75</small></span></div>
+            <div class="swatch-item"><span class="swatch-color" style="background: var(--brand-neon-blue);"></span><span class="swatch-label">Neon Blue<small>#4A69FF</small></span></div>
+          </div>
+
+          <h3 style="margin-top: var(--space-6);">Secondary Colors</h3>
+          <div class="swatch-grid demo-row">
+            <div class="swatch-item"><span class="swatch-color" style="background: var(--mauve);"></span><span class="swatch-label">Mauve<small>#D0AEFE</small></span></div>
+            <div class="swatch-item"><span class="swatch-color" style="background: var(--pale-purple);"></span><span class="swatch-label">Pale Purple<small>#F5E8FF</small></span></div>
+            <div class="swatch-item"><span class="swatch-color" style="background: var(--thistle);"></span><span class="swatch-label">Thistle<small>#F8D7FC</small></span></div>
+            <div class="swatch-item"><span class="swatch-color" style="background: var(--magnolia);"></span><span class="swatch-label">Magnolia<small>#FCE0FE</small></span></div>
+            <div class="swatch-item"><span class="swatch-color" style="background: var(--tiffany-blue);"></span><span class="swatch-label">Tiffany Blue<small>#70DEC3</small></span></div>
+            <div class="swatch-item"><span class="swatch-color" style="background: var(--mint-green);"></span><span class="swatch-label">Mint Green<small>#A9F8ED</small></span></div>
+            <div class="swatch-item"><span class="swatch-color" style="background: var(--uranian-blue);"></span><span class="swatch-label">Uranian Blue<small>#A3E0FF</small></span></div>
+            <div class="swatch-item"><span class="swatch-color" style="background: var(--alice-blue);"></span><span class="swatch-label">Alice Blue<small>#DAF0FF</small></span></div>
+            <div class="swatch-item"><span class="swatch-color" style="background: var(--beaver);"></span><span class="swatch-label">Beaver<small>#A8A978</small></span></div>
+            <div class="swatch-item"><span class="swatch-color" style="background: var(--silver);"></span><span class="swatch-label">Silver<small>#CAC8AC</small></span></div>
+          </div>
+
+          <h3 style="margin-top: var(--space-6);">Tag Themes</h3>
+          <div class="demo-row">
+            <span class="tag tag-lavender">Lavender</span>
+            <span class="tag tag-mint">Complete</span>
+            <span class="tag tag-pink">Urgent</span>
+            <span class="tag tag-blue">Info</span>
+            <span class="tag tag-yellow">Warning</span>
+            <span class="tag tag-neutral">Archived</span>
+            <span class="tag tag-gray">Disabled</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Typography -->
+      <section>
+        <div class="container">
+          <div class="section-title">
+            <p class="eyebrow">Foundation</p>
+            <h1>Typography</h1>
+            <p class="lead">Inter font family, Regular (400) and Medium (500) weights only. Compact 100% line height.</p>
+          </div>
+          <div class="stack">
+            <div><h6>H6 — MEDIUM 10px</h6></div>
+            <div><h5>H5 — Regular 14px</h5></div>
+            <div><h4>H4 — Medium 16px (tracking -0.22px)</h4></div>
+            <div><h3>H3 — Medium 18px</h3></div>
+            <div><h2>H2 — Medium 22px (tracking -1px)</h2></div>
+            <div><h1>H1 — Medium 32px</h1></div>
+            <div style="margin-top: var(--space-6);"><p style="font-size: var(--text-md);">P1 — Regular 16px body text for primary content paragraphs.</p></div>
+            <div><p style="font-size: var(--text-base); font-weight: var(--weight-medium); line-height: var(--leading-relaxed);">P2 — Medium 14px, 110% line height for compact secondary body.</p></div>
+            <div><p style="font-size: var(--text-sm);">P3 — Regular 12px captions and metadata.</p></div>
+          </div>
+          <div class="demo-row" style="margin-top: var(--space-6);">
+            <span style="color: var(--fg);">■ Black #000</span>
+            <span style="color: var(--muted);">■ Ship Cove #6E6E8E</span>
+            <span style="color: #d0a0f0;">■ Brilliant Lavender #D0A0F0</span>
+            <span style="color: var(--surface); background: var(--fg); padding: 2px 8px; border-radius: 4px;">■ White #FFF</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Buttons -->
+      <section>
+        <div class="container">
+          <div class="section-title">
+            <p class="eyebrow">Components</p>
+            <h1>Buttons</h1>
+            <p class="lead">Pill-shaped with full border-radius. Primary, Secondary, Tertiary variants with state system.</p>
+          </div>
+
+          <h3>Primary</h3>
+          <div class="demo-row">
+            <a class="btn btn-primary" href="#">Default</a>
+            <a class="btn btn-primary" href="#" style="background: var(--accent-hover);">Hover</a>
+            <a class="btn btn-primary" href="#" style="background: var(--accent-active);">Press</a>
+            <a class="btn btn-primary disabled">Disabled</a>
+            <a class="btn btn-primary danger" href="#">Delete</a>
+            <a class="btn btn-primary btn-icon" href="#">Add item</a>
+          </div>
+
+          <h3 style="margin-top: var(--space-6);">Secondary</h3>
+          <div class="demo-row">
+            <a class="btn btn-secondary" href="#">Default</a>
+            <a class="btn btn-secondary" href="#" style="background: var(--accent-surface);">Hover</a>
+            <a class="btn btn-secondary disabled">Disabled</a>
+          </div>
+
+          <h3 style="margin-top: var(--space-6);">Tertiary</h3>
+          <div class="demo-row">
+            <a class="btn btn-tertiary" href="#">Link action</a>
+            <a class="btn btn-tertiary disabled">Disabled link</a>
+          </div>
+        </div>
+      </section>
+
+      <!-- Cards -->
+      <section>
+        <div class="container">
+          <div class="section-title">
+            <p class="eyebrow">Components</p>
+            <h1>Cards</h1>
+            <p class="lead">Template and board cards with thumbnail, title, tags, and avatar groups.</p>
+          </div>
+          <div class="grid-3">
+            <article class="card">
+              <div class="card-thumb"></div>
+              <div class="card-body">
+                <h4>Project Template</h4>
+                <p>Sprint planning board with Kanban views and progress tracking.</p>
+              </div>
+              <div class="card-footer">
+                <span class="tag tag-lavender">Template</span>
+                <div class="avatar-group">
+                  <span class="avatar avatar-sm">T</span>
+                  <span class="avatar avatar-sm" style="background: var(--tiffany-blue);">A</span>
+                  <span class="avatar avatar-sm" style="background: var(--brand-neon-blue); color: white;">M</span>
+                </div>
+              </div>
+            </article>
+            <article class="card">
+              <div class="card-thumb" style="background: linear-gradient(135deg, var(--tiffany-blue), var(--brand-caribbean));"></div>
+              <div class="card-body">
+                <h4>Marketing Board</h4>
+                <p>Campaign tracker with deadlines and asset management.</p>
+              </div>
+              <div class="card-footer">
+                <span class="tag tag-mint">Active</span>
+                <div class="avatar-group">
+                  <span class="avatar avatar-sm" style="background: var(--brand-shamrock); color: white;">S</span>
+                  <span class="avatar avatar-sm">J</span>
+                </div>
+              </div>
+            </article>
+            <article class="card">
+              <div class="card-thumb" style="background: linear-gradient(135deg, var(--brand-maize), var(--brand-lavender));"></div>
+              <div class="card-body">
+                <h4>Product Roadmap</h4>
+                <p>Quarterly goals with feature prioritization matrix.</p>
+              </div>
+              <div class="card-footer">
+                <span class="tag tag-blue">Planning</span>
+                <div class="avatar-group">
+                  <span class="avatar avatar-sm" style="background: var(--brand-neon-blue); color: white;">P</span>
+                </div>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- Progress Bars -->
+      <section>
+        <div class="container">
+          <div class="section-title">
+            <p class="eyebrow">Components</p>
+            <h1>Progress Bars</h1>
+            <p class="lead">Linear and segmented variants with teal and lavender fills.</p>
+          </div>
+          <div class="stack" style="max-width: 480px;">
+            <div>
+              <p class="text-muted" style="font-size: var(--text-sm); margin-bottom: var(--space-1);">Linear — Teal (68%)</p>
+              <div class="progress"><div class="progress-fill teal" style="width: 68%;"></div></div>
+            </div>
+            <div>
+              <p class="text-muted" style="font-size: var(--text-sm); margin-bottom: var(--space-1);">Linear — Lavender (45%)</p>
+              <div class="progress"><div class="progress-fill lavender" style="width: 45%;"></div></div>
+            </div>
+            <div>
+              <p class="text-muted" style="font-size: var(--text-sm); margin-bottom: var(--space-1);">Segmented (4 phases)</p>
+              <div class="progress-segmented">
+                <span class="seg seg-1"></span>
+                <span class="seg seg-2"></span>
+                <span class="seg seg-3"></span>
+                <span class="seg seg-4"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Text Fields -->
+      <section>
+        <div class="container">
+          <div class="section-title">
+            <p class="eyebrow">Components</p>
+            <h1>Text Fields</h1>
+            <p class="lead">Input states: Regular, Focused, Filled, Disabled, Prefilled. Plus textarea and search.</p>
+          </div>
+          <div class="grid-2" style="max-width: 640px;">
+            <div class="field"><label>Regular</label><input type="text" placeholder="Indicator text" /></div>
+            <div class="field"><label>Filled</label><input type="text" value="Content entered" /></div>
+            <div class="field"><label>Disabled</label><input type="text" value="Cannot edit" class="disabled" disabled /></div>
+            <div class="field"><label>Prefilled</label><input type="text" value="Locked value" class="prefilled" readonly /></div>
+            <div class="field" style="grid-column: 1 / -1;"><label>Textarea</label><textarea placeholder="Multi-line content..."></textarea></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Switch, Checkbox, Tabs -->
+      <section>
+        <div class="container">
+          <div class="section-title">
+            <p class="eyebrow">Components</p>
+            <h1>Controls</h1>
+            <p class="lead">Switches, checkboxes, and tab navigation with active/disabled states.</p>
+          </div>
+
+          <h3>Switch</h3>
+          <div class="demo-row">
+            <div class="switch active"></div>
+            <span class="text-muted" style="font-size: var(--text-sm);">Active</span>
+            <div class="switch"></div>
+            <span class="text-muted" style="font-size: var(--text-sm);">Regular</span>
+            <div class="switch disabled"></div>
+            <span class="text-muted" style="font-size: var(--text-sm);">Disabled</span>
+          </div>
+
+          <h3 style="margin-top: var(--space-6);">Checkbox</h3>
+          <div class="demo-row">
+            <div class="checkbox active"></div>
+            <span class="text-muted" style="font-size: var(--text-sm);">Active</span>
+            <div class="checkbox"></div>
+            <span class="text-muted" style="font-size: var(--text-sm);">Regular</span>
+            <div class="checkbox disabled"></div>
+            <span class="text-muted" style="font-size: var(--text-sm);">Disabled</span>
+          </div>
+
+          <h3 style="margin-top: var(--space-6);">Tabs</h3>
+          <div class="tabs">
+            <span class="tab active">Overview</span>
+            <span class="tab">Activity</span>
+            <span class="tab">Settings</span>
+            <span class="tab" style="color: var(--accent); font-size: var(--text-sm);">+ Add Tab</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Dropdown -->
+      <section>
+        <div class="container">
+          <div class="section-title">
+            <p class="eyebrow">Components</p>
+            <h1>Dropdown / Context Menu</h1>
+            <p class="lead">Navigation dropdowns, section selectors, and context action menus.</p>
+          </div>
+          <div class="grid-2" style="max-width: 500px;">
+            <div class="dropdown">
+              <div class="dropdown-header">Views</div>
+              <div class="dropdown-item"><span class="icon-placeholder"></span> Dashboard</div>
+              <div class="dropdown-item"><span class="icon-placeholder"></span> Kanban</div>
+              <div class="dropdown-item"><span class="icon-placeholder"></span> Table</div>
+              <div class="dropdown-divider"></div>
+              <div class="dropdown-header">Actions</div>
+              <div class="dropdown-item"><span class="icon-placeholder"></span> Duplicate</div>
+              <div class="dropdown-item"><span class="icon-placeholder"></span> Rename</div>
+              <div class="dropdown-item" style="color: var(--danger);"><span class="icon-placeholder" style="background: var(--danger);"></span> Delete</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Avatars -->
+      <section>
+        <div class="container">
+          <div class="section-title">
+            <p class="eyebrow">Components</p>
+            <h1>Avatars</h1>
+            <p class="lead">Circular avatars in S/M/L sizes with group stacking.</p>
+          </div>
+          <div class="demo-row">
+            <span class="avatar avatar-sm">T</span>
+            <span class="avatar avatar-md">TB</span>
+            <span class="avatar avatar-lg">T</span>
+            <span style="margin-left: var(--space-4);"></span>
+            <div class="avatar-group">
+              <span class="avatar avatar-md">A</span>
+              <span class="avatar avatar-md" style="background: var(--tiffany-blue);">B</span>
+              <span class="avatar avatar-md" style="background: var(--brand-shamrock); color: white;">C</span>
+              <span class="avatar avatar-md" style="background: var(--brand-neon-blue); color: white;">+3</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Brand Gradient & Shapes -->
+      <section>
+        <div class="container">
+          <div class="section-title">
+            <p class="eyebrow">Brand</p>
+            <h1>Gradient & Identity</h1>
+            <p class="lead">The lavender-to-teal gradient defines Suivi's brand illustrations and hero backgrounds.</p>
+          </div>
+          <div class="grid-2">
+            <div style="height: 160px; border-radius: var(--radius-lg); background: linear-gradient(135deg, var(--brand-brilliant-lavender), var(--brand-caribbean)); display: flex; align-items: center; justify-content: center; color: white; font-size: var(--text-xl); font-weight: var(--weight-medium);">Lavender → Teal</div>
+            <div style="height: 160px; border-radius: var(--radius-lg); background: linear-gradient(180deg, var(--pale-purple), var(--mint-green)); display: flex; align-items: center; justify-content: center; color: var(--brand-caribbean); font-size: var(--text-xl); font-weight: var(--weight-medium);">Soft variant</div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </body>
+</html>

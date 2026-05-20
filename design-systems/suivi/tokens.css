@@ -1,0 +1,151 @@
+/* design-systems/suivi/tokens.css
+ * Structured token bindings for Suivi.
+ * Lavender-teal identity, pill buttons, Inter typography, professional SaaS aesthetic.
+ */
+
+:root {
+  /* Surfaces */
+  --bg: #f8f6fc;
+  --surface: #ffffff;
+  --surface-warm: #f5e8ff;
+  --surface-nav: #006677;
+
+  /* Foreground / Text */
+  --fg: #000000;
+  --fg-2: #333333;
+  --muted: #6e6e8e;
+  --meta: #4a69ff;
+
+  /* Borders */
+  --border: #e0e2e6;
+  --border-soft: #f0eef4;
+
+  /* Accent: Lavender */
+  --accent: #bb8ff0;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 10%);
+  --accent-active: color-mix(in oklab, var(--accent), black 18%);
+  --accent-light: #d0aefe;
+  --accent-surface: #f5e8ff;
+
+  /* Secondary accent: Teal */
+  --teal: #006677;
+  --teal-on: #ffffff;
+  --teal-hover: color-mix(in oklab, var(--teal), black 10%);
+  --teal-light: #70dec3;
+  --teal-surface: #a9f8ed;
+
+  /* Semantic */
+  --success: #0e9e6e;
+  --success-surface: #d7fce2;
+  --warn: #f8ea75;
+  --warn-text: #a8a928;
+  --danger: #e83064;
+  --danger-surface: #fbeafd;
+
+  /* Brand */
+  --brand-lavender: #bb8ff0;
+  --brand-brilliant-lavender: #f1b1f0;
+  --brand-caribbean: #006677;
+  --brand-shamrock: #0e9e6e;
+  --brand-maize: #f8ea75;
+  --brand-neon-blue: #4a69ff;
+
+  /* Secondary palette */
+  --mauve: #d0aefe;
+  --pale-purple: #f5e8ff;
+  --thistle: #f8d7fc;
+  --magnolia: #fce0fe;
+  --tiffany-blue: #70dec3;
+  --mint-green: #a9f8ed;
+  --uranian-blue: #a3e0ff;
+  --alice-blue: #daf0ff;
+  --beaver: #a8a978;
+  --silver: #cac8ac;
+
+  /* Typography */
+  --font-display: Inter, -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-body: Inter, -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, monospace;
+
+  --text-xs: 10px;
+  --text-sm: 12px;
+  --text-base: 14px;
+  --text-md: 16px;
+  --text-lg: 18px;
+  --text-xl: 22px;
+  --text-2xl: 32px;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+
+  --leading-body: 1.0;
+  --leading-relaxed: 1.1;
+  --tracking-tight: -1px;
+  --tracking-h4: -0.22px;
+  --tracking-normal: 0;
+
+  /* Spacing (8px base) */
+  --space-0: 0px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  --section-y-desktop: 48px;
+  --section-y-tablet: 32px;
+  --section-y-phone: 24px;
+
+  /* Radius */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 24px;
+  --radius-pill: 9999px;
+
+  /* Elevation */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 4px 12px rgba(0, 102, 119, 0.08);
+  --elev-hover: 0 8px 24px rgba(0, 102, 119, 0.12);
+  --elev-modal: 0 16px 48px rgba(0, 0, 0, 0.16);
+
+  /* Focus */
+  --focus-ring: 0 0 0 3px rgba(187, 143, 240, 0.35);
+
+  /* Motion */
+  --motion-fast: 120ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Layout */
+  --container-max: 1200px;
+  --container-gutter-desktop: 32px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+  --header-height: 48px;
+
+  /* Tag themes (bg / accent pairs) */
+  --tag-lavender-mist-bg: #f1e1ff;
+  --tag-lavender-mist-fg: #bb8ff0;
+  --tag-lavender-bg: #e0d0ff;
+  --tag-lavender-fg: #6926ff;
+  --tag-mint-bg: #d7fce2;
+  --tag-mint-fg: #0e9e6e;
+  --tag-pink-bg: #fbeafd;
+  --tag-pink-fg: #e83064;
+  --tag-blue-bg: #daf0ff;
+  --tag-blue-fg: #4a69ff;
+  --tag-yellow-bg: #f6f7c6;
+  --tag-yellow-fg: #a8a928;
+  --tag-neutral-bg: #e0e0d6;
+  --tag-neutral-fg: #b5b97b;
+  --tag-gray-bg: #f2eeed;
+  --tag-gray-fg: #a9a9c2;
+}
