@@ -21,9 +21,18 @@ import path from 'node:path';
 // a `previewUrl` (or `null` when the underlying skill has no `example.html`).
 // ---------------------------------------------------------------------------
 
-const PREVIEWS_ROOT = path.resolve(
-  fileURLToPath(new URL('../../public/previews', import.meta.url)),
-);
+const PREVIEWS_ROOT_CANDIDATES = [
+  // `pnpm --filter @open-design/landing-page build` may keep cwd at the
+  // workspace root, while direct package scripts run from the app root.
+  path.resolve(process.cwd(), 'apps/landing-page/public/previews'),
+  path.resolve(process.cwd(), 'public/previews'),
+  // Keep the source-relative path as a final fallback for local dev.
+  path.resolve(fileURLToPath(new URL('../../public/previews', import.meta.url))),
+] as const;
+
+function previewRoot(): string | null {
+  return PREVIEWS_ROOT_CANDIDATES.find((dir) => existsSync(dir)) ?? null;
+}
 
 /**
  * Map of `slug → filename`, e.g. `'kami-deck' → 'kami-deck.webp'`.
@@ -36,7 +45,9 @@ const PREVIEWS_ROOT = path.resolve(
  * template asset).
  */
 function listPreviews(bucket: 'skills' | 'systems' | 'templates'): Map<string, string> {
-  const dir = path.join(PREVIEWS_ROOT, bucket);
+  const root = previewRoot();
+  if (!root) return new Map();
+  const dir = path.join(root, bucket);
   if (!existsSync(dir)) return new Map();
   const map = new Map<string, string>();
   for (const file of readdirSync(dir)) {
@@ -396,14 +407,18 @@ export async function getCraftRecords(): Promise<ReadonlyArray<CraftRecord>> {
 }
 
 // ---------------------------------------------------------------------------
-// Templates — Live Artifacts + skills with `mode: template`
+// Templates — renderable design templates + legacy Live Artifacts
 // ---------------------------------------------------------------------------
 
 export interface TemplateRecord {
   slug: string;
   name: string;
   summary: string;
-  origin: 'live-artifact' | 'skill';
+  origin: 'design-template' | 'live-artifact';
+  mode?: string;
+  platform?: string;
+  scenario?: string;
+  featured?: number;
   source: string;
   detailHref: string;
   /** Skill body / template README body (Markdown). */
@@ -412,6 +427,44 @@ export interface TemplateRecord {
 }
 
 export type TemplateEntry = CollectionEntry<'templates'>;
+export type DesignTemplateEntry = CollectionEntry<'designTemplates'>;
+
+export function shapeDesignTemplate(
+  entry: DesignTemplateEntry,
+  previews: Map<string, string>,
+): TemplateRecord {
+  const slug = deriveSkillSlug(entry.id);
+  const data = entry.data as {
+    name?: string;
+    description?: string;
+    od?: {
+      mode?: string;
+      platform?: string;
+      scenario?: string;
+      featured?: number;
+    };
+  };
+  const body = entry.body ?? '';
+  const summary =
+    firstParagraph(data.description) ||
+    extractFirstProseParagraph(body) ||
+    'Open Design renderable design template.';
+
+  return {
+    slug,
+    name: data.name ?? titleizeSlug(slug),
+    summary,
+    origin: 'design-template',
+    mode: data.od?.mode,
+    platform: data.od?.platform,
+    scenario: data.od?.scenario,
+    featured: data.od?.featured,
+    source: `${REPO_TREE}/design-templates/${slug}`,
+    detailHref: `/templates/${slug}/`,
+    body,
+    previewUrl: previewUrlFor('templates', slug, previews),
+  };
+}
 
 export function shapeLiveArtifactTemplate(
   entry: TemplateEntry,
@@ -438,6 +491,8 @@ export function shapeLiveArtifactTemplate(
     name: cleanH1 || titleizeSlug(slug),
     summary,
     origin: 'live-artifact',
+    mode: 'template',
+    scenario: 'live-artifacts',
     source: `${REPO_TREE}/templates/live-artifacts/${slug}`,
     detailHref: `/templates/${liveSlug}/`,
     body,
@@ -447,28 +502,21 @@ export function shapeLiveArtifactTemplate(
 
 export async function getTemplateRecords(): Promise<ReadonlyArray<TemplateRecord>> {
   const previews = listPreviews('templates');
+  const designEntries = await getCollection('designTemplates');
+  const designRecords = designEntries.map((entry) => shapeDesignTemplate(entry, previews));
+
   const liveEntries = await getCollection('templates');
   const liveRecords = liveEntries.map((entry) => shapeLiveArtifactTemplate(entry, previews));
 
-  const skillRecords = await getSkillRecords();
-  const skillTemplates: TemplateRecord[] = skillRecords
-    .filter((s) => s.mode === 'template')
-    .map((s) => ({
-      slug: `skill-${s.slug}`,
-      name: s.name,
-      summary: firstParagraph(s.description),
-      origin: 'skill' as const,
-      source: s.source,
-      detailHref: `/skills/${s.slug}/`,
-      body: s.body,
-      // Templates render skill-mode skill thumbnails reusing the
-      // /previews/skills/ tree (no separate render).
-      previewUrl: s.previewUrl,
-    }));
-
-  return [...liveRecords, ...skillTemplates].sort((a, b) =>
-    a.name.localeCompare(b.name),
-  );
+  return [...designRecords, ...liveRecords].sort((a, b) => {
+    // Keep explicitly featured templates first, then group the canonical
+    // design-template catalogue ahead of legacy live-artifact shims.
+    const af = a.featured ?? Number.POSITIVE_INFINITY;
+    const bf = b.featured ?? Number.POSITIVE_INFINITY;
+    if (af !== bf) return af - bf;
+    if (a.origin !== b.origin) return a.origin === 'design-template' ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
 }
 
 // ---------------------------------------------------------------------------

@@ -14,7 +14,7 @@
 //     metadata so project creation can still pass JSON cleanly.
 //   - Default values pre-fill the field on mount.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { InputFieldSpec } from '@open-design/contracts';
 
 interface Props {
@@ -26,11 +26,17 @@ interface Props {
 
 export function PluginInputsForm(props: Props) {
   const fields = props.fields ?? [];
+  const onValidityChangeRef = useRef(props.onValidityChange);
+  const lastValidityRef = useRef<boolean | null>(null);
   const required = useMemo(
     () => fields.filter((f) => f.required === true).map((f) => f.name),
     [fields],
   );
   const [values, setValues] = useState<Record<string, unknown>>(props.values ?? {});
+
+  useEffect(() => {
+    onValidityChangeRef.current = props.onValidityChange;
+  }, [props.onValidityChange]);
 
   useEffect(() => {
     setValues(props.values ?? {});
@@ -60,8 +66,10 @@ export function PluginInputsForm(props: Props) {
       const v = values[name];
       return v !== undefined && v !== null && v !== '';
     });
-    props.onValidityChange?.(valid);
-  }, [values, required, props]);
+    if (lastValidityRef.current === valid) return;
+    lastValidityRef.current = valid;
+    onValidityChangeRef.current?.(valid);
+  }, [values, required]);
 
   if (fields.length === 0) return null;
 
@@ -99,6 +107,7 @@ function renderField(
 ) {
   const type = fieldType(field);
   if (type === 'select' && Array.isArray(field.options)) {
+    const optionLabels = optionLabelMap(field);
     return (
       <select
         className="plugin-inputs-form__input"
@@ -109,7 +118,7 @@ function renderField(
         <option value="">{field.placeholder ?? 'Select…'}</option>
         {field.options.map((opt) => (
           <option key={opt} value={opt}>
-            {opt}
+            {optionLabels[opt] ?? opt}
           </option>
         ))}
       </select>
@@ -191,6 +200,13 @@ function fieldType(field: InputFieldSpec): string {
   const rawType = (field as { type?: unknown }).type;
   const raw = typeof rawType === 'string' ? rawType : 'string';
   return raw === 'upload' ? 'file' : raw;
+}
+
+function optionLabelMap(field: InputFieldSpec): Record<string, string> {
+  const labels = (field as { optionLabels?: unknown }).optionLabels;
+  return labels && typeof labels === 'object' && !Array.isArray(labels)
+    ? labels as Record<string, string>
+    : {};
 }
 
 function hasFieldValue(value: unknown): boolean {

@@ -168,6 +168,16 @@ function formatRunTimestamp(ts: number): string {
   });
 }
 
+function runFailureReason(run: {
+  status: RoutineRun['status'];
+  error?: string | null;
+  summary?: string | null;
+} | null | undefined): string | null {
+  if (!run || run.status !== 'failed') return null;
+  const reason = (run.error || run.summary || '').trim();
+  return reason || null;
+}
+
 type FormState = {
   name: string;
   prompt: string;
@@ -192,6 +202,34 @@ function emptyForm(): FormState {
     mode: 'create_each_run',
     projectId: '',
   };
+}
+
+function formFromRoutine(routine: Routine): FormState {
+  const base = emptyForm();
+  const schedule = routine.schedule;
+  if (schedule.kind === 'hourly') {
+    base.kind = 'hourly';
+    base.minute = schedule.minute;
+  } else if (schedule.kind === 'weekly') {
+    base.kind = 'weekly';
+    base.weekday = schedule.weekday;
+    base.time = schedule.time;
+    base.timezone = schedule.timezone;
+  } else {
+    base.kind = schedule.kind;
+    base.time = schedule.time;
+    base.timezone = schedule.timezone;
+  }
+  if (routine.target.mode === 'reuse') {
+    base.mode = 'reuse';
+    base.projectId = routine.target.projectId;
+  } else {
+    base.mode = 'create_each_run';
+    base.projectId = '';
+  }
+  base.name = routine.name;
+  base.prompt = routine.prompt;
+  return base;
 }
 
 function buildSchedule(form: FormState): RoutineSchedule {
@@ -340,38 +378,44 @@ function RunHistory({ routineId, refreshKey, onClose }: { routineId: string; ref
 
   return (
     <ul className="routines-history">
-      {runs.map((r) => (
-        <li key={r.id} className="routines-history-row">
-          <StatusPill status={r.status} />
-          <span className="routines-history-time">{formatRunTimestamp(r.startedAt)}</span>
-          <span className="routines-history-trigger">
-            {r.trigger === 'manual' ? 'manual' : 'scheduled'}
-          </span>
-          <button
-            type="button"
-            className="routines-history-link"
-            onClick={() => {
-              // Issue #1505: deep-link to this run's specific
-              // conversation, not just the project root. Without the
-              // conversation id, parallel runs that share a project
-              // (reuse mode) all resolve to the same default
-              // conversation in the project view, which made earlier
-              // runs look "absorbed" by the latest one.
-              navigate({
-                kind: 'project',
-                projectId: r.projectId,
-                conversationId: r.conversationId ?? null,
-                fileName: null,
-              });
-              onClose?.();
-            }}
-            title="Open the project this run wrote to"
-          >
-            Open project
-            <Icon name="chevron-right" size={12} />
-          </button>
-        </li>
-      ))}
+      {runs.map((r) => {
+        const failureReason = runFailureReason(r);
+        return (
+          <li key={r.id} className="routines-history-row">
+            <StatusPill status={r.status} />
+            <span className="routines-history-time">{formatRunTimestamp(r.startedAt)}</span>
+            <span className="routines-history-trigger">
+              {r.trigger === 'manual' ? 'manual' : 'scheduled'}
+            </span>
+            <button
+              type="button"
+              className="routines-history-link"
+              onClick={() => {
+                // Issue #1505: deep-link to this run's specific
+                // conversation, not just the project root. Without the
+                // conversation id, parallel runs that share a project
+                // (reuse mode) all resolve to the same default
+                // conversation in the project view, which made earlier
+                // runs look "absorbed" by the latest one.
+                navigate({
+                  kind: 'project',
+                  projectId: r.projectId,
+                  conversationId: r.conversationId ?? null,
+                  fileName: null,
+                });
+                onClose?.();
+              }}
+              title="Open the project this run wrote to"
+            >
+              Open project
+              <Icon name="chevron-right" size={12} />
+            </button>
+            {failureReason ? (
+              <div className="routines-history-error">{failureReason}</div>
+            ) : null}
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -384,6 +428,7 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -452,16 +497,22 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
         target,
         enabled: true,
       };
-      const res = await fetch('/api/routines', {
-        method: 'POST',
+      const isEdit = editingId !== null;
+      const url = isEdit ? `/api/routines/${editingId}` : '/api/routines';
+      const payload = isEdit
+        ? { name: body.name, prompt: body.prompt, schedule: body.schedule, target: body.target }
+        : body;
+      const res = await fetch(url, {
+        method: isEdit ? 'PATCH' : 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
-        throw new Error(j.error || `create failed: ${res.status}`);
+        throw new Error(j.error || `${isEdit ? 'update' : 'create'} failed: ${res.status}`);
       }
       setShowForm(false);
+      setEditingId(null);
       setForm(emptyForm());
       void refresh();
     } catch (err) {
@@ -512,8 +563,8 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
 
   const remove = async (id: string) => {
     if (!(await confirmDialog({
-      title: 'Delete routine',
-      message: 'Delete this routine? Past runs and their projects are kept.',
+      title: 'Delete automation',
+      message: 'Delete this automation? Past runs and their projects are kept.',
       confirmLabel: 'Delete',
       cancelLabel: 'Cancel',
       danger: true,
@@ -538,7 +589,7 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
     <section className="settings-section routines-section">
       <div className="section-head">
         <div>
-          <h3>Routines</h3>
+          <h3>Automations</h3>
         </div>
         {!showForm ? (
           <button
@@ -550,7 +601,7 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
             }}
           >
             <Icon name="plus" size={14} />
-            <span>New routine</span>
+            <span>New automation</span>
           </button>
         ) : null}
       </div>
@@ -636,13 +687,16 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
               className="btn"
               onClick={() => {
                 setShowForm(false);
+                setEditingId(null);
                 setForm(emptyForm());
               }}
             >
               Cancel
             </button>
             <button type="submit" className="btn btn-primary" disabled={submitting}>
-              {submitting ? 'Creating…' : 'Create'}
+              {editingId
+                ? submitting ? 'Saving…' : 'Save'
+                : submitting ? 'Creating…' : 'Create'}
             </button>
           </div>
         </form>
@@ -652,8 +706,8 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
         <div className="routines-empty">Loading…</div>
       ) : routines.length === 0 ? (
         <div className="routines-empty">
-          <strong>No routines yet.</strong>
-          <p>Click <em>New routine</em> to schedule an unattended agent run.</p>
+          <strong>No automations yet.</strong>
+          <p>Click <em>New automation</em> to schedule an unattended agent run.</p>
         </div>
       ) : (
         <ul className="routines-list">
@@ -664,6 +718,7 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
                 : '→ new project each run';
             const isBusy = busyId === r.id;
             const isExpanded = expandedId === r.id;
+            const failureReason = runFailureReason(r.lastRun);
             return (
               <li key={r.id} className={`routines-card routines-item${r.enabled ? '' : ' is-disabled'}`}>
                 <div className="routines-item-head">
@@ -689,6 +744,9 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
                         </>
                       ) : null}
                     </div>
+                    {failureReason ? (
+                      <div className="routines-item-error">{failureReason}</div>
+                    ) : null}
                   </div>
                   <div className="routines-item-actions">
                     <button
@@ -698,6 +756,18 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
                       disabled={isBusy}
                     >
                       Run now
+                    </button>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => {
+                        setForm(formFromRoutine(r));
+                        setEditingId(r.id);
+                        setShowForm(true);
+                      }}
+                      disabled={isBusy}
+                    >
+                      Edit
                     </button>
                     <button
                       type="button"
@@ -720,7 +790,7 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
                       className="btn btn-ghost btn-danger"
                       onClick={() => remove(r.id)}
                       disabled={isBusy}
-                      title="Delete this routine"
+                      title="Delete this automation"
                     >
                       Delete
                     </button>

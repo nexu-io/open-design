@@ -1,6 +1,6 @@
-// Capability-detected wrapper around the Electron shell.openPath
+// Capability-detected wrapper around the Open Design host shell.openPath
 // bridge for the Continue in CLI button (#451). On desktop builds the
-// preload exposes window.electronAPI.openPath; the renderer hands it
+// host bridge exposes shell.openPath; the renderer hands it
 // a *project ID* (not a path) and the desktop main process asks the
 // daemon for the canonical resolvedDir before forwarding to
 // shell.openPath. The bridge opens the OS file manager at the
@@ -8,44 +8,39 @@
 // paths; it is NOT a terminal launcher). On the browser fallback,
 // the hook reports `web-fallback` so the caller can render a
 // manual-instruction toast naming the working directory.
-//
-// Note that shell.openPath resolves to the empty string on success and
-// to a non-empty error string on failure; we treat any non-empty
-// string return as `ok: false` so the caller can render the manual
-// fallback toast.
 
 import { useMemo } from 'react';
+import {
+  isOpenDesignHostAvailable,
+  openHostProjectPath,
+} from '@open-design/host';
 
 export interface TerminalLaunchResult {
-  kind: 'electron' | 'web-fallback';
+  kind: 'host' | 'web-fallback';
   ok: boolean;
 }
 
 export interface TerminalLauncher {
-  isElectron: boolean;
+  isHost: boolean;
   open: (projectId: string) => Promise<TerminalLaunchResult>;
 }
 
 export function useTerminalLaunch(): TerminalLauncher {
   return useMemo<TerminalLauncher>(() => {
-    const isElectron =
-      typeof window !== 'undefined' &&
-      typeof window.electronAPI?.openPath === 'function';
+    const isHost = isOpenDesignHostAvailable();
 
     async function open(projectId: string): Promise<TerminalLaunchResult> {
-      if (!isElectron) {
+      if (!isHost) {
         return { kind: 'web-fallback', ok: true };
       }
       try {
-        const out = await window.electronAPI!.openPath!(projectId);
-        // Electron's shell.openPath resolves to '' on success.
-        const ok = typeof out === 'string' ? out.length === 0 : true;
-        return { kind: 'electron', ok };
+        const result = await openHostProjectPath(projectId);
+        return { kind: 'host', ok: result.ok };
       } catch {
-        return { kind: 'electron', ok: false };
+        return { kind: 'host', ok: false };
       }
     }
 
-    return { isElectron, open };
+    return { isHost, open };
   }, []);
 }

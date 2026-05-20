@@ -16,7 +16,11 @@ import { describe, expect, it } from 'vitest';
 
 import {
   isDesignTokenChannelEnabled,
+  listDesignSystems,
+  readDesignSystem,
   readDesignSystemAssets,
+  readDesignSystemPackageInfo,
+  readDesignSystemPullFile,
   resolveDesignSystemAssets,
 } from '../src/design-systems.js';
 
@@ -27,6 +31,29 @@ function fresh(): string {
 function brandDir(root: string, id: string): string {
   const dir = path.join(root, id);
   mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+function writeDesignSystemProject(
+  root: string,
+  id: string,
+  {
+    manifest,
+    design = '# Markdown Title\n\n> Category: Markdown Category\n> Markdown summary.\n',
+    tokens = ':root { --bg: #fff; }',
+    components = '<button>fixture</button>',
+  }: {
+    manifest?: Record<string, unknown>;
+    design?: string;
+    tokens?: string;
+    components?: string | null;
+  } = {},
+): string {
+  const dir = brandDir(root, id);
+  writeFileSync(path.join(dir, 'DESIGN.md'), design);
+  writeFileSync(path.join(dir, 'tokens.css'), tokens);
+  if (components !== null) writeFileSync(path.join(dir, 'components.html'), components);
+  if (manifest) writeFileSync(path.join(dir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   return dir;
 }
 
@@ -43,6 +70,7 @@ describe('readDesignSystemAssets', () => {
     const assets = await readDesignSystemAssets(root, 'sample');
     expect(assets.tokensCss).toContain('--bg: #fff');
     expect(assets.fixtureHtml).toContain('fixture');
+    expect(assets.componentsManifest).toContain('components.manifest schema v1 for sample');
   });
 
   it('returns the single field that exists when its sibling is missing (per-file independence)', async () => {
@@ -60,6 +88,7 @@ describe('readDesignSystemAssets', () => {
     const fixtureOnly = await readDesignSystemAssets(root, 'fixture-only');
     expect(fixtureOnly.tokensCss).toBeUndefined();
     expect(fixtureOnly.fixtureHtml).toBe('<p>only</p>');
+    expect(fixtureOnly.componentsManifest).toContain('components.manifest schema v1 for fixture-only');
   });
 
   it('returns an empty object when the brand directory has neither file', async () => {
@@ -114,6 +143,301 @@ describe('readDesignSystemAssets', () => {
     const assets = await readDesignSystemAssets(root, 'partial');
     expect(assets.tokensCss).toBe(':root { --x: 1; }');
     expect(assets.fixtureHtml).toBeUndefined();
+  });
+});
+
+describe('Design System Project manifest runtime consumption', () => {
+  it('uses manifest name/category/description for listings while still reading DESIGN.md body', async () => {
+    const root = fresh();
+    writeDesignSystemProject(root, 'project-system', {
+      manifest: {
+        schemaVersion: 'od-design-system-project/v1',
+        id: 'project-system',
+        name: 'Project System',
+        category: 'Imported',
+        description: 'Description from manifest.',
+        source: { type: 'local', path: '/tmp/project' },
+        files: {
+          design: 'DESIGN.md',
+          tokens: 'tokens.css',
+          components: 'components.html',
+        },
+      },
+      design: '# Markdown Title\n\n> Category: Markdown Category\n> Markdown summary.\n\nBody.\n',
+    });
+
+    const systems = await listDesignSystems(root);
+    expect(systems).toHaveLength(1);
+    expect(systems[0]).toMatchObject({
+      id: 'project-system',
+      title: 'Project System',
+      category: 'Imported',
+      summary: 'Description from manifest.',
+      body: '# Markdown Title\n\n> Category: Markdown Category\n> Markdown summary.\n\nBody.\n',
+    });
+
+    await expect(readDesignSystem(root, 'project-system')).resolves.toContain('# Markdown Title');
+  });
+
+  it('keeps DESIGN.md-only systems working next to project manifests', async () => {
+    const root = fresh();
+    writeDesignSystemProject(root, 'project-system', {
+      manifest: {
+        schemaVersion: 'od-design-system-project/v1',
+        id: 'project-system',
+        name: 'Project System',
+        category: 'Imported',
+        description: 'Description from manifest.',
+        source: { type: 'bundled' },
+        files: {
+          design: 'DESIGN.md',
+          tokens: 'tokens.css',
+        },
+      },
+      components: null,
+    });
+    writeDesignSystemProject(root, 'legacy-system', {
+      design: '# Legacy System\n\n> Category: Legacy\n> Legacy summary.\n\nBody.\n',
+      components: null,
+    });
+
+    const systems = await listDesignSystems(root);
+    expect(systems.map((s) => s.id).sort()).toEqual(['legacy-system', 'project-system']);
+    expect(systems.find((s) => s.id === 'legacy-system')).toMatchObject({
+      title: 'Legacy System',
+      category: 'Legacy',
+      summary: 'Legacy summary.',
+    });
+    expect(systems.find((s) => s.id === 'project-system')).toMatchObject({
+      title: 'Project System',
+      category: 'Imported',
+      summary: 'Description from manifest.',
+    });
+  });
+
+  it('reads manifest-declared tokens and skips missing optional components.html', async () => {
+    const root = fresh();
+    writeDesignSystemProject(root, 'tokens-only-project', {
+      manifest: {
+        schemaVersion: 'od-design-system-project/v1',
+        id: 'tokens-only-project',
+        name: 'Tokens Only Project',
+        category: 'Imported',
+        source: { type: 'bundled' },
+        files: {
+          design: 'DESIGN.md',
+          tokens: 'tokens.css',
+        },
+      },
+      tokens: ':root { --accent: #2F6FEB; }',
+      components: null,
+    });
+
+    const assets = await readDesignSystemAssets(root, 'tokens-only-project');
+    expect(assets.tokensCss).toBe(':root { --accent: #2F6FEB; }');
+    expect(assets.fixtureHtml).toBeUndefined();
+  });
+
+  it('reads USAGE.md, committed component cache, and manifest pull index without loading rich files', async () => {
+    const root = fresh();
+    const dir = writeDesignSystemProject(root, 'hybrid-project', {
+      manifest: {
+        schemaVersion: 'od-design-system-project/v1',
+        id: 'hybrid-project',
+        name: 'Hybrid Project',
+        category: 'Imported',
+        source: { type: 'local', path: '/tmp/project' },
+        files: {
+          design: 'DESIGN.md',
+          tokens: 'tokens.css',
+          components: 'components.html',
+        },
+        usage: 'USAGE.md',
+        componentsManifest: 'components.manifest.json',
+        importMode: 'verbatim',
+        craft: {
+          applies: ['color'],
+          suggested: [],
+          exemptions: ['typography'],
+        },
+        assetsDir: 'assets',
+        fonts: [{ family: 'Inter', weight: 500, file: 'fonts/Inter-Medium.woff2' }],
+        preview: {
+          dir: 'preview',
+          pages: [
+            { path: 'preview/colors.html', role: 'colors', title: 'Colors' },
+            { path: 'preview/app.html', role: 'app', title: 'App Preview' },
+          ],
+        },
+        sourceFiles: {
+          scanned: 'source/scanned-files.json',
+          evidence: 'source/evidence.md',
+          tokens: 'source/tokens.source.json',
+          snippets: 'source/snippets/INDEX.json',
+        },
+      },
+      tokens: ':root { --accent: #00aa55; }',
+      components: '<button class="btn">Derived should lose to cache</button>',
+    });
+    writeFileSync(path.join(dir, 'USAGE.md'), '## Read Order\n\nUse cache first.');
+    writeFileSync(
+      path.join(dir, 'components.manifest.json'),
+      `${JSON.stringify({
+        schemaVersion: 1,
+        brandId: 'cache-brand',
+        source: { componentsHtml: 'components.html', tokensCss: 'tokens.css' },
+        fixture: {
+          styleBlockCount: 1,
+          selectorCount: 3,
+          classCount: 2,
+          elementCount: 1,
+        },
+        tokens: {
+          declared: ['--accent'],
+          referenced: ['--accent'],
+          unusedDeclared: [],
+          undeclaredReferenced: [],
+        },
+        selectors: ['.cached-button'],
+        classes: ['cached-button'],
+        elements: ['button'],
+        groups: [
+          {
+            id: 'buttons',
+            label: 'Cached buttons',
+            present: true,
+            selectors: ['.cached-button'],
+            classes: ['cached-button'],
+            elements: ['button'],
+            tokenReferences: ['--accent'],
+          },
+        ],
+        literals: {
+          colorExpressions: 0,
+          pixelValues: 0,
+          hardcodedFontFamilies: 0,
+        },
+      }, null, 2)}\n`,
+    );
+
+    const assets = await readDesignSystemAssets(root, 'hybrid-project');
+    expect(assets.usageMd).toContain('Use cache first');
+    expect(assets.importMode).toBe('verbatim');
+    expect(assets.craftApplies).toEqual(['color']);
+    expect(assets.craftExemptions).toEqual(['typography']);
+    expect(assets.componentsManifest).toContain('components.manifest schema v1 for cache-brand');
+    expect(assets.componentsManifest).toContain('Cached buttons');
+    expect(assets.pullIndex).toContain('preview/colors.html: Colors; colors');
+    expect(assets.pullIndex).toContain('fonts/Inter-Medium.woff2: font: Inter 500');
+    expect(assets.pullIndex).toContain('source/snippets/INDEX.json: source snippet index');
+  });
+
+  it('allows pull reads only for manifest-declared rich-layer files', async () => {
+    const root = fresh();
+    const dir = writeDesignSystemProject(root, 'pull-project', {
+      manifest: {
+        schemaVersion: 'od-design-system-project/v1',
+        id: 'pull-project',
+        name: 'Pull Project',
+        category: 'Imported',
+        source: { type: 'local', path: '/tmp/project' },
+        files: {
+          design: 'DESIGN.md',
+          tokens: 'tokens.css',
+          components: 'components.html',
+        },
+        assetsDir: 'assets',
+        preview: {
+          dir: 'preview',
+          pages: [{ path: 'preview/colors.html', role: 'colors', title: 'Colors' }],
+        },
+        sourceFiles: {
+          snippets: 'source/snippets/INDEX.json',
+        },
+      },
+    });
+    mkdirSync(path.join(dir, 'preview'), { recursive: true });
+    mkdirSync(path.join(dir, 'source', 'snippets'), { recursive: true });
+    mkdirSync(path.join(dir, 'assets', 'icons'), { recursive: true });
+    writeFileSync(path.join(dir, 'preview', 'colors.html'), '<h1>Colors</h1>');
+    writeFileSync(path.join(dir, 'preview', 'spacing.html'), '<h1>Spacing</h1>');
+    writeFileSync(path.join(dir, 'source', 'snippets', 'INDEX.json'), `${JSON.stringify({
+      schemaVersion: 1,
+      snippets: [{ path: 'source/snippets/Button.tsx', role: 'button' }],
+    })}\n`);
+    writeFileSync(path.join(dir, 'source', 'snippets', 'Button.tsx'), 'export function Button() {}');
+    writeFileSync(path.join(dir, 'assets', 'icons', 'mark.svg'), '<svg />');
+
+    await expect(readDesignSystemPullFile(root, 'pull-project', 'preview/colors.html')).resolves.toMatchObject({
+      path: 'preview/colors.html',
+      encoding: 'utf8',
+      content: '<h1>Colors</h1>',
+    });
+    await expect(readDesignSystemPullFile(root, 'pull-project', 'source/snippets/Button.tsx')).resolves.toMatchObject({
+      path: 'source/snippets/Button.tsx',
+      content: 'export function Button() {}',
+    });
+    await expect(readDesignSystemPullFile(root, 'pull-project', 'assets/icons/mark.svg')).resolves.toMatchObject({
+      path: 'assets/icons/mark.svg',
+      content: '<svg />',
+    });
+    await expect(readDesignSystemPullFile(root, 'pull-project', 'preview/spacing.html')).resolves.toBeNull();
+    await expect(readDesignSystemPullFile(root, 'pull-project', '../pull-project/preview/colors.html')).resolves.toBeNull();
+  });
+
+  it('summarizes manifest and source evidence for the detail page', async () => {
+    const root = fresh();
+    const dir = writeDesignSystemProject(root, 'detail-project', {
+      manifest: {
+        schemaVersion: 'od-design-system-project/v1',
+        id: 'detail-project',
+        name: 'Detail Project',
+        category: 'Imported',
+        source: { type: 'local', path: '/tmp/project' },
+        files: {
+          design: 'DESIGN.md',
+          tokens: 'tokens.css',
+          components: 'components.html',
+        },
+        usage: 'USAGE.md',
+        componentsManifest: 'components.manifest.json',
+        importMode: 'hybrid',
+        preview: {
+          dir: 'preview',
+          pages: [{ path: 'preview/colors.html', role: 'colors', title: 'Colors' }],
+        },
+        sourceFiles: {
+          scanned: 'source/scanned-files.json',
+          evidence: 'source/evidence.md',
+          tokens: 'source/tokens.source.json',
+          snippets: 'source/snippets/INDEX.json',
+        },
+      },
+    });
+    mkdirSync(path.join(dir, 'source', 'snippets'), { recursive: true });
+    writeFileSync(path.join(dir, 'source', 'scanned-files.json'), JSON.stringify({ files: [{ path: 'Button.tsx' }] }));
+    writeFileSync(path.join(dir, 'source', 'evidence.md'), '# Evidence\n\n- Buttons matched source.');
+    writeFileSync(path.join(dir, 'source', 'tokens.source.json'), JSON.stringify({
+      tokenCount: 7,
+      confidence: { color: 'high', spacing: 0.4 },
+    }));
+    writeFileSync(path.join(dir, 'source', 'snippets', 'INDEX.json'), JSON.stringify({
+      snippets: [{ path: 'source/snippets/Button.tsx' }],
+    }));
+
+    await expect(readDesignSystemPackageInfo(root, 'detail-project')).resolves.toMatchObject({
+      manifest: {
+        usage: 'USAGE.md',
+        importMode: 'hybrid',
+        preview: { pages: [{ path: 'preview/colors.html' }] },
+      },
+      sourceEvidence: {
+        scannedFileCount: 1,
+        tokenCount: 7,
+        snippetCount: 1,
+        confidence: { color: 'high', spacing: 0.4 },
+      },
+    });
   });
 });
 
@@ -179,6 +503,7 @@ describe('resolveDesignSystemAssets (PR-D server-layer asset resolution)', () =>
     const assets = await resolveDesignSystemAssets('sample', builtInRoot, userRoot, {});
     expect(assets.tokensCss).toBe(':root { --bg: #fff; }');
     expect(assets.fixtureHtml).toBe('<button>btn</button>');
+    expect(assets.componentsManifest).toContain('Buttons and calls to action');
   });
 
   it('returns empty (kill switch) when OD_DESIGN_TOKEN_CHANNEL is `0`, even if files are on disk', async () => {
@@ -193,6 +518,7 @@ describe('resolveDesignSystemAssets (PR-D server-layer asset resolution)', () =>
     });
     expect(assets.tokensCss).toBeUndefined();
     expect(assets.fixtureHtml).toBeUndefined();
+    expect(assets.componentsManifest).toBeUndefined();
   });
 
   it('still returns the assets under the legacy explicit opt-in `OD_DESIGN_TOKEN_CHANNEL=1`', async () => {
@@ -207,6 +533,7 @@ describe('resolveDesignSystemAssets (PR-D server-layer asset resolution)', () =>
     });
     expect(assets.tokensCss).toContain('--bg: #fff');
     expect(assets.fixtureHtml).toContain('<button>');
+    expect(assets.componentsManifest).toContain('Buttons and calls to action');
   });
 
   it('falls back to user-installed root for files missing in built-in (per-file independence)', async () => {
@@ -220,6 +547,7 @@ describe('resolveDesignSystemAssets (PR-D server-layer asset resolution)', () =>
     const assets = await resolveDesignSystemAssets('split', builtInRoot, userRoot, {});
     expect(assets.tokensCss).toBe(':root { --bg: built-in; }');
     expect(assets.fixtureHtml).toBe('<from-user-installed/>');
+    expect(assets.componentsManifest).toContain('components.manifest schema v1 for split');
   });
 
   it('returns the built-in assets verbatim when both files are present built-in (skips the user-installed roundtrip)', async () => {
@@ -237,6 +565,7 @@ describe('resolveDesignSystemAssets (PR-D server-layer asset resolution)', () =>
     const assets = await resolveDesignSystemAssets('sample', builtInRoot, userRoot, {});
     expect(assets.tokensCss).toBe(':root { --bg: built-in; }');
     expect(assets.fixtureHtml).toBe('<from-built-in/>');
+    expect(assets.componentsManifest).toContain('components.manifest schema v1 for sample');
   });
 
   it('returns undefined for both fields when the brand ships neither file in either root (legacy ~138-brand fallback)', async () => {
@@ -247,6 +576,7 @@ describe('resolveDesignSystemAssets (PR-D server-layer asset resolution)', () =>
     const assets = await resolveDesignSystemAssets('prose-only', builtInRoot, userRoot, {});
     expect(assets.tokensCss).toBeUndefined();
     expect(assets.fixtureHtml).toBeUndefined();
+    expect(assets.componentsManifest).toBeUndefined();
   });
 
   it('returns undefined for both fields when the brand directory does not exist in either root', async () => {
@@ -256,5 +586,6 @@ describe('resolveDesignSystemAssets (PR-D server-layer asset resolution)', () =>
     const assets = await resolveDesignSystemAssets('nonexistent', builtInRoot, userRoot, {});
     expect(assets.tokensCss).toBeUndefined();
     expect(assets.fixtureHtml).toBeUndefined();
+    expect(assets.componentsManifest).toBeUndefined();
   });
 });

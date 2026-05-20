@@ -127,6 +127,21 @@ type ProjectMetadata = {
     title?: string | null;
     description?: string | null;
   }> | null;
+  contextMcpServers?: Array<{
+    id?: string | null;
+    label?: string | null;
+    transport?: string | null;
+    url?: string | null;
+    command?: string | null;
+  }> | null;
+  contextConnectors?: Array<{
+    id?: string | null;
+    name?: string | null;
+    provider?: string | null;
+    category?: string | null;
+    status?: string | null;
+    accountLabel?: string | null;
+  }> | null;
 };
 type ProjectTemplate = { name: string; description?: string | null; files: Array<{ name: string; content: string }> };
 type AudioVoiceOption = {
@@ -156,6 +171,23 @@ Active design system exception: the active design system is the visual direction
 - When a downstream framework mentions "active direction" or "theme tokens", bind those fields from the active design system instead of the built-in direction library.
 `;
 
+const DEFAULT_DESIGN_SYSTEM_USAGE = `Read DESIGN.md for visual principles, paste tokens.css verbatim into the first <style> when it is provided, and match component shapes from the reference component manifest or fixture when available. Treat any pull-layer index as optional context for deeper inspection; do not assume those files have already been loaded.`;
+
+function renderDesignSystemImportModeGuidance(
+  importMode: ComposeInput['designSystemImportMode'],
+): string | undefined {
+  if (importMode === 'normalized') {
+    return 'This package is normalized. Treat tokens.css and DESIGN.md as the contract, and prefer OD token names over source-project names. Use pull-layer source evidence only as optional background.';
+  }
+  if (importMode === 'hybrid') {
+    return 'This package is hybrid. Build with OD-normalized tokens first, then inspect pull-layer source evidence or snippets only when original component behavior, density, or naming would materially improve fidelity.';
+  }
+  if (importMode === 'verbatim') {
+    return 'This package is verbatim-oriented. Preserve source semantics and source naming as much as possible. Before translating component behavior, inspect the relevant pull-layer source evidence or snippets when the runtime tool is available.';
+  }
+  return undefined;
+}
+
 export interface ComposeInput {
   agentId?: string | null | undefined;
   includeCodexImagegenOverride?: boolean | undefined;
@@ -182,14 +214,25 @@ export interface ComposeInput {
   // prose still sets the high-level voice and the structured form
   // disambiguates token names + worked component shapes.
   //
+  // - `designSystemUsageMd`      — optional USAGE.md router that tells
+  //                                agents how to consume this package.
   // - `designSystemTokensCss`    — verbatim `tokens.css` :root contract
   //                                that the agent pastes into the
   //                                artifact's <style>.
-  // - `designSystemFixtureHtml`  — verbatim `components.html` reference
-  //                                fixture demonstrating button / card /
-  //                                type-scale shapes wired to the tokens.
+  // - `designSystemComponentsManifest` — concise structured summary
+  //                                      derived from components.html.
+  // - `designSystemFixtureHtml`        — verbatim `components.html`
+  //                                      fallback when no manifest can
+  //                                      be derived.
+  // - `designSystemPullIndex`          — lightweight manifest-derived
+  //                                      list of richer files available
+  //                                      for later pull-channel work.
+  designSystemUsageMd?: string | undefined;
   designSystemTokensCss?: string | undefined;
+  designSystemComponentsManifest?: string | undefined;
   designSystemFixtureHtml?: string | undefined;
+  designSystemPullIndex?: string | undefined;
+  designSystemImportMode?: 'normalized' | 'hybrid' | 'verbatim' | undefined;
   // Craft references the active skill opted into via `od.craft.requires`.
   // The daemon resolves the slug list to file contents and concatenates
   // them with section headers; we inject them between the DESIGN.md and
@@ -270,8 +313,12 @@ export function composeSystemPrompt({
   skillMode,
   designSystemBody,
   designSystemTitle,
+  designSystemUsageMd,
   designSystemTokensCss,
+  designSystemComponentsManifest,
   designSystemFixtureHtml,
+  designSystemPullIndex,
+  designSystemImportMode,
   craftBody,
   craftSections,
   memoryBody,
@@ -339,29 +386,55 @@ export function composeSystemPrompt({
   }
 
   if (activeDesignSystemBody && activeDesignSystemBody.length > 0) {
+    const usageBlock =
+      designSystemUsageMd && designSystemUsageMd.trim().length > 0
+        ? designSystemUsageMd.trim()
+        : DEFAULT_DESIGN_SYSTEM_USAGE;
+    parts.push(
+      `\n\n## How to use this design system${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\n${usageBlock}`,
+    );
+
     parts.push(
       `\n\n## Active design system${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nTreat the following DESIGN.md as authoritative for color, typography, spacing, and component rules. Do not invent tokens outside this palette. When you copy the active skill's seed template, bind these tokens into its \`:root\` block before generating any layout.\n\n${activeDesignSystemBody}`,
     );
+
+    const importModeGuidance = renderDesignSystemImportModeGuidance(designSystemImportMode);
+    if (importModeGuidance) {
+      parts.push(
+        `\n\n## Design system import mode${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\n${importModeGuidance}`,
+      );
+    }
   }
 
   // Structured (compiled) form of the active brand. The DESIGN.md above
   // sets voice and intent; the tokens.css block below is the SAME
   // contract in machine-readable form — names + values the agent pastes
   // verbatim instead of re-deriving from prose. The components.html
-  // fixture grounds the token vocabulary in worked component shapes
-  // (button / card / type roles) so the agent can copy fragments
-  // directly. Both blocks are individually gated: missing files (today,
-  // every brand except `default` and `kami`) skip silently, preserving
-  // the legacy DESIGN.md-only behaviour for the other ~138 brands.
+  // manifest grounds the token vocabulary in worked component shapes
+  // (button / card / type roles) without injecting the full HTML fixture.
+  // If manifest extraction fails or is unavailable, the composer falls
+  // back to the verbatim components.html fixture. Both blocks are
+  // individually gated: missing files skip silently, preserving the
+  // legacy DESIGN.md-only behaviour for prose-only brands.
   if (designSystemTokensCss && designSystemTokensCss.trim().length > 0) {
     parts.push(
       `\n\n## Active design system tokens${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nThe block below is this brand's tokens.css contract — every \`:root\` custom property and any scoped override (e.g. \`:root[lang=...]\`) the brand defines. **Paste the unscoped \`:root { ... }\` block verbatim into the artifact's first \`<style>\`** so every \`var(--*)\` reference resolves at runtime.\n\nDo not invent new tokens. Do not redefine these values. Do not write raw hex outside this :root block. The DESIGN.md above is prose; this is the binding contract.\n\n\`\`\`css\n${designSystemTokensCss.trim()}\n\`\`\``,
     );
   }
 
-  if (designSystemFixtureHtml && designSystemFixtureHtml.trim().length > 0) {
+  if (designSystemComponentsManifest && designSystemComponentsManifest.trim().length > 0) {
+    parts.push(
+      `\n\n## Reference component manifest${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nA compact structured summary derived from this brand's components.html fixture. Use it as the component inventory for generated artifacts: match the listed selectors, component groups, class names, token references, focus behavior, and spacing cadence. Prefer these manifest entries over inventing new component shapes.\n\n\`\`\`text\n${designSystemComponentsManifest.trim()}\n\`\`\``,
+    );
+  } else if (designSystemFixtureHtml && designSystemFixtureHtml.trim().length > 0) {
     parts.push(
       `\n\n## Reference fixture${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nA self-contained worked artifact in this design system. Match its component shapes (button structure, card structure, type-scale rhythm, focus ring, spacing cadence) when generating new artifacts. Copying fragments is encouraged as long as you keep the \`var(--*)\` references intact — they are already wired to the tokens above.\n\n\`\`\`html\n${designSystemFixtureHtml.trim()}\n\`\`\``,
+    );
+  }
+
+  if (designSystemPullIndex && designSystemPullIndex.trim().length > 0) {
+    parts.push(
+      `\n\n## Pull-layer files available on demand${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nThis design-system package declares richer files for inspection, source evidence, or human preview. Keep the push prompt light: use the index below to decide what to read later. When the runtime tool environment is available, read a listed path with \`\"$OD_NODE_BIN\" \"$OD_BIN\" tools design-systems read --path <path>\`; the daemon will reject paths outside this manifest allowlist.\n\n\`\`\`text\n${designSystemPullIndex.trim()}\n\`\`\``,
     );
   }
 
@@ -862,6 +935,44 @@ function renderMetadataBlock(
         ? ` — ${plugin.description.trim()}`
         : '';
       lines.push(`- ${title}${id ? ` (\`${id}\`)` : ''}${description}`);
+    }
+  }
+
+  if (Array.isArray(metadata.contextMcpServers) && metadata.contextMcpServers.length > 0) {
+    lines.push('');
+    lines.push('### @ MCP context');
+    lines.push(
+      'The user selected these MCP servers as context. Prefer their tools when mounted and relevant before asking where data should come from.',
+    );
+    for (const server of metadata.contextMcpServers) {
+      const id = typeof server.id === 'string' ? server.id : '';
+      const label = typeof server.label === 'string' && server.label.trim().length > 0
+        ? server.label.trim()
+        : id;
+      if (!id && !label) continue;
+      const transport = typeof server.transport === 'string' && server.transport.trim().length > 0
+        ? ` — ${server.transport.trim()}`
+        : '';
+      lines.push(`- ${label}${id ? ` (\`${id}\`)` : ''}${transport}`);
+    }
+  }
+
+  if (Array.isArray(metadata.contextConnectors) && metadata.contextConnectors.length > 0) {
+    lines.push('');
+    lines.push('### @ connector context');
+    lines.push(
+      'The user selected these connectors as context. Use daemon connector tools through the OD CLI wrapper when data from these sources is needed; do not ask the user to identify a source that is already selected.',
+    );
+    for (const connector of metadata.contextConnectors) {
+      const id = typeof connector.id === 'string' ? connector.id : '';
+      const name = typeof connector.name === 'string' && connector.name.trim().length > 0
+        ? connector.name.trim()
+        : id;
+      if (!id && !name) continue;
+      const meta = [connector.provider, connector.status, connector.accountLabel]
+        .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+        .join(' · ');
+      lines.push(`- ${name}${id ? ` (\`${id}\`)` : ''}${meta ? ` — ${meta}` : ''}`);
     }
   }
 

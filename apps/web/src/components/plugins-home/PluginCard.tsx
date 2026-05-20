@@ -16,6 +16,7 @@ import { useMemo, useState } from 'react';
 import type { InstalledPluginRecord } from '@open-design/contracts';
 import type { PluginShareAction } from '../../state/projects';
 import { Icon } from '../Icon';
+import { TrustBadge } from '../TrustBadge';
 import { PreviewSurface } from './cards/PreviewSurface';
 import { inferPluginPreview } from './preview';
 import type { PluginUseAction } from './useActions';
@@ -93,9 +94,7 @@ export function PluginCard({
 
       <div className="plugins-home__card-overlay">
         <div className="plugins-home__card-overlay-top">
-          <span className={`plugins-home__trust trust-${record.trust}`}>
-            {record.trust}
-          </span>
+          <TrustBadge trust={record.trust} variant="overlay" />
           {isFeatured ? (
             <span className="plugins-home__overlay-featured" aria-hidden>
               <Icon name="star" size={11} />
@@ -249,9 +248,7 @@ export function PluginCard({
           ) : null}
           {record.title}
         </span>
-        <span className={`plugins-home__trust trust-${record.trust}`}>
-          {record.trust}
-        </span>
+        <TrustBadge trust={record.trust} />
       </div>
     </article>
   );

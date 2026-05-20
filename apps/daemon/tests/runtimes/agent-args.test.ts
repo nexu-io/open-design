@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import {
-  assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, gemini, join, kilo, kiro, mkdtempSync, opencode, pi, qoder, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
+  assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, gemini, join, kilo, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
 } from './helpers/test-helpers.js';
 import type { TestAgentDef } from './helpers/test-helpers.js';
 
@@ -35,7 +35,6 @@ test('opencode args deliver prompts via stdin without passing a literal dash pro
     'run',
     '--format',
     'json',
-    '--dangerously-skip-permissions',
   ]);
 
   const withModel = opencode.buildArgs(
@@ -48,10 +47,11 @@ test('opencode args deliver prompts via stdin without passing a literal dash pro
     'run',
     '--format',
     'json',
-    '--dangerously-skip-permissions',
-    '--model',
+    '-m',
     'anthropic/claude-sonnet-4-5',
   ]);
+  assert.equal(withModel.includes('--dangerously-skip-permissions'), false);
+  assert.equal(withModel.includes('--model'), false);
 });
 
 // Copilot reads the prompt from stdin when `-p` is omitted entirely
@@ -429,6 +429,25 @@ test('detectAgents keeps qoder unavailable with fallback metadata when qodercli 
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('qwen args check promptViaStdin, base args, model args and exclude `-` sentinel', () => {
+  assert.equal(qwen.promptViaStdin, true);
+
+  const baseArgs = qwen.buildArgs('', [], [], {}, { cwd: '/tmp/od-project' });
+  assert.deepEqual(baseArgs, ['--yolo']);
+  assert.equal(baseArgs.includes('-'), false);
+
+  const withModel = qwen.buildArgs(
+    '',
+    [],
+    [],
+    { model: 'qwen3-coder-plus' },
+    { cwd: '/tmp/od-project' },
+  );
+
+  assert.deepEqual(withModel, ['--yolo', '--model', 'qwen3-coder-plus']);
+  assert.equal(withModel.includes('-'), false);
 });
 
 test('kiro fetchModels falls back to fallbackModels when detection fails', async () => {

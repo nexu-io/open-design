@@ -21,7 +21,6 @@ od:
   surface: web
   mode: deck
   scenario: marketing
-  featured: 0.06
   audience: founders, researchers, design studios, conference talks
   tone: editorial, restrained, print-first
   scale: 6-15 viewport-locked slides

@@ -62,8 +62,8 @@
     ],
     "useCase": {
       "query": {
-        "en": "Generate a {{mediaKind}} of {{subject}}. Style: {{style}}. Aspect: {{aspect}}. Use the media-* atom that matches the project kind, then wrap the result in a live artifact for preview. Iterate on the critique signal until it converges.",
-        "zh-CN": "使用这个插件完成以下任务：Generate a {{mediaKind}} of {{subject}}. Style: {{style}}. Aspect: {{aspect}}. Use the media-* atom that matches the project kind, then wrap the result in a live artifact for preview. Iterate on the critique signal until it converges."
+        "en": "Generate a premium product-studio {{mediaKind}} of {{subject}}. Style direction: {{style}}. Aspect: {{aspect}}. Make it elegant, restrained, brand-ready, and polished enough for a commercial launch campaign. Use the media-* atom that matches the project kind, then wrap the result in a live artifact for preview. Iterate on the critique signal until it converges.",
+        "zh-CN": "用高端产品工作室的完成度，生成一个关于 {{subject}} 的 {{mediaKind}}。风格方向：{{style}}。画幅：{{aspect}}。整体要优雅、克制、品牌感强，并具备商业发布级别的完成度。使用匹配项目类型的 media-* atom，再包装成 live artifact 预览，并根据 critique 信号迭代到收敛。"
       },
       "exampleOutputs": []
     },

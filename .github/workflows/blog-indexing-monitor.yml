@@ -59,8 +59,8 @@ jobs:
           node-version: 24
           cache: pnpm
 
-      - name: Install dependencies (landing-page only)
-        run: pnpm install --frozen-lockfile --filter @open-design/landing-page
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Check indexing configuration
         id: config
@@ -274,6 +274,7 @@ jobs:
           add-paths: |
             docs/blog-indexing-status.md
             docs/blog-indexing-status.json
+          base: main
           branch: automation/blog-indexing-status
           delete-branch: true
           commit-message: 'docs(blog): refresh daily indexing status'

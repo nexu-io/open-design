@@ -172,6 +172,7 @@ function migrate(db: SqliteDb): void {
       project_id TEXT,
       skill_id TEXT,
       agent_id TEXT,
+      context_json TEXT,
       enabled INTEGER NOT NULL DEFAULT 1,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
@@ -189,6 +190,7 @@ function migrate(db: SqliteDb): void {
       completed_at INTEGER,
       summary TEXT,
       error TEXT,
+      error_code TEXT,
       FOREIGN KEY(routine_id) REFERENCES routines(id) ON DELETE CASCADE
     );
 
@@ -226,6 +228,10 @@ function migrate(db: SqliteDb): void {
   if (!messageCols.some((c: DbRow) => c.name === 'feedback_json')) {
     db.exec(`ALTER TABLE messages ADD COLUMN feedback_json TEXT`);
   }
+  const routineRunCols = db.prepare(`PRAGMA table_info(routine_runs)`).all() as DbRow[];
+  if (!routineRunCols.some((c: DbRow) => c.name === 'error_code')) {
+    db.exec(`ALTER TABLE routine_runs ADD COLUMN error_code TEXT`);
+  }
 
   const previewCommentCols = db.prepare(`PRAGMA table_info(preview_comments)`).all() as DbRow[];
   if (!previewCommentCols.some((c: DbRow) => c.name === 'selection_kind')) {
@@ -258,6 +264,9 @@ function migrate(db: SqliteDb): void {
   const routineCols = db.prepare(`PRAGMA table_info(routines)`).all() as DbRow[];
   if (routineCols.length > 0 && !routineCols.some((c: DbRow) => c.name === 'schedule_json')) {
     db.exec(`ALTER TABLE routines ADD COLUMN schedule_json TEXT`);
+  }
+  if (routineCols.length > 0 && !routineCols.some((c: DbRow) => c.name === 'context_json')) {
+    db.exec(`ALTER TABLE routines ADD COLUMN context_json TEXT`);
   }
   migrateCritique(db);
   migrateMediaTasks(db);
@@ -967,6 +976,50 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
   return row ? normalizeMessage(row) : null;
 }
 
+export function appendMessageStatusEvent(db: SqliteDb, messageId: string, event: DbRow) {
+  const label = typeof event?.label === 'string' ? event.label.trim() : '';
+  const detail = typeof event?.detail === 'string' ? event.detail.trim() : '';
+  if (!label) return null;
+  const row = db
+    .prepare(`SELECT events_json AS eventsJson FROM messages WHERE id = ?`)
+    .get(messageId) as DbRow | undefined;
+  if (!row) return null;
+  const parsed = parseJsonOrUndef(row.eventsJson);
+  const events = Array.isArray(parsed) ? parsed : [];
+  const last = events[events.length - 1];
+  if (last?.kind === 'status' && last.label === label && (last.detail ?? '') === detail) {
+    return events;
+  }
+  const nextEvent = detail
+    ? { kind: 'status', label, detail }
+    : { kind: 'status', label };
+  const next = [...events, nextEvent];
+  db.prepare(`UPDATE messages SET events_json = ? WHERE id = ?`)
+    .run(JSON.stringify(next), messageId);
+  return next;
+}
+
+export function appendMessageAgentEvent(db: SqliteDb, messageId: string, event: DbRow) {
+  if (!event || typeof event !== 'object') return null;
+  const kind = typeof event.kind === 'string' ? event.kind : '';
+  if (!kind) return null;
+  const row = db
+    .prepare(`SELECT content, events_json AS eventsJson FROM messages WHERE id = ?`)
+    .get(messageId) as DbRow | undefined;
+  if (!row) return null;
+  const parsed = parseJsonOrUndef(row.eventsJson);
+  const events = Array.isArray(parsed) ? parsed : [];
+  const last = events[events.length - 1];
+  if (last && JSON.stringify(last) === JSON.stringify(event)) {
+    return events;
+  }
+  const next = [...events, event];
+  const textDelta = kind === 'text' && typeof event.text === 'string' ? event.text : '';
+  db.prepare(`UPDATE messages SET content = COALESCE(content, '') || ?, events_json = ? WHERE id = ?`)
+    .run(textDelta, JSON.stringify(next), messageId);
+  return next;
+}
+
 export function deleteMessage(db: SqliteDb, id: string) {
   db.prepare(`DELETE FROM messages WHERE id = ?`).run(id);
 }
@@ -1225,12 +1278,13 @@ const ROUTINE_COLS = `id, name, prompt,
   schedule_json AS scheduleJson,
   project_mode AS projectMode, project_id AS projectId,
   skill_id AS skillId, agent_id AS agentId,
+  context_json AS contextJson,
   enabled, created_at AS createdAt, updated_at AS updatedAt`;
 
 const ROUTINE_RUN_COLS = `id, routine_id AS routineId, trigger, status,
   project_id AS projectId, conversation_id AS conversationId,
   agent_run_id AS agentRunId, started_at AS startedAt,
-  completed_at AS completedAt, summary, error`;
+  completed_at AS completedAt, summary, error, error_code AS errorCode`;
 
 export function listRoutines(db: SqliteDb) {
   return (db
@@ -1250,9 +1304,9 @@ export function insertRoutine(db: SqliteDb, r: DbRow) {
   db.prepare(
     `INSERT INTO routines
        (id, name, prompt, schedule_kind, schedule_value, schedule_json,
-        project_mode, project_id, skill_id, agent_id, enabled,
+        project_mode, project_id, skill_id, agent_id, context_json, enabled,
         created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     r.id,
     r.name,
@@ -1264,6 +1318,7 @@ export function insertRoutine(db: SqliteDb, r: DbRow) {
     r.projectId ?? null,
     r.skillId ?? null,
     r.agentId ?? null,
+    r.contextJson ?? null,
     r.enabled ? 1 : 0,
     r.createdAt,
     r.updatedAt,
@@ -1284,7 +1339,7 @@ export function updateRoutine(db: SqliteDb, id: string, patch: DbRow) {
         SET name = ?, prompt = ?,
             schedule_kind = ?, schedule_value = ?, schedule_json = ?,
             project_mode = ?, project_id = ?,
-            skill_id = ?, agent_id = ?,
+            skill_id = ?, agent_id = ?, context_json = ?,
             enabled = ?, updated_at = ?
       WHERE id = ?`,
   ).run(
@@ -1297,6 +1352,7 @@ export function updateRoutine(db: SqliteDb, id: string, patch: DbRow) {
     merged.projectId ?? null,
     merged.skillId ?? null,
     merged.agentId ?? null,
+    merged.contextJson ?? null,
     merged.enabled ? 1 : 0,
     merged.updatedAt,
     id,
@@ -1321,6 +1377,7 @@ function normalizeRoutine(row: DbRow) {
     projectId: row.projectId ?? null,
     skillId: row.skillId ?? null,
     agentId: row.agentId ?? null,
+    contextJson: row.contextJson ?? null,
     enabled: Number(row.enabled) === 1,
     createdAt: Number(row.createdAt),
     updatedAt: Number(row.updatedAt),
@@ -1364,8 +1421,8 @@ export function insertRoutineRun(db: SqliteDb, r: DbRow) {
   db.prepare(
     `INSERT INTO routine_runs
        (id, routine_id, trigger, status, project_id, conversation_id,
-        agent_run_id, started_at, completed_at, summary, error)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        agent_run_id, started_at, completed_at, summary, error, error_code)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     r.id,
     r.routineId,
@@ -1378,6 +1435,7 @@ export function insertRoutineRun(db: SqliteDb, r: DbRow) {
     r.completedAt ?? null,
     r.summary ?? null,
     r.error ?? null,
+    r.errorCode ?? null,
   );
   return getRoutineRun(db, r.id);
 }
@@ -1391,13 +1449,14 @@ export function updateRoutineRun(db: SqliteDb, id: string, patch: DbRow) {
   };
   db.prepare(
     `UPDATE routine_runs
-        SET status = ?, completed_at = ?, summary = ?, error = ?
+        SET status = ?, completed_at = ?, summary = ?, error = ?, error_code = ?
       WHERE id = ?`,
   ).run(
     merged.status,
     merged.completedAt ?? null,
     merged.summary ?? null,
     merged.error ?? null,
+    merged.errorCode ?? null,
     id,
   );
   return getRoutineRun(db, id);
@@ -1416,6 +1475,7 @@ function normalizeRoutineRun(row: DbRow) {
     completedAt: row.completedAt == null ? null : Number(row.completedAt),
     summary: row.summary ?? null,
     error: row.error ?? null,
+    errorCode: row.errorCode ?? null,
   };
 }
 

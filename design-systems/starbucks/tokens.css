@@ -1,0 +1,182 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/starbucks/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by Starbucks".
+ * Warm cream canvas, four-tier green system, full-pill buttons, whisper-
+ * soft layered shadows, and SoDoSans with universal -0.01em tracking.
+ *
+ * Key brand decisions encoded here:
+ *   - Neutral Warm cream (#f2f0eb) as the page canvas — never pure white
+ *   - Green Accent (#00754A) reserved for the primary CTA fill / Frap
+ *   - Text Black at rgba(0, 0, 0, 0.87) to match the warm canvas temperature
+ *   - Whisper-soft dual-shadow card elevation — never one heavy drop
+ *   - Universal -0.01em tracking on SoDoSans across every surface
+ *   - 9999px pill radius — every button is a full pill, no exceptions
+ *   - Measured ease-out (0.25, 0.46, 0.45, 0.94) — the Starbucks expander
+ *
+ * No C-extensions: every token in this :root maps to a shared schema slot.
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ─────────────────────────────────────────────────────
+   * Warm cream canvas: the brand never sits on cold white. Neutral
+   * Warm references café paper and store wood; Ceramic is the
+   * slightly warmer/darker step used for zone separators and
+   * partnership bands. White is reserved for the card surface so
+   * content cards feel like ceramic mugs on a wood table. */
+  --bg: #f2f0eb;                /* Neutral Warm — primary page canvas */
+  --surface: #ffffff;           /* White — content card / modal surface */
+  --surface-warm: #edebe9;      /* Ceramic — zone separator, warmer tier */
+
+  /* ─── Foreground ──────────────────────────────────────────────────
+   * Text Black is 87%-opacity black, never pure #000 — it reads
+   * warmer on the cream canvas. Rewards Green (--fg-2) is the
+   * dustier slate-green used only on Rewards-page text blocks: a
+   * "reward surface" signal without reaching for Starbucks Green. */
+  --fg: rgba(0, 0, 0, 0.87);    /* Text Black — primary heading + body */
+  --fg-2: #33433d;              /* Rewards Green — dustier reading tier */
+  --muted: rgba(0, 0, 0, 0.58); /* Text Black Soft — secondary / metadata */
+  --meta: var(--muted);         /* alias — single secondary text tier */
+
+  /* ─── Border ──────────────────────────────────────────────────────
+   * Input Border (#d6dbde) is the explicit DESIGN.md value for the
+   * outlined-rectangle Add-in / Milk / Customize fields. The soft
+   * tier is the nutrition-table hairline — quiet enough to row-
+   * separate without competing with the card edge. */
+  --border: #d6dbde;            /* Input Border — outlined rectangle edge */
+  --border-soft: #e7e7e7;       /* Nutrition-table row hairline */
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * Green Accent (#00754A) is the CTA green — the brighter, more
+   * luminous tier in the four-tier green system. Reserved for the
+   * primary filled pill CTAs and the Frap floating circular order
+   * button. Starbucks Green (#006241) is the heading tier and stays
+   * inline on h1; House Green (#1E3932) is the feature-band /
+   * footer tier and stays inline at those surfaces. */
+  --accent: #00754A;            /* Green Accent — primary CTA / Frap fill */
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * Red (#c82014) is the explicit DESIGN.md error / destructive
+   * value. Yellow (#fbbc05) is the documented warning / legacy brand
+   * touch. Success has no brand-specific value in DESIGN.md — keep
+   * the schema default so it does not collide with the four-tier
+   * green system. */
+  --success: #16a34a;
+  --warn: #fbbc05;              /* Yellow — DESIGN.md warning state */
+  --danger: #c82014;            /* Red — DESIGN.md error / destructive */
+
+  /* ─── Typography — fonts ──────────────────────────────────────────
+   * SoDoSans is Starbucks' proprietary corporate typeface (licensed
+   * from House Industries; not publicly available). Display and body
+   * share the same stack — the visual identity comes from the
+   * universal -0.01em / -0.16px tracking, not from typeface mixing.
+   * Lander Tall (Rewards serif) and Kalam (Careers script) are
+   * context-specific and intentionally NOT promoted to schema
+   * slots — they stay inline at their respective surfaces. */
+  --font-display: SoDoSans, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-body: SoDoSans, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* ─── Typography — type scale ─────────────────────────────────────
+   * DESIGN.md anchors at 1rem = 10px and uses semantic textSize-1
+   * through textSize-10. We bind the px values directly so the
+   * pasted :root works without the 62.5% root font-size trick.
+   * Hierarchy is carried by weight + color, not by size jumps —
+   * H1 and H2 share 24px (--text-xl), only weight (600 vs 400) and
+   * color (Starbucks-Green vs Text Black) separate them. */
+  --text-xs: 13px;              /* Micro / text-1 — caption */
+  --text-sm: 14px;              /* Small / text-2 — button, label */
+  --text-base: 16px;            /* Body / text-3 — default body */
+  --text-lg: 19px;              /* Body Large — hero intro copy */
+  --text-xl: 24px;              /* H1 / H2 — shared by weight, not size */
+  --text-2xl: 32px;             /* sub-heading bridge to hero */
+  --text-3xl: 45px;             /* Hero Large / text-8 */
+  --text-4xl: 58px;             /* Jumbo / text-9 — display ceiling */
+
+  /* ─── Typography — leading & tracking ─────────────────────────────
+   * Body leading 1.5, display leading 1.2 — the schema-standard
+   * two-mode rhythm. Tracking sits at -0.01em across the entire
+   * system: SoDoSans reads slightly compressed, which gives it its
+   * confident-but-friendly presence without feeling squeezed. */
+  --leading-body: 1.5;
+  --leading-tight: 1.2;
+  --tracking-display: -0.01em;  /* universal — DESIGN.md letterSpacingNormal */
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * 4px grid. The brand's universal rhythm constant is 16px
+   * (--space-4) — the default outer gutter, card padding baseline,
+   * and body text size all share it. The off-grid Starbucks rem
+   * scale (4 / 8 / 16 / 24 / 32 / 40 / 48 / 56 / 64) maps cleanly
+   * to this schema with 12px and 20px filling the gaps. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;              /* universal rhythm — gutter, card pad, body */
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* ─── Section rhythm ──────────────────────────────────────────────
+   * 64px desktop / 48px tablet / 32px phone — generous breathing so
+   * the cream canvas can carry "plenty of space in the café". The
+   * brand never uses divider lines between sections; whitespace
+   * does the work. */
+  --section-y-desktop: 64px;
+  --section-y-tablet: 48px;
+  --section-y-phone: 32px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * Two anchor values define the geometry: 12px on cards / modals
+   * (--cardBorderRadius), 9999px on every button (--buttonBorderRadius
+   * is 50px on the brand, but 9999px pills are visually identical at
+   * any reasonable height). 4px is reserved for outlined-rectangle
+   * inputs (Add-in / Milk / store availability). 16px stays as the
+   * larger-container tier for hero-photo frames. */
+  --radius-sm: 4px;             /* outlined-rectangle inputs */
+  --radius-md: 12px;            /* cards, modals — --cardBorderRadius */
+  --radius-lg: 16px;            /* larger containers */
+  --radius-pill: 9999px;        /* full pill — universal button radius */
+
+  /* ─── Elevation ───────────────────────────────────────────────────
+   * Whisper-soft layered shadows. The brand forbids a single heavy
+   * drop shadow; instead it stacks 2–3 low-alpha shadows with
+   * different offsets to simulate ambient + direct lighting. The
+   * --elev-raised value here is the canonical Starbucks card
+   * --cardBoxShadow (DESIGN.md §6). The Frap floating button gets
+   * its own stacked shadow inline at the component level. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 0 0.5px 0 rgba(0, 0, 0, 0.14), 0 1px 1px 0 rgba(0, 0, 0, 0.24);
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * Green-tinted ring built from --accent. DESIGN.md does not
+   * publish a brand-specific focus treatment, so we keep the
+   * schema's accent-tinted formula — Green Accent reads cleanly
+   * against the warm cream canvas and the white card surface. */
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * 150ms for micro-states (the universal `transform: scale(0.95)`
+   * pressed-button rebound), 200ms for general state changes
+   * (DESIGN.md: `all 0.2s ease` on buttons). The standard easing
+   * curve is the Starbucks Expander cubic-bezier from DESIGN.md
+   * §4 — a measured ease-out rather than the schema's snappier
+   * default, giving accordions and disclosures a calm café cadence. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * Content caps at 1440px (--columnWidthXLarge per DESIGN.md §5).
+   * Gutters scale progressively: 40px desktop (--outerGutterLarge),
+   * 24px tablet (--outerGutterMedium), 16px phone (--outerGutter,
+   * the universal rhythm constant). */
+  --container-max: 1440px;
+  --container-gutter-desktop: 40px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

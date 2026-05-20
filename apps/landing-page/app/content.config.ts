@@ -36,6 +36,14 @@ const skills = defineCollection({
   schema: skillSchema,
 });
 
+const designTemplates = defineCollection({
+  loader: glob({
+    base: '../../design-templates',
+    pattern: '*/SKILL.md',
+  }),
+  schema: skillSchema,
+});
+
 // `design-systems/<slug>/DESIGN.md` files use plain Markdown without YAML
 // frontmatter. We treat them as untyped Markdown bundles and parse the
 // human-meaningful fields (H1, `> Category:`, palette hex codes) at
@@ -56,9 +64,10 @@ const craft = defineCollection({
   schema: z.object({}).passthrough(),
 });
 
-// `templates/live-artifacts/<slug>/README.md` — Live Artifact bundles.
-// We surface them under `/templates/` together with skills whose `od.mode`
-// is `template` (filtered at render time, not in the schema).
+// `templates/live-artifacts/<slug>/README.md` — legacy Live Artifact bundles.
+// The public `/templates/` catalog is primarily sourced from
+// `design-templates/*/SKILL.md`; these remain available as compatibility
+// records while older live-artifact bundles still exist in the repo.
 const templates = defineCollection({
   loader: glob({
     base: '../../templates/live-artifacts',
@@ -87,4 +96,25 @@ const blog = defineCollection({
   }),
 });
 
-export const collections = { skills, systems, craft, templates, blog };
+// Tutorials live in `app/content/tutorials/*.md`. Each entry maps to a
+// single YouTube video and renders a click-through preview on
+// `/tutorials/<slug>/`.
+const tutorials = defineCollection({
+  loader: glob({
+    pattern: ['*.md', '!_*.md'],
+    base: './app/content/tutorials',
+  }),
+  schema: z.object({
+    title: z.string(),
+    youtubeId: z.string().regex(/^[\w-]{11}$/, 'youtubeId must be 11 chars'),
+    summary: z.string(),
+    date: z.coerce.date(),
+    category: z.enum(['Getting started', 'Tutorial', 'Demo', 'Review', 'Community']),
+    durationSeconds: z.number().int().positive(),
+    author: z.string(),
+    official: z.boolean().default(false),
+    thumbnail: z.string().url().optional(),
+  }),
+});
+
+export const collections = { skills, designTemplates, systems, craft, templates, blog, tutorials };

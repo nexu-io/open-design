@@ -1,12 +1,13 @@
 ---
 import Layout from '../../_components/sub-page-layout.astro';
+import LazyImg from '../../_components/lazy-img.astro';
 import { getTemplateRecords } from '../../_lib/catalog';
 
 const templates = await getTemplateRecords();
 
 const title = `Templates — ${templates.length} ready-to-fork artifact templates | Open Design`;
 const description =
-  'Ready-to-fork artifact templates: refreshable Live Artifacts (Notion-style team dashboards, ops briefs) plus deck and prototype starting points. Each template ships as a fork-friendly bundle with sample data.';
+  'Ready-to-fork Open Design templates: decks, prototypes, dashboards, live artifacts, image/video systems, and other renderable starting points from the design-templates catalog.';
 
 const jsonLd = {
   '@context': 'https://schema.org',
@@ -25,29 +26,34 @@ const jsonLd = {
       <em>Templates</em> — {templates.length} ready-to-fork artifacts<span class="dot">.</span>
     </h1>
     <p class="lead">
-      Pre-wired artifact bundles with sample data and a known-good
-      visual language. Fork the folder, swap the sample data with yours,
-      and ship.
+      Pre-wired design-template bundles with a known-good visual language,
+      baked examples, and agent instructions. Fork the folder, adapt the
+      source data or prompt, and ship.
     </p>
   </header>
 
   <section class="template-grid" aria-label="All templates">
     <ul>
-      {templates.map((t) => (
+      {templates.map((t, i) => (
         <li class="template-card">
           <a href={t.detailHref}>
             {t.previewUrl ? (
               <span class="template-thumb">
-                <img src={t.previewUrl} alt="" loading="lazy" decoding="async" />
+                <LazyImg src={t.previewUrl} alt="" loading={i < 4 ? 'eager' : 'precise'} />
               </span>
             ) : (
               <span class="template-thumb template-thumb-empty" aria-hidden="true" />
             )}
             <span class={`meta-tag ${t.origin === 'live-artifact' ? 'coral' : ''}`}>
-              {t.origin === 'live-artifact' ? 'Live Artifact' : 'Skill template'}
+              {t.origin === 'live-artifact' ? 'Live Artifact' : (t.mode ?? 'Design template')}
             </span>
             <span class="template-name">{t.name}</span>
             <p class="template-summary">{t.summary}</p>
+            {(t.platform || t.scenario) && (
+              <span class="template-meta-line">
+                {[t.platform, t.scenario].filter(Boolean).join(' · ')}
+              </span>
+            )}
           </a>
         </li>
       ))}

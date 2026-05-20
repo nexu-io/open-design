@@ -23,6 +23,11 @@ import {
 import { fetchPreviewComments } from '../../src/providers/registry';
 
 vi.mock('../../src/i18n', () => ({
+  useI18n: () => ({
+    locale: 'en',
+    setLocale: () => undefined,
+    t: (key: string) => key,
+  }),
   useT: () => (key: string) => key,
 }));
 
@@ -37,6 +42,7 @@ vi.mock('../../src/providers/anthropic', () => ({
 vi.mock('../../src/providers/daemon', () => ({
   fetchChatRunStatus: vi.fn(),
   listActiveChatRuns: vi.fn().mockResolvedValue([]),
+  listProjectRuns: vi.fn().mockResolvedValue([]),
   reattachDaemonRun: vi.fn(),
   streamViaDaemon: vi.fn(),
 }));

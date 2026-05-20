@@ -3,18 +3,11 @@ name: Docker image
 # Phase 5 / spec §15.5 — multi-arch image builds.
 #
 # Pushes to ghcr.io on:
-#   - main branch     → ghcr.io/<owner>/od:edge + :sha-<short>
-#   - tag (v*)        → ghcr.io/<owner>/od:<tag> + :latest
-#
-# Pull requests build the image but do not push (smoke test only).
+#   - tag (v*.*.*)    → ghcr.io/<owner>/od:<tag> + :latest
 
 on:
   push:
-    branches: [main]
     tags: ['v*.*.*']
-  pull_request:
-    branches: [main]
-  workflow_dispatch:
 
 jobs:
   build-and-push:

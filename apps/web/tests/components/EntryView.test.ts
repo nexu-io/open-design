@@ -256,7 +256,12 @@ describe('connector authorization pending state', () => {
       },
     }, nowMs);
 
-    expect(pending).toEqual({ exist: { expiresAt: future } });
+    expect(pending).toEqual({
+      exist: {
+        expiresAt: future,
+        redirectUrl: 'https://example.com/oauth',
+      },
+    });
   });
 
   it('keeps pending state while status polling still reports available', () => {

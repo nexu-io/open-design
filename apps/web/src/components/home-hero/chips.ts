@@ -19,7 +19,7 @@
 //   - `action` — discriminated union the HomeView dispatcher matches
 //     on. The rail component itself stays presentational.
 
-import type { ProjectKind } from '@open-design/contracts';
+import type { ProjectKind, ProjectMetadata } from '@open-design/contracts';
 import type { DefaultScenarioPluginId } from '@open-design/contracts';
 import type { IconName } from '../Icon';
 
@@ -41,12 +41,14 @@ export type ChipAction =
       pluginId: ChipScenarioPluginId;
       projectKind: ProjectKind;
       inputs?: Record<string, unknown>;
+      projectMetadata?: ProjectMetadata;
     }
   | {
       kind: 'apply-figma-migration';
       pluginId: 'od-figma-migration';
       projectKind: ProjectKind;
       inputs?: Record<string, unknown>;
+      projectMetadata?: ProjectMetadata;
     }
   | { kind: 'create-plugin' }
   | { kind: 'import-folder' }
@@ -92,18 +94,18 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   {
     id: 'live-artifact',
     label: 'Live artifact',
-    icon: 'pencil',
+    icon: 'refresh',
     group: 'create',
-    hint: 'Build an interactive HTML/CSS/JS artifact you can preview live.',
-    // Live artifact shares web-prototype's seed today — the difference
-    // is intent (interactive HTML/CSS/JS) vs static prototype, not the
-    // underlying template. The chip keeps a distinct id so active-state
-    // tracking + analytics see "user picked live-artifact" rather than
-    // "user picked prototype".
+    hint: 'Build a refreshable artifact backed by connector or local data.',
     action: {
       kind: 'apply-scenario',
-      pluginId: 'example-web-prototype',
+      pluginId: 'example-live-artifact',
       projectKind: 'prototype',
+      projectMetadata: {
+        kind: 'prototype',
+        intent: 'live-artifact',
+        fidelity: 'high-fidelity',
+      },
     },
   },
   {

@@ -1,6 +1,6 @@
 import { playwrightUiScenarios } from '../../resources/playwright.ts';
 
-export type ScenarioKind = 'prototype' | 'deck' | 'hyperframes' | 'template' | 'workspace';
+export type ScenarioKind = 'prototype' | 'deck' | 'hyperframes' | 'image' | 'audio' | 'template' | 'workspace';
 
 export interface MockArtifactScenario {
   identifier: string;
@@ -8,6 +8,12 @@ export interface MockArtifactScenario {
   html: string;
   fileName: string;
   heading: string;
+}
+
+export interface ExpectedScenarioFile {
+  kind?: string;
+  name: string;
+  previewText?: string;
 }
 
 export interface UiScenario {
@@ -34,20 +40,28 @@ export interface UiScenario {
     | 'deck-pagination-per-file-isolated'
     | 'uploaded-image-renders-in-preview'
     | 'python-source-preview'
-    | 'plugin-create-import'
-    | 'home-rail-generation';
+    | 'hyperframes-project-routing'
+    | 'image-project-routing'
+    | 'video-project-routing'
+    | 'audio-project-routing'
+    | 'live-artifact-project-routing'
+    | 'plugin-create-import';
   automated: boolean;
   description: string;
   create: {
     projectName: string;
-    tab?: 'prototype' | 'deck' | 'template' | 'other';
-    railChip?: 'prototype' | 'deck' | 'hyperframes';
-    expectedProjectKind?: 'prototype' | 'deck' | 'video';
-    expectedPluginId?: 'example-web-prototype' | 'example-simple-deck' | 'example-hyperframes';
+    tab?: 'prototype' | 'live-artifact' | 'deck' | 'template' | 'media' | 'other';
+    mediaSurface?: 'image' | 'video' | 'audio';
+    videoModel?: string;
+    audioKind?: 'speech' | 'sfx';
   };
   prompt: string;
   secondaryPrompt?: string;
   mockArtifact?: MockArtifactScenario;
+  expectedProjectMetadata?: Record<string, unknown>;
+  expectedRunRequest?: Record<string, unknown>;
+  expectedFiles?: ExpectedScenarioFile[];
+  expectedPreviewText?: string;
   notes?: string[];
 }
 

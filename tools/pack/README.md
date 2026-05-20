@@ -50,7 +50,9 @@ namespace paths, and the packaged sidecar launcher passes daemon managed paths v
 own default fallback for non-packaged launches, but packaged runtime must not rely on fallback inference from Electron
 `userData`, app bundle names, or ports.
 
-Runtime updater integration remains a later phase.
+Packaged desktop can check the release metadata feed, download a verified mac DMG or Windows installer, and expose
+update actions through desktop IPC. This runtime updater phase still opens the downloaded installer for manual
+replacement instead of applying an in-place update.
 
 Electron-builder resources live under `tools/pack/resources/mac/`. The current logo is staged there as the mac icon/DMG
 placeholder so future design-provided assets can replace the resource files without changing packaging code.
@@ -58,6 +60,11 @@ placeholder so future design-provided assets can replace the resource files with
 Local developer artifacts bake the tools-pack namespace runtime root so `tools-pack mac start/stop/logs/cleanup` can manage
 them from the repo. Release artifacts use `--portable` so the installed app resolves namespace data/log/runtime/user-data
 from the user's Electron `userData` root instead of the build machine's `.tmp` path.
+
+### macOS compatibility notes
+
+- `tools-pack mac build --portable --to zip` is the safest manual-install artifact for Intel Macs. This path was smoke-tested on macOS 12.7.6 Monterey on a 2015 Intel iMac and the app launched successfully from `/Applications`.
+- Finder/manual launches on macOS may not inherit your shell-managed `PATH`. If packaged Open Design cannot detect agent CLIs that work in Terminal, expose those binaries to the GUI login environment or launch the packaged app from a shell session that already sees them.
 
 ## Windows
 

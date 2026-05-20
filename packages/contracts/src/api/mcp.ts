@@ -10,6 +10,7 @@
 // per-spawn config files (e.g. project-cwd `.mcp.json` for Claude Code).
 
 export type McpTransport = 'stdio' | 'sse' | 'http';
+export type McpAuthMode = 'none' | 'oauth';
 
 export interface McpServerConfig {
   /** Stable slug (lowercase, alphanumeric + dash/underscore). Doubles as the
@@ -28,6 +29,10 @@ export interface McpServerConfig {
    * spawn so users can keep credentials around without them being wired into
    * every run. */
   enabled: boolean;
+  /** HTTP/SSE only: whether Open Design should offer its managed OAuth flow.
+   * `none` means no daemon-managed OAuth; credentials, if any, are supplied
+   * by headers or by a trusted local server. */
+  authMode?: McpAuthMode;
 
   // ── stdio ──
   command?: string;
@@ -76,6 +81,8 @@ export interface McpTemplate {
   label: string;
   description: string;
   transport: McpTransport;
+  /** HTTP/SSE only. Defaults are inferred by URL when omitted. */
+  authMode?: McpAuthMode;
   /** Picker grouping. Required so the UI can always find a home for the
    * template — fall back to `utilities` for true grab-bag entries. */
   category: McpTemplateCategory;

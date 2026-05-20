@@ -13,6 +13,8 @@ import {
   useRef,
   useState,
 } from 'react';
+import { useAnalytics } from '../analytics/provider';
+import { trackIntegrationsMcpTabClick } from '../analytics/events';
 import {
   disconnectMcpOAuth,
   fetchMcpOAuthStatus,
@@ -26,7 +28,10 @@ import type {
   McpServerConfig,
   McpTemplate,
 } from '../state/mcp';
+import { fetchAgents } from '../providers/registry';
+import type { AgentInfo } from '../types';
 import { Icon } from './Icon';
+import { useT } from '../i18n';
 
 interface Props {
   // Receive a notification when servers list changes so the parent can
@@ -63,9 +68,50 @@ function genLocalId(): string {
   return `mcp-row-${NEXT_LOCAL_ID++}`;
 }
 
+function isLoopbackMcpUrl(rawUrl: string | undefined): boolean {
+  if (!rawUrl) return false;
+  try {
+    const host = new URL(rawUrl)
+      .hostname
+      .replace(/^\[|\]$/g, '')
+      .toLowerCase()
+      .replace(/\.+$/g, '');
+    if (host === 'localhost' || host === '::1') return true;
+    if (/^127(?:\.\d{1,3}){3}$/.test(host)) return true;
+    return /^::ffff:127(?:\.\d{1,3}){3}$/i.test(host);
+  } catch {
+    return false;
+  }
+}
+
+function inferMcpAuthMode(url: string | undefined): NonNullable<McpServerConfig['authMode']> {
+  return isLoopbackMcpUrl(url) ? 'none' : 'oauth';
+}
+
+function effectiveMcpAuthMode(
+  row: Pick<McpServerConfig, 'transport' | 'url' | 'authMode'>,
+): NonNullable<McpServerConfig['authMode']> {
+  if (row.transport !== 'http' && row.transport !== 'sse') return 'none';
+  return row.authMode ?? inferMcpAuthMode(row.url);
+}
+
+function authModeAfterUrlChange(
+  row: Pick<McpServerConfig, 'url' | 'authMode'>,
+  nextUrl: string,
+): NonNullable<McpServerConfig['authMode']> {
+  const previousInferred = inferMcpAuthMode(row.url);
+  if (!row.authMode || row.authMode === previousInferred) {
+    return inferMcpAuthMode(nextUrl);
+  }
+  return row.authMode;
+}
+
 function rowsFromServers(servers: McpServerConfig[]): DraftRow[] {
   return servers.map((s) => ({
     ...s,
+    ...(s.transport === 'http' || s.transport === 'sse'
+      ? { authMode: effectiveMcpAuthMode(s) }
+      : {}),
     _envText: s.env ? mapToText(s.env) : '',
     _headersText: s.headers ? mapToText(s.headers) : '',
     _localId: genLocalId(),
@@ -109,6 +155,7 @@ function rowsToServers(rows: DraftRow[]): McpServerConfig[] {
       const env = textToMap(r._envText);
       if (env) out.env = env;
     } else {
+      out.authMode = effectiveMcpAuthMode(r);
       if (r.url) out.url = r.url;
       const headers = textToMap(r._headersText);
       if (headers) out.headers = headers;
@@ -132,6 +179,9 @@ function rowFromTemplate(
     templateId: tpl.id,
     transport: tpl.transport,
     enabled: true,
+    ...(tpl.transport === 'http' || tpl.transport === 'sse'
+      ? { authMode: tpl.authMode ?? inferMcpAuthMode(tpl.url) }
+      : {}),
     command: tpl.command,
     args: tpl.args ? [...tpl.args] : undefined,
     url: tpl.url,
@@ -249,6 +299,8 @@ function signature(rows: DraftRow[]): string {
 
 export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
   function McpClientSection({ onServersChanged, onDirtyChange }, ref) {
+  const t = useT();
+  const analytics = useAnalytics();
   const [rows, setRows] = useState<DraftRow[]>([]);
   const [savedSig, setSavedSig] = useState<string>('[]');
   const [templates, setTemplates] = useState<McpTemplate[]>([]);
@@ -261,6 +313,11 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
   // picker preserves the user's last query while they scan through it.
   const [pickerQuery, setPickerQuery] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // Cached agent list so the support banner can tell the user which of the
+  // installed CLI agents will actually receive the MCP servers below.
+  // Without this, OpenCode / Codex / Gemini users save a server and have
+  // no way to learn it never reached the agent (issue #2142).
+  const [agents, setAgents] = useState<AgentInfo[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -268,7 +325,7 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
       const data = await fetchMcpServers();
       if (cancelled) return;
       if (!data) {
-        setError('Could not reach the local daemon. Make sure Open Design is running, then reopen this panel.');
+        setError(t('mcpClient.daemonError'));
         setLoaded(true);
         return;
       }
@@ -277,6 +334,18 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
       setSavedSig(signature(fresh));
       setTemplates(data.templates);
       setLoaded(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const list = await fetchAgents();
+      if (cancelled) return;
+      setAgents(list);
     })();
     return () => {
       cancelled = true;
@@ -331,7 +400,7 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
     const data = await saveMcpServers(payload);
     setSaving(false);
     if (!data) {
-      setError('Save failed. Check that the daemon is running and try again.');
+      setError(t('mcpClient.saveFailed'));
       return false;
     }
     const fresh = rowsFromServers(data.servers);
@@ -353,8 +422,8 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
       <section className="settings-section">
         <div className="section-head">
           <div>
-            <h3>External MCP servers</h3>
-            <p className="hint">Loading…</p>
+            <h3>{t('mcpClient.title')}</h3>
+            <p className="hint">{t('common.loading')}</p>
           </div>
         </div>
       </section>
@@ -365,19 +434,28 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
     <section className="settings-section">
       <div className="section-head">
         <div>
-          <h3>External MCP servers</h3>
-          <p className="hint">Third-party tools for your coding agent.</p>
+          <h3>{t('mcpClient.title')}</h3>
+          <p className="hint">{t('mcpClient.subtitle')}</p>
         </div>
         <button
           type="button"
           className="primary mcp-add-btn"
-          onClick={() => setPickerOpen((v) => !v)}
+          onClick={() => {
+            trackIntegrationsMcpTabClick(analytics.track, {
+              page_name: 'integrations',
+              area: 'mcp_tab',
+              element: 'add_server',
+            });
+            setPickerOpen((v) => !v);
+          }}
           aria-expanded={pickerOpen}
         >
           <Icon name="sparkles" size={13} />
-          <span>Add server</span>
+          <span>{t('mcpClient.addServer')}</span>
         </button>
       </div>
+
+      <McpAgentSupportBanner agents={agents} />
 
       {pickerOpen ? (
         <PickerPanel
@@ -396,11 +474,9 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
 
       {rows.length === 0 ? (
         <div className="empty-card">
-          <strong>No MCP servers configured.</strong>
+          <strong>{t('mcpClient.emptyTitle')}</strong>
           <p className="hint">
-            Click &ldquo;Add server&rdquo; to get started — pick a template
-            (Higgsfield OpenClaw, Pollinations, Allyson, Imagician, EdgeOne
-            Pages, GitHub, Filesystem…) or set up a custom stdio / HTTP server.
+            {t('mcpClient.emptyBody')}
           </p>
         </div>
       ) : (
@@ -429,17 +505,24 @@ export const McpClientSection = forwardRef<McpClientSectionHandle, Props>(
         <button
           type="button"
           className="primary"
-          onClick={() => void save()}
+          onClick={() => {
+            trackIntegrationsMcpTabClick(analytics.track, {
+              page_name: 'integrations',
+              area: 'mcp_tab',
+              element: 'saved',
+            });
+            void save();
+          }}
           disabled={saving || !dirty}
         >
-          {saving ? 'Saving…' : dirty ? 'Save changes' : 'Saved'}
+          {saving ? t('settings.autosaveSaving') : dirty ? t('mcpClient.saveChanges') : t('settings.autosaveSaved')}
         </button>
         {savedAt && !dirty ? (
-          <span className="hint mcp-saved-msg">Saved.</span>
+          <span className="hint mcp-saved-msg">{t('settings.connectorsSaved')}.</span>
         ) : null}
         <span className="mcp-foot-spacer" />
         <span className="hint">
-          Stored at <code>.od/mcp-config.json</code>
+          {t('mcpClient.storedAt')} <code>.od/mcp-config.json</code>
         </span>
       </div>
     </section>
@@ -647,6 +730,7 @@ interface RowProps {
 
 function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMoveDown }: RowProps) {
   const isHttpLike = row.transport === 'http' || row.transport === 'sse';
+  const usesManagedOAuth = isHttpLike && effectiveMcpAuthMode(row) === 'oauth';
   const [expanded, setExpanded] = useState<boolean>(false);
   const summaryTitle = row.label?.trim() || row.id || 'Unnamed MCP server';
   const [showMcpExample, setShowMcpExample] = useState<boolean>(false);
@@ -766,12 +850,26 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
           ) : null}
 
           {isHttpLike && !row._isNew && row.id ? (
-            <McpOAuthControl serverId={row.id} />
+            usesManagedOAuth ? (
+              <McpOAuthControl serverId={row.id} />
+            ) : (
+              <div className="mcp-oauth-hint hint">
+                <strong>No managed OAuth.</strong> Open Design will use this
+                server as configured. Add headers below if the server needs a
+                token.
+              </div>
+            )
           ) : null}
-          {isHttpLike && row._isNew ? (
+          {isHttpLike && row._isNew && usesManagedOAuth ? (
             <div className="mcp-oauth-hint hint">
               Save first, then click <strong>Connect</strong> to grant Open Design
               access via the provider's OAuth flow.
+            </div>
+          ) : null}
+          {isHttpLike && row._isNew && !usesManagedOAuth ? (
+            <div className="mcp-oauth-hint hint">
+              <strong>No managed OAuth.</strong> Save this server and Open Design
+              will use it directly.
             </div>
           ) : null}
 
@@ -789,9 +887,15 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
               <span className="mcp-row-field-label">Transport</span>
               <select
                 value={row.transport}
-                onChange={(e) =>
-                  onChange({ transport: e.target.value as DraftRow['transport'] })
-                }
+                onChange={(e) => {
+                  const transport = e.target.value as DraftRow['transport'];
+                  onChange({
+                    transport,
+                    ...(transport === 'http' || transport === 'sse'
+                      ? { authMode: row.authMode ?? inferMcpAuthMode(row.url) }
+                      : { authMode: undefined }),
+                  });
+                }}
               >
                 <option value="stdio">stdio</option>
                 <option value="sse">SSE</option>
@@ -843,12 +947,29 @@ function McpRow({ row, idx, total, template, onChange, onRemove, onMoveUp, onMov
           ) : (
             <>
               <label className="mcp-row-field mcp-row-field-stack">
+                <span className="mcp-row-field-label">OAuth mode</span>
+                <select
+                  value={effectiveMcpAuthMode(row)}
+                  onChange={(e) =>
+                    onChange({
+                      authMode: e.target.value as NonNullable<McpServerConfig['authMode']>,
+                    })
+                  }
+                >
+                  <option value="none">No managed OAuth</option>
+                  <option value="oauth">Managed OAuth</option>
+                </select>
+              </label>
+              <label className="mcp-row-field mcp-row-field-stack">
                 <span className="mcp-row-field-label">URL</span>
                 <input
                   type="text"
                   value={row.url ?? ''}
                   placeholder="https://mcp.higgsfield.ai/mcp"
-                  onChange={(e) => onChange({ url: e.target.value })}
+                  onChange={(e) => {
+                    const url = e.target.value;
+                    onChange({ url, authMode: authModeAfterUrlChange(row, url) });
+                  }}
                   spellCheck={false}
                 />
               </label>
@@ -1242,6 +1363,87 @@ function McpOAuthControl({ serverId }: { serverId: string }) {
       ) : null}
 
       {error ? <div className="mcp-oauth-error">{error}</div> : null}
+    </div>
+  );
+}
+
+/**
+ * Renders a compact two-line banner showing which installed CLI agents
+ * receive the user's external MCP servers at spawn time and which do not.
+ * The truth source is the daemon `/api/agents` payload — every runtime def
+ * carries an `externalMcpInjection` discriminator (one of
+ * `claude-mcp-json` / `acp-merge` / `opencode-env-content`, or undefined
+ * when no native injection is wired yet).
+ *
+ * The banner replaces the previous silent-failure UX from issue #2142:
+ * users were configuring servers under OpenCode / Codex / Gemini and
+ * never learning the daemon never forwarded them to the agent process.
+ * Rendered above the picker so it is the first thing the user reads.
+ */
+function McpAgentSupportBanner({ agents }: { agents: AgentInfo[] }) {
+  // Empty payload = either still loading or daemon unreachable. Either
+  // way, render nothing — the error banner below already covers the
+  // "daemon unreachable" path and we don't want to flash an empty hint
+  // during the initial fetch.
+  if (agents.length === 0) return null;
+  // `/api/agents` returns every runtime def the daemon knows about,
+  // including CLIs the user hasn't installed (those carry
+  // `available: false`). Splitting the full catalog into "Forwarded to /
+  // Not forwarded to" would mention adapters the user can't even launch,
+  // which is misleading. Scope the banner to installed CLIs only.
+  const installed = agents.filter((a) => a.available);
+  if (installed.length === 0) return null;
+  const supported = installed.filter(
+    (a) => typeof a.externalMcpInjection === 'string',
+  );
+  const unsupported = installed.filter(
+    (a) => !a.externalMcpInjection,
+  );
+  if (supported.length === 0 && unsupported.length === 0) return null;
+  // ACP adapters (Hermes / Kimi / Kilo / Kiro / Vibe / Devin) currently
+  // accept stdio MCP servers only — `buildAcpMcpServers()` in
+  // `apps/daemon/src/mcp-config.ts` filters to `transport === 'stdio'`
+  // because the ACP `mcpServers` descriptor itself has no slot for
+  // HTTP / SSE entries. Tag those runtimes inline so the banner does
+  // not silently claim full forwarding for HTTP MCP servers, which
+  // would re-introduce the very silent-failure UX we are removing.
+  const renderNames = (list: AgentInfo[]) =>
+    list
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((a) =>
+        a.externalMcpInjection === 'acp-merge'
+          ? `${a.name} (stdio only)`
+          : a.name,
+      )
+      .join(' · ');
+  const hasAcpSupported = supported.some(
+    (a) => a.externalMcpInjection === 'acp-merge',
+  );
+  return (
+    <div className="mcp-agent-support">
+      {supported.length > 0 ? (
+        <p className="hint mcp-agent-support-line">
+          <strong>Forwarded to:</strong> {renderNames(supported)}.
+          {hasAcpSupported ? (
+            <>
+              {' '}
+              ACP adapters marked <em>stdio only</em> receive
+              <code>stdio</code> MCP servers from this list; HTTP and SSE
+              entries are dropped at spawn time.
+            </>
+          ) : null}
+        </p>
+      ) : null}
+      {unsupported.length > 0 ? (
+        <p className="hint mcp-agent-support-line mcp-agent-support-unsupported">
+          <strong>Not forwarded to:</strong> {renderNames(unsupported)}. For
+          those agents, configure MCP servers in the agent's own config file
+          (e.g.&nbsp;<code>~/.codex/config.toml</code>,&nbsp;
+          <code>~/.gemini/settings.json</code>); the servers below are
+          silently unused there.
+        </p>
+      ) : null}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 // "Finalize design package" toolbar action — #451. Triggers the
-// daemon's POST /api/projects/:id/finalize/anthropic, which
+// daemon's POST /api/projects/:id/finalize/<provider>, which
 // synchronously synthesizes DESIGN.md from the project transcript +
 // active design system + current artifact (route owned by PR #832,
 // merged 2026-05-08 by lefarcen).

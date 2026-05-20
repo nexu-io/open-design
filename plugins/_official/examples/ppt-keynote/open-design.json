@@ -34,7 +34,6 @@
     "mode": "deck",
     "scenario": "marketing",
     "surface": "web",
-    "featured": 19,
     "preview": {
       "type": "html",
       "entry": "./example.html"

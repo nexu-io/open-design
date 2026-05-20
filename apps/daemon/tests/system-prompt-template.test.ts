@@ -55,9 +55,10 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
       designSystemTitle: 'Brand',
     });
 
+    expect(out).toContain('Do not emit a direction question-form');
     expect(out).not.toContain('<question-form id="direction"');
     expect(out).not.toContain('Pick a visual direction');
-    expect(out).toContain('if a design system is active, use it as the visual direction without asking again');
+    expect(out).toContain('if a design system is active and no new brand/reference source was provided, use it as the visual direction without asking again');
   });
 
   it('inlines the prompt body, attribution, and reference-template label for image projects', () => {

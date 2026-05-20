@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ConnectorDetail } from '@open-design/contracts';
 
@@ -12,6 +12,7 @@ import {
   fetchConnectorDiscovery,
   fetchConnectors,
   fetchConnectorStatuses,
+  openExternalUrl,
 } from '../../src/providers/registry';
 
 vi.mock('../../src/providers/registry', async () => {
@@ -27,6 +28,7 @@ vi.mock('../../src/providers/registry', async () => {
     fetchConnectorDiscovery: vi.fn(),
     fetchConnectors: vi.fn(),
     fetchConnectorStatuses: vi.fn(),
+    openExternalUrl: vi.fn(),
   };
 });
 
@@ -66,9 +68,11 @@ describe('ConnectorsBrowser', () => {
     vi.mocked(fetchConnectorDetail).mockReset();
     vi.mocked(fetchConnectorDiscovery).mockReset();
     vi.mocked(fetchConnectorStatuses).mockReset();
+    vi.mocked(openExternalUrl).mockReset();
     vi.mocked(cancelConnectorAuthorization).mockResolvedValue(null);
     vi.mocked(connectConnector).mockResolvedValue({ connector: null });
     vi.mocked(fetchConnectorDetail).mockResolvedValue(null);
+    vi.mocked(openExternalUrl).mockResolvedValue(true);
     window.sessionStorage.clear();
   });
 
@@ -358,6 +362,49 @@ describe('ConnectorsBrowser', () => {
     await waitFor(() => expect(fetchConnectorDetail).toHaveBeenCalledTimes(2));
   });
 
+  it('retries failed drawer preview hydration when reopened from a panel alert', async () => {
+    const previewConnector: ConnectorDetail = {
+      ...configuredComposioConnector,
+      id: 'notion',
+      name: 'Notion',
+      status: 'available',
+      toolCount: 48,
+      tools: [],
+    };
+    vi.mocked(fetchConnectors).mockResolvedValue([previewConnector]);
+    vi.mocked(fetchConnectorDiscovery).mockResolvedValue([previewConnector]);
+    vi.mocked(fetchConnectorStatuses).mockResolvedValue({});
+    vi.mocked(fetchConnectorDetail).mockResolvedValue(null);
+    vi.mocked(connectConnector).mockResolvedValue({
+      connector: null,
+      error: 'Composio provider is not configured',
+    });
+
+    render(<ConnectorsBrowser composioConfigured />);
+
+    await screen.findByText('Notion');
+    fireEvent.click(screen.getByRole('button', { name: 'Open Notion details' }));
+    await waitFor(() => expect(fetchConnectorDetail).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByTestId('connector-drawer')).toBeNull());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+    await waitFor(() => expect(connectConnector).toHaveBeenCalledWith('notion'));
+    const alert = await screen.findByRole('status');
+    expect(alert.textContent).toContain('Notion: Composio provider is not configured');
+    const alertRow = alert.closest('.connector-panel-alert');
+    expect(alertRow).not.toBeNull();
+
+    fireEvent.click(within(alertRow as HTMLElement).getByRole('button', { name: 'Open Notion details' }));
+
+    await waitFor(() => expect(fetchConnectorDetail).toHaveBeenCalledTimes(2));
+    expect(fetchConnectorDetail).toHaveBeenNthCalledWith(2, 'notion', {
+      hydrateTools: true,
+      toolsLimit: 50,
+    });
+  });
+
   it('cancels pending authorization through the daemon before clearing the local state', async () => {
     const availableConnector: ConnectorDetail = {
       ...configuredComposioConnector,
@@ -382,6 +429,11 @@ describe('ConnectorsBrowser', () => {
     await screen.findByText('GitHub');
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
     await screen.findByRole('button', { name: 'Cancel' });
+    const authorizationButton = screen.getByRole('button', { name: 'Continue in browser' });
+    fireEvent.click(authorizationButton);
+    await waitFor(() => expect(openExternalUrl).toHaveBeenCalledWith(
+      'https://example.com/oauth',
+    ));
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
@@ -418,13 +470,96 @@ describe('ConnectorsBrowser', () => {
 
     await waitFor(() => expect(cancelConnectorAuthorization).toHaveBeenCalledWith('github'));
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
-    expect(screen.getByRole('alert').textContent).toContain("Couldn't cancel authorization. Try again.");
+    const status = screen.getByRole('status');
+    expect(status.textContent).toContain("Couldn't cancel authorization. Try again.");
+    expect(status.closest('.connector-grid')).toBeNull();
+    expect(status.closest('.connector-card')).toBeNull();
+    const alertRow = status.closest('.connector-panel-alert');
+    expect(alertRow).not.toBeNull();
+    fireEvent.click(within(alertRow as HTMLElement).getByRole('button', { name: 'Open GitHub details' }));
+    const drawer = await screen.findByTestId('connector-drawer');
+    expect(within(drawer).getByRole('alert').textContent).toContain("Couldn't cancel authorization. Try again.");
+    expect(document.querySelector('.connector-panel-alert')).toBeNull();
     expect(
       JSON.parse(window.sessionStorage.getItem('od-connectors-authorization-pending') ?? '{}'),
     ).toHaveProperty('github');
   });
 
-  it('surfaces a connect error inline on the connector card', async () => {
+  it('clears failed authorization cancel alerts after status refresh connects', async () => {
+    const availableConnector: ConnectorDetail = {
+      ...configuredComposioConnector,
+      status: 'available',
+      auth: { provider: 'composio', configured: true },
+    };
+    vi.mocked(fetchConnectors).mockResolvedValue([availableConnector]);
+    vi.mocked(fetchConnectorDiscovery).mockResolvedValue([availableConnector]);
+    vi.mocked(fetchConnectorStatuses)
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ github: { status: 'connected' } });
+    vi.mocked(connectConnector).mockResolvedValue({
+      connector: availableConnector,
+      auth: {
+        kind: 'redirect_required',
+        redirectUrl: 'https://example.com/oauth',
+        expiresAt: '2099-05-08T10:00:00.000Z',
+      },
+    });
+    vi.mocked(cancelConnectorAuthorization).mockResolvedValue(null);
+
+    render(<ConnectorsBrowser composioConfigured />);
+
+    await screen.findByText('GitHub');
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+    await screen.findByRole('button', { name: 'Cancel' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(cancelConnectorAuthorization).toHaveBeenCalledWith('github'));
+    expect(screen.getByRole('status').textContent).toContain("Couldn't cancel authorization. Try again.");
+
+    fireEvent.focus(window);
+
+    await waitFor(() => expect(fetchConnectorStatuses).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
+    expect(document.querySelector('.connector-panel-alert')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Disconnect' })).toBeTruthy();
+  });
+
+  it('does not show a failed authorization cancel alert when refresh already reports connected', async () => {
+    const availableConnector: ConnectorDetail = {
+      ...configuredComposioConnector,
+      status: 'available',
+      auth: { provider: 'composio', configured: true },
+    };
+    vi.mocked(fetchConnectors).mockResolvedValue([availableConnector]);
+    vi.mocked(fetchConnectorDiscovery).mockResolvedValue([availableConnector]);
+    vi.mocked(fetchConnectorStatuses).mockResolvedValue({ github: { status: 'connected' } });
+    vi.mocked(connectConnector).mockResolvedValue({
+      connector: availableConnector,
+      auth: {
+        kind: 'redirect_required',
+        redirectUrl: 'https://example.com/oauth',
+        expiresAt: '2099-05-08T10:00:00.000Z',
+      },
+    });
+    vi.mocked(cancelConnectorAuthorization).mockResolvedValue(null);
+
+    render(<ConnectorsBrowser composioConfigured />);
+
+    await screen.findByText('GitHub');
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+    await screen.findByRole('button', { name: 'Cancel' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(cancelConnectorAuthorization).toHaveBeenCalledWith('github'));
+    await waitFor(() => expect(fetchConnectorStatuses).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
+    expect(document.querySelector('.connector-panel-alert')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Disconnect' })).toBeTruthy();
+  });
+
+  it('surfaces a connect error above the connector grid', async () => {
     const availableConnector: ConnectorDetail = {
       ...configuredComposioConnector,
       status: 'available',
@@ -444,12 +579,66 @@ describe('ConnectorsBrowser', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
 
     await waitFor(() => expect(connectConnector).toHaveBeenCalledWith('github'));
-    await waitFor(() => expect(
-      screen.getByRole('alert').textContent,
-    ).toContain('Composio provider is not configured'));
+    const alert = await screen.findByRole('status');
+    expect(alert.textContent).toContain('GitHub: Composio provider is not configured');
+    expect(alert.textContent).toContain('GitHub');
+    expect(alert.textContent).toContain('Composio provider is not configured');
+    expect(alert.closest('.connector-grid')).toBeNull();
+    expect(alert.closest('.connector-card')).toBeNull();
+    const alertRow = alert.closest('.connector-panel-alert');
+    expect(alertRow).not.toBeNull();
+    fireEvent.click(within(alertRow as HTMLElement).getByRole('button', { name: 'Open GitHub details' }));
+    const drawer = await screen.findByTestId('connector-drawer');
+    expect(within(drawer).getByText('Composio provider is not configured')).toBeTruthy();
+    expect(document.querySelector('.connector-panel-alert')).toBeNull();
   });
 
-  it('clears the inline connect error when the user retries and succeeds', async () => {
+  it('preserves full long connect errors in the panel alert title and drawer', async () => {
+    const availableConnector: ConnectorDetail = {
+      ...configuredComposioConnector,
+      name: 'GitHub Enterprise Connector With A Very Long Display Name',
+      status: 'available',
+      auth: { provider: 'composio', configured: true },
+    };
+    const longError = [
+      'OAuth failed because provider returned invalid_request.',
+      'Raw response:',
+      'https://example.com/callback?error_description=this-is-a-very-long-provider-token-that-should-not-stretch-the-card-grid',
+    ].join(' ');
+    vi.mocked(fetchConnectors).mockResolvedValue([availableConnector]);
+    vi.mocked(fetchConnectorDiscovery).mockResolvedValue([availableConnector]);
+    vi.mocked(fetchConnectorStatuses).mockResolvedValue({});
+    vi.mocked(connectConnector).mockResolvedValue({
+      connector: null,
+      error: longError,
+    });
+
+    render(<ConnectorsBrowser composioConfigured />);
+
+    await screen.findByText('GitHub Enterprise Connector With A Very Long Display Name');
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+
+    await waitFor(() => expect(connectConnector).toHaveBeenCalledWith('github'));
+    const alert = await screen.findByRole('status');
+    expect(alert.textContent).toContain(longError);
+    expect(alert.closest('.connector-grid')).toBeNull();
+    expect(alert.closest('.connector-card')).toBeNull();
+    expect(alert.querySelector('strong')?.getAttribute('title')).toBe(
+      'GitHub Enterprise Connector With A Very Long Display Name',
+    );
+    const message = alert.querySelector('span[title]');
+    expect(message?.getAttribute('title')).toBe(longError);
+    const alertRow = alert.closest('.connector-panel-alert');
+    expect(alertRow).not.toBeNull();
+    fireEvent.click(within(alertRow as HTMLElement).getByRole('button', {
+      name: 'Open GitHub Enterprise Connector With A Very Long Display Name details',
+    }));
+    const drawer = await screen.findByTestId('connector-drawer');
+    expect(within(drawer).getByText(longError)).toBeTruthy();
+    expect(document.querySelector('.connector-panel-alert')).toBeNull();
+  });
+
+  it('clears the panel connect error when the user retries and succeeds', async () => {
     const availableConnector: ConnectorDetail = {
       ...configuredComposioConnector,
       status: 'available',
@@ -474,12 +663,12 @@ describe('ConnectorsBrowser', () => {
     await screen.findByText('GitHub');
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
     await waitFor(() => expect(
-      screen.getByRole('alert').textContent,
+      screen.getByRole('status').textContent,
     ).toContain('Composio provider is not configured'));
 
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
     await waitFor(() => expect(connectConnector).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
   });
 
   it('does not mark failed OAuth launches as pending authorization', async () => {
@@ -512,5 +701,162 @@ describe('ConnectorsBrowser', () => {
     expect(
       JSON.parse(window.sessionStorage.getItem('od-connectors-authorization-pending') ?? '{}'),
     ).not.toHaveProperty('github');
+  });
+
+  it('does not auto-cancel pending authorization on focus while the daemon authorization window is still valid', async () => {
+    const availableConnector: ConnectorDetail = {
+      ...configuredComposioConnector,
+      status: 'available',
+      auth: { provider: 'composio', configured: true },
+    };
+    vi.mocked(fetchConnectors).mockResolvedValue([availableConnector]);
+    vi.mocked(fetchConnectorDiscovery).mockResolvedValue([availableConnector]);
+    vi.mocked(fetchConnectorStatuses).mockResolvedValue({
+      github: { status: 'available' },
+    });
+    vi.mocked(connectConnector).mockResolvedValue({
+      connector: availableConnector,
+      auth: {
+        kind: 'redirect_required',
+        redirectUrl: 'https://example.com/oauth',
+        expiresAt: '2099-05-08T10:00:00.000Z',
+      },
+    });
+    vi.mocked(cancelConnectorAuthorization).mockResolvedValue(availableConnector);
+
+    render(<ConnectorsBrowser composioConfigured />);
+
+    await screen.findByText('GitHub');
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+    await screen.findByRole('button', { name: 'Cancel' });
+
+    fireEvent(window, new Event('focus'));
+
+    await waitFor(() => expect(fetchConnectorStatuses).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(cancelConnectorAuthorization).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
+    expect(
+      JSON.parse(window.sessionStorage.getItem('od-connectors-authorization-pending') ?? '{}'),
+    ).toHaveProperty('github');
+  });
+
+  it('auto-cancels stuck pending authorization on focus once the daemon authorization window has expired', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const startMs = new Date('2026-05-17T10:00:00.000Z').getTime();
+    vi.setSystemTime(startMs);
+
+    const availableConnector: ConnectorDetail = {
+      ...configuredComposioConnector,
+      status: 'available',
+      auth: { provider: 'composio', configured: true },
+    };
+    vi.mocked(fetchConnectors).mockResolvedValue([availableConnector]);
+    vi.mocked(fetchConnectorDiscovery).mockResolvedValue([availableConnector]);
+    vi.mocked(fetchConnectorStatuses).mockResolvedValue({
+      github: { status: 'available' },
+    });
+    vi.mocked(connectConnector).mockResolvedValue({
+      connector: availableConnector,
+      auth: {
+        kind: 'redirect_required',
+        redirectUrl: 'https://example.com/oauth',
+        expiresAt: new Date(startMs + 5 * 60 * 1000).toISOString(),
+      },
+    });
+    vi.mocked(cancelConnectorAuthorization).mockResolvedValue(availableConnector);
+
+    render(<ConnectorsBrowser composioConfigured />);
+
+    await screen.findByText('GitHub');
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+    await screen.findByRole('button', { name: 'Cancel' });
+
+    vi.setSystemTime(startMs + 10 * 60 * 1000);
+
+    fireEvent(window, new Event('focus'));
+
+    await waitFor(() => expect(cancelConnectorAuthorization).toHaveBeenCalledWith('github'));
+    await screen.findByRole('button', { name: 'Connect' });
+    expect(
+      JSON.parse(window.sessionStorage.getItem('od-connectors-authorization-pending') ?? '{}'),
+    ).not.toHaveProperty('github');
+
+    vi.useRealTimers();
+  });
+
+  it('marks the auto-cancel as failed when the daemon /authorization/cancel returns null after the authorization expires', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const startMs = new Date('2026-05-17T10:00:00.000Z').getTime();
+    vi.setSystemTime(startMs);
+
+    const availableConnector: ConnectorDetail = {
+      ...configuredComposioConnector,
+      status: 'available',
+      auth: { provider: 'composio', configured: true },
+    };
+    vi.mocked(fetchConnectors).mockResolvedValue([availableConnector]);
+    vi.mocked(fetchConnectorDiscovery).mockResolvedValue([availableConnector]);
+    vi.mocked(fetchConnectorStatuses).mockResolvedValue({
+      github: { status: 'available' },
+    });
+    vi.mocked(connectConnector).mockResolvedValue({
+      connector: availableConnector,
+      auth: {
+        kind: 'redirect_required',
+        redirectUrl: 'https://example.com/oauth',
+        expiresAt: new Date(startMs + 5 * 60 * 1000).toISOString(),
+      },
+    });
+    vi.mocked(cancelConnectorAuthorization).mockResolvedValue(null);
+
+    render(<ConnectorsBrowser composioConfigured />);
+
+    await screen.findByText('GitHub');
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+    await screen.findByRole('button', { name: 'Cancel' });
+
+    vi.setSystemTime(startMs + 10 * 60 * 1000);
+
+    fireEvent(window, new Event('focus'));
+
+    await waitFor(() => expect(cancelConnectorAuthorization).toHaveBeenCalledWith('github'));
+    expect(await screen.findAllByText("Couldn't cancel authorization. Try again.")).toHaveLength(2);
+
+    vi.useRealTimers();
+  });
+
+  it('does not auto-cancel pending authorization on focus when the daemon already reports the connector as connected', async () => {
+    const availableConnector: ConnectorDetail = {
+      ...configuredComposioConnector,
+      status: 'available',
+      auth: { provider: 'composio', configured: true },
+    };
+    vi.mocked(fetchConnectors).mockResolvedValue([availableConnector]);
+    vi.mocked(fetchConnectorDiscovery).mockResolvedValue([availableConnector]);
+    vi.mocked(fetchConnectorStatuses).mockResolvedValue({
+      github: { status: 'connected' },
+    });
+    vi.mocked(connectConnector).mockResolvedValue({
+      connector: availableConnector,
+      auth: {
+        kind: 'redirect_required',
+        redirectUrl: 'https://example.com/oauth',
+        expiresAt: '2099-05-08T10:00:00.000Z',
+      },
+    });
+    vi.mocked(cancelConnectorAuthorization).mockResolvedValue(availableConnector);
+
+    render(<ConnectorsBrowser composioConfigured />);
+
+    await screen.findByText('GitHub');
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+    await screen.findByRole('button', { name: 'Cancel' });
+
+    fireEvent(window, new Event('focus'));
+
+    await waitFor(() => expect(fetchConnectorStatuses).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(cancelConnectorAuthorization).not.toHaveBeenCalled();
   });
 });

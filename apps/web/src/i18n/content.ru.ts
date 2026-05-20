@@ -788,6 +788,11 @@ export const RU_PROMPT_TEMPLATE_COPY: Record<string, Partial<Pick<PromptTemplate
     summary:
       '6-секундный вертикальный HyperFrames-клип 1080x1920 — счетчик в духе Apple от $0 до $10 000 с зеленой вспышкой, денежными частицами, иконкой пачки наличных и заголовком-kicker. Основано на каталожном блоке HyperFrames `apple-money-count`.',
   },
+  'weread-year-in-review-video-template': {
+    title: 'Видео-шаблон WeRead Year in Review',
+    summary:
+      'Вертикальный 9:16 HyperFrames-шаблон для годовых отчетов о чтении в стиле WeRead: теплая бумажная фактура, редакционная китайская типографика, переходы страниц, статистика чтения, следы заметок, ключевые интересы и финальная карточка читательского persona.',
+  },
   'hyperframes-product-reveal-minimal': {
     title: 'HyperFrames: 5-секундный минималистичный product reveal',
     summary:

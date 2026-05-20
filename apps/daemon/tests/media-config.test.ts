@@ -8,6 +8,7 @@ import {
   readMaskedConfig,
   resolveModelAlias,
   resolveProviderConfig,
+  seedProviderIfMissing,
   writeConfig,
 } from '../src/media-config.js';
 
@@ -472,6 +473,209 @@ describe('media-config OpenAI OAuth fallback', () => {
   });
 });
 
+const GROK_ENV_KEYS = ['OD_GROK_API_KEY', 'XAI_API_KEY'];
+
+describe('media-config Grok / xAI OAuth fallback', () => {
+  let homeDir: string;
+  let projectRoot: string;
+  const originalHome = process.env.HOME;
+  const originalEnv = Object.fromEntries(
+    GROK_ENV_KEYS.map((key) => [key, process.env[key]]),
+  );
+  const originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
+  const originalDataDir = process.env.OD_DATA_DIR;
+  let homedirSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(async () => {
+    homeDir = await mkdtemp(path.join(tmpdir(), 'od-media-grok-home-'));
+    projectRoot = await mkdtemp(path.join(tmpdir(), 'od-media-grok-project-'));
+    process.env.HOME = homeDir;
+    homedirSpy = vi.spyOn(os, 'homedir').mockReturnValue(homeDir);
+    for (const key of GROK_ENV_KEYS) {
+      delete process.env[key];
+    }
+    delete process.env.OD_MEDIA_CONFIG_DIR;
+    delete process.env.OD_DATA_DIR;
+  });
+
+  afterEach(async () => {
+    if (originalHome == null) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = originalHome;
+    }
+    for (const key of GROK_ENV_KEYS) {
+      if (originalEnv[key] == null) {
+        delete process.env[key];
+      } else {
+        process.env[key] = originalEnv[key];
+      }
+    }
+    if (originalMediaConfigDir == null) {
+      delete process.env.OD_MEDIA_CONFIG_DIR;
+    } else {
+      process.env.OD_MEDIA_CONFIG_DIR = originalMediaConfigDir;
+    }
+    if (originalDataDir == null) {
+      delete process.env.OD_DATA_DIR;
+    } else {
+      process.env.OD_DATA_DIR = originalDataDir;
+    }
+    homedirSpy.mockRestore();
+    await rm(homeDir, { recursive: true, force: true });
+    await rm(projectRoot, { recursive: true, force: true });
+  });
+
+  async function writeHomeJson(relPath: string, data: unknown) {
+    const file = path.join(homeDir, relPath);
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, JSON.stringify(data), 'utf8');
+  }
+
+  async function writeOdXaiTokens(token: {
+    accessToken: string;
+    refreshToken?: string;
+    expiresAt?: number;
+  }) {
+    const file = path.join(projectRoot, '.od', 'xai-tokens.json');
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(
+      file,
+      JSON.stringify({
+        token: {
+          accessToken: token.accessToken,
+          tokenType: 'Bearer',
+          savedAt: Date.now(),
+          ...(token.refreshToken ? { refreshToken: token.refreshToken } : {}),
+          ...(token.expiresAt !== undefined
+            ? { expiresAt: token.expiresAt }
+            : {}),
+        },
+      }),
+      'utf8',
+    );
+  }
+
+  async function writeStoredMediaConfig(data: unknown) {
+    const file = path.join(projectRoot, '.od', 'media-config.json');
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, JSON.stringify(data), 'utf8');
+  }
+
+  function grokProvider(masked: { providers: unknown }) {
+    return (masked.providers as Record<string, unknown>).grok;
+  }
+
+  it('uses OD-native xai-tokens.json when one is stored', async () => {
+    await writeOdXaiTokens({
+      accessToken: 'od-bearer-1',
+      expiresAt: Date.now() + 3_600_000,
+    });
+
+    const resolved = await resolveProviderConfig(projectRoot, 'grok');
+    const masked = await readMaskedConfig(projectRoot);
+
+    expect(resolved.apiKey).toBe('od-bearer-1');
+    expect(grokProvider(masked)).toMatchObject({
+      configured: true,
+      source: 'oauth-xai-stored',
+      apiKeyTail: '',
+    });
+  });
+
+  it('borrows the Hermes-side xai-oauth token when OD has no native creds', async () => {
+    await writeHomeJson('.hermes/auth.json', {
+      providers: {
+        'xai-oauth': {
+          tokens: { access_token: 'hermes-xai-bearer' },
+        },
+      },
+    });
+
+    const resolved = await resolveProviderConfig(projectRoot, 'grok');
+    const masked = await readMaskedConfig(projectRoot);
+
+    expect(resolved.apiKey).toBe('hermes-xai-bearer');
+    expect(grokProvider(masked)).toMatchObject({
+      configured: true,
+      source: 'oauth-hermes-xai',
+    });
+  });
+
+  it('prefers OD-native xai-tokens over Hermes borrowing', async () => {
+    await writeOdXaiTokens({
+      accessToken: 'od-bearer-2',
+      expiresAt: Date.now() + 3_600_000,
+    });
+    await writeHomeJson('.hermes/auth.json', {
+      providers: {
+        'xai-oauth': {
+          tokens: { access_token: 'hermes-xai-bearer' },
+        },
+      },
+    });
+
+    const resolved = await resolveProviderConfig(projectRoot, 'grok');
+    expect(resolved.apiKey).toBe('od-bearer-2');
+  });
+
+  it('keeps env keys ahead of OAuth fallbacks', async () => {
+    process.env.XAI_API_KEY = 'env-xai-key';
+    await writeOdXaiTokens({
+      accessToken: 'od-bearer-3',
+      expiresAt: Date.now() + 3_600_000,
+    });
+
+    const resolved = await resolveProviderConfig(projectRoot, 'grok');
+    const masked = await readMaskedConfig(projectRoot);
+
+    expect(resolved.apiKey).toBe('env-xai-key');
+    expect(grokProvider(masked)).toMatchObject({
+      configured: true,
+      source: 'env',
+    });
+  });
+
+  it('keeps stored provider key ahead of OAuth fallbacks', async () => {
+    await writeStoredMediaConfig({
+      providers: {
+        grok: { apiKey: 'stored-grok-key', baseUrl: 'https://api.x.ai/v1' },
+      },
+    });
+    await writeOdXaiTokens({
+      accessToken: 'od-bearer-4',
+      expiresAt: Date.now() + 3_600_000,
+    });
+
+    const resolved = await resolveProviderConfig(projectRoot, 'grok');
+    expect(resolved.apiKey).toBe('stored-grok-key');
+  });
+
+  it('returns empty when no env, no stored key, and no OAuth source exists', async () => {
+    const resolved = await resolveProviderConfig(projectRoot, 'grok');
+    const masked = await readMaskedConfig(projectRoot);
+
+    expect(resolved.apiKey).toBe('');
+    expect(grokProvider(masked)).toMatchObject({
+      configured: false,
+      source: 'unset',
+    });
+  });
+
+  it('skips an OD-native token within the expiry skew when no refresh_token is stored', async () => {
+    // expiresAt within the 120s skew window → treated as expired by
+    // resolveXAIBearer. Without a refresh_token it can't recover, so
+    // the resolver falls through to other sources (none here).
+    await writeOdXaiTokens({
+      accessToken: 'od-bearer-expired',
+      expiresAt: Date.now() + 30_000,
+    });
+
+    const resolved = await resolveProviderConfig(projectRoot, 'grok');
+    expect(resolved.apiKey).toBe('');
+  });
+});
+
 describe('media-config model alias resolution (issue #1277)', () => {
   let projectRoot: string;
   const originalEnvAliases = process.env.OD_MEDIA_MODEL_ALIASES;
@@ -663,5 +867,161 @@ describe('media-config model alias resolution (issue #1277)', () => {
     expect(
       await resolveModelAlias(projectRoot, 'doubao-seedream-3-0-t2i-250415'),
     ).toBe('doubao-seedream-5-0');
+  });
+});
+
+describe('seedProviderIfMissing', () => {
+  let projectRoot: string;
+  const SENSEAUDIO_ENV_KEYS = ['OD_SENSEAUDIO_API_KEY', 'SENSEAUDIO_API_KEY'];
+  const originalEnv = Object.fromEntries(
+    SENSEAUDIO_ENV_KEYS.map((key) => [key, process.env[key]]),
+  );
+  const originalMediaConfigDir = process.env.OD_MEDIA_CONFIG_DIR;
+  const originalDataDir = process.env.OD_DATA_DIR;
+
+  beforeEach(async () => {
+    projectRoot = await mkdtemp(path.join(tmpdir(), 'od-media-seed-'));
+    for (const key of SENSEAUDIO_ENV_KEYS) {
+      delete process.env[key];
+    }
+    delete process.env.OD_MEDIA_CONFIG_DIR;
+    delete process.env.OD_DATA_DIR;
+  });
+
+  afterEach(async () => {
+    for (const key of SENSEAUDIO_ENV_KEYS) {
+      if (originalEnv[key] == null) {
+        delete process.env[key];
+      } else {
+        process.env[key] = originalEnv[key];
+      }
+    }
+    if (originalMediaConfigDir == null) {
+      delete process.env.OD_MEDIA_CONFIG_DIR;
+    } else {
+      process.env.OD_MEDIA_CONFIG_DIR = originalMediaConfigDir;
+    }
+    if (originalDataDir == null) {
+      delete process.env.OD_DATA_DIR;
+    } else {
+      process.env.OD_DATA_DIR = originalDataDir;
+    }
+    await rm(projectRoot, { recursive: true, force: true });
+  });
+
+  async function writeStored(data: unknown) {
+    const file = path.join(projectRoot, '.od', 'media-config.json');
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, JSON.stringify(data), 'utf8');
+  }
+
+  async function readStoredJson(): Promise<unknown> {
+    const file = path.join(projectRoot, '.od', 'media-config.json');
+    const raw = await readFile(file, 'utf8');
+    return JSON.parse(raw);
+  }
+
+  it('writes a fresh entry when the slot is empty', async () => {
+    const wrote = await seedProviderIfMissing(projectRoot, 'senseaudio', {
+      apiKey: 'sa-test-key',
+      baseUrl: 'https://api.senseaudio.cn',
+    });
+    expect(wrote).toBe(true);
+    const stored = await readStoredJson();
+    expect(stored).toEqual({
+      providers: {
+        senseaudio: {
+          apiKey: 'sa-test-key',
+          baseUrl: 'https://api.senseaudio.cn',
+        },
+      },
+    });
+  });
+
+  it('no-ops and preserves the stored key when one is already configured', async () => {
+    await writeStored({
+      providers: {
+        senseaudio: { apiKey: 'pre-existing-key', baseUrl: 'https://existing.example' },
+      },
+    });
+    const wrote = await seedProviderIfMissing(projectRoot, 'senseaudio', {
+      apiKey: 'newer-byok-key',
+      baseUrl: 'https://api.senseaudio.cn',
+    });
+    expect(wrote).toBe(false);
+    const stored = (await readStoredJson()) as { providers: Record<string, unknown> };
+    expect(stored.providers.senseaudio).toEqual({
+      apiKey: 'pre-existing-key',
+      baseUrl: 'https://existing.example',
+    });
+  });
+
+  it('preserves every other provider and aliases when seeding', async () => {
+    await writeStored({
+      providers: {
+        openai: { apiKey: 'sk-openai', baseUrl: 'https://api.openai.com/v1' },
+        volcengine: { apiKey: 'ark-key', baseUrl: 'https://ark.cn-beijing.volces.com/api/v3' },
+      },
+      aliases: { 'doubao-seedream-3-0-t2i-250415': 'doubao-seedream-5-0' },
+    });
+    const wrote = await seedProviderIfMissing(projectRoot, 'senseaudio', {
+      apiKey: 'sa-new',
+    });
+    expect(wrote).toBe(true);
+    const stored = (await readStoredJson()) as {
+      providers: Record<string, unknown>;
+      aliases: Record<string, string>;
+    };
+    expect(stored.providers.openai).toEqual({
+      apiKey: 'sk-openai',
+      baseUrl: 'https://api.openai.com/v1',
+    });
+    expect(stored.providers.volcengine).toEqual({
+      apiKey: 'ark-key',
+      baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+    });
+    expect(stored.providers.senseaudio).toEqual({ apiKey: 'sa-new' });
+    expect(stored.aliases).toEqual({
+      'doubao-seedream-3-0-t2i-250415': 'doubao-seedream-5-0',
+    });
+  });
+
+  it('no-ops when an env var resolves a key for the provider', async () => {
+    process.env.OD_SENSEAUDIO_API_KEY = 'env-key';
+    const wrote = await seedProviderIfMissing(projectRoot, 'senseaudio', {
+      apiKey: 'sa-byok-key',
+      baseUrl: 'https://api.senseaudio.cn',
+    });
+    expect(wrote).toBe(false);
+    await expect(readStoredJson()).rejects.toThrow();
+  });
+
+  it('no-ops on empty apiKey', async () => {
+    const wrote = await seedProviderIfMissing(projectRoot, 'senseaudio', {
+      apiKey: '',
+      baseUrl: 'https://api.senseaudio.cn',
+    });
+    expect(wrote).toBe(false);
+    await expect(readStoredJson()).rejects.toThrow();
+  });
+
+  it('no-ops for unknown provider ids', async () => {
+    const wrote = await seedProviderIfMissing(projectRoot, 'not-a-provider', {
+      apiKey: 'whatever',
+    });
+    expect(wrote).toBe(false);
+    await expect(readStoredJson()).rejects.toThrow();
+  });
+
+  it('resolves the seeded key through resolveProviderConfig', async () => {
+    await seedProviderIfMissing(projectRoot, 'senseaudio', {
+      apiKey: 'sa-final',
+      baseUrl: 'https://api.senseaudio.cn',
+    });
+    const resolved = await resolveProviderConfig(projectRoot, 'senseaudio');
+    expect(resolved).toEqual({
+      apiKey: 'sa-final',
+      baseUrl: 'https://api.senseaudio.cn',
+    });
   });
 });

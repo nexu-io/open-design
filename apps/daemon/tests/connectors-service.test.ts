@@ -211,6 +211,18 @@ describe('connector read-only safety classification', () => {
     expect(isRefreshEligibleConnectorToolSafety(safety)).toBe(true);
   });
 
+  it('does not let response-size wording override a read-only search name', () => {
+    const safety = classifyConnectorToolSafety({
+      name: 'notion.notion_search_notion_page',
+      title: 'Search Notion pages and databases',
+      description:
+        'Searches Notion pages and databases by title. Database pages can create large responses for databases with many properties.',
+    });
+
+    expect(safety).toMatchObject({ sideEffect: 'read', approval: 'auto' });
+    expect(isRefreshEligibleConnectorToolSafety(safety)).toBe(true);
+  });
+
   it('fails closed for unknown tools', () => {
     const safety = classifyConnectorToolSafety({ name: 'provider.sync' });
 

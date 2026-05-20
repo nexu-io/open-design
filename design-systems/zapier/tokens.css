@@ -1,0 +1,64 @@
+/* design-systems/zapier/tokens.css
+ *
+ * Structured token bindings for Zapier.
+ * warm automation workspace with off-white canvas, orange connectors, and approachable cards.
+ */
+
+:root {
+  --bg: #fff7ed;
+  --surface: #ffffff;
+  --surface-warm: #ffedd5;
+  --fg: #2d2a26;
+  --fg-2: #574f45;
+  --muted: #7c6f64;
+  --meta: #ff4f00;
+  --border: #eadfd3;
+  --border-soft: #f4eadf;
+  --accent: #ff4f00;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #15803d;
+  --warn: #d97706;
+  --danger: #dc2626;
+  --font-display: "Degular", Inter, system-ui, sans-serif;
+  --font-body: "Inter", system-ui, sans-serif;
+  --font-mono: "Roboto Mono", ui-monospace, Menlo, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 24px;
+  --text-2xl: 36px;
+  --text-3xl: 52px;
+  --text-4xl: 72px;
+  --leading-body: 1.5;
+  --leading-tight: 1.02;
+  --tracking-display: -0.025em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 96px;
+  --section-y-tablet: 68px;
+  --section-y-phone: 48px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 18px 44px rgba(45, 42, 38, 0.12);
+  --focus-ring: 0 0 0 4px rgba(255, 79, 0, 0.24);
+  --motion-fast: 140ms;
+  --motion-base: 220ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --container-max: 1160px;
+  --container-gutter-desktop: 32px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

@@ -18,6 +18,7 @@ export type MediaProvider = {
   credentialsRequired?: boolean;
   settingsVisible?: boolean;
   supportsCustomModel?: boolean;
+  customModelPlaceholder?: string;
 };
 
 export type MediaModel = {
@@ -35,6 +36,8 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
   { id: 'grok', label: 'xAI Grok Imagine', hint: 'grok-imagine — image + video with native audio', integrated: true, defaultBaseUrl: 'https://api.x.ai/v1' },
   { id: 'hyperframes', label: 'HyperFrames', hint: 'Local HTML -> MP4 renderer', integrated: true, credentialsRequired: false, settingsVisible: false },
   { id: 'nanobanana', label: 'Nano Banana', hint: 'Google official by default; custom gateway configurable', integrated: true, defaultBaseUrl: 'https://generativelanguage.googleapis.com', supportsCustomModel: true },
+  { id: 'imagerouter', label: 'ImageRouter', hint: 'OpenAI-compatible image + video routing', integrated: true, defaultBaseUrl: 'https://api.imagerouter.io/v1/openai', docsUrl: 'https://docs.imagerouter.io/api-reference/image-generation/', supportsCustomModel: true, customModelPlaceholder: 'openai/gpt-image-2 or xAI/grok-imagine-video' },
+  { id: 'custom-image', label: 'Custom Image API', hint: 'OpenAI-compatible /v1/images/generations endpoint', integrated: true, docsUrl: 'https://platform.openai.com/docs/api-reference/images', supportsCustomModel: true, customModelPlaceholder: 'my-image-model' },
   { id: 'bfl', label: 'Black Forest Labs', hint: 'FLUX 1.1 Pro / FLUX Pro / Dev', integrated: false, defaultBaseUrl: 'https://api.bfl.ai' },
   { id: 'fal', label: 'Fal.ai', hint: 'Sora / Seedance / Veo / FLUX', integrated: false, defaultBaseUrl: 'https://fal.run' },
   { id: 'leonardo', label: 'Leonardo.ai', hint: 'Phoenix / Kino XL / FLUX', integrated: true, credentialsRequired: true, settingsVisible: true, defaultBaseUrl: 'https://cloud.leonardo.ai/api/rest/v1' },
@@ -57,7 +60,7 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
   {
     id: 'senseaudio',
     label: 'SenseAudio',
-    hint: 'TTS · 70+ system voices · clone',
+    hint: '',
     integrated: true,
     defaultBaseUrl: 'https://api.senseaudio.cn',
     docsUrl: 'https://docs.senseaudio.cn',
@@ -77,9 +80,19 @@ export const IMAGE_MODELS: MediaModel[] = [
   { id: 'doubao-seedream-3-0-t2i-250415', label: 'seedream-3.0', hint: 'ByteDance · Doubao image', provider: 'volcengine', caps: ['t2i'] },
   { id: 'doubao-seededit-3-0-i2i-250628', label: 'seededit-3.0', hint: 'ByteDance · image edit', provider: 'volcengine', caps: ['i2i'] },
 
+  { id: 'senseaudio-image-2.0-260319', label: 'senseaudio-image-2.0', hint: 'SenseAudio · multi-aspect, latest', provider: 'senseaudio', caps: ['t2i', 'i2i'] },
+  { id: 'senseaudio-image-1.0-260319', label: 'senseaudio-image-1.0', hint: 'SenseAudio · standard', provider: 'senseaudio', caps: ['t2i', 'i2i'] },
+  { id: 'doubao-seedream-5-0-260128', label: 'seedream-5.0', hint: 'SenseAudio · ByteDance Seedream 5.0 hi-res', provider: 'senseaudio', caps: ['t2i', 'i2i'] },
+
   { id: 'grok-imagine-image', label: 'grok-imagine-image', hint: 'xAI · 2K text-to-image', provider: 'grok', caps: ['t2i'] },
 
   { id: 'gemini-3.1-flash-image-preview', label: 'nano-banana-2', hint: 'Nano Banana · text-to-image', provider: 'nanobanana', caps: ['t2i'] },
+
+  { id: 'openai/gpt-image-2', label: 'openai/gpt-image-2', hint: 'ImageRouter · routed GPT Image', provider: 'imagerouter', caps: ['t2i'] },
+  { id: 'openai/gpt-image-1.5', label: 'openai/gpt-image-1.5', hint: 'ImageRouter · routed GPT Image', provider: 'imagerouter', caps: ['t2i'] },
+  { id: 'black-forest-labs/FLUX-1.1-pro', label: 'FLUX-1.1-pro', hint: 'ImageRouter · Black Forest Labs', provider: 'imagerouter', caps: ['t2i'] },
+
+  { id: 'custom-image', label: 'custom-image', hint: 'Custom · OpenAI-compatible endpoint', provider: 'custom-image', caps: ['t2i'] },
 
   { id: 'flux-1.1-pro', label: 'flux-1.1-pro', hint: 'BFL · flagship', provider: 'bfl', caps: ['t2i', 'i2i'] },
   { id: 'flux-pro', label: 'flux-pro', hint: 'BFL', provider: 'bfl', caps: ['t2i'] },
@@ -113,6 +126,10 @@ export const VIDEO_MODELS: MediaModel[] = [
 
   { id: 'grok-imagine-video', label: 'grok-imagine-video', hint: 'xAI · 720p t2v + i2v + native audio', provider: 'grok', caps: ['t2v', 'i2v', 'audio'] },
 
+  { id: 'xAI/grok-imagine-video', label: 'xAI/grok-imagine-video', hint: 'ImageRouter · routed video', provider: 'imagerouter', caps: ['t2v', 'audio'] },
+  { id: 'bytedance/seedance-1.5-pro', label: 'seedance-1.5-pro', hint: 'ImageRouter · Bytedance', provider: 'imagerouter', caps: ['t2v'] },
+  { id: 'google/veo-3.1-lite', label: 'veo-3.1-lite', hint: 'ImageRouter · Google', provider: 'imagerouter', caps: ['t2v'] },
+
   { id: 'kling-2.0', label: 'kling-2.0', hint: 'Kuaishou · latest', provider: 'kling', caps: ['t2v', 'i2v'] },
   { id: 'kling-1.6', label: 'kling-1.6', hint: 'Kuaishou', provider: 'kling', caps: ['t2v', 'i2v'] },
   { id: 'kling-1.5', label: 'kling-1.5', hint: 'Kuaishou', provider: 'kling', caps: ['t2v', 'i2v'] },
@@ -141,6 +158,8 @@ export const AUDIO_MODELS_BY_KIND: Record<AudioKind, MediaModel[]> = {
     { id: 'senseaudio-tts', label: 'senseaudio-tts', hint: 'SenseAudio', provider: 'senseaudio', caps: ['tts', 'voice-clone'] },
     { id: 'doubao-tts', label: 'doubao-tts', hint: 'Volcengine', provider: 'volcengine', caps: ['tts'] },
     { id: 'gpt-4o-mini-tts', label: 'gpt-4o-mini-tts', hint: 'OpenAI', provider: 'openai', caps: ['tts'] },
+    // xAI TTS — multilingual; uses the same SuperGrok OAuth as image / video.
+    { id: 'grok-tts', label: 'grok-tts', hint: 'xAI · multilingual · uses Grok subscription', provider: 'grok', caps: ['tts'] },
   ],
   sfx: [
     { id: 'elevenlabs-sfx', label: 'elevenlabs-sfx', hint: 'ElevenLabs SFX', provider: 'elevenlabs', caps: ['sfx'], default: true },

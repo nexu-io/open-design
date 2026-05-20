@@ -17,6 +17,16 @@ const DISCOVERY_CACHE_TTL_MS = 60_000;
 const CUSTOM_AUTH_REQUIRED_MESSAGE = 'Composio does not have managed credentials for this toolkit.';
 const PERSISTED_CATALOG_REFRESH_MS = 24 * 60 * 60 * 1000;
 
+const COMPOSIO_READ_ONLY_TOOL_SAFETY_OVERRIDES = new Set([
+  'notion:notion_search_notion_page',
+]);
+
+const COMPOSIO_READ_ONLY_TOOL_SAFETY = {
+  sideEffect: 'read',
+  approval: 'auto',
+  reason: 'Provider-specific override: this Composio tool is a read-only search/list operation.',
+} as const;
+
 interface ComposioToolkitCatalogEntry {
   name: string;
   slug: string;
@@ -1421,7 +1431,19 @@ function applyComposioToolCuration(
   const overlay = COMPOSIO_CURATION_OVERLAY[connectorKey];
   const toolKey = providerToolId ? normalizeProviderToolId(providerToolId) : undefined;
   const curation = toolKey ? overlay?.[toolKey] : undefined;
-  return curation === undefined ? tool : { ...tool, curation: { ...(tool.curation ?? {}), ...curation } };
+  const safetyOverride = toolKey
+    ? COMPOSIO_READ_ONLY_TOOL_SAFETY_OVERRIDES.has(`${connectorKey}:${toolKey}`)
+    : false;
+  const curated = curation === undefined
+    ? tool
+    : { ...tool, curation: { ...(tool.curation ?? {}), ...curation } };
+  return safetyOverride
+    ? {
+        ...curated,
+        safety: { ...COMPOSIO_READ_ONLY_TOOL_SAFETY },
+        refreshEligible: true,
+      }
+    : curated;
 }
 
 function titleFromSlug(value: string): string {

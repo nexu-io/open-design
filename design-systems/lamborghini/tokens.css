@@ -1,0 +1,64 @@
+/* design-systems/lamborghini/tokens.css
+ *
+ * Structured token bindings for Lamborghini.
+ * sharp black-gold performance interface with angular premium energy.
+ */
+
+:root {
+  --bg: #050505;
+  --surface: #141414;
+  --surface-warm: #211b0b;
+  --fg: #f8f4e6;
+  --fg-2: #d8ceb0;
+  --muted: #9b927d;
+  --meta: #d4af37;
+  --border: #3a321d;
+  --border-soft: #282315;
+  --accent: #d4af37;
+  --accent-on: #050505;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #39a852;
+  --warn: #f7c948;
+  --danger: #e63946;
+  --font-display: "Lamborghini", "Eurostile", Arial, sans-serif;
+  --font-body: "Inter", Arial, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 26px;
+  --text-2xl: 42px;
+  --text-3xl: 64px;
+  --text-4xl: 90px;
+  --leading-body: 1.48;
+  --leading-tight: 0.96;
+  --tracking-display: -0.025em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 112px;
+  --section-y-tablet: 80px;
+  --section-y-phone: 56px;
+  --radius-sm: 2px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 28px 84px rgba(0, 0, 0, 0.54);
+  --focus-ring: 0 0 0 4px rgba(212, 175, 55, 0.32);
+  --motion-fast: 120ms;
+  --motion-base: 210ms;
+  --ease-standard: cubic-bezier(0.16, 1, 0.3, 1);
+  --container-max: 1240px;
+  --container-gutter-desktop: 40px;
+  --container-gutter-tablet: 28px;
+  --container-gutter-phone: 18px;
+}

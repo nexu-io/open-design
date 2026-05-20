@@ -20,6 +20,7 @@ export function MediaSurface({ preview, pluginTitle, inView }: Props) {
   const [hovering, setHovering] = useState(false);
   const showVideo =
     inView && hovering && preview.mediaType === 'video' && Boolean(preview.videoUrl);
+  const hasPoster = Boolean(preview.poster);
 
   return (
     <div
@@ -36,6 +37,8 @@ export function MediaSurface({ preview, pluginTitle, inView }: Props) {
           decoding="async"
           referrerPolicy="no-referrer"
         />
+      ) : !hasPoster ? (
+        <MediaFallback pluginTitle={pluginTitle} mediaType={preview.mediaType} />
       ) : (
         <div className="plugins-home__media-skeleton" aria-hidden />
       )}
@@ -55,6 +58,26 @@ export function MediaSurface({ preview, pluginTitle, inView }: Props) {
           <Icon name="play" size={12} />
         </span>
       ) : null}
+    </div>
+  );
+}
+
+function MediaFallback({
+  mediaType,
+  pluginTitle,
+}: {
+  mediaType: MediaPreviewSpec['mediaType'];
+  pluginTitle: string;
+}) {
+  const trimmed = pluginTitle.trim();
+  const glyph = String.fromCodePoint(trimmed.codePointAt(0) ?? 0x2022).toUpperCase();
+  const icon = mediaType === 'video' ? 'play' : mediaType === 'audio' ? 'mic' : 'image';
+  return (
+    <div className="plugins-home__media-fallback" aria-hidden>
+      <span className="plugins-home__media-fallback-glyph">{glyph}</span>
+      <span className="plugins-home__media-fallback-icon">
+        <Icon name={icon} size={15} />
+      </span>
     </div>
   );
 }
