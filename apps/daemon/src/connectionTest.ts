@@ -1183,7 +1183,10 @@ async function testAgentConnectionInternal(
     };
   };
 
-  const resultFromAgentText = (text: string): ConnectionTestResponse => {
+  const resultFromAgentText = (
+    text: string,
+    exit?: { code: number | null; signal: NodeJS.Signals | null },
+  ): ConnectionTestResponse => {
     const latencyMs = Date.now() - start;
     const rawSample = truncateSample(text);
     const sample = redactSecrets(rawSample);
@@ -1199,7 +1202,10 @@ async function testAgentConnectionInternal(
         model,
         agentName: def.name,
         detail,
-        diagnostics: buildDiagnostics({ phase: 'output_parse' }),
+        diagnostics: buildDiagnostics({
+          phase: 'output_parse',
+          ...(exit ? { exitCode: exit.code, signal: exit.signal } : {}),
+        }),
       };
     }
     if (!isSmokeOkReply(text)) {
@@ -1208,6 +1214,14 @@ async function testAgentConnectionInternal(
       );
     }
     console.log(`[test:agent] ${def.name} → ok in ${(latencyMs / 1000).toFixed(1)}s`);
+    // resultFromChildExit can route ACP forced shutdown (code === null,
+    // signal === 'SIGTERM' + acpCleanCompletion) through this success
+    // helper. Hard-coding `exitCode: 0` would silently overwrite the
+    // SIGTERM signal and violate the raw code/signal contract in
+    // packages/contracts/src/api/connectionTest.ts. Pass through the
+    // real `winner.code` / `winner.signal` when the caller has them and
+    // only synthesize `exitCode: 0` when no exit context is available
+    // (theoretical text-without-exit path).
     return {
       ok: true,
       kind: 'success',
@@ -1215,7 +1229,11 @@ async function testAgentConnectionInternal(
       model,
       agentName: def.name,
       sample,
-      diagnostics: buildDiagnostics({ phase: 'connection_smoke_test', exitCode: 0 }),
+      diagnostics: buildDiagnostics(
+        exit
+          ? { phase: 'connection_smoke_test', exitCode: exit.code, signal: exit.signal }
+          : { phase: 'connection_smoke_test', exitCode: 0 },
+      ),
     };
   };
 
@@ -1292,6 +1310,10 @@ async function testAgentConnectionInternal(
       );
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
+      // buildArgs runs *after* binary resolution but *before* spawn, so
+      // phase is still 'binary_resolution' here. Stamp diagnostics so the
+      // contract advertised in packages/contracts/src/api/connectionTest.ts
+      // ("Always set on local agent test responses") actually holds.
       return {
         ok: false,
         kind: 'agent_spawn_failed',
@@ -1299,6 +1321,7 @@ async function testAgentConnectionInternal(
         model,
         agentName: def.name,
         detail: redactSecrets(detail),
+        diagnostics: buildDiagnostics(),
       };
     }
     const stdinMode =
@@ -1314,6 +1337,11 @@ async function testAgentConnectionInternal(
     const env = applyAgentLaunchEnv(baseEnv, executableResolution);
     const auth = await probeAgentAuthStatus(input.agentId, executableResolution.launchPath, env);
     if (auth?.status === 'missing') {
+      // Preflight auth probe runs after binary resolution but before the
+      // smoke spawn — phase is still 'binary_resolution'. Without
+      // diagnostics here, Cursor-style auth failures never get the
+      // binaryPath/stderrTail context the rest of the local agent
+      // surface promises.
       return {
         ok: false,
         kind: 'agent_auth_required',
@@ -1321,6 +1349,7 @@ async function testAgentConnectionInternal(
         model,
         agentName: def.name,
         detail: auth.message ?? cursorAuthGuidance(),
+        diagnostics: buildDiagnostics(),
       };
     }
     const invocation = createCommandInvocation({
@@ -1419,10 +1448,11 @@ async function testAgentConnectionInternal(
         (winner.code === 0 && !winner.signal) || acpForcedShutdown;
       if (buffered) {
         const rawSample = truncateSample(buffered);
+        const exitInfo = { code: winner.code, signal: winner.signal };
         if (rawSample && isLikelyModelErrorText(rawSample)) {
-          return resultFromAgentText(buffered);
+          return resultFromAgentText(buffered, exitInfo);
         }
-        if (exitedCleanly) return resultFromAgentText(buffered);
+        if (exitedCleanly) return resultFromAgentText(buffered, exitInfo);
       }
       const stderrTail = sink.getStderrTail().trim();
       const rawStdoutTail = sink.getRawStdoutTail().trim();
@@ -1563,6 +1593,10 @@ async function testAgentConnectionInternal(
     return resultFromChildExit(winner);
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
+    // Outer catch — the failure may have happened at any phase between
+    // binary_resolution and output_parse, so stamp the current phase as
+    // observed. buildDiagnostics is defined in the enclosing scope and
+    // is safe to call here.
     return {
       ok: false,
       kind: 'agent_spawn_failed',
@@ -1570,6 +1604,7 @@ async function testAgentConnectionInternal(
       model,
       agentName: def.name,
       detail: redactSecrets(detail),
+      diagnostics: buildDiagnostics(),
     };
   } finally {
     if (timer) clearTimeout(timer);

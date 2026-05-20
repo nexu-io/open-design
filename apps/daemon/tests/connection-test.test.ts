@@ -2196,6 +2196,45 @@ process.stdin.on('end', () => {
       process.env.PATH = oldPath;
     }
   });
+
+  it('attaches diagnostics when the preflight auth probe reports missing auth (#2248)', async () => {
+    // Cursor Agent's preflight `cursor-agent status` check rejects the
+    // smoke run before the daemon ever spawns the smoke prompt. The
+    // initial #2248 pass forgot to stamp diagnostics on that return
+    // path, which contradicted the "Always set on local agent test
+    // responses" contract in packages/contracts. Lock the contract.
+    await withFakeCursorAgent(
+      `
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('2026.05.07-test');
+  process.exit(0);
+}
+if (args[0] === 'models') {
+  console.log('auto');
+  process.exit(0);
+}
+if (args[0] === 'status') {
+  console.error('Not logged in');
+  process.exit(1);
+}
+console.error('smoke prompt should not run when status reports missing auth');
+process.exit(1);
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'cursor-agent' });
+        expect(result).toMatchObject({
+          ok: false,
+          kind: 'agent_auth_required',
+        });
+        expect(result.diagnostics).toBeDefined();
+        // Preflight runs after binary resolution but before the smoke
+        // spawn, so phase should still be 'binary_resolution'.
+        expect(result.diagnostics?.phase).toBe('binary_resolution');
+        expect(result.diagnostics?.binaryPath ?? '').toMatch(/cursor-agent/);
+      },
+    );
+  });
 });
 
 describe('connection test helpers', () => {
