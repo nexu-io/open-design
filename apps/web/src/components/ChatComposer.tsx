@@ -66,6 +66,22 @@ const USER_PLUGIN_SOURCE_KINDS = new Set<PluginSourceKind>([
 
 const COMPOSER_TEXTAREA_MIN_HEIGHT = 88;
 const COMPOSER_TEXTAREA_MAX_HEIGHT = 184;
+const CHAT_FOLDER_UPLOAD_SKIP_SEGMENTS = new Set([
+  '.git',
+  '.hg',
+  '.next',
+  '.nuxt',
+  '.svn',
+  '.turbo',
+  '.vercel',
+  'build',
+  'coverage',
+  'dist',
+  'node_modules',
+  'out',
+  'target',
+]);
+const CHAT_FOLDER_UPLOAD_SKIP_NAMES = new Set(['.ds_store', 'thumbs.db']);
 
 function composerTextareaMaxHeight(): number {
   if (typeof window === 'undefined') return COMPOSER_TEXTAREA_MAX_HEIGHT;
@@ -278,6 +294,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     const [toolsOpen, setToolsOpen] = useState(false);
     const [toolsTab, setToolsTab] = useState<ToolsTab>('plugins');
     const fileInputRef = useRef<HTMLInputElement | null>(null);
+    const folderInputRef = useRef<HTMLInputElement | null>(null);
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
     const composingRef = useRef(false);
     const toolsMenuRef = useRef<HTMLDivElement | null>(null);
@@ -787,17 +804,25 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
 
     async function uploadFiles(files: File[]) {
       if (files.length === 0) return;
+      const { accepted, skipped } = selectChatUploadFiles(files);
+      if (accepted.length === 0) {
+        if (skipped > 0) setUploadError(`Skipped ${skipped} sensitive or generated folder file(s).`);
+        return;
+      }
       const id = await ensureProject();
-      if (!id) return;
+      if (!id) {
+        setUploadError('Start a conversation before attaching files.');
+        return;
+      }
       setUploading(true);
-      setUploadError(null);
+      setUploadError(skipped > 0 ? `Skipped ${skipped} sensitive or generated folder file(s).` : null);
       // Cohort math is identical to the Design Files Upload button; see
       // `analytics/upload-tracking.ts`. v2 doc fires one
       // file_upload_result per surface so this path reports
       // `page_name='chat_panel'` / `area='chat_composer'`.
       const cohort = deriveUploadCohort(files);
       try {
-        const result = await uploadProjectFiles(id, files);
+        const result = await uploadProjectFiles(id, accepted);
         if (result.uploaded.length > 0) {
           setStaged((s) => [...s, ...result.uploaded]);
         }
@@ -808,8 +833,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           const detail = result.error ? ` (${result.error})` : '';
           setUploadError(
             uploadedCount > 0
-              ? `Attached ${uploadedCount} file(s), but ${failedCount} failed${detail}.`
-              : `Attachment upload failed for ${failedCount} file(s)${detail}.`,
+              ? `Attached ${uploadedCount} file(s), but ${failedCount} failed${detail}.${skipped > 0 ? ` Skipped ${skipped} sensitive or generated folder file(s).` : ''}`
+              : `Attachment upload failed for ${failedCount} file(s)${detail}.${skipped > 0 ? ` Skipped ${skipped} sensitive or generated folder file(s).` : ''}`,
           );
           console.warn('Some attachments failed to upload', result.failed);
         }
@@ -1562,6 +1587,19 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 e.target.value = '';
               }}
             />
+            <input
+              ref={folderInputRef}
+              data-testid="chat-folder-input"
+              type="file"
+              multiple
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const files = Array.from(e.target.files ?? []);
+                void uploadFiles(files);
+                e.target.value = '';
+              }}
+              {...({ webkitdirectory: '', directory: '' } as Record<string, string>)}
+            />
             <div className="composer-tools-wrap">
               <button
                 ref={toolsTriggerRef}
@@ -1725,6 +1763,27 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 <Icon name="spinner" size={15} />
               ) : (
                 <Icon name="attach" size={15} />
+              )}
+            </button>
+            <button
+              className="icon-btn"
+              data-testid="chat-attach-folder"
+              onClick={() => {
+                trackChatPanelClick(analytics.track, {
+                  page_name: 'chat_panel',
+                  area: 'chat_panel',
+                  element: 'attachment',
+                });
+                folderInputRef.current?.click();
+              }}
+              title="Attach folder"
+              disabled={uploading}
+              aria-label="Attach folder"
+            >
+              {uploading ? (
+                <Icon name="spinner" size={15} />
+              ) : (
+                <Icon name="folder" size={15} />
               )}
             </button>
             {footerAccessory}
@@ -2777,6 +2836,31 @@ function saveComposerDraft(key: string | undefined, draft: string) {
   } catch {
     // Storage can be unavailable in privacy modes; the composer should still work.
   }
+}
+
+function selectChatUploadFiles(files: File[]): { accepted: File[]; skipped: number } {
+  const accepted: File[] = [];
+  let skipped = 0;
+  for (const file of files) {
+    if (shouldSkipChatUploadFile(file)) skipped += 1;
+    else accepted.push(file);
+  }
+  return { accepted, skipped };
+}
+
+function shouldSkipChatUploadFile(file: File): boolean {
+  const path = chatUploadRelativePath(file).toLowerCase();
+  if (!path) return true;
+  const parts = path.split('/').filter(Boolean);
+  const leaf = parts.at(-1) ?? '';
+  if (leaf === '.env' || leaf.startsWith('.env.')) return true;
+  if (CHAT_FOLDER_UPLOAD_SKIP_NAMES.has(leaf)) return true;
+  return parts.some((part) => CHAT_FOLDER_UPLOAD_SKIP_SEGMENTS.has(part));
+}
+
+function chatUploadRelativePath(file: File): string {
+  const browserPath = (file as File & { webkitRelativePath?: string }).webkitRelativePath;
+  return (browserPath || file.name).replace(/\\/g, '/').split('/').filter(Boolean).join('/');
 }
 
 function looksLikeImage(name: string): boolean {

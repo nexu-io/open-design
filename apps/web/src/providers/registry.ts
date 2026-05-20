@@ -1637,7 +1637,8 @@ export async function uploadProjectFile(
 }
 
 // Multi-file project upload used by the chat composer's paste / drop /
-// picker. Each file lands flat in the project folder; the response is
+// picker. Folder-picked files send their browser relative path so the daemon
+// can keep their tree shape; ordinary file uploads still land flat. The response is
 // reshaped into ChatAttachments so the composer can stage them without a
 // follow-up listFiles round-trip.
 const PROJECT_UPLOAD_BATCH_SIZE = 12;
@@ -1668,7 +1669,10 @@ export async function uploadProjectFiles(
     const batch = files.slice(i, i + PROJECT_UPLOAD_BATCH_SIZE);
     const remaining = files.slice(i + PROJECT_UPLOAD_BATCH_SIZE);
     const form = new FormData();
-    for (const f of batch) form.append('files', f);
+    for (const f of batch) {
+      form.append('paths', projectUploadRelativePath(f));
+      form.append('files', f);
+    }
 
     try {
       const resp = await fetch(
@@ -1698,7 +1702,7 @@ export async function uploadProjectFiles(
         ...responseFiles.map((f) => ({
           path: f.path,
           name: f.originalName ?? f.name,
-          kind: looksLikeImage(f.name) ? ('image' as const) : ('file' as const),
+          kind: looksLikeImage(f.path || f.name) ? ('image' as const) : ('file' as const),
           size: f.size,
         })),
       );
@@ -1725,6 +1729,11 @@ export async function uploadProjectFiles(
   }
 
   return { uploaded, failed, error };
+}
+
+function projectUploadRelativePath(file: File): string {
+  const browserPath = (file as File & { webkitRelativePath?: string }).webkitRelativePath;
+  return browserPath?.replace(/\\/g, '/').split('/').filter(Boolean).join('/') ?? '';
 }
 
 // Stable URL that serves a project file with its original mime — for

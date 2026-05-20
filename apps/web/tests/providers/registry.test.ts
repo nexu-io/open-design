@@ -726,6 +726,39 @@ describe('uploadProjectFiles', () => {
     expect(result.failed).toHaveLength(1);
     expect(result.failed[0]).toMatchObject({ name: 'c.txt' });
   });
+
+  it('sends browser folder relative paths alongside uploaded files', async () => {
+    const folderFile = new File(['component'], 'Button.tsx', { type: 'text/plain' });
+    Object.defineProperty(folderFile, 'webkitRelativePath', {
+      value: 'demo/src/Button.tsx',
+      configurable: true,
+    });
+    const flatFile = new File(['flat'], 'brief.txt', { type: 'text/plain' });
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const body = init?.body as FormData;
+      expect(body.getAll('paths')).toEqual(['demo/src/Button.tsx', '']);
+      expect(body.getAll('files')).toEqual([folderFile, flatFile]);
+      return new Response(JSON.stringify({
+        files: [
+          { name: 'demo/src/Button.tsx', path: 'demo/src/Button.tsx', size: 9, originalName: 'Button.tsx' },
+          { name: 't1-brief.txt', path: 't1-brief.txt', size: 4, originalName: 'brief.txt' },
+        ],
+      }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await uploadProjectFiles('project-1', [folderFile, flatFile]);
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/projects/project-1/upload', expect.objectContaining({
+      method: 'POST',
+      body: expect.any(FormData),
+    }));
+    expect(result.failed).toEqual([]);
+    expect(result.uploaded).toEqual([
+      { path: 'demo/src/Button.tsx', name: 'Button.tsx', kind: 'file', size: 9 },
+      { path: 't1-brief.txt', name: 'brief.txt', kind: 'file', size: 4 },
+    ]);
+  });
 });
 
 describe('deploy provider registry helpers', () => {

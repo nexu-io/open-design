@@ -351,6 +351,11 @@ import {
   writeProjectFile,
   reconcileHtmlArtifactManifest,
 } from './projects.js';
+import {
+  ProjectUploadPathError,
+  projectUploadRelativePaths,
+  resolveProjectUploadRelativePath,
+} from './project-upload-guards.js';
 import { validateArtifactManifestInput } from './artifact-manifest.js';
 import { ArtifactPublicationBlockedError } from './artifact-publication-guard.js';
 import { readCurrentAppVersionInfo } from './app-version.js';
@@ -10019,7 +10024,9 @@ export async function startServer({
   });
 
   // Multi-file upload that the chat composer uses for paste/drop/picker.
-  // Files land flat in the project folder; the response carries the same
+  // Browser folder uploads include a per-file relative path so the daemon can
+  // preserve the tree; ordinary files keep the existing flat, timestamped path.
+  // The response carries the same
   // metadata as listFiles so the client can stage them as ChatAttachments
   // without a separate refetch.
   app.post(
@@ -10028,17 +10035,44 @@ export async function startServer({
     async (req, res) => {
       try {
         const incoming = Array.isArray(req.files) ? req.files : [];
+        const requestedPaths = projectUploadRelativePaths(req.body?.paths, incoming.length);
+        let targetPaths;
+        try {
+          targetPaths = requestedPaths.map(resolveProjectUploadRelativePath);
+        } catch (err) {
+          await Promise.all(incoming.map((f) => fs.promises.unlink(f.path).catch(() => {})));
+          if (err instanceof ProjectUploadPathError) {
+            return sendApiError(res, 400, err.code, err.message);
+          }
+          throw err;
+        }
+        const project = getProject(db, req.params.id);
         const out = [];
-        for (const f of incoming) {
+        for (const [index, f] of incoming.entries()) {
           try {
-            const stat = await fs.promises.stat(f.path);
-            out.push({
-              name: f.filename,
-              path: f.filename,
-              size: stat.size,
-              mtime: stat.mtimeMs,
-              originalName: f.originalname,
-            });
+            const targetPath = targetPaths[index];
+            if (targetPath) {
+              const buffer = await fs.promises.readFile(f.path);
+              const meta = await writeProjectFile(
+                PROJECTS_DIR,
+                req.params.id,
+                targetPath,
+                buffer,
+                undefined,
+                project?.metadata,
+              );
+              await fs.promises.unlink(f.path).catch(() => {});
+              out.push({ ...meta, originalName: f.originalname });
+            } else {
+              const stat = await fs.promises.stat(f.path);
+              out.push({
+                name: f.filename,
+                path: f.filename,
+                size: stat.size,
+                mtime: stat.mtimeMs,
+                originalName: f.originalname,
+              });
+            }
           } catch {
             // skip files that vanished mid-flight
           }
@@ -10061,7 +10095,15 @@ export async function startServer({
   // main: file-upload routes lifted to a dedicated module. Keep alongside the
   // inline routes garnet still owns above; duplicate registrations resolve in
   // a follow-up after route-routes.ts vs garnet inline coverage is audited.
-  registerProjectUploadRoutes(app, { http: httpDeps, uploads: uploadDeps, node: nodeDeps });
+  registerProjectUploadRoutes(app, {
+    db,
+    http: httpDeps,
+    uploads: uploadDeps,
+    node: nodeDeps,
+    paths: pathDeps,
+    projectStore: projectStoreDeps,
+    projectFiles: projectFileDeps,
+  });
 
   const composeDaemonSystemPrompt = async ({
     agentId,

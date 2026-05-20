@@ -84,7 +84,59 @@ describe('ChatComposer /search command', () => {
     expect(onSend).toHaveBeenCalledWith('follow-up while busy', [], [], undefined);
   });
 
-  it('auto-sends concurrent queued visual annotations when streaming ends', async () => {
+  it('uploads browser-selected folders with native directory input paths intact', async () => {
+    mockedUploadProjectFiles.mockResolvedValue({
+      uploaded: [{ path: 'demo/src/Button.tsx', name: 'Button.tsx', kind: 'file', size: 9 }],
+      failed: [],
+    });
+
+    render(
+      <ChatComposer
+        projectId="project-1"
+        projectFiles={[]}
+        streaming={false}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    const folderInput = screen.getByTestId('chat-folder-input') as HTMLInputElement;
+    expect(folderInput.hasAttribute('webkitdirectory')).toBe(true);
+    const file = new File(['component'], 'Button.tsx', { type: 'text/plain' });
+    Object.defineProperty(file, 'webkitRelativePath', {
+      value: 'demo/src/Button.tsx',
+      configurable: true,
+    });
+    fireEvent.change(folderInput, {
+      target: { files: [file] },
+    });
+
+    await waitFor(() => expect(mockedUploadProjectFiles).toHaveBeenCalledWith('project-1', [file]));
+    expect(await screen.findByText('Button.tsx')).toBeTruthy();
+  });
+
+  it('shows a clear attachment error when no project can be created yet', async () => {
+    render(
+      <ChatComposer
+        projectId={null}
+        projectFiles={[]}
+        streaming={false}
+        onEnsureProject={async () => null}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId('chat-file-input'), {
+      target: { files: [new File(['brief'], 'brief.txt', { type: 'text/plain' })] },
+    });
+
+    expect(await screen.findByText('Start a conversation before attaching files.')).toBeTruthy();
+    expect(mockedUploadProjectFiles).not.toHaveBeenCalled();
+  });
+
+  it('keeps concurrent queued visual annotations distinct after uploads resolve', async () => {
     const onSend = vi.fn();
     const firstUpload = deferred<Awaited<ReturnType<typeof uploadProjectFiles>>>();
     const secondUpload = deferred<Awaited<ReturnType<typeof uploadProjectFiles>>>();

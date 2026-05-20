@@ -8,6 +8,11 @@ import { ArtifactPublicationBlockedError } from './artifact-publication-guard.js
 import { ArtifactRegressionError } from './artifact-stub-guard.js';
 import { listDesignSystems } from './design-systems.js';
 import {
+  ProjectUploadPathError,
+  projectUploadRelativePaths,
+  resolveProjectUploadRelativePath,
+} from './project-upload-guards.js';
+import {
   FIRST_PARTY_ATOMS,
   buildConnectorProbe,
   getInstalledPlugin,
@@ -1192,12 +1197,16 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
 
 }
 
-export interface RegisterProjectUploadRoutesDeps extends RouteDeps<'http' | 'uploads' | 'node'> {}
+export interface RegisterProjectUploadRoutesDeps extends RouteDeps<'db' | 'http' | 'uploads' | 'node' | 'paths' | 'projectStore' | 'projectFiles'> {}
 
 export function registerProjectUploadRoutes(app: Express, ctx: RegisterProjectUploadRoutesDeps) {
+  const { db } = ctx;
   const { sendApiError } = ctx.http;
   const { handleProjectUpload } = ctx.uploads;
   const { fs } = ctx.node;
+  const { PROJECTS_DIR } = ctx.paths;
+  const { getProject } = ctx.projectStore;
+  const { writeProjectFile } = ctx.projectFiles;
 
   app.post(
     '/api/projects/:id/upload',
@@ -1205,17 +1214,44 @@ export function registerProjectUploadRoutes(app: Express, ctx: RegisterProjectUp
     async (req, res) => {
       try {
         const incoming = Array.isArray(req.files) ? req.files : [];
+        const requestedPaths = projectUploadRelativePaths((req.body as any)?.paths, incoming.length);
+        let targetPaths: Array<string | null>;
+        try {
+          targetPaths = requestedPaths.map(resolveProjectUploadRelativePath);
+        } catch (err: any) {
+          await Promise.all(incoming.map((f: any) => fs.promises.unlink(f.path).catch(() => {})));
+          if (err instanceof ProjectUploadPathError) {
+            return sendApiError(res, 400, err.code, err.message);
+          }
+          throw err;
+        }
+        const project = getProject(db, req.params.id);
         const out = [];
-        for (const f of incoming) {
+        for (const [index, f] of incoming.entries()) {
           try {
-            const stat = await fs.promises.stat(f.path);
-            out.push({
-              name: f.filename,
-              path: f.filename,
-              size: stat.size,
-              mtime: stat.mtimeMs,
-              originalName: f.originalname,
-            });
+            const targetPath = targetPaths[index];
+            if (targetPath) {
+              const buffer = await fs.promises.readFile(f.path);
+              const meta = await writeProjectFile(
+                PROJECTS_DIR,
+                req.params.id,
+                targetPath,
+                buffer,
+                undefined,
+                project?.metadata,
+              );
+              await fs.promises.unlink(f.path).catch(() => {});
+              out.push({ ...meta, originalName: f.originalname });
+            } else {
+              const stat = await fs.promises.stat(f.path);
+              out.push({
+                name: f.filename,
+                path: f.filename,
+                size: stat.size,
+                mtime: stat.mtimeMs,
+                originalName: f.originalname,
+              });
+            }
           } catch {
             // skip files that vanished mid-flight
           }
