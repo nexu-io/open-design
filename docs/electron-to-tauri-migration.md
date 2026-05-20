@@ -484,6 +484,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Tightened stale-handoff continuation for receiver checkouts. When `scripts/continue-tauri-migration.ts --root <repo>` has to regenerate and package handoff artifacts, it now passes the requested root through to `scripts/package-tauri-migration-handoff.ts` instead of validating the package against the script checkout. `scripts/tauri-migration-status.test.ts` now covers a real stale-handoff refresh, package, push, and remote-head verification from a fixture root.
 - 2026-05-20: Kept custom receiver roots in printed post-push commands. `scripts/tauri-migration-status.ts`, `scripts/continue-tauri-migration.ts`, and `scripts/download-tauri-m4-reports.ts` now preserve non-default `--root` values in follow-up download, advance, M5, and inventory guidance instead of printing commands that would fall back to the script checkout.
 - 2026-05-20: Tightened the push-only receiver PR fallback path. `scripts/push-tauri-migration-handoff.ts --pr-body-path <relative>` now resolves that path from the receiving checkout `--cwd`, so fallback draft PR bodies are written beside the imported branch instead of whichever checkout launched the helper.
+- 2026-05-20: Aligned the repo-local continuation runner with the receiver PR fallback. When `scripts/continue-tauri-migration.ts` reaches a pushed branch but GitHub workflow dispatch is unavailable or denied, it now writes the shared template-complete `.tmp/tauri-migration-pr-body.md` before printing the draft PR fallback command; dry-runs report the target path without writing the file.
 
 ### Platform Gate Runners
 
@@ -551,6 +552,8 @@ pnpm exec tsx scripts/continue-tauri-migration.ts \
   --report-dir /tmp/open-design-tauri-m4-reports \
   --dry-run
 ```
+
+If the remote branch is already current but workflow dispatch is unavailable from the current host, the continuation runner writes the same template-complete draft PR body used by the packaged receiver flow before printing the `gh pr create --draft --body-file ...` fallback. In `--dry-run` mode it reports the body path without creating the file.
 
 When the branch can be pushed and the native CI artifacts are expected to become available, the same runner can wait for the matching branch-head reports and apply the guarded M4→M5 advance:
 

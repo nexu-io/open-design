@@ -44,6 +44,8 @@ test("migration doc continuation command blocks keep verified handoff paths", as
     assert.match(block, /--remote origin/);
     assert.match(block, /--report-dir \/tmp\/open-design-tauri-m4-reports/);
   }
+  assert.match(source, /continuation runner writes the same template-complete draft PR body/);
+  assert.match(source, /dry-run.*reports the body path without creating the file/i);
 });
 
 test("migration doc platform gate table includes verifier-required uninstall evidence", async () => {
