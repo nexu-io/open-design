@@ -6638,15 +6638,17 @@ button.connector-action.is-loading {
 /* Connector detail drawer                                             */
 /* ------------------------------------------------------------------ */
 .connector-drawer-backdrop {
-  position: fixed;
+  position: absolute;
   inset: 0;
   z-index: 100;
-  background: color-mix(in srgb, #000 42%, transparent);
+  background: color-mix(in srgb, var(--bg-panel) 35%, transparent);
   backdrop-filter: blur(2px);
   -webkit-backdrop-filter: blur(2px);
   display: flex;
   justify-content: flex-end;
   animation: connector-drawer-fade 180ms ease;
+  border-radius: var(--radius);
+  overflow: hidden;
 }
 @keyframes connector-drawer-fade {
   from { opacity: 0; }
@@ -6656,11 +6658,11 @@ button.connector-action.is-loading {
   position: relative;
   display: flex;
   flex-direction: column;
-  width: min(480px, 92vw);
+  width: min(440px, 92vw);
   height: 100%;
   background: var(--bg-panel);
-  border-left: 1px solid var(--border);
-  box-shadow: -24px 0 48px -20px rgba(0, 0, 0, 0.32);
+  border-left: 1px solid var(--border-soft, var(--border));
+  box-shadow: -12px 0 30px rgba(0, 0, 0, 0.08);
   animation: connector-drawer-slide 240ms cubic-bezier(0.22, 0.9, 0.3, 1);
 }
 @keyframes connector-drawer-slide {
@@ -6670,8 +6672,8 @@ button.connector-action.is-loading {
 .connector-drawer-head {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  padding: 20px 22px 16px;
+  gap: 16px;
+  padding: 24px 24px 20px;
   border-bottom: 1px solid var(--border);
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--bg-subtle) 60%, transparent) 0%, transparent 100%);
@@ -6681,7 +6683,7 @@ button.connector-action.is-loading {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 .connector-drawer-eyebrow {
   display: flex;
@@ -6694,18 +6696,19 @@ button.connector-action.is-loading {
   color: var(--text-faint);
 }
 .connector-drawer-titles h2 {
-  margin: 0;
+  margin: 2px 0 4px;
   font-size: 22px;
   font-weight: 600;
-  line-height: 1.2;
+  line-height: 1.25;
   letter-spacing: -0.01em;
-  color: var(--text);
+  color: var(--text-strong, var(--text));
 }
 .connector-drawer-status {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  margin-top: 2px;
 }
 .connector-drawer-close {
   flex: 0 0 auto;
@@ -6717,26 +6720,34 @@ button.connector-action.is-loading {
   padding: 0;
   border-radius: 999px;
   color: var(--text-muted);
+  transition: background 140ms ease, color 140ms ease, box-shadow 140ms ease;
 }
 .connector-drawer-close:hover {
   background: var(--bg-subtle);
-  color: var(--text);
+  color: var(--text-strong, var(--text));
+}
+.connector-drawer-close:focus {
+  outline: none;
+}
+.connector-drawer-close:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 50%, transparent);
 }
 .connector-drawer-body {
   flex: 1 1 auto;
   overflow-y: auto;
-  padding: 20px 22px 24px;
+  padding: 24px;
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 24px;
 }
 .connector-drawer-section {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 .connector-drawer-section-title {
-  margin: 0;
+  margin: 0 0 2px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -6755,7 +6766,7 @@ button.connector-action.is-loading {
   padding: 0 6px;
   border-radius: 999px;
   background: var(--bg-subtle);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-soft, var(--border));
   color: var(--text-muted);
   font-size: 10px;
   font-weight: 600;
@@ -6765,42 +6776,71 @@ button.connector-action.is-loading {
 .connector-drawer-description {
   margin: 0;
   color: var(--text);
-  font-size: 14px;
+  font-size: 13.5px;
   line-height: 1.6;
 }
 .connector-drawer-details {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 2px;
+  display: flex;
+  flex-direction: column;
   margin: 0;
-  padding: 2px 0;
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-  background: var(--bg-subtle);
-  overflow: hidden;
+  padding: 0;
+  background: transparent;
+  border: none;
+  overflow: visible;
 }
 .connector-drawer-details > div {
   display: grid;
-  grid-template-columns: 110px 1fr;
+  grid-template-columns: 120px 1fr;
   align-items: baseline;
-  gap: 12px;
-  padding: 10px 14px;
-  background: var(--bg-panel);
+  gap: 16px;
+  padding: 10px 0;
+  background: transparent;
 }
 .connector-drawer-details > div + div {
-  border-top: 1px solid var(--border);
+  border-top: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
 }
 .connector-drawer-details dt {
   margin: 0;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 500;
 }
 .connector-drawer-details dd {
   margin: 0;
-  color: var(--text);
+  color: var(--text-strong, var(--text));
   font-size: 13px;
   word-break: break-word;
+}
+.connector-drawer-details-status-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.connector-drawer-disconnect-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  background: color-mix(in srgb, var(--red, #ef4444) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--red, #ef4444) 20%, transparent);
+  border-radius: var(--radius-sm, 4px);
+  color: var(--red, #ef4444);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease, transform 120ms ease;
+}
+.connector-drawer-disconnect-inline:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--red, #ef4444) 14%, transparent);
+  border-color: color-mix(in srgb, var(--red, #ef4444) 35%, transparent);
+}
+.connector-drawer-disconnect-inline:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.connector-drawer-disconnect-inline:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .connector-drawer-details-error dd {
   color: var(--red);
@@ -6828,23 +6868,44 @@ button.connector-action.is-loading {
   gap: 6px;
   padding: 12px 14px;
   background: var(--bg-panel);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-soft, var(--border));
   border-radius: var(--radius);
-  transition: border-color 140ms ease, background 140ms ease;
+  transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
 }
 .connector-drawer-tool:hover {
-  border-color: color-mix(in srgb, var(--text) 20%, var(--border));
+  border-color: color-mix(in srgb, var(--text) 15%, var(--border));
+  background: color-mix(in srgb, var(--bg-panel) 97%, var(--text));
+  box-shadow: var(--shadow-xs);
 }
 .connector-drawer-tool-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 12px;
+}
+.connector-drawer-tool-titles {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 .connector-drawer-tool-title {
   font-size: 13px;
   font-weight: 600;
-  color: var(--text);
+  color: var(--text-strong, var(--text));
+}
+.connector-drawer-tool-name {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10px;
+  color: var(--text-faint);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  padding: 1px 5px;
+  border-radius: 4px;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .connector-drawer-tool-badge {
   display: inline-flex;
@@ -6879,19 +6940,6 @@ button.connector-action.is-loading {
   color: var(--text-muted);
   font-size: 12.5px;
   line-height: 1.5;
-}
-.connector-drawer-tool-name {
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 11px;
-  color: var(--text-faint);
-  background: var(--bg-subtle);
-  padding: 2px 6px;
-  border-radius: 4px;
-  align-self: flex-start;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .connector-drawer-load-more {
   align-self: flex-start;

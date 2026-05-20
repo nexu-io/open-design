@@ -7,6 +7,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type SyntheticEvent,
 } from 'react';
+import { createPortal } from 'react-dom';
 import type { ConnectorConnectResponse, ConnectorDetail, ConnectorStatusResponse } from '@open-design/contracts';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
@@ -1262,6 +1263,15 @@ function ConnectorDetailDrawer({
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
   const categoryLabel = connectorCategoryLabel(connector.category, t);
 
+  const [modalElement, setModalElement] = useState<Element | null>(null);
+
+  useEffect(() => {
+    const el = document.querySelector('.modal-settings');
+    if (el) {
+      setModalElement(el);
+    }
+  }, []);
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') {
@@ -1281,7 +1291,7 @@ function ConnectorDetailDrawer({
 
   const statusTone = isAuthorizationPending ? 'pending' : connector.status;
 
-  return (
+  const drawerContent = (
     <div
       className="connector-drawer-backdrop"
       role="presentation"
@@ -1359,7 +1369,20 @@ function ConnectorDetailDrawer({
             <dl className="connector-drawer-details">
               <div>
                 <dt>{t('connectors.statusLabel')}</dt>
-                <dd>{statusLabel(connector.status, t)}</dd>
+                <dd className="connector-drawer-details-status-row">
+                  <span>{statusLabel(connector.status, t)}</span>
+                  {isConnected ? (
+                    <button
+                      type="button"
+                      className={`connector-drawer-disconnect-inline${isDisconnecting ? ' is-loading' : ''}`}
+                      disabled={!canDisconnect}
+                      onClick={() => onDisconnect(connector.id)}
+                    >
+                      {isDisconnecting ? <Icon name="spinner" size={11} className="icon-spin" /> : null}
+                      <span>{t('connectors.disconnect')}</span>
+                    </button>
+                  ) : null}
+                </dd>
               </div>
               <div>
                 <dt>{t('connectors.categoryLabel')}</dt>
@@ -1400,7 +1423,12 @@ function ConnectorDetailDrawer({
                   {connector.tools.map((tool) => (
                     <li key={tool.name} className="connector-drawer-tool">
                       <div className="connector-drawer-tool-head">
-                        <span className="connector-drawer-tool-title">{tool.title || tool.name}</span>
+                        <div className="connector-drawer-tool-titles">
+                          <span className="connector-drawer-tool-title">{tool.title || tool.name}</span>
+                          {tool.title && tool.title !== tool.name ? (
+                            <code className="connector-drawer-tool-name">{tool.name}</code>
+                          ) : null}
+                        </div>
                         <span
                           className={`connector-drawer-tool-badge side-${tool.safety.sideEffect}`}
                           title={tool.safety.reason}
@@ -1411,7 +1439,6 @@ function ConnectorDetailDrawer({
                       {tool.description ? (
                         <p className="connector-drawer-tool-desc">{tool.description}</p>
                       ) : null}
-                      <code className="connector-drawer-tool-name">{tool.name}</code>
                     </li>
                   ))}
                 </ul>
@@ -1431,19 +1458,8 @@ function ConnectorDetailDrawer({
           </section>
         </div>
 
-        <footer className="connector-drawer-foot">
-          {isConnected ? (
-            <button
-              type="button"
-              className={`ghost connector-action is-disconnect${isDisconnecting ? ' is-loading' : ''}`}
-              disabled={!canDisconnect}
-              aria-busy={isDisconnecting || undefined}
-              onClick={() => onDisconnect(connector.id)}
-            >
-              {isDisconnecting ? <Icon name="spinner" size={12} /> : null}
-              <span>{t('connectors.disconnect')}</span>
-            </button>
-          ) : (
+        {!isConnected ? (
+          <footer className="connector-drawer-foot">
             <button
               type="button"
               className={`primary connector-action is-connect${isConnecting || isAuthorizationPending ? ' is-loading' : ''}`}
@@ -1454,20 +1470,22 @@ function ConnectorDetailDrawer({
               {isConnecting || isAuthorizationPending ? <Icon name="spinner" size={12} /> : null}
               <span>{isAuthorizationPending ? t('connectors.authorizationPending') : t('connectors.connect')}</span>
             </button>
-          )}
-          {isAuthorizationPending ? (
-            <button
-              type="button"
-              className="ghost connector-action is-cancel-authorization"
-              onClick={() => onCancelAuthorization(connector.id)}
-            >
-              <span>{t('connectors.cancelAuthorization')}</span>
-            </button>
-          ) : null}
-        </footer>
+            {isAuthorizationPending ? (
+              <button
+                type="button"
+                className="ghost connector-action is-cancel-authorization"
+                onClick={() => onCancelAuthorization(connector.id)}
+              >
+                <span>{t('connectors.cancelAuthorization')}</span>
+              </button>
+            ) : null}
+          </footer>
+        ) : null}
       </aside>
     </div>
   );
+
+  return modalElement ? createPortal(drawerContent, modalElement) : drawerContent;
 }
 
 function getDisplayableConnectorAccountLabel(connector: ConnectorDetail): string | undefined {
