@@ -449,12 +449,18 @@ export function DesignFilesPanel({
   function startRename(name: string) {
     setMenuPos(null);
     setPreview(name);
-    setRenaming({ name, draft: name, saving: false });
+    const draft = currentDir === '' ? name : name.slice(currentDir.length + 1);
+    setRenaming({ name, draft, saving: false });
   }
 
   async function commitRename(name: string, draft: string) {
-    const nextName = draft.trim();
-    if (!nextName || nextName === name) {
+    const nextBasename = draft.trim();
+    if (!nextBasename) {
+      setRenaming(null);
+      return;
+    }
+    const nextName = currentDir === '' ? nextBasename : `${currentDir}/${nextBasename}`;
+    if (nextName === name) {
       setRenaming(null);
       return;
     }
