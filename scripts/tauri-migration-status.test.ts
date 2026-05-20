@@ -614,6 +614,31 @@ test("tauri-migration-status reports a remote branch matching the handoff", asyn
   assert.match(parsed.nextActions.join("\n"), /download-tauri-m4-reports/);
 });
 
+test("tauri-migration-status keeps custom report directory in remote-ready download guidance", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+  const remotePath = await createRemoteFixture(fixture, head);
+  const reportDir = join(fixture, "reports with space");
+
+  const result = await runStatus(fixture, "--handoff-dir", handoffDir, "--remote", remotePath, "--report-dir", reportDir);
+  const parsed = JSON.parse(result.stdout) as {
+    nextActions: string[];
+    platformReports: { reportDir: string };
+    remote: { current: boolean };
+  };
+  const nextActions = parsed.nextActions.join("\n");
+
+  assert.equal(parsed.remote.current, true);
+  assert.equal(parsed.platformReports.reportDir, reportDir);
+  assert.match(nextActions, new RegExp(`--output-dir '${escapeRegExp(reportDir)}'`));
+  assert.doesNotMatch(nextActions, /--output-dir \/tmp\/open-design-tauri-m4-reports/);
+});
+
 test("tauri-migration-status reports a missing remote branch", async (t) => {
   const fixture = await createFixtureRoot(t, {
     checked: [],

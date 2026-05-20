@@ -132,6 +132,7 @@ type PlatformReportsStatus = {
   current: boolean;
   linuxReport?: string;
   problems: string[];
+  reportDir?: string;
   verifierOutput?: string;
   winReport?: string;
 };
@@ -327,7 +328,7 @@ async function resolvePlatformReportsStatus(
     const [winExists, linuxExists] = await Promise.all([pathExists(inferredWinReport), pathExists(inferredLinuxReport)]);
     if (!winExists && !linuxExists) return undefined;
   }
-  return readPlatformReportsStatus(inferredWinReport, inferredLinuxReport);
+  return readPlatformReportsStatus(inferredWinReport, inferredLinuxReport, inferredReportDir);
 }
 
 async function readHeartbeatStatus(automationDir: string): Promise<HeartbeatStatus> {
@@ -477,6 +478,7 @@ function nextActionsForPhase(
     const expectedHead = remote?.expectedHead ?? handoff?.branchHead ?? "<sha>";
     const reportsReadyForAdvance = platformReports?.current === true && (remote == null || remoteReady);
     const remoteName = remote?.remote ?? "origin";
+    const reportDir = platformReports?.reportDir ?? defaultReportDir;
     return [
       ...heartbeatActions,
       "Run scripts/continue-tauri-migration.ts --dry-run to print the next executable handoff/push/report sequence; add --wait-reports --advance after the remote branch and native CI are available.",
@@ -493,7 +495,7 @@ function nextActionsForPhase(
       reportsReadyForAdvance
         ? `Advance M4 evidence and M5 defaults with scripts/advance-tauri-migration-m4-m5.ts --remote ${remoteName} --branch ${migrationBranch} --expected-head ${expectedHead} using the verified report paths shown above.`
         : remoteReady
-          ? `Trigger native CI with \${GH_BIN:-gh} workflow run ci.yml --ref ${migrationBranch} or open a draft PR, then download and verify artifacts with scripts/download-tauri-m4-reports.ts --branch ${migrationBranch} --expected-head ${expectedHead} --remote ${remoteName} --wait --output-dir /tmp/open-design-tauri-m4-reports; add --advance to apply M4 evidence and M5 defaults immediately after verification.`
+          ? `Trigger native CI with \${GH_BIN:-gh} workflow run ci.yml --ref ${migrationBranch} or open a draft PR, then download and verify artifacts with scripts/download-tauri-m4-reports.ts --branch ${migrationBranch} --expected-head ${expectedHead} --remote ${shellQuote(remoteName)} --wait --output-dir ${shellQuote(reportDir)}; add --advance to apply M4 evidence and M5 defaults immediately after verification.`
           : remote == null
             ? "Run the Windows and Linux Tauri package smoke jobs."
             : `Remote ${remote.remote}/${migrationBranch} must match ${expectedHead} before native CI artifacts can be collected; current blocker: ${remote.problems.join("; ") || "remote branch is not current"}.`,
@@ -964,7 +966,7 @@ async function readRemoteBranchHead(cwd: string, remote: string, branch: string)
   return head;
 }
 
-async function readPlatformReportsStatus(winReport?: string, linuxReport?: string): Promise<PlatformReportsStatus> {
+async function readPlatformReportsStatus(winReport?: string, linuxReport?: string, reportDir?: string): Promise<PlatformReportsStatus> {
   const problems: string[] = [];
   if (winReport == null) problems.push("Windows report not provided");
   if (linuxReport == null) problems.push("Linux report not provided");
@@ -973,6 +975,7 @@ async function readPlatformReportsStatus(winReport?: string, linuxReport?: strin
       current: false,
       ...(linuxReport == null ? {} : { linuxReport }),
       problems,
+      ...(reportDir == null ? {} : { reportDir }),
       ...(winReport == null ? {} : { winReport }),
     };
   }
@@ -989,6 +992,7 @@ async function readPlatformReportsStatus(winReport?: string, linuxReport?: strin
       current: false,
       linuxReport: checkedLinuxReport,
       problems: missingManifestProblems,
+      ...(reportDir == null ? {} : { reportDir }),
       winReport: checkedWinReport,
     };
   }
@@ -1013,6 +1017,7 @@ async function readPlatformReportsStatus(winReport?: string, linuxReport?: strin
       current: true,
       linuxReport: checkedLinuxReport,
       problems: [],
+      ...(reportDir == null ? {} : { reportDir }),
       verifierOutput: result.stdout.trim(),
       winReport: checkedWinReport,
     };
@@ -1021,9 +1026,14 @@ async function readPlatformReportsStatus(winReport?: string, linuxReport?: strin
       current: false,
       linuxReport: checkedLinuxReport,
       problems: [platformVerifierFailureMessage(error)],
+      ...(reportDir == null ? {} : { reportDir }),
       winReport: checkedWinReport,
     };
   }
+}
+
+function shellQuote(value: string): string {
+  return /^[A-Za-z0-9_./:=@-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 async function missingReportManifestProblem(platform: "Linux" | "Windows", reportDir: string): Promise<string | undefined> {
