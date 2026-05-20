@@ -32,6 +32,8 @@ test("package-tauri-migration-handoff creates a tarball and checksum sidecar", a
   assert.match(result.stdout, new RegExp(`Command script: ${escapeRegExp(`${output}.commands.sh`)}`));
   assert.match(result.stdout, /Command script SHA-256: [0-9a-f]{64}/);
   assert.match(result.stdout, new RegExp(`Command script checksum: ${escapeRegExp(`${output}.commands.sh.sha256`)}`));
+  assert.match(result.stdout, /Receiver command sidecar:/);
+  assert.match(result.stdout, new RegExp(`'${escapeRegExp(`${output}.commands.sh`)}' '${escapeRegExp(output)}'`));
   assert.match(result.stdout, /Receiver push command:/);
   assert.match(result.stdout, /push-tauri-migration-handoff/);
   assert.match(result.stdout, new RegExp(`--archive '${escapeRegExp(output)}'`));

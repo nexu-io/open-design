@@ -68,6 +68,8 @@ async function main(): Promise<void> {
       `Command script: ${commandScriptPath}`,
       `Command script SHA-256: ${commandScriptSha256}`,
       `Command script checksum: ${commandScriptChecksumPath}`,
+      "Receiver command sidecar:",
+      indent(`${shellQuote(commandScriptPath)} ${shellQuote(archivePath)}`),
       "Receiver push command:",
       indent(
         [

@@ -264,6 +264,7 @@ test("tauri-migration-status reports current packaged handoff archives", async (
   assert.equal(parsed.handoffArchive.sha256, archiveSha256);
   assert.deepEqual(parsed.handoffArchive.problems, []);
   assert.match(parsed.nextActions.join("\n"), /command script/);
+  assert.match(parsed.nextActions.join("\n"), new RegExp(`${escapeRegExp(`${archivePath}.commands.sh`)} ${escapeRegExp(archivePath)}`));
   assert.match(parsed.nextActions.join("\n"), new RegExp(`continue-tauri-migration\\.ts .*--handoff-archive ${escapeRegExp(archivePath)} .*--dry-run`));
   assert.match(parsed.nextActions.join("\n"), /push-tauri-migration-handoff\.ts --archive/);
   assert.match(parsed.nextActions.join("\n"), /attempt native CI dispatch/);
@@ -305,6 +306,7 @@ test("tauri-migration-status prints continuation guidance for a custom handoff a
   assert.match(nextActions, new RegExp(`continue-tauri-migration\\.ts .*--handoff-archive '${escapeRegExp(customArchivePath)}'`));
   assert.match(nextActions, new RegExp(`--remote '${escapeRegExp(remotePath)}'`));
   assert.match(nextActions, new RegExp(`--report-dir '${escapeRegExp(reportDir)}'`));
+  assert.match(nextActions, new RegExp(`'${escapeRegExp(`${customArchivePath}.commands.sh`)}' '${escapeRegExp(customArchivePath)}'`));
   assert.match(nextActions, /--dry-run/);
   assert.doesNotMatch(nextActions, new RegExp(escapeRegExp(`${handoffDir}.tar.gz`)));
 });
