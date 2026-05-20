@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 import {
+  formatM4RemoteEvidenceDetail,
   m4EvidenceLogMarker,
   m4PlatformGateLabels,
   m4RemoteEvidenceLogMarker,
@@ -22,6 +23,10 @@ const execFileAsync = promisify(execFile);
 const scriptsRoot = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptsRoot, "..");
 const m5Script = join(scriptsRoot, "apply-tauri-migration-m5.ts");
+const verifiedRemoteEvidence = [
+  m4RemoteEvidenceLogMarker,
+  formatM4RemoteEvidenceDetail("origin", "codex/electron-to-tauri-migration", "1".repeat(40)),
+] as const;
 
 test("apply-tauri-migration-m5 refuses to run before verified M4 evidence", async (t) => {
   const root = await createFixtureRoot(t, { verifiedM4: false });
@@ -33,6 +38,12 @@ test("apply-tauri-migration-m5 refuses to run before pushed remote head evidence
   const root = await createFixtureRoot(t, { verifiedM4: true, verifiedRemote: false });
 
   await assert.rejects(runM5Script(root), /pushed remote branch-head evidence log marker/);
+});
+
+test("apply-tauri-migration-m5 refuses marker-only pushed remote head evidence", async (t) => {
+  const root = await createFixtureRoot(t, { verifiedM4: true, verifiedRemote: "marker-only" });
+
+  await assert.rejects(runM5Script(root), /matching branch\/head detail/);
 });
 
 test("apply-tauri-migration-m5 refuses to run with tracked worktree changes", async (t) => {
@@ -71,7 +82,7 @@ test("apply-tauri-migration-m5 flips defaults, docs, and checklist after verifie
 
 async function createFixtureRoot(
   t: test.TestContext,
-  options: { verifiedM4: boolean; verifiedRemote?: boolean },
+  options: { verifiedM4: boolean; verifiedRemote?: boolean | "marker-only" },
 ): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "open-design-tauri-m5-"));
   t.after(() => void rm(root, { force: true, recursive: true }));
@@ -136,8 +147,14 @@ async function initGitFixture(root: string): Promise<void> {
   await execFileAsync("git", ["commit", "-m", "fixture"], { cwd: root, maxBuffer: 1024 * 1024 });
 }
 
-function migrationDoc(options: { verifiedM4: boolean; verifiedRemote?: boolean }): string {
+function migrationDoc(options: { verifiedM4: boolean; verifiedRemote?: boolean | "marker-only" }): string {
   const checked = new Set<string>(options.verifiedM4 ? m4PlatformGateLabels : []);
+  const remoteEvidence =
+    options.verifiedM4 && options.verifiedRemote !== false
+      ? options.verifiedRemote === "marker-only"
+        ? [m4RemoteEvidenceLogMarker]
+        : verifiedRemoteEvidence
+      : [];
   return [
     "# Electron to Tauri Migration",
     "",
@@ -151,7 +168,7 @@ function migrationDoc(options: { verifiedM4: boolean; verifiedRemote?: boolean }
     ].map((label) => `- [${checked.has(label) ? "x" : " "}] ${label}`),
     "",
     ...(options.verifiedM4 ? [m4EvidenceLogMarker] : []),
-    ...(options.verifiedM4 && options.verifiedRemote !== false ? [m4RemoteEvidenceLogMarker] : []),
+    ...remoteEvidence,
   ].join("\n");
 }
 

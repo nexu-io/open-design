@@ -8,6 +8,8 @@ export const m4EvidenceLogMarker =
   "Verified native Windows/Linux M4 package smoke with `scripts/verify-tauri-platform-gates.ts --update-migration-doc`.";
 export const m4RemoteEvidenceLogMarker =
   "Verified pushed migration branch head with `scripts/verify-tauri-migration-remote.ts` before M5.";
+const m4RemoteEvidenceDetailPattern =
+  /Remote `[^`\n]+` matched `[0-9a-f]{40}` before M4 evidence was recorded and M5 defaults were applied\./;
 export const m5ToolsDevDefaultLabel = "Change `tools-dev` default desktop runtime to Tauri.";
 export const m5ToolsPackDefaultLabel = "Change `tools-pack` default desktop runtime to Tauri.";
 export const m5ReleaseBetaDefaultLabel = "Change `release-beta` desktop runtime workflow default to Tauri.";
@@ -18,6 +20,14 @@ export const m6ElectronRuntimeLabel = "Remove Electron preload/runtime code afte
 export const m6ElectronResourcesLabel = "Remove Electron-only resources/hooks from `tools-pack` and release workflows.";
 export const m6ElectronTestsLabel = "Delete or rewrite Electron-only tests.";
 export const m6ElectronGuidanceLabel = "Update AGENTS guidance and PR checklist references from Electron to Tauri.";
+
+export function formatM4RemoteEvidenceDetail(remote: string, branch: string, expectedHead: string): string {
+  return `Remote \`${remote}/${branch}\` matched \`${expectedHead}\` before M4 evidence was recorded and M5 defaults were applied.`;
+}
+
+export function hasM4RemoteEvidence(migrationDoc: string): boolean {
+  return migrationDoc.includes(m4RemoteEvidenceLogMarker) && m4RemoteEvidenceDetailPattern.test(migrationDoc);
+}
 
 type DesktopRuntime = "electron" | "tauri";
 
@@ -75,7 +85,7 @@ export function evaluateTauriMigrationOrder(input: TauriMigrationPolicyInputs): 
   const m4Complete = m4PlatformGateStates.every(Boolean);
   const m4PartiallyComplete = m4PlatformGateStates.some(Boolean) && !m4Complete;
   const m4EvidenceLogMarked = input.migrationDoc.includes(m4EvidenceLogMarker);
-  const m4RemoteEvidenceLogMarked = input.migrationDoc.includes(m4RemoteEvidenceLogMarker);
+  const m4RemoteEvidenceLogMarked = hasM4RemoteEvidence(input.migrationDoc);
   const toolsDevDefaultFlipped = isChecklistLineChecked(input.migrationDoc, m5ToolsDevDefaultLabel);
   const toolsPackDefaultFlipped = isChecklistLineChecked(input.migrationDoc, m5ToolsPackDefaultLabel);
   const releaseBetaDefaultFlipped = isChecklistLineChecked(input.migrationDoc, m5ReleaseBetaDefaultLabel);
@@ -111,7 +121,7 @@ export function evaluateTauriMigrationOrder(input: TauriMigrationPolicyInputs): 
   }
   if (m4Complete && !m4RemoteEvidenceLogMarked) {
     violations.push(
-      "M4 platform gates are checked, but the migration doc is missing the pushed remote branch-head evidence log marker.",
+      "M4 platform gates are checked, but the migration doc is missing the pushed remote branch-head evidence log marker/detail.",
     );
   }
   if (!m4Complete && (toolsDevDefault === "tauri" || toolsPackDefault === "tauri" || releaseBetaDefault === "tauri")) {

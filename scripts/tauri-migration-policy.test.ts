@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   evaluateTauriMigrationOrder,
+  formatM4RemoteEvidenceDetail,
   m4EvidenceLogMarker,
   m4PlatformGateLabels,
   m4RemoteEvidenceLogMarker,
@@ -20,6 +21,7 @@ import {
 } from "./tauri-migration-policy.ts";
 
 type Runtime = "electron" | "tauri";
+const verifiedRemoteEvidence = [m4RemoteEvidenceLogMarker, formatM4RemoteEvidenceDetail("origin", "codex/electron-to-tauri-migration", "1".repeat(40))] as const;
 
 test("evaluateTauriMigrationOrder accepts the current parallel migration state", () => {
   assert.deepEqual(evaluateTauriMigrationOrder(baseInput()), []);
@@ -55,6 +57,19 @@ test("evaluateTauriMigrationOrder rejects checked M4 gates without pushed remote
   assertContains(violations, "missing the pushed remote branch-head evidence log marker");
 });
 
+test("evaluateTauriMigrationOrder rejects marker-only pushed remote evidence", () => {
+  const violations = evaluateTauriMigrationOrder(
+    baseInput({
+      migrationDoc: migrationDoc({
+        checked: [...m4PlatformGateLabels],
+        extra: [m4EvidenceLogMarker, m4RemoteEvidenceLogMarker],
+      }),
+    }),
+  );
+
+  assertContains(violations, "missing the pushed remote branch-head evidence log marker");
+});
+
 test("evaluateTauriMigrationOrder rejects default flips before M4 is complete", () => {
   const violations = evaluateTauriMigrationOrder(
     baseInput({
@@ -72,7 +87,7 @@ test("evaluateTauriMigrationOrder rejects divergent tools-dev and tools-pack def
     baseInput({
       migrationDoc: migrationDoc({
         checked: [...m4PlatformGateLabels, m5ToolsDevDefaultLabel],
-        extra: [m4EvidenceLogMarker, m4RemoteEvidenceLogMarker],
+        extra: [m4EvidenceLogMarker, ...verifiedRemoteEvidence],
       }),
       toolsDevConfig: toolsConfig("tauri"),
     }),
@@ -294,14 +309,14 @@ function postM5MigrationDoc(options: { m6Checked?: readonly string[] } = {}): st
       m5PrimaryDocsLabel,
       ...(options.m6Checked ?? []),
     ],
-    extra: [m4EvidenceLogMarker, m4RemoteEvidenceLogMarker],
+    extra: [m4EvidenceLogMarker, ...verifiedRemoteEvidence],
   });
 }
 
 function verifiedM4MigrationDoc(): string {
   return migrationDoc({
     checked: [...m4PlatformGateLabels],
-    extra: [m4EvidenceLogMarker, m4RemoteEvidenceLogMarker],
+    extra: [m4EvidenceLogMarker, ...verifiedRemoteEvidence],
   });
 }
 

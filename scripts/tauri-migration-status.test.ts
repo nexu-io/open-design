@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 import {
+  formatM4RemoteEvidenceDetail,
   m4EvidenceLogMarker,
   m4PlatformGateLabels,
   m4RemoteEvidenceLogMarker,
@@ -31,6 +32,10 @@ const continueScript = join(scriptsRoot, "continue-tauri-migration.ts");
 const statusScript = join(scriptsRoot, "tauri-migration-status.ts");
 const linuxArtifactName = "open-design-ci-linux-tauri-e2e-report";
 const winArtifactName = "open-design-ci-win-tauri-e2e-report";
+const verifiedRemoteEvidence = [
+  m4RemoteEvidenceLogMarker,
+  formatM4RemoteEvidenceDetail("origin", "codex/electron-to-tauri-migration", "1".repeat(40)),
+] as const;
 
 test("migration doc continuation command blocks keep verified handoff paths", async () => {
   const source = await readFile(join(repoRoot, "docs/electron-to-tauri-migration.md"), "utf8");
@@ -117,7 +122,7 @@ test("tauri-migration-status advances to M5 after verified M4 checkboxes", async
   const fixture = await createFixtureRoot(t, {
     checked: [...m4PlatformGateLabels],
     defaults: "electron",
-    extraDocLines: [m4EvidenceLogMarker, m4RemoteEvidenceLogMarker],
+    extraDocLines: [m4EvidenceLogMarker, ...verifiedRemoteEvidence],
   });
 
   const result = await runStatus(fixture);
@@ -150,10 +155,37 @@ test("tauri-migration-status stays in M4 when remote head evidence is missing", 
   assert.equal(parsed.m4Evidence.platformGatesChecked, true);
   assert.equal(parsed.m4Evidence.nativeEvidence, true);
   assert.equal(parsed.m4Evidence.remoteEvidence, false);
-  assert.deepEqual(parsed.m4Evidence.problems, ["missing pushed remote branch-head evidence marker"]);
+  assert.deepEqual(parsed.m4Evidence.problems, ["missing pushed remote branch-head evidence marker/detail"]);
   assert.doesNotMatch(parsed.nextActions.join("\n"), /apply-tauri-migration-m5/);
   assert.match(parsed.nextActions.join("\n"), /M4 platform checkboxes are closed but evidence markers are incomplete/);
-  assert.match(parsed.nextActions.join("\n"), /missing pushed remote branch-head evidence marker/);
+  assert.match(parsed.nextActions.join("\n"), /missing pushed remote branch-head evidence marker\/detail/);
+});
+
+test("tauri-migration-status stays in M4 when remote head evidence has no branch detail", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [...m4PlatformGateLabels],
+    defaults: "electron",
+    extraDocLines: [m4EvidenceLogMarker, m4RemoteEvidenceLogMarker],
+  });
+
+  const result = await runStatus(fixture);
+  const parsed = JSON.parse(result.stdout) as {
+    m4Evidence: {
+      nativeEvidence: boolean;
+      platformGatesChecked: boolean;
+      problems: string[];
+      remoteEvidence: boolean;
+    };
+    nextActions: string[];
+    phase: string;
+  };
+
+  assert.equal(parsed.phase, "M4");
+  assert.equal(parsed.m4Evidence.platformGatesChecked, true);
+  assert.equal(parsed.m4Evidence.nativeEvidence, true);
+  assert.equal(parsed.m4Evidence.remoteEvidence, false);
+  assert.deepEqual(parsed.m4Evidence.problems, ["missing pushed remote branch-head evidence marker/detail"]);
+  assert.doesNotMatch(parsed.nextActions.join("\n"), /apply-tauri-migration-m5/);
 });
 
 test("tauri-migration-status explains missing M4 evidence markers when checkboxes are closed", async (t) => {
@@ -180,10 +212,10 @@ test("tauri-migration-status explains missing M4 evidence markers when checkboxe
   assert.equal(parsed.m4Evidence.remoteEvidence, false);
   assert.deepEqual(parsed.m4Evidence.problems, [
     "missing native Windows/Linux verifier evidence marker",
-    "missing pushed remote branch-head evidence marker",
+    "missing pushed remote branch-head evidence marker/detail",
   ]);
   assert.match(parsed.nextActions.join("\n"), /missing native Windows\/Linux verifier evidence marker/);
-  assert.match(parsed.nextActions.join("\n"), /missing pushed remote branch-head evidence marker/);
+  assert.match(parsed.nextActions.join("\n"), /missing pushed remote branch-head evidence marker\/detail/);
   assert.match(parsed.nextActions.join("\n"), /continue-tauri-migration\.ts --wait-reports --advance/);
 });
 
@@ -1552,7 +1584,7 @@ test("continue-tauri-migration surfaces missing M4 evidence markers before plann
   const result = await runContinue(fixture, "--handoff-dir", handoffDir, "--remote", remotePath, "--dry-run", "--skip-dispatch");
 
   assert.match(result.stdout, /M4 evidence needs attention/);
-  assert.match(result.stdout, /missing pushed remote branch-head evidence marker/);
+  assert.match(result.stdout, /missing pushed remote branch-head evidence marker\/detail/);
   assert.match(result.stdout, /Would push codex\/electron-to-tauri-migration/);
 });
 

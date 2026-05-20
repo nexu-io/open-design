@@ -9,6 +9,7 @@ import { commandSidecarProblems, commandSidecarSyntaxProblem } from "./tauri-mig
 import {
   m4EvidenceLogMarker,
   m4PlatformGateLabels,
+  hasM4RemoteEvidence,
   m4RemoteEvidenceLogMarker,
   m5ElectronFallbackLabel,
   m5PrimaryDocsLabel,
@@ -484,13 +485,13 @@ function readM4EvidenceStatus(groups: ChecklistGroupStatus[], migrationDoc: stri
   const m4 = groups.find((group) => group.name === "M4");
   const platformGatesChecked = m4 != null && m4.checked === m4.total;
   const nativeEvidence = migrationDoc.includes(m4EvidenceLogMarker);
-  const remoteEvidence = migrationDoc.includes(m4RemoteEvidenceLogMarker);
+  const remoteEvidence = hasM4RemoteEvidence(migrationDoc);
   const problems: string[] = [];
   if (platformGatesChecked && !nativeEvidence) {
     problems.push("missing native Windows/Linux verifier evidence marker");
   }
   if (platformGatesChecked && !remoteEvidence) {
-    problems.push("missing pushed remote branch-head evidence marker");
+    problems.push("missing pushed remote branch-head evidence marker/detail");
   }
   return {
     nativeEvidence,

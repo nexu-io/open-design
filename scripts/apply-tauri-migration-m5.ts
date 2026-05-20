@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import {
   m4EvidenceLogMarker,
   m4PlatformGateLabels,
+  hasM4RemoteEvidence,
   m4RemoteEvidenceLogMarker,
   m5ElectronFallbackLabel,
   m5PrimaryDocsLabel,
@@ -168,8 +169,8 @@ function assertM4Complete(migrationDoc: string): void {
   if (!migrationDoc.includes(m4EvidenceLogMarker)) {
     throw new Error("M5 default flip requires the verifier-applied native M4 evidence log marker");
   }
-  if (!migrationDoc.includes(m4RemoteEvidenceLogMarker)) {
-    throw new Error("M5 default flip requires the pushed remote branch-head evidence log marker");
+  if (!hasM4RemoteEvidence(migrationDoc)) {
+    throw new Error("M5 default flip requires the pushed remote branch-head evidence log marker and matching branch/head detail");
   }
 }
 
