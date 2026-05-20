@@ -345,20 +345,46 @@ test.describe('chat pane autoscroll on TodoCard growth', () => {
       `seed more filler messages or increase the scroll offset if this fires`,
     ).toBeGreaterThan(80);
 
+    // Capture scrollTop and clientHeight before growing — the invariant is that
+    // scrollTop (not distance-to-bottom) is preserved. Distance-to-bottom
+    // naturally increases by ~extraPx because growPinnedTodo reduces clientHeight
+    // while holding scrollTop fixed, so comparing distances before/after would
+    // fail on correct behavior.
+    const scrollTopBeforeGrow = await page.evaluate(
+      () => document.querySelector<HTMLElement>('.chat-log')?.scrollTop ?? -1,
+    );
+    const clientHeightBeforeGrow = await page.evaluate(
+      () => document.querySelector<HTMLElement>('.chat-log')?.clientHeight ?? -1,
+    );
+
     // Now grow the todo card — the non-pinned user should NOT be dragged back.
     await growPinnedTodo(page, 80);
 
-    const distanceAfterGrow = await chatLogBottomDistance(page);
+    // Hard precondition: the grow step must have actually changed clientHeight.
+    // If this fails, the layout changed and the test no longer exercises the
+    // "user scrolled away, do not yank them back" path — fail fast.
+    const clientHeightAfterGrow = await page.evaluate(
+      () => document.querySelector<HTMLElement>('.chat-log')?.clientHeight ?? -1,
+    );
+    expect(
+      clientHeightAfterGrow,
+      `expected grow step to reduce chat-log clientHeight ` +
+      `(before=${clientHeightBeforeGrow} after=${clientHeightAfterGrow}); ` +
+      `increase extraPx in growPinnedTodo or check the layout if this fires`,
+    ).toBeLessThan(clientHeightBeforeGrow);
 
-    // Tight invariant: the scroll position should be preserved within a small
-    // delta of where the user left it. A regression that pulls the log most of
-    // the way back to the bottom (e.g. before=150, after=61) would have passed
-    // a loose absolute threshold but fails this delta check.
+    // Core invariant: scrollTop must be preserved. A regression where
+    // followLatestIfPinned fires and snaps the user back to the bottom would
+    // set scrollTop = scrollHeight - clientHeight, far from scrollTopBeforeGrow.
+    const scrollTopAfterGrow = await page.evaluate(
+      () => document.querySelector<HTMLElement>('.chat-log')?.scrollTop ?? -1,
+    );
     const SCROLL_PRESERVATION_TOLERANCE_PX = 20;
     expect(
-      Math.abs(distanceAfterGrow - distanceAfterScroll),
-      `expected scroll position preserved within ${SCROLL_PRESERVATION_TOLERANCE_PX}px of pre-grow ` +
-      `(before=${distanceAfterScroll} after=${distanceAfterGrow} delta=${Math.abs(distanceAfterGrow - distanceAfterScroll)})`,
+      Math.abs(scrollTopAfterGrow - scrollTopBeforeGrow),
+      `expected scrollTop preserved within ${SCROLL_PRESERVATION_TOLERANCE_PX}px of pre-grow ` +
+      `(before=${scrollTopBeforeGrow} after=${scrollTopAfterGrow} ` +
+      `delta=${Math.abs(scrollTopAfterGrow - scrollTopBeforeGrow)})`,
     ).toBeLessThan(SCROLL_PRESERVATION_TOLERANCE_PX);
   });
 });
