@@ -60,6 +60,30 @@ User uploads a screenshot, brand guide PDF, or Figma link. OD runs `design-syste
 
 These four scenarios map 1:1 to the four modes in [`modes.md`](modes.md).
 
+## 4.5 Studio365 / NovaDash integration flow
+
+Studio365 integration in NovaDash is a handoff-first workflow, not a page full of raw scripts. The dashboard should present workflow intents and handoff actions as first-class UI objects.
+
+- **Workspace task hub**: a primary dashboard panel showing the current Studio365 workflow, queue status, and next recommended action.
+- **Workflow cards**: cards for SEO content farming, short-form video briefs, and B2B outreach. Each card shows the active task, progress, memory snapshot, and the next handoff command.
+- **Handoff panel**: a dedicated UI where the user reviews the generated output brief, selects the target channel (Netlify, Hyperframe, Gmail/n8n), and presses `Run Handoff`.
+- **Hermes memory panel**: surfacing the current Obsidian notes from `H:\Workspace\Studio365-Knowledge` so the user can see what context Hermes is using.
+- **Queue status**: display the SQLite queue at `H:\Workspace\studio365_ops\chalam.db`, including pending tasks, cooling delay, last run time, and success/failure status.
+- **Result review**: after a handoff command, NovaDash should show the expected artifact destination and next follow-up step, rather than executing monolithic scripts itself.
+
+### UI flow example
+
+1. User opens NovaDash and selects `Studio365` from the top-level workflow menu.
+2. The dashboard loads the current Hermes brief, memory context, and queue state.
+3. The user chooses a workflow type: `SEO Content`, `Video Brief`, or `Agency Outreach`.
+4. NovaDash displays the generated task summary and required output channels.
+5. User confirms the task and clicks `Run Handoff`.
+6. The dashboard writes a handoff command and marks the task as submitted to `run-handoff.ps1`.
+7. The queue panel updates with the pending handoff, cooling delay, and expected next execution time.
+8. When the task completes, NovaDash records the artifact location and next recommended action.
+
+This flow keeps NovaDash lightweight and local-first while still enabling Studio365's core COO workflows.
+
 ## 5. High-level modules
 
 ```
