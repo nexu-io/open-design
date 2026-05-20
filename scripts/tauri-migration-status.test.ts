@@ -31,6 +31,21 @@ const statusScript = join(scriptsRoot, "tauri-migration-status.ts");
 const linuxArtifactName = "open-design-ci-linux-tauri-e2e-report";
 const winArtifactName = "open-design-ci-win-tauri-e2e-report";
 
+test("migration doc continuation command blocks keep verified handoff paths", async () => {
+  const source = await readFile(join(repoRoot, "docs/electron-to-tauri-migration.md"), "utf8");
+  const continuationBlocks = [...source.matchAll(/```bash\n([\s\S]*?)\n```/g)]
+    .map((match) => match[1] ?? "")
+    .filter((block) => block.includes("scripts/continue-tauri-migration.ts"));
+
+  assert.ok(continuationBlocks.length > 0);
+  for (const block of continuationBlocks) {
+    assert.match(block, /--handoff-dir \/tmp\/open-design-tauri-migration-handoff/);
+    assert.match(block, /--handoff-archive \/tmp\/open-design-tauri-migration-handoff\.tar\.gz/);
+    assert.match(block, /--remote origin/);
+    assert.match(block, /--report-dir \/tmp\/open-design-tauri-m4-reports/);
+  }
+});
+
 test("tauri-migration-status reports the current M4 blocker state", async (t) => {
   const fixture = await createFixtureRoot(t, {
     checked: [],

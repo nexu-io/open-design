@@ -67,6 +67,10 @@ Do not write mutable handoff commit SHAs or archive hashes into this document as
 
 ```bash
 pnpm exec tsx scripts/continue-tauri-migration.ts \
+  --handoff-dir /tmp/open-design-tauri-migration-handoff \
+  --handoff-archive /tmp/open-design-tauri-migration-handoff.tar.gz \
+  --remote origin \
+  --report-dir /tmp/open-design-tauri-m4-reports \
   --wait-reports \
   --advance
 ```
@@ -471,6 +475,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Tightened the push-only packaged handoff receiver path so `scripts/push-tauri-migration-handoff.ts --archive` now verifies the archive checksum, executable `.commands.sh` sidecar, `.commands.sh.sha256` sidecar, and current command-sidecar safety markers before extracting or pushing. This keeps the push-only fallback aligned with the status checker and executable sidecar requirement that all four transfer files stay together. `node --import tsx --test scripts/push-tauri-migration-handoff.test.ts scripts/tauri-migration-status.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, `git diff --check`, `pnpm guard`, and `pnpm typecheck` passed.
 - 2026-05-20: Centralized the `.commands.sh` safety-marker requirements in `scripts/tauri-migration-command-sidecar.ts` so `scripts/tauri-migration-status.ts` and `scripts/push-tauri-migration-handoff.ts` reject stale packaged handoff command sidecars from the same requirement list. This prevents the status archive-current check and push-only receiver fallback from drifting as new receiver safeguards are added. `node --import tsx --test scripts/push-tauri-migration-handoff.test.ts scripts/tauri-migration-status.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, `git diff --check`, `pnpm guard`, and `pnpm typecheck` passed.
 - 2026-05-20: Tightened the continuation cadence and heartbeat validation so the daily follow-up must run `scripts/tauri-migration-status.ts` and `scripts/continue-tauri-migration.ts --dry-run` with the current handoff directory, handoff archive, remote, and report directory. This keeps future continuation passes from silently falling back to default archive/report paths after the packaged handoff has already been verified. `node --import tsx --test scripts/tauri-migration-status.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, `git diff --check`, `pnpm guard`, and `pnpm typecheck` passed.
+- 2026-05-20: Aligned the remaining documented `scripts/continue-tauri-migration.ts` command blocks with the verified handoff archive/report-directory contract, including the post-push `--wait-reports --advance` examples. `scripts/tauri-migration-status.test.ts` now reads this document and fails if a continuation bash block omits `--handoff-dir`, `--handoff-archive`, `--remote origin`, or `--report-dir`. `node --import tsx --test scripts/tauri-migration-status.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `git diff --check` passed.
 
 ### Platform Gate Runners
 
@@ -521,9 +526,9 @@ Before handing off or changing phases, print the current migration status:
 ```bash
 pnpm exec tsx scripts/tauri-migration-status.ts \
   --handoff-dir /tmp/open-design-tauri-migration-handoff \
+  --handoff-archive /tmp/open-design-tauri-migration-handoff.tar.gz \
   --remote origin \
-  --win-report /path/to/open-design-ci-win-tauri-e2e-report \
-  --linux-report /path/to/open-design-ci-linux-tauri-e2e-report
+  --report-dir /tmp/open-design-tauri-m4-reports
 ```
 
 When `--handoff-dir` is provided, status also checks the default handoff archive at `<handoff-dir>.tar.gz`, its `.sha256` sidecar, its `.commands.sh` sidecar, and the `.commands.sh.sha256` sidecar. If the archive was written elsewhere, add `--handoff-archive /path/to/open-design-tauri-migration-handoff.tar.gz` so the next-action list reflects the actual transferable artifact. Status also auto-detects verified platform reports in `/tmp/open-design-tauri-m4-reports` when that default download directory exists. If reports were downloaded elsewhere with `scripts/download-tauri-m4-reports.ts --output-dir <dir>`, pass `--report-dir <dir>` instead of spelling out both report artifact paths.
@@ -531,13 +536,24 @@ When `--handoff-dir` is provided, status also checks the default handoff archive
 For the current machine, use the continuation runner to print or execute the next safe step without bypassing the M4/M5/M6 guards:
 
 ```bash
-pnpm exec tsx scripts/continue-tauri-migration.ts --dry-run
+pnpm exec tsx scripts/continue-tauri-migration.ts \
+  --handoff-dir /tmp/open-design-tauri-migration-handoff \
+  --handoff-archive /tmp/open-design-tauri-migration-handoff.tar.gz \
+  --remote origin \
+  --report-dir /tmp/open-design-tauri-m4-reports \
+  --dry-run
 ```
 
 When the branch can be pushed and the native CI artifacts are expected to become available, the same runner can wait for the matching branch-head reports and apply the guarded M4→M5 advance:
 
 ```bash
-pnpm exec tsx scripts/continue-tauri-migration.ts --wait-reports --advance
+pnpm exec tsx scripts/continue-tauri-migration.ts \
+  --handoff-dir /tmp/open-design-tauri-migration-handoff \
+  --handoff-archive /tmp/open-design-tauri-migration-handoff.tar.gz \
+  --remote origin \
+  --report-dir /tmp/open-design-tauri-m4-reports \
+  --wait-reports \
+  --advance
 ```
 
 To collect native M4 evidence, push that branch with a credential that can write to `nexu-io/open-design`, open a draft PR against `main`, and wait for these CI jobs:
