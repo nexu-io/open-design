@@ -10,7 +10,7 @@ import {
   DESIGN_SYSTEM_WORKSPACE_DISPLAY_TITLE,
   isDesignSystemWorkspacePrompt,
 } from '../design-system-auto-prompt';
-import { latestTodoWriteInputFromMessages } from '../runtime/todos';
+import { latestTodoWriteInputForPinnedCard } from '../runtime/todos';
 import { TodoCard } from './ToolCard';
 import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, ChatMessageFeedbackChange, Conversation, PreviewComment, ProjectFile, ProjectMetadata, SkillSummary } from '../types';
 import { dayKey, dayLabel, exactDateTime, messageTime, relativeTimeLong } from '../utils/chatTime';
@@ -915,7 +915,7 @@ function PinnedTodoSlot({
   // the slot tears down. Without it React would unmount immediately and
   // the card would pop out without animation.
   const [exiting, setExiting] = useState(false);
-  const input = latestTodoWriteInputFromMessages(messages);
+  const input = latestTodoWriteInputForPinnedCard(messages);
   if (input == null) return null;
   let snapshotKey: string;
   try {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   latestTodosFromEvents,
+  latestTodoWriteInputForPinnedCard,
   parseTodoWriteInput,
   unfinishedTodosFromEvents,
 } from '../../src/runtime/todos';
@@ -115,6 +116,64 @@ describe('todo event helpers', () => {
         status: 'pending',
         activeForm: undefined,
       },
+    ]);
+  });
+
+  it('marks the active todo as stopped when a failed run ended without a final TodoWrite', () => {
+    const input = latestTodoWriteInputForPinnedCard([
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '',
+        runStatus: 'failed',
+        events: [
+          {
+            kind: 'tool_use',
+            id: 'todo-1',
+            name: 'TodoWrite',
+            input: {
+              todos: [
+                { content: 'Draft layout', status: 'completed' },
+                { content: 'Build components', status: 'in_progress', activeForm: 'Building components' },
+                { content: 'Run QA', status: 'pending' },
+              ],
+            },
+          },
+        ],
+      },
+    ]);
+
+    expect(parseTodoWriteInput(input)).toEqual([
+      { content: 'Draft layout', status: 'completed', activeForm: undefined },
+      { content: 'Build components', status: 'stopped', activeForm: 'Building components' },
+      { content: 'Run QA', status: 'pending', activeForm: undefined },
+    ]);
+  });
+
+  it('marks the active todo as stopped when a nominally successful run ended with stale progress', () => {
+    const input = latestTodoWriteInputForPinnedCard([
+      {
+        runStatus: 'succeeded',
+        endedAt: 3_000,
+        events: [
+          {
+            kind: 'tool_use',
+            id: 'todo-1',
+            name: 'TodoWrite',
+            input: {
+              todos: [
+                { content: 'Generate HTML', status: 'in_progress' },
+                { content: 'Self-check', status: 'pending' },
+              ],
+            },
+          },
+        ],
+      },
+    ]);
+
+    expect(parseTodoWriteInput(input)).toEqual([
+      { content: 'Generate HTML', status: 'stopped', activeForm: undefined },
+      { content: 'Self-check', status: 'pending', activeForm: undefined },
     ]);
   });
 });

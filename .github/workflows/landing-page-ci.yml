@@ -10,6 +10,8 @@ on:
       - .github/workflows/blog-indexing-monitor.yml
       # Landing page sources
       - apps/landing-page/**
+      # Design template source of truth for the homepage.
+      - design-templates/open-design-landing/**
       # Content sources globbed by Astro content collections — without
       # these the deploy can be silently skipped when only Markdown
       # content is touched.
@@ -30,6 +32,7 @@ on:
       - .github/workflows/blog-indexing-on-deploy.yml
       - .github/workflows/blog-indexing-monitor.yml
       - apps/landing-page/**
+      - design-templates/open-design-landing/**
       - skills/**
       - design-systems/**
       - craft/**

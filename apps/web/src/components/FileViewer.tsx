@@ -59,7 +59,7 @@ import {
   requestPreviewSnapshot,
 } from '../runtime/exports';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
-import { buildLazySrcdocTransport, buildSrcdoc } from '../runtime/srcdoc';
+import { buildLazySrcdocTransport, buildSrcdoc, canActivateSrcDocTransport } from '../runtime/srcdoc';
 import {
   hasTweaksTemplate,
   hasUrlModeBridge,
@@ -4031,50 +4031,61 @@ function HtmlViewer({
   const lazySrcDocTransport = useMemo(() => buildLazySrcdocTransport(), []);
   const [hasLazySrcDocTransport, setHasLazySrcDocTransport] = useState(useUrlLoadPreview);
   const [srcDocTransportResetKey, setSrcDocTransportResetKey] = useState(0);
+  const [srcDocShellReady, setSrcDocShellReady] = useState(false);
   const wasUrlLoadPreviewRef = useRef(useUrlLoadPreview);
-  // True once the srcDoc iframe's lazy-transport bootstrap has fired its
-  // initial onLoad. The activation effect must wait for this — posting the
-  // `od:srcdoc-transport-activate` message BEFORE the iframe parses its
-  // inline `<script data-od-lazy-srcdoc-transport>` lands in the air with no
-  // listener installed yet, and the iframe sits on the 536-byte bootstrap
-  // forever (white preview). Re-firing onLoad after each `document.write`
-  // does NOT reset this back to false — by then the bootstrap listener (or
-  // the equivalent listener injected by `injectSrcdocTransportActivationBridge`
-  // into the full srcDoc) has been installed on `window` and persists across
-  // subsequent document rewrites.
-  const [srcDocTransportReady, setSrcDocTransportReady] = useState(false);
   useEffect(() => {
     if (useUrlLoadPreview) setHasLazySrcDocTransport(true);
   }, [useUrlLoadPreview]);
+  // Reset the shell-ready latch whenever the srcDoc iframe re-mounts. The
+  // next shell will post `od:srcdoc-transport-ready` (or fire onLoad) and
+  // flip this back to true. See #2253.
+  useEffect(() => {
+    setSrcDocShellReady(false);
+  }, [srcDocTransportResetKey]);
+  // Listen for the shell's ready handshake. Gating activation on this is
+  // what fixes the #2253 race: opening Tweaks right after a key-driven
+  // re-mount used to post `activate` before the shell's listener was
+  // installed, dropping the message and stranding the iframe on the empty
+  // 536-byte body.
+  useEffect(() => {
+    function onMessage(ev: MessageEvent) {
+      if (ev.source !== srcDocPreviewIframeRef.current?.contentWindow) return;
+      const data = ev.data as { type?: string } | null;
+      if (data?.type !== 'od:srcdoc-transport-ready') return;
+      setSrcDocShellReady(true);
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, []);
   const useLazySrcDocTransport = useUrlLoadPreview || hasLazySrcDocTransport;
   const srcDocTransportContent = useLazySrcDocTransport ? lazySrcDocTransport : srcDoc;
   const urlTransportSrc = useUrlLoadPreview ? activePreviewSrcUrl : 'about:blank';
   const activateSrcDocTransport = useCallback((target: HTMLIFrameElement | null = srcDocPreviewIframeRef.current) => {
+    if (!canActivateSrcDocTransport({
+      srcDoc,
+      useUrlLoadPreview,
+      useLazySrcDocTransport,
+      shellReady: srcDocShellReady,
+      activatedHtml: activatedSrcDocTransportHtmlRef.current,
+    })) return false;
     const win = target?.contentWindow;
-    if (!win || !srcDoc || useUrlLoadPreview || !useLazySrcDocTransport) return false;
-    if (activatedSrcDocTransportHtmlRef.current === srcDoc) return false;
+    if (!win) return false;
     win.postMessage({ type: 'od:srcdoc-transport-activate', html: srcDoc }, '*');
     activatedSrcDocTransportHtmlRef.current = srcDoc;
     return true;
-  }, [srcDoc, useLazySrcDocTransport, useUrlLoadPreview]);
+  }, [srcDoc, useLazySrcDocTransport, useUrlLoadPreview, srcDocShellReady]);
   useEffect(() => {
     if (useUrlLoadPreview) {
       activatedSrcDocTransportHtmlRef.current = null;
       if (!wasUrlLoadPreviewRef.current) {
         setSrcDocTransportResetKey((key) => key + 1);
-        setSrcDocTransportReady(false);
       }
       wasUrlLoadPreviewRef.current = true;
       return;
     }
     wasUrlLoadPreviewRef.current = false;
-    // Gate the post on the iframe's first onLoad. Without this gate the
-    // post races the bootstrap script's `window.addEventListener('message')`
-    // call and gets dropped — symptom: lazy bootstrap stays at 536 bytes,
-    // preview renders blank white.
-    if (!srcDocTransportReady) return;
     activateSrcDocTransport();
-  }, [activateSrcDocTransport, useUrlLoadPreview, srcDocTransportReady]);
+  }, [activateSrcDocTransport, useUrlLoadPreview]);
   useEffect(() => {
     restorePreviewScrollPosition();
   }, [boardMode, manualEditMode, srcDoc, restorePreviewScrollPosition]);
@@ -6174,12 +6185,11 @@ function HtmlViewer({
                       onLoad={() => {
                         const frame = srcDocPreviewIframeRef.current;
                         if (!useUrlLoadPreview) iframeRef.current = frame;
-                        // Unblock the activation effect on the first
-                        // bootstrap load. Subsequent onLoad fires (one per
-                        // document.write into the iframe) keep the flag
-                        // true — there is no need to re-race the listener
-                        // install once it is up.
-                        setSrcDocTransportReady(true);
+                        // Belt-and-suspenders for the ready handshake: if the
+                        // postMessage racing the parent's listener registration
+                        // ever loses, the load event still tells us the shell
+                        // script ran to completion.
+                        if (useLazySrcDocTransport) setSrcDocShellReady(true);
                         activateSrcDocTransport(frame);
                         dcViewportRestoreAtRef.current = Date.now();
                         frame?.contentWindow?.postMessage({

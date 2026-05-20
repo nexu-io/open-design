@@ -1870,6 +1870,48 @@ export function telemetryPromptFromRunRequest(message, currentPrompt) {
   return typeof currentPrompt === 'string' ? currentPrompt : message;
 }
 
+const FORM_ANSWERS_HEADER_RE = /^\s*\[form answers\s+(?:\u2014|-)\s*([^\]\r\n]+)\]/i;
+
+function formAnswerTransitionForCurrentPrompt(currentPrompt) {
+  if (typeof currentPrompt !== 'string') return null;
+  const trimmed = currentPrompt.trim();
+  if (!trimmed) return null;
+  const match = FORM_ANSWERS_HEADER_RE.exec(trimmed);
+  if (!match) return null;
+  const rawFormId = (match[1] || 'form').trim() || 'form';
+  const formId = rawFormId.replace(/[^\w.-]/g, '') || 'form';
+  const lines = [
+    '## Latest user turn - form answers submitted',
+    trimmed,
+    '',
+    `The user has answered the ${formId} form. Do not emit another ${formId} form.`,
+  ];
+  if (formId.toLowerCase() === 'discovery') {
+    lines.push(
+      'Continue with RULE 2 / RULE 3 now. For Branch B answers, build now instead of asking another brief.',
+    );
+  } else {
+    lines.push(
+      'Treat these form answers as the active user turn instead of replaying the transcript as a fresh request.',
+    );
+  }
+  return lines.join('\n');
+}
+
+export function composeChatUserRequestForAgent(message, currentPrompt) {
+  const body =
+    typeof message === 'string' && message.trim()
+      ? message
+      : '(No extra typed instruction.)';
+  const transition = formAnswerTransitionForCurrentPrompt(currentPrompt);
+  if (!transition) return body;
+  return [
+    transition,
+    '## Full conversation transcript',
+    body,
+  ].join('\n\n');
+}
+
 export function createFinalizedMessageTelemetryReporter({
   design,
   db,
@@ -9223,6 +9265,10 @@ export async function startServer({
       research,
       message,
     );
+    const userRequestPrompt = composeChatUserRequestForAgent(
+      message,
+      currentPrompt,
+    );
     const clientInstructionPrompt = [researchCommandContract, runContextPrompt, systemPrompt]
       .map((part) => (typeof part === 'string' ? part.trim() : ''))
       .filter(Boolean)
@@ -9241,7 +9287,7 @@ export async function startServer({
           : linkedDirsHint
             ? `# Instructions${linkedDirsHint}\n\n---\n`
             : '',
-      `# User request\n\n${message || '(No extra typed instruction.)'}${attachmentHint}${commentHint}`,
+      `# User request\n\n${userRequestPrompt}${attachmentHint}${commentHint}`,
       safeImages.length
         ? `\n\n${safeImages.map((p) => `@${p}`).join(' ')}`
         : '',
