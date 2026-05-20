@@ -314,9 +314,8 @@ async function continueM4(args: Args, status: MigrationStatus, log: string[]): P
         }
       }
     } else {
-      log.push(
-        `Push skipped. Transfer ${archive}, ${archive}.sha256, ${archive}.commands.sh, and ${archive}.commands.sh.sha256 to a write-capable checkout.`,
-      );
+      log.push("Push skipped.");
+      appendTransferableHandoffHint(args, archive, log);
       remoteCurrent = false;
     }
   }

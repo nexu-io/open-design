@@ -841,7 +841,7 @@ test("continue-tauri-migration dry-run with skip-push stops before native CI whe
   const head = await initGitFixture(fixture);
   const handoffDir = join(fixture, "handoff");
   await writeHandoffFixture(handoffDir, { branchHead: head });
-  await writeHandoffArchive(handoffDir);
+  const { archivePath } = await writeHandoffArchive(handoffDir);
   const remotePath = join(fixture, "empty.git");
   await git(fixture, "init", "--bare", remotePath);
 
@@ -856,6 +856,12 @@ test("continue-tauri-migration dry-run with skip-push stops before native CI whe
   );
 
   assert.match(result.stdout, /Push skipped/);
+  assert.match(result.stdout, /If this host lacks repository write access/);
+  assert.match(result.stdout, new RegExp(escapeRegExp(archivePath)));
+  assert.match(result.stdout, new RegExp(escapeRegExp(`${archivePath}.sha256`)));
+  assert.match(result.stdout, new RegExp(escapeRegExp(`${archivePath}.commands.sh`)));
+  assert.match(result.stdout, new RegExp(escapeRegExp(`${archivePath}.commands.sh.sha256`)));
+  assert.match(result.stdout, new RegExp(`push-tauri-migration-handoff\\.ts --archive ${escapeRegExp(archivePath)}`));
   assert.match(result.stdout, /Remote branch is not ready; native CI cannot be collected yet/);
   assert.doesNotMatch(result.stdout, /Native CI dispatch/);
   assert.doesNotMatch(result.stdout, /download-tauri-m4-reports\.ts/);
