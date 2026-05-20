@@ -305,21 +305,14 @@ async function continueM4(args: Args, status: MigrationStatus, log: string[]): P
           dryRun: args.dryRun,
         });
       } catch (error) {
+        const hint: string[] = [];
+        appendTransferableHandoffHint(args, archive, hint);
         throw new Error(
           [
             error instanceof Error ? error.message : String(error),
             "",
-            "Remote handoff push failed. Transfer the current packaged handoff to a checkout with repository write access:",
-            `  ${archive}`,
-            `  ${archive}.sha256`,
-            `  ${archive}.commands.sh`,
-            `  ${archive}.commands.sh.sha256`,
-            "",
-            "Then run the command sidecar from that checkout:",
-            `  ${formatCommand(`${archive}.commands.sh`, [archive])}`,
-            "",
-            "Or run the push-only fallback:",
-            `  ${formatScriptCommand("push-tauri-migration-handoff.ts", pushHandoffArgs(args, archive, { omitCwd: true }))}`,
+            "Remote handoff push failed.",
+            ...hint,
           ].join("\n"),
         );
       }
@@ -453,6 +446,10 @@ function appendTransferableHandoffHint(args: Args, archive: string, log: string[
   log.push(`  ${archive}.commands.sh.sha256`);
   log.push("Then run the command sidecar from that checkout:");
   log.push(`  ${formatCommand(`${archive}.commands.sh`, [archive])}`);
+  log.push("After the receiver push succeeds, native CI dispatch requires GH_BIN/gh or a manual draft PR from that receiver.");
+  log.push(
+    `The command sidecar prints the ${formatCommand(args.ghBin, ["workflow", "run", args.workflow, "--ref", args.branch])} and draft PR fallback commands if dispatch cannot run.`,
+  );
   log.push("Or run the push-only fallback:");
   log.push(`  ${formatScriptCommand("push-tauri-migration-handoff.ts", pushHandoffArgs(args, archive, { omitCwd: true }))}`);
 }

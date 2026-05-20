@@ -1375,6 +1375,8 @@ test("continue-tauri-migration dry-run stops after a failed push preflight", asy
   assert.match(result.stdout, new RegExp(escapeRegExp(`${archivePath}.sha256`)));
   assert.match(result.stdout, new RegExp(escapeRegExp(`${archivePath}.commands.sh`)));
   assert.match(result.stdout, new RegExp(escapeRegExp(`${archivePath}.commands.sh.sha256`)));
+  assert.match(result.stdout, /After the receiver push succeeds, native CI dispatch requires GH_BIN\/gh/);
+  assert.match(result.stdout, /The command sidecar prints the gh workflow run ci\.yml --ref codex\/electron-to-tauri-migration/);
   assert.match(result.stdout, /Remote branch is not ready; native CI cannot be collected yet/);
   assert.doesNotMatch(result.stdout, /Native CI dispatch/);
   assert.doesNotMatch(result.stdout, /Trigger it manually with: gh workflow run/);
@@ -1438,6 +1440,8 @@ test("continue-tauri-migration dry-run with skip-push stops before native CI whe
   assert.match(result.stdout, new RegExp(escapeRegExp(`${archivePath}.commands.sh`)));
   assert.match(result.stdout, new RegExp(escapeRegExp(`${archivePath}.commands.sh.sha256`)));
   assert.match(result.stdout, new RegExp(`push-tauri-migration-handoff\\.ts --archive ${escapeRegExp(archivePath)}`));
+  assert.match(result.stdout, /After the receiver push succeeds, native CI dispatch requires GH_BIN\/gh/);
+  assert.match(result.stdout, /The command sidecar prints the gh workflow run ci\.yml --ref codex\/electron-to-tauri-migration/);
   assert.match(result.stdout, /Remote branch is not ready; native CI cannot be collected yet/);
   assert.doesNotMatch(result.stdout, /Native CI dispatch/);
   assert.doesNotMatch(result.stdout, /download-tauri-m4-reports\.ts/);
@@ -1700,6 +1704,8 @@ test("continue-tauri-migration reports transferable handoff paths when push fail
       assert.match(stderr, new RegExp(escapeRegExp(`${archivePath}.commands.sh.sha256`)));
       assert.match(stderr, /Then run the command sidecar from that checkout/);
       assert.match(stderr, new RegExp(`${escapeRegExp(`${archivePath}.commands.sh`)} ${escapeRegExp(archivePath)}`));
+      assert.match(stderr, /After the receiver push succeeds, native CI dispatch requires GH_BIN\/gh/);
+      assert.match(stderr, /The command sidecar prints the gh workflow run ci\.yml --ref codex\/electron-to-tauri-migration/);
       assert.match(stderr, /Or run the push-only fallback/);
       assert.match(stderr, /push-tauri-migration-handoff\.ts/);
       return true;
