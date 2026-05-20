@@ -15,7 +15,7 @@ config:
 # For Staging clusters, leave this as "production".
   nodeEnv: "production"
   allowedOrigins: ""
-  publicBaseUrl: "http://localhost:7456"
+  publicBaseUrl: ""
   nodeOptions: "--max-old-space-size=192"
   webPort: 7456
   proxyPort: 8080

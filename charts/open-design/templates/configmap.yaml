@@ -12,7 +12,9 @@ data:
 
   NODE_ENV: {{ .Values.config.nodeEnv | quote }}
   NODE_OPTIONS: {{ .Values.config.nodeOptions | quote }}
+{{- if .Values.config.publicBaseUrl }}
   OD_PUBLIC_BASE_URL: {{ .Values.config.publicBaseUrl | quote }}
+  {{- end }}
 
 {{- $origins := .Values.config.allowedOrigins }}
   {{- if and .Values.ingress.enabled (not $origins) }}

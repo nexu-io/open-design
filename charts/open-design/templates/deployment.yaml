@@ -131,6 +131,9 @@ spec:
             - name: proxy-tmp
               mountPath: /tmp
         {{- end }}
+        {{- if .Values.sidecars }}
+        {{- toYaml .Values.sidecars | nindent 8 }}
+        {{- end }}
       volumes:
         - name: storage
           {{- if .Values.persistence.enabled }}
