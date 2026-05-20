@@ -131,9 +131,9 @@ Do not create duplicate reminders for the same work. If the continuation sequenc
 
 - [x] macOS `.app`: build, start, inspect status/eval/screenshot, stop.
 - [x] macOS `.dmg`: build, install, start, inspect status/eval/screenshot, stop.
-- [ ] Windows NSIS: build, install, start, inspect status/eval/screenshot, stop.
+- [ ] Windows NSIS: build, install, start, inspect status/eval/screenshot, stop, uninstall, and verify no residue.
 - [x] Windows MSI: out of scope for the default flip; reopen only if release ownership makes MSI mandatory.
-- [ ] Linux: build AppImage, install, start, inspect status/eval/screenshot, stop.
+- [ ] Linux: build AppImage, install, start, inspect status/eval/screenshot, stop, uninstall, and verify removal.
 - [x] Linux headless path has non-GUI lifecycle regression coverage.
 - [ ] Linux headless platform smoke remains supported and unaffected.
 - [x] Run e2e `tests/tools-dev/inspect.test.ts` against Tauri where the host supports a GUI.
@@ -479,6 +479,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Added bash syntax validation for generated `.commands.sh` handoff sidecars. `scripts/package-tauri-migration-handoff.ts` marks generated command sidecars, and both `scripts/tauri-migration-status.ts` and `scripts/push-tauri-migration-handoff.ts` run `bash -n` when that marker is present, so a checksum-valid but syntactically broken receiver script is no longer reported as current or accepted by the push-only archive path. `node --import tsx --test scripts/package-tauri-migration-handoff.test.ts scripts/push-tauri-migration-handoff.test.ts scripts/tauri-migration-status.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `git diff --check` passed.
 - 2026-05-20: Required the generated command-sidecar marker as part of packaged handoff currentness, so older unmarked `.commands.sh` sidecars cannot bypass bash syntax validation while still matching the receiver safety snippets. `node --import tsx --test scripts/package-tauri-migration-handoff.test.ts scripts/push-tauri-migration-handoff.test.ts scripts/tauri-migration-status.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, `git diff --check`, `pnpm guard`, and `pnpm typecheck` passed.
 - 2026-05-20: Aligned the manual Open Platform Gates table with the native report verifier's uninstall evidence contract. Windows NSIS and Linux AppImage smoke instructions now include uninstall commands and the residue/removal evidence that `scripts/verify-tauri-platform-gates.ts` requires before M4 can close. `node --import tsx --test scripts/tauri-migration-status.test.ts scripts/verify-tauri-platform-gates.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `git diff --check` passed.
+- 2026-05-20: Promoted the same uninstall evidence into the M4 checklist and policy labels. `scripts/tauri-migration-status.ts`, `scripts/tauri-migration-policy.ts`, and `scripts/verify-tauri-platform-gates.ts --update-migration-doc` now all treat Windows no-residue uninstall and Linux AppImage removal as part of closing M4, not just as verifier side conditions. `node --import tsx --test scripts/tauri-migration-status.test.ts scripts/verify-tauri-platform-gates.test.ts scripts/tauri-migration-policy.test.ts scripts/apply-tauri-migration-m5.test.ts scripts/advance-tauri-migration-m4-m5.test.ts scripts/download-tauri-m4-reports.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `git diff --check` passed.
 
 ### Platform Gate Runners
 
@@ -514,7 +515,7 @@ CI equivalents live in `.github/workflows/ci.yml`:
 
 Both jobs run `scripts/verify-tauri-platform-gates.ts` against the generated report before uploading the artifact. Changes to the verifier script, migration-order policy, handoff/status scripts, or their tests are packaging-scope changes, so CI reruns the native Tauri smoke jobs when the M4 evidence contract, handoff path, or phase-ordering contract changes.
 
-Do not close the Windows/Linux M4 checkboxes from CI wiring alone. Close them only after the native CI jobs or equivalent host commands produce the required eval/screenshot/stop evidence.
+Do not close the Windows/Linux M4 checkboxes from CI wiring alone. Close them only after the native CI jobs or equivalent host commands produce the required eval/screenshot/stop/uninstall evidence.
 
 ### Remote CI Handoff
 

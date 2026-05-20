@@ -250,11 +250,11 @@ async function updateMigrationDoc(path: string, evidence: PlatformEvidence[]): P
   content = content.replace(/^Last updated: .+$/m, `Last updated: ${date}`);
   content = replaceChecklistLine(
     content,
-    "Windows NSIS: build, install, start, inspect status/eval/screenshot, stop.",
+    "Windows NSIS: build, install, start, inspect status/eval/screenshot, stop, uninstall, and verify no residue.",
   );
   content = replaceChecklistLine(
     content,
-    "Linux: build AppImage, install, start, inspect status/eval/screenshot, stop.",
+    "Linux: build AppImage, install, start, inspect status/eval/screenshot, stop, uninstall, and verify removal.",
   );
   content = replaceChecklistLine(
     content,

@@ -89,8 +89,8 @@ test("verify-tauri-platform-gates can apply verified M4 evidence to the migratio
       "",
       "### M4 Platform package smoke",
       "",
-      "- [ ] Windows NSIS: build, install, start, inspect status/eval/screenshot, stop.",
-      "- [ ] Linux: build AppImage, install, start, inspect status/eval/screenshot, stop.",
+      "- [ ] Windows NSIS: build, install, start, inspect status/eval/screenshot, stop, uninstall, and verify no residue.",
+      "- [ ] Linux: build AppImage, install, start, inspect status/eval/screenshot, stop, uninstall, and verify removal.",
       "- [ ] Linux headless platform smoke remains supported and unaffected.",
       "",
       "## Execution Log",
@@ -114,8 +114,14 @@ test("verify-tauri-platform-gates can apply verified M4 evidence to the migratio
   const updated = await readFile(migrationDoc, "utf8");
 
   assert.match(result.stdout, /Updated migration document:/);
-  assert.match(updated, /- \[x\] Windows NSIS: build, install, start, inspect status\/eval\/screenshot, stop\./);
-  assert.match(updated, /- \[x\] Linux: build AppImage, install, start, inspect status\/eval\/screenshot, stop\./);
+  assert.match(
+    updated,
+    /- \[x\] Windows NSIS: build, install, start, inspect status\/eval\/screenshot, stop, uninstall, and verify no residue\./,
+  );
+  assert.match(
+    updated,
+    /- \[x\] Linux: build AppImage, install, start, inspect status\/eval\/screenshot, stop, uninstall, and verify removal\./,
+  );
   assert.match(updated, /- \[x\] Linux headless platform smoke remains supported and unaffected\./);
   assert.match(updated, /Verified native Windows\/Linux M4 package smoke/);
   assert.match(updated, /### Platform Gate Runners/);

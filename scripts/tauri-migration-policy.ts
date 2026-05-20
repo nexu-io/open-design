@@ -1,6 +1,6 @@
 export const m4PlatformGateLabels = [
-  "Windows NSIS: build, install, start, inspect status/eval/screenshot, stop.",
-  "Linux: build AppImage, install, start, inspect status/eval/screenshot, stop.",
+  "Windows NSIS: build, install, start, inspect status/eval/screenshot, stop, uninstall, and verify no residue.",
+  "Linux: build AppImage, install, start, inspect status/eval/screenshot, stop, uninstall, and verify removal.",
   "Linux headless platform smoke remains supported and unaffected.",
 ] as const;
 
