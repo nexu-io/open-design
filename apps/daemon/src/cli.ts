@@ -169,6 +169,10 @@ const MEMORY_STRING_FLAGS = new Set([
 const MEMORY_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json',
 ]);
+const AGENT_STRING_FLAGS = new Set(['daemon-url', 'model', 'reasoning']);
+const AGENT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
+const CONFIG_STRING_FLAGS = new Set(['daemon-url', 'value', 'value-json']);
+const CONFIG_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 // Hoisted because `runAutomation` is reachable through the top-of-file
 // SUBCOMMAND_MAP dispatch, which runs during module evaluation —
 // any `const` declared further down would still be in TDZ when
@@ -732,6 +736,23 @@ function parseFlags(argv, opts = {}) {
     } else {
       out[key] = true;
     }
+  }
+  return out;
+}
+
+function positionalArgs(argv, stringFlags) {
+  const out = [];
+  for (let i = 0; i < argv.length; i++) {
+    const value = argv[i];
+    if (!value) continue;
+    if (value.startsWith('--')) {
+      const eq = value.indexOf('=');
+      const key = eq >= 0 ? value.slice(2, eq) : value.slice(2);
+      if (eq < 0 && stringFlags instanceof Set && stringFlags.has(key)) i++;
+      continue;
+    }
+    if (value.startsWith('-')) continue;
+    out.push(value);
   }
   return out;
 }
@@ -3660,9 +3681,6 @@ async function projectDaemonUrl(flags) {
   return cliDaemonUrl(flags);
 }
 
-const AGENT_STRING_FLAGS = new Set(['daemon-url', 'model', 'reasoning']);
-const AGENT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
-
 async function runAgent(args) {
   if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
@@ -3686,7 +3704,7 @@ Common options:
   }
   const rest = args.slice(1);
   const flags = parseFlags(rest, { string: AGENT_STRING_FLAGS, boolean: AGENT_BOOLEAN_FLAGS });
-  const agentId = rest.find((a) => !a.startsWith('-'));
+  const agentId = positionalArgs(rest, AGENT_STRING_FLAGS)[0];
   if (!agentId) {
     console.error('Usage: od agent test <agentId> [--model <id>] [--reasoning <effort>] [--json]');
     process.exit(2);
@@ -3783,7 +3801,7 @@ Common options:
       return;
     }
     case 'info': {
-      const id = rest.find((a) => !a.startsWith('-'));
+      const id = positionalArgs(rest, PROJECT_STRING_FLAGS)[0];
       if (!id) {
         console.error('Usage: od project info <id>');
         process.exit(2);
@@ -3844,7 +3862,7 @@ Common options:
       return;
     }
     case 'delete': {
-      const id = rest.find((a) => !a.startsWith('-'));
+      const id = positionalArgs(rest, PROJECT_STRING_FLAGS)[0];
       if (!id) {
         console.error('Usage: od project delete <id>');
         process.exit(2);
@@ -3896,7 +3914,7 @@ Common options:
       return;
     }
     case 'info': {
-      const id = rest.find((a) => !a.startsWith('-'));
+      const id = positionalArgs(rest, PROJECT_STRING_FLAGS)[0];
       if (!id) {
         console.error('Usage: od run info <runId>');
         process.exit(2);
@@ -3908,7 +3926,7 @@ Common options:
       return;
     }
     case 'cancel': {
-      const id = rest.find((a) => !a.startsWith('-'));
+      const id = positionalArgs(rest, PROJECT_STRING_FLAGS)[0];
       if (!id) {
         console.error('Usage: od run cancel <runId>');
         process.exit(2);
@@ -3919,7 +3937,7 @@ Common options:
       return;
     }
     case 'watch': {
-      const id = rest.find((a) => !a.startsWith('-'));
+      const id = positionalArgs(rest, PROJECT_STRING_FLAGS)[0];
       if (!id) {
         console.error('Usage: od run watch <runId>');
         process.exit(2);
@@ -4472,7 +4490,7 @@ Common options:
       return;
     }
     case 'show': {
-      const id = rest.find((a) => !a.startsWith('-'));
+      const id = positionalArgs(rest, LIBRARY_STRING_FLAGS)[0];
       if (!id) {
         console.error('Usage: od atoms show <id>');
         process.exit(2);
@@ -4489,7 +4507,7 @@ Common options:
       return;
     }
     case 'info': {
-      const id = rest.find((a) => !a.startsWith('-'));
+      const id = positionalArgs(rest, LIBRARY_STRING_FLAGS)[0];
       if (!id) {
         console.error('Usage: od atoms info <id>');
         process.exit(2);
@@ -4548,7 +4566,7 @@ async function runLibraryList(name, args) {
       return;
     }
     case 'show': {
-      const id = rest.find((a) => !a.startsWith('-'));
+      const id = positionalArgs(rest, LIBRARY_STRING_FLAGS)[0];
       if (!id) {
         console.error(`Usage: od ${name} show <id>`);
         process.exit(2);
@@ -4611,9 +4629,6 @@ async function runVersion(args) {
 // without leaving the terminal. JSON values pass through unchanged;
 // scalar strings/numbers/booleans are coerced.
 // ---------------------------------------------------------------------------
-
-const CONFIG_STRING_FLAGS = new Set(['daemon-url', 'value', 'value-json']);
-const CONFIG_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 
 async function runDoctor(args) {
   const flags = parseFlags(args, { string: CONFIG_STRING_FLAGS, boolean: CONFIG_BOOLEAN_FLAGS });
@@ -4767,7 +4782,7 @@ Common options:
       return;
     }
     case 'get': {
-      const key = rest.find((a) => !a.startsWith('-'));
+      const key = positionalArgs(rest, CONFIG_STRING_FLAGS)[0];
       if (!key) {
         console.error('Usage: od config get <key>');
         process.exit(2);
@@ -4815,7 +4830,7 @@ Common options:
       return;
     }
     case 'unset': {
-      const key = rest.find((a) => !a.startsWith('-'));
+      const key = positionalArgs(rest, CONFIG_STRING_FLAGS)[0];
       if (!key) {
         console.error('Usage: od config unset <key>');
         process.exit(2);
@@ -5305,24 +5320,10 @@ async function runAutomation(args) {
   const writeJson = (data) =>
     process.stdout.write(JSON.stringify(data, null, 2) + '\n');
 
-  const positionalArgs = (values) => {
-    const out = [];
-    for (let i = 0; i < values.length; i++) {
-      const value = values[i];
-      if (!value) continue;
-      if (value.startsWith('--')) {
-        const eq = value.indexOf('=');
-        const key = eq >= 0 ? value.slice(2, eq) : value.slice(2);
-        if (eq < 0 && AUTOMATION_STRING_FLAGS.has(key)) i++;
-        continue;
-      }
-      out.push(value);
-    }
-    return out;
-  };
+  const automationPositionals = (values) => positionalArgs(values, AUTOMATION_STRING_FLAGS);
 
   const requireId = (label) => {
-    const id = positionalArgs(rest)[0];
+    const id = automationPositionals(rest)[0];
     if (!id) {
       console.error(`Usage: od automation ${label} <id>`);
       process.exit(2);
@@ -5339,7 +5340,7 @@ async function runAutomation(args) {
   switch (sub) {
     case 'template':
     case 'templates': {
-      const parts = positionalArgs(rest);
+      const parts = automationPositionals(rest);
       const action = parts[0] ?? 'list';
       if (action === 'list') {
         let resp;
@@ -5395,7 +5396,7 @@ async function runAutomation(args) {
     case 'ingest':
     case 'source':
     case 'sources': {
-      const parts = positionalArgs(rest);
+      const parts = automationPositionals(rest);
       const action = sub === 'ingest' ? 'ingest' : (parts[0] ?? 'list');
       if (action === 'ingest') {
         const sourceKind = flags['source-kind'] ?? (sub === 'ingest' ? parts[0] : parts[1]);
@@ -5506,7 +5507,7 @@ async function runAutomation(args) {
     }
     case 'proposal':
     case 'proposals': {
-      const parts = positionalArgs(rest);
+      const parts = automationPositionals(rest);
       const action = parts[0] ?? 'list';
       if (action === 'list') {
         const query = flags.status ? `?status=${encodeURIComponent(String(flags.status))}` : '';
@@ -5655,7 +5656,7 @@ async function runAutomation(args) {
       return;
     }
     case 'crystallize-run': {
-      const parts = positionalArgs(rest);
+      const parts = automationPositionals(rest);
       const routineId = parts[0];
       const runId = parts[1];
       if (!routineId || !runId) {
