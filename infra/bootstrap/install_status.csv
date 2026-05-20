@@ -1,0 +1,5 @@
+component,planned_version,installed_version,status,verify_command,last_checked
+python,3.11.9,3.11.9,installed,python --version,2026-05-21T00:00:00Z
+node,24.x,24.15.0,installed,node --version,2026-05-21T00:00:00Z
+git,2.x,2.54.0.windows.1,installed,git --version,2026-05-21T00:00:00Z
+docker,latest,missing,pending,docker --version,

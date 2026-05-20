@@ -1,0 +1,2 @@
+incident_id,ticket_id,severity,symptom,root_cause,fix_action,retry_count,final_state
+INCIDENT-001,TICKET-001,medium,Docker unavailable,Docker not installed or not running,Keep install plan local-first and skip container workflows,0,open

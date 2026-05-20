@@ -1,0 +1,2 @@
+ticket_id,title,phase,status,priority,owner,created_at,updated_at,depends_on,notes
+TICKET-001,SPEC_AUDIT,SPEC_AUDIT,working,high,local,2026-05-21T00:00:00Z,2026-05-21T00:00:00Z,,Initial machine audit and risk classification

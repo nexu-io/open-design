@@ -4,6 +4,8 @@ This quickstart file captures the practical, lean approach for the current Studi
 
 See `docs/studio365-product-blueprint.md` for the full Studio365 product blueprint, roadmap, and MVP scope.
 
+For local machine bootstrap, use `docs/studio365-local-bootstrap.md` and the CSV tracker in `infra/bootstrap/`.
+
 ## TL;DR
 
 Use this approach:

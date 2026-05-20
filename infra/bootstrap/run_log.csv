@@ -1,0 +1,2 @@
+run_id,ticket_id,step_name,tool_used,start_time,end_time,result,fallback_reason,cpu_peak,ram_peak,install_status
+RUN-001,TICKET-001,SPEC_AUDIT,local_audit,2026-05-21T00:00:00Z,2026-05-21T00:00:00Z,pass,,6,3.56,not_applicable
