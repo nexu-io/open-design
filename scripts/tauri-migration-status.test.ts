@@ -517,7 +517,11 @@ test("tauri-migration-status rejects command sidecars without relocatable rerun 
   const { archivePath } = await writeHandoffArchive(handoffDir);
   const commandScriptPath = `${archivePath}.commands.sh`;
   const commandScript = await readFile(commandScriptPath, "utf8");
-  await writeFile(commandScriptPath, commandScript.replace('printf \'%q\' "$script_path"', 'printf \'%s\' "./$(basename "$0")"'), "utf8");
+  await writeFile(
+    commandScriptPath,
+    commandScript.replace('print_shell_command "GITHUB_RUN_ID=<github-run-id>" "$script_path" "$archive"', 'printf \'%s\' "./$(basename "$0")"'),
+    "utf8",
+  );
   await writeCommandScriptChecksum(commandScriptPath);
 
   const result = await runStatus(fixture, "--handoff-dir", handoffDir);
@@ -525,6 +529,31 @@ test("tauri-migration-status rejects command sidecars without relocatable rerun 
 
   assert.equal(parsed.handoffArchive.current, false);
   assert.match(parsed.handoffArchive.problems.join("\n"), /command script is missing relocatable rerun guidance/);
+});
+
+test("tauri-migration-status rejects command sidecars without quoted receiver commands", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+  const { archivePath } = await writeHandoffArchive(handoffDir);
+  const commandScriptPath = `${archivePath}.commands.sh`;
+  const commandScript = await readFile(commandScriptPath, "utf8");
+  await writeFile(
+    commandScriptPath,
+    commandScript.replace('print_shell_command "$gh_bin" workflow run "$workflow" --ref "$branch"', 'printf "%s\\n" "$gh_bin workflow run $workflow --ref $branch"'),
+    "utf8",
+  );
+  await writeCommandScriptChecksum(commandScriptPath);
+
+  const result = await runStatus(fixture, "--handoff-dir", handoffDir);
+  const parsed = JSON.parse(result.stdout) as { handoffArchive: { current: boolean; problems: string[] } };
+
+  assert.equal(parsed.handoffArchive.current, false);
+  assert.match(parsed.handoffArchive.problems.join("\n"), /command script is missing quoted receiver command guidance/);
 });
 
 test("tauri-migration-status reports stale handoff artifacts", async (t) => {
@@ -1330,6 +1359,11 @@ async function writeHandoffArchive(handoffDir: string): Promise<{ archivePath: s
       'gh_bin="${GH_BIN:-gh}"',
       'command -v "$gh_bin"',
       '"$gh_bin" workflow run "$workflow" --ref "$branch"',
+      "print_shell_command()",
+      'printf \'%q\' "$word"',
+      'print_shell_command "$gh_bin" workflow run "$workflow" --ref "$branch"',
+      'print_shell_command "$gh_bin" pr create --draft --base main --head "$branch"',
+      'print_shell_command pnpm exec tsx scripts/download-tauri-m4-reports.ts --branch "$branch"',
       "$gh_bin pr create --draft",
       'git fetch "$bundle" "$branch:$temp_ref"',
       'gh workflow run "$workflow" --ref "$branch"',
@@ -1352,8 +1386,7 @@ async function writeHandoffArchive(handoffDir: string): Promise<{ archivePath: s
       '--expected-head "$expected_head"',
       '--handoff-archive "$archive"',
       "GITHUB_RUN_ID=<github-run-id> ",
-      'printf \'%q\' "$script_path"',
-      'printf \'%q\' "$archive"',
+      'print_shell_command "GITHUB_RUN_ID=<github-run-id>" "$script_path" "$archive"',
       "--wait",
       "TAURI_PR_BODY_PATH",
       "--body-file",

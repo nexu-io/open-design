@@ -792,10 +792,18 @@ async function readHandoffArchiveStatus(archivePath: string, handoff?: HandoffSt
     }
     if (
       !commandScriptSource.includes("GITHUB_RUN_ID=<github-run-id> ") ||
-      !commandScriptSource.includes("printf '%q' \"$script_path\"") ||
-      !commandScriptSource.includes("printf '%q' \"$archive\"")
+      !commandScriptSource.includes("print_shell_command()") ||
+      !commandScriptSource.includes("printf '%q' \"$word\"") ||
+      !commandScriptSource.includes('print_shell_command "GITHUB_RUN_ID=<github-run-id>" "$script_path" "$archive"')
     ) {
       problems.push(`command script is missing relocatable rerun guidance: ${commandScriptPath}`);
+    }
+    if (
+      !commandScriptSource.includes('print_shell_command "$gh_bin" workflow run "$workflow" --ref "$branch"') ||
+      !commandScriptSource.includes('print_shell_command "$gh_bin" pr create --draft --base main --head "$branch"') ||
+      !commandScriptSource.includes('print_shell_command pnpm exec tsx scripts/download-tauri-m4-reports.ts --branch "$branch"')
+    ) {
+      problems.push(`command script is missing quoted receiver command guidance: ${commandScriptPath}`);
     }
     if (
       !commandScriptSource.includes('--run-id "$GITHUB_RUN_ID"') ||

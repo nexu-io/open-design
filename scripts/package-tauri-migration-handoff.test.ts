@@ -85,7 +85,10 @@ test("package-tauri-migration-handoff creates a tarball and checksum sidecar", a
   assert.match(commandScript, /"\$gh_bin" workflow run "\$workflow" --ref "\$branch"/);
   assert.match(commandScript, /Requested native CI dispatch/);
   assert.match(commandScript, /TAURI_NATIVE_CI_TRIGGER/);
-  assert.match(commandScript, /\$gh_bin pr create --draft/);
+  assert.match(commandScript, /print_shell_command\(\)/);
+  assert.match(commandScript, /printf '%q' "\$word"/);
+  assert.match(commandScript, /print_shell_command "\$gh_bin" workflow run "\$workflow" --ref "\$branch"/);
+  assert.match(commandScript, /print_shell_command "\$gh_bin" pr create --draft --base main --head "\$branch"/);
   assert.match(commandScript, /TAURI_PR_BODY_PATH/);
   assert.match(commandScript, /handoff_dir=/);
   assert.match(commandScript, /schema_version=/);
@@ -101,14 +104,13 @@ test("package-tauri-migration-handoff creates a tarball and checksum sidecar", a
   assert.match(commandScript, /bundle_head="\$\(git rev-parse --verify "\$temp_ref\^\{commit\}"\)"/);
   assert.match(commandScript, /bundle branch head mismatch/);
   assert.match(commandScript, /<<'PR_BODY'/);
-  assert.match(commandScript, /--body-file \$pr_body_path/);
+  assert.match(commandScript, /--body-file "\$pr_body_path"/);
   assert.match(commandScript, /## Why/);
   assert.match(commandScript, /## Surface area/);
   assert.match(commandScript, /## Validation/);
   assert.match(commandScript, /GITHUB_RUN_ID/);
   assert.match(commandScript, /GITHUB_RUN_ID=<github-run-id>/);
-  assert.match(commandScript, /printf '%q' "\$script_path"/);
-  assert.match(commandScript, /printf '%q' "\$archive"/);
+  assert.match(commandScript, /print_shell_command "GITHUB_RUN_ID=<github-run-id>" "\$script_path" "\$archive"/);
   assert.doesNotMatch(commandScript, /\.\/\$\(basename "\$0"\)/);
   assert.match(commandScript, /download-tauri-m4-reports/);
   assert.match(commandScript, /--run-id "\$GITHUB_RUN_ID" --branch "\$branch" --expected-head "\$expected_head" --remote "\$remote"/);
@@ -119,7 +121,8 @@ test("package-tauri-migration-handoff creates a tarball and checksum sidecar", a
     commandScript,
     /tauri-migration-status\.ts --handoff-dir "\$handoff_dir" --handoff-archive "\$archive" --remote "\$remote" --report-dir "\$report_dir"/,
   );
-  assert.match(commandScript, /--output-dir \$report_dir --advance/);
+  assert.match(commandScript, /print_shell_command pnpm exec tsx scripts\/download-tauri-m4-reports\.ts --branch "\$branch"/);
+  assert.match(commandScript, /--output-dir "\$report_dir" --advance/);
   assert.doesNotMatch(commandScript, /--output-dir \/tmp\/open-design-tauri-m4-reports --advance/);
   await execFileAsync("bash", ["-n", `${output}.commands.sh`]);
   assert.equal((await stat(`${output}.commands.sh`)).mode & 0o111, 0o111);
