@@ -58,6 +58,36 @@ function isMissingOrExpiredComposioOAuthState(error: unknown): boolean {
     && error.message === 'Composio OAuth state is missing or expired';
 }
 
+function boundedJsonValueIncludesAuthStaleSignal(value: BoundedJsonValue | undefined): boolean {
+  if (value === undefined || value === null) return false;
+  if (typeof value === 'number') return value === 401;
+  if (typeof value === 'boolean') return false;
+  if (typeof value === 'string') {
+    const normalized = value.toLowerCase();
+    return normalized === '401'
+      || /\bbad credentials\b/.test(normalized)
+      || /\bunauthori[sz]ed\b/.test(normalized)
+      || /\binvalid (?:access )?token\b/.test(normalized)
+      || /\btoken (?:is )?expired\b/.test(normalized)
+      || /\bexpired (?:access )?token\b/.test(normalized);
+  }
+  if (Array.isArray(value)) return value.some(boundedJsonValueIncludesAuthStaleSignal);
+  return Object.values(value).some(boundedJsonValueIncludesAuthStaleSignal);
+}
+
+function isConnectorAuthStaleError(error: unknown): boolean {
+  if (error instanceof ConnectorServiceError) {
+    return error.status === 401
+      || boundedJsonValueIncludesAuthStaleSignal(error.details);
+  }
+  if (error instanceof Error) return boundedJsonValueIncludesAuthStaleSignal(error.message);
+  return boundedJsonValueIncludesAuthStaleSignal(String(error));
+}
+
+function connectorAuthExpiredMessage(definition: ConnectorCatalogDefinition): string {
+  return `${definition.name} authorization expired. Reconnect ${definition.name}.`;
+}
+
 function hasStoredComposioConnection(credential: ConnectorCredentialRecord | undefined, providerConnectionId: string): boolean {
   return credential?.credentials.provider === 'composio'
     && credential.credentials.providerConnectionId === providerConnectionId;
@@ -421,6 +451,11 @@ export class ConnectorStatusService {
     return cloneStatus(next);
   }
 
+  markAuthenticationExpired(definition: ConnectorCatalogDefinition, lastError: string, accountLabel?: string): ConnectorConnectionStatus {
+    this.credentialStore?.delete(definition.id);
+    return this.setError(definition, lastError, accountLabel);
+  }
+
   clear(connectorId: string): void {
     this.statuses.delete(connectorId);
   }
@@ -776,7 +811,15 @@ export class ConnectorService {
 
     this.enforceRunLimits(context);
 
-    const providerOutput = await this.executeConnectorProviderTool(request, context, definition, tool);
+    let providerOutput: BoundedJsonObject;
+    try {
+      providerOutput = await this.executeConnectorProviderTool(request, context, definition, tool);
+    } catch (error) {
+      if (isConnectorAuthStaleError(error)) {
+        this.statusService.markAuthenticationExpired(definition, connectorAuthExpiredMessage(definition), connector.accountLabel);
+      }
+      throw error;
+    }
     const protectedOutput = protectConnectorOutput(providerOutput);
     const output = protectedOutput.output;
     const outputSummary = summarizeConnectorOutput(output);
