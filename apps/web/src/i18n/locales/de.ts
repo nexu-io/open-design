@@ -426,11 +426,11 @@ export const de: Dict = {
     'Beliebig editierbar — deine Änderungen fließen in das Agenten-Briefing ein.',
   'newproj.promptTemplateBodyEmpty':
     'Leerer Body — der Agent erhält keine Vorlagenreferenz.',
-  'newproj.deleteTemplateTitle': 'Delete template',
-  'newproj.deleteTemplateConfirm': 'Delete "{name}"? This cannot be undone.',
-  'newproj.deleteTemplateConfirmCta': 'Delete template',
+  'newproj.deleteTemplateTitle': 'Template löschen',
+  'newproj.deleteTemplateConfirm': '„{name}" löschen? Dies kann nicht rückgängig gemacht werden.',
+  'newproj.deleteTemplateConfirmCta': 'Template löschen',
   'newproj.deleteTemplateError':
-    'Could not delete this template. Please try again.',
+    'Dieses Template konnte nicht gelöscht werden. Bitte erneut versuchen.',
 
   'designs.subRecent': 'Aktuell',
   'designs.subYours': 'Ihre Designs',

@@ -528,11 +528,11 @@ export const tr: Dict = {
     'İstediğin her şeyi düzenle — değişikliklerin ajan brief’ine taşınır.',
   'newproj.promptTemplateBodyEmpty': 'Gövde boş — ajana şablon referansı gitmeyecek.',
 
-  'newproj.deleteTemplateTitle': 'Delete template',
-  'newproj.deleteTemplateConfirm': 'Delete "{name}"? This cannot be undone.',
-  'newproj.deleteTemplateConfirmCta': 'Delete template',
+  'newproj.deleteTemplateTitle': 'Şablonu sil',
+  'newproj.deleteTemplateConfirm': '"{name}" silinsin mi? Bu işlem geri alınamaz.',
+  'newproj.deleteTemplateConfirmCta': 'Şablonu sil',
   'newproj.deleteTemplateError':
-    'Could not delete this template. Please try again.',
+    'Bu şablon silinemedi. Lütfen tekrar deneyin.',
   'designs.subRecent': 'Yakında',
   'designs.subYours': 'Tasarımların',
   'designs.filterAria': 'Projeleri filtrele',

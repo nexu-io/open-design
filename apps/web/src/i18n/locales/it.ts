@@ -506,11 +506,11 @@ export const it: Dict = {
     'Modifica ciò che vuoi — le tue modifiche vengono trasmesse al brief dell\'agente.',
   'newproj.promptTemplateBodyEmpty':
     'Corpo vuoto — l\'agente non riceverà alcun riferimento di modello.',
-  'newproj.deleteTemplateTitle': 'Delete template',
-  'newproj.deleteTemplateConfirm': 'Delete "{name}"? This cannot be undone.',
-  'newproj.deleteTemplateConfirmCta': 'Delete template',
+  'newproj.deleteTemplateTitle': 'Elimina modello',
+  'newproj.deleteTemplateConfirm': 'Eliminare « {name} » ? Questa operazione non può essere annullata.',
+  'newproj.deleteTemplateConfirmCta': 'Elimina modello',
   'newproj.deleteTemplateError':
-    'Could not delete this template. Please try again.',
+    'Impossibile eliminare questo modello. Riprova.',
 
   'designs.subRecent': 'Recenti',
   'designs.subYours': 'I tuoi design',

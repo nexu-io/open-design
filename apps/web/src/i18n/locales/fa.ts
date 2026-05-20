@@ -541,11 +541,11 @@ export const fa: Dict = {
   'newproj.promptTemplateOptimizeHint':
     'هر چیزی را می‌توانید ویرایش کنید — تغییرات شما به بریف ایجنت اضافه می‌شود.',
   'newproj.promptTemplateBodyEmpty': 'متن خالی است — ایجنت هیچ مرجع قالبی دریافت نمی‌کند.',
-  'newproj.deleteTemplateTitle': 'Delete template',
-  'newproj.deleteTemplateConfirm': 'Delete "{name}"? This cannot be undone.',
-  'newproj.deleteTemplateConfirmCta': 'Delete template',
+  'newproj.deleteTemplateTitle': 'حذف قالب',
+  'newproj.deleteTemplateConfirm': 'آیا «{name}» حذف شود؟ این عمل قابل بازگشت نیست.',
+  'newproj.deleteTemplateConfirmCta': 'حذف قالب',
   'newproj.deleteTemplateError':
-    'Could not delete this template. Please try again.',
+    'حذف این قالب ممکن نشد. لطفاً دوباره تلاش کنید.',
   'newproj.dsModeSingle': 'تکی',
   'newproj.dsModeMulti': 'چندگانه',
   'newproj.dsNoneTitle': 'هیچ — آزاد',

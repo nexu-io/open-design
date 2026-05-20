@@ -426,11 +426,11 @@ export const ja: Dict = {
     '自由に編集できます — 変更内容はエージェントのブリーフに反映されます。',
   'newproj.promptTemplateBodyEmpty': '本文が空です — エージェントはテンプレート参照を受け取りません。',
 
-  'newproj.deleteTemplateTitle': 'Delete template',
-  'newproj.deleteTemplateConfirm': 'Delete "{name}"? This cannot be undone.',
-  'newproj.deleteTemplateConfirmCta': 'Delete template',
+  'newproj.deleteTemplateTitle': 'テンプレートを削除',
+  'newproj.deleteTemplateConfirm': '"{name}" を削除しますか？この操作は取り消せません。',
+  'newproj.deleteTemplateConfirmCta': 'テンプレートを削除',
   'newproj.deleteTemplateError':
-    'Could not delete this template. Please try again.',
+    'テンプレートを削除できませんでした。もう一度お試しください。',
   'designs.subRecent': '最近',
   'designs.subYours': 'あなたのデザイン',
   'designs.filterAria': 'プロジェクトをフィルター',

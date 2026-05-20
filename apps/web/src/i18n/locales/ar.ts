@@ -538,11 +538,11 @@ export const ar: Dict = {
     'عدل أي شيء - تغييراتك تنتقل إلى موجز الوكيل.',
   'newproj.promptTemplateBodyEmpty':
     'جسم فارغ - لن يحصل الوكيل على مرجع قالب.',
-  'newproj.deleteTemplateTitle': 'Delete template',
-  'newproj.deleteTemplateConfirm': 'Delete "{name}"? This cannot be undone.',
-  'newproj.deleteTemplateConfirmCta': 'Delete template',
+  'newproj.deleteTemplateTitle': 'حذف القالب',
+  'newproj.deleteTemplateConfirm': 'هل تريد حذف "{name}"؟ لا يمكن التراجع عن هذا الإجراء.',
+  'newproj.deleteTemplateConfirmCta': 'حذف القالب',
   'newproj.deleteTemplateError':
-    'Could not delete this template. Please try again.',
+    'تعذر حذف هذا القالب. يرجى المحاولة مرة أخرى.',
 
   'designs.subRecent': 'الأخيرة',
   'designs.subYours': 'تصاميمك',
