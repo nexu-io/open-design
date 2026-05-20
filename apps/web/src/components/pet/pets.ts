@@ -1,4 +1,4 @@
-import type { AppConfig, PetAtlasLayout, PetAtlasRowDef, PetCustom, PetConfig } from '../../types';
+import type { AppConfig, CodexPetSummary, PetAtlasLayout, PetAtlasRowDef, PetCustom, PetConfig } from '../../types';
 import {
   codexPetSpritesheetUrl,
   fetchCodexPets,
@@ -321,6 +321,24 @@ export async function migrateCustomPetAtlas(
   } catch {
     return null;
   }
+}
+
+export async function prepareCodexPetCustom(pet: CodexPetSummary): Promise<PetCustom> {
+  const resp = await fetch(codexPetSpritesheetUrl(pet));
+  if (!resp.ok) throw new Error('Could not download that pet.');
+  const blob = await resp.blob();
+  const dataUrl = await blobToDataUrl(blob);
+  const prepared = await prepareCodexAtlas(dataUrl);
+  return {
+    name: pet.displayName || pet.id,
+    glyph: '🦄',
+    accent: '#c96442',
+    greeting: pet.description || `Hi! I am ${pet.displayName || pet.id}.`,
+    imageUrl: prepared.dataUrl,
+    frames: 1,
+    fps: prepared.layout.rowsDef[0]?.fps ?? 6,
+    atlas: prepared.layout,
+  };
 }
 
 function blobToDataUrl(blob: Blob): Promise<string> {

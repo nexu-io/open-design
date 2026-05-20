@@ -5,6 +5,7 @@ export type UpdaterFixtureOptions = {
   artifactBody?: Buffer | string;
   channel?: "stable" | "beta";
   host?: string;
+  platform?: "mac" | "win";
   port?: number;
   version?: string;
 };
@@ -15,6 +16,7 @@ export type UpdaterFixtureInfo = {
   checksumUrl: string;
   metadataUrl: string;
   origin: string;
+  platform: "mac" | "win";
   sha256: string;
   version: string;
 };
@@ -81,9 +83,17 @@ function channelMetadata(channel: "stable" | "beta", version: string): Record<st
 export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions = {}): Promise<UpdaterFixtureServer> {
   const channel = options.channel ?? "stable";
   const host = options.host ?? "127.0.0.1";
+  const platform = options.platform ?? "mac";
   const port = options.port ?? 0;
   const version = options.version ?? "99.0.0";
-  const artifactName = `open-design-${version}-mac-arm64.dmg`;
+  const platformKey = platform === "win" ? "win" : "mac";
+  const artifactKey = platform === "win" ? "installer" : "dmg";
+  const artifactName = platform === "win"
+    ? `open-design-${version}-win-x64-setup.exe`
+    : `open-design-${version}-mac-arm64.dmg`;
+  const contentType = platform === "win"
+    ? "application/vnd.microsoft.portable-executable"
+    : "application/x-apple-diskimage";
   const artifactBody = Buffer.isBuffer(options.artifactBody)
     ? options.artifactBody
     : Buffer.from(options.artifactBody ?? `Open Design updater fixture ${version}\n`, "utf8");
@@ -104,19 +114,23 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
         generatedAt: new Date().toISOString(),
         ...channelMetadata(channel, version),
         platforms: {
-          mac: {
-            arch: "arm64",
+          [platformKey]: {
+            arch: platform === "win" ? "x64" : "arm64",
             artifacts: {
-              dmg: {
-                contentType: "application/x-apple-diskimage",
+              [artifactKey]: {
+                contentType,
                 name: artifactName,
                 sha256Url: info.checksumUrl,
                 size: artifactBody.byteLength,
                 url: info.artifactUrl,
               },
             },
+            channel,
             enabled: true,
             feed: null,
+            label: platform === "win" ? "Windows x64" : "macOS arm64",
+            platform,
+            platformKey,
             signed: false,
           },
         },
@@ -126,7 +140,7 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
     }
     if (path === `/${channel}/versions/${version}/${artifactName}`) {
       response.setHeader("content-length", String(artifactBody.byteLength));
-      response.setHeader("content-type", "application/x-apple-diskimage");
+      response.setHeader("content-type", contentType);
       response.end(artifactBody);
       return;
     }
@@ -148,6 +162,7 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
     checksumUrl: `${artifactUrl}.sha256`,
     metadataUrl: `${origin}/${channel}/latest/metadata.json`,
     origin,
+    platform,
     sha256,
     version,
   };

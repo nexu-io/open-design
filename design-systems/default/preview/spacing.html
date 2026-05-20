@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Neutral Modern spacing</title>
+    <link rel="stylesheet" href="../tokens.css" />
+    <style>
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font-body);
+      }
+      main {
+        max-width: 840px;
+        margin: 0 auto;
+        padding: var(--space-12) var(--space-6);
+      }
+      h1 {
+        margin: 0 0 var(--space-6);
+        font-size: var(--text-2xl);
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 120px 1fr;
+        gap: var(--space-4);
+        align-items: center;
+        margin-bottom: var(--space-4);
+      }
+      .bar {
+        width: var(--value);
+        height: var(--space-4);
+        border-radius: var(--radius-sm);
+        background: var(--accent);
+      }
+      .label {
+        color: var(--muted);
+        font-size: var(--text-sm);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Spacing ramp</h1>
+      <div class="row"><div class="label">--space-2</div><div class="bar" style="--value: var(--space-2)"></div></div>
+      <div class="row"><div class="label">--space-4</div><div class="bar" style="--value: var(--space-4)"></div></div>
+      <div class="row"><div class="label">--space-6</div><div class="bar" style="--value: var(--space-6)"></div></div>
+      <div class="row"><div class="label">--space-8</div><div class="bar" style="--value: var(--space-8)"></div></div>
+      <div class="row"><div class="label">--space-12</div><div class="bar" style="--value: var(--space-12)"></div></div>
+      <div class="row"><div class="label">--space-20</div><div class="bar" style="--value: var(--space-20)"></div></div>
+    </main>
+  </body>
+</html>

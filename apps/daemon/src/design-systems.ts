@@ -14,6 +14,7 @@ import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path';
 
 import {
+  type ComponentsManifest,
   extractComponentsManifest,
   summarizeComponentsManifestForPrompt,
 } from '@open-design/contracts';
@@ -65,6 +66,27 @@ export type DesignSystemFileDetail = DesignSystemFileSummary & {
   content: string;
 };
 
+export type DesignSystemPullFileDetail = {
+  path: string;
+  name: string;
+  kind: DesignSystemFileKind;
+  size: number;
+  updatedAt: string;
+  encoding: 'utf8' | 'base64';
+  content: string;
+};
+
+export type DesignSystemPackageInfo = {
+  manifest?: DesignSystemProjectManifest;
+  sourceEvidence?: {
+    scannedFileCount?: number;
+    tokenCount?: number;
+    snippetCount?: number;
+    confidence?: Record<string, string | number>;
+    evidenceExcerpt?: string;
+  };
+};
+
 export type DesignSystemRevision = {
   id: string;
   designSystemId: string;
@@ -90,6 +112,36 @@ type DesignSystemProjectManifest = {
     design: 'DESIGN.md';
     tokens: 'tokens.css';
     components?: 'components.html';
+  };
+  assetsDir?: 'assets';
+  previewDir?: 'preview';
+  usage?: string;
+  componentsManifest?: string;
+  fonts?: Array<{
+    family: string;
+    file: string;
+    weight?: number | string;
+    style?: string;
+  }>;
+  preview?: {
+    dir: string;
+    pages: Array<{
+      path: string;
+      role?: string;
+      title?: string;
+    }>;
+  };
+  sourceFiles?: {
+    scanned?: string;
+    evidence?: string;
+    tokens?: string;
+    snippets?: string;
+  };
+  importMode?: 'normalized' | 'hybrid' | 'verbatim';
+  craft?: {
+    applies?: string[];
+    suggested?: string[];
+    exemptions?: string[];
   };
 };
 
@@ -297,6 +349,24 @@ export async function readDesignSystem(
   }
 }
 
+export async function readDesignSystemPackageInfo(
+  root: string,
+  id: string,
+  options: { idPrefix?: string } = {},
+): Promise<DesignSystemPackageInfo | null> {
+  const dirId = stripPrefixAndValidateId(id, options.idPrefix);
+  if (!dirId) return null;
+  const brandRoot = path.join(root, dirId);
+  const manifest = await readProjectManifest(brandRoot, dirId);
+  if (manifest === null) return null;
+
+  const sourceEvidence = await readDesignSystemSourceEvidence(brandRoot, manifest);
+  return {
+    manifest,
+    ...(sourceEvidence ? { sourceEvidence } : {}),
+  };
+}
+
 /**
  * Structured (compiled) form of a brand's design system. Optional sibling
  * files alongside DESIGN.md that, when present, give agents a
@@ -307,15 +377,25 @@ export async function readDesignSystem(
  * hand-authored or derived tokens.
  *
  * - `tokensCss`     — verbatim content of `<brand>/tokens.css`.
+ * - `usageMd`       — optional agent-facing router for the package.
  * - `fixtureHtml`   — verbatim content of `<brand>/components.html`.
  * - `componentsManifest` — concise summary derived from components.html
+ *                          or read from components.manifest.json cache
  *                          for prompt injection; when absent, callers
  *                          can fall back to `fixtureHtml`.
+ * - `pullIndex`     — short manifest-derived file index. It lists
+ *                     richer preview/source evidence paths without
+ *                     loading those files into the push prompt.
  */
 export type DesignSystemAssets = {
+  usageMd?: string | undefined;
   tokensCss?: string | undefined;
   fixtureHtml?: string | undefined;
   componentsManifest?: string | undefined;
+  pullIndex?: string | undefined;
+  importMode?: 'normalized' | 'hybrid' | 'verbatim' | undefined;
+  craftApplies?: string[] | undefined;
+  craftExemptions?: string[] | undefined;
 };
 
 export async function readDesignSystemAssets(
@@ -326,13 +406,66 @@ export async function readDesignSystemAssets(
   if (!dirId) return {};
   const brandRoot = path.join(root, dirId);
   const manifest = await readProjectManifest(brandRoot, dirId);
-  const [tokensCss, fixtureHtml] = await Promise.all([
+  const [usageMd, tokensCss, fixtureHtml, componentsManifestJson] = await Promise.all([
+    readManifestFileOptional(brandRoot, manifest?.usage ?? 'USAGE.md'),
     readFileOptional(path.join(brandRoot, manifest?.files.tokens ?? 'tokens.css')),
     manifest?.files.components === undefined && manifest !== null
       ? Promise.resolve(undefined)
       : readFileOptional(path.join(brandRoot, manifest?.files.components ?? 'components.html')),
+    readManifestFileOptional(brandRoot, manifest?.componentsManifest ?? 'components.manifest.json'),
   ]);
-  return withComponentsManifest(id, { tokensCss, fixtureHtml });
+  return withComponentsManifest(id, {
+    usageMd,
+    tokensCss,
+    fixtureHtml,
+    componentsManifestJson,
+    pullIndex: buildDesignSystemPullIndex(manifest),
+    importMode: manifest?.importMode,
+    craftApplies: manifest?.craft?.applies,
+    craftExemptions: manifest?.craft?.exemptions,
+  });
+}
+
+export async function readDesignSystemPullFile(
+  root: string,
+  id: string,
+  relativePath: string,
+): Promise<DesignSystemPullFileDetail | null> {
+  const dirId = stripPrefixAndValidateId(id, id.startsWith('user:') ? 'user:' : '');
+  const cleanPath = sanitizeRelativeFilePath(relativePath);
+  if (!dirId || !cleanPath) return null;
+
+  const brandRoot = path.join(root, dirId);
+  const manifest = await readProjectManifest(brandRoot, dirId);
+  if (manifest === null) return null;
+
+  const allowed = await buildDesignSystemPullFileAllowlist(brandRoot, manifest);
+  if (!allowed.has(cleanPath)) return null;
+
+  const resolvedRoot = path.resolve(brandRoot);
+  const filePath = path.resolve(brandRoot, cleanPath);
+  if (filePath !== resolvedRoot && !filePath.startsWith(`${resolvedRoot}${path.sep}`)) {
+    return null;
+  }
+
+  try {
+    const stats = await stat(filePath);
+    if (!stats.isFile()) return null;
+    const bytes = await readFile(filePath);
+    const encoding = isTextDesignSystemPullFile(cleanPath) ? 'utf8' : 'base64';
+    return {
+      path: cleanPath,
+      name: path.basename(cleanPath),
+      kind: classifyDesignSystemFile(cleanPath, false),
+      size: stats.size,
+      updatedAt: stats.mtime.toISOString(),
+      encoding,
+      content: encoding === 'utf8' ? bytes.toString('utf8') : bytes.toString('base64'),
+    };
+  } catch (err) {
+    if (isAbsenceError(err)) return null;
+    throw err;
+  }
 }
 
 export function isDesignTokenChannelEnabled(
@@ -348,7 +481,16 @@ export async function resolveDesignSystemAssets(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<DesignSystemAssets> {
   if (!isDesignTokenChannelEnabled(env)) {
-    return { tokensCss: undefined, fixtureHtml: undefined };
+    return {
+      usageMd: undefined,
+      tokensCss: undefined,
+      fixtureHtml: undefined,
+      componentsManifest: undefined,
+      pullIndex: undefined,
+      importMode: undefined,
+      craftApplies: undefined,
+      craftExemptions: undefined,
+    };
   }
 
   const builtIn = await readDesignSystemAssets(builtInRoot, designSystemId);
@@ -358,21 +500,53 @@ export async function resolveDesignSystemAssets(
 
   const userInstalled = await readDesignSystemAssets(userInstalledRoot, designSystemId);
   return withComponentsManifest(designSystemId, {
+    usageMd: builtIn.usageMd ?? userInstalled.usageMd,
     tokensCss: builtIn.tokensCss ?? userInstalled.tokensCss,
     fixtureHtml: builtIn.fixtureHtml ?? userInstalled.fixtureHtml,
+    componentsManifestJson: undefined,
+    componentsManifest: builtIn.componentsManifest ?? userInstalled.componentsManifest,
+    pullIndex: builtIn.pullIndex ?? userInstalled.pullIndex,
+    importMode: builtIn.importMode ?? userInstalled.importMode,
+    craftApplies: builtIn.craftApplies ?? userInstalled.craftApplies,
+    craftExemptions: builtIn.craftExemptions ?? userInstalled.craftExemptions,
   });
 }
 
 function withComponentsManifest(
   designSystemId: string,
-  assets: Pick<DesignSystemAssets, 'tokensCss' | 'fixtureHtml'>,
+  assets: Pick<
+    DesignSystemAssets,
+    | 'usageMd'
+    | 'tokensCss'
+    | 'fixtureHtml'
+    | 'componentsManifest'
+    | 'pullIndex'
+    | 'importMode'
+    | 'craftApplies'
+    | 'craftExemptions'
+  > & {
+    componentsManifestJson?: string | undefined;
+  },
 ): DesignSystemAssets {
-  const componentsManifest = buildComponentsManifestSummary(
-    designSystemId,
-    assets.fixtureHtml,
-    assets.tokensCss,
-  );
-  return { ...assets, componentsManifest };
+  const { componentsManifestJson, ...publicAssets } = assets;
+  const componentsManifest =
+    publicAssets.componentsManifest
+    ?? summarizeComponentsManifestCache(componentsManifestJson)
+    ?? buildComponentsManifestSummary(
+      designSystemId,
+      publicAssets.fixtureHtml,
+      publicAssets.tokensCss,
+    );
+  return { ...publicAssets, componentsManifest };
+}
+
+function summarizeComponentsManifestCache(raw: string | undefined): string | undefined {
+  if (raw === undefined || raw.trim().length === 0) return undefined;
+  try {
+    return summarizeComponentsManifestForPrompt(JSON.parse(raw) as ComponentsManifest);
+  } catch {
+    return undefined;
+  }
 }
 
 function buildComponentsManifestSummary(
@@ -390,6 +564,196 @@ function buildComponentsManifestSummary(
         ? extractComponentsManifest({ brandId: designSystemId, fixtureHtml })
         : extractComponentsManifest({ brandId: designSystemId, fixtureHtml, tokensCss });
     return summarizeComponentsManifestForPrompt(manifest);
+  } catch {
+    return undefined;
+  }
+}
+
+function buildDesignSystemPullIndex(
+  manifest: DesignSystemProjectManifest | null,
+): string | undefined {
+  if (manifest === null) return undefined;
+  const entries: string[] = [];
+  const add = (filePath: string | undefined, label: string): void => {
+    if (!filePath || !isSafeManifestPath(filePath)) return;
+    entries.push(`- ${filePath}: ${label}`);
+  };
+
+  if (manifest.preview?.pages) {
+    for (const page of manifest.preview.pages) {
+      if (!isSafeManifestPath(page.path)) continue;
+      const labelParts = [page.title, page.role].filter((part) => typeof part === 'string' && part.trim().length > 0);
+      entries.push(`- ${page.path}: ${labelParts.join('; ') || 'preview page'}`);
+    }
+  } else if (manifest.previewDir === 'preview') {
+    entries.push('- preview/: preview pages');
+  }
+
+  if (manifest.assetsDir === 'assets') entries.push('- assets/: brand assets');
+  for (const font of manifest.fonts ?? []) {
+    add(font.file, `font: ${font.family}${font.weight ? ` ${font.weight}` : ''}${font.style ? ` ${font.style}` : ''}`);
+  }
+
+  add(manifest.sourceFiles?.scanned, 'scanned source file inventory');
+  add(manifest.sourceFiles?.evidence, 'import evidence notes');
+  add(manifest.sourceFiles?.tokens, 'source-token evidence');
+  add(manifest.sourceFiles?.snippets, 'source snippet index');
+
+  if (entries.length === 0) return undefined;
+  return ['Additional design-system files declared by manifest.json:', ...entries].join('\n');
+}
+
+async function buildDesignSystemPullFileAllowlist(
+  brandRoot: string,
+  manifest: DesignSystemProjectManifest,
+): Promise<Set<string>> {
+  const allowed = new Set<string>();
+  const add = (filePath: string | undefined): void => {
+    const cleanPath = typeof filePath === 'string' ? sanitizeRelativeFilePath(filePath) : null;
+    if (cleanPath) allowed.add(cleanPath);
+  };
+
+  for (const page of manifest.preview?.pages ?? []) add(page.path);
+  add(manifest.sourceFiles?.scanned);
+  add(manifest.sourceFiles?.evidence);
+  add(manifest.sourceFiles?.tokens);
+  add(manifest.sourceFiles?.snippets);
+
+  if (manifest.assetsDir === 'assets') {
+    await addFilesUnderDeclaredDir(brandRoot, 'assets', allowed);
+  }
+
+  if (manifest.sourceFiles?.snippets) {
+    await addSnippetIndexEntries(brandRoot, manifest.sourceFiles.snippets, allowed);
+  }
+
+  return allowed;
+}
+
+async function addFilesUnderDeclaredDir(
+  brandRoot: string,
+  dir: string,
+  allowed: Set<string>,
+): Promise<void> {
+  if (!isSafeManifestPath(dir)) return;
+  const absoluteDir = path.join(brandRoot, dir);
+  let entries;
+  try {
+    entries = await readdir(absoluteDir, { withFileTypes: true });
+  } catch (err) {
+    if (isAbsenceError(err)) return;
+    throw err;
+  }
+  await Promise.all(entries.map(async (entry) => {
+    const relativePath = `${dir}/${entry.name}`;
+    if (!isSafeManifestPath(relativePath)) return;
+    if (entry.isDirectory()) {
+      await addFilesUnderDeclaredDir(brandRoot, relativePath, allowed);
+    } else if (entry.isFile()) {
+      allowed.add(relativePath);
+    }
+  }));
+}
+
+async function addSnippetIndexEntries(
+  brandRoot: string,
+  indexPath: string,
+  allowed: Set<string>,
+): Promise<void> {
+  if (!isSafeManifestPath(indexPath)) return;
+  let raw: string | undefined;
+  try {
+    raw = await readFileOptional(path.join(brandRoot, indexPath));
+  } catch {
+    return;
+  }
+  if (raw === undefined) return;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+    const snippets = (parsed as { snippets?: unknown }).snippets;
+    if (!Array.isArray(snippets)) return;
+    for (const snippet of snippets) {
+      if (!snippet || typeof snippet !== 'object' || Array.isArray(snippet)) continue;
+      const snippetPath = (snippet as { path?: unknown }).path;
+      if (typeof snippetPath === 'string') {
+        const cleanPath = sanitizeRelativeFilePath(snippetPath);
+        if (cleanPath?.startsWith('source/snippets/')) allowed.add(cleanPath);
+      }
+    }
+  } catch {
+    // A malformed snippets index should not widen the allowlist.
+  }
+}
+
+function isTextDesignSystemPullFile(relativePath: string): boolean {
+  const ext = path.extname(relativePath).toLowerCase();
+  return new Set([
+    '.css',
+    '.html',
+    '.js',
+    '.jsx',
+    '.json',
+    '.md',
+    '.mjs',
+    '.svg',
+    '.ts',
+    '.tsx',
+    '.txt',
+    '.xml',
+    '.yaml',
+    '.yml',
+  ]).has(ext);
+}
+
+async function readDesignSystemSourceEvidence(
+  brandRoot: string,
+  manifest: DesignSystemProjectManifest,
+): Promise<DesignSystemPackageInfo['sourceEvidence'] | undefined> {
+  const [scanned, tokens, snippets, evidence] = await Promise.all([
+    readManifestJsonOptional(brandRoot, manifest.sourceFiles?.scanned),
+    readManifestJsonOptional(brandRoot, manifest.sourceFiles?.tokens),
+    readManifestJsonOptional(brandRoot, manifest.sourceFiles?.snippets),
+    readManifestFileOptional(brandRoot, manifest.sourceFiles?.evidence ?? ''),
+  ]);
+
+  const out: NonNullable<DesignSystemPackageInfo['sourceEvidence']> = {};
+  if (scanned && typeof scanned === 'object' && !Array.isArray(scanned)) {
+    const files = (scanned as { files?: unknown }).files;
+    if (Array.isArray(files)) out.scannedFileCount = files.length;
+  }
+  if (tokens && typeof tokens === 'object' && !Array.isArray(tokens)) {
+    const tokenCount = (tokens as { tokenCount?: unknown }).tokenCount;
+    if (typeof tokenCount === 'number') out.tokenCount = tokenCount;
+    const confidence = (tokens as { confidence?: unknown }).confidence;
+    if (confidence && typeof confidence === 'object' && !Array.isArray(confidence)) {
+      const cleanConfidence: Record<string, string | number> = {};
+      for (const [key, value] of Object.entries(confidence)) {
+        if (typeof value === 'string' || typeof value === 'number') cleanConfidence[key] = value;
+      }
+      if (Object.keys(cleanConfidence).length > 0) out.confidence = cleanConfidence;
+    }
+  }
+  if (snippets && typeof snippets === 'object' && !Array.isArray(snippets)) {
+    const entries = (snippets as { snippets?: unknown }).snippets;
+    if (Array.isArray(entries)) out.snippetCount = entries.length;
+  }
+  if (typeof evidence === 'string' && evidence.trim().length > 0) {
+    out.evidenceExcerpt = evidence.trim().split(/\r?\n/).filter(Boolean).slice(0, 5).join('\n');
+  }
+
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+async function readManifestJsonOptional(
+  brandRoot: string,
+  relativePath: string | undefined,
+): Promise<unknown | undefined> {
+  if (!relativePath) return undefined;
+  const raw = await readManifestFileOptional(brandRoot, relativePath);
+  if (raw === undefined) return undefined;
+  try {
+    return JSON.parse(raw) as unknown;
   } catch {
     return undefined;
   }
@@ -2303,6 +2667,21 @@ async function readFileOptional(file: string): Promise<string | undefined> {
     if (isAbsenceError(err)) return undefined;
     throw err;
   }
+}
+
+async function readManifestFileOptional(
+  brandRoot: string,
+  relativePath: string,
+): Promise<string | undefined> {
+  if (!isSafeManifestPath(relativePath)) return undefined;
+  return readFileOptional(path.join(brandRoot, relativePath));
+}
+
+function isSafeManifestPath(relativePath: string): boolean {
+  if (relativePath.trim().length === 0) return false;
+  if (path.isAbsolute(relativePath)) return false;
+  const parts = relativePath.split(/[\\/]+/);
+  return parts.every((part) => part.length > 0 && part !== '.' && part !== '..');
 }
 
 function isAbsenceError(err: unknown): boolean {

@@ -2,9 +2,11 @@ import type http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import {
   chmodSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   promises as fsp,
+  readFileSync,
   realpathSync,
   rmSync,
   symlinkSync,
@@ -715,6 +717,76 @@ setInterval(() => {}, 1000);
         delete process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
       } else {
         process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = previous;
+      }
+    }
+  });
+
+  it('marks submitted discovery form answers as the active turn before the transcript', async () => {
+    const captureDir = mkdtempSync(join(tmpdir(), 'od-form-answer-prompt-'));
+    tempDirs.push(captureDir);
+    const capturePath = join(captureDir, 'prompt.txt');
+    const previousCapturePath = process.env.OD_CAPTURE_PROMPT_PATH;
+    process.env.OD_CAPTURE_PROMPT_PATH = capturePath;
+    try {
+      await withFakeAgent(
+        'opencode',
+        `
+const fs = require('node:fs');
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { input += chunk; });
+process.stdin.on('end', () => {
+  fs.writeFileSync(process.env.OD_CAPTURE_PROMPT_PATH, input, 'utf8');
+  console.log(JSON.stringify({ type: 'text', part: { text: 'building now' } }));
+});
+`,
+        async () => {
+          const formAnswers = [
+            '[form answers — discovery]',
+            '- output: Dashboard / tool UI',
+            '- brand: Pick a direction for me [value: pick_direction]',
+          ].join('\n');
+          const transcript = [
+            '## user',
+            'Design a metrics dashboard.',
+            '',
+            '## assistant',
+            '<question-form id="discovery" title="Quick brief — 30 seconds"></question-form>',
+            '',
+            '## user',
+            formAnswers,
+          ].join('\n');
+
+          const createResponse = await fetch(`${baseUrl}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'opencode',
+              message: transcript,
+              currentPrompt: formAnswers,
+            }),
+          });
+          expect(createResponse.status).toBe(202);
+          const { runId } = await createResponse.json() as { runId: string };
+          const statusBody = await waitForRunStatus(baseUrl, runId);
+
+          expect(statusBody.status).toBe('succeeded');
+          expect(existsSync(capturePath)).toBe(true);
+          const prompt = readFileSync(capturePath, 'utf8');
+          const transitionIdx = prompt.indexOf('## Latest user turn - form answers submitted');
+          const transcriptIdx = prompt.indexOf('## Full conversation transcript');
+          expect(transitionIdx).toBeGreaterThan(-1);
+          expect(transcriptIdx).toBeGreaterThan(transitionIdx);
+          expect(prompt).toContain('The user has answered the discovery form. Do not emit another discovery form.');
+          expect(prompt).toContain('Continue with RULE 2 / RULE 3 now.');
+          expect(prompt).toContain(formAnswers);
+        },
+      );
+    } finally {
+      if (previousCapturePath == null) {
+        delete process.env.OD_CAPTURE_PROMPT_PATH;
+      } else {
+        process.env.OD_CAPTURE_PROMPT_PATH = previousCapturePath;
       }
     }
   });

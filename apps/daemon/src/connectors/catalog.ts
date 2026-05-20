@@ -132,6 +132,12 @@ function connectorToolSafetyHaystack(input: ConnectorToolSafetyClassificationInp
     .join(' ');
 }
 
+function connectorToolPrimarySafetyHaystack(input: ConnectorToolSafetyClassificationInput): string {
+  return [input.name, input.title, ...(input.requiredScopes ?? [])]
+    .filter((value): value is string => typeof value === 'string' && value.length > 0)
+    .join(' ');
+}
+
 export function classifyConnectorToolSafety(input: ConnectorToolSafetyClassificationInput): ConnectorToolSafety {
   const haystack = connectorToolSafetyHaystack(input);
   if (destructiveHintPattern.test(haystack)) {
@@ -141,18 +147,33 @@ export function classifyConnectorToolSafety(input: ConnectorToolSafetyClassifica
       reason: 'Tool name, scope, or description contains destructive hints; destructive tools are not refreshable.',
     };
   }
-  if (writeHintPattern.test(haystack)) {
+  const primaryHaystack = connectorToolPrimarySafetyHaystack(input);
+  if (writeHintPattern.test(primaryHaystack)) {
     return {
       sideEffect: 'write',
       approval: 'confirm',
       reason: 'Tool name or required scope indicates write-capable behavior; explicit confirmation is required.',
     };
   }
-  if (readOnlyHintPattern.test(haystack)) {
+  if (readOnlyHintPattern.test(primaryHaystack)) {
     return {
       sideEffect: 'read',
       approval: 'auto',
-      reason: 'Tool name, scope, or description indicates explicit read-only behavior.',
+      reason: 'Tool name or scope indicates explicit read-only behavior.',
+    };
+  }
+  if (writeHintPattern.test(input.description ?? '')) {
+    return {
+      sideEffect: 'write',
+      approval: 'confirm',
+      reason: 'Tool description indicates write-capable behavior; explicit confirmation is required.',
+    };
+  }
+  if (readOnlyHintPattern.test(input.description ?? '')) {
+    return {
+      sideEffect: 'read',
+      approval: 'auto',
+      reason: 'Tool description indicates explicit read-only behavior.',
     };
   }
   return {

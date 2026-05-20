@@ -2,6 +2,7 @@ import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
 import { checkDesignSystemManifests } from "./check-design-system-manifests.ts";
+import { checkDesignSystemPackageQuality } from "./check-design-system-package-quality.ts";
 import { checkDesignSystemComponentFixtureReport } from "./check-components-fixtures.ts";
 import { checkDesignSystemFlagParity } from "./check-design-system-flag-parity.ts";
 import { checkComponentsManifestExtraction } from "./check-components-manifest-extraction.ts";
@@ -19,6 +20,7 @@ const repoRoot = path.resolve(import.meta.dirname, "..");
 const allowedE2eScripts = new Set([
   "e2e/scripts/playwright.ts",
   "e2e/scripts/release-smoke.ts",
+  "e2e/scripts/visual-report.ts",
 ]);
 
 type GuardCheck = {
@@ -56,6 +58,8 @@ const residualAllowedExactPaths = new Set([
   // dist output exists.
   "packages/agui-adapter/esbuild.config.mjs",
   "packages/contracts/esbuild.config.mjs",
+  "packages/diagnostics/esbuild.config.mjs",
+  "packages/host/esbuild.config.mjs",
   "packages/platform/esbuild.config.mjs",
   "packages/plugin-runtime/esbuild.config.mjs",
   "packages/registry-protocol/esbuild.config.mjs",
@@ -490,6 +494,7 @@ async function checkE2eLayout(): Promise<boolean> {
       repositoryPath === "e2e/tsconfig.json" ||
       repositoryPath === "e2e/vitest.config.ts" ||
       repositoryPath === "e2e/playwright.config.ts" ||
+      repositoryPath === "e2e/playwright.visual.config.ts" ||
       repositoryPath === "e2e/AGENTS.md"
     ) {
       continue;
@@ -903,6 +908,7 @@ const checks: GuardCheck[] = [
   { name: "tools layout", run: checkToolsLayout },
   { name: "style policy", run: checkStylePolicy },
   { name: "design system manifests", run: checkDesignSystemManifests },
+  { name: "design system package quality", run: checkDesignSystemPackageQuality },
   { name: "design system component fixture report", run: checkDesignSystemComponentFixtureReport },
   { name: "design system token-fixture sync", run: checkDesignSystemTokenFixtureSync },
   { name: "design system A1 required tokens", run: checkDesignSystemA1RequiredTokens },

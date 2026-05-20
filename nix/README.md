@@ -229,8 +229,9 @@ at the top of each file and re-run. Bump the hash whenever
 
 ## CI
 
-`.github/workflows/nix-check.yml` runs `nix flake check` followed by
-separate `nix build .#daemon` and `nix build .#web` steps on each push
-that touches the flake or the lockfile. Build artifacts are cached on
-the `nexu-open-design` Cachix instance — PRs from forks read from the
-cache without needing the auth token.
+`.github/workflows/nix-check.yml` runs `nix flake check` on pushes to
+`main` and can also be started manually with `workflow_dispatch`. It is
+not a default pull request gate: the flake is a community installation
+and deployment surface, while regular PR validation stays focused on the
+primary product delivery checks. The flake check already builds the
+`daemon` and `web` checks declared in `flake.nix`.

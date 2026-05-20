@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useAnalytics } from '../analytics/provider';
+import { trackFileManagerClick } from '../analytics/events';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { projectFileUrl } from '../providers/registry';
@@ -37,6 +39,18 @@ type DesignFilesGroupMode = 'kind' | 'modified';
 type ModifiedSection = 'today' | 'yesterday' | 'previous7Days' | 'previous30Days' | 'older';
 type SortKey = 'name' | 'kind' | 'mtime';
 type SortDir = 'asc' | 'desc';
+type FileSystemEntryWithReader = FileSystemEntry & {
+  createReader?: () => FileSystemDirectoryReader;
+};
+type FileSystemFileEntryWithFile = FileSystemFileEntry & {
+  file: (
+    successCallback: (file: File) => void,
+    errorCallback?: (error: DOMException) => void,
+  ) => void;
+};
+type DataTransferItemWithEntry = DataTransferItem & {
+  webkitGetAsEntry?: () => FileSystemEntry | null;
+};
 
 const MODIFIED_SECTION_ORDER: ModifiedSection[] = [
   'today',
@@ -78,6 +92,7 @@ export function DesignFilesPanel({
   onPluginFolderAgentAction,
 }: Props) {
   const t = useT();
+  const analytics = useAnalytics();
   const [refreshing, setRefreshing] = useState(false);
   const [draggingFiles, setDraggingFiles] = useState(false);
   const dragDepthRef = useRef(0);
@@ -671,11 +686,11 @@ export function DesignFilesPanel({
     }
   }
 
-  function handleDrop(ev: React.DragEvent<HTMLDivElement>) {
+  async function handleDrop(ev: React.DragEvent<HTMLDivElement>) {
     ev.preventDefault();
     dragDepthRef.current = 0;
     setDraggingFiles(false);
-    const dropped = Array.from(ev.dataTransfer.files ?? []);
+    const dropped = await filesFromDataTransfer(ev.dataTransfer);
     if (dropped.length > 0) onUploadFiles(dropped);
   }
 
@@ -717,7 +732,14 @@ export function DesignFilesPanel({
       <div className="df-actions">
         <button
           type="button"
-          onClick={() => void handleBatchDownload()}
+          onClick={() => {
+            trackFileManagerClick(analytics.track, {
+              page_name: 'file_manager',
+              area: 'file_manager',
+              element: 'download_as_zip',
+            });
+            void handleBatchDownload();
+          }}
           title={t('designFiles.downloadSelected', { n: selected.size })}
         >
           <Icon name="download" size={13} />
@@ -1180,7 +1202,14 @@ export function DesignFilesPanel({
         </div>
       </div>
       {preview && previewFile ? (
+        // Key on the file name so React unmounts the previous DfPreview
+        // (and its iframe / image element) when the user clicks a
+        // different file. Without this, React diffing reuses the same
+        // iframe DOM node and the browser keeps showing the first
+        // file's contents — only the `src` prop changes but the iframe
+        // never actually navigates.
         <DfPreview
+          key={previewFile.name}
           projectId={projectId}
           file={previewFile}
           onOpen={() => onOpenFile(previewFile.name)}
@@ -1392,6 +1421,49 @@ function dateDaysBefore(date: Date, days: number): Date {
   const result = new Date(date);
   result.setDate(result.getDate() - days);
   return result;
+}
+
+async function filesFromDataTransfer(dataTransfer: DataTransfer): Promise<File[]> {
+  const items = Array.from(dataTransfer.items ?? []);
+  if (items.length === 0) return Array.from(dataTransfer.files ?? []);
+
+  const files = await Promise.all(items.map(filesFromDataTransferItem));
+  const flattened = files.flat();
+  return flattened.length > 0 ? flattened : Array.from(dataTransfer.files ?? []);
+}
+
+async function filesFromDataTransferItem(item: DataTransferItem): Promise<File[]> {
+  const entry = (item as DataTransferItemWithEntry).webkitGetAsEntry?.();
+  if (!entry) {
+    const file = item.kind === 'file' ? item.getAsFile() : null;
+    return file ? [file] : [];
+  }
+  return filesFromFileSystemEntry(entry);
+}
+
+async function filesFromFileSystemEntry(entry: FileSystemEntry): Promise<File[]> {
+  if (entry.isFile) return [await fileFromEntry(entry as FileSystemFileEntryWithFile)];
+  if (!entry.isDirectory) return [];
+
+  const reader = (entry as FileSystemEntryWithReader).createReader?.();
+  if (!reader) return [];
+
+  const files: File[] = [];
+  for (;;) {
+    const entries = await readEntryBatch(reader);
+    if (entries.length === 0) break;
+    const nested = await Promise.all(entries.map(filesFromFileSystemEntry));
+    files.push(...nested.flat());
+  }
+  return files;
+}
+
+function fileFromEntry(entry: FileSystemFileEntryWithFile): Promise<File> {
+  return new Promise((resolve, reject) => entry.file(resolve, reject));
+}
+
+function readEntryBatch(reader: FileSystemDirectoryReader): Promise<FileSystemEntry[]> {
+  return new Promise((resolve, reject) => reader.readEntries(resolve, reject));
 }
 
 function kindGlyph(kind: ProjectFileKind): string {

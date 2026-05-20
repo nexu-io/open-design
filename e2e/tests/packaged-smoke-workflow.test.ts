@@ -24,7 +24,7 @@ describe("packaged smoke workflow", () => {
     expect(workflow).not.toContain("actions/cache/save");
   });
 
-  it("preserves beta linux AppImage smoke reports for release publication", async () => {
+  it("preserves beta linux AppImage smoke reports for platform publication", async () => {
     const workflow = await readFile(releaseBetaWorkflowPath, "utf8");
     const linuxBuildStep = workflow.match(
       /- name: Build beta linux artifacts\n(?:.+\n)+?(?=\n      - name: Smoke beta linux AppImage runtime)/m,
@@ -38,7 +38,11 @@ describe("packaged smoke workflow", () => {
     expect(workflow).toContain("tools-pack.json");
     expect(workflow).toContain("Upload linux e2e spec report");
     expect(workflow).toContain("open-design-beta-linux-e2e-report");
-    expect(workflow).toContain("Download linux e2e spec report");
+    expect(workflow).toContain("Publish beta linux assets to R2");
+    expect(workflow).toContain("RELEASE_PLATFORM: linux");
+    expect(workflow).toContain("Upload linux publish manifest");
+    expect(workflow).toContain("open-design-beta-linux-publish-manifest");
+    expect(workflow).not.toContain("Download linux e2e spec report");
     expectReleaseLinuxBuildPreservesEvidence(workflow, "Build beta linux artifacts");
     expectReleaseLinuxSmokePreservesEvidenceBeforeApt(workflow, "Smoke beta linux AppImage runtime");
   });

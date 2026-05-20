@@ -10,6 +10,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   ApplyResult,
+  ConnectorDetail,
   InputFieldSpec,
   McpServerConfig,
   InstalledPluginRecord,
@@ -17,6 +18,16 @@ import type {
   AudioVoiceOption,
 } from '@open-design/contracts';
 import { DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID } from '@open-design/contracts';
+import { projectKindToTracking } from '@open-design/contracts/analytics';
+import { useAnalytics } from '../analytics/provider';
+import {
+  trackHomeChatComposerClick,
+  trackPageView,
+  trackPluginReplacementModalClick,
+  trackPluginReplacementModalSurfaceView,
+  trackPluginReplacementResult,
+  trackRecentProjectsClick,
+} from '../analytics/events';
 import {
   applyPlugin,
   listPlugins,
@@ -80,9 +91,28 @@ interface SelectedPluginContext {
   record: InstalledPluginRecord;
 }
 
+interface SelectedMcpContext {
+  server: McpServerConfig;
+}
+
+interface SelectedConnectorContext {
+  connector: ConnectorDetail;
+}
+
 interface PendingReplacement {
   title: string;
-  confirm: () => void;
+  // Returns a promise resolving when the underlying plugin apply has
+  // finished (or rejecting on failure) so the modal's success/failure
+  // analytics fire on the real outcome, not on the synchronous
+  // queue-the-apply step.
+  confirm: () => Promise<void>;
+  // Plugin ids surrounding the replacement so the result event can
+  // report which plugin owned the existing prompt and which plugin is
+  // about to take over. `pluginBefore` is null when nothing was active
+  // (e.g. a manually typed prompt that should be replaced by a plugin
+  // selection).
+  pluginBefore: string | null;
+  pluginAfter: string;
 }
 
 interface PendingPluginUseHandoff {
@@ -112,6 +142,7 @@ interface Props {
   promptHandoff?: HomePromptHandoff | null;
   skills?: SkillSummary[];
   skillsLoading?: boolean;
+  connectors?: ConnectorDetail[];
   promptTemplates?: PromptTemplateSummary[];
 }
 
@@ -127,9 +158,19 @@ export function HomeView({
   promptHandoff,
   skills = [],
   skillsLoading = false,
+  connectors = [],
   promptTemplates = [],
 }: Props) {
   const { locale, t } = useI18n();
+  const analytics = useAnalytics();
+  // P0 page_view page_name=home — fire once on mount. ref-keyed to survive
+  // re-renders that flip parent state without remounting HomeView.
+  const homePageViewFiredRef = useRef(false);
+  useEffect(() => {
+    if (homePageViewFiredRef.current) return;
+    homePageViewFiredRef.current = true;
+    trackPageView(analytics.track, { page_name: 'home' });
+  }, [analytics.track]);
   const [plugins, setPlugins] = useState<InstalledPluginRecord[]>([]);
   const [pluginsLoading, setPluginsLoading] = useState(true);
   const [pendingApplyId, setPendingApplyId] = useState<string | null>(null);
@@ -145,6 +186,8 @@ export function HomeView({
   const [active, setActive] = useState<ActivePlugin | null>(null);
   const [activeSkill, setActiveSkill] = useState<SkillSummary | null>(null);
   const [selectedPluginContexts, setSelectedPluginContexts] = useState<SelectedPluginContext[]>([]);
+  const [selectedMcpContexts, setSelectedMcpContexts] = useState<SelectedMcpContext[]>([]);
+  const [selectedConnectorContexts, setSelectedConnectorContexts] = useState<SelectedConnectorContext[]>([]);
   const [stagedFiles, setStagedFiles] = useState<File[]>([]);
   const [mcpServers, setMcpServers] = useState<McpServerConfig[]>([]);
   const [mcpLoading, setMcpLoading] = useState(true);
@@ -156,6 +199,23 @@ export function HomeView({
   const [elevenLabsVoicesError, setElevenLabsVoicesError] = useState<string | null>(null);
   const [detailsRecord, setDetailsRecord] = useState<InstalledPluginRecord | null>(null);
   const [pendingReplacement, setPendingReplacement] = useState<PendingReplacement | null>(null);
+  // Surface_view fires when the replacement modal becomes visible. Tied
+  // to the {before, after} pair so reopening with the same pair after a
+  // close doesn't double-fire, but a fresh pair always does.
+  const lastPluginReplacementViewRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!pendingReplacement) {
+      lastPluginReplacementViewRef.current = null;
+      return;
+    }
+    const key = `${pendingReplacement.pluginBefore ?? ''}->${pendingReplacement.pluginAfter}`;
+    if (lastPluginReplacementViewRef.current === key) return;
+    lastPluginReplacementViewRef.current = key;
+    trackPluginReplacementModalSurfaceView(analytics.track, {
+      page_name: 'home',
+      area: 'plugin_replacement_modal',
+    });
+  }, [pendingReplacement, analytics.track]);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const consumedHandoffIdRef = useRef<number | null>(null);
   const pendingPromptFocusEndRef = useRef(false);
@@ -293,6 +353,8 @@ export function HomeView({
     setActive(null);
     setActiveSkill(null);
     setSelectedPluginContexts([]);
+    setSelectedMcpContexts([]);
+    setSelectedConnectorContexts([]);
     setFallbackProjectKind('other');
     setPrompt(promptHandoff.prompt);
     setPendingAuthoringPrompt(promptHandoff.prompt);
@@ -307,8 +369,10 @@ export function HomeView({
     () =>
       (active?.result?.contextItems?.length ?? 0) +
       selectedPluginContexts.length +
+      selectedMcpContexts.length +
+      selectedConnectorContexts.length +
       stagedFiles.length,
-    [active, selectedPluginContexts, stagedFiles.length],
+    [active, selectedConnectorContexts.length, selectedMcpContexts.length, selectedPluginContexts, stagedFiles.length],
   );
 
   // When the active plugin was bound through a chip, the badge shows
@@ -495,14 +559,15 @@ export function HomeView({
       inputFields: options?.inputFields,
       queryTemplate: options?.queryTemplate,
     });
-    const confirm = () => {
-      void usePlugin(record, nextPrompt, options);
-    };
+    const confirm = () => usePlugin(record, nextPrompt, options);
     if (options?.replaceWithoutConfirmation) {
-      confirm();
+      void confirm();
       return;
     }
-    runWithReplacementConfirmation(record.title, replacement, confirm);
+    runWithReplacementConfirmation(record.title, replacement, confirm, {
+      before: active?.record.id ?? null,
+      after: record.id,
+    });
   }
 
   function requestPluginContextUse(
@@ -531,17 +596,23 @@ export function HomeView({
   function runWithReplacementConfirmation(
     title: string,
     replacementPrompt: string | null,
-    confirm: () => void,
+    confirm: () => Promise<void>,
+    pluginIds: { before: string | null; after: string },
   ) {
     if (
       replacementPrompt !== null &&
       prompt.trim().length > 0 &&
       prompt.trim() !== replacementPrompt.trim()
     ) {
-      setPendingReplacement({ title, confirm });
+      setPendingReplacement({
+        title,
+        confirm,
+        pluginBefore: pluginIds.before,
+        pluginAfter: pluginIds.after,
+      });
       return;
     }
-    confirm();
+    void confirm();
   }
 
   function previewPluginReplacement(
@@ -708,6 +779,22 @@ export function HomeView({
   }
 
   function useMcpServer(_server: McpServerConfig, nextPrompt: string) {
+    setSelectedMcpContexts((current) => (
+      current.some((item) => item.server.id === _server.id)
+        ? current
+        : [...current, { server: _server }]
+    ));
+    setPrompt(nextPrompt);
+    setError(null);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }
+
+  function useConnector(connector: ConnectorDetail, nextPrompt: string) {
+    setSelectedConnectorContexts((current) => (
+      current.some((item) => item.connector.id === connector.id)
+        ? current
+        : [...current, { connector }]
+    ));
     setPrompt(nextPrompt);
     setError(null);
     requestAnimationFrame(() => inputRef.current?.focus());
@@ -716,7 +803,7 @@ export function HomeView({
   function queuePluginAuthoring(chipId: string | null, goal?: string) {
     const nextInputs = buildPluginAuthoringInputs(goal);
     const nextPrompt = buildPluginAuthoringPromptForInputs(nextInputs);
-    runWithReplacementConfirmation('Plugin authoring', nextPrompt, () => {
+    runWithReplacementConfirmation('Plugin authoring', nextPrompt, async () => {
       setActive(null);
       setActiveSkill(null);
       setFallbackProjectKind('other');
@@ -726,6 +813,9 @@ export function HomeView({
       setPendingAuthoringInputs(nextInputs);
       setPendingAuthoringChipId(chipId ?? 'create-plugin');
       requestAnimationFrame(() => inputRef.current?.focus());
+    }, {
+      before: active?.record.id ?? null,
+      after: 'od-plugin-authoring',
     });
   }
 
@@ -758,6 +848,22 @@ export function HomeView({
   // forward to callbacks threaded in from EntryShell.
   function pickChip(chip: HomeHeroChip) {
     setError(null);
+    // P0 ui_click area=chat_composer element=plugin_chip|action_chip. The
+    // chip's `action.kind` discriminates: plugin-bound chips
+    // (apply-scenario / apply-figma-migration) route to a plugin; the rest
+    // (create-plugin, import-folder, open-template-picker) are action
+    // shortcuts. Failure paths below still fire because the user did pick
+    // the chip — error state belongs in the run lifecycle event.
+    const chipElement: 'plugin_chip' | 'action_chip' =
+      chip.action.kind === 'apply-scenario' || chip.action.kind === 'apply-figma-migration'
+        ? 'plugin_chip'
+        : 'action_chip';
+    trackHomeChatComposerClick(analytics.track, {
+      page_name: 'home',
+      area: 'chat_composer',
+      element: chipElement,
+      chip_id: chip.id,
+    });
     switch (chip.action.kind) {
       case 'apply-scenario':
       case 'apply-figma-migration': {
@@ -795,21 +901,11 @@ export function HomeView({
           });
           return;
         }
-        const pluginOptions = {
+        requestActivePlugin(record, undefined, {
           projectKind: chip.action.projectKind,
           chipId: chip.id,
           inputs: chip.action.inputs,
-        };
-        // Output-type tabs (create group) are mode-selection gestures:
-        // switching between them should never prompt for confirmation,
-        // even when the input already has template text from a previous
-        // tab. Migrate-group chips (From Figma, etc.) still go through
-        // the replacement guard because they carry a meaningful prompt.
-        if (chip.group === 'create') {
-          void usePlugin(record, undefined, pluginOptions);
-        } else {
-          requestActivePlugin(record, undefined, pluginOptions);
-        }
+        });
         return;
       }
       case 'create-plugin': {
@@ -838,6 +934,15 @@ export function HomeView({
   async function submit() {
     const trimmed = prompt.trim();
     if (!trimmed && stagedFiles.length === 0) return;
+    // P0 ui_click area=chat_composer element=send_button. Fires before the
+    // async plugin-apply roundtrip so the click count reflects user intent
+    // even when the run is rejected (missing inputs, apply failure). The
+    // subsequent run_created/run_finished events carry the result detail.
+    trackHomeChatComposerClick(analytics.track, {
+      page_name: 'home',
+      area: 'chat_composer',
+      element: 'send_button',
+    });
     let submittedActive = active;
     if (submittedActive && !submittedActive.inputsValid) {
       setError('Fill the required plugin parameters before running.');
@@ -859,6 +964,21 @@ export function HomeView({
         ? { description: item.record.manifest.description }
         : {}),
     }));
+    const contextMcpServers = selectedMcpContexts.map((item) => ({
+      id: item.server.id,
+      ...(item.server.label ? { label: item.server.label } : {}),
+      ...(item.server.transport ? { transport: item.server.transport } : {}),
+      ...(item.server.url ? { url: item.server.url } : {}),
+      ...(item.server.command ? { command: item.server.command } : {}),
+    }));
+    const contextConnectors = selectedConnectorContexts.map((item) => ({
+      id: item.connector.id,
+      name: item.connector.name,
+      provider: item.connector.provider,
+      category: item.connector.category,
+      status: item.connector.status,
+      ...(item.connector.accountLabel ? { accountLabel: item.connector.accountLabel } : {}),
+    }));
     const defaultInputs = { prompt: trimmed };
     const submittedProjectMetadata = submittedActive?.mediaSurface
       ? metadataForHomeMediaComposer(submittedActive.mediaSurface, submittedActive.inputs, promptTemplates)
@@ -874,6 +994,8 @@ export function HomeView({
       projectKind: submittedActive?.projectKind ?? fallbackProjectKind ?? projectKindForSkill(activeSkill) ?? 'other',
       projectMetadata: submittedProjectMetadata,
       contextPlugins,
+      contextMcpServers,
+      contextConnectors,
       attachments: stagedFiles,
     });
   }
@@ -915,6 +1037,7 @@ export function HomeView({
         skillsLoading={skillsLoading}
         mcpOptions={enabledMcpServers}
         mcpLoading={mcpLoading}
+        connectorOptions={connectors.filter((connector) => connector.status === 'connected')}
         pendingPluginId={pendingApplyId}
         pendingChipId={pendingChipId}
         submitDisabled={
@@ -925,6 +1048,7 @@ export function HomeView({
         onPickPlugin={(record, nextPrompt) => addPluginContext(record, nextPrompt)}
         onPickSkill={useSkill}
         onPickMcp={useMcpServer}
+        onPickConnector={useConnector}
         onPickChip={pickChip}
         contextItemCount={contextItemCount}
         error={error}
@@ -933,8 +1057,29 @@ export function HomeView({
       <RecentProjectsStrip
         projects={projects}
         {...(projectsLoading !== undefined ? { loading: projectsLoading } : {})}
-        onOpen={onOpenProject}
-        onViewAll={onViewAllProjects}
+        onOpen={(id) => {
+          // P0 ui_click area=recent_projects element=project_card — emit
+          // before navigation so the event isn't lost when the host
+          // re-renders into the project view.
+          const project = projects.find((p) => p.id === id);
+          const projectKind = projectKindToTracking(project?.metadata?.kind);
+          trackRecentProjectsClick(analytics.track, {
+            page_name: 'home',
+            area: 'recent_projects',
+            element: 'project_card',
+            project_id: id,
+            ...(projectKind ? { project_kind: projectKind } : {}),
+          });
+          onOpenProject(id);
+        }}
+        onViewAll={() => {
+          trackRecentProjectsClick(analytics.track, {
+            page_name: 'home',
+            area: 'recent_projects',
+            element: 'view_all',
+          });
+          onViewAllProjects();
+        }}
       />
 
       <PluginsHomeSection
@@ -972,7 +1117,14 @@ export function HomeView({
               <button
                 type="button"
                 className="home-hero-confirm__secondary"
-                onClick={() => setPendingReplacement(null)}
+                onClick={() => {
+                  trackPluginReplacementModalClick(analytics.track, {
+                    page_name: 'home',
+                    area: 'plugin_replacement_modal',
+                    element: 'cancel',
+                  });
+                  setPendingReplacement(null);
+                }}
               >
                 {t('common.cancel')}
               </button>
@@ -980,9 +1132,44 @@ export function HomeView({
                 type="button"
                 className="home-hero-confirm__primary"
                 onClick={() => {
+                  trackPluginReplacementModalClick(analytics.track, {
+                    page_name: 'home',
+                    area: 'plugin_replacement_modal',
+                    element: 'replace',
+                  });
+                  const pluginBefore = pendingReplacement.pluginBefore;
+                  const pluginAfter = pendingReplacement.pluginAfter;
                   const action = pendingReplacement.confirm;
                   setPendingReplacement(null);
-                  action();
+                  // `action()` now returns a promise that resolves when
+                  // the underlying plugin apply finishes (or rejects on
+                  // failure). Emitting the result event off the promise
+                  // settle is the only way to capture real success /
+                  // failure — the synchronous path used to mark every
+                  // attempt as a success and never observed the catch
+                  // branch.
+                  void (async () => {
+                    try {
+                      await action();
+                      trackPluginReplacementResult(analytics.track, {
+                        page_name: 'home',
+                        area: 'plugin_replacement',
+                        plugin_before: pluginBefore ?? '',
+                        plugin_after: pluginAfter,
+                        result: 'success',
+                      });
+                    } catch (err) {
+                      trackPluginReplacementResult(analytics.track, {
+                        page_name: 'home',
+                        area: 'plugin_replacement',
+                        plugin_before: pluginBefore ?? '',
+                        plugin_after: pluginAfter,
+                        result: 'failed',
+                        error_code:
+                          err instanceof Error ? err.message : String(err),
+                      });
+                    }
+                  })();
                 }}
               >
                 {t('homeHero.confirmReplace')}

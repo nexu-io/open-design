@@ -33,6 +33,27 @@ const healthExpression = `
     };
   })()
 `;
+const updaterPopupExpression = `
+  (() => {
+    const popup = document.querySelector('[data-testid="updater-popup"]');
+    const button = document.querySelector('[data-testid="updater-install-button"]');
+    return {
+      installButtonVisible: button instanceof HTMLButtonElement && !button.disabled,
+      text: popup?.textContent?.trim() ?? null,
+      title: popup?.querySelector('h2')?.textContent?.trim() ?? null,
+      visible: popup instanceof HTMLElement,
+    };
+  })()
+`;
+const clickUpdaterInstallExpression = `
+  (() => {
+    const button = document.querySelector('[data-testid="updater-install-button"]');
+    if (!(button instanceof HTMLButtonElement)) return { clicked: false, reason: 'missing-install-button' };
+    if (button.disabled) return { clicked: false, reason: 'install-button-disabled' };
+    button.click();
+    return { clicked: true };
+  })()
+`;
 
 type DesktopStatus = {
   state?: string;
@@ -123,6 +144,18 @@ type HealthEvalValue = {
   title: string;
 };
 
+type UpdaterPopupEvalValue = {
+  installButtonVisible: boolean;
+  text: string | null;
+  title: string | null;
+  visible: boolean;
+};
+
+type UpdaterClickEvalValue = {
+  clicked: boolean;
+  reason?: string;
+};
+
 const shouldRunPackagedMacSmoke = process.platform === 'darwin' && process.env.OD_PACKAGED_E2E_MAC === '1';
 const macDescribe = shouldRunPackagedMacSmoke ? describe : describe.skip;
 const shouldRunDesktopMacSmoke = process.platform === 'darwin' && process.env.OD_DESKTOP_SMOKE === '1';
@@ -151,7 +184,7 @@ macDescribe('packaged mac runtime smoke', () => {
       process.env.OD_UPDATE_METADATA_URL = updaterFixture.info.metadataUrl;
       process.env.OD_UPDATE_CURRENT_VERSION = '99.0.0-beta.0';
       process.env.OD_UPDATE_OPEN_DRY_RUN = '1';
-      process.env.OD_UPDATE_AUTO_CHECK = '0';
+      process.env.OD_UPDATE_AUTO_CHECK = '1';
 
       const start = await runToolsPackJson<MacStartResult>('start');
       started = true;
@@ -180,15 +213,26 @@ macDescribe('packaged mac runtime smoke', () => {
       expect(value.health.ok).toBe(true);
       expect(value.health.version).toEqual(expect.any(String));
 
-      const updateStatus = await runToolsPackJson<MacInspectResult>('inspect', ['--update-action', 'check']);
+      const popup = await waitForUpdaterPopup();
+      expect(popup.visible).toBe(true);
+      expect(popup.title).toBe('Update ready');
+      expect(popup.installButtonVisible).toBe(true);
+      expect(popup.text ?? '').toContain(updaterFixture.info.version);
+
+      const updateStatus = await runToolsPackJson<MacInspectResult>('inspect', ['--update-action', 'status']);
       expect(updateStatus.update?.state).toBe('downloaded');
       expect(updateStatus.update?.channel).toBe('beta');
       expect(updateStatus.update?.currentVersion).toBe('99.0.0-beta.0');
       expect(updateStatus.update?.availableVersion).toBe(updaterFixture.info.version);
       expectPathInside(updateStatus.update?.downloadPath ?? '', join(runtimeNamespaceRoot, 'updates'));
-      const updateInstall = await runToolsPackJson<MacInspectResult>('inspect', ['--update-action', 'install']);
+
+      const clickInstall = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', clickUpdaterInstallExpression]);
+      const clickValue = assertUpdaterClickEvalValue(clickInstall.eval?.value);
+      expect(clickValue.clicked).toBe(true);
+      const updateInstall = await waitForUpdaterInstallerOpened();
       expect(updateInstall.update?.state).toBe('downloaded');
       expect(updateInstall.update?.installResult?.dryRun).toBe(true);
+      expectPathInside(updateInstall.update?.installResult?.path ?? '', join(runtimeNamespaceRoot, 'updates'));
 
       await mkdir(dirname(screenshotPath), { recursive: true });
       const screenshot = await runToolsPackJson<MacInspectResult>('inspect', ['--path', screenshotPath]);
@@ -232,6 +276,11 @@ macDescribe('packaged mac runtime smoke', () => {
         },
         stop,
         uninstall,
+        update: {
+          popup,
+          status: updateStatus.update,
+          install: updateInstall.update,
+        },
       });
       passed = true;
     } finally {
@@ -1592,6 +1641,47 @@ async function waitForHealthyDesktop(): Promise<MacInspectResult> {
   throw new Error(`packaged mac runtime did not become healthy: ${formatUnknown(lastResult)}`);
 }
 
+async function waitForUpdaterPopup(): Promise<UpdaterPopupEvalValue> {
+  const timeoutMs = 90_000;
+  const startedAt = Date.now();
+  let lastResult: unknown = null;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const inspect = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', updaterPopupExpression]);
+      lastResult = inspect;
+      if (inspect.status?.state === 'running' && inspect.eval?.ok === true) {
+        const value = asUpdaterPopupEvalValue(inspect.eval.value);
+        if (value?.visible === true && value.installButtonVisible === true) return value;
+      }
+    } catch (error) {
+      lastResult = error;
+    }
+    await delay(1000);
+  }
+
+  throw new Error(`packaged mac updater popup did not appear: ${formatUnknown(lastResult)}`);
+}
+
+async function waitForUpdaterInstallerOpened(): Promise<MacInspectResult> {
+  const timeoutMs = 60_000;
+  const startedAt = Date.now();
+  let lastResult: unknown = null;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const inspect = await runToolsPackJson<MacInspectResult>('inspect', ['--update-action', 'status']);
+      lastResult = inspect;
+      if (inspect.update?.installResult?.path != null) return inspect;
+    } catch (error) {
+      lastResult = error;
+    }
+    await delay(1000);
+  }
+
+  throw new Error(`packaged mac updater did not observe installer open: ${formatUnknown(lastResult)}`);
+}
+
 function assertLogPathsAndContent(result: LogsResult): void {
   expect(result.namespace).toBe(namespace);
   for (const app of ['desktop', 'web', 'daemon']) {
@@ -1637,11 +1727,35 @@ function assertHealthEvalValue(value: unknown): HealthEvalValue {
   return normalized;
 }
 
+function assertUpdaterClickEvalValue(value: unknown): UpdaterClickEvalValue {
+  const normalized = asUpdaterClickEvalValue(value);
+  if (normalized == null) {
+    throw new Error(`unexpected updater click eval value: ${formatUnknown(value)}`);
+  }
+  return normalized;
+}
+
 function asHealthEvalValue(value: unknown): HealthEvalValue | null {
   if (!isRecord(value)) return null;
   if (typeof value.href !== 'string' || typeof value.status !== 'number' || typeof value.title !== 'string') return null;
   if (!isRecord(value.health)) return null;
   return value as HealthEvalValue;
+}
+
+function asUpdaterPopupEvalValue(value: unknown): UpdaterPopupEvalValue | null {
+  if (!isRecord(value)) return null;
+  if (typeof value.visible !== 'boolean') return null;
+  if (typeof value.installButtonVisible !== 'boolean') return null;
+  if (value.title != null && typeof value.title !== 'string') return null;
+  if (value.text != null && typeof value.text !== 'string') return null;
+  return value as UpdaterPopupEvalValue;
+}
+
+function asUpdaterClickEvalValue(value: unknown): UpdaterClickEvalValue | null {
+  if (!isRecord(value)) return null;
+  if (typeof value.clicked !== 'boolean') return null;
+  if (value.reason != null && typeof value.reason !== 'string') return null;
+  return value as UpdaterClickEvalValue;
 }
 
 function expectPathInside(filePath: string, expectedRoot: string): void {

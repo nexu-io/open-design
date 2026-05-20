@@ -1,0 +1,66 @@
+name: visual-baseline
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: visual-baseline-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  baseline:
+    name: Capture visual baselines
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Prepare visual screenshot environment
+        uses: ./.github/actions/visual-screenshot
+
+      - name: Capture baseline screenshots
+        env:
+          OD_VISUAL_OUTPUT_DIR: ui/reports/visual-screenshots
+        run: |
+          pnpm -C e2e exec tsx scripts/playwright.ts clean
+          pnpm -C e2e exec playwright test -c playwright.visual.config.ts
+
+      - name: Upload baseline screenshots to R2
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_PUBLIC_ORIGIN: ${{ vars.R2_PUBLIC_ORIGIN }}
+          CLOUDFLARE_R2_RELEASES_AK: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          CLOUDFLARE_R2_RELEASES_SK: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          CLOUDFLARE_R2_RELEASES_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          CLOUDFLARE_R2_RELEASES_URL: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+        run: |
+          pnpm -C e2e exec tsx scripts/visual-report.ts upload-baseline \
+            --sha "${{ github.sha }}" \
+            --screenshots ui/reports/visual-screenshots \
+            --manifest-out ui/reports/visual-report/baseline-manifest.json
+
+      - name: Upload baseline debug artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: visual-baseline-${{ github.sha }}
+          path: |
+            e2e/ui/reports/visual-screenshots
+            e2e/ui/reports/visual-results.json
+            e2e/ui/reports/visual-report/baseline-manifest.json
+          if-no-files-found: ignore
+          retention-days: 7

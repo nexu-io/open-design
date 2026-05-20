@@ -426,6 +426,42 @@ test('detectAgents marks Cursor Agent auth ok when cursor-agent status succeeds'
   }
 });
 
+test('detectAgents surfaces Cursor Agent model labels without putting labels in ids', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-cursor-model-labels-'));
+  try {
+    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME'], async () => {
+      const bin = join(dir, process.platform === 'win32' ? 'cursor-agent.cmd' : 'cursor-agent');
+      if (process.platform === 'win32') {
+        writeFileSync(
+          bin,
+          '@echo off\r\nif "%~1"=="--version" echo 2026.05.16-test& exit /b 0\r\nif "%~1"=="models" (\r\n  echo Available models\r\n  echo auto - Auto\r\n  echo composer-2.5 - Composer 2.5 (current)\r\n  exit /b 0\r\n)\r\nif "%~1"=="status" echo Authenticated& exit /b 0\r\nexit /b 0\r\n',
+        );
+      } else {
+        writeFileSync(
+          bin,
+          '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "2026.05.16-test"; exit 0; fi\nif [ "$1" = "models" ]; then printf "%s\\n" "Available models" "auto - Auto" "composer-2.5 - Composer 2.5 (current)"; exit 0; fi\nif [ "$1" = "status" ]; then echo "Authenticated"; exit 0; fi\nexit 0\n',
+        );
+        chmodSync(bin, 0o755);
+      }
+      process.env.PATH = dir;
+      process.env.OD_AGENT_HOME = dir;
+
+      const agents = await detectAgents();
+      const detected = agents.find((agent) => agent.id === 'cursor-agent');
+
+      assert.equal(detected?.available, true);
+      assert.equal(detected?.modelsSource, 'live');
+      assert.deepEqual(detected?.models, [
+        { id: 'default', label: 'Default (CLI config)' },
+        { id: 'auto', label: 'Auto' },
+        { id: 'composer-2.5', label: 'Composer 2.5 (current)' },
+      ]);
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('detectAgents keeps Cursor Agent available when auth is missing', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'od-cursor-auth-missing-'));
   try {
