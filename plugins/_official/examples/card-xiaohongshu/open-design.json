@@ -36,7 +36,6 @@
     "platform": "desktop",
     "scenario": "marketing",
     "surface": "web",
-    "featured": 24,
     "preview": {
       "type": "html",
       "entry": "./example.html"

@@ -192,7 +192,7 @@ async function selectStyleRowInput(
 test('manual edit mode keeps deck navigation available for deck-shaped HTML', async ({ page }) => {
   await routeMockAgents(page);
   const projectId = await createEmptyProject(page, 'Manual edit deck smoke');
-  await seedHtmlArtifact(page, projectId, 'manual-deck.html', deckHtml());
+  await seedDeckArtifact(page, projectId, 'manual-deck.html', 'Manual Deck', ['Slide One', 'Slide Two']);
   await page.goto(`/projects/${projectId}/files/manual-deck.html`);
   await openDesignFile(page, 'manual-deck.html');
 
@@ -248,6 +248,7 @@ async function gotoEntryHome(page: Page) {
 
 async function openNewProjectModal(page: Page) {
   await page.getByTestId('entry-nav-new-project').click();
+  await expect(page.getByTestId('new-project-modal')).toBeVisible();
   await expect(page.getByTestId('new-project-panel')).toBeVisible();
 }
 
@@ -273,26 +274,69 @@ async function seedHtmlArtifact(page: Page, projectId: string, fileName: string,
   expect(resp.ok()).toBeTruthy();
 }
 
+async function seedDeckArtifact(
+  page: Page,
+  projectId: string,
+  fileName: string,
+  title: string,
+  slides: string[],
+) {
+  const slideHtml = slides
+    .map((slide, index) => `<section class="slide" data-od-id="slide-${index + 1}"${index === 0 ? '' : ' hidden'}><h1>${slide}</h1></section>`)
+    .join('\n');
+  const resp = await page.request.post(
+    `/api/projects/${projectId}/files`,
+    {
+      data: {
+        name: fileName,
+        content: `<!doctype html><html><body>${slideHtml}</body></html>`,
+        artifactManifest: {
+          version: 1,
+          kind: 'deck',
+          title,
+          entry: fileName,
+          renderer: 'deck-html',
+          exports: ['html', 'pptx'],
+        },
+      },
+      timeout: 15_000,
+    },
+  );
+  expect(resp.ok()).toBeTruthy();
+}
+
 async function openDesignFile(page: Page, fileName: string) {
   const preview = page.getByTestId('artifact-preview-frame');
-  if (await preview.isVisible().catch(() => false)) {
+  if (
+    await preview
+      .waitFor({ state: 'visible', timeout: 5_000 })
+      .then(() => true)
+      .catch(() => false)
+  ) {
     return;
   }
 
-  const fileTab = page.getByRole('tab', { name: new RegExp(fileName.replace('.', '\\.'), 'i') });
+  const filePattern = new RegExp(fileName.replace('.', '\\.'), 'i');
+  const fileTabButton = page
+    .locator('.workspace-tab')
+    .filter({ hasText: filePattern })
+    .locator('.workspace-tab__main')
+    .first();
   if (
-    await fileTab
+    await fileTabButton
       .waitFor({ state: 'visible', timeout: 2_000 })
       .then(() => true)
       .catch(() => false)
   ) {
-    await fileTab.click();
+    await fileTabButton.click();
+    await expect(preview).toBeVisible();
     return;
   }
 
-  const fileButton = page.getByRole('button', { name: new RegExp(fileName.replace('.', '\\.'), 'i') });
+  const fileButton = page.getByRole('button', { name: filePattern });
   await fileButton.click();
   await page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' }).click();
+  await expect(preview).toBeVisible();
 }
 
 async function waitForLoadingToClear(page: Page) {

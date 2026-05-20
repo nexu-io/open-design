@@ -1,11 +1,19 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
+import { useAnalytics } from '../analytics/provider';
+import { trackChatPanelClick } from '../analytics/events';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { projectRawUrl } from '../providers/registry';
 import type { TodoItem } from '../runtime/todos';
 import type { AppliedPluginSnapshot } from '@open-design/contracts';
-import { latestTodoWriteInputFromMessages } from '../runtime/todos';
+import type { TrackingProjectKind } from '@open-design/contracts/analytics';
+import {
+  DESIGN_SYSTEM_WORKSPACE_DISPLAY_DESCRIPTION,
+  DESIGN_SYSTEM_WORKSPACE_DISPLAY_TITLE,
+  isDesignSystemWorkspacePrompt,
+} from '../design-system-auto-prompt';
+import { latestTodoWriteInputForPinnedCard } from '../runtime/todos';
 import { TodoCard } from './ToolCard';
 import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, ChatMessageFeedbackChange, Conversation, PreviewComment, ProjectFile, ProjectMetadata, SkillSummary } from '../types';
 import { dayKey, dayLabel, exactDateTime, messageTime, relativeTimeLong } from '../utils/chatTime';
@@ -203,6 +211,11 @@ interface Props {
   streaming: boolean;
   error: string | null;
   projectId: string | null;
+  // Analytics-only — forwarded to AssistantMessage so the feedback
+  // events know which project surface the rating applies to. Optional
+  // (defaults to null/'prototype') so unit tests can mount ChatPane
+  // without project context.
+  projectKindForTracking?: TrackingProjectKind | null;
   projectFiles: ProjectFile[];
   hasActiveDesignSystem?: boolean;
   sendDisabled?: boolean;
@@ -242,6 +255,10 @@ interface Props {
   // Header "+" button — kicks off ProjectView's create-conversation flow.
   onNewConversation?: () => void;
   newConversationDisabled?: boolean;
+  // Header "resume" button — synthesizes a handoff prompt from the
+  // current transcript and opens a fresh conversation seeded with it.
+  onResumeConversation?: () => void;
+  resumeConversationDisabled?: boolean;
   // Conversation list that used to live in the topbar. The chat tab now
   // owns the list so users can browse + switch conversations without
   // leaving the pane.
@@ -274,6 +291,12 @@ interface Props {
   // message" without forcing a separate side widget.
   activePluginSnapshot?: AppliedPluginSnapshot | null;
   onCollapse?: () => void;
+  // SenseAudio BYOK only — wired straight through to ChatComposer for the
+  // in-composer image-model picker. Active protocol is read so the picker
+  // hides when the user is on any other BYOK tab (azure / openai / …).
+  byokApiProtocol?: AppConfig['apiProtocol'];
+  byokImageModel?: string;
+  onChangeByokImageModel?: (model: string) => void;
 }
 
 type Tab = 'chat' | 'comments';
@@ -284,6 +307,7 @@ export function ChatPane({
   sendDisabled = false,
   error,
   projectId,
+  projectKindForTracking = null,
   projectFiles,
   hasActiveDesignSystem = false,
   projectFileNames,
@@ -303,6 +327,8 @@ export function ChatPane({
   onAssistantFeedback,
   onNewConversation,
   newConversationDisabled = false,
+  onResumeConversation,
+  resumeConversationDisabled = false,
   conversations,
   activeConversationId,
   onSelectConversation,
@@ -322,8 +348,12 @@ export function ChatPane({
   activePluginSnapshot,
   skills = [],
   onCollapse,
+  byokApiProtocol,
+  byokImageModel,
+  onChangeByokImageModel,
 }: Props) {
   const t = useT();
+  const analytics = useAnalytics();
   const logRef = useRef<HTMLDivElement | null>(null);
   const historyWrapRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<ChatComposerHandle | null>(null);
@@ -645,7 +675,19 @@ export function ChatPane({
               aria-label={t('chat.conversationsAria')}
               aria-haspopup="menu"
               aria-expanded={showConvList}
-              onClick={() => setShowConvList((v) => !v)}
+              onClick={() => {
+                setShowConvList((v) => {
+                  const next = !v;
+                  if (next) {
+                    trackChatPanelClick(analytics.track, {
+                      page_name: 'chat_panel',
+                      area: 'chat_panel',
+                      element: 'history',
+                    });
+                  }
+                  return next;
+                });
+              }}
             >
               <Icon name="history" size={15} />
             </button>
@@ -703,11 +745,32 @@ export function ChatPane({
             data-testid="new-conversation"
             title={t('chat.newConversationsTitle')}
             aria-label={t('chat.newConversation')}
-            onClick={onNewConversation}
+            onClick={() => {
+              if (!onNewConversation || newConversationDisabled) return;
+              trackChatPanelClick(analytics.track, {
+                page_name: 'chat_panel',
+                area: 'chat_panel',
+                element: 'new_chat',
+              });
+              onNewConversation();
+            }}
             disabled={!onNewConversation || newConversationDisabled}
           >
             <Icon name="plus" size={16} />
           </button>
+          {onResumeConversation ? (
+            <button
+              type="button"
+              className="icon-only"
+              data-testid="resume-conversation"
+              title={t('chat.resumeConversation')}
+              aria-label={t('chat.resumeConversation')}
+              onClick={onResumeConversation}
+              disabled={resumeConversationDisabled}
+            >
+              <Icon name="reload" size={16} />
+            </button>
+          ) : null}
           {onCollapse ? (
             <button
               type="button"
@@ -715,7 +778,14 @@ export function ChatPane({
               data-testid="chat-collapse"
               title={t('workspace.focusMode')}
               aria-label={t('workspace.focusMode')}
-              onClick={onCollapse}
+              onClick={() => {
+                trackChatPanelClick(analytics.track, {
+                  page_name: 'chat_panel',
+                  area: 'chat_panel',
+                  element: 'back',
+                });
+                onCollapse();
+              }}
             >
               <Icon name="chevron-left" size={15} />
             </button>
@@ -732,9 +802,6 @@ export function ChatPane({
                     <span className="chat-empty-title">
                       {t('chat.startTitle')}
                     </span>
-                    <span className="chat-empty-hint">
-                      {t('chat.startHint')}
-                    </span>
                   </div>
                   <div className="chat-examples" role="list">
                     {pickStarters(projectMetadata, t).map((ex, i) => (
@@ -744,7 +811,14 @@ export function ChatPane({
                         role="listitem"
                         className="chat-example"
                         style={{ animationDelay: `${i * 70}ms` }}
-                        onClick={() => composerRef.current?.setDraft(ex.prompt)}
+                        onClick={() => {
+                          trackChatPanelClick(analytics.track, {
+                            page_name: 'chat_panel',
+                            area: 'chat_panel',
+                            element: 'template_card',
+                          });
+                          composerRef.current?.setDraft(ex.prompt);
+                        }}
                         title={t('chat.fillInputTitle')}
                       >
                         <span className="chat-example-icon" aria-hidden>
@@ -793,6 +867,8 @@ export function ChatPane({
                         message={m}
                         streaming={messageStreaming}
                         projectId={projectId}
+                        projectKind={projectKindForTracking}
+                        conversationId={activeConversationId}
                         projectFiles={projectFiles}
                         projectFileNames={projectFileNames}
                         onRequestOpenFile={onRequestOpenFile}
@@ -870,6 +946,9 @@ export function ChatPane({
             researchAvailable={researchAvailable}
             projectMetadata={projectMetadata}
             onProjectMetadataChange={onProjectMetadataChange}
+            byokApiProtocol={byokApiProtocol}
+            byokImageModel={byokImageModel}
+            onChangeByokImageModel={onChangeByokImageModel}
             currentSkillId={currentSkillId}
             onProjectSkillChange={onProjectSkillChange}
             pinnedPluginId={activePluginSnapshot?.pluginId ?? null}
@@ -901,7 +980,7 @@ function PinnedTodoSlot({
   // the slot tears down. Without it React would unmount immediately and
   // the card would pop out without animation.
   const [exiting, setExiting] = useState(false);
-  const input = latestTodoWriteInputFromMessages(messages);
+  const input = latestTodoWriteInputForPinnedCard(messages);
   if (input == null) return null;
   let snapshotKey: string;
   try {
@@ -1183,6 +1262,8 @@ function UserMessage({
     }, 2000);
   }
 
+  const isDesignSystemWorkspaceRequest = isDesignSystemWorkspacePrompt(message.content);
+
   return (
     <div className="msg user">
       <div className="role">
@@ -1234,7 +1315,19 @@ function UserMessage({
           ))}
         </div>
       ) : null}
-      {message.content ? (
+      {message.content && isDesignSystemWorkspaceRequest ? (
+        <div className="user-text-wrap user-status-wrap">
+          <div className="user-status-card design-system-generation-status">
+            <span className="user-status-card__icon">
+              <Icon name="palette" size={15} />
+            </span>
+            <span className="user-status-card__copy">
+              <strong>{DESIGN_SYSTEM_WORKSPACE_DISPLAY_TITLE}</strong>
+              <span>{DESIGN_SYSTEM_WORKSPACE_DISPLAY_DESCRIPTION}</span>
+            </span>
+          </div>
+        </div>
+      ) : message.content ? (
         <div className="user-text-wrap">
           <div className="user-text user-bubble">{message.content}</div>
           <button

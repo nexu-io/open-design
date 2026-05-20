@@ -12,17 +12,19 @@
   align-items: flex-start;
   justify-content: center;
   padding: 56px 32px 32px;
-  overflow-y: auto;
+  overflow: hidden;
 }
 .new-project-modal {
   width: 100%;
   max-width: 760px;
+  max-height: calc(100vh - 88px);
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
+  min-height: 0;
   overflow: hidden;
 }
 .new-project-modal__head {
@@ -31,6 +33,7 @@
   justify-content: space-between;
   padding: 14px 18px;
   border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
 }
 .new-project-modal__title {
   margin: 0;
@@ -63,8 +66,38 @@
   background: var(--bg-subtle);
   color: var(--text);
 }
+.new-project-modal__close:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
 .new-project-modal__body {
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 16px;
-  max-height: calc(100vh - 160px);
-  overflow-y: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+/* NewProjectPanel expects a bounded flex parent; without this chain the
+   panel grows to full content height and `.newproj { overflow: hidden }`
+   clips the bottom of tall tabs (prototype, template, media). */
+.new-project-modal__body .newproj {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-top: 0;
+}
+.new-project-modal__status {
+  flex: 0 0 auto;
+  margin-top: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.new-project-modal__status.error {
+  border-color: color-mix(in oklab, var(--danger, #d4543b) 45%, var(--border));
+  background: color-mix(in oklab, var(--danger, #d4543b) 10%, var(--bg-panel));
+  color: var(--danger, #d4543b);
 }

@@ -27,6 +27,7 @@ export type SrcdocOptions = {
   initialSlideIndex?: number;
   commentBridge?: boolean;
   inspectBridge?: boolean;
+  selectionBridge?: boolean;
   editBridge?: boolean;
   paletteBridge?: boolean;
   initialPalette?: string | null;
@@ -61,7 +62,7 @@ export function buildSrcdoc(
   // active — without that initial seed there is a window after each
   // srcdoc rebuild where the host's `od:*-mode` postMessage races the
   // bridge's own listener install and the iframe ignores clicks.
-  const withSelection = options.commentBridge || options.inspectBridge
+  const withSelection = options.selectionBridge || options.commentBridge || options.inspectBridge
     ? injectSelectionBridge(withDeck, {
         initialCommentMode: !!options.commentBridge,
         initialInspectMode: !!options.inspectBridge,
@@ -71,7 +72,96 @@ export function buildSrcdoc(
     ? injectPaletteBridge(withSelection, { initialPalette: options.initialPalette ?? null })
     : withSelection;
   const withEdit = options.editBridge ? injectManualEditBridge(withPalette) : withPalette;
-  return injectSnapshotBridge(withEdit);
+  // The tweaks bridge is always injected — it's a passive listener that
+  // toggles a `.tw-panel`'s visibility in response to host postMessage. Tying
+  // it to a per-call option would force iframe srcdoc regeneration (and a
+  // visible flash) every time the host toggle flips.
+  const withTweaks = injectTweaksBridge(withEdit);
+  return injectSrcdocTransportActivationBridge(injectSnapshotBridge(withTweaks));
+}
+
+/**
+ * Build the lazy transport shell.
+ *
+ * The shell does two things:
+ *   1. Register a listener for `od:srcdoc-transport-activate` that replaces
+ *      its own document with the real artifact HTML.
+ *   2. Post `od:srcdoc-transport-ready` to the parent as soon as the listener
+ *      is installed. This `ready` signal is the only reliable way for the
+ *      host to know the listener is live; without it, the host risks posting
+ *      `activate` before the iframe's script has executed (e.g. right after a
+ *      key-driven re-mount), in which case the message is dropped and the
+ *      iframe stays stuck on the empty shell. See #2253.
+ */
+export function buildLazySrcdocTransport(): string {
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script data-od-lazy-srcdoc-transport>(function(){
+      window.addEventListener('message', function(ev){
+        var data = ev && ev.data;
+        if (!data || data.type !== 'od:srcdoc-transport-activate' || typeof data.html !== 'string') return;
+        document.open();
+        document.write(data.html);
+        document.close();
+      });
+      try {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({ type: 'od:srcdoc-transport-ready' }, '*');
+        }
+      } catch (_) { /* sandboxed parent — host falls back to onLoad */ }
+    })();</script>
+  </head>
+  <body></body>
+</html>`;
+}
+
+export interface SrcDocActivationInputs {
+  /** The real artifact HTML the host wants to inject into the shell. */
+  srcDoc: string;
+  /** Host is currently showing the URL-loaded iframe (srcDoc iframe is hidden). */
+  useUrlLoadPreview: boolean;
+  /** Host's render pipeline is routing through the lazy transport shell. */
+  useLazySrcDocTransport: boolean;
+  /** The shell document has loaded AND posted `od:srcdoc-transport-ready`. */
+  shellReady: boolean;
+  /** Which artifact HTML has already been pushed into this shell (dedupe). */
+  activatedHtml: string | null;
+}
+
+/**
+ * Pure decision for whether the host should now post
+ * `od:srcdoc-transport-activate` to the shell iframe.
+ *
+ * Gating on `shellReady` is the fix for #2253: without it, an activation
+ * triggered by `useUrlLoadPreview` flipping to false (e.g. opening the
+ * Tweaks palette) can fire while the iframe's shell script has not yet
+ * registered its message listener. The message is dropped, the shell stays
+ * on its empty 536-byte body, and the dedupe check then suppresses the
+ * follow-up activation from the iframe's onLoad path.
+ */
+export function canActivateSrcDocTransport(state: SrcDocActivationInputs): boolean {
+  if (!state.srcDoc) return false;
+  if (state.useUrlLoadPreview) return false;
+  if (!state.useLazySrcDocTransport) return false;
+  if (!state.shellReady) return false;
+  if (state.activatedHtml === state.srcDoc) return false;
+  return true;
+}
+
+function injectSrcdocTransportActivationBridge(doc: string): string {
+  const script = `<script data-od-srcdoc-transport-activation>(function(){
+  window.addEventListener('message', function(ev){
+    var data = ev && ev.data;
+    if (!data || data.type !== 'od:srcdoc-transport-activate' || typeof data.html !== 'string') return;
+    document.open();
+    document.write(data.html);
+    document.close();
+  });
+})();</script>`;
+  return injectBeforeBodyEnd(doc, script);
 }
 
 function injectSnapshotBridge(doc: string): string {
@@ -192,6 +282,10 @@ function injectPaletteBridge(
   var SAVED = '__odPaletteSaved__';
   var MIN_SAT = 0.08;
   var WALK_LIMIT = 12000;
+  var STYLE_RULE_LIMIT = 5000;
+  var ROOT_SELECTOR = /(^|,)\\s*(:root|html|body|:host)\\s*($|,)/;
+  var varApplied = Object.create(null);
+  var probeEl = null;
   function parseRgb(s){
     var str = String(s||'').trim();
     if (!str || str === 'transparent' || str === 'none') return null;
@@ -246,7 +340,65 @@ function injectPaletteBridge(
     var sat = Math.max(hsl.s, palette.satFloor * 0.7);
     return hslStr(palette.hue, sat, hsl.l);
   }
+  function normalizeColor(value){
+    var raw = String(value||'').trim();
+    if (!raw) return null;
+    var direct = parseRgb(raw);
+    if (direct) return direct;
+    if (raw.indexOf('var(') === 0 || raw.indexOf('--') === 0) return null;
+    if (!probeEl){
+      probeEl = document.createElement('div');
+      probeEl.style.display = 'none';
+      (document.body || document.documentElement).appendChild(probeEl);
+    }
+    probeEl.style.color = '';
+    try { probeEl.style.color = raw; } catch (_){ return null; }
+    if (!probeEl.style.color) return null;
+    return parseRgb(probeEl.style.color);
+  }
+  function isRootSelector(selector){
+    return !!selector && ROOT_SELECTOR.test(String(selector));
+  }
+  function forEachStyleRule(rules, visit, budget){
+    if (!rules || !budget.left) return;
+    for (var i=0; i<rules.length && budget.left>0; i++){
+      var rule = rules[i];
+      budget.left--;
+      if (rule.selectorText && rule.style && isRootSelector(rule.selectorText)) visit(rule);
+      if (rule.cssRules && rule.cssRules.length) forEachStyleRule(rule.cssRules, visit, budget);
+    }
+  }
+  function applyVarTint(palette){
+    var sheets = document.styleSheets;
+    if (!sheets || !sheets.length) return;
+    var budget = { left: STYLE_RULE_LIMIT };
+    for (var i=0; i<sheets.length; i++){
+      var sheet = sheets[i];
+      var rules = null;
+      try { rules = sheet.cssRules; } catch (_){ continue; }
+      forEachStyleRule(rules, function(rule){
+        var decl = rule.style;
+        for (var j=0; j<decl.length; j++){
+          var name = decl[j];
+          if (name.indexOf('--') !== 0) continue;
+          var raw = decl.getPropertyValue(name);
+          var color = normalizeColor(raw);
+          var hsl = chromatic(color);
+          if (!hsl) continue;
+          document.documentElement.style.setProperty(name, shift(hsl, palette));
+          varApplied[name] = true;
+        }
+      }, budget);
+    }
+  }
+  function restoreVars(){
+    for (var name in varApplied){
+      document.documentElement.style.setProperty(name, '');
+    }
+    varApplied = Object.create(null);
+  }
   function restoreAll(){
+    restoreVars();
     var nodes = document.querySelectorAll('['+ATTR+']');
     for (var i=0;i<nodes.length;i++){
       var el = nodes[i], saved = el[SAVED];
@@ -264,6 +416,7 @@ function injectPaletteBridge(
   function applyTint(id){
     var palette = PALETTES[id];
     if (!palette) return;
+    applyVarTint(palette);
     var all = document.body ? document.body.querySelectorAll('*') : [];
     for (var i=0; i<all.length && i<WALK_LIMIT; i++){
       var el = all[i], cs = getComputedStyle(el), saved = {}, changed = false;
@@ -812,7 +965,7 @@ function meaningfulDomFallbackTarget(el) {
 
   return true;
 }
-  function targetFrom(el, allowDomFallback){
+  function targetFrom(el, allowDomFallback, clickedEl){
     var id = el.getAttribute('data-od-id') || el.getAttribute('data-screen-label');
     var selector = annotatedSelectorFor(el);
     if (!id && allowDomFallback && meaningfulDomFallbackTarget(el)) {
@@ -825,7 +978,7 @@ function meaningfulDomFallbackTarget(el) {
     var cls = typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\\s+/).slice(0,2).join('.') : '';
     var html = '';
     try { html = (el.outerHTML || '').replace(/\\s+/g, ' ').match(/^<[^>]+>/)?.[0] || ''; } catch (_) {}
-    return {
+    var payload = {
       type: 'od:comment-target',
       elementId: id,
       selector: selector,
@@ -835,6 +988,15 @@ function meaningfulDomFallbackTarget(el) {
       htmlHint: html.slice(0, 180),
       style: styleSnapshot(el)
     };
+    if (clickedEl && clickedEl !== el) {
+      var clickedTag = clickedEl.tagName ? clickedEl.tagName.toLowerCase() : 'element';
+      var clickedCls = typeof clickedEl.className === 'string' && clickedEl.className.trim() ? '.' + clickedEl.className.trim().split(/\\s+/).slice(0,2).join('.') : '';
+      payload.clickedDescendant = {
+        label: clickedTag + clickedCls,
+        text: (clickedEl.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 80)
+      };
+    }
+    return payload;
   }
   function allTargets(){
     var annotatedNodes = document.querySelectorAll('[data-od-id], [data-screen-label]');
@@ -907,15 +1069,18 @@ function meaningfulDomFallbackTarget(el) {
     return commentEnabled && !inspectEnabled && document.querySelectorAll('[data-od-id], [data-screen-label]').length === 0;
   }
   function closestTarget(event){
-    var el = event.target;
+    var clicked = event.target;
+    var el = clicked;
     var fallback = null;
     var allowDomFallback = mode === 'picker' && canUseDomFallback();
     while (el && el !== document.documentElement) {
-      if (el.getAttribute && (el.hasAttribute('data-od-id') || el.hasAttribute('data-screen-label'))) return el;
-if (!fallback && allowDomFallback && meaningfulDomFallbackTarget(el)) fallback = el;
+      if (el.getAttribute && (el.hasAttribute('data-od-id') || el.hasAttribute('data-screen-label'))) {
+        return { target: el, clicked: clicked };
+      }
+      if (!fallback && allowDomFallback && meaningfulDomFallbackTarget(el)) fallback = el;
       el = el.parentElement;
     }
-    return fallback;
+    return fallback ? { target: fallback, clicked: clicked } : null;
   }
   function applyOverride(elementId, selector, prop, value){
     if (!elementId || !prop) return;
@@ -1026,20 +1191,20 @@ if (!fallback && allowDomFallback && meaningfulDomFallbackTarget(el)) fallback =
   function pickerActive(){ return inspectEnabled || (commentEnabled && mode === 'picker'); }
   document.addEventListener('mouseover', function(ev){
     if (!pickerActive()) return;
-    var el = closestTarget(ev);
-    if (!el) return;
-    var payload = targetFrom(el, commentEnabled && mode === 'picker' && !inspectEnabled);
+    var result = closestTarget(ev);
+    if (!result) return;
+    var payload = targetFrom(result.target, commentEnabled && mode === 'picker' && !inspectEnabled);
     if (!payload || payload.elementId === hoveredId) return;
     hoveredId = payload.elementId;
     window.parent.postMessage(Object.assign({}, payload, { type: 'od:comment-hover' }), '*');
   }, true);
   document.addEventListener('mouseout', function(ev){
     if (!pickerActive()) return;
-    var el = closestTarget(ev);
-    if (!el) return;
+    var result = closestTarget(ev);
+    if (!result) return;
     var next = ev.relatedTarget;
     while (next && next !== document.documentElement) {
-      if (next === el) return;
+      if (next === result.target) return;
       next = next.parentElement;
     }
     hoveredId = null;
@@ -1047,11 +1212,11 @@ if (!fallback && allowDomFallback && meaningfulDomFallbackTarget(el)) fallback =
   }, true);
   document.addEventListener('click', function(ev){
     if (!pickerActive()) return;
-    var el = closestTarget(ev);
-    if (el) {
+    var result = closestTarget(ev);
+    if (result) {
       ev.preventDefault();
       ev.stopPropagation();
-      var payload = targetFrom(el, commentEnabled && mode === 'picker' && !inspectEnabled);
+      var payload = targetFrom(result.target, commentEnabled && mode === 'picker' && !inspectEnabled, result.clicked);
       if (payload) window.parent.postMessage(payload, '*');
       return;
     }
@@ -1152,6 +1317,11 @@ if (!fallback && allowDomFallback && meaningfulDomFallbackTarget(el)) fallback =
 html[data-od-comment-mode] body * { cursor: crosshair !important; }
 html[data-od-inspect-mode] body * { cursor: crosshair !important; }
 html[data-od-comment-mode][data-od-comment-mode-kind="pod"] body * { cursor: cell !important; }
+/* Nested iframes (e.g. shared device frames) consume clicks in their own browsing context.
+   While picker modes are on, disable pointer events on outer-document iframes so the
+   hit target resolves to an annotated ancestor (card, shell) in this document. */
+html[data-od-comment-mode] body iframe,
+html[data-od-inspect-mode] body iframe { pointer-events: none !important; }
 </style>`;
   return injectBeforeBodyEnd(injectBeforeHeadEnd(doc, style), script);
 }
@@ -1179,11 +1349,24 @@ html[data-od-comment-mode][data-od-comment-mode-kind="pod"] body * { cursor: cel
 // the scaled canvas ends up offset toward the bottom-right of any
 // preview that's smaller than 1920x1080 — exactly what users see in the
 // sandbox iframe. `place-content: center` centers the track itself.
+//
+// Framework decks (apps/daemon/src/prompts/deck-framework.ts) opt out:
+// their `fit()` already centers a `transform-origin: top left` stage with
+// an explicit `translate(tx, ty)` that assumes the stage's natural layout
+// position is (0, 0). If we force `place-content: center` on their
+// `.deck-shell` grid, the implicit track gets re-centered to
+// ((sw-1920)/2, (sh-1080)/2) and `fit()`'s translate stacks on top, so
+// the scaled stage lands ~1000px off-screen and the user sees a mostly-
+// black preview with a sliver of slide content in the top-left. Skip the
+// override whenever the framework's marker id is present.
 function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
   const safeInitialSlideIndex = Number.isFinite(initialSlideIndex)
     ? Math.max(0, Math.floor(initialSlideIndex))
     : 0;
-  const styleFix = `<style data-od-deck-fix>
+  const isFrameworkDeck = /\bid\s*=\s*["']deck-stage["']/i.test(doc);
+  const styleFix = isFrameworkDeck
+    ? ''
+    : `<style data-od-deck-fix>
 .stage, .deck-stage, .deck-shell { place-content: center !important; }
 </style>`;
   const script = `<script data-od-deck-bridge>(function(){
@@ -1453,4 +1636,123 @@ function injectDeckBridge(doc: string, initialSlideIndex = 0): string {
   observeSlides();
 })();</script>`;
   return injectBeforeBodyEnd(injectBeforeHeadEnd(doc, styleFix), script);
+}
+
+// The tweaks bridge lets the host toolbar toggle the visibility of the artifact's
+// native tweaks panel. Bidirectional: host posts `od:tweaks-panel-visible` to
+// drive panel visibility; bridge posts `od:tweaks-panel-state` back whenever the
+// artifact's own `× close` button or `T` shortcut flips the `.tw-hidden` class,
+// so the toolbar toggle stays in sync. Also reports `od:tweaks-available` so the
+// host can disable the toggle on artifacts without a `.tw-panel`.
+function injectTweaksBridge(doc: string): string {
+  // Hide-state styling mirrors the artifact's own `.tw-hidden` (transform +
+  // opacity) so the CSS transition plays in both directions. `.tw-restore` is
+  // kept permanently hidden — the host toolbar is the only entry point.
+  const style = `<style data-od-tweaks-bridge-style>
+[data-od-tweaks-hidden] .tw-panel {
+  transform: translateX(calc(100% + 32px)) !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+.tw-restore { display: none !important; }
+</style>`;
+  const script = `<script data-od-tweaks-bridge>(function(){
+  // Synchronously hide BEFORE the artifact body parses so the panel never
+  // flashes on initial paint. The host removes the attribute via postMessage
+  // once it knows the desired state.
+  document.documentElement.setAttribute('data-od-tweaks-hidden', '');
+
+  var suppressEcho = false;
+  var observer = null;
+
+  function panelEl(){ return document.querySelector('.tw-panel'); }
+
+  function applyClassesToPanel(visible){
+    var panel = panelEl();
+    if (panel) panel.classList.toggle('tw-hidden', !visible);
+  }
+
+  function setPanelVisible(visible){
+    suppressEcho = true;
+    document.documentElement.toggleAttribute('data-od-tweaks-hidden', !visible);
+    applyClassesToPanel(visible);
+    // Clear flag after the MutationObserver has had a chance to fire for this
+    // change so we don't echo our own host-driven toggles back to the host.
+    Promise.resolve().then(function(){ suppressEcho = false; });
+  }
+
+  function postState(){
+    var panel = panelEl();
+    if (!panel) return;
+    try {
+      parent.postMessage({
+        type: 'od:tweaks-panel-state',
+        visible: !panel.classList.contains('tw-hidden'),
+      }, '*');
+    } catch (e) {}
+  }
+
+  function postAvailability(){
+    try {
+      parent.postMessage({
+        type: 'od:tweaks-available',
+        available: !!panelEl(),
+      }, '*');
+    } catch (e) {}
+  }
+
+  function attachObserver(){
+    var panel = panelEl();
+    if (!panel || observer) return;
+    observer = new MutationObserver(function(){
+      if (suppressEcho) return;
+      postState();
+    });
+    observer.observe(panel, { attributes: true, attributeFilter: ['class'] });
+  }
+
+  function onReady(){
+    // Capture the panel authored visibility BEFORE we apply the host hidden
+    // attribute. The bridge sets data-od-tweaks-hidden synchronously in head
+    // (before the body parses), so on entry to onReady the attribute is
+    // always present even though the artifact may have authored the panel
+    // as default-visible. Reading the panel class first is the only place
+    // we can still observe the author intent. Then drive the attribute,
+    // classes, and posted state from that captured value so a default
+    // visible tw-panel reports visible:true and the toolbar toggle starts
+    // ON. Issue surfaced in PR #1643 review.
+    var panel = panelEl();
+    var initialVisible = !!panel && !panel.classList.contains('tw-hidden');
+    document.documentElement.toggleAttribute('data-od-tweaks-hidden', !initialVisible);
+    applyClassesToPanel(initialVisible);
+    attachObserver();
+    postAvailability();
+    // Post the captured initial visibility so the toolbar toggle reflects
+    // the default state on mount. Without this the toggle reads OFF while
+    // a default-visible tw-panel artifact clearly shows its panel and the
+    // user would have to click toggle-on then toggle-off to actually hide.
+    postState();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', onReady);
+  } else {
+    onReady();
+  }
+
+  window.addEventListener('message', function(ev){
+    if (!ev.data || ev.data.type !== 'od:tweaks-panel-visible') return;
+    setPanelVisible(!!ev.data.visible);
+  });
+})();</script>`;
+  const withStyle = /<\/head>/i.test(doc)
+    ? doc.replace(/<\/head>/i, style + '</head>')
+    : /<head[^>]*>/i.test(doc)
+      ? doc.replace(/<head[^>]*>/i, (m) => m + style)
+      : style + doc;
+  // Inject the bridge as early as possible (inside <head>) so the synchronous
+  // attribute set runs before the artifact body parses.
+  if (/<\/head>/i.test(withStyle)) return withStyle.replace(/<\/head>/i, script + '</head>');
+  if (/<head[^>]*>/i.test(withStyle)) return withStyle.replace(/<head[^>]*>/i, (m) => m + script);
+  return script + withStyle;
 }

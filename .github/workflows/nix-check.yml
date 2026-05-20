@@ -24,27 +24,7 @@ on:
       - .github/ISSUE_TEMPLATE/**
       - .github/PULL_REQUEST_TEMPLATE.md
       - .github/CODEOWNERS
-  pull_request:
-    paths-ignore:
-      - '**/*.md'
-      - '**/*.mdx'
-      - '**/*.txt'
-      - LICENSE
-      - .gitignore
-      - .editorconfig
-      - .vscode/**
-      - .idea/**
-      - docs/**
-      - assets/**
-      - '**/*.png'
-      - '**/*.jpg'
-      - '**/*.jpeg'
-      - '**/*.gif'
-      - '**/*.svg'
-      - '**/*.webp'
-      - .github/ISSUE_TEMPLATE/**
-      - .github/PULL_REQUEST_TEMPLATE.md
-      - .github/CODEOWNERS
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -75,21 +55,3 @@ jobs:
 
       - name: nix flake check
         run: nix flake check --print-build-logs --keep-going
-
-      - name: nix build .#daemon
-        id: build-daemon
-        run: nix build .#daemon --print-build-logs --log-format raw |& tee daemon-build.log
-
-      - name: nix build .#web
-        id: build-web
-        run: nix build .#web --print-build-logs --log-format raw |& tee web-build.log
-
-      - name: Upload build logs (on failure)
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: nix-build-logs
-          path: |
-            daemon-build.log
-            web-build.log
-          if-no-files-found: ignore

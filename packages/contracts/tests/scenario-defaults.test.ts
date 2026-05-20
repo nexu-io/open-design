@@ -9,6 +9,7 @@ import {
   DEFAULT_SCENARIO_PLUGIN_BY_TASK_KIND,
   DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID,
   defaultScenarioPluginIdForKind,
+  defaultScenarioPluginIdForProjectMetadata,
   defaultScenarioPluginIdForTaskKind,
 } from '../src/plugins/scenario-defaults.js';
 
@@ -34,6 +35,16 @@ describe('defaultScenarioPluginIdForKind', () => {
 
   it('returns null for an undefined kind so the daemon can skip the fallback', () => {
     expect(defaultScenarioPluginIdForKind(undefined)).toBeNull();
+  });
+
+  it('routes live-artifact intent to the dedicated bundled live artifact scenario', () => {
+    expect(defaultScenarioPluginIdForProjectMetadata({
+      kind: 'prototype',
+      intent: 'live-artifact',
+    })).toBe('example-live-artifact');
+    expect(defaultScenarioPluginIdForProjectMetadata({ kind: 'prototype' }))
+      .toBe('example-web-prototype');
+    expect(defaultScenarioPluginIdForProjectMetadata(undefined)).toBeNull();
   });
 
   it('exposes the hidden free-form Home fallback plugin separately from kind defaults', () => {

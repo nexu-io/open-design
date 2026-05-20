@@ -17,6 +17,7 @@
 
 /* Hero — large centered prompt input */
 .home-hero {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -80,8 +81,128 @@
   border-radius: 3px;
   background: var(--bg-subtle);
 }
+/* Example prompt panel below the Home chip rail. */
+.home-hero__examples {
+  position: relative;
+  z-index: 0;
+  width: 100%;
+  max-width: 720px;
+  padding: 0 12px;
+  margin-top: 4px;
+}
+.home-hero__examples-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 6px;
+}
+.home-hero__examples-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.home-hero__examples-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: 0.01em;
+}
+.home-hero__examples-close {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.home-hero__examples-close:hover:not(:disabled) {
+  color: var(--text-strong);
+  background: var(--bg-subtle);
+  border-color: var(--border);
+}
+.home-hero__examples-close:disabled {
+  cursor: not-allowed;
+  opacity: 0;
+  pointer-events: none;
+}
+.home-hero__examples-close:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}
+.home-hero__examples-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+}
+.home-hero__example-card {
+  appearance: none;
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  text-align: left;
+  padding: 10px 28px 10px 12px;
+  min-height: 64px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.45;
+  cursor: pointer;
+  transition: color 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.home-hero__example-card:hover:not(:disabled) {
+  border-color: var(--border-strong, var(--border));
+  background: color-mix(in srgb, var(--bg-panel) 92%, var(--bg-subtle));
+}
+.home-hero__example-card:active:not(:disabled) {
+  transform: translateY(1px);
+}
+.home-hero__example-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.home-hero__example-card:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-tint);
+}
+.home-hero__example-card-body {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 500;
+}
+.home-hero__example-card-arrow {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  color: var(--text-muted);
+  opacity: 0.7;
+  transition: opacity 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.home-hero__example-card:hover:not(:disabled) .home-hero__example-card-arrow {
+  color: var(--text-strong);
+  opacity: 1;
+}
+
 .home-hero__input-card {
   position: relative;
+  z-index: 2;
   width: 100%;
   max-width: 720px;
   background: var(--bg-panel);
@@ -92,7 +213,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin-top: 8px;
+  margin-top: 0;
   transition: border-color 120ms ease, box-shadow 120ms ease;
 }
 .home-hero__input-card:focus-within {
@@ -197,7 +318,14 @@
   color: var(--text);
   font: inherit;
   font-size: 15px;
-  line-height: 1.55;
+  /* Generous line-height so adjacent slot/mention pills do not
+     collide vertically when the prompt wraps. Each pill paints a
+     2px ring via `box-shadow`; with a tight line-height the rings
+     from line N and line N+1 visually merge into a single bar.
+     Bumping the line-height leaves ~8px of clear space between
+     pill rows. The textarea below mirrors this value so the
+     overlay and the editable text stay pixel-aligned. */
+  line-height: 1.85;
   pointer-events: none;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -225,57 +353,73 @@
   line-height: inherit;
   vertical-align: baseline;
 }
+.home-hero__prompt-option-shell {
+  position: relative;
+  display: inline;
+  pointer-events: auto;
+}
+.home-hero__prompt-slot--button {
+  appearance: none;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.home-hero__prompt-slot--button:hover,
+.home-hero__prompt-slot--button:focus-visible {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 24%, transparent);
+  outline: none;
+}
+.home-hero__prompt-option-popover {
+  position: relative;
+  z-index: 4;
+  display: grid;
+  gap: 6px;
+  width: min(100%, 420px);
+  margin-top: 6px;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-lg, 0 14px 36px rgba(0, 0, 0, 0.14));
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.3;
+  white-space: normal;
+}
+.home-hero__prompt-option-label {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.home-hero__prompt-option-input {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  border-radius: 6px;
+  background: var(--bg-panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+.home-hero__prompt-option-input:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent) 18%, transparent);
+  border-color: var(--accent);
+}
+.home-hero__prompt-option-note {
+  display: block;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.home-hero__prompt-option-note[data-tone='warning'] {
+  color: #9f3a1a;
+}
 .home-hero__prompt-slot[data-filled='false'] {
   background: color-mix(in srgb, var(--accent) 7%, transparent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 12%, transparent);
   color: color-mix(in srgb, var(--accent) 74%, var(--text-muted));
-}
-.home-hero__prompt-slot-control {
-  pointer-events: auto;
-  position: relative;
-  z-index: 3;
-  appearance: none;
-  min-width: 8ch;
-  min-height: 0;
-  height: auto;
-  box-sizing: border-box;
-  cursor: text;
-}
-.home-hero__prompt-slot-text {
-  pointer-events: none;
-}
-.home-hero__prompt-slot-control:focus,
-.home-hero__prompt-slot-control:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 24%, transparent);
-  outline-offset: 1px;
-  border-color: var(--accent);
-}
-.home-hero__prompt-slot-input {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.home-hero__prompt-slot-select {
-  width: auto;
-  max-width: min(100%, 32ch);
-  padding-right: 18px;
-  cursor: pointer;
-}
-.home-hero__prompt-slot-toggle {
-  cursor: pointer;
-}
-.home-hero__prompt-slot-file {
-  cursor: pointer;
-}
-.home-hero__prompt-slot-file input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
-}
-.home-hero__prompt-slot-file span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .home-hero__prompt-mention {
   appearance: none;
@@ -320,10 +464,20 @@
   z-index: 1;
   width: 100%;
   min-height: 84px;
-  resize: vertical;
+  /* The textarea height is driven by the auto-grow effect in
+     HomeHero.tsx, which writes an explicit pixel height after every
+     keystroke. We disable the native resize grip and internal
+     scrollbar so users cannot accidentally shrink the box, and so
+     content never disappears behind a scroll — the box just grows
+     to fit. The outer page handles overflow when the prompt is
+     very long. */
+  resize: none;
+  overflow: hidden;
   font: inherit;
   font-size: 15px;
-  line-height: 1.55;
+  /* Must match `.home-hero__prompt-highlight` so the editable
+     textarea and the highlight overlay wrap identically. */
+  line-height: 1.85;
   padding: 6px 6px;
   border: none;
   outline: none;
@@ -701,8 +855,12 @@
 }
 .home-hero__attach {
   appearance: none;
-  width: 32px;
-  height: 32px;
+  /* Match the submit button size and make the paper-clip glyph
+     readable at typical viewing distance. The previous 32px / 14px
+     glyph combo rendered the icon at roughly 11–12px after stroke
+     antialiasing and washed out against the white card. */
+  width: 38px;
+  height: 38px;
   flex: 0 0 auto;
   border: 1px solid var(--border);
   border-radius: 50%;
@@ -735,8 +893,11 @@
 }
 .home-hero__submit {
   appearance: none;
-  width: 32px;
-  height: 32px;
+  /* Larger send button so the arrow glyph reads at typical viewing
+     distance and the primary call-to-action carries enough visual
+     weight against the surrounding muted controls. */
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
   border: none;
   background: var(--accent);
@@ -828,6 +989,7 @@
 }
 .home-hero-confirm__primary:hover {
   background: var(--accent-strong);
+  color: white;
 }
 
 /* ------------------------------------------------------------
@@ -841,6 +1003,8 @@
    intents recede without losing affordance.
    ------------------------------------------------------------ */
 .home-hero__rail {
+  position: relative;
+  z-index: 1;
   width: 100%;
   max-width: 720px;
   display: flex;

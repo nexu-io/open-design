@@ -16,6 +16,10 @@ import { buildSrcdoc, type SrcdocOptions } from './srcdoc';
 import { buildReactComponentSrcdoc } from './react-component';
 import { buildZip } from './zip';
 import { randomUUID } from '../utils/uuid';
+import {
+  isOpenDesignHostAvailable,
+  printHostPdf,
+} from '@open-design/host';
 
 const DESIGN_HANDOFF_FILENAME = 'DESIGN-HANDOFF.md';
 const DESIGN_MANIFEST_FILENAME = 'DESIGN-MANIFEST.json';
@@ -578,10 +582,6 @@ export function openSandboxedPreviewInNewTab(
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
-type DesktopPrintPdfOptions = {
-  deck?: boolean;
-};
-
 // Open the artifact in a new tab via a Blob URL with a self-printing
 // script injected. Going through a Blob URL (rather than `window.open('')`
 // + `document.write`) avoids two failure modes we hit before:
@@ -617,26 +617,17 @@ export async function exportAsPdf(
   // omits allow-modals here because the native flow never calls
   // window.print(); granting it would let untrusted artifact code call
   // alert()/confirm() and stall the hidden Electron window indefinitely.
-  const desktopApi =
-    typeof window !== 'undefined'
-      ? (window as unknown as Record<string, unknown>).__odDesktop as
-          | {
-              printPdf?: (
-                html: string,
-                nonce?: string,
-                options?: DesktopPrintPdfOptions,
-              ) => Promise<void>;
-              isDesktop?: boolean;
-            }
-          | undefined
-      : undefined;
-  if (desktopApi?.printPdf) {
+  if (isOpenDesignHostAvailable()) {
     if (sandboxedPreview) {
       doc = buildSandboxedPreviewDocument(doc, title);
     }
     doc = injectParentPrintReadyCache(doc, nonce);
     try {
-      await desktopApi.printPdf(doc, nonce, opts?.deck ? { deck: true } : undefined);
+      const result = await printHostPdf(doc, nonce, opts?.deck ? { deck: true } : undefined);
+      if (result.ok) return;
+      if (typeof alert !== 'undefined') {
+        alert('Print failed. Please try Export PDF again or use the browser version.');
+      }
     } catch {
       if (typeof alert !== 'undefined') {
         alert('Print failed. Please try Export PDF again or use the browser version.');

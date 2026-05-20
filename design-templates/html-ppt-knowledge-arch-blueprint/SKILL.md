@@ -11,7 +11,6 @@ triggers:
 od:
   mode: deck
   scenario: engineering
-  featured: 29
   upstream: "https://github.com/lewislulu/html-ppt-skill"
   preview:
     type: html

@@ -37,6 +37,7 @@ function fakePaths(root: string): PackagedNamespacePaths {
     namespaceRoot: root,
     resourceRoot: join(root, "resources"),
     runtimeRoot: join(root, "runtime"),
+    updateRoot: join(root, "updates"),
     webIdentityPath: join(root, "runtime", "web-root.json"),
   };
 }

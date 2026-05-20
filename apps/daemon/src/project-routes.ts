@@ -1,8 +1,10 @@
 import type { Express } from 'express';
 import {
-  defaultScenarioPluginIdForKind,
+  defaultScenarioPluginIdForProjectMetadata,
   type PluginManifest,
 } from '@open-design/contracts';
+import { createProjectArtifactFile } from './artifact-create.js';
+import { ArtifactPublicationBlockedError } from './artifact-publication-guard.js';
 import { ArtifactRegressionError } from './artifact-stub-guard.js';
 import { listDesignSystems } from './design-systems.js';
 import {
@@ -13,8 +15,9 @@ import {
 } from './plugins/index.js';
 import type { RouteDeps } from './server-context.js';
 import { listSkills } from './skills.js';
+import { auditDesignSystemPackage } from './tools-connectors-cli.js';
 
-export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry'> {}
+export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'validation'> {}
 
 export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDeps) {
   const { db, design } = ctx;
@@ -27,6 +30,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   const { listLatestProjectRunStatuses, listProjectsAwaitingInput, normalizeProjectDisplayStatus, composeProjectDisplayStatus, listProjects } = ctx.status;
   const { subscribeFileEvents, activeProjectEventSinks } = ctx.events;
   const { randomId } = ctx.ids;
+  const { validateProjectDesignSystemId } = ctx.validation;
   async function loadPluginRegistryView() {
     const [skills, designSystems] = await Promise.all([
       listSkills(SKILLS_DIR),
@@ -165,6 +169,16 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       if (skipDiscoveryBrief !== undefined && typeof skipDiscoveryBrief !== 'boolean') {
         return sendApiError(res, 400, 'BAD_REQUEST', 'skipDiscoveryBrief must be a boolean');
       }
+      const designSystemValidation = await validateProjectDesignSystemId(designSystemId);
+      if (!designSystemValidation.ok) {
+        return sendApiError(
+          res,
+          400,
+          designSystemValidation.code,
+          designSystemValidation.message,
+        );
+      }
+      const normalizedDesignSystemId = designSystemValidation.id;
       const projectMetadata =
         metadata && typeof metadata === 'object'
           ? {
@@ -185,7 +199,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         id,
         name: name.trim(),
         skillId: skillId ?? null,
-        designSystemId: designSystemId ?? null,
+        designSystemId: normalizedDesignSystemId,
         pendingPrompt: pendingPrompt || null,
         metadata: projectMetadata,
         customInstructions:
@@ -213,9 +227,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       let resolveBody =
         explicitPlugin ? (req.body as Record<string, unknown>) : null;
       if (!resolveBody) {
-        const fallbackPluginId = defaultScenarioPluginIdForKind(
-          projectMetadata?.kind,
-        );
+        const fallbackPluginId = defaultScenarioPluginIdForProjectMetadata(projectMetadata);
         if (fallbackPluginId && getInstalledPlugin(db, fallbackPluginId)) {
           resolveBody = { ...(req.body || {}), pluginId: fallbackPluginId };
         }
@@ -230,8 +242,8 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           conversationId: cid,
           registry,
           activeProjectDesignSystem:
-            typeof designSystemId === 'string' && designSystemId.length > 0
-              ? { id: designSystemId }
+            typeof normalizedDesignSystemId === 'string' && normalizedDesignSystemId.length > 0
+              ? { id: normalizedDesignSystemId }
               : undefined,
         });
         if (resolved && !resolved.ok) {
@@ -305,7 +317,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     res.json(body);
   });
 
-  app.patch('/api/projects/:id', (req, res) => {
+  app.patch('/api/projects/:id', async (req, res) => {
     try {
       const patch = req.body || {};
       // baseDir / folder-import state is privileged: it's set only by the
@@ -375,6 +387,18 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       }
       if (typeof patch.customInstructions === 'string' && patch.customInstructions.length > 5000) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'customInstructions exceeds 5 000 character limit');
+      }
+      if (Object.prototype.hasOwnProperty.call(patch, 'designSystemId')) {
+        const designSystemValidation = await validateProjectDesignSystemId(patch.designSystemId);
+        if (!designSystemValidation.ok) {
+          return sendApiError(
+            res,
+            400,
+            designSystemValidation.code,
+            designSystemValidation.message,
+          );
+        }
+        patch.designSystemId = designSystemValidation.id;
       }
       const project = updateProject(db, req.params.id, patch);
       if (!project)
@@ -780,7 +804,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
   const { upload } = ctx.uploads;
   const { fs } = ctx.node;
   const { getProject } = ctx.projectStore;
-  const { listFiles, searchProjectFiles, readProjectFile, resolveProjectFilePath, parseByteRange, renameProjectFile, deleteProjectFile, writeProjectFile, sanitizeName, ensureProject } = ctx.projectFiles;
+  const { listFiles, searchProjectFiles, readProjectFile, resolveProjectDir, resolveProjectFilePath, parseByteRange, renameProjectFile, deleteProjectFile, writeProjectFile, sanitizeName, ensureProject } = ctx.projectFiles;
   const { buildDocumentPreview } = ctx.documents;
   const { validateArtifactManifestInput } = ctx.artifacts;
 
@@ -820,6 +844,22 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         metadata: searchProject?.metadata,
       });
       res.json({ query, matches });
+    } catch (err: any) {
+      sendApiError(res, 400, 'BAD_REQUEST', String(err));
+    }
+  });
+
+  app.get('/api/projects/:id/design-system-package-audit', async (req, res) => {
+    try {
+      const project = getProject(db, req.params.id);
+      if (!project) {
+        sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+        return;
+      }
+      const projectRoot = resolveProjectDir(PROJECTS_DIR, project.id, project.metadata);
+      const audit = await auditDesignSystemPackage(projectRoot);
+      res.setHeader('Cache-Control', 'no-store');
+      res.json({ audit });
     } catch (err: any) {
       sendApiError(res, 400, 'BAD_REQUEST', String(err));
     }
@@ -1013,7 +1053,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
           const body = { file: meta };
           return res.json(body);
         }
-        const { name, content, encoding, artifactManifest } = req.body || {};
+        const { name, content, encoding, artifactManifest, artifact, overwrite } = req.body || {};
         if (typeof name !== 'string' || typeof content !== 'string') {
           return sendApiError(
             res,
@@ -1040,14 +1080,25 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
           encoding === 'base64'
             ? Buffer.from(content, 'base64')
             : Buffer.from(content, 'utf8');
-        const meta = await writeProjectFile(
-          PROJECTS_DIR,
-          req.params.id,
-          name,
-          buf,
-          { artifactManifest },
-          uploadProject?.metadata,
-        );
+        const meta = artifact === true
+          ? await createProjectArtifactFile({
+              projectsRoot: PROJECTS_DIR,
+              projectId: req.params.id,
+              input: { name, content, encoding, artifactManifest },
+              metadata: uploadProject?.metadata,
+              writeProjectFile,
+            })
+          : await writeProjectFile(
+              PROJECTS_DIR,
+              req.params.id,
+              name,
+              buf,
+              {
+                artifactManifest,
+                ...(overwrite === false ? { overwrite: false } : {}),
+              },
+              uploadProject?.metadata,
+            );
         /** @type {import('@open-design/contracts').ProjectFileResponse} */
         const body = { file: meta };
         res.json(body);
@@ -1061,6 +1112,20 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
               priorName: err.priorName,
             },
           });
+        }
+        if (err instanceof ArtifactPublicationBlockedError) {
+          return sendApiError(res, 422, 'ARTIFACT_PUBLICATION_BLOCKED', err.message, {
+            details: { placeholders: err.placeholders },
+          });
+        }
+        if (err?.code === 'EEXIST') {
+          return sendApiError(res, 409, 'FILE_EXISTS', 'file already exists');
+        }
+        if (err?.code === 'ARTIFACT_MANIFEST_REQUIRED') {
+          return sendApiError(res, 400, 'ARTIFACT_MANIFEST_REQUIRED', err.message);
+        }
+        if (err?.code === 'ARTIFACT_MANIFEST_INVALID') {
+          return sendApiError(res, 400, 'BAD_REQUEST', err.message);
         }
         sendApiError(res, 500, 'INTERNAL_ERROR', 'upload failed');
       }

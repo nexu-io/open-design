@@ -18,6 +18,7 @@ triggers:
   - "杂志海报"
   - "报纸版式"
 od:
+  featured: 0.02
   mode: prototype
   platform: desktop
   scenario: marketing

@@ -5,10 +5,10 @@
 // (prototype / live-artifact / deck / template / image / video /
 // audio / other) and their connector / template / design-system
 // pickers carry over without duplication. The modal closes itself
-// when the panel calls onCreate (success path) or when the user
+// when the panel calls onCreate and it completes (success path) or when the user
 // clicks the backdrop / Esc.
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ConnectorDetail } from '@open-design/contracts';
 import type {
   DesignSystemSummary,
@@ -18,7 +18,7 @@ import type {
   SkillSummary,
 } from '../types';
 import { Icon } from './Icon';
-import { NewProjectPanel, type CreateInput } from './NewProjectPanel';
+import { NewProjectPanel, type CreateInput, type CreateTab } from './NewProjectPanel';
 
 interface Props {
   open: boolean;
@@ -26,16 +26,18 @@ interface Props {
   designSystems: DesignSystemSummary[];
   defaultDesignSystemId: string | null;
   templates: ProjectTemplate[];
+  onDeleteTemplate?: (id: string) => Promise<boolean>;
   promptTemplates: PromptTemplateSummary[];
   mediaProviders?: Record<string, MediaProviderCredentials>;
   connectors?: ConnectorDetail[];
   connectorsLoading?: boolean;
   loading?: boolean;
-  onCreate: (input: CreateInput) => void;
+  onCreate: (input: CreateInput & { requestId?: string }) => Promise<boolean> | boolean | void;
   onImportClaudeDesign?: (file: File) => Promise<void> | void;
   onImportFolder?: (baseDir: string) => Promise<void> | void;
   onOpenConnectorsTab?: () => void;
   onClose: () => void;
+  initialTab?: CreateTab;
 }
 
 export function NewProjectModal({
@@ -44,6 +46,7 @@ export function NewProjectModal({
   designSystems,
   defaultDesignSystemId,
   templates,
+  onDeleteTemplate,
   promptTemplates,
   mediaProviders,
   connectors,
@@ -54,17 +57,20 @@ export function NewProjectModal({
   onImportFolder,
   onOpenConnectorsTab,
   onClose,
+  initialTab,
 }: Props) {
   const closeRef = useRef<HTMLButtonElement | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape' && !creating) onClose();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+  }, [creating, open, onClose]);
 
   useEffect(() => {
     if (!open) return;
@@ -77,10 +83,30 @@ export function NewProjectModal({
 
   useEffect(() => {
     if (!open) return;
+    setCreating(false);
+    setCreateError(null);
     closeRef.current?.focus();
   }, [open]);
 
   if (!open) return null;
+
+  async function handleCreate(input: CreateInput & { requestId?: string }) {
+    if (creating) return;
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const result = await onCreate(input);
+      if (result === false) {
+        setCreateError('Could not create project. Please try again.');
+        return;
+      }
+      onClose();
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : 'Could not create project. Please try again.');
+    } finally {
+      setCreating(false);
+    }
+  }
 
   return (
     <div
@@ -90,7 +116,7 @@ export function NewProjectModal({
       aria-label="New project"
       data-testid="new-project-modal"
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget && !creating) onClose();
       }}
     >
       <div className="new-project-modal">
@@ -101,6 +127,7 @@ export function NewProjectModal({
             type="button"
             className="new-project-modal__close"
             onClick={onClose}
+            disabled={creating}
             aria-label="Close"
             title="Close (Esc)"
           >
@@ -113,19 +140,30 @@ export function NewProjectModal({
             designSystems={designSystems}
             defaultDesignSystemId={defaultDesignSystemId}
             templates={templates}
+            {...(onDeleteTemplate ? { onDeleteTemplate } : {})}
             promptTemplates={promptTemplates}
             {...(mediaProviders ? { mediaProviders } : {})}
             {...(connectors ? { connectors } : {})}
             {...(typeof connectorsLoading === 'boolean' ? { connectorsLoading } : {})}
-            {...(typeof loading === 'boolean' ? { loading } : {})}
+            loading={Boolean(loading) || creating}
             onCreate={(input) => {
-              onCreate(input);
-              onClose();
+              void handleCreate(input);
             }}
             {...(onImportClaudeDesign ? { onImportClaudeDesign } : {})}
             {...(onImportFolder ? { onImportFolder } : {})}
             {...(onOpenConnectorsTab ? { onOpenConnectorsTab } : {})}
+            {...(initialTab ? { initialTab } : {})}
           />
+          {creating ? (
+            <div className="new-project-modal__status" role="status">
+              Creating project…
+            </div>
+          ) : null}
+          {createError ? (
+            <div className="new-project-modal__status error" role="alert">
+              {createError}
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

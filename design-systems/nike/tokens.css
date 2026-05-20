@@ -1,0 +1,304 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/nike/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by Nike" —
+ * the kinetic retail cathedral. A monochromatic UI (black/white/grey
+ * only) so that athletic photography and product color carry the
+ * emotional weight, with massive uppercase Nike Futura ND display
+ * typography that punches through hero imagery like a typographic
+ * shockwave. This file is the *machine-readable* form of the values
+ * described in `DESIGN.md`. Agents paste the `:root { … }` block
+ * verbatim into the first `<style>` of every artifact, then reference
+ * everything via var(--name) from then on.
+ *
+ * Brand-specific schema decisions (non-obvious bindings worth flagging
+ * for reviewers and downstream brand authors):
+ *   1. --bg is pure white (#FFFFFF) and --fg is Nike Black (#111111),
+ *      not pure black. The fractional warmth at #111111 is a
+ *      brand-determining choice ("Don't use #000000 for text" — §7
+ *      do's-and-don'ts) so we honor it strictly even though the gap
+ *      from #000 is small.
+ *   2. --surface and --surface-warm bind to two real tiers of Nike's
+ *      grey ladder: --surface → #F5F5F5 (Light Gray, Podium grey-100,
+ *      the search-fill / placeholder / skeleton tier) and
+ *      --surface-warm → #FAFAFA (Snow, grey-50, the lightest near-
+ *      white differentiation tier). Collapsing surface-warm to an
+ *      alias would erase a real brand feature — Nike walks the full
+ *      50/100/200 surface ramp.
+ *   3. --accent is bound to Nike Black (#111111), the same value as
+ *      --fg. Nike's UI accent IS black: §9 ("Quick Color Reference")
+ *      lists "Primary CTA: Nike Black (#111111)" and §7 forbids
+ *      brand colors beyond the grey scale for UI elements ("product
+ *      photography is the color"). The schema's ≤2 visible accent
+ *      uses per screen aligns naturally because Nike already self-
+ *      polices its UI to a single chromatic move.
+ *   4. --accent-hover is bound to #707072 (Grey-500 / Secondary Text),
+ *      not a black-mix darkening. Nike's documented primary-button
+ *      hover SHIFTS to grey rather than darkening (§4 — "Hover:
+ *      background shifts to Grey-500"); the schema's default formula
+ *      would fight that motion. --accent-active darkens to true
+ *      black (#000000) — the only place pure black appears in the
+ *      system, reserved for the press-feedback moment.
+ *   5. --fg-2 aliases to --fg, while --muted (#707072) and --meta
+ *      (#9E9EA0) bind to independent values. Nike's text hierarchy
+ *      is essentially binary at the primary tier (no intermediate
+ *      between Nike Black and Secondary Text), but it does keep a
+ *      separate tertiary / disabled tier for metadata.
+ *   6. --border-soft binds to #E5E5E5 (Hover Gray / grey-200) — Nike's
+ *      §6 documents the only sanctioned divider as
+ *      `0px -1px 0px 0px #E5E5E5 inset`. The hairline #CACACB
+ *      (--border) reads as a card edge; #E5E5E5 reads as a row-
+ *      separator whisper.
+ *   7. --radius-pill is bound to 30px, NOT 9999px. Nike's signature
+ *      pill button uses 30px literally (§4 — "fully rounded pill
+ *      (30px)") and the number is itself a brand-recognisable
+ *      detail. Apple makes the same kind of choice with 980px; we
+ *      follow that precedent rather than collapsing to the schema
+ *      default.
+ *   8. --elev-raised is ring-only (`0 0 0 1px var(--border)`),
+ *      identical to --elev-ring. §6 declares Nike's elevation model
+ *      "radically flat — no card shadows, no hover lifts, no
+ *      floating elements." Binding raised to a blur shadow would
+ *      contradict the brand; we bind it to the ring so artifacts
+ *      that reference --elev-raised still resolve, but produce the
+ *      flat / hairline look Nike intends.
+ *   9. --focus-ring is the documented 2px solid blue ring
+ *      `0 0 0 2px rgba(39, 93, 197, 1)` from §4 / §6, NOT the
+ *      schema's transparent-mixed accent halo. Nike's focus indicator
+ *      is a deliberate chromatic break — the only blue moment in the
+ *      whole UI — and we keep it verbatim.
+ *  10. --tracking-display is -0.02em. The DESIGN.md hierarchy table
+ *      leaves display letter-spacing as "—", but the user-facing
+ *      brief calls for "tight tracking" on the BIG uppercase
+ *      condensed Futura display; -0.02em (≈ -1.92px on 96px)
+ *      compresses the Futura ND silhouette into the monolithic
+ *      stadium-scoreboard block §3 describes without crushing
+ *      smaller display tiers.
+ *  11. --leading-tight is 0.90, the most aggressive tight-leading
+ *      binding in any brand on the repo. §3 calls it "impossibly
+ *      tight" and the typographic identity depends on it; ascenders
+ *      and descenders nearly touch on the 96px display.
+ *
+ * Contract sources:
+ *   - Standard token names: design-systems/_schema/tokens.schema.ts
+ *       (TOKEN_SCHEMA — every name below appears there or as an
+ *        explicit B-slot.)
+ *   - A2 fallback values: design-systems/_schema/defaults.css
+ *       (We override --accent-on, --accent-hover, --accent-active,
+ *        --success, --warn, --danger, --radius-md, --radius-lg,
+ *        --radius-pill, --elev-raised, --focus-ring; the rest match
+ *        defaults.)
+ *
+ * Keep this file additive: never invent token names not also documented
+ * in DESIGN.md or the shared schema.
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface (3 levels) ──────────────────────────────────────────
+   * Nike's surface ladder runs 50 → 100 → 200 across grey-50/100/200.
+   * --bg is the white retail canvas (the most common default page
+   * background); --surface is the Light Gray feature/skeleton tier;
+   * --surface-warm is the Snow near-white differentiation tier that
+   * appears between hero bands and merchandise grids on nike.com.
+   * All three bind to real values — collapsing surface-warm would
+   * erase a real brand feature. */
+  --bg: #ffffff;             /* Nike White — primary page canvas */
+  --surface: #f5f5f5;        /* Light Gray (Podium grey-100) — fill / skeleton */
+  --surface-warm: #fafafa;   /* Snow (Podium grey-50) — lightest tier */
+
+  /* ─── Foreground ramp (4 levels) ─────────────────────────────────
+   * Nike's text neutrals are explicitly named in DESIGN.md §2:
+   * Nike Black (primary text — #111111, deliberately not #000000),
+   * Secondary Text (#707072, descriptive copy / metadata / price
+   * labels), and Disabled Text (#9E9EA0, inactive elements). The
+   * brand's hierarchy is binary at the primary tier (no #2 stop
+   * between #111111 and #707072), so --fg-2 collapses to var(--fg);
+   * --muted and --meta bind to independent values. */
+  --fg: #111111;             /* Nike Black — primary text, headings, nav links */
+  --fg-2: var(--fg);         /* alias — no intermediate between primary and muted */
+  --muted: #707072;          /* Secondary Text (grey-500) — descriptive copy */
+  --meta: #9e9ea0;           /* Disabled Text (grey-400) — tertiary / metadata */
+
+  /* ─── Border (2 levels) ──────────────────────────────────────────
+   * Nike's border palette is restrained: --border (#CACACB, grey-300)
+   * is the standard input / divider weight; --border-soft (#E5E5E5,
+   * grey-200) is the documented inset-divider color that whispers
+   * between rows in dense product grids without competing with the
+   * #CACACB hairline. */
+  --border: #cacacb;         /* Border Secondary (grey-300) — input borders, dividers */
+  --border-soft: #e5e5e5;    /* Hover Gray (grey-200) — inset row separator */
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * Nike's UI accent IS black. §9 ("Quick Color Reference") lists
+   * Primary CTA as Nike Black (#111111); §7 ("Don't introduce brand
+   * colors beyond the grey scale for UI elements") forbids using a
+   * chromatic accent. Product photography carries all the color, so
+   * the schema's "≤2 visible uses per screen" cap aligns naturally
+   * with Nike's already-monochrome UI policy. */
+  --accent: #111111;         /* Nike Black — primary action color */
+  --accent-on: #ffffff;      /* white label on black fill */
+
+  /* ─── Accent states ───────────────────────────────────────────────
+   * Nike's documented primary-button hover shifts to Grey-500 (§4 —
+   * "Hover: background shifts to Grey-500 (#707072)") rather than
+   * darkening, so we override the schema's black-mix formula with
+   * the literal grey-500 value. --accent-active darkens to pure
+   * black — the ONLY place #000000 appears in the entire system,
+   * reserved for the press-feedback moment when Nike Black
+   * compresses one stop further. */
+  --accent-hover: #707072;   /* Grey-500 — documented hover, not a darken */
+  --accent-active: #000000;  /* True black — the only #000000 in the system */
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * Nike reserves color exclusively for semantic meaning (red=error,
+   * green=success, yellow=warning) — the only chromatic moves in the
+   * whole UI besides product photography. Values come straight from
+   * §2's "Semantic & Accent" block. */
+  --success: #007d48;        /* Success Green — confirmation, availability */
+  --warn: #fca600;           /* Yellow-500 — warning state */
+  --danger: #d30005;         /* Nike Red — critical errors, sale badges */
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * Nike's documented split is THREE families that we collapse onto
+   * the schema's two slots via fallback chains:
+   *   - Nike Futura ND: custom condensed Futura, 96px hero display
+   *     ONLY (§7 forbids it below 24px). Falls back to Helvetica Now
+   *     Display Medium for headings.
+   *   - Helvetica Now Display Medium: 24–32px section heads.
+   *   - Helvetica Now Text: navigation, body, controls.
+   *
+   * --font-display chains Nike Futura ND → Helvetica Now Display
+   * Medium → Helvetica Neue, so hero h1 lands on Futura when
+   * available and gracefully degrades to Helvetica Now Display
+   * (Nike's documented heading face) on every other surface.
+   * --font-body holds the workhorse Helvetica Now Text stack. */
+  --font-display:
+    "Nike Futura ND", "Helvetica Now Display Medium", "Helvetica Now Display", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-body:
+    "Helvetica Now Text Medium", "Helvetica Now Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono:
+    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* Type scale (px) — derived from DESIGN.md §3 hierarchy table.
+   * Nike's documented sizes are 12 / 14 / 16 / 24 / 32 / 96; the
+   * --text-lg and --text-3xl slots interpolate cleanly into the
+   * existing system (20px = emphasized body / promo links;
+   * 48px = mid-display, between H1 and Hero). The 96px display is
+   * the brand ceiling — the typographic shockwave §3 describes. */
+  --text-xs: 12px;           /* Small / Tiny — timestamps, legal text */
+  --text-sm: 14px;           /* Caption / Link Small / Button Small */
+  --text-base: 16px;         /* Body / Link / Button / H3 — Nike's reading baseline */
+  --text-lg: 20px;           /* Promoted body — interpolation tier */
+  --text-xl: 24px;           /* Heading 2 — subsection titles */
+  --text-2xl: 32px;          /* Heading 1 — section heads */
+  --text-3xl: 48px;          /* Mid-display — interpolation tier */
+  --text-4xl: 96px;          /* Display Hero — typographic shockwave */
+
+  /* Nike's leading envelope is unusually airy in the body (1.75 —
+   * generous for product browsing) and uniquely tight at the top
+   * (0.90 — the "impossibly tight" display ceiling §3 calls a
+   * stadium scoreboard). Both numbers come straight from §3. */
+  --leading-body: 1.75;      /* Body — comfortable product-browsing rhythm */
+  --leading-tight: 0.9;      /* Hero Display — ascenders nearly touch descenders */
+
+  /* Display tracking compresses to -0.02em — condensed Futura ND
+   * wants slight letter-spacing tightening to read as the monolithic
+   * uppercase block §3 describes (≈ -1.92px on the 96px hero).
+   * Body type stays at 0 / component-controlled. */
+  --tracking-display: -0.02em;
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * Nike's grid is 4px base / 8px primary multiples (§5). The shared
+   * schema's 4-8-12-16-20-24-32-48 scale is verbatim Nike — no
+   * overrides needed. Component-internal values (the 4–12px product-
+   * grid gaps that create Nike's "dense superstore" feel) stay
+   * inline at the call site. */
+  --space-1: 4px;            /* tight icon gaps, inline spacing */
+  --space-2: 8px;            /* base unit, button icon gaps */
+  --space-3: 12px;           /* card internal padding, tight margins */
+  --space-4: 16px;           /* standard padding, nav spacing */
+  --space-5: 20px;           /* product card gaps */
+  --space-6: 24px;           /* section internal padding, grid gaps */
+  --space-8: 32px;           /* section breaks */
+  --space-12: 48px;          /* major section padding */
+
+  /* ─── Section rhythm ──────────────────────────────────────────────
+   * Nike's section padding scales 80 → 48 → 32 across desktop /
+   * tablet / phone (§5 / §8 — "Section padding: 80px → 48px → 32px
+   * → 24px as viewport narrows"). The 80px desktop top is the hero-
+   * section padding from the §5 spacing scale (--space-10 in Nike's
+   * native vocabulary). */
+  --section-y-desktop: 80px;
+  --section-y-tablet: 48px;
+  --section-y-phone: 32px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * Nike uses purposeful radius tiers (§5): 0px on product imagery,
+   * 8px on form inputs (non-search), 20px on UI containers, 24px on
+   * search inputs, 30px on buttons (full pill), 50% on circular
+   * icons. Mapped onto the schema:
+   *   --radius-sm   →  8px   compact controls and form fields
+   *   --radius-md   → 20px   interactive containers (Nike's card)
+   *   --radius-lg   → 24px   search inputs / medium pills
+   *   --radius-pill → 30px   Nike's signature button capsule —
+   *                          we keep the literal value rather than
+   *                          collapse to 9999px because the number
+   *                          itself is a brand-recognisable detail
+   *                          (same precedent as Apple's 980px). */
+  --radius-sm: 8px;
+  --radius-md: 20px;
+  --radius-lg: 24px;
+  --radius-pill: 30px;
+
+  /* ─── Elevation (3 levels) ────────────────────────────────────────
+   * Nike's elevation philosophy is radically flat (§6 — "no card
+   * shadows, no hover lifts, no floating elements"). Three sanctioned
+   * levels:
+   *   - flat   → none (the default; tonal contrast does the work)
+   *   - ring   → hairline 1px box-shadow border (the only sanctioned
+   *              container outline)
+   *   - raised → SAME as ring. We deliberately collapse raised onto
+   *              the ring tier because Nike refuses blur shadows.
+   *              Components that reference var(--elev-raised) still
+   *              resolve, but produce the flat / hairline result Nike
+   *              intends — never the Material-flavoured float that
+   *              would betray the brand. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 0 0 1px var(--border);
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * Nike's keyboard-focus signal is the documented 2px solid blue
+   * ring at rgba(39, 93, 197, 1) — §4 / §6. This is the ONLY blue
+   * moment in the entire UI, a deliberate chromatic break from the
+   * monochrome canvas to satisfy WCAG focus visibility. We bind the
+   * literal value rather than the schema's transparent-mixed accent
+   * formula because Nike's focus is intentionally NOT the accent
+   * (which is black, indistinguishable from the surface it would
+   * outline). */
+  --focus-ring: 0 0 0 2px rgba(39, 93, 197, 1);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * Nike's transitions are all 200ms ease (§4 — "Transition:
+   * background 200ms ease", "border-color 200ms ease", "opacity
+   * 200ms ease for image swap on hover"). The schema defaults match
+   * already; we keep them verbatim. --motion-fast (150ms) covers
+   * micro-states like hover-tints and focus; --motion-base (200ms)
+   * is the documented hero-state duration. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * Nike's content scaffolding (§5) is 1920px max container with
+   * 1440px standard content width. We bind --container-max to 1440px
+   * because that is the documented STANDARD content width, the one
+   * artifacts should target — the 1920px ceiling is reserved for
+   * full-bleed hero photography that breaks out of the container.
+   * Gutters step 48 → 24 → 16 across desktop / tablet / phone, the
+   * exact horizontal-padding values from §5. */
+  --container-max: 1440px;
+  --container-gutter-desktop: 48px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+}

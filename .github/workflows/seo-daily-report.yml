@@ -1,0 +1,113 @@
+name: seo-daily-report
+
+# Daily Search Console summary for open-design.ai.
+# Runs at 09:00 Asia/Shanghai (UTC 01:00) and posts a Feishu group bot card.
+# Search Analytics is reported for T-2 and compared with T-9 because GSC
+# backfills recent data.
+
+on:
+  schedule:
+    - cron: '0 1 * * *'
+  workflow_dispatch:
+    inputs:
+      today:
+        description: 'Override the run date (YYYY-MM-DD). Defaults to today in Asia/Shanghai.'
+        required: false
+      dry_run:
+        description: 'Build the Feishu card but print JSON instead of posting.'
+        required: false
+        default: 'false'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: seo-daily-report
+  cancel-in-progress: false
+
+jobs:
+  report:
+    name: Post SEO daily report to Feishu
+    if: github.repository == 'nexu-io/open-design'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check report configuration
+        id: config
+        env:
+          GSC_OAUTH_CLIENT_ID: ${{ secrets.GSC_OAUTH_CLIENT_ID }}
+          GSC_OAUTH_CLIENT_SECRET: ${{ secrets.GSC_OAUTH_CLIENT_SECRET }}
+          GSC_OAUTH_REFRESH_TOKEN: ${{ secrets.GSC_OAUTH_REFRESH_TOKEN }}
+          GSC_SERVICE_ACCOUNT_KEY: ${{ secrets.GSC_SERVICE_ACCOUNT_KEY }}
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+        run: |
+          gsc=false
+          feishu=false
+          if { [ -n "$GSC_OAUTH_CLIENT_ID" ] && [ -n "$GSC_OAUTH_CLIENT_SECRET" ] && [ -n "$GSC_OAUTH_REFRESH_TOKEN" ]; } || [ -n "$GSC_SERVICE_ACCOUNT_KEY" ]; then
+            gsc=true
+          fi
+          if [ -n "$FEISHU_WEBHOOK_URL" ]; then
+            feishu=true
+          fi
+          echo "gsc=$gsc" >> "$GITHUB_OUTPUT"
+          echo "feishu=$feishu" >> "$GITHUB_OUTPUT"
+          {
+            echo "### SEO daily report configuration"
+            echo "- GSC auth configured: \`$gsc\`"
+            echo "- Feishu webhook configured: \`$feishu\`"
+            if [ "$gsc" != "true" ]; then
+              echo ""
+              echo "Search Console data cannot be queried until GSC auth secrets are configured."
+            fi
+            if [ "$feishu" != "true" ]; then
+              echo ""
+              echo "Feishu posting is disabled until \`FEISHU_WEBHOOK_URL\` is configured."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$gsc" != "true" ]; then
+            echo "::warning title=seo-daily-report skipped::GSC auth is not configured."
+          fi
+          if [ "$feishu" != "true" ]; then
+            echo "::warning title=seo-daily-report skipped::Feishu webhook is not configured."
+          fi
+
+      - name: Post SEO daily report
+        if: steps.config.outputs.gsc == 'true' && (steps.config.outputs.feishu == 'true' || github.event.inputs.dry_run == 'true')
+        env:
+          GSC_OAUTH_CLIENT_ID: ${{ secrets.GSC_OAUTH_CLIENT_ID }}
+          GSC_OAUTH_CLIENT_SECRET: ${{ secrets.GSC_OAUTH_CLIENT_SECRET }}
+          GSC_OAUTH_REFRESH_TOKEN: ${{ secrets.GSC_OAUTH_REFRESH_TOKEN }}
+          GSC_SERVICE_ACCOUNT_KEY: ${{ secrets.GSC_SERVICE_ACCOUNT_KEY }}
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+          FEISHU_WEBHOOK_SECRET: ${{ secrets.FEISHU_WEBHOOK_SECRET }}
+          REPORT_DELAY_DAYS: '2'
+          OPP_MIN_IMPRESSIONS: '30'
+          OPP_LOW_CTR: '0.01'
+          OPP_MOBILE_DESKTOP_CTR_GAP: '0.30'
+        run: |
+          flags=""
+          if [ -n "${{ github.event.inputs.today }}" ]; then
+            flags="$flags --today ${{ github.event.inputs.today }}"
+          fi
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            flags="$flags --dry-run"
+          fi
+          pnpm --filter @open-design/landing-page exec tsx scripts/seo-daily-report.ts $flags

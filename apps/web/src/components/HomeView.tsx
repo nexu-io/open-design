@@ -10,12 +10,24 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   ApplyResult,
+  ConnectorDetail,
   InputFieldSpec,
   McpServerConfig,
   InstalledPluginRecord,
   ProjectKind,
+  AudioVoiceOption,
 } from '@open-design/contracts';
 import { DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID } from '@open-design/contracts';
+import { projectKindToTracking } from '@open-design/contracts/analytics';
+import { useAnalytics } from '../analytics/provider';
+import {
+  trackHomeChatComposerClick,
+  trackPageView,
+  trackPluginReplacementModalClick,
+  trackPluginReplacementModalSurfaceView,
+  trackPluginReplacementResult,
+  trackRecentProjectsClick,
+} from '../analytics/events';
 import {
   applyPlugin,
   listPlugins,
@@ -24,10 +36,18 @@ import {
 } from '../state/projects';
 import { fetchMcpServers } from '../state/mcp';
 import { useI18n } from '../i18n';
-import type { Project, SkillSummary } from '../types';
+import { fetchElevenLabsVoiceOptions } from '../providers/elevenlabs-voices';
+import type { Project, ProjectMetadata, PromptTemplateSummary, SkillSummary } from '../types';
 import { inlineMentionToken } from '../utils/inlineMentions';
-import { HomeHero } from './HomeHero';
-import { findChip, type HomeHeroChip } from './home-hero/chips';
+import { HomeHero, type ExampleSuggestion } from './HomeHero';
+import { findChip, HOME_HERO_CHIPS, type HomeHeroChip } from './home-hero/chips';
+import {
+  buildHomeMediaComposer,
+  homeMediaSurfaceForChipId,
+  metadataForHomeMediaComposer,
+  normalizeHomeMediaInputs,
+  type HomeComposerMediaSurface,
+} from './home-hero/media-surfaces';
 import {
   buildPluginAuthoringInputs,
   buildPluginAuthoringPromptForInputs,
@@ -38,8 +58,16 @@ import {
 import { PluginDetailsModal } from './PluginDetailsModal';
 import { PluginsHomeSection } from './PluginsHomeSection';
 import type { PluginLoopSubmit } from './PluginLoopHome';
+import {
+  applyFacetSelection,
+  isFeaturedPlugin,
+  type FacetSelection,
+} from './plugins-home/facets';
 import type { PluginUseAction } from './plugins-home/useActions';
+import { sortByVisualAppeal } from './plugins-home/visualScore';
 import { RecentProjectsStrip } from './RecentProjectsStrip';
+
+const EXAMPLE_PROMPT_LIMIT = 4;
 
 interface ActivePlugin {
   record: InstalledPluginRecord;
@@ -61,15 +89,48 @@ interface ActivePlugin {
   // kind defaults to the historical 'prototype' value.
   projectKind: ProjectKind | null;
   chipId: string | null;
+  mediaSurface: HomeComposerMediaSurface | null;
+  projectMetadata: ProjectMetadata | null;
+  editableInputNames: string[];
+  preserveInputFields: boolean;
+  // True when the active plugin was bound through a type chip.
+  // In that mode we never push the rendered useCase.query into the
+  // textarea — the user keeps full control over the prompt and the
+  // example-prompt panel below the composer is the explicit opt-in
+  // for a starter sentence. Without this flag the media composer
+  // effect (which fires on external list reloads like ElevenLabs
+  // voices) and updateActiveInputs (fires on inline form edits)
+  // would back-fill the textarea, defeating the suppression that
+  // the chip click set up.
+  suppressPromptSync: boolean;
 }
 
 interface SelectedPluginContext {
   record: InstalledPluginRecord;
 }
 
+interface SelectedMcpContext {
+  server: McpServerConfig;
+}
+
+interface SelectedConnectorContext {
+  connector: ConnectorDetail;
+}
+
 interface PendingReplacement {
   title: string;
-  confirm: () => void;
+  // Returns a promise resolving when the underlying plugin apply has
+  // finished (or rejecting on failure) so the modal's success/failure
+  // analytics fire on the real outcome, not on the synchronous
+  // queue-the-apply step.
+  confirm: () => Promise<void>;
+  // Plugin ids surrounding the replacement so the result event can
+  // report which plugin owned the existing prompt and which plugin is
+  // about to take over. `pluginBefore` is null when nothing was active
+  // (e.g. a manually typed prompt that should be replaced by a plugin
+  // selection).
+  pluginBefore: string | null;
+  pluginAfter: string;
 }
 
 interface PendingPluginUseHandoff {
@@ -99,6 +160,8 @@ interface Props {
   promptHandoff?: HomePromptHandoff | null;
   skills?: SkillSummary[];
   skillsLoading?: boolean;
+  connectors?: ConnectorDetail[];
+  promptTemplates?: PromptTemplateSummary[];
 }
 
 export function HomeView({
@@ -113,8 +176,19 @@ export function HomeView({
   promptHandoff,
   skills = [],
   skillsLoading = false,
+  connectors = [],
+  promptTemplates = [],
 }: Props) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
+  const analytics = useAnalytics();
+  // P0 page_view page_name=home — fire once on mount. ref-keyed to survive
+  // re-renders that flip parent state without remounting HomeView.
+  const homePageViewFiredRef = useRef(false);
+  useEffect(() => {
+    if (homePageViewFiredRef.current) return;
+    homePageViewFiredRef.current = true;
+    trackPageView(analytics.track, { page_name: 'home' });
+  }, [analytics.track]);
   const [plugins, setPlugins] = useState<InstalledPluginRecord[]>([]);
   const [pluginsLoading, setPluginsLoading] = useState(true);
   const [pendingApplyId, setPendingApplyId] = useState<string | null>(null);
@@ -130,16 +204,41 @@ export function HomeView({
   const [active, setActive] = useState<ActivePlugin | null>(null);
   const [activeSkill, setActiveSkill] = useState<SkillSummary | null>(null);
   const [selectedPluginContexts, setSelectedPluginContexts] = useState<SelectedPluginContext[]>([]);
+  const [selectedMcpContexts, setSelectedMcpContexts] = useState<SelectedMcpContext[]>([]);
+  const [selectedConnectorContexts, setSelectedConnectorContexts] = useState<SelectedConnectorContext[]>([]);
   const [stagedFiles, setStagedFiles] = useState<File[]>([]);
   const [mcpServers, setMcpServers] = useState<McpServerConfig[]>([]);
   const [mcpLoading, setMcpLoading] = useState(true);
   const [prompt, setPrompt] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [elevenLabsVoices, setElevenLabsVoices] = useState<AudioVoiceOption[]>([]);
+  const [elevenLabsVoicesLoading, setElevenLabsVoicesLoading] = useState(false);
+  const [elevenLabsVoicesLoaded, setElevenLabsVoicesLoaded] = useState(false);
+  const [elevenLabsVoicesError, setElevenLabsVoicesError] = useState<string | null>(null);
   const [detailsRecord, setDetailsRecord] = useState<InstalledPluginRecord | null>(null);
   const [pendingReplacement, setPendingReplacement] = useState<PendingReplacement | null>(null);
+  // Surface_view fires when the replacement modal becomes visible. Tied
+  // to the {before, after} pair so reopening with the same pair after a
+  // close doesn't double-fire, but a fresh pair always does.
+  const lastPluginReplacementViewRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!pendingReplacement) {
+      lastPluginReplacementViewRef.current = null;
+      return;
+    }
+    const key = `${pendingReplacement.pluginBefore ?? ''}->${pendingReplacement.pluginAfter}`;
+    if (lastPluginReplacementViewRef.current === key) return;
+    lastPluginReplacementViewRef.current = key;
+    trackPluginReplacementModalSurfaceView(analytics.track, {
+      page_name: 'home',
+      area: 'plugin_replacement_modal',
+    });
+  }, [pendingReplacement, analytics.track]);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const consumedHandoffIdRef = useRef<number | null>(null);
   const pendingPromptFocusEndRef = useRef(false);
+  const activePluginApplyRequestRef = useRef(0);
+  const defaultedPrototypeRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -171,6 +270,88 @@ export function HomeView({
   }, []);
 
   useEffect(() => {
+    if (active?.mediaSurface !== 'audio' || active.inputs.model !== 'elevenlabs-v3') return;
+    if (elevenLabsVoicesLoaded) return;
+    const controller = new AbortController();
+    setElevenLabsVoicesLoading(true);
+    setElevenLabsVoicesError(null);
+    void fetchElevenLabsVoiceOptions(controller.signal)
+      .then((voices) => {
+        if (controller.signal.aborted) return;
+        setElevenLabsVoices(voices);
+        setElevenLabsVoicesLoaded(true);
+      })
+      .catch((err) => {
+        if (controller.signal.aborted) return;
+        setElevenLabsVoices([]);
+        setElevenLabsVoicesLoaded(true);
+        setElevenLabsVoicesError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (controller.signal.aborted) return;
+        setElevenLabsVoicesLoading(false);
+      });
+    return () => controller.abort();
+  }, [active?.mediaSurface, active?.inputs.model, elevenLabsVoicesLoaded]);
+
+  const elevenLabsVoiceWarning = useMemo(() => {
+    if (active?.mediaSurface !== 'audio' || active.inputs.model !== 'elevenlabs-v3') return null;
+    if (elevenLabsVoicesError) return elevenLabsVoicesError;
+    if (elevenLabsVoicesLoaded && elevenLabsVoices.length === 0) {
+      return 'No configured ElevenLabs voices were returned. Using Rachel (default).';
+    }
+    return null;
+  }, [
+    active?.mediaSurface,
+    active?.inputs.model,
+    elevenLabsVoicesError,
+    elevenLabsVoicesLoaded,
+    elevenLabsVoices.length,
+  ]);
+
+  useEffect(() => {
+    if (!active?.mediaSurface) return;
+    const composer = buildHomeMediaComposer(
+      active.mediaSurface,
+      promptTemplates,
+      active.inputs,
+      elevenLabsVoices,
+      {
+        elevenLabsVoiceWarning,
+        elevenLabsVoicesLoading,
+      },
+    );
+    const nextRendered = renderPluginBriefTemplate(composer.queryTemplate, composer.inputs);
+    // When the plugin was bound through a type chip the user owns the
+    // textarea; never back-fill from this effect even if external
+    // lists (ElevenLabs voices, prompt templates) reload after the
+    // chip click. lastRenderedPrompt stays null in that mode so we
+    // don't mis-detect "the user hasn't typed" via the empty-string
+    // branch either.
+    if (
+      !active.suppressPromptSync &&
+      (prompt === active.lastRenderedPrompt || prompt.trim().length === 0)
+    ) {
+      setPrompt(nextRendered);
+    }
+    setActive((prev) => {
+      if (!prev?.mediaSurface) return prev;
+      return {
+        ...prev,
+        inputs: composer.inputs,
+        inputFields: composer.fields,
+        queryTemplate: composer.queryTemplate,
+        editableInputNames: composer.editableFieldNames,
+        inputsValid: pluginInputsAreValid(composer.fields, composer.inputs),
+        result: inputsEqual(prev.result?.appliedPlugin?.inputs, composer.inputs) ? prev.result : null,
+        lastRenderedPrompt: prev.suppressPromptSync ? prev.lastRenderedPrompt : nextRendered,
+        projectMetadata: metadataForHomeMediaComposer(prev.mediaSurface, composer.inputs, promptTemplates),
+      };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [promptTemplates, elevenLabsVoices, elevenLabsVoiceWarning, elevenLabsVoicesLoading]);
+
+  useEffect(() => {
     if (!pendingPromptFocusEndRef.current) return;
     pendingPromptFocusEndRef.current = false;
     const input = inputRef.current;
@@ -200,6 +381,8 @@ export function HomeView({
     setActive(null);
     setActiveSkill(null);
     setSelectedPluginContexts([]);
+    setSelectedMcpContexts([]);
+    setSelectedConnectorContexts([]);
     setFallbackProjectKind('other');
     setPrompt(promptHandoff.prompt);
     setPendingAuthoringPrompt(promptHandoff.prompt);
@@ -210,13 +393,95 @@ export function HomeView({
     setPendingAuthoringChipId('create-plugin');
   }, [promptHandoff]);
 
+  const activeContextItemCount = useMemo(
+    () =>
+      active
+        ? active.result?.contextItems?.length ??
+          estimatePluginContextItemCount(active.record)
+        : 0,
+    [active],
+  );
   const contextItemCount = useMemo(
     () =>
-      (active?.result?.contextItems?.length ?? 0) +
+      activeContextItemCount +
       selectedPluginContexts.length +
+      selectedMcpContexts.length +
+      selectedConnectorContexts.length +
       stagedFiles.length,
-    [active, selectedPluginContexts, stagedFiles.length],
+    [
+      activeContextItemCount,
+      selectedConnectorContexts.length,
+      selectedMcpContexts.length,
+      selectedPluginContexts.length,
+      stagedFiles.length,
+    ],
   );
+
+  // The Home chip rail and the Official starters grid share a mental
+  // model — "Prototype" up top is the same artifact intent as the
+  // `create / prototype` slice down below. When the user picks a chip,
+  // we drive the starters' FacetSelection from it so they get a
+  // pre-filtered shelf of templates for the same intent without having
+  // to scroll and re-pick. `pendingChipId` (set on click, before apply
+  // resolves) is preferred over `active?.chipId` so the filter snaps on
+  // the same frame as the click.
+  const presetStartersSelection = useMemo<FacetSelection | null>(() => {
+    const chipId = pendingChipId ?? active?.chipId ?? null;
+    if (!chipId) return null;
+    return facetSelectionForChip(chipId);
+  }, [pendingChipId, active?.chipId]);
+
+  const rankedExamplePlugins = useMemo(() => {
+    if (plugins.length === 0) return [];
+    const visible = plugins.filter(
+      (plugin) =>
+        plugin.manifest?.od?.kind !== 'atom' && Boolean(plugin.manifest?.od?.useCase?.query),
+    );
+    return sortByVisualAppeal(visible);
+  }, [plugins]);
+
+  // Manus-style example-prompt suggestions for the panel that appears
+  // below the composer after a type chip is picked. We surface the
+  // top-N visually-strong plugins from the matching facet slice (e.g.
+  // picking "Slide deck" shows four polished deck templates) and
+  // pre-render each plugin's useCase.query through the same renderer
+  // submit uses, so the card body is the actual sentence that hits
+  // the textarea on click. Sparse slices are topped up with featured
+  // picks so the row never collapses to a single dim example.
+  const exampleSuggestions = useMemo<ExampleSuggestion[]>(() => {
+    if (rankedExamplePlugins.length === 0) return [];
+    const sliceFor = (selection: FacetSelection | null) => {
+      if (!selection) return rankedExamplePlugins;
+      return applyFacetSelection(rankedExamplePlugins, selection);
+    };
+    const primary = sliceFor(presetStartersSelection);
+    const featuredBackfill = rankedExamplePlugins.filter(
+      (plugin) => isFeaturedPlugin(plugin) && !primary.some((p) => p.id === plugin.id),
+    );
+    const records = [...primary, ...featuredBackfill].slice(0, EXAMPLE_PROMPT_LIMIT);
+    return records
+      .map((plugin) => {
+        const template = resolvePluginQueryFallback(plugin.manifest?.od?.useCase?.query, locale);
+        if (!template) return null;
+        const preview = renderPluginBriefTemplate(
+          template,
+          hydratePluginInputs(plugin.manifest?.od?.inputs ?? [], undefined),
+        );
+        return { plugin, preview };
+      })
+      .filter((entry): entry is ExampleSuggestion => entry !== null);
+  }, [rankedExamplePlugins, presetStartersSelection, locale]);
+
+  // Per-chip dismissal: once the user closes the panel for a given
+  // chip, we keep it hidden until they pick a different chip (which
+  // makes dismissedExampleChipId stale and lets the panel open
+  // again). This matches Manus' close-once-then-quiet behavior.
+  const [dismissedExampleChipId, setDismissedExampleChipId] = useState<string | null>(null);
+  const currentExampleChipId = pendingChipId ?? active?.chipId ?? null;
+  const showExamples =
+    Boolean(currentExampleChipId) &&
+    exampleSuggestions.length > 0 &&
+    dismissedExampleChipId !== currentExampleChipId;
 
   // When the active plugin was bound through a chip, the badge shows
   // the chip label (e.g. "Prototype") instead of the underlying plugin
@@ -227,10 +492,10 @@ export function HomeView({
     if (!active) return null;
     if (active.chipId) {
       const chip = findChip(active.chipId);
-      if (chip) return chip.label;
+      if (chip) return homeHeroChipLabelForId(chip.id, t);
     }
     return active.record.title;
-  }, [active]);
+  }, [active, t]);
 
   const selectableSkills = useMemo(
     () => skills.filter((skill) => !skill.aggregatesExamples),
@@ -249,10 +514,31 @@ export function HomeView({
       projectKind?: ProjectKind;
       chipId?: string;
       inputs?: Record<string, unknown>;
+      inputFields?: InputFieldSpec[];
       queryTemplate?: string | null;
+      mediaSurface?: HomeComposerMediaSurface | null;
+      projectMetadata?: ProjectMetadata | null;
+      editableInputNames?: string[];
+      preserveInputFields?: boolean;
+      replaceWithoutConfirmation?: boolean;
+      // When true, applying the plugin updates the active badge +
+      // context items but does NOT push the rendered useCase.query
+      // into the textarea. The user keeps whatever they had typed
+      // (or empty); the example-prompt panel below the composer is
+      // the surfaced opt-in to seed the textarea instead. Used by
+      // the top type-chip rail: picking Slide deck binds the plugin
+      // context, leaving the user's draft alone.
+      suppressPromptUpdate?: boolean;
+      // Type chips are a mode switch, not a commitment to run. Keeping
+      // their apply deferred makes Prototype <-> Deck <-> Media changes
+      // feel instant; submit() still resolves the snapshot before sending.
+      deferApply?: boolean;
     },
   ) {
-    const inputFields = record.manifest?.od?.inputs ?? [];
+    const applyRequestId = activePluginApplyRequestRef.current + 1;
+    activePluginApplyRequestRef.current = applyRequestId;
+    const shouldResolveImmediately = options?.deferApply !== true;
+    const inputFields = options?.inputFields ?? record.manifest?.od?.inputs ?? [];
     const optimisticInputs = hydratePluginInputs(inputFields, options?.inputs);
     const inputsValid = pluginInputsAreValid(inputFields, optimisticInputs);
     const queryTemplate =
@@ -267,7 +553,7 @@ export function HomeView({
         : queryTemplate
           ? renderPluginBriefTemplate(queryTemplate, optimisticInputs)
           : null;
-    if (options?.chipId) setPendingChipId(options.chipId);
+    if (options?.chipId && shouldResolveImmediately) setPendingChipId(options.chipId);
     setError(null);
     // Optimistic update: the chip already carries the inputs and the
     // plugin record's manifest already carries the query template, so
@@ -277,6 +563,7 @@ export function HomeView({
     // items in the background and we reconcile in place. Without this
     // the user sees a ~100-500ms freeze before the input back-fills,
     // which feels like the UI is jammed.
+    const suppressPromptUpdate = options?.suppressPromptUpdate === true;
     setActive({
       record,
       result: null,
@@ -284,21 +571,31 @@ export function HomeView({
       inputFields,
       inputsValid,
       queryTemplate,
-      lastRenderedPrompt: optimisticPrompt,
+      // When prompt updates are suppressed we leave lastRenderedPrompt
+      // null so the inline pattern-extraction in handlePromptChange
+      // doesn't claim ownership of the user's typed text.
+      lastRenderedPrompt: suppressPromptUpdate ? null : optimisticPrompt,
       projectKind: options?.projectKind ?? null,
       chipId: options?.chipId ?? null,
+      mediaSurface: options?.mediaSurface ?? null,
+      projectMetadata: options?.projectMetadata ?? null,
+      editableInputNames: options?.editableInputNames ?? [],
+      preserveInputFields: options?.preserveInputFields === true,
+      suppressPromptSync: suppressPromptUpdate,
     });
     setFallbackProjectKind(null);
     setDetailsRecord(null);
-    if (optimisticPrompt !== null) setPrompt(optimisticPrompt);
+    if (!suppressPromptUpdate && optimisticPrompt !== null) setPrompt(optimisticPrompt);
     requestAnimationFrame(() => inputRef.current?.focus());
 
     if (!inputsValid) {
       setPendingChipId(null);
       return;
     }
+    if (!shouldResolveImmediately) return;
 
-    const result = await resolveActivePlugin(record, optimisticInputs);
+    const result = await resolveActivePlugin(record, optimisticInputs, applyRequestId);
+    if (activePluginApplyRequestRef.current !== applyRequestId) return;
     if (!result) {
       // Roll back the optimistic active so submit can't fire against a
       // plugin that never bound. Only clear when the in-flight apply
@@ -320,8 +617,11 @@ export function HomeView({
             ...prev,
             result,
             inputs: reconciledInputs,
-            inputFields: result.inputs ?? inputFields,
-            inputsValid: pluginInputsAreValid(result.inputs ?? inputFields, reconciledInputs),
+            inputFields: options?.preserveInputFields ? inputFields : result.inputs ?? inputFields,
+            inputsValid: pluginInputsAreValid(
+              options?.preserveInputFields ? inputFields : result.inputs ?? inputFields,
+              reconciledInputs,
+            ),
           }
         : prev,
     );
@@ -332,10 +632,11 @@ export function HomeView({
     // user hasn't edited the prompt in the meantime — if they have,
     // current !== optimisticPrompt and the functional setter is a
     // no-op so their edits survive.
-    if (nextPrompt === undefined || nextPrompt === null) {
+    if (!suppressPromptUpdate && (nextPrompt === undefined || nextPrompt === null)) {
       const reconciledQuery =
-        result.query ||
-        resolvePluginQueryFallback(record.manifest?.od?.useCase?.query, locale);
+        options?.queryTemplate !== undefined
+          ? options.queryTemplate
+          : result.query || resolvePluginQueryFallback(record.manifest?.od?.useCase?.query, locale);
       if (reconciledQuery) {
         const reconciledPrompt = renderPluginBriefTemplate(reconciledQuery, reconciledInputs);
         if (reconciledPrompt !== optimisticPrompt) {
@@ -353,11 +654,14 @@ export function HomeView({
   async function resolveActivePlugin(
     record: InstalledPluginRecord,
     inputs: Record<string, unknown>,
+    applyRequestId?: number,
   ): Promise<ApplyResult | null> {
     setPendingApplyId(record.id);
     const result = await applyPlugin(record.id, { locale, inputs });
-    setPendingApplyId(null);
-    setPendingChipId(null);
+    if (applyRequestId === undefined || activePluginApplyRequestRef.current === applyRequestId) {
+      setPendingApplyId(null);
+      setPendingChipId(null);
+    }
     return result;
   }
 
@@ -368,12 +672,30 @@ export function HomeView({
       projectKind?: ProjectKind;
       chipId?: string;
       inputs?: Record<string, unknown>;
+      inputFields?: InputFieldSpec[];
       queryTemplate?: string | null;
+      mediaSurface?: HomeComposerMediaSurface | null;
+      projectMetadata?: ProjectMetadata | null;
+      editableInputNames?: string[];
+      preserveInputFields?: boolean;
+      replaceWithoutConfirmation?: boolean;
+      suppressPromptUpdate?: boolean;
+      deferApply?: boolean;
     },
   ) {
-    const replacement = previewPluginReplacement(record, nextPrompt, options?.inputs);
-    runWithReplacementConfirmation(record.title, replacement, () => {
-      void usePlugin(record, nextPrompt, options);
+    const replacement = previewPluginReplacement(record, nextPrompt, {
+      inputs: options?.inputs,
+      inputFields: options?.inputFields,
+      queryTemplate: options?.queryTemplate,
+    });
+    const confirm = () => usePlugin(record, nextPrompt, options);
+    if (options?.replaceWithoutConfirmation) {
+      void confirm();
+      return;
+    }
+    runWithReplacementConfirmation(record.title, replacement, confirm, {
+      before: active?.record.id ?? null,
+      after: record.id,
     });
   }
 
@@ -403,28 +725,42 @@ export function HomeView({
   function runWithReplacementConfirmation(
     title: string,
     replacementPrompt: string | null,
-    confirm: () => void,
+    confirm: () => Promise<void>,
+    pluginIds: { before: string | null; after: string },
   ) {
     if (
       replacementPrompt !== null &&
       prompt.trim().length > 0 &&
       prompt.trim() !== replacementPrompt.trim()
     ) {
-      setPendingReplacement({ title, confirm });
+      setPendingReplacement({
+        title,
+        confirm,
+        pluginBefore: pluginIds.before,
+        pluginAfter: pluginIds.after,
+      });
       return;
     }
-    confirm();
+    void confirm();
   }
 
   function previewPluginReplacement(
     record: InstalledPluginRecord,
     nextPrompt?: string | null,
-    inputs?: Record<string, unknown>,
+    options?: {
+      inputs?: Record<string, unknown>;
+      inputFields?: InputFieldSpec[];
+      queryTemplate?: string | null;
+    },
   ): string | null {
     if (nextPrompt !== undefined && nextPrompt !== null) return nextPrompt;
-    const query = resolvePluginQueryFallback(record.manifest?.od?.useCase?.query, locale);
+    const query =
+      options?.queryTemplate !== undefined
+        ? options.queryTemplate
+        : resolvePluginQueryFallback(record.manifest?.od?.useCase?.query, locale);
     if (!query) return null;
-    return renderPluginBriefTemplate(query, hydratePluginInputs(record.manifest?.od?.inputs ?? [], inputs));
+    const fields = options?.inputFields ?? record.manifest?.od?.inputs ?? [];
+    return renderPluginBriefTemplate(query, hydratePluginInputs(fields, options?.inputs));
   }
 
   function renderPluginContextPrompt(
@@ -485,14 +821,20 @@ export function HomeView({
     );
     if (!extracted) return;
     const nextInputs = { ...active.inputs, ...extracted };
-    const inputsValid = pluginInputsAreValid(active.inputFields, nextInputs);
-    const inputsChanged = !inputsEqual(active.inputs, nextInputs);
+    const normalizedInputs = active.mediaSurface
+      ? normalizeHomeMediaInputs(active.mediaSurface, nextInputs, promptTemplates, elevenLabsVoices)
+      : nextInputs;
+    const inputsValid = pluginInputsAreValid(active.inputFields, normalizedInputs);
+    const inputsChanged = !inputsEqual(active.inputs, normalizedInputs);
     setActive({
       ...active,
-      inputs: nextInputs,
+      inputs: normalizedInputs,
       inputsValid,
+      projectMetadata: active.mediaSurface
+        ? metadataForHomeMediaComposer(active.mediaSurface, normalizedInputs, promptTemplates)
+        : active.projectMetadata,
       result:
-        inputsChanged && !inputsEqual(active.result?.appliedPlugin?.inputs, nextInputs)
+        inputsChanged && !inputsEqual(active.result?.appliedPlugin?.inputs, normalizedInputs)
           ? null
           : active.result,
       lastRenderedPrompt: nextPrompt,
@@ -512,13 +854,28 @@ export function HomeView({
 
   function updateActiveInputs(next: Record<string, unknown>) {
     if (!active) return;
-    const inputsValid = pluginInputsAreValid(active.inputFields, next);
+    const normalized = active.mediaSurface
+      ? normalizeHomeMediaInputs(active.mediaSurface, next, promptTemplates, elevenLabsVoices)
+      : next;
+    const mediaComposer = active.mediaSurface
+      ? buildHomeMediaComposer(active.mediaSurface, promptTemplates, normalized, elevenLabsVoices, {
+          elevenLabsVoiceWarning,
+          elevenLabsVoicesLoading,
+        })
+      : null;
+    const inputFields = mediaComposer?.fields ?? active.inputFields;
+    const queryTemplate = mediaComposer?.queryTemplate ?? active.queryTemplate;
+    const projectMetadata = active.mediaSurface
+      ? metadataForHomeMediaComposer(active.mediaSurface, normalized, promptTemplates)
+      : active.projectMetadata;
+    const inputsValid = pluginInputsAreValid(inputFields, normalized);
     const nextRendered =
-      active.queryTemplate !== null
-        ? renderPluginBriefTemplate(active.queryTemplate, next)
+      queryTemplate !== null
+        ? renderPluginBriefTemplate(queryTemplate, normalized)
         : active.lastRenderedPrompt;
     if (
-      active.queryTemplate !== null &&
+      !active.suppressPromptSync &&
+      queryTemplate !== null &&
       nextRendered !== null &&
       (prompt === active.lastRenderedPrompt || prompt.trim().length === 0)
     ) {
@@ -526,10 +883,14 @@ export function HomeView({
     }
     setActive({
       ...active,
-      inputs: next,
+      inputs: normalized,
+      inputFields,
+      queryTemplate,
+      projectMetadata,
+      editableInputNames: mediaComposer?.editableFieldNames ?? active.editableInputNames,
       inputsValid,
-      result: inputsEqual(active.result?.appliedPlugin?.inputs, next) ? active.result : null,
-      lastRenderedPrompt: nextRendered,
+      result: inputsEqual(active.result?.appliedPlugin?.inputs, normalized) ? active.result : null,
+      lastRenderedPrompt: active.suppressPromptSync ? active.lastRenderedPrompt : nextRendered,
     });
   }
 
@@ -548,6 +909,22 @@ export function HomeView({
   }
 
   function useMcpServer(_server: McpServerConfig, nextPrompt: string) {
+    setSelectedMcpContexts((current) => (
+      current.some((item) => item.server.id === _server.id)
+        ? current
+        : [...current, { server: _server }]
+    ));
+    setPrompt(nextPrompt);
+    setError(null);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }
+
+  function useConnector(connector: ConnectorDetail, nextPrompt: string) {
+    setSelectedConnectorContexts((current) => (
+      current.some((item) => item.connector.id === connector.id)
+        ? current
+        : [...current, { connector }]
+    ));
     setPrompt(nextPrompt);
     setError(null);
     requestAnimationFrame(() => inputRef.current?.focus());
@@ -556,7 +933,7 @@ export function HomeView({
   function queuePluginAuthoring(chipId: string | null, goal?: string) {
     const nextInputs = buildPluginAuthoringInputs(goal);
     const nextPrompt = buildPluginAuthoringPromptForInputs(nextInputs);
-    runWithReplacementConfirmation('Plugin authoring', nextPrompt, () => {
+    runWithReplacementConfirmation('Plugin authoring', nextPrompt, async () => {
       setActive(null);
       setActiveSkill(null);
       setFallbackProjectKind('other');
@@ -566,6 +943,9 @@ export function HomeView({
       setPendingAuthoringInputs(nextInputs);
       setPendingAuthoringChipId(chipId ?? 'create-plugin');
       requestAnimationFrame(() => inputRef.current?.focus());
+    }, {
+      before: active?.record.id ?? null,
+      after: 'od-plugin-authoring',
     });
   }
 
@@ -598,6 +978,22 @@ export function HomeView({
   // forward to callbacks threaded in from EntryShell.
   function pickChip(chip: HomeHeroChip) {
     setError(null);
+    // P0 ui_click area=chat_composer element=plugin_chip|action_chip. The
+    // chip's `action.kind` discriminates: plugin-bound chips
+    // (apply-scenario / apply-figma-migration) route to a plugin; the rest
+    // (create-plugin, import-folder, open-template-picker) are action
+    // shortcuts. Failure paths below still fire because the user did pick
+    // the chip — error state belongs in the run lifecycle event.
+    const chipElement: 'plugin_chip' | 'action_chip' =
+      chip.action.kind === 'apply-scenario' || chip.action.kind === 'apply-figma-migration'
+        ? 'plugin_chip'
+        : 'action_chip';
+    trackHomeChatComposerClick(analytics.track, {
+      page_name: 'home',
+      area: 'chat_composer',
+      element: chipElement,
+      chip_id: chip.id,
+    });
     switch (chip.action.kind) {
       case 'apply-scenario':
       case 'apply-figma-migration': {
@@ -609,11 +1005,58 @@ export function HomeView({
           );
           return;
         }
-        requestActivePlugin(record, undefined, {
+        const mediaSurface = homeMediaSurfaceForChipId(chip.id);
+        if (mediaSurface) {
+          const composer = buildHomeMediaComposer(
+            mediaSurface,
+            promptTemplates,
+            chip.action.inputs,
+            elevenLabsVoices,
+            {
+              elevenLabsVoiceWarning,
+              elevenLabsVoicesLoading,
+            },
+          );
+          requestActivePlugin(record, undefined, {
+            projectKind: composer.projectKind,
+            chipId: chip.id,
+            inputs: composer.inputs,
+            inputFields: composer.fields,
+            queryTemplate: composer.queryTemplate,
+            mediaSurface,
+            projectMetadata: metadataForHomeMediaComposer(mediaSurface, composer.inputs, promptTemplates),
+            editableInputNames: composer.editableFieldNames,
+            preserveInputFields: true,
+            // Media chips are an editable generation form: the prompt
+            // slots are where users adjust model, duration, ratio, and
+            // audio text before running. Keep this path eager so the
+            // inline options and required plugin inputs stay visible.
+            replaceWithoutConfirmation: true,
+          });
+          return;
+        }
+        const pluginOptions = {
           projectKind: chip.action.projectKind,
           chipId: chip.id,
           inputs: chip.action.inputs,
-        });
+          projectMetadata: chip.action.projectMetadata ?? null,
+        };
+        // Output-type tabs (create group) are mode-selection gestures:
+        // switching between them should never prompt for confirmation,
+        // and they should NOT pre-fill the textarea with the rendered
+        // useCase.query — the example-prompt panel below the composer
+        // is the explicit opt-in for that. Migrate-group chips (From
+        // Figma, etc.) still carry a meaningful prompt the user wants
+        // dropped in, so they keep the historical behavior.
+        if (chip.group === 'create') {
+          void usePlugin(record, undefined, {
+            ...pluginOptions,
+            suppressPromptUpdate: true,
+            deferApply: true,
+          });
+        } else {
+          requestActivePlugin(record, undefined, pluginOptions);
+        }
         return;
       }
       case 'create-plugin': {
@@ -639,9 +1082,37 @@ export function HomeView({
     }
   }
 
+  // Default-select the Prototype tab on first mount so the active
+  // tab + composer always read as one joined surface instead of a
+  // naked composer under a row of unselected tabs. Runs once after
+  // plugins finish loading; skips if the user already has a chip
+  // bound (handoff, restored session, manual pick).
+  useEffect(() => {
+    if (pluginsLoading) return;
+    if (defaultedPrototypeRef.current) return;
+    if (active?.chipId || pendingChipId) {
+      defaultedPrototypeRef.current = true;
+      return;
+    }
+    const prototypeChip = HOME_HERO_CHIPS.find((c) => c.id === 'prototype');
+    if (!prototypeChip) return;
+    defaultedPrototypeRef.current = true;
+    pickChip(prototypeChip);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pluginsLoading, active?.chipId, pendingChipId]);
+
   async function submit() {
     const trimmed = prompt.trim();
     if (!trimmed && stagedFiles.length === 0) return;
+    // P0 ui_click area=chat_composer element=send_button. Fires before the
+    // async plugin-apply roundtrip so the click count reflects user intent
+    // even when the run is rejected (missing inputs, apply failure). The
+    // subsequent run_created/run_finished events carry the result detail.
+    trackHomeChatComposerClick(analytics.track, {
+      page_name: 'home',
+      area: 'chat_composer',
+      element: 'send_button',
+    });
     let submittedActive = active;
     if (submittedActive && !submittedActive.inputsValid) {
       setError('Fill the required plugin parameters before running.');
@@ -663,7 +1134,25 @@ export function HomeView({
         ? { description: item.record.manifest.description }
         : {}),
     }));
+    const contextMcpServers = selectedMcpContexts.map((item) => ({
+      id: item.server.id,
+      ...(item.server.label ? { label: item.server.label } : {}),
+      ...(item.server.transport ? { transport: item.server.transport } : {}),
+      ...(item.server.url ? { url: item.server.url } : {}),
+      ...(item.server.command ? { command: item.server.command } : {}),
+    }));
+    const contextConnectors = selectedConnectorContexts.map((item) => ({
+      id: item.connector.id,
+      name: item.connector.name,
+      provider: item.connector.provider,
+      category: item.connector.category,
+      status: item.connector.status,
+      ...(item.connector.accountLabel ? { accountLabel: item.connector.accountLabel } : {}),
+    }));
     const defaultInputs = { prompt: trimmed };
+    const submittedProjectMetadata = submittedActive?.mediaSurface
+      ? metadataForHomeMediaComposer(submittedActive.mediaSurface, submittedActive.inputs, promptTemplates)
+      : submittedActive?.projectMetadata ?? null;
     onSubmit({
       prompt: trimmed,
       pluginId: submittedActive?.record.id ?? DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID,
@@ -673,7 +1162,10 @@ export function HomeView({
       taskKind: submittedActive?.result?.appliedPlugin?.taskKind ?? null,
       pluginInputs: submittedActive ? submittedActive.inputs : defaultInputs,
       projectKind: submittedActive?.projectKind ?? fallbackProjectKind ?? projectKindForSkill(activeSkill) ?? 'other',
+      projectMetadata: submittedProjectMetadata,
       contextPlugins,
+      contextMcpServers,
+      contextConnectors,
       attachments: stagedFiles,
     });
   }
@@ -699,6 +1191,8 @@ export function HomeView({
         pluginInputValues={active?.inputs ?? {}}
         pluginInputTemplate={active?.queryTemplate ?? null}
         onPluginInputValuesChange={updateActiveInputs}
+        inlineEditableInputNames={active?.editableInputNames ?? []}
+        showPluginInputsForm={!active?.mediaSurface}
         onPluginInputValidityChange={(valid) => {
           setActive((prev) => (
             prev && prev.inputsValid !== valid ? { ...prev, inputsValid: valid } : prev
@@ -713,6 +1207,7 @@ export function HomeView({
         skillsLoading={skillsLoading}
         mcpOptions={enabledMcpServers}
         mcpLoading={mcpLoading}
+        connectorOptions={connectors.filter((connector) => connector.status === 'connected')}
         pendingPluginId={pendingApplyId}
         pendingChipId={pendingChipId}
         submitDisabled={
@@ -723,7 +1218,16 @@ export function HomeView({
         onPickPlugin={(record, nextPrompt) => addPluginContext(record, nextPrompt)}
         onPickSkill={useSkill}
         onPickMcp={useMcpServer}
+        onPickConnector={useConnector}
         onPickChip={pickChip}
+        exampleSuggestions={exampleSuggestions}
+        showExamples={showExamples}
+        onPickExample={(record) => requestPluginContextUse(record, 'use-with-query')}
+        onDismissExamples={() => {
+          if (currentExampleChipId) {
+            setDismissedExampleChipId(currentExampleChipId);
+          }
+        }}
         contextItemCount={contextItemCount}
         error={error}
       />
@@ -731,8 +1235,29 @@ export function HomeView({
       <RecentProjectsStrip
         projects={projects}
         {...(projectsLoading !== undefined ? { loading: projectsLoading } : {})}
-        onOpen={onOpenProject}
-        onViewAll={onViewAllProjects}
+        onOpen={(id) => {
+          // P0 ui_click area=recent_projects element=project_card — emit
+          // before navigation so the event isn't lost when the host
+          // re-renders into the project view.
+          const project = projects.find((p) => p.id === id);
+          const projectKind = projectKindToTracking(project?.metadata?.kind);
+          trackRecentProjectsClick(analytics.track, {
+            page_name: 'home',
+            area: 'recent_projects',
+            element: 'project_card',
+            project_id: id,
+            ...(projectKind ? { project_kind: projectKind } : {}),
+          });
+          onOpenProject(id);
+        }}
+        onViewAll={() => {
+          trackRecentProjectsClick(analytics.track, {
+            page_name: 'home',
+            area: 'recent_projects',
+            element: 'view_all',
+          });
+          onViewAllProjects();
+        }}
       />
 
       <PluginsHomeSection
@@ -744,6 +1269,7 @@ export function HomeView({
         onOpenDetails={setDetailsRecord}
         onCreatePlugin={(goal) => queuePluginAuthoring(null, goal)}
         onBrowseRegistry={onBrowseRegistry}
+        presetSelection={presetStartersSelection}
       />
 
       {detailsRecord ? (
@@ -762,28 +1288,70 @@ export function HomeView({
             aria-modal="true"
             aria-labelledby="home-hero-confirm-title"
           >
-            <h2 id="home-hero-confirm-title">Replace current prompt?</h2>
+            <h2 id="home-hero-confirm-title">{t('homeHero.confirmReplaceTitle')}</h2>
             <p>
-              Using {pendingReplacement.title} will replace the text currently in the input.
+              {t('homeHero.confirmReplaceBody', { title: pendingReplacement.title })}
             </p>
             <div className="home-hero-confirm__actions">
               <button
                 type="button"
                 className="home-hero-confirm__secondary"
-                onClick={() => setPendingReplacement(null)}
+                onClick={() => {
+                  trackPluginReplacementModalClick(analytics.track, {
+                    page_name: 'home',
+                    area: 'plugin_replacement_modal',
+                    element: 'cancel',
+                  });
+                  setPendingReplacement(null);
+                }}
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
                 className="home-hero-confirm__primary"
                 onClick={() => {
+                  trackPluginReplacementModalClick(analytics.track, {
+                    page_name: 'home',
+                    area: 'plugin_replacement_modal',
+                    element: 'replace',
+                  });
+                  const pluginBefore = pendingReplacement.pluginBefore;
+                  const pluginAfter = pendingReplacement.pluginAfter;
                   const action = pendingReplacement.confirm;
                   setPendingReplacement(null);
-                  action();
+                  // `action()` now returns a promise that resolves when
+                  // the underlying plugin apply finishes (or rejects on
+                  // failure). Emitting the result event off the promise
+                  // settle is the only way to capture real success /
+                  // failure — the synchronous path used to mark every
+                  // attempt as a success and never observed the catch
+                  // branch.
+                  void (async () => {
+                    try {
+                      await action();
+                      trackPluginReplacementResult(analytics.track, {
+                        page_name: 'home',
+                        area: 'plugin_replacement',
+                        plugin_before: pluginBefore ?? '',
+                        plugin_after: pluginAfter,
+                        result: 'success',
+                      });
+                    } catch (err) {
+                      trackPluginReplacementResult(analytics.track, {
+                        page_name: 'home',
+                        area: 'plugin_replacement',
+                        plugin_before: pluginBefore ?? '',
+                        plugin_after: pluginAfter,
+                        result: 'failed',
+                        error_code:
+                          err instanceof Error ? err.message : String(err),
+                      });
+                    }
+                  })();
                 }}
               >
-                Replace
+                {t('homeHero.confirmReplace')}
               </button>
             </div>
           </div>
@@ -802,6 +1370,60 @@ function projectKindForSkill(skill: SkillSummary | null): ProjectKind | null {
   if (skill.mode === 'video' || skill.surface === 'video') return 'video';
   if (skill.mode === 'audio' || skill.surface === 'audio') return 'audio';
   return 'other';
+}
+
+// Maps a Home hero chip id to the Official starters facet slice the
+// user most likely wants to browse next. The chip rail is intent
+// ("I want to design a slide deck"); the starters grid is the catalog
+// for that intent, so pinning the same `create / deck` slice lets the
+// user keep scanning examples without re-picking the same artifact
+// kind in a different control. The list mirrors the `apply-scenario`
+// and `apply-figma-migration` chip ids in `home-hero/chips.ts`; any
+// new chip there should add a row here too.
+function facetSelectionForChip(chipId: string): FacetSelection | null {
+  switch (chipId) {
+    case 'prototype': return { category: 'create', subcategory: 'prototype' };
+    case 'live-artifact': return { category: 'create', subcategory: 'live-artifact' };
+    case 'deck': return { category: 'create', subcategory: 'deck' };
+    case 'image': return { category: 'create', subcategory: 'image' };
+    case 'video': return { category: 'create', subcategory: 'video' };
+    case 'hyperframes': return { category: 'create', subcategory: 'hyperframes' };
+    case 'audio': return { category: 'create', subcategory: 'audio' };
+    case 'figma': return { category: 'import', subcategory: 'from-figma' };
+    case 'folder': return { category: 'import', subcategory: 'from-code' };
+    case 'create-plugin': return { category: 'extend', subcategory: 'plugin-authoring' };
+    default: return null;
+  }
+}
+
+function homeHeroChipLabelForId(chipId: string, t: ReturnType<typeof useI18n>['t']): string {
+  switch (chipId) {
+    case 'prototype': return t('homeHero.chip.prototype');
+    case 'live-artifact': return t('homeHero.chip.liveArtifact');
+    case 'deck': return t('homeHero.chip.deck');
+    case 'image': return t('homeHero.chip.image');
+    case 'video': return t('homeHero.chip.video');
+    case 'hyperframes': return t('homeHero.chip.hyperframes');
+    case 'audio': return t('homeHero.chip.audio');
+    case 'create-plugin': return t('homeHero.chip.createPlugin');
+    case 'figma': return t('homeHero.chip.figma');
+    case 'folder': return t('homeHero.chip.folder');
+    case 'template': return t('homeHero.chip.template');
+    default: return chipId;
+  }
+}
+
+function estimatePluginContextItemCount(
+  record: InstalledPluginRecord,
+): number {
+  const context = record.manifest?.od?.context;
+  if (!context) return 0;
+  const assetCount = context.assets?.length ?? 0;
+  const mcpCount = context.mcp?.length ?? 0;
+  const claudePluginCount = context.claudePlugins?.length ?? 0;
+  const atomCount = context.atoms?.length ?? 0;
+  const craftCount = context.craft?.length ?? 0;
+  return assetCount + mcpCount + claudePluginCount + atomCount + craftCount;
 }
 
 function hydratePluginInputs(

@@ -81,16 +81,35 @@ export interface ReadinessResult {
   canonical?: string;
 }
 
+export type SearchAnalyticsWindow = 3 | 7 | 28;
+
 export interface SearchAnalyticsRecord {
   url: string;
   queriedAt: string;
-  windowDays: 7 | 28;
+  windowDays: SearchAnalyticsWindow;
   startDate: string;
   endDate: string;
   clicks: number;
   impressions: number;
   ctr: number;
   position: number;
+}
+
+export interface SearchAnalyticsRow {
+  keys: string[];
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+}
+
+export interface SearchAnalyticsQueryOptions {
+  startDate: string;
+  endDate: string;
+  dimensions?: string[];
+  rowLimit?: number;
+  dataState?: 'final' | 'all' | 'hourly_all';
+  dimensionFilterGroups?: unknown[];
 }
 
 export interface BlogIndexingState {
@@ -327,7 +346,7 @@ export async function inspectUrl(url: string): Promise<InspectionVerdict> {
  */
 export async function querySearchAnalytics(
   url: string,
-  windowDays: 7 | 28,
+  windowDays: SearchAnalyticsWindow,
 ): Promise<SearchAnalyticsRecord> {
   const token = await getAccessToken();
   const end = new Date();
@@ -386,6 +405,41 @@ export async function querySearchAnalytics(
     ctr: row.ctr ?? 0,
     position: row.position ?? 0,
   };
+}
+
+export async function querySearchAnalyticsRows(
+  options: SearchAnalyticsQueryOptions,
+): Promise<SearchAnalyticsRow[]> {
+  const token = await getAccessToken();
+  const endpoint = `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(GSC_SITE_URL)}/searchAnalytics/query`;
+  const res = await fetchWithRetry(endpoint, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${token}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      startDate: options.startDate,
+      endDate: options.endDate,
+      dimensions: options.dimensions ?? [],
+      rowLimit: options.rowLimit ?? 25_000,
+      ...(options.dataState ? { dataState: options.dataState } : {}),
+      ...(options.dimensionFilterGroups
+        ? { dimensionFilterGroups: options.dimensionFilterGroups }
+        : {}),
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`Search Analytics failed (${res.status}): ${await res.text()}`);
+  }
+  const body = (await res.json()) as { rows?: SearchAnalyticsRow[] };
+  return (body.rows ?? []).map((row) => ({
+    keys: row.keys ?? [],
+    clicks: row.clicks ?? 0,
+    impressions: row.impressions ?? 0,
+    ctr: row.ctr ?? 0,
+    position: row.position ?? 0,
+  }));
 }
 
 /* --------------------------- URLs ---------------------------- */

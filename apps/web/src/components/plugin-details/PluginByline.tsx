@@ -13,6 +13,7 @@
 import { useState } from 'react';
 import type { InstalledPluginRecord } from '@open-design/contracts';
 import { Icon } from '../Icon';
+import { TrustBadge } from '../TrustBadge';
 import {
   authorInitials,
   derivePluginSourceLinks,
@@ -25,7 +26,6 @@ interface Props {
 
 export function PluginByline({ record, variant = 'default' }: Props) {
   const links = derivePluginSourceLinks(record);
-  const trust = record.trust;
   const version = record.version;
 
   return (
@@ -47,7 +47,7 @@ export function PluginByline({ record, variant = 'default' }: Props) {
           ) : (
             <span className="plugin-byline__name">{links.sourceLabel}</span>
           )}
-          <span className={`plugin-byline__trust trust-${trust}`}>{trust}</span>
+          <TrustBadge trust={record.trust} />
           <span className="plugin-byline__version">v{version}</span>
         </div>
         {variant === 'default' ? (

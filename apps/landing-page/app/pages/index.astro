@@ -3,7 +3,9 @@ import Page from '../page';
 import '../globals.css';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { heroImage } from '../image-assets';
+import FontStylesheet from '../_components/font-stylesheet.astro';
+import PreciseLazyload from '../_components/precise-lazyload.astro';
+import { heroImage, heroImageSrcset } from '../image-assets';
 import { getCatalogCounts } from '../_lib/catalog';
 import { getGithubRepoMeta } from '../_lib/github';
 
@@ -30,6 +32,25 @@ const pageHtml = renderToStaticMarkup(
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
+    <FontStylesheet />
+
+    {/*
+     * Hero LCP preload. Cloudflare Pages turns this <link rel="preload"> into
+     * a 103 Early Hints response automatically when Early Hints is enabled in
+     * the dashboard, so the browser starts the image fetch before the HTML
+     * body finishes streaming.
+     *
+     * Only emitted on `/` — the rest of the site uses lighter hero treatment.
+     */}
+    <link
+      rel="preload"
+      as="image"
+      href={heroImage}
+      imagesrcset={heroImageSrcset}
+      imagesizes="(max-width: 768px) 100vw, 60vw"
+      fetchpriority="high"
+    />
+
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Open Design" />
     <meta property="og:title" content={title} />
@@ -44,6 +65,7 @@ const pageHtml = renderToStaticMarkup(
   </head>
   <body>
     <Fragment set:html={pageHtml} />
+    <PreciseLazyload />
     <script is:inline>
       (() => {
         const formatStars = (count) => {
