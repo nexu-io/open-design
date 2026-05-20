@@ -485,6 +485,27 @@ test("tauri-migration-status rejects packaged handoff archives without manifest 
   assert.match(parsed.handoffArchive.problems.join("\n"), /command script is missing handoff manifest field validation/);
 });
 
+test("tauri-migration-status rejects command sidecars without source archive status guidance", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+  const { archivePath } = await writeHandoffArchive(handoffDir);
+  const commandScriptPath = `${archivePath}.commands.sh`;
+  const commandScript = await readFile(commandScriptPath, "utf8");
+  await writeFile(commandScriptPath, commandScript.replace('--handoff-archive "$archive"', ""), "utf8");
+  await writeCommandScriptChecksum(commandScriptPath);
+
+  const result = await runStatus(fixture, "--handoff-dir", handoffDir);
+  const parsed = JSON.parse(result.stdout) as { handoffArchive: { current: boolean; problems: string[] } };
+
+  assert.equal(parsed.handoffArchive.current, false);
+  assert.match(parsed.handoffArchive.problems.join("\n"), /command script is missing source archive status guidance/);
+});
+
 test("tauri-migration-status reports stale handoff artifacts", async (t) => {
   const fixture = await createFixtureRoot(t, {
     checked: [],
@@ -1308,6 +1329,7 @@ async function writeHandoffArchive(handoffDir: string): Promise<{ archivePath: s
       '--branch "$branch"',
       '--remote "$remote"',
       '--expected-head "$expected_head"',
+      '--handoff-archive "$archive"',
       "--wait",
       "TAURI_PR_BODY_PATH",
       "--body-file",

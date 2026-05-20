@@ -787,6 +787,9 @@ async function readHandoffArchiveStatus(archivePath: string, handoff?: HandoffSt
     if (!commandScriptSource.includes("--expected-head") || !commandScriptSource.includes("--wait")) {
       problems.push(`command script is missing branch-head CI wait guidance: ${commandScriptPath}`);
     }
+    if (!commandScriptSource.includes('--handoff-archive "$archive"')) {
+      problems.push(`command script is missing source archive status guidance: ${commandScriptPath}`);
+    }
     if (
       !commandScriptSource.includes('--run-id "$GITHUB_RUN_ID"') ||
       !commandScriptSource.includes('--branch "$branch"') ||

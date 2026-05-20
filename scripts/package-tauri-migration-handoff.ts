@@ -531,7 +531,7 @@ function commandScript(archivePath: string): string {
     'git checkout "$branch" >/dev/null',
     'restore_branch=""',
     'echo "Verified remote $remote $branch at $remote_head."',
-    'pnpm exec tsx scripts/tauri-migration-status.ts --handoff-dir "$handoff_dir" --remote "$remote" --report-dir "$report_dir"',
+    'pnpm exec tsx scripts/tauri-migration-status.ts --handoff-dir "$handoff_dir" --handoff-archive "$archive" --remote "$remote" --report-dir "$report_dir"',
     "",
     'if [[ -n "${GITHUB_RUN_ID:-}" ]]; then',
     '  pnpm exec tsx scripts/download-tauri-m4-reports.ts --run-id "$GITHUB_RUN_ID" --branch "$branch" --expected-head "$expected_head" --remote "$remote" --output-dir "$report_dir" --advance',
