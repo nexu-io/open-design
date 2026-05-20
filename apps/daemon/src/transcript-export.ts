@@ -119,6 +119,12 @@ type Block =
 
 export interface TranscriptExportOptions {
   now?: () => Date;
+  /**
+   * When set, restricts the export to a single conversation. The handoff
+   * flow scopes to the one conversation the user is resuming; project-wide
+   * consumers (finalize) omit this and export every conversation.
+   */
+  conversationId?: string;
 }
 
 export interface TranscriptExportResult {
@@ -170,15 +176,19 @@ export function exportProjectTranscript(
   try {
     // Conversations ordered chronologically (oldest first) — easiest for an
     // LLM to follow as a single sequence. db.listConversations sorts by
-    // updated_at DESC for the sidebar; we re-sort here.
+    // updated_at DESC for the sidebar; we re-sort here. When
+    // `options.conversationId` is set the export is narrowed to that one
+    // conversation (the resume/handoff flow); otherwise every conversation
+    // in the project is exported.
+    const { conversationId } = options;
     const conversations = db
       .prepare(
         `SELECT id, title, created_at AS createdAt, updated_at AS updatedAt
            FROM conversations
-          WHERE project_id = ?
+          WHERE project_id = ?${conversationId ? ' AND id = ?' : ''}
           ORDER BY created_at ASC`,
       )
-      .all(projectId) as ConversationRow[];
+      .all(...(conversationId ? [projectId, conversationId] : [projectId])) as ConversationRow[];
 
     const messageStmt = db.prepare(
       `SELECT id, role, content, position,

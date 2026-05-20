@@ -1,10 +1,14 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { NewProjectModal } from '../../src/components/NewProjectModal';
-import type { DesignSystemSummary, SkillSummary } from '../../src/types';
+import type {
+  DesignSystemSummary,
+  ProjectTemplate,
+  SkillSummary,
+} from '../../src/types';
 
 const skills: SkillSummary[] = [
   {
@@ -75,5 +79,41 @@ describe('NewProjectModal layout', () => {
     expect(panelBody).toBeTruthy();
     expect(screen.getByTestId('new-project-panel')).toBeTruthy();
     expect(screen.getByTestId('create-project')).toBeTruthy();
+  });
+});
+
+describe('NewProjectModal template deletion plumbing', () => {
+  it('forwards onDeleteTemplate to the inner panel', async () => {
+    const templates: ProjectTemplate[] = [
+      {
+        id: 'tmpl-landing',
+        name: 'Landing Page',
+        description: 'A saved landing page starter.',
+        files: [{ name: 'prototype/App.jsx', content: '' }],
+        createdAt: 1714867200000,
+      },
+    ];
+    const onDelete = vi.fn().mockResolvedValue(true);
+
+    render(
+      <NewProjectModal
+        open
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId="clay"
+        templates={templates}
+        promptTemplates={[]}
+        onDeleteTemplate={onDelete}
+        onCreate={() => {}}
+        onClose={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'From template' }));
+    fireEvent.click(screen.getByLabelText(/delete template/i));
+    await screen.findByRole('alertdialog');
+    fireEvent.click(screen.getByRole('button', { name: 'Delete template' }));
+
+    expect(onDelete).toHaveBeenCalledWith('tmpl-landing');
   });
 });

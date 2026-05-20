@@ -303,6 +303,18 @@ const fmtDate = (d: Date) =>
         font-size: 13px;
         line-height: 1.55;
       }
+      /*
+       * Astro/Shiki stamps an inline `background-color:#xxx; color:#xxx;`
+       * on `.astro-code` based on the configured theme. We supply a
+       * custom paper theme in `astro.config.ts`, but pin the background
+       * to `--bone` here as a belt-and-braces guard against a theme
+       * upgrade silently re-introducing a slate slab.
+       */
+      .post-body :global(pre.astro-code),
+      .post-body :global(pre.shiki) {
+        background-color: var(--bone) !important;
+        color: var(--ink) !important;
+      }
       .post-body :global(pre code) {
         background: transparent;
         padding: 0;

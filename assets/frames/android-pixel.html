@@ -149,9 +149,13 @@
   <script>
     (function () {
       var qs = new URLSearchParams(location.search);
-      var src = qs.get('screen');
+      var raw = qs.get('screen');
       var iframe = document.getElementById('screen');
-      if (src) iframe.src = src;
+      if (!raw) return;
+      var isAbsolute = /^[a-zA-Z][a-zA-Z\d+.\-]*:/.test(raw) || raw.charAt(0) === '/';
+      iframe.src = isAbsolute
+        ? raw
+        : new URL(raw, document.referrer || location.href).toString();
     })();
   </script>
 </body>

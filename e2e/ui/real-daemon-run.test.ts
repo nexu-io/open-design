@@ -12,6 +12,8 @@ const GENERATED_HEADING = 'Real Daemon Smoke';
 const CHUNKED_FILE = 'chunked-daemon-smoke.html';
 const CHUNKED_HEADING = 'Chunked Daemon Smoke';
 const FOLLOW_UP_FILE = 'follow-up-daemon-smoke.html';
+const DELAYED_FILE = 'delayed-daemon-smoke.html';
+const DELAYED_HEADING = 'Delayed Daemon Smoke';
 let fakeRuntimes: Awaited<ReturnType<typeof createFakeAgentRuntimes>>;
 
 test.describe.configure({ mode: 'serial' });
@@ -113,19 +115,59 @@ test('real daemon run supports a follow-up turn in the same project', async ({ p
   await expectProjectFileToContain(page, projectId, FOLLOW_UP_FILE, 'Generated after an earlier daemon turn.');
 });
 
-test('real daemon run previews an artifact from a fake OpenCode runtime', async ({ page }) => {
-  await configureFakeAgent(page, 'opencode');
+test('real daemon run survives a mid-flight reload and restores the delayed artifact turn', async ({ page }) => {
   await page.goto('/');
-  await setBrowserAgentConfig(page, 'opencode');
-  await page.reload();
-  await createProject(page, 'Fake OpenCode runtime smoke');
+  await createProject(page, 'Delayed daemon reload smoke', 'claude');
+  await expectWorkspaceReady(page);
+
+  await sendPrompt(page, 'Create a delayed deterministic smoke artifact');
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expectWorkspaceReady(page);
+
+  const { projectId, conversationId } = await currentProjectContext(page);
+  await expectProjectFilesToContain(page, projectId, [DELAYED_FILE], 20_000);
+  await expect(page.getByText('I recovered the delayed reasoning path and will persist the artifact now.')).toBeVisible();
+  const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
+  await expect(frame.getByRole('heading', { name: DELAYED_HEADING })).toBeVisible();
+
+  const files = await listProjectFiles(page, projectId);
+  expect(files.map((file) => file.name)).toEqual([DELAYED_FILE]);
+  await expectProjectFileToContain(page, projectId, DELAYED_FILE, 'Generated after a delayed daemon turn.');
+
+  await expectRestoredDelayedAssistantMessage(page, projectId, conversationId, {
+    expectedUserMessages: 1,
+  });
+});
+
+test('real daemon run survives reload before the create response reaches the browser', async ({ page }) => {
+  await page.goto('/');
+  await createProject(page, 'Delayed daemon create-response reload smoke', 'claude');
+  await expectWorkspaceReady(page);
+
+  await sendPromptAndReloadBeforeCreateResponse(
+    page,
+    'Create a delayed deterministic smoke artifact',
+  );
+  await expectWorkspaceReady(page);
+
+  const { projectId, conversationId } = await currentProjectContext(page);
+  await expectProjectFilesToContain(page, projectId, [DELAYED_FILE], 20_000);
+  await expect(page.getByText('I recovered the delayed reasoning path and will persist the artifact now.')).toBeVisible();
+
+  await expectRestoredDelayedAssistantMessage(page, projectId, conversationId, {
+    requireRunId: true,
+  });
+});
+test('real daemon run previews an artifact from a fake OpenCode runtime', async ({ page }) => {
+  await page.goto('/');
+  await createProject(page, 'Fake OpenCode runtime smoke', 'opencode');
   await expectWorkspaceReady(page);
 
   await sendPrompt(page, 'Fake runtime smoke for opencode');
 
   const fileName = 'fake-agent-runtime-opencode.html';
   const heading = 'Fake Agent Runtime opencode';
-  await expect(page.getByText(fileName, { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('file-workspace').getByText(fileName, { exact: true })).toBeVisible({ timeout: 15_000 });
   const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
   await expect(frame.getByRole('heading', { name: heading })).toBeVisible();
 
@@ -155,9 +197,19 @@ test('real daemon run supports fake non-Codex runtime protocols', async ({ page 
   }
 });
 
-async function createProject(page: Page, name: string) {
+async function createProject(page: Page, name: string, agentId: FakeAgentId = 'codex') {
+  await configureFakeAgent(page, agentId);
+  await installBrowserAgentConfig(page, agentId);
   await gotoEntryHome(page);
-  await openNewProjectModal(page);
+  await setBrowserAgentConfig(page, agentId);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  await setBrowserAgentConfig(page, agentId);
+  await configureFakeAgent(page, agentId);
+  await expectBrowserAgentConfig(page, agentId);
+  await dismissPrivacyDialog(page);
+  await page.getByTestId('entry-nav-new-project').click();
+  await expect(page.getByTestId('new-project-modal')).toBeVisible();
   await expect(page.getByTestId('new-project-panel')).toBeVisible();
   await page.getByTestId('new-project-tab-prototype').click();
   await page.getByTestId('new-project-name').fill(name);
@@ -217,17 +269,46 @@ async function sendPrompt(page: Page, prompt: string) {
   expect(response.ok()).toBeTruthy();
 }
 
-async function openNewProjectModal(page: Page) {
-  await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await waitForLoadingToClear(page);
+async function sendPromptAndReloadBeforeCreateResponse(page: Page, prompt: string) {
+  const input = page.getByTestId('chat-composer-input');
+  const sendButton = page.getByTestId('chat-send');
+  let releaseResponse!: () => void;
+  const releaseResponsePromise = new Promise<void>((resolve) => {
+    releaseResponse = resolve;
+  });
+  let createResponseReady = false;
+  const runRoute = '**/api/runs';
+
+  await page.route(runRoute, async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.continue();
+      return;
+    }
+    const response = await route.fetch();
+    createResponseReady = true;
+    await releaseResponsePromise;
+    await route.fulfill({ response }).catch(() => {});
+  });
+
+  await expect(input).toBeVisible({ timeout: 5_000 });
+  await input.click();
+  await input.fill(prompt);
+  await expect(input).toHaveValue(prompt);
+  await expect(sendButton).toBeEnabled();
+  await sendButton.click();
+  await expect.poll(() => createResponseReady, { timeout: 10_000 }).toBe(true);
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  releaseResponse();
+  await page.unroute(runRoute).catch(() => {});
+}
+
+async function dismissPrivacyDialog(page: Page) {
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
   if (await privacyDialog.isVisible().catch(() => false)) {
     await privacyDialog.getByRole('button', { name: /not now/i }).click();
     await expect(privacyDialog).toHaveCount(0);
   }
-  await page.getByTestId('entry-nav-new-project').click();
-  await expect(page.getByTestId('new-project-modal')).toBeVisible();
-  await expect(page.getByTestId('new-project-panel')).toBeVisible();
 }
 
 async function waitForLoadingToClear(page: Page) {
@@ -251,23 +332,57 @@ async function configureFakeAgent(page: Page, agentId: FakeAgentId) {
 }
 
 async function setBrowserAgentConfig(page: Page, agentId: FakeAgentId) {
-  await page.evaluate(({ key, id, env }) => {
-    window.localStorage.setItem(
-      key,
-      JSON.stringify({
-        mode: 'daemon',
-        apiKey: '',
-        baseUrl: 'https://api.anthropic.com',
-        model: 'claude-sonnet-4-5',
-        agentId: id,
-        skillId: null,
-        designSystemId: null,
-        onboardingCompleted: true,
-        agentModels: { [id]: { model: 'default', reasoning: 'default' } },
-        agentCliEnv: { [id]: env },
-      }),
-    );
-  }, { key: STORAGE_KEY, id: agentId, env: fakeRuntimes[agentId].env });
+  const payload = { key: STORAGE_KEY, id: agentId, env: fakeRuntimes[agentId].env };
+  await installBrowserAgentConfig(page, agentId);
+  await page.evaluate(installConfig, payload);
+}
+
+async function installBrowserAgentConfig(page: Page, agentId: FakeAgentId) {
+  await page.addInitScript(installConfig, {
+    key: STORAGE_KEY,
+    id: agentId,
+    env: fakeRuntimes[agentId].env,
+  });
+}
+
+function installConfig({ key, id, env }: { key: string; id: FakeAgentId; env: Record<string, string> }) {
+  window.localStorage.setItem(
+    key,
+    JSON.stringify({
+      mode: 'daemon',
+      apiKey: '',
+      baseUrl: 'https://api.anthropic.com',
+      model: 'claude-sonnet-4-5',
+      agentId: id,
+      skillId: null,
+      designSystemId: null,
+      onboardingCompleted: true,
+      agentModels: { [id]: { model: 'default', reasoning: 'default' } },
+      agentCliEnv: { [id]: env },
+    }),
+  );
+}
+
+async function expectBrowserAgentConfig(page: Page, agentId: FakeAgentId) {
+  await expect
+    .poll(async () => page.evaluate(({ key }) => {
+      const raw = window.localStorage.getItem(key);
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw).agentId ?? null;
+      } catch {
+        return null;
+      }
+    }, { key: STORAGE_KEY }), { timeout: 10_000 })
+    .toBe(agentId);
+  await expect
+    .poll(async () => {
+      const response = await page.request.get('/api/app-config');
+      if (!response.ok()) return null;
+      const body = (await response.json()) as { config?: { agentId?: string } };
+      return body.config?.agentId ?? null;
+    }, { timeout: 10_000 })
+    .toBe(agentId);
 }
 
 async function resetDaemonAppConfig(page: Page) {
@@ -341,6 +456,101 @@ async function expectProjectFileToContain(
       return response.text();
     }, { timeout: 15_000 })
     .toContain(expected);
+}
+
+async function expectProjectFilesToContain(
+  page: Page,
+  projectId: string,
+  expectedNames: string[],
+  timeout = 15_000,
+) {
+  await expect
+    .poll(async () => {
+      try {
+        const files = await listProjectFiles(page, projectId);
+        return files.map((file) => file.name);
+      } catch {
+        return [];
+      }
+    }, { timeout })
+    .toEqual(expect.arrayContaining(expectedNames));
+}
+
+async function listProjectFiles(
+  page: Page,
+  projectId: string,
+) {
+  const response = await page.request.get(`/api/projects/${projectId}/files`);
+  expect(response.ok()).toBeTruthy();
+  const body = (await response.json()) as { files: Array<{ kind: string; name: string }> };
+  return body.files;
+}
+
+async function currentProjectContext(
+  page: Page,
+): Promise<{ conversationId: string; projectId: string }> {
+  const { projectId } = currentProject(page);
+  const response = await page.request.get(`/api/projects/${projectId}/conversations`);
+  expect(response.ok()).toBeTruthy();
+  const { conversations } = (await response.json()) as {
+    conversations: Array<{ id: string; updatedAt: number }>;
+  };
+  const active = [...conversations].sort((a, b) => b.updatedAt - a.updatedAt)[0];
+  if (!active) {
+    throw new Error(`no conversations found for project ${projectId}`);
+  }
+  return { projectId, conversationId: active.id };
+}
+
+async function expectRestoredDelayedAssistantMessage(
+  page: Page,
+  projectId: string,
+  conversationId: string,
+  options: { expectedUserMessages?: number; requireRunId?: boolean } = {},
+) {
+  await expect
+    .poll(async () => {
+      const messages = await listConversationMessages(page, projectId, conversationId);
+      const assistant = messages.find((message) => message.role === 'assistant');
+      return {
+        userMessages: messages.filter((message) => message.role === 'user').length,
+        assistantMessages: messages.filter((message) => message.role === 'assistant').length,
+        hasRunId: Boolean(assistant?.runId),
+        runStatus: assistant?.runStatus ?? null,
+        producedFiles: assistant?.producedFiles?.map((file) => file.name) ?? [],
+        hasThinking: Boolean(assistant?.events?.some((event) => event.kind === 'thinking')),
+      };
+    }, { timeout: 15_000 })
+    .toEqual({
+      userMessages: options.expectedUserMessages ?? expect.any(Number),
+      assistantMessages: 1,
+      hasRunId: options.requireRunId ? true : expect.any(Boolean),
+      runStatus: 'succeeded',
+      producedFiles: [DELAYED_FILE],
+      hasThinking: true,
+    });
+}
+
+async function listConversationMessages(
+  page: Page,
+  projectId: string,
+  conversationId: string,
+) {
+  const response = await page.request.get(
+    `/api/projects/${projectId}/conversations/${conversationId}/messages`,
+  );
+  expect(response.ok()).toBeTruthy();
+  const body = (await response.json()) as {
+    messages: Array<{
+      id: string;
+      role: string;
+      runId?: string;
+      runStatus?: string;
+      events?: Array<{ kind: string }>;
+      producedFiles?: Array<{ name: string }>;
+    }>;
+  };
+  return body.messages;
 }
 
 function isCreateRunResponse(response: Response): boolean {

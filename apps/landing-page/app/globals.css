@@ -1,9 +1,9 @@
 /*
  * Atelier Zero — landing page styles.
  *
- * Mirrors `skills/open-design-landing/example.html` <style> block 1:1.
+ * Mirrors `design-templates/open-design-landing/example.html` <style> block 1:1.
  * When the canonical example.html changes, mirror the diff here so the
- * skill's known-good rendering stays in lockstep with the deployed site.
+ * template's known-good rendering stays in lockstep with the deployed site.
  *
  * Font loading lives in `_components/font-stylesheet.astro` — a server
  * component injected into every page's <head>. We used to `@import` it

@@ -1,5 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { AppConfig } from '../types';
+import { useAnalytics } from '../analytics/provider';
+import {
+  trackIntegrationsConnectorsTabClick,
+  trackIntegrationsSkillsTabClick,
+  trackIntegrationsTabClick,
+  trackPageView,
+  trackSettingsConnectorAuthResult,
+} from '../analytics/events';
 import { ConnectorSection } from './SettingsDialog';
 import { Icon } from './Icon';
 import { McpClientSection } from './McpClientSection';
@@ -24,6 +32,13 @@ const INTEGRATION_TABS: ReadonlyArray<{
   { id: 'use-everywhere' },
 ];
 
+function integrationTabToTrackingElement(
+  id: IntegrationTab,
+): 'mcp' | 'connectors' | 'skills' | 'use_everywhere' {
+  if (id === 'use-everywhere') return 'use_everywhere';
+  return id;
+}
+
 export function IntegrationsView({
   config,
   initialTab = 'mcp',
@@ -31,6 +46,13 @@ export function IntegrationsView({
   onPersistComposioKey,
 }: Props) {
   const t = useT();
+  const analytics = useAnalytics();
+  const integrationsPageViewFiredRef = useRef(false);
+  useEffect(() => {
+    if (integrationsPageViewFiredRef.current) return;
+    integrationsPageViewFiredRef.current = true;
+    trackPageView(analytics.track, { page_name: 'integrations' });
+  }, [analytics.track]);
   const [activeTab, setActiveTab] = useState<IntegrationTab>(initialTab);
   const [localConfig, setLocalConfig] = useState<AppConfig>(config);
 
@@ -80,7 +102,14 @@ export function IntegrationsView({
               role="tab"
               aria-selected={active}
               className={`integrations-view__tab${active ? ' is-active' : ''}`}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => {
+                trackIntegrationsTabClick(analytics.track, {
+                  page_name: 'integrations',
+                  area: 'integrations_tab',
+                  element: integrationTabToTrackingElement(tab.id),
+                });
+                setActiveTab(tab.id);
+              }}
               data-testid={`integrations-tab-${tab.id}`}
             >
               <span className="integrations-view__tab-label">{integrationTabLabel(tab.id, t)}</span>
@@ -99,6 +128,23 @@ export function IntegrationsView({
             setCfg={setLocalConfig}
             composioConfigLoading={composioConfigLoading}
             onPersistComposioKey={onPersistComposioKey}
+            onConnectorsTabClick={(element) =>
+              trackIntegrationsConnectorsTabClick(analytics.track, {
+                page_name: 'integrations',
+                area: 'connectors_tab',
+                element,
+              })
+            }
+            onConnectorAuthResult={({ connectorId, action, result, errorCode }) =>
+              trackSettingsConnectorAuthResult(analytics.track, {
+                page: 'settings',
+                area: 'connectors',
+                connector_id: connectorId,
+                action,
+                result,
+                ...(errorCode ? { error_code: errorCode } : {}),
+              })
+            }
           />
         ) : null}
 
@@ -119,8 +165,19 @@ export function IntegrationsView({
 
 function SkillsComingSoonPanel() {
   const t = useT();
+  const analytics = useAnalytics();
   return (
-    <section className="integrations-view__coming-soon" aria-labelledby="integration-skills-title">
+    <section
+      className="integrations-view__coming-soon"
+      aria-labelledby="integration-skills-title"
+      onClick={() =>
+        trackIntegrationsSkillsTabClick(analytics.track, {
+          page_name: 'integrations',
+          area: 'skills_tab',
+          element: 'coming_soon',
+        })
+      }
+    >
       <div className="integrations-view__coming-icon" aria-hidden="true">
         <Icon name="sparkles" size={22} />
       </div>

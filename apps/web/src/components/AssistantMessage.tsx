@@ -4,6 +4,14 @@ import { FileOpsSummary } from "./FileOpsSummary";
 import { renderMarkdown } from "../runtime/markdown";
 import { projectFileUrl } from "../providers/registry";
 import { submitChatRunToolResult } from "../providers/daemon";
+import { useAnalytics } from "../analytics/provider";
+import {
+  trackAssistantFeedbackButtonClick,
+  trackAssistantFeedbackReasonPanelSurfaceView,
+  trackAssistantFeedbackReasonSubmitClick,
+  trackFeedbackSubmitResult,
+} from "../analytics/events";
+import type { TrackingProjectKind } from "@open-design/contracts/analytics";
 import {
   splitOnQuestionForms,
   type QuestionForm,
@@ -44,6 +52,11 @@ interface Props {
   message: ChatMessage;
   streaming: boolean;
   projectId: string | null;
+  // Analytics context for the assistant_feedback_* events. Defaults
+  // applied at the call site keep AssistantMessage usable in tests
+  // that don't care about telemetry.
+  projectKind?: TrackingProjectKind | null;
+  conversationId?: string | null;
   projectFiles?: ProjectFile[];
   projectFileNames?: Set<string>;
   onRequestOpenFile?: (name: string) => void;
@@ -80,6 +93,8 @@ export function AssistantMessage({
   message,
   streaming,
   projectId,
+  projectKind = null,
+  conversationId = null,
   projectFiles = [],
   projectFileNames,
   onRequestOpenFile,
@@ -258,6 +273,12 @@ export function AssistantMessage({
               <AssistantFeedback
                 feedback={message.feedback}
                 onFeedback={onFeedback}
+                projectId={projectId}
+                projectKind={projectKind}
+                conversationId={conversationId}
+                runId={message.runId ?? null}
+                assistantMessageId={message.id}
+                producedFileCount={produced.length}
                 footerProps={{
                   streaming,
                   startedAt: message.startedAt,
@@ -460,12 +481,29 @@ function AssistantFeedback({
   feedback,
   onFeedback,
   footerProps,
+  projectId,
+  projectKind,
+  conversationId,
+  runId,
+  assistantMessageId,
+  producedFileCount,
 }: {
   feedback: ChatMessage["feedback"];
   onFeedback: (change: ChatMessageFeedbackChange) => void;
   footerProps: AssistantFooterProps;
+  projectId: string | null;
+  projectKind: TrackingProjectKind | null;
+  conversationId: string | null;
+  runId: string | null;
+  assistantMessageId: string;
+  producedFileCount: number;
 }) {
   const t = useT();
+  const analytics = useAnalytics();
+  // P0 — analytics context the feedback events need. The four ids are
+  // either user-anchored (projectId / assistantMessageId) or run-anchored
+  // (runId), so we pass them down with a stable identity. `producedFileCount`
+  // feeds `has_produced_files` on assistant_feedback_button click.
   const [burstKey, setBurstKey] = useState(0);
   const [reasonRating, setReasonRating] =
     useState<ChatMessageFeedbackRating | null>(null);
@@ -482,13 +520,56 @@ function AssistantFeedback({
   useEffect(() => {
     if (!reasonRating) return;
     reasonsRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
-  }, [reasonRating]);
+    // P0 surface_view assistant_feedback_reason_panel — fires when the
+    // reason panel actually appears (reasonRating flips from null to
+    // truthy), not when the buttons render.
+    trackAssistantFeedbackReasonPanelSurfaceView(analytics.track, {
+      page_name: "chat_panel",
+      area: "chat_panel",
+      element: "assistant_feedback_reason_panel",
+      view_type: "panel",
+      project_id: projectId ?? "",
+      project_kind: projectKind,
+      conversation_id: conversationId,
+      assistant_message_id: assistantMessageId,
+      run_id: runId ?? "",
+      rating: reasonRating,
+    });
+  }, [
+    reasonRating,
+    analytics.track,
+    projectId,
+    projectKind,
+    conversationId,
+    assistantMessageId,
+    runId,
+  ]);
   const toggleFeedback = (rating: ChatMessageFeedbackRating) => {
     const nextRating = selected === rating ? null : rating;
     if (nextRating === "positive") setBurstKey((key) => key + 1);
     setDraftReasonCodes(new Set());
     setCustomReason("");
     setReasonRating(nextRating);
+    // P0 ui_click assistant_feedback_button. v1 emitted `rating: null` on
+    // the clear path, which lost the signal "user un-thumbed positive vs
+    // un-thumbed negative". v2 fixes this: when clearing, `rating` carries
+    // the rating that was cleared (the user's most recent gesture target),
+    // and `rating_before` records the previous selection state.
+    const ratingBefore: "positive" | "negative" | "none" = selected ?? "none";
+    trackAssistantFeedbackButtonClick(analytics.track, {
+      page_name: "chat_panel",
+      area: "chat_panel",
+      element: "assistant_feedback_button",
+      action: nextRating ? "submit_feedback_rating" : "clear_feedback_rating",
+      project_id: projectId ?? "",
+      project_kind: projectKind,
+      conversation_id: conversationId,
+      assistant_message_id: assistantMessageId,
+      run_id: runId ?? "",
+      rating,
+      rating_before: ratingBefore,
+      has_produced_files: producedFileCount > 0,
+    });
     onFeedback(nextRating ? { rating: nextRating } : null);
   };
   const toggleReasonCode = (code: ChatMessageFeedbackReasonCode) => {
@@ -504,9 +585,61 @@ function AssistantFeedback({
   const submitReasons = () => {
     if (!reasonRating) return;
     const trimmedCustomReason = customReason.trim();
+    const reasonCodes = [...draftReasonCodes];
+    const reasonJoined = reasonCodes.length > 0 ? reasonCodes.join(",") : undefined;
+    const hasCustomReason = draftReasonCodes.has("other") && trimmedCustomReason.length > 0;
+    const requestId = analytics.newRequestId();
+    // P0 ui_click element=assistant_feedback_reason_submit_button — fires
+    // synchronously on the user gesture so the click count never depends on
+    // the host's onFeedback persistence resolving.
+    trackAssistantFeedbackReasonSubmitClick(
+      analytics.track,
+      {
+        page_name: "chat_panel",
+        area: "chat_panel",
+        element: "assistant_feedback_reason_submit_button",
+        action: "click_submit_feedback_reason",
+        project_id: projectId ?? "",
+        project_kind: projectKind,
+        conversation_id: conversationId,
+        assistant_message_id: assistantMessageId,
+        run_id: runId ?? "",
+        rating: reasonRating,
+        ...(reasonJoined ? { reason: reasonJoined } : {}),
+        reason_count: reasonCodes.length,
+        has_custom_reason: hasCustomReason,
+        ...(hasCustomReason ? { custom_reason: trimmedCustomReason } : {}),
+      },
+      { requestId },
+    );
+    // P0 feedback_submit_result — paired with the click via requestId so
+    // PostHog dashboards can correlate intent → persistence. onFeedback in
+    // our app currently completes synchronously, so we emit `success`
+    // optimistically; a future error-aware host can flip this to `failed`.
+    trackFeedbackSubmitResult(
+      analytics.track,
+      {
+        page_name: "chat_panel",
+        area: "chat_panel",
+        element: "assistant_feedback_reason_submit",
+        action: "submit_feedback_reason",
+        project_id: projectId ?? "",
+        project_kind: projectKind,
+        conversation_id: conversationId,
+        assistant_message_id: assistantMessageId,
+        run_id: runId ?? "",
+        rating: reasonRating,
+        ...(reasonJoined ? { reason: reasonJoined } : {}),
+        reason_count: reasonCodes.length,
+        has_custom_reason: hasCustomReason,
+        ...(hasCustomReason ? { custom_reason: trimmedCustomReason } : {}),
+        result: "success",
+      },
+      { requestId },
+    );
     onFeedback({
       rating: reasonRating,
-      reasonCodes: [...draftReasonCodes],
+      reasonCodes,
       customReason:
         draftReasonCodes.has("other") && trimmedCustomReason
           ? trimmedCustomReason

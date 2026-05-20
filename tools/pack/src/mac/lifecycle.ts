@@ -35,6 +35,7 @@ import { desktopIdentityPath, desktopLogPath, macAppExecutablePath, resolveMacPa
 import type { DesktopRootIdentityFallback, DesktopRootIdentityMarker, MacCleanupResult, MacInspectResult, MacInstallResult, MacStartResult, MacStartSource, MacStopResult, MacUninstallResult } from "./types.js";
 
 const execFileAsync = promisify(execFile);
+const UPDATE_ACTION_TIMEOUT_MS = 10 * 60 * 1000;
 
 function desktopStamp(config: ToolPackConfig): SidecarStamp {
   return {
@@ -710,7 +711,7 @@ export async function inspectPackedMacApp(config: ToolPackConfig, options: { exp
       update: await requestJsonIpc<DesktopUpdateResult>(
         stamp.ipc,
         { input: { action: updateAction }, type: SIDECAR_MESSAGES.UPDATE },
-        { timeoutMs: 60000 },
+        { timeoutMs: UPDATE_ACTION_TIMEOUT_MS },
       ),
     }),
     status,

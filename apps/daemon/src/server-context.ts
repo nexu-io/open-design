@@ -89,6 +89,7 @@ export interface ServerContext {
   telemetry?: TelemetryDeps;
   validation: any;
   finalize: any;
+  handoff: any;
   chat: any;
   agents: any;
   critique: any;

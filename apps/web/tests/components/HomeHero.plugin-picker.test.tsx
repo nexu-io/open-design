@@ -329,18 +329,15 @@ describe('HomeHero plugin picker', () => {
     );
 
     // The inline pill is a read-only span so its width tracks the
-    // textarea text exactly. (See HomeHero.tsx for why <input>/<select>
-    // at this position caused the overlay/textarea caret drift.)
+    // textarea text exactly — editing happens in the form below. (See
+    // HomeHero.tsx for why <input>/<select> at this position caused the
+    // overlay/textarea caret drift.)
     const slot = screen.getByTestId('home-hero-prompt-slot-source');
     expect(slot.tagName).toBe('SPAN');
     expect(slot.textContent).toBe('marketplace');
     expect(slot.getAttribute('data-filled')).toBe('true');
-    // The structured inputs form below the textarea is suppressed
-    // when every plugin input is already referenced in the template
-    // — otherwise the form would render a second, identical labelled
-    // input for every slot pill shown inline, making the chat box
-    // look like it had grown a second composer.
-    expect(screen.queryByTestId('plugin-inputs-form')).toBeNull();
+    const form = screen.getByTestId('plugin-inputs-form');
+    expect(form.querySelector('[data-field-name="source"]')).toBeTruthy();
 
     rerender(
       <HomeHero

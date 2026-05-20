@@ -66,19 +66,18 @@ test.beforeEach(async ({ page }) => {
 test('home loads with the primary entry controls', async ({ page }) => {
   await gotoEntryHome(page);
 
-  await expect(page.getByTestId('entry-nav-logo')).toHaveAttribute('aria-current', 'page');
-  await expect(page.getByTestId('entry-nav-home')).toHaveCount(0);
+  await expect(page.getByTestId('entry-nav-home')).toHaveAttribute('aria-current', 'page');
   await expect(page.getByTestId('entry-nav-new-project')).toBeVisible();
   await expect(page.getByTestId('home-hero-input')).toBeVisible();
 });
 
-test('settings dialog is reachable from home', async ({ page }) => {
+test('settings menu is reachable from home', async ({ page }) => {
   await gotoEntryHome(page);
 
-  await page.getByRole('button', { name: 'Open settings' }).click();
-  const settingsDialog = page.getByRole('dialog');
-  await expect(settingsDialog).toBeVisible();
-  await expect(settingsDialog.getByRole('heading', { name: 'Execution mode' })).toBeVisible();
+  await page.locator('.avatar-menu .settings-icon-btn').click();
+  const settingsMenu = page.locator('.avatar-popover[role="menu"]');
+  await expect(settingsMenu).toBeVisible();
+  await expect(settingsMenu.getByRole('button', { name: /^settings$/i })).toBeVisible();
 });
 
 test('prototype project creation reaches the workspace shell', async ({ page }) => {

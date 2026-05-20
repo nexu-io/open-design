@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { app, dialog, Menu, shell, type MenuItemConstructorOptions } from "electron";
+import { BrowserWindow, Menu, app, shell, type MenuItemConstructorOptions } from "electron";
 
 import {
   APP_KEYS,
@@ -19,11 +19,15 @@ import {
   type SidecarStamp,
   type WebStatusSnapshot,
 } from "@open-design/sidecar-proto";
+import { dirname, join } from "node:path";
+
 import {
   bootstrapSidecarRuntime,
   createJsonIpcServer,
   requestJsonIpc,
   resolveAppIpcPath,
+  resolveLogFilePath,
+  resolveNamespaceRoot,
   type JsonIpcServerHandle,
   type SidecarRuntimeContext,
 } from "@open-design/sidecar";
@@ -31,7 +35,11 @@ import { readProcessStamp } from "@open-design/platform";
 
 import { createDesktopRuntime, type DesktopRuntime } from "./runtime.js";
 import { attachDesktopProcessErrorFilter } from "./uncaught-exception.js";
-import { createDesktopUpdater, createDesktopUpdaterScheduler, type DesktopUpdater, type DesktopUpdaterScheduler } from "./updater.js";
+import { createDesktopUpdater, createDesktopUpdaterScheduler, type DesktopUpdaterScheduler } from "./updater.js";
+import {
+  exportDiagnosticsToFile,
+  registerDesktopDiagnosticsIpc,
+} from "./diagnostics.js";
 
 // Re-export pure URL-policy helpers so the packaged workspace's
 // vitest can pin their behaviour without spinning up a full Electron
@@ -125,69 +133,16 @@ function createWebDiscovery(runtime: SidecarRuntimeContext<SidecarStamp>): () =>
   };
 }
 
-function buildUpdateMenuItems(updater: DesktopUpdater): MenuItemConstructorOptions[] {
-  const status = updater.snapshot();
-  const busy = status.state === "checking" || status.state === "downloading" || status.state === "installing";
-  return [
-    {
-      enabled: status.enabled && !busy,
-      label: status.state === "downloading" ? "Downloading Update..." : "Check for Updates...",
-      async click() {
-        const next = await updater.checkForUpdates();
-        await showUpdateResultDialog(updater, next);
-      },
-    },
-    {
-      enabled: status.enabled && status.state === "downloaded",
-      label: "Install Update...",
-      async click() {
-        const next = await updater.installUpdate();
-        if (next.state === "error") {
-          dialog.showErrorBox("Open Design update failed", next.error?.message ?? "Could not open the downloaded installer.");
-        }
-      },
-    },
-  ];
-}
-
-async function showUpdateResultDialog(updater: DesktopUpdater, status = updater.snapshot()): Promise<void> {
-  if (!status.enabled) return;
-  if (status.state === "downloaded") {
-    const result = await dialog.showMessageBox({
-      buttons: ["Install Update", "Later"],
-      defaultId: 0,
-      message: "A new Open Design version has been downloaded.",
-      detail: "Open the installer to update Open Design. You may need to quit the app and replace the existing copy.",
-      type: "info",
+function installDesktopMenu(
+  runtime: SidecarRuntimeContext<SidecarStamp>,
+): () => void {
+  const exportDiagnostics = () => {
+    const focused = BrowserWindow.getFocusedWindow();
+    void exportDiagnosticsToFile(runtime, focused).catch((error: unknown) => {
+      console.error("desktop diagnostics export from menu failed", error);
     });
-    if (result.response === 0) await updater.installUpdate();
-    return;
-  }
-  if (status.state === "not-available") {
-    await dialog.showMessageBox({
-      buttons: ["OK"],
-      message: "Open Design is up to date.",
-      type: "info",
-    });
-    return;
-  }
-  if (status.state === "unsupported") {
-    await dialog.showMessageBox({
-      buttons: ["OK"],
-      detail: status.error?.message,
-      message: "Updates are not available for this Open Design build.",
-      type: "info",
-    });
-    return;
-  }
-  if (status.state === "error") {
-    dialog.showErrorBox("Open Design update failed", status.error?.message ?? "Could not check for updates.");
-  }
-}
-
-function installDesktopMenu(updater: DesktopUpdater): () => void {
+  };
   const rebuild = () => {
-    const updateItems = buildUpdateMenuItems(updater);
     const template: MenuItemConstructorOptions[] = [
       ...(process.platform === "darwin"
         ? [
@@ -195,8 +150,6 @@ function installDesktopMenu(updater: DesktopUpdater): () => void {
               label: app.name,
               submenu: [
                 { role: "about" as const },
-                { type: "separator" as const },
-                ...updateItems,
                 { type: "separator" as const },
                 { role: "services" as const },
                 { type: "separator" as const },
@@ -212,8 +165,6 @@ function installDesktopMenu(updater: DesktopUpdater): () => void {
             {
               label: "File",
               submenu: [
-                ...updateItems,
-                { type: "separator" as const },
                 { role: "quit" as const },
               ],
             },
@@ -263,6 +214,8 @@ function installDesktopMenu(updater: DesktopUpdater): () => void {
               void shell.openExternal("https://github.com/nexu-io/open-design");
             },
           },
+          { type: "separator" },
+          { label: "Export Diagnostics…", click: exportDiagnostics },
         ],
       },
     ];
@@ -270,7 +223,7 @@ function installDesktopMenu(updater: DesktopUpdater): () => void {
   };
 
   rebuild();
-  return updater.subscribe(rebuild);
+  return () => undefined;
 }
 
 const REGISTER_DESKTOP_AUTH_RETRY_DELAYS_MS = [120, 240, 480, 960, 1500];
@@ -373,9 +326,22 @@ export async function runDesktopMain(
     },
     { openPath: (path) => shell.openPath(path) },
   );
+  const namespaceRoot = resolveNamespaceRoot({
+    base: runtime.base,
+    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    namespace: runtime.namespace,
+  });
+  const desktopLogPath = resolveLogFilePath({
+    app: APP_KEYS.DESKTOP,
+    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    runtimeRoot: namespaceRoot,
+  });
+  const rendererLogPath = join(dirname(desktopLogPath), "renderer.log");
+
   let desktop: DesktopRuntime | null = null;
   let disposeMenu: () => void = () => undefined;
   let updateScheduler: DesktopUpdaterScheduler | null = null;
+  let removeDiagnosticsIpc: () => void = () => undefined;
   let ipcServer: JsonIpcServerHandle | null = null;
   let shuttingDown = false;
 
@@ -387,6 +353,7 @@ export async function runDesktopMain(
     });
     updateScheduler?.stop("shutdown");
     disposeMenu();
+    removeDiagnosticsIpc();
     await ipcServer?.close().catch(() => undefined);
     await desktop?.close().catch(() => undefined);
     app.quit();
@@ -407,10 +374,12 @@ export async function runDesktopMain(
     // runtime then mints a FRESH token (new nonce + new exp — replay
     // protection still works) and POSTs once more.
     registerDesktopAuthWithDaemon: () => registerDesktopAuthWithDaemon(runtime, desktopAuthSecret),
+    rendererLogPath,
     requestQuit: shutdownAndExit,
     updater,
   });
-  disposeMenu = installDesktopMenu(updater);
+  disposeMenu = installDesktopMenu(runtime);
+  removeDiagnosticsIpc = registerDesktopDiagnosticsIpc(runtime);
   updateScheduler = createDesktopUpdaterScheduler(updater, {
     backoffInitialMs: updater.config.checkBackoffInitialMs,
     backoffMaxMs: updater.config.checkBackoffMaxMs,

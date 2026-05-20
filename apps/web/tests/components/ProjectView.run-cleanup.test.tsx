@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, render, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ProjectView,
   clearStreamingConversationMarker,
@@ -23,6 +23,7 @@ const fetchDesignSystem = vi.fn();
 const getTemplate = vi.fn();
 const fetchChatRunStatus = vi.fn();
 const listActiveChatRuns = vi.fn();
+const listProjectRuns = vi.fn();
 const reattachDaemonRun = vi.fn();
 const streamViaDaemon = vi.fn();
 const saveMessage = vi.fn();
@@ -42,6 +43,7 @@ vi.mock('../../src/providers/anthropic', () => ({
 vi.mock('../../src/providers/daemon', () => ({
   fetchChatRunStatus: (...args: unknown[]) => fetchChatRunStatus(...args),
   listActiveChatRuns: (...args: unknown[]) => listActiveChatRuns(...args),
+  listProjectRuns: (...args: unknown[]) => listProjectRuns(...args),
   reattachDaemonRun: (...args: unknown[]) => reattachDaemonRun(...args),
   streamViaDaemon: (...args: unknown[]) => streamViaDaemon(...args),
 }));
@@ -116,6 +118,10 @@ async function waitForReadyChatPaneProps() {
 }
 
 describe('ProjectView daemon cleanup', () => {
+  beforeEach(() => {
+    listProjectRuns.mockResolvedValue([]);
+  });
+
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
@@ -266,6 +272,163 @@ describe('ProjectView daemon cleanup', () => {
       expect(failedCall).toBeTruthy();
     });
     expect(reattachDaemonRun).not.toHaveBeenCalled();
+  });
+
+  it('persists a delayed daemon run id after switching projects so returning can reattach', async () => {
+    const projectOne = { id: 'project-1', name: 'Project One', skillId: null, designSystemId: null };
+    const projectTwo = { id: 'project-2', name: 'Project Two', skillId: null, designSystemId: null };
+    const messagesByConversation = new Map<string, ChatMessage[]>([
+      ['conv-1', []],
+      ['conv-2', []],
+    ]);
+
+    listConversations.mockImplementation(async (projectId: string) => [
+      projectId === 'project-1'
+        ? { id: 'conv-1', title: 'Conversation 1' }
+        : { id: 'conv-2', title: 'Conversation 2' },
+    ]);
+    listMessages.mockImplementation(async (_projectId: string, conversationId: string) =>
+      messagesByConversation.get(conversationId) ?? [],
+    );
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-delayed',
+      status: 'running',
+      createdAt: 1,
+      updatedAt: 1,
+      exitCode: null,
+      signal: null,
+    });
+    saveMessage.mockImplementation(async (_projectId: string, conversationId: string, message: ChatMessage) => {
+      const existing = messagesByConversation.get(conversationId) ?? [];
+      const next = existing.filter((item) => item.id !== message.id);
+      next.push(message);
+      messagesByConversation.set(conversationId, next);
+      return message;
+    });
+    reattachDaemonRun.mockImplementation(async () => new Promise<void>(() => {}));
+
+    let capturedRunCreated: ((runId: string) => void) | null = null;
+    let capturedStreamSignal: AbortSignal | null = null;
+    let capturedCancelSignal: AbortSignal | null = null;
+    let capturedAssistantMessageId: string | null = null;
+    streamViaDaemon.mockImplementation(async (options: {
+      assistantMessageId?: string;
+      signal: AbortSignal;
+      cancelSignal?: AbortSignal;
+      onRunCreated?: (runId: string) => void;
+    }) => {
+      capturedRunCreated = options.onRunCreated ?? null;
+      capturedStreamSignal = options.signal;
+      capturedCancelSignal = options.cancelSignal ?? null;
+      capturedAssistantMessageId = options.assistantMessageId ?? null;
+      return new Promise<void>(() => {});
+    });
+
+    const view = render(
+      <ProjectView
+        project={projectOne as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    const sendProps = await waitForReadyChatPaneProps();
+    await sendProps.onSend!('keep running', [], []);
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    expect(capturedRunCreated).not.toBeNull();
+
+    view.rerender(
+      <ProjectView
+        project={projectTwo as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => expect((capturedStreamSignal as AbortSignal | null)?.aborted).toBe(true));
+    expect((capturedCancelSignal as AbortSignal | null)?.aborted).toBe(false);
+
+    capturedRunCreated!('run-delayed');
+
+    await waitFor(() => {
+      const persistedAssistant = saveMessage.mock.calls.find(
+        (call) =>
+          call[0] === 'project-1' &&
+          call[1] === 'conv-1' &&
+          call[2]?.id === capturedAssistantMessageId &&
+          call[2]?.role === 'assistant' &&
+          call[2]?.runId === 'run-delayed' &&
+          call[2]?.runStatus === 'queued',
+      );
+      expect(persistedAssistant).toBeTruthy();
+    });
+
+    view.rerender(
+      <ProjectView
+        project={projectOne as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(reattachDaemonRun).toHaveBeenCalledWith(
+        expect.objectContaining({ runId: 'run-delayed' }),
+      );
+    });
   });
 
   // Regression: when a project is created via PluginLoopHome with the
@@ -435,6 +598,7 @@ describe('ProjectView daemon cleanup', () => {
       onRunCreated?: (runId: string) => void;
     }) => {
       options.onRunCreated?.('run-ds-1');
+      await Promise.resolve();
       options.handlers.onDone();
     });
 
