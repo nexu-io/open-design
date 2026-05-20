@@ -483,6 +483,7 @@ test("package-tauri-migration-handoff command sidecar imports, pushes, and verif
   const binDir = join(root, "bin");
   const fakePnpmLog = join(root, "pnpm.log");
   const prBodyPath = join(root, "tauri-migration-pr-body.md");
+  const reportDir = join(root, "reports");
 
   await git(root, "init", "--initial-branch=main", sourceRepo);
   await git(sourceRepo, "config", "user.email", "codex@example.test");
@@ -551,6 +552,34 @@ test("package-tauri-migration-handoff command sidecar imports, pushes, and verif
   assert.equal((await git(targetRepo, "symbolic-ref", "--short", "HEAD")).stdout.trim(), migrationBranch);
   assert.match(await readFile(prBodyPath, "utf8"), /Pending native M4 evidence/);
   assert.match(await readFile(fakePnpmLog, "utf8"), /tauri-migration-status\.ts/);
+
+  await writeFile(fakePnpmLog, "", "utf8");
+  const runIdResult = await execFileAsync("bash", [`${output}.commands.sh`, output], {
+    cwd: targetRepo,
+    env: {
+      ...process.env,
+      GITHUB_RUN_ID: "123456789",
+      PATH: `${binDir}:${process.env.PATH ?? ""}`,
+      REMOTE: remotePath,
+      TAURI_M4_REPORT_DIR: reportDir,
+      TAURI_PR_BODY_PATH: prBodyPath,
+    },
+    maxBuffer: 1024 * 1024 * 4,
+  });
+  assert.match(
+    runIdResult.stdout,
+    new RegExp(`Verified remote ${escapeRegExp(remotePath)} ${escapeRegExp(migrationBranch)} at ${sourceHead}`),
+  );
+  assert.doesNotMatch(runIdResult.stdout, /Remote push is complete/);
+  const runIdPnpmLog = await readFile(fakePnpmLog, "utf8");
+  assert.match(runIdPnpmLog, /tauri-migration-status\.ts/);
+  assert.match(runIdPnpmLog, /download-tauri-m4-reports\.ts/);
+  assert.match(runIdPnpmLog, /--run-id 123456789/);
+  assert.match(runIdPnpmLog, new RegExp(`--branch ${escapeRegExp(migrationBranch)}`));
+  assert.match(runIdPnpmLog, new RegExp(`--expected-head ${sourceHead}`));
+  assert.match(runIdPnpmLog, new RegExp(`--remote ${escapeRegExp(remotePath)}`));
+  assert.match(runIdPnpmLog, new RegExp(`--output-dir ${escapeRegExp(reportDir)}`));
+  assert.match(runIdPnpmLog, /--advance/);
 });
 
 test("package-tauri-migration-handoff command sidecar restores the checked-out branch when push fails", async (t) => {
