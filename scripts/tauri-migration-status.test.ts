@@ -791,6 +791,7 @@ test("continue-tauri-migration dry-run plans a branch push from current handoff 
   assert.doesNotMatch(result.stdout, /package-tauri-migration-handoff\.ts/);
   assert.match(result.stdout, /push-tauri-migration-handoff\.ts/);
   assert.match(result.stdout, /Would push codex\/electron-to-tauri-migration/);
+  assert.match(result.stdout, /Dry-run push preflight succeeded/);
   assert.match(result.stdout, /If this host lacks repository write access/);
   assert.match(result.stdout, new RegExp(escapeRegExp(archivePath)));
   assert.match(result.stdout, new RegExp(escapeRegExp(`${archivePath}.sha256`)));
@@ -800,6 +801,8 @@ test("continue-tauri-migration dry-run plans a branch push from current handoff 
   assert.match(result.stdout, /download-tauri-m4-reports\.ts/);
   assert.match(result.stdout, new RegExp(`--expected-head ${head}`));
   assert.match(result.stdout, /--advance/);
+  const remoteHead = await git(fixture, "ls-remote", "--heads", remotePath, "refs/heads/codex/electron-to-tauri-migration");
+  assert.equal(remoteHead.stdout.trim(), "");
 });
 
 test("continue-tauri-migration rejects branch overrides that differ from the current handoff", async (t) => {

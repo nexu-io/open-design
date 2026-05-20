@@ -297,6 +297,13 @@ async function continueM4(args: Args, status: MigrationStatus, log: string[]): P
       }
       log.push(`${args.dryRun ? "Would push" : "Pushed"} ${args.branch} to ${args.remote} from ${archive}.`);
       if (args.dryRun) {
+        const preflight = await preflightDryRunPush(args);
+        if (preflight.ok) {
+          log.push(`Dry-run push preflight succeeded for ${args.remote} ${args.branch}.`);
+        } else {
+          log.push(`Dry-run push preflight failed: ${preflight.message}`);
+          log.push("The planned push is likely blocked on this host; use the transferable handoff path below.");
+        }
         appendTransferableHandoffHint(args, archive, log);
       }
       if (!args.dryRun) {
@@ -395,6 +402,18 @@ function pushHandoffArgs(args: Args, archive: string, options: { omitCwd?: boole
   ];
 }
 
+async function preflightDryRunPush(args: Args): Promise<{ ok: true } | { message: string; ok: false }> {
+  try {
+    await execFileAsync("git", ["push", "--dry-run", args.remote, `HEAD:refs/heads/${args.branch}`], {
+      cwd: args.root,
+      maxBuffer: 1024 * 1024,
+    });
+    return { ok: true };
+  } catch (error) {
+    return { message: conciseErrorMessage(error), ok: false };
+  }
+}
+
 function appendTransferableHandoffHint(args: Args, archive: string, log: string[]): void {
   log.push("If this host lacks repository write access, transfer the current packaged handoff to a write-capable checkout:");
   log.push(`  ${archive}`);
@@ -454,6 +473,14 @@ async function requestNativeCiDispatch(args: Args): Promise<
 }
 
 function conciseErrorMessage(error: unknown): string {
+  if (error instanceof Error && ("stderr" in error || "stdout" in error)) {
+    const detail = error as Error & { stderr?: string; stdout?: string };
+    const output = [detail.stderr, detail.stdout]
+      .filter((value): value is string => value != null && value.trim().length > 0)
+      .join("\n");
+    const firstOutputLine = output.split(/\r?\n/).find((line) => line.trim().length > 0)?.trim();
+    if (firstOutputLine != null) return firstOutputLine;
+  }
   const message = error instanceof Error ? error.message : String(error);
   return message.split(/\r?\n/).find((line) => line.trim().length > 0)?.trim() ?? "unknown error";
 }
