@@ -12,6 +12,10 @@ type CommandSidecarRequirement = {
 
 const commandSidecarRequirements: readonly CommandSidecarRequirement[] = [
   {
+    label: "generated command sidecar marker",
+    snippets: [generatedCommandSidecarMarker],
+  },
+  {
     label: "self-contained bundle import",
     snippets: ['git fetch "$bundle" "$branch:$temp_ref"'],
   },
