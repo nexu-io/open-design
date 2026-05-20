@@ -16,11 +16,12 @@ import {
 } from '../analytics/events';
 import { IMAGE_MODELS } from "../media/models";
 import { projectRawUrl, uploadProjectFiles, openFolderDialog, fetchConnectors } from "../providers/registry";
+import { importUrl } from "../providers/daemon";
 import { patchProject } from "../state/projects";
 import { fetchMcpServers } from "../state/mcp";
 import type { McpServerConfig, McpTemplate } from "../state/mcp";
 import { listPlugins } from "../state/projects";
-import type { AppConfig, ChatAttachment, ChatCommentAttachment, ProjectFile, ProjectMetadata, SkillSummary } from "../types";
+import type { AgentInfo, AppConfig, ChatAttachment, ChatCommentAttachment, ProjectFile, ProjectMetadata, SkillSummary } from "../types";
 import type {
   ContextItem,
   ConnectorDetail,
@@ -30,6 +31,8 @@ import type {
   RunContextSelection,
 } from '@open-design/contracts';
 import { buildVisualAnnotationAttachment } from '../comments';
+import { FanOutButton } from "./FanOutButton";
+import { SkillRecommendations } from "./SkillRecommendations";
 import { Icon } from "./Icon";
 import { PluginDetailsModal } from "./PluginDetailsModal";
 import { PluginsSection, type PluginsSectionHandle } from "./PluginsSection";
@@ -146,6 +149,15 @@ interface Props {
   // ActivePluginChip on each user message (see UserMessage in
   // ChatPane). Pass `null` (or omit) to render the full rail.
   pinnedPluginId?: string | null;
+  // Available local-CLI agents for the Fan Out picker. When 2+ are
+  // installed and `execMode === 'daemon'`, the composer surfaces a
+  // FanOutButton between Attach and Send so the user can dispatch one
+  // brief at multiple CLIs in parallel. Pass undefined or a single-
+  // agent list to hide the button — single-agent is still the default
+  // path.
+  agents?: AgentInfo[];
+  currentAgentId?: string | null;
+  fanoutSupported?: boolean;
 }
 
 // Imperative handle so ancestors (e.g. example chips in ChatPane) can
@@ -163,6 +175,15 @@ export interface ChatSendMeta {
   // for this run only is composed with the extra skill bodies, without
   // touching the project's persistent `skillId`.
   skillIds?: string[];
+  // Multi-CLI fan-out: when populated with 2+ agent ids, ChatPane skips
+  // the single-agent send and dispatches N parallel runs sharing one
+  // fanoutGroupId. When this is undefined/empty the send falls back to
+  // the user's currently-selected agent in AvatarMenu, preserving the
+  // single-agent flow byte-for-byte.
+  agentIds?: string[];
+  // Browser-session delay for Fan Out. ProjectView schedules the
+  // parallel dispatch with setTimeout and renders a scheduled note.
+  fanoutDelayMs?: number;
 }
 
 /**
@@ -203,6 +224,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       currentSkillId = null,
       onProjectSkillChange,
       pinnedPluginId = null,
+      agents = [],
+      currentAgentId = null,
+      fanoutSupported = false,
     },
     ref
   ) {
@@ -1037,7 +1061,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       }
     }
 
-    async function submit() {
+    async function submit(opts?: { agentIds?: string[]; extraSkillIds?: string[]; fanoutDelayMs?: number }) {
       const prompt = draft.trim();
       if (sendDisabled) return;
       // Intercept `/pet …` and `/mcp` before sending so the slash command
@@ -1048,7 +1072,32 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       // prompt and *is* sent to the agent — the agent runs the skill,
       // packages a Codex pet under `~/.codex/pets/`, and the user
       // adopts it from "Recently hatched" in pet settings afterwards.
-      const contextMeta = currentRunContextMeta();
+      const baseMeta = currentRunContextMeta();
+      // Fan-out: when the user picked 2+ agents in FanOutButton, attach
+      // the list to meta so ChatPane can dispatch parallel runs. Single-
+      // agent flow leaves agentIds undefined and goes through the normal
+      // path byte-for-byte. Extra skill ids (e.g. super-system playbook
+      // toggle) merge with whatever the @-mention picker already staged.
+      const fanIds = opts?.agentIds && opts.agentIds.length >= 2 ? opts.agentIds : undefined;
+      const extraSkills = opts?.extraSkillIds ?? [];
+      const mergedSkillIds = extraSkills.length > 0
+        ? Array.from(new Set([...(baseMeta?.skillIds ?? []), ...extraSkills]))
+        : baseMeta?.skillIds;
+      const contextMetaDraft: ChatSendMeta = { ...(baseMeta ?? {}) };
+      if (fanIds) contextMetaDraft.agentIds = fanIds;
+      if (fanIds && opts?.fanoutDelayMs && opts.fanoutDelayMs > 0) {
+        contextMetaDraft.fanoutDelayMs = opts.fanoutDelayMs;
+      } else {
+        delete contextMetaDraft.fanoutDelayMs;
+      }
+      if (mergedSkillIds && mergedSkillIds.length > 0) {
+        contextMetaDraft.skillIds = mergedSkillIds;
+      } else {
+        delete contextMetaDraft.skillIds;
+      }
+      const contextMeta = Object.keys(contextMetaDraft).length > 0
+        ? contextMetaDraft
+        : undefined;
       const hatched = expandHatchCommand(prompt);
       const nextCommentAttachments = currentCommentAttachments();
       if (hatched) {
@@ -1163,6 +1212,12 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               t={t}
             />
           ) : null}
+          <SkillRecommendations
+            draft={draft}
+            skills={skills}
+            stagedSkillIds={stagedSkillIds}
+            onAdd={(s) => setStagedSkills((prev) => [...prev, s])}
+          />
           {staged.length > 0 ? (
             <StagedAttachments
               attachments={staged}
@@ -1588,7 +1643,106 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 <Icon name="attach" size={15} />
               )}
             </button>
+            <button
+              type="button"
+              className="icon-btn"
+              data-testid="chat-mobbin"
+              onClick={() => {
+                // Mobbin search opens in a new tab so users can pick
+                // real-app frames to reference. Pasting the URL back
+                // into the prompt gives the agent a concrete visual
+                // anchor (PATTERNS Rule #2: references > adjectives).
+                const q = draft.trim();
+                const url = q
+                  ? `https://mobbin.com/search?q=${encodeURIComponent(q)}`
+                  : 'https://mobbin.com/browse/ios/apps';
+                window.open(url, '_blank', 'noopener,noreferrer');
+              }}
+              title="Search Mobbin for reference frames"
+              aria-label="Search Mobbin"
+            >
+              <Icon name="image" size={15} />
+            </button>
+            <button
+              type="button"
+              className="icon-btn"
+              data-testid="chat-extract-theme"
+              onClick={() => {
+                const tpl =
+                  'Extract a design system from this image. Output two files in fenced code blocks:\n\n' +
+                  '1. `tokens.css` — a :root block with --bg, --surface, --fg, --muted, --border, --accent, ' +
+                  '--font-display, --font-body, --text-{xs,sm,base,lg,xl,2xl,3xl,4xl}, --leading-body, ' +
+                  '--leading-tight, --tracking-display, --section-y-{desktop,tablet,phone}, ' +
+                  '--container-max, --container-gutter-{desktop,tablet,phone}, --accent-on, ' +
+                  '--accent-hover, --accent-active, --success, --warn, --danger, --font-mono, ' +
+                  '--space-{1,2,3,4,5,6,8,12}, --radius-{sm,md,lg,pill}, --elev-{flat,ring,raised}, ' +
+                  '--focus-ring, --motion-{fast,base}, --ease-standard, --surface-warm, --fg-2, --meta, ' +
+                  '--border-soft. Use literal hex / hsl / oklch values, not var() chains.\n\n' +
+                  '2. `DESIGN.md` — Visual identity (3-5 sentences) + Key characteristics (bullet list) + ' +
+                  'Anti-patterns + When to pick. Match the tone of design-systems/apple/DESIGN.md.\n\n' +
+                  'Brand name: <fill in based on the image>.\n\n' +
+                  'Then attach the reference image below.';
+                setDraft(tpl);
+                fileInputRef.current?.click();
+              }}
+              title="Extract a design system from an image"
+              disabled={uploading}
+              aria-label="Extract design system from image"
+            >
+              <Icon name="palette" size={15} />
+            </button>
+            <button
+              type="button"
+              className="icon-btn"
+              data-testid="chat-import-url"
+              onClick={async () => {
+                const raw = window.prompt(t('chat.importUrlPrompt'), '');
+                if (!raw) return;
+                const ensuredProjectId = await onEnsureProject();
+                const result = await importUrl(raw, ensuredProjectId);
+                if (!result || !result.savedPath || !result.savedName) {
+                  window.alert(t('chat.importUrlFailed'));
+                  return;
+                }
+                setStaged((curr) => [
+                  ...curr,
+                  {
+                    path: result.savedPath as string,
+                    name: result.savedName as string,
+                    kind: 'file',
+                    size: result.byteLength,
+                  },
+                ]);
+              }}
+              title={t('chat.importUrlTitle')}
+              disabled={uploading}
+              aria-label={t('chat.importUrlAria')}
+            >
+              <Icon name="link" size={15} />
+            </button>
             <span className="composer-spacer" />
+            {!streaming && fanoutSupported ? (
+              <FanOutButton
+                agents={agents}
+                defaultAgentId={currentAgentId}
+                disabled={
+                  sendDisabled ||
+                  (!draft.trim() && staged.length === 0 && currentCommentAttachments().length === 0)
+                }
+                onSend={(agentIds, extraSkillIds, options) => {
+                  trackStudioClickChatComposer(analytics.track, {
+                    page: 'studio',
+                    area: 'chat_composer',
+                    element: 'send_button',
+                    action: 'click_composer_control',
+                    user_query_tokens: Math.ceil(draft.length / 4),
+                    has_attachment:
+                      staged.length > 0 || currentCommentAttachments().length > 0,
+                  });
+                  void submit({ agentIds, extraSkillIds, fanoutDelayMs: options?.delayMs });
+                }}
+              />
+            ) : null}
             {streaming ? (
               <button
                 type="button"
@@ -2249,7 +2403,14 @@ function skillMatchesQuery(skill: SkillSummary, query: string): boolean {
 
 function skillMentionRank(skill: SkillSummary, query: string): number {
   const q = query.trim().toLowerCase();
-  if (!q) return 1;
+  // No query — featured skills float to the top so the popover defaults
+  // to the agent's curated picks instead of alphabetical order. Aura
+  // borrows this pattern; their Skills page leads with featured by
+  // default and offers Popular/Trending/Recent as sort overrides.
+  if (!q) {
+    if (typeof skill.featured === 'number' && skill.featured > 0) return 0;
+    return 1;
+  }
   const id = skill.id.toLowerCase();
   const name = skill.name.toLowerCase();
   if (id.startsWith(q) || name.startsWith(q)) return 0;

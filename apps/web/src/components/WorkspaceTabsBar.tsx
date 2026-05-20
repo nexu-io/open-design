@@ -585,6 +585,12 @@ function displayTabFor(
     plugins: t('entry.navPlugins'),
     'design-systems': t('entry.navDesignSystems'),
     integrations: t('entry.navIntegrations'),
+    compare: t('entry.navCompare'),
+    components: t('entry.navComponents'),
+    welcome: 'Welcome',
+    'agent-builder': 'Skill builder',
+    'ship-readiness': 'Ship readiness',
+    'theme-lab': 'Image to theme',
   };
   const entryIcon: Record<EntryHomeView, IconName> = {
     home: 'home',
@@ -594,6 +600,12 @@ function displayTabFor(
     plugins: 'grid',
     'design-systems': 'palette',
     integrations: 'link',
+    compare: 'grid',
+    components: 'file-code',
+    welcome: 'sparkles',
+    'agent-builder': 'sparkles',
+    'ship-readiness': 'check',
+    'theme-lab': 'image',
   };
   return {
     id: tab.id,

@@ -1,0 +1,144 @@
+/* SHARED-SCHEMA-BLOCK - super-system, auto-added 2026-05-19 */
+:root {
+  --bg: var(--outlook-surface);
+  --surface: var(--outlook-surface-sunken);
+  --fg: var(--outlook-ink);
+  --muted: var(--outlook-muted);
+  --border: var(--outlook-border);
+  --accent: var(--outlook-blue);
+  --font-display: var(--outlook-font);
+  --font-body: var(--outlook-font);
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-lg: 17px;
+  --text-xl: 19px;
+  --text-2xl: 24px;
+  --text-3xl: 32px;
+  --text-4xl: 44px;
+  --leading-body: 1.55;
+  --leading-tight: 1.20;
+  --tracking-display: -0.01em;
+  --section-y-desktop: 80px;
+  --section-y-tablet: 64px;
+  --section-y-phone: 48px;
+  --container-max: 1200px;
+  --container-gutter-desktop: 32px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #16a34a;
+  --warn: #eab308;
+  --danger: #dc2626;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 2px 8px color-mix(in oklab, var(--fg), transparent 92%);
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 60%);
+  --motion-fast: 120ms;
+  --motion-base: 220ms;
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --surface-warm: var(--surface);
+  --fg-2: var(--fg);
+  --meta: var(--muted);
+  --border-soft: var(--border);
+}
+
+/* Microsoft Outlook iOS — design tokens.
+   Source: Mobbin screen extraction (Inbox, New Message, Email Detail,
+   Apps drawer, Action Sheet) — 2026-05-19. */
+
+:root {
+  /* === Brand ============================================================= */
+  --outlook-blue: #1F62B0;
+  --outlook-blue-dark: #155092;
+  --outlook-blue-light: #E5F0FB;
+
+  /* === Surfaces ========================================================== */
+  --outlook-surface: #FFFFFF;
+  --outlook-surface-sunken: #F3F2F1;
+  --outlook-header-bg: var(--outlook-blue);
+  --outlook-overlay: rgba(0, 0, 0, 0.50);
+
+  /* === Text ============================================================== */
+  --outlook-ink: #1C1C1E;
+  --outlook-subhead: #3A3939;
+  --outlook-muted: #605E5C;
+  --outlook-disabled: #A19F9D;
+  --outlook-ink-inverse: #FFFFFF;
+
+  /* === Status =========================================================== */
+  --outlook-red: #D13438;
+  --outlook-green: #107C10;
+  --outlook-amber: #FFB900;
+
+  /* === Avatar palette (deterministic by initial) ======================== */
+  --avatar-terracotta: #D4844C;
+  --avatar-sage: #5BAA68;
+  --avatar-lilac: #A36ECC;
+  --avatar-brown: #A66D4D;
+  --avatar-cobalt: #5089C6;
+  --avatar-pink: #D879B3;
+
+  /* === Borders ========================================================== */
+  --outlook-divider: #EDEBE9;
+  --outlook-border: #DFDDDB;
+  --outlook-focus: var(--outlook-blue);
+
+  /* === Radii ============================================================ */
+  --outlook-radius-xs: 4px;
+  --outlook-radius-sm: 8px;
+  --outlook-radius-md: 12px;
+  --outlook-radius-lg: 16px;
+  --outlook-radius-pill: 999px;
+
+  /* === Spacing ========================================================== */
+  --outlook-space-xs: 4px;
+  --outlook-space-sm: 8px;
+  --outlook-space-md: 12px;
+  --outlook-space-lg: 16px;
+  --outlook-space-xl: 24px;
+  --outlook-space-2xl: 32px;
+
+  /* === Type ============================================================= */
+  --outlook-font: -apple-system, BlinkMacSystemFont, "Segoe UI", "SF Pro Text", Roboto, sans-serif;
+
+  --outlook-text-title: 700 28px/32px var(--outlook-font);
+  --outlook-text-headline: 700 22px/28px var(--outlook-font);
+  --outlook-text-sender: 600 17px/22px var(--outlook-font);
+  --outlook-text-subject: 600 16px/22px var(--outlook-font);
+  --outlook-text-subject-read: 500 16px/22px var(--outlook-font);
+  --outlook-text-body: 400 15px/22px var(--outlook-font);
+  --outlook-text-meta: 400 13px/18px var(--outlook-font);
+  --outlook-text-button: 600 16px/20px var(--outlook-font);
+  --outlook-text-chip: 600 14px/18px var(--outlook-font);
+
+  --outlook-tracking-tight: -0.4px;
+  --outlook-tracking-headline: -0.3px;
+  --outlook-tracking-snug: -0.2px;
+  --outlook-tracking-normal: 0;
+
+  /* === Shadows ========================================================== */
+  --outlook-shadow-pill: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --outlook-shadow-sheet: 0 -8px 24px rgba(0, 0, 0, 0.10);
+
+  /* === Motion =========================================================== */
+  --outlook-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --outlook-duration-fast: 120ms;
+  --outlook-duration-base: 180ms;
+  --outlook-duration-slow: 240ms;
+}

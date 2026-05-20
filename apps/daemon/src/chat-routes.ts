@@ -219,11 +219,84 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   });
 
   app.get('/api/runs', (req, res) => {
-    const { projectId, conversationId, status } = req.query;
-    const runs = design.runs.list({ projectId, conversationId, status });
+    const { projectId, conversationId, status, fanoutGroupId } = req.query;
+    const runs = design.runs.list({ projectId, conversationId, status, fanoutGroupId });
     /** @type {import('@open-design/contracts').ChatRunListResponse} */
     const body = { runs: runs.map(design.runs.statusBody) };
     res.json(body);
+  });
+
+  // Compare view — list runs bucketed by fanoutGroupId so the UI can
+  // render siblings side by side without N round-trips. The web client
+  // could synthesise this from /api/runs, but the bucket-and-sort is
+  // identical for every consumer (Compare tab + `od fanout status`),
+  // so the daemon owns it.
+  app.get('/api/runs/fanout-groups', (req, res) => {
+    const limitRaw = Number(req.query.limit);
+    const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(200, Math.floor(limitRaw)) : 50;
+    /** @type {import('@open-design/contracts').FanoutGroupListResponse} */
+    const body = { groups: design.runs.listFanoutGroups({ limit }) };
+    res.json(body);
+  });
+
+  app.post('/api/runs/:id/winner', (req, res) => {
+    const status = design.runs.setWinner(req.params.id);
+    if (!status) return sendApiError(res, 404, 'NOT_FOUND', 'run not found or not part of a fanout group');
+    res.json(status);
+  });
+
+  // Synthesizer mirror — see server.ts for the canonical handler. The
+  // duplicate exists because both files register run routes today;
+  // until that divergence is resolved, both must carry every new run
+  // endpoint.
+  app.post('/api/runs/fanout-groups/:groupId/suggest-winner', (req, res) => {
+    const groupId = req.params.groupId;
+    const siblings = design.runs.list({ fanoutGroupId: groupId });
+    if (siblings.length < 2) {
+      return sendApiError(res, 404, 'NOT_FOUND', 'fanout group not found or has fewer than 2 runs');
+    }
+    type SiblingRun = { id: string; agentId: string | null; status: string; events?: Array<{ event: string; data: unknown }> };
+    const succeeded = (siblings as SiblingRun[]).filter((r) => r.status === 'succeeded');
+    if (succeeded.length === 0) {
+      return sendApiError(res, 409, 'CONFLICT', 'no succeeded siblings in this group yet');
+    }
+    type Candidate = { runId: string; agentId: string | null; text: string };
+    const candidates: Candidate[] = succeeded.map((run) => {
+      // Run events are { event, data } pairs. Assistant text arrives as
+      // event:'agent' with data.type:'text_delta' carrying data.delta.
+      // Older code paths may also use kind:'text' with .text. Cover both.
+      const text = (run.events ?? [])
+        .map((e) => {
+          const d = e.data as
+            | { type?: string; delta?: string; kind?: string; text?: string; content?: string }
+            | string
+            | null;
+          if (typeof d === 'string') return d;
+          if (!d || typeof d !== 'object') return '';
+          if (d.type === 'text_delta' && typeof d.delta === 'string') return d.delta;
+          if (d.kind === 'text' && typeof d.text === 'string') return d.text;
+          if (typeof d.content === 'string') return d.content;
+          return '';
+        })
+        .join('');
+      return { runId: run.id, agentId: run.agentId, text: text.slice(0, 8000) };
+    });
+    candidates.sort((a: Candidate, b: Candidate) => b.text.length - a.text.length);
+    const winner = candidates[0];
+    if (!winner) {
+      return sendApiError(res, 409, 'CONFLICT', 'no candidates after filter');
+    }
+    const rationale = `Heuristic pick: longest succeeded output (${winner.text.length} chars). Wire a judge model into apps/daemon/src/fanout-synthesizer.ts to upgrade.`;
+    design.runs.setWinner(winner.runId);
+    res.json({
+      winnerRunId: winner.runId,
+      rationale,
+      candidates: candidates.map((c: Candidate) => ({
+        runId: c.runId,
+        agentId: c.agentId,
+        textLength: c.text.length,
+      })),
+    });
   });
 
   app.get('/api/runs/:id', (req, res) => {

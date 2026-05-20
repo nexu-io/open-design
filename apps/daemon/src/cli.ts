@@ -205,6 +205,7 @@ const SUBCOMMAND_MAP = {
   media: runMedia,
   mcp: runMcp,
   research: runResearch,
+  fanout: runFanout,
   plugin: runPlugin,
   ui: runUi,
   marketplace: runMarketplace,
@@ -417,6 +418,190 @@ async function runResearchSearch(rawArgs) {
 async function runArtifacts(args) {
   const { exitCode } = await runArtifactsCli(args);
   process.exit(exitCode);
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand: od fanout — multi-CLI parallel dispatch
+// ---------------------------------------------------------------------------
+//
+// Mirrors the web UI's Fan Out button so external agents (hermes-agent,
+// shell scripts, slack bots) can drive the same flow from outside the
+// browser. The web client and this CLI both hit POST /api/runs N times
+// with a shared fanoutGroupId; the daemon's group lister bundles them
+// for the Compare tab and `od fanout status`.
+//
+// Usage:
+//   od fanout --agents claude,codex,cursor-agent,gemini \
+//             --prompt "Build a hero" \
+//             --project super-system-demo \
+//             [--skill super-system] [--design-system monarch-money] \
+//             [--prompt-file path|-] [--json] [--daemon-url <url>]
+//   od fanout status <fanoutGroupId> [--json]
+async function runFanout(args) {
+  const sub = args[0] && !args[0].startsWith('-') ? args[0] : null;
+  if (sub === 'help' || args.includes('--help') || args.includes('-h')) {
+    printFanoutHelp();
+    process.exit(args.includes('--help') || args.includes('-h') ? 0 : 2);
+  }
+  if (sub === 'status') {
+    return runFanoutStatus(args.slice(1));
+  }
+  return runFanoutSend(args);
+}
+
+async function runFanoutSend(rawArgs) {
+  let flags;
+  try {
+    flags = parseFlags(rawArgs, {
+      string: new Set([
+        'agents', 'prompt', 'prompt-file', 'project', 'skill',
+        'design-system', 'conversation', 'daemon-url',
+      ]),
+      boolean: new Set(['json']),
+    });
+  } catch (err) {
+    console.error(err.message);
+    printFanoutHelp();
+    process.exit(2);
+  }
+  const agents = typeof flags.agents === 'string'
+    ? flags.agents.split(',').map((s) => s.trim()).filter(Boolean)
+    : [];
+  if (agents.length < 2) {
+    console.error('--agents must list 2+ comma-separated agent ids (e.g. claude,codex)');
+    process.exit(2);
+  }
+  // Long prompts via --prompt-file <path|->, per the dual-track rule in
+  // AGENTS.md. Stdin is the conventional sentinel for piped briefs.
+  let prompt = typeof flags.prompt === 'string' ? flags.prompt : '';
+  if (typeof flags['prompt-file'] === 'string') {
+    const path = flags['prompt-file'];
+    try {
+      if (path === '-') {
+        const chunks = [];
+        for await (const chunk of process.stdin) chunks.push(chunk);
+        prompt = Buffer.concat(chunks).toString('utf8');
+      } else {
+        prompt = await (await import('node:fs/promises')).readFile(path, 'utf8');
+      }
+    } catch (err) {
+      console.error(`failed to read --prompt-file: ${err.message ?? err}`);
+      process.exit(3);
+    }
+  }
+  if (!prompt.trim()) {
+    console.error('--prompt or --prompt-file required');
+    process.exit(2);
+  }
+  const projectId = typeof flags.project === 'string' ? flags.project : null;
+  const conversationId = typeof flags.conversation === 'string' ? flags.conversation : null;
+  const skillId = typeof flags.skill === 'string' ? flags.skill : null;
+  const designSystemId = typeof flags['design-system'] === 'string' ? flags['design-system'] : null;
+  const daemonUrl = await cliDaemonUrl(flags);
+  const base = daemonUrl.replace(/\/$/, '');
+  const { randomUUID } = await import('node:crypto');
+  const fanoutGroupId = randomUUID();
+  const runIds = [];
+  const failed = [];
+  for (const agentId of agents) {
+    const body = {
+      agentId,
+      message: prompt,
+      currentPrompt: prompt,
+      projectId,
+      conversationId,
+      skillId,
+      designSystemId,
+      fanoutGroupId,
+    };
+    let resp;
+    try {
+      resp = await fetch(`${base}/api/runs`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-od-client': 'cli' },
+        body: JSON.stringify(body),
+      });
+    } catch (err) {
+      surfaceFetchError(err, daemonUrl);
+      process.exit(3);
+    }
+    if (!resp.ok) {
+      const text = await resp.text();
+      failed.push({ agentId, status: resp.status, error: text.slice(0, 140) });
+      continue;
+    }
+    const json = await resp.json();
+    runIds.push({ agentId, runId: json.runId });
+  }
+  if (flags.json) {
+    process.stdout.write(
+      `${JSON.stringify({ fanoutGroupId, runs: runIds, failed })}\n`,
+    );
+  } else {
+    process.stdout.write(`fanout-group: ${fanoutGroupId}\n`);
+    for (const r of runIds) process.stdout.write(`  ${r.agentId.padEnd(16)} ${r.runId}\n`);
+    for (const f of failed) process.stdout.write(`  ${f.agentId.padEnd(16)} FAILED ${f.status} ${f.error}\n`);
+  }
+  process.exit(failed.length > 0 && runIds.length === 0 ? 4 : 0);
+}
+
+async function runFanoutStatus(rawArgs) {
+  const flags = parseFlags(rawArgs, {
+    string: new Set(['daemon-url']),
+    boolean: new Set(['json']),
+  });
+  const groupId = rawArgs.find((a) => !a.startsWith('-'));
+  const daemonUrl = await cliDaemonUrl(flags);
+  const base = daemonUrl.replace(/\/$/, '');
+  const url = groupId
+    ? `${base}/api/runs?fanoutGroupId=${encodeURIComponent(groupId)}`
+    : `${base}/api/runs/fanout-groups?limit=20`;
+  let resp;
+  try {
+    resp = await fetch(url);
+  } catch (err) {
+    surfaceFetchError(err, daemonUrl);
+    process.exit(3);
+  }
+  if (!resp.ok) {
+    console.error(`daemon ${resp.status}: ${await resp.text()}`);
+    process.exit(4);
+  }
+  if (flags.json) {
+    process.stdout.write(`${await resp.text()}\n`);
+    process.exit(0);
+  }
+  const data = await resp.json();
+  if (groupId) {
+    for (const r of data.runs ?? []) {
+      process.stdout.write(
+        `${(r.agentId ?? '?').padEnd(16)} ${r.status.padEnd(10)} ${r.id}\n`,
+      );
+    }
+  } else {
+    for (const g of data.groups ?? []) {
+      process.stdout.write(
+        `${g.fanoutGroupId}  runs=${g.runs.length}  ${g.brief.slice(0, 60)}\n`,
+      );
+    }
+  }
+  process.exit(0);
+}
+
+function printFanoutHelp() {
+  console.log(`Usage:
+  od fanout --agents <ids> --prompt <text> [--project <id>] [--skill <id>]
+            [--design-system <id>] [--conversation <id>]
+            [--prompt-file <path|->] [--json] [--daemon-url <url>]
+
+  od fanout status [<fanoutGroupId>] [--json] [--daemon-url <url>]
+
+Examples:
+  od fanout --agents claude,codex,cursor-agent --prompt "Build a hero" \\
+            --project super-system-demo --json
+
+  od fanout status 9a06c06c-bbab-4f2d-8997-5b107286fb5d
+`);
 }
 
 function printResearchHelp() {

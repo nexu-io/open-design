@@ -25,7 +25,21 @@ export type EntryView =
   | 'tasks'
   | 'plugins'
   | 'design-systems'
-  | 'integrations';
+  | 'integrations'
+  // Multi-CLI fan-out side-by-side review. Surfaces every fanoutGroupId
+  // bucket from /api/runs/fanout-groups so the user can compare outputs
+  // and pick a winner.
+  | 'compare'
+  // Brand-component browser. Reads /api/components which scans every
+  // built-in design system's components.html for class selectors.
+  | 'components'
+  // Welcome / feature tour. Distinct from the existing 'onboarding'
+  // view (which is the BYOK/agent config wizard).
+  | 'welcome'
+  // Skill builder — write a new SKILL.md and save it to user-skills/.
+  | 'agent-builder'
+  | 'ship-readiness'
+  | 'theme-lab';
 
 interface Props {
   view: EntryView;
@@ -119,6 +133,42 @@ export function EntryNavRail({ view, onViewChange, onNewProject }: Props) {
           testId="entry-nav-design-systems"
         >
           <Icon name="palette" size={18} />
+        </NavButton>
+        <NavButton
+          active={view === 'compare'}
+          ariaLabel={t('entry.navCompare')}
+          tooltip={t('entry.navCompare')}
+          onClick={() => onViewChange('compare')}
+          testId="entry-nav-compare"
+        >
+          <Icon name="grid" size={18} />
+        </NavButton>
+        <NavButton
+          active={view === 'components'}
+          ariaLabel={t('entry.navComponents')}
+          tooltip={t('entry.navComponents')}
+          onClick={() => onViewChange('components')}
+          testId="entry-nav-components"
+        >
+          <Icon name="file-code" size={18} />
+        </NavButton>
+        <NavButton
+          active={view === 'theme-lab'}
+          ariaLabel="Image to theme"
+          tooltip="Image to theme"
+          onClick={() => onViewChange('theme-lab')}
+          testId="entry-nav-theme-lab"
+        >
+          <Icon name="image" size={18} />
+        </NavButton>
+        <NavButton
+          active={view === 'ship-readiness'}
+          ariaLabel="Ship readiness"
+          tooltip="Ship readiness"
+          onClick={() => onViewChange('ship-readiness')}
+          testId="entry-nav-ship-readiness"
+        >
+          <Icon name="check" size={18} />
         </NavButton>
       </div>
       <div className="entry-nav-rail__footer">

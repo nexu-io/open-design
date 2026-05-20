@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Bumble — Components</title>
+<link rel="stylesheet" href="tokens.css" />
+<style>
+:root {
+  --bg: #FFFFFF;
+  --surface: var(--bumble-page);
+  --fg: var(--bumble-ink);
+  --muted: var(--bumble-muted);
+  --border: var(--bumble-skip-gray);
+  --accent: var(--bumble-yellow);
+  --font-display: var(--bumble-font);
+  --font-body: var(--bumble-font);
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-lg: 17px;
+  --text-xl: 19px;
+  --text-2xl: 24px;
+  --text-3xl: 32px;
+  --text-4xl: 44px;
+  --leading-body: 1.55;
+  --leading-tight: 1.20;
+  --tracking-display: -0.01em;
+  --section-y-desktop: 80px;
+  --section-y-tablet: 64px;
+  --section-y-phone: 48px;
+  --container-max: 1200px;
+  --container-gutter-desktop: 32px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #16a34a;
+  --warn: #eab308;
+  --danger: #dc2626;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 2px 8px color-mix(in oklab, var(--fg), transparent 92%);
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 60%);
+  --motion-fast: 120ms;
+  --motion-base: 220ms;
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --surface-warm: var(--surface);
+  --fg-2: var(--fg);
+  --meta: var(--muted);
+  --border-soft: var(--border);
+}
+</style>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;padding:32px;background:#F0F0F0;font-family:var(--bumble-font);color:var(--bumble-ink)}
+  .stage{max-width:420px;margin:0 auto;background:var(--bumble-page);border-radius:24px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.08)}
+  h2.section{font:600 17px/22px var(--bumble-font);margin:32px 0 8px}
+
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:18px 22px 8px}
+  .brand{font:var(--bumble-text-brand);color:var(--bumble-ink);letter-spacing:-0.5px}
+  .brand .accent{color:var(--bumble-yellow)}
+  .topbar-icons{display:flex;gap:14px;font-size:18px;color:var(--bumble-ink)}
+
+  .card{position:relative;margin:8px 22px 20px;border-radius:var(--bumble-radius-card);overflow:hidden;height:520px;background:linear-gradient(135deg,#7ba6cf 0%,#54799d 100%);box-shadow:var(--bumble-shadow-photo)}
+  .card::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 60%,rgba(0,0,0,0.30) 100%)}
+  .overlay{position:absolute;left:18px;bottom:18px;color:#fff;text-shadow:var(--bumble-text-shadow);z-index:2}
+  .overlay .name{font:var(--bumble-text-name)}
+  .overlay .job{font:var(--bumble-text-job);margin-top:4px}
+  .verified-shield{display:inline-block;width:14px;height:14px;background:var(--bumble-verified);border-radius:3px;margin-left:6px;vertical-align:1px}
+
+  .actions{position:absolute;bottom:18px;right:18px;display:flex;gap:14px;z-index:2}
+  .yellow-btn{width:52px;height:52px;border-radius:50%;background:var(--bumble-yellow);color:var(--bumble-ink);display:grid;place-items:center;font-size:22px;box-shadow:var(--bumble-shadow-action);border:none;cursor:pointer}
+  .yellow-btn:active{transform:scale(0.94)}
+
+  .tooltip{position:absolute;top:24px;left:50%;transform:translateX(-50%);background:var(--bumble-yellow);color:var(--bumble-ink);padding:14px 18px;border-radius:var(--bumble-radius-tooltip);font:var(--bumble-text-tooltip);max-width:280px;text-align:center;z-index:3}
+  .tooltip::before{content:"";position:absolute;top:-6px;left:50%;transform:translateX(-50%) rotate(45deg);width:12px;height:12px;background:var(--bumble-yellow)}
+
+  .tabbar{display:grid;grid-template-columns:repeat(5,1fr);padding:10px 0 18px;border-top:1px solid var(--bumble-skip-gray);background:var(--bumble-page)}
+  .tab{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--bumble-muted);font:var(--bumble-text-tab)}
+  .tab.active{color:var(--bumble-ink);font-weight:600}
+  .tab .ico{font-size:18px}
+
+  .helper{padding:16px 22px;background:var(--bumble-yellow-soft);border-radius:14px;margin:12px 22px}
+  .helper h3{margin:0;font:var(--bumble-text-helper)}
+  .helper p{margin:4px 0 0;font:var(--bumble-text-helper-sub);color:var(--bumble-muted)}
+</style>
+</head>
+<body>
+
+<h2 class="section">Profile stack + actions + tooltip</h2>
+<div class="stage">
+  <div class="topbar">
+    <span class="topbar-icons">&#9776;</span>
+    <span class="brand">bumble<span class="accent">.</span></span>
+    <span class="topbar-icons">&equiv;</span>
+  </div>
+  <div class="card">
+    <div class="tooltip">Keep on swiping, we&rsquo;re learning what you like!</div>
+    <div class="overlay"><div class="name">Niel, 28<span class="verified-shield"></span></div><div class="job">Teacher</div></div>
+    <div class="actions">
+      <button class="yellow-btn">&#9825;</button>
+      <button class="yellow-btn">&#9733;</button>
+    </div>
+  </div>
+  <div class="tabbar">
+    <div class="tab"><span class="ico">&#128100;</span><span>Profile</span></div>
+    <div class="tab"><span class="ico">&#9994;</span><span>For You</span></div>
+    <div class="tab active"><span class="ico">&#128101;</span><span>People</span></div>
+    <div class="tab"><span class="ico">&#9825;</span><span>Liked You</span></div>
+    <div class="tab"><span class="ico">&#128172;</span><span>Chats</span></div>
+  </div>
+</div>
+
+<h2 class="section">Onboarding helper</h2>
+<div class="stage" style="padding:16px 0">
+  <div class="helper">
+    <h3>Like what you see?</h3>
+    <p>Swipe right for a chance to match.</p>
+  </div>
+</div>
+
+</body>
+</html>

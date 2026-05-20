@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Plaid SDK — Components</title>
+<link rel="stylesheet" href="tokens.css" />
+<style>
+:root {
+  --bg: var(--plaid-page);
+  --surface: #F4F5F7;
+  --fg: var(--plaid-ink);
+  --muted: var(--plaid-muted);
+  --border: var(--plaid-border);
+  --accent: var(--plaid-teal);
+  --font-display: var(--plaid-font);
+  --font-body: var(--plaid-font);
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-lg: 17px;
+  --text-xl: 19px;
+  --text-2xl: 24px;
+  --text-3xl: 32px;
+  --text-4xl: 44px;
+  --leading-body: 1.55;
+  --leading-tight: 1.20;
+  --tracking-display: -0.01em;
+  --section-y-desktop: 80px;
+  --section-y-tablet: 64px;
+  --section-y-phone: 48px;
+  --container-max: 1200px;
+  --container-gutter-desktop: 32px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #16a34a;
+  --warn: #eab308;
+  --danger: #dc2626;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 2px 8px color-mix(in oklab, var(--fg), transparent 92%);
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 60%);
+  --motion-fast: 120ms;
+  --motion-base: 220ms;
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --surface-warm: var(--surface);
+  --fg-2: var(--fg);
+  --meta: var(--muted);
+  --border-soft: var(--border);
+}
+</style>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;padding:32px;background:#f5f5f7;font-family:var(--plaid-font);color:var(--plaid-ink);-webkit-font-smoothing:antialiased}
+  .stage{max-width:420px;margin:0 auto;background:var(--plaid-page);border-radius:24px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.08);min-height:680px;position:relative;padding-bottom:88px}
+  h2.section{font:var(--plaid-text-subtitle);margin:32px 0 8px;color:var(--plaid-ink)}
+
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:18px 22px}
+  .topbar .close{font-size:18px;color:var(--plaid-charcoal);width:28px}
+  .topbar .brand{display:flex;align-items:center;gap:6px;font:var(--plaid-text-caps);color:var(--plaid-charcoal);letter-spacing:0.12em}
+  .topbar .icon{width:14px;height:14px;background:var(--plaid-charcoal);border-radius:3px}
+
+  .progress{display:flex;gap:8px;padding:0 22px 24px}
+  .seg{flex:1;height:4px;border-radius:var(--plaid-radius-pill);background:rgba(26,163,158,0.12)}
+  .seg.active,.seg.past{background:var(--plaid-teal)}
+
+  .title{font:var(--plaid-text-title);text-align:center;padding:0 22px}
+  .reassure{display:flex;gap:10px;padding:18px 22px;align-items:flex-start}
+  .reassure .lightning{color:var(--plaid-charcoal);font-size:18px;margin-top:2px}
+  .reassure-text{font:var(--plaid-text-body);color:var(--plaid-muted)}
+
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:8px 22px}
+  .bank-card{aspect-ratio:1.2/1;border:1px solid var(--plaid-border);border-radius:var(--plaid-radius-card);display:grid;place-items:center;color:var(--plaid-charcoal);font:800 13px/1.1 var(--plaid-font);letter-spacing:0.05em;text-align:center;padding:14px}
+  .bank-card.chase{color:#117ACA}
+  .bank-card.boa{color:#012169}
+  .bank-card.wells{color:#D71E28}
+  .bank-card.cap1{color:#004977}
+
+  .row{display:flex;align-items:center;gap:12px;padding:14px 22px;border-bottom:1px solid var(--plaid-border)}
+  .row .logo{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:700;font-size:11px}
+  .row .name{font:600 16px/20px var(--plaid-font);color:var(--plaid-ink)}
+  .row .url{font:var(--plaid-text-label);color:var(--plaid-muted);margin-top:1px}
+  .row .body{flex:1}
+  .row .chev{color:var(--plaid-muted);font-size:16px}
+
+  .cta-bar{position:absolute;left:0;right:0;bottom:0;padding:16px 22px 24px;background:var(--plaid-page)}
+  .cta{display:block;width:100%;background:var(--plaid-charcoal);color:#fff;border:none;padding:18px;border-radius:var(--plaid-radius-cta);font:var(--plaid-text-cta);cursor:pointer}
+  .cta-alt{display:block;text-align:center;color:var(--plaid-ink);font:600 15px/20px var(--plaid-font);margin-top:14px;background:none;border:none}
+</style>
+</head>
+<body>
+
+<h2 class="section">Bank picker (grid)</h2>
+<div class="stage">
+  <div class="topbar"><span class="close">&times;</span><span class="brand"><span class="icon"></span>PLAID</span><span class="close">&nbsp;</span></div>
+  <div class="progress">
+    <div class="seg past"></div>
+    <div class="seg active"></div>
+    <div class="seg"></div>
+  </div>
+  <div class="title" style="text-align:left;padding:0 22px 12px">Select your bank to start the authentication process</div>
+  <div class="reassure" style="padding-top:0;padding-bottom:20px"><span class="reassure-text">Select or search for your bank to link your account instantly, or link your account manually.</span></div>
+  <div class="grid">
+    <div class="bank-card chase">CHASE</div>
+    <div class="bank-card boa">Bank of America</div>
+    <div class="bank-card wells">WELLS FARGO</div>
+    <div class="bank-card cap1">Capital One</div>
+    <div class="bank-card">SoFi</div>
+    <div class="bank-card">Ally</div>
+  </div>
+  <div class="cta-bar">
+    <button class="cta">Continue</button>
+  </div>
+</div>
+
+<h2 class="section">Connect to institution (list)</h2>
+<div class="stage">
+  <div class="topbar"><span class="close">&times;</span><span class="brand"><span class="icon"></span>PLAID</span><span class="close">&nbsp;</span></div>
+  <div class="title" style="padding:8px 22px 6px">Connect to your institution</div>
+  <div class="reassure" style="padding-top:0"><span class="reassure-text">Select an institution below to authorize a secure connection.</span></div>
+
+  <div class="row"><div class="logo" style="background:#2E8B57">TD</div><div class="body"><div class="name">TD</div><div class="url">td.ca</div></div><div class="chev">&rsaquo;</div></div>
+  <div class="row"><div class="logo" style="background:#005DAA">RBC</div><div class="body"><div class="name">RBC</div><div class="url">rbcroyalbank.com</div></div><div class="chev">&rsaquo;</div></div>
+  <div class="row"><div class="logo" style="background:#0079C1">BMO</div><div class="body"><div class="name">BMO</div><div class="url">bmo.com</div></div><div class="chev">&rsaquo;</div></div>
+  <div class="row"><div class="logo" style="background:#EE0000">S</div><div class="body"><div class="name">Scotiabank</div><div class="url">scotiabank.com</div></div><div class="chev">&rsaquo;</div></div>
+
+  <div class="cta-bar">
+    <button class="cta">Continue</button>
+    <button class="cta-alt">Enter account number instead</button>
+  </div>
+</div>
+
+</body>
+</html>

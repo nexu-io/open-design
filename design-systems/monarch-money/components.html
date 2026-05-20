@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Monarch Money — Components</title>
+<link rel="stylesheet" href="tokens.css" />
+<style>
+:root {
+  --bg: var(--monarch-card);
+  --surface: var(--monarch-banding);
+  --fg: var(--monarch-ink);
+  --muted: var(--monarch-muted);
+  --border: var(--monarch-border);
+  --accent: var(--monarch-navy);
+  --font-display: var(--monarch-font);
+  --font-body: var(--monarch-font);
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-lg: 17px;
+  --text-xl: 19px;
+  --text-2xl: 24px;
+  --text-3xl: 32px;
+  --text-4xl: 44px;
+  --leading-body: 1.55;
+  --leading-tight: 1.20;
+  --tracking-display: -0.01em;
+  --section-y-desktop: 80px;
+  --section-y-tablet: 64px;
+  --section-y-phone: 48px;
+  --container-max: 1200px;
+  --container-gutter-desktop: 32px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #16a34a;
+  --warn: #eab308;
+  --danger: #dc2626;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 2px 8px color-mix(in oklab, var(--fg), transparent 92%);
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 60%);
+  --motion-fast: 120ms;
+  --motion-base: 220ms;
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --surface-warm: var(--surface);
+  --fg-2: var(--fg);
+  --meta: var(--muted);
+  --border-soft: var(--border);
+}
+</style>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;padding:32px;background:#EFEFEF;font-family:var(--monarch-font);color:var(--monarch-ink)}
+  .stage{max-width:420px;margin:0 auto;background:var(--monarch-card);border-radius:24px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.08)}
+  h2.section{font:600 17px/22px var(--monarch-font);margin:32px 0 8px}
+
+  .head{background:var(--monarch-navy);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:18px 22px}
+  .head .center{font:var(--monarch-text-month)}
+  .head .ico{font-size:18px;opacity:0.9}
+
+  .alert{background:var(--monarch-coral);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:14px 22px;font:var(--monarch-text-alert)}
+
+  .section-band{background:var(--monarch-banding);display:flex;align-items:center;justify-content:space-between;padding:10px 22px;font:var(--monarch-text-section);color:var(--monarch-muted);text-transform:uppercase;letter-spacing:0.04em}
+  .col-labels{display:flex;gap:24px;font:600 11px/1 var(--monarch-font);color:var(--monarch-muted);text-transform:uppercase;letter-spacing:0.04em}
+
+  .accordion{padding:14px 22px;border-bottom:1px solid var(--monarch-banding);display:flex;align-items:center;justify-content:space-between;background:var(--monarch-card)}
+  .accordion .left{display:flex;align-items:center;gap:8px;font:var(--monarch-text-category);color:var(--monarch-ink)}
+  .chev{color:var(--monarch-muted);font-size:14px}
+  .accordion .right{display:flex;gap:18px;align-items:center}
+  .cell{min-width:80px;text-align:right;padding:6px 10px;border:1px solid var(--monarch-border);border-radius:var(--monarch-radius-sm);font:var(--monarch-text-cell);color:var(--monarch-ink)}
+  .cell.empty{color:var(--monarch-muted);border-color:var(--monarch-banding)}
+  .chip{min-width:80px;text-align:center;padding:6px 12px;border-radius:var(--monarch-radius-pill);font:var(--monarch-text-chip)}
+  .chip.mint{background:var(--monarch-mint-soft);color:var(--monarch-mint)}
+  .chip.coral{background:var(--monarch-coral-soft);color:#A6332C}
+  .chip.gray{background:var(--monarch-banding);color:var(--monarch-muted)}
+
+  .subitem{padding:12px 22px 12px 44px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--monarch-banding);background:var(--monarch-card);font:var(--monarch-text-row)}
+  .subitem .label{display:flex;align-items:center;gap:10px;color:var(--monarch-ink)}
+
+  .show-more{padding:12px 22px;color:var(--monarch-muted);font:400 13px/18px var(--monarch-font);display:flex;align-items:center;gap:8px;background:var(--monarch-card);border-bottom:1px solid var(--monarch-banding)}
+
+  .nav{display:grid;grid-template-columns:repeat(6,1fr);background:var(--monarch-card);border-top:1px solid var(--monarch-border);padding:10px 0 18px}
+  .nav-item{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--monarch-muted);font:var(--monarch-text-nav)}
+  .nav-item.active{color:var(--monarch-navy);font:var(--monarch-text-nav-active)}
+  .nav-item .ico{font-size:16px}
+</style>
+</head>
+<body>
+
+<h2 class="section">Monarch — Budget screen</h2>
+<div class="stage">
+  <div class="head">
+    <span class="ico">&larr;</span>
+    <span class="center">February 2024</span>
+    <span class="ico">&#128197;</span>
+  </div>
+  <div class="alert">
+    <span>Left to budget &nbsp;&#9432;</span>
+    <span>&minus;$50</span>
+  </div>
+
+  <div class="section-band">
+    <span>Expenses</span>
+    <span class="col-labels"><span>Budget</span><span>Remaining</span></span>
+  </div>
+
+  <div class="accordion">
+    <div class="left"><span class="chev">&#9662;</span>Auto & Transport</div>
+    <div class="right">
+      <span class="cell">$0</span>
+      <span class="chip gray">$0</span>
+    </div>
+  </div>
+  <div class="show-more"><span>&#128065;</span>Show 6 unbudgeted</div>
+
+  <div class="accordion">
+    <div class="left"><span class="chev">&#9662;</span>Gifts &amp; Donations</div>
+    <div class="right">
+      <span class="cell">$0</span>
+      <span class="chip gray">$0</span>
+    </div>
+  </div>
+
+  <div class="accordion">
+    <div class="left"><span class="chev">&#9662;</span>Flexible</div>
+    <div class="right">
+      <span class="cell">$1,000</span>
+      <span class="chip mint">$995</span>
+    </div>
+  </div>
+  <div class="subitem">
+    <span class="label">&#127869; Restaurants &amp; Bars</span>
+    <span class="cell empty">$0</span>
+  </div>
+
+  <div class="section-band">
+    <span>Contributions</span>
+    <span class="col-labels"><span>Budget</span><span>Remaining</span></span>
+  </div>
+  <div class="accordion">
+    <div class="left"><span class="chev">&#9662;</span>Goals</div>
+    <div class="right">
+      <span class="cell">$50</span>
+      <span class="chip mint">$50</span>
+    </div>
+  </div>
+  <div class="subitem">
+    <span class="label">&#127965; Trip to Bali</span>
+    <span class="cell">$50</span>
+  </div>
+
+  <div class="nav">
+    <div class="nav-item active"><span class="ico">&#127968;</span><span>Dashboard</span></div>
+    <div class="nav-item"><span class="ico">&#128179;</span><span>Accounts</span></div>
+    <div class="nav-item"><span class="ico">&#128203;</span><span>Transactions</span></div>
+    <div class="nav-item"><span class="ico">&#128202;</span><span>Cash Flow</span></div>
+    <div class="nav-item"><span class="ico">&#128197;</span><span>Budget</span></div>
+    <div class="nav-item"><span class="ico">&#128260;</span><span>Recurring</span></div>
+  </div>
+</div>
+
+</body>
+</html>

@@ -16,12 +16,19 @@ export type EntryHomeView =
   | 'tasks'
   | 'plugins'
   | 'design-systems'
-  | 'integrations';
+  | 'integrations'
+  | 'compare'
+  | 'components'
+  | 'welcome'
+  | 'agent-builder'
+  | 'ship-readiness'
+  | 'theme-lab';
 
 export type Route =
   | { kind: 'home'; view: EntryHomeView }
   | { kind: 'design-system-create' }
   | { kind: 'design-system-detail'; designSystemId: string }
+  | { kind: 'skill-detail'; skillId: string }
   | {
       kind: 'project';
       projectId: string;
@@ -82,6 +89,9 @@ export function parseRoute(pathname: string): Route {
     }
     return { kind: 'home', view: 'design-systems' };
   }
+  if (parts[0] === 'skills' && parts[1]) {
+    return { kind: 'skill-detail', skillId: decodeURIComponent(parts[1]) };
+  }
   if (parts[0] === 'automations' || parts[0] === 'tasks') {
     return { kind: 'home', view: 'tasks' };
   }
@@ -90,6 +100,24 @@ export function parseRoute(pathname: string): Route {
   }
   if (parts[0] === 'integrations') {
     return { kind: 'home', view: 'integrations' };
+  }
+  if (parts[0] === 'compare') {
+    return { kind: 'home', view: 'compare' };
+  }
+  if (parts[0] === 'components' && !parts[1]) {
+    return { kind: 'home', view: 'components' };
+  }
+  if (parts[0] === 'welcome') {
+    return { kind: 'home', view: 'welcome' };
+  }
+  if (parts[0] === 'agent-builder') {
+    return { kind: 'home', view: 'agent-builder' };
+  }
+  if (parts[0] === 'ship') {
+    return { kind: 'home', view: 'ship-readiness' };
+  }
+  if (parts[0] === 'theme-lab') {
+    return { kind: 'home', view: 'theme-lab' };
   }
   // Phase 2B / spec §11.6 — marketplace deep UI routes. Two paths:
   //   /marketplace            → catalog grid (MarketplaceView)
@@ -113,6 +141,12 @@ export function buildPath(route: Route): string {
     if (route.view === 'plugins') return '/plugins';
     if (route.view === 'design-systems') return '/design-systems';
     if (route.view === 'integrations') return '/integrations';
+    if (route.view === 'compare') return '/compare';
+    if (route.view === 'components') return '/components';
+    if (route.view === 'welcome') return '/welcome';
+    if (route.view === 'agent-builder') return '/agent-builder';
+    if (route.view === 'ship-readiness') return '/ship';
+    if (route.view === 'theme-lab') return '/theme-lab';
     return '/';
   }
   if (route.kind === 'marketplace') return '/marketplace';
@@ -120,6 +154,9 @@ export function buildPath(route: Route): string {
   if (route.kind === 'design-system-create') return '/design-systems/create';
   if (route.kind === 'design-system-detail') {
     return `/design-systems/${encodeURIComponent(route.designSystemId)}`;
+  }
+  if (route.kind === 'skill-detail') {
+    return `/skills/${encodeURIComponent(route.skillId)}`;
   }
   const id = encodeURIComponent(route.projectId);
   const file = route.fileName

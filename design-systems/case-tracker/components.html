@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Case Tracker — Components</title>
+<link rel="stylesheet" href="tokens.css" />
+<style>
+:root {
+  --bg: var(--ct-canvas);
+  --surface: var(--ct-card);
+  --fg: var(--ct-ink);
+  --muted: var(--ct-muted);
+  --border: var(--ct-border);
+  --accent: var(--ct-violet);
+  --font-display: var(--ct-font);
+  --font-body: var(--ct-font);
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-lg: 17px;
+  --text-xl: 19px;
+  --text-2xl: 24px;
+  --text-3xl: 32px;
+  --text-4xl: 44px;
+  --leading-body: 1.55;
+  --leading-tight: 1.20;
+  --tracking-display: -0.01em;
+  --section-y-desktop: 80px;
+  --section-y-tablet: 64px;
+  --section-y-phone: 48px;
+  --container-max: 1200px;
+  --container-gutter-desktop: 32px;
+  --container-gutter-tablet: 24px;
+  --container-gutter-phone: 16px;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #16a34a;
+  --warn: #eab308;
+  --danger: #dc2626;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 2px 8px color-mix(in oklab, var(--fg), transparent 92%);
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 60%);
+  --motion-fast: 120ms;
+  --motion-base: 220ms;
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --surface-warm: var(--surface);
+  --fg-2: var(--fg);
+  --meta: var(--muted);
+  --border-soft: var(--border);
+}
+</style>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;padding:32px;background:var(--ct-canvas);font-family:var(--ct-font);color:var(--ct-ink);-webkit-font-smoothing:antialiased}
+  .stage{max-width:420px;margin:0 auto;background:var(--ct-canvas);border-radius:24px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.08)}
+  h2.section{font:var(--ct-text-section);margin:32px 0 8px}
+
+  .hero{background:linear-gradient(135deg,#3C1A78 0%,#5C2FB8 100%);color:#fff;padding:20px 20px 28px;border-radius:0 0 20px 20px}
+  .hero-promo{font:var(--ct-text-hero);margin-bottom:6px}
+  .hero-sub{font:400 14px/20px var(--ct-font);color:rgba(255,255,255,.78)}
+  .welcome{font:var(--ct-text-welcome);padding:24px 20px 8px}
+
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:0 20px 20px}
+  .stat{background:var(--ct-card);border:1px solid var(--ct-border);border-radius:var(--ct-radius-md);padding:24px 20px;box-shadow:var(--ct-shadow-card)}
+  .stat-digit{font:var(--ct-text-stat);color:var(--ct-ink);margin:0}
+  .stat-label{font:var(--ct-text-stat-label);color:var(--ct-subhead);margin-top:6px}
+
+  .activity-title{font:var(--ct-text-section);padding:8px 20px 12px}
+  .row{display:grid;grid-template-columns:48px 1fr auto;align-items:center;gap:12px;padding:14px 20px;background:var(--ct-card);border-top:1px solid var(--ct-divider)}
+  .tile{width:40px;height:40px;border-radius:var(--ct-radius-tile);background:var(--ct-violet-tint);display:grid;place-items:center;color:var(--ct-violet);font-size:18px}
+  .row-title{font:var(--ct-text-row);color:var(--ct-ink)}
+  .row-sub{font:var(--ct-text-meta);color:var(--ct-muted);margin-top:2px}
+  .row-meta{font:var(--ct-text-meta);color:var(--ct-muted)}
+
+  .btn{display:inline-flex;align-items:center;justify-content:center;padding:14px 22px;border-radius:14px;font:var(--ct-text-btn);border:none;cursor:pointer}
+  .btn-primary{background:var(--ct-ink);color:#fff}
+  .btn-secondary{background:var(--ct-sunken);color:var(--ct-ink)}
+  .pill-tab{display:inline-flex;gap:8px;margin:16px 20px}
+  .tab{padding:8px 14px;border-radius:var(--ct-radius-pill);border:1px solid var(--ct-border);color:var(--ct-subhead);font:600 13px/1 var(--ct-font);background:transparent}
+  .tab.active{background:var(--ct-ink);color:#fff;border-color:var(--ct-ink)}
+
+  .bottom-nav{display:grid;grid-template-columns:1fr 80px 1fr;align-items:end;background:var(--ct-card);border-top:1px solid var(--ct-divider);padding:14px 0 20px;position:relative}
+  .nav-item{display:flex;flex-direction:column;align-items:center;color:var(--ct-muted);font:500 11px/1 var(--ct-font);gap:4px}
+  .nav-item.active{color:var(--ct-violet);font-weight:600}
+  .fab{width:56px;height:56px;border-radius:50%;background:var(--ct-violet);color:#fff;display:grid;place-items:center;font-size:24px;box-shadow:var(--ct-shadow-fab);margin:-28px auto 0}
+</style>
+</head>
+<body>
+
+<h2 class="section">Hero band + welcome + stats</h2>
+<div class="stage">
+  <div class="hero">
+    <div class="hero-promo">Upgrade Your Account</div>
+    <div class="hero-sub">Send more envelopes and enjoy additional premium features.</div>
+  </div>
+  <div class="welcome">Welcome</div>
+  <div class="stats">
+    <div class="stat"><div class="stat-digit">12</div><div class="stat-label">Action Required</div></div>
+    <div class="stat"><div class="stat-digit">3</div><div class="stat-label">Waiting for Others</div></div>
+  </div>
+
+  <div class="activity-title">Agreement activity</div>
+  <div class="row">
+    <div class="tile">&#9998;</div>
+    <div>
+      <div class="row-title">Non-Disclosure Agreement &mdash; Sam Lee</div>
+      <div class="row-sub">From: Alex Smith &middot; Waiting for Others</div>
+    </div>
+    <div class="row-meta">12:29 PM</div>
+  </div>
+  <div class="row">
+    <div class="tile">&#9998;</div>
+    <div>
+      <div class="row-title">Complete with Docusign: Agreement 01</div>
+      <div class="row-sub">From: Alex Smith &middot; Needs to Sign</div>
+    </div>
+    <div class="row-meta">11:42 AM</div>
+  </div>
+
+  <div class="bottom-nav">
+    <div class="nav-item active"><span>&#127968;</span><span>Home</span></div>
+    <div class="fab">+</div>
+    <div class="nav-item"><span>&#128221;</span><span>Agreements</span></div>
+  </div>
+</div>
+
+<h2 class="section">Tabs &middot; Buttons</h2>
+<div class="stage" style="padding:20px">
+  <div class="pill-tab" style="margin:0 0 20px">
+    <span class="tab active">Immigration</span>
+    <span class="tab">Background checks</span>
+  </div>
+  <div style="display:flex;gap:12px;flex-wrap:wrap">
+    <button class="btn btn-secondary">Take a tour</button>
+    <button class="btn btn-primary">Check visa eligibility</button>
+  </div>
+</div>
+
+</body>
+</html>

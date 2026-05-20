@@ -196,6 +196,31 @@ function migrate(db: SqliteDb): void {
 
     CREATE INDEX IF NOT EXISTS idx_routine_runs_routine
       ON routine_runs(routine_id, started_at DESC);
+
+    -- Multi-CLI fan-out persistence. Rows survive daemon restart so the
+    -- Compare tab is not empty after the in-memory run map TTL expires.
+    -- One row per sibling run; the group surface is just an aggregate
+    -- query keyed by fanout_group_id (no separate groups table — the
+    -- group is defined entirely by its shared id and brief snapshot).
+    CREATE TABLE IF NOT EXISTS fanout_runs (
+      id TEXT PRIMARY KEY,
+      fanout_group_id TEXT NOT NULL,
+      project_id TEXT,
+      conversation_id TEXT,
+      agent_id TEXT,
+      status TEXT NOT NULL,
+      brief TEXT,
+      winner INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      error TEXT,
+      output_text TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_fanout_runs_group
+      ON fanout_runs(fanout_group_id, created_at ASC);
+    CREATE INDEX IF NOT EXISTS idx_fanout_runs_updated
+      ON fanout_runs(updated_at DESC);
   `);
   // Forward-compatible column add for databases created before metadata_json.
   // SQLite has no IF NOT EXISTS for ALTER, so we check pragma_table_info.
@@ -227,6 +252,10 @@ function migrate(db: SqliteDb): void {
   }
   if (!messageCols.some((c: DbRow) => c.name === 'feedback_json')) {
     db.exec(`ALTER TABLE messages ADD COLUMN feedback_json TEXT`);
+  }
+  const fanoutCols = db.prepare(`PRAGMA table_info(fanout_runs)`).all() as DbRow[];
+  if (!fanoutCols.some((c: DbRow) => c.name === 'output_text')) {
+    db.exec(`ALTER TABLE fanout_runs ADD COLUMN output_text TEXT`);
   }
   const routineRunCols = db.prepare(`PRAGMA table_info(routine_runs)`).all() as DbRow[];
   if (!routineRunCols.some((c: DbRow) => c.name === 'error_code')) {

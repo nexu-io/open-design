@@ -238,6 +238,17 @@ export function AssistantMessage({
             onRequestOpenFile={onRequestOpenFile}
           />
         ) : null}
+        {message.fanoutGroupId ? (
+          <a
+            className="assistant-fanout-link"
+            href={`/compare?group=${encodeURIComponent(message.fanoutGroupId)}`}
+            title="See this fan-out group side by side"
+          >
+            <span>Open in Compare</span>
+            <span className="assistant-fanout-link__arrow">→</span>
+          </a>
+        ) : null}
+        {!streaming ? <SaveExtractedDesignSystemAction content={message.content} /> : null}
         {!streaming && projectId && pluginActionFolders.length > 0 ? (
           <PluginActionPanel
             folders={pluginActionFolders}
@@ -1647,4 +1658,64 @@ function formatElapsedMs(ms: number): string {
   const m = Math.floor(s / 60);
   const rem = Math.floor(s - m * 60);
   return `${m}m ${rem.toString().padStart(2, "0")}s`;
+}
+
+// Detects when the agent emitted a complete design-system extraction
+// (fenced tokens.css block + fenced DESIGN.md block). Surfaces a
+// "Save as design system" affordance that POSTs to
+// /api/design-systems/save-from-extraction and writes the new brand
+// into user-design-systems/<slug>/. The slug is derived from the
+// first heading in DESIGN.md or the user supplies it via prompt.
+function SaveExtractedDesignSystemAction({ content }: { content: string }) {
+  const extractFenced = (lang: string): string | null => {
+    const re = new RegExp('```' + lang + '\\b[^\\n]*\\n([\\s\\S]*?)\\n```');
+    const m = content.match(re);
+    return m && m[1] ? m[1] : null;
+  };
+  const tokensCss = extractFenced('css|tokens\\.css|CSS');
+  const designMd = extractFenced('md|markdown|MARKDOWN');
+  const componentsHtml = extractFenced('html|HTML');
+  if (!tokensCss || !designMd) return null;
+  const headingMatch = designMd.match(/#\s+([^\n]+)/);
+  const guessedName = headingMatch && headingMatch[1] ? headingMatch[1].trim() : 'Untitled Brand';
+  const guessedSlug = guessedName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState<{ slug: string } | null>(null);
+  const onSave = async () => {
+    const slug = window.prompt('Brand slug (kebab-case):', guessedSlug || 'untitled');
+    if (!slug || !/^[a-z0-9_-]+$/.test(slug)) return;
+    setBusy(true);
+    try {
+      const { saveExtractedDesignSystem } = await import('../providers/daemon');
+      const result = await saveExtractedDesignSystem({
+        slug,
+        name: guessedName,
+        tokensCss,
+        designMd,
+        componentsHtml: componentsHtml ?? undefined,
+      });
+      if (result) setSaved({ slug: result.slug });
+      else window.alert('Save failed — check the daemon log.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (saved) {
+    return (
+      <a
+        className="assistant-fanout-link"
+        href={`/components`}
+        title="Open the Components browser to find your new brand"
+      >
+        <span>Saved as {saved.slug}</span>
+        <span className="assistant-fanout-link__arrow">→</span>
+      </a>
+    );
+  }
+  return (
+    <button type="button" className="assistant-fanout-link" onClick={onSave} disabled={busy}>
+      <span>{busy ? 'Saving…' : 'Save as design system'}</span>
+      <span className="assistant-fanout-link__arrow">→</span>
+    </button>
+  );
 }

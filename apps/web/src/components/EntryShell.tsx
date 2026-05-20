@@ -55,6 +55,12 @@ import type { PluginUseAction } from './plugins-home/useActions';
 import { Icon } from './Icon';
 import { AgentIcon } from './AgentIcon';
 import { IntegrationsView, type IntegrationTab } from './IntegrationsView';
+import { CompareView } from './CompareView';
+import { ComponentsView } from './ComponentsView';
+import { WelcomeView } from './WelcomeView';
+import { AgentBuilderView } from './AgentBuilderView';
+import { ShipReadinessView } from './ShipReadinessView';
+import { ThemeLabView } from './ThemeLabView';
 import { InlineModelSwitcher } from './InlineModelSwitcher';
 import { NewProjectModal } from './NewProjectModal';
 import { PluginsView } from './PluginsView';
@@ -587,6 +593,12 @@ export function EntryShell({
                 onPersistComposioKey={onPersistComposioKey}
               />
             ) : null}
+            {view === 'compare' ? <CompareView /> : null}
+            {view === 'components' ? <ComponentsView /> : null}
+            {view === 'theme-lab' ? <ThemeLabView /> : null}
+            {view === 'ship-readiness' ? <ShipReadinessView /> : null}
+            {view === 'welcome' ? <WelcomeView /> : null}
+            {view === 'agent-builder' ? <AgentBuilderView /> : null}
           </div>
         </main>
       </div>
