@@ -9,6 +9,9 @@ const scriptsRoot = import.meta.dirname;
 const defaultRoot = resolve(scriptsRoot, "..");
 const defaultBranch = "codex/electron-to-tauri-migration";
 const defaultBase = "origin/main";
+const receiverReportDirArg = '"${TAURI_M4_REPORT_DIR:-/tmp/open-design-tauri-m4-reports}"';
+const receiverLinuxReportArg = '"${TAURI_M4_REPORT_DIR:-/tmp/open-design-tauri-m4-reports}/open-design-ci-linux-tauri-e2e-report"';
+const receiverWinReportArg = '"${TAURI_M4_REPORT_DIR:-/tmp/open-design-tauri-m4-reports}/open-design-ci-win-tauri-e2e-report"';
 
 type Args = {
   base: string;
@@ -441,14 +444,15 @@ async function writeNote(
       "",
       `That command verifies its own checksum sidecar and the archive checksum, including checksum target filenames, then imports the bundle, pushes the branch, verifies the remote head, writes \`${prBodyPath}\`, attempts \`\${GH_BIN:-gh} workflow run ci.yml --ref ${note.branch}\` when \`GH_BIN\` or \`gh\` is available, and prints branch-head-aware report download commands.`,
       "",
-      "Set `REMOTE=<remote>` if the receiving checkout's write-capable remote is not named `origin`. Set `GH_BIN=<path-to-gh>` if the GitHub CLI is not named `gh` on the receiving machine. Set `TAURI_NATIVE_CI_TRIGGER=0` to skip automatic workflow dispatch. Set `TAURI_NATIVE_CI_WAIT=1` to have the command wait for matching CI reports and run the guarded M4→M5 advance after dispatch. Set `TAURI_PR_BODY_PATH=<path>` to override the generated draft PR body location.",
+      "Set `REMOTE=<remote>` if the receiving checkout's write-capable remote is not named `origin`. Set `GH_BIN=<path-to-gh>` if the GitHub CLI is not named `gh` on the receiving machine. Set `TAURI_M4_REPORT_DIR=<report-dir>` to override where native report artifacts are downloaded and verified. Set `TAURI_NATIVE_CI_TRIGGER=0` to skip automatic workflow dispatch. Set `TAURI_NATIVE_CI_WAIT=1` to have the command wait for matching CI reports and run the guarded M4→M5 advance after dispatch. Set `TAURI_PR_BODY_PATH=<path>` to override the generated draft PR body location.",
       "",
       "Push-only fallback when you want to trigger CI yourself:",
       "",
       "```bash",
       "pnpm exec tsx scripts/push-tauri-migration-handoff.ts \\",
       `  --archive ${shellWord(archivePath)} \\`,
-      '  --remote "${REMOTE:-origin}"',
+      '  --remote "${REMOTE:-origin}" \\',
+      `  --report-dir ${receiverReportDirArg}`,
       "```",
       "",
       "Add `--gh /path/to-gh` or set `GH_BIN=<path-to-gh>` if the push-only helper should print fallback commands for a non-default GitHub CLI binary.",
@@ -474,7 +478,8 @@ async function writeNote(
         : [
             "pnpm exec tsx scripts/push-tauri-migration-handoff.ts \\",
             `  --manifest ${shellWord(note.manifestPath)} \\`,
-            '  --remote "${REMOTE:-origin}"',
+            '  --remote "${REMOTE:-origin}" \\',
+            `  --report-dir ${receiverReportDirArg}`,
           ]),
       "```",
       "",
@@ -510,7 +515,7 @@ async function writeNote(
       `  --expected-head ${note.branchHead} \\`,
       '  --remote "${REMOTE:-origin}" \\',
       "  --wait \\",
-      "  --output-dir /tmp/open-design-tauri-m4-reports",
+      `  --output-dir ${receiverReportDirArg}`,
       "```",
       "",
       "If you already know the completed run id, the packaged command sidecar also accepts `GITHUB_RUN_ID=<github-run-id>` and downloads that run directly.",
@@ -523,7 +528,7 @@ async function writeNote(
       `  --expected-head ${note.branchHead} \\`,
       '  --remote "${REMOTE:-origin}" \\',
       "  --wait \\",
-      "  --output-dir /tmp/open-design-tauri-m4-reports \\",
+      `  --output-dir ${receiverReportDirArg} \\`,
       "  --advance",
       "```",
       "",
@@ -534,8 +539,8 @@ async function writeNote(
       '  --remote "${REMOTE:-origin}" \\',
       `  --branch ${shellWord(note.branch)} \\`,
       `  --expected-head ${note.branchHead} \\`,
-      "  --win-report /tmp/open-design-tauri-m4-reports/open-design-ci-win-tauri-e2e-report \\",
-      "  --linux-report /tmp/open-design-tauri-m4-reports/open-design-ci-linux-tauri-e2e-report",
+      `  --win-report ${receiverWinReportArg} \\`,
+      `  --linux-report ${receiverLinuxReportArg}`,
       "```",
       "",
     ].join("\n"),

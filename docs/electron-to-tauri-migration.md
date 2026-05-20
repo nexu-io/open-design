@@ -496,6 +496,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Made `scripts/package-tauri-migration-handoff.ts` print the same explicit `--report-dir /tmp/open-design-tauri-m4-reports` on its receiver push command. This keeps package output, status output, and continuation output aligned about where native M4 reports should be downloaded and verified.
 - 2026-05-20: Extended `scripts/download-tauri-m4-reports.ts` to honor `TAURI_M4_REPORT_DIR` when `--output-dir` is omitted, matching the report-directory override contract already used by status, continuation, package, and push handoff paths.
 - 2026-05-20: Extended `scripts/tauri-migration-status.ts` to honor `TAURI_M4_REPORT_DIR` when `--report-dir` is omitted, so status, continuation, downloader, package, and push receiver paths all resolve the same report directory from the same environment override.
+- 2026-05-20: Updated `scripts/package-tauri-migration-handoff.ts` output and `scripts/verify-tauri-migration-handoff.ts` notes so manual receiver commands also use `TAURI_M4_REPORT_DIR` fallbacks for push, status, download, continuation, and direct M4 advance paths.
 
 ### Platform Gate Runners
 

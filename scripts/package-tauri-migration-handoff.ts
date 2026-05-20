@@ -11,6 +11,7 @@ import { tauriMigrationPrBodyLines } from "./tauri-migration-pr-body.ts";
 const execFileAsync = promisify(execFile);
 const defaultRoot = resolve(import.meta.dirname, "..");
 const defaultHandoffDir = "/tmp/open-design-tauri-migration-handoff";
+const receiverReportDirArg = '"${TAURI_M4_REPORT_DIR:-/tmp/open-design-tauri-m4-reports}"';
 const manifestName = "open-design-tauri-migration-handoff.json";
 const noteName = "open-design-tauri-migration-handoff.md";
 
@@ -76,7 +77,7 @@ async function main(): Promise<void> {
           "pnpm exec tsx scripts/push-tauri-migration-handoff.ts \\",
           `  --archive ${shellQuote(archivePath)} \\`,
           '  --remote "${REMOTE:-origin}" \\',
-          "  --report-dir /tmp/open-design-tauri-m4-reports",
+          `  --report-dir ${receiverReportDirArg}`,
         ].join("\n"),
       ),
       "Receiver environment overrides:",
@@ -116,7 +117,7 @@ async function main(): Promise<void> {
           `  --expected-head ${handoff.manifest.branchHead} \\`,
           '  --remote "${REMOTE:-origin}" \\',
           "  --wait \\",
-          "  --output-dir /tmp/open-design-tauri-m4-reports \\",
+          `  --output-dir ${receiverReportDirArg} \\`,
           "  --advance",
         ].join("\n"),
       ),
@@ -127,7 +128,7 @@ async function main(): Promise<void> {
           `  --handoff-dir ${shellQuote(args.handoffDir)} \\`,
           `  --handoff-archive ${shellQuote(archivePath)} \\`,
           '  --remote "${REMOTE:-origin}" \\',
-          "  --report-dir /tmp/open-design-tauri-m4-reports \\",
+          `  --report-dir ${receiverReportDirArg} \\`,
           "  --wait-reports \\",
           "  --advance",
         ].join("\n"),
@@ -139,7 +140,7 @@ async function main(): Promise<void> {
           `  --handoff-dir ${shellQuote(args.handoffDir)} \\`,
           `  --handoff-archive ${shellQuote(archivePath)} \\`,
           '  --remote "${REMOTE:-origin}" \\',
-          "  --report-dir /tmp/open-design-tauri-m4-reports",
+          `  --report-dir ${receiverReportDirArg}`,
         ].join("\n"),
       ),
       "",

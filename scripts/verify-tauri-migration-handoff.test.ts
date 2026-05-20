@@ -77,6 +77,7 @@ test("verify-tauri-migration-handoff round-trips a bundle through a receiving ch
   assert.match(note, /TAURI_NATIVE_CI_WAIT=1/);
   assert.match(note, /REMOTE=<remote>/);
   assert.match(note, /GH_BIN=<path-to-gh>/);
+  assert.match(note, /TAURI_M4_REPORT_DIR=<report-dir>/);
   assert.match(note, /TAURI_PR_BODY_PATH=<path>/);
   assert.match(note, new RegExp(`--archive '${escapeRegExp(`${dirname(manifestPath)}.tar.gz`)}' \\\\`));
   assert.match(note, /\$\{GH_BIN:-gh\} pr create --draft/);
@@ -94,10 +95,11 @@ test("verify-tauri-migration-handoff round-trips a bundle through a receiving ch
   assert.doesNotMatch(note, /--remote origin/);
   assert.match(note, /GITHUB_RUN_ID=<github-run-id>/);
   assert.match(note, /--advance/);
+  assert.match(note, /--output-dir "\$\{TAURI_M4_REPORT_DIR:-\/tmp\/open-design-tauri-m4-reports\}"/);
   assert.match(note, /advance-tauri-migration-m4-m5/);
   assert.match(note, new RegExp(`advance-tauri-migration-m4-m5[\\s\\S]*--branch '${migrationBranch.replaceAll("/", "\\/")}' \\\\`));
   assert.match(note, new RegExp(`advance-tauri-migration-m4-m5[\\s\\S]*--expected-head ${sourceHead} \\\\`));
-  assert.match(note, /\/tmp\/open-design-tauri-m4-reports\/open-design-ci-win-tauri-e2e-report/);
+  assert.match(note, /--win-report "\$\{TAURI_M4_REPORT_DIR:-\/tmp\/open-design-tauri-m4-reports\}\/open-design-ci-win-tauri-e2e-report"/);
 });
 
 test("verify-tauri-migration-handoff can derive standard artifact paths from output-dir", async (t) => {
