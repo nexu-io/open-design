@@ -2458,12 +2458,31 @@ export function ProjectView({
     ) => {
       const ids = meta?.agentIds;
       if (Array.isArray(ids) && ids.length >= 2) {
+        const delayMs = typeof meta?.fanoutDelayMs === 'number' ? meta.fanoutDelayMs : 0;
+        if (delayMs > 0) {
+          const scheduledAt = Date.now() + delayMs;
+          const note: ChatMessage = {
+            id: randomUUID(),
+            role: 'assistant',
+            content: `Scheduled fan-out for ${new Date(scheduledAt).toLocaleTimeString()}. Keep this browser tab open; durable daemon scheduling is still the next backend step.`,
+            createdAt: Date.now(),
+          };
+          setMessages((curr) => [...curr, note]);
+          persistMessage(note);
+          window.setTimeout(() => {
+            void handleFanout(prompt, attachments, commentAttachments, ids, {
+              ...meta,
+              fanoutDelayMs: undefined,
+            });
+          }, delayMs);
+          return;
+        }
         await handleFanout(prompt, attachments, commentAttachments, ids, meta);
         return;
       }
       await handleSend(prompt, attachments, commentAttachments, meta);
     },
-    [handleFanout, handleSend],
+    [handleFanout, handleSend, persistMessage, setMessages],
   );
 
   useEffect(() => {

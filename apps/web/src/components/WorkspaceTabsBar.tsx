@@ -589,6 +589,8 @@ function displayTabFor(
     components: t('entry.navComponents'),
     welcome: 'Welcome',
     'agent-builder': 'Skill builder',
+    'ship-readiness': 'Ship readiness',
+    'theme-lab': 'Image to theme',
   };
   const entryIcon: Record<EntryHomeView, IconName> = {
     home: 'home',
@@ -602,6 +604,8 @@ function displayTabFor(
     components: 'file-code',
     welcome: 'sparkles',
     'agent-builder': 'sparkles',
+    'ship-readiness': 'check',
+    'theme-lab': 'image',
   };
   return {
     id: tab.id,

@@ -59,6 +59,8 @@ import { CompareView } from './CompareView';
 import { ComponentsView } from './ComponentsView';
 import { WelcomeView } from './WelcomeView';
 import { AgentBuilderView } from './AgentBuilderView';
+import { ShipReadinessView } from './ShipReadinessView';
+import { ThemeLabView } from './ThemeLabView';
 import { InlineModelSwitcher } from './InlineModelSwitcher';
 import { NewProjectModal } from './NewProjectModal';
 import { PluginsView } from './PluginsView';
@@ -593,6 +595,8 @@ export function EntryShell({
             ) : null}
             {view === 'compare' ? <CompareView /> : null}
             {view === 'components' ? <ComponentsView /> : null}
+            {view === 'theme-lab' ? <ThemeLabView /> : null}
+            {view === 'ship-readiness' ? <ShipReadinessView /> : null}
             {view === 'welcome' ? <WelcomeView /> : null}
             {view === 'agent-builder' ? <AgentBuilderView /> : null}
           </div>

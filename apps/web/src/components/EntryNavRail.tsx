@@ -37,7 +37,9 @@ export type EntryView =
   // view (which is the BYOK/agent config wizard).
   | 'welcome'
   // Skill builder — write a new SKILL.md and save it to user-skills/.
-  | 'agent-builder';
+  | 'agent-builder'
+  | 'ship-readiness'
+  | 'theme-lab';
 
 interface Props {
   view: EntryView;
@@ -149,6 +151,24 @@ export function EntryNavRail({ view, onViewChange, onNewProject }: Props) {
           testId="entry-nav-components"
         >
           <Icon name="file-code" size={18} />
+        </NavButton>
+        <NavButton
+          active={view === 'theme-lab'}
+          ariaLabel="Image to theme"
+          tooltip="Image to theme"
+          onClick={() => onViewChange('theme-lab')}
+          testId="entry-nav-theme-lab"
+        >
+          <Icon name="image" size={18} />
+        </NavButton>
+        <NavButton
+          active={view === 'ship-readiness'}
+          ariaLabel="Ship readiness"
+          tooltip="Ship readiness"
+          onClick={() => onViewChange('ship-readiness')}
+          testId="entry-nav-ship-readiness"
+        >
+          <Icon name="check" size={18} />
         </NavButton>
       </div>
       <div className="entry-nav-rail__footer">

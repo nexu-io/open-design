@@ -20,7 +20,9 @@ export type EntryHomeView =
   | 'compare'
   | 'components'
   | 'welcome'
-  | 'agent-builder';
+  | 'agent-builder'
+  | 'ship-readiness'
+  | 'theme-lab';
 
 export type Route =
   | { kind: 'home'; view: EntryHomeView }
@@ -111,6 +113,12 @@ export function parseRoute(pathname: string): Route {
   if (parts[0] === 'agent-builder') {
     return { kind: 'home', view: 'agent-builder' };
   }
+  if (parts[0] === 'ship') {
+    return { kind: 'home', view: 'ship-readiness' };
+  }
+  if (parts[0] === 'theme-lab') {
+    return { kind: 'home', view: 'theme-lab' };
+  }
   // Phase 2B / spec §11.6 — marketplace deep UI routes. Two paths:
   //   /marketplace            → catalog grid (MarketplaceView)
   //   /marketplace/<pluginId> → detail page (PluginDetailView)
@@ -137,6 +145,8 @@ export function buildPath(route: Route): string {
     if (route.view === 'components') return '/components';
     if (route.view === 'welcome') return '/welcome';
     if (route.view === 'agent-builder') return '/agent-builder';
+    if (route.view === 'ship-readiness') return '/ship';
+    if (route.view === 'theme-lab') return '/theme-lab';
     return '/';
   }
   if (route.kind === 'marketplace') return '/marketplace';

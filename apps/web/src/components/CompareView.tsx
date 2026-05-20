@@ -11,6 +11,61 @@ import {
 import type { FanoutGroupSummary, ChatRunStatusResponse } from '@open-design/contracts';
 import { useT } from '../i18n';
 
+function outputForRun(run: ChatRunStatusResponse, liveText = ''): string {
+  return liveText || run.outputText || run.error || '';
+}
+
+function analyzeOutput(display: string, brief: string, status: ChatRunStatusResponse['status']) {
+  const words = display.trim().split(/\s+/).filter(Boolean);
+  const chars = display.length;
+  const codeBlocks = (display.match(/```/g) ?? []).length / 2;
+  const hasHtml = /<!doctype\s+html|<html[\s>]/i.test(display);
+  const briefTerms = Array.from(
+    new Set(
+      brief
+        .toLowerCase()
+        .split(/[^a-z0-9]+/)
+        .filter((w) => w.length > 3)
+        .slice(0, 12),
+    ),
+  );
+  const lower = display.toLowerCase();
+  const covered = briefTerms.filter((term) => lower.includes(term)).length;
+  const coverage = briefTerms.length > 0 ? covered / briefTerms.length : 0;
+  const substance = Math.min(1, words.length / 180);
+  const structure = Math.min(1, codeBlocks * 0.35 + (hasHtml ? 0.45 : 0) + (/\n[-*]|\n\d+\./.test(display) ? 0.2 : 0));
+  const statusScore = status === 'succeeded' ? 1 : status === 'running' || status === 'queued' ? 0.45 : 0;
+  const score = Math.round((statusScore * 0.35 + substance * 0.25 + coverage * 0.25 + structure * 0.15) * 100);
+  const reasons = [
+    `${words.length} words`,
+    briefTerms.length > 0 ? `${covered}/${briefTerms.length} brief terms` : 'brief coverage n/a',
+    hasHtml ? 'HTML artifact' : codeBlocks > 0 ? `${Math.round(codeBlocks)} code block(s)` : 'text output',
+  ];
+  return { score, words: words.length, chars, codeBlocks: Math.round(codeBlocks), hasHtml, coverage, reasons };
+}
+
+function exportGroupMarkdown(group: FanoutGroupSummary): string {
+  const lines = [
+    `# Fan-out comparison`,
+    '',
+    `Group: ${group.fanoutGroupId}`,
+    `Brief: ${group.brief || '(no brief)'}`,
+    `Updated: ${new Date(group.updatedAt).toISOString()}`,
+    '',
+  ];
+  for (const run of group.runs) {
+    const display = outputForRun(run);
+    const analysis = analyzeOutput(display, group.brief, run.status);
+    lines.push(`## ${run.agentId ?? 'unknown'} (${run.status})`);
+    lines.push(`Score: ${analysis.score}/100`);
+    if (group.winnerRunId === run.id) lines.push('Winner: yes');
+    lines.push('');
+    lines.push(display.trim() || '(no output)');
+    lines.push('');
+  }
+  return lines.join('\n');
+}
+
 /**
  * Side-by-side review of multi-CLI fan-out runs. Lists every group from
  * the daemon's /api/runs/fanout-groups bucket, newest first, and renders
@@ -143,6 +198,7 @@ function CompareGroupCard({ group, isExpanded, onToggle, onPickWinner }: CardPro
   // yet (the winner flag does persist, which is the load-bearing bit).
   const [suggesting, setSuggesting] = useState(false);
   const [rationale, setRationale] = useState<string | null>(null);
+  const [exported, setExported] = useState(false);
 
   const runSuggest = useCallback(async () => {
     if (suggesting || done < 2) return;
@@ -159,6 +215,13 @@ function CompareGroupCard({ group, isExpanded, onToggle, onPickWinner }: CardPro
       setSuggesting(false);
     }
   }, [done, group.fanoutGroupId, onPickWinner, suggesting]);
+
+  const copyExport = useCallback(() => {
+    void navigator.clipboard?.writeText(exportGroupMarkdown(group)).then(() => {
+      setExported(true);
+      window.setTimeout(() => setExported(false), 1400);
+    });
+  }, [group]);
 
   return (
     <li className={`compare-group${isExpanded ? ' is-expanded' : ''}`}>
@@ -196,6 +259,15 @@ function CompareGroupCard({ group, isExpanded, onToggle, onPickWinner }: CardPro
           </button>
           <button
             type="button"
+            className="compare-group__suggest-btn"
+            onClick={copyExport}
+            title="Copy this comparison as Markdown"
+          >
+            <Icon name="copy" size={12} />
+            <span>{exported ? 'Copied' : 'Export'}</span>
+          </button>
+          <button
+            type="button"
             className="compare-group__chevron"
             onClick={onToggle}
             aria-label={isExpanded ? 'Collapse group' : 'Expand group'}
@@ -213,6 +285,7 @@ function CompareGroupCard({ group, isExpanded, onToggle, onPickWinner }: CardPro
             <CompareRunCard
               key={r.id}
               run={r}
+              brief={group.brief}
               isWinner={group.winnerRunId === r.id}
               onPickWinner={() => onPickWinner(r.id)}
             />
@@ -225,11 +298,12 @@ function CompareGroupCard({ group, isExpanded, onToggle, onPickWinner }: CardPro
 
 interface RunCardProps {
   run: ChatRunStatusResponse;
+  brief: string;
   isWinner: boolean;
   onPickWinner: () => void;
 }
 
-function CompareRunCard({ run, isWinner, onPickWinner }: RunCardProps) {
+function CompareRunCard({ run, brief, isWinner, onPickWinner }: RunCardProps) {
   const t = useT();
   const agentId = run.agentId ?? 'unknown';
   // Live-tail the run's event stream so the Compare card is a real
@@ -272,7 +346,8 @@ function CompareRunCard({ run, isWinner, onPickWinner }: RunCardProps) {
     };
   }, [run.error, run.id, run.outputText, run.status]);
 
-  const display = liveText || run.outputText || run.error || '';
+  const display = outputForRun(run, liveText);
+  const analysis = analyzeOutput(display, brief, run.status);
   // Detect when the assistant emitted an HTML artifact (the agent's
   // standard output for a UI generation). The detection is intentionally
   // loose: a `<html` or `<!doctype html` anywhere in the text is enough.
@@ -319,6 +394,12 @@ function CompareRunCard({ run, isWinner, onPickWinner }: RunCardProps) {
         </div>
       </header>
       <div className="compare-run__body">
+        <div className="compare-run__score-row">
+          <span className={`compare-run__score compare-run__score--${analysis.score >= 80 ? 'high' : analysis.score >= 55 ? 'mid' : 'low'}`}>
+            {analysis.score}
+          </span>
+          <span>{analysis.reasons.join(' · ')}</span>
+        </div>
         {run.error ? (
           <pre className="compare-run__error">{run.error}</pre>
         ) : htmlSrc && previewMode === 'rendered' ? (

@@ -21,6 +21,14 @@ interface BrandBucket {
     passesAa: boolean;
   };
   vibe: string;
+  quality?: {
+    score: number;
+    grade: 'A' | 'B' | 'C' | 'D';
+    tokenCoverage: number;
+    selectorCoverage: number;
+    contrastScore: number;
+    notes: string[];
+  };
 }
 interface ComponentsResponse {
   totalBrands: number;
@@ -50,8 +58,9 @@ export function ComponentsView() {
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [activeVibe, setActiveVibe] = useState<string>('all');
   const [aaOnly, setAaOnly] = useState(false);
+  const [qualityOnly, setQualityOnly] = useState(false);
   const [openBrand, setOpenBrand] = useState<string | null>(null);
-  const [sortBy, setSortBy] = useState<'count' | 'az' | 'aa'>('count');
+  const [sortBy, setSortBy] = useState<'count' | 'az' | 'aa' | 'quality'>('quality');
   const [projects, setProjects] = useState<Project[]>([]);
   const [applyTarget, setApplyTarget] = useState<{ brand: string } | null>(null);
   // Multi-select for cross-brand diff. The cap is 4 because viewports
@@ -101,6 +110,7 @@ export function ComponentsView() {
       if (activeCategory !== 'all' && !b.categories[activeCategory]) return false;
       if (activeVibe !== 'all' && b.vibe !== activeVibe) return false;
       if (aaOnly && !b.contrast.passesAa) return false;
+      if (qualityOnly && (b.quality?.score ?? 0) < 85) return false;
       return true;
     });
     if (sortBy === 'az') {
@@ -112,10 +122,15 @@ export function ComponentsView() {
         }
         return b.selectorCount - a.selectorCount;
       });
+    } else if (sortBy === 'quality') {
+      filtered.sort((a, b) => {
+        const byScore = (b.quality?.score ?? 0) - (a.quality?.score ?? 0);
+        return byScore || b.selectorCount - a.selectorCount;
+      });
     }
     // 'count' is the daemon's default order; no client sort needed.
     return filtered;
-  }, [data, query, activeCategory, activeVibe, aaOnly, sortBy]);
+  }, [data, query, activeCategory, activeVibe, aaOnly, qualityOnly, sortBy]);
 
   const vibesFromData = useMemo(() => {
     if (!data) return [];
@@ -147,9 +162,10 @@ export function ComponentsView() {
           <select
             className="components-view__sort"
             value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as 'count' | 'az' | 'aa')}
+            onChange={(e) => setSortBy(e.target.value as 'count' | 'az' | 'aa' | 'quality')}
             aria-label="Sort brands"
           >
+            <option value="quality">Quality score</option>
             <option value="count">Most selectors</option>
             <option value="az">A → Z</option>
             <option value="aa">AA-pass first</option>
@@ -220,6 +236,14 @@ export function ComponentsView() {
               title="Show only brands whose fg/bg + accent/bg pairs pass WCAG AA"
             >
               AA-only
+            </button>
+            <button
+              type="button"
+              className={`components-view__cat${qualityOnly ? ' is-active' : ''}`}
+              onClick={() => setQualityOnly((v) => !v)}
+              title="Show systems scoring 85+ across token, selector, and contrast coverage"
+            >
+              85+
             </button>
           </div>
         ) : null}
@@ -442,6 +466,14 @@ function BrandCard({ brand, isExpanded, onToggle, activeCategory, onUseInProject
               {brand.contrast.passesAa ? 'AA' : `${brand.contrast.fgOnBg}:1`}
             </span>
           ) : null}
+          {brand.quality ? (
+            <span
+              className={`brand-card__quality brand-card__quality--${brand.quality.grade.toLowerCase()}`}
+              title={brand.quality.notes.join(' · ')}
+            >
+              {brand.quality.grade} {brand.quality.score}
+            </span>
+          ) : null}
           <Icon name={isExpanded ? 'chevron-down' : 'chevron-right'} size={14} />
         </div>
       </button>
@@ -484,6 +516,22 @@ function BrandCard({ brand, isExpanded, onToggle, activeCategory, onUseInProject
       </div>
       {isExpanded ? (
         <div className="brand-card__body">
+          {brand.quality ? (
+            <div className="brand-card__quality-panel">
+              <div>
+                <span>Tokens</span>
+                <strong>{brand.quality.tokenCoverage}%</strong>
+              </div>
+              <div>
+                <span>Selectors</span>
+                <strong>{brand.quality.selectorCoverage}%</strong>
+              </div>
+              <div>
+                <span>Contrast</span>
+                <strong>{brand.quality.contrastScore}%</strong>
+              </div>
+            </div>
+          ) : null}
           {categoriesToShow.map((cat) => (
             <div key={cat} className="brand-card__category">
               <div className="brand-card__category-head">{cat}</div>

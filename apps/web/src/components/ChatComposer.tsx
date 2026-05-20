@@ -181,6 +181,9 @@ export interface ChatSendMeta {
   // the user's currently-selected agent in AvatarMenu, preserving the
   // single-agent flow byte-for-byte.
   agentIds?: string[];
+  // Browser-session delay for Fan Out. ProjectView schedules the
+  // parallel dispatch with setTimeout and renders a scheduled note.
+  fanoutDelayMs?: number;
 }
 
 /**
@@ -1058,7 +1061,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       }
     }
 
-    async function submit(opts?: { agentIds?: string[]; extraSkillIds?: string[] }) {
+    async function submit(opts?: { agentIds?: string[]; extraSkillIds?: string[]; fanoutDelayMs?: number }) {
       const prompt = draft.trim();
       if (sendDisabled) return;
       // Intercept `/pet …` and `/mcp` before sending so the slash command
@@ -1082,6 +1085,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         : baseMeta?.skillIds;
       const contextMetaDraft: ChatSendMeta = { ...(baseMeta ?? {}) };
       if (fanIds) contextMetaDraft.agentIds = fanIds;
+      if (fanIds && opts?.fanoutDelayMs && opts.fanoutDelayMs > 0) {
+        contextMetaDraft.fanoutDelayMs = opts.fanoutDelayMs;
+      } else {
+        delete contextMetaDraft.fanoutDelayMs;
+      }
       if (mergedSkillIds && mergedSkillIds.length > 0) {
         contextMetaDraft.skillIds = mergedSkillIds;
       } else {
@@ -1721,7 +1729,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                   sendDisabled ||
                   (!draft.trim() && staged.length === 0 && currentCommentAttachments().length === 0)
                 }
-                onSend={(agentIds, extraSkillIds) => {
+                onSend={(agentIds, extraSkillIds, options) => {
                   trackStudioClickChatComposer(analytics.track, {
                     page: 'studio',
                     area: 'chat_composer',
@@ -1731,7 +1739,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                     has_attachment:
                       staged.length > 0 || currentCommentAttachments().length > 0,
                   });
-                  void submit({ agentIds, extraSkillIds });
+                  void submit({ agentIds, extraSkillIds, fanoutDelayMs: options?.delayMs });
                 }}
               />
             ) : null}

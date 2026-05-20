@@ -10666,6 +10666,14 @@ export async function startServer({
         accentOnBg: number | null;
         passesAa: boolean;
       };
+      type BrandQuality = {
+        score: number;
+        grade: 'A' | 'B' | 'C' | 'D';
+        tokenCoverage: number;
+        selectorCoverage: number;
+        contrastScore: number;
+        notes: string[];
+      };
       type BrandBucket = {
         brand: string;
         selectorCount: number;
@@ -10673,6 +10681,7 @@ export async function startServer({
         previewUrl: string;
         contrast: ContrastSnapshot;
         vibe: string;
+        quality: BrandQuality;
       };
       const fs2 = await import('node:fs/promises');
       const path2 = await import('node:path');
@@ -10732,7 +10741,32 @@ export async function startServer({
         [/retro|vintage|nostalg/i, 'retro'],
         [/corporate|enterprise|fiduciary|bank/i, 'corporate'],
       ];
-      const computeBrandMeta = async (brand: string): Promise<{ contrast: ContrastSnapshot; vibe: string }> => {
+      const A1_TOKEN_NAMES = [
+        'bg', 'surface', 'fg', 'muted', 'border', 'accent',
+        'font-display', 'font-body', 'text-xs', 'text-sm', 'text-base',
+        'text-lg', 'text-xl', 'text-2xl', 'text-3xl', 'text-4xl',
+        'leading-body', 'leading-tight', 'tracking-display',
+        'section-y-desktop', 'section-y-tablet', 'section-y-phone',
+        'container-max', 'container-gutter-desktop',
+        'container-gutter-tablet', 'container-gutter-phone',
+      ];
+      const emptyQuality = (): BrandQuality => ({
+        score: 0,
+        grade: 'D',
+        tokenCoverage: 0,
+        selectorCoverage: 0,
+        contrastScore: 0,
+        notes: ['No token metadata available'],
+      });
+      const qualityGrade = (score: number): BrandQuality['grade'] => {
+        if (score >= 90) return 'A';
+        if (score >= 75) return 'B';
+        if (score >= 60) return 'C';
+        return 'D';
+      };
+      const computeBrandMeta = async (
+        brand: string,
+      ): Promise<{ contrast: ContrastSnapshot; vibe: string; tokenCoverage: number; tokenCount: number }> => {
         const empty: ContrastSnapshot = { fgOnBg: null, accentOnBg: null, passesAa: false };
         try {
           // Resolve from whichever root holds this brand (user takes
@@ -10748,6 +10782,11 @@ export async function startServer({
           const bg = grab('bg');
           const fg = grab('fg');
           const accent = grab('accent');
+          const tokenNames = new Set(
+            Array.from(tokens.matchAll(/--([\w-]+)\s*:/g)).map((m) => m[1]),
+          );
+          const tokenCoverage =
+            A1_TOKEN_NAMES.filter((name) => tokenNames.has(name)).length / A1_TOKEN_NAMES.length;
           const fgOnBg = contrastRatio(fg, bg);
           const accentOnBg = contrastRatio(accent, bg);
           // WCAG AA normal-text floor is 4.5. We're checking against bg
@@ -10765,9 +10804,14 @@ export async function startServer({
           for (const [re, tag] of VIBE_RULES) {
             if (re.test(hay)) { vibe = tag; break; }
           }
-          return { contrast: { fgOnBg, accentOnBg, passesAa }, vibe };
+          return {
+            contrast: { fgOnBg, accentOnBg, passesAa },
+            vibe,
+            tokenCoverage,
+            tokenCount: tokenNames.size,
+          };
         } catch {
-          return { contrast: empty, vibe: 'modern' };
+          return { contrast: empty, vibe: 'modern', tokenCoverage: 0, tokenCount: 0 };
         }
       };
       const brandMap = new Map<string, BrandBucket>();
@@ -10783,6 +10827,7 @@ export async function startServer({
           previewUrl: `/api/design-systems/${encodeURIComponent(b.name)}/components-html`,
           contrast: { fgOnBg: null, accentOnBg: null, passesAa: false },
           vibe: 'modern',
+          quality: emptyQuality(),
         });
       }
       for (const r of rows) {
@@ -10801,6 +10846,27 @@ export async function startServer({
           const meta = await computeBrandMeta(b.brand);
           b.contrast = meta.contrast;
           b.vibe = meta.vibe;
+          const categoryCount = Object.keys(b.categories).length;
+          const selectorCoverage = Math.min(1, (b.selectorCount / 30) * 0.65 + (categoryCount / 8) * 0.35);
+          const contrastScore = b.contrast.passesAa
+            ? 1
+            : Math.min(1, ((b.contrast.fgOnBg ?? 0) / 4.5) * 0.7 + ((b.contrast.accentOnBg ?? 0) / 3) * 0.3);
+          const score = Math.round(
+            (meta.tokenCoverage * 0.45 + selectorCoverage * 0.35 + contrastScore * 0.2) * 100,
+          );
+          const notes = [
+            meta.tokenCoverage >= 0.95 ? 'A1 tokens complete' : `${Math.round(meta.tokenCoverage * 100)}% A1 token coverage`,
+            selectorCoverage >= 0.9 ? 'Rich component coverage' : `${b.selectorCount} selectors across ${categoryCount} groups`,
+            b.contrast.passesAa ? 'Contrast passes AA baseline' : 'Contrast needs review',
+          ];
+          b.quality = {
+            score,
+            grade: qualityGrade(score),
+            tokenCoverage: Math.round(meta.tokenCoverage * 100),
+            selectorCoverage: Math.round(selectorCoverage * 100),
+            contrastScore: Math.round(contrastScore * 100),
+            notes,
+          };
         }),
       );
       const brandList = Array.from(brandMap.values()).sort((a, b) => b.selectorCount - a.selectorCount);
@@ -10810,6 +10876,83 @@ export async function startServer({
         categories: Object.keys(byCategory).sort(),
         components: rows,
         brands: brandList,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: { code: 'INTERNAL', message } });
+    }
+  });
+
+  app.get('/api/ship-readiness', async (_req, res) => {
+    try {
+      const [branch, status, latest, upstream] = await Promise.all([
+        execFileBuffered('git', ['branch', '--show-current'], { cwd: PROJECT_ROOT, timeout: 10_000 }),
+        execFileBuffered('git', ['status', '--short'], { cwd: PROJECT_ROOT, timeout: 10_000 }),
+        execFileBuffered('git', ['log', '-1', '--oneline'], { cwd: PROJECT_ROOT, timeout: 10_000 }),
+        execFileBuffered('git', ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'], { cwd: PROJECT_ROOT, timeout: 10_000 }),
+      ]);
+      let packageJson: { engines?: { node?: string } } = {};
+      try {
+        packageJson = JSON.parse(await fs.promises.readFile(path.join(PROJECT_ROOT, 'package.json'), 'utf8'));
+      } catch {
+        packageJson = {};
+      }
+      const dirtyFiles = status.stdout
+        ? status.stdout.split('\n').map((line) => line.trim()).filter(Boolean)
+        : [];
+      const checks = [
+        {
+          id: 'worktree',
+          label: 'Working tree clean',
+          status: dirtyFiles.length === 0 ? 'pass' : 'fail',
+          detail: dirtyFiles.length === 0 ? 'No unstaged or untracked source changes' : `${dirtyFiles.length} changed path(s)`,
+        },
+        {
+          id: 'branch',
+          label: 'Feature branch',
+          status: branch.stdout && branch.stdout !== 'main' && branch.stdout !== 'master' ? 'pass' : 'warn',
+          detail: branch.stdout || 'unknown branch',
+        },
+        {
+          id: 'upstream',
+          label: 'Remote tracking',
+          status: upstream.ok ? 'pass' : 'warn',
+          detail: upstream.ok ? upstream.stdout : 'No upstream branch yet',
+        },
+        {
+          id: 'node',
+          label: 'Node engine',
+          status: packageJson.engines?.node && process.version.startsWith('v26') ? 'warn' : 'pass',
+          detail: `running ${process.version}${packageJson.engines?.node ? ` · repo wants ${packageJson.engines.node}` : ''}`,
+        },
+        {
+          id: 'daemon',
+          label: 'Daemon live',
+          status: 'pass',
+          detail: `uptime ${Math.round(process.uptime())}s · data ${RUNTIME_DATA_DIR}`,
+        },
+      ];
+      const pass = checks.filter((c) => c.status === 'pass').length;
+      const warn = checks.filter((c) => c.status === 'warn').length;
+      const fail = checks.filter((c) => c.status === 'fail').length;
+      res.json({
+        generatedAt: new Date().toISOString(),
+        projectRoot: PROJECT_ROOT,
+        branch: branch.stdout || null,
+        upstream: upstream.ok ? upstream.stdout : null,
+        latestCommit: latest.stdout || null,
+        dirtyFiles,
+        node: {
+          actual: process.version,
+          wanted: packageJson.engines?.node ?? null,
+        },
+        checks,
+        summary: {
+          pass,
+          warn,
+          fail,
+          ready: fail === 0,
+        },
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

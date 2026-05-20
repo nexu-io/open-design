@@ -52,7 +52,7 @@ interface Props {
   // Returns the ids selected this turn and optional extra skill ids
   // (e.g. the super-system playbook toggle). Empty agent array means
   // "use the single default agent, don't fan out."
-  onSend: (agentIds: string[], extraSkillIds?: string[]) => void;
+  onSend: (agentIds: string[], extraSkillIds?: string[], options?: { delayMs?: number }) => void;
 }
 
 /**
@@ -84,6 +84,7 @@ export function FanOutButton({ agents, defaultAgentId, disabled, onSend }: Props
   // agent's system prompt. Off lets the user compare raw CLI taste
   // without the 14-video bias.
   const [usePlaybook, setUsePlaybook] = useState(true);
+  const [delayMs, setDelayMs] = useState(0);
 
   useEffect(() => {
     if (!open) return;
@@ -127,7 +128,7 @@ export function FanOutButton({ agents, defaultAgentId, disabled, onSend }: Props
       setOpen(false);
       return;
     }
-    onSend(ids, usePlaybook ? ['super-system'] : []);
+    onSend(ids, usePlaybook ? ['super-system'] : [], delayMs > 0 ? { delayMs } : undefined);
     setOpen(false);
   };
 
@@ -210,6 +211,19 @@ export function FanOutButton({ agents, defaultAgentId, disabled, onSend }: Props
               onChange={(e) => setUsePlaybook(e.target.checked)}
             />
             <span>{t('fanout.usePlaybook')}</span>
+          </label>
+          <label className="fanout-schedule">
+            <span>Start</span>
+            <select
+              value={String(delayMs)}
+              onChange={(e) => setDelayMs(Number(e.target.value))}
+              aria-label="Fan-out start time"
+            >
+              <option value="0">Now</option>
+              <option value="300000">In 5 min</option>
+              <option value="1800000">In 30 min</option>
+              <option value="3600000">In 1 hour</option>
+            </select>
           </label>
           <button
             type="button"
