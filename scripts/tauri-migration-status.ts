@@ -30,6 +30,16 @@ const winReportName = "open-design-ci-win-tauri-e2e-report";
 const expectedHeartbeatId = "tauri-migration-follow-up";
 const expectedHeartbeatName = "Tauri migration follow-up";
 const expectedHeartbeatRrule = "FREQ=DAILY;BYHOUR=9;BYMINUTE=0;BYSECOND=0";
+const expectedHeartbeatPromptSnippets = [
+  "docs/electron-to-tauri-migration.md",
+  "tauri-migration-status.ts",
+  "--handoff-dir /tmp/open-design-tauri-migration-handoff",
+  "--handoff-archive /tmp/open-design-tauri-migration-handoff.tar.gz",
+  "--remote origin",
+  "--report-dir /tmp/open-design-tauri-m4-reports",
+  "continue-tauri-migration.ts",
+  "--dry-run",
+] as const;
 
 type DesktopRuntime = "electron" | "tauri";
 
@@ -371,11 +381,11 @@ async function readHeartbeatStatus(automationDir: string): Promise<HeartbeatStat
         matchProblems.push(`expected rrule ${expectedHeartbeatRrule}, got ${fields.rrule ?? "missing"}`);
       }
       const promptIncludesContinuation =
-        fields.prompt?.includes("docs/electron-to-tauri-migration.md") === true &&
-        fields.prompt.includes("tauri-migration-status.ts") &&
-        fields.prompt.includes("continue-tauri-migration.ts --dry-run");
+        fields.prompt != null && expectedHeartbeatPromptSnippets.every((snippet) => fields.prompt?.includes(snippet));
       if (!promptIncludesContinuation) {
-        matchProblems.push("prompt must read the migration document, print migration status, and run continuation dry-run");
+        matchProblems.push(
+          "prompt must read the migration document, print migration status with the current handoff archive/report paths, and run continuation dry-run",
+        );
       }
       matches.push({
         file,

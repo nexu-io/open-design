@@ -856,7 +856,7 @@ test("tauri-migration-status flags missing or inactive follow-up heartbeats", as
   const automationDir = join(fixture, "automations");
   await writeHeartbeatAutomation(automationDir, "tauri-migration-follow-up", {
     prompt:
-      "Continue the Electron to Tauri migration from docs/electron-to-tauri-migration.md, then run scripts/tauri-migration-status.ts.",
+      "Continue the Electron to Tauri migration from docs/electron-to-tauri-migration.md, then run scripts/tauri-migration-status.ts --handoff-dir /tmp/open-design-tauri-migration-handoff --remote origin --report-dir /tmp/open-design-tauri-m4-reports.",
     status: "PAUSED",
   });
   await writeHeartbeatAutomation(automationDir, "duplicate", {
@@ -878,6 +878,7 @@ test("tauri-migration-status flags missing or inactive follow-up heartbeats", as
   assert.equal(parsed.heartbeat.matches.length, 2);
   assert.match(parsed.heartbeat.problems.join("\n"), /duplicate heartbeat automations/);
   assert.match(parsed.heartbeat.problems.join("\n"), /expected status ACTIVE, got PAUSED/);
+  assert.match(parsed.heartbeat.problems.join("\n"), /current handoff archive\/report paths/);
   assert.match(parsed.heartbeat.problems.join("\n"), /continuation dry-run/);
   assert.match(parsed.nextActions.join("\n"), /Repair the Tauri migration follow-up heartbeat/);
 });
@@ -1697,7 +1698,7 @@ async function writeHeartbeatAutomation(
 ): Promise<void> {
   const prompt =
     options.prompt ??
-    "Continue from docs/electron-to-tauri-migration.md, then run scripts/tauri-migration-status.ts and scripts/continue-tauri-migration.ts --dry-run before mutating state.";
+    "Continue from docs/electron-to-tauri-migration.md, then run scripts/tauri-migration-status.ts --handoff-dir /tmp/open-design-tauri-migration-handoff --handoff-archive /tmp/open-design-tauri-migration-handoff.tar.gz --remote origin --report-dir /tmp/open-design-tauri-m4-reports and scripts/continue-tauri-migration.ts --handoff-dir /tmp/open-design-tauri-migration-handoff --handoff-archive /tmp/open-design-tauri-migration-handoff.tar.gz --remote origin --report-dir /tmp/open-design-tauri-m4-reports --dry-run before mutating state.";
   await mkdir(join(automationDir, directoryName), { recursive: true });
   await writeFile(
     join(automationDir, directoryName, "automation.toml"),

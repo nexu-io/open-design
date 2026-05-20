@@ -43,8 +43,15 @@ Each continuation pass starts from current repository evidence, not from a remem
 git status --short --branch
 pnpm exec tsx scripts/tauri-migration-status.ts \
   --handoff-dir /tmp/open-design-tauri-migration-handoff \
-  --remote origin
-pnpm exec tsx scripts/continue-tauri-migration.ts --dry-run
+  --handoff-archive /tmp/open-design-tauri-migration-handoff.tar.gz \
+  --remote origin \
+  --report-dir /tmp/open-design-tauri-m4-reports
+pnpm exec tsx scripts/continue-tauri-migration.ts \
+  --handoff-dir /tmp/open-design-tauri-migration-handoff \
+  --handoff-archive /tmp/open-design-tauri-migration-handoff.tar.gz \
+  --remote origin \
+  --report-dir /tmp/open-design-tauri-m4-reports \
+  --dry-run
 ```
 
 If the handoff is stale, regenerate it before attempting a remote push:
@@ -68,7 +75,7 @@ If the push is still blocked, keep the archive, `.sha256`, `.commands.sh`, and `
 
 ### Sustained follow-up
 
-The Codex thread should keep exactly one active heartbeat for this migration, named `Tauri migration follow-up` with id `tauri-migration-follow-up`, scheduled daily at 09:00 local thread time. The heartbeat prompt must start from this document and the current `tauri-migration-status` output, then use `scripts/continue-tauri-migration.ts --dry-run` before taking mutating action.
+The Codex thread should keep exactly one active heartbeat for this migration, named `Tauri migration follow-up` with id `tauri-migration-follow-up`, scheduled daily at 09:00 local thread time. The heartbeat prompt must start from this document and the current `tauri-migration-status` output using the handoff directory, handoff archive, remote, and report directory above, then use the matching `scripts/continue-tauri-migration.ts ... --dry-run` command before taking mutating action.
 
 Do not create duplicate reminders for the same work. If the continuation sequence changes, update that heartbeat prompt instead. The heartbeat must keep the goal active until M4 native evidence, M5 default flip, and M6 Electron cleanup are all complete and verified.
 
@@ -463,6 +470,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Aligned receiver remote overrides across the executable handoff sidecar, push-only helper, and repo-local continuation runner. `scripts/push-tauri-migration-handoff.ts` and `scripts/continue-tauri-migration.ts` now honor `REMOTE=<remote>` when `--remote` is omitted, matching the command sidecar behavior for write-capable checkouts whose push remote is not named `origin`. `node --import tsx --test scripts/tauri-migration-status.test.ts scripts/push-tauri-migration-handoff.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, and `git diff --check` passed.
 - 2026-05-20: Tightened the push-only packaged handoff receiver path so `scripts/push-tauri-migration-handoff.ts --archive` now verifies the archive checksum, executable `.commands.sh` sidecar, `.commands.sh.sha256` sidecar, and current command-sidecar safety markers before extracting or pushing. This keeps the push-only fallback aligned with the status checker and executable sidecar requirement that all four transfer files stay together. `node --import tsx --test scripts/push-tauri-migration-handoff.test.ts scripts/tauri-migration-status.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, `git diff --check`, `pnpm guard`, and `pnpm typecheck` passed.
 - 2026-05-20: Centralized the `.commands.sh` safety-marker requirements in `scripts/tauri-migration-command-sidecar.ts` so `scripts/tauri-migration-status.ts` and `scripts/push-tauri-migration-handoff.ts` reject stale packaged handoff command sidecars from the same requirement list. This prevents the status archive-current check and push-only receiver fallback from drifting as new receiver safeguards are added. `node --import tsx --test scripts/push-tauri-migration-handoff.test.ts scripts/tauri-migration-status.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, `git diff --check`, `pnpm guard`, and `pnpm typecheck` passed.
+- 2026-05-20: Tightened the continuation cadence and heartbeat validation so the daily follow-up must run `scripts/tauri-migration-status.ts` and `scripts/continue-tauri-migration.ts --dry-run` with the current handoff directory, handoff archive, remote, and report directory. This keeps future continuation passes from silently falling back to default archive/report paths after the packaged handoff has already been verified. `node --import tsx --test scripts/tauri-migration-status.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, `git diff --check`, `pnpm guard`, and `pnpm typecheck` passed.
 
 ### Platform Gate Runners
 
