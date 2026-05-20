@@ -441,6 +441,7 @@ These gates are intentionally not marked complete from macOS-only evidence. Run 
 - 2026-05-20: Tightened the direct M4→M5 phase advance path so `scripts/advance-tauri-migration-m4-m5.ts` verifies the pushed remote migration branch before consuming local Windows/Linux report directories. The downloader, continuation runner, status next actions, and packaged handoff sidecar now pass the same `--remote`, `--branch`, and `--expected-head` contract into the mutating advance command.
 - 2026-05-20: Updated the generated handoff Markdown note and status checker for the same remote-bound M4 advance contract. `scripts/tauri-migration-status.ts` now rejects stale handoff notes whose report download or direct advance command omits `--remote origin`, the migration branch, or the exact expected head.
 - 2026-05-20: Moved `scripts/download-tauri-m4-reports.ts --advance` remote-head verification ahead of all GitHub artifact reads. A receiver that asks the downloader to mutate M4/M5 now proves the configured remote branch matches `--expected-head` before `gh run view`, `gh run list`, or artifact download can consume native report evidence.
+- 2026-05-20: Tightened the receiver-side bundle import before remote push. `scripts/import-tauri-migration-bundle.ts` now requires manifest `branchHead` to match the bundle's `refs/heads/<migration-branch>` head before updating refs, and `scripts/push-tauri-migration-handoff.ts` now has regression coverage proving stale manifest heads fail before the remote branch is pushed.
 
 ### Platform Gate Runners
 

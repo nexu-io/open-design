@@ -13,6 +13,7 @@ type Args = {
   bundle: string;
   checkout: boolean;
   cwd: string;
+  expectedBranchHead?: string;
   expectedSha256?: string;
   manifest?: string;
 };
@@ -28,6 +29,7 @@ type ParsedArgs = {
 
 type HandoffManifest = {
   branch: string;
+  branchHead: string;
   bundlePath: string;
   bundleSha256: string;
   schemaVersion: 1;
@@ -44,8 +46,11 @@ async function main(): Promise<void> {
 
   const verify = await git(args.cwd, ["bundle", "verify", args.bundle]);
   const heads = await git(args.cwd, ["bundle", "list-heads", args.bundle]);
-  if (!heads.stdout.includes(`refs/heads/${args.branch}`)) {
-    throw new Error(`bundle does not contain refs/heads/${args.branch}`);
+  const bundleHead = readBundleHead(heads.stdout, args.branch);
+  if (args.expectedBranchHead != null && bundleHead !== args.expectedBranchHead) {
+    throw new Error(
+      `bundle branch head mismatch for ${args.branch}: expected ${args.expectedBranchHead}, got ${bundleHead}`,
+    );
   }
 
   const currentBranch = await readCurrentBranch(args.cwd);
@@ -63,6 +68,11 @@ async function main(): Promise<void> {
     await deleteRefIfPresent(args.cwd, tempRef);
   }
   const branchHead = (await git(args.cwd, ["rev-parse", "--verify", args.branch])).stdout.trim();
+  if (args.expectedBranchHead != null && branchHead !== args.expectedBranchHead) {
+    throw new Error(
+      `imported branch head mismatch for ${args.branch}: expected ${args.expectedBranchHead}, got ${branchHead}`,
+    );
+  }
   if (args.checkout || shouldRestoreCheckedOutBranch) {
     await ensureTrackedClean(args.cwd);
     await git(args.cwd, ["checkout", args.branch]);
@@ -163,6 +173,9 @@ async function resolveArgs(parsed: ParsedArgs): Promise<Args> {
     checkout: parsed.checkout,
     cwd: parsed.cwd,
   };
+  if (manifest?.branchHead != null) {
+    args.expectedBranchHead = manifest.branchHead;
+  }
   const expectedSha256 = parsed.expectedSha256 ?? manifest?.bundleSha256;
   if (expectedSha256 != null) {
     args.expectedSha256 = expectedSha256;
@@ -181,6 +194,9 @@ async function readManifest(path: string): Promise<HandoffManifest> {
   if (typeof value.branch !== "string" || value.branch.length === 0) {
     throw new Error("handoff manifest missing branch");
   }
+  if (typeof value.branchHead !== "string" || !/^[0-9a-f]{40}$/.test(value.branchHead)) {
+    throw new Error("handoff manifest missing branchHead");
+  }
   if (typeof value.bundlePath !== "string" || value.bundlePath.length === 0) {
     throw new Error("handoff manifest missing bundlePath");
   }
@@ -189,10 +205,22 @@ async function readManifest(path: string): Promise<HandoffManifest> {
   }
   return {
     branch: value.branch,
+    branchHead: value.branchHead,
     bundlePath: value.bundlePath,
     bundleSha256: value.bundleSha256,
     schemaVersion: value.schemaVersion,
   };
+}
+
+function readBundleHead(bundleHeads: string, branch: string): string {
+  const ref = `refs/heads/${branch}`;
+  for (const line of bundleHeads.split(/\r?\n/)) {
+    const [head, lineRef] = line.trim().split(/\s+/, 2);
+    if (lineRef === ref && head != null && /^[0-9a-f]{40}$/.test(head)) {
+      return head;
+    }
+  }
+  throw new Error(`bundle does not contain ${ref}`);
 }
 
 function resolveMaybeRelative(manifestPath: string, targetPath: string): string {

@@ -104,6 +104,37 @@ test("import-tauri-migration-bundle resolves manifest bundle paths relative to t
   assert.equal(targetHead, sourceHead);
 });
 
+test("import-tauri-migration-bundle rejects manifest branch head mismatches before ref updates", async (t) => {
+  const { bundlePath, sourceRepo, targetRepo } = await createBundleFixture(
+    t,
+    "open-design-tauri-import-head-mismatch-",
+  );
+  const sourceHead = (await git(sourceRepo, "rev-parse", migrationBranch)).stdout.trim();
+  const sha256 = await sha256File(bundlePath);
+  const manifestPath = join(dirname(bundlePath), "handoff.json");
+  await writeFile(
+    manifestPath,
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        branch: migrationBranch,
+        branchHead: "0".repeat(40),
+        bundlePath,
+        bundleSha256: sha256,
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+
+  await assert.rejects(
+    runImportScript(targetRepo, "--manifest", manifestPath),
+    new RegExp(`bundle branch head mismatch for ${migrationBranch}: expected ${"0".repeat(40)}, got ${sourceHead}`),
+  );
+  await assert.rejects(git(targetRepo, "rev-parse", migrationBranch));
+});
+
 test("import-tauri-migration-bundle rejects checksum mismatches before fetch", async (t) => {
   const { bundlePath, targetRepo } = await createBundleFixture(t, "open-design-tauri-import-sha-");
 

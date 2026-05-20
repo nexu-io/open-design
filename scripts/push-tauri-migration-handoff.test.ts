@@ -101,6 +101,36 @@ test("push-tauri-migration-handoff rejects archive checksum mismatches", async (
   await assert.rejects(runPushHandoffScript(targetRepo, "--archive", archivePath), /archive SHA-256 mismatch/);
 });
 
+test("push-tauri-migration-handoff refuses stale manifest heads before pushing", async (t) => {
+  const { bundlePath, manifestPath, remotePath, targetRepo } = await createHandoffFixture(
+    t,
+    "open-design-tauri-push-handoff-stale-head-",
+  );
+  const bundleSha256 = createHash("sha256").update(await readFile(bundlePath)).digest("hex");
+  await writeFile(
+    manifestPath,
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        branch: migrationBranch,
+        branchHead: "0".repeat(40),
+        bundlePath: "open-design-tauri-migration.bundle",
+        bundleSha256,
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+
+  await assert.rejects(
+    runPushHandoffScript(targetRepo, "--manifest", manifestPath, "--remote", remotePath),
+    /bundle branch head mismatch/,
+  );
+  const remoteHead = (await git(targetRepo, "ls-remote", "--heads", remotePath, `refs/heads/${migrationBranch}`)).stdout;
+  assert.equal(remoteHead.trim(), "");
+});
+
 async function createHandoffFixture(
   t: test.TestContext,
   prefix: string,
