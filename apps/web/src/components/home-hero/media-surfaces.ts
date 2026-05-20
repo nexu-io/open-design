@@ -261,6 +261,10 @@ function fieldsForSurface(
     audioType === 'sfx'
       ? stringField('prompt', 'Prompt', 'Describe the sound effect')
       : stringField('text', 'Text', 'Text to turn into audio'),
+    selectField('audioType', 'Audio type', audioKinds(), {
+      speech: 'Speech',
+      sfx: 'Sound effect',
+    }),
     selectField('model', 'Model', audioModels.map((m) => m.id), modelLabels(audioModels)),
     selectField('duration', 'Duration', audioDurationsForKind(audioType).map(String), secondsLabels(audioDurationsForKind(audioType))),
   ];

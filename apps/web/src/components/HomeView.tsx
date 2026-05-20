@@ -189,10 +189,15 @@ interface Props {
   promptTemplates?: PromptTemplateSummary[];
 }
 
+const EMPTY_DESIGN_SYSTEMS: DesignSystemSummary[] = [];
+const EMPTY_SKILLS: SkillSummary[] = [];
+const EMPTY_CONNECTORS: ConnectorDetail[] = [];
+const EMPTY_PROMPT_TEMPLATES: PromptTemplateSummary[] = [];
+
 export function HomeView({
   projects,
   projectsLoading,
-  designSystems = [],
+  designSystems = EMPTY_DESIGN_SYSTEMS,
   defaultDesignSystemId = null,
   onSubmit,
   onOpenProject,
@@ -201,10 +206,10 @@ export function HomeView({
   onImportFolder,
   onOpenNewProject,
   promptHandoff,
-  skills = [],
+  skills = EMPTY_SKILLS,
   skillsLoading = false,
-  connectors = [],
-  promptTemplates = [],
+  connectors = EMPTY_CONNECTORS,
+  promptTemplates = EMPTY_PROMPT_TEMPLATES,
 }: Props) {
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
@@ -415,13 +420,13 @@ export function HomeView({
     setSelectedMcpContexts([]);
     setSelectedConnectorContexts([]);
     setFallbackProjectKind('other');
+    if (promptHandoff.focus) {
+      pendingPromptFocusEndRef.current = true;
+    }
     setPrompt(promptHandoff.prompt);
     setPromptEditedByUser(false);
     setPendingAuthoringPrompt(promptHandoff.prompt);
     setPendingAuthoringInputs(promptHandoff.inputs);
-    if (promptHandoff.focus) {
-      focusPromptAtEnd();
-    }
     setPendingAuthoringChipId('create-plugin');
   }, [promptHandoff]);
 
@@ -525,7 +530,7 @@ export function HomeView({
     if (active.chipId) {
       const defaultPluginId = defaultPluginIdForChip(active.chipId);
       const chip = findChip(active.chipId);
-      if (chip && defaultPluginId === active.record.id) {
+      if (chip && (defaultPluginId === null || defaultPluginId === active.record.id)) {
         return homeHeroChipLabelForId(chip.id, t);
       }
     }
@@ -554,7 +559,9 @@ export function HomeView({
       (system.status ?? 'draft') === 'published'
     ));
     if (personalSystems.length === 0) {
-      setDesignSystemLogoById({});
+      setDesignSystemLogoById((current) => (
+        Object.keys(current).length === 0 ? current : {}
+      ));
       return;
     }
 
@@ -1242,10 +1249,17 @@ export function HomeView({
     }
     const prototypeChip = HOME_HERO_CHIPS.find((c) => c.id === 'prototype');
     if (!prototypeChip) return;
+    const prototypeAction = prototypeChip.action;
+    if (prototypeAction.kind !== 'apply-scenario') {
+      return;
+    }
+    if (!plugins.some((plugin) => plugin.id === prototypeAction.pluginId)) {
+      return;
+    }
     defaultedPrototypeRef.current = true;
     pickChip(prototypeChip);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pluginsLoading, active?.chipId, pendingChipId]);
+  }, [pluginsLoading, active?.chipId, pendingChipId, plugins]);
 
   async function submit() {
     const trimmed = prompt.trim();
@@ -1640,7 +1654,7 @@ function footerInputNamesForChip(chipId: string | null): string[] {
   if (chipId === 'deck') return ['designSystem', 'speakerNotes'];
   if (chipId === 'image') return ['designSystem', 'model', 'ratio', 'resolution'];
   if (chipId === 'video') return ['designSystem', 'model', 'ratio', 'duration', 'resolution'];
-  if (chipId === 'audio') return ['model', 'duration'];
+  if (chipId === 'audio') return ['audioType', 'model', 'duration'];
   if (chipId === 'hyperframes') return ['ratio', 'duration'];
   return [];
 }
