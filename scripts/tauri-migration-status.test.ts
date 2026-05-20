@@ -582,7 +582,7 @@ test("tauri-migration-status keeps verified reports behind missing remote verifi
   const head = await initGitFixture(fixture);
   const handoffDir = join(fixture, "handoff");
   await writeHandoffFixture(handoffDir, { branchHead: head });
-  await writeHandoffArchive(handoffDir);
+  const { archivePath } = await writeHandoffArchive(handoffDir);
   const remotePath = join(fixture, "empty.git");
   await git(fixture, "init", "--bare", remotePath);
   const reportDir = join(fixture, "reports");
@@ -772,7 +772,7 @@ test("continue-tauri-migration dry-run plans a branch push from current handoff 
   const head = await initGitFixture(fixture);
   const handoffDir = join(fixture, "handoff");
   await writeHandoffFixture(handoffDir, { branchHead: head });
-  await writeHandoffArchive(handoffDir);
+  const { archivePath } = await writeHandoffArchive(handoffDir);
   const remotePath = join(fixture, "empty.git");
   await git(fixture, "init", "--bare", remotePath);
 
@@ -791,6 +791,12 @@ test("continue-tauri-migration dry-run plans a branch push from current handoff 
   assert.doesNotMatch(result.stdout, /package-tauri-migration-handoff\.ts/);
   assert.match(result.stdout, /push-tauri-migration-handoff\.ts/);
   assert.match(result.stdout, /Would push codex\/electron-to-tauri-migration/);
+  assert.match(result.stdout, /If this host lacks repository write access/);
+  assert.match(result.stdout, new RegExp(escapeRegExp(archivePath)));
+  assert.match(result.stdout, new RegExp(escapeRegExp(`${archivePath}.sha256`)));
+  assert.match(result.stdout, new RegExp(escapeRegExp(`${archivePath}.commands.sh`)));
+  assert.match(result.stdout, new RegExp(escapeRegExp(`${archivePath}.commands.sh.sha256`)));
+  assert.match(result.stdout, new RegExp(`push-tauri-migration-handoff\\.ts --archive ${escapeRegExp(archivePath)}`));
   assert.match(result.stdout, /download-tauri-m4-reports\.ts/);
   assert.match(result.stdout, new RegExp(`--expected-head ${head}`));
   assert.match(result.stdout, /--advance/);

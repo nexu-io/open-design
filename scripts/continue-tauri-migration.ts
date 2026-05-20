@@ -296,6 +296,9 @@ async function continueM4(args: Args, status: MigrationStatus, log: string[]): P
         );
       }
       log.push(`${args.dryRun ? "Would push" : "Pushed"} ${args.branch} to ${args.remote} from ${archive}.`);
+      if (args.dryRun) {
+        appendTransferableHandoffHint(args, archive, log);
+      }
       if (!args.dryRun) {
         currentStatus = await readStatus(args);
         remoteCurrent = currentStatus.remote?.current === true;
@@ -390,6 +393,16 @@ function pushHandoffArgs(args: Args, archive: string, options: { omitCwd?: boole
     "--pr-body-path",
     args.prBodyPath,
   ];
+}
+
+function appendTransferableHandoffHint(args: Args, archive: string, log: string[]): void {
+  log.push("If this host lacks repository write access, transfer the current packaged handoff to a write-capable checkout:");
+  log.push(`  ${archive}`);
+  log.push(`  ${archive}.sha256`);
+  log.push(`  ${archive}.commands.sh`);
+  log.push(`  ${archive}.commands.sh.sha256`);
+  log.push("Then run the command sidecar from that checkout, or run:");
+  log.push(`  ${formatScriptCommand("push-tauri-migration-handoff.ts", pushHandoffArgs(args, archive, { omitCwd: true }))}`);
 }
 
 function appendManualNativeCiFallback(args: Args, log: string[]): void {
