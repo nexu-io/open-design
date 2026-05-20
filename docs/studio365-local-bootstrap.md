@@ -63,7 +63,8 @@ The current bootstrap folder maintains these files:
 
 ## 7) Prompt Pack for Antigravity
 
-Use these prompts in order:
+Use these prompts in order.
+The full Thai prompt pack is available at `docs/studio365-local-bootstrap-prompt-pack-th.md`.
 
 ### Prompt 1 — SPEC_AUDIT
 This is the first and most important prompt.
