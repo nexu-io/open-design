@@ -10531,7 +10531,15 @@ export async function startServer({
       // `byokConfigured: undefined` and let the helper fall back to the
       // installed-CLI signal. Web-side captures use the same helper with
       // the full credential view to keep dashboards aligned.
+      //
+      // `mode: 'daemon'` pins the call into the helper's daemon branch so
+      // `configure_availability` is judged from the requested agent's
+      // install status (not the cohort-wide "any CLI installed?" fallback).
+      // Without it, a run for an uninstalled agent would still report
+      // `available` whenever any unrelated CLI was on PATH — see PR #2285
+      // review.
       const configureGlobals = deriveConfigureGlobals({
+        mode: 'daemon',
         agentId: typeof reqBody.agentId === 'string' ? reqBody.agentId : null,
         agents: detectedAgentsForAnalytics,
       });

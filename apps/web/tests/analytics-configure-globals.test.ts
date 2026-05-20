@@ -136,6 +136,30 @@ describe('deriveConfigureGlobals — cold-start gating', () => {
       configure_availability: 'unavailable',
     });
   });
+
+  // Reviewer #2285 (mrcfps, 2026-05-20 03:36) flagged the daemon call site
+  // for not pinning `mode: 'daemon'`. Without the explicit mode the helper
+  // falls through to the generic branch and reports `available` whenever
+  // any unrelated CLI is on PATH — even when the requested agent is the
+  // one that's missing. This test pins the right behavior: a run targeted
+  // at an uninstalled agent must report `unavailable`, regardless of
+  // whether other agents happen to be installed.
+  it('reports unavailable when the requested daemon-mode agent is missing even if peers are installed', () => {
+    expect(
+      deriveConfigureGlobals({
+        mode: 'daemon',
+        agentId: 'codex',
+        agents: [
+          { id: 'claude', available: true },
+          { id: 'codex', available: false },
+        ],
+      }),
+    ).toEqual({
+      has_available_configure_cli: true,
+      configure_type: 'local_cli',
+      configure_availability: 'unavailable',
+    });
+  });
 });
 
 describe('setConfigureGlobals (web client)', () => {
