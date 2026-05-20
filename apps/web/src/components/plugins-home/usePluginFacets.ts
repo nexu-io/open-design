@@ -1,14 +1,14 @@
 // Faceted categorisation hook for the Plugins home section.
 //
-// Two-level workflow model: the top row is a curated shortlist of
-// semantic lanes (Import / Create / Export / Refine / Extend). A scoped
-// child row exposes concrete buckets inside the active lane, e.g.
-// Create -> Prototype / Slides / Design system / Media.
+// Two-level starter model: the top row is the artifact kind
+// (Prototype / Slides / Image / Video / HyperFrames / Audio). Prototype,
+// Slides, Image, and Video expose scene buckets from the prompt-taxonomy
+// analysis; HyperFrames and Audio stay flat.
 //
-// A small "Featured" toggle sits orthogonally to the category row —
+// A small "Saved" toggle sits orthogonally to the category row —
 // when active it overrides the category selection and just shows
-// the curator-promoted plugins. We intentionally make Featured
-// override rather than AND-compose so a featured pick is never
+// the plugins saved by the user. We intentionally make Saved
+// override rather than AND-compose so a saved pick is never
 // accidentally hidden behind a still-selected category pill.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -17,17 +17,17 @@ import {
   applyFacetSelection,
   buildFacetCatalog,
   filterByQuery,
-  isFeaturedPlugin,
   resolveDefaultSelection,
   type FacetCatalog,
   type FacetSelection,
 } from './facets';
 import { sortByVisualAppeal } from './visualScore';
 
-export type FilterMode = 'all' | 'featured';
+export type FilterMode = 'all' | 'saved';
 
 interface UsePluginFacetsArgs {
   plugins: InstalledPluginRecord[];
+  savedPluginIds?: ReadonlySet<string>;
   preferDefaultFacet?: boolean;
   // External selection driven by the Home hero chip rail. When this
   // value changes to a new (non-null) selection, the hook applies it,
@@ -40,7 +40,7 @@ interface UsePluginFacetsArgs {
 
 export interface UsePluginFacetsResult {
   visiblePlugins: InstalledPluginRecord[];
-  featuredList: InstalledPluginRecord[];
+  savedList: InstalledPluginRecord[];
   filtered: InstalledPluginRecord[];
   catalog: FacetCatalog;
   selection: FacetSelection;
@@ -62,6 +62,7 @@ const EMPTY_SELECTION: FacetSelection = {
 
 export function usePluginFacets({
   plugins,
+  savedPluginIds,
   preferDefaultFacet = true,
   presetSelection = null,
 }: UsePluginFacetsArgs): UsePluginFacetsResult {
@@ -81,7 +82,7 @@ export function usePluginFacets({
   // sort by visual-appeal score so the first viewport leads with the
   // cinematic decks / image / video templates rather than alphabetical
   // bundled noise. Featured plugins get a +1000 score boost inside the
-  // sort so they stay anchored to the front of every category view.
+  // sort so curator picks stay anchored to the front of every category view.
   const visiblePlugins = useMemo(
     () =>
       sortByVisualAppeal(
@@ -90,9 +91,9 @@ export function usePluginFacets({
     [plugins],
   );
 
-  const featuredList = useMemo(
-    () => visiblePlugins.filter(isFeaturedPlugin),
-    [visiblePlugins],
+  const savedList = useMemo(
+    () => visiblePlugins.filter((plugin) => savedPluginIds?.has(plugin.id)),
+    [savedPluginIds, visiblePlugins],
   );
 
   const catalog = useMemo(() => buildFacetCatalog(visiblePlugins), [visiblePlugins]);
@@ -123,7 +124,7 @@ export function usePluginFacets({
     if (lastAppliedPresetKeyRef.current === key) return;
     lastAppliedPresetKeyRef.current = key;
     setSelection(presetSelection);
-    setMode((current) => (current === 'featured' ? 'all' : current));
+    setMode((current) => (current === 'saved' ? 'all' : current));
     setBootstrapped(true);
   }, [presetSelection]);
 
@@ -133,14 +134,14 @@ export function usePluginFacets({
   // override should both remain stable across selections.
   const filtered = useMemo(() => {
     const base =
-      mode === 'featured'
-        ? featuredList
+      mode === 'saved'
+        ? savedList
         : applyFacetSelection(visiblePlugins, selection);
     return filterByQuery(base, query);
-  }, [mode, featuredList, visiblePlugins, selection, query]);
+  }, [mode, savedList, visiblePlugins, selection, query]);
 
   function pickCategory(slug: string | null): void {
-    if (mode === 'featured') setMode('all');
+    if (mode === 'saved') setMode('all');
     setSelection((prev) => ({
       category: prev.category === slug ? null : slug,
       subcategory: null,
@@ -148,7 +149,7 @@ export function usePluginFacets({
   }
 
   function pickSubcategory(slug: string | null): void {
-    if (mode === 'featured') setMode('all');
+    if (mode === 'saved') setMode('all');
     setSelection((prev) => ({
       ...prev,
       subcategory: prev.subcategory === slug ? null : slug,
@@ -165,7 +166,7 @@ export function usePluginFacets({
 
   return {
     visiblePlugins,
-    featuredList,
+    savedList,
     filtered,
     catalog,
     selection,

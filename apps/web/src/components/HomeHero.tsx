@@ -1,8 +1,8 @@
 // Lovart-style centered hero for the entry Home view.
 //
 // The prompt textarea is the canonical creation surface: the user
-// either types freely or selects a type below to reveal example
-// prompts, then presses Run / Enter to spawn a project. The hero is
+// either types freely or selects a type below to reveal matching
+// starters, then presses Run / Enter to spawn a project. The hero is
 // kept dependency-free (no plugin list / project list) so it can be
 // composed with the recent-projects strip and plugins section
 // without owning their data lifecycles.
@@ -98,19 +98,6 @@ interface Props {
   onPickMcp?: (server: McpServerConfig, nextPrompt: string) => void;
   onPickConnector?: (connector: ConnectorDetail, nextPrompt: string) => void;
   onPickChip: (chip: HomeHeroChip) => void;
-  // Manus-style example-prompt suggestions. Each entry carries both
-  // the source plugin (we still dispatch the existing
-  // `requestPluginContextUse(record, 'use-with-query')` path on click)
-  // and a pre-resolved, locale-aware preview of the prompt the
-  // textarea will receive, so the card body shows the actual sentence
-  // the user is about to send. HomeView decides the slice (matching
-  // the active chip), how many, and whether the panel should be
-  // visible (chip selected + not dismissed). The panel stays mounted
-  // either way so the accordion exit animation runs on close.
-  exampleSuggestions?: ExampleSuggestion[];
-  showExamples?: boolean;
-  onPickExample?: (record: InstalledPluginRecord) => void;
-  onDismissExamples?: () => void;
   contextItemCount: number;
   error: string | null;
   showActivePluginChip?: boolean;
@@ -193,10 +180,6 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
     onPickMcp = () => undefined,
     onPickConnector = () => undefined,
     onPickChip,
-    exampleSuggestions = [],
-    showExamples = false,
-    onPickExample = () => undefined,
-    onDismissExamples = () => undefined,
     contextItemCount,
     error,
     showActivePluginChip = true,
@@ -1168,18 +1151,6 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
           </div>
         </div>
       ) : null}
-
-      {/* Always render the panel; toggle visibility via accordion class
-          so the exit animation runs on dismiss/chip-change. Hidden
-          when no chip is picked or when the user closed it for the
-          current chip. */}
-      <ExamplePromptPanel
-        suggestions={exampleSuggestions}
-        open={showExamples}
-        onPick={onPickExample}
-        onDismiss={onDismissExamples}
-        disabled={pluginsLoading || pendingPluginId !== null}
-      />
 
       {error ? (
         <div role="alert" className="home-hero__error">
@@ -2424,90 +2395,6 @@ function getPluginQueryPreview(plugin: InstalledPluginRecord): string {
         : '';
   const trimmed = value.replace(/\s+/g, ' ').trim();
   return trimmed.length > 96 ? `${trimmed.slice(0, 96)}…` : trimmed;
-}
-
-// Each suggestion carries both the source plugin (so click can route
-// through the same `requestPluginContextUse(record, 'use-with-query')`
-// path the plugin card menu uses) and a pre-rendered, locale-aware
-// preview the card displays. HomeView resolves the preview through
-// the same renderer it'd use on submit, so the card body is exactly
-// the sentence the user is about to send.
-export interface ExampleSuggestion {
-  plugin: InstalledPluginRecord;
-  preview: string;
-}
-
-interface ExamplePromptPanelProps {
-  suggestions: ExampleSuggestion[];
-  open: boolean;
-  onPick: (record: InstalledPluginRecord) => void;
-  onDismiss: () => void;
-  disabled: boolean;
-}
-
-// Manus-style suggestion panel. Sits below the composer card + migrate
-// rail and surfaces 3-4 representative `useCase.query` previews as
-// content-bearing cards (not chip pills). The panel stays mounted so
-// the accordion exit animation runs on dismiss; `.accordion-collapsible
-// .open` toggles visibility per the shared motion contract in
-// `apps/web/src/index.css`. A small close button hides the panel for
-// the current chip; switching chips re-arms it (state lives in
-// HomeView).
-function ExamplePromptPanel({
-  suggestions,
-  open,
-  onPick,
-  onDismiss,
-  disabled,
-}: ExamplePromptPanelProps) {
-  const hasContent = suggestions.length > 0;
-  const isOpen = open && hasContent;
-  return (
-    <div
-      className={`home-hero__examples accordion-collapsible${isOpen ? ' open' : ''}`}
-      aria-hidden={isOpen ? undefined : true}
-      data-testid="home-hero-example-prompts"
-    >
-      <div className="accordion-collapsible-inner">
-        <section className="home-hero__examples-panel">
-          <header className="home-hero__examples-head">
-            <span className="home-hero__examples-title">Example prompts</span>
-            <button
-              type="button"
-              className="home-hero__examples-close"
-              onClick={onDismiss}
-              aria-label="Dismiss example prompts"
-              data-testid="home-hero-example-dismiss"
-              disabled={disabled || !isOpen}
-            >
-              <Icon name="close" size={12} />
-            </button>
-          </header>
-          <div className="home-hero__examples-grid" role="list">
-            {suggestions.map(({ plugin, preview }) => (
-              <button
-                key={plugin.id}
-                type="button"
-                role="listitem"
-                className="home-hero__example-card"
-                data-testid={`home-hero-example-${plugin.id}`}
-                onClick={() => onPick(plugin)}
-                disabled={disabled || !isOpen}
-                title={preview}
-              >
-                <span className="home-hero__example-card-body">{preview}</span>
-                <Icon
-                  name="arrow-up"
-                  size={12}
-                  className="home-hero__example-card-arrow"
-                />
-              </button>
-            ))}
-          </div>
-        </section>
-      </div>
-    </div>
-  );
 }
 
 interface RailGroupProps {

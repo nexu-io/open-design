@@ -423,14 +423,6 @@ export function PluginsView({
               });
               requestPluginShareTask(record, action);
             }}
-            onCreatePlugin={(goal) => {
-              trackPluginsInstalledTabClick(analytics.track, {
-                page_name: 'plugins',
-                area: 'installed_tab',
-                element: 'create_plugin',
-              });
-              onCreatePlugin?.(goal);
-            }}
             preferDefaultFacet={false}
             title={t('pluginsView.installedTitle')}
             subtitle={t('pluginsView.installedSubtitle')}

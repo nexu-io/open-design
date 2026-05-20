@@ -47,7 +47,7 @@ import type {
   SkillSummary,
 } from '../types';
 import { inlineMentionToken } from '../utils/inlineMentions';
-import { HomeHero, type ExampleSuggestion } from './HomeHero';
+import { HomeHero } from './HomeHero';
 import { findChip, HOME_HERO_CHIPS, type HomeHeroChip } from './home-hero/chips';
 import {
   buildHomeMediaComposer,
@@ -66,16 +66,9 @@ import {
 import { PluginDetailsModal } from './PluginDetailsModal';
 import { PluginsHomeSection } from './PluginsHomeSection';
 import type { PluginLoopSubmit } from './PluginLoopHome';
-import {
-  applyFacetSelection,
-  isFeaturedPlugin,
-  type FacetSelection,
-} from './plugins-home/facets';
+import type { FacetSelection } from './plugins-home/facets';
 import type { PluginUseAction } from './plugins-home/useActions';
-import { sortByVisualAppeal } from './plugins-home/visualScore';
 import { RecentProjectsStrip } from './RecentProjectsStrip';
-
-const EXAMPLE_PROMPT_LIMIT = 4;
 
 interface ActivePlugin {
   record: InstalledPluginRecord;
@@ -104,8 +97,8 @@ interface ActivePlugin {
   // True when the active plugin was bound through a type chip.
   // In that mode we never push the rendered useCase.query into the
   // textarea — the user keeps full control over the prompt and the
-  // example-prompt panel below the composer is the explicit opt-in
-  // for a starter sentence. Without this flag the media composer
+  // plugin preset cards are the explicit opt-in for a starter
+  // sentence. Without this flag the media composer
   // effect (which fires on external list reloads like ElevenLabs
   // voices) and updateActiveInputs (fires on inline form edits)
   // would back-fill the textarea, defeating the suppression that
@@ -273,7 +266,6 @@ export function HomeView({
   const consumedHandoffIdRef = useRef<number | null>(null);
   const pendingPromptFocusEndRef = useRef(false);
   const activePluginApplyRequestRef = useRef(0);
-  const defaultedPrototypeRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -456,7 +448,7 @@ export function HomeView({
 
   // The Home chip rail and the Official starters grid share a mental
   // model — "Prototype" up top is the same artifact intent as the
-  // `create / prototype` slice down below. When the user picks a chip,
+  // `prototype` slice down below. When the user picks a chip,
   // we drive the starters' FacetSelection from it so they get a
   // pre-filtered shelf of templates for the same intent without having
   // to scroll and re-pick. `pendingChipId` (set on click, before apply
@@ -467,58 +459,6 @@ export function HomeView({
     if (!chipId) return null;
     return facetSelectionForChip(chipId);
   }, [pendingChipId, active?.chipId]);
-
-  const rankedExamplePlugins = useMemo(() => {
-    if (plugins.length === 0) return [];
-    const visible = plugins.filter(
-      (plugin) =>
-        plugin.manifest?.od?.kind !== 'atom' && Boolean(plugin.manifest?.od?.useCase?.query),
-    );
-    return sortByVisualAppeal(visible);
-  }, [plugins]);
-
-  // Manus-style example-prompt suggestions for the panel that appears
-  // below the composer after a type chip is picked. We surface the
-  // top-N visually-strong plugins from the matching facet slice (e.g.
-  // picking "Slide deck" shows four polished deck templates) and
-  // pre-render each plugin's useCase.query through the same renderer
-  // submit uses, so the card body is the actual sentence that hits
-  // the textarea on click. Sparse slices are topped up with featured
-  // picks so the row never collapses to a single dim example.
-  const exampleSuggestions = useMemo<ExampleSuggestion[]>(() => {
-    if (rankedExamplePlugins.length === 0) return [];
-    const sliceFor = (selection: FacetSelection | null) => {
-      if (!selection) return rankedExamplePlugins;
-      return applyFacetSelection(rankedExamplePlugins, selection);
-    };
-    const primary = sliceFor(presetStartersSelection);
-    const featuredBackfill = rankedExamplePlugins.filter(
-      (plugin) => isFeaturedPlugin(plugin) && !primary.some((p) => p.id === plugin.id),
-    );
-    const records = [...primary, ...featuredBackfill].slice(0, EXAMPLE_PROMPT_LIMIT);
-    return records
-      .map((plugin) => {
-        const template = resolvePluginQueryFallback(plugin.manifest?.od?.useCase?.query, locale);
-        if (!template) return null;
-        const preview = renderPluginBriefTemplate(
-          template,
-          hydratePluginInputs(plugin.manifest?.od?.inputs ?? [], undefined),
-        );
-        return { plugin, preview };
-      })
-      .filter((entry): entry is ExampleSuggestion => entry !== null);
-  }, [rankedExamplePlugins, presetStartersSelection, locale]);
-
-  // Per-chip dismissal: once the user closes the panel for a given
-  // chip, we keep it hidden until they pick a different chip (which
-  // makes dismissedExampleChipId stale and lets the panel open
-  // again). This matches Manus' close-once-then-quiet behavior.
-  const [dismissedExampleChipId, setDismissedExampleChipId] = useState<string | null>(null);
-  const currentExampleChipId = pendingChipId ?? active?.chipId ?? null;
-  const showExamples =
-    Boolean(currentExampleChipId) &&
-    exampleSuggestions.length > 0 &&
-    dismissedExampleChipId !== currentExampleChipId;
 
   // When the active plugin was bound through a chip, the badge shows
   // the chip label (e.g. "Prototype") instead of the underlying plugin
@@ -621,10 +561,10 @@ export function HomeView({
       // When true, applying the plugin updates the active badge +
       // context items but does NOT push the rendered useCase.query
       // into the textarea. The user keeps whatever they had typed
-      // (or empty); the example-prompt panel below the composer is
-      // the surfaced opt-in to seed the textarea instead. Used by
-      // the top type-chip rail: picking Slide deck binds the plugin
-      // context, leaving the user's draft alone.
+      // (or empty); the preset cards are the surfaced opt-in to seed
+      // the textarea instead. Used by the top type-chip rail: picking
+      // Slide deck binds the plugin context, leaving the user's draft
+      // alone.
       suppressPromptUpdate?: boolean;
       // Type chips are a mode switch, not a commitment to run. Keeping
       // their apply deferred makes Prototype <-> Deck <-> Media changes
@@ -1197,10 +1137,10 @@ export function HomeView({
         // Output-type tabs (create group) are mode-selection gestures:
         // switching between them should never prompt for confirmation,
         // and they should NOT pre-fill the textarea with the rendered
-        // useCase.query — the example-prompt panel below the composer
-        // is the explicit opt-in for that. Migrate-group chips (From
-        // Figma, etc.) still carry a meaningful prompt the user wants
-        // dropped in, so they keep the historical behavior.
+        // useCase.query — the preset cards are the explicit opt-in
+        // for that. Migrate-group chips (From Figma, etc.) still carry
+        // a meaningful prompt the user wants dropped in, so they keep
+        // the historical behavior.
         if (chip.group === 'create') {
           void usePlugin(record, undefined, {
             ...pluginOptions,
@@ -1234,32 +1174,6 @@ export function HomeView({
       }
     }
   }
-
-  // Default-select the Prototype tab on first mount so the active
-  // tab + composer always read as one joined surface instead of a
-  // naked composer under a row of unselected tabs. Runs once after
-  // plugins finish loading; skips if the user already has a chip
-  // bound (handoff, restored session, manual pick).
-  useEffect(() => {
-    if (pluginsLoading) return;
-    if (defaultedPrototypeRef.current) return;
-    if (active?.chipId || pendingChipId) {
-      defaultedPrototypeRef.current = true;
-      return;
-    }
-    const prototypeChip = HOME_HERO_CHIPS.find((c) => c.id === 'prototype');
-    if (!prototypeChip) return;
-    const prototypeAction = prototypeChip.action;
-    if (prototypeAction.kind !== 'apply-scenario') {
-      return;
-    }
-    if (!plugins.some((plugin) => plugin.id === prototypeAction.pluginId)) {
-      return;
-    }
-    defaultedPrototypeRef.current = true;
-    pickChip(prototypeChip);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pluginsLoading, active?.chipId, pendingChipId, plugins]);
 
   async function submit() {
     const trimmed = prompt.trim();
@@ -1409,14 +1323,6 @@ export function HomeView({
         onPickMcp={useMcpServer}
         onPickConnector={useConnector}
         onPickChip={pickChip}
-        exampleSuggestions={exampleSuggestions}
-        showExamples={showExamples}
-        onPickExample={(record) => requestPluginContextUse(record, 'use-with-query')}
-        onDismissExamples={() => {
-          if (currentExampleChipId) {
-            setDismissedExampleChipId(currentExampleChipId);
-          }
-        }}
         contextItemCount={contextItemCount}
         error={error}
       />
@@ -1456,8 +1362,8 @@ export function HomeView({
         pendingApplyId={pendingApplyId}
         onUse={(record, action) => requestPluginContextUse(record, action)}
         onOpenDetails={setDetailsRecord}
-        onCreatePlugin={(goal) => queuePluginAuthoring(null, goal)}
         onBrowseRegistry={onBrowseRegistry}
+        preferDefaultFacet={false}
         presetSelection={presetStartersSelection}
       />
 
@@ -1611,23 +1517,20 @@ function shouldShowActivePluginChip(active: ActivePlugin | null): boolean {
 // Maps a Home hero chip id to the Official starters facet slice the
 // user most likely wants to browse next. The chip rail is intent
 // ("I want to design a slide deck"); the starters grid is the catalog
-// for that intent, so pinning the same `create / deck` slice lets the
+// for that intent, so pinning the same `deck` slice lets the
 // user keep scanning examples without re-picking the same artifact
 // kind in a different control. The list mirrors the `apply-scenario`
 // and `apply-figma-migration` chip ids in `home-hero/chips.ts`; any
 // new chip there should add a row here too.
 function facetSelectionForChip(chipId: string): FacetSelection | null {
   switch (chipId) {
-    case 'prototype': return { category: 'create', subcategory: 'prototype' };
-    case 'live-artifact': return { category: 'create', subcategory: 'live-artifact' };
-    case 'deck': return { category: 'create', subcategory: 'deck' };
-    case 'image': return { category: 'create', subcategory: 'image' };
-    case 'video': return { category: 'create', subcategory: 'video' };
-    case 'hyperframes': return { category: 'create', subcategory: 'hyperframes' };
-    case 'audio': return { category: 'create', subcategory: 'audio' };
-    case 'figma': return { category: 'import', subcategory: 'from-figma' };
-    case 'folder': return { category: 'import', subcategory: 'from-code' };
-    case 'create-plugin': return { category: 'extend', subcategory: 'plugin-authoring' };
+    case 'prototype': return { category: 'prototype', subcategory: null };
+    case 'live-artifact': return { category: 'prototype', subcategory: 'business-dashboards' };
+    case 'deck': return { category: 'deck', subcategory: null };
+    case 'image': return { category: 'image', subcategory: null };
+    case 'video': return { category: 'video', subcategory: null };
+    case 'hyperframes': return { category: 'hyperframes', subcategory: null };
+    case 'audio': return { category: 'audio', subcategory: null };
     default: return null;
   }
 }

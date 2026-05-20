@@ -788,9 +788,6 @@ export interface Dict {
   'pluginsHome.emptyCatalog': string;
   'pluginsHome.emptyFiltered': string;
   'pluginsHome.clearFilters': string;
-  'pluginsHome.contributeTitle': string;
-  'pluginsHome.contributeBody': string;
-  'pluginsHome.starterPrefix': string;
   'pluginsHome.modeAria': string;
   'pluginsHome.featured': string;
   'pluginsHome.totalInCatalog': string;
