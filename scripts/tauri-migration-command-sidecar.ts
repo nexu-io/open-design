@@ -1,0 +1,109 @@
+type CommandSidecarRequirement = {
+  label: string;
+  snippets?: readonly string[];
+  anySnippet?: readonly string[];
+};
+
+const commandSidecarRequirements: readonly CommandSidecarRequirement[] = [
+  {
+    label: "self-contained bundle import",
+    snippets: ['git fetch "$bundle" "$branch:$temp_ref"'],
+  },
+  {
+    label: "tracked worktree guard",
+    snippets: ["ensure_tracked_clean()", "git status --porcelain --untracked-files=no", "tracked worktree changes are present"],
+  },
+  {
+    label: "post-CI report advance guidance",
+    snippets: ["download-tauri-m4-reports.ts", "GITHUB_RUN_ID"],
+  },
+  {
+    label: "extracted bundle SHA-256 validation",
+    snippets: ["bundle_sha=", 'actual_bundle_sha="$(hash_file "$bundle")"', "bundle SHA-256 mismatch"],
+  },
+  {
+    label: "bundle branch-head validation",
+    snippets: ['bundle_head="$(git rev-parse --verify "$temp_ref^{commit}")"', "bundle branch head mismatch"],
+  },
+  {
+    label: "bundle preflight validation",
+    snippets: ['git bundle verify "$bundle"', 'bundle_heads="$(git bundle list-heads "$bundle")"', "bundle does not contain expected branch head"],
+  },
+  {
+    label: "checked-out branch restoration",
+    snippets: ['restore_branch=""', 'restore_branch="$branch"', 'git checkout "$restore_branch"'],
+  },
+  {
+    label: "configurable GitHub CLI dispatch",
+    snippets: [
+      'gh_bin="${GH_BIN:-gh}"',
+      'command -v "$gh_bin"',
+      '"$gh_bin" workflow run "$workflow" --ref "$branch"',
+      'print_shell_command "$gh_bin" pr create --draft',
+    ],
+  },
+  {
+    label: "handoff manifest field validation",
+    snippets: [
+      "handoff manifest branchHead must be a 40-character SHA-1",
+      "handoff manifest bundlePath must be relative and relocatable",
+      "handoff manifest bundleSha256 must be a 64-character SHA-256",
+      "unsupported handoff manifest schemaVersion",
+    ],
+  },
+  {
+    label: "branch-head CI wait guidance",
+    snippets: ["--expected-head", "--wait"],
+  },
+  {
+    label: "source archive status guidance",
+    snippets: ['--handoff-archive "$archive"'],
+  },
+  {
+    label: "relocatable rerun guidance",
+    snippets: [
+      "GITHUB_RUN_ID=<github-run-id>",
+      "print_shell_command()",
+      "printf '%q' \"$word\"",
+      'print_shell_command "GITHUB_RUN_ID=<github-run-id>" "$script_path" "$archive"',
+    ],
+  },
+  {
+    label: "quoted receiver command guidance",
+    snippets: [
+      'print_shell_command "$gh_bin" workflow run "$workflow" --ref "$branch"',
+      'print_shell_command "$gh_bin" pr create --draft --base main --head "$branch"',
+      'print_shell_command pnpm exec tsx scripts/download-tauri-m4-reports.ts --branch "$branch"',
+    ],
+  },
+  {
+    label: "branch-and-remote-bound explicit run guidance",
+    snippets: ['--run-id "$GITHUB_RUN_ID"', '--branch "$branch"', '--remote "$remote"', '--expected-head "$expected_head"'],
+  },
+  {
+    label: "native CI trigger guidance",
+    anySnippet: ["workflow run", "pr create"],
+  },
+  {
+    label: "template-complete draft PR guidance",
+    snippets: ["TAURI_PR_BODY_PATH", "--body-file"],
+  },
+  {
+    label: "checksum target-name validation",
+    snippets: [
+      "read_checksum()",
+      'read_checksum "$command_checksum" "$(basename -- "$script_path")" "command script"',
+      'read_checksum "$checksum" "$(basename -- "$archive")" "archive"',
+    ],
+  },
+];
+
+export function commandSidecarProblems(source: string): string[] {
+  return commandSidecarRequirements
+    .filter((requirement) => {
+      const missingRequired = requirement.snippets?.some((snippet) => !source.includes(snippet)) ?? false;
+      const missingAny = requirement.anySnippet == null ? false : requirement.anySnippet.every((snippet) => !source.includes(snippet));
+      return missingRequired || missingAny;
+    })
+    .map((requirement) => `command script is missing ${requirement.label}`);
+}

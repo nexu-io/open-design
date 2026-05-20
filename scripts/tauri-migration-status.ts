@@ -5,6 +5,7 @@ import { homedir, tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
+import { commandSidecarProblems } from "./tauri-migration-command-sidecar.ts";
 import {
   m4PlatformGateLabels,
   m5ElectronFallbackLabel,
@@ -748,103 +749,8 @@ async function readHandoffArchiveStatus(archivePath: string, handoff?: HandoffSt
     if ((commandScriptStat.mode & 0o111) === 0) {
       problems.push(`command script is not executable: ${commandScriptPath}`);
     }
-    if (!commandScriptSource.includes('git fetch "$bundle" "$branch:$temp_ref"')) {
-      problems.push(`command script is missing self-contained bundle import: ${commandScriptPath}`);
-    }
-    if (
-      !commandScriptSource.includes("ensure_tracked_clean()") ||
-      !commandScriptSource.includes("git status --porcelain --untracked-files=no") ||
-      !commandScriptSource.includes("tracked worktree changes are present")
-    ) {
-      problems.push(`command script is missing tracked worktree guard: ${commandScriptPath}`);
-    }
-    if (!commandScriptSource.includes("download-tauri-m4-reports.ts") || !commandScriptSource.includes("GITHUB_RUN_ID")) {
-      problems.push(`command script is missing post-CI report advance guidance: ${commandScriptPath}`);
-    }
-    if (
-      !commandScriptSource.includes("bundle_sha=") ||
-      !commandScriptSource.includes('actual_bundle_sha="$(hash_file "$bundle")"') ||
-      !commandScriptSource.includes("bundle SHA-256 mismatch")
-    ) {
-      problems.push(`command script is missing extracted bundle SHA-256 validation: ${commandScriptPath}`);
-    }
-    if (
-      !commandScriptSource.includes('bundle_head="$(git rev-parse --verify "$temp_ref^{commit}")"') ||
-      !commandScriptSource.includes("bundle branch head mismatch")
-    ) {
-      problems.push(`command script is missing bundle branch-head validation: ${commandScriptPath}`);
-    }
-    if (
-      !commandScriptSource.includes('git bundle verify "$bundle"') ||
-      !commandScriptSource.includes('bundle_heads="$(git bundle list-heads "$bundle")"') ||
-      !commandScriptSource.includes("bundle does not contain expected branch head")
-    ) {
-      problems.push(`command script is missing bundle preflight validation: ${commandScriptPath}`);
-    }
-    if (
-      !commandScriptSource.includes('restore_branch=""') ||
-      !commandScriptSource.includes('restore_branch="$branch"') ||
-      !commandScriptSource.includes('git checkout "$restore_branch"')
-    ) {
-      problems.push(`command script is missing checked-out branch restoration: ${commandScriptPath}`);
-    }
-    if (
-      !commandScriptSource.includes('gh_bin="${GH_BIN:-gh}"') ||
-      !commandScriptSource.includes('command -v "$gh_bin"') ||
-      !commandScriptSource.includes('"$gh_bin" workflow run "$workflow" --ref "$branch"') ||
-      !commandScriptSource.includes('print_shell_command "$gh_bin" pr create --draft')
-    ) {
-      problems.push(`command script is missing configurable GitHub CLI dispatch: ${commandScriptPath}`);
-    }
-    if (
-      !commandScriptSource.includes("handoff manifest branchHead must be a 40-character SHA-1") ||
-      !commandScriptSource.includes("handoff manifest bundlePath must be relative and relocatable") ||
-      !commandScriptSource.includes("handoff manifest bundleSha256 must be a 64-character SHA-256") ||
-      !commandScriptSource.includes("unsupported handoff manifest schemaVersion")
-    ) {
-      problems.push(`command script is missing handoff manifest field validation: ${commandScriptPath}`);
-    }
-    if (!commandScriptSource.includes("--expected-head") || !commandScriptSource.includes("--wait")) {
-      problems.push(`command script is missing branch-head CI wait guidance: ${commandScriptPath}`);
-    }
-    if (!commandScriptSource.includes('--handoff-archive "$archive"')) {
-      problems.push(`command script is missing source archive status guidance: ${commandScriptPath}`);
-    }
-    if (
-      !commandScriptSource.includes("GITHUB_RUN_ID=<github-run-id>") ||
-      !commandScriptSource.includes("print_shell_command()") ||
-      !commandScriptSource.includes("printf '%q' \"$word\"") ||
-      !commandScriptSource.includes('print_shell_command "GITHUB_RUN_ID=<github-run-id>" "$script_path" "$archive"')
-    ) {
-      problems.push(`command script is missing relocatable rerun guidance: ${commandScriptPath}`);
-    }
-    if (
-      !commandScriptSource.includes('print_shell_command "$gh_bin" workflow run "$workflow" --ref "$branch"') ||
-      !commandScriptSource.includes('print_shell_command "$gh_bin" pr create --draft --base main --head "$branch"') ||
-      !commandScriptSource.includes('print_shell_command pnpm exec tsx scripts/download-tauri-m4-reports.ts --branch "$branch"')
-    ) {
-      problems.push(`command script is missing quoted receiver command guidance: ${commandScriptPath}`);
-    }
-    if (
-      !commandScriptSource.includes('--run-id "$GITHUB_RUN_ID"') ||
-      !commandScriptSource.includes('--branch "$branch"') ||
-      !commandScriptSource.includes('--remote "$remote"') ||
-      !commandScriptSource.includes('--expected-head "$expected_head"')
-    ) {
-      problems.push(`command script is missing branch-and-remote-bound explicit run guidance: ${commandScriptPath}`);
-    }
-    if (!commandScriptSource.includes("workflow run") && !commandScriptSource.includes("pr create")) {
-      problems.push(`command script is missing native CI trigger guidance: ${commandScriptPath}`);
-    }
-    if (!commandScriptSource.includes("TAURI_PR_BODY_PATH") || !commandScriptSource.includes("--body-file")) {
-      problems.push(`command script is missing template-complete draft PR guidance: ${commandScriptPath}`);
-    }
-    if (
-      !commandScriptSource.includes("read_checksum()") ||
-      !commandScriptSource.includes('read_checksum "$command_checksum" "$(basename -- "$script_path")" "command script"') ||
-      !commandScriptSource.includes('read_checksum "$checksum" "$(basename -- "$archive")" "archive"')
-    ) {
-      problems.push(`command script is missing checksum target-name validation: ${commandScriptPath}`);
+    for (const problem of commandSidecarProblems(commandScriptSource)) {
+      problems.push(`${problem}: ${commandScriptPath}`);
     }
   } catch (error) {
     problems.push(`command script unavailable: ${error instanceof Error ? error.message : String(error)}`);
