@@ -10544,10 +10544,15 @@ export async function startServer({
       const userQueryTokens = promptText.length > 0
         ? Math.ceil(promptText.length / 4)
         : 0;
-      const stringField = (key: string): string | undefined =>
-        typeof reqBody[key] === 'string' ? (reqBody[key] as string) : undefined;
-      const booleanField = (key: string): boolean | undefined =>
-        typeof reqBody[key] === 'boolean' ? (reqBody[key] as boolean) : undefined;
+      // Only fields the current `/api/runs` create payload actually
+      // sends. The v2 schema documents extended context props
+      // (entry_from / project_kind / target_platforms / fidelity /
+      // companion_surfaces / connectors / use_speaker_notes /
+      // include_animations / reference_template / aspect /
+      // project_source) but `packages/contracts/src/api/chat.ts` and
+      // `apps/web/src/providers/daemon.ts` do not yet thread them onto
+      // the wire, so reading them here would always produce null/undef
+      // — better to omit until a follow-up extends the create payload.
       const baseProps: Record<string, unknown> = {
         page_name: 'chat_panel',
         area: 'chat_composer',
@@ -10556,20 +10561,10 @@ export async function startServer({
         conversation_id:
           typeof reqBody.conversationId === 'string' ? reqBody.conversationId : null,
         run_id: run.id,
-        project_kind: stringField('projectKind') ?? null,
-        design_system_id: stringField('designSystemId'),
-        design_system_source: stringField('designSystemSource') ?? 'unknown',
-        design_system_version: stringField('designSystemVersion'),
-        entry_from: stringField('entryFrom'),
-        project_source: stringField('projectSource'),
-        target_platforms: stringField('targetPlatforms'),
-        companion_surfaces: stringField('companionSurfaces'),
-        fidelity: stringField('fidelity'),
-        connectors: stringField('connectors'),
-        use_speaker_notes: booleanField('useSpeakerNotes'),
-        include_animations: booleanField('includeAnimations'),
-        reference_template: stringField('referenceTemplate'),
-        aspect: stringField('aspect'),
+        design_system_id:
+          typeof reqBody.designSystemId === 'string'
+            ? reqBody.designSystemId
+            : undefined,
         has_attachment: Array.isArray(reqBody.attachments)
           ? (reqBody.attachments as unknown[]).length > 0
           : false,

@@ -265,7 +265,17 @@ export function App() {
   // whenever the user's execution-mode config or the detected agent list
   // changes; the next capture inherits the fresh values, so dashboards
   // can segment by execution setup without per-helper boilerplate.
+  //
+  // Gated on `agentsLoading` so the cold-start probe (`fetchAgents()`
+  // lands asynchronously after this effect's first run) does not stamp
+  // the first home/projects/plugins page_view with
+  // has_available_configure_cli=false / configure_availability=unavailable
+  // on machines that DO have an installed CLI. While the probe is in
+  // flight we leave the boot defaults ('unknown'/'unknown') in place,
+  // matching what the helper would return for an empty agent list with
+  // no mode pinned.
   useEffect(() => {
+    if (agentsLoading) return;
     const byokConfigured = (() => {
       const protocols = config.apiProtocolConfigs;
       if (!protocols) return Boolean(config.apiKey?.trim());
@@ -282,6 +292,7 @@ export function App() {
     analytics.setConfigureGlobals(globals);
   }, [
     analytics.setConfigureGlobals,
+    agentsLoading,
     config.mode,
     config.agentId,
     config.apiKey,
