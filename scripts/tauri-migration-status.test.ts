@@ -48,8 +48,14 @@ test("migration doc continuation command blocks keep verified handoff paths", as
 
 test("migration doc platform gate table includes verifier-required uninstall evidence", async () => {
   const source = await readFile(join(repoRoot, "docs/electron-to-tauri-migration.md"), "utf8");
+  const m4ScheduleRow = source.split(/\r?\n/).find((line) => line.startsWith("| M4 Platform package smoke |"));
   const windowsRow = source.split(/\r?\n/).find((line) => line.startsWith("| Windows NSIS smoke |"));
   const linuxRow = source.split(/\r?\n/).find((line) => line.startsWith("| Linux AppImage smoke |"));
+
+  assert.ok(m4ScheduleRow);
+  assert.match(m4ScheduleRow, /uninstall\/removal evidence/);
+
+  assert.match(source, /including uninstall\/removal evidence, before the M4 boxes below can close/);
 
   assert.ok(windowsRow);
   assert.match(windowsRow, /tools-pack win uninstall/);
