@@ -144,6 +144,10 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
     await fulfillGet(route, { projects });
   });
 
+  await page.route('**/api/routines', async (route) => {
+    await fulfillGet(route, { routines: [] });
+  });
+
   await page.route('**/api/plugins', async (route) => {
     await fulfillGet(route, { plugins: VISUAL_PLUGINS });
   });

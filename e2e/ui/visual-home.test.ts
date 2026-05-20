@@ -100,6 +100,7 @@ test('captures the tasks page surface', async ({ page }) => {
   await page.getByTestId('entry-nav-tasks').click();
   await expect(page).toHaveURL(/\/automations$/);
   await expect(page.getByTestId('tasks-view')).toBeVisible();
+  await expect(page.getByText('No automations yet')).toBeVisible();
   await waitForVisualFonts(page);
 
   await captureVisual(page, 'visual-tasks');
