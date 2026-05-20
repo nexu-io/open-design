@@ -1086,6 +1086,8 @@ test("tauri-migration-status reports missing platform report manifests without v
     defaults: "electron",
   });
   const reportDir = join(fixture, "reports");
+  await mkdir(join(reportDir, winArtifactName), { recursive: true });
+  await mkdir(join(reportDir, linuxArtifactName), { recursive: true });
 
   const result = await runStatus(fixture, "--report-dir", reportDir);
   const parsed = JSON.parse(result.stdout) as {
@@ -1098,6 +1100,29 @@ test("tauri-migration-status reports missing platform report manifests without v
   assert.equal(parsed.platformReports.current, false);
   assert.match(parsed.platformReports.problems.join("\n"), /Windows report manifest missing:/);
   assert.match(parsed.platformReports.problems.join("\n"), /Linux report manifest missing:/);
+  assert.doesNotMatch(parsed.platformReports.problems.join("\n"), /verify-tauri-platform-gates/);
+  assert.doesNotMatch(parsed.platformReports.problems.join("\n"), /Node\.js/);
+});
+
+test("tauri-migration-status reports a missing platform report directory without verifier stacks", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const reportDir = join(fixture, "missing-reports");
+
+  const result = await runStatus(fixture, "--report-dir", reportDir);
+  const parsed = JSON.parse(result.stdout) as {
+    platformReports: {
+      current: boolean;
+      problems: string[];
+      reportDir: string;
+    };
+  };
+
+  assert.equal(parsed.platformReports.current, false);
+  assert.equal(parsed.platformReports.reportDir, reportDir);
+  assert.deepEqual(parsed.platformReports.problems, [`platform report directory missing: ${reportDir}`]);
   assert.doesNotMatch(parsed.platformReports.problems.join("\n"), /verify-tauri-platform-gates/);
   assert.doesNotMatch(parsed.platformReports.problems.join("\n"), /Node\.js/);
 });

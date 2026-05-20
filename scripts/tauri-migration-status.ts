@@ -1026,17 +1026,22 @@ async function readPlatformReportsStatus(winReport?: string, linuxReport?: strin
   }
   const checkedWinReport = winReport!;
   const checkedLinuxReport = linuxReport!;
-  const missingManifestProblems = (
-    await Promise.all([
-      missingReportManifestProblem("Windows", checkedWinReport),
-      missingReportManifestProblem("Linux", checkedLinuxReport),
-    ])
-  ).filter((problem): problem is string => problem != null);
-  if (missingManifestProblems.length > 0) {
+  const reportDirProblems = reportDir == null ? [] : await reportDirectoryProblems(reportDir);
+  const missingManifestProblems: string[] =
+    reportDirProblems.length > 0
+      ? []
+      : (
+          await Promise.all([
+            missingReportManifestProblem("Windows", checkedWinReport),
+            missingReportManifestProblem("Linux", checkedLinuxReport),
+          ])
+        ).filter((problem): problem is string => problem != null);
+  const artifactProblems = [...reportDirProblems, ...missingManifestProblems];
+  if (artifactProblems.length > 0) {
     return {
       current: false,
       linuxReport: checkedLinuxReport,
-      problems: missingManifestProblems,
+      problems: artifactProblems,
       ...(reportDir == null ? {} : { reportDir }),
       winReport: checkedWinReport,
     };
@@ -1079,6 +1084,15 @@ async function readPlatformReportsStatus(winReport?: string, linuxReport?: strin
 
 function shellQuote(value: string): string {
   return /^[A-Za-z0-9_./:=@-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+async function reportDirectoryProblems(reportDir: string): Promise<string[]> {
+  try {
+    const reportDirStat = await stat(reportDir);
+    return reportDirStat.isDirectory() ? [] : [`platform report directory is not a directory: ${reportDir}`];
+  } catch {
+    return [`platform report directory missing: ${reportDir}`];
+  }
 }
 
 async function missingReportManifestProblem(platform: "Linux" | "Windows", reportDir: string): Promise<string | undefined> {
