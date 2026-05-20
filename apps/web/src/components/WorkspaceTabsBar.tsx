@@ -495,16 +495,6 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
             </div>
           );
         })}
-        {hiddenTabCount > 0 ? (
-          <button
-            type="button"
-            className="workspace-tab workspace-tab--overflow"
-            onClick={() => setTabsMenuOpen(true)}
-            title="Show hidden tabs"
-          >
-            {hiddenTabCount} more
-          </button>
-        ) : null}
         <div className="workspace-tabs-actions" ref={menuRef}>
           <button
             type="button"
