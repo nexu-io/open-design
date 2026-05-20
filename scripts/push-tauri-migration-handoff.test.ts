@@ -31,10 +31,18 @@ test("push-tauri-migration-handoff imports, pushes, and verifies a handoff manif
   assert.match(result.stdout, new RegExp(`Branch: ${migrationBranch.replaceAll("/", "\\/")} @ ${sourceHead}`));
   assert.match(result.stdout, /Next:/);
   assert.match(result.stdout, /gh workflow run ci\.yml --ref codex\/electron-to-tauri-migration/);
+  assert.match(result.stdout, /gh pr create --draft/);
+  assert.match(result.stdout, /--body-file/);
   assert.match(result.stdout, /download-tauri-m4-reports/);
   assert.match(result.stdout, new RegExp(`--expected-head ${sourceHead}`));
   assert.match(result.stdout, /--remote /);
   assert.match(result.stdout, /--advance/);
+  const prBodyPath = join(targetRepo, ".tmp", "tauri-migration-pr-body.md");
+  assert.match(result.stdout, new RegExp(`PR body: ${escapeRegExp(prBodyPath)}`));
+  const prBody = await readFile(prBodyPath, "utf8");
+  assert.match(prBody, /## Why/);
+  assert.match(prBody, /## Surface area/);
+  assert.match(prBody, /Pending native M4 evidence: Windows NSIS, Linux AppImage, and Linux headless platform smoke/);
   const remoteHead = (await git(targetRepo, "ls-remote", "--heads", remotePath, `refs/heads/${migrationBranch}`)).stdout
     .trim()
     .split(/\s+/, 1)[0];

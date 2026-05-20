@@ -1,9 +1,9 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -58,6 +58,9 @@ async function main(): Promise<void> {
       "--remote",
       args.remote,
     ]);
+    const prBodyPath = resolve(process.env.TAURI_PR_BODY_PATH ?? join(args.cwd, ".tmp/tauri-migration-pr-body.md"));
+    await mkdir(dirname(prBodyPath), { recursive: true });
+    await writeFile(prBodyPath, prBody(), "utf8");
 
     process.stdout.write(
       [
@@ -86,10 +89,19 @@ async function main(): Promise<void> {
         indent((pushOutput.stdout + pushOutput.stderr).trim()),
         "Verify:",
         indent(verifyOutput.stdout.trim()),
+        `PR body: ${prBodyPath}`,
         "Next:",
         indent(
           [
             `Trigger native CI with: gh workflow run ci.yml --ref ${shellQuote(args.branch)}`,
+            "If workflow dispatch is unavailable, open a draft PR with:",
+            [
+              "gh pr create --draft \\",
+              "  --base main \\",
+              `  --head ${shellQuote(args.branch)} \\`,
+              "  --title 'Migrate desktop runtime to Tauri' \\",
+              `  --body-file ${shellQuote(prBodyPath)}`,
+            ].join("\n"),
             "Then download, verify, record M4 evidence, and apply the guarded M5 default flip with:",
             [
               "pnpm exec tsx scripts/download-tauri-m4-reports.ts \\",
@@ -312,6 +324,47 @@ function indent(value: string): string {
 
 function shellQuote(value: string): string {
   return /^[A-Za-z0-9_./:=@-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+function prBody(): string {
+  return [
+    "## Why",
+    "",
+    "This PR carries the Electron to Tauri migration branch so native Windows and Linux package smoke can run against the exact handoff commit.",
+    "",
+    "It addresses the migration blocker where local macOS parity is available but M4 cannot close until NSIS, AppImage, and Linux headless evidence is collected from native runners.",
+    "",
+    "## What users will see",
+    "",
+    "No default desktop behavior changes until M5. Electron remains the default runtime while Tauri stays behind explicit migration flags.",
+    "",
+    "## Surface area",
+    "",
+    "- [ ] **UI** — new page / dialog / panel / menu item / setting / empty state in `apps/web` or `apps/desktop` (including Electron menu bar)",
+    "- [ ] **Keyboard shortcut** — new or changed",
+    "- [x] **CLI / env var** — new `od` subcommand or flag, new `tools-dev` / `tools-pack` / `tools-pr` flag, or new `OD_*` env var",
+    "- [ ] **API / contract** — new `/api/*` endpoint, new SSE event, or changed shape in `packages/contracts`",
+    "- [ ] **Extension point** — new entry under `skills/`, `design-systems/`, `design-templates/`, or `craft/`, or change to the skills protocol",
+    "- [ ] **i18n keys** — added new translation keys (see `TRANSLATIONS.md` for the locale workflow)",
+    "- [ ] **New top-level dependency** — adding any new entry to the **root** `package.json` (`dependencies` or `devDependencies`); workspace-package `package.json` files are out of scope. Include a paragraph on what we get vs. what bytes we ship (see `CONTRIBUTING.md` -> Code style)",
+    "- [ ] **Default behavior change** — changes what existing users experience without opting in (default model, default setting, file/SQLite schema, auto-network on startup, auto-install)",
+    "- [ ] **None** — internal refactor, docs, tests, or translation update only",
+    "",
+    "## Screenshots",
+    "",
+    "Not applicable for user-facing UI. Native package smoke screenshots are collected as CI artifacts for the M4 evidence gate.",
+    "",
+    "## Bug fix verification",
+    "",
+    "Not a bug fix.",
+    "",
+    "## Validation",
+    "",
+    "- `pnpm guard`",
+    "- `pnpm typecheck`",
+    "- Pending native M4 evidence: Windows NSIS, Linux AppImage, and Linux headless platform smoke.",
+    "",
+  ].join("\n");
 }
 
 try {
