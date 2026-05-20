@@ -1,10 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { resolveSystemLocale } from '../../src/i18n';
 import { en } from '../../src/i18n/locales/en';
 import { id } from '../../src/i18n/locales/id';
 import { LOCALES, LOCALE_LABEL, type Dict, type Locale } from '../../src/i18n/types';
 
-const EXPECTED_LOCALES = ['en', 'id', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ar', 'ja', 'ko', 'pl', 'hu', 'fr', 'uk', 'tr', 'th'];
+const EXPECTED_LOCALES = ['en', 'id', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ar', 'ja', 'ko', 'pl', 'hu', 'fr', 'uk', 'tr', 'th', 'it'];
 
 function placeholders(value: string): string[] {
   const names: string[] = [];
@@ -33,10 +34,20 @@ function explicitLocaleKeys(locale: Locale): string[] {
 }
 
 describe('i18n locales', () => {
+  it('resolves the initial locale from browser language preferences', () => {
+    expect(resolveSystemLocale(['zh-Hans-CN', 'en-US'])).toBe('zh-CN');
+    expect(resolveSystemLocale(['zh-Hant-HK', 'en-US'])).toBe('zh-TW');
+    expect(resolveSystemLocale(['pt-PT', 'en-US'])).toBe('pt-BR');
+    expect(resolveSystemLocale(['es-MX', 'en-US'])).toBe('es-ES');
+    expect(resolveSystemLocale(['nl-NL', 'en-US'])).toBe('en');
+    expect(resolveSystemLocale(['nl-NL'])).toBeNull();
+  });
+
   it('registers every supported locale in the language menu', () => {
     expect(LOCALES).toEqual(EXPECTED_LOCALES);
     expect((LOCALE_LABEL as Record<string, string>).id).toBe('Bahasa Indonesia');
     expect((LOCALE_LABEL as Record<string, string>).de).toBe('Deutsch');
+    expect((LOCALE_LABEL as Record<string, string>).it).toBe('Italiano');
     expect((LOCALE_LABEL as Record<string, string>).ja).toBe('日本語');
   });
 

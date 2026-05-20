@@ -1,6 +1,7 @@
-// Capability-detected wrapper around the desktop openPath
+// Capability-detected wrapper around the Open Design host shell.openPath
 // bridge for the Continue in CLI button (#451). On desktop builds the
-// native runtime exposes openPath; the renderer hands it
+// host bridge exposes shell.openPath; the Tauri migration fallback uses
+// the same project-ID-only contract through the desktop bridge.
 // a *project ID* (not a path) and the desktop main process asks the
 // daemon for the canonical resolvedDir before forwarding to
 // the OS opener. The bridge opens the file manager at the
@@ -8,48 +9,45 @@
 // paths; it is NOT a terminal launcher). On the browser fallback,
 // the hook reports `web-fallback` so the caller can render a
 // manual-instruction toast naming the working directory.
-//
-// Note that shell.openPath resolves to the empty string on success and
-// to a non-empty error string on failure; we treat any non-empty
-// string return as `ok: false` so the caller can render the manual
-// fallback toast.
 
 import { useMemo } from 'react';
+import {
+  isOpenDesignHostAvailable,
+  openHostProjectPath,
+} from '@open-design/host';
 
 import { resolveDesktopBridge } from '../native/desktop-bridge';
 
 export interface TerminalLaunchResult {
-  kind: 'electron' | 'web-fallback';
+  kind: 'host' | 'web-fallback';
   ok: boolean;
 }
 
 export interface TerminalLauncher {
-  isElectron: boolean;
+  isHost: boolean;
   open: (projectId: string) => Promise<TerminalLaunchResult>;
 }
 
 export function useTerminalLaunch(): TerminalLauncher {
   return useMemo<TerminalLauncher>(() => {
     const desktopBridge = resolveDesktopBridge();
-    const openPath = desktopBridge?.openPath;
-    const isElectron = openPath != null;
+    const isHost = isOpenDesignHostAvailable() || desktopBridge?.openPath != null;
 
     async function open(projectId: string): Promise<TerminalLaunchResult> {
-      if (openPath == null) {
+      if (!isHost) {
         return { kind: 'web-fallback', ok: true };
       }
       try {
-        const out = await openPath(projectId);
-        // Native openPath bridges resolve to '' on success.
-        const ok = typeof out === 'string' ? out.length === 0 : true;
-        // Keep the existing public result label stable while Tauri is
-        // introduced behind the same desktop capability.
-        return { kind: 'electron', ok };
+        const result =
+          desktopBridge?.openPath == null
+            ? await openHostProjectPath(projectId)
+            : { ok: (await desktopBridge.openPath(projectId)).length === 0 };
+        return { kind: 'host', ok: result.ok };
       } catch {
-        return { kind: 'electron', ok: false };
+        return { kind: 'host', ok: false };
       }
     }
 
-    return { isElectron, open };
+    return { isHost, open };
   }, []);
 }

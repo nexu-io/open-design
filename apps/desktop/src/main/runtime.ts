@@ -1,12 +1,22 @@
 import { createHmac, randomBytes } from "node:crypto";
-import { mkdir, writeFile, realpath, stat } from "node:fs/promises";
+import { appendFile, mkdir, realpath, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { BrowserWindow, dialog, ipcMain, shell } from "electron";
-import type { DesktopExportPdfInput, DesktopExportPdfResult } from "@open-design/sidecar-proto";
+import { BrowserWindow, dialog, ipcMain, screen, shell } from "electron";
+import {
+  DESKTOP_UPDATE_CHANNELS,
+  DESKTOP_UPDATE_MODES,
+  DESKTOP_UPDATE_STATES,
+  type DesktopExportPdfInput,
+  type DesktopExportPdfResult,
+  type DesktopUpdateStatusSnapshot,
+} from "@open-design/sidecar-proto";
+import type { OpenDesignHostActionResult, OpenDesignHostUpdaterActionOptions } from "@open-design/host";
 
-import { exportPdfFromHtml, waitForPrintReadyHandshake } from "./pdf-export.js";
+import { createElectronPdfTarget, exportPdfFromHtml, savePrintReadyDocumentAsPdf } from "./pdf-export.js";
+import type { PrintReadyPdfOptions } from "./pdf-export.js";
+import type { DesktopUpdater } from "./updater.js";
 
 /**
  * Result of validating a candidate path before exposing it to a
@@ -204,6 +214,17 @@ export function signDesktopImportToken(
 const PENDING_POLL_MS = 120;
 const RUNNING_POLL_MS = 2000;
 const MAX_CONSOLE_ENTRIES = 200;
+const DESKTOP_PET_WINDOW_WIDTH = 360;
+const DESKTOP_PET_WINDOW_HEIGHT = 300;
+const DESKTOP_PET_WINDOW_MARGIN = 24;
+const UPDATER_STATUS_EVENT = "od:update:status-changed";
+const UPDATER_IPC_CHANNELS = [
+  "od:update:status",
+  "od:update:check",
+  "od:update:download",
+  "od:update:install",
+  "od:update:quit",
+] as const;
 
 export type DesktopEvalInput = {
   expression: string;
@@ -283,8 +304,9 @@ export type DesktopRuntimeOptions = {
    * calls bypass the protocol handler entirely. Optional so tools-dev
    * (where webUrl IS an http:// URL Node fetch can hit) can omit it
    * and the runtime falls back to `discoverUrl` for API calls too.
-   */
+  */
   discoverDaemonUrl?: () => Promise<string | null>;
+  preloadPath?: string;
   /**
    * Round-5 (lefarcen P1, mrcfps): lazy re-handshake hook. The runtime
    * calls this when the daemon answers `503 DESKTOP_AUTH_PENDING` so a
@@ -295,6 +317,14 @@ export type DesktopRuntimeOptions = {
    * skip it (the lazy retry then collapses into a single attempt).
    */
   registerDesktopAuthWithDaemon?: () => Promise<boolean>;
+  /**
+   * Optional file path to append renderer-process error/warning console
+   * messages to. Lets the diagnostics export pick up UI errors that would
+   * otherwise only live in DevTools.
+   */
+  rendererLogPath?: string | null;
+  requestQuit?: () => void;
+  updater?: DesktopUpdater;
 };
 
 const DESKTOP_IMPORT_TOKEN_HEADER = "X-OD-Desktop-Import-Token";
@@ -432,27 +462,32 @@ const MAC_WINDOW_CHROME =
   process.platform === "darwin"
     ? ({
         titleBarStyle: "hiddenInset" as const,
-        trafficLightPosition: { x: 14, y: 12 },
+        trafficLightPosition: { x: 12, y: 10 },
       })
     : {};
 
 const MAC_WINDOW_CHROME_CSS = `
   .app-chrome-header {
-    --app-chrome-traffic-space: 56px !important;
-    --app-chrome-traffic-margin: 8px !important;
+    --app-chrome-traffic-space: 64px !important;
+    --app-chrome-traffic-margin: 4px !important;
     -webkit-app-region: drag;
   }
   .app-chrome-traffic-space {
-    flex: 0 0 56px !important;
-    width: 56px !important;
+    flex: 0 0 64px !important;
+    width: 64px !important;
   }
   .app-chrome-header button,
+  .app-chrome-header a,
   .app-chrome-header [role="button"],
   .app-chrome-header [contenteditable],
   .app-chrome-actions,
   .app-chrome-actions *,
   .avatar-popover,
-  .avatar-popover * {
+  .avatar-popover *,
+  .inline-switcher__popover,
+  .inline-switcher__popover *,
+  .workspace-tabs-popover,
+  .workspace-tabs-popover * {
     -webkit-app-region: no-drag;
   }
   .app-chrome-drag {
@@ -494,8 +529,12 @@ const MAC_WINDOW_CHROME_CSS = `
   .share-menu-popover,
   .share-menu-popover *,
   .entry-side-resizer,
+  .inline-switcher__popover,
+  .inline-switcher__popover *,
   .avatar-popover,
-  .avatar-popover * {
+  .avatar-popover *,
+  .workspace-tabs-popover,
+  .workspace-tabs-popover * {
     -webkit-app-region: no-drag;
   }
 `;
@@ -614,6 +653,49 @@ function installWindowChromeCssHook(window: BrowserWindow): void {
   });
 }
 
+function desktopPetUrl(baseUrl: string): string {
+  const url = new URL(baseUrl);
+  url.pathname = "/desktop-pet";
+  url.search = "";
+  url.hash = "";
+  return url.toString();
+}
+
+function createDesktopPetWindow(preloadPath: string): BrowserWindow {
+  const { workArea } = screen.getPrimaryDisplay();
+  const petWindow = new BrowserWindow({
+    width: DESKTOP_PET_WINDOW_WIDTH,
+    height: DESKTOP_PET_WINDOW_HEIGHT,
+    x: workArea.x + workArea.width - DESKTOP_PET_WINDOW_WIDTH - DESKTOP_PET_WINDOW_MARGIN,
+    y: workArea.y + workArea.height - DESKTOP_PET_WINDOW_HEIGHT - DESKTOP_PET_WINDOW_MARGIN,
+    show: false,
+    frame: false,
+    transparent: true,
+    backgroundColor: "#00000000",
+    resizable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    hasShadow: false,
+    focusable: false,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      preload: preloadPath,
+      sandbox: true,
+    },
+  });
+  petWindow.setAlwaysOnTop(true, "floating");
+  petWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  petWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (isHttpUrl(url)) void shell.openExternal(url);
+    return { action: "deny" };
+  });
+  petWindow.webContents.on("will-navigate", (event, url) => {
+    if (!url.includes("/desktop-pet")) event.preventDefault();
+  });
+  return petWindow;
+}
+
 function showWindowButtons(window: BrowserWindow): void {
   if (process.platform !== "darwin" || window.isDestroyed()) return;
   window.setWindowButtonVisibility(true);
@@ -707,8 +789,50 @@ function attachDownloadSaveAsDialog(window: BrowserWindow): void {
   });
 }
 
+function parsePrintReadyPdfOptions(value: unknown): PrintReadyPdfOptions {
+  if (value == null) return {};
+  if (typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Invalid print payload: expected options object");
+  }
+  const deck = (value as { deck?: unknown }).deck;
+  if (deck !== undefined && typeof deck !== "boolean") {
+    throw new Error("Invalid print payload: expected deck option to be boolean");
+  }
+  return deck === true ? { deck: true } : {};
+}
+
+function unavailableUpdaterStatus(): DesktopUpdateStatusSnapshot {
+  return {
+    arch: process.arch,
+    capabilities: {
+      canApplyInPlace: false,
+      canDownload: false,
+      canOpenInstaller: false,
+      requiresManualInstall: false,
+    },
+    channel: DESKTOP_UPDATE_CHANNELS.BETA,
+    currentVersion: "0.0.0",
+    enabled: false,
+    error: {
+      code: "updater-unavailable",
+      message: "Desktop updater is not available.",
+    },
+    mode: DESKTOP_UPDATE_MODES.PACKAGE_LAUNCHER,
+    platform: process.platform,
+    state: DESKTOP_UPDATE_STATES.UNSUPPORTED,
+    supported: false,
+  };
+}
+
+function checkOptionsFromHost(options: unknown): { autoDownload?: boolean } | undefined {
+  const input = options as OpenDesignHostUpdaterActionOptions | null | undefined;
+  const payload = input?.payload;
+  if (payload == null || typeof payload.autoDownload !== "boolean") return undefined;
+  return { autoDownload: payload.autoDownload };
+}
+
 export async function createDesktopRuntime(options: DesktopRuntimeOptions): Promise<DesktopRuntime> {
-  const preloadPath = join(dirname(fileURLToPath(import.meta.url)), "preload.cjs");
+  const preloadPath = options.preloadPath ?? join(dirname(fileURLToPath(import.meta.url)), "preload.cjs");
 
   // ipcMain.handle() registers a handler in an internal map that is *not*
   // surfaced via eventNames(); the previous `!eventNames().includes(...)`
@@ -719,6 +843,9 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   ipcMain.removeHandler("dialog:pick-and-import");
   ipcMain.removeHandler("shell:open-external");
   ipcMain.removeHandler("shell:open-path");
+  for (const channel of UPDATER_IPC_CHANNELS) {
+    ipcMain.removeHandler(channel);
+  }
   ipcMain.handle("shell:open-external", async (_event, url: string) => {
     if (!isHttpUrl(url)) return false;
     try {
@@ -838,6 +965,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   });
 
   const consoleEntries: DesktopConsoleEntry[] = [];
+  const petWindow = createDesktopPetWindow(preloadPath);
   const window = new BrowserWindow({
     height: 900,
     // Below this size the project page's left/right split (chat
@@ -861,45 +989,87 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   showWindowButtons(window);
   attachDownloadSaveAsDialog(window);
 
+  const sendUpdaterStatus = (status = options.updater?.snapshot() ?? unavailableUpdaterStatus()) => {
+    if (window.isDestroyed()) return;
+    window.webContents.send(UPDATER_STATUS_EVENT, status);
+  };
+  const unsubscribeUpdater = options.updater?.subscribe(() => sendUpdaterStatus()) ?? (() => undefined);
+  const requireMainWindowSender = (event: Electron.IpcMainInvokeEvent): void => {
+    if (event.sender !== window.webContents) {
+      throw new Error("updater IPC is only available to the main Open Design window");
+    }
+  };
+  ipcMain.handle("od:update:status", async (event) => {
+    requireMainWindowSender(event);
+    const status = await (options.updater?.status() ?? unavailableUpdaterStatus());
+    sendUpdaterStatus(status);
+    return status;
+  });
+  ipcMain.handle("od:update:check", async (event, updaterOptions: unknown) => {
+    requireMainWindowSender(event);
+    const status = await (options.updater?.checkForUpdates(checkOptionsFromHost(updaterOptions)) ?? unavailableUpdaterStatus());
+    sendUpdaterStatus(status);
+    return status;
+  });
+  ipcMain.handle("od:update:download", async (event) => {
+    requireMainWindowSender(event);
+    const status = await (options.updater?.downloadUpdate() ?? unavailableUpdaterStatus());
+    sendUpdaterStatus(status);
+    return status;
+  });
+  ipcMain.handle("od:update:install", async (event) => {
+    requireMainWindowSender(event);
+    const status = await (options.updater?.installUpdate() ?? unavailableUpdaterStatus());
+    sendUpdaterStatus(status);
+    return status;
+  });
+  ipcMain.handle("od:update:quit", async (event): Promise<OpenDesignHostActionResult> => {
+    requireMainWindowSender(event);
+    const status = await (options.updater?.status() ?? unavailableUpdaterStatus());
+    if (status.installResult == null) {
+      return { ok: false, reason: "installer has not been opened" };
+    }
+    if (options.requestQuit == null) {
+      return { ok: false, reason: "desktop quit is not available" };
+    }
+    setTimeout(() => options.requestQuit?.(), 0);
+    return { ok: true };
+  });
+
+  ipcMain.removeAllListeners("desktop-pet:set-visible");
+  ipcMain.on("desktop-pet:set-visible", (event, visible: unknown) => {
+    if (petWindow.isDestroyed() || event.sender !== petWindow.webContents) return;
+    if (visible) petWindow.showInactive();
+    else petWindow.hide();
+  });
+
   ipcMain.removeHandler('od:print-pdf');
-  ipcMain.handle('od:print-pdf', async (_event, html: unknown, nonce: unknown): Promise<void> => {
+  ipcMain.handle('od:print-pdf', async (_event, html: unknown, nonce: unknown, options: unknown): Promise<void> => {
     if (typeof html !== 'string') {
       throw new Error('Invalid print payload: expected HTML string');
     }
     const printNonce = typeof nonce === 'string' ? nonce : '';
-
-    const printWindow = new BrowserWindow({
-      width: 800,
-      height: 600,
-      show: false,
-      webPreferences: {
-        contextIsolation: true,
-        nodeIntegration: false,
-        sandbox: true,
-      },
-    });
-
-    printWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-    printWindow.webContents.on('will-navigate', (e) => e.preventDefault());
-
-    try {
-      await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
-      await waitForPrintReadyHandshake(printWindow.webContents, printNonce);
-      printWindow.show();
-
-      await new Promise<void>((resolve, reject) => {
-        printWindow.webContents.print({ printBackground: true }, (success: boolean, failureReason?: string) => {
-          if (success) resolve();
-          else if (failureReason === 'Print job canceled') resolve();
-          else reject(new Error(failureReason ?? 'Print failed'));
-        });
-      });
-    } finally {
-      if (!printWindow.isDestroyed()) printWindow.close();
+    const printOptions = parsePrintReadyPdfOptions(options);
+    // Issue #1774: the renderer's `printPdf()` bridge runs the direct
+    // Save-as-PDF flow (showSaveDialog -> printToPDF -> write), never
+    // `webContents.print()` — the printer-first OS dialog. The renderer
+    // (apps/web/src/runtime/exports.ts#exportAsPdf) only reacts to a
+    // rejection: it shows a "Print failed" alert. A resolved call —
+    // including a user-canceled Save dialog — is silent, matching the
+    // pre-#1774 behavior where canceling the OS dialog was a no-op.
+    const result = await savePrintReadyDocumentAsPdf(
+      html,
+      printNonce,
+      createElectronPdfTarget(),
+      printOptions,
+    );
+    if (!result.ok) {
+      throw new Error(result.error ?? 'PDF export failed');
     }
   });
 
   let currentUrl: string | null = null;
+  let currentPetUrl: string | null = null;
   let pendingUrl: string | null = null;
   let stopped = false;
   let timer: NodeJS.Timeout | null = null;
@@ -963,16 +1133,39 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     });
   }
 
+  const rendererLogPath = options.rendererLogPath ?? null;
+  let rendererLogReady: Promise<void> | null = null;
+  const ensureRendererLogDir = async (): Promise<void> => {
+    if (rendererLogPath == null) return;
+    if (rendererLogReady == null) {
+      rendererLogReady = mkdir(dirname(rendererLogPath), { recursive: true }).then(() => undefined);
+    }
+    await rendererLogReady;
+  };
+  const persistRendererEntry = async (entry: DesktopConsoleEntry): Promise<void> => {
+    if (rendererLogPath == null) return;
+    if (entry.level !== "error" && entry.level !== "warn") return;
+    try {
+      await ensureRendererLogDir();
+      const line = `${JSON.stringify({ timestamp: entry.timestamp, level: entry.level, text: entry.text })}\n`;
+      await appendFile(rendererLogPath, line, "utf8");
+    } catch (error) {
+      console.error("desktop renderer log append failed", error);
+    }
+  };
+
   (window.webContents as any).on("console-message", (event: { level?: number | string; message?: string }) => {
     const level = typeof event.level === "number" ? mapConsoleLevel(event.level) : (event.level ?? "log");
-    consoleEntries.push({
+    const entry: DesktopConsoleEntry = {
       level,
       text: event.message ?? "",
       timestamp: new Date().toISOString(),
-    });
+    };
+    consoleEntries.push(entry);
     if (consoleEntries.length > MAX_CONSOLE_ENTRIES) {
       consoleEntries.splice(0, consoleEntries.length - MAX_CONSOLE_ENTRIES);
     }
+    void persistRendererEntry(entry);
   });
 
   await window.loadURL(createPendingHtml());
@@ -997,6 +1190,11 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
         currentUrl = url;
         pendingUrl = null;
         showWindowButtons(window);
+        const nextPetUrl = desktopPetUrl(url);
+        if (!petWindow.isDestroyed() && nextPetUrl !== currentPetUrl) {
+          await petWindow.loadURL(nextPetUrl);
+          currentPetUrl = nextPetUrl;
+        }
       } else if (url == null) {
         pendingUrl = null;
       }
@@ -1030,6 +1228,12 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
         clearTimeout(timer);
         timer = null;
       }
+      unsubscribeUpdater();
+      ipcMain.removeAllListeners("desktop-pet:set-visible");
+      for (const channel of UPDATER_IPC_CHANNELS) {
+        ipcMain.removeHandler(channel);
+      }
+      if (!petWindow.isDestroyed()) petWindow.close();
       if (!window.isDestroyed()) window.close();
     },
     console() {

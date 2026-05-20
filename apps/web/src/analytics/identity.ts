@@ -5,6 +5,7 @@
 // headers (see @open-design/contracts/analytics).
 
 import type { AnalyticsClientType } from '@open-design/contracts/analytics';
+import { detectOpenDesignHostClientType } from '@open-design/host';
 
 import { hasDesktopBridge } from '../native/desktop-bridge';
 
@@ -54,15 +55,13 @@ export function getSessionId(): string {
   }
 }
 
-// Desktop packaged builds set this marker on window in a preload script so
-// the same web bundle can distinguish desktop runs from browser visits.
-// Falls back to 'web' when the marker isn't present.
+// Desktop packaged builds install the Open Design host bridge so the
+// same web bundle can distinguish desktop runs from browser visits.
+// Falls back to 'web' when the host bridge isn't present.
 export function detectClientType(): AnalyticsClientType {
   if (typeof window === 'undefined') return 'web';
-  const w = window as Window & {
-    __OD_CLIENT_TYPE__?: AnalyticsClientType;
-  };
-  if (w.__OD_CLIENT_TYPE__ === 'desktop') return 'desktop';
+  const hostClientType = detectOpenDesignHostClientType();
+  if (hostClientType === 'desktop') return 'desktop';
   if (hasDesktopBridge()) return 'desktop';
   return 'web';
 }

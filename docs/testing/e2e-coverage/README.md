@@ -7,11 +7,13 @@
 - 优先记录已经存在于 `e2e/` 下的自动化覆盖；当某个用户流主要由 `apps/web` 组件测试保护时，也会一并注明。
 - 以用户视角描述场景，不展开实现细节。
 - 新增测试文件或新增重要场景时，同步更新对应模块文档。
+- 插件系统总验收维护在 [`../plugin-system-test-suite.md`](../plugin-system-test-suite.md)；Registry / CLI / daemon 跨层用例另见 [`../plugin-registry-eval-cases.md`](../plugin-registry-eval-cases.md)。
 
 ## 模块索引
 
 | 模块 | 覆盖重点 | 对应测试文件 |
 | --- | --- | --- |
+| [status.md](./status.md) | 当前 E2E 分层、最近补强范围、grouped run 状态、已知 intentional gap | `e2e/ui/app.test.ts`, `e2e/ui/real-daemon-run.test.ts`, `e2e/ui/app-design-files.test.ts`, `e2e/ui/app-restoration.test.ts`, `e2e/ui/project-management-flows.test.ts`, `e2e/ui/entry-configuration-flows.test.ts`, `e2e/ui/workspace-keyboard-flows.test.ts`, `e2e/tests/dialog/artifact-consistency.test.ts` |
 | [entry.md](./entry.md) | 入口页创建路径、连接器入口、提示词模板、资源驱动场景、顶部 chrome | `e2e/ui/app.test.ts`, `e2e/ui/entry-configuration-flows.test.ts`, `e2e/ui/entry-chrome-flows.test.ts` |
 | [project-management.md](./project-management.md) | 首页/项目管理、设计系统、项目重命名、删除流程、搜索与视图切换 | `e2e/ui/project-management-flows.test.ts` |
 | [workspace.md](./workspace.md) | 工作区标签、会话、文件流、快速切换器、手动编辑模式 | `e2e/ui/app.test.ts`, `e2e/ui/workspace-keyboard-flows.test.ts` |

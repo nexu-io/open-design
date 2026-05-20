@@ -1,0 +1,17 @@
+# Spec §15.5 — Tencent Cloud override.
+#
+# Persistence:
+#   - cfs (Tencent CFS) for /data/od.
+#   - cbs (Tencent Cloud Block Storage) for /data/config.
+
+persistence:
+  enabled: true
+  data:
+    storageClass: cfs
+    size: 50Gi
+  config:
+    storageClass: cbs
+    size: 1Gi
+
+ingress:
+  enabled: false

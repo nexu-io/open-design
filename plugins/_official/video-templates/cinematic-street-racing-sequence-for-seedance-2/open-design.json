@@ -1,0 +1,82 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "video-template-cinematic-street-racing-sequence-for-seedance-2",
+  "title": "Cinematic Street Racing Sequence for Seedance 2",
+  "version": "0.1.0",
+  "description": "A detailed, multi-shot prompt designed for Seedance 2 to generate a cinematic street racing sequence at night, focusing on intense driver focus, dynamic camera work, and explosive acceleration, struct",
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "Pierrick Chevallier | IA",
+    "url": "https://x.com/CharaspowerAI/status/2039651574297792688"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-seedance-2-prompts",
+  "tags": [
+    "video-template",
+    "first-party",
+    "video",
+    "cinematic",
+    "cyberpunk",
+    "action"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "video",
+    "scenario": "video",
+    "surface": "video",
+    "preview": {
+      "type": "video",
+      "poster": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/3a7fb0a6d706b9f568479bb720ce1ad4/thumbnails/thumbnail.jpg",
+      "video": "https://customer-qs6wnyfuv0gcybzj.cloudflarestream.com/3a7fb0a6d706b9f568479bb720ce1ad4/downloads/default.mp4"
+    },
+    "useCase": {
+      "query": {
+        "en": "cinematic street racing sequence at night, a focused driver inside a high-performance car grips the steering wheel, intense eye focus, city lights reflecting on windshield, tension building before sudden acceleration\n\ncamera: rapid multi-angle system with seamless transitions, interior close-up → over-the-shoulder → exterior tracking → low ground shots, ultra dynamic camera movement, whip pans + speed ramp transitions + motion blur masking cuts, continuous flow illusion\n\n(0-2s) interior close-up on driver, hand tightens on gear shift, subtle breathing, dashboard lights glowing\n(2-4s) over-the-shoulder shot, road ahead stretching into neon-lit city, engine vibration building\n(4-6s) extreme close-up on finger pressing NOS button, instant ignition reaction\n(6-8s) explosive acceleration, camera snaps to exterior side tracking shot, car launches forward with violent speed surge\n(8-10s) ultra low ground shot near asphalt, wheels spinning at extreme velocity, environment streaking past\n(10-12s) high-speed chase through tight streets, sharp turns, camera whip pans between angles, reflections and light trails enhancing speed\n\nDense urban night environment, wet asphalt reflecting neon lights, tunnel passages, street lights streaking, high-speed city atmosphere\nUltra realistic, fast and furious inspired energy, photorealistic lighting, intense motion blur, high contrast neon reflections, cinematic depth of field, extreme sense of speed, fluid transitions, no distortion, no stretching",
+        "zh-CN": "使用这个插件完成以下任务：cinematic street racing sequence at night, a focused driver inside a high-performance car grips the steering wheel, intense eye focus, city lights reflecting on windshield, tension building before sudden acceleration\n\ncamera: rapid multi-angle system with seamless transitions, interior close-up → over-the-shoulder → exterior tracking → low ground shots, ultra dynamic camera movement, whip pans + speed ramp transitions + motion blur masking cuts, continuous flow illusion\n\n(0-2s) interior close-up on driver, hand tightens on gear shift, subtle breathing, dashboard lights glowing\n(2-4s) over-the-shoulder shot, road ahead stretching into neon-lit city, engine vibration building\n(4-6s) extreme close-up on finger pressing NOS button, instant ignition reaction\n(6-8s) explosive acceleration, camera snaps to exterior side tracking shot, car launches forward with violent speed surge\n(8-10s) ultra low ground shot near asphalt, wheels spinning at extreme velocity, environment streaking past\n(10-12s) high-speed chase through tight streets, sharp turns, camera whip pans between angles, reflections and light trails enhancing speed\n\nDense urban night environment, wet asphalt reflecting neon lights, tunnel passages, street lights streaking, high-speed city atmosphere\nUltra realistic, fast and furious inspired energy, photorealistic lighting, intense motion blur, high contrast neon reflections, cinematic depth of field, extreme sense of speed, fluid transitions, no distortion, no stretching"
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "seedance-2.0"
+        ],
+        "default": "seedance-2.0"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "16:9",
+          "9:16",
+          "1:1",
+          "4:5"
+        ],
+        "default": "16:9"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "video-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:video-generate"
+    ]
+  }
+}

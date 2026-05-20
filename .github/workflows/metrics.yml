@@ -12,8 +12,7 @@ on:
       - .github/workflows/metrics.yml
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   metrics:
@@ -21,6 +20,19 @@ jobs:
     if: github.repository == 'nexu-io/open-design'
     runs-on: ubuntu-latest
     steps:
+      - name: Generate Open Design bot token
+        id: open-design-bot-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+          owner: nexu-io
+          repositories: open-design
+          permission-administration: read
+          permission-contents: write
+          permission-issues: read
+          permission-pull-requests: write
+
       - name: Generate GitHub repository metrics
         uses: lowlighter/metrics@latest
         with:
@@ -28,11 +40,11 @@ jobs:
           # Requires manual review to merge. If metrics unchanged, no PR is created.
           filename: docs/assets/github-metrics.svg
 
-          # Auth: METRICS_TOKEN must be a fine-grained PAT or GitHub App token that
-          # can create pull requests in this repository. GITHUB_TOKEN is kept only
-          # as a read/render fallback because many orgs disallow PR creation from it.
-          token: ${{ secrets.METRICS_TOKEN || secrets.GITHUB_TOKEN }}
-          committer_token: ${{ secrets.METRICS_TOKEN }}
+          # Auth: use the Open Design GitHub App so generated commits and pull
+          # requests come from open-design-bot[bot] and trigger normal PR CI.
+          token: ${{ steps.open-design-bot-token.outputs.token }}
+          committer_token: ${{ steps.open-design-bot-token.outputs.token }}
+          committer_message: Update ${filename}
           output_action: pull-request
           output_condition: data-changed
 

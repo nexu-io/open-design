@@ -13,8 +13,8 @@
  *      and `openPath(projectId)` must only forward projects whose
  *      resolvedDir came from the trusted-picker flow.
  */
-import { mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
+import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdir, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -70,7 +70,7 @@ describe("validateExistingDirectory", () => {
   it("accepts an existing absolute directory and returns the realpath", async () => {
     const result = await validateExistingDirectory(tempRoot);
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.resolved).toBe(realpathSync(tempRoot));
+    if (result.ok) expect(result.resolved).toBe(await realpath(tempRoot));
   });
 
   it("realpath-resolves symlinks so attackers cannot register one path and reach another", async () => {
@@ -80,7 +80,7 @@ describe("validateExistingDirectory", () => {
     symlinkSync(realDir, linkDir, "dir");
     const result = await validateExistingDirectory(linkDir);
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.resolved).toBe(realpathSync(realDir));
+    if (result.ok) expect(result.resolved).toBe(await realpath(realDir));
   });
 
   it("rejects macOS .app bundles even though they are technically directories", async () => {

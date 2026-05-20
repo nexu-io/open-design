@@ -1,0 +1,43 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "refine-critique-loop",
+  "title": "Critique And Refine",
+  "version": "0.1.0",
+  "description": "Review, patch, and improve an existing Open Design artifact.",
+  "license": "MIT",
+  "tags": ["refine", "critique", "review", "patch-edit", "tune-collab"],
+  "compat": {
+    "agentSkills": [{ "path": "./SKILL.md" }]
+  },
+  "od": {
+    "kind": "skill",
+    "taskKind": "tune-collab",
+    "mode": "refine",
+    "scenario": "critique",
+    "useCase": {
+      "query": "Refine the current artifact with focus on {{focus}}."
+    },
+    "context": {
+      "skills": [{ "path": "./SKILL.md" }],
+      "atoms": ["file-read", "critique-theater", "patch-edit", "diff-review"]
+    },
+    "pipeline": {
+      "stages": [
+        { "id": "inspect", "atoms": ["file-read"] },
+        {
+          "id": "critique",
+          "atoms": ["critique-theater"],
+          "repeat": true,
+          "until": "critique.score>=4 || iterations>=3"
+        },
+        { "id": "patch", "atoms": ["patch-edit", "diff-review"] }
+      ]
+    },
+    "inputs": [
+      { "name": "focus", "type": "string", "required": false, "label": "Focus", "default": "visual polish, responsive behavior, and text fit" }
+    ],
+    "capabilities": ["prompt:inject", "fs:read", "fs:write"]
+  }
+}
+

@@ -183,16 +183,20 @@ async function copyOptional(sourcePath, destinationPath, options = {}) {
   return true;
 }
 
-async function linkRelative(sourcePath, destinationPath) {
+async function linkRelative(sourcePath, destinationPath, options = {}) {
   if (!(await pathExists(sourcePath))) return false;
   if (await pathLstatExists(destinationPath)) return false;
   await mkdir(path.dirname(destinationPath), { recursive: true });
+  if (options.copyInsteadOfSymlink === true) {
+    await copyRequired(sourcePath, destinationPath, { dereference: true });
+    return true;
+  }
   const relativeTarget = path.relative(path.dirname(destinationPath), sourcePath);
   await symlink(relativeTarget.length === 0 ? "." : relativeTarget, destinationPath);
   return true;
 }
 
-async function linkPnpmPublicHoist(destinationRoot) {
+async function linkPnpmPublicHoist(destinationRoot, options = {}) {
   const nodeModulesRoot = path.join(destinationRoot, "node_modules");
   const hoistRoot = path.join(nodeModulesRoot, ".pnpm", "node_modules");
   const entries = await readdir(hoistRoot, { withFileTypes: true }).catch(() => []);
@@ -205,13 +209,13 @@ async function linkPnpmPublicHoist(destinationRoot) {
       for (const scopedEntry of scopedEntries) {
         const scopedSource = path.join(sourcePath, scopedEntry);
         const scopedDestination = path.join(nodeModulesRoot, entry.name, scopedEntry);
-        if (await linkRelative(scopedSource, scopedDestination)) linked.push(scopedDestination);
+        if (await linkRelative(scopedSource, scopedDestination, options)) linked.push(scopedDestination);
       }
       continue;
     }
 
     const destinationPath = path.join(nodeModulesRoot, entry.name);
-    if (await linkRelative(sourcePath, destinationPath)) linked.push(destinationPath);
+    if (await linkRelative(sourcePath, destinationPath, options)) linked.push(destinationPath);
   }
 
   return linked;
@@ -243,7 +247,7 @@ async function installStandaloneResource(config, resourcesRoot, platformName) {
   await copyRequired(path.join(sourceWebRoot, "server.js"), path.join(destinationWebRoot, "server.js"));
   await copyOptional(path.join(sourceWebRoot, "package.json"), path.join(destinationWebRoot, "package.json"));
   const copiedNestedNodeModules = await copyOptional(path.join(sourceWebRoot, "node_modules"), path.join(destinationWebRoot, "node_modules"), copyOptions);
-  const linkedHoistEntries = await linkPnpmPublicHoist(destinationRoot);
+  const linkedHoistEntries = await linkPnpmPublicHoist(destinationRoot, { copyInsteadOfSymlink: platformName === "win32" });
   await copyRequired(path.join(sourceWebRoot, ".next"), path.join(destinationWebRoot, ".next"));
   const copiedStatic = await copyOptional(config.webStaticSourceRoot, path.join(destinationWebRoot, ".next", "static"));
   const copiedPublic = await copyOptional(config.webPublicSourceRoot, path.join(destinationWebRoot, "public"));
@@ -553,6 +557,73 @@ function isMacCodeBundle(name) {
   return name.endsWith(".app") || name.endsWith(".framework");
 }
 
+async function ensureRelativeSymlink(linkPath, targetPath, type) {
+  if (await pathLstatExists(linkPath)) {
+    const metadata = await lstat(linkPath);
+    if (metadata.isSymbolicLink()) {
+      const existingTarget = await readlink(linkPath);
+      if (existingTarget === targetPath) return false;
+    }
+    await rm(linkPath, { force: true, recursive: true });
+  }
+
+  await symlink(targetPath, linkPath, type);
+  return true;
+}
+
+async function normalizeMacVersionedFramework(frameworkPath) {
+  const versionsRoot = path.join(frameworkPath, "Versions");
+  const entries = await readdir(versionsRoot, { withFileTypes: true }).catch(() => []);
+  const versionName = entries
+    .filter((entry) => entry.isDirectory() && entry.name !== "Current")
+    .map((entry) => entry.name)
+    .sort()[0];
+  if (versionName == null) return false;
+
+  const versionPath = path.join(versionsRoot, versionName);
+  await ensureRelativeSymlink(path.join(versionsRoot, "Current"), versionName, "dir");
+
+  const versionEntries = await readdir(versionPath, { withFileTypes: true }).catch(() => []);
+  let changed = false;
+  for (const entry of versionEntries) {
+    if (entry.name === "_CodeSignature") continue;
+    const targetPath = `Versions/Current/${entry.name}`;
+    const linkPath = path.join(frameworkPath, entry.name);
+    const type = entry.isDirectory() ? "dir" : "file";
+    changed = (await ensureRelativeSymlink(linkPath, targetPath, type)) || changed;
+  }
+
+  return changed;
+}
+
+async function normalizeMacVersionedFrameworks(appPath) {
+  const frameworksRoot = path.join(appPath, "Contents", "Frameworks");
+
+  async function visit(current) {
+    const entries = await readdir(current, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const entryPath = path.join(current, entry.name);
+      if (entry.name.endsWith(".framework")) {
+        await normalizeMacVersionedFramework(entryPath);
+        continue;
+      }
+      await visit(entryPath);
+    }
+  }
+
+  await visit(frameworksRoot);
+}
+
+async function resolveMacAdhocSignTarget(bundlePath, bundleName) {
+  if (!bundleName.endsWith(".framework")) return bundlePath;
+
+  const currentVersionPath = path.join(bundlePath, "Versions", "Current");
+  if (await pathExists(currentVersionPath)) return currentVersionPath;
+
+  return bundlePath;
+}
+
 async function collectMacAdhocSignTargets(appPath) {
   const frameworksRoot = path.join(appPath, "Contents", "Frameworks");
   const targets = [];
@@ -563,7 +634,7 @@ async function collectMacAdhocSignTargets(appPath) {
       if (!entry.isDirectory()) continue;
       const entryPath = path.join(current, entry.name);
       if (isMacCodeBundle(entry.name)) {
-        targets.push(entryPath);
+        targets.push(await resolveMacAdhocSignTarget(entryPath, entry.name));
         continue;
       }
       await visit(entryPath);
@@ -576,6 +647,7 @@ async function collectMacAdhocSignTargets(appPath) {
 }
 
 async function signMacAdhocBundle(appPath) {
+  await normalizeMacVersionedFrameworks(appPath);
   const targets = await collectMacAdhocSignTargets(appPath);
   for (const target of targets) {
     await execFileAsync("codesign", ["--force", "--sign", "-", "--timestamp=none", target], {

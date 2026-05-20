@@ -1,7 +1,7 @@
 ---
 name: ui-ux-pro-max
 description: |
-  UI/UX design patterns and best practices. Pattern library + heuristic checks for shipping clean, usable interfaces.
+  Catalog-only UI/UX Pro Max entry. The full upstream templates, data, and search workflow are not bundled in Open Design.
 triggers:
   - "ui ux patterns"
   - "design patterns"
@@ -19,7 +19,18 @@ od:
 
 ## What it does
 
-UI/UX design patterns and best practices. Pattern library + heuristic checks for shipping clean, usable interfaces.
+Catalog-only UI/UX Pro Max entry. The full upstream templates, data, and search workflow are not bundled in Open Design.
+
+## Current Open Design scope
+
+Open Design currently ships this entry as discovery metadata only. If this `SKILL.md`
+is the only file under `skills/ui-ux-pro-max/`, the upstream UI/UX Pro Max
+workflow is not available locally.
+
+The full upstream workflow expects additional assets such as the searchable
+`data` CSVs, the `scripts/search.py` helper, reference material, templates, and
+related upstream skill instructions. Without those files, do not tell users that
+the full UI/UX Pro Max pattern library or template search is active.
 
 ## Source
 
@@ -40,3 +51,7 @@ open https://github.com/nextlevelbuilder/ui-ux-pro-max-skill
 
 Then ask the agent to invoke this skill by name (`ui-ux-pro-max`) or with
 one of the trigger phrases listed in this skill's frontmatter.
+
+If those upstream files are not installed, explain that Open Design only has the
+catalog entry for this skill and ask whether to continue with Open Design's
+default design-system guidance instead.

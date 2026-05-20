@@ -233,7 +233,7 @@ describe("startPackedLinuxHeadless", () => {
         "headless.mjs",
       );
       const nodePath = join(config.roots.output.namespaceRoot, "resources", "open-design", "bin", "node");
-      mockState.markerPath = join(config.roots.runtime.namespaceRoot, "runtime", "desktop-root.json");
+      mockState.markerPath = join(config.roots.runtime.namespaceRoot, "runtime", "headless-root.json");
       mockState.webIdentityPath = join(config.roots.runtime.namespaceRoot, "runtime", "web-root.json");
 
       await mkdir(join(entryPath, ".."), { recursive: true });
@@ -247,7 +247,7 @@ describe("startPackedLinuxHeadless", () => {
       expect(result.status.url).toBe("http://127.0.0.1:17456");
       expect(spawnCall?.command).toBe(nodePath);
       expect(spawnCall?.args).toEqual([entryPath]);
-      expect(spawnCall?.env.OD_NAMESPACE).toBe(config.namespace);
+      expect(spawnCall?.env.OD_PACKAGED_NAMESPACE).toBe(config.namespace);
       expect(spawnCall?.env.OD_DATA_DIR).toBe(join(config.roots.runtime.namespaceBaseRoot, ".."));
       expect(spawnCall?.env.OD_RESOURCE_ROOT).toBe(join(config.roots.output.namespaceRoot, "resources", "open-design"));
     } finally {

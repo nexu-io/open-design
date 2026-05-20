@@ -1,0 +1,91 @@
+name: 🧪 Open Design 0.8.0 — preview feedback
+description: 0.8.0 is here as a preview on `main`. Bugs, suggestions, "this feels off", first impressions — drop them here.
+labels: ["preview/v0.8.0"]
+title: "[0.8.0] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Open Design 0.8.0 is shipping as a preview.** The rebuilt core (plugins, headless, agent-native) is on `main` and we're hardening it before tagging 0.8.0 stable.
+
+        This template is the fast lane for anything you noticed while trying 0.8.0 — bugs, UX rough edges, missing features, half-formed thoughts. Small reports are the most useful.
+
+        For issues that aren't about 0.8.0 specifically, the regular **Bug report** / **Feature request** templates still work fine.
+
+  - type: dropdown
+    id: feature
+    attributes:
+      label: Which area does this relate to?
+      options:
+        - Plugins / plugin authoring
+        - Skills tab (/integrations)
+        - Automations (Routines / Schedules / Live artifacts)
+        - Headless / CLI / agent-driven flow
+        - Desktop app shell
+        - General 0.8.0 experience
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: type
+    attributes:
+      label: Type of feedback
+      options:
+        - Bug / broken behavior
+        - UX or design concern
+        - Suggestion / feature request
+        - First impression / general thought
+        - Question
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened, or what would you like to see?
+      description: For bugs, include steps to reproduce. For suggestions, describe the use case.
+      placeholder: |
+        1. Open /integrations
+        2. Click the Skills tab
+        3. Expected X, saw Y
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior (skip if not a bug)
+      placeholder: What did you expect to happen?
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: Build / version
+      description: From the app's About menu, or run `git rev-parse HEAD` if you built from source.
+      placeholder: e.g. 0.8.0-preview.2
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Windows
+        - Linux
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Plugins installed, design systems in use, anything else relevant.
+    validations:
+      required: false

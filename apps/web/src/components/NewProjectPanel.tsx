@@ -1,16 +1,18 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { createTabToTracking } from '@open-design/contracts/analytics';
 import {
-  createTabToTracking,
-  projectKindToTracking,
-} from '@open-design/contracts/analytics';
+  isOpenDesignHostAvailable,
+  normalizeOpenDesignHostProjectImportResult,
+  pickAndImportHostProject,
+  type OpenDesignHostProjectImportSuccess,
+} from '@open-design/host';
 import { useAnalytics } from '../analytics/provider';
-import { trackHomeClickCreateButton } from '../analytics/events';
-import type { ConnectorDetail, ImportFolderResponse } from '@open-design/contracts';
-
-// Desktop bridge types are declared globally in apps/web/src/types/electron.d.ts.
-// PR #974 deleted the raw `pickFolder` bridge: the renderer no longer
-// receives a filesystem path from the desktop process, only the daemon's
-// import response.
+import {
+  trackNewProjectModalElementClick,
+  trackNewProjectModalSurfaceView,
+  trackNewProjectModalTabClick,
+} from '../analytics/events';
+import type { ConnectorDetail } from '@open-design/contracts';
 
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
@@ -42,39 +44,10 @@ import {
   VIDEO_LENGTHS_SEC,
   VIDEO_MODELS,
 } from '../media/models';
+import { formatPickAndImportFailure } from '../utils/pickAndImportError';
 import { Icon } from './Icon';
 import { Skeleton } from './Loading';
 import { Toast } from './Toast';
-
-/**
- * Best-effort flattening of the `details` field that the
- * pickAndImport main-process handler attaches when the daemon returned
- * a structured error envelope (PR #974 round-4 mrcfps). Daemon errors
- * carry `error.message` and sometimes nested `error.details.reason`;
- * we surface the most operator-actionable string we can find without
- * over-coupling to any particular error code.
- */
-function formatPickAndImportErrorDetails(details: unknown): string | undefined {
-  if (typeof details === 'string' && details.length > 0) return details;
-  if (details == null || typeof details !== 'object') return undefined;
-  const record = details as Record<string, unknown>;
-  const error = record.error;
-  if (error != null && typeof error === 'object') {
-    const errRecord = error as Record<string, unknown>;
-    const message = errRecord.message;
-    const nestedDetails = errRecord.details;
-    if (typeof message === 'string' && message.length > 0) {
-      if (nestedDetails != null && typeof nestedDetails === 'object') {
-        const nestedReason = (nestedDetails as Record<string, unknown>).reason;
-        if (typeof nestedReason === 'string' && nestedReason.length > 0) {
-          return `${message} (${nestedReason})`;
-        }
-      }
-      return message;
-    }
-  }
-  return undefined;
-}
 
 // Snapshot of a curated prompt template, captured at New Project time and
 // folded into ProjectMetadata.promptTemplate. The user may have edited the
@@ -142,7 +115,7 @@ interface Props {
   designSystems: DesignSystemSummary[];
   defaultDesignSystemId: string | null;
   templates: ProjectTemplate[];
-  onDeleteTemplate: (id: string) => Promise<boolean>;
+  onDeleteTemplate?: (id: string) => Promise<boolean>;
   promptTemplates: PromptTemplateSummary[];
   onCreate: (input: CreateInput & { requestId?: string }) => void;
   onImportClaudeDesign?: (file: File) => Promise<void> | void;
@@ -151,17 +124,18 @@ interface Props {
   // builds have no `shell.openPath` surface, so the renderer naming a
   // path here cannot escalate (PR #974 trust model).
   onImportFolder?: (baseDir: string) => Promise<void> | void;
-  // Electron flow: the desktop main process owns the picker dialog and
+  // Host flow: the desktop main process owns the picker dialog and
   // the import call atomically (`pickAndImport` IPC). The renderer
   // never sees the path or the HMAC token; it only receives the
-  // daemon's import response and forwards it here so App-level state
-  // can update without a second fetch.
-  onImportFolderResponse?: (response: ImportFolderResponse) => Promise<void> | void;
+  // host-owned project identifiers and forwards them here so App-level
+  // state can refresh through the daemon API.
+  onImportFolderResponse?: (response: OpenDesignHostProjectImportSuccess) => Promise<void> | void;
   mediaProviders?: Record<string, MediaProviderCredentials>;
   connectors?: ConnectorDetail[];
   connectorsLoading?: boolean;
   onOpenConnectorsTab?: () => void;
   loading?: boolean;
+  initialTab?: CreateTab;
 }
 
 const TAB_LABEL_KEYS: Record<CreateTab, keyof Dict> = {
@@ -217,6 +191,7 @@ export function NewProjectPanel({
   connectorsLoading = false,
   onOpenConnectorsTab,
   loading = false,
+  initialTab = 'prototype',
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
@@ -232,7 +207,21 @@ export function NewProjectPanel({
   const [importFolderError, setImportFolderError] = useState<
     { message: string; details?: string } | null
   >(null);
-  const [tab, setTab] = useState<CreateTab>('prototype');
+  const [tab, setTab] = useState<CreateTab>(initialTab);
+  // P0 analytics — fire surface_view once per (panel mount, tab) pair so the
+  // funnel sees both initial open and tab switches without double-counting on
+  // unrelated re-renders. Ref keys on a tab string because the panel is a
+  // long-lived component the modal mounts/unmounts as the user opens/closes it.
+  const newProjectViewedTabRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (newProjectViewedTabRef.current === tab) return;
+    newProjectViewedTabRef.current = tab;
+    trackNewProjectModalSurfaceView(analytics.track, {
+      page_name: 'home',
+      area: 'new_project_modal',
+      tab_name: createTabToTracking(tab),
+    });
+  }, [tab, analytics.track]);
   // Media tab consolidates image / video / audio. The active surface picks
   // which set of options + skill resolution applies; submission still maps
   // back to the existing image/video/audio ProjectKind branches so the
@@ -510,6 +499,7 @@ export function NewProjectPanel({
             ? videoPromptTemplate
             : null
         : null;
+    const trimmedName = name.trim();
     const metadata = buildMetadata({
       tab,
       mediaSurface,
@@ -536,25 +526,28 @@ export function NewProjectPanel({
     // Generate the click→result correlation id here so the home_click and
     // the eventual project_create_result share request_id.
     const requestId = analytics.newRequestId();
-    const trackedKind = projectKindToTracking(metadata?.kind ?? null) ?? 'prototype';
-    trackHomeClickCreateButton(
+    // v2 emits ui_click element=create on the New project modal; the
+    // project_create_result correlated through `requestId` carries the
+    // project_kind / fidelity payload, so we no longer duplicate them
+    // on the click event.
+    trackNewProjectModalElementClick(
       analytics.track,
       {
-        page: 'home',
-        area: 'create_panel',
-        element: 'create_button',
-        action: 'create_project',
-        source_tab: createTabToTracking(tab),
-        project_kind: trackedKind,
-        has_project_name: name.trim().length > 0,
+        page_name: 'home',
+        area: 'new_project_modal',
+        element: 'create',
+        tab_name: createTabToTracking(tab),
       },
       { requestId },
     );
     onCreate({
-      name: name.trim() || autoName(tab, mediaSurface, t),
+      name: trimmedName || autoName(tab, mediaSurface, t),
       skillId: skillIdForTab,
       designSystemId: primaryDs,
-      metadata,
+      metadata: {
+        ...metadata,
+        nameSource: trimmedName ? 'user' : 'generated',
+      },
       requestId,
     });
   }
@@ -571,25 +564,33 @@ export function NewProjectPanel({
     }
   }
 
-  // PR #974: the desktop bridge no longer exposes `pickFolder` (raw
-  // path crossing to the renderer). Native runtimes use `pickAndImport`,
-  // which performs the picker + the HMAC-gated import atomically in the
-  // desktop process and returns the daemon response.
   const desktopBridge = resolveDesktopBridge();
-  const pickAndImport = desktopBridge?.pickAndImport;
+  const desktopPickAndImport = desktopBridge?.pickAndImport;
+  const hasNativePickAndImport = isOpenDesignHostAvailable() || desktopPickAndImport != null;
 
+  // PR #974: the host bridge does not expose raw folder paths to the
+  // renderer. The desktop flow uses `pickAndImport`, which performs the
+  // picker + the HMAC-gated import atomically in the main process and
+  // returns host-owned project identifiers.
+  // During the Tauri migration the runtime can expose the same operation
+  // through the explicit desktop bridge before it installs the host global.
+  // The web fallback continues to use the manual baseDir input —
+  // browser builds have no `shell.openPath` surface so a renderer-named
+  // path cannot escalate.
   async function handleOpenFolder() {
-    if (pickAndImport != null) {
+    if (hasNativePickAndImport) {
       if (!onImportFolderResponse) return;
       setImportFolderError(null);
       setImportingFolder(true);
       try {
-        const result = await pickAndImport({
-          skillId: skillIdForTab,
-        });
+        const init = { skillId: skillIdForTab };
+        const result =
+          desktopPickAndImport == null
+            ? await pickAndImportHostProject(init)
+            : normalizeOpenDesignHostProjectImportResult(await desktopPickAndImport(init));
         if (!result) return;
         if (result.ok === true) {
-          await onImportFolderResponse(result.response);
+          await onImportFolderResponse(result);
           return;
         }
         // Round-4 (mrcfps #2): every non-OK shape used to fall through
@@ -599,16 +600,7 @@ export function NewProjectPanel({
         // network errors). The pickAndImport handler already pre-shapes
         // these into a `{ ok: false, reason, details? }` envelope.
         if ('canceled' in result && result.canceled === true) return;
-        const reason = 'reason' in result && typeof result.reason === 'string'
-          ? result.reason
-          : 'unknown failure';
-        const details = 'details' in result && result.details != null
-          ? formatPickAndImportErrorDetails(result.details)
-          : undefined;
-        setImportFolderError({
-          message: `Open folder failed: ${reason}`,
-          ...(details ? { details } : {}),
-        });
+        setImportFolderError(formatPickAndImportFailure(result));
       } finally {
         setImportingFolder(false);
       }
@@ -616,10 +608,18 @@ export function NewProjectPanel({
     }
     if (!onImportFolder) return;
     const trimmed = baseDir.trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      setImportFolderError({ message: 'Path cannot be empty' });
+      return;
+    }
+    setImportFolderError(null);
     setImportingFolder(true);
     try {
       await onImportFolder(trimmed);
+    } catch (err) {
+      setImportFolderError({
+        message: err instanceof Error ? err.message : 'Failed to import folder',
+      });
     } finally {
       setImportingFolder(false);
     }
@@ -645,7 +645,17 @@ export function NewProjectPanel({
               data-testid={`new-project-tab-${entry}`}
               aria-selected={tab === entry}
               className={`newproj-tab ${tab === entry ? 'active' : ''}`}
-              onClick={() => setTab(entry)}
+              onClick={() => {
+                if (entry !== tab) {
+                  trackNewProjectModalTabClick(analytics.track, {
+                    page_name: 'home',
+                    area: 'new_project_modal',
+                    element: 'tab',
+                    tab_name: createTabToTracking(entry),
+                  });
+                }
+                setTab(entry);
+              }}
             >
               {t(TAB_LABEL_KEYS[entry])}
             </button>
@@ -875,9 +885,9 @@ export function NewProjectPanel({
             </button>
           </>
         ) : null}
-        {(pickAndImport != null ? onImportFolderResponse : onImportFolder) ? (
+        {(hasNativePickAndImport ? onImportFolderResponse : onImportFolder) ? (
           <div className="newproj-open-folder">
-            {pickAndImport == null ? (
+            {!hasNativePickAndImport ? (
               <input
                 type="text"
                 className="newproj-folder-input"
@@ -891,7 +901,7 @@ export function NewProjectPanel({
             <button
               type="button"
               className="ghost newproj-import"
-              disabled={(pickAndImport == null && !baseDir.trim()) || importingFolder}
+              disabled={(!hasNativePickAndImport && !baseDir.trim()) || importingFolder}
               onClick={() => void handleOpenFolder()}
             >
               <Icon name="folder" size={13} />
@@ -1320,9 +1330,40 @@ function TemplatePicker({
   templates: ProjectTemplate[];
   value: string | null;
   onChange: (id: string | null) => void;
-  onDelete: (id: string) => Promise<boolean>;
+  onDelete?: (id: string) => Promise<boolean>;
 }) {
   const t = useT();
+  const [confirmDelete, setConfirmDelete] = useState<
+    { id: string; name: string } | null
+  >(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState(false);
+
+  function closeConfirm() {
+    setConfirmDelete(null);
+    setDeleting(false);
+    setDeleteError(false);
+  }
+
+  async function runDelete() {
+    if (!confirmDelete || !onDelete) return;
+    setDeleting(true);
+    setDeleteError(false);
+    let ok = false;
+    try {
+      ok = await onDelete(confirmDelete.id);
+    } catch {
+      ok = false;
+    }
+    if (ok) {
+      if (value === confirmDelete.id) onChange(null);
+      closeConfirm();
+    } else {
+      setDeleting(false);
+      setDeleteError(true);
+    }
+  }
+
   return (
     <div className="newproj-section">
       <label className="newproj-label">{t('newproj.templateLabel')}</label>
@@ -1348,10 +1389,7 @@ function TemplatePicker({
                 key={tpl.id}
                 active={value === tpl.id}
                 onClick={() => onChange(tpl.id)}
-                onDelete={async () => {
-                  const ok = await onDelete(tpl.id);
-                  if (ok && value === tpl.id) onChange(null);
-                }}
+                onDelete={onDelete ? () => setConfirmDelete({ id: tpl.id, name: tpl.name }) : () => {}}
                 name={tpl.name}
                 description={tpl.description ?? fallbackDesc}
               />
@@ -1359,6 +1397,43 @@ function TemplatePicker({
           })}
         </div>
       )}
+      {confirmDelete ? (
+        <div
+          className="modal-backdrop"
+          onClick={deleting ? undefined : closeConfirm}
+        >
+          <div
+            className="modal modal-confirm"
+            onClick={(e) => e.stopPropagation()}
+            role="alertdialog"
+            aria-modal="true"
+          >
+            <h2>{t('newproj.deleteTemplateTitle')}</h2>
+            <p className="modal-confirm-message">
+              {t('newproj.deleteTemplateConfirm', { name: confirmDelete.name })}
+            </p>
+            {deleteError ? (
+              <p className="modal-confirm-error" role="alert">
+                {t('newproj.deleteTemplateError')}
+              </p>
+            ) : null}
+            <div className="row">
+              <button type="button" onClick={closeConfirm} disabled={deleting}>
+                {t('common.cancel')}
+              </button>
+              <button
+                type="button"
+                className="primary danger"
+                autoFocus
+                disabled={deleting}
+                onClick={runDelete}
+              >
+                {t('newproj.deleteTemplateConfirmCta')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

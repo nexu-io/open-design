@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { app } from "electron";
+import { BrowserWindow, Menu, app, shell, type MenuItemConstructorOptions } from "electron";
 
 import {
   APP_KEYS,
@@ -14,22 +14,32 @@ import {
   type DesktopEvalInput,
   type DesktopExportPdfInput,
   type DesktopScreenshotInput,
+  type DesktopUpdateInput,
   type RegisterDesktopAuthResult,
   type SidecarStamp,
   type WebStatusSnapshot,
 } from "@open-design/sidecar-proto";
+import { dirname, join } from "node:path";
+
 import {
   bootstrapSidecarRuntime,
   createJsonIpcServer,
   requestJsonIpc,
   resolveAppIpcPath,
+  resolveLogFilePath,
+  resolveNamespaceRoot,
   type JsonIpcServerHandle,
   type SidecarRuntimeContext,
 } from "@open-design/sidecar";
 import { readProcessStamp } from "@open-design/platform";
 
-import { createDesktopRuntime } from "./runtime.js";
+import { createDesktopRuntime, type DesktopRuntime } from "./runtime.js";
 import { attachDesktopProcessErrorFilter } from "./uncaught-exception.js";
+import { createDesktopUpdater, createDesktopUpdaterScheduler, type DesktopUpdaterScheduler } from "./updater.js";
+import {
+  exportDiagnosticsToFile,
+  registerDesktopDiagnosticsIpc,
+} from "./diagnostics.js";
 
 // Re-export pure URL-policy helpers so the packaged workspace's
 // vitest can pin their behaviour without spinning up a full Electron
@@ -72,6 +82,11 @@ export type DesktopMainOptions = {
    * Node fetch can hit.
    */
   discoverDaemonUrl?: () => Promise<string | null>;
+  preloadPath?: string;
+  update?: {
+    currentVersion?: string | null;
+    downloadRoot?: string | null;
+  };
 };
 
 function isDirectEntry(): boolean {
@@ -116,6 +131,99 @@ function createWebDiscovery(runtime: SidecarRuntimeContext<SidecarStamp>): () =>
     const web = await requestJsonIpc<WebStatusSnapshot>(webIpc, { type: SIDECAR_MESSAGES.STATUS }, { timeoutMs: 600 }).catch(() => null);
     return web?.url ?? null;
   };
+}
+
+function installDesktopMenu(
+  runtime: SidecarRuntimeContext<SidecarStamp>,
+): () => void {
+  const exportDiagnostics = () => {
+    const focused = BrowserWindow.getFocusedWindow();
+    void exportDiagnosticsToFile(runtime, focused).catch((error: unknown) => {
+      console.error("desktop diagnostics export from menu failed", error);
+    });
+  };
+  const rebuild = () => {
+    const template: MenuItemConstructorOptions[] = [
+      ...(process.platform === "darwin"
+        ? [
+            {
+              label: app.name,
+              submenu: [
+                { role: "about" as const },
+                { type: "separator" as const },
+                { role: "services" as const },
+                { type: "separator" as const },
+                { role: "hide" as const },
+                { role: "hideOthers" as const },
+                { role: "unhide" as const },
+                { type: "separator" as const },
+                { role: "quit" as const },
+              ],
+            },
+          ]
+        : [
+            {
+              label: "File",
+              submenu: [
+                { role: "quit" as const },
+              ],
+            },
+          ]),
+      {
+        label: "Edit",
+        submenu: [
+          { role: "undo" },
+          { role: "redo" },
+          { type: "separator" },
+          { role: "cut" },
+          { role: "copy" },
+          { role: "paste" },
+          { role: "selectAll" },
+        ],
+      },
+      {
+        label: "View",
+        submenu: [
+          { role: "reload" },
+          { role: "forceReload" },
+          { role: "toggleDevTools" },
+          { type: "separator" },
+          { role: "resetZoom" },
+          { role: "zoomIn" },
+          { role: "zoomOut" },
+          { type: "separator" },
+          { role: "togglefullscreen" },
+        ],
+      },
+      {
+        label: "Window",
+        submenu: [
+          { role: "minimize" },
+          { role: "zoom" },
+          ...(process.platform === "darwin"
+            ? [{ type: "separator" as const }, { role: "front" as const }]
+            : [{ role: "close" as const }]),
+        ],
+      },
+      {
+        label: "Help",
+        submenu: [
+          {
+            label: "Open Design",
+            click() {
+              void shell.openExternal("https://github.com/nexu-io/open-design");
+            },
+          },
+          { type: "separator" },
+          { label: "Export Diagnostics…", click: exportDiagnostics },
+        ],
+      },
+    ];
+    Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+  };
+
+  rebuild();
+  return () => undefined;
 }
 
 const REGISTER_DESKTOP_AUTH_RETRY_DELAYS_MS = [120, 240, 480, 960, 1500];
@@ -209,17 +317,31 @@ export async function runDesktopMain(
     );
   }
 
-  const desktop = await createDesktopRuntime({
-    desktopAuthSecret,
-    discoverUrl: options.discoverWebUrl ?? createWebDiscovery(runtime),
-    discoverDaemonUrl: options.discoverDaemonUrl,
-    // Round-5 (lefarcen P1, mrcfps): runtime hands this back to itself
-    // on `503 DESKTOP_AUTH_PENDING` to re-handshake with the daemon
-    // (after a daemon restart, or after a missed startup window). The
-    // runtime then mints a FRESH token (new nonce + new exp — replay
-    // protection still works) and POSTs once more.
-    registerDesktopAuthWithDaemon: () => registerDesktopAuthWithDaemon(runtime, desktopAuthSecret),
+  const updater = createDesktopUpdater(
+    {
+      currentVersion: options.update?.currentVersion,
+      downloadRoot: options.update?.downloadRoot,
+      runtimeBase: runtime.base,
+      source: runtime.source,
+    },
+    { openPath: (path) => shell.openPath(path) },
+  );
+  const namespaceRoot = resolveNamespaceRoot({
+    base: runtime.base,
+    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    namespace: runtime.namespace,
   });
+  const desktopLogPath = resolveLogFilePath({
+    app: APP_KEYS.DESKTOP,
+    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    runtimeRoot: namespaceRoot,
+  });
+  const rendererLogPath = join(dirname(desktopLogPath), "renderer.log");
+
+  let desktop: DesktopRuntime | null = null;
+  let disposeMenu: () => void = () => undefined;
+  let updateScheduler: DesktopUpdaterScheduler | null = null;
+  let removeDiagnosticsIpc: () => void = () => undefined;
   let ipcServer: JsonIpcServerHandle | null = null;
   let shuttingDown = false;
 
@@ -229,14 +351,42 @@ export async function runDesktopMain(
     await options.beforeShutdown?.().catch((error: unknown) => {
       console.error("desktop beforeShutdown failed", error);
     });
+    updateScheduler?.stop("shutdown");
+    disposeMenu();
+    removeDiagnosticsIpc();
     await ipcServer?.close().catch(() => undefined);
-    await desktop.close().catch(() => undefined);
+    await desktop?.close().catch(() => undefined);
     app.quit();
   }
 
   function shutdownAndExit(): void {
     void shutdown().finally(() => process.exit(0));
   }
+
+  desktop = await createDesktopRuntime({
+    desktopAuthSecret,
+    discoverUrl: options.discoverWebUrl ?? createWebDiscovery(runtime),
+    discoverDaemonUrl: options.discoverDaemonUrl,
+    preloadPath: options.preloadPath,
+    // Round-5 (lefarcen P1, mrcfps): runtime hands this back to itself
+    // on `503 DESKTOP_AUTH_PENDING` to re-handshake with the daemon
+    // (after a daemon restart, or after a missed startup window). The
+    // runtime then mints a FRESH token (new nonce + new exp — replay
+    // protection still works) and POSTs once more.
+    registerDesktopAuthWithDaemon: () => registerDesktopAuthWithDaemon(runtime, desktopAuthSecret),
+    rendererLogPath,
+    requestQuit: shutdownAndExit,
+    updater,
+  });
+  disposeMenu = installDesktopMenu(runtime);
+  removeDiagnosticsIpc = registerDesktopDiagnosticsIpc(runtime);
+  updateScheduler = createDesktopUpdaterScheduler(updater, {
+    backoffInitialMs: updater.config.checkBackoffInitialMs,
+    backoffMaxMs: updater.config.checkBackoffMaxMs,
+    initialDelayMs: updater.config.checkInitialDelayMs,
+    intervalMs: updater.config.checkIntervalMs,
+  });
+  if (updater.shouldAutoCheck()) updateScheduler.start();
 
   attachParentMonitor(shutdown);
 
@@ -250,19 +400,25 @@ export async function runDesktopMain(
     socketPath: runtime.ipc,
     handler: async (message: unknown) => {
       const request = normalizeDesktopSidecarMessage(message);
+      const activeDesktop = desktop;
+      if (activeDesktop == null) {
+        throw new Error("desktop runtime is not initialized");
+      }
       switch (request.type) {
         case SIDECAR_MESSAGES.STATUS:
-          return desktop.status();
+          return { ...activeDesktop.status(), update: await updater.status() };
         case SIDECAR_MESSAGES.EVAL:
-          return await desktop.eval(request.input as DesktopEvalInput);
+          return await activeDesktop.eval(request.input as DesktopEvalInput);
         case SIDECAR_MESSAGES.SCREENSHOT:
-          return await desktop.screenshot(request.input as DesktopScreenshotInput);
+          return await activeDesktop.screenshot(request.input as DesktopScreenshotInput);
         case SIDECAR_MESSAGES.CONSOLE:
-          return desktop.console();
+          return activeDesktop.console();
         case SIDECAR_MESSAGES.CLICK:
-          return await desktop.click(request.input as DesktopClickInput);
+          return await activeDesktop.click(request.input as DesktopClickInput);
         case SIDECAR_MESSAGES.EXPORT_PDF:
-          return await desktop.exportPdf(request.input as DesktopExportPdfInput);
+          return await activeDesktop.exportPdf(request.input as DesktopExportPdfInput);
+        case SIDECAR_MESSAGES.UPDATE:
+          return await updater.handle((request.input as DesktopUpdateInput).action);
         case SIDECAR_MESSAGES.SHUTDOWN:
           setImmediate(() => {
             shutdownAndExit();
@@ -283,7 +439,7 @@ export async function runDesktopMain(
   });
 
   app.on("activate", () => {
-    desktop.show();
+    desktop?.show();
   });
 
   for (const signal of ["SIGINT", "SIGTERM"] as const) {

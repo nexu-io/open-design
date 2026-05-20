@@ -5,6 +5,8 @@ import type { UiScenario } from '@/playwright/resources';
 
 const STORAGE_KEY = 'open-design:config';
 
+test.describe.configure({ timeout: 30_000 });
+
 test.beforeEach(async ({ page }) => {
   await page.addInitScript((key) => {
     window.localStorage.setItem(
@@ -19,9 +21,31 @@ test.beforeEach(async ({ page }) => {
         designSystemId: null,
         onboardingCompleted: true,
         agentModels: {},
+        privacyDecisionAt: 1,
+        telemetry: { metrics: false, content: false, artifactManifest: false },
       }),
     );
   }, STORAGE_KEY);
+
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      json: {
+        config: {
+          onboardingCompleted: true,
+          agentId: 'mock',
+          skillId: null,
+          designSystemId: null,
+          agentModels: {},
+          privacyDecisionAt: 1,
+          telemetry: { metrics: false, content: false, artifactManifest: false },
+        },
+      },
+    });
+  });
 });
 
 const designFileFlows = new Set([
@@ -51,7 +75,7 @@ for (const entry of automatedUiScenarios().filter((scenario) => designFileFlows.
       });
     });
 
-    await page.goto('/');
+    await gotoEntryHome(page);
     await createProject(page, entry);
     await expectWorkspaceReady(page);
 
@@ -68,11 +92,11 @@ for (const entry of automatedUiScenarios().filter((scenario) => designFileFlows.
       return;
     }
     if (entry.flow === 'uploaded-image-renders-in-preview') {
-      await runUploadedImageRendersInPreviewFlow(page);
+      await runUploadedImageRendersInPreviewFlow(page, entry);
       return;
     }
     if (entry.flow === 'python-source-preview') {
-      await runPythonSourcePreviewFlow(page);
+      await runPythonSourcePreviewFlow(page, entry);
     }
   });
 }
@@ -83,14 +107,33 @@ async function createProject(page: Page, entry: UiScenario) {
 }
 
 async function createProjectNameOnly(page: Page, entry: UiScenario) {
-  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+  await openNewProjectModal(page);
   if (entry.create.tab) {
     await page.getByTestId(`new-project-tab-${entry.create.tab}`).click();
   }
   await page.getByTestId('new-project-name').fill(entry.create.projectName);
 }
 
+async function gotoEntryHome(page: Page) {
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
+  if (await privacyDialog.isVisible().catch(() => false)) {
+    await privacyDialog.getByRole('button', { name: /not now/i }).click();
+    await expect(privacyDialog).toHaveCount(0);
+  }
+  await expect(page.getByTestId('home-hero')).toBeVisible();
+  await expect(page.getByTestId('home-hero-input')).toBeVisible();
+}
+
+async function openNewProjectModal(page: Page) {
+  await page.getByTestId('entry-nav-new-project').click();
+  await expect(page.getByTestId('new-project-modal')).toBeVisible();
+  await expect(page.getByTestId('new-project-panel')).toBeVisible();
+}
+
 async function expectWorkspaceReady(page: Page) {
+  await waitForLoadingToClear(page);
   await expect(page).toHaveURL(/\/projects\//);
   await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
@@ -125,41 +168,135 @@ async function seedProjectFile(
   encoding?: 'base64',
   artifactManifest?: Record<string, unknown>,
 ) {
-  const response = await page.request.post(`/api/projects/${projectId}/files`, {
-    data: {
-      name,
-      content,
-      ...(encoding ? { encoding } : {}),
-      ...(artifactManifest ? { artifactManifest } : {}),
+  const response = await page.request.post(
+    `/api/projects/${projectId}/files`,
+    {
+      data: {
+        name,
+        content,
+        ...(encoding ? { encoding } : {}),
+        ...(artifactManifest ? { artifactManifest } : {}),
+      },
+      timeout: 15_000,
     },
-  });
+  );
   expect(response.ok()).toBeTruthy();
 }
 
 async function seedHtmlArtifact(page: Page, projectId: string, fileName: string, content: string) {
-  const resp = await page.request.post(`/api/projects/${projectId}/files`, {
-    data: {
-      name: fileName,
-      content,
-      artifactManifest: {
-        version: 1,
-        kind: 'html',
-        title: fileName,
-        entry: fileName,
-        renderer: 'html',
-        exports: ['html'],
+  const resp = await page.request.post(
+    `/api/projects/${projectId}/files`,
+    {
+      data: {
+        name: fileName,
+        content,
+        artifactManifest: {
+          version: 1,
+          kind: 'html',
+          title: fileName,
+          entry: fileName,
+          renderer: 'html',
+          exports: ['html'],
+        },
       },
+      timeout: 15_000,
     },
-  });
+  );
   expect(resp.ok()).toBeTruthy();
 }
 
+async function listProjectFilesFromApi(
+  page: Page,
+  projectId: string,
+): Promise<Array<{ name: string; kind: string }>> {
+  const response = await page.request.get(`/api/projects/${projectId}/files`);
+  expect(response.ok()).toBeTruthy();
+  const { files } = (await response.json()) as { files: Array<{ name: string; kind: string }> };
+  return files;
+}
+
+async function expectProjectFileToContain(
+  page: Page,
+  projectId: string,
+  fileName: string,
+  expected: string,
+) {
+  await expect
+    .poll(async () => {
+      const response = await page.request.get(`/api/projects/${projectId}/files/${fileName}`);
+      if (!response.ok()) return '';
+      return response.text();
+    }, { timeout: 15_000 })
+    .toContain(expected);
+}
+
+async function expectScenarioFiles(
+  page: Page,
+  entry: UiScenario,
+  projectId: string,
+) {
+  if (!entry.expectedFiles?.length) return;
+  const files = await listProjectFilesFromApi(page, projectId);
+  for (const expectedFile of entry.expectedFiles) {
+    const actual = files.find((file) => file.name === expectedFile.name);
+    expect(actual, `missing expected file ${expectedFile.name}`).toBeDefined();
+    if (expectedFile.kind) {
+      expect(actual?.kind).toBe(expectedFile.kind);
+    }
+    if (expectedFile.previewText) {
+      await expectProjectFileToContain(page, projectId, expectedFile.name, expectedFile.previewText);
+    }
+  }
+}
+
+async function expectScenarioPreviewText(page: Page, entry: UiScenario) {
+  if (!entry.expectedPreviewText) return;
+  const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
+  await expect(frame.getByText(entry.expectedPreviewText, { exact: false })).toBeVisible();
+}
+
+async function expectScenarioProjectState(
+  page: Page,
+  entry: UiScenario,
+  projectId: string,
+) {
+  await expectScenarioFiles(page, entry, projectId);
+  await expectScenarioPreviewText(page, entry);
+}
+
+async function expectProjectFilesToIncludeSuffixes(
+  page: Page,
+  projectId: string,
+  suffixes: string[],
+) {
+  await expect
+    .poll(async () => {
+      const names = (await listProjectFilesFromApi(page, projectId)).map((file) => file.name);
+      return suffixes.every((suffix) => names.some((name) => name.endsWith(suffix)));
+    })
+    .toBe(true);
+}
+
 async function openDesignFile(page: Page, fileName: string) {
+  const preview = page.getByTestId('artifact-preview-frame');
+  if (await preview.isVisible().catch(() => false)) return;
+
+  const fileTab = page.getByRole('tab', { name: new RegExp(fileName.replace('.', '\\.'), 'i') });
+  if (await fileTab.isVisible().catch(() => false)) {
+    await fileTab.click();
+    return;
+  }
+
   await page.getByRole('button', { name: new RegExp(fileName.replace('.', '\\.')) }).click();
   await page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' }).click();
 }
 
-async function runUploadedImageRendersInPreviewFlow(page: Page) {
+async function waitForLoadingToClear(page: Page) {
+  const loading = page.getByText('Loading Open Design…');
+  await loading.waitFor({ state: 'detached', timeout: 10_000 }).catch(() => {});
+}
+
+async function runUploadedImageRendersInPreviewFlow(page: Page, entry: UiScenario) {
   const { projectId } = await getCurrentProjectContext(page);
   const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5W6McAAAAASUVORK5CYII=';
   await seedProjectFile(page, projectId, 'brand.png', pngBase64, 'base64');
@@ -177,9 +314,10 @@ async function runUploadedImageRendersInPreviewFlow(page: Page) {
   await expect
     .poll(async () => image.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0))
     .toBe(true);
+  await expectScenarioProjectState(page, entry, projectId);
 }
 
-async function runPythonSourcePreviewFlow(page: Page) {
+async function runPythonSourcePreviewFlow(page: Page, entry: UiScenario) {
   const { projectId } = await getCurrentProjectContext(page);
   await seedProjectFile(page, projectId, 'app.py', 'def greet():\n    return "hello from python"\n');
   await page.reload();
@@ -187,9 +325,11 @@ async function runPythonSourcePreviewFlow(page: Page) {
 
   await expect(page.locator('.code-viewer')).toContainText('def greet');
   await expect(page.locator('.code-viewer')).toContainText('hello from python');
+  await expectScenarioFiles(page, entry, projectId);
 }
 
 async function runDesignFilesUploadFlow(page: Page) {
+  const { projectId } = await getCurrentProjectContext(page);
   await page.getByTestId('design-files-upload-input').setInputFiles({
     name: 'moodboard.png',
     mimeType: 'image/png',
@@ -213,9 +353,11 @@ async function runDesignFilesUploadFlow(page: Page) {
 
   await nameBtn.dblclick();
   await expect(page.getByRole('tab', { name: /moodboard\.png/i })).toBeVisible();
+  await expectProjectFilesToIncludeSuffixes(page, projectId, ['moodboard.png']);
 }
 
 async function runDesignFilesDeleteFlow(page: Page) {
+  const { projectId } = await getCurrentProjectContext(page);
   page.on('dialog', async (dialog) => {
     await dialog.accept();
   });
@@ -254,9 +396,20 @@ async function runDesignFilesDeleteFlow(page: Page) {
   await expect(page.getByRole('tab', { name: /trash-me\.png/i })).toHaveCount(0);
   await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('tab', { name: /keep-me\.png/i })).toBeVisible();
+  await expect
+    .poll(async () => {
+      const names = (await listProjectFilesFromApi(page, projectId)).map((file) => file.name);
+      return (
+        names.length === 1 &&
+        names.some((name) => name.endsWith('keep-me.png')) &&
+        names.every((name) => !name.endsWith('trash-me.png'))
+      );
+    })
+    .toBe(true);
 }
 
 async function runDesignFilesTabPersistenceFlow(page: Page) {
+  const { projectId } = await getCurrentProjectContext(page);
   const pngBytes = Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5W6McAAAAASUVORK5CYII=',
     'base64',
@@ -286,11 +439,24 @@ async function runDesignFilesTabPersistenceFlow(page: Page) {
   await page.reload();
 
   const restoredFirstTab = page.getByRole('tab', { name: /first-tab\.png/i });
-  const restoredSecondTab = page.getByRole('tab', { name: /second-tab\.png/i });
   await expect(restoredFirstTab).toBeVisible();
-  await expect(restoredSecondTab).toBeVisible();
   await expect(restoredFirstTab).toHaveAttribute('aria-selected', 'true');
-  await expect(restoredSecondTab).toHaveAttribute('aria-selected', 'false');
+
+  // The refreshed workspace restores the active file tab, while other project files
+  // remain available from the Design Files list until the user reopens them.
+  await page.getByTestId('design-files-tab').click();
+  const secondFileRow = page.locator('[data-testid^="design-file-row-"]', {
+    hasText: 'second-tab.png',
+  });
+  await expect(secondFileRow).toBeVisible();
+  await secondFileRow.getByRole('button').first().click();
+  await page.getByTestId('design-file-preview').getByRole('button', { name: 'Open' }).click();
+
+  const restoredSecondTab = page.getByRole('tab', { name: /second-tab\.png/i });
+  await expect(restoredSecondTab).toBeVisible();
+  await expect(restoredSecondTab).toHaveAttribute('aria-selected', 'true');
+  await expect(restoredFirstTab).toHaveAttribute('aria-selected', 'false');
+  await expectProjectFilesToIncludeSuffixes(page, projectId, ['first-tab.png', 'second-tab.png']);
 }
 
 function homeDesignCard(page: Page, name: string): Locator {

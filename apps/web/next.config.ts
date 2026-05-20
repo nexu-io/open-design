@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import { networkInterfaces } from 'node:os';
 import { dirname, isAbsolute, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -42,8 +43,66 @@ function resolveDevTsconfigPath() {
 
 const DEV_TSCONFIG_PATH = resolveDevTsconfigPath();
 
+function parseAllowedDevHost(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  try {
+    return new URL(trimmed).hostname.toLowerCase();
+  } catch {
+    try {
+      return new URL(`http://${trimmed}`).hostname.toLowerCase();
+    } catch {
+      return null;
+    }
+  }
+}
+
+function parseIpv4(value: string): [number, number, number, number] | null {
+  const parts = value.split('.');
+  if (parts.length !== 4) return null;
+  if (!parts.every((part) => /^\d+$/.test(part))) return null;
+  const octets = parts.map((part) => Number(part));
+  if (!octets.every((octet) => Number.isInteger(octet) && octet >= 0 && octet <= 255)) return null;
+  return octets as [number, number, number, number];
+}
+
+function isPrivateLanIpv4(value: string): boolean {
+  const octets = parseIpv4(value);
+  if (octets == null) return false;
+  const [a, b] = octets;
+  return (
+    a === 10 ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 169 && b === 254) ||
+    (a === 100 && b >= 64 && b <= 127)
+  );
+}
+
+function localPrivateLanHosts(): string[] {
+  return Object.values(networkInterfaces())
+    .flatMap((entries) => entries ?? [])
+    .filter((entry) => entry.family === 'IPv4' && !entry.internal && isPrivateLanIpv4(entry.address))
+    .map((entry) => entry.address);
+}
+
+function configuredAllowedDevHosts(): string[] {
+  const configured = (process.env.OD_ALLOWED_DEV_ORIGINS ?? '')
+    .split(',')
+    .map(parseAllowedDevHost)
+    .filter((host): host is string => host != null);
+
+  const bindHost = parseAllowedDevHost(process.env.OD_HOST ?? '');
+  return Array.from(new Set([
+    '127.0.0.1',
+    ...localPrivateLanHosts(),
+    ...(bindHost != null && bindHost !== '0.0.0.0' && bindHost !== '::' ? [bindHost] : []),
+    ...configured,
+  ]));
+}
+
 const nextConfig: NextConfig = {
-  allowedDevOrigins: ['127.0.0.1'],
+  allowedDevOrigins: configuredAllowedDevHosts(),
   outputFileTracingRoot: WORKSPACE_ROOT,
   reactStrictMode: true,
   turbopack: {

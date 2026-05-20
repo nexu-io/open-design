@@ -17,6 +17,10 @@ import { buildReactComponentSrcdoc } from './react-component';
 import { buildZip } from './zip';
 import { resolveDesktopBridge } from '../native/desktop-bridge';
 import { randomUUID } from '../utils/uuid';
+import {
+  isOpenDesignHostAvailable,
+  printHostPdf,
+} from '@open-design/host';
 
 const DESIGN_HANDOFF_FILENAME = 'DESIGN-HANDOFF.md';
 const DESIGN_MANIFEST_FILENAME = 'DESIGN-MANIFEST.json';
@@ -607,18 +611,31 @@ export async function exportAsPdf(
   if (opts?.deck) doc = injectDeckPrintStylesheet(doc);
   doc = injectPrintReadyHandshake(doc, nonce);
 
-  // Desktop native print bridge — Electron currently uses
-  // webContents.print() instead of window.open + window.print(). Tauri
-  // intentionally omits this method during the parallel introduction, so
-  // it falls through to the browser print flow below.
+  // Desktop native PDF bridge — the main process runs a direct
+  // Save-as-PDF flow: a native Save dialog, then Electron's
+  // webContents.printToPDF() straight to the chosen file (issue #1774;
+  // see apps/desktop/src/main/pdf-export.ts). The sandboxed wrapper
+  // omits allow-modals here because the native flow never calls
+  // window.print(); granting it would let untrusted artifact code call
+  // alert()/confirm() and stall the hidden Electron window indefinitely.
+  // During the Tauri migration, runtimes that have no PDF bridge fall
+  // through to the browser print path below.
   const desktopPrintPdf = resolveDesktopBridge()?.printPdf;
-  if (desktopPrintPdf != null) {
+  if (isOpenDesignHostAvailable() || desktopPrintPdf != null) {
     if (sandboxedPreview) {
       doc = buildSandboxedPreviewDocument(doc, title);
     }
     doc = injectParentPrintReadyCache(doc, nonce);
     try {
-      await desktopPrintPdf(doc, nonce);
+      if (isOpenDesignHostAvailable()) {
+        const result = await printHostPdf(doc, nonce, opts?.deck ? { deck: true } : undefined);
+        if (result.ok) return;
+        if (typeof alert !== 'undefined') {
+          alert('Print failed. Please try Export PDF again or use the browser version.');
+        }
+      } else {
+        await desktopPrintPdf!(doc, nonce);
+      }
     } catch {
       if (typeof alert !== 'undefined') {
         alert('Print failed. Please try Export PDF again or use the browser version.');

@@ -1,0 +1,2596 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ivory Ledger · User Research Synthesis</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!--
+      Ivory Ledger font stack:
+        Jost          — geometric sans, the backbone (weights 200–600)
+        JetBrains Mono— chrome labels, sidebar metadata, mono elements
+        Lora          — serif for insight card titles and quotes (italic)
+        Noto Serif SC — CJK serif fallback
+        Noto Sans SC  — CJK sans fallback
+    -->
+    <link
+      href="https://fonts.googleapis.com/css2?family=Jost:wght@200;300;400;500;600&family=JetBrains+Mono:wght@300;400;500&family=Lora:ital,wght@0,400;0,500;0,600;1,400;1,500;1,600&family=Noto+Serif+SC:wght@300;400;500&family=Noto+Sans+SC:wght@200;300;400;500&display=swap"
+      rel="stylesheet"
+    />
+
+    <style>
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  ZONE A · TOKENS  (Ivory Ledger style)                                      ║
+   ║                                                                      ║
+   ║  Ivory Ledger: black ink on cream paper only.                  ║
+   ║  Replace ONLY this block to retheme. Every color, font, and size     ║
+   ║  in this file reads from these custom properties.                    ║
+   ║  Never write raw hex values or px sizes outside this block.          ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+      :root {
+        /* ── Palette ──────────────────────────────────────────────────────── */
+        --c-bg: #fafadf; /* cream background for every slide       */
+        --c-bg-alt: #f2f2d2; /* cream inset surface                   */
+        --c-bg-light: #fafadf; /* title-slide cream                     */
+        --c-bg-light-alt: #f0f0d4; /* slightly deeper cream for insets      */
+        --c-bg-cream: #f5f0e4; /* warm cream variant                    */
+
+        --c-fg: #1a1a16; /* black ink text                         */
+        --c-fg-2: #5e5e54; /* secondary graphite text                */
+        --c-fg-3: #8a8a80; /* tertiary graphite text                 */
+        --c-fg-light: #1a1a16; /* black ink on cream                    */
+        --c-fg-light-2: #5e5e54; /* secondary graphite on cream           */
+        --c-fg-light-3: #8a8a80; /* tertiary graphite on cream            */
+
+        --c-accent: #1a1a16; /* accent collapsed to black ink         */
+        --c-border: #1a1a16; /* black dividers                        */
+        --c-border-light: #1a1a16; /* black dividers on cream               */
+
+        /* ── Insight cards: no accent colors, just cream paper surfaces ─── */
+        --c-card-a: #fafadf;
+        --c-card-b: #f5f0e4;
+        --c-card-c: #fafadf;
+
+        /* ── Typography ──────────────────────────────────────────────────── */
+        --f-display: "Jost", "Noto Sans SC", system-ui, sans-serif;
+        --f-heading: "Jost", "Noto Sans SC", system-ui, sans-serif;
+        --f-body: "Jost", "Noto Sans SC", system-ui, sans-serif;
+        --f-serif: "Lora", "Noto Serif SC", Georgia, serif;
+        --f-mono: "JetBrains Mono", monospace;
+
+        /* ── Type Scale ───────────────────────────────────────────────────── */
+        --sz-display: 8.5vw; /* hero/cover — very large, very light         */
+        --sz-h1: 5vw; /* chapter / statement headline                */
+        --sz-h2: 3.2vw; /* slide headline                              */
+        --sz-h3: 2vw; /* sub-headline                                */
+        --sz-lead: 1.5vw; /* generous lead text                          */
+        --sz-body: 1.1vw; /* body text                                   */
+        --sz-caption: 0.85vw; /* captions, footnotes                         */
+        --sz-label: 0.72vw; /* chrome labels, sidebar labels               */
+
+        /* ── Spacing ─────────────────────────────────────────────────────── */
+        --pad-x: 8vw; /* generous horizontal padding — space is the design */
+        --pad-y: 6vh;
+        --gap-lg: 5vh;
+        --gap-md: 3vh;
+        --gap-sm: 1.5vh;
+
+        /* ── Motion ──────────────────────────────────────────────────────── */
+        --ease-slide: cubic-bezier(0.77, 0, 0.175, 1);
+        --dur-slide: 0.9s;
+        --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+        --dur-enter: 0.7s;
+      }
+
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  ZONE B · ENGINE — DO NOT MODIFY                                     ║
+   ║                                                                      ║
+   ║  Layout engine, slide transitions, animation system, navigation.     ║
+   ║  Touching this breaks the mechanics.                                 ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: var(--c-bg);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* Deck container — all slides sit side by side in a single row */
+      #deck {
+        display: flex;
+        height: 100vh;
+        /* Width = N * 100vw, calculated and set by JS on init */
+        transition: transform var(--dur-slide) var(--ease-slide);
+        will-change: transform;
+      }
+
+      /* Slide base — each slide is exactly one full viewport */
+      .slide {
+        flex: 0 0 100vw;
+        width: 100vw;
+        height: 100vh;
+        position: relative;
+        /* Left extra gutter makes room for the sidebar element */
+        padding: var(--pad-y) var(--pad-x) var(--pad-y)
+          calc(var(--pad-x) + 3.5vw);
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        overflow: hidden;
+      }
+      /* Prevent grid children from overflowing their row */
+      .slide-body {
+        min-height: 0;
+      }
+
+      /* Slide themes */
+      .slide.dark {
+        background: var(--c-bg);
+        color: var(--c-fg);
+      }
+      .slide.light {
+        background: var(--c-bg-light);
+        color: var(--c-fg-light);
+      }
+      /* Cream variant — insights + timeline slides */
+      .slide.cream {
+        background: var(--c-bg-cream);
+        color: var(--c-fg-light);
+      }
+
+      /* ── Animation system ──────────────────────────────────────────────── */
+      /*
+       * All [data-anim] elements start invisible (opacity:0).
+       * They animate when their parent slide gains .is-active.
+       * JS forcefully resets them before adding .is-active so re-visiting
+       * a slide replays the entrance animation from the beginning.
+       */
+      [data-anim] {
+        opacity: 0;
+      }
+      .slide.is-active [data-anim] {
+        animation-duration: var(--dur-enter);
+        animation-timing-function: var(--ease-enter);
+        animation-fill-mode: forwards;
+      }
+      .slide.is-active [data-anim="fade-up"] {
+        animation-name: kFadeUp;
+      }
+      .slide.is-active [data-anim="fade-in"] {
+        animation-name: kFadeIn;
+      }
+      .slide.is-active [data-anim="reveal-right"] {
+        animation-name: kRevealRight;
+      }
+      .slide.is-active [data-anim="reveal-left"] {
+        animation-name: kRevealLeft;
+      }
+      .slide.is-active [data-anim="scale-in"] {
+        animation-name: kScaleIn;
+      }
+
+      /* Stagger delays — add data-delay="N" to offset elements */
+      [data-delay="0"] {
+        animation-delay: 0s;
+      }
+      [data-delay="1"] {
+        animation-delay: 0.08s;
+      }
+      [data-delay="2"] {
+        animation-delay: 0.18s;
+      }
+      [data-delay="3"] {
+        animation-delay: 0.3s;
+      }
+      [data-delay="4"] {
+        animation-delay: 0.44s;
+      }
+      [data-delay="5"] {
+        animation-delay: 0.6s;
+      }
+      [data-delay="6"] {
+        animation-delay: 0.78s;
+      }
+      [data-delay="7"] {
+        animation-delay: 0.96s;
+      }
+
+      @keyframes kFadeUp {
+        from {
+          opacity: 0;
+          transform: translateY(28px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      @keyframes kFadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+      @keyframes kRevealRight {
+        from {
+          clip-path: inset(0 100% 0 0);
+          opacity: 1;
+        }
+        to {
+          clip-path: inset(0 0% 0 0);
+          opacity: 1;
+        }
+      }
+      @keyframes kRevealLeft {
+        from {
+          clip-path: inset(0 0 0 100%);
+          opacity: 1;
+        }
+        to {
+          clip-path: inset(0 0 0 0%);
+          opacity: 1;
+        }
+      }
+      @keyframes kScaleIn {
+        from {
+          opacity: 0;
+          transform: scale(0.94);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      /* ── Navigation dots ──────────────────────────────────────────────── */
+      #nav-dots {
+        position: fixed;
+        bottom: 24px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        gap: 7px;
+        z-index: 100;
+      }
+      .nav-dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        border: none;
+        /* Default: semi-transparent near-black, readable on cream bg */
+        background: rgba(26, 26, 22, 0.3);
+        cursor: pointer;
+        transition:
+          background 0.3s,
+          transform 0.3s;
+        padding: 0;
+      }
+      .nav-dot.is-active {
+        background: rgba(26, 26, 22, 0.8);
+        transform: scale(1.4);
+      }
+
+      /* Slide counter — bottom-right, barely-there */
+      #slide-counter {
+        position: fixed;
+        bottom: 20px;
+        right: 28px;
+        font-family: var(--f-mono);
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        color: rgba(26, 26, 22, 0.28);
+        z-index: 100;
+        user-select: none;
+      }
+
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  ZONE C · TYPOGRAPHY  (Ivory Ledger: ultra-light weights, generous spacing) ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+
+      /* Display: hero headline, weight 200 — maximum airiness */
+      .display {
+        font-family: var(--f-display);
+        font-size: var(--sz-display);
+        font-weight: 200;
+        line-height: 0.96;
+        letter-spacing: -0.02em;
+      }
+      .h1 {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h1);
+        font-weight: 200;
+        line-height: 1.1;
+        letter-spacing: -0.01em;
+      }
+      .h2 {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h2);
+        font-weight: 300;
+        line-height: 1.2;
+      }
+      .h3 {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h3);
+        font-weight: 400;
+        line-height: 1.3;
+      }
+      .lead {
+        font-family: var(--f-body);
+        font-size: var(--sz-lead);
+        font-weight: 300;
+        line-height: 1.65;
+      }
+      .body {
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        font-weight: 300;
+        line-height: 1.7;
+      }
+      .caption {
+        font-family: var(--f-body);
+        font-size: var(--sz-caption);
+        font-weight: 300;
+        line-height: 1.55;
+      }
+      /* Labels: the one exception — tracked mono uppercase for structural chrome */
+      .label {
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        font-weight: 400;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+      /* Serif: Lora — used for insight card titles and quote text */
+      .serif {
+        font-family: var(--f-serif);
+      }
+
+      /* Contextual color helpers */
+      .dark .muted {
+        color: var(--c-fg-2);
+      }
+      .light .muted {
+        color: var(--c-fg-light-2);
+      }
+      .cream .muted {
+        color: var(--c-fg-light-2);
+      }
+      /* Accent: monochrome ink for small emphasis marks */
+      .accent {
+        color: var(--c-accent);
+      }
+
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  ZONE D · CHROME + SIDEBAR                                           ║
+   ║                                                                      ║
+   ║  Standard header/footer on light slides.                             ║
+   ║  Sidebar: the Ivory Ledger signature — a thin vertical line in the left     ║
+   ║  gutter with rotated mono labels reading bottom-to-top.              ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+
+      /* Chrome header and footer: thin rule + label on each side */
+      .slide-chrome,
+      .slide-foot {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .slide-chrome {
+        padding-bottom: var(--gap-sm);
+        border-bottom: 1px solid var(--c-border);
+        margin-bottom: var(--gap-md);
+      }
+      .slide-foot {
+        padding-top: var(--gap-sm);
+        border-top: 1px solid var(--c-border);
+        margin-top: var(--gap-md);
+      }
+      /* Light and cream slides: warm tan border instead of dark */
+      .light .slide-chrome,
+      .light .slide-foot,
+      .cream .slide-chrome,
+      .cream .slide-foot {
+        border-color: var(--c-border-light);
+      }
+
+      /* These slide types suppress chrome/foot entirely */
+      .slide--cover .slide-chrome,
+      .slide--cover .slide-foot,
+      .slide--chapter .slide-chrome,
+      .slide--chapter .slide-foot,
+      .slide--quote .slide-chrome,
+      .slide--quote .slide-foot,
+      .slide--end .slide-chrome,
+      .slide--end .slide-foot {
+        display: none;
+      }
+
+      /*
+       * ── Vertical Sidebar ─────────────────────────────────────────────────
+       *
+       * The sidebar occupies the left gutter (the 3.5vw added to pad-x above).
+       * It draws a single 1px vertical line with rotated mono labels along it.
+       * Labels read upward (writing-mode: vertical-rl + rotate(180deg)).
+       *
+       * How to use:
+       *   <div class="slide-sidebar" data-anim="fade-in" data-delay="0">
+       *     <span class="sidebar-label">Section Name</span>
+       *     <span class="sidebar-label">[Month, Year]</span>
+       *   </div>
+       *
+       * Two labels is the sweet spot. Three is the maximum.
+       */
+      /* Disabled: the rotated mono sidebar (vertical text in the left
+         gutter) was added as a chapter-tab decoration but reads as
+         visual noise. Hidden across the deck. */
+      .slide-sidebar {
+        display: none !important;
+      }
+
+      .slide-sidebar:not(.deck-no-such-thing) {
+        position: absolute;
+        /* Positioned in the left gutter, between outer padding and content */
+        left: var(--pad-x);
+        top: var(--pad-y);
+        bottom: var(--pad-y);
+        width: 3vw;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        align-items: flex-start;
+      }
+      /* The thin vertical spine of the sidebar */
+      .slide-sidebar::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 1px;
+        background: var(--c-border-light);
+      }
+      .dark .slide-sidebar::before {
+        background: var(--c-border);
+      }
+      /* Individual rotated label — reads bottom-to-top along the line */
+      .sidebar-label {
+        font-family: var(--f-mono);
+        font-size: 0.65vw;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--c-fg-light-3);
+        writing-mode: vertical-rl;
+        transform: rotate(180deg);
+        white-space: nowrap;
+        /* Small gap between the spine and the text */
+        padding-left: 0.8vw;
+      }
+      .dark .sidebar-label {
+        color: var(--c-fg-3);
+      }
+
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  ZONE E · LAYOUT PATTERNS                                            ║
+   ║                                                                      ║
+   ║  12 slide types. Only use the class names defined below.             ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+
+      /* ── 1. COVER ─────────────────────────────────────────────────────── */
+      /* Opening slide: light cream bg, bottom-anchored content, no chrome */
+      .slide--cover {
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+      }
+      .cover-body {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        justify-content: flex-end;
+        gap: var(--gap-md);
+      }
+      /* Bottom meta bar: thin rule above, author left, version right */
+      .cover-meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        margin-top: var(--gap-lg);
+        padding-top: var(--gap-sm);
+        border-top: 1px solid var(--c-border-light);
+      }
+
+      /* ── 2. CHAPTER ───────────────────────────────────────────────────── */
+      /* Dark section-break slide: chapter number + rule + headline */
+      .slide--chapter {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+      /* Chapter number in tracked mono — colored accent */
+      .chapter-num {
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: var(--c-accent);
+        margin-bottom: var(--gap-md);
+      }
+      /* Thin horizontal rule — monochrome accent, matches chapter-num color */
+      .chapter-rule {
+        width: 36px;
+        height: 1px;
+        background: var(--c-accent);
+        margin-bottom: var(--gap-md);
+      }
+
+      /* ── 3. STATEMENT ─────────────────────────────────────────────────── */
+      /* Large claim slide: sidebar + headline + optional supporting content */
+      .slide--statement .statement-body {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: var(--gap-md);
+      }
+
+      /* ── 4. SPLIT ─────────────────────────────────────────────────────── */
+      /* Two-column: text left, image right */
+      .slide--split .slide-body {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: calc(var(--pad-x) * 0.7);
+        align-items: center;
+      }
+      .split-text {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+      }
+      .split-image {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-sm);
+      }
+      /* Always specify explicit height in vh — never auto or aspect-ratio */
+      .split-image img,
+      .img-placeholder {
+        width: 100%;
+        height: 55vh;
+      }
+      .split-image img {
+        object-fit: cover;
+        display: block;
+      }
+      .img-placeholder {
+        border: 1px solid var(--c-border-light);
+        background: var(--c-bg-light-alt);
+        color: var(--c-fg-light-2);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        font-weight: 400;
+      }
+
+      /* ── 5. STATS ─────────────────────────────────────────────────────── */
+      /* Three large numeric stats with rule-top, label, and source note */
+      .slide--stats .slide-body {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: var(--gap-lg);
+      }
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0;
+      }
+      .stat-card {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-sm);
+        padding: var(--gap-md) var(--gap-md) var(--gap-md) 0;
+        border-top: 1px solid var(--c-border-light);
+      }
+      /* The big number: weight 200, maximum lightness */
+      .stat-value {
+        font-family: var(--f-display);
+        font-size: 5.5vw;
+        font-weight: 200;
+        line-height: 1;
+        color: var(--c-fg-light);
+        letter-spacing: -0.03em;
+      }
+      .stat-label {
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        line-height: 1.5;
+        font-weight: 300;
+        color: var(--c-fg-light);
+      }
+      /* Source attribution in small mono */
+      .stat-note {
+        font-family: var(--f-mono);
+        font-size: var(--sz-caption);
+        letter-spacing: 0.05em;
+        color: var(--c-fg-light-3);
+      }
+
+      /* ── 6. QUOTE ─────────────────────────────────────────────────────── */
+      /* Dark slide: large Lora italic quote, no quote mark decoration */
+      .slide--quote {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        /* Override standard padding for full bleed feel */
+        padding: calc(var(--pad-y) * 1.3) calc(var(--pad-x) * 1.2)
+          calc(var(--pad-y) * 1.3) calc(var(--pad-x) + 3.5vw + 1.2vw);
+      }
+      /* The quote itself: Lora italic, large, no decoration */
+      .quote-text {
+        font-family: var(--f-serif);
+        font-size: 3.2vw;
+        font-weight: 400;
+        line-height: 1.35;
+        letter-spacing: 0;
+        max-width: 75%;
+        margin-bottom: var(--gap-lg);
+        font-style: italic;
+        color: var(--c-fg);
+      }
+      /* Attribution: two lines of small mono text */
+      .quote-attr {
+        display: flex;
+        flex-direction: column;
+        gap: 0.4vh;
+      }
+
+      /* ── 7. LIST ──────────────────────────────────────────────────────── */
+      /* Left: label + heading + context. Right: bullet list with dash markers */
+      .slide--list .slide-body {
+        display: grid;
+        grid-template-columns: 2fr 3fr;
+        gap: calc(var(--pad-x) * 0.8);
+        align-items: center;
+      }
+      .list-head {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+        padding-top: var(--gap-sm);
+      }
+      .bullet-list {
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+      }
+      .bullet-list li {
+        display: grid;
+        grid-template-columns: 1.2em 1fr;
+        gap: 0.5em;
+        font-family: var(--f-body);
+        font-size: var(--sz-lead);
+        font-weight: 300;
+        line-height: 1.5;
+      }
+      /* Ivory Ledger bullet: em dash in muted tan — never a heavy accent dot */
+      .bullet-list li::before {
+        content: "—";
+        color: var(--c-fg-light-3);
+        font-family: var(--f-mono);
+      }
+      .light .bullet-list li {
+        color: var(--c-fg-light);
+      }
+      .dark .bullet-list li {
+        color: var(--c-fg);
+      }
+
+      /* ── 8. COMPARE ───────────────────────────────────────────────────── */
+      /* Two panels divided by a center rule: before left, after right */
+      .slide--compare .slide-body {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        height: 100%;
+      }
+      .compare-panel {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+        padding: var(--gap-md) 0;
+      }
+      .compare-panel.left {
+        padding-right: calc(var(--pad-x) * 0.55);
+        border-right: 1px solid var(--c-border-light);
+      }
+      .compare-panel.right {
+        padding-left: calc(var(--pad-x) * 0.55);
+      }
+      .compare-label {
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        padding-bottom: var(--gap-sm);
+        border-bottom: 1px solid var(--c-border-light);
+        color: var(--c-fg-light-3);
+      }
+      /* "After" label: monochrome accent treatment */
+      .compare-label.after {
+        color: var(--c-accent);
+        border-color: var(--c-accent);
+      }
+
+      /* ── 9. END ───────────────────────────────────────────────────────── */
+      /* Closing slide: cream bg, centered vertically, simple */
+      .slide--end {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: var(--gap-md);
+      }
+
+      /* ── 10. INSIGHTS ─────────────────────────────────────────────────── */
+      /*
+       * The signature "insight cards" pattern: cream background with 3 tall
+       * rounded-rectangle cards in quiet cream tones. Each card has a
+       * large Lora serif italic title and body text below.
+       */
+      .slide--insights {
+        background: var(--c-bg-cream);
+        color: var(--c-fg-light);
+        grid-template-rows: auto 1fr auto;
+      }
+      /* The three-card grid — equal columns, stretching to fill the middle row */
+      .insights-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 2vw;
+        align-items: stretch;
+      }
+      .insight-card {
+        border-radius: 16px;
+        padding: 3vh 2.5vw;
+        display: flex;
+        flex-direction: column;
+        gap: 1.5vh;
+      }
+      /* The three card surfaces: all monochrome cream tones */
+      .insight-card:nth-child(1) {
+        background: var(--c-card-a);
+      }
+      .insight-card:nth-child(2) {
+        background: var(--c-card-b);
+      }
+      .insight-card:nth-child(3) {
+        background: var(--c-card-c);
+      }
+      /* Large serif italic title: the visual anchor of each card */
+      .insight-title {
+        font-family: var(--f-serif);
+        font-size: 2.8vw;
+        font-weight: 400;
+        line-height: 1.15;
+        color: var(--c-fg-light);
+      }
+      .insight-title em {
+        font-style: italic;
+      }
+      /* Smaller serif subtitle under the title */
+      .insight-subtitle {
+        font-family: var(--f-serif);
+        font-size: 1.3vw;
+        font-weight: 500;
+        line-height: 1.3;
+        color: var(--c-fg-light);
+      }
+      /* Body: light sans, pushed to the bottom of the card */
+      .insight-body {
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        line-height: 1.65;
+        font-weight: 300;
+        color: rgba(26, 26, 22, 0.75);
+        margin-top: auto;
+      }
+
+      /* ── 11. TIMELINE ─────────────────────────────────────────────────── */
+      /* Horizontal research timeline: steps connected by a thin rule */
+      .slide--timeline {
+        background: var(--c-bg-cream);
+        color: var(--c-fg-light);
+        grid-template-rows: auto auto 1fr auto;
+      }
+      /* Large headline above the track */
+      .timeline-hl {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h2);
+        font-weight: 300;
+        line-height: 1.2;
+        padding-bottom: var(--gap-md);
+        border-bottom: 1px solid var(--c-border-light);
+        max-width: 70%;
+      }
+      /* The horizontal track container — equal-width steps side by side */
+      .timeline-track {
+        display: flex;
+        align-items: flex-start;
+        gap: 0;
+        padding-top: var(--gap-md);
+        position: relative;
+        min-height: 0;
+      }
+      /* Each step: flex column with dot, date, label, description */
+      .timeline-step {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-sm);
+        padding-right: calc(var(--pad-x) * 0.3);
+        position: relative;
+      }
+      /* The horizontal connecting rule behind all steps */
+      .timeline-step::before {
+        content: "";
+        position: absolute;
+        top: 0.55em;
+        left: 0;
+        right: 0;
+        height: 1px;
+        background: var(--c-border-light);
+        z-index: 0;
+      }
+      /* The dot: monochrome accent, cream border to punch through the rule */
+      .timeline-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--c-accent);
+        border: 2px solid var(--c-bg-cream);
+        position: relative;
+        z-index: 1;
+        margin-bottom: var(--gap-sm);
+        flex-shrink: 0;
+      }
+      .timeline-date {
+        font-family: var(--f-mono);
+        font-size: var(--sz-caption);
+        letter-spacing: 0.1em;
+        color: var(--c-fg-light-3);
+      }
+      .timeline-label {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h3);
+        font-weight: 400;
+        line-height: 1.25;
+        color: var(--c-fg-light);
+      }
+      .timeline-desc {
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        line-height: 1.6;
+        font-weight: 300;
+        color: var(--c-fg-light-2);
+      }
+
+      /* ── 12. DENSE ────────────────────────────────────────────────────── */
+      /* Research analysis: large headline above two-column text body */
+      .slide--dense {
+        grid-template-rows: auto auto 1fr auto;
+      }
+      .dense-hl {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h2);
+        font-weight: 300;
+        line-height: 1.2;
+        padding-bottom: var(--gap-md);
+        border-bottom: 1px solid var(--c-border-light);
+        max-width: 88%;
+      }
+      .dense-cols {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: calc(var(--pad-x) * 0.5);
+        padding-top: var(--gap-md);
+        min-height: 0;
+      }
+      /* Section heading within each column: tracked mono uppercase */
+      .dense-col h4 {
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--c-fg-light-3);
+        margin-bottom: var(--gap-sm);
+        padding-bottom: var(--gap-sm);
+        border-bottom: 1px solid var(--c-border-light);
+      }
+      .dense-col p {
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        line-height: 1.75;
+        font-weight: 300;
+        color: var(--c-fg-light-2);
+        margin-bottom: 1.4vh;
+      }
+      .dense-col p:last-child {
+        margin-bottom: 0;
+      }
+
+      /* ╔══════════════════════════════════════════════════════════════════════╗
+   ║  ZONE F · COMPONENTS                                                 ║
+   ╚══════════════════════════════════════════════════════════════════════╝ */
+
+      /* Thin accent rule — 36px default, full-width with .full */
+      .rule {
+        width: 36px;
+        height: 1px;
+        background: var(--c-border-light);
+      }
+      .rule.dark-rule {
+        background: var(--c-accent);
+      }
+      .rule.full {
+        width: 100%;
+        background: var(--c-border-light);
+      }
+
+      /* Eyebrow kicker label: mono uppercase, muted */
+      .kicker {
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--c-fg-light-3);
+      }
+      .dark .kicker {
+        color: var(--c-fg-3);
+      }
+
+      /* Bordered inline tag: used for version numbers, status labels */
+      .tag {
+        display: inline-block;
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--c-fg-light);
+        border: 1px solid var(--c-border-light);
+        padding: 0.3em 0.8em;
+        line-height: 1;
+      }
+      .dark .tag {
+        color: var(--c-fg-2);
+        border-color: var(--c-border);
+      }
+
+      /* Image caption: barely-there mono text below photos */
+      .img-caption {
+        font-family: var(--f-mono);
+        font-size: var(--sz-caption);
+        letter-spacing: 0.04em;
+        opacity: 0.45;
+        margin-top: 0.8vh;
+      }
+      /* ── CHART ─────────────────────────────────────────────────────────── */
+      .slide--chart .slide-body {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+        min-height: 0;
+      }
+      .chart-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        flex-shrink: 0;
+      }
+      .chart-wrapper {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        min-height: 0;
+      }
+      .bar-track {
+        height: 28vh;
+        display: flex;
+        align-items: flex-end;
+        gap: 4vw;
+        border-left: 1px solid var(--c-border-light);
+        padding-left: 0.5vw;
+      }
+      .bar-col {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: flex-end;
+        gap: 1vh;
+        height: 100%;
+      }
+      .bar-fill {
+        width: 100%;
+        background: var(--c-fg-light-3);
+        opacity: 0.5;
+      }
+      .bar-fill.accent {
+        background: var(--c-accent);
+        opacity: 1;
+      }
+      .bar-x-label {
+        font-family: var(--f-mono);
+        font-size: var(--sz-caption);
+        font-weight: 300;
+        letter-spacing: 0.1em;
+        color: var(--c-fg-light-3);
+        white-space: nowrap;
+        text-transform: uppercase;
+      }
+      .bar-val {
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        font-weight: 300;
+        color: var(--c-fg-light-2);
+      }
+      .bar-val.hi {
+        color: var(--c-accent);
+        font-weight: 500;
+      }
+      .chart-baseline {
+        height: 1px;
+        background: var(--c-border-light);
+        flex-shrink: 0;
+      }
+      .chart-source {
+        flex-shrink: 0;
+        font-family: var(--f-mono);
+        font-size: var(--sz-caption);
+        font-weight: 300;
+        color: var(--c-fg-light-3);
+        letter-spacing: 0.06em;
+        margin-top: var(--gap-sm);
+      }
+
+      /* ── DIAGRAM ────────────────────────────────────────────────────────── */
+      .slide--diagram .slide-body {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: var(--gap-lg);
+        min-height: 0;
+      }
+      .flow {
+        display: flex;
+        align-items: flex-start;
+        gap: 0;
+      }
+      .flow-step {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-sm);
+        padding-right: calc(var(--pad-x) * 0.4);
+        padding-top: var(--gap-md);
+        border-top: 1px solid var(--c-border-light);
+      }
+      .flow-num {
+        font-family: var(--f-display);
+        font-size: 3.5vw;
+        font-weight: 200;
+        line-height: 1;
+        color: var(--c-fg-light-3);
+        letter-spacing: -0.02em;
+      }
+      .flow-title {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h3);
+        font-weight: 400;
+        line-height: 1.2;
+        color: var(--c-fg-light);
+      }
+      .flow-desc {
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        font-weight: 300;
+        color: var(--c-fg-light-2);
+        line-height: 1.68;
+      }
+      /* Ivory Ledger diagram uses no arrows — whitespace between steps implies flow */
+
+      /* ── PIE / DONUT CHART ──────────────────────────────────────────────── */
+      .slide--pie .slide-body {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+        min-height: 0;
+      }
+      .pie-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: calc(var(--pad-x) * 0.7);
+        align-items: center;
+        flex: 1;
+        min-height: 0;
+      }
+      .pie-donut {
+        width: min(26vw, 42vh);
+        height: min(26vw, 42vh);
+        border-radius: 50%;
+        position: relative;
+        flex-shrink: 0;
+        justify-self: center;
+      }
+      .pie-donut::after {
+        content: "";
+        position: absolute;
+        inset: 22%;
+        border-radius: 50%;
+        background: var(--c-bg-light);
+      }
+      .pie-legend {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+      }
+      .pie-item {
+        display: grid;
+        grid-template-columns: 0.8em 1fr auto;
+        gap: 1em;
+        align-items: center;
+      }
+      .pie-swatch {
+        width: 0.8em;
+        height: 0.8em;
+        border-radius: 2px;
+        flex-shrink: 0;
+      }
+      .pie-item-label {
+        font-family: var(--f-body);
+        font-size: var(--sz-lead);
+        font-weight: 300;
+        line-height: 1.4;
+        color: var(--c-fg-light);
+      }
+      .pie-item-val {
+        font-family: var(--f-mono);
+        font-size: var(--sz-body);
+        font-weight: 400;
+        letter-spacing: 0.08em;
+        color: var(--c-accent);
+      }
+      .pie-total {
+        margin-top: var(--gap-sm);
+        padding-top: var(--gap-sm);
+        border-top: 1px solid var(--c-border-light);
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        letter-spacing: 0.1em;
+        color: var(--c-fg-light-3);
+      }
+
+      /* ── PYRAMID ─────────────────────────────────────────────────────────── */
+      .slide--pyramid .slide-body {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: var(--gap-md);
+        min-height: 0;
+      }
+      .pyramid {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        align-items: center;
+      }
+      .pyr-level {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1.3vh 2.5vw;
+        border-left: 2px solid var(--c-border-light);
+        transition: width 0.3s;
+      }
+      .pyr-level:nth-child(1) {
+        background: color-mix(in srgb, var(--c-accent) 55%, var(--c-bg-light));
+        width: 36%;
+      }
+      .pyr-level:nth-child(2) {
+        background: color-mix(in srgb, var(--c-accent) 35%, var(--c-bg-light));
+        width: 52%;
+      }
+      .pyr-level:nth-child(3) {
+        background: color-mix(in srgb, var(--c-accent) 20%, var(--c-bg-light));
+        width: 68%;
+      }
+      .pyr-level:nth-child(4) {
+        background: color-mix(in srgb, var(--c-accent) 10%, var(--c-bg-light));
+        width: 84%;
+      }
+      .pyr-level:nth-child(5) {
+        background: color-mix(in srgb, var(--c-accent) 4%, var(--c-bg-light));
+        width: 100%;
+      }
+      .pyr-name {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h3);
+        font-weight: 300;
+        line-height: 1.2;
+        color: var(--c-fg-light);
+      }
+      .pyr-desc {
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        font-weight: 300;
+        color: var(--c-fg-light-2);
+        text-align: right;
+        max-width: 55%;
+        line-height: 1.4;
+      }
+
+      /* ── VERTICAL TIMELINE ───────────────────────────────────────────────── */
+      .slide--vtimeline {
+        grid-template-rows: auto auto 1fr auto;
+      }
+      .vt-hl {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h2);
+        font-weight: 200;
+        padding-bottom: var(--gap-md);
+        border-bottom: 1px solid var(--c-border-light);
+      }
+      .vtimeline {
+        display: grid;
+        grid-template-columns: 8em 1px 1fr;
+        gap: 0;
+        min-height: 0;
+        padding-top: var(--gap-md);
+      }
+      .vt-date {
+        font-family: var(--f-mono);
+        font-size: var(--sz-caption);
+        font-weight: 300;
+        letter-spacing: 0.08em;
+        color: var(--c-fg-light-3);
+        text-align: right;
+        padding: 0 1.5vw 3.5vh 0;
+        line-height: 1.4;
+      }
+      .vt-spine {
+        background: var(--c-border-light);
+        position: relative;
+      }
+      .vt-spine::before {
+        content: "";
+        position: absolute;
+        top: 0.25em;
+        left: -4px;
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--c-accent);
+      }
+      .vt-content {
+        padding: 0 0 3.5vh 1.5vw;
+      }
+      .vt-title {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h3);
+        font-weight: 400;
+        margin-bottom: 0.6vh;
+        line-height: 1.25;
+        color: var(--c-fg-light);
+      }
+      .vt-body {
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        font-weight: 300;
+        color: var(--c-fg-light-2);
+        line-height: 1.68;
+      }
+
+      /* ── CYCLE PROCESS ───────────────────────────────────────────────────── */
+      .slide--cycle .slide-body {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+        min-height: 0;
+      }
+      .cycle-grid {
+        display: grid;
+        grid-template-columns: 1fr 3em 1fr;
+        grid-template-rows: 1fr 3em 1fr;
+        gap: var(--gap-sm);
+        flex: 1;
+        min-height: 0;
+        align-items: center;
+      }
+      .cycle-step {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-sm);
+        padding: var(--gap-md);
+        border-top: 1px solid var(--c-border-light);
+      }
+      .cycle-num {
+        font-family: var(--f-display);
+        font-size: 3vw;
+        font-weight: 200;
+        color: var(--c-fg-light-3);
+        line-height: 1;
+        letter-spacing: -0.02em;
+      }
+      .cycle-title {
+        font-family: var(--f-heading);
+        font-size: var(--sz-h3);
+        font-weight: 400;
+        line-height: 1.2;
+        color: var(--c-fg-light);
+      }
+      .cycle-desc {
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        font-weight: 300;
+        color: var(--c-fg-light-2);
+        line-height: 1.65;
+      }
+      .cycle-arrow {
+        color: var(--c-fg-light-3);
+        font-size: 1.6vw;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      /* ── PIE / DONUT CHART (v2 — legend variant) ───────────────────── */
+      /* Used by slide--pie v2: donut on left, legend items on right */
+      .slide--pie .slide-body {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+        min-height: 0;
+      }
+      .pie-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--gap-lg);
+        align-items: center;
+        flex: 1;
+        min-height: 0;
+      }
+      .pie-donut {
+        width: min(26vw, 40vh);
+        height: min(26vw, 40vh);
+        border-radius: 50%;
+        position: relative;
+        margin: 0 auto;
+      }
+      .pie-donut::after {
+        content: "";
+        position: absolute;
+        inset: 22%;
+        border-radius: 50%;
+        background: var(--c-bg-light);
+      }
+      .pie-legend {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-sm);
+      }
+      .pie-legend-item {
+        display: flex;
+        align-items: center;
+        gap: 1.2vw;
+        font-size: var(--sz-body);
+        color: var(--c-fg-light);
+      }
+      .pie-legend-dot {
+        width: 1vw;
+        height: 1vw;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+
+      /* ── PYRAMID (v2 — centered stack variant) ─────────────────────── */
+      /* Used by slide--pyramid v2: centered levels, solid fills */
+      .slide--pyramid .slide-body {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+        min-height: 0;
+      }
+      .pyr-wrap {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.6vh;
+        flex: 1;
+        justify-content: center;
+      }
+      .pyr-level {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1.4vh 2vw;
+        border-radius: 2px;
+        font-family: var(--f-body);
+        font-size: var(--sz-body);
+        font-weight: 500;
+        color: var(--c-fg-light);
+        text-align: center;
+        transition: width 0.4s ease;
+      }
+      .pyr-level:nth-child(1) {
+        background: color-mix(in srgb, var(--c-accent) 90%, transparent);
+        color: var(--c-bg-light);
+        width: 30%;
+      }
+      .pyr-level:nth-child(2) {
+        background: color-mix(in srgb, var(--c-accent) 68%, transparent);
+        color: var(--c-bg-light);
+        width: 48%;
+      }
+      .pyr-level:nth-child(3) {
+        background: color-mix(in srgb, var(--c-accent) 46%, transparent);
+        width: 66%;
+      }
+      .pyr-level:nth-child(4) {
+        background: color-mix(in srgb, var(--c-accent) 28%, transparent);
+        width: 83%;
+      }
+      .pyr-level:nth-child(5) {
+        background: color-mix(in srgb, var(--c-accent) 14%, transparent);
+        width: 100%;
+      }
+
+      /* ── VERTICAL TIMELINE (v2 — grid spine variant) ───────────────── */
+      /* Used by slide--vtimeline v2: date | spine | content grid layout */
+      .slide--vtimeline .slide-body {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+        min-height: 0;
+      }
+      .vtimeline {
+        display: grid;
+        grid-template-columns: 8em 1px 1fr;
+        gap: 0 0;
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+      }
+      .vt-item {
+        display: contents;
+      }
+      .vt-date {
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        color: var(--c-accent);
+        padding: 0.4vh 1.5vw 2.5vh 0;
+        text-align: right;
+        line-height: 1.3;
+      }
+      .vt-spine {
+        background: color-mix(in srgb, var(--c-accent) 30%, transparent);
+        position: relative;
+        margin: 0 auto;
+      }
+      .vt-spine::before {
+        content: "";
+        position: absolute;
+        top: 0.3em;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--c-accent);
+      }
+      .vt-content {
+        padding: 0 0 2.5vh 1.5vw;
+        min-height: 0;
+      }
+      .vt-content p {
+        font-size: var(--sz-body);
+        color: var(--c-fg-light);
+        margin: 0.3vh 0 0;
+        line-height: 1.5;
+      }
+
+      /* ── CYCLE PROCESS (v2 — boxed cell variant) ───────────────────── */
+      /* Used by slide--cycle v2: 2×2 grid of bordered cells with center label */
+      .slide--cycle .slide-body {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gap-md);
+        min-height: 0;
+      }
+      .cycle-grid {
+        display: grid;
+        grid-template-columns: 1fr 3em 1fr;
+        grid-template-rows: 1fr 3em 1fr;
+        gap: 0;
+        flex: 1;
+        min-height: 0;
+      }
+      .cycle-cell {
+        display: flex;
+        flex-direction: column;
+        gap: 0.6vh;
+        padding: 1.8vh 2vw;
+        background: color-mix(in srgb, var(--c-accent) 8%, transparent);
+        border: 1px solid color-mix(in srgb, var(--c-accent) 25%, transparent);
+        border-radius: 3px;
+      }
+      .cycle-num {
+        font-family: var(--f-mono);
+        font-size: var(--sz-label);
+        color: var(--c-accent);
+        font-weight: 500;
+      }
+      .cycle-cell p {
+        font-size: var(--sz-body);
+        color: var(--c-fg-light);
+        margin: 0;
+      }
+      .cycle-arrow {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.8vw;
+        color: var(--c-accent);
+        font-family: var(--f-mono);
+      }
+      .cycle-center {
+        display: block;
+        background: transparent;
+        border-radius: 0;
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="deck">
+      <!-- ══════════════════════════════════════════════════════════════════
+       SLIDE 01 · COVER (light — cream)
+       ──────────────────────────────────────────────────────────────────
+       Opening slide. Content anchors to the bottom of the slide.
+       Top-right mono label: deck title and date.
+       Large weight-200 display headline split across two lines.
+       Lead sentence in muted warm gray below the headline.
+       Bottom meta bar: team and round/version info.
+       ══════════════════════════════════════════════════════════════════ -->
+      <section class="slide slide--cover light">
+        <!-- Sidebar: research context above, date below -->
+        <div class="slide-sidebar" data-anim="fade-in" data-delay="0">
+          <span class="sidebar-label">Research Synthesis</span>
+          <span class="sidebar-label">[Month, Year]</span>
+        </div>
+
+        <!-- Top-right deck label: title and date -->
+        <div
+          style="
+            position: absolute;
+            top: var(--pad-y);
+            right: var(--pad-x);
+            text-align: right;
+          "
+          data-anim="fade-in"
+          data-delay="1"
+        >
+          <span class="label muted"
+            >User Research Synthesis / [Month, Year]</span
+          >
+        </div>
+
+        <div class="cover-body">
+          <!-- Display headline: weight 200, two lines -->
+          <h1 class="display" data-anim="fade-up" data-delay="2">
+            User Research<br />Synthesis
+          </h1>
+
+          <!-- Thin rule between headline and lead -->
+          <div
+            class="rule"
+            data-anim="reveal-right"
+            data-delay="3"
+            style="margin: 1.5vh 0"
+          ></div>
+
+          <!-- Lead: weight 300, muted, max 55% width -->
+          <p
+            class="lead muted"
+            data-anim="fade-up"
+            data-delay="4"
+            style="max-width: 55%"
+          >
+            What we learned from 24 interviews and what it means for the
+            product.
+          </p>
+        </div>
+
+        <!-- Bottom meta bar: team left, round right -->
+        <div class="cover-meta" data-anim="fade-in" data-delay="5">
+          <span class="label muted">Research Team · [Month, Year]</span>
+          <span class="label muted">Round [N] · Internal</span>
+        </div>
+      </section>
+      <section class="slide slide--chapter dark">
+        <!-- Sidebar on dark: adapts automatically via .dark .sidebar-label -->
+        <div class="slide-sidebar" data-anim="fade-in" data-delay="0">
+          <span class="sidebar-label">Context</span>
+          <span class="sidebar-label">Part One</span>
+        </div>
+
+        <!-- Chapter number: small mono, monochrome accent -->
+        <div class="chapter-num" data-anim="fade-in" data-delay="1">
+          01 · Context
+        </div>
+
+        <!-- Thin accent rule -->
+        <div class="chapter-rule" data-anim="reveal-right" data-delay="2"></div>
+
+        <!-- Chapter headline: weight 200, very large -->
+        <h2 class="h1" data-anim="fade-up" data-delay="3">
+          Why we went back<br />to users
+        </h2>
+
+        <!-- Short description: muted, capped at 50% width -->
+        <p
+          class="lead"
+          style="
+            max-width: 50%;
+            margin-top: var(--gap-md);
+            color: var(--c-fg-3);
+          "
+          data-anim="fade-up"
+          data-delay="4"
+        >
+          Three months after launch, retention numbers told us something the
+          metrics couldn't.
+        </p>
+      </section>
+      <section class="slide slide--statement light">
+        <!-- Sidebar: three contextual labels -->
+        <div class="slide-sidebar" data-anim="fade-in" data-delay="0">
+          <span class="sidebar-label">[Month, Year]</span>
+          <span class="sidebar-label">Round [N]</span>
+          <span class="sidebar-label">Objective</span>
+        </div>
+
+        <!-- Chrome header -->
+        <header class="slide-chrome">
+          <span class="label muted">Key Finding</span>
+          <span class="label muted">03</span>
+        </header>
+
+        <!-- Statement body: centered vertically -->
+        <div class="statement-body">
+          <!-- Objective label in mono muted at top of content area -->
+          <p class="kicker" data-anim="fade-in" data-delay="1">
+            Primary objective · Round [N] synthesis
+          </p>
+
+          <!-- The big claim: weight 200, sentence case, max 65% width -->
+          <h2
+            class="h1"
+            data-anim="fade-up"
+            data-delay="2"
+            style="max-width: 65%"
+          >
+            Users don't leave because they lose interest. They leave because
+            they don't know what to do next.
+          </h2>
+
+          <!-- Thin rule as a visual pause below the headline -->
+          <div
+            class="rule"
+            data-anim="reveal-right"
+            data-delay="3"
+            style="margin-top: var(--gap-sm)"
+          ></div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="slide-foot">
+          <span class="label muted">User Research Synthesis</span>
+          <span class="label muted">Research Team</span>
+        </footer>
+      </section>
+      <section class="slide slide--split light">
+        <div class="slide-sidebar" data-anim="fade-in" data-delay="0">
+          <span class="sidebar-label">User Behavior</span>
+          <span class="sidebar-label">[Month, Year]</span>
+        </div>
+
+        <!-- Chrome header -->
+        <header class="slide-chrome">
+          <span class="label muted">User Behavior</span>
+          <span class="label muted">04</span>
+        </header>
+
+        <!-- Two-column body -->
+        <div class="slide-body">
+          <!-- Left: text content -->
+          <div class="split-text">
+            <p class="kicker" data-anim="fade-in" data-delay="1">The Pattern</p>
+            <h2 class="h2" data-anim="fade-up" data-delay="2">
+              The first 48 hours determine everything
+            </h2>
+            <p class="lead muted" data-anim="fade-up" data-delay="3">
+              Users who complete three core actions in their first two days have
+              a 4× higher 90-day retention rate. Most never get there.
+            </p>
+            <!-- Small bullet list below the lead -->
+            <ul
+              class="bullet-list"
+              style="margin-top: 0"
+              data-anim="fade-up"
+              data-delay="4"
+            >
+              <li>Onboarding drop-off peaks at step 3</li>
+              <li>"What do I do next?" is the most common exit trigger</li>
+              <li>Users who invite a teammate retain at 2× the rate</li>
+            </ul>
+          </div>
+
+          <!-- Right: image with caption -->
+          <div class="split-image" data-anim="fade-in" data-delay="3">
+            <div class="img-placeholder">Image placeholder</div>
+            <p class="img-caption">
+              Session recording review · [Month of study]
+            </p>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="slide-foot">
+          <span class="label muted">User Research Synthesis</span>
+          <span class="label muted">Research Team</span>
+        </footer>
+      </section>
+      <section class="slide slide--stats light">
+        <div class="slide-sidebar" data-anim="fade-in" data-delay="0">
+          <span class="sidebar-label">By the Numbers</span>
+          <span class="sidebar-label">[Month, Year]</span>
+        </div>
+
+        <!-- Chrome header -->
+        <header class="slide-chrome">
+          <span class="label muted">By the Numbers</span>
+          <span class="label muted">05</span>
+        </header>
+
+        <!-- Stats body: headline + three-col stat grid -->
+        <div class="slide-body">
+          <h2 class="h2" data-anim="fade-up" data-delay="1">
+            What the data showed
+          </h2>
+
+          <div
+            class="stats-grid"
+            style="margin-top: var(--gap-lg)"
+            data-anim="fade-up"
+            data-delay="2"
+          >
+            <!-- Stat 1: churn rate -->
+            <div class="stat-card">
+              <div class="stat-value">68%</div>
+              <p class="stat-label muted">
+                of users churned within 14 days — up from 54% in cohort 2
+              </p>
+              <p class="stat-note">[Analytics tool] · [Launch month]</p>
+            </div>
+
+            <!-- Stat 2: time to abandonment -->
+            <div class="stat-card">
+              <div class="stat-value">3.2min</div>
+              <p class="stat-label muted">
+                Average time before abandonment on the setup flow
+              </p>
+              <p class="stat-note">Session recordings · n=240</p>
+            </div>
+
+            <!-- Stat 3: retention multiplier -->
+            <div class="stat-card">
+              <div class="stat-value">4×</div>
+              <p class="stat-label muted">
+                Higher 90-day retention for users who complete onboarding fully
+              </p>
+              <p class="stat-note">Cohort analysis</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="slide-foot">
+          <span class="label muted">User Research Synthesis</span>
+          <span class="label muted">Research Team</span>
+        </footer>
+      </section>
+      <section class="slide slide--list light">
+        <div class="slide-sidebar" data-anim="fade-in" data-delay="0">
+          <span class="sidebar-label">Recommendations</span>
+          <span class="sidebar-label">[Month, Year]</span>
+        </div>
+
+        <!-- Chrome header -->
+        <header class="slide-chrome">
+          <span class="label muted">Recommendations</span>
+          <span class="label muted">06</span>
+        </header>
+
+        <!-- List body: left head + right bullets -->
+        <div class="slide-body">
+          <div class="list-head">
+            <p class="kicker" data-anim="fade-in" data-delay="1">What to fix</p>
+            <h2 class="h2" data-anim="fade-up" data-delay="2">
+              Five changes, ordered by impact
+            </h2>
+            <p class="body muted" data-anim="fade-up" data-delay="3">
+              We recommend addressing these sequentially — later ones depend on
+              the first landing.
+            </p>
+          </div>
+
+          <!-- Five bullets: weight-300 lead size, em dash markers -->
+          <ul class="bullet-list" data-anim="fade-up" data-delay="3">
+            <li>Redesign the setup flow to three steps maximum</li>
+            <li>Add a "start here" prompt on day one based on user type</li>
+            <li>
+              Surface the collaboration invite after first meaningful action
+            </li>
+            <li>Replace feature tour with outcome demonstration</li>
+            <li>
+              Build a 7-day email sequence that mirrors in-product progress
+            </li>
+          </ul>
+        </div>
+
+        <!-- Footer -->
+        <footer class="slide-foot">
+          <span class="label muted">User Research Synthesis</span>
+          <span class="label muted">Research Team</span>
+        </footer>
+      </section>
+      <section class="slide slide--compare light">
+        <div class="slide-sidebar" data-anim="fade-in" data-delay="0">
+          <span class="sidebar-label">Current vs Proposed</span>
+          <span class="sidebar-label">[Month, Year]</span>
+        </div>
+
+        <!-- Chrome header -->
+        <header class="slide-chrome">
+          <span class="label muted">Current · Proposed</span>
+          <span class="label muted">07</span>
+        </header>
+
+        <!-- Two-panel body -->
+        <div class="slide-body">
+          <!-- Left panel: current state -->
+          <div class="compare-panel left" data-anim="fade-up" data-delay="1">
+            <div class="compare-label">Current Onboarding</div>
+            <h3 class="h3">9-step setup, any order</h3>
+            <p class="lead muted">
+              Users choose their own path through setup. Most choose wrong.
+            </p>
+            <ul class="bullet-list" style="font-size: var(--sz-body)">
+              <li>Average 3.2 minutes to first value</li>
+              <li>Step 6 is where 41% abandon</li>
+              <li>No adaptive logic based on user type</li>
+            </ul>
+          </div>
+
+          <!-- Right panel: proposed state -->
+          <div class="compare-panel right" data-anim="fade-up" data-delay="2">
+            <div class="compare-label after">Proposed Flow</div>
+            <h3 class="h3">3-step guided path, adaptive</h3>
+            <p class="lead muted">
+              User type detected at signup. Path adjusts. First value in under
+              90 seconds.
+            </p>
+            <ul class="bullet-list" style="font-size: var(--sz-body)">
+              <li>Target: 90 seconds to first value</li>
+              <li>Eliminate decision paralysis at step entry</li>
+              <li>Inline help triggered at abandonment signals</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="slide-foot">
+          <span class="label muted">User Research Synthesis</span>
+          <span class="label muted">Research Team</span>
+        </footer>
+      </section>
+      <section class="slide slide--quote dark">
+        <div class="slide-sidebar" data-anim="fade-in" data-delay="0">
+          <span class="sidebar-label">Participant Voice</span>
+          <span class="sidebar-label">[Month of study]</span>
+        </div>
+
+        <!-- Quote text: Lora italic, large, no decoration -->
+        <p class="quote-text" data-anim="fade-up" data-delay="1">
+          "I kept opening the app and then closing it again. I didn't know what
+          I was supposed to do."
+        </p>
+
+        <!-- Attribution: two lines of small mono -->
+        <div class="quote-attr" data-anim="fade-in" data-delay="3">
+          <span
+            class="label"
+            style="color: var(--c-fg-3); letter-spacing: 0.12em"
+          >
+            Participant 14 · 28 years old, Product Designer
+          </span>
+          <span
+            class="label"
+            style="color: var(--c-fg-3); letter-spacing: 0.12em"
+          >
+            Interview · [Month of study]
+          </span>
+        </div>
+      </section>
+      <section class="slide slide--dense light">
+        <div class="slide-sidebar" data-anim="fade-in" data-delay="0">
+          <span class="sidebar-label">Analysis</span>
+          <span class="sidebar-label">[Month, Year]</span>
+        </div>
+
+        <!-- Chrome header -->
+        <header class="slide-chrome">
+          <span class="label muted">Analysis</span>
+          <span class="label muted">09</span>
+        </header>
+
+        <!-- Dense headline -->
+        <h2 class="dense-hl" data-anim="fade-up" data-delay="1">
+          Why onboarding problems compound over time
+        </h2>
+
+        <!-- Two-column analysis body -->
+        <div class="slide-body">
+          <div class="dense-cols" data-anim="fade-up" data-delay="2">
+            <!-- Left column: The Activation Trap -->
+            <div class="dense-col">
+              <h4>The Activation Trap</h4>
+              <p>
+                Activation is the moment a user experiences the core value of a
+                product for the first time. When that moment is delayed or never
+                arrives, the user's mental model of the product never fully
+                forms. They carry a vague, unresolved impression into every
+                subsequent session.
+              </p>
+              <p>
+                Each session that ends without activation reinforces the exit
+                pattern. The user doesn't consciously decide to leave — they
+                simply stop opening the app because it hasn't yet earned a place
+                in their routine. The gap between download and habit is where
+                most products lose users permanently.
+              </p>
+              <p>
+                Retention data confirms this: users who hit activation in
+                session one have a 3× higher probability of returning in week
+                two. The window is narrow. Products that front-load value
+                creation outperform those that distribute it across multiple
+                sessions.
+              </p>
+            </div>
+
+            <!-- Right column: The Network Effect Delay -->
+            <div class="dense-col">
+              <h4>The Network Effect Delay</h4>
+              <p>
+                Collaboration products face a compounding problem: the value of
+                the product increases with each additional teammate, but users
+                must cross the value threshold alone before they think to invite
+                anyone. Most never reach the threshold.
+              </p>
+              <p>
+                Our data shows that the median user does not discover the
+                invitation flow until session four — by which point 60% have
+                already churned. The product's most powerful retention mechanism
+                is invisible during the critical first-session window where the
+                keep-or-leave decision is made.
+              </p>
+              <p>
+                The solution is not to surface the invite prompt earlier in a
+                disruptive way, but to design the single-player experience as an
+                explicit bridge to the collaborative one. Every solo action
+                should feel like preparation for something that scales.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="slide-foot">
+          <span class="label muted">User Research Synthesis</span>
+          <span class="label muted">Research Team</span>
+        </footer>
+      </section>
+      <section class="slide slide--chart light">
+        <header class="slide-chrome">
+          <span class="label muted">Retention Analysis</span>
+          <span class="label muted">11</span>
+        </header>
+        <div class="slide-body">
+          <div class="chart-header">
+            <h2
+              class="h2"
+              style="font-weight: 200"
+              data-anim="fade-up"
+              data-delay="0"
+            >
+              90-day retention by onboarding cohort
+            </h2>
+            <span class="caption muted" data-anim="fade-in" data-delay="1"
+              >% retained · n=480 · [Q1 of study period]</span
+            >
+          </div>
+          <div class="chart-wrapper" data-anim="fade-up" data-delay="2">
+            <div class="bar-track">
+              <div class="bar-col">
+                <span class="bar-val">34%</span>
+                <div class="bar-fill" style="height: 10vh"></div>
+                <span class="bar-x-label">Cohort 1</span>
+              </div>
+              <div class="bar-col">
+                <span class="bar-val">41%</span>
+                <div class="bar-fill" style="height: 13vh"></div>
+                <span class="bar-x-label">Cohort 2</span>
+              </div>
+              <div class="bar-col">
+                <span class="bar-val">48%</span>
+                <div class="bar-fill" style="height: 16vh"></div>
+                <span class="bar-x-label">Cohort 3</span>
+              </div>
+              <div class="bar-col">
+                <span class="bar-val hi">67%</span>
+                <div class="bar-fill accent" style="height: 22vh"></div>
+                <span class="bar-x-label">Proposed</span>
+              </div>
+            </div>
+            <div class="chart-baseline"></div>
+          </div>
+          <p class="chart-source" data-anim="fade-in" data-delay="3">
+            Source: [Analytics tool] · Cohort analysis · Proposed target based
+            on redesigned onboarding flow
+          </p>
+        </div>
+        <footer class="slide-foot">
+          <span class="label muted">Research Team · [Month, Year]</span>
+          <span class="label muted">11 / 18</span>
+        </footer>
+      </section>
+      <section class="slide slide--diagram light">
+        <header class="slide-chrome">
+          <span class="label muted">Methodology</span>
+          <span class="label muted">12</span>
+        </header>
+        <div class="slide-body">
+          <h2
+            class="h2"
+            style="font-weight: 200"
+            data-anim="fade-up"
+            data-delay="0"
+          >
+            How this research was conducted
+          </h2>
+          <div class="flow" data-anim="fade-up" data-delay="1">
+            <div class="flow-step">
+              <div class="flow-num">01</div>
+              <div class="flow-title">Recruit</div>
+              <div class="flow-desc">
+                24 participants screened from the active user base. Mix of power
+                users, casual users, and churned users within 90 days.
+              </div>
+            </div>
+            <div class="flow-step">
+              <div class="flow-num">02</div>
+              <div class="flow-title">Interview</div>
+              <div class="flow-desc">
+                60-minute moderated sessions. Cognitive walkthrough of key
+                flows. Think-aloud protocol throughout.
+              </div>
+            </div>
+            <div class="flow-step">
+              <div class="flow-num">03</div>
+              <div class="flow-title">Analyse</div>
+              <div class="flow-desc">
+                Affinity mapping across 340 observations. Pattern clustering by
+                behaviour type, not stated preference.
+              </div>
+            </div>
+            <div class="flow-step">
+              <div class="flow-num">04</div>
+              <div class="flow-title">Validate</div>
+              <div class="flow-desc">
+                Key findings stress-tested against session recordings and
+                support ticket data before synthesis.
+              </div>
+            </div>
+          </div>
+        </div>
+        <footer class="slide-foot">
+          <span class="label muted">Research Team · [Month, Year]</span>
+          <span class="label muted">12 / 18</span>
+        </footer>
+      </section>
+      <section class="slide slide--pie light">
+        <div class="slide-sidebar" data-anim="fade-in" data-delay="0">
+          <span class="sidebar-label">Participants</span>
+          <span class="sidebar-label">[Month, Year]</span>
+        </div>
+
+        <header class="slide-chrome">
+          <span class="label muted">Participant Breakdown</span>
+          <span class="label muted">13</span>
+        </header>
+
+        <div class="slide-body">
+          <h2
+            class="h2"
+            style="font-weight: 200"
+            data-anim="fade-up"
+            data-delay="1"
+          >
+            Who we spoke with
+          </h2>
+
+          <div class="pie-row" data-anim="fade-up" data-delay="2">
+            <!-- Donut chart: conic-gradient with 4 segments -->
+            <div
+              class="pie-donut"
+              style="
+                background: conic-gradient(
+                  var(--c-accent) 0% 38%,
+                  color-mix(in srgb, var(--c-accent) 60%, var(--c-bg-light)) 38%
+                    63%,
+                  color-mix(in srgb, var(--c-accent) 34%, var(--c-bg-light)) 63%
+                    85%,
+                  var(--c-bg-light-alt) 85% 100%
+                );
+              "
+            ></div>
+
+            <!-- Legend -->
+            <div class="pie-legend">
+              <div class="pie-item">
+                <div class="pie-swatch" style="background: var(--c-accent)"></div>
+                <span class="pie-item-label">Power Users</span>
+                <span class="pie-item-val">38%</span>
+              </div>
+              <div class="pie-item">
+                <div
+                  class="pie-swatch"
+                  style="
+                    background: color-mix(
+                      in srgb,
+                      var(--c-accent) 60%,
+                      var(--c-bg-light)
+                    );
+                  "
+                ></div>
+                <span class="pie-item-label">Casual Users</span>
+                <span class="pie-item-val">25%</span>
+              </div>
+              <div class="pie-item">
+                <div
+                  class="pie-swatch"
+                  style="
+                    background: color-mix(
+                      in srgb,
+                      var(--c-accent) 34%,
+                      var(--c-bg-light)
+                    );
+                  "
+                ></div>
+                <span class="pie-item-label">Churned Users</span>
+                <span class="pie-item-val">22%</span>
+              </div>
+              <div class="pie-item">
+                <div
+                  class="pie-swatch"
+                  style="background: var(--c-bg-light-alt)"
+                ></div>
+                <span class="pie-item-label">Prospects</span>
+                <span class="pie-item-val">15%</span>
+              </div>
+              <p class="pie-total">Total participants: [N] · [Study period]</p>
+            </div>
+          </div>
+
+          <p class="chart-source" data-anim="fade-in" data-delay="3">
+            Source: Recruitment screener · [Study period]
+          </p>
+        </div>
+
+        <footer class="slide-foot">
+          <span class="label muted">[Research Team] · [Month, Year]</span>
+        </footer>
+      </section>
+      <section class="slide slide--vtimeline light">
+        <div class="slide-sidebar" data-anim="fade-in" data-delay="0">
+          <span class="sidebar-label">Process</span>
+          <span class="sidebar-label">[Month, Year]</span>
+        </div>
+
+        <header class="slide-chrome">
+          <span class="label muted">Process</span>
+          <span class="label muted">14</span>
+        </header>
+
+        <h2 class="vt-hl" data-anim="fade-up" data-delay="1">
+          From research to recommendation
+        </h2>
+
+        <div class="slide-body">
+          <div class="vtimeline" data-anim="fade-up" data-delay="2">
+            <!-- Row 1 -->
+            <div class="vt-date">[Week 1]</div>
+            <div class="vt-spine"></div>
+            <div class="vt-content">
+              <div class="vt-title">Recruitment</div>
+              <p class="vt-body">
+                Screened [N]+ applicants, selected [N] participants across user
+                segments.
+              </p>
+            </div>
+            <!-- Row 2 -->
+            <div class="vt-date">[Week 2–3]</div>
+            <div class="vt-spine"></div>
+            <div class="vt-content">
+              <div class="vt-title">Fieldwork</div>
+              <p class="vt-body">
+                [N] moderated sessions. Think-aloud protocol. All sessions
+                recorded and transcribed.
+              </p>
+            </div>
+            <!-- Row 3 -->
+            <div class="vt-date">[Week 4]</div>
+            <div class="vt-spine"></div>
+            <div class="vt-content">
+              <div class="vt-title">Synthesis</div>
+              <p class="vt-body">
+                Affinity mapping across [N]+ observations. Pattern clustering by
+                behaviour type.
+              </p>
+            </div>
+            <!-- Row 4 -->
+            <div class="vt-date">[Week 5]</div>
+            <div class="vt-spine"></div>
+            <div class="vt-content">
+              <div class="vt-title">Validation</div>
+              <p class="vt-body">
+                Findings stress-tested against [analytics tool] data and [N]
+                support ticket samples.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <footer class="slide-foot">
+          <span class="label muted">[Research Team] · [Month, Year]</span>
+          <span class="label muted">14</span>
+        </footer>
+      </section>
+      <section class="slide slide--cycle light">
+        <div class="slide-sidebar" data-anim="fade-in" data-delay="0">
+          <span class="sidebar-label">Design Process</span>
+          <span class="sidebar-label">[Month, Year]</span>
+        </div>
+
+        <header class="slide-chrome">
+          <span class="label muted">Design Process</span>
+          <span class="label muted">15</span>
+        </header>
+
+        <div class="slide-body">
+          <h2
+            class="h2"
+            style="font-weight: 200"
+            data-anim="fade-up"
+            data-delay="1"
+          >
+            The design thinking cycle
+          </h2>
+
+          <div class="cycle-grid" data-anim="fade-up" data-delay="2">
+            <!-- Step 01: top-left -->
+            <div class="cycle-step">
+              <div class="cycle-num">01</div>
+              <div class="cycle-title">Empathise</div>
+              <p class="cycle-desc">
+                Understand users in their own context. Suspend assumptions.
+                Observe before interpreting.
+              </p>
+            </div>
+            <!-- Arrow right: top-center -->
+            <div class="cycle-arrow">→</div>
+            <!-- Step 02: top-right -->
+            <div class="cycle-step">
+              <div class="cycle-num">02</div>
+              <div class="cycle-title">Define</div>
+              <p class="cycle-desc">
+                Reframe the problem as a point of view. One sentence. Testable.
+                Grounded in observation.
+              </p>
+            </div>
+            <!-- Arrow down-left: mid-left -->
+            <div class="cycle-arrow">↓</div>
+            <!-- Center spacer: mid-center -->
+            <div></div>
+            <!-- Arrow down-right: mid-right -->
+            <div class="cycle-arrow">↓</div>
+            <!-- Step 04: bottom-left -->
+            <div class="cycle-step">
+              <div class="cycle-num">04</div>
+              <div class="cycle-title">Test</div>
+              <p class="cycle-desc">
+                Put prototypes in front of real users. Capture what they do, not
+                what they say.
+              </p>
+            </div>
+            <!-- Arrow left: bottom-center -->
+            <div class="cycle-arrow">←</div>
+            <!-- Step 03: bottom-right -->
+            <div class="cycle-step">
+              <div class="cycle-num">03</div>
+              <div class="cycle-title">Prototype</div>
+              <p class="cycle-desc">
+                Build to think, not to ship. The lowest fidelity that answers
+                the question.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <footer class="slide-foot">
+          <span class="label muted">[Research Team] · [Month, Year]</span>
+          <span class="label muted">15</span>
+        </footer>
+      </section>
+      <section class="slide slide--pyramid light" data-slide="17">
+        <div class="slide-sidebar" data-anim="fade-in" data-delay="0">
+          <span class="sidebar-label">Research Framework</span>
+          <span class="sidebar-label">[Month, Year]</span>
+        </div>
+
+        <header class="slide-chrome">
+          <span class="label muted">Research Framework</span>
+          <span class="label muted">17</span>
+        </header>
+
+        <div class="slide-body">
+          <p class="kicker" data-anim="fade-in" data-delay="1">
+            Research Framework
+          </p>
+
+          <h2 class="h2" data-anim="fade-up" data-delay="2">
+            Analysis Hierarchy
+          </h2>
+
+          <p class="lead muted" data-anim="fade-up" data-delay="3">
+            From raw observations to strategic insight
+          </p>
+
+          <!-- Centered pyramid: narrowest at top, widest at bottom -->
+          <div class="pyr-wrap" data-anim="fade-up" data-delay="4">
+            <div class="pyr-level">Strategic Insight</div>
+            <div class="pyr-level">Behavioral Patterns</div>
+            <div class="pyr-level">Synthesized Themes</div>
+            <div class="pyr-level">Coded Observations</div>
+            <div class="pyr-level">Raw Field Notes</div>
+          </div>
+        </div>
+
+        <footer class="slide-foot">
+          <span class="label muted">User Research Synthesis</span>
+          <span class="label muted">Research Team</span>
+        </footer>
+      </section>
+      <section class="slide slide--end light">
+        <div class="slide-sidebar" data-anim="fade-in" data-delay="0">
+          <span class="sidebar-label">Research Team</span>
+          <span class="sidebar-label">[Month, Year]</span>
+        </div>
+
+        <!-- Kicker: team attribution in muted mono -->
+        <p class="kicker" data-anim="fade-in" data-delay="1">Research Team</p>
+
+        <!-- Thin rule -->
+        <div
+          class="rule"
+          data-anim="reveal-right"
+          data-delay="2"
+          style="margin: var(--gap-sm) 0"
+        ></div>
+
+        <!-- Closing headline: weight 200, max 55% width -->
+        <h2
+          class="h1"
+          data-anim="fade-up"
+          data-delay="3"
+          style="max-width: 55%"
+        >
+          Questions, feedback, and next steps
+        </h2>
+
+        <!-- Contact lead: muted, links styled as plain text -->
+        <p
+          class="lead muted"
+          data-anim="fade-up"
+          data-delay="4"
+          style="max-width: 42%; margin-top: var(--gap-md)"
+        >
+          [research@org.com] · [Slack #research] · Full report at [link]
+        </p>
+      </section>
+
+    </div>
+    <!-- /#deck -->
+
+    <!-- Navigation dots: built dynamically by JS -->
+    <nav id="nav-dots" aria-label="Slide navigation"></nav>
+
+    <!-- Slide counter: bottom-right, barely visible -->
+    <div id="slide-counter"></div>
+
+    <script>
+      (function () {
+        /* ── DOM references ─────────────────────────────────────────────── */
+        const deck = document.getElementById("deck");
+        const dotsNav = document.getElementById("nav-dots");
+        const counter = document.getElementById("slide-counter");
+        const slides = Array.from(deck.querySelectorAll(".slide"));
+        const total = slides.length;
+        let current = 0;
+        let isAnimating = false;
+
+        /* ── Size the deck to fit all slides in a single horizontal row ── */
+        deck.style.width = "calc(" + total + " * 100vw)";
+
+        /* ── Build one nav dot per slide ─────────────────────────────────  */
+        slides.forEach(function (_, i) {
+          var dot = document.createElement("button");
+          dot.className = "nav-dot";
+          dot.setAttribute("aria-label", "Slide " + (i + 1));
+          dot.addEventListener("click", function () {
+            goTo(i);
+          });
+          dotsNav.appendChild(dot);
+        });
+
+        /* ── Helpers ─────────────────────────────────────────────────────  */
+        function pad(n) {
+          return String(n).padStart(2, "0");
+        }
+
+        /* ── goTo: the central navigation function ───────────────────────  */
+        function goTo(index) {
+          /* Guard: no double-firing while a transition is running */
+          if (isAnimating) return;
+          if (index < 0 || index >= total) return;
+          if (
+            index === current &&
+            slides[current].classList.contains("is-active")
+          )
+            return;
+
+          isAnimating = true;
+
+          /* Remove active state from the outgoing slide */
+          slides[current].classList.remove("is-active");
+
+          current = index;
+          var slide = slides[current];
+
+          /*
+           * Animation reset: force the browser to forget the current animation
+           * state by setting animation:none, triggering a reflow, then clearing.
+           * This makes re-visiting a slide replay the entrance animation.
+           */
+          slide.querySelectorAll("[data-anim]").forEach(function (el) {
+            el.style.animation = "none";
+            void el.offsetHeight; /* force reflow — critical for reset to work */
+            el.style.animation = "";
+          });
+
+          /* Activate the incoming slide and scroll the deck */
+          slide.classList.add("is-active");
+          deck.style.transform = "translateX(calc(-" + current + " * 100vw))";
+
+          /* ── Update nav dots ─────────────────────────────────────────── */
+          dotsNav.querySelectorAll(".nav-dot").forEach(function (d, i) {
+            d.classList.toggle("is-active", i === current);
+            d.style.background =
+              i === current ? "rgba(26,26,22,0.8)" : "rgba(26,26,22,0.3)";
+          });
+
+          /* ── Update slide counter ────────────────────────────────────── */
+          counter.textContent = pad(current + 1) + " / " + pad(total);
+          counter.style.color = "rgba(26,26,22,0.28)";
+
+          /* Unlock after the slide transition completes */
+          setTimeout(function () {
+            isAnimating = false;
+          }, 950);
+        }
+
+        /* ── Keyboard navigation ─────────────────────────────────────────  */
+        document.addEventListener("keydown", function (e) {
+          if (
+            e.key === "ArrowRight" ||
+            e.key === " " ||
+            e.key === "ArrowDown"
+          ) {
+            e.preventDefault();
+            goTo(current + 1);
+          }
+          if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+            e.preventDefault();
+            goTo(current - 1);
+          }
+          if (e.key === "Home") goTo(0);
+          if (e.key === "End") goTo(total - 1);
+        });
+
+        /* ── Touch swipe ─────────────────────────────────────────────────  */
+        var touchStartX = 0;
+        document.addEventListener(
+          "touchstart",
+          function (e) {
+            touchStartX = e.touches[0].clientX;
+          },
+          { passive: true },
+        );
+        document.addEventListener(
+          "touchend",
+          function (e) {
+            var dx = e.changedTouches[0].clientX - touchStartX;
+            /* Require at least 40px swipe to trigger navigation */
+            if (Math.abs(dx) > 40) goTo(current + (dx < 0 ? 1 : -1));
+          },
+          { passive: true },
+        );
+
+        /* ── Mouse wheel ─────────────────────────────────────────────────  */
+        var wheelLocked = false;
+        document.addEventListener(
+          "wheel",
+          function (e) {
+            if (wheelLocked) return;
+            /* Use whichever axis has greater delta */
+            var primary =
+              Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+            goTo(current + (primary > 0 ? 1 : -1));
+            /* Lock for 1 second to prevent runaway scroll */
+            wheelLocked = true;
+            setTimeout(function () {
+              wheelLocked = false;
+            }, 1000);
+          },
+          { passive: true },
+        );
+
+        /* ── Initialize on slide 1 ───────────────────────────────────────  */
+        goTo(0);
+      })();
+    </script>
+  </body>
+</html>

@@ -1,8 +1,8 @@
 /*
  * Sticky Header — static markup rendered at build time. Headroom-style
  * hide/show and the live GitHub star count are attached by the tiny inline
- * script in `app/pages/index.astro`, so this marketing page ships no React
- * runtime to the browser.
+ * scripts on each Astro page, so this marketing page ships no React runtime
+ * to the browser.
  *
  * The nav links go to internal multi-page routes (`/skills/`, `/systems/`,
  * `/templates/`, `/craft/`) so Google sees a real site hierarchy. Numbers
@@ -20,7 +20,7 @@ const ext = {
 
 export interface HeaderProps {
   /** Nav highlight target. `'home'` is the default for `/`. */
-  active?: 'home' | 'skills' | 'systems' | 'templates' | 'craft';
+  active?: 'home' | 'skills' | 'systems' | 'templates' | 'craft' | 'tutorials' | 'blog';
   /**
    * Live counts from the Markdown catalogs. Required so we can never
    * silently render stale fallback numbers when a caller forgets to
@@ -34,6 +34,9 @@ export interface HeaderProps {
     templates: number;
     craft: number;
   };
+  github?: {
+    starsLabel: string;
+  };
   /** Brand link target — `#top` on the homepage, `/` on sub-pages. */
   brandHref?: string;
 }
@@ -41,6 +44,7 @@ export interface HeaderProps {
 export function Header({
   active = 'home',
   counts,
+  github,
   brandHref = '#top',
 }: HeaderProps) {
   const linkClass = (key: NonNullable<HeaderProps['active']>) =>
@@ -51,7 +55,7 @@ export function Header({
       <div className='container nav-inner'>
         <a href={brandHref} className='brand'>
           <span className='brand-mark'>
-            <img src='/logo.png' alt='' width={36} height={36} />
+            <img src='/logo.webp' alt='' width={36} height={36} />
           </span>
           <span>Open Design</span>
           <span className='brand-meta'>
@@ -81,6 +85,16 @@ export function Header({
               </a>
             </li>
             <li>
+              <a href='/tutorials/' className={linkClass('tutorials')}>
+                Tutorials
+              </a>
+            </li>
+            <li>
+              <a href='/blog/' className={linkClass('blog')}>
+                Blog
+              </a>
+            </li>
+            <li>
               <a href={brandHref === '#top' ? '#contact' : '/#contact'}>
                 Contact
               </a>
@@ -104,7 +118,7 @@ export function Header({
             title='Click to star us on GitHub'
             {...ext}
           >
-            Star · <span data-github-stars>0</span>
+            Star · <span data-github-stars>{github?.starsLabel ?? '40K+'}</span>
           </a>
           <span className='status-dot' aria-hidden='true' />
         </div>

@@ -1,0 +1,21 @@
+# Spec §15.5 — Aliyun (Alibaba Cloud) override.
+#
+# Persistence:
+#   - alicloud-nas for /data/od (multi-AZ NAS).
+#   - alicloud-disk-essd for /data/config.
+#
+# Secrets:
+#   - Wire to Aliyun KMS via the Secrets Store CSI driver
+#     (alibabacloud-secrets) or fetch into the Secret manually.
+
+persistence:
+  enabled: true
+  data:
+    storageClass: alicloud-nas
+    size: 50Gi
+  config:
+    storageClass: alicloud-disk-essd
+    size: 1Gi
+
+ingress:
+  enabled: false

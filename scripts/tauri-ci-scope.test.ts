@@ -38,17 +38,13 @@ const tauriEvidencePaths = [
 
 test("Tauri migration evidence scripts trigger package smoke and tools-pack tests", async () => {
   const workflow = await readFile(ciWorkflowPath, "utf8");
-  const packagingScope = workflow.match(/patterns=\(\n(?<body>[\s\S]*?)\n\s*\)/)?.groups?.body;
-  assert.ok(packagingScope, "ci.yml must define the packaged_changes patterns array");
-
-  const toolsPackScope = workflow.match(
-    /if \[\[ "\$file" == "e2e\/lib\/vitest\/packaged-report\.ts"[\s\S]*?\]\]; then\n\s+tools_pack_tests_required=true/,
+  const tauriSmokeScope = workflow.match(
+    /if \[\[ "\$file" == "e2e\/lib\/vitest\/packaged-report\.ts"[\s\S]*?\]\]; then\n\s+tools_pack_tests_required=true\n\s+tauri_smoke_required=true/,
   )?.[0];
-  assert.ok(toolsPackScope, "ci.yml must define the explicit tools_pack_tests_required condition");
+  assert.ok(tauriSmokeScope, "ci.yml must define the explicit Tauri smoke/tools-pack condition");
 
   for (const filePath of tauriEvidencePaths) {
-    assert.match(packagingScope, quotedPathPattern(filePath), `${filePath} must set packaged_changes.required=true`);
-    assert.match(toolsPackScope, quotedPathPattern(filePath), `${filePath} must set tools_pack_tests_required=true`);
+    assert.match(tauriSmokeScope, quotedPathPattern(filePath), `${filePath} must require tools-pack and Tauri smoke`);
   }
 });
 
@@ -58,15 +54,15 @@ test("Tauri migration handoff can manually dispatch native CI", async () => {
   assert.match(workflow, /^\s+workflow_dispatch:\s*$/m, "ci.yml must keep workflow_dispatch for handoff CI runs");
   assert.match(
     workflow,
-    /else\n\s+required=true\n\s+daemon_tests_required=true\n\s+web_tests_required=true\n\s+tools_dev_tests_required=true\n\s+tools_pack_tests_required=true\n\s+fi/m,
+    /else\n\s+daemon_tests_required=true\n\s+web_tests_required=true\n\s+tools_dev_tests_required=true\n\s+tools_pack_tests_required=true\n\s+tauri_smoke_required=true\n\s+workspace_validation_required=true\n\s+fi/m,
     "workflow_dispatch must force the packaged scope so Windows/Linux Tauri smoke jobs run",
   );
   assert.match(workflow, /^\s+packaged_smoke_tauri_win:\s*$/m, "ci.yml must define the Windows Tauri smoke job");
   assert.match(workflow, /^\s+packaged_smoke_tauri_linux:\s*$/m, "ci.yml must define the Linux Tauri smoke job");
   assert.match(
     workflow,
-    /^\s+if: \$\{\{ needs\.packaged_changes\.outputs\.required == 'true' \}\}\s*$/m,
-    "Tauri smoke jobs must remain tied to packaged_changes.required",
+    /^\s+if: \$\{\{ needs\.change_scopes\.outputs\.tauri_smoke_required == 'true' \}\}\s*$/m,
+    "Tauri smoke jobs must remain tied to tauri_smoke_required",
   );
 });
 

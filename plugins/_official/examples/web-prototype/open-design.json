@@ -1,0 +1,132 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-web-prototype",
+  "title": "Web Prototype",
+  "version": "0.1.1",
+  "description": "General-purpose desktop web prototype. Single self-contained HTML file built\nby copying the seed `assets/template.html` and pasting section layouts from\n`references/layouts.md`. Default for any landing / marketing / docs / SaaS\npage when no more specific skill matches.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/web-prototype",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "design",
+    "web",
+    "desktop",
+    "mockup",
+    "landing",
+    "single-page",
+    "marketing-page",
+    "homepage"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Build a {{fidelity}} {{artifactKind}} for {{audience}}. Use {{designSystem}} as the design-system direction and start from {{template}}. Single self-contained HTML file built by copying the seed `assets/template.html` and pasting section layouts from `references/layouts.md`.",
+        "zh-CN": "使用这个插件完成以下任务：为 {{audience}} 构建一个 {{fidelity}} 的 {{artifactKind}}。设计系统方向使用 {{designSystem}}，从 {{template}} 开始。使用 `assets/template.html` 种子并从 `references/layouts.md` 粘贴版面，输出单文件 HTML。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Web Prototype"
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "string",
+        "required": true,
+        "placeholder": "SaaS landing page",
+        "default": "web prototype"
+      },
+      {
+        "name": "fidelity",
+        "label": "Fidelity",
+        "type": "select",
+        "required": true,
+        "options": [
+          "wireframe",
+          "high-fidelity"
+        ],
+        "default": "high-fidelity"
+      },
+      {
+        "name": "audience",
+        "label": "Audience",
+        "type": "string",
+        "required": true,
+        "placeholder": "startup founders evaluating an AI CRM",
+        "default": "product evaluators"
+      },
+      {
+        "name": "designSystem",
+        "label": "Design system",
+        "type": "string",
+        "placeholder": "OpenAI, Linear, shadcn, or custom brand notes",
+        "default": "the active project design system"
+      },
+      {
+        "name": "template",
+        "label": "Template",
+        "type": "string",
+        "placeholder": "marketing homepage, dashboard, docs page",
+        "default": "the bundled web prototype seed"
+      }
+    ],
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html",
+        "./assets/template.html",
+        "./references/checklist.md",
+        "./references/layouts.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

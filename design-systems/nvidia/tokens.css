@@ -1,0 +1,133 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/nvidia/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by NVIDIA".
+ * GPU computing power aesthetic: black canvas, NVIDIA Green (#76b900) as
+ * pure signal accent, industrial NVIDIA-EMEA font, minimal 2px radius.
+ *
+ * Key brand decisions encoded here:
+ *   - True black (#000000) primary canvas — maximum energy contrast
+ *   - NVIDIA Green (#76b900) as SIGNAL ONLY: borders, underlines, outlines
+ *     — never as large surface fills (that's the rule from the brand)
+ *   - Bold (700) as the dominant voice for headings, buttons, nav, labels
+ *   - Minimal radius (2px) — precision-engineered hardware aesthetic
+ *   - Primary button is transparent with 2px green border (NOT filled green)
+ *   - Hover shifts: green-border → teal fill (#1eaedb) — the NVIDIA surprise
+ *   - Dark/light section alternation — green works identically on both
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ─────────────────────────────────────────────────────
+   * True black as the dominant page canvas. Cards and content areas
+   * alternate with white sections. Near Black (#1a1a1a) for dark cards. */
+  --bg: #000000;             /* True Black — dominant dark canvas */
+  --surface: #1a1a1a;        /* Near Black — card backgrounds on black pages */
+  --surface-warm: var(--surface); /* alias — no warm tier; system is monochromatic */
+
+  /* ─── Foreground (on dark) ────────────────────────────────────────
+   * White primary text. Gray scale for hierarchy on dark backgrounds. */
+  --fg: #ffffff;             /* Pure White — primary text on dark backgrounds */
+  --fg-2: #a7a7a7;           /* Gray 300 — muted heading variants */
+  --muted: #757575;          /* Gray 500 — tertiary text, placeholders, footers */
+  --meta: #898989;           /* Gray 400 — secondary text, metadata */
+
+  /* ─── Border ──────────────────────────────────────────────────────
+   * Gray borders for structure; NVIDIA Green for emphasis/accent borders.
+   * The 2px green border IS the primary interactive signal. */
+  --border: #5e5e5e;         /* Gray Border — subtle borders, divider lines */
+  --border-soft: #2a2a2a;    /* Barely visible inner divider on dark */
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * NVIDIA Green — the brand fingerprint. Use ONLY for borders, underlines,
+   * outlines, and active indicators. Never as a filled surface.
+   *
+   * Note on hover/active: NVIDIA's CTA hover shifts to TEAL (#1eaedb),
+   * not a darker green. This is the NVIDIA brand surprise — document it.
+   * --accent-hover: teal fill for hover state
+   * --accent-active: bright blue for active/pressed */
+  --accent: #76b900;         /* NVIDIA Green — the signature */
+  --accent-on: #000000;      /* Dark text on green (if ever used as fill) */
+  --accent-hover: #1eaedb;   /* Teal — NVIDIA button hover color */
+  --accent-active: #007fff;  /* Bright Blue — NVIDIA button active color */
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * Success uses a darker green (#3f8500) — clearly distinct from the
+   * brand NVIDIA Green (#76b900) while remaining in the green family. */
+  --success: #3f8500;        /* Green 500 — success (darker than brand green) */
+  --warn: #ef9100;           /* Yellow 300 — advisory states */
+  --danger: #e52020;         /* Red 500 — error states */
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * NVIDIA-EMEA font (Arial/Helvetica fallbacks) — European, pragmatic,
+   * engineering-focused. Bold (700) as the dominant voice.
+   * 400 reserved for body text and descriptions only. */
+  --font-display: "NVIDIA-EMEA", Arial, Helvetica, sans-serif;
+  --font-body: "NVIDIA-EMEA", Arial, Helvetica, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  /* Type scale — DESIGN.md §3. Display at 36px (modest by GPU standards).
+   * Dense technical content doesn't need massive display typography. */
+  --text-xs: 10px;           /* Micro Label — uppercase tiny badges */
+  --text-sm: 12px;           /* Caption Small — fine print, legal */
+  --text-base: 16px;         /* Body — standard reading text */
+  --text-lg: 18px;           /* Body Large — emphasized lead paragraphs */
+  --text-xl: 22px;           /* Sub-heading — feature descriptions */
+  --text-2xl: 24px;          /* Section Heading */
+  --text-3xl: 32px;          /* Below display — intermediate heading */
+  --text-4xl: 36px;          /* Display Hero — maximum impact headlines */
+
+  --leading-body: 1.5;       /* Body text */
+  --leading-tight: 1.25;     /* Tight headings — dense authoritative blocks */
+  --tracking-display: 0em;   /* No decorative tracking — font carries industrial character */
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * Tighter than typical SaaS — technical content requires density.
+   * Primary padding values: 8px, 11px, 13px, 16px, 24px, 32px. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  --section-y-desktop: 64px; /* Denser than typical — GPU catalog feel */
+  --section-y-tablet: 48px;
+  --section-y-phone: 32px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * 2px for virtually everything — precision-engineered appearance.
+   * No rounding that would soften the hardware character. */
+  --radius-sm: 2px;          /* Everything — buttons, cards, inputs */
+  --radius-md: 2px;          /* Same — minimal variation */
+  --radius-lg: 4px;          /* Rare larger containers */
+  --radius-pill: 9999px;     /* Declared for schema compliance */
+
+  /* ─── Elevation ───────────────────────────────────────────────────
+   * One shadow value in the system: 5px ambient blur at 30% opacity.
+   * The primary depth signal is color contrast (black vs white sections)
+   * and green accent borders. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 2px var(--accent);   /* Green border ring — NVIDIA signal */
+  --elev-raised: rgba(0, 0, 0, 0.3) 0px 0px 5px 0px; /* Ambient card shadow */
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * Black outline focus — crisp, hardware-like. The green accent
+   * is already used for elev-ring; focus uses black for distinction. */
+  --focus-ring: 0 0 0 2px #ffffff; /* White ring on dark surface for visibility */
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * Standard durations — GPU software feels solid and instantaneous. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * 1200px container with full-width hero sections.
+   * Feature sections: 2–3 column product card grids. */
+  --container-max: 1200px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 16px;
+  --container-gutter-phone: 12px;
+}

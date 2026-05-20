@@ -6,6 +6,7 @@ import type {
   PreviewVisualMarkKind,
 } from './comments';
 import type { ResearchOptions } from './research';
+import type { RunContextSelection } from './context.js';
 
 export type ChatRole = 'user' | 'assistant';
 export type ChatCommentSelectionKind = PreviewCommentSelectionKind | 'visual';
@@ -33,6 +34,7 @@ export interface ChatRequest {
   model?: string | null;
   reasoning?: string | null;
   research?: ResearchOptions;
+  context?: RunContextSelection;
 }
 
 export interface ChatRunCreateRequest extends ChatRequest {
@@ -68,6 +70,8 @@ export interface ChatMessageFeedback {
 
 export interface ChatRunCreateResponse {
   runId: string;
+  appliedPluginSnapshotId?: string;
+  pluginId?: string;
 }
 
 export interface ChatRunStatusResponse {
@@ -76,11 +80,15 @@ export interface ChatRunStatusResponse {
   conversationId: string | null;
   assistantMessageId: string | null;
   agentId: string | null;
+  appliedPluginSnapshotId?: string | null;
+  pluginId?: string | null;
   status: ChatRunStatus;
   createdAt: number;
   updatedAt: number;
   exitCode?: number | null;
   signal?: string | null;
+  error?: string | null;
+  errorCode?: string | null;
 }
 
 export interface ChatRunListResponse {
