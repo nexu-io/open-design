@@ -315,6 +315,15 @@ export async function buildDeployFilePlan(projectsRoot: string, projectId: strin
       for (const ref of extractCssReferences(projectFile.buffer.toString('utf8'))) {
         pending.push({ ref, base: cssBase });
       }
+    } else if (/\.html?$/i.test(safePath)) {
+      const htmlBase = path.posix.dirname(safePath);
+      const htmlText = projectFile.buffer.toString('utf8');
+      for (const ref of extractHtmlReferences(htmlText)) {
+        pending.push({ ref, base: htmlBase });
+      }
+      for (const ref of extractInlineCssReferences(htmlText)) {
+        pending.push({ ref, base: htmlBase });
+      }
     }
   }
 
@@ -327,7 +336,13 @@ export async function buildDeployFilePlan(projectsRoot: string, projectId: strin
         files.set(filePath, { ...existing, data: Buffer.from(rewritten, 'utf8') });
       }
     }
-    files.set(routing.vercelJson.file, routing.vercelJson);
+    // Invariant: anchor rewrites above unconditionally point to clean routes,
+    // so the deploy plan must always carry a vercel.json with cleanUrls:true.
+    // Merge into the user's file when it is a plain object; otherwise the
+    // routing config takes precedence over malformed or non-object data.
+    const existingVercel = files.get(routing.vercelJson.file);
+    const mergedVercel = existingVercel ? mergeUserVercelJson(existingVercel) : null;
+    files.set(routing.vercelJson.file, mergedVercel ?? routing.vercelJson);
   }
 
   return {
@@ -336,6 +351,25 @@ export async function buildDeployFilePlan(projectsRoot: string, projectId: strin
     files: Array.from(files.values()),
     missing,
     invalid,
+  };
+}
+
+function mergeUserVercelJson(existing: DeployFile): DeployFile | null {
+  const text = Buffer.isBuffer(existing.data) || existing.data instanceof Uint8Array
+    ? Buffer.from(existing.data).toString('utf8')
+    : String(existing.data);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const merged = { ...(parsed as Record<string, unknown>), cleanUrls: true };
+  return {
+    ...existing,
+    data: Buffer.from(JSON.stringify(merged), 'utf8'),
+    contentType: 'application/json',
   };
 }
 
@@ -1441,6 +1475,10 @@ export function buildVercelRoutingConfig(files: DeployFile[]): VercelRoutingConf
     routes.push(route);
     pathToRoute.set(f.file, route);
     const source = f.sourcePath;
+    // First-writer-wins when two emitted files share a sourcePath: htmlFiles
+    // is ordered by file insertion, so the earlier deploy path keeps the
+    // alias. Overwriting silently would let a later duplicate steal an
+    // anchor target the earlier file is rendering links to.
     if (source && source !== f.file && !pathToRoute.has(source)) {
       pathToRoute.set(source, route);
     }
@@ -1482,7 +1520,7 @@ function rewriteAnchorHrefsToCleanRoutes(html: string, pathToRoute: Map<string, 
   // mutating comment contents.
   const rawTextRanges = htmlRawTextRanges(html);
   return html.replace(/<a\b([^<>]*?)\bhref\s*=\s*(["'])([^"']+)\2([^<>]*)>/gi, (match, pre, quote, href, post, offset) => {
-    if (isOffsetInRanges(offset, rawTextRanges)) return match;
+    if (isOffsetInRanges(Number(offset), rawTextRanges)) return match;
     if (isExternalUrl(href)) return match;
     if (href.startsWith('#')) return match;
     const splitIdx = href.search(/[?#]/);
@@ -1492,6 +1530,7 @@ function rewriteAnchorHrefsToCleanRoutes(html: string, pathToRoute: Map<string, 
     const resolved = pathnamePart.startsWith('/')
       ? pathnamePart.replace(/^\/+/, '')
       : path.posix.normalize(`${currentDir}/${pathnamePart}`);
+    if (resolved.startsWith('..')) return match;
     const route = pathToRoute.get(resolved);
     if (!route) return match;
     return `<a${pre}href=${quote}${route}${suffix}${quote}${post}>`;
