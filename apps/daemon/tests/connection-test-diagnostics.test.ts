@@ -11,9 +11,11 @@ import {
   buildAgentDiagnostics,
   createAgentSink,
   recoveryHintsFor,
+  redactConnectionTestResponse,
   sanitizeStderrExcerpt,
   testAgentConnection,
 } from '../src/connectionTest.js';
+import type { ConnectionTestResponse } from '@open-design/contracts/api/connectionTest';
 import { startServer } from '../src/server.js';
 
 interface StartedServer {
@@ -106,17 +108,7 @@ describe('sanitizeStderrExcerpt', () => {
     expect(out!).not.toContain('sk-xyz123');
   });
 
-  it('redacts bare configured secret values when the caller threads exactSecrets', () => {
-    const out = sanitizeStderrExcerpt(
-      'Error: invalid api key sk-rotateMe',
-      ['sk-rotateMe'],
-    );
-    expect(out).not.toBeNull();
-    expect(out!).not.toContain('sk-rotateMe');
-    expect(out!).toContain('[REDACTED]');
-  });
-
-  it('leaves bare tokens with no header/query context unredacted when exactSecrets is omitted', () => {
+  it('leaves bare tokens unredacted by the producer; exact-secret scrubbing happens at the response boundary', () => {
     const out = sanitizeStderrExcerpt('Error: invalid api key sk-rotateMe');
     expect(out).not.toBeNull();
     expect(out!).toContain('sk-rotateMe');
@@ -211,24 +203,11 @@ describe('buildAgentDiagnostics', () => {
     expect(d.stderrExcerpt!).toContain('[REDACTED]');
   });
 
-  it('scrubs the exact agent secret values supplied by the caller', () => {
-    const d = buildAgentDiagnostics({
-      agentId: 'codex',
-      agentName: 'Codex CLI',
-      kind: 'agent_spawn_failed',
-      phase: 'spawn',
-      binaryPath: '/usr/local/bin/codex',
-      binaryVersion: '0.1.2',
-      stderrRaw: 'Error: api key sk-xyz rejected at https://api.example.com',
-      agentSecrets: ['sk-xyz'],
-    });
-    expect(d.stderrExcerpt).not.toBeNull();
-    expect(d.stderrExcerpt!).not.toContain('sk-xyz');
-    expect(d.stderrExcerpt!).toContain('[REDACTED]');
-  });
+});
 
-  it('scrubs AWS/GCP-style cloud-provider secrets when the caller filters configuredAgentEnv through the broadened regex', () => {
-    const configuredAgentEnv = {
+describe('redactConnectionTestResponse with broad cloud-secret env list', () => {
+  it('scrubs AWS/GCP/DB secrets from response.detail and diagnostics.stderrExcerpt while leaving the binary path readable', () => {
+    const spawnedEnvSubset = {
       OPENAI_API_KEY: 'sk-openai-rotateMe',
       GITHUB_TOKEN: 'ghp_tokenvalue',
       AWS_SECRET_ACCESS_KEY: 'awsSecret/+ABC123',
@@ -237,30 +216,33 @@ describe('buildAgentDiagnostics', () => {
       AZURE_CLIENT_SECRET: 'azureSecretValue',
       CODEX_BIN: '/usr/local/bin/codex',
     };
-    const agentSecrets = Object.entries(configuredAgentEnv)
+    const agentSecrets = Object.entries(spawnedEnvSubset)
       .filter(([k]) => /(_API_KEY|_TOKEN|_SECRET|_PASSWORD|_PRIVATE_KEY|_SECRET_KEY|_ACCESS_KEY)$/i.test(k))
       .map(([, v]) => v);
-    expect(agentSecrets).toContain('awsSecret/+ABC123');
-    expect(agentSecrets).toContain('-----BEGIN PRIVATE KEY-----abc');
-    expect(agentSecrets).toContain('hunter2');
-    expect(agentSecrets).toContain('azureSecretValue');
-    expect(agentSecrets).not.toContain('/usr/local/bin/codex');
-    const d = buildAgentDiagnostics({
-      agentId: 'codex',
-      agentName: 'Codex CLI',
+    const response: ConnectionTestResponse = {
+      ok: false,
       kind: 'agent_spawn_failed',
-      phase: 'spawn',
-      binaryPath: '/usr/local/bin/codex',
-      binaryVersion: '0.1.2',
-      stderrRaw:
-        'Error: AWS rejected key awsSecret/+ABC123; also DB_PASSWORD=hunter2 leaked; private key -----BEGIN PRIVATE KEY-----abc; binary /usr/local/bin/codex still resolves',
-      agentSecrets,
-    });
-    expect(d.stderrExcerpt).not.toBeNull();
-    expect(d.stderrExcerpt!).not.toContain('awsSecret/+ABC123');
-    expect(d.stderrExcerpt!).not.toContain('hunter2');
-    expect(d.stderrExcerpt!).not.toContain('-----BEGIN PRIVATE KEY-----abc');
-    expect(d.stderrExcerpt!).toContain('/usr/local/bin/codex');
+      latencyMs: 7,
+      detail:
+        'Error: AWS rejected awsSecret/+ABC123; DB_PASSWORD=hunter2 leaked; binary /usr/local/bin/codex still resolves',
+      diagnostics: {
+        agentId: 'codex',
+        agentName: 'Codex CLI',
+        phase: 'spawn',
+        binaryPath: '/usr/local/bin/codex',
+        binaryVersion: '0.1.2',
+        stderrExcerpt:
+          'Error: AWS rejected key awsSecret/+ABC123; also DB_PASSWORD=hunter2 leaked; private key -----BEGIN PRIVATE KEY-----abc; binary /usr/local/bin/codex still resolves',
+        recoveryHints: [],
+      },
+    };
+    const out = redactConnectionTestResponse(response, agentSecrets);
+    expect(out.detail!).not.toContain('awsSecret/+ABC123');
+    expect(out.detail!).not.toContain('hunter2');
+    expect(out.diagnostics!.stderrExcerpt!).not.toContain('awsSecret/+ABC123');
+    expect(out.diagnostics!.stderrExcerpt!).not.toContain('hunter2');
+    expect(out.diagnostics!.stderrExcerpt!).not.toContain('-----BEGIN PRIVATE KEY-----abc');
+    expect(out.diagnostics!.binaryPath).toBe('/usr/local/bin/codex');
   });
 });
 
@@ -403,5 +385,121 @@ setImmediate(() => process.exit(1));
         expect(Array.isArray(diag!.recoveryHints)).toBe(true);
       },
     );
+  });
+
+  it('scrubs the configured agent secret from both result.detail and result.diagnostics.stderrExcerpt when the agent echoes the bare token', async () => {
+    const leakKey = `sk-bare-cfg-${Date.now()}`;
+    await withFakeCodex(
+      `
+process.stderr.write('boot failed: authentication rejected key ' + (process.env.CODEX_API_KEY || '') + ' from agent\\n');
+process.stdout.write('reply mentioned ' + (process.env.CODEX_API_KEY || '') + ' inline\\n');
+setImmediate(() => process.exit(1));
+`,
+      async () => {
+        const result = await testAgentConnection({
+          agentId: 'codex',
+          agentCliEnv: { codex: { CODEX_API_KEY: leakKey } },
+        });
+        expect(result.ok).toBe(false);
+        expect(typeof result.detail).toBe('string');
+        expect(result.detail!).not.toContain(leakKey);
+        expect(result.detail!).toContain('[REDACTED]');
+        expect(result.diagnostics).toBeDefined();
+        expect(result.diagnostics!.stderrExcerpt).not.toBeNull();
+        expect(result.diagnostics!.stderrExcerpt!).not.toContain(leakKey);
+      },
+    );
+  });
+
+  it('scrubs configured agent secrets from result.detail and diagnostics for a successful Codex run via POST /api/test/connection', async () => {
+    const leakKey = `sk-bare-http-${Date.now()}`;
+    await withFakeCodex(
+      `
+process.stderr.write('warning: token ' + (process.env.CODEX_API_KEY || '') + ' near boundary\\n');
+console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'ok' } }));
+setImmediate(() => process.exit(0));
+`,
+      async () => {
+        const res = await realFetch(`${baseUrl}/api/test/connection`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            mode: 'agent',
+            agentId: 'codex',
+            agentCliEnv: { codex: { CODEX_API_KEY: leakKey } },
+          }),
+        });
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as Record<string, unknown>;
+        const detail = body.detail as string | undefined;
+        if (detail) {
+          expect(detail).not.toContain(leakKey);
+        }
+        const diag = body.diagnostics as Record<string, unknown> | undefined;
+        expect(diag).toBeDefined();
+        if (typeof diag!.stderrExcerpt === 'string') {
+          expect(diag!.stderrExcerpt as string).not.toContain(leakKey);
+        }
+      },
+    );
+  });
+});
+
+describe('redactConnectionTestResponse', () => {
+  it('scrubs configured secrets from every string field of the response', () => {
+    const response: ConnectionTestResponse = {
+      ok: false,
+      kind: 'agent_spawn_failed',
+      latencyMs: 12,
+      model: 'codex-default',
+      sample: 'reply with sk-rotateMe attached',
+      agentName: 'Codex CLI',
+      detail: 'boot failed: key sk-rotateMe rejected by upstream',
+      configuredExecutablePath: '/usr/local/bin/codex',
+      detectedExecutablePath: '/usr/local/bin/codex',
+      usedExecutablePath: '/usr/local/bin/codex',
+      usedExecutableSource: 'configured',
+      diagnostics: {
+        agentId: 'codex',
+        agentName: 'Codex CLI',
+        phase: 'spawn',
+        binaryPath: '/usr/local/bin/codex',
+        binaryVersion: 'codex 1.0.0 sk-rotateMe',
+        stderrExcerpt: 'boot failed: key sk-rotateMe rejected',
+        recoveryHints: ['Inspect log for sk-rotateMe context'],
+      },
+    };
+    const out = redactConnectionTestResponse(response, ['sk-rotateMe']);
+    expect(out.detail!).not.toContain('sk-rotateMe');
+    expect(out.detail!).toContain('[REDACTED]');
+    expect(out.sample!).not.toContain('sk-rotateMe');
+    expect(out.diagnostics!.binaryVersion!).not.toContain('sk-rotateMe');
+    expect(out.diagnostics!.stderrExcerpt!).not.toContain('sk-rotateMe');
+    expect(out.diagnostics!.recoveryHints[0]).not.toContain('sk-rotateMe');
+    expect(out.diagnostics!.binaryPath).toBe('/usr/local/bin/codex');
+  });
+
+  it('still applies pattern-based redaction even when no exact secrets are supplied', () => {
+    const response: ConnectionTestResponse = {
+      ok: false,
+      kind: 'unknown',
+      latencyMs: 5,
+      detail: 'curl failed: authorization: Bearer abcdef123 missing',
+    };
+    const out = redactConnectionTestResponse(response, []);
+    expect(out.detail!).not.toContain('abcdef123');
+    expect(out.detail!).toContain('[REDACTED]');
+  });
+
+  it('leaves null/undefined string fields untouched', () => {
+    const response: ConnectionTestResponse = {
+      ok: true,
+      kind: 'success',
+      latencyMs: 1,
+    };
+    const out = redactConnectionTestResponse(response, ['sk-anything']);
+    expect(out.detail).toBeUndefined();
+    expect(out.sample).toBeUndefined();
+    expect(out.diagnostics).toBeUndefined();
   });
 });

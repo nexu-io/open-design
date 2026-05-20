@@ -337,13 +337,16 @@ export const STDERR_EXCERPT_MAX_CHARS = 500;
 // output (`\x1b[?25l` cursor toggles, `\x1b[?1049h` alternate screen).
 const ANSI_ESCAPE_RE = /\x1b\[[0-9;?]*[A-Za-z]/g;
 
+// Pattern-based redaction stays here as defense in depth (Bearer / header /
+// query). Exact-secret scrubbing runs at the response boundary instead — see
+// redactConnectionTestResponse — so every text field of a connection-test
+// response is covered without each producer threading the secret list.
 export function sanitizeStderrExcerpt(
   raw: string | null | undefined,
-  exactSecrets: Array<string | undefined | null> = [],
 ): string | null {
   if (typeof raw !== 'string') return null;
   const stripped = raw.replace(ANSI_ESCAPE_RE, '').replace(/\r/g, '');
-  const redacted = redactSecrets(stripped, exactSecrets).trim();
+  const redacted = redactSecrets(stripped).trim();
   if (redacted.length === 0) return null;
   if (redacted.length <= STDERR_EXCERPT_MAX_CHARS) return redacted;
   return redacted.slice(0, STDERR_EXCERPT_MAX_CHARS);
@@ -428,7 +431,6 @@ interface BuildAgentDiagnosticsInput {
   binaryPath: string | null;
   binaryVersion: string | null;
   stderrRaw: string | null;
-  agentSecrets?: Array<string | undefined | null>;
 }
 
 export function buildAgentDiagnostics(
@@ -440,13 +442,54 @@ export function buildAgentDiagnostics(
     phase: input.phase,
     binaryPath: input.binaryPath,
     binaryVersion: input.binaryVersion,
-    stderrExcerpt: sanitizeStderrExcerpt(input.stderrRaw, input.agentSecrets),
+    stderrExcerpt: sanitizeStderrExcerpt(input.stderrRaw),
     recoveryHints: recoveryHintsFor({
       phase: input.phase,
       kind: input.kind,
       agentId: input.agentId,
     }),
   };
+}
+
+// Apply exact-secret redaction to every string-valued field of a connection
+// test response — detail, sample, agentName, executable-path diagnostics, and
+// the structured diagnostics envelope. Pattern-based scrubbing already runs
+// inside each producer; this boundary helper closes the gaps where a bare
+// configured secret value (e.g. an OPENAI_API_KEY echoed verbatim into stderr
+// or a CLI's stdout reply) would otherwise reach the caller unredacted.
+export function redactConnectionTestResponse(
+  result: ConnectionTestResponse,
+  agentSecrets: Array<string | undefined | null>,
+): ConnectionTestResponse {
+  const scrub = (value: string | undefined): string | undefined =>
+    typeof value === 'string' ? redactSecrets(value, agentSecrets) : value;
+  const out: ConnectionTestResponse = {
+    ...result,
+    ...(result.sample !== undefined ? { sample: scrub(result.sample)! } : {}),
+    ...(result.agentName !== undefined ? { agentName: scrub(result.agentName)! } : {}),
+    ...(result.detail !== undefined ? { detail: scrub(result.detail)! } : {}),
+    ...(result.configuredExecutablePath !== undefined
+      ? { configuredExecutablePath: scrub(result.configuredExecutablePath)! }
+      : {}),
+    ...(result.detectedExecutablePath !== undefined
+      ? { detectedExecutablePath: scrub(result.detectedExecutablePath)! }
+      : {}),
+    ...(result.usedExecutablePath !== undefined
+      ? { usedExecutablePath: scrub(result.usedExecutablePath)! }
+      : {}),
+  };
+  if (result.diagnostics) {
+    const d = result.diagnostics;
+    out.diagnostics = {
+      ...d,
+      agentName: redactSecrets(d.agentName, agentSecrets),
+      binaryPath: typeof d.binaryPath === 'string' ? redactSecrets(d.binaryPath, agentSecrets) : d.binaryPath,
+      binaryVersion: typeof d.binaryVersion === 'string' ? redactSecrets(d.binaryVersion, agentSecrets) : d.binaryVersion,
+      stderrExcerpt: typeof d.stderrExcerpt === 'string' ? redactSecrets(d.stderrExcerpt, agentSecrets) : d.stderrExcerpt,
+      recoveryHints: d.recoveryHints.map((h) => redactSecrets(h, agentSecrets)),
+    };
+  }
+  return out;
 }
 
 type ProviderConnectionInput = ProviderTestRequest & { signal?: AbortSignal };
@@ -1263,7 +1306,6 @@ async function probeAgentBinaryVersion(
   launchPath: string,
   env: NodeJS.ProcessEnv,
   timeoutMs: number,
-  exactSecrets: Array<string | undefined | null> = [],
   signal?: AbortSignal,
 ): Promise<string | null> {
   if (signal?.aborted) return null;
@@ -1328,7 +1370,7 @@ async function probeAgentBinaryVersion(
         finish(null);
         return;
       }
-      finish(redactSecrets(firstLine, exactSecrets).slice(0, 200));
+      finish(redactSecrets(firstLine).slice(0, 200));
     });
   });
 }
@@ -1549,7 +1591,6 @@ async function testAgentConnectionInternal(
         executableResolution.launchPath,
         env,
         AGENT_VERSION_PROBE_TIMEOUT_MS,
-        collectAgentSecretsFromEnv(env),
         input.signal,
       );
     }
@@ -1907,9 +1948,13 @@ export async function testAgentConnection(
       binaryPath,
       binaryVersion: diag.binaryVersion,
       stderrRaw: diag.stderrRaw,
-      agentSecrets,
     });
   };
+  const finalize = (
+    response: ConnectionTestResponse,
+    envelope: ConnectionTestDiagnostics,
+  ): ConnectionTestResponse =>
+    redactConnectionTestResponse(attachDiagnostics(response, envelope), agentSecrets);
 
   if (
     input.agentId === 'codex' &&
@@ -1920,7 +1965,7 @@ export async function testAgentConnection(
       const usedPath =
         executableResolution.launchPath ?? executableResolution.configuredOverridePath;
       const envelope = buildEnvelope(primaryResult.kind, primaryDiag, usedPath);
-      return attachDiagnostics({
+      return finalize({
         ...primaryResult,
         configuredExecutablePath: executableResolution.configuredOverridePath,
         usedExecutablePath: usedPath,
@@ -1928,10 +1973,8 @@ export async function testAgentConnection(
         ...(executableResolution.pathResolvedPath
           ? { detectedExecutablePath: executableResolution.pathResolvedPath }
           : {}),
-        detail: redactSecrets(
-          codexConfiguredPathSuccessDetail(
-            executableResolution.configuredOverridePath,
-          ),
+        detail: codexConfiguredPathSuccessDetail(
+          executableResolution.configuredOverridePath,
         ),
       }, envelope);
     }
@@ -1939,17 +1982,15 @@ export async function testAgentConnection(
       const usedPath =
         executableResolution.launchPath ?? executableResolution.pathResolvedPath;
       const envelope = buildEnvelope(primaryResult.kind, primaryDiag, usedPath);
-      return attachDiagnostics({
+      return finalize({
         ...primaryResult,
         configuredExecutablePath: configuredCodexBin,
         detectedExecutablePath: executableResolution.pathResolvedPath,
         usedExecutablePath: usedPath,
         usedExecutableSource: 'fallback_invalid',
-        detail: redactSecrets(
-          codexInvalidConfiguredPathFallbackDetail(
-            configuredCodexBin,
-            executableResolution.pathResolvedPath,
-          ),
+        detail: codexInvalidConfiguredPathFallbackDetail(
+          configuredCodexBin,
+          executableResolution.pathResolvedPath,
         ),
       }, envelope);
     }
@@ -1963,7 +2004,7 @@ export async function testAgentConnection(
     executableResolution.configuredOverridePath === executableResolution.pathResolvedPath
   ) {
     const envelope = buildEnvelope(primaryResult.kind, primaryDiag);
-    return attachDiagnostics(primaryResult, envelope);
+    return finalize(primaryResult, envelope);
   }
   const fallbackDiag = freshDiagState(input.agentId);
   const fallbackResult = await testAgentConnectionInternal(
@@ -1975,24 +2016,22 @@ export async function testAgentConnection(
   );
   if (!fallbackResult.ok) {
     const envelope = buildEnvelope(primaryResult.kind, primaryDiag);
-    return attachDiagnostics(primaryResult, envelope);
+    return finalize(primaryResult, envelope);
   }
   const usedPath =
     fallbackDiag.binaryPath ??
     executableResolution.launchPath ??
     executableResolution.pathResolvedPath;
   const envelope = buildEnvelope(fallbackResult.kind, fallbackDiag, usedPath);
-  return attachDiagnostics({
+  return finalize({
     ...fallbackResult,
     configuredExecutablePath: executableResolution.configuredOverridePath,
     detectedExecutablePath: executableResolution.pathResolvedPath,
     usedExecutablePath: usedPath,
     usedExecutableSource: 'fallback_failed',
-    detail: redactSecrets(
-      codexExecutableFallbackSuccessDetail(
-        executableResolution.configuredOverridePath,
-        executableResolution.pathResolvedPath,
-      ),
+    detail: codexExecutableFallbackSuccessDetail(
+      executableResolution.configuredOverridePath,
+      executableResolution.pathResolvedPath,
     ),
   }, envelope);
 }
