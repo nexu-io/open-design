@@ -59,7 +59,7 @@ import {
   requestPreviewSnapshot,
 } from '../runtime/exports';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
-import { buildLazySrcdocTransport, buildSrcdoc } from '../runtime/srcdoc';
+import { buildLazySrcdocTransport, buildSrcdoc, canActivateSrcDocTransport } from '../runtime/srcdoc';
 import {
   hasUrlModeBridge,
   htmlNeedsSandboxShim,
@@ -3998,21 +3998,49 @@ function HtmlViewer({
   const lazySrcDocTransport = useMemo(() => buildLazySrcdocTransport(), []);
   const [hasLazySrcDocTransport, setHasLazySrcDocTransport] = useState(useUrlLoadPreview);
   const [srcDocTransportResetKey, setSrcDocTransportResetKey] = useState(0);
+  const [srcDocShellReady, setSrcDocShellReady] = useState(false);
   const wasUrlLoadPreviewRef = useRef(useUrlLoadPreview);
   useEffect(() => {
     if (useUrlLoadPreview) setHasLazySrcDocTransport(true);
   }, [useUrlLoadPreview]);
+  // Reset the shell-ready latch whenever the srcDoc iframe re-mounts. The
+  // next shell will post `od:srcdoc-transport-ready` (or fire onLoad) and
+  // flip this back to true. See #2253.
+  useEffect(() => {
+    setSrcDocShellReady(false);
+  }, [srcDocTransportResetKey]);
+  // Listen for the shell's ready handshake. Gating activation on this is
+  // what fixes the #2253 race: opening Tweaks right after a key-driven
+  // re-mount used to post `activate` before the shell's listener was
+  // installed, dropping the message and stranding the iframe on the empty
+  // 536-byte body.
+  useEffect(() => {
+    function onMessage(ev: MessageEvent) {
+      if (ev.source !== srcDocPreviewIframeRef.current?.contentWindow) return;
+      const data = ev.data as { type?: string } | null;
+      if (data?.type !== 'od:srcdoc-transport-ready') return;
+      setSrcDocShellReady(true);
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, []);
   const useLazySrcDocTransport = useUrlLoadPreview || hasLazySrcDocTransport;
   const srcDocTransportContent = useLazySrcDocTransport ? lazySrcDocTransport : srcDoc;
   const urlTransportSrc = useUrlLoadPreview ? activePreviewSrcUrl : 'about:blank';
   const activateSrcDocTransport = useCallback((target: HTMLIFrameElement | null = srcDocPreviewIframeRef.current) => {
+    if (!canActivateSrcDocTransport({
+      srcDoc,
+      useUrlLoadPreview,
+      useLazySrcDocTransport,
+      shellReady: srcDocShellReady,
+      activatedHtml: activatedSrcDocTransportHtmlRef.current,
+    })) return false;
     const win = target?.contentWindow;
-    if (!win || !srcDoc || useUrlLoadPreview || !useLazySrcDocTransport) return false;
-    if (activatedSrcDocTransportHtmlRef.current === srcDoc) return false;
+    if (!win) return false;
     win.postMessage({ type: 'od:srcdoc-transport-activate', html: srcDoc }, '*');
     activatedSrcDocTransportHtmlRef.current = srcDoc;
     return true;
-  }, [srcDoc, useLazySrcDocTransport, useUrlLoadPreview]);
+  }, [srcDoc, useLazySrcDocTransport, useUrlLoadPreview, srcDocShellReady]);
   useEffect(() => {
     if (useUrlLoadPreview) {
       activatedSrcDocTransportHtmlRef.current = null;
@@ -6022,6 +6050,11 @@ function HtmlViewer({
                       onLoad={() => {
                         const frame = srcDocPreviewIframeRef.current;
                         if (!useUrlLoadPreview) iframeRef.current = frame;
+                        // Belt-and-suspenders for the ready handshake: if the
+                        // postMessage racing the parent's listener registration
+                        // ever loses, the load event still tells us the shell
+                        // script ran to completion.
+                        if (useLazySrcDocTransport) setSrcDocShellReady(true);
                         activateSrcDocTransport(frame);
                         dcViewportRestoreAtRef.current = Date.now();
                         frame?.contentWindow?.postMessage({
