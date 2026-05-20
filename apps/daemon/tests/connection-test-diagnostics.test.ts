@@ -288,6 +288,24 @@ describe('testAgentConnection diagnostics envelope', () => {
     expect(result.diagnostics!.recoveryHints.length).toBeGreaterThan(0);
   });
 
+  it('captures binaryVersion from the --version probe across POSIX bins and Windows .cmd shims', async () => {
+    await withFakeCodex(
+      `
+if (process.argv.includes('--version')) {
+  process.stdout.write('codex 1.2.3-probe\\n');
+  process.exit(0);
+}
+console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'ok' } }));
+setImmediate(() => process.exit(0));
+`,
+      async () => {
+        const result = await testAgentConnection({ agentId: 'codex' });
+        expect(result.diagnostics).toBeDefined();
+        expect(result.diagnostics!.binaryVersion).toBe('codex 1.2.3-probe');
+      },
+    );
+  });
+
   it('reports a stream-phase diagnostics envelope on the Codex success path', async () => {
     await withFakeCodex(
       `

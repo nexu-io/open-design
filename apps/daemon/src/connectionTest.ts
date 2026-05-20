@@ -1320,10 +1320,16 @@ async function probeAgentBinaryVersion(
     };
     let child: ReturnType<typeof spawn>;
     try {
-      child = spawn(launchPath, ['--version'], {
+      const invocation = createCommandInvocation({
+        command: launchPath,
+        args: ['--version'],
+        env,
+      });
+      child = spawn(invocation.command, invocation.args, {
         env,
         stdio: ['ignore', 'pipe', 'ignore'],
         shell: false,
+        windowsVerbatimArguments: invocation.windowsVerbatimArguments,
       });
     } catch {
       finish(null);
