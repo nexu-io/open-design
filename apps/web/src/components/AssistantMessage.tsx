@@ -610,6 +610,7 @@ function AssistantFeedback({
         has_custom_reason: hasCustomReason,
         ...(hasCustomReason ? { custom_reason: trimmedCustomReason } : {}),
       },
+      { requestId },
     );
     // P0 feedback_submit_result — paired with the click via requestId so
     // PostHog dashboards can correlate intent → persistence. onFeedback in

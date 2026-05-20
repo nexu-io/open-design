@@ -42,6 +42,8 @@ import {
   type ResearchOptions,
 } from '@open-design/contracts';
 import { projectKindToTracking } from '@open-design/contracts/analytics';
+import { useAnalytics } from '../analytics/provider';
+import { trackPageView } from '../analytics/events';
 import { navigate } from '../router';
 import { agentDisplayName, agentModelDisplayName } from '../utils/agentLabels';
 import { isMacPlatform } from '../utils/platform';
@@ -456,6 +458,20 @@ export function ProjectView({
   onProjectsRefresh,
 }: Props) {
   const t = useT();
+  const analytics = useAnalytics();
+  // P0 page_view page_name=chat_panel — fire once per project mount.
+  // ProjectView outlives conversation switches (ChatPane is keyed by
+  // activeConversationId so it remounts when the user switches chats,
+  // but this component does not), so page_view stays a "chat-panel
+  // entry" metric instead of becoming a "conversation switch" count.
+  // Reviewer #2285 (mrcfps, 2026-05-20 04:08) flagged the previous
+  // ChatComposer-level emit for skewing the funnel.
+  const chatPanelPageViewFiredRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (chatPanelPageViewFiredRef.current === project.id) return;
+    chatPanelPageViewFiredRef.current = project.id;
+    trackPageView(analytics.track, { page_name: 'chat_panel' });
+  }, [analytics.track, project.id]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(
     null,

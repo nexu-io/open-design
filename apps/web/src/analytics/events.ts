@@ -438,8 +438,9 @@ export function trackAssistantFeedbackButtonClick(
 export function trackAssistantFeedbackReasonSubmitClick(
   track: Track,
   props: AssistantFeedbackReasonSubmitClickProps,
+  options?: { requestId?: string },
 ): void {
-  send(track, 'ui_click', props);
+  send(track, 'ui_click', props, options);
 }
 
 // ---- ui_click (settings) -------------------------------------------------

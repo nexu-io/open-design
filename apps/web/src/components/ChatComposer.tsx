@@ -12,7 +12,6 @@ import type { Dict } from '../i18n/types';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackChatPanelClick,
-  trackPageView,
 } from '../analytics/events';
 import { IMAGE_MODELS } from "../media/models";
 import { projectRawUrl, uploadProjectFiles, openFolderDialog, fetchConnectors } from "../providers/registry";
@@ -210,26 +209,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     const analytics = useAnalytics();
     const [draft, setDraft] = useState(initialDraft ?? "");
 
-    // studio_view chat_panel — fire once per ChatComposer mount per project.
-    // The composer is the dominant chat surface; firing here keeps the
-    // event close to where the user actually sees the panel rather than at
-    // the higher-level ProjectView layer which mounts before the composer.
-    const studioViewFiredRef = useRef<string | null>(null);
-    useEffect(() => {
-      if (studioViewFiredRef.current === projectId) return;
-      studioViewFiredRef.current = projectId;
-      // `source` records which entry surface launched the studio
-      // (new_project / recent_project / template / projects_list / …).
-      // The web router currently only stores `projectId` / `conversationId`
-      // / `fileName`, so we cannot tell a New-project launch apart from a
-      // template-pick or a Recent-projects click from here. Until the
-      // router gets a launch-source channel we omit the field rather than
-      // stamp a false constant — better-no-source-than-wrong-source so
-      // dashboards do not over-attribute to a single bucket.
-      trackPageView(analytics.track, {
-        page_name: 'chat_panel',
-      });
-    }, [projectId, analytics.track]);
+    // chat_panel page_view fires from ProjectView (which outlives
+    // conversation switches) so the event measures real chat-panel
+    // entries rather than ChatComposer remounts. See PR #2285 review
+    // 2026-05-20 04:08 for the rationale.
     const [staged, setStaged] = useState<ChatAttachment[]>([]);
     const [stagedVisualComments, setStagedVisualComments] = useState<ChatCommentAttachment[]>([]);
     // Skills the user has @-mentioned for this turn. We dedupe on id and
