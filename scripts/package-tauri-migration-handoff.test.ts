@@ -481,6 +481,7 @@ test("package-tauri-migration-handoff command sidecar imports, pushes, and verif
   const bundlePath = join(handoffDir, "open-design-tauri-migration.bundle");
   const output = join(root, "open-design-tauri-migration-handoff.tar.gz");
   const binDir = join(root, "bin");
+  const fakeGhLog = join(root, "gh.log");
   const fakePnpmLog = join(root, "pnpm.log");
   const prBodyPath = join(root, "tauri-migration-pr-body.md");
   const reportDir = join(root, "reports");
@@ -526,6 +527,12 @@ test("package-tauri-migration-handoff command sidecar imports, pushes, and verif
     "utf8",
   );
   await chmod(join(binDir, "pnpm"), 0o755);
+  await writeFile(
+    join(binDir, "gh"),
+    ["#!/usr/bin/env bash", `printf '%q ' "$@" >> ${shellQuote(fakeGhLog)}`, `printf '\\n' >> ${shellQuote(fakeGhLog)}`].join("\n"),
+    "utf8",
+  );
+  await chmod(join(binDir, "gh"), 0o755);
 
   const result = await execFileAsync("bash", [`${output}.commands.sh`, output], {
     cwd: targetRepo,
@@ -580,6 +587,34 @@ test("package-tauri-migration-handoff command sidecar imports, pushes, and verif
   assert.match(runIdPnpmLog, new RegExp(`--remote ${escapeRegExp(remotePath)}`));
   assert.match(runIdPnpmLog, new RegExp(`--output-dir ${escapeRegExp(reportDir)}`));
   assert.match(runIdPnpmLog, /--advance/);
+
+  await writeFile(fakeGhLog, "", "utf8");
+  await writeFile(fakePnpmLog, "", "utf8");
+  const waitResult = await execFileAsync("bash", [`${output}.commands.sh`, output], {
+    cwd: targetRepo,
+    env: {
+      ...process.env,
+      PATH: `${binDir}:${process.env.PATH ?? ""}`,
+      REMOTE: remotePath,
+      TAURI_M4_REPORT_DIR: reportDir,
+      TAURI_NATIVE_CI_WAIT: "1",
+      TAURI_PR_BODY_PATH: prBodyPath,
+    },
+    maxBuffer: 1024 * 1024 * 4,
+  });
+  assert.match(waitResult.stdout, /Requested native CI dispatch: ci\.yml @ codex\/electron-to-tauri-migration/);
+  assert.doesNotMatch(waitResult.stdout, /Remote push is complete/);
+  assert.match(await readFile(fakeGhLog, "utf8"), /workflow run ci\.yml --ref codex\/electron-to-tauri-migration/);
+  const waitPnpmLog = await readFile(fakePnpmLog, "utf8");
+  assert.match(waitPnpmLog, /tauri-migration-status\.ts/);
+  assert.match(waitPnpmLog, /download-tauri-m4-reports\.ts/);
+  assert.doesNotMatch(waitPnpmLog, /--run-id/);
+  assert.match(waitPnpmLog, new RegExp(`--branch ${escapeRegExp(migrationBranch)}`));
+  assert.match(waitPnpmLog, new RegExp(`--expected-head ${sourceHead}`));
+  assert.match(waitPnpmLog, new RegExp(`--remote ${escapeRegExp(remotePath)}`));
+  assert.match(waitPnpmLog, /--wait/);
+  assert.match(waitPnpmLog, new RegExp(`--output-dir ${escapeRegExp(reportDir)}`));
+  assert.match(waitPnpmLog, /--advance/);
 });
 
 test("package-tauri-migration-handoff command sidecar restores the checked-out branch when push fails", async (t) => {
