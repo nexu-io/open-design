@@ -538,6 +538,10 @@ function nextActionsForPhase(
       archiveReady && handoffArchive?.commandScript != null && handoffArchive.archive != null
         ? `${shellQuote(handoffArchive.commandScript)} ${shellQuote(handoffArchive.archive)}`
         : "the command script";
+    const pushOnlyHandoffCommand =
+      archiveReady && handoffArchive?.archive != null
+        ? `scripts/push-tauri-migration-handoff.ts --archive ${shellQuote(handoffArchive.archive)} --remote ${shellQuote(remoteName)}`
+        : `scripts/push-tauri-migration-handoff.ts --archive /path/to/open-design-tauri-migration-handoff.tar.gz --remote ${shellQuote(remoteName)}`;
     const rootOption = root === defaultRoot ? "" : ` --root ${shellQuote(root)}`;
     return [
       ...heartbeatActions,
@@ -551,8 +555,8 @@ function nextActionsForPhase(
       remote?.current === true
         ? `Remote ${remote.remote} already matches ${remote.branch ?? "the migration branch"} at ${remote.head ?? "the expected head"}.`
         : archiveReady
-          ? `On the receiving machine, run ${commandSidecarCommand} from the repository root to verify checksum, extract, push, verify the remote branch, and attempt native CI dispatch when GH_BIN/gh is available; or run scripts/push-tauri-migration-handoff.ts --archive ${handoffArchive.archive} --remote ${remoteName} for push-only handoff.`
-          : `Copy the packaged handoff archive, .sha256 sidecar, .commands.sh sidecar, and .commands.sh.sha256 sidecar to a write-capable machine, then run the command script or scripts/push-tauri-migration-handoff.ts --archive /path/to/open-design-tauri-migration-handoff.tar.gz --remote ${remoteName}.`,
+          ? `On the receiving machine, run ${commandSidecarCommand} from the repository root to verify checksum, extract, push, verify the remote branch, and attempt native CI dispatch when GH_BIN/gh is available; or run ${pushOnlyHandoffCommand} for push-only handoff.`
+          : `Copy the packaged handoff archive, .sha256 sidecar, .commands.sh sidecar, and .commands.sh.sha256 sidecar to a write-capable machine, then run the command script or ${pushOnlyHandoffCommand}.`,
       reportsReadyForAdvance
         ? `Advance M4 evidence and M5 defaults with scripts/advance-tauri-migration-m4-m5.ts --remote ${remoteName} --branch ${migrationBranch} --expected-head ${expectedHead}${rootOption} using the verified report paths shown above.`
         : remoteReady
