@@ -57,16 +57,24 @@ type ComparedCase = {
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const e2eDir = path.resolve(scriptDir, '..');
 
-const args = parseArgs(process.argv.slice(2));
-const command = args._[0] as CommandName | undefined;
+const isDirectRun = process.argv[1] != null && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
 
-if (command === 'upload-baseline') {
-  await uploadBaseline(args);
-} else if (command === 'compare-pr') {
-  await comparePr(args);
-} else {
-  printUsage();
-  process.exitCode = 1;
+if (isDirectRun) {
+  await main(process.argv.slice(2));
+}
+
+async function main(argv: string[]): Promise<void> {
+  const args = parseArgs(argv);
+  const command = args._[0] as CommandName | undefined;
+
+  if (command === 'upload-baseline') {
+    await uploadBaseline(args);
+  } else if (command === 'compare-pr') {
+    await comparePr(args);
+  } else {
+    printUsage();
+    process.exitCode = 1;
+  }
 }
 
 async function uploadBaseline(options: ParsedArgs): Promise<void> {
@@ -209,6 +217,7 @@ async function writeDiffPng(mainPath: string, prPath: string, diffPath: string):
   assertPngSize(pr, prPath);
   const width = Math.max(main.width, pr.width);
   const height = Math.max(main.height, pr.height);
+  assertPngPixels(width, height, `${mainPath} vs ${prPath} normalized diff canvas`);
   const normalizedMain = normalizePng(main, width, height);
   const normalizedPr = normalizePng(pr, width, height);
   const diffMask = new PNG({ width, height });
@@ -383,9 +392,13 @@ function setPixel(png: PNG, x: number, y: number, color: readonly [number, numbe
 }
 
 function assertPngSize(png: PNG, filePath: string): void {
-  const pixels = png.width * png.height;
+  assertPngPixels(png.width, png.height, filePath);
+}
+
+export function assertPngPixels(width: number, height: number, label: string): void {
+  const pixels = width * height;
   if (pixels > maxPngPixels) {
-    throw new Error(`Visual case ${filePath} is ${png.width}x${png.height}; maximum allowed is ${maxPngPixels} pixels`);
+    throw new Error(`Visual case ${label} is ${width}x${height}; maximum allowed is ${maxPngPixels} pixels`);
   }
 }
 
