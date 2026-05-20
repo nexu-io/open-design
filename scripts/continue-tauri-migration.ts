@@ -300,9 +300,11 @@ async function continueM4(args: Args, status: MigrationStatus, log: string[]): P
         const preflight = await preflightDryRunPush(args);
         if (preflight.ok) {
           log.push(`Dry-run push preflight succeeded for ${args.remote} ${args.branch}.`);
+          remoteCurrent = true;
         } else {
           log.push(`Dry-run push preflight failed: ${preflight.message}`);
           log.push("The planned push is likely blocked on this host; use the transferable handoff path below.");
+          remoteCurrent = false;
         }
         appendTransferableHandoffHint(args, archive, log);
       }
@@ -320,7 +322,7 @@ async function continueM4(args: Args, status: MigrationStatus, log: string[]): P
     }
   }
 
-  if (!remoteCurrent && (!args.dryRun || !args.push)) {
+  if (!remoteCurrent) {
     log.push("Remote branch is not ready; native CI cannot be collected yet.");
     return;
   }

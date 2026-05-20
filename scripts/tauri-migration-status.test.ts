@@ -805,6 +805,32 @@ test("continue-tauri-migration dry-run plans a branch push from current handoff 
   assert.equal(remoteHead.stdout.trim(), "");
 });
 
+test("continue-tauri-migration dry-run stops after a failed push preflight", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [],
+    defaults: "electron",
+  });
+  const head = await initGitFixture(fixture);
+  const handoffDir = join(fixture, "handoff");
+  await writeHandoffFixture(handoffDir, { branchHead: head });
+  const { archivePath } = await writeHandoffArchive(handoffDir);
+  const remotePath = join(fixture, "missing.git");
+
+  const result = await runContinue(fixture, "--handoff-dir", handoffDir, "--remote", remotePath, "--dry-run");
+
+  assert.match(result.stdout, /Would push codex\/electron-to-tauri-migration/);
+  assert.match(result.stdout, /Dry-run push preflight failed/);
+  assert.match(result.stdout, /The planned push is likely blocked on this host/);
+  assert.match(result.stdout, new RegExp(escapeRegExp(archivePath)));
+  assert.match(result.stdout, new RegExp(escapeRegExp(`${archivePath}.sha256`)));
+  assert.match(result.stdout, new RegExp(escapeRegExp(`${archivePath}.commands.sh`)));
+  assert.match(result.stdout, new RegExp(escapeRegExp(`${archivePath}.commands.sh.sha256`)));
+  assert.match(result.stdout, /Remote branch is not ready; native CI cannot be collected yet/);
+  assert.doesNotMatch(result.stdout, /Native CI dispatch/);
+  assert.doesNotMatch(result.stdout, /Trigger it manually with: gh workflow run/);
+  assert.doesNotMatch(result.stdout, /download-tauri-m4-reports\.ts/);
+});
+
 test("continue-tauri-migration rejects branch overrides that differ from the current handoff", async (t) => {
   const fixture = await createFixtureRoot(t, {
     checked: [],
