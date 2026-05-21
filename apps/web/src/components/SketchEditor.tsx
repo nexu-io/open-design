@@ -216,7 +216,7 @@ export function SketchEditor({
     setShowSaved(true);
     clearTimeout(savedTimerRef.current);
     savedTimerRef.current = setTimeout(() => setShowSaved(false), SAVED_VISIBLE_MS);
-}, [onSave]);
+  }, [onSave]);
 
   return (
     <div className="sketch-editor">
