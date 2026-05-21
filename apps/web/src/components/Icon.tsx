@@ -34,6 +34,7 @@ export type IconName =
   | 'info'
   | 'kanban'
   | 'languages'
+  | 'layout'
   | 'link'
   | 'mic'
   | 'minus'
@@ -343,6 +344,17 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
           <path d="M7 2h1" />
           <path d="m22 22-5-10-5 10" />
           <path d="M14 18h6" />
+        </svg>
+      );
+    case 'layout':
+      // Page-layout glyph: outer frame with a header bar and a divider
+      // hinting at sections. Reads as "page" or "wireframe" at 18px
+      // alongside the design-systems palette icon in the nav rail.
+      return (
+        <svg {...common}>
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <path d="M3 9h18" />
+          <path d="M9 21V9" />
         </svg>
       );
     case 'link':

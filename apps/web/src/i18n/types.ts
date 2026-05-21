@@ -709,6 +709,7 @@ export interface Dict {
   'entry.navTasks': string;
   'entry.navPlugins': string;
   'entry.navDesignSystems': string;
+  'entry.navPagePatterns': string;
   'entry.navIntegrations': string;
   'workspaceTabs.project': string;
   'workspaceTabs.pluginDetails': string;

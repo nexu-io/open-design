@@ -404,6 +404,7 @@ export const en: Dict = {
   'entry.navTasks': 'Automations',
   'entry.navPlugins': 'Plugins',
   'entry.navDesignSystems': 'Design systems',
+  'entry.navPagePatterns': 'Page patterns',
   'entry.navIntegrations': 'Integrations',
   'workspaceTabs.project': 'Project',
   'workspaceTabs.pluginDetails': 'Plugin details',

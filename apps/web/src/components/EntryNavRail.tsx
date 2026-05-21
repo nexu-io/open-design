@@ -125,6 +125,15 @@ export function EntryNavRail({ view, onViewChange, onNewProject }: Props) {
           <Icon name="blocks" size={18} />
         </NavButton>
         <NavButton
+          active={view === 'page-patterns'}
+          ariaLabel={t('entry.navPagePatterns')}
+          tooltip={t('entry.navPagePatterns')}
+          onClick={() => onViewChange('page-patterns')}
+          testId="entry-nav-page-patterns"
+        >
+          <Icon name="layout" size={18} />
+        </NavButton>
+        <NavButton
           active={view === 'plugins'}
           ariaLabel={t('entry.navPlugins')}
           tooltip={t('entry.navPlugins')}
