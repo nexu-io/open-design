@@ -11,6 +11,25 @@ test('AGENT_DEFS ids are unique', () => {
   assert.deepEqual(dupes, [], `duplicate agent ids: ${JSON.stringify(dupes)}`);
 });
 
+test('codebuddy appears after established adapters in AGENT_DEFS', () => {
+  // CodeBuddy is a new adapter; established adapters (claude, codex, gemini,
+  // etc.) must come first so that first-run auto-selection
+  // (agents.find(a => a.available)) prefers an auth-ready agent over an
+  // unauthenticated CodeBuddy install.
+  const ids = AGENT_DEFS.map((a) => a.id);
+  const codebuddyIndex = ids.indexOf('codebuddy');
+  assert.ok(codebuddyIndex >= 0, 'codebuddy must be in AGENT_DEFS');
+  for (const established of ['codex', 'gemini', 'opencode']) {
+    const establishedIndex = ids.indexOf(established);
+    if (establishedIndex >= 0) {
+      assert.ok(
+        establishedIndex < codebuddyIndex,
+        `${established} (index ${establishedIndex}) must come before codebuddy (index ${codebuddyIndex})`,
+      );
+    }
+  }
+});
+
 test('local agent profiles inherit a base adapter and can pin the default model', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'od-local-agent-profiles-'));
   try {

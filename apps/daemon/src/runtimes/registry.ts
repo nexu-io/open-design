@@ -27,7 +27,6 @@ import type { RuntimeAgentDef } from './types.js';
 const BASE_AGENT_DEFS: RuntimeAgentDef[] = [
   amrAgentDef,
   claudeAgentDef,
-  codebuddyAgentDef,
   codexAgentDef,
   devinAgentDef,
   geminiAgentDef,
@@ -48,6 +47,7 @@ const BASE_AGENT_DEFS: RuntimeAgentDef[] = [
   aiderAgentDef,
   antigravityAgentDef,
   reasonixAgentDef,
+  codebuddyAgentDef,
 ];
 
 export function readLocalAgentProfileDefs(
