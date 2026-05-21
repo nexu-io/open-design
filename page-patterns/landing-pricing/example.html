@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pricing — Pattern Preview</title>
+    <style>
+      :root {
+        --bg: #fafaf9;
+        --card: #ffffff;
+        --border: #e5e7eb;
+        --text: #18181b;
+        --muted: #71717a;
+        --accent: #18181b;
+        --accent-fg: #ffffff;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0; padding: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+        background: var(--bg); color: var(--text);
+        line-height: 1.5;
+      }
+      .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+      header.page {
+        padding: 72px 0 40px; text-align: center;
+      }
+      .eyebrow {
+        display: inline-block;
+        font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
+        color: var(--muted);
+        padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px;
+        background: #fff;
+      }
+      header.page h1 {
+        font-size: 40px; letter-spacing: -0.02em;
+        margin: 18px 0 12px;
+      }
+      header.page p {
+        max-width: 560px; margin: 0 auto 28px;
+        color: var(--muted); font-size: 16px;
+      }
+      .toggle {
+        display: inline-flex; align-items: center;
+        padding: 4px; border-radius: 999px;
+        border: 1px solid var(--border); background: #fff;
+        font-size: 13px;
+      }
+      .toggle span {
+        padding: 6px 14px; border-radius: 999px; color: var(--muted);
+        cursor: default;
+      }
+      .toggle span.active {
+        background: var(--accent); color: var(--accent-fg);
+        font-weight: 600;
+      }
+      .toggle .save {
+        padding: 6px 8px; color: var(--muted); font-size: 11px;
+      }
+      .plans {
+        display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;
+        margin-top: 32px;
+      }
+      .plan {
+        background: var(--card);
+        border: 1px solid var(--border); border-radius: 14px;
+        padding: 28px 24px;
+        display: flex; flex-direction: column; gap: 12px;
+      }
+      .plan.featured {
+        border-color: var(--accent);
+        box-shadow: 0 6px 24px rgba(24, 24, 27, 0.08);
+        position: relative;
+      }
+      .badge {
+        position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
+        background: var(--accent); color: var(--accent-fg);
+        font-size: 11px; font-weight: 600;
+        padding: 4px 10px; border-radius: 999px;
+        letter-spacing: 0.04em; text-transform: uppercase;
+      }
+      .plan h2 { margin: 0; font-size: 18px; }
+      .plan .tag { color: var(--muted); font-size: 13px; margin: 0; }
+      .price {
+        display: flex; align-items: baseline; gap: 4px;
+        margin: 8px 0;
+      }
+      .price .amount {
+        font-size: 36px; font-weight: 700; letter-spacing: -0.01em;
+      }
+      .price .cadence { color: var(--muted); font-size: 13px; }
+      .btn {
+        display: inline-block; padding: 10px 14px;
+        border-radius: 8px; font-size: 14px; font-weight: 600;
+        border: 1px solid var(--border); background: #fff; color: inherit;
+        text-align: center; cursor: pointer; text-decoration: none;
+      }
+      .btn.primary {
+        background: var(--accent); color: var(--accent-fg);
+        border-color: var(--accent);
+      }
+      .features {
+        list-style: none; margin: 14px 0 0; padding: 0;
+        font-size: 14px; color: var(--text);
+      }
+      .features li {
+        padding-left: 22px; position: relative; margin-bottom: 8px;
+      }
+      .features li::before {
+        content: ""; position: absolute; left: 4px; top: 8px;
+        width: 10px; height: 6px;
+        border-left: 2px solid var(--accent);
+        border-bottom: 2px solid var(--accent);
+        transform: rotate(-45deg);
+      }
+      section.compare {
+        margin: 80px 0 64px;
+      }
+      section.compare h2 {
+        font-size: 22px; margin: 0 0 18px; text-align: center;
+      }
+      table.compare {
+        width: 100%; border-collapse: collapse;
+        background: var(--card); border: 1px solid var(--border);
+        border-radius: 12px; overflow: hidden; font-size: 14px;
+      }
+      table.compare th, table.compare td {
+        text-align: left; padding: 12px 16px;
+        border-bottom: 1px solid var(--border);
+      }
+      table.compare th {
+        background: #f5f5f4; font-weight: 600;
+      }
+      table.compare td.center { text-align: center; color: var(--muted); }
+      table.compare td.center.yes { color: var(--accent); font-weight: 700; }
+      table.compare tr:last-child td { border-bottom: 0; }
+      section.faq { padding: 32px 0 64px; }
+      section.faq h2 {
+        font-size: 22px; margin: 0 0 18px; text-align: center;
+      }
+      .faq-grid {
+        display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+      }
+      .faq-item {
+        background: var(--card); border: 1px solid var(--border);
+        border-radius: 12px; padding: 18px 20px;
+      }
+      .faq-item h3 {
+        margin: 0 0 6px; font-size: 15px;
+      }
+      .faq-item p {
+        margin: 0; color: var(--muted); font-size: 14px;
+      }
+      section.contact {
+        margin: 24px 0 80px; padding: 36px 32px;
+        background: var(--card);
+        border: 1px solid var(--border); border-radius: 14px;
+        display: flex; align-items: center; justify-content: space-between; gap: 24px;
+      }
+      section.contact h2 {
+        margin: 0 0 4px; font-size: 18px;
+      }
+      section.contact p { margin: 0; color: var(--muted); font-size: 14px; }
+    </style>
+  </head>
+  <body>
+    <header class="page wrap">
+      <span class="eyebrow">Pricing</span>
+      <h1>Simple, predictable pricing.</h1>
+      <p>Start free. Upgrade only when you need the extras. Cancel any time.</p>
+      <div class="toggle" role="group" aria-label="Billing period">
+        <span>Monthly</span>
+        <span class="active">Annual</span>
+        <span class="save">Save 20%</span>
+      </div>
+    </header>
+
+    <section class="wrap">
+      <div class="plans">
+        <article class="plan">
+          <h2>Free</h2>
+          <p class="tag">For solo work and small experiments.</p>
+          <div class="price">
+            <span class="amount">$0</span>
+            <span class="cadence">/ month</span>
+          </div>
+          <a class="btn" href="#start">Get started</a>
+          <ul class="features">
+            <li>Up to 3 projects</li>
+            <li>Community support</li>
+            <li>Public sharing links</li>
+            <li>Basic templates</li>
+            <li>1 GB storage</li>
+          </ul>
+        </article>
+
+        <article class="plan featured" aria-label="Pro plan (most popular)">
+          <span class="badge">Most popular</span>
+          <h2>Pro</h2>
+          <p class="tag">For builders shipping every week.</p>
+          <div class="price">
+            <span class="amount">$19</span>
+            <span class="cadence">/ user / month</span>
+          </div>
+          <a class="btn primary" href="#start">Start Pro</a>
+          <ul class="features">
+            <li>Unlimited projects</li>
+            <li>Priority email support</li>
+            <li>Private sharing &amp; SSO</li>
+            <li>Premium templates</li>
+            <li>50 GB storage</li>
+            <li>Version history (30 days)</li>
+          </ul>
+        </article>
+
+        <article class="plan">
+          <h2>Team</h2>
+          <p class="tag">For teams that ship together.</p>
+          <div class="price">
+            <span class="amount">$49</span>
+            <span class="cadence">/ user / month</span>
+          </div>
+          <a class="btn" href="#start">Start Team</a>
+          <ul class="features">
+            <li>Everything in Pro</li>
+            <li>Roles &amp; permissions</li>
+            <li>Audit log</li>
+            <li>Centralized billing</li>
+            <li>500 GB storage</li>
+            <li>Version history (1 year)</li>
+            <li>Dedicated onboarding</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="compare wrap">
+      <h2>Compare plans</h2>
+      <table class="compare">
+        <thead>
+          <tr>
+            <th>Capability</th>
+            <th>Free</th>
+            <th>Pro</th>
+            <th>Team</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Projects</td><td class="center">3</td><td class="center yes">Unlimited</td><td class="center yes">Unlimited</td></tr>
+          <tr><td>Storage</td><td class="center">1 GB</td><td class="center">50 GB</td><td class="center">500 GB</td></tr>
+          <tr><td>Version history</td><td class="center">—</td><td class="center">30 days</td><td class="center">1 year</td></tr>
+          <tr><td>SSO</td><td class="center">—</td><td class="center yes">Included</td><td class="center yes">Included</td></tr>
+          <tr><td>Roles &amp; permissions</td><td class="center">—</td><td class="center">—</td><td class="center yes">Included</td></tr>
+          <tr><td>Audit log</td><td class="center">—</td><td class="center">—</td><td class="center yes">Included</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="faq wrap">
+      <h2>Frequently asked</h2>
+      <div class="faq-grid">
+        <div class="faq-item">
+          <h3>Can I switch plans later?</h3>
+          <p>Yes. You can upgrade or downgrade any time; we prorate the difference automatically.</p>
+        </div>
+        <div class="faq-item">
+          <h3>Do you offer refunds?</h3>
+          <p>Annual plans are refundable within 14 days. Monthly plans simply stop billing on cancellation.</p>
+        </div>
+        <div class="faq-item">
+          <h3>How do team seats work?</h3>
+          <p>You add or remove seats from the admin console; billing updates the next cycle.</p>
+        </div>
+        <div class="faq-item">
+          <h3>Can I get an invoice?</h3>
+          <p>Team plans include invoiced billing with net-30 terms. Pro plans can request invoicing via support.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="contact wrap">
+      <div>
+        <h2>Need something custom?</h2>
+        <p>We work with larger orgs on procurement, SAML, and data residency.</p>
+      </div>
+      <a class="btn primary" href="#contact-sales">Contact sales</a>
+    </section>
+  </body>
+</html>
