@@ -34,5 +34,22 @@ export function asInProjectFilePath(href: string | null | undefined): string | n
   const withoutHash = stripped.split('#')[0] ?? stripped;
   const withoutQuery = withoutHash.split('?')[0] ?? withoutHash;
   if (!withoutQuery) return null;
-  return withoutQuery;
+  // Chat markdown emits links as URL-encoded text (`Mock%20Page.html`
+  // for a file named `Mock Page.html`, multi-byte sequences for
+  // non-ASCII names). The workspace tab opener
+  // (`requestOpenFile` → `FileWorkspace`) matches by literal on-disk
+  // file name, so passing the encoded form silently misses the tab.
+  // Decode after the literal `..` check so a `%2E%2E` smuggling
+  // attempt cannot bypass the traversal guard, and re-check `..` on
+  // the decoded form. Treat malformed encodings as "not a real
+  // in-project link" rather than letting the URIError crash the
+  // renderer.
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(withoutQuery);
+  } catch {
+    return null;
+  }
+  if (decoded.split('/').some((segment) => segment === '..')) return null;
+  return decoded;
 }
