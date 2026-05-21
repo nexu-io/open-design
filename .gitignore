@@ -67,6 +67,3 @@ docs/superpowers/
 # on every deploy. Should not be committed (~70MB of PNGs).
 apps/landing-page/public/previews/
 
-# RTK (local token-optimized CLI config)
-.github/hooks/rtk-rewrite.json
-.github/copilot-instructions.md

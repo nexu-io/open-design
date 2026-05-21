@@ -137,7 +137,7 @@
 
   /* Tag themes (bg / accent pairs) */
   --tag-lavender-mist-bg: #f1e1ff;
-  --tag-lavender-mist-fg: #bb8ff0;
+  --tag-lavender-mist-fg: #7b4db0;
   --tag-lavender-bg: #e0d0ff;
   --tag-lavender-fg: #6926ff;
   --tag-mint-bg: #d7fce2;
@@ -147,9 +147,9 @@
   --tag-blue-bg: #daf0ff;
   --tag-blue-fg: #4a69ff;
   --tag-yellow-bg: #f6f7c6;
-  --tag-yellow-fg: #a8a928;
+  --tag-yellow-fg: #6b6b00;
   --tag-neutral-bg: #e0e0d6;
-  --tag-neutral-fg: #b5b97b;
+  --tag-neutral-fg: #5c5e2e;
   --tag-gray-bg: #f2eeed;
-  --tag-gray-fg: #a9a9c2;
+  --tag-gray-fg: #5f5f78;
 }
