@@ -11,6 +11,7 @@ import {
   describe,
   expect,
   it,
+  vi,
 } from 'vitest';
 
 import { readAppConfig, writeAppConfig } from '../src/app-config.js';
@@ -368,6 +369,56 @@ describe('app-config', () => {
 
       expect(cfg.agentCliEnv).toEqual({
         claude: { CLAUDE_CONFIG_DIR: '~/.claude-2' },
+      });
+    });
+
+    it('drops CODEBUDDY_INTERNET_ENVIRONMENT with invalid enum value and logs warning', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      await writeAppConfig(dataDir, {
+        agentCliEnv: {
+          codebuddy: {
+            CODEBUDDY_INTERNET_ENVIRONMENT: 'internel',
+            CODEBUDDY_API_KEY: 'cb-test-key',
+          },
+        },
+      });
+      const cfg = await readAppConfig(dataDir);
+      // Invalid enum value should be dropped; valid key should persist.
+      expect(cfg.agentCliEnv).toEqual({
+        codebuddy: { CODEBUDDY_API_KEY: 'cb-test-key' },
+      });
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('CODEBUDDY_INTERNET_ENVIRONMENT'),
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('internel'),
+      );
+      warnSpy.mockRestore();
+    });
+
+    it('persists valid CODEBUDDY_INTERNET_ENVIRONMENT enum values', async () => {
+      await writeAppConfig(dataDir, {
+        agentCliEnv: {
+          codebuddy: {
+            CODEBUDDY_INTERNET_ENVIRONMENT: 'internal',
+          },
+        },
+      });
+      let cfg = await readAppConfig(dataDir);
+      expect(cfg.agentCliEnv).toEqual({
+        codebuddy: { CODEBUDDY_INTERNET_ENVIRONMENT: 'internal' },
+      });
+
+      await writeAppConfig(dataDir, {
+        agentCliEnv: {
+          codebuddy: {
+            CODEBUDDY_INTERNET_ENVIRONMENT: 'ioa',
+          },
+        },
+      });
+      cfg = await readAppConfig(dataDir);
+      expect(cfg.agentCliEnv).toEqual({
+        codebuddy: { CODEBUDDY_INTERNET_ENVIRONMENT: 'ioa' },
       });
     });
 

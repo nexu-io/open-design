@@ -240,6 +240,39 @@ describe('diagnoseClaudeCliFailure', () => {
     expect(diagnostic?.detail).not.toContain('/login');
   });
 
+  it('reports effective CODEBUDDY_INTERNET_ENVIRONMENT in CodeBuddy diagnostic context', () => {
+    const diagnostic = diagnoseClaudeCliFailure({
+      agentId: 'codebuddy',
+      exitCode: 1,
+      stderrTail: '{"apiKeySource":"none","error_status":401}',
+      env: { CODEBUDDY_INTERNET_ENVIRONMENT: 'internal' },
+    });
+
+    expect(diagnostic?.detail).toContain('CODEBUDDY_INTERNET_ENVIRONMENT=internal');
+  });
+
+  it('reports effective CODEBUDDY_INTERNET_ENVIRONMENT with configured value', () => {
+    const diagnostic = diagnoseClaudeCliFailure({
+      agentId: 'codebuddy',
+      exitCode: 1,
+      stderrTail: '{"apiKeySource":"none","error_status":401}',
+      env: { CODEBUDDY_API_KEY: 'cb-test-key', CODEBUDDY_INTERNET_ENVIRONMENT: 'ioa' },
+    });
+
+    expect(diagnostic?.detail).toContain('CODEBUDDY_INTERNET_ENVIRONMENT=ioa');
+  });
+
+  it('does not report CODEBUDDY_INTERNET_ENVIRONMENT when unset', () => {
+    const diagnostic = diagnoseClaudeCliFailure({
+      agentId: 'codebuddy',
+      exitCode: 1,
+      stderrTail: '{"apiKeySource":"none","error_status":401}',
+      env: { CODEBUDDY_API_KEY: 'cb-test-key' },
+    });
+
+    expect(diagnostic?.detail).not.toContain('CODEBUDDY_INTERNET_ENVIRONMENT');
+  });
+
   it('does not classify unrelated agent failures', () => {
     const diagnostic = diagnoseClaudeCliFailure({
       agentId: 'codex',

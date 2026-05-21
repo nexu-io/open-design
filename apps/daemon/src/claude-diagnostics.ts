@@ -32,6 +32,9 @@ interface AgentDiagnosticConfig {
   // mode (not OAuth /login). Diagnostics should surface API-key guidance
   // when the key is present and auth fails, rather than redirecting to /login.
   apiKeyIsPrimaryAuth?: boolean;
+  // Additional env keys to report in diagnostic context when their effective
+  // value is set (e.g. CODEBUDDY_INTERNET_ENVIRONMENT).
+  contextEnvKeys?: string[];
 }
 
 const CLAUDE_DIAGNOSTIC_CONFIG: AgentDiagnosticConfig = {
@@ -55,6 +58,7 @@ const CODEBUDDY_DIAGNOSTIC_CONFIG: AgentDiagnosticConfig = {
   apiKeyEnvKey: 'CODEBUDDY_API_KEY',
   endpointLabel: 'CodeBuddy',
   apiKeyIsPrimaryAuth: true,
+  contextEnvKeys: ['CODEBUDDY_INTERNET_ENVIRONMENT'],
 };
 
 const AGENT_DIAGNOSTIC_CONFIGS = new Map<string, AgentDiagnosticConfig>([
@@ -92,6 +96,12 @@ function withContext(
   if (diagnosticTail) context.push(`${config.brandName} output: ${diagnosticTail}`);
   if (configDir) context.push(`Effective ${config.configDirEnvKey}: ${configDir}.`);
   if (baseUrl) context.push(`${config.baseUrlEnvKey} is set for this ${config.brandName} process.`);
+  if (config.contextEnvKeys) {
+    for (const ctxKey of config.contextEnvKeys) {
+      const ctxValue = envValue(input.env, ctxKey);
+      if (ctxValue) context.push(`${ctxKey}=${ctxValue} is effective for this ${config.brandName} process.`);
+    }
+  }
   return {
     message: redactSecrets(message),
     detail: redactSecrets(context.filter(Boolean).join(' ')),
