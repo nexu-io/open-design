@@ -94,7 +94,7 @@ interface Props {
       autoSendFirstMessage?: boolean;
       pendingFiles?: File[];
     },
-  ) => void;
+  ) => Promise<boolean> | boolean | void;
   onCreatePluginShareProject: (
     pluginId: string,
     action: PluginShareAction,

@@ -6,6 +6,7 @@ import { HomeView } from '../../src/components/HomeView';
 import type { PromptTemplateSummary } from '../../src/types';
 
 const MEDIA_PLUGIN = pluginRecord('od-media-generation', 'Media generation');
+const PROTOTYPE_PLUGIN = pluginRecord('example-web-prototype', 'Web prototype');
 const HYPERFRAMES_PLUGIN = pluginRecord('example-hyperframes', 'HyperFrames');
 
 const PROMPT_TEMPLATES: PromptTemplateSummary[] = [
@@ -51,10 +52,10 @@ describe('HomeView media composer options', () => {
     stubFetch();
     renderHome();
 
-    fireEvent.click(await screen.findByTestId('home-hero-rail-image'));
-    await openOption('template');
+    await clickHomeRailChip('audio');
+    await openOption('text');
 
-    const popover = screen.getByTestId('home-hero-prompt-option-template');
+    const popover = screen.getByTestId('home-hero-prompt-option-text');
     expect(popover.closest('.home-hero__prompt-highlight')).toBeNull();
   });
 
@@ -62,41 +63,57 @@ describe('HomeView media composer options', () => {
     stubFetch();
     renderHome();
 
-    fireEvent.click(await screen.findByTestId('home-hero-rail-image'));
-    await waitFor(() => expect(screen.getByTestId('home-hero-prompt-slot-template')).toBeTruthy());
-    expect(screen.getByTestId('home-hero-prompt-slot-model')).toBeTruthy();
-    expect(screen.getByTestId('home-hero-prompt-slot-ratio')).toBeTruthy();
-    expect(screen.queryByTestId('home-hero-prompt-slot-duration')).toBeNull();
+    await clickHomeRailChip('image');
+    await waitFor(() => expect(screen.getByTestId('home-hero-footer-option-model')).toBeTruthy());
+    expect(screen.getByTestId('home-hero-footer-option-designSystem')).toBeTruthy();
+    expect(screen.getByTestId('home-hero-footer-option-ratio')).toBeTruthy();
+    expect(screen.getByTestId('home-hero-footer-option-resolution')).toBeTruthy();
+    expect(screen.queryByTestId('home-hero-footer-option-duration')).toBeNull();
 
-    fireEvent.click(screen.getByTestId('home-hero-rail-video'));
-    await waitFor(() => expect(screen.getByTestId('home-hero-prompt-slot-duration')).toBeTruthy());
-    expect(screen.getByTestId('home-hero-prompt-slot-template')).toBeTruthy();
-    expect(screen.getByTestId('home-hero-prompt-slot-model')).toBeTruthy();
-    expect(screen.getByTestId('home-hero-prompt-slot-ratio')).toBeTruthy();
+    await clickHomeRailChip('video');
+    await waitFor(() => expect(screen.getByTestId('home-hero-footer-option-duration')).toBeTruthy());
+    expect(screen.getByTestId('home-hero-footer-option-designSystem')).toBeTruthy();
+    expect(screen.getByTestId('home-hero-footer-option-model')).toBeTruthy();
+    expect(screen.getByTestId('home-hero-footer-option-ratio')).toBeTruthy();
+    expect(screen.getByTestId('home-hero-footer-option-resolution')).toBeTruthy();
 
-    fireEvent.click(screen.getByTestId('home-hero-rail-hyperframes'));
-    await waitFor(() => expect(screen.getByTestId('home-hero-prompt-slot-duration')).toBeTruthy());
-    expect(screen.getByTestId('home-hero-prompt-slot-template')).toBeTruthy();
-    expect(screen.getByTestId('home-hero-prompt-slot-ratio')).toBeTruthy();
-    expect(screen.queryByTestId('home-hero-prompt-slot-model')).toBeNull();
+    await clickHomeRailChip('hyperframes');
+    await waitFor(() => expect(screen.getByTestId('home-hero-footer-option-duration')).toBeTruthy());
+    expect(screen.getByTestId('home-hero-footer-option-ratio')).toBeTruthy();
+    expect(screen.queryByTestId('home-hero-footer-option-model')).toBeNull();
 
-    fireEvent.click(screen.getByTestId('home-hero-rail-audio'));
+    await clickHomeRailChip('audio');
     await waitFor(() => expect(screen.getByTestId('home-hero-prompt-slot-text')).toBeTruthy());
-    await waitFor(() => expect(screen.getByTestId('home-hero-prompt-slot-audioType')).toBeTruthy());
-    expect(screen.getByTestId('home-hero-prompt-slot-text')).toBeTruthy();
-    expect(screen.getByTestId('home-hero-prompt-slot-model')).toBeTruthy();
-    expect(screen.getByTestId('home-hero-prompt-slot-duration')).toBeTruthy();
+    expect(screen.getByTestId('home-hero-footer-option-audioType')).toBeTruthy();
+    expect(screen.getByTestId('home-hero-footer-option-model')).toBeTruthy();
+    expect(screen.getByTestId('home-hero-footer-option-duration')).toBeTruthy();
     expect(screen.queryByTestId('home-hero-prompt-slot-voice')).toBeNull();
+  });
+
+  it('switches media chips without opening the replacement dialog', async () => {
+    stubFetch();
+    renderHome();
+
+    await clickHomeRailChip('image');
+    await waitFor(() => expect(screen.getByTestId('home-hero-footer-option-model')).toBeTruthy());
+    expect(screen.queryByRole('dialog', { name: /replace current prompt/i })).toBeNull();
+
+    fireEvent.change(screen.getByTestId('home-hero-input'), {
+      target: { value: 'Make this prompt personally tuned.' },
+    });
+    await clickHomeRailChip('video');
+    await waitFor(() => expect(screen.getByTestId('home-hero-footer-option-duration')).toBeTruthy());
+    expect(screen.queryByRole('dialog', { name: /replace current prompt/i })).toBeNull();
   });
 
   it('exposes only Speech and Sound effect in the Home Audio workflow', async () => {
     stubFetch();
     renderHome();
 
-    fireEvent.click(await screen.findByTestId('home-hero-rail-audio'));
+    await clickHomeRailChip('audio');
     await openOption('audioType');
 
-    const audioTypes = optionTexts(screen.getByTestId('home-hero-prompt-option-audioType-select'));
+    const audioTypes = optionTexts(screen.getByTestId('home-hero-footer-option-audioType-menu'));
     expect(audioTypes).toEqual(['Speech', 'Sound effect']);
   });
 
@@ -104,19 +121,16 @@ describe('HomeView media composer options', () => {
     stubFetch();
     renderHome();
 
-    fireEvent.click(await screen.findByTestId('home-hero-rail-audio'));
+    await clickHomeRailChip('audio');
     await waitFor(() => expect(screen.getByTestId('home-hero-prompt-slot-text')).toBeTruthy());
     expect(screen.queryByTestId('home-hero-prompt-slot-prompt')).toBeNull();
 
-    await openOption('audioType');
-    fireEvent.change(screen.getByTestId('home-hero-prompt-option-audioType-select'), {
-      target: { value: 'sfx' },
-    });
+    await chooseOption('audioType', 'sfx', 'Sound effect');
 
     await waitFor(() => expect(screen.getByTestId('home-hero-prompt-slot-prompt')).toBeTruthy());
     expect(screen.queryByTestId('home-hero-prompt-slot-text')).toBeNull();
     expect((screen.getByTestId('home-hero-input') as HTMLTextAreaElement).value).toContain(
-      "Create sfx audio from the user's brief",
+      "Create premium product-studio audio from the user's brief",
     );
   });
 
@@ -124,7 +138,7 @@ describe('HomeView media composer options', () => {
     stubFetch();
     renderHome();
 
-    fireEvent.click(await screen.findByTestId('home-hero-rail-audio'));
+    await clickHomeRailChip('audio');
     await openOption('text');
     const textInput = screen.getByTestId('home-hero-prompt-option-text-input');
 
@@ -145,56 +159,72 @@ describe('HomeView media composer options', () => {
     stubFetch();
     renderHome();
 
-    fireEvent.click(await screen.findByTestId('home-hero-rail-image'));
-    await waitFor(() => expect(screen.getByTestId('home-hero-prompt-slot-template')).toBeTruthy());
+    await clickHomeRailChip('image');
+    await waitFor(() => expect(screen.getByTestId('home-hero-footer-option-model')).toBeTruthy());
     expect(screen.queryByRole('combobox', { name: 'Template' })).toBeNull();
     expect(screen.queryByRole('combobox', { name: 'Model' })).toBeNull();
     expect(screen.queryByRole('combobox', { name: 'Ratio' })).toBeNull();
 
-    fireEvent.click(screen.getByTestId('home-hero-rail-video'));
-    await waitFor(() => expect(screen.getByTestId('home-hero-prompt-slot-duration')).toBeTruthy());
+    await clickHomeRailChip('video');
+    await waitFor(() => expect(screen.getByTestId('home-hero-footer-option-duration')).toBeTruthy());
     expect(screen.queryByRole('combobox', { name: 'Duration' })).toBeNull();
     expect(screen.queryByRole('combobox', { name: 'Template' })).toBeNull();
     expect(screen.queryByRole('combobox', { name: 'Model' })).toBeNull();
     expect(screen.queryByRole('combobox', { name: 'Ratio' })).toBeNull();
 
-    fireEvent.click(screen.getByTestId('home-hero-rail-audio'));
+    await clickHomeRailChip('audio');
     await waitFor(() => expect(screen.getByTestId('home-hero-prompt-slot-text')).toBeTruthy());
     expect(screen.queryByRole('textbox', { name: 'Text' })).toBeNull();
     expect(screen.queryByRole('combobox', { name: 'Audio type' })).toBeNull();
     expect((screen.getByTestId('home-hero-input') as HTMLTextAreaElement).value).toContain("from the user's brief");
   });
 
-  it('splits Video and HyperFrames templates into separate option lists', async () => {
+  it('splits Video and HyperFrames templates into separate submitted metadata', async () => {
     stubFetch();
-    renderHome();
+    const onSubmit = vi.fn();
+    renderHome({ onSubmit });
 
-    fireEvent.click(await screen.findByTestId('home-hero-rail-video'));
-    await openOption('template');
-    const videoTemplateOptions = optionTexts(screen.getByTestId('home-hero-prompt-option-template-select'));
-    expect(videoTemplateOptions).toContain('Video reveal');
-    expect(videoTemplateOptions).not.toContain('HyperFrames captions');
+    await clickHomeRailChip('video');
+    await submitHome();
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+        projectMetadata: expect.objectContaining({
+          promptTemplate: expect.objectContaining({ id: 'video-reveal' }),
+        }),
+      }));
+    });
 
-    fireEvent.click(screen.getByTestId('home-hero-rail-hyperframes'));
-    await openOption('template');
-    const hyperframesTemplateOptions = optionTexts(screen.getByTestId('home-hero-prompt-option-template-select'));
-    expect(hyperframesTemplateOptions).toEqual(['HyperFrames captions']);
+    onSubmit.mockClear();
+    await clickHomeRailChip('hyperframes');
+    await submitHome();
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+        projectMetadata: expect.objectContaining({
+          promptTemplate: expect.objectContaining({ id: 'hyperframes-caption' }),
+        }),
+      }));
+    });
   });
 
-  it('replaces the template placeholder after media templates load', async () => {
+  it('updates submitted template metadata after media templates load', async () => {
     stubFetch();
     const onSubmit = vi.fn();
     const props = homeProps({ onSubmit, promptTemplates: [] });
     const view = render(<HomeView {...props} />);
 
-    fireEvent.click(await screen.findByTestId('home-hero-rail-image'));
-    await waitFor(() => expect(screen.getByTestId('home-hero-prompt-slot-template').textContent).toBe('No template'));
-
-    view.rerender(<HomeView {...props} promptTemplates={PROMPT_TEMPLATES} />);
-
+    await clickHomeRailChip('image');
+    await waitFor(() => expect(screen.getByTestId('home-hero-footer-option-model')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
     await waitFor(() => {
-      expect(screen.getByTestId('home-hero-prompt-slot-template').textContent).toBe('Image product concept');
+      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+        projectMetadata: expect.not.objectContaining({
+          promptTemplate: expect.anything(),
+        }),
+      }));
     });
+
+    onSubmit.mockClear();
+    view.rerender(<HomeView {...props} promptTemplates={PROMPT_TEMPLATES} />);
     fireEvent.click(screen.getByTestId('home-hero-submit'));
 
     await waitFor(() => {
@@ -211,7 +241,7 @@ describe('HomeView media composer options', () => {
     const onSubmit = vi.fn();
     renderHome({ onSubmit });
 
-    fireEvent.click(await screen.findByTestId('home-hero-rail-hyperframes'));
+    await clickHomeRailChip('hyperframes');
     await waitFor(() => expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(screen.getByTestId('home-hero-submit'));
 
@@ -228,14 +258,11 @@ describe('HomeView media composer options', () => {
     stubFetch();
     renderHome();
 
-    fireEvent.click(await screen.findByTestId('home-hero-rail-audio'));
-    await waitFor(() => expect(screen.getByTestId('home-hero-prompt-slot-model')).toBeTruthy());
+    await clickHomeRailChip('audio');
+    await waitFor(() => expect(screen.getByTestId('home-hero-footer-option-model')).toBeTruthy());
     expect(screen.queryByTestId('home-hero-prompt-slot-voice')).toBeNull();
 
-    await openOption('model');
-    fireEvent.change(screen.getByTestId('home-hero-prompt-option-model-select'), {
-      target: { value: 'elevenlabs-v3' },
-    });
+    await chooseOption('model', 'elevenlabs-v3');
 
     await waitFor(() => expect(screen.getByTestId('home-hero-prompt-slot-voice')).toBeTruthy());
     await waitFor(() => {
@@ -253,11 +280,8 @@ describe('HomeView media composer options', () => {
     stubFetch({ elevenLabsVoices: [] });
     renderHome();
 
-    fireEvent.click(await screen.findByTestId('home-hero-rail-audio'));
-    await openOption('model');
-    fireEvent.change(screen.getByTestId('home-hero-prompt-option-model-select'), {
-      target: { value: 'elevenlabs-v3' },
-    });
+    await clickHomeRailChip('audio');
+    await chooseOption('model', 'elevenlabs-v3');
 
     await waitFor(() => expect(screen.getByTestId('home-hero-prompt-slot-voice')).toBeTruthy());
     await waitFor(() => {
@@ -278,11 +302,8 @@ describe('HomeView media composer options', () => {
     stubFetch({ elevenLabsVoiceError: 'no ElevenLabs API key' });
     renderHome();
 
-    fireEvent.click(await screen.findByTestId('home-hero-rail-audio'));
-    await openOption('model');
-    fireEvent.change(screen.getByTestId('home-hero-prompt-option-model-select'), {
-      target: { value: 'elevenlabs-v3' },
-    });
+    await clickHomeRailChip('audio');
+    await chooseOption('model', 'elevenlabs-v3');
 
     await waitFor(() => expect(screen.getByTestId('home-hero-prompt-slot-voice')).toBeTruthy());
     await waitFor(() => {
@@ -303,21 +324,15 @@ describe('HomeView media composer options', () => {
     stubFetch();
     renderHome();
 
-    fireEvent.click(await screen.findByTestId('home-hero-rail-audio'));
-    await openOption('duration');
-    fireEvent.change(screen.getByTestId('home-hero-prompt-option-duration-select'), {
-      target: { value: '60' },
-    });
+    await clickHomeRailChip('audio');
+    await chooseOption('duration', '60', '60s');
     await waitFor(() => {
       expect((screen.getByTestId('home-hero-input') as HTMLTextAreaElement).value).toContain(
         'for 60 seconds',
       );
     });
 
-    await openOption('audioType');
-    fireEvent.change(screen.getByTestId('home-hero-prompt-option-audioType-select'), {
-      target: { value: 'sfx' },
-    });
+    await chooseOption('audioType', 'sfx', 'Sound effect');
 
     await waitFor(() => {
       expect((screen.getByTestId('home-hero-input') as HTMLTextAreaElement).value).toContain(
@@ -325,7 +340,7 @@ describe('HomeView media composer options', () => {
       );
     });
     await openOption('duration');
-    const durationOptions = optionTexts(screen.getByTestId('home-hero-prompt-option-duration-select'));
+    const durationOptions = optionTexts(screen.getByTestId('home-hero-footer-option-duration-menu'));
     expect(durationOptions).toEqual(['5s', '10s', '15s', '30s']);
   });
 
@@ -334,7 +349,7 @@ describe('HomeView media composer options', () => {
     const onSubmit = vi.fn();
     renderHome({ onSubmit });
 
-    fireEvent.click(await screen.findByTestId('home-hero-rail-audio'));
+    await clickHomeRailChip('audio');
     const input = screen.getByTestId('home-hero-input') as HTMLTextAreaElement;
     await waitFor(() => expect(input.value).toContain('for 10 seconds'));
     fireEvent.change(input, {
@@ -355,7 +370,7 @@ describe('HomeView media composer options', () => {
     const onSubmit = vi.fn();
     renderHome({ onSubmit });
 
-    fireEvent.click(await screen.findByTestId('home-hero-rail-audio'));
+    await clickHomeRailChip('audio');
     await openOption('text');
     fireEvent.change(screen.getByTestId('home-hero-prompt-option-text-input'), {
       target: { value: 'Welcome to Open Design.' },
@@ -380,7 +395,7 @@ describe('HomeView media composer options', () => {
     const fetchMock = stubFetch();
     renderHome();
 
-    fireEvent.click(await screen.findByTestId('home-hero-rail-image'));
+    await clickHomeRailChip('image');
 
     await waitFor(() => {
       expect(fetchMock.mock.calls.some(([url, init]) => (
@@ -424,7 +439,7 @@ function stubFetch(options: { elevenLabsVoices?: Array<{ voiceId: string; name: 
   });
   const fetchMock = vi.fn<typeof fetch>(async (url, init) => {
     if (typeof url === 'string' && url === '/api/plugins') {
-      return json({ plugins: [MEDIA_PLUGIN, HYPERFRAMES_PLUGIN] });
+      return json({ plugins: [MEDIA_PLUGIN, PROTOTYPE_PLUGIN, HYPERFRAMES_PLUGIN] });
     }
     if (typeof url === 'string' && url === '/api/mcp/servers') {
       return json({ servers: [], templates: [] });
@@ -457,12 +472,44 @@ function stubFetch(options: { elevenLabsVoices?: Array<{ voiceId: string; name: 
 }
 
 async function openOption(name: string) {
-  fireEvent.pointerDown(await screen.findByTestId(`home-hero-prompt-slot-${name}`));
-  await waitFor(() => expect(screen.getByTestId(`home-hero-prompt-option-${name}`)).toBeTruthy());
+  const promptSlot = screen.queryByTestId(`home-hero-prompt-slot-${name}`);
+  if (promptSlot) {
+    fireEvent.pointerDown(promptSlot);
+    await waitFor(() => expect(screen.getByTestId(`home-hero-prompt-option-${name}`)).toBeTruthy());
+    return;
+  }
+  fireEvent.click(await screen.findByTestId(`home-hero-footer-option-${name}`));
+  await waitFor(() => expect(screen.getByTestId(`home-hero-footer-option-${name}-menu`)).toBeTruthy());
+}
+
+async function clickHomeRailChip(id: string) {
+  fireEvent.click(await screen.findByTestId('home-hero-active-type-chip'));
+  fireEvent.click(await screen.findByTestId(`home-hero-rail-${id}`));
+}
+
+async function submitHome() {
+  await waitFor(() => expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(screen.getByTestId('home-hero-submit'));
 }
 
 function optionTexts(select: HTMLElement): string[] {
   return within(select).getAllByRole('option').map((option) => option.textContent ?? '');
+}
+
+async function chooseOption(name: string, value: string, label = value) {
+  await openOption(name);
+  const promptSelect = screen.queryByTestId(`home-hero-prompt-option-${name}-select`);
+  if (promptSelect) {
+    fireEvent.change(promptSelect, { target: { value } });
+    return;
+  }
+  const menu = screen.getByTestId(`home-hero-footer-option-${name}-menu`);
+  const option = within(menu).getAllByRole('option').find((item) => {
+    const text = item.textContent ?? '';
+    return text.includes(label) || text.includes(value);
+  });
+  if (!option) throw new Error(`No option "${label}" for ${name}`);
+  fireEvent.click(option);
 }
 
 function pluginRecord(id: string, title: string) {

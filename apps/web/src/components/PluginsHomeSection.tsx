@@ -24,7 +24,7 @@ import {
   usePluginFacets,
   type FilterMode,
 } from './plugins-home/usePluginFacets';
-import type { FacetOption } from './plugins-home/facets';
+import type { FacetOption, FacetSelection } from './plugins-home/facets';
 import type { PluginUseAction } from './plugins-home/useActions';
 
 interface Props {
@@ -42,6 +42,12 @@ interface Props {
   onCreatePlugin?: (goal?: string) => void;
   onBrowseRegistry?: () => void;
   preferDefaultFacet?: boolean;
+  // Optional external selection. When the Home chip rail picks
+  // "Slide deck", HomeView passes { category: 'create', subcategory:
+  // 'deck' } so the Official starters grid scrolls to the matching
+  // slice instead of staying on its default. The hook only re-applies
+  // when this identity changes, so manual facet clicks still win.
+  presetSelection?: FacetSelection | null;
   title?: string;
   subtitle?: string;
   emptyMessage?: string;
@@ -61,6 +67,7 @@ export function PluginsHomeSection({
   onCreatePlugin,
   onBrowseRegistry,
   preferDefaultFacet = true,
+  presetSelection = null,
   title,
   subtitle,
   emptyMessage,
@@ -75,13 +82,12 @@ export function PluginsHomeSection({
     pickCategory,
     pickSubcategory,
     clearFacets,
-    hasActiveFacet,
     mode,
     setMode,
     query,
     setQuery,
     totalVisible,
-  } = usePluginFacets({ plugins, preferDefaultFacet });
+  } = usePluginFacets({ plugins, preferDefaultFacet, presetSelection });
   const contributionTarget = onCreatePlugin
     ? resolveContributionTarget(catalog, selection)
     : null;
@@ -94,9 +100,9 @@ export function PluginsHomeSection({
       <header className="plugins-home__head">
         <div className="plugins-home__heading">
           <h2 className="plugins-home__title">{title ?? t('pluginsHome.title')}</h2>
-          <p className="plugins-home__subtitle">
-            {subtitle ?? t('pluginsHome.subtitle')}
-          </p>
+          {subtitle ? (
+            <p className="plugins-home__subtitle">{subtitle}</p>
+          ) : null}
         </div>
         <div className="plugins-home__head-tools">
           {onBrowseRegistry ? (
@@ -109,10 +115,6 @@ export function PluginsHomeSection({
               {t('pluginsHome.browseRegistry')}
             </button>
           ) : null}
-          <SearchInput value={query} onChange={setQuery} />
-          <span className="plugins-home__count">
-            {loading ? '…' : t('pluginsHome.count', { filtered: filtered.length, total: totalVisible })}
-          </span>
         </div>
       </header>
 
@@ -124,14 +126,6 @@ export function PluginsHomeSection({
         </div>
       ) : (
         <>
-          <ModeRow
-            mode={mode}
-            featuredCount={featuredList.length}
-            totalVisible={totalVisible}
-            hasActiveFacet={hasActiveFacet}
-            onModeChange={setMode}
-            onClearFacets={clearFacets}
-          />
           <div
             className="plugins-home__facets"
             role="group"
@@ -142,6 +136,13 @@ export function PluginsHomeSection({
               selectedSlug={selection.category}
               totalVisible={totalVisible}
               onPick={pickCategory}
+              featuredCount={featuredList.length}
+              featuredActive={mode === 'featured'}
+              onToggleFeatured={() =>
+                setMode(mode === 'featured' ? 'all' : 'featured')
+              }
+              query={query}
+              onQueryChange={setQuery}
             />
             {selection.category ? (
               <SubcategoryRow
@@ -257,73 +258,34 @@ function ContributionCard({
   );
 }
 
-interface ModeRowProps {
-  mode: FilterMode;
-  featuredCount: number;
-  totalVisible: number;
-  hasActiveFacet: boolean;
-  onModeChange: (next: FilterMode) => void;
-  onClearFacets: () => void;
-}
-
-// Tiny strip above the category row: Featured override + a clear-link
-// when at least one filter is active. Kept compact so the category
-// bar is what the eye lands on first.
-function ModeRow({
-  mode,
-  featuredCount,
-  totalVisible,
-  hasActiveFacet,
-  onModeChange,
-  onClearFacets,
-}: ModeRowProps) {
-  const t = useT();
-  return (
-    <div className="plugins-home__mode" role="group" aria-label={t('pluginsHome.modeAria')}>
-      {featuredCount > 0 ? (
-        <button
-          type="button"
-          className={[
-            'plugins-home__chip',
-            'plugins-home__chip--featured',
-            mode === 'featured' ? 'is-active' : '',
-          ]
-            .filter(Boolean)
-            .join(' ')}
-          onClick={() => onModeChange(mode === 'featured' ? 'all' : 'featured')}
-          aria-pressed={mode === 'featured'}
-          data-testid="plugins-home-chip-featured"
-        >
-          <Icon name="star" size={11} />
-          <span>{t('pluginsHome.featured')}</span>
-          <span className="plugins-home__chip-count">{featuredCount}</span>
-        </button>
-      ) : null}
-      <span className="plugins-home__mode-total">
-        {t('pluginsHome.totalInCatalog', { n: totalVisible })}
-      </span>
-      {hasActiveFacet ? (
-        <button
-          type="button"
-          className="plugins-home__linkbtn"
-          onClick={onClearFacets}
-          data-testid="plugins-home-clear"
-        >
-          {t('pluginsHome.clearFilters')}
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
 interface CategoryRowProps {
   options: FacetOption[];
   selectedSlug: string | null;
   totalVisible: number;
   onPick: (slug: string | null) => void;
+  featuredCount: number;
+  featuredActive: boolean;
+  onToggleFeatured: () => void;
+  query: string;
+  onQueryChange: (next: string) => void;
 }
 
-function CategoryRow({ options, selectedSlug, totalVisible, onPick }: CategoryRowProps) {
+// Single combined filter bar: Featured override chip + category pills
+// on the left, search field on the right. Each chip carries its own
+// count, and the "All" chip doubles as a clear-filters affordance,
+// so a separate `X / Y` counter and `Clear` link would just repeat
+// what the chip strip already shows.
+function CategoryRow({
+  options,
+  selectedSlug,
+  totalVisible,
+  onPick,
+  featuredCount,
+  featuredActive,
+  onToggleFeatured,
+  query,
+  onQueryChange,
+}: CategoryRowProps) {
   const t = useT();
   if (options.length === 0) return null;
   return (
@@ -336,6 +298,25 @@ function CategoryRow({ options, selectedSlug, totalVisible, onPick }: CategoryRo
         role="tablist"
         aria-label={t('pluginsHome.categoryFilterAria')}
       >
+        {featuredCount > 0 ? (
+          <button
+            type="button"
+            className={[
+              'plugins-home__chip',
+              'plugins-home__chip--featured',
+              featuredActive ? 'is-active' : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+            onClick={onToggleFeatured}
+            aria-pressed={featuredActive}
+            data-testid="plugins-home-chip-featured"
+          >
+            <Icon name="star" size={11} />
+            <span>{t('pluginsHome.featured')}</span>
+            <span className="plugins-home__chip-count">{featuredCount}</span>
+          </button>
+        ) : null}
         <CategoryPill
           slug={null}
           label={t('common.all')}
@@ -354,6 +335,9 @@ function CategoryRow({ options, selectedSlug, totalVisible, onPick }: CategoryRo
             onPick={onPick}
           />
         ))}
+      </div>
+      <div className="plugins-home__facet-tools">
+        <SearchInput value={query} onChange={onQueryChange} />
       </div>
     </div>
   );
@@ -431,6 +415,15 @@ function CategoryPill({ slug, label, count, active, variant, testId, onPick }: C
         .filter(Boolean)
         .join(' ')}
       onClick={() => onPick(slug)}
+      // Empty lanes are intentionally kept in the strip so the
+      // overall workflow shape (Import / Create / Export / Share /
+      // Deploy / Refine / Extend) is visible at a glance, and
+      // clicking one surfaces a "Contribute a X plugin" card. The
+      // `data-empty` flag drives a faded treatment in CSS so users
+      // can tell at a glance which chips are populated vs which
+      // are open-invite buckets — without that hint, "Deploy 0"
+      // and "Create 375" read as the same kind of control.
+      data-empty={count === 0 ? 'true' : 'false'}
       data-testid={testId ?? `plugins-home-pill-category-${slug ?? 'all'}`}
     >
       <span>{displayLabel}</span>

@@ -48,8 +48,8 @@
     },
     "useCase": {
       "query": {
-        "en": "Create a {{duration}}-second {{format}} HyperFrames composition for {{subject}}. Aspect: {{aspect}}. Visual style: {{style}}. Audio/captions: {{audioPlan}}. Use the HyperFrames HTML workflow, deterministic timelines, and the referenced motion guides.",
-        "zh-CN": "使用这个插件完成以下任务：为 {{subject}} 创建一个 {{duration}} 秒的 {{format}} HyperFrames 作品。画幅：{{aspect}}。视觉风格：{{style}}。音频/字幕：{{audioPlan}}。使用 HyperFrames HTML 工作流、确定性时间线和引用的运动指南。"
+        "en": "Create a premium product-studio {{duration}}-second {{format}} HyperFrames composition for {{subject}}: refined kinetic typography, elegant transitions, restrained motion language, and studio-grade timing. Aspect: {{aspect}}. Visual style: {{style}}. Audio/captions: {{audioPlan}}. Use the HyperFrames HTML workflow, deterministic timelines, and the referenced motion guides.",
+        "zh-CN": "用高端产品工作室的完成度，为 {{subject}} 创建一个 {{duration}} 秒的 {{format}} HyperFrames 作品：动态排版利落、转场优雅、运动语言克制，整体有工作室级别的节奏和完成度。画幅：{{aspect}}。视觉风格：{{style}}。音频/字幕：{{audioPlan}}。使用 HyperFrames HTML 工作流、确定性时间线和引用的运动指南。"
       }
     },
     "inputs": [
@@ -73,7 +73,7 @@
         "type": "string",
         "required": true,
         "placeholder": "a premium AI note-taking app",
-        "default": "a polished product concept"
+        "default": "a premium product concept"
       },
       {
         "name": "duration",
@@ -99,7 +99,7 @@
         "label": "Style",
         "type": "string",
         "placeholder": "minimal premium, soft side light, restrained motion",
-        "default": "minimal premium motion"
+        "default": "premium product-studio motion"
       },
       {
         "name": "audioPlan",

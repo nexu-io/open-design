@@ -17,7 +17,7 @@ import {
 } from '../providers/registry';
 import { buildSrcdoc } from '../runtime/srcdoc';
 import { Icon } from './Icon';
-import type { DesignSystemSummary, Surface } from '../types';
+import type { DesignSystemSummary, ProjectTemplate, Surface } from '../types';
 
 interface Props {
   systems: DesignSystemSummary[];
@@ -27,6 +27,7 @@ interface Props {
   onCreate?: () => void;
   onOpenSystem?: (id: string) => void;
   onSystemsRefresh?: () => Promise<void> | void;
+  templates?: ProjectTemplate[];
 }
 
 const CATEGORY_ORDER = [
@@ -88,8 +89,19 @@ export function DesignSystemsTab({
   useEffect(() => {
     if (designSystemsPageViewFiredRef.current) return;
     designSystemsPageViewFiredRef.current = true;
-    trackPageView(analytics.track, { page_name: 'design_systems' });
-  }, [analytics.track]);
+    // v2 doc: the DS list page also carries `area` / `view_type` /
+    // `entry_from` so it can stitch the cross-surface DS funnel.
+    // `entry_from` is `unknown` here because the tab is reached
+    // through the home nav rail; a router-aware entry mapper can
+    // refine this later.
+    trackPageView(analytics.track, {
+      page_name: 'design_systems',
+      area: 'design_system_list',
+      view_type: 'page',
+      entry_from: 'unknown',
+      available_design_system_count: systems.length,
+    });
+  }, [analytics.track, systems.length]);
   const searchTrackedRef = useRef(false);
   const categoryTrackedRef = useRef(false);
   const [filter, setFilter] = useState('');
@@ -468,7 +480,6 @@ export function DesignSystemsTab({
                   });
                   onSelect(s.id);
                 }}
-                onOpenSystem={onOpenSystem ? () => onOpenSystem(s.id) : undefined}
                 onPreview={() => {
                   trackDesignSystemsTemplateCardClick(analytics.track, {
                     page_name: 'design_systems',
@@ -494,7 +505,6 @@ interface CardProps {
   thumbHtml: string | null | undefined;
   onIntersect: () => void;
   onSelect: () => void;
-  onOpenSystem?: () => void;
   onPreview: () => void;
 }
 
@@ -504,7 +514,6 @@ function DesignSystemCard({
   thumbHtml,
   onIntersect,
   onSelect,
-  onOpenSystem,
   onPreview,
 }: CardProps) {
   const { locale, t } = useI18n();
@@ -621,19 +630,6 @@ function DesignSystemCard({
             </div>
           ) : null}
         </div>
-        {onOpenSystem ? (
-          <button
-            type="button"
-            className="ghost"
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenSystem();
-            }}
-          >
-            <Icon name={system.isEditable ? 'edit' : 'external-link'} />
-            {system.isEditable ? 'Edit' : 'Open'}
-          </button>
-        ) : null}
       </div>
     </div>
   );

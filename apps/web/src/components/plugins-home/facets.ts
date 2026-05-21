@@ -372,6 +372,13 @@ const SUBCATEGORIES: readonly SubcategoryDef[] = [
   },
   {
     parent: 'create',
+    slug: 'live-artifact',
+    label: 'Live artifact',
+    starterPrompt: 'Create an Open Design plugin that generates a refreshable dashboard, report, or data-backed artifact.',
+    test: byAnySlug('live-artifact', 'live-dashboard', 'refreshable-dashboard', 'live-report', 'refreshable-report'),
+  },
+  {
+    parent: 'create',
     slug: 'design-system',
     label: 'Design system',
     starterPrompt: 'Create an Open Design plugin that generates a reusable design system from brand and product constraints.',

@@ -223,7 +223,9 @@ describe('PluginsView', () => {
         .map((item) => item.getAttribute('data-plugin-id'))
         .sort(),
     ).toEqual(['create-plugin', 'import-plugin']);
-    expect(screen.getByText('2 of 2')).toBeTruthy();
+    const summary = screen.getByLabelText('Plugin summary');
+    expect(within(summary).getByText('2')).toBeTruthy();
+    expect(within(summary).getByText('Installed')).toBeTruthy();
   });
 
   it('hands installed plugin Use actions to the host shell', async () => {

@@ -20,6 +20,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import FontStylesheet from './font-stylesheet.astro';
 import HeaderEnhancer from './header-enhancer.astro';
+import LocaleSwitcherEnhancer from './locale-switcher-enhancer.astro';
 import { Header, type HeaderProps } from './header';
 import PreciseLazyload from './precise-lazyload.astro';
 import SiteFooter from './site-footer.astro';
@@ -27,6 +28,7 @@ import Topbar from './topbar.astro';
 import { heroImage } from '../image-assets';
 import { getCatalogCounts } from '../_lib/catalog';
 import { getGithubRepoMeta } from '../_lib/github';
+import { DEFAULT_LOCALE, LOCALE_OG, alternateLinks, localeDir, type Locale } from '../_lib/i18n';
 
 export interface Props {
   title: string;
@@ -34,21 +36,39 @@ export interface Props {
   active?: HeaderProps['active'];
   ogImage?: string;
   jsonLd?: Record<string, unknown> | Array<Record<string, unknown>>;
+  locale?: Locale;
+  prefixDefaultLocale?: boolean;
 }
 
-const { title, description, active = 'home', ogImage, jsonLd } = Astro.props;
+const {
+  title,
+  description,
+  active = 'home',
+  ogImage,
+  jsonLd,
+  locale = DEFAULT_LOCALE,
+  prefixDefaultLocale = false,
+} = Astro.props;
 const canonical = new URL(Astro.url.pathname, Astro.site).toString();
 const og = ogImage ?? heroImage;
 const counts = await getCatalogCounts();
 const github = await getGithubRepoMeta();
 const headerHtml = renderToStaticMarkup(
-  Header({ active, counts, github, brandHref: '/' }) as ReturnType<typeof createElement>,
+  Header({
+    active,
+    counts,
+    github,
+    brandHref: '/',
+    locale,
+    prefixDefaultLocale,
+    pathname: Astro.url.pathname,
+  }) as ReturnType<typeof createElement>,
 );
 const ldArray = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang={locale} dir={localeDir(locale)}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -56,6 +76,9 @@ const ldArray = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
+    {alternateLinks(Astro.url.pathname).map((item) => (
+      <link rel="alternate" hreflang={item.hreflang} href={new URL(item.href, Astro.site).toString()} />
+    ))}
 
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
@@ -68,6 +91,7 @@ const ldArray = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonical} />
     <meta property="og:image" content={og} />
+    <meta property="og:locale" content={LOCALE_OG[locale]} />
 
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
@@ -80,7 +104,7 @@ const ldArray = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
   </head>
   <body class="sub-page">
     <div class="shell">
-      <Topbar github={github} />
+      <Topbar github={github} locale={locale} />
       {/* Same React-rendered Header used by the homepage. SSR'd here
        * so we have one nav implementation that handles active state. */}
       <Fragment set:html={headerHtml} />
@@ -89,10 +113,11 @@ const ldArray = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
         <slot />
       </main>
 
-      <SiteFooter counts={counts} />
+      <SiteFooter counts={counts} locale={locale} prefixDefaultLocale={prefixDefaultLocale} />
     </div>
 
     <HeaderEnhancer />
+    <LocaleSwitcherEnhancer />
     <PreciseLazyload />
   </body>
 </html>

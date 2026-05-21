@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useAnalytics } from '../analytics/provider';
 import { trackChatPanelClick } from '../analytics/events';
 import { useT } from '../i18n';
@@ -15,7 +15,7 @@ import {
 } from '../design-system-auto-prompt';
 import { latestTodoWriteInputForPinnedCard } from '../runtime/todos';
 import { TodoCard } from './ToolCard';
-import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, ChatMessageFeedbackChange, Conversation, PreviewComment, ProjectFile, ProjectMetadata, SkillSummary } from '../types';
+import type { AppConfig, ChatAttachment, ChatCommentAttachment, ChatMessage, ChatMessageFeedbackChange, Conversation, DesignSystemSummary, PreviewComment, ProjectFile, ProjectMetadata, SkillSummary } from '../types';
 import { dayKey, dayLabel, exactDateTime, messageTime, relativeTimeLong } from '../utils/chatTime';
 import { commentsToAttachments, simplePositionLabel } from '../comments';
 import { AssistantMessage } from './AssistantMessage';
@@ -218,6 +218,7 @@ interface Props {
   projectKindForTracking?: TrackingProjectKind | null;
   projectFiles: ProjectFile[];
   hasActiveDesignSystem?: boolean;
+  activeDesignSystem?: DesignSystemSummary | null;
   sendDisabled?: boolean;
   // Names that exist in the project folder. Tool cards and chips use this
   // set to decide whether a path can be opened as a tab.
@@ -297,6 +298,7 @@ interface Props {
   byokApiProtocol?: AppConfig['apiProtocol'];
   byokImageModel?: string;
   onChangeByokImageModel?: (model: string) => void;
+  composerFooterAccessory?: ReactNode;
 }
 
 type Tab = 'chat' | 'comments';
@@ -310,6 +312,7 @@ export function ChatPane({
   projectKindForTracking = null,
   projectFiles,
   hasActiveDesignSystem = false,
+  activeDesignSystem = null,
   projectFileNames,
   onEnsureProject,
   previewComments = [],
@@ -351,6 +354,7 @@ export function ChatPane({
   byokApiProtocol,
   byokImageModel,
   onChangeByokImageModel,
+  composerFooterAccessory,
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
@@ -861,6 +865,11 @@ export function ChatPane({
                             ? activePluginSnapshot ?? null
                             : null
                         }
+                        activeDesignSystem={
+                          m.id === firstUserMessageId
+                            ? activeDesignSystem ?? null
+                            : null
+                        }
                       />
                     ) : (
                       <AssistantMessage
@@ -876,6 +885,7 @@ export function ChatPane({
                         isLast={m.id === lastAssistantId}
                         nextUserContent={nextUserContentByAssistantId.get(m.id)}
                         suppressDirectionForms={hasActiveDesignSystem}
+                        hasDesignSystemContext={hasActiveDesignSystem || !!activeDesignSystem}
                         onSubmitForm={(text) => {
                           pinnedToBottomRef.current = true;
                           scrolledToFormRef.current = new Set();
@@ -952,6 +962,7 @@ export function ChatPane({
             currentSkillId={currentSkillId}
             onProjectSkillChange={onProjectSkillChange}
             pinnedPluginId={activePluginSnapshot?.pluginId ?? null}
+            footerAccessory={composerFooterAccessory}
           />
         </>
       ) : null}
@@ -1231,6 +1242,7 @@ function UserMessage({
   onRequestOpenFile,
   t,
   activePluginSnapshot,
+  activeDesignSystem,
 }: {
   message: ChatMessage;
   projectId: string | null;
@@ -1238,6 +1250,7 @@ function UserMessage({
   onRequestOpenFile?: (name: string) => void;
   t: TranslateFn;
   activePluginSnapshot?: AppliedPluginSnapshot | null;
+  activeDesignSystem?: DesignSystemSummary | null;
 }) {
   const attachments = message.attachments ?? [];
   const commentAttachments = message.commentAttachments ?? [];
@@ -1272,6 +1285,9 @@ function UserMessage({
       </div>
       {activePluginSnapshot ? (
         <ActivePluginChip snapshot={activePluginSnapshot} t={t} />
+      ) : null}
+      {activeDesignSystem ? (
+        <ActiveDesignSystemChip system={activeDesignSystem} />
       ) : null}
       {attachments.length > 0 ? (
         <div className="user-attachments">
@@ -1319,7 +1335,7 @@ function UserMessage({
         <div className="user-text-wrap user-status-wrap">
           <div className="user-status-card design-system-generation-status">
             <span className="user-status-card__icon">
-              <Icon name="palette" size={15} />
+              <Icon name="blocks" size={15} />
             </span>
             <span className="user-status-card__copy">
               <strong>{DESIGN_SYSTEM_WORKSPACE_DISPLAY_TITLE}</strong>
@@ -1370,6 +1386,25 @@ function ActivePluginChip({
       </span>
       {taskKind ? (
         <span className="msg-plugin-chip__task">{taskKind}</span>
+      ) : null}
+    </div>
+  );
+}
+
+function ActiveDesignSystemChip({
+  system,
+}: {
+  system: DesignSystemSummary;
+}) {
+  return (
+    <div className="msg-plugin-chip msg-plugin-chip--design-system" data-testid="msg-design-system-chip">
+      <span className="msg-plugin-chip__dot" aria-hidden />
+      <span className="msg-plugin-chip__label">
+        <span className="msg-plugin-chip__kind">Design System</span>
+        <span className="msg-plugin-chip__title">{system.title}</span>
+      </span>
+      {system.category ? (
+        <span className="msg-plugin-chip__task">{system.category}</span>
       ) : null}
     </div>
   );

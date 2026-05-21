@@ -53,10 +53,12 @@ export type ChatMessageFeedbackReasonCode =
   | 'strong_visual'
   | 'useful_structure'
   | 'easy_to_continue'
+  | 'followed_design_system'
   | 'missed_request'
   | 'weak_visual'
   | 'incomplete_output'
   | 'hard_to_use'
+  | 'missed_design_system'
   | 'other';
 
 export interface ChatMessageFeedback {

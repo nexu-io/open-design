@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { NewProjectModal } from '../../src/components/NewProjectModal';
@@ -79,6 +79,42 @@ describe('NewProjectModal layout', () => {
     expect(panelBody).toBeTruthy();
     expect(screen.getByTestId('new-project-panel')).toBeTruthy();
     expect(screen.getByTestId('create-project')).toBeTruthy();
+  });
+
+  it('keeps the modal open with a waiting state until project creation finishes', async () => {
+    let resolveCreate!: (value: boolean) => void;
+    const onCreate = vi.fn(
+      () => new Promise<boolean>((resolve) => {
+        resolveCreate = resolve;
+      }),
+    );
+    const onClose = vi.fn();
+
+    render(
+      <NewProjectModal
+        open
+        skills={skills}
+        designSystems={designSystems}
+        defaultDesignSystemId={null}
+        templates={[]}
+        promptTemplates={[]}
+        onCreate={onCreate}
+        onClose={onClose}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('create-project'));
+
+    expect(onCreate).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole('status').textContent).toContain('Creating project…');
+    expect((screen.getByTestId('create-project') as HTMLButtonElement).disabled).toBe(true);
+
+    resolveCreate(true);
+
+    await waitFor(() => {
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
   });
 });
 

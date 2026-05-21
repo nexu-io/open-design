@@ -31,6 +31,11 @@ const playSound = vi.fn();
 const showCompletionNotification = vi.fn();
 
 vi.mock('../../src/i18n', () => ({
+  useI18n: () => ({
+    locale: 'en',
+    setLocale: () => undefined,
+    t: (key: string) => key,
+  }),
   useT: () => (key: string) => key,
 }));
 
