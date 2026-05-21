@@ -383,6 +383,52 @@ describe('openrouter video generation', () => {
     expect(submitBody.duration).toBe(5);
   });
 
+  it('parses resolution suffix from model ID and passes it to OpenRouter', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResp({
+        id: 'job-res',
+        polling_url: 'https://openrouter.ai/api/v1/videos/job-res',
+        status: 'pending',
+      }, 202))
+      .mockResolvedValueOnce(jsonResp({
+        id: 'job-res',
+        status: 'completed',
+        unsigned_urls: ['https://example.com/dl.mp4'],
+      }))
+      .mockResolvedValueOnce(mp4Resp());
+    vi.stubGlobal('fetch', fetchMock);
+
+    await generateMedia({ ...argsWithPaths(), model: 'openrouter/bytedance/seedance-2.0:1080p' });
+
+    const [, submitOpts] = fetchMock.mock.calls[0]!;
+    const submitBody = JSON.parse(submitOpts.body);
+    expect(submitBody.model).toBe('bytedance/seedance-2.0');
+    expect(submitBody.resolution).toBe('1080p');
+  });
+
+  it('defaults resolution to 720p when no suffix is present in model ID', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResp({
+        id: 'job-res-def',
+        polling_url: 'https://openrouter.ai/api/v1/videos/job-res-def',
+        status: 'pending',
+      }, 202))
+      .mockResolvedValueOnce(jsonResp({
+        id: 'job-res-def',
+        status: 'completed',
+        unsigned_urls: ['https://example.com/dl.mp4'],
+      }))
+      .mockResolvedValueOnce(mp4Resp());
+    vi.stubGlobal('fetch', fetchMock);
+
+    await generateMedia({ ...argsWithPaths(), model: 'openrouter/bytedance/seedance-2.0' });
+
+    const [, submitOpts] = fetchMock.mock.calls[0]!;
+    const submitBody = JSON.parse(submitOpts.body);
+    expect(submitBody.model).toBe('bytedance/seedance-2.0');
+    expect(submitBody.resolution).toBe('720p');
+  });
+
   it('honours OD_MEDIA_MODEL_ALIASES for video (alias contract regression)', async () => {
     // Set an alias: the catalog id 'openrouter/bytedance/seedance-2.0'
     // should resolve to wire name 'my-custom-seedance-deployment'.
