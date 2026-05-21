@@ -78,15 +78,61 @@ describe('project folder upload route', () => {
       body: secondForm,
     });
 
-    expect(secondResp.status).toBe(200);
+    expect(secondResp.status).toBe(409);
     const body = (await secondResp.json()) as {
-      files: Array<{ name: string; path?: string; originalName?: string }>;
+      error?: { code?: string; message?: string };
     };
-    expect(body.files).toEqual([]);
+    expect(body.error?.code).toBe('CONFLICT');
+    expect(body.error?.message).toContain('demo/src/App.tsx');
 
     const raw = await fetch(`${baseUrl}/api/projects/${projectId}/raw/demo/src/App.tsx`);
     expect(raw.status).toBe(200);
     expect(await raw.text()).toBe('first');
+
+    const filesResp = await fetch(`${baseUrl}/api/projects/${projectId}/files`);
+    expect(filesResp.status).toBe(200);
+    const filesBody = (await filesResp.json()) as {
+      files: Array<{ name: string; path?: string }>;
+    };
+    expect(filesBody.files.map((file) => file.path ?? file.name).sort()).toEqual(['demo/src/App.tsx']);
+  });
+
+  it('rejects a conflicting folder batch before writing later files', async () => {
+    const projectId = await createProject();
+    const firstForm = new FormData();
+    firstForm.append('paths', 'demo/src/App.tsx');
+    firstForm.append('files', new File(['first'], 'App.tsx', { type: 'text/plain' }));
+
+    const firstResp = await fetch(`${baseUrl}/api/projects/${projectId}/upload`, {
+      method: 'POST',
+      body: firstForm,
+    });
+    expect(firstResp.status).toBe(200);
+
+    const secondForm = new FormData();
+    secondForm.append('paths', 'demo/src/App.tsx');
+    secondForm.append('paths', 'demo/src/Later.tsx');
+    secondForm.append('files', new File(['second'], 'App.tsx', { type: 'text/plain' }));
+    secondForm.append('files', new File(['later'], 'Later.tsx', { type: 'text/plain' }));
+
+    const secondResp = await fetch(`${baseUrl}/api/projects/${projectId}/upload`, {
+      method: 'POST',
+      body: secondForm,
+    });
+
+    expect(secondResp.status).toBe(409);
+    const error = (await secondResp.json()) as {
+      error?: { code?: string; message?: string };
+    };
+    expect(error.error?.code).toBe('CONFLICT');
+    expect(error.error?.message).toContain('demo/src/App.tsx');
+
+    const original = await fetch(`${baseUrl}/api/projects/${projectId}/raw/demo/src/App.tsx`);
+    expect(original.status).toBe(200);
+    expect(await original.text()).toBe('first');
+
+    const later = await fetch(`${baseUrl}/api/projects/${projectId}/raw/demo/src/Later.tsx`);
+    expect(later.status).toBe(404);
 
     const filesResp = await fetch(`${baseUrl}/api/projects/${projectId}/files`);
     expect(filesResp.status).toBe(200);

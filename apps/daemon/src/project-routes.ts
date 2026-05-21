@@ -1206,7 +1206,7 @@ export function registerProjectUploadRoutes(app: Express, ctx: RegisterProjectUp
   const { fs } = ctx.node;
   const { PROJECTS_DIR } = ctx.paths;
   const { getProject } = ctx.projectStore;
-  const { writeProjectFile } = ctx.projectFiles;
+  const { writeProjectFile, resolveProjectFilePath } = ctx.projectFiles;
 
   app.post(
     '/api/projects/:id/upload',
@@ -1226,6 +1226,16 @@ export function registerProjectUploadRoutes(app: Express, ctx: RegisterProjectUp
           throw err;
         }
         const project = getProject(db, req.params.id);
+        for (const targetPath of targetPaths) {
+          if (!targetPath) continue;
+          try {
+            await resolveProjectFilePath(PROJECTS_DIR, req.params.id, targetPath, project?.metadata);
+            await Promise.all(incoming.map((f: any) => fs.promises.unlink(f.path).catch(() => {})));
+            return sendApiError(res, 409, 'CONFLICT', `project file already exists: ${targetPath}`);
+          } catch (err: any) {
+            if (!err || err.code !== 'ENOENT') throw err;
+          }
+        }
         const out = [];
         for (const [index, f] of incoming.entries()) {
           try {

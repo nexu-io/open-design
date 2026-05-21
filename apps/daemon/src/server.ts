@@ -10047,6 +10047,16 @@ export async function startServer({
           throw err;
         }
         const project = getProject(db, req.params.id);
+        for (const targetPath of targetPaths) {
+          if (!targetPath) continue;
+          try {
+            await resolveProjectFilePath(PROJECTS_DIR, req.params.id, targetPath, project?.metadata);
+            await Promise.all(incoming.map((f) => fs.promises.unlink(f.path).catch(() => {})));
+            return sendApiError(res, 409, 'CONFLICT', `project file already exists: ${targetPath}`);
+          } catch (err) {
+            if (!err || err.code !== 'ENOENT') throw err;
+          }
+        }
         const out = [];
         for (const [index, f] of incoming.entries()) {
           try {
