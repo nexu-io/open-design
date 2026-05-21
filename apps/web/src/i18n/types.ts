@@ -342,6 +342,7 @@ export interface Dict {
   'settings.cliEnvClaudeBaseUrl': string;
   'settings.cliEnvClaudeApiKey': string;
   'settings.cliEnvCodebuddyConfigDir': string;
+  'settings.cliEnvCodebuddyBin': string;
   'settings.cliEnvCodebuddyBaseUrl': string;
   'settings.cliEnvCodebuddyApiKey': string;
   'settings.cliEnvCodebuddyInternetEnvironment': string;

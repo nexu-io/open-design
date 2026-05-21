@@ -502,6 +502,12 @@ const AGENT_CLI_ENV_FIELDS = [
   },
   {
     agentId: 'codebuddy',
+    envKey: 'CODEBUDDY_BIN',
+    labelKey: 'settings.cliEnvCodebuddyBin',
+    placeholder: '/absolute/path/to/codebuddy',
+  },
+  {
+    agentId: 'codebuddy',
     envKey: 'CODEBUDDY_BASE_URL',
     labelKey: 'settings.cliEnvCodebuddyBaseUrl',
     placeholder: 'https://your-proxy.example.com',

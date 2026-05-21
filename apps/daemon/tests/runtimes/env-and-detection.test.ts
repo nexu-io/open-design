@@ -287,6 +287,7 @@ test('resolveAgentExecutable supports configured binary overrides for non-Codex 
     ['deepseek', 'deepseek', 'DEEPSEEK_BIN'],
     ['trae-cli', 'traecli', 'TRAE_CLI_BIN'],
     ['aider', 'aider', 'AIDER_BIN'],
+    ['codebuddy', 'codebuddy', 'CODEBUDDY_BIN'],
   ];
   const dir = mkdtempSync(join(tmpdir(), 'od-agent-bin-overrides-'));
   try {
@@ -1081,12 +1082,12 @@ test('spawnEnvForAgent preserves CODEBUDDY_API_KEY with CODEBUDDY_BASE_URL set',
   assert.equal(env.CODEBUDDY_BASE_URL, 'https://proxy.example.com');
 });
 
-test('spawnEnvForAgent passes CODEBUDDY_INTERNET_ENVIRONMENT to the codebuddy adapter', () => {
-  const env = spawnEnvForAgent('codebuddy', {
-    CODEBUDDY_API_KEY: 'cb-test-key',
-    CODEBUDDY_INTERNET_ENVIRONMENT: 'internal',
-    PATH: '/usr/bin',
-  });
+test('spawnEnvForAgent passes configured CODEBUDDY_INTERNET_ENVIRONMENT to the codebuddy adapter', () => {
+  const env = spawnEnvForAgent(
+    'codebuddy',
+    { CODEBUDDY_API_KEY: 'cb-test-key', PATH: '/usr/bin' },
+    { CODEBUDDY_INTERNET_ENVIRONMENT: 'internal' },
+  );
 
   assert.equal(env.CODEBUDDY_API_KEY, 'cb-test-key');
   assert.equal(env.CODEBUDDY_INTERNET_ENVIRONMENT, 'internal');
@@ -1105,4 +1106,25 @@ test('spawnEnvForAgent applies configured CodeBuddy env including INTERNET_ENVIR
   assert.equal(env.CODEBUDDY_CONFIG_DIR, '/tmp/codebuddy-alt');
   assert.equal(env.CODEBUDDY_INTERNET_ENVIRONMENT, 'ioa');
   assert.equal(env.PATH, '/usr/bin');
+});
+
+test('spawnEnvForAgent strips inherited CODEBUDDY_INTERNET_ENVIRONMENT when not configured', () => {
+  const env = spawnEnvForAgent(
+    'codebuddy',
+    { CODEBUDDY_API_KEY: 'cb-test-key', CODEBUDDY_INTERNET_ENVIRONMENT: 'internal', PATH: '/usr/bin' },
+    {},
+  );
+
+  assert.equal(env.CODEBUDDY_API_KEY, 'cb-test-key');
+  assert.equal('CODEBUDDY_INTERNET_ENVIRONMENT' in env, false);
+});
+
+test('spawnEnvForAgent keeps CODEBUDDY_INTERNET_ENVIRONMENT when configured overrides inherited', () => {
+  const env = spawnEnvForAgent(
+    'codebuddy',
+    { CODEBUDDY_API_KEY: 'cb-test-key', CODEBUDDY_INTERNET_ENVIRONMENT: 'internal', PATH: '/usr/bin' },
+    { CODEBUDDY_INTERNET_ENVIRONMENT: 'ioa' },
+  );
+
+  assert.equal(env.CODEBUDDY_INTERNET_ENVIRONMENT, 'ioa');
 });

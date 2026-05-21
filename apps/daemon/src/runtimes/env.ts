@@ -80,6 +80,23 @@ export function spawnEnvForAgent(
   // CodeBuddy's `-p` mode requires CODEBUDDY_API_KEY for authentication.
   // Do not strip it — the key is the primary auth path, not a fallback.
   // See https://www.codebuddy.cn/docs/cli/env-vars.
+  //
+  // CODEBUDDY_INTERNET_ENVIRONMENT is a closed enum (internal/ioa).
+  // When the user selects "inherit / unset" in Settings, the configured
+  // value is empty and gets dropped by validateAgentCliEnv. If the
+  // parent process inherited a non-default value (e.g. from a shell
+  // export), we must strip it here so the child sees the default
+  // (international) rather than the stale inherited value.
+  if (agentId === 'codebuddy') {
+    const hasConfiguredInternetEnv = Object.keys(expandConfiguredEnv(configuredEnv)).some(
+      (k) => k.toUpperCase() === 'CODEBUDDY_INTERNET_ENVIRONMENT',
+    );
+    if (!hasConfiguredInternetEnv) {
+      for (const key of Object.keys(env)) {
+        if (key.toUpperCase() === 'CODEBUDDY_INTERNET_ENVIRONMENT') delete env[key];
+      }
+    }
+  }
   return env;
   return env;
 }
