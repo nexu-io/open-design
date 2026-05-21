@@ -39,11 +39,10 @@ Produce a single-screen login page. Layout, in order:
 
 1. **Branding header** — wordmark or logomark, centered or top-left
    per the design system.
-2. **Form card** — narrow centered card:
+2. **Form card** — narrow centered card wrapped in a `<form>` element:
    - Email input (`type=email`, autofocus).
-   - Password input (`type=password`) with show/hide toggle.
+   - Password input (`type=password`).
    - Primary submit button (full width).
-   - Inline error region (hidden by default; `aria-live=polite`).
 3. **Divider** — "or continue with" caption between the form and
    social providers.
 4. **Social providers** — Google and Apple buttons, full width, icon
@@ -57,3 +56,10 @@ Produce a single-screen login page. Layout, in order:
 Emit a single self-contained HTML document inside an `<artifact>`
 tag, CSS inline, no external assets. Honor the active DESIGN.md
 tokens for color / typography / form / button.
+
+## Self-check
+
+- Primary submit button uses the DS accent token (not a raw color).
+- Inputs are wrapped in a `<form>` with visible labels.
+- Footer links route to signup and password reset.
+- No third-party iconography fetched from a CDN — use inline SVG or text.

@@ -83,15 +83,17 @@
     <main>
       <section class="card" aria-label="Login">
         <div class="brand">Acme</div>
-        <div class="field">
-          <label for="email">Email</label>
-          <input id="email" type="email" autocomplete="email" placeholder="you@company.com" />
-        </div>
-        <div class="field">
-          <label for="password">Password</label>
-          <input id="password" type="password" autocomplete="current-password" />
-        </div>
-        <button class="submit">Sign in</button>
+        <form>
+          <div class="field">
+            <label for="email">Email</label>
+            <input id="email" type="email" autocomplete="email" placeholder="you@company.com" />
+          </div>
+          <div class="field">
+            <label for="password">Password</label>
+            <input id="password" type="password" autocomplete="current-password" />
+          </div>
+          <button class="submit" type="submit">Sign in</button>
+        </form>
         <div class="divider">or continue with</div>
         <div class="social">
           <button type="button">Continue with Google</button>
