@@ -88,4 +88,21 @@ describe('composeSystemPrompt — SenseAudio voice options', () => {
     expect(prompt).toContain('SenseAudio voice list could not be loaded because the SenseAudio API key is missing');
     expect(prompt).toContain('configure it in Settings');
   });
+
+  it('surfaces invalid SenseAudio credentials as a Settings remediation', () => {
+    const prompt = composeSystemPrompt({
+      streamFormat: 'plain',
+      metadata: {
+        kind: 'audio',
+        audioKind: 'speech',
+        audioModel: 'senseaudio-tts',
+        audioDuration: 30,
+      },
+      senseAudioCatalogueError: 'SenseAudio voice list could not be loaded (400 Bad Request): senseaudio voices api error 1004: invalid api key',
+    });
+
+    expect(prompt).toContain('SenseAudio voice list could not be loaded because the SenseAudio credentials look invalid');
+    expect(prompt).toContain('update SenseAudio in Settings');
+    expect(prompt).not.toContain('retry the lookup or paste a voice id manually');
+  });
 });

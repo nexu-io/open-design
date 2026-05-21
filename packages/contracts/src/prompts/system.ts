@@ -763,6 +763,19 @@ export function formatSenseAudioCatalogueErrorForPrompt(
   if (/no SenseAudio API key/i.test(trimmed)) {
     return `${SENSEAUDIO_VOICE_OPTIONS_PROMPT_PREFIX} because the SenseAudio API key is missing. Tell the user to configure it in Settings or paste a voice id manually.`;
   }
+  if (
+    /invalid api key/i.test(trimmed)
+    || /\bunauthori[sz]ed\b/i.test(trimmed)
+    || /\bauth(?:entication|orization)?\b/i.test(trimmed)
+  ) {
+    return `${SENSEAUDIO_VOICE_OPTIONS_PROMPT_PREFIX} because the SenseAudio credentials look invalid. Tell the user to update SenseAudio in Settings or paste a voice id manually.`;
+  }
+  if (
+    /\bquota\b/i.test(trimmed)
+    || /\b(insufficient|exhausted)\b.*\b(credit|balance|quota)\b/i.test(trimmed)
+  ) {
+    return `${SENSEAUDIO_VOICE_OPTIONS_PROMPT_PREFIX} because the SenseAudio account quota could not be used. Tell the user to check their SenseAudio account or update SenseAudio in Settings, or paste a voice id manually.`;
+  }
   const statusMatch = trimmed.match(
     /(?:\((\d{3})(?:\s+([^)]+))?\)|\b(\d{3})(?:\s+([A-Za-z][A-Za-z -]{0,40}))?\b)/,
   );

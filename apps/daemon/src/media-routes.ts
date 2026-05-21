@@ -3,6 +3,20 @@ import type { RouteDeps } from './server-context.js';
 
 export interface RegisterMediaRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'ids' | 'media' | 'appConfig' | 'orbit' | 'nativeDialogs' | 'projectStore' | 'projectFiles' | 'conversations' | 'research'> {}
 
+function senseAudioCatalogueErrorStatus(message: string): number {
+  if (
+    /no SenseAudio API key/i.test(message)
+    || /invalid api key/i.test(message)
+    || /\bunauthori[sz]ed\b/i.test(message)
+    || /\bauth(?:entication|orization)?\b/i.test(message)
+    || /\bquota\b/i.test(message)
+    || /\b(insufficient|exhausted)\b.*\b(credit|balance|quota)\b/i.test(message)
+  ) {
+    return 400;
+  }
+  return 502;
+}
+
 export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) {
   const { db } = ctx;
   const { sendApiError, requireLocalDaemonRequest, isLocalSameOrigin, resolvedPortRef } = ctx.http;
@@ -77,7 +91,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       res.json({ catalogue });
     } catch (err: any) {
       const message = String(err && err.message ? err.message : err);
-      const status = message.includes('no SenseAudio API key') ? 400 : 502;
+      const status = senseAudioCatalogueErrorStatus(message);
       res.status(status).json({ error: message });
     }
   });
