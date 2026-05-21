@@ -20,15 +20,15 @@ should edit before cutting the next tag — see #1893 for context.
 - Critique Theater Settings toggle with i18n across 6 locales. (#1484)
 - Custom select web component primitive. (#1714)
 - AskUserQuestion tool wired through chat with TodoWrite pinning. (#1743)
-- Structured tokens for Notion, Linear, GitHub design systems. (#1825)
-- Structured tokens for Cursor, Apple, Stripe design systems. (#1831)
+- Structured tokens for Notion, Linear, GitHub design systems. (#1794)
+- Structured tokens for Cursor, Apple, Stripe design systems. (#1652)
 - OpenAI-compatible media providers in daemon. (#1712)
 - Leonardo.ai image generation provider. (#1123)
 - Italian (`it`) locale support. (#1323)
 
 ### Changed
 
-- Packaged client lazy-loads Electron to enable headless config imports. (#1798)
+- Packaged client lazy-loads Electron to enable headless config imports. ([`2bc281f`](https://github.com/nexu-io/open-design/commit/2bc281fe), via #1832)
 - Claude design import canvas no longer zooms on scroll. (#1726)
 
 ### Fixed
@@ -50,13 +50,13 @@ should edit before cutting the next tag — see #1893 for context.
 - Template toolbar stickiness during scroll. (#1785)
 - Comment panel string localization. (#1443)
 - Resolved comments hidden from preview overlays. (#1762)
-- HTML preview sandbox fallback to `srcDoc`. (#1754)
+- HTML preview sandbox fallback to `srcDoc`. (#1306)
 - BYOK chat inlines attached file context. (#1730)
 
 #### Daemon
 
 - Claude connection smoke wraps stdin properly. (#1844)
-- BYOK proxy honors IP-literal `OD_ALLOWED_ORIGINS` in no-Origin Host check. (#1775)
+- BYOK proxy honors IP-literal `OD_ALLOWED_ORIGINS` in no-Origin Host check. ([`c18be3f`](https://github.com/nexu-io/open-design/commit/c18be3f1))
 - ACP stage timeout aligned to outer chat inactivity window. (#1743)
 
 #### Documentation
@@ -67,7 +67,7 @@ should edit before cutting the next tag — see #1893 for context.
 
 #### Packaging
 
-- Nix flake `pnpmDepsHash` refresh after merging main. (#1765)
+- Nix flake `pnpmDepsHash` refresh after merging main. ([`14cff69`](https://github.com/nexu-io/open-design/commit/14cff694), via #1832)
 
 ### Security
 
@@ -75,10 +75,10 @@ should edit before cutting the next tag — see #1893 for context.
 
 ### Internal / Tests
 
-- Italian locale cleanup (`onImportFolder` signature + stale pet rail keys). (#1814)
+- Italian locale cleanup (`onImportFolder` signature + stale pet rail keys). ([`068d00a`](https://github.com/nexu-io/open-design/commit/068d00a6), via #1832)
 - Linux packaged client parity smoke coverage. (#1204)
 - Metrics PRs trigger required checks. (#1801)
-- Packaged-linux runtime logs captured into headless artifact. (#1823)
+- Packaged-linux runtime logs captured into headless artifact. ([`64139db`](https://github.com/nexu-io/open-design/commit/64139db3), via #1832)
 - Memory preview icon assertion decoupled for test stability. (#1863)
 
 ## [0.7.0] - 2026-05-12
