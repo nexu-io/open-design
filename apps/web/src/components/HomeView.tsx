@@ -74,16 +74,9 @@ import {
 import { PluginDetailsModal } from './PluginDetailsModal';
 import { PluginsHomeSection } from './PluginsHomeSection';
 import type { PluginLoopSubmit } from './PluginLoopHome';
-import {
-  applyFacetSelection,
-  isFeaturedPlugin,
-  type FacetSelection,
-} from './plugins-home/facets';
+import type { FacetSelection } from './plugins-home/facets';
 import type { PluginUseAction } from './plugins-home/useActions';
-import { sortByVisualAppeal } from './plugins-home/visualScore';
 import { RecentProjectsStrip } from './RecentProjectsStrip';
-
-const EXAMPLE_PROMPT_LIMIT = 4;
 
 interface ActivePlugin {
   record: InstalledPluginRecord;
@@ -119,11 +112,6 @@ interface ActivePlugin {
   // would back-fill the textarea, defeating the suppression that
   // the chip click set up.
   suppressPromptSync: boolean;
-}
-
-interface ExampleSuggestion {
-  plugin: InstalledPluginRecord;
-  preview: string;
 }
 
 interface SelectedPluginContext {
@@ -487,61 +475,6 @@ export function HomeView({
     if (!chipId) return null;
     return facetSelectionForChip(chipId);
   }, [pendingChipId, active?.chipId]);
-
-  const rankedExamplePlugins = useMemo(() => {
-    if (plugins.length === 0) return [];
-    const visible = plugins.filter(
-      (plugin) =>
-        plugin.manifest?.od?.kind !== 'atom' && Boolean(plugin.manifest?.od?.useCase?.query),
-    );
-    return sortByVisualAppeal(visible);
-  }, [plugins]);
-
-  // Manus-style example-prompt suggestions for the panel that appears
-  // below the composer after a type chip is picked. We surface the
-  // top-N visually-strong plugins from the matching facet slice (e.g.
-  // picking "Slide deck" shows four polished deck templates) and
-  // pre-render each plugin's useCase.query through the same renderer
-  // submit uses, so the card body is the actual sentence that hits
-  // the textarea on click. Sparse slices are topped up with featured
-  // picks so the row never collapses to a single dim example.
-  const exampleSuggestions = useMemo<ExampleSuggestion[]>(() => {
-    if (rankedExamplePlugins.length === 0) return [];
-    const sliceFor = (selection: FacetSelection | null) => {
-      if (!selection) return rankedExamplePlugins;
-      return applyFacetSelection(rankedExamplePlugins, selection);
-    };
-    const primary = sliceFor(presetStartersSelection);
-    const featuredBackfill = rankedExamplePlugins.filter(
-      (plugin) => isFeaturedPlugin(plugin) && !primary.some((p) => p.id === plugin.id),
-    );
-    const records = [...primary, ...featuredBackfill].slice(0, EXAMPLE_PROMPT_LIMIT);
-    return records
-      .map((plugin) => {
-        const template = resolvePluginQueryFallback(plugin.manifest?.od?.useCase?.query, locale);
-        if (!template) return null;
-        const fields = plugin.manifest?.od?.inputs ?? [];
-        const preview = renderLocalizedPluginBriefTemplate(
-          locale,
-          template,
-          hydratePluginInputs(fields, undefined),
-          fields,
-        );
-        return { plugin, preview };
-      })
-      .filter((entry): entry is ExampleSuggestion => entry !== null);
-  }, [rankedExamplePlugins, presetStartersSelection, locale]);
-
-  // Per-chip dismissal: once the user closes the panel for a given
-  // chip, we keep it hidden until they pick a different chip (which
-  // makes dismissedExampleChipId stale and lets the panel open
-  // again). This matches Manus' close-once-then-quiet behavior.
-  const [dismissedExampleChipId, setDismissedExampleChipId] = useState<string | null>(null);
-  const currentExampleChipId = pendingChipId ?? active?.chipId ?? null;
-  const showExamples =
-    Boolean(currentExampleChipId) &&
-    exampleSuggestions.length > 0 &&
-    dismissedExampleChipId !== currentExampleChipId;
 
   // When the active plugin was bound through a chip, the badge shows
   // the chip label (e.g. "Prototype") instead of the underlying plugin
