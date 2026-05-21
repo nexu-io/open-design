@@ -33,4 +33,9 @@ export const antigravityAgentDef = {
     buildArgs: () => ['--print', '--dangerously-skip-permissions'],
     promptViaStdin: true,
     streamFormat: 'plain',
+    // SettingsDialog's unavailable-agent row renders an "Install" /
+    // "Docs" affordance only when these are set. Without them users
+    // who don't have agy installed see a dead "Not detected" row.
+    installUrl: 'https://antigravity.google/download',
+    docsUrl: 'https://antigravity.google/docs',
 } satisfies RuntimeAgentDef;
