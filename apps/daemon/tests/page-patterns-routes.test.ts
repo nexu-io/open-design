@@ -2,7 +2,7 @@
 // page-patterns feature (see docs/plans/2026-05-21-page-patterns.md). The
 // tests point the static-resource-routes harness at the real seed folder
 // under <repo>/page-patterns/ so the snake_case → camelCase frontmatter
-// projection is exercised end-to-end against the eight committed seeds.
+// projection is exercised end-to-end against every committed seed.
 
 import express from 'express';
 import http from 'node:http';
@@ -26,12 +26,18 @@ const PAGE_PATTERNS_ROOT = path.join(REPO_ROOT, 'page-patterns');
 const EXPECTED_PATTERN_IDS = [
   'auth-login',
   'auth-signup',
+  'auth-password-reset',
   'board-list',
   'gallery-grid',
   'social-feed',
   'post-detail',
   'dashboard-metrics',
   'user-profile',
+  'landing-marketing',
+  'landing-pricing',
+  'form-settings',
+  'form-contact',
+  'error-not-found',
 ];
 
 describe('/api/page-patterns routes', () => {
@@ -112,7 +118,7 @@ describe('/api/page-patterns routes', () => {
       }),
   );
 
-  it('GET /api/page-patterns returns all eight seed patterns', async () => {
+  it('GET /api/page-patterns returns every seed pattern', async () => {
     const res = await fetch(`${baseUrl}/api/page-patterns`);
     expect(res.status).toBe(200);
     const body = (await res.json()) as PagePatternListResponse;

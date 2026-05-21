@@ -49,11 +49,14 @@ Reserved namespaces and the seed entries each owns:
 
 | Namespace   | Entries                                  |
 | ----------- | ---------------------------------------- |
-| `auth`      | `login`, `signup`                        |
+| `auth`      | `login`, `signup`, `password-reset`      |
 | `list`      | `board`, `gallery`, `feed`               |
 | `detail`    | `post`                                   |
 | `dashboard` | `metrics`                                |
 | `profile`   | `user`                                   |
+| `landing`   | `marketing`, `pricing`                   |
+| `form`      | `settings`, `contact`                    |
+| `error`     | `not-found`                              |
 
 New namespaces require an explicit code change to
 `packages/contracts/src/api/page-patterns.ts` (the enum kept there

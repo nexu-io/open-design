@@ -36,6 +36,9 @@ const KNOWN_CATEGORY_KEYS = new Set([
   'detail',
   'dashboard',
   'profile',
+  'landing',
+  'form',
+  'error',
 ]);
 
 type CategoryKey =
@@ -43,7 +46,10 @@ type CategoryKey =
   | 'pagePatterns.category.list'
   | 'pagePatterns.category.detail'
   | 'pagePatterns.category.dashboard'
-  | 'pagePatterns.category.profile';
+  | 'pagePatterns.category.profile'
+  | 'pagePatterns.category.landing'
+  | 'pagePatterns.category.form'
+  | 'pagePatterns.category.error';
 
 function categoryLabelKey(namespace: string): CategoryKey | null {
   if (!KNOWN_CATEGORY_KEYS.has(namespace)) return null;

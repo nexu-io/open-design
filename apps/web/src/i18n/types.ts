@@ -722,6 +722,9 @@ export interface Dict {
   'pagePatterns.category.detail': string;
   'pagePatterns.category.dashboard': string;
   'pagePatterns.category.profile': string;
+  'pagePatterns.category.landing': string;
+  'pagePatterns.category.form': string;
+  'pagePatterns.category.error': string;
   'pagePatterns.useAction': string;
   'pagePatterns.previewAction': string;
   'pagePatterns.empty': string;
