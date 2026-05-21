@@ -227,6 +227,65 @@ export const BRAND_EXTENSIONS: Readonly<Record<string, readonly string[]>> = {
     "--radius-xl", // 16px — kami hero containers
     "--elev-ring-accent", // 1px brand ring used as primary-button edge
   ],
+  suivi: [
+    "--accent-light", // lighter lavender for links / hover
+    "--text-md", // 16px intermediate tier between base and lg
+    "--radius-xs", // 4px — tags, micro chips
+    "--radius-xl", // 16px — hero containers
+    "--surface-nav", // Caribbean Current header surface
+    "--accent-surface", // light lavender surface for accent contexts
+    "--teal", // secondary brand accent
+    "--teal-on", // FG on teal surfaces
+    "--teal-hover", // teal hover state
+    "--teal-light", // light teal for progress indicators
+    "--teal-surface", // light teal background
+    "--success-surface", // light green background for success states
+    "--warn-text", // text color on warning backgrounds
+    "--danger-surface", // light pink background for danger states
+    "--brand-lavender", // named brand palette slot
+    "--brand-brilliant-lavender", // named brand palette slot
+    "--brand-caribbean", // named brand palette slot
+    "--brand-shamrock", // named brand palette slot
+    "--brand-maize", // named brand palette slot
+    "--brand-neon-blue", // named brand palette slot
+    "--mauve", // secondary palette
+    "--pale-purple", // secondary palette
+    "--thistle", // secondary palette
+    "--magnolia", // secondary palette
+    "--tiffany-blue", // secondary palette
+    "--mint-green", // secondary palette
+    "--uranian-blue", // secondary palette
+    "--alice-blue", // secondary palette
+    "--beaver", // secondary palette
+    "--silver", // secondary palette
+    "--weight-regular", // font-weight 400
+    "--weight-medium", // font-weight 500
+    "--leading-relaxed", // 1.1 expanded line-height
+    "--tracking-tight", // -1px heading tracking
+    "--tracking-h4", // -0.22px H4 tracking
+    "--tracking-normal", // 0 default tracking
+    "--space-0", // 0px explicit zero
+    "--radius-2xl", // 24px large modal radius
+    "--elev-hover", // hover elevation (teal-tinted)
+    "--elev-modal", // modal overlay elevation
+    "--header-height", // fixed header height
+    "--tag-lavender-mist-bg", // tag theme
+    "--tag-lavender-mist-fg", // tag theme
+    "--tag-lavender-bg", // tag theme
+    "--tag-lavender-fg", // tag theme
+    "--tag-mint-bg", // tag theme
+    "--tag-mint-fg", // tag theme
+    "--tag-pink-bg", // tag theme
+    "--tag-pink-fg", // tag theme
+    "--tag-blue-bg", // tag theme
+    "--tag-blue-fg", // tag theme
+    "--tag-yellow-bg", // tag theme
+    "--tag-yellow-fg", // tag theme
+    "--tag-neutral-bg", // tag theme
+    "--tag-neutral-fg", // tag theme
+    "--tag-gray-bg", // tag theme
+    "--tag-gray-fg", // tag theme
+  ],
 };
 
 /**
