@@ -19,6 +19,7 @@ import { vibeAgentDef } from './defs/vibe.js';
 import { deepseekAgentDef } from './defs/deepseek.js';
 import { aiderAgentDef } from './defs/aider.js';
 import { reasonixAgentDef } from './defs/reasonix.js';
+import { openclawAgentDef } from './defs/openclaw.js';
 import { readLocalAgentProfileDefs as readLocalAgentProfileDefsFromFile } from './local-profiles.js';
 import type { RuntimeAgentDef } from './types.js';
 
@@ -44,6 +45,7 @@ const BASE_AGENT_DEFS: RuntimeAgentDef[] = [
   deepseekAgentDef,
   aiderAgentDef,
   reasonixAgentDef,
+  openclawAgentDef,
 ];
 
 export function readLocalAgentProfileDefs(
