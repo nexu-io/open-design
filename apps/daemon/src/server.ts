@@ -4282,16 +4282,26 @@ const MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 // always means the agent is winding down or hanging. See #1451.
 const DEFAULT_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS = 60 * 1000;
 
-function resolveChatRunInactivityTimeoutMs() {
-  const raw = Number(process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS);
-  // This watchdog observes child stdout/stderr/SSE activity, not real CPU or
-  // filesystem progress. Keep the default long enough for agents that spend
-  // several minutes silently writing large artifacts.
-  if (!Number.isFinite(raw)) return DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
-  // Node clamps delays larger than a signed 32-bit integer down to 1ms, which
-  // makes an oversized override fail almost immediately while reporting a huge
-  // timeout. Keep explicit overrides bounded to a practical, timer-safe value.
-  return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(raw)));
+// Resolve the chat-run inactivity watchdog ceiling. Priority order:
+//   1. `OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS` (operator escape hatch).
+//   2. The agent runtime def's `inactivityTimeoutMs` recommendation —
+//      lets agents whose CLIs go silent for long stretches during
+//      legitimate work (e.g. Copilot from #2467) raise the ceiling
+//      without every operator having to set an env var.
+//   3. The 10-minute global default.
+// Both env and def values pass through the same clamp because Node
+// silently downgrades signed-32-bit-overflowing setTimeout delays to
+// 1ms — without the clamp an oversized hint would fire the watchdog
+// almost immediately while reporting the huge timeout to the user.
+export function resolveChatRunInactivityTimeoutMs(agentDefault?: number) {
+  const env = Number(process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS);
+  if (Number.isFinite(env)) {
+    return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(env)));
+  }
+  if (typeof agentDefault === 'number' && Number.isFinite(agentDefault)) {
+    return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(agentDefault)));
+  }
+  return DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
 }
 
 // Resolve the post-artifact quiet-period window. Same clamp as the outer
@@ -12237,7 +12247,7 @@ export async function startServer({
     // here; on this branch `send` was hoisted into the AMR preflight
     // earlier, so we keep only the new `runStartTimeMs` declaration.
     const runStartTimeMs = Date.now();
-    const inactivityTimeoutMs = resolveChatRunInactivityTimeoutMs();
+    const inactivityTimeoutMs = resolveChatRunInactivityTimeoutMs(def.inactivityTimeoutMs);
     const artifactQuietPeriodMs = resolveChatRunArtifactQuietPeriodMs();
     const inactivityKillGraceMs = 3_000;
     let inactivityTimer = null;

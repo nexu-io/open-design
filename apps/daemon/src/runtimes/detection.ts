@@ -242,8 +242,9 @@ function stripFns(
   // (reasoningOptions, streamFormat, name, bin, etc.). `models` is
   // populated separately by `fetchModels`, so we strip the static
   // `fallbackModels` slot here too. `helpArgs` / `capabilityFlags` /
-  // `fallbackBins` / `maxPromptArgBytes` / `env` are probe-or-spawn-only
-  // metadata and shouldn't bleed into the API response either.
+  // `fallbackBins` / `maxPromptArgBytes` / `env` / `inactivityTimeoutMs`
+  // are probe-or-spawn-only metadata and shouldn't bleed into the API
+  // response either.
   const {
     buildArgs,
     listModels,
@@ -255,6 +256,7 @@ function stripFns(
     versionProbeTimeoutMs,
     maxPromptArgBytes,
     env,
+    inactivityTimeoutMs,
     authProbe,
     ...rest
   } = def;
