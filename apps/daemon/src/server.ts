@@ -388,6 +388,8 @@ import { configureConnectorCredentialStore, ConnectorServiceError, FileConnector
 import { composioConnectorProvider } from './connectors/composio.js';
 import { configureComposioConfigStore } from './connectors/composio-config.js';
 import { CHAT_TOOL_ENDPOINTS, CHAT_TOOL_OPERATIONS, toolTokenRegistry } from './tool-tokens.js';
+import { createIdentityMiddleware } from './identity/middleware.js';
+import { resolveIdentity } from './identity/types.js';
 import {
   aggregateCloudflarePagesStatus,
   buildDeployFileSet,
@@ -3204,6 +3206,15 @@ export async function startServer({
       return next();
     });
   }
+
+  // Identity middleware — resolves req.identity once per request via
+  // the identity seam in apps/daemon/src/identity/types.ts. Today's
+  // LocalFallbackProvider returns a configurable placeholder; future
+  // multi-user-support work registers richer providers ahead of it.
+  // Consumers (chat-run lifecycle, message attribution) read identity
+  // from req.identity rather than resolving from scratch — see the spec
+  // for #1241 for the durable-on-run propagation rationale.
+  app.use(createIdentityMiddleware());
 
   // Multi-directory scanning shared by every skill / template surface. The
   // helpers delegate to listSkills(roots) which walks roots in priority
@@ -11111,6 +11122,7 @@ export async function startServer({
       assistantMessageId,
       clientRequestId: `orbit-${trigger}-${randomUUID()}`,
       agentId,
+      identity: req.identity,
     });
     upsertMessage(db, conversationId, {
       id: `orbit-user-${run.id}`,
@@ -11269,7 +11281,7 @@ export async function startServer({
         resolvedSnapshot = resolved;
       }
     }
-    const meta = { ...(req.body || {}) };
+    const meta = { ...(req.body || {}), identity: req.identity };
     if (resolvedSnapshot?.ok) {
       meta.appliedPluginSnapshotId = resolvedSnapshot.snapshotId;
       if (!meta.pluginId) meta.pluginId = resolvedSnapshot.snapshot.pluginId;
@@ -11589,7 +11601,7 @@ export async function startServer({
     if (daemonShuttingDown) {
       return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
     }
-    const run = design.runs.create();
+    const run = design.runs.create({ identity: req.identity });
     design.runs.stream(run, req, res);
     design.runs.start(run, () => startChatRun(req.body || {}, run));
   });
@@ -11723,6 +11735,13 @@ export async function startServer({
       assistantMessageId,
       clientRequestId: `routine-${trigger}-${randomUUID()}`,
       agentId,
+      // Routines fire from the scheduler, not from an HTTP request, so
+      // there's no req.identity to forward. Use the env-driven identity
+      // fallback so the run still has an attributable Identity (the
+      // local user under LocalFallbackProvider). When a future
+      // multi-user feature captures the routine creator's identity at
+      // creation time, this site reads from the routine record instead.
+      identity: resolveIdentity({}),
       ...(resolvedRoutineSnapshot?.ok
         ? {
             appliedPluginSnapshotId: resolvedRoutineSnapshot.snapshotId,

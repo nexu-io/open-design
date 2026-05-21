@@ -45,6 +45,12 @@ export function createChatRunService({
           : null,
       pluginId:
         typeof meta.pluginId === 'string' && meta.pluginId ? meta.pluginId : null,
+      // Resolved Identity for the user/context that initiated this run.
+      // Populated by callers from `req.identity` (set by the identity
+      // middleware). Stored on the run so it remains available across
+      // the async run lifecycle (message upsert, post-run history
+      // commit), which outlives the HTTP request.
+      identity: meta.identity && typeof meta.identity === 'object' ? meta.identity : null,
       status: 'queued',
       createdAt: now,
       updatedAt: now,
