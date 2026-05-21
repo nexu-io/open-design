@@ -408,10 +408,6 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
       : [],
     [activeChipId, activeExamplePlugins.length, locale],
   );
-  const workingDirLabel = useMemo(() => {
-    if (!workingDir) return null;
-    return workingDir.split(/[\\/]/).filter(Boolean).slice(-1)[0] ?? workingDir;
-  }, [workingDir]);
   const authoringLayoutActive =
     activeChipId === 'create-plugin' || pendingChipId === 'create-plugin';
   const promptMaxHeight = authoringLayoutActive
