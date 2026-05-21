@@ -66,30 +66,38 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     cleanup();
   });
 
-  it('keeps each new Home tab independent when one tab navigates', async () => {
+  it('reuses the existing Home tab when returning from a project', async () => {
     const { rerender } = render(
       <WorkspaceTabsBar route={homeRoute} projects={[project]} />,
     );
 
     expect(screen.getAllByRole('tab')).toHaveLength(1);
 
-    fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
-    fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
+    openWorkspaceTab(projectRoute);
 
     await waitFor(() => {
       const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
-      expect(labels.filter((label) => label.includes('Home'))).toHaveLength(3);
+      expect(labels).toHaveLength(2);
+      expect(labels.filter((label) => label.includes('Home'))).toHaveLength(1);
+      expect(labels.some((label) => label.includes('Project Alpha'))).toBe(true);
     });
-    expect(navigate).toHaveBeenCalledWith(homeRoute);
 
     rerender(<WorkspaceTabsBar route={projectRoute} projects={[project]} />);
+
+    rerender(<WorkspaceTabsBar route={homeRoute} projects={[project]} />);
 
     await waitFor(() => {
       const tabs = screen.getAllByRole('tab');
       const labels = tabs.map((tab) => tab.textContent ?? '');
-      expect(tabs).toHaveLength(3);
-      expect(labels.filter((label) => label.includes('Home'))).toHaveLength(2);
+      const selectedLabels = tabs
+        .filter((tab) => tab.getAttribute('aria-selected') === 'true')
+        .map((tab) => tab.textContent ?? '');
+
+      expect(tabs).toHaveLength(2);
+      expect(labels.filter((label) => label.includes('Home'))).toHaveLength(1);
       expect(labels.some((label) => label.includes('Project Alpha'))).toBe(true);
+      expect(selectedLabels).toHaveLength(1);
+      expect(selectedLabels[0]).toContain('Home');
     });
   });
 
@@ -106,7 +114,20 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     });
   });
 
-  it('preserves restored Home tabs instead of collapsing them by route', async () => {
+  it('keeps Home singleton when the new-tab action targets Home', async () => {
+    render(<WorkspaceTabsBar route={homeRoute} projects={[project]} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
+
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels).toHaveLength(1);
+      expect(labels[0]).toContain('Home');
+    });
+    expect(navigate).toHaveBeenCalledWith(homeRoute);
+  });
+
+  it('collapses restored duplicate Home tabs to a single Home tab', async () => {
     window.localStorage.setItem(
       'open-design:workspace-tabs:v1',
       JSON.stringify({
@@ -134,7 +155,16 @@ describe('WorkspaceTabsBar navigation semantics', () => {
 
     await waitFor(() => {
       const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
-      expect(labels.filter((label) => label.includes('Home'))).toHaveLength(2);
+      const saved = JSON.parse(
+        window.localStorage.getItem('open-design:workspace-tabs:v1') ?? '{}',
+      ) as {
+        tabs?: Array<{ kind?: string; view?: string }>;
+      };
+
+      expect(labels.filter((label) => label.includes('Home'))).toHaveLength(1);
+      expect(
+        saved.tabs?.filter((tab) => tab.kind === 'entry' && tab.view === 'home'),
+      ).toHaveLength(1);
     });
   });
 

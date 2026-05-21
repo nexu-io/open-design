@@ -167,19 +167,66 @@ function uniqueIdForTab(tab: WorkspaceChromeTab): string {
   return `entry:${tab.view}:${nowId()}`;
 }
 
+function isHomeRoute(route: Route): boolean {
+  return route.kind === 'home' && route.view === 'home';
+}
+
+function isHomeTab(tab: WorkspaceChromeTab): boolean {
+  return tab.kind === 'entry' && tab.view === 'home';
+}
+
+function singletonKeyForTab(tab: WorkspaceChromeTab): string | null {
+  return isHomeTab(tab) ? 'entry:home' : null;
+}
+
+function findReusableTabForRoute(
+  tabs: WorkspaceChromeTab[],
+  route: Route,
+): WorkspaceChromeTab | null {
+  if (isHomeRoute(route)) {
+    return tabs.find(isHomeTab) ?? null;
+  }
+  return null;
+}
+
+function activateTabInState(
+  state: WorkspaceTabsState,
+  tabId: string,
+  timestamp = Date.now(),
+): WorkspaceTabsState {
+  return normalizeTabsState({
+    tabs: state.tabs.map((tab) =>
+      tab.id === tabId ? { ...tab, lastActiveAt: timestamp } : tab,
+    ),
+    activeTabId: tabId,
+  });
+}
+
 function normalizeTabsState(state: WorkspaceTabsState): WorkspaceTabsState {
   const sourceTabs = state.tabs.length > 0 ? state.tabs : [createEntryTab('home')];
   const usedIds = new Set<string>();
+  const singletonIds = new Map<string, string>();
   let activeTabId = '';
   let activeClaimed = false;
-  const tabs = sourceTabs.map((tab) => {
+  const tabs: WorkspaceChromeTab[] = [];
+  for (const tab of sourceTabs) {
     const wasActive = tab.id === state.activeTabId && !activeClaimed;
-    if (wasActive) activeClaimed = true;
+    const singletonKey = singletonKeyForTab(tab);
+    const existingSingletonId = singletonKey ? singletonIds.get(singletonKey) : null;
+    if (existingSingletonId) {
+      if (wasActive) {
+        activeTabId = existingSingletonId;
+        activeClaimed = true;
+      }
+      continue;
+    }
     const id = tab.id && !usedIds.has(tab.id) ? tab.id : uniqueIdForTab(tab);
     usedIds.add(id);
+    if (singletonKey) singletonIds.set(singletonKey, id);
+    if (wasActive) activeClaimed = true;
     if (wasActive) activeTabId = id;
-    return id === tab.id ? tab : { ...tab, id };
-  });
+    tabs.push(id === tab.id ? tab : { ...tab, id });
+  }
   return {
     tabs,
     activeTabId: activeTabId || tabs[0]!.id,
@@ -215,6 +262,10 @@ function initialTabsState(route: Route): WorkspaceTabsState {
 function syncStateToRoute(state: WorkspaceTabsState, route: Route): WorkspaceTabsState {
   const timestamp = Date.now();
   const current = normalizeTabsState(state);
+  const reusableTab = findReusableTabForRoute(current.tabs, route);
+  if (reusableTab && reusableTab.id !== current.activeTabId) {
+    return activateTabInState(current, reusableTab.id, timestamp);
+  }
   const currentActive = current.tabs.find((tab) => tab.id === current.activeTabId) ?? null;
   if (!currentActive) {
     const nextTab = tabFromRoute(route, timestamp);
@@ -331,6 +382,10 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
       const nextTab = tabFromRoute(nextRoute);
       setState((current) => {
         const normalized = normalizeTabsState(current);
+        const reusableTab = findReusableTabForRoute(normalized.tabs, nextRoute);
+        if (reusableTab) {
+          return activateTabInState(normalized, reusableTab.id);
+        }
         return normalizeTabsState({
           tabs: [...normalized.tabs, nextTab],
           activeTabId: nextTab.id,
@@ -411,13 +466,10 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
   }
 
   function createNewTab() {
-    const tab = createEntryTab('home');
-    setState((current) => ({
-      tabs: [...normalizeTabsState(current).tabs, tab],
-      activeTabId: tab.id,
-    }));
+    const nextRoute: Route = { kind: 'home', view: 'home' };
+    setState((current) => syncStateToRoute(current, nextRoute));
     setTabsMenuOpen(false);
-    navigate({ kind: 'home', view: 'home' });
+    navigate(nextRoute);
   }
 
   function closeTab(tabId: string) {
