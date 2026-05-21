@@ -1264,11 +1264,12 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
           error: `unknown tool: ${fnName || 'unnamed'}`,
         };
       }
+      const toolKind = fnName === 'generate_image' ? 'image' : fnName === 'generate_video' ? 'video' : 'speech';
       let args: any = {};
       try {
         args = JSON.parse(call.function.arguments || '{}');
       } catch {
-        return { ok: false, error: 'tool arguments were not valid JSON' };
+        return { ok: false, error: 'tool arguments were not valid JSON', kind: toolKind };
       }
       if (fnName === 'generate_image') {
         const result = await executeGenerateImage(args, toolCtx);
