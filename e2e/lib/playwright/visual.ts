@@ -4,7 +4,11 @@ import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 
 const STORAGE_KEY = 'open-design:config';
+const GITHUB_STARS_STORAGE_KEY = 'open-design:gh-stars';
 const VISUAL_STYLE_ID = 'od-visual-stability-style';
+// Keep this exact-route mock narrow so unrelated GitHub UI still behaves normally.
+const VISUAL_GITHUB_REPO_API = 'https://api.github.com/repos/nexu-io/open-design';
+const VISUAL_GITHUB_STARS = 40_000;
 
 const VISUAL_CONFIG = {
   mode: 'daemon',
@@ -129,9 +133,13 @@ const VISUAL_DESIGN_SYSTEMS = [
 export async function configureVisualPage(page: Page, options: VisualPageOptions = {}): Promise<void> {
   const projects = options.projects ?? VISUAL_PROJECTS;
 
-  await page.addInitScript(([key, config]) => {
+  await page.addInitScript(([key, config, githubStarsKey, githubStarsCount]) => {
     window.localStorage.setItem(key, JSON.stringify(config));
-  }, [STORAGE_KEY, VISUAL_CONFIG] as const);
+    window.localStorage.setItem(
+      githubStarsKey,
+      JSON.stringify({ count: githubStarsCount, ts: Date.now() }),
+    );
+  }, [STORAGE_KEY, VISUAL_CONFIG, GITHUB_STARS_STORAGE_KEY, VISUAL_GITHUB_STARS] as const);
 
   await page.route('**/api/app-config', async (route) => {
     await fulfillGet(route, { config: VISUAL_CONFIG });
@@ -139,6 +147,17 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
 
   await page.route('**/api/agents', async (route) => {
     await fulfillGet(route, { agents: [MOCK_AGENT] });
+  });
+
+  await page.route(VISUAL_GITHUB_REPO_API, async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+
+    await route.fulfill({
+      json: { stargazers_count: VISUAL_GITHUB_STARS },
+    });
   });
 
   await page.route('**/api/projects', async (route) => {

@@ -1748,6 +1748,8 @@
   color: var(--text-faint);
 }
 .entry-star-badge__count {
+  display: inline-block;
+  min-width: 5ch;
   color: var(--text);
   font-variant-numeric: tabular-nums;
   transition: opacity 160ms ease;
