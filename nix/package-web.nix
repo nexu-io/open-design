@@ -26,12 +26,7 @@ let
   pname = "open-design-web";
   version = (lib.importJSON ../package.json).version;
 
-  # Vendored pnpm store. The hash MUST be pinned on first build:
-  # `nix build .#web` will fail with the expected hash printed; copy
-  # that into `pnpmDepsHash` below. Bump it whenever pnpm-lock.yaml
-  # changes.
-  pnpmDepsHash = "sha256-TI7gjjF47YIkLblWjG9flG3E1mg310AI5S4uZ+9B2kI=";
-  # pnpmDepsHash = lib.fakeHash;
+  pnpmDepsHash = (import ./pnpm-deps.nix).hash;
 in
   stdenv.mkDerivation (finalAttrs: {
     inherit pname version src;
