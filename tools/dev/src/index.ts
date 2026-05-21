@@ -605,23 +605,10 @@ async function spawnDesktopRuntime(config: ToolDevConfig, options: CliOptions): 
   try {
     const spawnEnv = createDesktopSpawnEnv(env, options);
     await logHandle.write(`[tools-dev] launching desktop (${runtime}) at ${new Date().toISOString()}\n`);
-    if (runtime === "tauri") {
-      await buildTauriDesktop(config, logHandle);
-      const spawned = await spawnBackgroundProcess({
-        args: stampArgs,
-        command: config.apps.desktop.tauriDebugBinaryPath,
-        cwd: config.workspaceRoot,
-        detached: true,
-        env: spawnEnv,
-        logFd: logHandle.fd,
-      });
-      return { pid: spawned.pid };
-    }
-
-    await buildDesktop(config, logHandle);
+    await buildTauriDesktop(config, logHandle);
     const spawned = await spawnBackgroundProcess({
-      args: [config.apps.desktop.mainEntryPath, ...stampArgs],
-      command: config.apps.desktop.electronBinaryPath,
+      args: stampArgs,
+      command: config.apps.desktop.tauriDebugBinaryPath,
       cwd: config.workspaceRoot,
       detached: true,
       env: spawnEnv,
@@ -1064,7 +1051,7 @@ function addPortOptions(command: ReturnType<typeof cli.command>) {
   return command
     .option("--daemon-port <port>", "force daemon port; conflict quick-fails")
     .option("--web-port <port>", "force web port; conflict quick-fails")
-    .option("--desktop-runtime <runtime>", `desktop runtime: electron|tauri (default: ${DEFAULT_DESKTOP_RUNTIME})`)
+    .option("--desktop-runtime <runtime>", `desktop runtime: tauri (default: ${DEFAULT_DESKTOP_RUNTIME})`)
     .option("--prod", "use production build (requires pnpm --filter @open-design/web build first)");
 }
 

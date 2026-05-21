@@ -67,8 +67,7 @@ function buildSidecarLogSources(runtime: SidecarRuntimeContext<SidecarStamp> | n
       kind: 'text',
       tailBytes: TAIL_BYTES_PER_LOG,
     });
-    // Only desktop runs an Electron renderer that writes `renderer.log`
-    // (see apps/desktop/src/main/runtime.ts). daemon and web are pure Node
+    // Only desktop writes a host-renderer log. daemon and web are pure Node
     // services with no renderer process, so listing the file there only
     // produces missing-file placeholders and manifest warnings.
     if (app === APP_KEYS.DESKTOP) {

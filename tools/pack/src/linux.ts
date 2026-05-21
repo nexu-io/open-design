@@ -1,4 +1,4 @@
-import { execFile, spawn } from "node:child_process";
+import { execFile } from "node:child_process";
 import { access, chmod, cp, mkdir, open, readFile, readdir, readlink, rename, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -18,7 +18,6 @@ import {
 import { createSidecarLaunchEnv, requestJsonIpc, resolveAppIpcPath } from "@open-design/sidecar";
 import {
   collectProcessTreePids,
-  createPackageManagerInvocation,
   createProcessStampArgs,
   listProcessSnapshots,
   matchesStampedProcess,
@@ -28,38 +27,13 @@ import {
 } from "@open-design/platform";
 
 import type { ToolPackConfig } from "./config.js";
-import { copyBundledResourceTrees, linuxResources } from "./resources.js";
+import { linuxResources } from "./resources.js";
 import { packTauriLinux } from "./tauri.js";
 
 const execFileAsync = promisify(execFile);
 
-const PRODUCT_NAME = "Open Design";
 const APP_IMAGE_PRODUCT_NAME = "Open-Design";
 const DESKTOP_LOG_ECHO_ENV = "OD_DESKTOP_LOG_ECHO";
-// The containerized build sets this to the standalone pnpm binary fetched by
-// buildDockerArgs; runProductionInstall reads it to avoid invoking `npm` inside
-// `electronuserland/builder:base`, which strips npm/npx/corepack.
-const PRODUCTION_INSTALL_PNPM_BIN_ENV = "OD_TOOLS_PACK_PNPM_BIN";
-const CONTAINER_PNPM_PATH = "/tmp/pnpm";
-const CONTAINER_PNPM_HOME = "/tmp/pnpm-home";
-const CONTAINER_NODE_VERSION = "24.14.1";
-const CONTAINER_TOOLS_PACK_CLI_PATH = "tools/pack/bin/tools-pack.mjs";
-
-const INTERNAL_PACKAGES = [
-  { directory: "packages/contracts", name: "@open-design/contracts" },
-  { directory: "packages/registry-protocol", name: "@open-design/registry-protocol" },
-  { directory: "packages/host", name: "@open-design/host" },
-  { directory: "packages/sidecar-proto", name: "@open-design/sidecar-proto" },
-  { directory: "packages/sidecar", name: "@open-design/sidecar" },
-  { directory: "packages/platform", name: "@open-design/platform" },
-  { directory: "packages/agui-adapter", name: "@open-design/agui-adapter" },
-  { directory: "packages/plugin-runtime", name: "@open-design/plugin-runtime" },
-  { directory: "packages/diagnostics", name: "@open-design/diagnostics" },
-  { directory: "apps/daemon", name: "@open-design/daemon" },
-  { directory: "apps/web", name: "@open-design/web" },
-  { directory: "apps/desktop", name: "@open-design/desktop" },
-  { directory: "apps/packaged", name: "@open-design/packaged" },
-] as const;
 
 export function sanitizeNamespace(value: string): string {
   return value.replace(/[^A-Za-z0-9._-]+/g, "-");
@@ -91,137 +65,6 @@ async function commandExists(bin: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-type DockerUserMapping = {
-  uid: number;
-  gid: number;
-};
-
-function toDockerMountPath(value: string): string {
-  return value.replaceAll("\\", "/");
-}
-
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", "'\\''")}'`;
-}
-
-export function buildDockerArgs(
-  config: ToolPackConfig,
-  user: DockerUserMapping,
-): string[] {
-  const workspaceRoot = toDockerMountPath(config.workspaceRoot);
-  const toolPackRoot = toDockerMountPath(config.roots.toolPackRoot);
-  const dockerHome = toDockerMountPath(join(config.roots.toolPackRoot, ".docker-home"));
-  const electronCache = toDockerMountPath(join(config.roots.toolPackRoot, ".docker-cache", "electron"));
-  const electronBuilderCache = toDockerMountPath(join(config.roots.toolPackRoot, ".docker-cache", "electron-builder"));
-
-  // The tool-pack root is mounted at a fixed container path so the inner build
-  // can be told where to write output via `--dir /tools-pack`. Without this
-  // mount + flag, the inner build would default to <workspaceRoot>/.tmp/tools-pack
-  // and silently ignore the caller's `--dir`, breaking any orchestration (CI,
-  // multi-namespace local builds) that pins tools-pack output outside the workspace.
-  // The .docker-home and .docker-cache/* mounts below shadow this parent mount at
-  // their specific paths under /home/builder, which is the supported overlap pattern.
-  //
-  // Shell-interpolation safety for the inner `bash -lc` command:
-  //   - config.namespace is sanitized at config-time by resolveNamespace() in
-  //     @open-design/sidecar-proto (restricted to namespace charset)
-  //   - config.to is enum-validated by resolveToolPackBuildOutput() in config.ts
-  //     to one of "all" | "appimage" | "dir"
-  //   - config.portable is a boolean
-  //   - config.appVersion is shell-quoted below because release versions can
-  //     carry punctuation that is not part of the namespace / target enums.
-  //
-  // The `electronuserland/builder:base` image is intentionally minimal: it
-  // strips node/npm/npx/corepack from PATH. Every "ask the image to invoke a
-  // package-manager shim" path fails with `command not found`.
-  //
-  // Download the official pnpm `linuxstatic-<arch>` standalone binary at
-  // container start. The binary bundles its own Node runtime, so it does not
-  // depend on the image's npm tooling. Select the asset by the container CPU so
-  // amd64 GitHub runners and arm64 local Docker hosts both work. Stage it under
-  // `/tmp/pnpm`, which is writable by the unprivileged container user. Then use
-  // it to install a pinned Node into PNPM_HOME so root lifecycle scripts and the
-  // final tools-pack CLI can run through an explicit `node .../tools-pack.mjs`
-  // entrypoint instead of generated `node_modules/.bin/*` shims.
-  //
-  // Route bootstrap and install diagnostics to stderr so stdout remains
-  // machine-readable when the inner `tools-pack linux build --json` emits JSON.
-  //
-  // The pinned version matches the `packageManager` field in the root
-  // package.json so reproducibility is preserved.
-  const PNPM_VERSION = "10.33.2";
-  const pnpmLinuxStaticX64Sha256 = "a47be715939bafa420fbdc5e34f7f9d8292c032402162c89ccb611e944e526d6";
-  const pnpmLinuxStaticArm64Sha256 = "4d402d0ef12cdc4d81ca339904e68638d841f4e27c73e460534d06e6b56048a9";
-  const pnpmReleaseUrl = `https://github.com/pnpm/pnpm/releases/download/v${PNPM_VERSION}`;
-  const setupPnpm =
-    `command -v curl >/dev/null || { echo "curl not found in container image" >&2; exit 127; } && ` +
-    `mkdir -p ${CONTAINER_PNPM_HOME} && ` +
-    `case "$(uname -m)" in ` +
-    `x86_64) PNPM_ASSET=pnpm-linuxstatic-x64; PNPM_SHA256=${pnpmLinuxStaticX64Sha256} ;; ` +
-    `aarch64) PNPM_ASSET=pnpm-linuxstatic-arm64; PNPM_SHA256=${pnpmLinuxStaticArm64Sha256} ;; ` +
-    `*) echo "unsupported container arch: $(uname -m)" >&2; exit 1 ;; ` +
-    `esac && ` +
-    `curl --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 -fsSL "${pnpmReleaseUrl}/$PNPM_ASSET" -o ${CONTAINER_PNPM_PATH}.tmp && ` +
-    `echo "$PNPM_SHA256  ${CONTAINER_PNPM_PATH}.tmp" | sha256sum -c - && ` +
-    `mv ${CONTAINER_PNPM_PATH}.tmp ${CONTAINER_PNPM_PATH} && ` +
-    `chmod +x ${CONTAINER_PNPM_PATH} && ` +
-    `PNPM_HOME=${CONTAINER_PNPM_HOME} PATH=${CONTAINER_PNPM_HOME}:$PATH ${CONTAINER_PNPM_PATH} env use --global ${CONTAINER_NODE_VERSION} && ` +
-    `export PNPM_HOME=${CONTAINER_PNPM_HOME} PATH=${CONTAINER_PNPM_HOME}:$PATH && ` +
-    `command -v node >/dev/null`;
-  const pnpmCmd = CONTAINER_PNPM_PATH;
-  const innerArgs = [
-    `node ${CONTAINER_TOOLS_PACK_CLI_PATH} linux build`,
-    `--to ${config.to}`,
-    `--desktop-runtime ${config.desktopRuntime}`,
-    `--namespace ${config.namespace}`,
-    "--dir /tools-pack",
-  ];
-  if (config.portable) {
-    innerArgs.push("--portable");
-  }
-  if (config.appVersion != null) {
-    innerArgs.push(`--app-version ${shellQuote(config.appVersion)}`);
-  }
-  const innerCommand = `{ ${setupPnpm} && ${pnpmCmd} install --frozen-lockfile; } >&2 && ` + innerArgs.join(" ");
-
-  const dockerArgs = [
-    "run",
-    "--rm",
-    "--user",
-    `${user.uid}:${user.gid}`,
-    "-v",
-    `${workspaceRoot}:/project`,
-    "-v",
-    `${toolPackRoot}:/tools-pack`,
-    "-v",
-    `${dockerHome}:/home/builder`,
-    "-v",
-    `${electronCache}:/home/builder/.cache/electron`,
-    "-v",
-    `${electronBuilderCache}:/home/builder/.cache/electron-builder`,
-    "-e",
-    "HOME=/home/builder",
-    "-e",
-    "ELECTRON_CACHE=/home/builder/.cache/electron",
-    "-e",
-    "ELECTRON_BUILDER_CACHE=/home/builder/.cache/electron-builder",
-    "-e",
-    `${PRODUCTION_INSTALL_PNPM_BIN_ENV}=${CONTAINER_PNPM_PATH}`,
-  ];
-  if (config.telemetryRelayUrl != null) {
-    dockerArgs.push("-e", `OPEN_DESIGN_TELEMETRY_RELAY_URL=${config.telemetryRelayUrl}`);
-  }
-  dockerArgs.push(
-    "-w",
-    "/project",
-    "electronuserland/builder:base",
-    "bash",
-    "-lc",
-    innerCommand,
-  );
-  return dockerArgs;
 }
 
 export type DesktopTemplateValues = {
@@ -321,251 +164,6 @@ function resolveLinuxPaths(config: ToolPackConfig): LinuxPaths {
   };
 }
 
-// --- Step 2: Runtime helpers ---
-
-async function runPnpm(
-  config: ToolPackConfig,
-  args: string[],
-  extraEnv: NodeJS.ProcessEnv = {},
-): Promise<void> {
-  const invocation = createPackageManagerInvocation(args, process.env);
-  await execFileAsync(invocation.command, invocation.args, {
-    cwd: config.workspaceRoot,
-    env: { ...process.env, ...extraEnv },
-  });
-}
-
-export type ProductionInstallCommand = { command: string; args: string[] };
-
-// Picks the package manager used to materialize the assembled-app node_modules
-// during writeAssembledApp. The default (`npm`) preserves host behavior for
-// developer-machine builds. When the build runs inside
-// `electronuserland/builder:base` (which strips npm, npx, and corepack),
-// buildDockerArgs sets OD_TOOLS_PACK_PNPM_BIN to the standalone pnpm binary it
-// bootstrapped, and this resolver routes the install through that binary.
-// `--config.node-linker=hoisted` keeps the resulting layout flat so
-// electron-builder packs node_modules the same way it does for npm-installed
-// trees.
-export function resolveProductionInstallCommand(env: NodeJS.ProcessEnv): ProductionInstallCommand {
-  const pnpmBin = env[PRODUCTION_INSTALL_PNPM_BIN_ENV];
-  if (pnpmBin != null && pnpmBin.length > 0) {
-    return {
-      command: pnpmBin,
-      args: ["install", "--prod", "--no-lockfile", "--config.node-linker=hoisted"],
-    };
-  }
-  return { command: "npm", args: ["install", "--omit=dev", "--no-package-lock"] };
-}
-
-async function runProductionInstall(appRoot: string): Promise<void> {
-  const { command, args } = resolveProductionInstallCommand(process.env);
-  await execFileAsync(command, args, {
-    cwd: appRoot,
-    env: process.env,
-  });
-}
-
-async function readPackagedVersion(config: ToolPackConfig): Promise<string> {
-  if (config.appVersion != null) return config.appVersion;
-  const packageJsonPath = join(config.workspaceRoot, "apps", "packaged", "package.json");
-  const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8")) as { version?: unknown };
-  if (typeof packageJson.version !== "string" || packageJson.version.length === 0) {
-    throw new Error(`missing apps/packaged package version in ${packageJsonPath}`);
-  }
-  return packageJson.version;
-}
-
-async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
-  const webNextEnvPath = join(config.workspaceRoot, "apps", "web", "next-env.d.ts");
-  const previousWebNextEnv = await readFile(webNextEnvPath, "utf8").catch(() => null);
-
-  await runPnpm(config, ["--filter", "@open-design/contracts", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/registry-protocol", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/host", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/sidecar-proto", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/sidecar", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/platform", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/agui-adapter", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/plugin-runtime", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/diagnostics", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/daemon", "build"]);
-  try {
-    await runPnpm(config, ["--filter", "@open-design/web", "build"], { OD_WEB_OUTPUT_MODE: "server" });
-    await runPnpm(config, ["--filter", "@open-design/web", "build:sidecar"]);
-  } finally {
-    if (previousWebNextEnv == null) {
-      await rm(webNextEnvPath, { force: true });
-    } else {
-      await writeFile(webNextEnvPath, previousWebNextEnv, "utf8");
-    }
-  }
-  await runPnpm(config, ["--filter", "@open-design/desktop", "build"]);
-  await runPnpm(config, ["--filter", "@open-design/packaged", "build"]);
-}
-
-// --- Step 3: Tarball + resource helpers ---
-
-type PackedTarballInfo = {
-  fileName: string;
-  packageName: (typeof INTERNAL_PACKAGES)[number]["name"];
-};
-
-async function collectWorkspaceTarballs(
-  config: ToolPackConfig,
-  paths: LinuxPaths,
-): Promise<PackedTarballInfo[]> {
-  await rm(paths.tarballsRoot, { force: true, recursive: true });
-  await mkdir(paths.tarballsRoot, { recursive: true });
-  const packed: PackedTarballInfo[] = [];
-
-  for (const pkg of INTERNAL_PACKAGES) {
-    const before = new Set(await readdir(paths.tarballsRoot));
-    await runPnpm(config, ["-C", pkg.directory, "pack", "--pack-destination", paths.tarballsRoot]);
-    const after = await readdir(paths.tarballsRoot);
-    const novel = after.filter((e) => !before.has(e));
-    if (novel.length !== 1 || novel[0] == null) {
-      throw new Error(`expected one tarball for ${pkg.name}, got ${novel.length}`);
-    }
-    packed.push({ fileName: novel[0], packageName: pkg.name });
-  }
-  return packed;
-}
-
-async function copyResourceTree(config: ToolPackConfig, paths: LinuxPaths): Promise<void> {
-  await rm(paths.resourceRoot, { force: true, recursive: true });
-  await mkdir(paths.resourceRoot, { recursive: true });
-  await copyBundledResourceTrees({
-    workspaceRoot: config.workspaceRoot,
-    resourceRoot: paths.resourceRoot,
-  });
-  await mkdir(join(paths.resourceRoot, "bin"), { recursive: true });
-  await cp(process.execPath, join(paths.resourceRoot, "bin", "node"));
-  await chmod(join(paths.resourceRoot, "bin", "node"), 0o755);
-}
-
-// --- Step 4: writeAssembledApp helper ---
-
-async function writeAssembledApp(
-  config: ToolPackConfig,
-  paths: LinuxPaths,
-  packed: PackedTarballInfo[],
-): Promise<void> {
-  await rm(paths.assembledAppRoot, { force: true, recursive: true });
-  await mkdir(paths.assembledAppRoot, { recursive: true });
-  await cp(
-    join(config.workspaceRoot, "apps", "desktop", "dist", "main", "preload.cjs"),
-    join(paths.assembledAppRoot, "preload.cjs"),
-  );
-
-  const dependencies: Record<string, string> = {};
-  for (const tarball of packed) {
-    dependencies[tarball.packageName] = `file:${join(paths.tarballsRoot, tarball.fileName)}`;
-  }
-
-  const version = await readPackagedVersion(config);
-  const packageJson = {
-    name: "open-design-packaged",
-    version,
-    private: true,
-    main: "main.cjs",
-    dependencies,
-  };
-  await writeFile(paths.assembledPackageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`, "utf8");
-
-  const mainStub = `"use strict";\nrequire("@open-design/packaged");\n`;
-  await writeFile(paths.assembledMainEntryPath, mainStub, "utf8");
-
-  await writeFile(
-    paths.packagedConfigPath,
-    `${JSON.stringify(
-      {
-        appVersion: version,
-        namespace: config.namespace,
-        nodeCommandRelative: "open-design/bin/node",
-        ...(config.telemetryRelayUrl == null ? {} : { telemetryRelayUrl: config.telemetryRelayUrl }),
-        ...(config.posthogKey == null ? {} : { posthogKey: config.posthogKey }),
-        ...(config.posthogHost == null ? {} : { posthogHost: config.posthogHost }),
-        ...(config.portable ? {} : { namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot }),
-      },
-      null,
-      2,
-    )}\n`,
-    "utf8",
-  );
-
-  await runProductionInstall(paths.assembledAppRoot);
-}
-
-// --- Step 5: writeLinuxBuilderConfig helper ---
-
-async function writeLinuxBuilderConfig(config: ToolPackConfig, paths: LinuxPaths): Promise<void> {
-  const target = config.to === "dir" ? ["dir"] : ["AppImage"];
-  const namespaceToken = sanitizeNamespace(config.namespace);
-  const packagedVersion = await readPackagedVersion(config);
-
-  const builderConfig: Record<string, unknown> = {
-    appId: "io.open-design.desktop",
-    artifactName: `${PRODUCT_NAME}-${namespaceToken}.\${ext}`,
-    asar: false,
-    buildDependenciesFromSource: false,
-    compression: "maximum",
-    directories: {
-      app: paths.assembledAppRoot,
-      output: paths.appBuilderOutputRoot,
-      buildResources: dirname(linuxResources.icon),
-    },
-    electronVersion: config.electronVersion.replace(/^[^\d]*/, ""),
-    electronDist: config.electronDistPath,
-    executableName: PRODUCT_NAME,
-    extraMetadata: {
-      main: "./main.cjs",
-      name: "open-design-packaged-app",
-      productName: PRODUCT_NAME,
-      version: packagedVersion,
-      ...(config.portable ? {} : { odToolsPackRuntimeRoot: config.roots.runtime.namespaceBaseRoot }),
-    },
-    extraResources: [
-      { from: paths.resourceRoot, to: "open-design" },
-      { from: paths.packagedConfigPath, to: "open-design-config.json" },
-    ],
-    files: ["**/*", "!**/node_modules/.bin", "!**/node_modules/electron{,/**/*}"],
-    icon: linuxResources.icon,
-    linux: {
-      target,
-      icon: linuxResources.icon,
-      category: "Development",
-      synopsis: "Open Design",
-      maintainer: "Open Design Contributors",
-    },
-    nodeGypRebuild: false,
-    npmRebuild: false,
-    productName: PRODUCT_NAME,
-  };
-
-  await mkdir(dirname(paths.appBuilderConfigPath), { recursive: true });
-  await writeFile(paths.appBuilderConfigPath, `${JSON.stringify(builderConfig, null, 2)}\n`, "utf8");
-}
-
-// --- Step 6: runElectronBuilderLinux + findBuiltAppImage helpers ---
-
-async function runElectronBuilderLinux(config: ToolPackConfig, paths: LinuxPaths): Promise<void> {
-  await rm(paths.appBuilderOutputRoot, { force: true, recursive: true });
-  const args = [
-    config.electronBuilderCliPath,
-    "--linux",
-    "--config",
-    paths.appBuilderConfigPath,
-    "--projectDir",
-    paths.assembledAppRoot,
-    "--publish",
-    "never",
-  ];
-  await execFileAsync(process.execPath, args, {
-    cwd: config.workspaceRoot,
-    env: process.env,
-  });
-}
-
 async function findBuiltAppImage(paths: LinuxPaths): Promise<string | null> {
   if (!(await pathExists(paths.appBuilderOutputRoot))) return null;
   const entries = await readdir(paths.appBuilderOutputRoot);
@@ -573,7 +171,7 @@ async function findBuiltAppImage(paths: LinuxPaths): Promise<string | null> {
   return appImage ? join(paths.appBuilderOutputRoot, appImage) : null;
 }
 
-// --- Step 7: packLinux orchestrator + result type + stub for runBuildInContainer ---
+// --- Linux package build ---
 
 export type LinuxPackResult = {
   appImagePath: string | null;
@@ -585,84 +183,7 @@ export type LinuxPackResult = {
 };
 
 export async function packLinux(config: ToolPackConfig): Promise<LinuxPackResult> {
-  if (config.desktopRuntime === "tauri") {
-    return await packTauriLinux(config);
-  }
-
-  if (config.containerized) {
-    await runBuildInContainer(config);
-    const paths = resolveLinuxPaths(config);
-    const appImagePath = config.to === "dir" ? null : await findBuiltAppImage(paths);
-    return {
-      appImagePath,
-      outputRoot: paths.appBuilderOutputRoot,
-      resourceRoot: paths.resourceRoot,
-      runtimeNamespaceRoot: config.roots.runtime.namespaceRoot,
-      to: config.to,
-      containerized: true,
-    };
-  }
-
-  const paths = resolveLinuxPaths(config);
-  await mkdir(config.roots.output.namespaceRoot, { recursive: true });
-  await buildWorkspaceArtifacts(config);
-  await copyResourceTree(config, paths);
-  const tarballs = await collectWorkspaceTarballs(config, paths);
-  await writeAssembledApp(config, paths, tarballs);
-  await writeLinuxBuilderConfig(config, paths);
-  await runElectronBuilderLinux(config, paths);
-
-  const appImagePath = config.to === "dir" ? null : await findBuiltAppImage(paths);
-  return {
-    appImagePath,
-    outputRoot: paths.appBuilderOutputRoot,
-    resourceRoot: paths.resourceRoot,
-    runtimeNamespaceRoot: config.roots.runtime.namespaceRoot,
-    to: config.to,
-    containerized: false,
-  };
-}
-
-async function assertDockerAvailable(): Promise<void> {
-  if (!(await commandExists("docker"))) {
-    throw new Error(
-      "tools-pack linux build --containerized requires Docker. Install Docker or omit --containerized for a native build.",
-    );
-  }
-}
-
-async function runBuildInContainer(config: ToolPackConfig): Promise<void> {
-  await assertDockerAvailable();
-
-  await mkdir(join(config.roots.toolPackRoot, ".docker-home"), { recursive: true });
-  await mkdir(join(config.roots.toolPackRoot, ".docker-cache", "electron"), { recursive: true });
-  await mkdir(join(config.roots.toolPackRoot, ".docker-cache", "electron-builder"), { recursive: true });
-
-  const uid = typeof process.getuid === "function" ? process.getuid() : 0;
-  const gid = typeof process.getgid === "function" ? process.getgid() : 0;
-  const args = buildDockerArgs(config, { uid, gid });
-
-  return new Promise((resolve, reject) => {
-    const child = spawn("docker", args, { stdio: "inherit", env: process.env });
-    // In Node's child-process `exit` event, code === null means the child was
-    // terminated by a signal (SIGTERM, SIGKILL, etc.). A signal-terminated
-    // build is NOT a successful build — the AppImage may be missing or partial,
-    // so we surface it as a failure instead of resolving silently.
-    child.on("exit", (code, signal) => {
-      if (code === 0 && signal == null) {
-        resolve();
-        return;
-      }
-      if (signal != null) {
-        reject(new Error(`docker build was terminated by signal ${signal}`));
-        return;
-      }
-      reject(new Error(`docker build exited with code ${code}`));
-    });
-    child.on("error", (error: Error) => {
-      reject(error);
-    });
-  });
+  return await packTauriLinux(config);
 }
 
 export type LinuxInstallResult = {
@@ -986,7 +507,6 @@ async function waitForMarker(markerPath: string, timeoutMs: number): Promise<boo
 }
 
 function isLinuxDesktopStartStatusReady(config: ToolPackConfig, status: DesktopStatusSnapshot): boolean {
-  if (config.desktopRuntime !== "tauri") return true;
   return status.state === "running" && typeof status.url === "string" && status.url.length > 0;
 }
 
@@ -1051,9 +571,9 @@ export async function startPackedLinuxApp(config: ToolPackConfig): Promise<Linux
     logFd: null,
   });
 
-  // 60s ceiling: AppImage --appimage-extract-and-run unpacks ~200MB to /tmp on
-  // first launch before exec'ing the inner electron, which adds substantial
-  // overhead vs mac's direct .app launch.
+  // 60s ceiling: AppImage --appimage-extract-and-run can unpack a large bundle
+  // to /tmp on first launch, which adds substantial overhead vs mac's direct
+  // .app launch.
   //
   // If the readiness wait or the post-ready status fetch throws, the detached
   // child we just spawned is still running but unidentifiable to a future
@@ -1156,7 +676,7 @@ export async function stopPackedLinuxApp(config: ToolPackConfig): Promise<LinuxS
   }
 
   // Try graceful shutdown via IPC first. mac/lifecycle.ts's pattern: best-effort SHUTDOWN
-  // request with a short timeout so Electron renderers + sidecars get a chance
+  // request with a short timeout so desktop and sidecar processes get a chance
   // to flush state (SQLite WAL, logs) before SIGTERM.
   let gracefulRequested = false;
   try {
@@ -1360,7 +880,7 @@ export type LinuxCleanupResult = {
 // The headless entry lives at:
 //   <assembledAppRoot>/node_modules/@open-design/packaged/dist/headless.mjs
 // The bundled Node binary lives at:
-//   <namespaceRoot>/resources/open-design/bin/node  (populated by copyResourceTree)
+//   <namespaceRoot>/resources/open-design/bin/node  (populated by the Tauri resource copy)
 
 function resolveHeadlessEntryPath(paths: LinuxPaths): string {
   return join(paths.assembledAppRoot, "node_modules", "@open-design", "packaged", "dist", "headless.mjs");

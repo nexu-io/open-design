@@ -36,7 +36,6 @@ if (Test-Path $packagedAppRoot) {
 }
 
 $priorityByNode = @{
-  "win.electron-builder-dir" = 0
   "win.workspace-build" = 1
   "win.resource-tree" = 2
   "win.workspace-tarballs" = 3

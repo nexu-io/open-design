@@ -26,7 +26,7 @@ export const ALL_APPS = [APP_KEYS.DAEMON, APP_KEYS.WEB, APP_KEYS.DESKTOP] as con
 export const DEFAULT_START_APPS = [APP_KEYS.DAEMON, APP_KEYS.WEB, APP_KEYS.DESKTOP] as const;
 export const DEFAULT_RUN_APPS = [APP_KEYS.DAEMON, APP_KEYS.WEB] as const;
 export const DEFAULT_STOP_APPS = [APP_KEYS.DESKTOP, APP_KEYS.WEB, APP_KEYS.DAEMON] as const;
-export const DESKTOP_RUNTIME_KINDS = ["electron", "tauri"] as const;
+export const DESKTOP_RUNTIME_KINDS = ["tauri"] as const;
 export const DEFAULT_DESKTOP_RUNTIME = "tauri" satisfies DesktopRuntimeKind;
 
 export type ToolDevAppName = (typeof ALL_APPS)[number];
@@ -55,8 +55,6 @@ export type ToolDevConfig = {
       sidecarEntryPath: string;
     };
     desktop: ToolDevAppConfig & {
-      electronBinaryPath: string;
-      mainEntryPath: string;
       packageJsonPath: string;
       tauriDebugBinaryPath: string;
       tauriManifestPath: string;
@@ -77,14 +75,6 @@ export type ToolDevConfig = {
 function resolveTsxCliPath(): string {
   const require = createRequire(import.meta.url);
   return require.resolve("tsx/cli");
-}
-
-function resolveElectronBinaryPath(workspaceRoot: string): string {
-  const packageJsonPath = path.join(workspaceRoot, "apps/desktop/package.json");
-  const require = createRequire(packageJsonPath);
-  const electron = require("electron") as unknown;
-  if (typeof electron === "string" && electron.length > 0) return electron;
-  return require.resolve("electron/cli.js");
 }
 
 function resolveAppConfig(options: {
@@ -175,7 +165,6 @@ export function resolveToolDevConfig(options: ToolDevOptions = {}): ToolDevConfi
   const desktop = resolveAppConfig({ app: APP_KEYS.DESKTOP, namespace, namespaceRoot, toolsDevRoot });
   const web = resolveAppConfig({ app: APP_KEYS.WEB, namespace, namespaceRoot, toolsDevRoot });
   const desktopPackageJsonPath = path.join(WORKSPACE_ROOT, "apps/desktop/package.json");
-  let cachedElectronBinaryPath: string | undefined;
 
   return {
     apps: {
@@ -185,11 +174,6 @@ export function resolveToolDevConfig(options: ToolDevOptions = {}): ToolDevConfi
       },
       desktop: {
         ...desktop,
-        get electronBinaryPath() {
-          if (cachedElectronBinaryPath == null) cachedElectronBinaryPath = resolveElectronBinaryPath(WORKSPACE_ROOT);
-          return cachedElectronBinaryPath;
-        },
-        mainEntryPath: path.join(WORKSPACE_ROOT, "apps/desktop/dist/main/index.js"),
         packageJsonPath: desktopPackageJsonPath,
         tauriDebugBinaryPath: path.join(
           WORKSPACE_ROOT,

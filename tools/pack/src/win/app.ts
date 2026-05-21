@@ -3,7 +3,6 @@ import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promi
 import { dirname, join, relative } from "node:path";
 import { promisify } from "node:util";
 
-import { rebuild } from "@electron/rebuild";
 import { createCommandInvocation, createPackageManagerInvocation } from "@open-design/platform";
 
 import { hashJson, hashPath, ToolPackCache } from "../cache.js";
@@ -22,7 +21,6 @@ import {
   WIN_PREBUNDLED_PACKAGED_MAIN_RELATIVE_PATH,
   WIN_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH,
   assertWinPrebundleMetafile,
-  renderWinPackagedMainEntry,
   shouldInstallInternalPackageForWinPrebundle,
   shouldUseWinStandalonePrebundle,
 } from "../win-prebundle.js";
@@ -73,27 +71,8 @@ async function runEsbuild(config: ToolPackConfig, args: string[]): Promise<void>
 }
 
 async function runElectronRebuild(config: ToolPackConfig, appRoot: string): Promise<void> {
-  const foundModules = new Set<string>();
-  const rebuildResult = rebuild({
-    arch: "x64",
-    buildFromSource: ELECTRON_BUILDER_BUILD_DEPENDENCIES_FROM_SOURCE,
-    buildPath: appRoot,
-    electronVersion: config.electronVersion,
-    force: true,
-    mode: ELECTRON_REBUILD_MODE,
-    onlyModules: [...ELECTRON_REBUILD_NATIVE_MODULES],
-    platform: "win32",
-    projectRootPath: appRoot,
-  });
-  rebuildResult.lifecycle.on("modules-found", (modules: string[]) => {
-    for (const moduleName of modules) foundModules.add(moduleName);
-    process.stderr.write(`[tools-pack] rebuilding Electron ABI modules: ${modules.join(", ") || "none"}\n`);
-  });
-  await rebuildResult;
-  const missingModules = ELECTRON_REBUILD_NATIVE_MODULES.filter((moduleName) => !foundModules.has(moduleName));
-  if (missingModules.length > 0) {
-    throw new Error(`Electron ABI rebuild did not discover required native module(s): ${missingModules.join(", ")}`);
-  }
+  void config;
+  void appRoot;
 }
 
 function nativeRebuildOutputPath(appRoot: string): string {
@@ -237,17 +216,13 @@ async function writeAssembledAppEntrypoints(
   options: { dependencies?: Record<string, string>; usePrebundle?: boolean } = {},
 ): Promise<void> {
   await mkdir(paths.assembledAppRoot, { recursive: true });
-  await cp(
-    join(config.workspaceRoot, "apps", "desktop", "dist", "main", "preload.cjs"),
-    join(paths.assembledAppRoot, "preload.cjs"),
-  );
   await writeFile(
     paths.assembledPackageJsonPath,
     `${JSON.stringify(
       {
         dependencies: options.dependencies ?? createAssembledAppDependencies(config, paths, packedTarballs),
         description: "Open Design packaged runtime",
-        main: "./main.cjs",
+        main: "./node_modules/@open-design/packaged/dist/tauri-sidecars.mjs",
         name: "open-design-packaged-app",
         private: true,
         productName: PRODUCT_NAME,
@@ -256,11 +231,6 @@ async function writeAssembledAppEntrypoints(
       null,
       2,
     )}\n`,
-    "utf8",
-  );
-  await writeFile(
-    paths.assembledMainEntryPath,
-    renderWinPackagedMainEntry(options.usePrebundle === true),
     "utf8",
   );
 }

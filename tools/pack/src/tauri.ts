@@ -114,7 +114,6 @@ async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
       await writeFile(webNextEnvPath, previousWebNextEnv, "utf8");
     }
   }
-  await runPnpm(config, ["--filter", "@open-design/desktop", "build"]);
   await runPnpm(config, ["--filter", "@open-design/packaged", "build"]);
 }
 
@@ -178,7 +177,7 @@ function resolveTauriBundleTargets(config: ToolPackConfig): TauriBundleTarget[] 
           return ["nsis"];
         case "dir":
           throw new Error(
-            "tools-pack win build --desktop-runtime tauri --to dir is not supported by Tauri; use --to nsis or --desktop-runtime electron for the legacy unpacked directory target",
+            "tools-pack win build --desktop-runtime tauri --to dir is not supported by Tauri; use --to nsis",
           );
         default:
           throw new Error(`unsupported win Tauri --to target: ${config.to}`);
@@ -190,7 +189,7 @@ function resolveTauriBundleTargets(config: ToolPackConfig): TauriBundleTarget[] 
           return ["appimage"];
         case "dir":
           throw new Error(
-            "tools-pack linux build --desktop-runtime tauri --to dir is not supported by Tauri; use --to appimage or --desktop-runtime electron for the legacy unpacked directory target",
+            "tools-pack linux build --desktop-runtime tauri --to dir is not supported by Tauri; use --to appimage",
           );
         default:
           throw new Error(`unsupported linux Tauri --to target: ${config.to}`);

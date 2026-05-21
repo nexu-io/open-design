@@ -23,15 +23,6 @@ on:
         required: true
         type: boolean
         default: false
-      desktop_runtime:
-        description: "Desktop runtime to package. Tauri is the default release path; use electron only as the transition fallback."
-        required: true
-        type: choice
-        options:
-          - electron
-          - tauri
-        default: tauri
-
 permissions:
   actions: write
   contents: read
@@ -127,25 +118,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Verify mac Electron framework symlinks
-        run: |
-          set -euo pipefail
-          electron_dist="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "apps/desktop/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist"));')"
-          framework="$electron_dist/Electron.app/Contents/Frameworks/Electron Framework.framework"
-          for link in \
-            "$framework/Electron Framework" \
-            "$framework/Helpers" \
-            "$framework/Libraries" \
-            "$framework/Resources" \
-            "$framework/Versions/Current"; do
-            if [ ! -L "$link" ]; then
-              echo "Expected Electron framework symlink, got non-symlink: $link" >&2
-              ls -la "$framework" >&2 || true
-              ls -la "$framework/Versions" >&2 || true
-              exit 1
-            fi
-          done
-
       - name: Prepare Apple signing certificate
         env:
           APPLE_SIGNING_CERTIFICATE_BASE64: ${{ secrets.APPLE_SIGNING_CERTIFICATE_BASE64 }}
@@ -192,70 +164,6 @@ jobs:
             exit "$build_status"
           fi
 
-      - name: Capture mac framework diagnostics
-        if: ${{ failure() }}
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-          output="$RUNNER_TEMP/mac-framework-diagnostics.txt"
-          source_resolve_log="$RUNNER_TEMP/mac-framework-source-resolve.err"
-          source_framework="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "apps/desktop/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist", "Electron.app", "Contents", "Frameworks", "Electron Framework.framework"));' 2>"$source_resolve_log" || true)"
-          built_framework="$RUNNER_TEMP/tools-pack/out/mac/namespaces/release-beta/builder/mac-arm64/Open Design Beta.app/Contents/Frameworks/Electron Framework.framework"
-
-          dump_framework() {
-            local label="$1"
-            local framework="$2"
-            echo "## $label"
-            echo "path=$framework"
-            if [ ! -e "$framework" ] && [ ! -L "$framework" ]; then
-              echo "missing"
-              return 0
-            fi
-            echo "### top-level"
-            ls -la "$framework" || true
-            echo "### symlinks"
-            find "$framework" -maxdepth 4 -type l -print0 | while IFS= read -r -d '' link; do
-              printf '%s -> %s\n' "$link" "$(readlink "$link")"
-            done || true
-            echo "### selected stat"
-            for path in \
-              "$framework" \
-              "$framework/Electron Framework" \
-              "$framework/Versions" \
-              "$framework/Versions/Current" \
-              "$framework/Versions/Current/Electron Framework" \
-              "$framework/Versions/A" \
-              "$framework/Versions/A/Electron Framework" \
-              "$framework/Resources" \
-              "$framework/Versions/A/Resources/Info.plist"; do
-              if [ -e "$path" ] || [ -L "$path" ]; then
-                stat -f '%Sp %HT %N' "$path" || true
-              else
-                echo "missing: $path"
-              fi
-            done
-            echo "### plist"
-            plutil -p "$framework/Versions/A/Resources/Info.plist" 2>&1 || true
-            echo "### codesign display"
-            codesign --display --verbose=4 "$framework/Electron Framework" 2>&1 || true
-            codesign --display --verbose=4 "$framework/Versions/Current/Electron Framework" 2>&1 || true
-            codesign --display --verbose=4 "$framework/Versions/A/Electron Framework" 2>&1 || true
-            codesign --display --verbose=4 "$framework" 2>&1 || true
-          }
-
-          {
-            date -u
-            if [ -n "$source_framework" ]; then
-              dump_framework "source Electron Framework" "$source_framework"
-            else
-              echo "## source Electron Framework"
-              echo "resolve failed"
-              cat "$source_resolve_log" || true
-            fi
-            dump_framework "built Electron Framework" "$built_framework"
-          } > "$output"
-          cat "$output"
-
       - name: Upload mac build diagnostics
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
@@ -264,7 +172,6 @@ jobs:
           path: |
             ${{ runner.temp }}/mac-tools-pack-build.log
             ${{ runner.temp }}/mac-tools-pack-build.json
-            ${{ runner.temp }}/mac-framework-diagnostics.txt
           if-no-files-found: warn
 
       - name: Smoke beta mac packaged runtime
@@ -630,10 +537,6 @@ jobs:
             wget \
             xvfb
 
-      # Electron keeps the existing containerized AppImage path for glibc
-      # compatibility. Tauri Linux builds run directly on the GitHub runner
-      # because the current Tauri path needs host Rust/WebKitGTK tooling and
-      # does not implement tools-pack's legacy container mode.
       - name: Build beta linux artifacts
         run: |
           set -euo pipefail
@@ -648,15 +551,11 @@ jobs:
             exec tools-pack linux build
             --dir "$tools_pack_dir"
             --namespace release-beta-linux
-            --desktop-runtime "${{ inputs.desktop_runtime }}"
             --portable
             --app-version "${{ needs.metadata.outputs.beta_version }}"
             --to appimage
             --json
           )
-          if [ "${{ inputs.desktop_runtime }}" = "electron" ]; then
-            build_args+=(--containerized)
-          fi
           if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$build_log_path" >&2))"; then
             printf '%s\n' "$build_output" | tee "$build_json_path"
             node -e 'const fs = require("node:fs"); JSON.parse(fs.readFileSync(process.argv[1], "utf8"));' "$build_json_path"
@@ -667,7 +566,6 @@ jobs:
           fi
 
       - name: Smoke beta linux Tauri packaged runtime
-        if: ${{ inputs.desktop_runtime == 'tauri' }}
         working-directory: e2e
         env:
           OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/release-report/linux/tools-pack.json
@@ -682,51 +580,15 @@ jobs:
           xvfb-run -a pnpm exec tsx scripts/release-smoke.ts linux specs/linux.spec.ts
 
       - name: Verify beta linux Tauri smoke report evidence
-        if: ${{ inputs.desktop_runtime == 'tauri' }}
         run: |
           set -euo pipefail
           pnpm exec tsx scripts/verify-tauri-platform-gates.ts --linux-report "$RUNNER_TEMP/release-report/linux"
 
-      - name: Smoke beta linux AppImage runtime
-        if: ${{ inputs.desktop_runtime == 'electron' }}
-        working-directory: e2e
-        env:
-          OD_PACKAGED_E2E_LINUX_APPIMAGE: "1"
-          OD_PACKAGED_E2E_NAMESPACE: release-beta-linux
-          OD_PACKAGED_E2E_SCREENSHOT_PATH: ${{ runner.temp }}/release-report/linux/screenshots/open-design-linux-smoke.png
-          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
-        run: |
-          set -euo pipefail
-          report_dir="$RUNNER_TEMP/release-report/linux"
-          mkdir -p "$report_dir/screenshots"
-          cat > "$report_dir/manifest.json" <<EOF
-          {
-            "platform": "linux",
-            "spec": "specs/linux.spec.ts",
-            "namespace": "release-beta-linux",
-            "screenshot": "screenshots/open-design-linux-smoke.png",
-            "githubRunId": "$GITHUB_RUN_ID",
-            "githubRunAttempt": "$GITHUB_RUN_ATTEMPT",
-            "commit": "$GITHUB_SHA"
-          }
-          EOF
-          sudo apt-get update 2>&1 | tee "$report_dir/apt-get-update.log"
-          sudo apt-get install -y xvfb 2>&1 | tee "$report_dir/apt-get-install-xvfb.log"
-          xvfb-run -a pnpm test specs/linux.spec.ts 2>&1 | tee "$report_dir/vitest.log"
-
       - name: Upload linux Tauri e2e spec report
-        if: ${{ always() && inputs.desktop_runtime == 'tauri' }}
+        if: ${{ always() }}
         uses: actions/upload-artifact@v7
         with:
           name: open-design-beta-linux-tauri-e2e-report
-          path: ${{ runner.temp }}/release-report/linux
-          if-no-files-found: warn
-
-      - name: Upload linux e2e spec report
-        if: ${{ always() && inputs.desktop_runtime == 'electron' }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: open-design-beta-linux-e2e-report
           path: ${{ runner.temp }}/release-report/linux
           if-no-files-found: warn
 

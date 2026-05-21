@@ -11,7 +11,6 @@ import {
   MAC_PREBUNDLED_DAEMON_SIDECAR_RELATIVE_PATH,
   MAC_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH,
   assertMacPrebundleMetafile,
-  renderMacPackagedMainEntry,
   shouldInstallInternalPackageForMacPrebundle,
   shouldUseMacStandalonePrebundle,
 } from "../mac-prebundle.js";
@@ -180,10 +179,6 @@ export async function writeAssembledApp(
   const identity = resolveMacInstallIdentity(config);
   await rm(join(config.roots.output.namespaceRoot, "assembled"), { force: true, recursive: true });
   await mkdir(paths.assembledAppRoot, { recursive: true });
-  await cp(
-    join(config.workspaceRoot, "apps", "desktop", "dist", "main", "preload.cjs"),
-    join(paths.assembledAppRoot, "preload.cjs"),
-  );
   const tarballByPackage = Object.fromEntries(
     packedTarballs.map((entry) => [entry.packageName, entry.fileName] as const),
   );
@@ -211,7 +206,7 @@ export async function writeAssembledApp(
       {
         dependencies,
         description: "Open Design packaged runtime",
-        main: "./main.cjs",
+        main: "./node_modules/@open-design/packaged/dist/tauri-sidecars.mjs",
         name: "open-design-packaged-app",
         private: true,
         productName: identity.productName,
@@ -225,11 +220,6 @@ export async function writeAssembledApp(
   if (usePrebundledStandaloneWeb) {
     await buildPrebundledStandaloneRuntime(config, paths);
   }
-  await writeFile(
-    paths.assembledMainEntryPath,
-    renderMacPackagedMainEntry(usePrebundledStandaloneWeb),
-    "utf8",
-  );
   await writeFile(
     paths.packagedConfigPath,
     `${JSON.stringify(

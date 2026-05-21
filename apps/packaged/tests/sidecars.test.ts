@@ -144,7 +144,7 @@ function fakeChild(): EventEmitter & {
 
 describe('buildPackagedDaemonSpawnEnv', () => {
   // PR #974 round-5 (lefarcen P2): the daemon's import-folder gate must
-  // be ON when an Electron desktop is being started alongside the daemon
+  // be ON when a desktop host is being started alongside the daemon
   // and OFF in headless packaged mode (daemon+web only, no shell.openPath
   // surface, no client to register a secret). Pin both branches against
   // a real pure-helper invocation so a future refactor can't silently
@@ -168,7 +168,7 @@ describe('buildPackagedDaemonSpawnEnv', () => {
     };
   }
 
-  it('sets OD_REQUIRE_DESKTOP_AUTH=1 when requireDesktopAuth=true (Electron entry)', () => {
+  it('sets OD_REQUIRE_DESKTOP_AUTH=1 when requireDesktopAuth=true (desktop entry)', () => {
     const env = buildPackagedDaemonSpawnEnv(fakePaths(), {
       appVersion: '1.2.3',
       daemonCliEntry: null,

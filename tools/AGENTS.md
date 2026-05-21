@@ -15,7 +15,7 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 ## Packaging scope
 
 - Keep `tools-pack` focused on packaging/runtime control and release artifact preparation. Runtime updater product integration remains a later phase.
-- Pack-specific Electron builder resources belong under `tools/pack/resources/`; do not reference app/docs/download assets directly from pack logic.
+- Pack-specific release resources belong under `tools/pack/resources/`; do not reference app/docs/download assets directly from pack logic.
 - Namespace controls packaged data/log/runtime/cache paths. Ports are transient transport details and must not participate in path decisions.
 - There is no root `pnpm build` aggregate. Use package-scoped builds for source packages and `pnpm tools-pack ...` for packaged artifact build/install/release flows.
 

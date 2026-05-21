@@ -113,10 +113,8 @@ async function findNsisLanguageDirectories(root: string, depth = 4): Promise<str
 
 export async function ensureNsisPersianLanguageAlias(config: ToolPackConfig): Promise<boolean> {
   const cacheRoots = [
-    process.env.ELECTRON_BUILDER_CACHE,
-    process.env.LOCALAPPDATA == null ? undefined : join(process.env.LOCALAPPDATA, "electron-builder", "Cache"),
-    process.env.APPDATA == null ? undefined : join(process.env.APPDATA, "electron-builder", "Cache"),
-    join(config.workspaceRoot, "node_modules", ".cache", "electron-builder"),
+    process.env.NSIS_CACHE,
+    join(config.workspaceRoot, "node_modules", ".cache", "nsis"),
     process.env["ProgramFiles(x86)"] == null ? undefined : join(process.env["ProgramFiles(x86)"], "NSIS"),
     process.env.ProgramFiles == null ? undefined : join(process.env.ProgramFiles, "NSIS"),
     "C:\\Program Files (x86)\\NSIS",

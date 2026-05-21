@@ -41,6 +41,5 @@ export const INTERNAL_PACKAGES = [
   { directory: "packages/diagnostics", name: "@open-design/diagnostics" },
   { directory: "apps/daemon", name: "@open-design/daemon" },
   { directory: "apps/web", name: "@open-design/web" },
-  { directory: "apps/desktop", name: "@open-design/desktop" },
   { directory: "apps/packaged", name: "@open-design/packaged" },
 ] as const;

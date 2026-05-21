@@ -163,14 +163,12 @@ jobs:
       # `scripts/postinstall.mjs` only prebuilds package/tool entrypoints that
       # are needed immediately after install for linked bins and shared
       # sidecar/platform imports. It intentionally skips app outputs because
-      # building all apps would make every install run a Next/Electron-adjacent
+      # building all apps would make every install run a Next/desktop-adjacent
       # app build, even when a developer only needs packages/tools.
       #
       # Fresh CI typecheck/test still need these specific generated declarations:
       #   - `apps/daemon/dist/*.d.ts` for packaged/runtime consumers of the daemon
       #     package export
-      #   - `apps/desktop/dist/main/index.d.ts` for `apps/packaged` imports of
-      #     `@open-design/desktop/main`
       #   - `apps/web/dist/sidecar/index.d.ts` for `apps/packaged` imports of
       #     `@open-design/web/sidecar`
       # If postinstall grows a targeted app type-generation phase covering these

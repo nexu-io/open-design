@@ -13,9 +13,9 @@ function makeConfig(platform: "win" | "linux", to: ToolPackConfig["to"]): ToolPa
   return {
     containerized: false,
     desktopRuntime: "tauri",
-    electronBuilderCliPath: "/x/electron-builder/cli.js",
-    electronDistPath: "/x/electron/dist",
-    electronVersion: "41.3.0",
+    electronBuilderCliPath: "",
+    electronDistPath: "",
+    electronVersion: "0.0.0",
     macCompression: "normal",
     namespace,
     platform,
@@ -58,15 +58,15 @@ describe("Tauri bundle target policy", () => {
     expect(resolveTauriMainBinaryName({ platform: "win" })).toBe("Open Design");
   });
 
-  it("keeps the Windows unpacked directory target Electron-only", async () => {
+  it("rejects the Windows unpacked directory target", async () => {
     await expect(packWin(makeConfig("win", "dir"))).rejects.toThrow(
-      /--desktop-runtime tauri --to dir is not supported by Tauri.*--to nsis.*--desktop-runtime electron/,
+      /--desktop-runtime tauri --to dir is not supported by Tauri.*--to nsis/,
     );
   });
 
-  it("keeps the Linux unpacked directory target Electron-only", async () => {
+  it("rejects the Linux unpacked directory target", async () => {
     await expect(packLinux(makeConfig("linux", "dir"))).rejects.toThrow(
-      /--desktop-runtime tauri --to dir is not supported by Tauri.*--to appimage.*--desktop-runtime electron/,
+      /--desktop-runtime tauri --to dir is not supported by Tauri.*--to appimage/,
     );
   });
 });

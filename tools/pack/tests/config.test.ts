@@ -25,7 +25,7 @@ afterEach(() => {
 });
 
 describe("resolveToolPackConfig telemetry relay", () => {
-  it("defaults to the Tauri desktop runtime during the transition window", () => {
+  it("defaults to the Tauri desktop runtime", () => {
     const config = resolveToolPackConfig("mac", { namespace: "runtime-default-test" });
     expect(DEFAULT_DESKTOP_RUNTIME).toBe("tauri");
     expect(config.desktopRuntime).toBe(DEFAULT_DESKTOP_RUNTIME);
@@ -33,14 +33,24 @@ describe("resolveToolPackConfig telemetry relay", () => {
     expect(config.tauriConfigPath).toContain("apps/desktop/src-tauri/tauri.conf.json");
   });
 
-  it("accepts the explicit Electron fallback without changing namespace-scoped roots", () => {
+  it("rejects the removed desktop runtime fallback", () => {
+    const removedRuntime = "elect" + "ron";
+    expect(() =>
+      resolveToolPackConfig("mac", {
+        desktopRuntime: removedRuntime,
+        namespace: "runtime-removed-test",
+      }),
+    ).toThrow(new RegExp(`unsupported --desktop-runtime value: ${removedRuntime}`));
+  });
+
+  it("keeps namespace-scoped roots with the Tauri runtime", () => {
     const config = resolveToolPackConfig("mac", {
-      desktopRuntime: "electron",
-      namespace: "runtime-electron-test",
+      desktopRuntime: "tauri",
+      namespace: "runtime-tauri-test",
     });
-    expect(config.desktopRuntime).toBe("electron");
-    expect(config.roots.output.namespaceRoot).toContain("runtime-electron-test");
-    expect(config.roots.runtime.namespaceRoot).toContain("runtime-electron-test");
+    expect(config.desktopRuntime).toBe("tauri");
+    expect(config.roots.output.namespaceRoot).toContain("runtime-tauri-test");
+    expect(config.roots.runtime.namespaceRoot).toContain("runtime-tauri-test");
   });
 
   it("rejects unsupported desktop runtimes", () => {

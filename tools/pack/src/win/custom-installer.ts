@@ -52,12 +52,10 @@ async function findFirstExistingPath(candidates: string[]): Promise<string | nul
   return null;
 }
 
-async function findElectronBuilderMakensis(config: ToolPackConfig): Promise<string | null> {
+async function findCachedMakensis(config: ToolPackConfig): Promise<string | null> {
   const cacheRoots = [
-    process.env.ELECTRON_BUILDER_CACHE,
-    process.env.LOCALAPPDATA == null ? undefined : join(process.env.LOCALAPPDATA, "electron-builder", "Cache"),
-    process.env.APPDATA == null ? undefined : join(process.env.APPDATA, "electron-builder", "Cache"),
-    join(config.workspaceRoot, "node_modules", ".cache", "electron-builder"),
+    process.env.NSIS_CACHE,
+    join(config.workspaceRoot, "node_modules", ".cache", "nsis"),
   ].filter((entry): entry is string => entry != null && entry.length > 0);
   for (const cacheRoot of cacheRoots) {
     const direct = await findFirstExistingPath([
@@ -70,7 +68,7 @@ async function findElectronBuilderMakensis(config: ToolPackConfig): Promise<stri
 }
 
 async function resolveMakensisCommand(config: ToolPackConfig): Promise<string> {
-  const cached = await findElectronBuilderMakensis(config);
+  const cached = await findCachedMakensis(config);
   if (cached != null) return cached;
   const candidates = [
     "makensis.exe",
@@ -86,7 +84,7 @@ async function resolveMakensisCommand(config: ToolPackConfig): Promise<string> {
       // Keep probing known locations.
     }
   }
-  throw new Error("makensis is required to build the Windows installer; install NSIS or populate the electron-builder NSIS cache");
+  throw new Error("makensis is required to build the Windows installer; install NSIS or populate the NSIS cache");
 }
 
 function createRunningInstancesScript(): string {

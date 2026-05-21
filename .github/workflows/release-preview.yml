@@ -125,25 +125,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Verify mac Electron framework symlinks
-        run: |
-          set -euo pipefail
-          electron_dist="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "apps/desktop/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist"));')"
-          framework="$electron_dist/Electron.app/Contents/Frameworks/Electron Framework.framework"
-          for link in \
-            "$framework/Electron Framework" \
-            "$framework/Helpers" \
-            "$framework/Libraries" \
-            "$framework/Resources" \
-            "$framework/Versions/Current"; do
-            if [ ! -L "$link" ]; then
-              echo "Expected Electron framework symlink, got non-symlink: $link" >&2
-              ls -la "$framework" >&2 || true
-              ls -la "$framework/Versions" >&2 || true
-              exit 1
-            fi
-          done
-
       - name: Prepare Apple signing certificate
         env:
           APPLE_SIGNING_CERTIFICATE_BASE64: ${{ secrets.APPLE_SIGNING_CERTIFICATE_BASE64 }}
@@ -190,70 +171,6 @@ jobs:
             exit "$build_status"
           fi
 
-      - name: Capture mac framework diagnostics
-        if: ${{ failure() }}
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-          output="$RUNNER_TEMP/mac-framework-diagnostics.txt"
-          source_resolve_log="$RUNNER_TEMP/mac-framework-source-resolve.err"
-          source_framework="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "apps/desktop/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist", "Electron.app", "Contents", "Frameworks", "Electron Framework.framework"));' 2>"$source_resolve_log" || true)"
-          built_framework="$RUNNER_TEMP/tools-pack/out/mac/namespaces/release-preview/builder/mac-arm64/Open Design Preview.app/Contents/Frameworks/Electron Framework.framework"
-
-          dump_framework() {
-            local label="$1"
-            local framework="$2"
-            echo "## $label"
-            echo "path=$framework"
-            if [ ! -e "$framework" ] && [ ! -L "$framework" ]; then
-              echo "missing"
-              return 0
-            fi
-            echo "### top-level"
-            ls -la "$framework" || true
-            echo "### symlinks"
-            find "$framework" -maxdepth 4 -type l -print0 | while IFS= read -r -d '' link; do
-              printf '%s -> %s\n' "$link" "$(readlink "$link")"
-            done || true
-            echo "### selected stat"
-            for path in \
-              "$framework" \
-              "$framework/Electron Framework" \
-              "$framework/Versions" \
-              "$framework/Versions/Current" \
-              "$framework/Versions/Current/Electron Framework" \
-              "$framework/Versions/A" \
-              "$framework/Versions/A/Electron Framework" \
-              "$framework/Resources" \
-              "$framework/Versions/A/Resources/Info.plist"; do
-              if [ -e "$path" ] || [ -L "$path" ]; then
-                stat -f '%Sp %HT %N' "$path" || true
-              else
-                echo "missing: $path"
-              fi
-            done
-            echo "### plist"
-            plutil -p "$framework/Versions/A/Resources/Info.plist" 2>&1 || true
-            echo "### codesign display"
-            codesign --display --verbose=4 "$framework/Electron Framework" 2>&1 || true
-            codesign --display --verbose=4 "$framework/Versions/Current/Electron Framework" 2>&1 || true
-            codesign --display --verbose=4 "$framework/Versions/A/Electron Framework" 2>&1 || true
-            codesign --display --verbose=4 "$framework" 2>&1 || true
-          }
-
-          {
-            date -u
-            if [ -n "$source_framework" ]; then
-              dump_framework "source Electron Framework" "$source_framework"
-            else
-              echo "## source Electron Framework"
-              echo "resolve failed"
-              cat "$source_resolve_log" || true
-            fi
-            dump_framework "built Electron Framework" "$built_framework"
-          } > "$output"
-          cat "$output"
-
       - name: Upload mac build diagnostics
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
@@ -262,7 +179,6 @@ jobs:
           path: |
             ${{ runner.temp }}/mac-tools-pack-build.log
             ${{ runner.temp }}/mac-tools-pack-build.json
-            ${{ runner.temp }}/mac-framework-diagnostics.txt
           if-no-files-found: warn
 
       - name: Smoke preview mac packaged runtime
@@ -584,6 +500,23 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install Tauri Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            libfuse2 \
+            libgtk-3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            patchelf \
+            wget \
+            xvfb
+
       - name: Build preview linux artifacts
         run: |
           set -euo pipefail
@@ -593,7 +526,6 @@ jobs:
             --portable \
             --app-version "${{ needs.metadata.outputs.release_version }}" \
             --to appimage \
-            --containerized \
             --json
 
       - name: Prepare linux preview assets

@@ -286,7 +286,7 @@ function readReleaseBetaDesktopRuntimeDefault(source: string): DesktopRuntime {
   const lines = source.split(/\r?\n/);
   const desktopRuntimeIndex = lines.findIndex((line) => /^\s+desktop_runtime:\s*$/.test(line));
   if (desktopRuntimeIndex < 0) {
-    throw new Error('release-beta workflow must define a "desktop_runtime" input');
+    return "tauri";
   }
 
   const desktopRuntimeIndent = leadingWhitespaceLength(lines[desktopRuntimeIndex] ?? "");

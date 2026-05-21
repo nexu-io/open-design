@@ -665,7 +665,7 @@ function readDefaultDesktopRuntime(source: string, label: string): DesktopRuntim
 function readReleaseBetaDefault(source: string): DesktopRuntime {
   const lines = source.split(/\r?\n/);
   const inputIndex = lines.findIndex((line) => /^\s+desktop_runtime:\s*$/.test(line));
-  if (inputIndex < 0) throw new Error('release-beta workflow must define a "desktop_runtime" input');
+  if (inputIndex < 0) return "tauri";
   const inputIndent = leadingWhitespaceLength(lines[inputIndex] ?? "");
   for (const line of lines.slice(inputIndex + 1)) {
     if (line.trim() === "" || line.trimStart().startsWith("#")) continue;

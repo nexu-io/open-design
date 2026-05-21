@@ -1,19 +1,12 @@
 import { access, readFile } from "node:fs/promises";
+import { homedir, platform } from "node:os";
 import { join, resolve } from "node:path";
 
 import { SIDECAR_DEFAULTS, normalizeNamespace } from "@open-design/sidecar-proto";
 
-// `electron` is loaded lazily so this module can also be imported from the
-// headless entry, which runs in a plain Node process without the electron
-// dependency on disk. Top-level `import { app } from "electron"` would crash
-// headless at module-load with ERR_MODULE_NOT_FOUND.
-async function loadElectronApp() {
-  const electron = await import("electron");
-  return electron.app;
-}
-
 export const PACKAGED_CONFIG_PATH_ENV = "OD_PACKAGED_CONFIG_PATH";
 export const PACKAGED_NAMESPACE_ENV = "OD_PACKAGED_NAMESPACE";
+export const TAURI_RESOURCE_DIR_ENV = "OD_TAURI_RESOURCE_DIR";
 export const PACKAGED_WEB_OUTPUT_MODE_OVERRIDE_ENV = "OD_PACKAGED_ALLOW_WEB_OUTPUT_MODE_OVERRIDE";
 export const PACKAGED_WEB_STANDALONE_ROOT_ENV = "OD_WEB_STANDALONE_ROOT";
 export const PACKAGED_WEB_OUTPUT_MODE_ENV = "OD_WEB_OUTPUT_MODE";
@@ -74,8 +67,38 @@ async function readJsonIfExists(filePath: string): Promise<RawPackagedConfig | n
   return JSON.parse(await readFile(filePath, "utf8")) as RawPackagedConfig;
 }
 
+function compatibilityResourcePath(): string | undefined {
+  return (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
+}
+
+function defaultResourceDir(): string {
+  return process.env[TAURI_RESOURCE_DIR_ENV] ?? compatibilityResourcePath() ?? process.cwd();
+}
+
 function resolveDefaultConfigPath(): string {
-  return join(process.resourcesPath, "open-design-config.json");
+  return join(defaultResourceDir(), "open-design-config.json");
+}
+
+function defaultNamespaceBaseRoot(): string {
+  const odDataDir = process.env.OD_DATA_DIR;
+  if (odDataDir != null && odDataDir.length > 0) {
+    return join(resolve(odDataDir.replace(/^~/, homedir())), "namespaces");
+  }
+
+  switch (platform()) {
+    case "darwin":
+      return join(homedir(), "Library", "Application Support", "Open Design", "namespaces");
+    case "win32":
+      return join(process.env.APPDATA ?? join(homedir(), "AppData", "Roaming"), "Open Design", "namespaces");
+    default: {
+      const xdgDataHome = process.env.XDG_DATA_HOME;
+      const dataBase =
+        xdgDataHome != null && xdgDataHome.length > 0
+          ? xdgDataHome
+          : join(homedir(), ".local", "share");
+      return join(dataBase, "open-design", "namespaces");
+    }
+  }
 }
 
 async function readRawPackagedConfig(): Promise<RawPackagedConfig> {
@@ -86,12 +109,7 @@ async function readRawPackagedConfig(): Promise<RawPackagedConfig> {
     return config;
   }
 
-  const electronApp = await loadElectronApp();
-  return (
-    (await readJsonIfExists(resolveDefaultConfigPath())) ??
-    (await readJsonIfExists(join(electronApp.getAppPath(), "open-design-config.json"))) ??
-    {}
-  );
+  return (await readJsonIfExists(resolveDefaultConfigPath())) ?? {};
 }
 
 function resolveOptionalPath(value: string | undefined): string | undefined {
@@ -123,13 +141,13 @@ function resolvePackagedWebStandaloneRoot(
   const configured = resolveOptionalPath(value);
   if (configured != null) return configured;
   if (webOutputMode !== "standalone") return null;
-  return join(process.resourcesPath, "open-design-web-standalone");
+  return join(defaultResourceDir(), "open-design-web-standalone");
 }
 
 async function resolvePackagedRelativeEntry(value: string | undefined): Promise<string | null> {
   const cleaned = cleanOptionalString(value);
   if (cleaned == null) return null;
-  const entry = join(process.resourcesPath, cleaned);
+  const entry = join(defaultResourceDir(), cleaned);
   if (!(await pathExists(entry))) {
     throw new Error(`configured packaged entry not found at ${entry}`);
   }
@@ -141,15 +159,15 @@ export async function readPackagedConfig(): Promise<PackagedConfig> {
   const namespace = normalizeNamespace(
     process.env[PACKAGED_NAMESPACE_ENV] ?? raw.namespace ?? SIDECAR_DEFAULTS.namespace,
   );
-  const electronApp = await loadElectronApp();
   const namespaceBaseRoot =
-    resolveOptionalPath(raw.namespaceBaseRoot) ?? join(electronApp.getPath("userData"), "namespaces");
-  const resourceRoot = resolveOptionalPath(raw.resourceRoot) ?? join(process.resourcesPath, "open-design");
+    resolveOptionalPath(raw.namespaceBaseRoot) ?? defaultNamespaceBaseRoot();
+  const resourceDir = defaultResourceDir();
+  const resourceRoot = resolveOptionalPath(raw.resourceRoot) ?? join(resourceDir, "open-design");
   const relativeNodeCommand =
     raw.nodeCommandRelative == null || raw.nodeCommandRelative.length === 0
       ? join("open-design", "bin", "node")
       : raw.nodeCommandRelative;
-  const nodeCommandCandidate = join(process.resourcesPath, relativeNodeCommand);
+  const nodeCommandCandidate = join(resourceDir, relativeNodeCommand);
   const nodeCommand = (await pathExists(nodeCommandCandidate)) ? nodeCommandCandidate : null;
   const allowWebOutputModeOverride = isTruthyEnv(process.env[PACKAGED_WEB_OUTPUT_MODE_OVERRIDE_ENV]);
   const webOutputMode = resolvePackagedWebOutputMode(

@@ -20,7 +20,6 @@ const PACKAGE_DIRS = [
   "packages/diagnostics",
   "apps/daemon",
   "apps/web",
-  "apps/desktop",
   "apps/packaged",
 ] as const;
 
@@ -50,8 +49,6 @@ const OUTPUT_FILES = [
   "apps/web/dist/sidecar/index.d.ts",
   "apps/web/.next/standalone/apps/web/server.js",
   "apps/web/.next/static/chunk.js",
-  "apps/desktop/dist/main/index.js",
-  "apps/desktop/dist/main/index.d.ts",
   "apps/packaged/dist/index.mjs",
   "apps/packaged/dist/index.d.ts",
   "apps/packaged/dist/tauri-sidecars.mjs",
@@ -78,10 +75,10 @@ async function writeOutputs(root: string, value: string): Promise<void> {
 function createConfig(root: string, cacheRoot: string): ToolPackConfig {
   return {
     containerized: false,
-    desktopRuntime: "electron",
-    electronBuilderCliPath: "electron-builder",
-    electronDistPath: "electron-dist",
-    electronVersion: "41.3.0",
+    desktopRuntime: "tauri",
+    electronBuilderCliPath: "",
+    electronDistPath: "",
+    electronVersion: "0.0.0",
     macCompression: "normal",
     namespace: "test",
     platform: "win",

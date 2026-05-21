@@ -3,14 +3,14 @@
   "version": "0.7.0",
   "private": true,
   "type": "module",
-  "main": "./dist/main/index.js",
+  "main": "./dist/main/updater.js",
   "files": [
     "dist"
   ],
   "exports": {
-    "./main": {
-      "types": "./dist/main/index.d.ts",
-      "default": "./dist/main/index.js"
+    "./updater": {
+      "types": "./dist/main/updater.d.ts",
+      "default": "./dist/main/updater.js"
     }
   },
   "scripts": {
@@ -28,9 +28,8 @@
     "@open-design/sidecar-proto": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "24.12.2",
     "@tauri-apps/cli": "2.11.2",
-    "electron": "41.3.0",
+    "@types/node": "24.12.2",
     "typescript": "6.0.3",
     "vitest": "4.1.6"
   },

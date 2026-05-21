@@ -18,7 +18,6 @@ const WORKSPACE_BUILD_PACKAGES = [
   { directory: "packages/diagnostics", name: "@open-design/diagnostics" },
   { directory: "apps/daemon", name: "@open-design/daemon" },
   { directory: "apps/web", name: "@open-design/web" },
-  { directory: "apps/desktop", name: "@open-design/desktop" },
   { directory: "apps/packaged", name: "@open-design/packaged" },
 ] as const;
 
@@ -35,7 +34,6 @@ const BUILD_COMMANDS = [
   { args: ["--filter", "@open-design/daemon", "build"] },
   { args: ["--filter", "@open-design/web", "build"], env: ["OD_WEB_OUTPUT_MODE"] },
   { args: ["--filter", "@open-design/web", "build:sidecar"] },
-  { args: ["--filter", "@open-design/desktop", "build"] },
   { args: ["--filter", "@open-design/packaged", "build"] },
 ] as const;
 
@@ -119,8 +117,6 @@ function workspaceBuildOutputFiles(config: ToolPackConfig): string[] {
     "apps/web/dist/sidecar/index.js",
     "apps/web/dist/sidecar/index.d.ts",
     ...(config.webOutputMode === "standalone" ? [webStandaloneServerCandidates.join("|")] : ["apps/web/.next/BUILD_ID"]),
-    "apps/desktop/dist/main/index.js",
-    "apps/desktop/dist/main/index.d.ts",
     "apps/packaged/dist/index.mjs",
     "apps/packaged/dist/index.d.ts",
     "apps/packaged/dist/tauri-sidecars.mjs",
@@ -141,7 +137,6 @@ function workspaceBuildArtifacts(config: ToolPackConfig): WorkspaceBuildArtifact
     "packages/diagnostics/dist",
     "apps/daemon/dist",
     "apps/web/dist",
-    "apps/desktop/dist",
     "apps/packaged/dist",
   ];
   if (config.webOutputMode === "standalone") {

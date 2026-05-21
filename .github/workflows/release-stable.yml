@@ -110,17 +110,14 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # `scripts/postinstall.mjs` auto-builds `packages/*` and `tools/*`, but
-      # `apps/daemon` and `apps/desktop` are not in that list. On a fresh clone
+      # `apps/daemon` is not in that list. On a fresh clone
       # (every CI run), workspace typecheck fails because:
       #   - packaged/runtime consumers resolve the daemon package export through
       #     generated `apps/daemon/dist/*.d.ts`
-      #   - `apps/packaged/src/index.ts` dynamic-imports `@open-design/desktop/main`
-      #     which resolves to `apps/desktop/dist/main/index.d.ts`
-      # Build them explicitly here. Keeps the root `typecheck` script untouched.
-      - name: Build daemon and desktop (typecheck dependencies)
+      # Build it explicitly here. Keeps the root `typecheck` script untouched.
+      - name: Build daemon (typecheck dependency)
         run: |
           pnpm --filter @open-design/daemon build
-          pnpm --filter @open-design/desktop build
 
       - name: Typecheck workspaces
         run: pnpm -r --workspace-concurrency=4 --if-present run typecheck
@@ -161,25 +158,6 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Verify mac Electron framework symlinks
-        run: |
-          set -euo pipefail
-          electron_dist="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "apps/desktop/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist"));')"
-          framework="$electron_dist/Electron.app/Contents/Frameworks/Electron Framework.framework"
-          for link in \
-            "$framework/Electron Framework" \
-            "$framework/Helpers" \
-            "$framework/Libraries" \
-            "$framework/Resources" \
-            "$framework/Versions/Current"; do
-            if [ ! -L "$link" ]; then
-              echo "Expected Electron framework symlink, got non-symlink: $link" >&2
-              ls -la "$framework" >&2 || true
-              ls -la "$framework/Versions" >&2 || true
-              exit 1
-            fi
-          done
 
       - name: Prepare Apple signing certificate
         env:
@@ -227,70 +205,6 @@ jobs:
             exit "$build_status"
           fi
 
-      - name: Capture mac framework diagnostics
-        if: ${{ failure() }}
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-          output="$RUNNER_TEMP/mac-framework-diagnostics.txt"
-          source_resolve_log="$RUNNER_TEMP/mac-framework-source-resolve.err"
-          source_framework="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "apps/desktop/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist", "Electron.app", "Contents", "Frameworks", "Electron Framework.framework"));' 2>"$source_resolve_log" || true)"
-          built_framework="$RUNNER_TEMP/tools-pack/out/mac/namespaces/release-stable/builder/mac-arm64/Open Design.app/Contents/Frameworks/Electron Framework.framework"
-
-          dump_framework() {
-            local label="$1"
-            local framework="$2"
-            echo "## $label"
-            echo "path=$framework"
-            if [ ! -e "$framework" ] && [ ! -L "$framework" ]; then
-              echo "missing"
-              return 0
-            fi
-            echo "### top-level"
-            ls -la "$framework" || true
-            echo "### symlinks"
-            find "$framework" -maxdepth 4 -type l -print0 | while IFS= read -r -d '' link; do
-              printf '%s -> %s\n' "$link" "$(readlink "$link")"
-            done || true
-            echo "### selected stat"
-            for path in \
-              "$framework" \
-              "$framework/Electron Framework" \
-              "$framework/Versions" \
-              "$framework/Versions/Current" \
-              "$framework/Versions/Current/Electron Framework" \
-              "$framework/Versions/A" \
-              "$framework/Versions/A/Electron Framework" \
-              "$framework/Resources" \
-              "$framework/Versions/A/Resources/Info.plist"; do
-              if [ -e "$path" ] || [ -L "$path" ]; then
-                stat -f '%Sp %HT %N' "$path" || true
-              else
-                echo "missing: $path"
-              fi
-            done
-            echo "### plist"
-            plutil -p "$framework/Versions/A/Resources/Info.plist" 2>&1 || true
-            echo "### codesign display"
-            codesign --display --verbose=4 "$framework/Electron Framework" 2>&1 || true
-            codesign --display --verbose=4 "$framework/Versions/Current/Electron Framework" 2>&1 || true
-            codesign --display --verbose=4 "$framework/Versions/A/Electron Framework" 2>&1 || true
-            codesign --display --verbose=4 "$framework" 2>&1 || true
-          }
-
-          {
-            date -u
-            if [ -n "$source_framework" ]; then
-              dump_framework "source Electron Framework" "$source_framework"
-            else
-              echo "## source Electron Framework"
-              echo "resolve failed"
-              cat "$source_resolve_log" || true
-            fi
-            dump_framework "built Electron Framework" "$built_framework"
-          } > "$output"
-          cat "$output"
-
       - name: Upload mac build diagnostics
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
@@ -299,7 +213,6 @@ jobs:
           path: |
             ${{ runner.temp }}/mac-tools-pack-build.log
             ${{ runner.temp }}/mac-tools-pack-build.json
-            ${{ runner.temp }}/mac-framework-diagnostics.txt
           if-no-files-found: warn
 
       - name: Smoke release mac packaged runtime
@@ -602,7 +515,7 @@ jobs:
     needs: [metadata, verify]
     # Linux AppImage packaging is temporarily excluded from stable releases.
     # Keep the job definition in place so the Linux lane can be re-enabled once
-    # the containerized pnpm bootstrap is fixed and reviewed.
+    # the native Tauri Linux package path is ready for stable promotion.
     if: ${{ vars.ENABLE_STABLE_LINUX == 'true' }}
     runs-on: ubuntu-latest
     env:
@@ -626,10 +539,23 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # `--containerized` builds the AppImage inside the electronuserland/builder
-      # Docker image (glibc 2.27 baseline) so the resulting binary runs on older
-      # distros than ubuntu-latest's glibc 2.39. Docker is preinstalled on the
-      # GitHub-hosted ubuntu-latest runner, so no extra setup is required.
+      - name: Install Tauri Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            libfuse2 \
+            libgtk-3-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            patchelf \
+            wget \
+            xvfb
+
       - name: Build release linux artifacts
         run: |
           set -euo pipefail
@@ -647,7 +573,6 @@ jobs:
             --portable
             --app-version "${{ needs.metadata.outputs.stable_version }}"
             --to appimage
-            --containerized
             --json
           )
           if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$build_log_path" >&2))"; then

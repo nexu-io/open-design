@@ -6,22 +6,22 @@ Last updated: 2026-05-21
 
 Replace the Electron desktop runtime with Tauri across dev and packaged flows while preserving the existing sidecar contract, daemon/web lifecycle entrypoints, desktop bridge trust boundaries, and namespace-scoped runtime paths.
 
-The migration is now in the transition window after native package parity. Tauri is the default runtime; Electron remains available only as an explicit fallback until M6 removes the Electron path.
+The migration has passed native package parity and the M6 cleanup. Tauri is the only supported desktop runtime in dev and packaged flows.
 
 ## Current State
 
-- `apps/desktop/src-tauri` is the default desktop runtime. The Electron path remains available only as an explicit transition fallback.
+- `apps/desktop/src-tauri` is the desktop runtime.
 - `apps/web` resolves desktop capabilities through `resolveDesktopBridge()` instead of directly calling `window.electronAPI`.
 - `tools-dev start desktop --desktop-runtime tauri` starts the Rust runtime, discovers the web sidecar URL, exposes desktop status IPC, and passes macOS dev inspect smoke for `status`, generic `eval`, `click`, `console`, and `screenshot`.
 - Tauri command IPC is permissioned through the generated app command manifest and confirmed from the remote web URL for `desktop_open_external`, `desktop_pick_and_import`, and `desktop_open_project_path`.
-- `tools-pack` accepts `--desktop-runtime electron|tauri`; the Tauri path assembles the existing packaged Node app, resource tree, bundled Node, and packaged config into Tauri bundle resources.
+- `tools-pack` accepts the Tauri desktop runtime and assembles the existing packaged Node app, resource tree, bundled Node, and packaged config into Tauri bundle resources.
 - macOS Tauri `.app` and `.dmg` packaging now pass build/install where applicable/start/inspect eval/inspect screenshot/stop smoke.
 - Windows NSIS and Linux AppImage/headless Tauri packaging, lifecycle, and uninstall paths have native CI evidence and close the M4 platform gate.
 - CI has Tauri platform gates for Windows NSIS and Linux AppImage through `packaged_smoke_tauri_win` and `packaged_smoke_tauri_linux`; their artifacts now provide the native runner evidence used by the M4 verifier.
-- `release-beta` has an explicit `desktop_runtime` workflow input, defaulting to `tauri`, with `electron` retained as the explicit transition fallback.
-- MSI and Windows/Linux unpacked `--to dir` are not default-flip blockers. Tauri officially supports MSI via WiX, but this repository still needs a namespace-scoped MSI install/uninstall lifecycle before treating MSI as release-grade. Tauri's documented bundle targets are `deb`, `rpm`, `appimage`, `nsis`, `msi`, `app`, and `dmg`, with no `dir` target; Windows/Linux `--desktop-runtime tauri --to dir` now fails fast with guidance to use the installer target or the legacy Electron runtime. Reference: https://v2.tauri.app/reference/config/#bundletype
+- `release-beta` packages the Tauri runtime without a desktop runtime selector.
+- MSI and Windows/Linux unpacked `--to dir` are not default-flip blockers. Tauri officially supports MSI via WiX, but this repository still needs a namespace-scoped MSI install/uninstall lifecycle before treating MSI as release-grade. Tauri's documented bundle targets are `deb`, `rpm`, `appimage`, `nsis`, `msi`, `app`, and `dmg`, with no `dir` target; Windows/Linux `--desktop-runtime tauri --to dir` now fails fast with guidance to use the installer target. Reference: https://v2.tauri.app/reference/config/#bundletype
 - Tauri versions are pinned to `tauri@2.11.2`, `@tauri-apps/cli@2.11.2`, and `@tauri-apps/api@2.11.0`.
-- Tauri is the default runtime for `tools-dev` and `tools-pack`; Electron remains selectable through `--desktop-runtime electron` until M6 cleanup.
+- Tauri is the only accepted runtime for `tools-dev` and `tools-pack`.
 
 ## Schedule
 
@@ -148,11 +148,11 @@ Do not create duplicate reminders for the same work. If the continuation sequenc
 
 ### M6 Electron removal
 
-- [ ] Remove `electron`, `electron-builder`, `@electron/rebuild`, and Electron-only package scripts.
-- [ ] Remove Electron preload/runtime code after Tauri bridge and packaging parity are complete.
-- [ ] Remove Electron-only resources/hooks from `tools-pack` and release workflows.
-- [ ] Delete or rewrite Electron-only tests.
-- [ ] Update AGENTS guidance and PR checklist references from Electron to Tauri.
+- [x] Remove `electron`, `electron-builder`, `@electron/rebuild`, and Electron-only package scripts.
+- [x] Remove Electron preload/runtime code after Tauri bridge and packaging parity are complete.
+- [x] Remove Electron-only resources/hooks from `tools-pack` and release workflows.
+- [x] Delete or rewrite Electron-only tests.
+- [x] Update AGENTS guidance and PR checklist references from Electron to Tauri.
 
 ## Post-M4 Execution Runbook
 

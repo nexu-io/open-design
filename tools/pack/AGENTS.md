@@ -10,8 +10,8 @@ Follow the root `AGENTS.md` and `tools/AGENTS.md` first. This tool owns the repo
 - Windows registry observation/cleanup must go through `reg.exe` and stay scoped to entries matching the namespace install/uninstaller paths.
 - Windows lifecycle logs must expose NSIS automation logs/markers/timings in addition to app runtime logs.
 - Linux AppImage build/install/start/stop/logs/uninstall/cleanup smoke commands.
-- Linux headless (no-Electron) install/start/stop via `--headless` flag on `install`, `start`, and `stop`.
-- Linux containerized builds via `electronuserland/builder` Docker image for distro-agnostic glibc compat.
+- Linux headless install/start/stop via `--headless` flag on `install`, `start`, and `stop`.
+- Linux AppImage builds through the native Tauri package path.
 - Consuming sidecar/process/path primitives from `@open-design/sidecar-proto`, `@open-design/sidecar`, and `@open-design/platform`.
 
 ## Does not own
@@ -28,7 +28,7 @@ Follow the root `AGENTS.md` and `tools/AGENTS.md` first. This tool owns the repo
 - Public release artifacts must use channel-specific app identity: stable uses `Open Design`, beta uses `Open Design Beta`, and preview uses `Open Design Preview`. Local tools-pack installs may still use namespace-scoped install paths only as a developer multi-instance validation convention.
 - Do not let namespace-named `.app` installs change data/log/runtime/cache path conventions.
 - Use `--portable` for public/release artifacts so packaged config does not bake local tools-pack runtime roots from the build machine.
-- Pack resource files used by electron-builder belong under `tools/pack/resources/`; do not point pack logic at Downloads, web public assets, docs assets, or other app-owned resource paths.
+- Pack resource files belong under `tools/pack/resources/`; do not point pack logic at Downloads, web public assets, docs assets, or other app-owned resource paths.
 - For ordinary Windows NSIS smoke tests, use short namespaces such as `rg`, `smoke`, or `nsis-a`. NSIS extracts deeply nested Next.js standalone files under the namespace-scoped install directory; long namespaces can push installed paths past the traditional Windows 260-character limit even when builder `win-unpacked` output is correct. During merge regression, namespace `regression-merge-nsis` produced an installed path length of 264 characters and missed `next/dist/server/route-matcher-providers/helpers/cached-route-matcher-provider.js` in the installed directory, while the same NSIS smoke passed with namespace `rg`. Use long namespaces only when intentionally testing installer path-length behavior.
 
 ## Packaged auto-update architecture and harness
@@ -38,11 +38,11 @@ Read this section before changing packaged auto-update behavior. The updater cro
 ### Architecture map
 
 - `apps/desktop/src/main/updater.ts` owns updater state, release metadata parsing, artifact selection, checksum verification, download-store ownership, progress events, and opening the downloaded installer. It is pure main-process logic and is tested under `apps/desktop/tests/main/updater.test.ts`.
-- `apps/desktop/src/main/runtime.ts` exposes updater IPC to the renderer through `od:update:status|check|download|install|quit` and emits `od:update:status-changed`. Keep installer launch separate from process shutdown; quit is an explicit post-installer action.
-- `apps/desktop/src/main/index.ts` wires the scheduler. Native menu update actions are intentionally not the user-facing surface; the web updater UI owns discovery and action prompts.
+- `apps/desktop/src-tauri/src/main.rs` owns the desktop host surface. The updater host message currently returns an explicit not-implemented response until native updater wiring is rebuilt.
+- Native menu update actions are intentionally not the user-facing surface; the web updater UI owns discovery and action prompts.
 - `apps/web/src/lib/updater.ts` normalizes host updater snapshots into UI-ready state.
 - `apps/web/src/components/UpdaterPopup.tsx` is the visible updater surface in the left rail. All visible copy must go through `apps/web/src/i18n`.
-- `apps/packaged/src/index.ts` passes packaged `appVersion` and namespace-scoped `updateRoot` into desktop main.
+- `apps/packaged/src/index.ts` starts the packaged Tauri sidecars with packaged `appVersion` and namespace-scoped runtime paths.
 - `tools/serve` owns deterministic local updater fixtures only. It must not contain product updater runtime logic.
 - `tools/pack` owns packaged build/install/start/inspect/logs/uninstall/cleanup and the platform installer harness, including Windows NSIS registry observation and cleanup.
 

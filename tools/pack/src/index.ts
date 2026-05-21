@@ -63,7 +63,7 @@ type CacCommand = ReturnType<CAC["command"]>;
 function addSharedOptions(command: CacCommand) {
   return command
     .option("--cache-dir <path>", "tools-pack cache directory")
-    .option("--desktop-runtime <runtime>", `desktop runtime: electron|tauri (default: ${DEFAULT_DESKTOP_RUNTIME})`)
+    .option("--desktop-runtime <runtime>", `desktop runtime: tauri (default: ${DEFAULT_DESKTOP_RUNTIME})`)
     .option("--dir <path>", "tools-pack root directory")
     .option("--json", "print JSON")
     .option("--namespace <name>", "runtime namespace")
@@ -76,9 +76,9 @@ function addSharedOptions(command: CacCommand) {
 // config.ts. Keep these in sync: the resolver throws on any value not listed
 // here for the given platform.
 const TO_HELP_BY_PLATFORM: Record<ToolPackPlatform, string> = {
-  linux: "build target: all|appimage|dir (default: all; dir is Electron-only)",
+  linux: "build target: all|appimage|dir (default: all; dir is unsupported for Tauri)",
   mac: "build target: all|app|dmg|zip (default: all)",
-  win: "build target: all|dir|nsis (default: nsis; dir is Electron-only)",
+  win: "build target: all|dir|nsis (default: nsis; dir is unsupported for Tauri)",
 };
 
 function addBuildOptions(command: CacCommand, platform: ToolPackPlatform) {
@@ -98,7 +98,7 @@ function addWinLifecycleOptions(command: CacCommand) {
   return command
     .option("--remove-data", "remove packaged data during uninstall/reset/cleanup")
     .option("--remove-logs", "remove packaged logs during uninstall/reset/cleanup")
-    .option("--remove-product-user-data", "remove the public Electron app userData root during Windows uninstall/reset/cleanup")
+    .option("--remove-product-user-data", "remove the public desktop app userData root during Windows uninstall/reset/cleanup")
     .option("--remove-sidecars", "remove packaged sidecar runtime during uninstall/reset/cleanup")
     .option("--silent", "run installer/uninstaller silently", { default: true });
 }
@@ -188,7 +188,7 @@ addWinLifecycleOptions(
 });
 
 addBuildOptions(addSharedOptions(cli.command("linux <action>", "Linux packaging commands: build|install|start|stop|logs|uninstall|cleanup|inspect")), "linux")
-  .option("--containerized", "build inside electronuserland/builder Docker for wider glibc compatibility")
+  .option("--containerized", "build inside a Linux packaging container for wider glibc compatibility")
   .option("--headless", "install/start/stop/uninstall/cleanup the headless entry; inspect returns status only")
   .action(async (action: string, options: CliOptions) => {
     const config = resolveToolPackConfig("linux", options);

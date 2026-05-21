@@ -268,7 +268,7 @@ export async function runElectronBuilder(
     electronBuilderCliPath: config.electronBuilderCliPath,
     electronVersion: config.electronVersion,
     filePatterns: ELECTRON_BUILDER_FILE_PATTERNS,
-    node: "win.electron-builder-dir",
+    node: "win.legacy-builder-dir",
     nodeGypRebuild: ELECTRON_BUILDER_NODE_GYP_REBUILD,
     npmRebuild: ELECTRON_BUILDER_NPM_REBUILD,
     packagedAppKey,
@@ -284,7 +284,7 @@ export async function runElectronBuilder(
   });
   const auditOutput = "web-standalone-after-pack-audit.json";
   const node = {
-    id: "win.electron-builder-dir",
+    id: "win.legacy-builder-dir",
     key,
     outputs: ["builder", ...(config.webOutputMode === "standalone" ? [auditOutput] : [])],
     invalidate: async () => null,

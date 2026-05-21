@@ -15,11 +15,11 @@ export const WORKSPACE_ROOT = resolve(__dirname, "../../..");
 
 export type ToolPackPlatform = "mac" | "win" | "linux";
 export type ToolPackBuildOutput = "all" | "app" | "appimage" | "dir" | "dmg" | "nsis" | "zip";
-export type ToolPackDesktopRuntimeKind = "electron" | "tauri";
+export type ToolPackDesktopRuntimeKind = "tauri";
 export type ToolPackMacCompression = "store" | "normal" | "maximum";
 export type ToolPackWebOutputMode = "server" | "standalone";
 
-export const DESKTOP_RUNTIME_KINDS = ["electron", "tauri"] as const;
+export const DESKTOP_RUNTIME_KINDS = ["tauri"] as const;
 export const DEFAULT_DESKTOP_RUNTIME = "tauri" satisfies ToolPackDesktopRuntimeKind;
 
 export type ToolPackCliOptions = {
@@ -64,6 +64,10 @@ export type ToolPackConfig = {
   appVersion?: string;
   containerized: boolean;
   desktopRuntime: ToolPackDesktopRuntimeKind;
+  /**
+   * Legacy builder fields are retained only so old helper modules can compile
+   * while the Tauri package path owns every reachable build command.
+   */
   electronBuilderCliPath: string;
   electronDistPath: string;
   electronVersion: string;
@@ -185,29 +189,6 @@ function resolveToolPackTelemetryRelayUrl(value: string | undefined): string | u
   return normalized.replace(/\/+$/, "");
 }
 
-function resolveElectronVersion(workspaceRoot: string): string {
-  const require = createRequire(join(workspaceRoot, "apps/desktop/package.json"));
-  const desktopPackage = require(join(workspaceRoot, "apps/desktop/package.json")) as {
-    devDependencies?: Record<string, string>;
-  };
-  const version = desktopPackage.devDependencies?.electron;
-  if (version == null || version.length === 0) {
-    throw new Error("apps/desktop/package.json must declare electron");
-  }
-  return version;
-}
-
-function resolveElectronDistPath(workspaceRoot: string): string {
-  const require = createRequire(join(workspaceRoot, "apps/desktop/package.json"));
-  const electronEntry = require.resolve("electron");
-  return join(path.dirname(electronEntry), "dist");
-}
-
-function resolveElectronBuilderCliPath(): string {
-  const require = createRequire(import.meta.url);
-  return require.resolve("electron-builder/out/cli/cli.js");
-}
-
 function resolveTauriCliPath(workspaceRoot: string): string {
   const require = createRequire(join(workspaceRoot, "apps/desktop/package.json"));
   return require.resolve("@tauri-apps/cli/tauri.js");
@@ -233,9 +214,9 @@ export function resolveToolPackConfig(
     appVersion: resolveToolPackAppVersion(options.appVersion),
     containerized: options.containerized === true,
     desktopRuntime: resolveToolPackDesktopRuntimeKind(options.desktopRuntime),
-    electronBuilderCliPath: resolveElectronBuilderCliPath(),
-    electronDistPath: resolveElectronDistPath(WORKSPACE_ROOT),
-    electronVersion: resolveElectronVersion(WORKSPACE_ROOT),
+    electronBuilderCliPath: "",
+    electronDistPath: "",
+    electronVersion: "0.0.0",
     macCompression: resolveToolPackMacCompression(options.macCompression),
     namespace,
     platform,

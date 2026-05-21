@@ -1,8 +1,8 @@
 /**
  * Regression coverage for the harmless-socket-option filter the
- * packaged Electron entry uses to swallow `setTypeOfService EINVAL`
+ * packaged desktop entry uses to swallow `setTypeOfService EINVAL`
  * undici crashes (issue #895). Without the filter, those errors
- * surface as native "JavaScript error in main process" dialogs the
+ * surface as native main-process dialogs the
  * moment a renderer fetch hits the affected socket option setter on
  * macOS / VPN configurations that don't allow IP_TOS marking.
  *
@@ -198,12 +198,12 @@ describe('createFatalUncaughtExceptionHandler (issue #906)', () => {
 // The parallel `unhandledRejection` listener mirrors the
 // uncaughtException policy: harmless EINVAL rejections log at warn
 // and return, anything else logs at error, detaches the listener, and
-// schedules a re-throw via setImmediate so Node/Electron's default
+// schedules a re-throw via setImmediate so Node's default
 // fail-fast path takes over. Before this factory landed, the inline
 // listener logged non-harmless rejections and returned, which silently
 // kept the main process alive after any rejected promise. Siri-Ray
 // and the codex P2 thread on PR #1298 flagged the same gap on the
-// parallel apps/desktop filter, so the two copies stay in lockstep.
+// parallel desktop filter, so the two copies stay in lockstep.
 describe('createFatalUnhandledRejectionHandler (issue #647 review follow-up)', () => {
   it('logs harmless socket option rejections at warn level and returns silently', () => {
     const logger = stubLogger();
