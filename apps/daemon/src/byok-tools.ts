@@ -43,6 +43,7 @@ const SENSEAUDIO_DEFAULT_BASE_URL = 'https://api.senseaudio.cn';
 const PROMPT_MAX_LENGTH = 2000;
 const SENSEAUDIO_TTS_MODEL = 'senseaudio-tts-1.5-260319';
 const SENSEAUDIO_DEFAULT_VOICE_ID = 'female_0033_b';
+const HEX_AUDIO_PATTERN = /^[0-9a-fA-F]+$/;
 
 // SenseAudio video — the API only documents one model today, so the
 // wire id is a const. The chat tool's `generate_video` param surface
@@ -273,6 +274,7 @@ export async function executeGenerateSpeech(
   try {
     const resp = await fetch(`${trimmedBase}/v1/t2a_v2`, {
       method: 'POST',
+      redirect: 'error',
       headers: {
         authorization: `Bearer ${apiKey}`,
         'content-type': 'application/json',
@@ -319,6 +321,9 @@ export async function executeGenerateSpeech(
   const hex = data?.data?.audio;
   if (typeof hex !== 'string' || !hex) {
     return { ok: false, error: 'senseaudio speech response missing data.audio' };
+  }
+  if (hex.length % 2 !== 0 || !HEX_AUDIO_PATTERN.test(hex)) {
+    return { ok: false, error: 'senseaudio speech response contained invalid hex audio' };
   }
   const bytes = Buffer.from(hex, 'hex');
   if (bytes.length === 0) return { ok: false, error: 'senseaudio speech decoded zero bytes' };

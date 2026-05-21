@@ -405,6 +405,7 @@ describe('executeGenerateSpeech', () => {
     const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
       expect(String(input)).toBe('https://api.senseaudio.cn/v1/t2a_v2');
       expect(init?.method).toBe('POST');
+      expect(init?.redirect).toBe('error');
       expect(init?.headers).toMatchObject({
         authorization: 'Bearer sa-byok-key',
         'content-type': 'application/json',
@@ -504,6 +505,59 @@ describe('executeGenerateSpeech', () => {
 
     expect(result).toEqual({ ok: false, error: 'network down' });
   });
+
+  it('asks fetch to reject redirected SenseAudio TTS upstreams', async () => {
+    const fetchMock = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      expect(init?.redirect).toBe('error');
+      throw new TypeError('redirect mode is set to error');
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await executeGenerateSpeech(
+      { text: 'hello' },
+      {
+        projectRoot: root,
+        projectsRoot,
+        projectId: PROJECT_ID,
+        upstreamApiKey: 'sa-byok-key',
+        upstreamBaseUrl: 'https://api.senseaudio.cn',
+      },
+    );
+
+    expect(result).toEqual({ ok: false, error: 'redirect mode is set to error' });
+  });
+
+  it.each(['aaZZ', 'abc'])(
+    'returns { ok: false } when SenseAudio returns malformed hex audio: %s',
+    async (audio) => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () =>
+          new Response(
+            JSON.stringify({
+              data: { audio },
+              base_resp: { status_code: 0, status_msg: 'success' },
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+        ),
+      );
+
+      const result = await executeGenerateSpeech(
+        { text: 'hello' },
+        {
+          projectRoot: root,
+          projectsRoot,
+          projectId: PROJECT_ID,
+          upstreamApiKey: 'sa-byok-key',
+          upstreamBaseUrl: 'https://api.senseaudio.cn',
+        },
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatch(/invalid hex audio/);
+    },
+  );
 });
 
 describe('executeGenerateVideo', () => {
