@@ -203,7 +203,11 @@ function validateAgentModels(
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
-export function validateAgentCliEnv(raw: unknown): AgentCliEnvPrefs | undefined {
+export function validateAgentCliEnv(
+  raw: unknown,
+  options?: { throwOnInvalid?: boolean },
+): AgentCliEnvPrefs | undefined {
+  const throwOnInvalid = options?.throwOnInvalid ?? false;
   if (raw === undefined || raw === null) return undefined;
   if (typeof raw !== 'object' || Array.isArray(raw)) return undefined;
   const result: AgentCliEnvPrefs = Object.create(null);
@@ -222,10 +226,17 @@ export function validateAgentCliEnv(raw: unknown): AgentCliEnvPrefs | undefined 
       if (!trimmed) continue;
       const allowedValues = enums?.get(envKey);
       if (allowedValues && !allowedValues.has(trimmed)) {
-        throw new Error(
+        if (throwOnInvalid) {
+          throw new Error(
+            `[app-config] ${agentId}.${envKey}: invalid value "${trimmed}",` +
+            ` expected one of: ${[...allowedValues].join(', ')}`,
+          );
+        }
+        console.warn(
           `[app-config] ${agentId}.${envKey}: invalid value "${trimmed}",` +
-          ` expected one of: ${[...allowedValues].join(', ')}`,
+          ` expected one of: ${[...allowedValues].join(', ')}. Dropping.`,
         );
+        continue;
       }
       env[envKey] = trimmed;
     }
@@ -275,6 +286,7 @@ function applyConfigValue(
   target: Record<string, unknown>,
   key: keyof AppConfigPrefs,
   value: unknown,
+  options?: { throwOnInvalid?: boolean },
 ): void {
   if (key === 'onboardingCompleted') {
     if (typeof value === 'boolean') target[key] = value;
@@ -293,7 +305,7 @@ function applyConfigValue(
     }
   }
   if (key === 'agentCliEnv') {
-    const validated = validateAgentCliEnv(value);
+    const validated = validateAgentCliEnv(value, options);
     if (validated !== undefined) {
       target[key] = validated;
     } else {
@@ -455,7 +467,7 @@ async function doWrite(
   const next: Record<string, unknown> = { ...existing };
   for (const key of Object.keys(partial)) {
     if (!ALLOWED_KEYS.has(key as keyof AppConfigPrefs)) continue;
-    applyConfigValue(next, key as keyof AppConfigPrefs, partial[key]);
+    applyConfigValue(next, key as keyof AppConfigPrefs, partial[key], { throwOnInvalid: true });
   }
   const file = configFile(dataDir);
   await mkdir(path.dirname(file), { recursive: true });

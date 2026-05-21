@@ -227,7 +227,7 @@ async function safeProbe(
 ): Promise<DetectedAgent> {
   try {
     return await probe(def, configuredEnv);
-  } catch {
+  } catch (err) {
     // Fault isolation (issue #2297): one adapter's probe blowing up
     // — e.g. a synchronous filesystem throw during PATH walking on a
     // packaged Windows daemon, or an async rejection from one of the
@@ -235,7 +235,10 @@ async function safeProbe(
     // Without this guard the bare `Promise.all` rejected and the
     // `/api/agents` catch arm returned `[]`, so the UI silently lost
     // every CLI option and fell back to BYOK / Cloud only.
-    return unavailableAgent(def);
+    return {
+      ...unavailableAgent(def),
+      ...(err instanceof Error ? { authMessage: err.message } : {}),
+    };
   }
 }
 

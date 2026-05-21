@@ -1158,3 +1158,35 @@ test('spawnEnvForAgent throws on invalid inherited CODEBUDDY_INTERNET_ENVIRONMEN
     ),
   ).toThrow(/Invalid inherited CODEBUDDY_INTERNET_ENVIRONMENT/);
 });
+
+test('detectAgents isolates CodeBuddy probe failure from other agents', async () => {
+  // When an invalid inherited CODEBUDDY_INTERNET_ENVIRONMENT causes the
+  // CodeBuddy probe to throw, other agents must still appear in the
+  // /api/agents response.
+  const dir = mkdtempSync(join(tmpdir(), 'od-isolated-probe-'));
+  try {
+    return await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CODEBUDDY_INTERNET_ENVIRONMENT'], async () => {
+      // Provide a claude binary so that agent is available.
+      const claudeBin = join(dir, 'claude');
+      writeFileSync(claudeBin, '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "1.0.0"; exit 0; fi\nif [ "$1" = "-p" ] && [ "$2" = "--help" ]; then echo "--add-dir --include-partial-messages"; exit 0; fi\nexit 0\n');
+      chmodSync(claudeBin, 0o755);
+      process.env.PATH = dir;
+      process.env.OD_AGENT_HOME = dir;
+      process.env.CODEBUDDY_INTERNET_ENVIRONMENT = 'internel';
+
+      const agents = await detectAgents();
+
+      // Claude should still be available.
+      const claudeAgent = agents.find((a) => a.id === 'claude');
+      assert.ok(claudeAgent);
+      assert.equal(claudeAgent.available, true);
+
+      // CodeBuddy should be unavailable (the invalid env caused a probe failure).
+      const codebuddyAgent = agents.find((a) => a.id === 'codebuddy');
+      assert.ok(codebuddyAgent);
+      assert.equal(codebuddyAgent.available, false);
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
