@@ -390,6 +390,7 @@ import { configureComposioConfigStore } from './connectors/composio-config.js';
 import { CHAT_TOOL_ENDPOINTS, CHAT_TOOL_OPERATIONS, toolTokenRegistry } from './tool-tokens.js';
 import { createIdentityMiddleware } from './identity/middleware.js';
 import { resolveIdentity } from './identity/types.js';
+import { attributionFromIdentity } from './identity/attribution.js';
 import { installHistoryEnsureHook } from './history/ensure-hook.js';
 import { installHistoryRunFinishedHook } from './history/run-hook.js';
 import {
@@ -2052,6 +2053,8 @@ function pinAssistantMessageOnRunCreate(db, run) {
     ).run(run.id, run.status, run.createdAt, run.assistantMessageId);
     return;
   }
+  // run.identity (populated at runs.create time per P0.2) is the
+  // resolved actor for this run; no req in scope here so source IP is null.
   upsertMessage(db, run.conversationId, {
     id: run.assistantMessageId,
     role: 'assistant',
@@ -2061,6 +2064,7 @@ function pinAssistantMessageOnRunCreate(db, run) {
     runId: run.id,
     runStatus: run.status,
     startedAt: run.createdAt,
+    ...attributionFromIdentity(run.identity),
   });
 }
 
@@ -5072,6 +5076,7 @@ export async function startServer({
     const saved = upsertMessage(db, req.params.cid, {
       ...m,
       id: req.params.mid,
+      ...attributionFromIdentity(req.identity, req),
     });
     // Bump the parent project's updatedAt so the project list re-orders.
     updateProject(db, req.params.id, {});
@@ -11146,10 +11151,12 @@ export async function startServer({
       identity: req.identity,
       message: prompt,
     });
+    const orbitAttribution = attributionFromIdentity(req.identity, req);
     upsertMessage(db, conversationId, {
       id: `orbit-user-${run.id}`,
       role: 'user',
       content: prompt,
+      ...orbitAttribution,
     });
     upsertMessage(db, conversationId, {
       id: assistantMessageId,
@@ -11160,6 +11167,7 @@ export async function startServer({
       runId: run.id,
       runStatus: 'queued',
       startedAt: now,
+      ...orbitAttribution,
     });
 
     if (template?.dir) {
@@ -11783,10 +11791,15 @@ export async function startServer({
         // Snapshot linking is best-effort; the in-memory run still carries it.
       }
     }
+    // Routines fire from the scheduler with no req in scope, so no
+    // source IP. The identity is the routine creator's fallback
+    // identity already resolved into run.identity at create time.
+    const routineAttribution = attributionFromIdentity(run.identity);
     upsertMessage(db, conversationId, {
       id: `routine-user-${run.id}`,
       role: 'user',
       content: routine.prompt,
+      ...routineAttribution,
     });
     upsertMessage(db, conversationId, {
       id: assistantMessageId,
@@ -11797,6 +11810,7 @@ export async function startServer({
       runId: run.id,
       runStatus: 'queued',
       startedAt: now,
+      ...routineAttribution,
     });
 
     const modelPrefs = appConfig.agentModels?.[agentId] ?? {};

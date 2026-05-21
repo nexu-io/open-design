@@ -14,6 +14,7 @@ import {
   resolvePluginSnapshot,
 } from './plugins/index.js';
 import type { RouteDeps } from './server-context.js';
+import { attributionFromIdentity } from './identity/attribution.js';
 import { listSkills } from './skills.js';
 import { auditDesignSystemPackage } from './tools-connectors-cli.js';
 
@@ -534,6 +535,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     const saved = upsertMessage(db, req.params.cid, {
       ...m,
       id: req.params.mid,
+      ...attributionFromIdentity(req.identity, req),
     });
     // Bump the parent project's updatedAt so the project list re-orders.
     updateProject(db, req.params.id, {});

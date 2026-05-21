@@ -896,6 +896,15 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
     .prepare(`SELECT position FROM messages WHERE id = ?`)
     .get(m.id) as DbRow | undefined;
   const now = Date.now();
+  // actor_* columns from the history feature (#1241). Optional in the
+  // input shape — callers without access to a resolved identity (e.g.,
+  // background message inserts, replay flows) leave them null. UPDATE
+  // path only overwrites when explicitly provided so an attribution
+  // populated by an earlier call isn't blanked by a later one that
+  // happens not to carry identity.
+  const actorIdentityId = m.actorIdentityId ?? null;
+  const actorDisplayName = m.actorDisplayName ?? null;
+  const actorSourceIp = m.actorSourceIp ?? null;
   if (existing) {
     db.prepare(
       `UPDATE messages
@@ -904,7 +913,10 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
               events_json = ?, attachments_json = ?, comment_attachments_json = ?,
               produced_files_json = ?, feedback_json = ?,
               pre_turn_file_names_json = ?,
-              started_at = ?, ended_at = ?
+              started_at = ?, ended_at = ?,
+              actor_identity_id = COALESCE(?, actor_identity_id),
+              actor_display_name = COALESCE(?, actor_display_name),
+              actor_source_ip = COALESCE(?, actor_source_ip)
         WHERE id = ?`,
     ).run(
       m.role,
@@ -922,6 +934,9 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       m.preTurnFileNames ? JSON.stringify(m.preTurnFileNames) : null,
       m.startedAt ?? null,
       m.endedAt ?? null,
+      actorIdentityId,
+      actorDisplayName,
+      actorSourceIp,
       m.id,
     );
   } else {
@@ -931,18 +946,20 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       )
       .get(conversationId) as DbRow | undefined;
     const position = (max?.m ?? -1) + 1;
-    // 19 values: id, conversation_id, role, content, agent_id, agent_name,
+    // 22 values: id, conversation_id, role, content, agent_id, agent_name,
     // run_id, run_status, last_run_event_id, events_json, attachments_json,
     // comment_attachments_json, produced_files_json, feedback_json,
-    // pre_turn_file_names_json, started_at, ended_at, position, created_at.
+    // pre_turn_file_names_json, started_at, ended_at, position, created_at,
+    // actor_identity_id, actor_display_name, actor_source_ip.
     db.prepare(
       `INSERT INTO messages
          (id, conversation_id, role, content, agent_id, agent_name,
           run_id, run_status, last_run_event_id, events_json,
           attachments_json, comment_attachments_json, produced_files_json,
           feedback_json, pre_turn_file_names_json,
-          started_at, ended_at, position, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          started_at, ended_at, position, created_at,
+          actor_identity_id, actor_display_name, actor_source_ip)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       m.id,
       conversationId,
@@ -963,6 +980,9 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       m.endedAt ?? null,
       position,
       now,
+      actorIdentityId,
+      actorDisplayName,
+      actorSourceIp,
     );
   }
   // Bump conversation activity so the sidebar's recency sort works.
