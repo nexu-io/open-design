@@ -300,6 +300,9 @@ export async function executeGenerateImage(
       model,
       prompt,
       aspect: sanitizeImageAspect(args.aspect_ratio),
+      // No silent placeholder: a model whose provider isn't configured must
+      // surface a real error to the chat, not a stub that looks like success.
+      allowStub: false,
     });
     return { ok: true, url: fileUrl(ctx.projectId, file.name), kind: 'image' };
   } catch (err) {
@@ -330,6 +333,7 @@ export async function executeGenerateVideo(
       prompt,
       aspect: sanitizeVideoAspect(args.aspect_ratio),
       length: sanitizeVideoDuration(args.duration),
+      allowStub: false,
     });
     return { ok: true, url: fileUrl(ctx.projectId, file.name), kind: 'video' };
   } catch (err) {
@@ -366,6 +370,7 @@ export async function executeGenerateAudio(
       ...(typeof args.duration === 'number' && Number.isFinite(args.duration)
         ? { duration: Math.round(args.duration) }
         : {}),
+      allowStub: false,
     });
     return { ok: true, url: fileUrl(ctx.projectId, file.name), kind: 'audio' };
   } catch (err) {

@@ -69,6 +69,9 @@ describe('executeGenerateImage', () => {
         model: SENSEAUDIO_DEFAULT_IMAGE_MODEL,
         prompt: 'a cat',
         aspect: '16:9',
+        // BYOK tools opt out of the stub fallback so an unconfigured model
+        // errors instead of returning a placeholder that looks generated.
+        allowStub: false,
       }),
     );
   });

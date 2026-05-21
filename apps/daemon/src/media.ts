@@ -286,6 +286,12 @@ export async function generateMedia(args: {
   prompt?: string; output?: string; aspect?: string; length?: number; duration?: number; voice?: string;
   audioKind?: AudioKind; language?: string; loop?: boolean; promptInfluence?: number;
   compositionDir?: string; image?: string; onProgress?: ProgressFn;
+  // When false, the stub fallback is disabled even if OD_MEDIA_ALLOW_STUBS is
+  // set: an unintegrated provider or a failed real-provider call throws
+  // instead of writing placeholder bytes. The BYOK chat tools pass false so a
+  // model the user hasn't configured surfaces a real "not configured" error
+  // rather than silently returning a placeholder that looks like success.
+  allowStub?: boolean;
 }) {
   const {
     projectRoot,
@@ -305,6 +311,7 @@ export async function generateMedia(args: {
     promptInfluence,
     compositionDir,
     image,
+    allowStub = true,
   } = args;
 
   if (!projectRoot) throw new Error('projectRoot required');
@@ -577,9 +584,10 @@ export async function generateMedia(args: {
       suggestedExt = result.suggestedExt;
     } else {
       // No real renderer wired up for this (provider, surface). Gate the
-      // stub fallback behind OD_MEDIA_ALLOW_STUBS so release builds don't
-      // silently write placeholder bytes to disk and confuse the user.
-      if (!stubsAllowed()) {
+      // stub fallback behind OD_MEDIA_ALLOW_STUBS (and the per-call allowStub
+      // opt-out) so release builds — and BYOK chats — don't silently write
+      // placeholder bytes to disk and confuse the user.
+      if (!stubsAllowed() || allowStub === false) {
         throw new StubProviderDisabledError(model);
       }
       const result = await renderStub(ctx, safeOut);
@@ -597,9 +605,9 @@ export async function generateMedia(args: {
     // A real provider failed (network blip, 4xx, missing key, …). We
     // still want to fall back to a stub so the agent's chat loop
     // doesn't dead-end — but only when stubs are allowed for this
-    // build. Otherwise re-throw so the CLI exits non-zero with the
-    // real upstream message.
-    if (!stubsAllowed()) {
+    // build AND the caller didn't opt out. Otherwise re-throw so the
+    // CLI / BYOK chat surfaces the real upstream message.
+    if (!stubsAllowed() || allowStub === false) {
       throw err;
     }
     const stub = await renderStub(ctx, safeOut);
