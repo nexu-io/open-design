@@ -2,7 +2,7 @@ import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync }
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   createCommandInvocation,
@@ -328,6 +328,34 @@ describe("createPackageManagerInvocation", () => {
       "/c",
       '"pnpm --filter @open-design/desktop build"',
     ]);
+  });
+});
+
+describe("isProcessAlive", () => {
+  const originalPlatform = process.platform;
+  function setPlatform(value: NodeJS.Platform): void {
+    Object.defineProperty(process, "platform", { configurable: true, value });
+  }
+  afterEach(() => {
+    Object.defineProperty(process, "platform", { configurable: true, value: originalPlatform });
+    vi.doUnmock("node:fs");
+    vi.resetModules();
+  });
+
+  it("treats Linux zombie processes as stopped even when kill(0) would succeed", async () => {
+    setPlatform("linux");
+    vi.resetModules();
+    vi.doMock("node:fs", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("node:fs")>();
+      return {
+        ...actual,
+        readFileSync: vi.fn(() => "1234 (AppRun) Z 1 2 3 4"),
+      };
+    });
+
+    const { isProcessAlive } = await import("../src/index.js");
+
+    expect(isProcessAlive(1234)).toBe(false);
   });
 });
 

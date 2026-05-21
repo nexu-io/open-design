@@ -1,5 +1,5 @@
 import { execFile, spawn, type ChildProcess, type StdioOptions } from "node:child_process";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { extname, isAbsolute, join } from "node:path";
@@ -260,12 +260,25 @@ export async function spawnLoggedProcess(request: SpawnProcessRequest): Promise<
 
 export function isProcessAlive(pid: number | null | undefined): boolean {
   if (typeof pid !== "number") return false;
+  if (isLinuxZombieProcess(pid)) return false;
   try {
     process.kill(pid, 0);
-    return true;
+    return !isLinuxZombieProcess(pid);
   } catch (error) {
     if (errorCode(error) === "ESRCH") return false;
     return true;
+  }
+}
+
+function isLinuxZombieProcess(pid: number): boolean {
+  if (process.platform !== "linux") return false;
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+    const commandEnd = stat.lastIndexOf(")");
+    if (commandEnd < 0) return false;
+    return stat.slice(commandEnd + 1).trimStart().startsWith("Z");
+  } catch {
+    return false;
   }
 }
 
