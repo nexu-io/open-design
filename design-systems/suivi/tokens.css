@@ -75,12 +75,16 @@
   --text-lg: 18px;
   --text-xl: 22px;
   --text-2xl: 32px;
+  --text-3xl: 40px;
+  --text-4xl: 56px;
 
   --weight-regular: 400;
   --weight-medium: 500;
 
   --leading-body: 1.0;
+  --leading-tight: 1.1;
   --leading-relaxed: 1.1;
+  --tracking-display: -0.02em;
   --tracking-tight: -1px;
   --tracking-h4: -0.22px;
   --tracking-normal: 0;
