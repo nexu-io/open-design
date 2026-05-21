@@ -248,7 +248,7 @@ export function SketchEditor({
         <button
           className="primary"          
           onClick={handleSave}
-          disabled={saving || showSaved || !canSave}
+          disabled={saving || !canSave}
         >
           {saving ? t('sketch.saving') : showSaved ? <Icon name="check" size={14} /> : t('common.save')}
         </button>
