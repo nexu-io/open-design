@@ -20,6 +20,11 @@ import {
   MANUAL_EDIT_DISCOVERY_SELECTOR,
   MANUAL_EDIT_SOURCE_PATH_ATTR,
 } from '../edit-mode/bridge';
+import {
+  SELECTION_BRIDGE_SCRIPT,
+  SELECTION_BRIDGE_STYLE,
+  ROUTE_PERSIST_SCRIPT,
+} from '@open-design/contracts/preview-bridges';
 
 export type SrcdocOptions = {
   deck?: boolean;
@@ -77,7 +82,15 @@ export function buildSrcdoc(
   // it to a per-call option would force iframe srcdoc regeneration (and a
   // visible flash) every time the host toggle flips.
   const withTweaks = injectTweaksBridge(withEdit);
-  return injectSrcdocTransportActivationBridge(injectSnapshotBridge(withTweaks));
+  // Issue #2143 — preserve in-iframe SPA route across mode toggles.
+  // Mode flips (comment / draw / inspect / edit / tweaks) re-render the
+  // srcDoc string and remount the iframe, wiping React-Router state. The
+  // bridge stamps the artifact's history.{push,replace}State + popstate +
+  // hashchange events into sessionStorage and restores the path before any
+  // user script runs on the next mount, so the artifact comes back where
+  // the user left it instead of jumping to the entry document.
+  const withRoutePersist = injectRoutePersistBridge(withTweaks);
+  return injectSrcdocTransportActivationBridge(injectSnapshotBridge(withRoutePersist));
 }
 
 /**
@@ -537,6 +550,18 @@ function injectManualEditBridge(doc: string): string {
   return injectBeforeBodyEnd(withStyle, buildManualEditBridge(true));
 }
 
+// Run before user scripts so React-Router reads the restored path on its
+// initial render instead of the entry path. Idempotent across remounts via
+// data-od-route-persist marker. Storage key is per-origin (sessionStorage
+// is keyed to the iframe's "null" srcdoc origin which is stable across
+// remounts within the same parent doc); we partition by document.title +
+// pathname-prefix when present so two artifacts in the same session don't
+// collide. Failure modes are silent — sandboxed iframes without storage
+// fall back to memory-only which still survives same-tab remounts.
+function injectRoutePersistBridge(doc: string): string {
+  return injectBeforeHeadEnd(doc, ROUTE_PERSIST_SCRIPT);
+}
+
 function injectBeforeHeadEnd(doc: string, payload: string): string {
   if (typeof DOMParser !== 'undefined') {
     try {
@@ -714,616 +739,24 @@ function injectSelectionBridge(
   doc: string,
   options: { initialCommentMode?: boolean; initialInspectMode?: boolean } = {},
 ): string {
-  const initialComment = options.initialCommentMode ? 'true' : 'false';
-  const initialInspect = options.initialInspectMode ? 'true' : 'false';
-  const script = `<script data-od-selection-bridge>(function(){
-  var commentEnabled = ${initialComment};
-  var inspectEnabled = ${initialInspect};
-  // Comment mode has two sub-tools (kept on the host side as boardTool):
-  //   'picker' — click-to-select an element for annotation.
-  //   'pod'    — pointer-drag a freeform stroke that the host turns into a
-  //              pod selection covering whatever the stroke encloses.
-  // Inspect mode always uses 'picker'-style click selection regardless of
-  // this value.
-  var mode = 'picker';
-  var hoveredId = null;
-  var drawing = false;
-  var stroke = [];
-  var postTargetsTimer = null;
-  // overrides[elementId] = { selector: '[data-od-id="x"]', props: { color: '#fff', ... } }
-  var overrides = Object.create(null);
-  var styleEl = null;
-  // Allow-list of CSS properties the host may override. A malicious parent
-  // could otherwise smuggle arbitrary CSS (or, with </style>, raw HTML)
-  // through od:inspect-set. Keep this in sync with the InspectPanel UI.
-  var ALLOWED_PROPS = {
-    'color': true,
-    'background-color': true,
-    'font-size': true,
-    'font-weight': true,
-    'font-family': true,
-    'line-height': true,
-    'text-align': true,
-    'padding': true,
-    'padding-top': true,
-    'padding-right': true,
-    'padding-bottom': true,
-    'padding-left': true,
-    'border-radius': true
-  };
-  // Reject any value that could break out of a 'prop: value' declaration:
-  // semicolons (extra declarations), braces (close the rule), angle
-  // brackets (close the <style> tag), and newlines (defense in depth).
-  var UNSAFE_VALUE = /[;{}<>\\n\\r]/;
-  function active(){ return commentEnabled || inspectEnabled; }
-  function esc(value){ try { return window.CSS && CSS.escape ? CSS.escape(value) : String(value).replace(/"/g, '\\\\"'); } catch (_) { return String(value); } }
-  // Recompute the selector from elementId rather than trusting the one in
-  // the inbound message — a forged selector like
-  // '} </style><script>...' would otherwise be concatenated into the
-  // override <style> sheet verbatim. The hint string is only inspected to
-  // decide which attribute kind (data-od-id vs data-screen-label) was the
-  // user's pick at click time, so we tune the same node the host
-  // serializer keys off; the hint itself is never written into CSS.
-  function safeSelectorFor(elementId, hint){
-    var id = String(elementId);
-    var kind = null;
-    if (typeof hint === 'string') {
-      if (hint.indexOf('[data-od-id=') === 0) kind = 'data-od-id';
-      else if (hint.indexOf('[data-screen-label=') === 0) kind = 'data-screen-label';
-    }
-    if (kind === 'data-screen-label' && document.querySelector('[data-screen-label="' + esc(id) + '"]')) {
-      return '[data-screen-label="' + esc(id) + '"]';
-    }
-    if (kind === 'data-od-id' && document.querySelector('[data-od-id="' + esc(id) + '"]')) {
-      return '[data-od-id="' + esc(id) + '"]';
-    }
-    if (document.querySelector('[data-od-id="' + esc(id) + '"]')) {
-      return '[data-od-id="' + esc(id) + '"]';
-    }
-    if (document.querySelector('[data-screen-label="' + esc(id) + '"]')) {
-      return '[data-screen-label="' + esc(id) + '"]';
-    }
-    return null;
-  }
-  function ensureStyleEl(){
-    if (styleEl && styleEl.isConnected) return styleEl;
-    styleEl = document.querySelector('style[data-od-inspect-overrides]');
-    if (!styleEl) {
-      styleEl = document.createElement('style');
-      styleEl.setAttribute('data-od-inspect-overrides', '');
-      (document.head || document.documentElement).appendChild(styleEl);
-    }
-    return styleEl;
-  }
-  // Hydrate the in-memory override map from any persisted
-  // <style data-od-inspect-overrides> block already in the document.
-  // Without this, the first od:inspect-set rebuilds the sheet from an
-  // empty map and silently drops every previously saved rule for other
-  // elements — a subsequent Save-to-source would then erase them from
-  // the artifact too.
-  function hydrateOverridesFromDom(){
-    var existing = document.querySelector('style[data-od-inspect-overrides]');
-    if (!existing) return;
-    var text = existing.textContent || '';
-    var ruleRe = /(\\[data-(?:od-id|screen-label)="[^"]*"\\])\\s*\\{\\s*([^}]*)\\}/g;
-    var match;
-    while ((match = ruleRe.exec(text)) !== null) {
-      var selector = match[1];
-      var declBody = match[2];
-      var idMatch = selector.match(/="([^"]*)"/);
-      if (!idMatch) continue;
-      var elementId = idMatch[1];
-      var props = Object.create(null);
-      var decls = declBody.split(';');
-      for (var d = 0; d < decls.length; d++) {
-        var raw = decls[d];
-        if (!raw) continue;
-        var colon = raw.indexOf(':');
-        if (colon <= 0) continue;
-        var name = raw.slice(0, colon).trim().toLowerCase();
-        if (!Object.prototype.hasOwnProperty.call(ALLOWED_PROPS, name)) continue;
-        var value = raw.slice(colon + 1).replace(/!important/i, '').trim();
-        if (!value || UNSAFE_VALUE.test(value)) continue;
-        props[name] = value;
-      }
-      if (Object.keys(props).length) {
-        overrides[elementId] = { selector: selector, props: props };
-      }
-    }
-    styleEl = existing;
-  }
-  function rebuildStyleSheet(){
-    var el = ensureStyleEl();
-    var lines = [];
-    Object.keys(overrides).forEach(function(id){
-      var entry = overrides[id];
-      if (!entry) return;
-      var props = entry.props || {};
-      var keys = Object.keys(props);
-      if (!keys.length) return;
-      var body = keys.map(function(k){ return k + ': ' + props[k] + ' !important'; }).join('; ');
-      lines.push(entry.selector + ' { ' + body + ' }');
-    });
-    el.textContent = lines.join('\\n');
-  }
-  function postOverrides(){
-    var clean = {};
-    Object.keys(overrides).forEach(function(id){
-      var entry = overrides[id];
-      if (entry && entry.props && Object.keys(entry.props).length) {
-        clean[id] = { selector: entry.selector, props: Object.assign({}, entry.props) };
-      }
-    });
-    // Intentionally do NOT include a css string here. Artifact code
-    // running inside this iframe shares window.parent and could forge
-    // od:inspect-overrides with a hostile css (e.g. </style><script>...).
-    // The host re-derives CSS from the structured overrides map under
-    // its own allow-list, so any stray css field on the wire would only
-    // be a false-trust trap.
-    try { window.parent.postMessage({ type: 'od:inspect-overrides', overrides: clean }, '*'); } catch (_) {}
-  }
-  function styleSnapshot(el){
-    try {
-      var cs = window.getComputedStyle(el);
-      return {
-        color: cs.color,
-        backgroundColor: cs.backgroundColor,
-        fontSize: cs.fontSize,
-        fontWeight: cs.fontWeight,
-        lineHeight: cs.lineHeight,
-        paddingTop: cs.paddingTop,
-        paddingRight: cs.paddingRight,
-        paddingBottom: cs.paddingBottom,
-        paddingLeft: cs.paddingLeft,
-        borderRadius: cs.borderTopLeftRadius,
-        textAlign: cs.textAlign,
-        fontFamily: cs.fontFamily
-      };
-    } catch (_) { return null; }
-  }
-  function annotatedSelectorFor(el){
-    var id = el.getAttribute('data-od-id') || el.getAttribute('data-screen-label');
-    if (!id) return null;
-    return el.hasAttribute('data-od-id') ? '[data-od-id="' + esc(id) + '"]' : '[data-screen-label="' + esc(id) + '"]';
-  }
-  function domSelectorFor(el){
-    if (!el || !el.tagName || el === document.documentElement || el === document.body) return null;
-    var parts = [];
-    var node = el;
-    while (node && node !== document.documentElement && node !== document.body) {
-      var tag = node.tagName ? node.tagName.toLowerCase() : '';
-      if (!tag || /^(script|style|template|meta|link|title|noscript)$/.test(tag)) return null;
-      var parent = node.parentElement;
-      if (!parent) return null;
-      var index = 1;
-      var sibling = node.previousElementSibling;
-      while (sibling) {
-        if (sibling.tagName && sibling.tagName.toLowerCase() === tag) index++;
-        sibling = sibling.previousElementSibling;
-      }
-      parts.unshift(tag + ':nth-of-type(' + index + ')');
-      node = parent;
-    }
-    if (!parts.length) return null;
-    return 'body > ' + parts.join(' > ');
-  }
-  function visibleTarget(el){
-    if (!el || !el.getBoundingClientRect) return false;
-    if (el === document.documentElement || el === document.body) return false;
-    if (/^(script|style|template|meta|link|title|noscript)$/.test(el.tagName ? el.tagName.toLowerCase() : '')) return false;
-    try {
-      var rect = el.getBoundingClientRect();
-      if (rect.width < 1 || rect.height < 1) return false;
-      var cs = window.getComputedStyle(el);
-      if (cs.display === 'none' || cs.visibility === 'hidden' || cs.pointerEvents === 'none') return false;
-    } catch (_) {
-      return false;
-    }
-    return true;
-  }
-function meaningfulDomFallbackTarget(el) {
-  if (!visibleTarget(el)) return false;
-
-  var tag = el.tagName ? el.tagName.toLowerCase() : '';
-
-  if (/^(a|button|input|textarea|select|label|img|video|canvas|h1|h2|h3|h4|h5|h6|p|li|td|th|section|article|main|aside|nav)$/.test(tag)) {
-    return true;
-  }
-
-  if (
-    el.getAttribute &&
-    (
-      el.getAttribute('role') ||
-      el.getAttribute('aria-label') ||
-      el.getAttribute('title')
-    )
-  ) {
-    return true;
-  }
-
-  if (tag === 'svg') {
-    return !!(
-      el.getAttribute &&
-      (
-        el.getAttribute('role') ||
-        el.getAttribute('aria-label') ||
-        el.getAttribute('title')
-      )
-    );
-  }
-
-  var text = (el.textContent || '').replace(/\s+/g, ' ').trim();
-  if (!text) return false;
-
-  var meaningfulChildren = 0;
-  for (var child = el.firstElementChild;child;child = child.nextElementSibling) {
-    if ((child.textContent || '').replace(/\s+/g, ' ').trim()) {
-      meaningfulChildren++;
-      if (meaningfulChildren > 1) return false;
-    }
-  }
-
-  return true;
-}
-  function targetFrom(el, allowDomFallback, clickedEl){
-    var id = el.getAttribute('data-od-id') || el.getAttribute('data-screen-label');
-    var selector = annotatedSelectorFor(el);
-    if (!id && allowDomFallback && meaningfulDomFallbackTarget(el)) {
-      selector = domSelectorFor(el);
-      if (selector) id = 'dom:' + selector;
-    }
-    if (!id || !selector) return null;
-    var rect = el.getBoundingClientRect();
-    var tag = el.tagName ? el.tagName.toLowerCase() : 'element';
-    var cls = typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\\s+/).slice(0,2).join('.') : '';
-    var html = '';
-    try { html = (el.outerHTML || '').replace(/\\s+/g, ' ').match(/^<[^>]+>/)?.[0] || ''; } catch (_) {}
-    var payload = {
-      type: 'od:comment-target',
-      elementId: id,
-      selector: selector,
-      label: tag + cls,
-      text: (el.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 160),
-      position: { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) },
-      htmlHint: html.slice(0, 180),
-      style: styleSnapshot(el)
-    };
-    if (clickedEl && clickedEl !== el) {
-      var clickedTag = clickedEl.tagName ? clickedEl.tagName.toLowerCase() : 'element';
-      var clickedCls = typeof clickedEl.className === 'string' && clickedEl.className.trim() ? '.' + clickedEl.className.trim().split(/\\s+/).slice(0,2).join('.') : '';
-      payload.clickedDescendant = {
-        label: clickedTag + clickedCls,
-        text: (clickedEl.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 80)
-      };
-    }
-    return payload;
-  }
-  function allTargets(){
-    var annotatedNodes = document.querySelectorAll('[data-od-id], [data-screen-label]');
-    var includeDomFallback = canUseDomFallback();
-    var nodes = includeDomFallback
-      ? document.querySelectorAll('body *')
-      : annotatedNodes;
-    var items = [];
-    var seen = Object.create(null);
-    for (var i = 0; i < nodes.length; i++) {
-      var item = targetFrom(nodes[i], includeDomFallback);
-      if (item && !seen[item.elementId]) {
-        seen[item.elementId] = true;
-        items.push(item);
-      }
-    }
-    return items;
-  }
-  var postTargetsPending = false;
-  var postPreviewScrollPending = false;
-  function previewScrollElement(){
-    return document.querySelector('.design-canvas') || document.scrollingElement || document.documentElement;
-  }
-  function postPreviewScroll(){
-    var el = previewScrollElement();
-    if (!el) return;
-    var frame = document.scrollingElement || document.documentElement;
-    window.parent.postMessage({
-      type: 'od:preview-scroll',
-      canvasLeft: Math.round(el.scrollLeft || 0),
-      canvasTop: Math.round(el.scrollTop || 0),
-      frameLeft: Math.round(frame.scrollLeft || 0),
-      frameTop: Math.round(frame.scrollTop || 0)
-    }, '*');
-  }
-  function schedulePostPreviewScroll(){
-    if (postPreviewScrollPending) return;
-    postPreviewScrollPending = true;
-    window.requestAnimationFrame(function(){
-      postPreviewScrollPending = false;
-      postPreviewScroll();
-    });
-  }
-  function requestPreviewScrollRestore(){
-    window.parent.postMessage({ type: 'od:preview-scroll-request' }, '*');
-  }
-  function postTargets(){
-    if (!active()) return;
-    window.parent.postMessage({ type: 'od:comment-targets', targets: allTargets() }, '*');
-  }
-  function schedulePostTargets(){
-    if (!active() || postTargetsPending) return;
-    postTargetsPending = true;
-    if (postTargetsTimer) window.clearTimeout(postTargetsTimer);
-    postTargetsTimer = window.setTimeout(function(){
-      window.requestAnimationFrame(function(){
-        postTargetsPending = false;
-        postTargetsTimer = null;
-        postTargets();
-      });
-    }, 120);
-  }
-  function relativePoint(ev){
-    return { x: Math.round(ev.clientX), y: Math.round(ev.clientY) };
-  }
-  function postStroke(type){
-    window.parent.postMessage({ type: type, points: stroke.slice() }, '*');
-  }
-  function canUseDomFallback(){
-    return commentEnabled && !inspectEnabled && document.querySelectorAll('[data-od-id], [data-screen-label]').length === 0;
-  }
-  function closestTarget(event){
-    var clicked = event.target;
-    var el = clicked;
-    var fallback = null;
-    var allowDomFallback = mode === 'picker' && canUseDomFallback();
-    while (el && el !== document.documentElement) {
-      if (el.getAttribute && (el.hasAttribute('data-od-id') || el.hasAttribute('data-screen-label'))) {
-        return { target: el, clicked: clicked };
-      }
-      if (!fallback && allowDomFallback && meaningfulDomFallbackTarget(el)) fallback = el;
-      el = el.parentElement;
-    }
-    return fallback ? { target: fallback, clicked: clicked } : null;
-  }
-  function applyOverride(elementId, selector, prop, value){
-    if (!elementId || !prop) return;
-    if (!Object.prototype.hasOwnProperty.call(ALLOWED_PROPS, prop)) return;
-    var safeSelector = safeSelectorFor(elementId, selector);
-    if (!safeSelector) return;
-    var v = (value == null) ? '' : String(value).trim();
-    if (v && UNSAFE_VALUE.test(v)) return;
-    var entry = overrides[elementId];
-    if (!entry) {
-      entry = { selector: safeSelector, props: Object.create(null) };
-      overrides[elementId] = entry;
-    } else {
-      entry.selector = safeSelector;
-    }
-    if (!v) delete entry.props[prop];
-    else entry.props[prop] = v;
-    if (Object.keys(entry.props).length === 0) delete overrides[elementId];
-    rebuildStyleSheet();
-    postOverrides();
-  }
-  function resetOverrides(elementId){
-    if (elementId) delete overrides[elementId];
-    else overrides = Object.create(null);
-    rebuildStyleSheet();
-    postOverrides();
-  }
-  window.addEventListener('message', function(ev){
-    var data = ev && ev.data;
-    if (!data || !data.type) return;
-    if (data.type === 'od:comment-mode') {
-      commentEnabled = !!data.enabled;
-      mode = data.mode === 'pod' ? 'pod' : 'picker';
-      document.documentElement.toggleAttribute('data-od-comment-mode', commentEnabled);
-      document.documentElement.setAttribute('data-od-comment-mode-kind', mode);
-      if (active()) setTimeout(postTargets, 0);
-      else hoveredId = null;
-      if (!commentEnabled || mode !== 'pod') {
-        drawing = false;
-        stroke = [];
-        try { window.parent.postMessage({ type: 'od:pod-clear' }, '*'); } catch (_) {}
-      }
-      return;
-    }
-    if (data.type === 'od:preview-scroll-restore') {
-      var frame = document.scrollingElement || document.documentElement;
-      var el = previewScrollElement();
-      if (frame) frame.scrollTo(Number(data.frameLeft || 0), Number(data.frameTop || 0));
-      if (el) el.scrollTo(Number(data.canvasLeft || 0), Number(data.canvasTop || 0));
-      setTimeout(postPreviewScroll, 0);
-      return;
-    }
-    if (data.type === 'od:inspect-mode') {
-      inspectEnabled = !!data.enabled;
-      document.documentElement.toggleAttribute('data-od-inspect-mode', inspectEnabled);
-      if (active()) setTimeout(postTargets, 0);
-      else hoveredId = null;
-      return;
-    }
-    if (data.type === 'od:inspect-set') {
-      applyOverride(data.elementId, data.selector, data.prop, data.value);
-      return;
-    }
-    if (data.type === 'od:inspect-reset') {
-      resetOverrides(data.elementId);
-      return;
-    }
-    if (data.type === 'od:inspect-extract') {
-      postOverrides();
-      return;
-    }
-    if (data.type === 'od:inspect-replay') {
-      // Replace the in-memory map with the host's authoritative set so
-      // unsaved edits survive a srcdoc rebuild (toggling inspect off/on,
-      // switching to comment, any other reload reloads the iframe from
-      // previewSource without the unsaved style block). Re-validate every
-      // entry: a parent able to postMessage to this bridge is otherwise
-      // trusted, but applying its payload through the same allow-list /
-      // value sanitizer keeps the override sheet under the bridge's own
-      // contract instead of whatever the parent sent.
-      var raw = (data && typeof data.overrides === 'object' && data.overrides) ? data.overrides : {};
-      overrides = Object.create(null);
-      var ids = Object.keys(raw);
-      for (var i = 0; i < ids.length; i++) {
-        var id = ids[i];
-        var entry = raw[id];
-        if (!entry || typeof entry.props !== 'object' || !entry.props) continue;
-        var safeSelector = safeSelectorFor(id, entry.selector);
-        if (!safeSelector) continue;
-        var clean = Object.create(null);
-        var pkeys = Object.keys(entry.props);
-        for (var p = 0; p < pkeys.length; p++) {
-          var name = String(pkeys[p]).toLowerCase();
-          if (!Object.prototype.hasOwnProperty.call(ALLOWED_PROPS, name)) continue;
-          var rawValue = entry.props[pkeys[p]];
-          if (rawValue == null) continue;
-          var v = String(rawValue).trim();
-          if (!v || UNSAFE_VALUE.test(v)) continue;
-          clean[name] = v;
+  // Issue #2143 — selection bridge is now shared with the daemon URL-load
+  // path so comment / inspect modes don't need a transport flip. The shared
+  // payload boots dormant; we seed initial modes via a tiny inline script
+  // that posts to self after the bridge installs its message listener.
+  const initScript = (options.initialCommentMode || options.initialInspectMode)
+    ? `<script data-od-selection-bridge-init>(function(){
+        if (${options.initialCommentMode ? 'true' : 'false'}) {
+          window.postMessage({ type: 'od:comment-mode', enabled: true, mode: 'picker' }, '*');
         }
-        if (Object.keys(clean).length) overrides[id] = { selector: safeSelector, props: clean };
-      }
-      rebuildStyleSheet();
-      postOverrides();
-      return;
-    }
-  });
-  function pickerActive(){ return inspectEnabled || (commentEnabled && mode === 'picker'); }
-  document.addEventListener('mouseover', function(ev){
-    if (!pickerActive()) return;
-    var result = closestTarget(ev);
-    if (!result) return;
-    var payload = targetFrom(result.target, commentEnabled && mode === 'picker' && !inspectEnabled);
-    if (!payload || payload.elementId === hoveredId) return;
-    hoveredId = payload.elementId;
-    window.parent.postMessage(Object.assign({}, payload, { type: 'od:comment-hover' }), '*');
-  }, true);
-  document.addEventListener('mouseout', function(ev){
-    if (!pickerActive()) return;
-    var result = closestTarget(ev);
-    if (!result) return;
-    var next = ev.relatedTarget;
-    while (next && next !== document.documentElement) {
-      if (next === result.target) return;
-      next = next.parentElement;
-    }
-    hoveredId = null;
-    window.parent.postMessage({ type: 'od:comment-leave' }, '*');
-  }, true);
-  document.addEventListener('click', function(ev){
-    if (!pickerActive()) return;
-    var result = closestTarget(ev);
-    if (result) {
-      ev.preventDefault();
-      ev.stopPropagation();
-      var payload = targetFrom(result.target, commentEnabled && mode === 'picker' && !inspectEnabled, result.clicked);
-      if (payload) window.parent.postMessage(payload, '*');
-      return;
-    }
-    // Free-pin fallback (comment mode only). Lets users drop a comment
-    // at a click location even when the artifact has no data-od-id
-    // annotations. Skipped for pod mode (drawing) and inspect mode
-    // (needs a real selector for live overrides).
-    if (!canUseDomFallback() || mode === 'pod') return;
-    // Skip clicks on interactive elements so links / buttons / inputs
-    // keep their native behavior; pin only on inert surfaces.
-    var t = ev.target;
-    var walk = t && t.nodeType === 1 ? t : null;
-    while (walk && walk !== document.documentElement) {
-      var tag = walk.tagName;
-      if (tag === 'A' || tag === 'BUTTON' || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'LABEL') return;
-      if (walk.isContentEditable) return;
-      walk = walk.parentElement;
-    }
-    ev.preventDefault();
-    ev.stopPropagation();
-    // Store viewport coordinates to match regular getBoundingClientRect()
-    // element targets; the host overlay renders this position directly.
-    var pinX = Math.round(ev.clientX);
-    var pinY = Math.round(ev.clientY);
-    var pinId = 'pin-' + Date.now().toString(36) + '-' + Math.floor(Math.random() * 1e6).toString(36);
-    window.parent.postMessage({
-      type: 'od:comment-target',
-      elementId: pinId,
-      // Synthetic selector / label so daemon upsert validation (which
-      // requires both to be non-empty) accepts the saved free-pin.
-      selector: '[data-od-pin="' + pinId + '"]',
-      label: 'pin',
-      text: '',
-      position: { x: pinX - 12, y: pinY - 12, width: 24, height: 24 },
-      htmlHint: '',
-      style: null,
-      freePin: true
-    }, '*');
-  }, true);
-  // Pod drawing — only active in comment mode with the 'pod' tool.
-  document.addEventListener('pointerdown', function(ev){
-    if (!commentEnabled || mode !== 'pod' || ev.button !== 0) return;
-    drawing = true;
-    stroke = [relativePoint(ev)];
-    ev.preventDefault();
-    ev.stopPropagation();
-    postStroke('od:pod-stroke');
-  }, true);
-  document.addEventListener('pointermove', function(ev){
-    if (!drawing || mode !== 'pod') return;
-    var point = relativePoint(ev);
-    var last = stroke[stroke.length - 1];
-    if (last && Math.hypot(last.x - point.x, last.y - point.y) < 4) return;
-    stroke.push(point);
-    ev.preventDefault();
-    ev.stopPropagation();
-    postStroke('od:pod-stroke');
-  }, true);
-  function finishStroke(ev){
-    if (!drawing || mode !== 'pod') return;
-    drawing = false;
-    if (ev) {
-      ev.preventDefault();
-      ev.stopPropagation();
-    }
-    postStroke('od:pod-select');
-  }
-  document.addEventListener('pointerup', finishStroke, true);
-  document.addEventListener('pointercancel', finishStroke, true);
-  window.addEventListener('resize', schedulePostTargets);
-  document.addEventListener('scroll', function(){
-    schedulePostTargets();
-    schedulePostPreviewScroll();
-  }, true);
-  var mo = new MutationObserver(schedulePostTargets);
-  mo.observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
-  // Reflect the host-requested initial modes on the documentElement so
-  // the cursor/hover styles match what the bridge picks up on click.
-  if (commentEnabled) document.documentElement.toggleAttribute('data-od-comment-mode', true);
-  if (inspectEnabled) document.documentElement.toggleAttribute('data-od-inspect-mode', true);
-  document.documentElement.setAttribute('data-od-comment-mode-kind', mode);
-  hydrateOverridesFromDom();
-  // Acknowledge the hydrated overrides to the host as a preview signal so
-  // diagnostic listeners (and tests) can observe that the bridge is in sync
-  // with the persisted style sheet. The host no longer treats this message
-  // as save input — it parses the artifact source itself — but emitting it
-  // keeps the iframe → host channel symmetric across set/reset/extract.
-  if (Object.keys(overrides).length) setTimeout(postOverrides, 0);
-  setTimeout(requestPreviewScrollRestore, 0);
-  setTimeout(requestPreviewScrollRestore, 80);
-  setTimeout(requestPreviewScrollRestore, 240);
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', postTargets);
-  else setTimeout(postTargets, 0);
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', postPreviewScroll);
-  else setTimeout(postPreviewScroll, 0);
-})();</script>`;
-  const style = `<style data-od-selection-bridge-style>
-html[data-od-comment-mode] body * { cursor: crosshair !important; }
-html[data-od-inspect-mode] body * { cursor: crosshair !important; }
-html[data-od-comment-mode][data-od-comment-mode-kind="pod"] body * { cursor: cell !important; }
-/* Nested iframes (e.g. shared device frames) consume clicks in their own browsing context.
-   While picker modes are on, disable pointer events on outer-document iframes so the
-   hit target resolves to an annotated ancestor (card, shell) in this document. */
-html[data-od-comment-mode] body iframe,
-html[data-od-inspect-mode] body iframe { pointer-events: none !important; }
-</style>`;
-  return injectBeforeBodyEnd(injectBeforeHeadEnd(doc, style), script);
+        if (${options.initialInspectMode ? 'true' : 'false'}) {
+          window.postMessage({ type: 'od:inspect-mode', enabled: true }, '*');
+        }
+      })();</script>`
+    : '';
+  return injectBeforeBodyEnd(
+    injectBeforeHeadEnd(doc, SELECTION_BRIDGE_STYLE),
+    SELECTION_BRIDGE_SCRIPT + initScript,
+  );
 }
 
 // The deck bridge supports three deck conventions found across our skills

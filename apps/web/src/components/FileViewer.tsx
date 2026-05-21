@@ -6530,23 +6530,28 @@ function HtmlViewer({
                 }`}
                 data-testid="inspect-empty-hint-container"
               >
-                {liveCommentTargets.size === 0 ? (
+                {liveCommentTargets.size === 0 && inspectMode ? (
                   <div
                     className="inspect-empty-hint"
                     data-testid="inspect-empty-hint-no-targets"
                   >
                     This artifact has no <code>data-od-id</code>{' '}
                     annotations yet — ask the agent to add them to the
-                    sections you want to{' '}
-                    {inspectMode ? 'inspect' : 'comment on'}.
+                    sections you want to inspect.
+                  </div>
+                ) : inspectMode ? (
+                  <div
+                    className="inspect-empty-hint"
+                    data-testid="inspect-empty-hint"
+                  >
+                    Click any element with <code>data-od-id</code> to tune its style.
                   </div>
                 ) : (
                   <div
                     className="inspect-empty-hint"
                     data-testid="inspect-empty-hint"
                   >
-                    Click any element with <code>data-od-id</code> to{' '}
-                    {inspectMode ? 'tune its style' : 'leave a comment'}.
+                    Hover any element to highlight it, then click to leave a comment.
                   </div>
                 )}
                 <button

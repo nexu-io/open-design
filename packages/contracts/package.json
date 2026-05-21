@@ -45,6 +45,10 @@
     "./analytics": {
       "types": "./dist/analytics/index.d.ts",
       "default": "./dist/analytics/index.mjs"
+    },
+    "./preview-bridges": {
+      "types": "./dist/preview-bridges/index.d.ts",
+      "default": "./dist/preview-bridges/index.mjs"
     }
   },
   "scripts": {

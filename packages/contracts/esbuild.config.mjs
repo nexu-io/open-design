@@ -13,6 +13,7 @@ await build({
     "./src/api/providerModels.ts",
     "./src/api/research.ts",
     "./src/analytics/index.ts",
+    "./src/preview-bridges/index.ts",
   ],
   format: "esm",
   outbase: "./src",
