@@ -221,6 +221,8 @@ const SUBCOMMAND_MAP = {
   skills: runSkills,
   'design-systems': runDesignSystems,
   craft: runCraft,
+  'page-pattern': runPagePatterns,
+  'page-patterns': runPagePatterns,
   diagnostics: runDiagnostics,
   status: runStatus,
   version: runVersion,
@@ -4523,7 +4525,13 @@ async function runLibraryList(name, args) {
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
       if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
-      const rows = data?.[name === 'design-systems' ? 'designSystems' : name] ?? [];
+      const listKey =
+        name === 'design-systems'
+          ? 'designSystems'
+          : name === 'page-patterns'
+            ? 'patterns'
+            : name;
+      const rows = data?.[listKey] ?? [];
       for (const row of rows) {
         const label = row.title ?? row.name ?? row.id ?? row.label;
         console.log(`${row.id}\t${label}`);
@@ -4551,6 +4559,7 @@ async function runLibraryList(name, args) {
 async function runSkills(args)        { return runLibraryList('skills', args); }
 async function runDesignSystems(args) { return runLibraryList('design-systems', args); }
 async function runCraft(args)         { return runLibraryList('craft', args); }
+async function runPagePatterns(args)  { return runLibraryList('page-patterns', args); }
 
 async function runStatus(args) {
   // Alias of `od daemon status`.
