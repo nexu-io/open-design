@@ -10058,7 +10058,7 @@ export async function startServer({
                 req.params.id,
                 targetPath,
                 buffer,
-                undefined,
+                { overwrite: false },
                 project?.metadata,
               );
               await fs.promises.unlink(f.path).catch(() => {});

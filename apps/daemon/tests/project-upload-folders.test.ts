@@ -57,6 +57,38 @@ describe('project folder upload route', () => {
     expect(await raw.text()).toBe('component');
   });
 
+  it('does not overwrite an existing project file when the same folder path is uploaded again', async () => {
+    const projectId = await createProject();
+    const firstForm = new FormData();
+    firstForm.append('paths', 'demo/src/App.tsx');
+    firstForm.append('files', new File(['first'], 'App.tsx', { type: 'text/plain' }));
+
+    const firstResp = await fetch(`${baseUrl}/api/projects/${projectId}/upload`, {
+      method: 'POST',
+      body: firstForm,
+    });
+    expect(firstResp.status).toBe(200);
+
+    const secondForm = new FormData();
+    secondForm.append('paths', 'demo/src/App.tsx');
+    secondForm.append('files', new File(['second'], 'App.tsx', { type: 'text/plain' }));
+
+    const secondResp = await fetch(`${baseUrl}/api/projects/${projectId}/upload`, {
+      method: 'POST',
+      body: secondForm,
+    });
+
+    expect(secondResp.status).toBe(200);
+    const body = (await secondResp.json()) as {
+      files: Array<{ name: string; path?: string; originalName?: string }>;
+    };
+    expect(body.files).toEqual([]);
+
+    const raw = await fetch(`${baseUrl}/api/projects/${projectId}/raw/demo/src/App.tsx`);
+    expect(raw.status).toBe(200);
+    expect(await raw.text()).toBe('first');
+  });
+
   it('rejects sensitive folder paths before exposing them as project files', async () => {
     const projectId = await createProject();
     const form = new FormData();
