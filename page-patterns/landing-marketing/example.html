@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Marketing Landing — Pattern Preview</title>
+    <style>
+      :root {
+        --bg: #fafaf9;
+        --card: #ffffff;
+        --border: #e5e7eb;
+        --text: #18181b;
+        --muted: #71717a;
+        --accent: #18181b;
+        --accent-fg: #ffffff;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0; padding: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+        background: var(--bg); color: var(--text);
+        line-height: 1.5;
+      }
+      a { color: inherit; text-decoration: none; }
+      .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+      nav.top {
+        position: sticky; top: 0; z-index: 10;
+        background: rgba(250, 250, 249, 0.85);
+        backdrop-filter: blur(8px);
+        border-bottom: 1px solid var(--border);
+      }
+      nav.top .row {
+        display: flex; align-items: center;
+        justify-content: space-between;
+        padding: 14px 0;
+      }
+      .brand { font-weight: 700; font-size: 16px; }
+      nav.top ul {
+        list-style: none; margin: 0; padding: 0;
+        display: flex; gap: 24px; align-items: center;
+        font-size: 14px; color: var(--muted);
+      }
+      .btn {
+        display: inline-block; padding: 9px 14px;
+        border-radius: 8px; font-size: 14px; font-weight: 600;
+        border: 1px solid var(--border); background: #fff; color: inherit;
+        cursor: pointer;
+      }
+      .btn.primary {
+        background: var(--accent); color: var(--accent-fg);
+        border-color: var(--accent);
+      }
+      .hero { padding: 88px 0 64px; text-align: center; }
+      .eyebrow {
+        display: inline-block;
+        font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
+        color: var(--muted);
+        padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px;
+        background: #fff;
+      }
+      h1 {
+        font-size: 52px; line-height: 1.1; letter-spacing: -0.02em;
+        margin: 20px 0 16px;
+      }
+      .hero p.lead {
+        max-width: 640px; margin: 0 auto 28px;
+        font-size: 18px; color: var(--muted);
+      }
+      .hero .cta-row {
+        display: flex; gap: 12px; justify-content: center; margin-bottom: 48px;
+      }
+      .hero-visual {
+        max-width: 880px; margin: 0 auto;
+        height: 320px;
+        border: 1px solid var(--border); border-radius: 14px;
+        background: linear-gradient(135deg, #f4f4f5 0%, #fff 100%);
+      }
+      section.features { padding: 72px 0; }
+      .features-grid {
+        display: grid; grid-template-columns: repeat(3, 1fr);
+        gap: 24px;
+      }
+      .feature {
+        padding: 24px;
+        border: 1px solid var(--border); border-radius: 12px;
+        background: var(--card);
+      }
+      .feature .glyph {
+        width: 32px; height: 32px; border-radius: 8px;
+        background: var(--accent); color: var(--accent-fg);
+        display: grid; place-items: center;
+        font-weight: 700; font-size: 14px;
+        margin-bottom: 14px;
+      }
+      .feature h3 { margin: 0 0 6px; font-size: 16px; }
+      .feature p { margin: 0; color: var(--muted); font-size: 14px; }
+      section.usecase {
+        padding: 64px 0;
+        border-top: 1px solid var(--border);
+      }
+      .usecase-row {
+        display: grid; grid-template-columns: 1fr 1fr; gap: 48px;
+        align-items: center;
+      }
+      .usecase-row.flip > div:first-child { order: 2; }
+      .usecase-art {
+        height: 240px; border: 1px solid var(--border); border-radius: 12px;
+        background: linear-gradient(135deg, #f4f4f5, #fff);
+      }
+      .usecase h2 {
+        font-size: 28px; letter-spacing: -0.01em; margin: 0 0 12px;
+      }
+      .usecase ul {
+        margin: 12px 0 0; padding-left: 18px; color: var(--muted); font-size: 14px;
+      }
+      .usecase li + li { margin-top: 6px; }
+      section.proof {
+        padding: 48px 0; border-top: 1px solid var(--border);
+        text-align: center;
+      }
+      .proof .caption { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
+      .logo-wall {
+        display: grid; grid-template-columns: repeat(6, 1fr); gap: 24px;
+        align-items: center;
+      }
+      .logo {
+        height: 28px; border-radius: 4px;
+        background: #ececec;
+      }
+      section.final-cta {
+        margin: 72px 0; padding: 56px 0;
+        background: var(--accent); color: var(--accent-fg);
+        text-align: center;
+        border-radius: 16px;
+      }
+      section.final-cta h2 {
+        font-size: 32px; margin: 0 0 8px; letter-spacing: -0.01em;
+      }
+      section.final-cta p {
+        margin: 0 0 22px; opacity: 0.8;
+      }
+      section.final-cta .btn.primary {
+        background: var(--accent-fg); color: var(--accent);
+        border-color: var(--accent-fg);
+      }
+      footer.site {
+        border-top: 1px solid var(--border);
+        padding: 48px 0 32px; font-size: 14px; color: var(--muted);
+      }
+      .footer-cols {
+        display: grid; grid-template-columns: 2fr repeat(3, 1fr); gap: 32px;
+        margin-bottom: 32px;
+      }
+      .footer-col h4 { color: var(--text); font-size: 13px; margin: 0 0 12px; }
+      .footer-col ul { list-style: none; padding: 0; margin: 0; }
+      .footer-col li + li { margin-top: 8px; }
+      .copyright { border-top: 1px solid var(--border); padding-top: 16px; }
+    </style>
+  </head>
+  <body>
+    <nav class="top" aria-label="Primary">
+      <div class="wrap row">
+        <div class="brand">Acme</div>
+        <ul>
+          <li><a href="#features">Features</a></li>
+          <li><a href="#pricing">Pricing</a></li>
+          <li><a href="#signin">Sign in</a></li>
+          <li><a class="btn primary" href="#start">Get started</a></li>
+        </ul>
+      </div>
+    </nav>
+
+    <main>
+      <section class="hero wrap">
+        <span class="eyebrow">New · v2 is here</span>
+        <h1>The fastest way to ship your idea.</h1>
+        <p class="lead">
+          Acme bundles everything your team needs to plan, build, and
+          launch — without the busywork of stitching tools together.
+        </p>
+        <div class="cta-row">
+          <a class="btn primary" href="#start">Start free</a>
+          <a class="btn" href="#demo">Talk to sales</a>
+        </div>
+        <div class="hero-visual" role="img" aria-label="Product screenshot placeholder"></div>
+      </section>
+
+      <section class="features wrap" id="features">
+        <div class="features-grid">
+          <div class="feature">
+            <div class="glyph" aria-hidden="true">1</div>
+            <h3>Ship faster</h3>
+            <p>Templates and primitives that get you to the first release in days, not months.</p>
+          </div>
+          <div class="feature">
+            <div class="glyph" aria-hidden="true">2</div>
+            <h3>Built-in collaboration</h3>
+            <p>Comments, reviews, and approvals where your work already lives.</p>
+          </div>
+          <div class="feature">
+            <div class="glyph" aria-hidden="true">3</div>
+            <h3>Scales with you</h3>
+            <p>From the first prototype to the enterprise rollout, on one consistent surface.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="usecase wrap">
+        <div class="usecase-row">
+          <div>
+            <h2>For product teams</h2>
+            <p>Capture intent, render prototypes, and keep specs in sync — the whole loop in one place.</p>
+            <ul>
+              <li>Auto-generated specs from your prototype</li>
+              <li>Shared review surface for stakeholders</li>
+              <li>Version history without a separate tool</li>
+            </ul>
+          </div>
+          <div class="usecase-art" role="img" aria-label="Use-case illustration placeholder"></div>
+        </div>
+      </section>
+
+      <section class="usecase wrap">
+        <div class="usecase-row flip">
+          <div>
+            <h2>For design systems</h2>
+            <p>Codify tokens once, then render any page pattern on top with consistent typography and color.</p>
+            <ul>
+              <li>DESIGN.md as the single source of truth</li>
+              <li>Pattern catalog grounded in your tokens</li>
+              <li>Round-trip refinement without copy-paste</li>
+            </ul>
+          </div>
+          <div class="usecase-art" role="img" aria-label="Use-case illustration placeholder"></div>
+        </div>
+      </section>
+
+      <section class="proof wrap">
+        <div class="caption">Trusted by teams at</div>
+        <div class="logo-wall" aria-hidden="true">
+          <div class="logo"></div>
+          <div class="logo"></div>
+          <div class="logo"></div>
+          <div class="logo"></div>
+          <div class="logo"></div>
+          <div class="logo"></div>
+        </div>
+      </section>
+
+      <div class="wrap">
+        <section class="final-cta">
+          <h2>Ready when you are.</h2>
+          <p>Free for solo work. Generous team pricing.</p>
+          <a class="btn primary" href="#start">Start free</a>
+        </section>
+      </div>
+    </main>
+
+    <footer class="site">
+      <div class="wrap">
+        <div class="footer-cols">
+          <div class="footer-col">
+            <div class="brand">Acme</div>
+            <p>Build, ship, refine.</p>
+          </div>
+          <div class="footer-col">
+            <h4>Product</h4>
+            <ul>
+              <li><a href="#features">Features</a></li>
+              <li><a href="#pricing">Pricing</a></li>
+              <li><a href="#changelog">Changelog</a></li>
+            </ul>
+          </div>
+          <div class="footer-col">
+            <h4>Company</h4>
+            <ul>
+              <li><a href="#about">About</a></li>
+              <li><a href="#blog">Blog</a></li>
+              <li><a href="#careers">Careers</a></li>
+            </ul>
+          </div>
+          <div class="footer-col">
+            <h4>Legal</h4>
+            <ul>
+              <li><a href="#terms">Terms</a></li>
+              <li><a href="#privacy">Privacy</a></li>
+            </ul>
+          </div>
+        </div>
+        <div class="copyright">&copy; 2026 Acme, Inc.</div>
+      </div>
+    </footer>
+  </body>
+</html>
