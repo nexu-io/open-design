@@ -319,7 +319,7 @@ import {
   readAllTokens,
   setToken,
 } from './mcp-tokens.js';
-import { agentCliEnvForAgent, AppConfigValidationError, readAppConfig, readPluginEnvKnobs, writeAppConfig } from './app-config.js';
+import { agentCliEnvForAgent, readAppConfig, readPluginEnvKnobs, writeAppConfig } from './app-config.js';
 import { OrbitService, formatLocalProjectTimestamp, renderOrbitTemplateSystemPrompt } from './orbit.js';
 import { buildOrbitNoLiveArtifactSummary } from './orbit-agent-summary.js';
 import {
@@ -9772,26 +9772,6 @@ export async function startServer({
       const config = await readAppConfig(RUNTIME_DATA_DIR);
       res.json({ config });
     } catch (err) {
-      res
-        .status(500)
-        .json({ error: String(err && err.message ? err.message : err) });
-    }
-  });
-
-  app.put('/api/app-config', async (req, res) => {
-    if (!isLocalSameOrigin(req, resolvedPort)) {
-      return res.status(403).json({ error: 'cross-origin request rejected' });
-    }
-    try {
-      const config = await writeAppConfig(RUNTIME_DATA_DIR, req.body);
-      orbitService.configure(config.orbit);
-      res.json({ config });
-    } catch (err) {
-      if (err instanceof AppConfigValidationError) {
-        return res
-          .status(400)
-          .json({ error: err.message });
-      }
       res
         .status(500)
         .json({ error: String(err && err.message ? err.message : err) });

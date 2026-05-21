@@ -10,6 +10,9 @@ export interface AgentInfo {
   available: boolean;
   authStatus?: 'ok' | 'missing' | 'unknown';
   authMessage?: string;
+  /** Why an unavailable agent is not available. `not_installed` = binary not
+   *  found; `config_error` = binary found but env/config is invalid. */
+  unavailableReason?: 'not_installed' | 'config_error';
   path?: string;
   version?: string | null;
   models?: AgentModelOption[];

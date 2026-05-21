@@ -4,6 +4,7 @@ import { defaultMediaExecutionPolicy, mediaPolicyDenial } from './media-policy.j
 import type { RouteDeps } from './server-context.js';
 import { proxyDispatcherRequestInit } from './connectionTest.js';
 import type { ToolTokenGrant } from './tool-tokens.js';
+import { AppConfigValidationError } from './app-config.js';
 
 const LONG_MEDIA_PROXY_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -231,6 +232,11 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       orbitService.configure(config.orbit);
       res.json({ config });
     } catch (err: any) {
+      if (err instanceof AppConfigValidationError) {
+        return res
+          .status(400)
+          .json({ error: err.message });
+      }
       res
         .status(500)
         .json({ error: String(err && err.message ? err.message : err) });
