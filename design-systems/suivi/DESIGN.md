@@ -53,7 +53,7 @@ Key Characteristics:
 |------|-----|-----|------|
 | Black | `#000000` | 0, 0, 0 | Primary text |
 | Ship Cove | `#6E6E8E` | 110, 110, 142 | Secondary/muted text |
-| Brilliant Lavender | `#D0A0F0` | 208, 160, 240 | Accent text, links |
+| Mauve | `#D0AEFE` | 208, 174, 254 | Accent text, links |
 | White | `#FFFFFF` | 255, 255, 255 | Text on dark surfaces |
 
 ### Tag Color Themes
