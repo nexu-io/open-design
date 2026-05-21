@@ -83,6 +83,8 @@ import type { PluginUseAction } from './plugins-home/useActions';
 import { sortByVisualAppeal } from './plugins-home/visualScore';
 import { RecentProjectsStrip } from './RecentProjectsStrip';
 
+const EXAMPLE_PROMPT_LIMIT = 4;
+
 interface ActivePlugin {
   record: InstalledPluginRecord;
   // `result` is `null` during the optimistic window — set on chip
@@ -1623,7 +1625,7 @@ function footerInputNamesForChip(chipId: string | null): string[] {
   if (chipId === 'deck') return ['designSystem', 'slideCount', 'speakerNotes'];
   if (chipId === 'image') return ['designSystem', 'model', 'ratio', 'resolution'];
   if (chipId === 'video') return ['designSystem', 'model', 'ratio', 'duration', 'resolution'];
-  if (chipId === 'audio') return ['audioType', 'model', 'duration'];
+  if (chipId === 'audio') return ['audioType', 'model', 'duration', 'voice'];
   if (chipId === 'hyperframes') return ['ratio', 'duration'];
   return [];
 }

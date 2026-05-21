@@ -165,33 +165,56 @@ describe('HomeView media composer options', () => {
     expect(screen.queryByRole('dialog', { name: /replace current prompt/i })).toBeNull();
   });
 
-  it('localizes media composer prompt slots in Simplified Chinese', async () => {
+  it('localizes media composer prompt templates in Simplified Chinese without auto-filling the textarea', async () => {
     stubFetch();
     renderHomeZh({ promptTemplates: ZH_MEDIA_PROMPT_TEMPLATES });
     const input = screen.getByTestId('home-hero-input') as HTMLTextAreaElement;
 
     await clickHomeRailChip('image');
-    await waitFor(() => expect(input.value).toContain(
-      '使用 自动 创建高级产品工作室图片',
+    await waitFor(() => expect(screen.getByTestId('home-hero-footer-option-model')).toBeTruthy());
+    expect(input.value).toBe('');
+    fireEvent.change(input, {
+      target: {
+        value:
+          '使用 自动 创建高级产品工作室图片：优雅构图、精致光影、克制色彩、丰富材质细节，并达到商业广告级质感。使用 gpt-image-2，以 16:9、2K 分辨率渲染。',
+      },
+    });
+    await waitFor(() => expect(screen.getByTestId('home-hero-prompt-highlight').textContent).toContain(
+      '高级产品工作室图片',
     ));
-    expect(input.value).toContain(
-      '使用 gpt-image-2，以 16:9、2K 分辨率渲染。',
-    );
 
     await clickHomeRailChip('video');
-    await waitFor(() => expect(input.value).toContain(
-      '使用 自动 创建高级产品工作室视频',
+    await waitFor(() => expect(screen.getByTestId('home-hero-footer-option-duration')).toBeTruthy());
+    fireEvent.change(input, {
+      target: {
+        value:
+          '使用 自动 创建高级产品工作室视频：电影感产品节奏、优雅动效、精致光影和发布片质感。使用 seedance-2.0，以 16:9、时长 5 秒、2K 分辨率渲染。',
+      },
+    });
+    await waitFor(() => expect(screen.getByTestId('home-hero-prompt-highlight').textContent).toContain(
+      '高级产品工作室视频',
     ));
-    expect(input.value).toContain(
-      '使用 seedance-2.0，以 16:9、时长 5 秒、2K 分辨率渲染。',
-    );
 
     await clickHomeRailChip('hyperframes');
-    await waitFor(() => expect(input.value).toContain(
-      '创建 16:9、时长 10 秒 的高级产品工作室 HyperFrames 视频',
+    await waitFor(() => expect(screen.getByTestId('home-hero-footer-option-duration')).toBeTruthy());
+    fireEvent.change(input, {
+      target: {
+        value:
+          '创建 16:9、时长 10 秒 的高级产品工作室 HyperFrames 视频：精致动态字体、优雅转场、克制动效语言和工作室级节奏。',
+      },
+    });
+    await waitFor(() => expect(screen.getByTestId('home-hero-prompt-highlight').textContent).toContain(
+      '高级产品工作室 HyperFrames 视频',
     ));
 
     await clickHomeRailChip('audio');
+    await waitFor(() => expect(screen.getByTestId('home-hero-footer-option-audioType')).toBeTruthy());
+    fireEvent.change(input, {
+      target: {
+        value:
+          '使用 minimax-tts，把 用户的需求说明 转成时长 10 秒的高级产品工作室音频：精致、克制、清晰，适合品牌使用。',
+      },
+    });
     await waitFor(() => expect(screen.getByTestId('home-hero-prompt-slot-text').textContent).toBe('用户的需求说明'));
     expect(input.value).toContain(
       '把 用户的需求说明 转成时长 10 秒的高级产品工作室音频',
@@ -439,18 +462,26 @@ describe('HomeView media composer options', () => {
 
     await clickHomeRailChip('audio');
     await chooseOption('model', 'elevenlabs-v3');
-    await waitFor(() => expect(screen.getByTestId('home-hero-prompt-slot-voice').textContent).toBe('Rachel'));
+    const input = screen.getByTestId('home-hero-input') as HTMLTextAreaElement;
+    await waitFor(() => expect(screen.getByTestId('home-hero-footer-option-voice').textContent).toContain('Rachel'));
+    expect(input.value).toBe('');
 
     await chooseOption('duration', '30');
     await chooseOption('voice', 'voice-adam', 'Adam');
 
-    const input = screen.getByTestId('home-hero-input') as HTMLTextAreaElement;
     await waitFor(() => {
-      expect(input.value).toContain('Adam');
-      expect(input.value).toContain('30 秒');
+      expect(screen.getByTestId('home-hero-footer-option-voice').textContent).toContain('Adam');
+      expect(screen.getByTestId('home-hero-footer-option-duration').textContent).toContain('30s');
     });
     fireEvent.change(input, {
-      target: { value: input.value.replace('用户的需求说明', '欢迎来到 Open Design') },
+      target: {
+        value:
+          '使用 elevenlabs-v3 和 Adam，把 欢迎来到 Open Design 转成时长 30 秒的高级产品工作室音频：精致、克制、清晰，适合品牌使用。',
+      },
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-prompt-highlight').textContent).toContain('Adam');
+      expect(screen.getByTestId('home-hero-prompt-slot-text').textContent).toBe('欢迎来到 Open Design');
     });
     fireEvent.click(screen.getByTestId('home-hero-submit'));
 
