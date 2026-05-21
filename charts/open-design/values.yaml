@@ -19,7 +19,7 @@ config:
   nodeOptions: "--max-old-space-size=192"
   webPort: 7456
   bindHost: "127.0.0.1"
-  apiToken: "" # Auto-generated if left empty
+  apiToken: "secure-default-token-change-me"
 
 service:
   type: ClusterIP
