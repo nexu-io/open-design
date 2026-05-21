@@ -3,7 +3,7 @@ import { appendFile, mkdir, realpath, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { BrowserWindow, dialog, ipcMain, screen, shell } from "electron";
+import { BrowserWindow, app, dialog, ipcMain, screen, shell } from "electron";
 import {
   DESKTOP_UPDATE_CHANNELS,
   DESKTOP_UPDATE_MODES,
@@ -1095,8 +1095,11 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     }
   });
 
+  if (process.platform === "darwin") {
+    void app.dock?.show();
+  }
+
   const consoleEntries: DesktopConsoleEntry[] = [];
-  const petWindow = createDesktopPetWindow(preloadPath);
   const window = new BrowserWindow({
     height: 900,
     // Below this size the project page's left/right split (chat
@@ -1119,6 +1122,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   installWindowChromeCssHook(window);
   showWindowButtons(window);
   attachDownloadSaveAsDialog(window);
+  const petWindow = createDesktopPetWindow(preloadPath);
 
   const sendUpdaterStatus = (status = options.updater?.snapshot() ?? unavailableUpdaterStatus()) => {
     if (window.isDestroyed()) return;
