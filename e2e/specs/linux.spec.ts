@@ -234,6 +234,9 @@ linuxTauriDescribe('packaged linux Tauri runtime smoke', () => {
       );
       started = false;
       expect(stop.namespace).toBe(namespace);
+      if (stop.status === 'partial' || stop.remainingPids.length > 0) {
+        console.error('[linux smoke stop]', JSON.stringify(stop, null, 2));
+      }
       expect(stop.status).not.toBe('partial');
       expect(stop.remainingPids).toEqual([]);
 
