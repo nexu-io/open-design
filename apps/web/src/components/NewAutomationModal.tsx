@@ -108,9 +108,10 @@ function formatTime12h(time: string): string {
 }
 
 /**
- * Extracts the schedule's display parts once.
- * Both the string formatter and the node builder consume this so they can
- * never silently desync (weekday labels, time format, timezone label, etc.).
+ * Shared schedule display parts — single source of truth for both the
+ * string formatter (describeScheduleSummary) and the node builder
+ * (buildScheduleSummaryNode). Any change to labels, time format, or
+ * weekday names only needs to happen here.
  */
 type ScheduleParts =
   | { kind: 'hourly'; minute: string }
@@ -480,13 +481,13 @@ export function NewAutomationModal({
       const url = isEdit ? `/api/routines/${editingId}` : '/api/routines';
       const payload = isEdit
         ? {
-            name: body.name,
-            prompt: body.prompt,
-            schedule: body.schedule,
-            target: body.target,
-            skillId: body.skillId,
-            context: body.context,
-          }
+          name: body.name,
+          prompt: body.prompt,
+          schedule: body.schedule,
+          target: body.target,
+          skillId: body.skillId,
+          context: body.context,
+        }
         : body;
       const res = await fetch(url, {
         method: isEdit ? 'PATCH' : 'POST',
