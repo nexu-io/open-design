@@ -3,7 +3,7 @@
 // serves these to the gallery and CLI; the I/O fields are stored
 // for forward-compatibility and not yet consumed.
 
-import type { SkillSummary } from './registry';
+import type { SkillSummary } from './registry.js';
 
 export type PagePatternIOKind = 'navigation' | 'data' | 'action';
 
