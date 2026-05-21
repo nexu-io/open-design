@@ -344,14 +344,19 @@ describe('ManualEditPanel', () => {
       ?.querySelector('input') as HTMLInputElement | null;
     if (!lineInput) throw new Error('Line input not found');
 
+    // Fire the onChange path first (typed input) and assert it commits the value.
     act(() => {
       lineInput.value = '49px';
       lineInput.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    });
+    // onChange calls onStyleChange immediately — proves the typed-input path ran.
+    expect(onStyleChange).toHaveBeenCalledWith('hero-title', { lineHeight: '49px' }, 'Style: Hero Title');
+
+    // Then fire the blur path and assert it clears the error — proves onBlur ran too.
+    act(() => {
       lineInput.dispatchEvent(new dom.window.FocusEvent('focusout', { bubbles: true }));
     });
-
     expect(onError).toHaveBeenCalledWith('');
-    expect(onStyleChange).toHaveBeenCalledWith('hero-title', { lineHeight: '49px' }, 'Style: Hero Title');
   });
 
   it('does not persist unchanged page styles when no target is selected', () => {
