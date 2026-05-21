@@ -25,6 +25,22 @@ export function createChatRunService({
 }) {
   const runs = new Map();
 
+  // Optional fire-and-forget hook fired when a run reaches a terminal
+  // state via finish(). Used by the history feature (#1241) to record
+  // a revision when the working tree is dirty at run end. The hook's
+  // Promise is intentionally not awaited — finish()'s contract is
+  // synchronous (closes SSE clients, schedules cleanup) and a slow or
+  // failing hook must not block that path.
+  let runFinishedHook = null;
+
+  /**
+   * Register a callback to run after every run.finish(). Pass null to
+   * detach. Single-slot — subsequent calls overwrite.
+   */
+  const setRunFinishedHook = (hook) => {
+    runFinishedHook = hook;
+  };
+
   const create = (meta = {}) => {
     const now = Date.now();
     const run = {
@@ -51,6 +67,12 @@ export function createChatRunService({
       // the async run lifecycle (message upsert, post-run history
       // commit), which outlives the HTTP request.
       identity: meta.identity && typeof meta.identity === 'object' ? meta.identity : null,
+      // User prompt that initiated this run. Captured at create time
+      // so the post-run history commit hook can derive a commit
+      // message from it without re-querying the messages table at
+      // commit-time (which would race with concurrent runs on the
+      // same conversation).
+      message: typeof meta.message === 'string' ? meta.message : null,
       status: 'queued',
       createdAt: now,
       updatedAt: now,
@@ -122,6 +144,15 @@ export function createChatRunService({
     for (const waiter of run.waiters) waiter(statusBody(run));
     run.waiters.clear();
     scheduleCleanup(run);
+    // Fire-and-forget — the history feature uses this to commit any
+    // dirty working-tree changes the run produced. Errors are logged
+    // by the hook itself; finish()'s contract stays synchronous so
+    // late callers (cleanup, status polling) aren't blocked on git.
+    if (runFinishedHook) {
+      Promise.resolve(runFinishedHook(run, status)).catch((err) => {
+        console.warn(`[runs] finished hook failed for run ${run.id}:`, err);
+      });
+    }
   };
 
   const fail = (run, code, message, init = {}) => {
@@ -263,6 +294,7 @@ export function createChatRunService({
     finish,
     fail,
     statusBody,
+    setRunFinishedHook,
     isTerminal(status) {
       return TERMINAL_RUN_STATUSES.has(status);
     },

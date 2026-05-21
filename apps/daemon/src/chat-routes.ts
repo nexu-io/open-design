@@ -127,7 +127,10 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     if (isDaemonShuttingDown()) {
       return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
     }
-    const run = design.runs.create({ identity: req.identity });
+    const run = design.runs.create({
+      identity: req.identity,
+      message: typeof req.body?.message === 'string' ? req.body.message : null,
+    });
     design.runs.stream(run, req, res);
     design.runs.start(run, () => startChatRun(req.body || {}, run));
   });

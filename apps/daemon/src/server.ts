@@ -391,6 +391,7 @@ import { CHAT_TOOL_ENDPOINTS, CHAT_TOOL_OPERATIONS, toolTokenRegistry } from './
 import { createIdentityMiddleware } from './identity/middleware.js';
 import { resolveIdentity } from './identity/types.js';
 import { installHistoryEnsureHook } from './history/ensure-hook.js';
+import { installHistoryRunFinishedHook } from './history/run-hook.js';
 import {
   aggregateCloudflarePagesStatus,
   buildDeployFileSet,
@@ -4523,6 +4524,16 @@ export async function startServer({
     getAppVersion: () => cachedAppVersion?.version ?? '0.0.0',
     readAnalyticsContext,
   };
+  // Register the history feature's chat-run-finished hook against the
+  // runs service. No-op when OD_GIT_INTEGRATION_ENABLED is unset;
+  // otherwise commits any dirty working-tree state at the end of each
+  // run with the run's resolved identity as author.
+  installHistoryRunFinishedHook({
+    db,
+    projectsRoot: PROJECTS_DIR,
+    reposRoot: REPOS_DIR,
+    runs: design.runs,
+  });
 
   // PostHog runtime config — gated on BOTH a server-side key (POSTHOG_KEY)
   // and the user's opt-in metrics consent (Privacy → "Share usage data").
@@ -11133,6 +11144,7 @@ export async function startServer({
       clientRequestId: `orbit-${trigger}-${randomUUID()}`,
       agentId,
       identity: req.identity,
+      message: prompt,
     });
     upsertMessage(db, conversationId, {
       id: `orbit-user-${run.id}`,
@@ -11611,7 +11623,10 @@ export async function startServer({
     if (daemonShuttingDown) {
       return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
     }
-    const run = design.runs.create({ identity: req.identity });
+    const run = design.runs.create({
+      identity: req.identity,
+      message: typeof req.body?.message === 'string' ? req.body.message : null,
+    });
     design.runs.stream(run, req, res);
     design.runs.start(run, () => startChatRun(req.body || {}, run));
   });
@@ -11752,6 +11767,7 @@ export async function startServer({
       // multi-user feature captures the routine creator's identity at
       // creation time, this site reads from the routine record instead.
       identity: resolveIdentity({}),
+      message: routine.prompt,
       ...(resolvedRoutineSnapshot?.ok
         ? {
             appliedPluginSnapshotId: resolvedRoutineSnapshot.snapshotId,
