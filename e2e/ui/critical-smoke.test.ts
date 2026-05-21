@@ -66,8 +66,8 @@ test.beforeEach(async ({ page }) => {
 test('home loads with the primary entry controls', async ({ page }) => {
   await gotoEntryHome(page);
 
-  await expect(page.getByTestId('entry-nav-logo')).toHaveAttribute('aria-current', 'page');
-  await expect(page.getByTestId('entry-nav-home')).toHaveCount(0);
+  await expect(page.getByTestId('entry-nav-logo')).toBeVisible();
+  await expect(page.getByTestId('entry-nav-home')).toHaveAttribute('aria-current', 'page');
   await expect(page.getByTestId('entry-nav-new-project')).toBeVisible();
   await expect(page.getByTestId('home-hero-input')).toBeVisible();
 });

@@ -438,5 +438,8 @@ describe('HomeHero plugin picker', () => {
 
     fireEvent.click(screen.getByTitle('Plugin: Prototype Plugin'));
     expect(onOpenPluginDetails).toHaveBeenCalledWith(active);
+    const activeChipText = screen.getByTestId('home-hero-active-plugin').textContent;
+    expect(activeChipText).toContain('Prototype');
+    expect(activeChipText).not.toContain('Plugin');
   });
 });

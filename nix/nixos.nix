@@ -41,7 +41,7 @@
       persist_config off
     }
 
-    ${cfg.webFrontend.host}:${toString cfg.webFrontend.port} {
+    http://${cfg.webFrontend.host}:${toString cfg.webFrontend.port} {
       handle /api/* {
         reverse_proxy 127.0.0.1:${toString cfg.port} {
           flush_interval -1

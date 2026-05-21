@@ -1,6 +1,6 @@
 import type { AgentEvent } from '../types';
 
-export type TodoStatus = 'pending' | 'in_progress' | 'completed';
+export type TodoStatus = 'pending' | 'in_progress' | 'completed' | 'stopped';
 
 export interface TodoItem {
   content: string;
@@ -19,7 +19,7 @@ export function parseTodoWriteInput(input: unknown): TodoItem[] {
       const content = typeof record.content === 'string' ? record.content : '';
       if (!content) return null;
       const status =
-        record.status === 'completed' || record.status === 'in_progress'
+        record.status === 'completed' || record.status === 'in_progress' || record.status === 'stopped'
           ? record.status
           : 'pending';
       return {
@@ -66,6 +66,63 @@ export function latestTodoWriteInputFromMessages(
   return null;
 }
 
+export function latestTodoWriteInputForPinnedCard<
+  T extends {
+    events?: AgentEvent[] | undefined;
+    runStatus?: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled' | undefined;
+    endedAt?: number | undefined;
+  },
+>(
+  messages: ReadonlyArray<T> | undefined,
+): unknown | null {
+  if (!messages || messages.length === 0) return null;
+  for (let mi = messages.length - 1; mi >= 0; mi -= 1) {
+    const message = messages[mi];
+    const events = message?.events;
+    if (!events || events.length === 0) continue;
+    for (let ei = events.length - 1; ei >= 0; ei -= 1) {
+      const event = events[ei];
+      if (event?.kind !== 'tool_use') continue;
+      if (!isTodoWriteToolName(event.name)) continue;
+      if (!hasTerminalRunEnded(message.runStatus, message.endedAt)) {
+        return event.input;
+      }
+      return stoppedTodoWriteInput(event.input);
+    }
+  }
+  return null;
+}
+
 function isTodoWriteToolName(name: string): boolean {
   return name === 'TodoWrite' || name === 'todowrite';
+}
+
+function hasTerminalRunEnded(
+  runStatus: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled' | undefined,
+  endedAt: number | undefined,
+): boolean {
+  return (
+    runStatus === 'succeeded' ||
+    runStatus === 'failed' ||
+    runStatus === 'canceled' ||
+    (runStatus === undefined && endedAt !== undefined)
+  );
+}
+
+function stoppedTodoWriteInput(input: unknown): unknown {
+  if (!input || typeof input !== 'object') return input;
+  const obj = input as { todos?: unknown };
+  if (!Array.isArray(obj.todos)) return input;
+  return {
+    ...(input as Record<string, unknown>),
+    todos: obj.todos.map((todo) => {
+      if (!todo || typeof todo !== 'object') return todo;
+      const record = todo as Record<string, unknown>;
+      if (record.status !== 'in_progress') return todo;
+      return {
+        ...record,
+        status: 'stopped',
+      };
+    }),
+  };
 }

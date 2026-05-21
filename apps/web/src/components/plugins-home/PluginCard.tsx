@@ -28,8 +28,10 @@ interface Props {
   pendingAny: boolean;
   pendingShareAction?: { pluginId: string; action: PluginShareAction } | null;
   isFeatured: boolean;
+  isSaved: boolean;
   onUse: (record: InstalledPluginRecord, action: PluginUseAction) => void;
   onOpenDetails: (record: InstalledPluginRecord) => void;
+  onSave: (record: InstalledPluginRecord) => void;
   onShareAction?: (
     record: InstalledPluginRecord,
     action: PluginShareAction,
@@ -45,8 +47,10 @@ export function PluginCard({
   pendingAny,
   pendingShareAction = null,
   isFeatured,
+  isSaved,
   onUse,
   onOpenDetails,
+  onSave,
   onShareAction,
 }: Props) {
   const [useMenuOpen, setUseMenuOpen] = useState(false);
@@ -238,15 +242,25 @@ export function PluginCard({
       </div>
 
       <div className="plugins-home__card-foot">
+        <button
+          type="button"
+          className={[
+            'plugins-home__card-save',
+            isSaved ? 'is-saved' : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
+          onClick={() => onSave(record)}
+          aria-pressed={isSaved}
+          aria-label={`${isSaved ? 'Saved' : 'Save'} ${record.title}`}
+          title={isSaved ? 'Saved' : 'Save'}
+          data-testid={`plugins-home-save-${record.id}`}
+        >
+          <Icon name={isSaved ? 'check' : 'star'} size={12} />
+          <span className="sr-only">{isSaved ? 'Saved' : 'Save'}</span>
+        </button>
         <span className="plugins-home__card-title" title={record.title}>
-          {isFeatured ? (
-            <Icon
-              name="star"
-              size={11}
-              className="plugins-home__card-featured-mark"
-            />
-          ) : null}
-          {record.title}
+          <span className="plugins-home__card-title-text">{record.title}</span>
         </span>
         <TrustBadge trust={record.trust} />
       </div>

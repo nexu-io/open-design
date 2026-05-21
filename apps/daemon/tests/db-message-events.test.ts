@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
+  appendMessageAgentEvent,
   appendMessageStatusEvent,
   closeDatabase,
   insertConversation,
@@ -67,6 +68,55 @@ describe('message event persistence', () => {
         label: 'error',
         detail: 'Agent stalled without emitting any new output for 1s.',
       },
+    ]);
+  });
+
+  it('appends agent events and mirrors text deltas into message content', () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const now = Date.now();
+    insertProject(db, {
+      id: 'proj-1',
+      name: 'Video project',
+      createdAt: now,
+      updatedAt: now,
+    });
+    insertConversation(db, {
+      id: 'conv-1',
+      projectId: 'proj-1',
+      title: 'HyperFrames run',
+      createdAt: now,
+      updatedAt: now,
+    });
+    upsertMessage(db, 'conv-1', {
+      id: 'assistant-1',
+      role: 'assistant',
+      content: '',
+      runId: 'agent-run-1',
+      runStatus: 'running',
+      events: [],
+      startedAt: now,
+    });
+
+    appendMessageAgentEvent(db, 'assistant-1', { kind: 'text', text: 'Rendering ' });
+    appendMessageAgentEvent(db, 'assistant-1', {
+      kind: 'tool_use',
+      id: 'tool-1',
+      name: 'Bash',
+      input: { command: 'od media generate' },
+    });
+    appendMessageAgentEvent(db, 'assistant-1', { kind: 'text', text: 'done.' });
+
+    const message = listMessages(db, 'conv-1')[0];
+    expect(message?.content).toBe('Rendering done.');
+    expect(message?.events).toEqual([
+      { kind: 'text', text: 'Rendering ' },
+      {
+        kind: 'tool_use',
+        id: 'tool-1',
+        name: 'Bash',
+        input: { command: 'od media generate' },
+      },
+      { kind: 'text', text: 'done.' },
     ]);
   });
 });

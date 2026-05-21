@@ -9,8 +9,12 @@ import {
 import { useAnalytics } from '../analytics/provider';
 import {
   trackArtifactExportResult,
-  trackStudioClickShareOption,
-  trackStudioViewArtifact,
+  trackArtifactHeaderClick,
+  trackArtifactToolbarClick,
+  trackPageView,
+  trackPresentPopoverClick,
+  trackShareOptionPopoverClick,
+  trackTweaksPopoverClick,
 } from '../analytics/events';
 import { MarkdownRenderer, artifactRendererRegistry } from '../artifacts/renderer-registry';
 import { renderMarkdownToSafeHtml } from '../artifacts/markdown';
@@ -59,8 +63,9 @@ import {
   requestPreviewSnapshot,
 } from '../runtime/exports';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
-import { buildLazySrcdocTransport, buildSrcdoc } from '../runtime/srcdoc';
+import { buildLazySrcdocTransport, buildSrcdoc, canActivateSrcDocTransport } from '../runtime/srcdoc';
 import {
+  hasTweaksTemplate,
   hasUrlModeBridge,
   htmlNeedsSandboxShim,
   parseForceInline,
@@ -181,6 +186,7 @@ const PREVIEW_VIEWPORT_PRESETS: PreviewViewportPreset[] = [
     titleKey: 'fileViewer.viewportMobileTitle',
   },
 ];
+const EXPORT_READY_NUDGE_STORAGE_PREFIX = 'open-design:export-ready-nudge:';
 
 // The five basic style facets the inspect panel exposes. Kept narrow on
 // purpose — open-slide's design tokens panel only edits global tokens, so
@@ -633,18 +639,8 @@ export function FileViewer({
     const key = `${projectId}::${file.name}`;
     if (studioViewKeyRef.current === key) return;
     studioViewKeyRef.current = key;
-    trackStudioViewArtifact(analytics.track, {
-      page: 'studio',
-      area: 'artifact',
-      element: 'artifact_view',
-      view_type: 'artifact',
-      artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
-      artifact_kind: artifactKindToTracking({
-        rendererId: rendererMatch?.renderer.id ?? null,
-        fileKind: file.kind ?? null,
-      }),
-      project_id: projectId,
-      project_kind: projectKind,
+    trackPageView(analytics.track, {
+      page_name: 'artifact',
     });
   }, [projectId, projectKind, file.name, file.kind, rendererMatch?.renderer.id, analytics.track]);
 
@@ -1434,6 +1430,26 @@ function formatDurationMs(ms: number | undefined): string | null {
   const minutes = Math.floor(ms / 60_000);
   const seconds = Math.round((ms % 60_000) / 1000);
   return seconds === 0 ? `${minutes}m` : `${minutes}m ${seconds}s`;
+}
+
+function exportReadyNudgeKey(projectId: string, fileName: string): string {
+  return `${EXPORT_READY_NUDGE_STORAGE_PREFIX}${projectId}:${fileName}`;
+}
+
+function hasSeenExportReadyNudge(projectId: string, fileName: string): boolean {
+  try {
+    return window.sessionStorage.getItem(exportReadyNudgeKey(projectId, fileName)) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function markExportReadyNudgeSeen(projectId: string, fileName: string) {
+  try {
+    window.sessionStorage.setItem(exportReadyNudgeKey(projectId, fileName), '1');
+  } catch {
+    // Ignore storage-denied contexts; the in-memory state still prevents loops.
+  }
 }
 
 interface RefreshStatusDescriptor {
@@ -3221,11 +3237,12 @@ function ReactComponentViewer({
               <div className="share-menu" ref={shareRef}>
                 <button
                   type="button"
-                  className="viewer-action primary"
+                  className="viewer-action primary viewer-action-export"
                   aria-haspopup="menu"
                   aria-expanded={shareMenuOpen}
                   onClick={() => setShareMenuOpen((v) => !v)}
                 >
+                  <Icon name="download" size={13} />
                   <span>{t('fileViewer.shareLabel')}</span>
                   <Icon name="chevron-down" size={11} />
                 </button>
@@ -3432,16 +3449,15 @@ function HtmlViewer({
   ) => {
     const requestId = analytics.newRequestId();
     const artifactId = anonymizeArtifactId({ projectId, fileName: file.name });
-    trackStudioClickShareOption(
+    const artifactKind = artifactKindToTracking({ fileKind: file.kind ?? null });
+    trackShareOptionPopoverClick(
       analytics.track,
       {
-        page: 'studio',
-        area: 'app_header',
+        page_name: 'artifact',
+        area: 'share_option_popover',
         artifact_id: artifactId,
-        element: 'share_option',
-        action: 'select_share_option',
-        share_context: 'artifact',
-        export_format: format,
+        artifact_kind: artifactKind,
+        element: format,
         project_id: projectId,
         project_kind: projectKind,
       },
@@ -3452,9 +3468,10 @@ function HtmlViewer({
       trackArtifactExportResult(
         analytics.track,
         {
-          page: 'studio',
-          area: 'app_header',
+          page_name: 'artifact',
+          area: 'share_option_popover',
           artifact_id: artifactId,
+          artifact_kind: artifactKind,
           project_id: projectId,
           project_kind: projectKind,
           export_format: format,
@@ -3479,6 +3496,55 @@ function HtmlViewer({
       finish('failed', err instanceof Error ? err.name : 'UNKNOWN');
     }
   };
+  // P0 helpers — keep the artifact_id + artifact_kind derivation in one place
+  // so each per-button onClick stays a one-liner. We compute lazily inside the
+  // closure because `file.kind` / `file.name` can change as the user navigates
+  // tabs without remounting HtmlViewer.
+  const fireArtifactToolbarClick = (
+    element:
+      | 'reload'
+      | 'preview'
+      | 'source'
+      | 'tweaks'
+      | 'draw'
+      | 'comment'
+      | 'pods'
+      | 'inspect'
+      | 'edit'
+      | 'zoom_out'
+      | 'zoom_level_dropdown'
+      | 'zoom_in',
+  ) => {
+    trackArtifactToolbarClick(analytics.track, {
+      page_name: 'artifact',
+      area: 'artifact_toolbar',
+      element,
+      artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
+      artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+    });
+  };
+  const fireArtifactHeaderClick = (
+    element: 'back' | 'edit' | 'present_dropdown' | 'share_dropdown' | 'settings',
+  ) => {
+    trackArtifactHeaderClick(analytics.track, {
+      page_name: 'artifact',
+      area: 'artifact_header',
+      element,
+      artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
+      artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+    });
+  };
+  const firePresentPopoverClick = (
+    element: 'in_this_tab' | 'fullscreen' | 'new_tab',
+  ) => {
+    trackPresentPopoverClick(analytics.track, {
+      page_name: 'artifact',
+      area: 'present_popover',
+      element,
+      artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
+      artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+    });
+  };
   const [mode, setMode] = useState<'preview' | 'source'>('preview');
   const [source, setSource] = useState<string | null>(liveHtml ?? null);
   const [inlinedSource, setInlinedSource] = useState<string | null>(null);
@@ -3490,6 +3556,8 @@ function HtmlViewer({
   const zoomMenuRef = useRef<HTMLDivElement | null>(null);
   const [presentMenuOpen, setPresentMenuOpen] = useState(false);
   const [shareMenuOpen, setShareMenuOpen] = useState(false);
+  const [exportReadyNudge, setExportReadyNudge] = useState(false);
+  const exportReadyNudgeSeenRef = useRef<Set<string>>(new Set());
   // Template save UX. We surface a transient "Saved" pill in the share
   // menu so the user gets feedback without a noisy toast layer.
   const [savingTemplate, setSavingTemplate] = useState(false);
@@ -3707,6 +3775,17 @@ function HtmlViewer({
   const [selectedSideCommentIds, setSelectedSideCommentIds] = useState<Set<string>>(() => new Set());
   const [commentSidePanelCollapsed, setCommentSidePanelCollapsed] = useState(false);
   const [strokePoints, setStrokePoints] = useState<StrokePoint[]>([]);
+  const [tweaksMode, setTweaksMode] = useState(false);
+  const [tweaksAvailable, setTweaksAvailable] = useState(false);
+  // Tracks the `file.name` for which we've already mirrored the artifact's
+  // initial `__edit_mode_available` announcement into `tweaksMode`. Agent-
+  // generated `.twk-panel` artifacts mount their panel visible by default,
+  // so the toolbar toggle should also start ON — otherwise the user has to
+  // click toggle-on → toggle-off to actually hide the panel they're seeing.
+  // We only mirror ONCE per file: subsequent re-emissions (iframe remount
+  // when the user flips render mode by opening Themes, etc.) would otherwise
+  // re-toggle the user's choice.
+  const firstEditModeAvailableSeenForFileRef = useRef<string | null>(null);
   const previewStateKey = `${projectId}:${file.name}`;
   const previewScale = zoom / 100;
 
@@ -3917,6 +3996,10 @@ function HtmlViewer({
   // When we URL-load the iframe directly, skip every in-host inlining /
   // srcDoc-rebuilding step. The browser does the asset resolution itself,
   // which is the whole point of the URL-load path.
+  // Detect the class based tweaks template so we keep the srcDoc path on
+  // first load: the bridge that emits `od:tweaks-available` is only injected
+  // by buildSrcdoc, never on the URL load iframe.
+  const tweaksBridgeRequired = hasTweaksTemplate(source);
   // Auto-fall back to the srcDoc path when the artifact will crash under
   // the URL-load iframe's bare `sandbox="allow-scripts"` — Babel-standalone
   // React prototypes and any HTML that reads Web Storage at mount throw
@@ -3937,6 +4020,7 @@ function HtmlViewer({
     inspectMode,
     paletteActive: palettePopoverOpen || selectedPalette !== null,
     drawMode: drawOverlayOpen,
+    tweaksBridge: tweaksBridgeRequired,
     forceInline: forceInline || needsSandboxShim,
   });
   const basePreviewSrcUrl = useMemo(
@@ -3953,8 +4037,24 @@ function HtmlViewer({
   useEffect(() => {
     setPreviewSrcUrl(basePreviewSrcUrl);
   }, [basePreviewSrcUrl]);
+  // Keep `iframeRef.current` aligned with whichever iframe is currently
+  // visible so the existing postMessage send sites do not need to know that
+  // there are two iframes mounted. Plain `useEffect` (rather than layout)
+  // because all reads of `iframeRef.current` are in async user handlers or
+  // postMessage callbacks, never synchronous during render, and `useEffect`
+  // does not warn under `renderToStaticMarkup`.
   useEffect(() => {
     iframeRef.current = useUrlLoadPreview ? urlPreviewIframeRef.current : srcDocPreviewIframeRef.current;
+  }, [useUrlLoadPreview]);
+  // When the render mode flips, the now-active iframe has already loaded
+  // (its `onLoad` fired when it first mounted, often long before the user
+  // toggled), so we manually re-push the current bridge state instead of
+  // relying on the iframe's load event. `syncBridgeModes` is a closure over
+  // the latest state, so reading it through a ref keeps this effect's deps
+  // honest while still firing the up-to-date sync function.
+  const syncBridgeModesRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    syncBridgeModesRef.current();
   }, [useUrlLoadPreview]);
 
   useEffect(() => {
@@ -3998,21 +4098,49 @@ function HtmlViewer({
   const lazySrcDocTransport = useMemo(() => buildLazySrcdocTransport(), []);
   const [hasLazySrcDocTransport, setHasLazySrcDocTransport] = useState(useUrlLoadPreview);
   const [srcDocTransportResetKey, setSrcDocTransportResetKey] = useState(0);
+  const [srcDocShellReady, setSrcDocShellReady] = useState(false);
   const wasUrlLoadPreviewRef = useRef(useUrlLoadPreview);
   useEffect(() => {
     if (useUrlLoadPreview) setHasLazySrcDocTransport(true);
   }, [useUrlLoadPreview]);
+  // Reset the shell-ready latch whenever the srcDoc iframe re-mounts. The
+  // next shell will post `od:srcdoc-transport-ready` (or fire onLoad) and
+  // flip this back to true. See #2253.
+  useEffect(() => {
+    setSrcDocShellReady(false);
+  }, [srcDocTransportResetKey]);
+  // Listen for the shell's ready handshake. Gating activation on this is
+  // what fixes the #2253 race: opening Tweaks right after a key-driven
+  // re-mount used to post `activate` before the shell's listener was
+  // installed, dropping the message and stranding the iframe on the empty
+  // 536-byte body.
+  useEffect(() => {
+    function onMessage(ev: MessageEvent) {
+      if (ev.source !== srcDocPreviewIframeRef.current?.contentWindow) return;
+      const data = ev.data as { type?: string } | null;
+      if (data?.type !== 'od:srcdoc-transport-ready') return;
+      setSrcDocShellReady(true);
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, []);
   const useLazySrcDocTransport = useUrlLoadPreview || hasLazySrcDocTransport;
   const srcDocTransportContent = useLazySrcDocTransport ? lazySrcDocTransport : srcDoc;
   const urlTransportSrc = useUrlLoadPreview ? activePreviewSrcUrl : 'about:blank';
   const activateSrcDocTransport = useCallback((target: HTMLIFrameElement | null = srcDocPreviewIframeRef.current) => {
+    if (!canActivateSrcDocTransport({
+      srcDoc,
+      useUrlLoadPreview,
+      useLazySrcDocTransport,
+      shellReady: srcDocShellReady,
+      activatedHtml: activatedSrcDocTransportHtmlRef.current,
+    })) return false;
     const win = target?.contentWindow;
-    if (!win || !srcDoc || useUrlLoadPreview || !useLazySrcDocTransport) return false;
-    if (activatedSrcDocTransportHtmlRef.current === srcDoc) return false;
+    if (!win) return false;
     win.postMessage({ type: 'od:srcdoc-transport-activate', html: srcDoc }, '*');
     activatedSrcDocTransportHtmlRef.current = srcDoc;
     return true;
-  }, [srcDoc, useLazySrcDocTransport, useUrlLoadPreview]);
+  }, [srcDoc, useLazySrcDocTransport, useUrlLoadPreview, srcDocShellReady]);
   useEffect(() => {
     if (useUrlLoadPreview) {
       activatedSrcDocTransportHtmlRef.current = null;
@@ -4181,10 +4309,21 @@ function HtmlViewer({
     }, '*');
     win.postMessage({ type: 'od-edit-mode', enabled: manualEditMode }, '*');
     postSelectedManualEditTargetToIframe(manualEditMode ? selectedManualEditTarget?.id ?? null : null, target);
+    // Push the toolbar's current `tweaksMode` to both dialects so the artifact
+    // aligns to host state on every load (including render-mode swaps that
+    // expose a different iframe. e.g. opening the Themes popover). Without
+    // this, an artifact that defaults to `open=true` would re-open on every
+    // swap and visually contradict a toolbar that is currently off.
+    win.postMessage({ type: 'od:tweaks-panel-visible', visible: tweaksMode }, '*');
+    win.postMessage({ type: tweaksMode ? '__activate_edit_mode' : '__deactivate_edit_mode' }, '*');
     win.postMessage({ type: 'od:inspect-mode', enabled: inspectMode }, '*');
     const palette = previewPalette ?? selectedPalette;
     win.postMessage({ type: 'od:palette', palette }, '*');
   }
+  // Keep the ref pointing at the latest `syncBridgeModes` closure so the
+  // render-mode-swap effect above (which can fire before this declaration in
+  // execution order) always calls the up-to-date function.
+  syncBridgeModesRef.current = syncBridgeModes;
 
   useEffect(() => {
     const win = iframeRef.current?.contentWindow;
@@ -4252,6 +4391,80 @@ function HtmlViewer({
   }, [inspectMode, boardMode, drawClickSelectionMode, file.name, isOurPreviewIframeSource]);
 
   useEffect(() => {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    // Send all known dialects so the artifact can pick up whichever it speaks:
+    //  - `od:tweaks-panel-visible` is the bridge protocol used by class-based
+    //    panels emitted from the tweaks skill template (`.tw-panel`).
+    //  - `__activate_edit_mode` / `__deactivate_edit_mode` is the protocol
+    //    agent-generated artifacts use for their own React-mounted `.twk-panel`.
+    // Deps intentionally exclude `srcDoc`: on iframe remount, sync happens via
+    // `syncBridgeModes` (bridge) and the artifact's own
+    // `__edit_mode_available` announcement (postMessage panels).
+    win.postMessage({ type: 'od:tweaks-panel-visible', visible: tweaksMode }, '*');
+    win.postMessage({ type: tweaksMode ? '__activate_edit_mode' : '__deactivate_edit_mode' }, '*');
+  }, [tweaksMode]);
+
+  // Receive tweaks-side state from the iframe. Supports both bridge messages
+  // (`od:tweaks-*` for skill-template artifacts) and the artifact-native
+  // edit-mode protocol (`__edit_mode_*` for agent-generated artifacts). Either
+  // surface controls toolbar availability and mirrors local close into the
+  // toolbar toggle state.
+  useEffect(() => {
+    function onMessage(ev: MessageEvent) {
+      if (!isOurPreviewIframeSource(ev.source)) return;
+      const data = ev.data as { type?: string; available?: boolean; visible?: boolean } | null;
+      if (!data?.type) return;
+      if (data.type === 'od:tweaks-available') {
+        // Scope this to the active iframe only. The hidden srcDoc iframe's
+        // tweaks bridge always evaluates `document.querySelector('.tw-panel')`
+        // and posts `available: false` for agent-protocol (`.twk-panel`)
+        // artifacts that ship no class based panel. Without this guard that
+        // `false` would land after `__edit_mode_available` had already set
+        // `tweaksAvailable = true` and silently disable the toolbar button.
+        // `__edit_mode_*` below stays accepted from either iframe — those
+        // signals carry real artifact intent and must survive render mode
+        // flips.
+        if (ev.source !== iframeRef.current?.contentWindow) return;
+        setTweaksAvailable(!!data.available);
+      } else if (data.type === 'od:tweaks-panel-state') {
+        setTweaksMode(!!data.visible);
+      } else if (data.type === '__edit_mode_available') {
+        setTweaksAvailable(true);
+        // Mirror the artifact's reported default visibility into `tweaksMode`
+        // exactly once per file. Per design-templates/tweaks/SKILL.md the
+        // artifact MAY emit `{ visible: boolean }` on the availability
+        // payload to declare a default-closed panel; if absent we treat it
+        // as default-open because the SDK pattern is `useState(true)` and
+        // omitting `visible` is the backward-compatible signal that the
+        // panel is already on screen. Without this mirror, the toolbar reads
+        // OFF while the panel is clearly visible and the user has to click
+        // toggle-on then toggle-off to actually hide it. Guarded by
+        // `firstEditModeAvailableSeenForFileRef` so a later iframe remount
+        // (Themes popover flipping render mode, etc.) doesn't snap a
+        // user-driven OFF back to ON. `syncBridgeModes` remains the source
+        // of truth on every subsequent load: it pushes the current
+        // `tweaksMode` into the artifact via `__activate_edit_mode` /
+        // `__deactivate_edit_mode` so the artifact tracks the toolbar.
+        if (firstEditModeAvailableSeenForFileRef.current !== file.name) {
+          firstEditModeAvailableSeenForFileRef.current = file.name;
+          setTweaksMode(data.visible !== false);
+        }
+      } else if (data.type === '__edit_mode_dismissed') {
+        setTweaksMode(false);
+      }
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+    // `file.name` is in the dep list so the handler's `firstEditMode-
+    // AvailableSeenForFileRef.current !== file.name` guard compares against
+    // the currently-displayed file. Without this, the listener would close
+    // over the first-render `file.name`; switching to another `.twk-panel`
+    // artifact would never re-mirror the new artifact's default-open state
+    // because the stale closure's comparison kept matching. PR #1643 review.
+  }, [file.name]);
+
+  useEffect(() => {
     setActiveCommentTarget(null);
     setHoveredCommentTarget(null);
     setLiveCommentTargets(new Map());
@@ -4273,6 +4486,10 @@ function HtmlViewer({
     setManualEditError(null);
     manualEditPendingStyleRef.current = null;
     clearManualEditStyleTimer();
+    // Stale tweaks state can carry across files (especially toolbar "on" with
+    // no panel underneath). Reset both and let the iframe bridge re-announce.
+    setTweaksMode(false);
+    setTweaksAvailable(false);
   }, [file.name]);
 
   // Selecting a new file or turning inspect off resets the panel target.
@@ -5271,6 +5488,23 @@ function HtmlViewer({
   const canShare = source !== null;
   const exportTitle = file.name.replace(/\.html?$/i, '') || file.name;
   const canPptx = canShare && Boolean(onExportAsPptx) && !streaming;
+  useEffect(() => {
+    const nudgeKey = `${projectId}\n${file.name}`;
+    if (!canShare || exportReadyNudgeSeenRef.current.has(nudgeKey)) return;
+    exportReadyNudgeSeenRef.current.add(nudgeKey);
+    if (hasSeenExportReadyNudge(projectId, file.name)) return;
+    markExportReadyNudgeSeen(projectId, file.name);
+    setExportReadyNudge(true);
+    const timeout = window.setTimeout(() => setExportReadyNudge(false), 1800);
+    return () => window.clearTimeout(timeout);
+  }, [canShare, file.name, projectId]);
+
+  const openExportMenu = () => {
+    fireArtifactHeaderClick('share_dropdown');
+    setExportReadyNudge(false);
+    markExportReadyNudgeSeen(projectId, file.name);
+    setShareMenuOpen((v) => !v);
+  };
   const visibleSideComments = useMemo(
     () => previewComments
       .filter((comment) => comment.filePath === file.name && comment.status === 'open')
@@ -5384,7 +5618,10 @@ function HtmlViewer({
           <button
             type="button"
             className="icon-only"
-            onClick={() => setReloadKey((n) => n + 1)}
+            onClick={() => {
+              fireArtifactToolbarClick('reload');
+              setReloadKey((n) => n + 1);
+            }}
             title={t('fileViewer.reload')}
             aria-label={t('fileViewer.reloadAria')}
           >
@@ -5412,7 +5649,10 @@ function HtmlViewer({
                     type="button"
                     className={`viewer-mode-menu-item${mode === id ? ' active' : ''}`}
                     role="menuitem"
-                    onClick={() => selectMode(id)}
+                    onClick={() => {
+                      fireArtifactToolbarClick(id);
+                      selectMode(id);
+                    }}
                   >
                     <span>{label}</span>
                     {mode === id ? <Icon name="check" size={13} /> : null}
@@ -5436,7 +5676,10 @@ function HtmlViewer({
                   className="viewer-action zoom-trigger"
                   aria-haspopup="menu"
                   aria-expanded={zoomMenuOpen}
-                  onClick={() => setZoomMenuOpen((v) => !v)}
+                  onClick={() => {
+                    fireArtifactToolbarClick('zoom_level_dropdown');
+                    setZoomMenuOpen((v) => !v);
+                  }}
                   style={{ minWidth: 64 }}
                 >
                   <span style={{ fontVariantNumeric: 'tabular-nums' }}>{zoom}%</span>
@@ -5502,6 +5745,19 @@ function HtmlViewer({
               </button>
             </span>
           ) : null}
+          <button
+            type="button"
+            className={`viewer-toggle${tweaksMode ? ' on' : ''}`}
+            title={tweaksAvailable ? t('fileViewer.tweaks') : t('fileViewer.tweaksUnavailable')}
+            aria-pressed={tweaksMode}
+            disabled={!tweaksAvailable}
+            data-coming-soon={!tweaksAvailable ? 'true' : undefined}
+            onClick={() => setTweaksMode((v) => !v)}
+          >
+            <Icon name="tweaks" size={13} />
+            <span>{t('fileViewer.tweaks')}</span>
+            <span className="switch" aria-hidden />
+          </button>
         </div>
         <div className="viewer-toolbar-actions">
           {showPreviewToolbarControls ? (
@@ -5511,13 +5767,16 @@ function HtmlViewer({
                   type="button"
                   className={`viewer-action${selectedPalette || palettePopoverOpen ? ' active' : ''}`}
                   data-testid="palette-tweaks-toggle"
-                  title="Tweaks"
+                  title="Themes"
                   aria-haspopup="dialog"
                   aria-expanded={palettePopoverOpen}
-                  onClick={() => setPalettePopoverOpen((v) => !v)}
+                  onClick={() => {
+                    fireArtifactToolbarClick('tweaks');
+                    setPalettePopoverOpen((v) => !v);
+                  }}
                 >
-                  <Icon name="tweaks" size={13} />
-                  <span>Tweaks</span>
+                  <Icon name="paint-bucket" size={13} />
+                  <span>Themes</span>
                   {selectedPalette ? (
                     <span
                       className="palette-tweaks-badge"
@@ -5536,7 +5795,29 @@ function HtmlViewer({
                 <PaletteTweaks
                   open={palettePopoverOpen}
                   selected={selectedPalette}
-                  onChange={setSelectedPalette}
+                  onChange={(nextPalette) => {
+                    // P0 ui_click area=tweaks_popover. status_before/after
+                    // reflect whether THIS variant was selected. Picking
+                    // "Original" (nextPalette === null) reads as turning
+                    // off the previously selected variant — record that
+                    // by passing the prior selection as variant_name.
+                    const targetVariant = nextPalette ?? selectedPalette;
+                    if (targetVariant) {
+                      const wasSelected = selectedPalette === targetVariant;
+                      const willBeSelected = nextPalette === targetVariant;
+                      trackTweaksPopoverClick(analytics.track, {
+                        page_name: 'artifact',
+                        area: 'tweaks_popover',
+                        element: 'variant_option',
+                        variant_name: targetVariant,
+                        artifact_id: anonymizeArtifactId({ projectId, fileName: file.name }),
+                        artifact_kind: artifactKindToTracking({ fileKind: file.kind ?? null }),
+                        status_before: wasSelected ? 'on' : 'off',
+                        status_after: willBeSelected ? 'on' : 'off',
+                      });
+                    }
+                    setSelectedPalette(nextPalette);
+                  }}
                   onPreview={setPreviewPalette}
                   onClose={() => setPalettePopoverOpen(false)}
                 />
@@ -5548,6 +5829,7 @@ function HtmlViewer({
                 title={t('fileViewer.draw')}
                 aria-pressed={drawOverlayOpen}
                 onClick={() => {
+                  fireArtifactToolbarClick('draw');
                   const next = !drawOverlayOpen;
                   if (!next) {
                     setDrawOverlayOpen(false);
@@ -5582,6 +5864,7 @@ function HtmlViewer({
             title={t('fileViewer.comment')}
             aria-pressed={boardMode}
             onClick={() => {
+              fireArtifactToolbarClick('comment');
               capturePreviewScrollPosition();
               if (boardMode) {
                 setBoardMode(false);
@@ -5627,7 +5910,10 @@ function HtmlViewer({
                 title="Draw a pod selection"
                 aria-label="Pods"
                 aria-pressed={boardTool === 'pod'}
-                onClick={() => activateBoard('pod')}
+                onClick={() => {
+                  fireArtifactToolbarClick('pods');
+                  activateBoard('pod');
+                }}
               >
                 <Icon name="draw" size={13} />
                 <span>Pods</span>
@@ -5641,6 +5927,7 @@ function HtmlViewer({
             title="Inspect"
             aria-pressed={inspectMode}
             onClick={() => {
+              fireArtifactToolbarClick('inspect');
               setInspectMode((v) => {
                 const next = !v;
                 if (next) {
@@ -5665,6 +5952,7 @@ function HtmlViewer({
             title={t('fileViewer.edit')}
             aria-pressed={manualEditMode}
             onClick={() => {
+              fireArtifactToolbarClick('edit');
               capturePreviewScrollPosition();
               if (!manualEditMode) {
                 setBoardMode(false);
@@ -5693,7 +5981,10 @@ function HtmlViewer({
                 className="chrome-action chrome-action-secondary present-trigger"
                 aria-haspopup="menu"
                 aria-expanded={presentMenuOpen}
-                onClick={() => setPresentMenuOpen((v) => !v)}
+                onClick={() => {
+                  fireArtifactHeaderClick('present_dropdown');
+                  setPresentMenuOpen((v) => !v);
+                }}
               >
                 <Icon name="present" size={13} />
                 <span>{t('fileViewer.present')}</span>
@@ -5701,15 +5992,15 @@ function HtmlViewer({
               </button>
               {presentMenuOpen ? (
                 <div className="present-menu" role="menu">
-                  <button role="menuitem" onClick={presentInThisTab}>
+                  <button role="menuitem" onClick={() => { firePresentPopoverClick('in_this_tab'); presentInThisTab(); }}>
                     <span className="present-icon"><Icon name="eye" size={13} /></span>{' '}
                     {t('fileViewer.presentInTab')}
                   </button>
-                  <button role="menuitem" onClick={presentFullscreen}>
+                  <button role="menuitem" onClick={() => { firePresentPopoverClick('fullscreen'); presentFullscreen(); }}>
                     <span className="present-icon"><Icon name="play" size={13} /></span>{' '}
                     {t('fileViewer.presentFullscreen')}
                   </button>
-                  <button role="menuitem" onClick={presentNewTab}>
+                  <button role="menuitem" onClick={() => { firePresentPopoverClick('new_tab'); presentNewTab(); }}>
                     <span className="present-icon"><Icon name="share" size={13} /></span>{' '}
                     {t('fileViewer.presentNewTab')}
                   </button>
@@ -5720,12 +6011,15 @@ function HtmlViewer({
           {canShare ? (
             <div className="share-menu chrome-share-menu" ref={shareRef}>
               <button
-                className="chrome-action chrome-action-primary"
+                className={
+                  'chrome-action chrome-action-primary chrome-action-export' +
+                  (exportReadyNudge ? ' export-ready-nudge' : '')
+                }
                 aria-haspopup="menu"
                 aria-expanded={shareMenuOpen}
-                onClick={() => setShareMenuOpen((v) => !v)}
+                onClick={openExportMenu}
               >
-                <Icon name="share" size={13} />
+                <Icon name="download" size={13} />
                 <span>{t('fileViewer.shareLabel')}</span>
                 <Icon name="chevron-down" size={11} />
               </button>
@@ -6022,6 +6316,11 @@ function HtmlViewer({
                       onLoad={() => {
                         const frame = srcDocPreviewIframeRef.current;
                         if (!useUrlLoadPreview) iframeRef.current = frame;
+                        // Belt-and-suspenders for the ready handshake: if the
+                        // postMessage racing the parent's listener registration
+                        // ever loses, the load event still tells us the shell
+                        // script ran to completion.
+                        if (useLazySrcDocTransport) setSrcDocShellReady(true);
                         activateSrcDocTransport(frame);
                         dcViewportRestoreAtRef.current = Date.now();
                         frame?.contentWindow?.postMessage({

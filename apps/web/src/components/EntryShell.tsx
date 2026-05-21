@@ -10,15 +10,26 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-  defaultScenarioPluginIdForKind,
+  defaultScenarioPluginIdForProjectMetadata,
   type ConnectorDetail,
   type InstalledPluginRecord,
 } from '@open-design/contracts';
+import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
+import { useAnalytics } from '../analytics/provider';
 import {
-  isOpenDesignHostAvailable,
-  pickAndImportHostProject,
-  type OpenDesignHostProjectImportSuccess,
-} from '@open-design/host';
+  trackHomeNavClick,
+  trackHomeToolbarClick,
+  trackPageView,
+} from '../analytics/events';
+import {
+  clearOnboardingSessionId,
+  getOrCreateOnboardingSessionId,
+} from '../analytics/onboarding-session';
+import type {
+  TrackingOnboardingArea,
+  TrackingOnboardingStepIndex,
+  TrackingOnboardingStepName,
+} from '@open-design/contracts/analytics';
 import { useT } from '../i18n';
 import { navigate, useRoute } from '../router';
 import type {
@@ -38,7 +49,6 @@ import type {
   ProviderModelsResponse,
   SkillSummary,
 } from '../types';
-import { formatPickAndImportFailure } from '../utils/pickAndImportError';
 import { CenteredLoader } from './Loading';
 import { DesignsTab } from './DesignsTab';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
@@ -65,7 +75,6 @@ import type {
   PluginShareProjectOutcome,
 } from '../state/projects';
 import { TasksView } from './TasksView';
-import { Toast } from './Toast';
 import {
   API_KEY_PLACEHOLDERS,
   API_PROTOCOL_TABS,
@@ -83,27 +92,69 @@ import { fetchProviderModels } from '../providers/provider-models';
 // markup — both surfaces are always present, and CSS toggles
 // `display` based on `--compact-topbar` breakpoint (900px).
 
-// Default scenario plugin for each project kind. The mapping lives in
-// `@open-design/contracts` so the daemon's `/api/projects` and
-// `/api/runs` fallbacks resolve to the same plugin id when no
+// Default scenario plugin for each project kind/intent. The mapping
+// lives in `@open-design/contracts` so the daemon's `/api/projects`
+// and `/api/runs` fallbacks resolve to the same plugin id when no
 // `pluginId` is on the request body — plan §3.3 of
 // `specs/current/plugin-driven-flow-plan.md`.
-function defaultPluginIdForKind(metadata: ProjectMetadata): string | null {
-  return defaultScenarioPluginIdForKind(metadata.kind);
+function defaultPluginIdForMetadata(metadata: ProjectMetadata): string | null {
+  return defaultScenarioPluginIdForProjectMetadata(metadata);
 }
 
 function defaultPluginInputsForCreate(
   input: CreateInput,
   pluginId: string | null,
 ): Record<string, unknown> | null {
-  if (pluginId !== 'od-media-generation') return null;
   const kind = input.metadata.kind;
+  const projectName = input.name.trim();
+
+  if (pluginId === 'example-web-prototype') {
+    return {
+      artifactKind: input.metadata.includeLandingPage
+        ? 'landing page'
+        : 'web prototype',
+      fidelity: input.metadata.fidelity ?? 'high-fidelity',
+      audience: 'product evaluators',
+      designSystem: 'the active project design system',
+      template: input.metadata.templateLabel ?? 'the bundled web prototype seed',
+    };
+  }
+
+  if (pluginId === 'example-simple-deck') {
+    return {
+      deckType: 'pitch deck',
+      topic: projectName || 'the user brief',
+      audience: 'decision makers',
+      slideCount: 10,
+      speakerNotes: input.metadata.speakerNotes
+        ? 'include speaker notes'
+        : 'no speaker notes',
+      designSystem: 'the active project design system',
+    };
+  }
+
+  if (pluginId === 'od-new-generation') {
+    const templateLabel = input.metadata.templateLabel?.trim();
+    const artifactKind =
+      kind === 'template'
+        ? 'artifact based on a saved template'
+        : kind === 'other'
+          ? 'custom design artifact'
+          : `${kind} artifact`;
+    return {
+      artifactKind,
+      audience: 'product and design reviewers',
+      topic: templateLabel || projectName || 'the user brief',
+    };
+  }
+
+  if (pluginId !== 'od-media-generation') return null;
   if (kind !== 'image' && kind !== 'video' && kind !== 'audio') return null;
 
   const promptTemplate = input.metadata.promptTemplate;
   const subject =
     promptTemplate?.prompt?.trim()
-    || input.name.trim()
+    || projectName
     || promptTemplate?.title?.trim()
     || `${kind} concept`;
   const style =
@@ -132,6 +183,7 @@ interface Props {
   designSystems: DesignSystemSummary[];
   projects: Project[];
   templates: ProjectTemplate[];
+  onDeleteTemplate?: (id: string) => Promise<boolean>;
   promptTemplates: PromptTemplateSummary[];
   defaultDesignSystemId: string | null;
   connectors: ConnectorDetail[];
@@ -170,7 +222,7 @@ interface Props {
       autoSendFirstMessage?: boolean;
       pendingFiles?: File[];
     },
-  ) => void;
+  ) => Promise<boolean> | boolean | void;
   onCreatePluginShareProject: (
     pluginId: string,
     action: PluginShareAction,
@@ -209,12 +261,45 @@ interface Props {
   onCompleteOnboarding: () => void;
 }
 
+// Map an EntryNavRail view id to the analytics `element` enum on
+// `home/nav` ui_click. Returns `null` for views without a dedicated nav
+// button (the rail's "Home" target is the brand logo, which gets its own
+// element value via the logo click handler — not the changeView path).
+function navElementForView(
+  next: EntryViewKind,
+):
+  | 'home'
+  | 'projects'
+  | 'automations'
+  | 'plugins'
+  | 'design_systems'
+  | 'integrations'
+  | null {
+  switch (next) {
+    case 'home':
+      return 'home';
+    case 'projects':
+      return 'projects';
+    case 'tasks':
+      return 'automations';
+    case 'plugins':
+      return 'plugins';
+    case 'design-systems':
+      return 'design_systems';
+    case 'integrations':
+      return 'integrations';
+    default:
+      return null;
+  }
+}
+
 export function EntryShell({
   skills,
   designTemplates,
   designSystems,
   projects,
   templates,
+  onDeleteTemplate,
   promptTemplates,
   defaultDesignSystemId,
   connectors,
@@ -264,14 +349,18 @@ export function EntryShell({
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [newProjectInitialTab, setNewProjectInitialTab] =
     useState<CreateTab>('prototype');
-  const [folderImportError, setFolderImportError] = useState<{
-    message: string;
-    details?: string;
-  } | null>(null);
-  const [chipImporting, setChipImporting] = useState(false);
   const [integrationTab, setIntegrationTab] = useState<IntegrationTab>(integrationInitialTab);
   const [homePromptHandoff, setHomePromptHandoff] = useState<HomePromptHandoff | null>(null);
+  const analytics = useAnalytics();
   function changeView(next: EntryViewKind) {
+    const navElement = navElementForView(next);
+    if (navElement) {
+      trackHomeNavClick(analytics.track, {
+        page_name: 'home',
+        area: 'nav',
+        element: navElement,
+      });
+    }
     navigate({ kind: 'home', view: next });
   }
 
@@ -319,9 +408,9 @@ export function EntryShell({
     // is intentionally explicit so future kind-specific scenarios
     // (e.g. a deck- or image-specialized pipeline) can take over a
     // single row without touching the form.
-    const pluginId = defaultPluginIdForKind(input.metadata);
+    const pluginId = defaultPluginIdForMetadata(input.metadata);
     const pluginInputs = defaultPluginInputsForCreate(input, pluginId);
-    onCreateProject({
+    return onCreateProject({
       ...input,
       ...(pluginId ? { pluginId } : {}),
       ...(pluginInputs ? { pluginInputs } : {}),
@@ -363,11 +452,12 @@ export function EntryShell({
       ...(payload.contextConnectors && payload.contextConnectors.length > 0
         ? { contextConnectors: payload.contextConnectors }
         : {}),
+      ...(payload.workingDir ? { userWorkingDir: payload.workingDir } : {}),
     };
     onCreateProject({
       name,
       skillId: payload.skillId ?? null,
-      designSystemId: null,
+      designSystemId: payload.designSystemId ?? null,
       metadata,
       pendingPrompt: payload.prompt,
       ...(payload.pluginId ? { pluginId: payload.pluginId } : {}),
@@ -380,38 +470,6 @@ export function EntryShell({
         : {}),
       autoSendFirstMessage: true,
     });
-  }
-
-  // Stage B of plugin-driven-flow-plan: the rail's "From folder" chip
-  // dispatcher. Prefers the Electron-native folder picker when
-  // available so a single click lands the user in an imported
-  // project. Browser-only shells fall back to the existing modal
-  // path so the user can paste a baseDir.
-  async function handleChipFolderImport() {
-    if (chipImporting) return;
-    // PR #974 trust boundary: the renderer cannot pick a folder directly
-    // anymore — the host exposes `pickAndImport` instead (atomic pick +
-    // HMAC-gated import). On the web, fall back to opening the New
-    // Project modal so the user can paste a baseDir manually.
-    if (
-      isOpenDesignHostAvailable() &&
-      onImportFolderResponse
-    ) {
-      setChipImporting(true);
-      try {
-        const result = await pickAndImportHostProject();
-        if (!result || ('canceled' in result && result.canceled === true)) return;
-        if (result.ok === true) {
-          await onImportFolderResponse(result);
-          return;
-        }
-        setFolderImportError(formatPickAndImportFailure(result));
-      } finally {
-        setChipImporting(false);
-      }
-      return;
-    }
-    openNewProject('prototype');
   }
 
   function finishOnboarding() {
@@ -430,6 +488,7 @@ export function EntryShell({
       <Icon name="settings" size={17} />
     </button>
   );
+
 
   if (view === 'onboarding') {
     return (
@@ -466,6 +525,16 @@ export function EntryShell({
           <div className="entry-main__topbar">
             <div className="entry-main__topbar-chips">
               <GithubStarBadge />
+              <a
+                className="entry-discord-badge"
+                href="https://discord.gg/mHAjSMV6gz"
+                aria-label="Join the Open Design Discord"
+                title="Join the Open Design Discord"
+                data-testid="entry-discord-badge"
+              >
+                <Icon name="discord" size={14} className="entry-discord-badge__icon" />
+                <span className="entry-discord-badge__label">Join Discord</span>
+              </a>
               <InlineModelSwitcher
                 config={config}
                 agents={agents}
@@ -480,7 +549,14 @@ export function EntryShell({
               <button
                 type="button"
                 className="use-everywhere-chip"
-                onClick={() => openIntegrationTab('use-everywhere')}
+                onClick={() => {
+                  trackHomeToolbarClick(analytics.track, {
+                    page_name: 'home',
+                    area: 'toolbar',
+                    element: 'use_everywhere',
+                  });
+                  openIntegrationTab('use-everywhere');
+                }}
                 title={t('entry.useEverywhereTitle')}
                 aria-label={t('entry.useEverywhereAria')}
                 data-testid="entry-use-everywhere-button"
@@ -504,11 +580,12 @@ export function EntryShell({
               <HomeView
                 projects={projects}
                 projectsLoading={projectsLoading}
+                designSystems={designSystems}
+                defaultDesignSystemId={defaultDesignSystemId}
                 onSubmit={handlePluginLoopSubmit}
                 onOpenProject={onOpenProject}
                 onViewAllProjects={() => changeView('projects')}
                 onBrowseRegistry={() => changeView('plugins')}
-                onImportFolder={handleChipFolderImport}
                 onOpenNewProject={(tab) => {
                   // Stage B of plugin-driven-flow-plan: the rail's
                   // "From template" chip wires through here so the
@@ -569,6 +646,7 @@ export function EntryShell({
                   </header>
                   <DesignSystemsTab
                     systems={designSystems}
+                    templates={templates}
                     selectedId={defaultDesignSystemId}
                     onSelect={onChangeDefaultDesignSystem}
                     onCreate={onCreateDesignSystem}
@@ -603,6 +681,7 @@ export function EntryShell({
         designSystems={designSystems}
         defaultDesignSystemId={defaultDesignSystemId}
         templates={templates}
+        {...(onDeleteTemplate ? { onDeleteTemplate } : {})}
         promptTemplates={promptTemplates}
         connectors={connectors}
         connectorsLoading={connectorsLoading}
@@ -610,20 +689,13 @@ export function EntryShell({
         onCreate={handleCreate}
         onImportClaudeDesign={onImportClaudeDesign}
         {...(onImportFolder ? { onImportFolder } : {})}
+        {...(onImportFolderResponse ? { onImportFolderResponse } : {})}
         onOpenConnectorsTab={() => {
           setNewProjectOpen(false);
           openIntegrationTab('connectors');
         }}
         onClose={() => setNewProjectOpen(false)}
       />
-      {folderImportError ? (
-        <Toast
-          message={folderImportError.message}
-          details={folderImportError.details ?? null}
-          role="alert"
-          onDismiss={() => setFolderImportError(null)}
-        />
-      ) : null}
     </div>
   );
 }
@@ -659,6 +731,7 @@ function OnboardingView({
   onFinish: () => void;
 }) {
   const t = useT();
+  const analytics = useAnalytics();
   const [step, setStep] = useState(0);
   const [runtime, setRuntime] = useState<'local' | 'byok' | null>(null);
   const [designSource, setDesignSource] = useState<'github' | 'upload' | 'prompt' | null>(null);
@@ -737,6 +810,50 @@ function OnboardingView({
       agentRevealTimersRef.current = [];
     };
   }, []);
+
+  // Onboarding 4-step funnel (v2 doc). Fires one `page_view` per step
+  // exposure. The fourth step (`generation`) lives in
+  // `DesignSystemDetailView` because the user navigates out of this
+  // component once the design system project opens; that emission
+  // reads the same `onboarding_session_id` from sessionStorage.
+  // `clearOnboardingSessionId` runs on `onFinish` / unmount so a
+  // later DS visit unrelated to onboarding doesn't inherit the id.
+  const onboardingSessionIdRef = useRef<string>('');
+  if (!onboardingSessionIdRef.current) {
+    onboardingSessionIdRef.current = getOrCreateOnboardingSessionId();
+  }
+  useEffect(() => {
+    return () => {
+      clearOnboardingSessionId();
+    };
+  }, []);
+  useEffect(() => {
+    const onboardingSessionId = onboardingSessionIdRef.current;
+    if (!onboardingSessionId) return;
+    let area: TrackingOnboardingArea;
+    let stepIndex: TrackingOnboardingStepIndex;
+    let stepName: TrackingOnboardingStepName;
+    if (step === 0) {
+      area = 'runtime';
+      stepIndex = '1';
+      stepName = 'connect';
+    } else if (step === 1) {
+      area = 'about_you';
+      stepIndex = '2';
+      stepName = 'about_you';
+    } else {
+      area = 'design_system';
+      stepIndex = '3';
+      stepName = 'design_system';
+    }
+    trackPageView(analytics.track, {
+      page_name: 'onboarding',
+      area,
+      step_index: stepIndex,
+      step_name: stepName,
+      onboarding_session_id: onboardingSessionId,
+    });
+  }, [analytics.track, step]);
 
   const steps = [
     t('settings.onboardingStepConnect'),

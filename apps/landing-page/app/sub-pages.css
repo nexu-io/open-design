@@ -532,6 +532,15 @@ body.sub-page {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.template-meta-line {
+  display: block;
+  margin: -10px 20px 20px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
 
 @media (max-width: 720px) {
   .template-grid ul { grid-template-columns: 1fr; }

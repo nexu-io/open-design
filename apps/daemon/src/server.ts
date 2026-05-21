@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import net from 'node:net';
 import {
-  defaultScenarioPluginIdForKind,
+  defaultScenarioPluginIdForProjectMetadata,
   PLUGIN_SHARE_ACTION_PLUGIN_IDS,
 } from '@open-design/contracts';
 import {
@@ -183,12 +183,18 @@ import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
 import { createChatRunService } from './runs.js';
+import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
 import { reportRunCompletedFromDaemon } from './langfuse-bridge.js';
 import {
   createAnalyticsService,
+  newInsertId,
   readAnalyticsContext,
   readPublicConfigResponse,
 } from './analytics.js';
+import {
+  agentIdToTracking,
+  deriveConfigureGlobals,
+} from '@open-design/contracts/analytics';
 import {
   redactSecrets,
   testAgentConnection,
@@ -239,6 +245,7 @@ import {
   MCP_TEMPLATES,
   buildAcpMcpServers,
   buildClaudeMcpJson,
+  buildOpenCodeMcpConfigContent,
   isManagedProjectCwd,
   readMcpConfig,
   writeMcpConfig,
@@ -290,8 +297,10 @@ import {
   writeProjectFile,
 } from './projects.js';
 import { validateArtifactManifestInput } from './artifact-manifest.js';
+import { ArtifactPublicationBlockedError } from './artifact-publication-guard.js';
 import { readCurrentAppVersionInfo } from './app-version.js';
 import {
+  appendMessageAgentEvent,
   appendMessageStatusEvent,
   deleteConversation,
   deletePreviewComment,
@@ -351,6 +360,7 @@ import { LiveArtifactRefreshUnavailableError, refreshLiveArtifact } from './live
 import { LiveArtifactRefreshAbortError } from './live-artifacts/refresh.js';
 import { registerConnectorRoutes } from './connectors/routes.js';
 import { registerActiveContextRoutes } from './active-context-routes.js';
+import { registerHostToolsRoutes } from './host-tools-routes.js';
 import { registerMcpRoutes } from './mcp-routes.js';
 import { registerXaiRoutes } from './xai-routes.js';
 import { registerLiveArtifactRoutes } from './live-artifact-routes.js';
@@ -359,6 +369,9 @@ import { registerDeployRoutes, registerDeploymentCheckRoutes } from './deploy-ro
 import { registerMediaRoutes } from './media-routes.js';
 import { registerProjectRoutes, registerProjectArtifactRoutes, registerProjectFileRoutes, registerProjectUploadRoutes } from './project-routes.js';
 import { registerFinalizeRoutes, registerImportRoutes, registerProjectExportRoutes } from './import-export-routes.js';
+import { registerHandoffRoutes } from './handoff-routes.js';
+import { EmptyTranscriptError, synthesizeHandoffPrompt } from './handoff-design.js';
+import { TranscriptExportLockedError } from './transcript-export.js';
 import { registerChatRoutes } from './chat-routes.js';
 import { registerStaticResourceRoutes } from './static-resource-routes.js';
 import { registerRoutineRoutes, routineDbRowToContract } from './routine-routes.js';
@@ -1856,6 +1869,152 @@ function reconcileAssistantMessageOnRunEnd(db, runs, run) {
     });
 }
 
+function persistRunEventToAssistantMessage(db, run, event, data) {
+  if (!run.assistantMessageId) return;
+  const persisted = runSseEventToPersistedAgentEvent(event, data);
+  if (!persisted) return;
+  try {
+    appendMessageAgentEvent(db, run.assistantMessageId, persisted);
+  } catch (err) {
+    console.warn('[runs] message event persistence failed', err);
+  }
+}
+
+function runSseEventToPersistedAgentEvent(event, data) {
+  if (event === 'start') {
+    return {
+      kind: 'status',
+      label: 'starting',
+      ...(typeof data?.bin === 'string' ? { detail: data.bin } : {}),
+    };
+  }
+  if (event === 'stdout') {
+    const chunk = typeof data?.chunk === 'string' ? data.chunk : '';
+    return chunk ? { kind: 'text', text: chunk } : null;
+  }
+  if (event === 'error') {
+    const message = typeof data?.error?.message === 'string'
+      ? data.error.message
+      : typeof data?.message === 'string'
+        ? data.message
+        : '';
+    return {
+      kind: 'status',
+      label: 'error',
+      ...(message ? { detail: message } : {}),
+    };
+  }
+  if (event !== 'agent') return null;
+  return daemonAgentPayloadToPersistedAgentEvent(data);
+}
+
+function daemonAgentPayloadToPersistedAgentEvent(data) {
+  const type = data?.type;
+  if (type === 'status' && typeof data.label === 'string') {
+    const detail =
+      typeof data.detail === 'string'
+        ? data.detail
+        : typeof data.model === 'string'
+          ? data.model
+          : typeof data.ttftMs === 'number'
+            ? `first token in ${Math.round(data.ttftMs / 100) / 10}s`
+            : undefined;
+    return { kind: 'status', label: data.label, ...(detail ? { detail } : {}) };
+  }
+  if (type === 'text_delta' && typeof data.delta === 'string') {
+    return { kind: 'text', text: data.delta };
+  }
+  if (type === 'thinking_delta' && typeof data.delta === 'string') {
+    return { kind: 'thinking', text: data.delta };
+  }
+  if (type === 'thinking_start') return { kind: 'status', label: 'thinking' };
+  if (type === 'live_artifact') {
+    return {
+      kind: 'live_artifact',
+      action: data.action,
+      projectId: data.projectId,
+      artifactId: data.artifactId,
+      title: data.title,
+      ...(data.refreshStatus ? { refreshStatus: data.refreshStatus } : {}),
+    };
+  }
+  if (type === 'live_artifact_refresh') {
+    return {
+      kind: 'live_artifact_refresh',
+      phase: data.phase,
+      projectId: data.projectId,
+      artifactId: data.artifactId,
+      ...(data.refreshId ? { refreshId: data.refreshId } : {}),
+      ...(data.title ? { title: data.title } : {}),
+      ...(typeof data.refreshedSourceCount === 'number'
+        ? { refreshedSourceCount: data.refreshedSourceCount }
+        : {}),
+      ...(data.error ? { error: data.error } : {}),
+    };
+  }
+  if (type === 'tool_use' && typeof data.id === 'string' && typeof data.name === 'string') {
+    return { kind: 'tool_use', id: data.id, name: data.name, input: normalizePersistedToolInput(data.input) };
+  }
+  if (type === 'tool_result' && typeof data.toolUseId === 'string') {
+    return {
+      kind: 'tool_result',
+      toolUseId: data.toolUseId,
+      content: String(data.content ?? ''),
+      isError: Boolean(data.isError),
+    };
+  }
+  if (type === 'usage') {
+    const usage = data.usage && typeof data.usage === 'object' ? data.usage : {};
+    return {
+      kind: 'usage',
+      inputTokens: usage.input_tokens,
+      outputTokens: usage.output_tokens,
+      ...(typeof data.costUsd === 'number' ? { costUsd: data.costUsd } : {}),
+      ...(typeof data.durationMs === 'number' ? { durationMs: data.durationMs } : {}),
+    };
+  }
+  if (type === 'raw' && typeof data.line === 'string') return { kind: 'raw', line: data.line };
+  return null;
+}
+
+function normalizePersistedToolInput(input) {
+  if (!input || typeof input !== 'object') return input;
+  if ('filePath' in input && typeof input.filePath === 'string') {
+    return { ...input, file_path: input.filePath };
+  }
+  return input;
+}
+
+function pinAssistantMessageOnRunCreate(db, run) {
+  if (!run.conversationId || !run.assistantMessageId) return;
+  const existing = db
+    .prepare(`SELECT id FROM messages WHERE id = ?`)
+    .get(run.assistantMessageId);
+  if (existing) {
+    db.prepare(
+      `UPDATE messages
+          SET run_id = ?,
+              run_status = CASE
+                WHEN run_status IN ('succeeded', 'failed', 'canceled') THEN run_status
+                ELSE ?
+              END,
+              started_at = COALESCE(started_at, ?)
+        WHERE id = ?`,
+    ).run(run.id, run.status, run.createdAt, run.assistantMessageId);
+    return;
+  }
+  upsertMessage(db, run.conversationId, {
+    id: run.assistantMessageId,
+    role: 'assistant',
+    content: '',
+    agentId: run.agentId ?? undefined,
+    events: [],
+    runId: run.id,
+    runStatus: run.status,
+    startedAt: run.createdAt,
+  });
+}
+
 export function shouldReportRunCompletedFromMessage(saved, body = {}) {
   return Boolean(
     saved &&
@@ -1868,6 +2027,48 @@ export function shouldReportRunCompletedFromMessage(saved, body = {}) {
 
 export function telemetryPromptFromRunRequest(message, currentPrompt) {
   return typeof currentPrompt === 'string' ? currentPrompt : message;
+}
+
+const FORM_ANSWERS_HEADER_RE = /^\s*\[form answers\s+(?:\u2014|-)\s*([^\]\r\n]+)\]/i;
+
+function formAnswerTransitionForCurrentPrompt(currentPrompt) {
+  if (typeof currentPrompt !== 'string') return null;
+  const trimmed = currentPrompt.trim();
+  if (!trimmed) return null;
+  const match = FORM_ANSWERS_HEADER_RE.exec(trimmed);
+  if (!match) return null;
+  const rawFormId = (match[1] || 'form').trim() || 'form';
+  const formId = rawFormId.replace(/[^\w.-]/g, '') || 'form';
+  const lines = [
+    '## Latest user turn - form answers submitted',
+    trimmed,
+    '',
+    `The user has answered the ${formId} form. Do not emit another ${formId} form.`,
+  ];
+  if (formId.toLowerCase() === 'discovery') {
+    lines.push(
+      'Continue with RULE 2 / RULE 3 now. For Branch B answers, build now instead of asking another brief.',
+    );
+  } else {
+    lines.push(
+      'Treat these form answers as the active user turn instead of replaying the transcript as a fresh request.',
+    );
+  }
+  return lines.join('\n');
+}
+
+export function composeChatUserRequestForAgent(message, currentPrompt) {
+  const body =
+    typeof message === 'string' && message.trim()
+      ? message
+      : '(No extra typed instruction.)';
+  const transition = formAnswerTransitionForCurrentPrompt(currentPrompt);
+  if (!transition) return body;
+  return [
+    transition,
+    '## Full conversation transcript',
+    body,
+  ].join('\n\n');
 }
 
 export function createFinalizedMessageTelemetryReporter({
@@ -4283,6 +4484,13 @@ export async function startServer({
     isFinalizeProviderProtocol,
     redactSecrets,
   };
+  const handoffDeps = {
+    synthesizeHandoffPrompt,
+    FinalizeUpstreamError,
+    TranscriptExportLockedError,
+    EmptyTranscriptError,
+    redactSecrets,
+  };
   const validationDeps = { isSafeId, validateExternalApiBaseUrl, validateBaseUrl, validateProjectDesignSystemId };
   const agentDeps = {
     listProviderModels,
@@ -4315,6 +4523,13 @@ export async function startServer({
     db,
     http: httpDeps,
     projectStore: projectStoreDeps,
+  });
+  registerHostToolsRoutes(app, {
+    db,
+    http: httpDeps,
+    paths: pathDeps,
+    projectStore: projectStoreDeps,
+    projectFiles: projectFileDeps,
   });
   registerProjectRoutes(app, {
     db,
@@ -4395,6 +4610,15 @@ export async function startServer({
     projectStore: projectStoreDeps,
     validation: validationDeps,
     finalize: finalizeDeps,
+  });
+  registerHandoffRoutes(app, {
+    db,
+    http: httpDeps,
+    paths: pathDeps,
+    projectStore: projectStoreDeps,
+    conversations: conversationDeps,
+    validation: validationDeps,
+    handoff: handoffDeps,
   });
   registerDeploymentCheckRoutes(app, { db, http: httpDeps, deploy: deployDeps });
   app.use('/frames', express.static(FRAMES_DIR));
@@ -5769,7 +5993,31 @@ export async function startServer({
         return;
       }
       let contentPath = resolved;
+      let contentRel = resolvedRel;
       let buf = await fsp.readFile(resolved);
+      if (resolvedRel && /\.html?$/i.test(resolvedRel)) {
+        const shellTarget = iframeOnlyHtmlShellTarget(buf.toString('utf8'));
+        if (shellTarget) {
+          const targetFull = path.resolve(path.dirname(resolved), shellTarget);
+          const rootDir = path.resolve(plugin.fsPath);
+          const insideRoot =
+            (targetFull + path.sep).startsWith(root) ||
+            targetFull === rootDir;
+          if (insideRoot) {
+            try {
+              const st = await fsp.stat(targetFull);
+              const lst = await fsp.lstat(targetFull);
+              if (!lst.isSymbolicLink() && st.isFile() && st.size <= 5 * 1024 * 1024) {
+                buf = await fsp.readFile(targetFull);
+                contentPath = targetFull;
+                contentRel = path.relative(plugin.fsPath, targetFull).split(path.sep).join('/');
+              }
+            } catch {
+              // Keep the wrapper HTML if the iframe target cannot be read.
+            }
+          }
+        }
+      }
       if (resolvedRel && /(^|\/)example-slides\.html$/i.test(resolvedRel)) {
         const templateRel = resolvedRel.replace(
           /(^|\/)example-slides\.html$/i,
@@ -5794,6 +6042,7 @@ export async function startServer({
               const slidesHtml = buf.toString('utf8');
               buf = Buffer.from(assembleExample(tplHtml, slidesHtml, title), 'utf8');
               contentPath = templateFull;
+              contentRel = templateRel;
             }
           } catch {
             // Keep the raw fallback if the companion template is missing.
@@ -5816,10 +6065,77 @@ export async function startServer({
         : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
         : 'application/octet-stream';
       res.setHeader('Content-Type', ct);
+      if (ext === '.html' && typeof contentRel === 'string') {
+        buf = Buffer.from(
+          rewritePluginAssetUrls(
+            buf.toString('utf8'),
+            req.params.id,
+            path.posix.dirname(contentRel.replace(/\\/g, '/')),
+          ),
+          'utf8',
+        );
+      }
       res.send(buf);
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }
+  }
+
+  function iframeOnlyHtmlShellTarget(html: string): string | null {
+    if (typeof html !== 'string' || html.length === 0) return null;
+    const bodyMatch = /<body\b[^>]*>([\s\S]*?)<\/body>/i.exec(html);
+    if (!bodyMatch) return null;
+    const body = bodyMatch[1].replace(/<!--[\s\S]*?-->/g, '').trim();
+    const iframeMatch = /^<iframe\b[^>]*\bsrc\s*=\s*(['"])([^'"]+)\1[^>]*>\s*(?:<\/iframe>)?\s*$/i.exec(body);
+    if (!iframeMatch) return null;
+    const src = iframeMatch[2].trim();
+    if (
+      !src ||
+      src.startsWith('/') ||
+      src.startsWith('//') ||
+      src.includes('\0') ||
+      /^[a-z][a-z0-9+.-]*:/i.test(src)
+    ) {
+      return null;
+    }
+    const pathOnly = src.split(/[?#]/)[0] ?? '';
+    if (!/\.html?$/i.test(pathOnly)) return null;
+    return pathOnly;
+  }
+
+  function rewritePluginAssetUrls(html: string, pluginId: string, baseDir: string) {
+    if (typeof html !== 'string' || html.length === 0) return html;
+    const safeBase = baseDir === '.' ? '' : baseDir;
+    return html.replace(
+      /(\s(?:src|href|poster)\s*=\s*)(['"])([^'"]+)(\2)/gi,
+      (match, attr, quote, rawValue, closeQuote) => {
+        const value = String(rawValue).trim();
+        if (
+          !value ||
+          value.startsWith('#') ||
+          value.startsWith('/') ||
+          value.startsWith('//') ||
+          value.includes('\0') ||
+          /^[a-z][a-z0-9+.-]*:/i.test(value)
+        ) {
+          return match;
+        }
+        const splitAt = value.search(/[?#]/);
+        const rel = splitAt === -1 ? value : value.slice(0, splitAt);
+        const suffix = splitAt === -1 ? '' : value.slice(splitAt);
+        const normalized = path.posix.normalize(path.posix.join(safeBase, rel));
+        if (
+          normalized === '.' ||
+          normalized === '..' ||
+          normalized.startsWith('../') ||
+          path.posix.isAbsolute(normalized)
+        ) {
+          return match;
+        }
+        const url = `/api/plugins/${encodeURIComponent(pluginId)}/asset/${normalized}${suffix}`;
+        return `${attr}${quote}${url}${closeQuote}`;
+      },
+    );
   }
 
   // Plan §6 Phase 2B + spec §11.6 / §9.2 — plugin preview + examples.
@@ -8051,6 +8367,11 @@ export async function startServer({
         const body = { file: meta };
         res.json(body);
       } catch (err) {
+        if (err instanceof ArtifactPublicationBlockedError) {
+          return sendApiError(res, 422, 'ARTIFACT_PUBLICATION_BLOCKED', err.message, {
+            details: { placeholders: err.placeholders },
+          });
+        }
         sendApiError(res, 500, 'INTERNAL_ERROR', 'upload failed');
       }
     },
@@ -9223,6 +9544,10 @@ export async function startServer({
       research,
       message,
     );
+    const userRequestPrompt = composeChatUserRequestForAgent(
+      message,
+      currentPrompt,
+    );
     const clientInstructionPrompt = [researchCommandContract, runContextPrompt, systemPrompt]
       .map((part) => (typeof part === 'string' ? part.trim() : ''))
       .filter(Boolean)
@@ -9241,7 +9566,7 @@ export async function startServer({
           : linkedDirsHint
             ? `# Instructions${linkedDirsHint}\n\n---\n`
             : '',
-      `# User request\n\n${message || '(No extra typed instruction.)'}${attachmentHint}${commentHint}`,
+      `# User request\n\n${userRequestPrompt}${attachmentHint}${commentHint}`,
       safeImages.length
         ? `\n\n${safeImages.map((p) => `@${p}`).join(' ')}`
         : '',
@@ -9299,7 +9624,17 @@ export async function startServer({
     // We also unlink a stale `.mcp.json` we previously wrote when the user has
     // since disabled all servers, so removing a server actually takes effect
     // on the next run.
-    if (def.id === 'claude' && isManagedProjectCwd(cwd, PROJECTS_DIR)) {
+    // Dispatch on `def.externalMcpInjection` rather than hard-coding agent
+    // id / stream-format checks. The three branches are functionally
+    // equivalent to the previous shape (claude/acp), with the OpenCode
+    // env-content branch added to fix #2142. Runtimes that leave the field
+    // undefined fall through unchanged — the settings UI surfaces an
+    // explicit "external MCP is not forwarded to <agent>" banner for them
+    // so the previous silent-failure UX is gone.
+    if (
+      def.externalMcpInjection === 'claude-mcp-json' &&
+      isManagedProjectCwd(cwd, PROJECTS_DIR)
+    ) {
       {
         const target = path.join(cwd, '.mcp.json');
         if (enabledExternalMcp.length > 0) {
@@ -9336,9 +9671,38 @@ export async function startServer({
         }
       }
     }
-    if (enabledExternalMcp.length > 0 && def.streamFormat === 'acp-json-rpc') {
+    if (
+      enabledExternalMcp.length > 0 &&
+      def.externalMcpInjection === 'acp-merge'
+    ) {
       const acpExternal = buildAcpMcpServers(enabledExternalMcp);
       mcpServers.push(...acpExternal);
+    }
+    // OpenCode: serialise enabled MCP servers into its `mcp` config schema
+    // and hand the JSON to the child via `OPENCODE_CONFIG_CONTENT`. The env
+    // var is *merged* with the user's saved `~/.config/opencode/opencode
+    // .json` (per OpenCode's documented config layering), so adding a
+    // server here does not erase whatever the user already has in their
+    // global config. We deliberately leave the env unset when no servers
+    // are enabled — overwriting with `{}` would wipe the user's saved
+    // mcp section for this single invocation, which is exactly the kind
+    // of surprise the previous silent-failure UX taught us to avoid.
+    let opencodeConfigContent: string | null = null;
+    if (
+      def.externalMcpInjection === 'opencode-env-content' &&
+      enabledExternalMcp.length > 0
+    ) {
+      try {
+        opencodeConfigContent = buildOpenCodeMcpConfigContent(
+          enabledExternalMcp,
+          oauthTokensForSpawn,
+        );
+      } catch (err) {
+        console.warn(
+          '[mcp-config] failed to build OPENCODE_CONFIG_CONTENT:',
+          err && err.message ? err.message : err,
+        );
+      }
     }
 
     // Pre-flight the composed prompt against any argv-byte budget the
@@ -9436,7 +9800,10 @@ export async function startServer({
       return design.runs.finish(run, 'failed', 1, null);
     }
 
-    const send = (event, data) => design.runs.emit(run, event, data);
+    const send = (event, data) => {
+      persistRunEventToAssistantMessage(db, run, event, data);
+      design.runs.emit(run, event, data);
+    };
     const inactivityTimeoutMs = resolveChatRunInactivityTimeoutMs();
     const inactivityKillGraceMs = 3_000;
     let inactivityTimer = null;
@@ -9578,6 +9945,19 @@ export async function startServer({
           configuredAgentEnv,
         ),
         ...odMediaEnv,
+        // OpenCode external-MCP injection (issue #2142). Layered AFTER
+        // spawnEnvForAgent / odMediaEnv / configuredAgentEnv so the
+        // daemon-built MCP config wins over a stale value the user
+        // might have exported in their shell — that would let an
+        // outdated content string suppress the user's freshly-saved
+        // MCP servers, which is exactly the bug we are fixing.
+        // `opencodeConfigContent === null` means "no enabled servers";
+        // we deliberately leave the env unset in that case so the
+        // user's saved `~/.config/opencode/opencode.json` continues
+        // to apply as-is.
+        ...(opencodeConfigContent
+          ? { OPENCODE_CONFIG_CONTENT: opencodeConfigContent }
+          : {}),
       }, agentLaunch);
       spawnedAgentEnv = env;
       const invocation = createCommandInvocation({
@@ -10402,11 +10782,11 @@ export async function startServer({
     //
     // Stage A of plugin-driven-flow-plan: when neither the body nor the
     // project carries plugin info we fall back to the bundled scenario
-    // plugin for the project's `metadata.kind` so direct callers (CLI /
-    // SDK / agent-headless runs) get the same auto-binding the web
-    // create flow already produces. The fallback is silent — a bundled
-    // scenario that is not installed leaves the run plugin-less, which
-    // matches the legacy path.
+    // plugin for the project's metadata kind/intent so direct callers
+    // (CLI / SDK / agent-headless runs) get the same auto-binding the
+    // web create flow already produces. The fallback is silent — a
+    // bundled scenario that is not installed leaves the run plugin-less,
+    // which matches the legacy path.
     let resolvedSnapshot = null;
     if (typeof req.body?.projectId === 'string' && req.body.projectId) {
       let registryView;
@@ -10424,9 +10804,7 @@ export async function startServer({
           typeof projectRow?.appliedPluginSnapshotId === 'string'
           && projectRow.appliedPluginSnapshotId.length > 0;
         if (!hasPin) {
-          const fallbackPluginId = defaultScenarioPluginIdForKind(
-            projectRow?.metadata?.kind,
-          );
+          const fallbackPluginId = defaultScenarioPluginIdForProjectMetadata(projectRow?.metadata);
           if (fallbackPluginId && getInstalledPlugin(db, fallbackPluginId)) {
             runResolveBody = { ...req.body, pluginId: fallbackPluginId };
           }
@@ -10466,6 +10844,24 @@ export async function startServer({
       }
     }
     const run = design.runs.create(meta);
+    try {
+      pinAssistantMessageOnRunCreate(db, run);
+    } catch (err) {
+      console.warn('[runs] message create pin failed', err);
+    }
+    // Capture clientType for downstream telemetry (Langfuse uses it on
+    // run-completed metadata; PostHog gets it via the request header
+    // bridge). Prefer the explicit `x-od-client` header from desktop /
+    // web sidecars, fall back to user-agent detection. Without this the
+    // run object's `clientType` stays undefined and Langfuse traces lose
+    // the surface dimension.
+    const declaredClient = String(req.get('x-od-client') ?? '').toLowerCase();
+    if (declaredClient === 'desktop' || declaredClient === 'web') {
+      run.clientType = declaredClient;
+    } else {
+      const ua = String(req.get('user-agent') ?? '');
+      run.clientType = ua.includes('Electron/') ? 'desktop' : 'web';
+    }
     if (resolvedSnapshot?.ok) {
       try {
         const { linkSnapshotToRun } = await import('./plugins/snapshots.js');
@@ -10504,6 +10900,173 @@ export async function startServer({
     }
     reconcileAssistantMessageOnRunEnd(db, design.runs, run);
     design.runs.start(run, () => startChatRun(meta, run));
+
+    // Analytics v2: emit run_created (daemon-side authoritative) and
+    // schedule run_finished on terminal state. The matching `chat-routes.ts`
+    // handler is shadowed by this earlier registration in Express; emit
+    // here so PostHog actually receives the event. Both fire under the
+    // same insert_id prefix so any web-side mirror dedupes by $insert_id.
+    const analyticsContext = readAnalyticsContext(req);
+    if (analyticsContext) {
+      const reqBody = (req.body || {}) as Record<string, unknown>;
+      const runInsertId = newInsertId();
+      const runStartedAt = Date.now();
+      // Configure-state triplet — v2 schema requires every event to carry
+      // these so PostHog dashboards can split run lifecycle by execution
+      // setup. Web-side captures inherit them from a PostHog global
+      // register, but daemon-side captures (run_created/run_finished) need
+      // to populate them at capture time. Best-effort derivation from
+      // `detectAgents()` + the request's `agentId`:
+      //   - has_available_configure_cli: any CLI on PATH appears installed
+      //   - configure_type: 'local_cli' when the run targets an installed
+      //     CLI, otherwise 'unknown' (BYOK keys live in the web client
+      //     storage and are not visible to the daemon at this layer)
+      //   - configure_availability: 'available' when the requested CLI is
+      //     installed; 'unavailable' when it's known but not installed;
+      //     'unknown' otherwise
+      const appCfgForAnalytics = await readAppConfig(RUNTIME_DATA_DIR).catch(
+        () => ({} as Record<string, unknown>),
+      );
+      const detectedAgentsForAnalytics = await detectAgents(
+        (appCfgForAnalytics as { agentCliEnv?: Record<string, unknown> }).agentCliEnv ?? {},
+      ).catch(() => [] as Array<{ id: string; available: boolean }>);
+      // BYOK credentials live in the web client (localStorage / store) and
+      // are not visible to the daemon at this layer, so we pass
+      // `byokConfigured: undefined` and let the helper fall back to the
+      // installed-CLI signal. Web-side captures use the same helper with
+      // the full credential view to keep dashboards aligned.
+      //
+      // `mode: 'daemon'` pins the call into the helper's daemon branch so
+      // `configure_availability` is judged from the requested agent's
+      // install status (not the cohort-wide "any CLI installed?" fallback).
+      // Without it, a run for an uninstalled agent would still report
+      // `available` whenever any unrelated CLI was on PATH — see PR #2285
+      // review.
+      const configureGlobals = deriveConfigureGlobals({
+        mode: 'daemon',
+        agentId: typeof reqBody.agentId === 'string' ? reqBody.agentId : null,
+        agents: detectedAgentsForAnalytics,
+      });
+      const promptText =
+        typeof reqBody.currentPrompt === 'string'
+          ? reqBody.currentPrompt
+          : typeof reqBody.message === 'string'
+            ? reqBody.message
+            : '';
+      const userQueryTokens = promptText.length > 0
+        ? Math.ceil(promptText.length / 4)
+        : 0;
+      // Only fields the current `/api/runs` create payload actually
+      // sends. The v2 schema documents extended context props
+      // (entry_from / project_kind / target_platforms / fidelity /
+      // companion_surfaces / connectors / use_speaker_notes /
+      // include_animations / reference_template / aspect /
+      // project_source) but `packages/contracts/src/api/chat.ts` and
+      // `apps/web/src/providers/daemon.ts` do not yet thread them onto
+      // the wire, so reading them here would always produce null/undef
+      // — better to omit until a follow-up extends the create payload.
+      const baseProps: Record<string, unknown> = {
+        page_name: 'chat_panel',
+        area: 'chat_composer',
+        ...configureGlobals,
+        project_id: typeof reqBody.projectId === 'string' ? reqBody.projectId : null,
+        conversation_id:
+          typeof reqBody.conversationId === 'string' ? reqBody.conversationId : null,
+        run_id: run.id,
+        design_system_id:
+          typeof reqBody.designSystemId === 'string'
+            ? reqBody.designSystemId
+            : undefined,
+        // `design_system_source` is required in the v2 contract
+        // (RunCreatedProps / RunFinishedProps). The daemon doesn't see
+        // whether the chosen design system was the workspace default,
+        // a user pick, or template-inherited — that signal lives only
+        // in the web client. Derive what we honestly know from the
+        // wire payload: 'not_applicable' when no design system was
+        // selected, 'unknown' otherwise. A follow-up that threads
+        // `designSystemSource` through `CreateRunRequest` can replace
+        // this with the precise value. See PR #2285 review 2026-05-20
+        // 04:35 for the rationale.
+        design_system_source:
+          typeof reqBody.designSystemId === 'string' && reqBody.designSystemId
+            ? 'unknown'
+            : 'not_applicable',
+        has_attachment: Array.isArray(reqBody.attachments)
+          ? (reqBody.attachments as unknown[]).length > 0
+          : false,
+        user_query_tokens: userQueryTokens,
+        model_id: typeof reqBody.model === 'string' ? reqBody.model : null,
+        agent_provider_id:
+          typeof reqBody.agentId === 'string'
+            ? agentIdToTracking(reqBody.agentId)
+            : null,
+        skill_id: typeof reqBody.skillId === 'string' ? reqBody.skillId : null,
+        mcp_id: null,
+        token_count_source: userQueryTokens > 0 ? 'estimated' : 'unknown',
+      };
+      design.analytics.capture({
+        eventName: 'run_created',
+        context: analyticsContext,
+        appVersion: design.getAppVersion(),
+        properties: baseProps,
+        insertId: runInsertId,
+      });
+      design.runs.wait(run).then((status: {
+        status: string;
+        error?: string | null;
+        errorCode?: string | null;
+        exitCode?: number | null;
+        signal?: string | null;
+      }) => {
+        // `deriveRunErrorCode` is the invariant: when `result === 'failed'`
+        // it always returns a non-empty string so dashboards keyed on
+        // `error_code` never see a blank cell. Live in `run-result.ts`
+        // with unit coverage for the fall-through cases (ACP fatal,
+        // child close without error event, etc.).
+        const result = runResultFromStatus(status.status);
+        const errorCode = deriveRunErrorCode(status);
+        let inputTokens: number | undefined;
+        let outputTokens: number | undefined;
+        for (let i = run.events.length - 1; i >= 0; i -= 1) {
+          const ev = run.events[i];
+          const data = ev?.data as
+            | { type?: string; usage?: Record<string, unknown> | null }
+            | null
+            | undefined;
+          if (ev?.event === 'agent' && data?.type === 'usage' && data.usage) {
+            const u = data.usage;
+            if (typeof u.input_tokens === 'number') inputTokens = u.input_tokens;
+            if (typeof u.output_tokens === 'number') outputTokens = u.output_tokens;
+            if (inputTokens !== undefined || outputTokens !== undefined) break;
+          }
+        }
+        const haveUsage = inputTokens !== undefined || outputTokens !== undefined;
+        const totalTokens =
+          inputTokens !== undefined && outputTokens !== undefined
+            ? inputTokens + outputTokens
+            : undefined;
+        design.analytics.capture({
+          eventName: 'run_finished',
+          context: analyticsContext,
+          appVersion: design.getAppVersion(),
+          properties: {
+            ...baseProps,
+            area: 'chat_panel',
+            result,
+            artifact_count: 0,
+            total_duration_ms: Date.now() - runStartedAt,
+            ...(errorCode ? { error_code: errorCode } : {}),
+            ...(inputTokens !== undefined ? { input_tokens: inputTokens } : {}),
+            ...(outputTokens !== undefined ? { output_tokens: outputTokens } : {}),
+            ...(totalTokens !== undefined ? { total_tokens: totalTokens } : {}),
+            ...(haveUsage ? { token_count_source: 'provider_usage' } : {}),
+          },
+          insertId: `${runInsertId}-finish`,
+        });
+      }).catch(() => {
+        // wait() can't reject in current runs.ts impl, but guard anyway.
+      });
+    }
   });
 
   app.get('/api/runs', (req, res) => {
@@ -10861,6 +11424,7 @@ export async function startServer({
     routines: { routineService },
     validation: validationDeps,
     finalize: finalizeDeps,
+    handoff: handoffDeps,
     chat: { startChatRun, submitToolResultToRun },
     agents: agentDeps,
     critique: critiqueDeps,
