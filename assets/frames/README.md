@@ -26,8 +26,29 @@ assets/frames/
 ├── android-pixel.html       ← 412×900 + punch-hole camera
 ├── ipad-pro.html            ← 1024×1366 + USB-C edge
 ├── macbook.html             ← 1440×900 inside laptop chrome
-└── browser-chrome.html      ← Safari/Chrome window with traffic lights
+├── browser-chrome.html      ← Safari/Chrome window with traffic lights
+└── nav.js                   ← position relay for link-style multi-page prototypes
 \`\`\`
+
+## nav.js — multi-page navigation relay
+
+For link-style multi-page prototypes (an entry gallery/list that links out to
+separate screen pages, with a "back to list" link), include the shared relay
+on **every** page and mark back links with \`data-home\`:
+
+\`\`\`html
+<script src="/frames/nav.js"></script>
+...
+<a href="index.html" data-home>← All screens</a>
+\`\`\`
+
+It restores the list's scroll position when the user returns via a back link
+(instead of resetting to the top) and restores the last-viewed screen on
+fullscreen/reload. It relays through \`window.name\` because the preview iframe
+is sandboxed without \`allow-same-origin\`, where \`localStorage\` resets on every
+reload. The entry/list page is auto-detected (\`index.html\` or \`/\`); override
+with \`<meta name="od-nav" content="home">\`. This is for link navigation between
+separate pages — the iframe-composition pattern above does not need it.
 
 ## Usage
 

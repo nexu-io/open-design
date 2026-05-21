@@ -72,6 +72,10 @@ const residualAllowedExactPaths = new Set([
   "apps/packaged/esbuild.config.mjs",
   // Browser service workers must be served as JavaScript files.
   "apps/web/public/od-notifications-sw.js",
+  // Shared prototype navigation relay, served at /frames/nav.js and loaded by
+  // generated multi-page prototypes via <script src>. It runs inside the
+  // sandboxed preview iframe, so it must ship as plain browser JS, not TS.
+  "assets/frames/nav.js",
   // PostCSS loads Tailwind through a web-local .mjs compatibility config entry.
   "apps/web/postcss.config.mjs",
   "scripts/bake-html-ppt-examples.mjs",
