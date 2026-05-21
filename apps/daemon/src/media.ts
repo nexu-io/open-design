@@ -565,6 +565,11 @@ export async function generateMedia(args: {
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'senseaudio' && surface === 'video') {
+      const result = await renderSenseAudioVideo(ctx, credentials, args.onProgress);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
     } else if (def.provider === 'fishaudio' && surface === 'audio') {
       const result = await renderFishAudioTTS(ctx, credentials);
       bytes = result.bytes;
@@ -2371,6 +2376,181 @@ async function renderSenseAudioImage(ctx: MediaContext, credentials: ProviderCon
     bytes,
     providerNote: `senseaudio/${ctx.wireModel} · ${size}${reference ? ' · i2i' : ''} · ${bytes.length} bytes`,
     suggestedExt: '.png',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Provider: SenseAudio video — async POST /v1/video/create + GET
+// /v1/video/status polling.
+//
+// Docs: https://docs.senseaudio.cn/api-reference/endpoint/video/create
+//   * Wire model: doubao-seedance-2-0-260128 (ByteDance Seedance via the
+//     SenseAudio gateway). The registry surfaces this under the distinct
+//     catalog id `senseaudio-video-2.0-260128` to avoid colliding with the
+//     volcengine entry that carries the same wire name, so we hard-pin the
+//     wire model here instead of trusting ctx.wireModel.
+//   * create body: { model, content:[{type:'text',text}], duration, ratio,
+//     resolution, provider_specific:{ generate_audio } }. An optional
+//     { type:'image_url', image_url:{url} } content entry drives i2v — the
+//     same content shape volcengine's identical Seedance model accepts.
+//   * status: { status: pending|processing|completed|failed, progress?,
+//     video_url?, error_message? }.
+//   * Auth: Authorization: Bearer <API_KEY>; shares the senseaudio provider
+//     slot (OD_SENSEAUDIO_API_KEY / SENSEAUDIO_API_KEY).
+// Mirrors byok-tools.ts executeGenerateVideo (the BYOK chat path) so the two
+// surfaces stay behavior-identical, and renderVolcengineVideo's onProgress
+// heartbeat pattern so a long Seedance job keeps the agent's bash watchdog
+// alive instead of being killed mid-poll.
+// ---------------------------------------------------------------------------
+
+const SENSEAUDIO_VIDEO_WIRE_MODEL = 'doubao-seedance-2-0-260128';
+const SENSEAUDIO_VIDEO_DURATION_MIN = 4;
+const SENSEAUDIO_VIDEO_DURATION_MAX = 15;
+const SENSEAUDIO_VIDEO_DURATION_DEFAULT = 5;
+const SENSEAUDIO_VIDEO_RESOLUTION_DEFAULT = '720p';
+
+function senseAudioVideoDuration(raw: number | undefined): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return SENSEAUDIO_VIDEO_DURATION_DEFAULT;
+  const rounded = Math.round(raw);
+  if (rounded < SENSEAUDIO_VIDEO_DURATION_MIN) return SENSEAUDIO_VIDEO_DURATION_MIN;
+  if (rounded > SENSEAUDIO_VIDEO_DURATION_MAX) return SENSEAUDIO_VIDEO_DURATION_MAX;
+  return rounded;
+}
+
+async function renderSenseAudioVideo(
+  ctx: MediaContext,
+  credentials: ProviderConfig,
+  onProgress?: ProgressFn,
+): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no SenseAudio API key — configure it in Settings or set OD_SENSEAUDIO_API_KEY',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || SENSEAUDIO_DEFAULT_BASE_URL).replace(/\/+$/, '');
+  const promptRaw = (ctx.prompt && ctx.prompt.trim()) || 'A short cinematic clip.';
+  const prompt =
+    promptRaw.length > SENSEAUDIO_IMAGE_PROMPT_LIMIT
+      ? promptRaw.slice(0, SENSEAUDIO_IMAGE_PROMPT_LIMIT)
+      : promptRaw;
+  const ratio = volcengineRatioFor(ctx.aspect);
+  const duration = senseAudioVideoDuration(ctx.length ?? ctx.duration);
+
+  // Content array mirrors volcengine's identical Seedance model: a text
+  // entry, plus an optional first-frame image_url for i2v when the caller
+  // supplied a reference image.
+  const content: Array<Record<string, unknown>> = [{ type: 'text', text: prompt }];
+  const reference = ctx.imageRef?.dataUrl;
+  if (reference) {
+    content.push({ type: 'image_url', image_url: { url: reference } });
+  }
+
+  // Step 1: create the async task.
+  let taskId: string;
+  {
+    const resp = await fetch(`${baseUrl}/v1/video/create`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${credentials.apiKey}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: SENSEAUDIO_VIDEO_WIRE_MODEL,
+        content,
+        duration,
+        resolution: SENSEAUDIO_VIDEO_RESOLUTION_DEFAULT,
+        ratio,
+      }),
+    });
+    const text = await resp.text();
+    if (!resp.ok) {
+      throw new Error(`senseaudio video create ${resp.status}: ${truncate(text, 240)}`);
+    }
+    let data: any;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error(`senseaudio video create non-JSON: ${truncate(text, 200)}`);
+    }
+    if (typeof data?.task_id !== 'string' || !data.task_id) {
+      throw new Error('senseaudio video create response missing task_id');
+    }
+    taskId = data.task_id;
+  }
+
+  if (typeof onProgress === 'function') {
+    const mode = reference ? 'i2v' : 't2v';
+    onProgress(`senseaudio ${mode} task ${taskId} accepted; polling status…`);
+  }
+
+  // Step 2: poll until completed / failed / timeout. Match byok-tools.ts:
+  // 5 s interval, 120-attempt (10 min) ceiling — covers real Seedance
+  // latency without pinning the stream forever.
+  const startedAt = Date.now();
+  const maxMs = 10 * 60 * 1000;
+  // Poll interval is a test seam (mirrors OD_VOLCENGINE_VIDEO_MAX_POLL_MS):
+  // production uses SenseAudio's recommended 5 s; the suite sets a tiny
+  // value so it doesn't sleep for real.
+  const configuredPollMs = Number(process.env.OD_SENSEAUDIO_VIDEO_POLL_MS);
+  const pollMs = Number.isFinite(configuredPollMs) && configuredPollMs > 0 ? configuredPollMs : 5000;
+  let videoUrl = '';
+  let lastStatus = '';
+  while (Date.now() - startedAt < maxMs) {
+    await sleep(pollMs);
+    const statusResp = await fetch(
+      `${baseUrl}/v1/video/status?id=${encodeURIComponent(taskId)}`,
+      { headers: { authorization: `Bearer ${credentials.apiKey}` } },
+    );
+    const statusText = await statusResp.text();
+    if (!statusResp.ok) {
+      throw new Error(`senseaudio video status ${statusResp.status}: ${truncate(statusText, 240)}`);
+    }
+    let data: any;
+    try {
+      data = JSON.parse(statusText);
+    } catch {
+      throw new Error(`senseaudio video status non-JSON: ${truncate(statusText, 200)}`);
+    }
+    lastStatus = data?.status || '';
+    if (typeof onProgress === 'function') {
+      const elapsedSec = Math.round((Date.now() - startedAt) / 1000);
+      const pct = typeof data?.progress === 'number' ? ` ${data.progress}%` : '';
+      onProgress(`senseaudio task ${taskId} status=${lastStatus || 'pending'}${pct} (elapsed ${elapsedSec}s)`);
+    }
+    if (lastStatus === 'completed') {
+      if (typeof data?.video_url !== 'string' || !data.video_url) {
+        throw new Error('senseaudio video completed but missing video_url');
+      }
+      videoUrl = data.video_url;
+      break;
+    }
+    if (lastStatus === 'failed') {
+      throw new Error(`senseaudio video failed: ${data?.error_message || 'unknown reason'}`);
+    }
+  }
+  if (!videoUrl) {
+    throw new Error(`senseaudio video did not finish in time (last status: ${lastStatus || 'unknown'})`);
+  }
+
+  // Step 3: SSRF-guard the gateway-returned URL (attacker-controllable
+  // inside a successful response), then download the mp4 bytes.
+  const urlCheck = await assertExternalAssetUrl(videoUrl);
+  if (!urlCheck.ok) {
+    throw new Error(`senseaudio video ${urlCheck.error}`);
+  }
+  const dlResp = await fetch(videoUrl, { redirect: 'error' });
+  if (!dlResp.ok) {
+    throw new Error(`senseaudio video fetch ${dlResp.status}`);
+  }
+  const bytes = Buffer.from(await dlResp.arrayBuffer());
+  if (bytes.length === 0) {
+    throw new Error('senseaudio video fetch returned zero bytes');
+  }
+
+  return {
+    bytes,
+    providerNote: `senseaudio/${SENSEAUDIO_VIDEO_WIRE_MODEL} · ${ratio} · ${duration}s${reference ? ' · i2v' : ''} · ${bytes.length} bytes`,
+    suggestedExt: '.mp4',
   };
 }
 

@@ -488,6 +488,20 @@ export const VIDEO_MODELS: MediaModel[] = [
     caps: ['t2v'],
   },
 
+  // SenseAudio video — async /v1/video/create + /v1/video/status polling.
+  // The wire model is ByteDance's doubao-seedance-2-0-260128, but the
+  // catalog id MUST stay distinct from the volcengine entry above (same
+  // wire name) so findMediaModel routes generation through the senseaudio
+  // dispatch branch, not volcengine's. renderSenseAudioVideo maps this
+  // catalog id back to the doubao wire model internally.
+  {
+    id: 'senseaudio-video-2.0-260128',
+    label: 'senseaudio-video-2.0',
+    hint: 'SenseAudio · Seedance t2v + i2v + audio',
+    provider: 'senseaudio',
+    caps: ['t2v', 'i2v', 'audio'],
+  },
+
   // xAI Grok Imagine — 720p t2v + i2v with natively generated audio.
   {
     id: 'grok-imagine-video',

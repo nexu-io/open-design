@@ -42,6 +42,7 @@ import {
   VIDEO_LENGTHS_SEC,
   VIDEO_MODELS,
 } from '../media/models';
+import { SENSEAUDIO_VOICES } from '../media/senseaudio-voices';
 import { formatPickAndImportFailure } from '../utils/pickAndImportError';
 import { Icon } from './Icon';
 import { Skeleton } from './Loading';
@@ -2218,6 +2219,15 @@ function MediaProjectOptions(props:
   const audioDurations = props.audioKind === 'sfx'
     ? SFX_AUDIO_DURATIONS_SEC
     : AUDIO_DURATIONS_SEC;
+  // SenseAudio ships a fixed voice catalogue. When its TTS model is the
+  // active audio model, back the voice input with a <datalist> so users can
+  // pick a catalogue voice by friendly name — while keeping it an editable
+  // text input so custom / premium-tier voice ids still work.
+  const selectedAudioProvider = AUDIO_MODELS_BY_KIND[props.audioKind].find(
+    (m) => m.id === props.audioModel,
+  )?.provider;
+  const showSenseAudioVoiceList =
+    props.audioKind === 'speech' && selectedAudioProvider === 'senseaudio';
   return (
     <div className="newproj-media-options">
       <OptionCards
@@ -2247,11 +2257,28 @@ function MediaProjectOptions(props:
       {props.audioKind === 'speech' ? (
         <label className="newproj-label">
           <span>{t('newproj.voiceLabel')}</span>
-          <input
-            value={props.voice}
-            placeholder={t('newproj.voicePlaceholder')}
-            onChange={(e) => props.onVoice(e.target.value)}
-          />
+          {showSenseAudioVoiceList ? (
+            <select value={props.voice} onChange={(e) => props.onVoice(e.target.value)}>
+              <option value="">{t('newproj.voicePlaceholder')}</option>
+              {/* Preserve any value that isn't in the catalogue (e.g. a
+                  premium-tier id) so the dropdown stays in sync with state
+                  instead of silently snapping to the placeholder. */}
+              {props.voice !== '' && !SENSEAUDIO_VOICES.some((v) => v.id === props.voice) ? (
+                <option value={props.voice}>{props.voice}</option>
+              ) : null}
+              {SENSEAUDIO_VOICES.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {`${v.name}（${v.kind === 'male' ? '男' : v.kind === 'female' ? '女' : '童'}）`}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input
+              value={props.voice}
+              placeholder={t('newproj.voicePlaceholder')}
+              onChange={(e) => props.onVoice(e.target.value)}
+            />
+          )}
         </label>
       ) : null}
     </div>
@@ -2260,8 +2287,8 @@ function MediaProjectOptions(props:
 
 export function supportedModels(surface: 'image' | 'video' | 'audio', models: MediaModel[]): MediaModel[] {
   const supportedProviders: Record<'image' | 'video' | 'audio', Set<string>> = {
-    image: new Set(['openai', 'volcengine', 'grok', 'nanobanana']),
-    video: new Set(['volcengine', 'hyperframes', 'grok']),
+    image: new Set(['openai', 'volcengine', 'grok', 'nanobanana', 'senseaudio']),
+    video: new Set(['volcengine', 'hyperframes', 'grok', 'senseaudio']),
     audio: new Set(['minimax', 'fishaudio', 'senseaudio', 'elevenlabs', 'openai', 'volcengine']),
   };
   return models.filter((model) => {

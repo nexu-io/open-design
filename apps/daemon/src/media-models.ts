@@ -124,6 +124,11 @@ export const VIDEO_MODELS: MediaModel[] = [
   { id: 'doubao-seedance-1-0-lite-i2v-250428', label: 'seedance-1.0-lite-i2v', hint: 'ByteDance · image-to-video', provider: 'volcengine', caps: ['i2v'] },
   { id: 'doubao-seedance-1-0-lite-t2v-250428', label: 'seedance-1.0-lite-t2v', hint: 'ByteDance · text-to-video', provider: 'volcengine', caps: ['t2v'] },
 
+  // SenseAudio video — distinct catalog id from the volcengine entry above
+  // (same doubao-seedance-2-0-260128 wire name); renderSenseAudioVideo maps
+  // it back to the wire model so generation routes through senseaudio.
+  { id: 'senseaudio-video-2.0-260128', label: 'senseaudio-video-2.0', hint: 'SenseAudio · Seedance t2v + i2v + audio', provider: 'senseaudio', caps: ['t2v', 'i2v', 'audio'] },
+
   { id: 'grok-imagine-video', label: 'grok-imagine-video', hint: 'xAI · 720p t2v + i2v + native audio', provider: 'grok', caps: ['t2v', 'i2v', 'audio'] },
 
   { id: 'xAI/grok-imagine-video', label: 'xAI/grok-imagine-video', hint: 'ImageRouter · routed video', provider: 'imagerouter', caps: ['t2v', 'audio'] },
