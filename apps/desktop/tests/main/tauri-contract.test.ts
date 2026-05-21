@@ -49,6 +49,14 @@ describe("Tauri sidecar contract constants", () => {
     expect(rustSource).toContain("strip_prefix(&inline_prefix)");
   });
 
+  it("normalizes Windows verbatim paths before handing bundled helpers to Node", () => {
+    expect(rustSource).toContain("const WINDOWS_VERBATIM_PREFIX");
+    expect(rustSource).toContain("fn node_compatible_path(path: &Path) -> PathBuf");
+    expect(rustSource).toContain("let helper_path_for_node = node_compatible_path(&helper_path);");
+    expect(rustSource).toContain(".arg(helper_path_for_node)");
+    expect(rustSource).toContain(".env(TAURI_RESOURCE_DIR_ENV, resource_dir_for_node)");
+  });
+
   it("keeps JSON IPC response envelopes aligned with sidecar runtime framing", () => {
     expect(rustSource).toContain('json!({ "ok": true, "result": result })');
     expect(rustSource).toContain('json!({ "ok": false, "error": { "message": message.into() } })');

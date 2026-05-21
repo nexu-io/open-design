@@ -51,6 +51,8 @@ const TAURI_RESOURCE_DIR_ENV: &str = "OD_TAURI_RESOURCE_DIR";
 const DEFAULT_NAMESPACE: &str = "default";
 const DEFAULT_IPC_BASE: &str = "/tmp/open-design/ipc";
 const WINDOWS_PIPE_PREFIX: &str = "open-design";
+const WINDOWS_VERBATIM_UNC_PREFIX: &str = "\\\\?\\UNC\\";
+const WINDOWS_VERBATIM_PREFIX: &str = "\\\\?\\";
 const IMPORT_TOKEN_HEADER: &str = "X-OD-Desktop-Import-Token";
 const IMPORT_TOKEN_FIELD_SEP: &str = "~";
 const IMPORT_TOKEN_TTL_SECONDS: i64 = 60;
@@ -241,6 +243,17 @@ fn packaged_node_path(resource_dir: &Path) -> PathBuf {
         .join(if cfg!(windows) { "node.exe" } else { "node" })
 }
 
+fn node_compatible_path(path: &Path) -> PathBuf {
+    let raw = path.as_os_str().to_string_lossy();
+    if let Some(rest) = raw.strip_prefix(WINDOWS_VERBATIM_UNC_PREFIX) {
+        return PathBuf::from(format!("\\\\{rest}"));
+    }
+    if let Some(rest) = raw.strip_prefix(WINDOWS_VERBATIM_PREFIX) {
+        return PathBuf::from(rest.to_string());
+    }
+    path.to_path_buf()
+}
+
 fn resource_dir_from_current_exe() -> Result<PathBuf, String> {
     let exe = env::current_exe()
         .map_err(|error| format!("current executable path could not be resolved: {error}"))?;
@@ -295,6 +308,9 @@ fn start_packaged_sidecars(app: &tauri::App, state: &AppState) -> Result<Option<
             helper_path.display()
         ));
     }
+    let node_path_for_command = node_compatible_path(&node_path);
+    let helper_path_for_node = node_compatible_path(&helper_path);
+    let resource_dir_for_node = node_compatible_path(&resource_dir);
     let runtime_root = env::var(SIDECAR_ENV_BASE)
         .map(PathBuf::from)
         .map_err(|_| format!("missing {SIDECAR_ENV_BASE} for packaged Tauri sidecar helper"))?;
@@ -321,7 +337,7 @@ fn start_packaged_sidecars(app: &tauri::App, state: &AppState) -> Result<Option<
     writeln!(
         helper_log,
         "[open-design tauri] starting sidecar helper {}",
-        helper_path.display()
+        helper_path_for_node.display()
     )
     .map_err(|error| format!("packaged Tauri sidecar helper log write failed: {error}"))?;
     let helper_err_log = helper_log
@@ -330,12 +346,13 @@ fn start_packaged_sidecars(app: &tauri::App, state: &AppState) -> Result<Option<
     let config_path = env::var(PACKAGED_CONFIG_PATH_ENV)
         .map(PathBuf::from)
         .unwrap_or_else(|_| resource_dir.join("open-design-config.json"));
-    let mut command = Command::new(node_path);
+    let config_path_for_node = node_compatible_path(&config_path);
+    let mut command = Command::new(node_path_for_command);
     command
-        .arg(helper_path)
+        .arg(helper_path_for_node)
         .args(stamp_args(&state.stamp))
-        .env(TAURI_RESOURCE_DIR_ENV, &resource_dir)
-        .env(PACKAGED_CONFIG_PATH_ENV, config_path)
+        .env(TAURI_RESOURCE_DIR_ENV, resource_dir_for_node)
+        .env(PACKAGED_CONFIG_PATH_ENV, config_path_for_node)
         .stdin(Stdio::null())
         .stdout(Stdio::from(helper_log))
         .stderr(Stdio::from(helper_err_log));
