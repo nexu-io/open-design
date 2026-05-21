@@ -113,6 +113,26 @@ describe('resolveChatRunInactivityTimeoutMs', () => {
     process.env[ENV_KEY] = 'not-a-number';
     expect(resolveChatRunInactivityTimeoutMs()).toBe(TEN_MINUTES_MS);
   });
+
+  it('still throws on an invalid def hint when a finite env override is also set — the env must not hide a checked-in typo', () => {
+    // Reviewer-correctness fix: an earlier ordering placed the env
+    // early-return before the def validation, so a bad runtime def
+    // could sit unnoticed in source whenever an operator had set
+    // OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS. The fast-fail now runs first
+    // and catches the typo regardless of which branch eventually
+    // wins.
+    process.env[ENV_KEY] = '15000';
+    expect(() => resolveChatRunInactivityTimeoutMs(-1)).toThrow(
+      /must be a non-negative integer/,
+    );
+  });
+
+  it('returns the env override when both the env and a valid def hint are provided (env wins as operator escape hatch)', () => {
+    // Sanity: validation order does not change priority — env still
+    // wins when both are valid.
+    process.env[ENV_KEY] = '15000';
+    expect(resolveChatRunInactivityTimeoutMs(THIRTY_MINUTES_MS)).toBe(15_000);
+  });
 });
 
 describe('copilotAgentDef.inactivityTimeoutMs', () => {

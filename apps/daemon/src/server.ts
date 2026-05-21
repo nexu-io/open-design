@@ -4298,11 +4298,14 @@ const DEFAULT_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS = 60 * 1000;
 // watchdog for that agent. Both paths still pass through the 24-hour
 // clamp because Node silently downgrades signed-32-bit-overflowing
 // setTimeout delays to 1ms.
+//
+// Order matters: validate the def hint *before* checking the env
+// override. Otherwise a finite env value would hide a bad checked-in
+// value (e.g. `inactivityTimeoutMs: -1`) from ever tripping the
+// fast-fail — the typo could sit unnoticed in source until someone
+// removed the override. Validation now runs on every call regardless
+// of which branch ultimately wins.
 export function resolveChatRunInactivityTimeoutMs(agentDefault?: number) {
-  const env = Number(process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS);
-  if (Number.isFinite(env)) {
-    return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(env)));
-  }
   if (agentDefault !== undefined) {
     if (!Number.isFinite(agentDefault) || agentDefault < 0 || !Number.isInteger(agentDefault)) {
       throw new RangeError(
@@ -4310,6 +4313,12 @@ export function resolveChatRunInactivityTimeoutMs(agentDefault?: number) {
           'Fix the runtime def — invalid values used to silently disable the watchdog.',
       );
     }
+  }
+  const env = Number(process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS);
+  if (Number.isFinite(env)) {
+    return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(env)));
+  }
+  if (agentDefault !== undefined) {
     return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, agentDefault);
   }
   return DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
