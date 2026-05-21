@@ -412,4 +412,71 @@ describe('ProjectView daemon reattach restore', () => {
       expect(finalSave?.runStatus).toBe('canceled');
     });
   });
+
+  it('persists the last buffered delta immediately on pagehide instead of waiting for the 500ms debounce', async () => {
+    const startedAt = Date.now();
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-unload',
+        role: 'assistant',
+        content: '',
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-unload',
+        runStatus: 'running',
+        preTurnFileNames: [],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-unload',
+      status: 'running',
+      createdAt: startedAt,
+      updatedAt: startedAt,
+      exitCode: null,
+      signal: null,
+    });
+    listActiveChatRuns.mockResolvedValue([]);
+
+    let capturedOnDelta: ((text: string) => void) | null = null;
+    reattachDaemonRun.mockImplementation(async (options: any) => {
+      capturedOnDelta = options.handlers.onDelta;
+      return new Promise<void>(() => {});
+    });
+
+    renderProjectView();
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+    expect(capturedOnDelta).not.toBeNull();
+
+    // Stream a delta. persistSoon would schedule a save in 500ms, but the
+    // page is about to be torn down — anything not yet persisted is lost.
+    capturedOnDelta!('last buffered chunk');
+
+    // Page reload fires pagehide synchronously while the document is still
+    // alive; the buffered chunk must reach saveMessage with keepalive=true
+    // BEFORE the debounce timer would otherwise fire.
+    saveMessage.mockClear();
+    window.dispatchEvent(new Event('pagehide'));
+
+    await waitFor(() => {
+      const keepaliveSave = saveMessage.mock.calls.find((call) => {
+        const msg = call[2] as ChatMessage;
+        const opts = call[3] as { keepalive?: boolean } | undefined;
+        return (
+          msg?.id === 'msg-unload' &&
+          typeof msg.content === 'string' &&
+          msg.content.includes('last buffered chunk') &&
+          opts?.keepalive === true
+        );
+      });
+      expect(keepaliveSave).toBeTruthy();
+    });
+  });
 });
