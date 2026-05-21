@@ -1108,7 +1108,11 @@ test('spawnEnvForAgent applies configured CodeBuddy env including INTERNET_ENVIR
   assert.equal(env.PATH, '/usr/bin');
 });
 
-test('spawnEnvForAgent strips inherited CODEBUDDY_INTERNET_ENVIRONMENT when not configured', () => {
+test('spawnEnvForAgent preserves inherited CODEBUDDY_INTERNET_ENVIRONMENT when not configured', () => {
+  // When the user selects "Inherit / unset" in Settings, no configured
+  // value is persisted. The inherited value from the parent process
+  // (e.g. CODEBUDDY_INTERNET_ENVIRONMENT=internal pnpm tools-dev)
+  // must survive so China/iOA installs continue to work.
   const env = spawnEnvForAgent(
     'codebuddy',
     { CODEBUDDY_API_KEY: 'cb-test-key', CODEBUDDY_INTERNET_ENVIRONMENT: 'internal', PATH: '/usr/bin' },
@@ -1116,7 +1120,7 @@ test('spawnEnvForAgent strips inherited CODEBUDDY_INTERNET_ENVIRONMENT when not 
   );
 
   assert.equal(env.CODEBUDDY_API_KEY, 'cb-test-key');
-  assert.equal('CODEBUDDY_INTERNET_ENVIRONMENT' in env, false);
+  assert.equal(env.CODEBUDDY_INTERNET_ENVIRONMENT, 'internal');
 });
 
 test('spawnEnvForAgent keeps CODEBUDDY_INTERNET_ENVIRONMENT when configured overrides inherited', () => {

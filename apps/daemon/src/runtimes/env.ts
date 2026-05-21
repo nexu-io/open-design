@@ -81,22 +81,14 @@ export function spawnEnvForAgent(
   // Do not strip it — the key is the primary auth path, not a fallback.
   // See https://www.codebuddy.cn/docs/cli/env-vars.
   //
-  // CODEBUDDY_INTERNET_ENVIRONMENT is a closed enum (internal/ioa).
-  // When the user selects "inherit / unset" in Settings, the configured
-  // value is empty and gets dropped by validateAgentCliEnv. If the
-  // parent process inherited a non-default value (e.g. from a shell
-  // export), we must strip it here so the child sees the default
-  // (international) rather than the stale inherited value.
-  if (agentId === 'codebuddy') {
-    const hasConfiguredInternetEnv = Object.keys(expandConfiguredEnv(configuredEnv)).some(
-      (k) => k.toUpperCase() === 'CODEBUDDY_INTERNET_ENVIRONMENT',
-    );
-    if (!hasConfiguredInternetEnv) {
-      for (const key of Object.keys(env)) {
-        if (key.toUpperCase() === 'CODEBUDDY_INTERNET_ENVIRONMENT') delete env[key];
-      }
-    }
-  }
+  // CODEBUDDY_INTERNET_ENVIRONMENT is a closed enum (internal/ioa; empty
+  // or unset = international). When the user selects "Inherit / unset" in
+  // Settings, no configured value is persisted. In that case we preserve
+  // any inherited value from the parent process (e.g.
+  //   CODEBUDDY_INTERNET_ENVIRONMENT=internal pnpm tools-dev
+  // ) so that China/iOA installs launched with the env var on the command
+  // line continue to work. When the user explicitly selects a value in
+  // Settings, expandConfiguredEnv will override the inherited value.
   return env;
   return env;
 }
