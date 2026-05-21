@@ -10074,6 +10074,7 @@ export async function startServer({
               });
             }
           } catch {
+            await fs.promises.unlink(f.path).catch(() => {});
             // skip files that vanished mid-flight
           }
         }

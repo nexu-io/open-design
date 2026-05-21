@@ -87,6 +87,13 @@ describe('project folder upload route', () => {
     const raw = await fetch(`${baseUrl}/api/projects/${projectId}/raw/demo/src/App.tsx`);
     expect(raw.status).toBe(200);
     expect(await raw.text()).toBe('first');
+
+    const filesResp = await fetch(`${baseUrl}/api/projects/${projectId}/files`);
+    expect(filesResp.status).toBe(200);
+    const filesBody = (await filesResp.json()) as {
+      files: Array<{ name: string; path?: string }>;
+    };
+    expect(filesBody.files.map((file) => file.path ?? file.name).sort()).toEqual(['demo/src/App.tsx']);
   });
 
   it('rejects sensitive folder paths before exposing them as project files', async () => {

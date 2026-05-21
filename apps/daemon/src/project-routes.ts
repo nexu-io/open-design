@@ -1253,6 +1253,7 @@ export function registerProjectUploadRoutes(app: Express, ctx: RegisterProjectUp
               });
             }
           } catch {
+            await fs.promises.unlink(f.path).catch(() => {});
             // skip files that vanished mid-flight
           }
         }
