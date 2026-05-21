@@ -28,9 +28,16 @@ data:
 {{- $origins := .Values.config.allowedOrigins }}
   {{- if and .Values.ingress.enabled (not $origins) }}
     {{- $hostList := list }}
-    {{- $scheme := ternary "https://" "http://" (gt (len .Values.ingress.tls) 0) }}
     {{- range .Values.ingress.hosts }}
-      {{- $hostList = append $hostList (printf "%s%s" $scheme .host) }}
+      {{- $currentHost := .host }}
+      {{- $isSecure := false }}
+      {{- range $.Values.ingress.tls }}
+        {{- if has $currentHost .hosts }}
+          {{- $isSecure = true }}
+        {{- end }}
+      {{- end }}
+      {{- $scheme := ternary "https://" "http://" $isSecure }}
+      {{- $hostList = append $hostList (printf "%s%s" $scheme $currentHost) }}
     {{- end }}
     {{- $origins = join "," $hostList }}
   {{- else if not $origins }}
