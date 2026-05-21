@@ -1337,10 +1337,40 @@
   transition:
     background-color 120ms cubic-bezier(0.23, 1, 0.32, 1),
     border-color 120ms cubic-bezier(0.23, 1, 0.32, 1);
-  max-width: 260px;
+  max-width: 320px;
 }
 
 .automation-pill > span:not(:first-child):not(:last-child) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+/* Schedule summary segments inside the pill */
+.automation-pill__freq {
+  font-weight: 700;
+  color: var(--text-strong);
+  flex-shrink: 0;
+}
+
+.automation-pill__sep {
+  color: var(--text-muted);
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+.automation-pill__time {
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+.automation-pill__tz {
+  color: var(--text-muted);
+  font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1448,10 +1478,10 @@
 }
 
 .automation-popover--schedule {
-  width: min(360px, calc(100vw - 48px));
+  width: min(380px, calc(100vw - 48px));
   min-width: 320px;
-  padding: 10px;
-  gap: 8px;
+  padding: 12px;
+  gap: 10px;
 }
 
 .automation-popover--templates {
@@ -1608,8 +1638,8 @@
 
 .automation-popover__row {
   display: grid;
-  grid-template-columns: 120px minmax(0, 1fr);
-  gap: 8px;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
 }
 
 .automation-popover__field {
@@ -1632,13 +1662,22 @@
   -webkit-appearance: none;
   width: 100%;
   min-width: 0;
-  height: 32px;
-  padding: 0 30px 0 8px;
+  height: 36px;
+  padding: 0 10px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--bg-panel);
   color: var(--text);
   font-size: 12.5px;
+}
+
+/* Hide the browser-native clock icon so it doesn't crowd the time field */
+.automation-popover__field > input[type='time']::-webkit-calendar-picker-indicator {
+  display: none;
+}
+
+.automation-popover__field > input[type='time']::-webkit-inner-spin-button {
+  display: none;
 }
 
 .automation-popover__field > select {
