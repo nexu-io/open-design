@@ -9793,8 +9793,18 @@ export async function startServer({
       artifactRegistered = true;
       // Switch the watchdog to the shorter quiet-period window
       // immediately so we don't have to wait for the next agent event
-      // before the new ceiling takes effect.
-      if (inactivityTimer) noteAgentActivity();
+      // before the new ceiling takes effect. Call unconditionally:
+      // an earlier `if (inactivityTimer)` gate left the run in limbo
+      // when `OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS=0` but
+      // `OD_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS>0` — noteAgentActivity()
+      // had returned early at run start (pre-artifact delay = 0,
+      // no timer set), so the guard then skipped the re-arm and the
+      // newly-positive quiet-period delay never armed a timer at all.
+      // `noteAgentActivity` itself is the one that decides whether to
+      // schedule (it bails when the active delay is 0), so leaving the
+      // decision there keeps the behavior coherent across all four
+      // combinations of pre / quiet timeouts.
+      noteAgentActivity();
     };
     const unregisterChatAgentEventSink = () => {
       const sinkRunId = toolTokenGrant?.runId ?? runId;
