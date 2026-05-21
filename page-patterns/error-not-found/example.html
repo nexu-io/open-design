@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>404 — Pattern Preview</title>
+    <style>
+      :root {
+        --bg: #fafaf9;
+        --card: #ffffff;
+        --border: #e5e7eb;
+        --text: #18181b;
+        --muted: #71717a;
+        --accent: #18181b;
+        --accent-fg: #ffffff;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0; padding: 0; min-height: 100%;
+        font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+        background: var(--bg); color: var(--text);
+        line-height: 1.5;
+      }
+      header.brand {
+        padding: 22px 32px; font-weight: 700; font-size: 16px;
+      }
+      main {
+        position: relative;
+        min-height: calc(100vh - 70px);
+        display: grid; place-items: center;
+        padding: 24px;
+        text-align: center;
+        overflow: hidden;
+      }
+      .motif {
+        position: absolute; inset: 0;
+        background-image:
+          radial-gradient(circle, #e7e5e4 1px, transparent 1px);
+        background-size: 24px 24px;
+        opacity: 0.45;
+        pointer-events: none;
+      }
+      .stack {
+        position: relative; z-index: 1;
+        max-width: 480px;
+      }
+      .display {
+        font-family: ui-serif, Georgia, "Times New Roman", serif;
+        font-weight: 700;
+        font-size: 168px;
+        line-height: 1;
+        letter-spacing: -0.04em;
+        color: var(--text);
+        margin: 0 0 16px;
+      }
+      h1 {
+        font-size: 22px; letter-spacing: -0.01em;
+        margin: 0 0 8px;
+      }
+      p {
+        margin: 0 0 28px;
+        color: var(--muted); font-size: 15px;
+      }
+      .row {
+        display: flex; gap: 12px; justify-content: center;
+        align-items: center;
+      }
+      .btn {
+        display: inline-block; padding: 10px 16px;
+        border-radius: 8px; font-size: 14px; font-weight: 600;
+        border: 1px solid var(--border); background: #fff; color: inherit;
+        cursor: pointer; text-decoration: none;
+      }
+      .btn.primary {
+        background: var(--accent); color: var(--accent-fg);
+        border-color: var(--accent);
+      }
+      .back {
+        color: var(--muted); text-decoration: none; font-size: 14px;
+      }
+      .back:hover { color: var(--text); }
+    </style>
+  </head>
+  <body>
+    <header class="brand">Acme</header>
+    <main>
+      <div class="motif" aria-hidden="true"></div>
+      <div class="stack">
+        <div class="display" aria-hidden="true">404</div>
+        <h1>Page not found</h1>
+        <p>The page you're looking for doesn't exist or has been moved.</p>
+        <div class="row">
+          <a class="btn primary" href="#home">Take me home</a>
+          <a class="back" href="#back">&larr; Go back</a>
+        </div>
+      </div>
+    </main>
+  </body>
+</html>
