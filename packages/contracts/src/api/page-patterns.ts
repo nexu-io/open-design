@@ -15,7 +15,7 @@ export interface PagePatternIO {
    * Page type (namespace.name) the link or action targets. Optional
    * because some outputs are pure events with no destination yet.
    */
-  target_page_type?: string;
+  targetPageType?: string;
 }
 
 /**

@@ -28,7 +28,7 @@ export type {
   PagePatternSummary,
   PagePatternListResponse,
   PagePatternResponse,
-} from './api/page-patterns';
+} from './api/page-patterns.js';
 export * from './api/research.js';
 export * from './api/version.js';
 export * from './examples.js';
