@@ -2,10 +2,10 @@
 // when the left nav rail's "Home" tab is active.
 //
 // Owns the prompt state + active plugin lifecycle and stitches
-// together the smaller pieces (HomeHero, RecentProjectsStrip,
-// PluginsHomeSection). Replaces the older left-side `PluginLoopHome`
-// surface by lifting its plugin orchestration up here so the prompt
-// textarea can live centered in the hero.
+// together the smaller pieces (HomeHero, RecentProjectsStrip).
+// Replaces the older left-side `PluginLoopHome` surface by lifting
+// its plugin orchestration up here so the prompt textarea can live
+// centered in the hero.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
@@ -64,7 +64,6 @@ import {
   type HomePromptHandoff,
 } from './home-hero/plugin-authoring';
 import { PluginDetailsModal } from './PluginDetailsModal';
-import { PluginsHomeSection } from './PluginsHomeSection';
 import type { PluginLoopSubmit } from './PluginLoopHome';
 import type { FacetSelection } from './plugins-home/facets';
 import type { PluginUseAction } from './plugins-home/useActions';
@@ -169,7 +168,6 @@ interface Props {
   onSubmit: (payload: PluginLoopSubmit) => void;
   onOpenProject: (id: string) => void;
   onViewAllProjects: () => void;
-  onBrowseRegistry?: () => void;
   // Stage B: optional callbacks the rail's migration chips need.
   // HomeView itself never imports them; EntryShell threads them
   // through so the dispatcher can stay declarative.
@@ -194,7 +192,6 @@ export function HomeView({
   onSubmit,
   onOpenProject,
   onViewAllProjects,
-  onBrowseRegistry,
   onOpenNewProject,
   promptHandoff,
   skills = EMPTY_SKILLS,
@@ -1339,18 +1336,6 @@ export function HomeView({
           });
           onViewAllProjects();
         }}
-      />
-
-      <PluginsHomeSection
-        plugins={plugins}
-        loading={pluginsLoading}
-        activePluginId={active?.record.id ?? null}
-        pendingApplyId={pendingApplyId}
-        onUse={(record, action) => requestPluginContextUse(record, action)}
-        onOpenDetails={setDetailsRecord}
-        onBrowseRegistry={onBrowseRegistry}
-        preferDefaultFacet={false}
-        presetSelection={presetStartersSelection}
       />
 
       {detailsRecord ? (
