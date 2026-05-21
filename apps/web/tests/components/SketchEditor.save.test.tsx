@@ -127,6 +127,41 @@ describe('SketchEditor save', () => {
     expect(saveButton().querySelector('svg')).toBeNull();
   });
 
+  it('hides the checkmark when dirty becomes true after a successful save', async () => {
+    vi.useFakeTimers();
+    const onSave = vi.fn().mockResolvedValue(true);
+    const { rerender } = renderEditor({ dirty: true, onSave });
+
+    await act(async () => {
+      fireEvent.click(saveButton());
+    });
+    expect(saveButton().querySelector('svg')).not.toBeNull();
+
+    // Parent updates dirty=false after successful save, then dirty=true when user draws again
+    rerender(
+      <SketchEditor
+        items={[]}
+        onItemsChange={noop}
+        onSave={onSave}
+        fileName="test.sketch.json"
+        dirty={false}
+      />,
+    );
+
+    rerender(
+      <SketchEditor
+        items={[]}
+        onItemsChange={noop}
+        onSave={onSave}
+        fileName="test.sketch.json"
+        dirty={true}
+      />,
+    );
+
+    expect(saveButton().textContent).toBe('common.save');
+    expect(saveButton().querySelector('svg')).toBeNull();
+  });
+
   it('hides the checkmark when save fails if success indicator is still visible', async () => {
     vi.useFakeTimers();
     const onSave = vi.fn()
