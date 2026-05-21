@@ -261,7 +261,8 @@
         display: inline-flex; align-items: center; padding: var(--space-1) var(--space-2);
         border-radius: var(--radius-xs); font-size: var(--text-sm); font-weight: var(--weight-medium);
       }
-      .tag-lavender { background: var(--tag-lavender-mist-bg); color: var(--tag-lavender-mist-fg); }
+      .tag-lavender-mist { background: var(--tag-lavender-mist-bg); color: var(--tag-lavender-mist-fg); }
+      .tag-lavender { background: var(--tag-lavender-bg); color: var(--tag-lavender-fg); }
       .tag-mint { background: var(--tag-mint-bg); color: var(--tag-mint-fg); }
       .tag-pink { background: var(--tag-pink-bg); color: var(--tag-pink-fg); }
       .tag-blue { background: var(--tag-blue-bg); color: var(--tag-blue-fg); }
@@ -422,7 +423,8 @@
 
           <h3 style="margin-top: var(--space-6);">Tag Themes</h3>
           <div class="demo-row">
-            <span class="tag tag-lavender">Lavender</span>
+            <span class="tag tag-lavender-mist">Default</span>
+            <span class="tag tag-lavender">Category</span>
             <span class="tag tag-mint">Complete</span>
             <span class="tag tag-pink">Urgent</span>
             <span class="tag tag-blue">Info</span>
@@ -511,7 +513,7 @@
                 <p>Sprint planning board with Kanban views and progress tracking.</p>
               </div>
               <div class="card-footer">
-                <span class="tag tag-lavender">Template</span>
+                <span class="tag tag-lavender-mist">Template</span>
                 <div class="avatar-group">
                   <span class="avatar avatar-sm">T</span>
                   <span class="avatar avatar-sm" style="background: var(--tiffany-blue);">A</span>
@@ -656,6 +658,64 @@
               <div class="dropdown-item"><span class="icon-placeholder"></span> Duplicate</div>
               <div class="dropdown-item"><span class="icon-placeholder"></span> Rename</div>
               <div class="dropdown-item" style="color: var(--danger);"><span class="icon-placeholder" style="background: var(--danger);"></span> Delete</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Modal -->
+      <section>
+        <div class="container">
+          <div class="section-title">
+            <p class="eyebrow">Components</p>
+            <h1>Popup / Modal</h1>
+            <p class="lead">Dark welcome panel and standard content modal with body text.</p>
+          </div>
+          <div class="grid-2" style="max-width: 640px;">
+            <div class="modal" style="position: relative;">
+              <div class="modal-dark">
+                <h2>Welcome to Suivi</h2>
+                <p style="color: var(--teal-light); margin-block-end: var(--space-4);">Your workspace is ready. Let’s get started.</p>
+                <button class="btn btn-primary" style="background: var(--accent); color: var(--accent-on);">Get Started</button>
+              </div>
+            </div>
+            <div class="modal" style="position: relative;">
+              <div class="modal-body">
+                <h2 style="margin-block-end: var(--space-3);">Confirm Action</h2>
+                <p style="color: var(--fg-2); margin-block-end: var(--space-4);">Are you sure you want to archive this project? You can restore it later from Settings.</p>
+                <div class="demo-row">
+                  <button class="btn btn-primary">Archive</button>
+                  <button class="btn btn-secondary">Cancel</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Color Picker -->
+      <section>
+        <div class="container">
+          <div class="section-title">
+            <p class="eyebrow">Components</p>
+            <h1>Color Picker</h1>
+            <p class="lead">Swatch grid with hex input for tag and label customization.</p>
+          </div>
+          <div class="color-picker" style="max-width: 280px;">
+            <p style="font-size: var(--text-sm); font-weight: var(--weight-medium); color: var(--fg-2); margin-block-end: 0;">Pick a color</p>
+            <div class="color-swatches">
+              <span class="color-swatch" style="background: var(--accent);"></span>
+              <span class="color-swatch" style="background: var(--teal);"></span>
+              <span class="color-swatch" style="background: var(--brand-shamrock);"></span>
+              <span class="color-swatch" style="background: var(--brand-neon-blue);"></span>
+              <span class="color-swatch" style="background: var(--danger);"></span>
+              <span class="color-swatch" style="background: var(--brand-maize);"></span>
+              <span class="color-swatch" style="background: var(--mauve);"></span>
+              <span class="color-swatch" style="background: var(--tiffany-blue);"></span>
+            </div>
+            <div class="color-hex-input">
+              <span style="font-size: var(--text-sm); color: var(--muted);">#</span>
+              <input type="text" value="BB8FF0" />
             </div>
           </div>
         </div>
