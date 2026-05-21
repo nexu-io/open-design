@@ -372,28 +372,17 @@ describe('app-config', () => {
       });
     });
 
-    it('drops CODEBUDDY_INTERNET_ENVIRONMENT with invalid enum value and logs warning', async () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      await writeAppConfig(dataDir, {
-        agentCliEnv: {
-          codebuddy: {
-            CODEBUDDY_INTERNET_ENVIRONMENT: 'internel',
-            CODEBUDDY_API_KEY: 'cb-test-key',
+    it('rejects CODEBUDDY_INTERNET_ENVIRONMENT with invalid enum value', async () => {
+      await expect(
+        writeAppConfig(dataDir, {
+          agentCliEnv: {
+            codebuddy: {
+              CODEBUDDY_INTERNET_ENVIRONMENT: 'internel',
+              CODEBUDDY_API_KEY: 'cb-test-key',
+            },
           },
-        },
-      });
-      const cfg = await readAppConfig(dataDir);
-      // Invalid enum value should be dropped; valid key should persist.
-      expect(cfg.agentCliEnv).toEqual({
-        codebuddy: { CODEBUDDY_API_KEY: 'cb-test-key' },
-      });
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('CODEBUDDY_INTERNET_ENVIRONMENT'),
-      );
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('internel'),
-      );
-      warnSpy.mockRestore();
+        }),
+      ).rejects.toThrow(/CODEBUDDY_INTERNET_ENVIRONMENT/);
     });
 
     it('persists valid CODEBUDDY_INTERNET_ENVIRONMENT enum values', async () => {

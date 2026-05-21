@@ -95,19 +95,18 @@ export function spawnEnvForAgent(
   // Settings, expandConfiguredEnv will override the inherited value.
   //
   // However, inherited values outside the closed enum (e.g. a typo like
-  // "internel") are dropped with a console.warn so the child process
-  // falls back to the international default instead of failing with a
-  // confusing auth/connectivity error.
+  // "internel") are treated as a hard error so the bad configuration is
+  // surfaced immediately instead of silently sending traffic to the wrong
+  // network region.
   if (agentId === 'codebuddy') {
     for (const key of Object.keys(env)) {
       if (key.toUpperCase() === 'CODEBUDDY_INTERNET_ENVIRONMENT') {
         const value = env[key];
         if (typeof value === 'string' && value.trim() && !CODEBUDDY_INTERNET_ENV_ALLOWED.has(value.trim())) {
-          console.warn(
-            `[env] Dropping invalid inherited CODEBUDDY_INTERNET_ENVIRONMENT="${value}".` +
+          throw new Error(
+            `[env] Invalid inherited CODEBUDDY_INTERNET_ENVIRONMENT="${value}".` +
             ` Valid values: ${[...CODEBUDDY_INTERNET_ENV_ALLOWED].join(', ')}.`,
           );
-          delete env[key];
         }
       }
     }

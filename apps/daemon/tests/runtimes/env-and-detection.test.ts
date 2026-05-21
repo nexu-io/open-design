@@ -1146,18 +1146,15 @@ test('spawnEnvForAgent overrides inherited internal with configured public', () 
   assert.equal(env.CODEBUDDY_INTERNET_ENVIRONMENT, 'public');
 });
 
-test('spawnEnvForAgent drops invalid inherited CODEBUDDY_INTERNET_ENVIRONMENT with warning', () => {
-  // A typo like "internel" should be dropped so the child falls back to
-  // the international default instead of failing with a confusing error.
-  const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-  const env = spawnEnvForAgent(
-    'codebuddy',
-    { CODEBUDDY_API_KEY: 'cb-test-key', CODEBUDDY_INTERNET_ENVIRONMENT: 'internel', PATH: '/usr/bin' },
-    {},
-  );
-
-  assert.equal(env.CODEBUDDY_API_KEY, 'cb-test-key');
-  assert.equal('CODEBUDDY_INTERNET_ENVIRONMENT' in env, false);
-  expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('internel'));
-  warnSpy.mockRestore();
+test('spawnEnvForAgent throws on invalid inherited CODEBUDDY_INTERNET_ENVIRONMENT', () => {
+  // A typo like "internel" should fail fast instead of silently falling
+  // back to the international default, which would send traffic to the
+  // wrong network region.
+  expect(() =>
+    spawnEnvForAgent(
+      'codebuddy',
+      { CODEBUDDY_API_KEY: 'cb-test-key', CODEBUDDY_INTERNET_ENVIRONMENT: 'internel', PATH: '/usr/bin' },
+      {},
+    ),
+  ).toThrow(/Invalid inherited CODEBUDDY_INTERNET_ENVIRONMENT/);
 });

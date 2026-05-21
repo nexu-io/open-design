@@ -222,11 +222,10 @@ export function validateAgentCliEnv(raw: unknown): AgentCliEnvPrefs | undefined 
       if (!trimmed) continue;
       const allowedValues = enums?.get(envKey);
       if (allowedValues && !allowedValues.has(trimmed)) {
-        console.warn(
+        throw new Error(
           `[app-config] ${agentId}.${envKey}: invalid value "${trimmed}",` +
           ` expected one of: ${[...allowedValues].join(', ')}`,
         );
-        continue;
       }
       env[envKey] = trimmed;
     }
