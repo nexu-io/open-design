@@ -10,6 +10,7 @@ import type {
   ImportGitHubDesignSystemResponse,
   ImportLocalDesignSystemRequest,
   ImportLocalDesignSystemResponse,
+  ReplaceProjectWorkingDirResponse,
 } from '@open-design/contracts';
 import type {
   AgentInfo,
@@ -1739,6 +1740,63 @@ export async function openFolderDialog(): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+// "Replace working directory" — points an existing project at a new
+// folder. Mirrors the import-folder trust gate but updates the current
+// project record instead of creating a new project.
+export async function replaceProjectWorkingDir(
+  projectId: string,
+  baseDir: string,
+  desktopImportToken?: string,
+): Promise<ReplaceProjectWorkingDirResponse> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (desktopImportToken) {
+    headers['x-od-desktop-import-token'] = desktopImportToken;
+  }
+  const resp = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/working-dir`,
+    {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ baseDir }),
+    },
+  );
+  if (!resp.ok) {
+    const body = await readApiErrorBody(resp);
+    throw new Error(body.message);
+  }
+  return (await resp.json()) as ReplaceProjectWorkingDirResponse;
+}
+
+// Hand-off (open project in local app). The daemon enumerates installed
+// editors on demand (PATH probe + macOS bundle scan), and the POST
+// endpoint spawns the chosen app with the project's resolvedDir.
+export async function fetchHostEditors(): Promise<
+  import('@open-design/contracts').HostEditorsResponse
+> {
+  const resp = await fetch('/api/editors');
+  if (!resp.ok) throw new Error(`GET /api/editors failed: ${resp.status}`);
+  return (await resp.json()) as import('@open-design/contracts').HostEditorsResponse;
+}
+
+export async function openProjectInEditor(
+  projectId: string,
+  editorId: import('@open-design/contracts').HostEditorId,
+): Promise<import('@open-design/contracts').OpenProjectInEditorResponse> {
+  const resp = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/open-in`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ editorId }),
+    },
+  );
+  if (!resp.ok) {
+    const body = await readApiErrorBody(resp);
+    throw new Error(body.message);
+  }
+  return (await resp.json()) as import('@open-design/contracts').OpenProjectInEditorResponse;
 }
 
 export async function fetchDesignSystemPreview(id: string): Promise<string | null> {

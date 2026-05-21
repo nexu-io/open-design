@@ -1,0 +1,202 @@
+---
+import { getCollection } from 'astro:content';
+import Layout from '../../_components/sub-page-layout.astro';
+import type { HeaderProps } from '../../_components/header';
+import LazyImg from '../../_components/lazy-img.astro';
+import {
+  getCraftRecords,
+  getSkillModeIndex,
+  getSkillRecords,
+  getSkillScenarioIndex,
+  getSystemCategoryIndex,
+  getSystemRecords,
+  getTemplateRecords,
+  tally,
+} from '../../_lib/catalog';
+import {
+  PREFIXED_LOCALES,
+  getCopy,
+  isLocale,
+  localizeCategory,
+  type Locale,
+} from '../../_lib/i18n';
+import { getPublicPlugins, getRegistryCounts } from '../../plugin-registry';
+import '../../globals.css';
+import '../../sub-pages.css';
+
+// Localized routing only generates listing/index pages. Detail pages
+// (individual skills, posts, templates, …) stay at canonical English
+// URLs to keep the static build bounded; the localized chrome links
+// straight to those canonical detail URLs.
+export async function getStaticPaths() {
+  const skillModes = await getSkillModeIndex();
+  const skillScenarios = await getSkillScenarioIndex();
+  const systemCategories = await getSystemCategoryIndex();
+
+  const paths = [
+    'skills',
+    'systems',
+    'craft',
+    'templates',
+    'blog',
+    'plugins',
+    ...skillModes.map((item) => `skills/mode/${item.slug}`),
+    ...skillScenarios.map((item) => `skills/scenario/${item.slug}`),
+    ...systemCategories.map((item) => `systems/category/${item.slug}`),
+  ];
+
+  return PREFIXED_LOCALES.flatMap((locale) =>
+    paths.map((path) => ({
+      params: { locale, path },
+    })),
+  );
+}
+
+const localeParam = Astro.params.locale;
+const locale: Locale = isLocale(localeParam) ? localeParam : 'en';
+const copy = getCopy(locale);
+const pathParam = Astro.params.path ?? '';
+const segments = pathParam.split('/').filter(Boolean);
+
+const [skills, systems, craft, templates, posts] = await Promise.all([
+  getSkillRecords(),
+  getSystemRecords(),
+  getCraftRecords(),
+  getTemplateRecords(),
+  getCollection('blog'),
+]);
+const plugins = getPublicPlugins();
+
+// All cross-locale subpage links resolve to canonical (English) URLs.
+const href = (path: string) => path;
+const titleSuffix = 'Open Design';
+const routeRoot = segments[0] ?? '';
+const routeSecond = segments[1] ?? '';
+const routeThird = segments[2] ?? '';
+
+const sortedPosts = posts.sort((a, b) => b.data.date.getTime() - a.data.date.getTime());
+
+const modeTags = await getSkillModeIndex();
+const scenarioTags = await getSkillScenarioIndex();
+const systemCategories = await getSystemCategoryIndex();
+const platformTally = tally(skills.map((skill) => skill.platform).filter((item): item is string => Boolean(item)));
+const pluginCounts = getRegistryCounts(plugins);
+
+const pageTitle = routeRoot === 'skills'
+  ? `${copy.skillsTitle} — ${skills.length} | ${titleSuffix}`
+  : routeRoot === 'systems'
+    ? `${copy.systemsTitle} — ${systems.length} | ${titleSuffix}`
+    : routeRoot === 'templates'
+      ? `${copy.templatesTitle} — ${templates.length} | ${titleSuffix}`
+      : routeRoot === 'craft'
+        ? `${copy.craftTitle} — ${craft.length} | ${titleSuffix}`
+        : routeRoot === 'plugins'
+          ? `${copy.pluginsTitle} — ${pluginCounts.all} | ${titleSuffix}`
+          : `${copy.blog} — ${titleSuffix}`;
+
+const pageDescription = `Open Design ${routeRoot || 'landing'} page.`;
+---
+
+<Layout title={pageTitle} description={pageDescription} active={routeRoot as HeaderProps['active']} locale={locale} prefixDefaultLocale={true}>
+    {routeRoot === 'blog' && (
+      <>
+        <header class='catalog-head'>
+          <span class='label'>{copy.blog}</span>
+          <h1 class='display'>{copy.blog}<span class='dot'>.</span></h1>
+          <p class='lead'>Notes to help you understand, explore, and build with Open Design.</p>
+        </header>
+        <section class='catalog-grid'>
+          <ol>
+            {sortedPosts.map((post, index) => (
+              <li class='catalog-row'>
+                <a href={href(`/blog/${post.id}/`)}>
+                  <span class='row-index'>{String(index + 1).padStart(2, '0')}</span>
+                  <span class='row-body'>
+                    <span class='row-name'>{post.data.title}</span>
+                    <span class='row-desc'>{post.data.summary}</span>
+                  </span>
+                  <span class='meta-tag'>{localizeCategory(post.data.category, locale)}</span>
+                </a>
+              </li>
+            ))}
+          </ol>
+        </section>
+      </>
+    )}
+
+    {routeRoot === 'skills' && (
+      <>
+        <header class='catalog-head'>
+          <span class='label'>{copy.catalog} · Nº 01</span>
+          <h1 class='display'><em>{copy.skillsTitle}</em> — {skills.length} composable design capabilities<span class='dot'>.</span></h1>
+          <p class='lead'>Each skill is a folder with one <code>SKILL.md</code>. Drop it in, restart the daemon, and the picker shows it.</p>
+        </header>
+        {routeSecond === '' && (
+          <section class='filter-strip' aria-label='Skill filters'>
+            <div class='filter-group'>
+              <span class='filter-label'>{copy.mode}</span>
+              <ul>{modeTags.map((tag) => <li><a class='chip chip-link' href={href(`/skills/mode/${tag.slug}/`)}>{tag.label}<span class='chip-num'>{tag.count}</span></a></li>)}</ul>
+            </div>
+            <div class='filter-group'>
+              <span class='filter-label'>{copy.scenario}</span>
+              <ul>{scenarioTags.slice(0, 12).map((tag) => <li><a class='chip chip-link' href={href(`/skills/scenario/${tag.slug}/`)}>{tag.label}<span class='chip-num'>{tag.count}</span></a></li>)}</ul>
+            </div>
+            <div class='filter-group'>
+              <span class='filter-label'>{copy.platform}</span>
+              <ul>{platformTally.map(([key, count]) => <li><span class='chip'>{key}<span class='chip-num'>{count}</span></span></li>)}</ul>
+            </div>
+          </section>
+        )}
+        <section class='catalog-grid catalog-grid-skills'>
+          <ol>
+            {skills
+              .filter((skill) => routeSecond === 'mode' ? skill.mode === routeThird : routeSecond === 'scenario' ? skill.scenario === routeThird : true)
+              .map((skill, index) => (
+                <li class='catalog-row'>
+                  <a href={href(`/skills/${skill.slug}/`)}>
+                    <span class='row-index'>{String(index + 1).padStart(2, '0')}</span>
+                    <span class='row-body'><span class='row-name'>{skill.name}</span><span class='row-desc'>{skill.description}</span></span>
+                    {skill.mode && <span class='meta-tag'>{skill.mode}</span>}
+                  </a>
+                </li>
+              ))}
+          </ol>
+        </section>
+      </>
+    )}
+
+    {routeRoot === 'systems' && (
+      <>
+        <header class='catalog-head'>
+          <span class='label'>{copy.catalog} · Nº 02</span>
+          <h1 class='display'><em>{copy.systemsTitle}</em> — {systems.length} portable visual systems<span class='dot'>.</span></h1>
+          <p class='lead'>Each system is a single <code>DESIGN.md</code> token spec that keeps colors, type, spacing, and components consistent.</p>
+        </header>
+        {routeSecond === '' && <section class='filter-strip'><div class='filter-group'><span class='filter-label'>{copy.category}</span><ul>{systemCategories.map((tag) => <li><a class='chip chip-link' href={href(`/systems/category/${tag.slug}/`)}>{tag.label}<span class='chip-num'>{tag.count}</span></a></li>)}</ul></div></section>}
+        <section class='catalog-grid systems-grid'>
+          <ul>{systems.filter((system) => routeSecond === 'category' ? system.category === routeThird : true).map((system) => <li class='system-card'><a href={href(`/systems/${system.slug}/`)}><span class='system-name'>{system.name}</span><p>{system.tagline}</p><span class='meta-tag'>{system.category}</span></a></li>)}</ul>
+        </section>
+      </>
+    )}
+
+    {routeRoot === 'craft' && (
+      <>
+        <header class='catalog-head'><span class='label'>{copy.catalog} · Nº 03</span><h1 class='display'><em>{copy.craftTitle}</em> — {craft.length} rendering principles<span class='dot'>.</span></h1><p class='lead'>Quality rules for accessibility, motion, color, type, and state coverage.</p></header>
+        <section class='catalog-grid'><ol>{craft.map((item, index) => <li class='catalog-row'><a href={href(`/craft/${item.slug}/`)}><span class='row-index'>{String(index + 1).padStart(2, '0')}</span><span class='row-body'><span class='row-name'>{item.name}</span><span class='row-desc'>{item.summary}</span></span></a></li>)}</ol></section>
+      </>
+    )}
+
+    {routeRoot === 'templates' && (
+      <>
+        <header class='catalog-head'><span class='label'>{copy.catalog} · Nº 04</span><h1 class='display'><em>{copy.templatesTitle}</em> — {templates.length} ready-to-fork artifacts<span class='dot'>.</span></h1><p class='lead'>Pre-wired artifact bundles with examples, visual language, and agent instructions.</p></header>
+        <section class='template-grid'><ul>{templates.map((template, index) => <li class='template-card'><a href={href(template.detailHref)}>{template.previewUrl && <span class='template-thumb'><LazyImg src={template.previewUrl} alt='' loading={index < 4 ? 'eager' : 'precise'} /></span>}<span class='template-name'>{template.name}</span><p class='template-summary'>{template.summary}</p></a></li>)}</ul></section>
+      </>
+    )}
+
+    {routeRoot === 'plugins' && (
+      <>
+        <header class='catalog-head'><span class='label'>Plugin Registry</span><h1 class='display'><em>{copy.pluginsTitle}</em> — {pluginCounts.all} installable entries<span class='dot'>.</span></h1><p class='lead'>Discover installable workflows, decks, image templates, design systems, and agent-native capabilities.</p></header>
+        <section class='catalog-grid'><ol>{plugins.map((plugin, index) => <li class='catalog-row'><a href={href(plugin.detailHref)}><span class='row-index'>{String(index + 1).padStart(2, '0')}</span><span class='row-body'><span class='row-name'>{plugin.title}</span><span class='row-desc'>{plugin.description}</span></span><span class='meta-tag'>{plugin.registryName}</span></a></li>)}</ol></section>
+      </>
+    )}
+  </Layout>

@@ -1,0 +1,797 @@
+---
+/*
+ * /html-anything/ — sister-project landing page for nexu-io/html-anything.
+ *
+ * One-off marketing surface (not a catalog channel). HA is a separate
+ * repo, so content is hardcoded from its README rather than driven by
+ * a content collection. Stats (stars, license) are fetched live from
+ * the GitHub API at build time, falling back to a hardcoded snapshot
+ * dated in the page itself when the API is unreachable.
+ *
+ * Active nav slot is `home` because we deliberately do not promote
+ * this into the top nav — it's a destination for SEO + direct links,
+ * not a primary channel like /skills/ or /tutorials/.
+ */
+import Layout from '../../_components/sub-page-layout.astro';
+
+const HA_REPO = 'nexu-io/html-anything';
+const HA_URL = `https://github.com/${HA_REPO}`;
+const HA_REPO_API = `https://api.github.com/repos/${HA_REPO}`;
+
+/*
+ * Imagery sourced directly from the HA repo via raw.githubusercontent.com.
+ * This is a temporary CDN — for production polish a follow-up should mirror
+ * these PNGs into the same Cloudflare R2 bucket (`open-design-static`) the
+ * rest of the marketing site already uses, then route them through Image
+ * Resizing for `format=auto` + width-aware variants.
+ */
+const HA_RAW = `https://raw.githubusercontent.com/${HA_REPO}/main`;
+const banner = `${HA_RAW}/docs/assets/banner.png`;
+const shots = {
+  entry:    `${HA_RAW}/docs/screenshots/01-entry-view.png`,
+  picker:   `${HA_RAW}/docs/screenshots/02-template-picker.png`,
+  stream:   `${HA_RAW}/docs/screenshots/03-streaming.png`,
+  exportUI: `${HA_RAW}/docs/screenshots/04-export.png`,
+  deck:     `${HA_RAW}/docs/screenshots/05-deck-mode.png`,
+  hyper:    `${HA_RAW}/docs/screenshots/06-hyperframes.png`,
+};
+const skillShots = {
+  guizang:   `${HA_RAW}/docs/screenshots/skills/deck-guizang-editorial.png`,
+  swiss:     `${HA_RAW}/docs/screenshots/skills/deck-swiss-international.png`,
+  parchment: `${HA_RAW}/docs/screenshots/skills/doc-kami-parchment.png`,
+  poster:    `${HA_RAW}/docs/screenshots/skills/magazine-poster.png`,
+};
+
+// Hardcoded snapshot — last manually verified date. Used as fallback
+// and as the dateline shown in the footer of the at-a-glance card.
+const SNAPSHOT_DATE = '2026-05-19';
+const FALLBACK_STARS = '4.1K';
+const FALLBACK_FORKS = '435';
+const FALLBACK_LICENSE = 'Apache-2.0';
+
+function formatCount(count: unknown): string | null {
+  if (typeof count !== 'number' || !Number.isFinite(count) || count <= 0) return null;
+  if (count < 1000) return String(count);
+  return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}K`;
+}
+
+let starsLabel = FALLBACK_STARS;
+let forksLabel = FALLBACK_FORKS;
+let licenseLabel = FALLBACK_LICENSE;
+
+try {
+  const response = await fetch(HA_REPO_API, {
+    headers: { Accept: 'application/vnd.github+json' },
+  });
+  if (response.ok) {
+    const repo = (await response.json()) as {
+      stargazers_count?: number;
+      forks_count?: number;
+      license?: { spdx_id?: string };
+    };
+    starsLabel = formatCount(repo.stargazers_count) ?? starsLabel;
+    forksLabel = formatCount(repo.forks_count) ?? forksLabel;
+    licenseLabel = repo.license?.spdx_id ?? licenseLabel;
+  }
+} catch {
+  // Network unavailable at build time — keep fallbacks.
+}
+
+const title = 'HTML Anything — your local AI agent writes the HTML, you ship it | Open Design';
+const description =
+  'HTML Anything is the agentic HTML editor from the Open Design family. Reuse the coding-agent CLI you already authenticated — Claude Code, Codex, Cursor, Gemini, Copilot, OpenCode, Qwen, Aider — to turn Markdown, CSV, or JSON into ship-ready HTML for WeChat, X, Zhihu, and Xiaohongshu. Open-source, Apache-2.0.';
+
+const surfaces = [
+  { name: 'Magazine article',  blurb: 'Long-form editorial layout with drop caps and pull quotes.' },
+  { name: 'Keynote deck',      blurb: 'Slide deck with editorial covers and Swiss-grid variants.' },
+  { name: 'Résumé',            blurb: 'One-page CV in print-ready typographic hierarchy.' },
+  { name: 'Poster',            blurb: 'Newsprint poster — single big idea, eye-catching grid.' },
+  { name: 'Xiaohongshu card',  blurb: 'Vertical 3:4 card sized for the Little Red Book feed.' },
+  { name: 'Tweet card',        blurb: '2× PNG export for X / Weibo with native ratios.' },
+  { name: 'Web prototype',     blurb: 'Functional landing-page or product-page sketch.' },
+  { name: 'Data report',       blurb: 'Tabular data → annotated dashboard in one shot.' },
+  { name: 'Hyperframes video', blurb: 'Storyboard frames you can hand off to Remotion.' },
+];
+
+const agents = [
+  'Claude Code',
+  'Cursor Agent',
+  'OpenAI Codex',
+  'Gemini CLI',
+  'GitHub Copilot CLI',
+  'OpenCode',
+  'Qwen Coder',
+  'Aider',
+];
+
+const exportTargets = [
+  { channel: 'WeChat MP',          how: 'CSS inlined via juice — paste straight into the editor.' },
+  { channel: 'X / Weibo',          how: '2× PNG via modern-screenshot, copied through ClipboardItem.' },
+  { channel: 'Xiaohongshu',        how: 'Vertical card export sized for the feed.' },
+  { channel: 'Zhihu',              how: 'LaTeX equations rendered as image placeholders.' },
+  { channel: 'Standalone HTML',    how: 'Single-file download. Self-contained, no asset paths.' },
+  { channel: 'High-DPI PNG',       how: '2× rendering for crisp screenshots on any platform.' },
+];
+
+const ideas = [
+  {
+    headline: 'Markdown is the draft. HTML is what humans read.',
+    body: 'You ship the rendered surface, not the source. HTML Anything closes the gap between your raw notes and the polished page a reader actually sees.',
+  },
+  {
+    headline: 'Your agent already knows you.',
+    body: 'No new account, no API key, no extra subscription. The CLI in your terminal is the rendering engine — HTML Anything just runs your skill.',
+  },
+  {
+    headline: 'Skills are folders, not magic.',
+    body: '75 templates, each a SKILL.md folder you can fork, edit, and reuse. The picker is a directory listing in disguise.',
+  },
+];
+
+const roadmap = [
+  { tag: 'Stable',      items: ['Agent detection', 'Skill registry & picker', 'SSE streaming render', 'Sandboxed iframe preview', 'Format auto-detect (Markdown · CSV · TSV · JSON · SQL · Excel)'] },
+  { tag: 'In progress', items: ['Multi-template compare view', 'Hyperframes → .mp4 Remotion handoff'] },
+  { tag: 'Planned',     items: ['Browser extension', 'History + version diff', 'Skill marketplace'] },
+];
+
+const jsonLd: Array<Record<string, unknown>> = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: 'HTML Anything',
+    /*
+     * alternateName fed as an array so Google understands the project
+     * is searched as: hyphenated, spaced, joined, capitalized variants,
+     * and the tagline. Each entry is a real query users type — keeping
+     * them in this list signals canonical-name equivalence rather than
+     * leaving the matching to Google's tokenizer alone.
+     */
+    alternateName: [
+      'html anything',
+      'html-anything',
+      'htmlanything',
+      'HTML Anything Editor',
+      'The agentic HTML editor',
+    ],
+    applicationCategory: 'DeveloperApplication',
+    operatingSystem: 'macOS, Linux, Windows',
+    description,
+    url: HA_URL,
+    sameAs: [
+      'https://open-design.ai/html-anything/',
+      HA_URL,
+    ],
+    license: 'https://www.apache.org/licenses/LICENSE-2.0',
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+    author: {
+      '@type': 'Organization',
+      name: 'Open Design',
+      url: 'https://open-design.ai/',
+    },
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Open Design', item: 'https://open-design.ai/' },
+      { '@type': 'ListItem', position: 2, name: 'HTML Anything', item: 'https://open-design.ai/html-anything/' },
+    ],
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: [
+      {
+        '@type': 'Question',
+        name: 'Which coding agents does HTML Anything support?',
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: 'Eight CLIs are auto-detected: Claude Code, Cursor Agent, OpenAI Codex, Gemini CLI, GitHub Copilot CLI, OpenCode, Qwen Coder, and Aider. HTML Anything reuses whichever sessions you have already authenticated — no extra API key required.',
+        },
+      },
+      {
+        '@type': 'Question',
+        name: 'Where can I export from HTML Anything?',
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: 'Built-in export targets include WeChat MP (CSS inlined via juice), X / Weibo / Xiaohongshu (2× PNG via modern-screenshot), Zhihu (with image placeholders for equations), and standalone .html or high-DPI .png download.',
+        },
+      },
+      {
+        '@type': 'Question',
+        name: 'Is HTML Anything related to Open Design?',
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: 'Yes. HTML Anything is a sister project from the same team behind Open Design. Open Design is the broader agentic design surface (skills · systems · templates); HTML Anything focuses specifically on Markdown / data → ship-ready HTML.',
+        },
+      },
+    ],
+  },
+];
+---
+
+<Layout title={title} description={description} active="product" ogImage={banner} jsonLd={jsonLd}>
+  <header class="catalog-head">
+    <span class="label">Sister project</span>
+    <h1 class="display">
+      <em>HTML Anything</em> — your local AI agent writes the HTML, you ship it<span class="dot">.</span>
+    </h1>
+    <p class="lead">
+      The agentic HTML editor from the Open Design family. Reuse the
+      coding-agent CLI you've already authenticated to turn Markdown,
+      CSV, or JSON into ship-ready HTML for WeChat, X, Zhihu, and
+      Xiaohongshu — no new keys, no copy-paste tax.
+    </p>
+    <p class="ha-cta">
+      <a class="ha-btn ha-btn-primary" href={HA_URL} rel="noopener">
+        View on GitHub →
+      </a>
+      <a class="ha-btn" href={`${HA_URL}#quickstart`} rel="noopener">
+        Quickstart
+      </a>
+    </p>
+  </header>
+
+  <figure class="ha-hero-figure">
+    <img
+      src={banner}
+      alt="HTML Anything — six surface modes preview banner"
+      width="2400"
+      height="1260"
+      loading="eager"
+      fetchpriority="high"
+      decoding="async"
+    />
+  </figure>
+
+  <section class="ha-glance" aria-label="At a glance">
+    <ul>
+      <li><span class="num">{starsLabel}</span><span class="lbl">GitHub stars</span></li>
+      <li><span class="num">8</span><span class="lbl">Coding-agent CLIs</span></li>
+      <li><span class="num">75</span><span class="lbl">Skill templates</span></li>
+      <li><span class="num">9</span><span class="lbl">Surface modes</span></li>
+      <li><span class="num">{licenseLabel}</span><span class="lbl">License</span></li>
+    </ul>
+    <p class="ha-glance-foot">
+      Stats verified <time datetime={SNAPSHOT_DATE}>{SNAPSHOT_DATE}</time> · live where the API is reachable.
+    </p>
+  </section>
+
+  <section class="ha-section" aria-labelledby="ha-why">
+    <h2 id="ha-why" class="ha-h2">Why this exists</h2>
+    <div class="ha-ideas">
+      {ideas.map((idea) => (
+        <article class="ha-idea">
+          <h3>{idea.headline}</h3>
+          <p>{idea.body}</p>
+        </article>
+      ))}
+    </div>
+  </section>
+
+  <section class="ha-section" aria-labelledby="ha-flow">
+    <h2 id="ha-flow" class="ha-h2">How it works</h2>
+    <ol class="ha-flow">
+      <li>
+        <span class="step-num">01</span>
+        <div class="step-body">
+          <h3>Drop in your input</h3>
+          <p>Markdown, CSV, TSV, JSON, SQL, Excel, or plain text. Tabular data is parsed in-browser via papaparse and xlsx — nothing leaves your laptop.</p>
+          <figure class="step-shot">
+            <img src={shots.entry} alt="HTML Anything entry view — paste or drop an input" loading="lazy" decoding="async" />
+          </figure>
+        </div>
+      </li>
+      <li>
+        <span class="step-num">02</span>
+        <div class="step-body">
+          <h3>Pick a skill, agent renders it</h3>
+          <p>Choose from 75 SKILL.md templates. The local CLI you already authenticated streams its stdout straight into a sandboxed iframe via SSE — you watch the layout assemble in real time.</p>
+          <div class="step-shot-pair">
+            <figure>
+              <img src={shots.picker} alt="Template picker showing 75 skills" loading="lazy" decoding="async" />
+              <figcaption>Template picker — 75 skills, organized by surface mode.</figcaption>
+            </figure>
+            <figure>
+              <img src={shots.stream} alt="Live SSE streaming of HTML output" loading="lazy" decoding="async" />
+              <figcaption>SSE streaming render — agent stdout becomes the layout.</figcaption>
+            </figure>
+          </div>
+        </div>
+      </li>
+      <li>
+        <span class="step-num">03</span>
+        <div class="step-body">
+          <h3>Export to your channel</h3>
+          <p>One click for WeChat MP, X / Weibo / Xiaohongshu, Zhihu, standalone .html, or 2× PNG. Output is presentation-ready, not a starter kit.</p>
+          <figure class="step-shot">
+            <img src={shots.exportUI} alt="Export menu with WeChat / X / Xiaohongshu / Zhihu / HTML / PNG targets" loading="lazy" decoding="async" />
+          </figure>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <section class="ha-section" aria-labelledby="ha-showcase">
+    <h2 id="ha-showcase" class="ha-h2">Showcase</h2>
+    <p class="ha-section-lead">
+      A glimpse of what HTML Anything ships out of the box. Each tile is a
+      real skill in the registry — fork the folder, swap the content, hit
+      export.
+    </p>
+    <ul class="ha-showcase-grid">
+      <li>
+        <figure>
+          <img src={skillShots.guizang} alt="Guizang editorial deck — magazine spread sample" loading="lazy" decoding="async" />
+          <figcaption>
+            <span class="ha-showcase-name">deck-guizang-editorial</span>
+            <span class="ha-showcase-tag">Magazine deck · 16:9</span>
+          </figcaption>
+        </figure>
+      </li>
+      <li>
+        <figure>
+          <img src={skillShots.swiss} alt="Swiss international deck — grid-based layout" loading="lazy" decoding="async" />
+          <figcaption>
+            <span class="ha-showcase-name">deck-swiss-international</span>
+            <span class="ha-showcase-tag">Swiss grid deck</span>
+          </figcaption>
+        </figure>
+      </li>
+      <li>
+        <figure>
+          <img src={skillShots.parchment} alt="Kami parchment document — warm cream long-form layout" loading="lazy" decoding="async" />
+          <figcaption>
+            <span class="ha-showcase-name">doc-kami-parchment</span>
+            <span class="ha-showcase-tag">Long-form document</span>
+          </figcaption>
+        </figure>
+      </li>
+      <li>
+        <figure>
+          <img src={skillShots.poster} alt="Magazine poster — newsprint layout" loading="lazy" decoding="async" />
+          <figcaption>
+            <span class="ha-showcase-name">magazine-poster</span>
+            <span class="ha-showcase-tag">Newsprint poster</span>
+          </figcaption>
+        </figure>
+      </li>
+    </ul>
+  </section>
+
+  <section class="ha-section" aria-labelledby="ha-modes">
+    <h2 id="ha-modes" class="ha-h2">Two surfaces beyond the page</h2>
+    <p class="ha-section-lead">
+      HTML Anything also covers presentation-style decks and storyboard
+      frames you can hand off to a video pipeline.
+    </p>
+    <div class="ha-modes-grid">
+      <figure>
+        <img src={shots.deck} alt="Deck mode — slide-by-slide presentation view" loading="lazy" decoding="async" />
+        <figcaption>
+          <strong>Keynote deck mode</strong> — full-bleed slide layouts with
+          Atelier Zero typography and Swiss-grid variants.
+        </figcaption>
+      </figure>
+      <figure>
+        <img src={shots.hyper} alt="Hyperframes — storyboard frames for video" loading="lazy" decoding="async" />
+        <figcaption>
+          <strong>Hyperframes</strong> — storyboard frames sized and labelled
+          so the next stop can be a Remotion render.
+        </figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="ha-section" aria-labelledby="ha-surfaces">
+    <h2 id="ha-surfaces" class="ha-h2">Nine surface modes</h2>
+    <p class="ha-section-lead">
+      Each surface is a curated layout family — pick the one that
+      matches where the output is going to live.
+    </p>
+    <ul class="ha-surface-grid">
+      {surfaces.map((s) => (
+        <li class="ha-surface">
+          <span class="ha-surface-name">{s.name}</span>
+          <span class="ha-surface-blurb">{s.blurb}</span>
+        </li>
+      ))}
+    </ul>
+  </section>
+
+  <section class="ha-section" aria-labelledby="ha-agents">
+    <h2 id="ha-agents" class="ha-h2">Eight coding agents auto-detected</h2>
+    <p class="ha-section-lead">
+      HTML Anything inherits whichever CLI sessions you already have on
+      your machine. No extra account, no extra API key.
+    </p>
+    <ul class="ha-agents">
+      {agents.map((a) => (
+        <li>{a}</li>
+      ))}
+    </ul>
+  </section>
+
+  <section class="ha-section" aria-labelledby="ha-export">
+    <h2 id="ha-export" class="ha-h2">Export targets</h2>
+    <dl class="ha-export">
+      {exportTargets.map((t) => (
+        <div class="ha-export-row">
+          <dt>{t.channel}</dt>
+          <dd>{t.how}</dd>
+        </div>
+      ))}
+    </dl>
+  </section>
+
+  <section class="ha-section" aria-labelledby="ha-quickstart">
+    <h2 id="ha-quickstart" class="ha-h2">Quickstart</h2>
+    <pre class="ha-code"><code>{`git clone https://github.com/nexu-io/html-anything
+cd html-anything
+pnpm install
+pnpm -F @html-anything/next dev
+# → http://localhost:3000`}</code></pre>
+    <p class="ha-section-lead">
+      The agent runs locally on your laptop. You can also deploy the
+      Next.js shell to Vercel — only the rendering loop stays local.
+    </p>
+  </section>
+
+  <section class="ha-section" aria-labelledby="ha-roadmap">
+    <h2 id="ha-roadmap" class="ha-h2">Roadmap</h2>
+    <div class="ha-roadmap">
+      {roadmap.map((bucket) => (
+        <article>
+          <h3 class="ha-roadmap-tag">{bucket.tag}</h3>
+          <ul>{bucket.items.map((it) => <li>{it}</li>)}</ul>
+        </article>
+      ))}
+    </div>
+  </section>
+
+  <section class="ha-tieback" aria-labelledby="ha-tieback">
+    <h2 id="ha-tieback" class="ha-h2">From the Open Design family</h2>
+    <p>
+      <strong>Open Design</strong> is the broader agentic design surface — skills,
+      systems, templates, the whole studio. <strong>HTML Anything</strong> is the
+      narrow tool: Markdown or data in, ship-ready HTML out.
+    </p>
+    <p>
+      <a class="ha-btn" href="/">Visit Open Design →</a>
+      <a class="ha-btn" href="/skills/" rel="noopener">Browse Skills</a>
+      <a class="ha-btn" href={HA_URL} rel="noopener">HTML Anything on GitHub</a>
+    </p>
+  </section>
+</Layout>
+
+<style>
+  /* Page-local styles. Tokens come from globals.css; layout/typography
+   * follows the Atelier Zero conventions used in sub-pages.css. */
+
+  .ha-cta {
+    margin-top: 1.25rem;
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+  .ha-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.55rem 1rem;
+    border: 1px solid var(--ink, #1a1a1a);
+    border-radius: 999px;
+    font-size: 0.95rem;
+    text-decoration: none;
+    color: inherit;
+    transition: background 120ms ease, color 120ms ease;
+  }
+  .ha-btn:hover { background: var(--ink, #1a1a1a); color: var(--paper, #efe7d2); }
+  .ha-btn-primary { background: var(--ink, #1a1a1a); color: var(--paper, #efe7d2); }
+  .ha-btn-primary:hover { background: transparent; color: inherit; }
+
+  .ha-hero-figure {
+    margin: 2rem 0 0 0;
+    padding: 0;
+  }
+  .ha-hero-figure img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.06);
+  }
+
+  .ha-glance {
+    margin: 3rem 0;
+    border-top: 1px solid currentColor;
+    border-bottom: 1px solid currentColor;
+    padding: 1.25rem 0;
+  }
+  .ha-glance ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1.5rem 2rem;
+  }
+  .ha-glance li {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  .ha-glance .num {
+    font-family: var(--font-display, 'GT Sectra', Georgia, serif);
+    font-size: 2.25rem;
+    line-height: 1;
+    letter-spacing: -0.01em;
+  }
+  .ha-glance .lbl {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    opacity: 0.7;
+  }
+  .ha-glance-foot {
+    margin-top: 1rem;
+    font-size: 0.8rem;
+    opacity: 0.6;
+  }
+
+  .ha-section { margin: 4rem 0; }
+  .ha-h2 {
+    font-family: var(--font-display, 'GT Sectra', Georgia, serif);
+    font-size: 2rem;
+    line-height: 1.15;
+    margin: 0 0 1rem 0;
+  }
+  .ha-section-lead {
+    max-width: 60ch;
+    font-size: 1.05rem;
+    line-height: 1.55;
+    opacity: 0.85;
+    margin: 0 0 2rem 0;
+  }
+
+  .ha-ideas {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 2rem;
+  }
+  .ha-idea h3 {
+    font-family: var(--font-display, 'GT Sectra', Georgia, serif);
+    font-size: 1.25rem;
+    margin: 0 0 0.5rem 0;
+  }
+  .ha-idea p { margin: 0; line-height: 1.55; opacity: 0.85; }
+
+  .ha-flow {
+    list-style: none;
+    counter-reset: ha-step;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 1.5rem;
+  }
+  .ha-flow li {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.5rem 1.5rem;
+    padding: 1.5rem 0;
+    border-top: 1px solid currentColor;
+  }
+  .ha-flow li:last-child { border-bottom: 1px solid currentColor; }
+  .step-num {
+    font-family: var(--font-display, 'GT Sectra', Georgia, serif);
+    font-size: 1.5rem;
+    opacity: 0.5;
+  }
+  .step-body { display: grid; gap: 1rem; }
+  .ha-flow h3 {
+    font-family: var(--font-display, 'GT Sectra', Georgia, serif);
+    margin: 0;
+    font-size: 1.2rem;
+  }
+  .ha-flow p { margin: 0; line-height: 1.55; opacity: 0.85; max-width: 64ch; }
+  .step-shot, .step-shot-pair figure {
+    margin: 0.5rem 0 0 0;
+  }
+  .step-shot img, .step-shot-pair img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 6px;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
+  }
+  .step-shot-pair {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1rem;
+  }
+  .step-shot-pair figcaption {
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+    opacity: 0.7;
+    line-height: 1.4;
+  }
+
+  .ha-showcase-grid {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1.5rem;
+  }
+  .ha-showcase-grid figure {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+  .ha-showcase-grid img {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    border-radius: 6px;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    background: rgba(0, 0, 0, 0.03);
+  }
+  .ha-showcase-name {
+    display: block;
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: 0.85rem;
+  }
+  .ha-showcase-tag {
+    display: block;
+    font-size: 0.8rem;
+    opacity: 0.65;
+    margin-top: 0.15rem;
+  }
+
+  .ha-modes-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 2rem;
+  }
+  .ha-modes-grid figure {
+    margin: 0;
+    display: grid;
+    gap: 0.75rem;
+  }
+  .ha-modes-grid img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 6px;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
+  }
+  .ha-modes-grid figcaption {
+    line-height: 1.5;
+    opacity: 0.85;
+  }
+  .ha-modes-grid figcaption strong {
+    font-family: var(--font-display, 'GT Sectra', Georgia, serif);
+    font-weight: 600;
+  }
+
+  .ha-surface-grid {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+  }
+  .ha-surface {
+    border: 1px solid currentColor;
+    padding: 1rem 1.1rem;
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  .ha-surface-name {
+    font-family: var(--font-display, 'GT Sectra', Georgia, serif);
+    font-size: 1.05rem;
+  }
+  .ha-surface-blurb {
+    font-size: 0.9rem;
+    line-height: 1.45;
+    opacity: 0.75;
+  }
+
+  .ha-agents {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .ha-agents li {
+    border: 1px solid currentColor;
+    padding: 0.4rem 0.85rem;
+    border-radius: 999px;
+    font-size: 0.9rem;
+  }
+
+  .ha-export {
+    margin: 0;
+    display: grid;
+    gap: 0.75rem;
+  }
+  .ha-export-row {
+    display: grid;
+    grid-template-columns: minmax(180px, 1fr) 3fr;
+    gap: 1rem 2rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px dashed currentColor;
+  }
+  .ha-export-row dt {
+    font-family: var(--font-display, 'GT Sectra', Georgia, serif);
+    font-size: 1.05rem;
+    margin: 0;
+  }
+  .ha-export-row dd { margin: 0; opacity: 0.85; line-height: 1.5; }
+
+  .ha-code {
+    background: rgba(0,0,0,0.04);
+    border: 1px solid currentColor;
+    padding: 1rem 1.25rem;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    margin: 0 0 1rem 0;
+  }
+  .ha-code code {
+    font-family: ui-monospace, 'SF Mono', Menlo, Monaco, Consolas, monospace;
+  }
+
+  .ha-roadmap {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 2rem;
+  }
+  .ha-roadmap-tag {
+    font-family: var(--font-display, 'GT Sectra', Georgia, serif);
+    font-size: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin: 0 0 0.75rem 0;
+    opacity: 0.7;
+  }
+  .ha-roadmap ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 0.4rem;
+    font-size: 0.95rem;
+    line-height: 1.5;
+  }
+
+  .ha-tieback {
+    margin: 5rem 0 3rem 0;
+    padding: 2rem 0;
+    border-top: 1px solid currentColor;
+    border-bottom: 1px solid currentColor;
+  }
+  .ha-tieback p {
+    max-width: 60ch;
+    line-height: 1.6;
+    margin: 0 0 1rem 0;
+  }
+  .ha-tieback p:last-child {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 0;
+  }
+</style>

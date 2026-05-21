@@ -35,6 +35,7 @@ jobs:
       web_tests_required: ${{ steps.detect.outputs.web_tests_required }}
       tools_dev_tests_required: ${{ steps.detect.outputs.tools_dev_tests_required }}
       tools_pack_tests_required: ${{ steps.detect.outputs.tools_pack_tests_required }}
+      nix_validation_required: ${{ steps.detect.outputs.nix_validation_required }}
       workspace_validation_required: ${{ steps.detect.outputs.workspace_validation_required }}
 
     steps:
@@ -49,6 +50,7 @@ jobs:
           web_tests_required=false
           tools_dev_tests_required=false
           tools_pack_tests_required=false
+          nix_validation_required=false
           workspace_validation_required=false
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             gh api --paginate \
@@ -71,16 +73,19 @@ jobs:
               if [[ "$file" == "tools/pack/"* || "$file" == "apps/packaged/"* || "$file" == "apps/desktop/"* || "$file" == "packages/host/"* || "$file" == "packages/platform/"* || "$file" == "packages/sidecar/"* || "$file" == "packages/sidecar-proto/"* ]]; then
                 tools_pack_tests_required=true
               fi
-              if [[ "$file" == "package.json" || "$file" == "pnpm-lock.yaml" || "$file" == "pnpm-workspace.yaml" || "$file" == ".github/workflows/ci.yml" ]]; then
+              if [[ "$file" == "package.json" || "$file" == "apps/"*/"package.json" || "$file" == "packages/"*/"package.json" || "$file" == "tools/"*/"package.json" || "$file" == "e2e/package.json" || "$file" == "pnpm-lock.yaml" || "$file" == "pnpm-workspace.yaml" || "$file" == ".github/workflows/ci.yml" ]]; then
                 daemon_tests_required=true
                 web_tests_required=true
                 tools_dev_tests_required=true
                 tools_pack_tests_required=true
               fi
+              if [[ "$file" == "package.json" || "$file" == "apps/"*/"package.json" || "$file" == "packages/"*/"package.json" || "$file" == "tools/"*/"package.json" || "$file" == "e2e/package.json" || "$file" == "pnpm-lock.yaml" || "$file" == "pnpm-workspace.yaml" || "$file" == "flake.nix" || "$file" == "flake.lock" || "$file" == "nix/"* || "$file" == ".github/workflows/ci.yml" || "$file" == ".github/workflows/nix-check.yml" ]]; then
+                nix_validation_required=true
+              fi
               case "$file" in
                 *.md|*.mdx|*.txt|LICENSE|.gitignore|.editorconfig|.vscode/*|.idea/*|docs/*|.github/ISSUE_TEMPLATE/*|.github/CODEOWNERS)
                   ;;
-                apps/landing-page/*|.github/workflows/landing-page-ci.yml|.github/workflows/landing-page-deploy.yml|.github/workflows/blog-indexing-on-deploy.yml|.github/workflows/blog-indexing-monitor.yml)
+                apps/landing-page/*|flake.nix|flake.lock|nix/*|.github/workflows/nix-check.yml|.github/workflows/landing-page-ci.yml|.github/workflows/landing-page-deploy.yml|.github/workflows/blog-indexing-on-deploy.yml|.github/workflows/blog-indexing-monitor.yml)
                   ;;
                 *)
                   workspace_validation_required=true
@@ -90,6 +95,7 @@ jobs:
                 && [ "$web_tests_required" = "true" ] \
                 && [ "$tools_dev_tests_required" = "true" ] \
                 && [ "$tools_pack_tests_required" = "true" ] \
+                && [ "$nix_validation_required" = "true" ] \
                 && [ "$workspace_validation_required" = "true" ]; then
                 break
               fi
@@ -105,6 +111,7 @@ jobs:
             web_tests_required=true
             tools_dev_tests_required=true
             tools_pack_tests_required=true
+            nix_validation_required=true
             workspace_validation_required=true
           fi
           {
@@ -112,8 +119,30 @@ jobs:
             echo "web_tests_required=$web_tests_required"
             echo "tools_dev_tests_required=$tools_dev_tests_required"
             echo "tools_pack_tests_required=$tools_pack_tests_required"
+            echo "nix_validation_required=$nix_validation_required"
             echo "workspace_validation_required=$workspace_validation_required"
           } >> "$GITHUB_OUTPUT"
+
+  nix_validation:
+    name: Validate Nix flake
+    needs: [change_scopes]
+    if: ${{ needs.change_scopes.outputs.nix_validation_required == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            accept-flake-config = true
+
+      - name: nix flake check
+        run: nix flake check --print-build-logs --keep-going
 
   preflight:
     name: Preflight
@@ -583,7 +612,9 @@ jobs:
   validate:
     name: Validate workspace
     needs:
+      - change_scopes
       - preflight
+      - nix_validation
       - core_tests
       - app_tests
       - e2e_vitest

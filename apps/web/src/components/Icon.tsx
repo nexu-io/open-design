@@ -5,6 +5,7 @@ export type IconName =
   | 'arrow-up'
   | 'attach'
   | 'bell'
+  | 'blocks'
   | 'check'
   | 'chevron-down'
   | 'chevron-left'
@@ -117,6 +118,13 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
         <svg {...common}>
           <path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
           <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+        </svg>
+      );
+    case 'blocks':
+      return (
+        <svg {...common}>
+          <path d="M10 22V7a1 1 0 0 0-1-1H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5a1 1 0 0 0-1-1H2" />
+          <rect x="14" y="2" width="8" height="8" rx="1" />
         </svg>
       );
     case 'check':

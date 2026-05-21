@@ -164,6 +164,7 @@ For the full tag dictionary, operational playbook (direct merge / duplicate-titl
 ## Validation strategy
 
 - After package, workspace, or command-entry changes, run `pnpm install` so workspace links and generated dist entries stay fresh.
+- Treat every `pnpm-lock.yaml` change as requiring a Nix pnpm deps hash refresh check. Use `pnpm nix:update-hash` to regenerate `nix/pnpm-deps.nix`, then re-run `nix flake check --print-build-logs --keep-going` (or rely on the PR `Validate workspace` gate if Nix is unavailable locally).
 - Before marking regular work ready, run at least `pnpm guard` and `pnpm typecheck`, plus the package-scoped tests/builds that match the files changed. Do not use or add root `pnpm test`/`pnpm build` aliases.
 - For local web runtime loops, prefer `pnpm tools-dev run web --daemon-port <port> --web-port <port>`.
 - On a GUI-capable machine, validate desktop by running `pnpm tools-dev`, then `pnpm tools-dev inspect desktop status`.
@@ -188,6 +189,7 @@ For a worked example of one full loop (red e2e spec → fix → green), see `e2e
 
 ```bash
 pnpm install
+pnpm nix:update-hash
 pnpm tools-dev
 pnpm tools-serve start updater
 pnpm tools-dev start web

@@ -18,6 +18,7 @@ import {
   trackSettingsLanguageClick,
   trackSettingsLocalCliClick,
   trackSettingsExecutionModeTabClick,
+  trackSettingsMediaProvidersClick,
   trackSettingsNotificationsClick,
   trackSettingsPrivacyClick,
   trackSettingsView,
@@ -3943,6 +3944,7 @@ export async function persistConfigAndRunOrbit(
   options?: {
     daemonProviders?: AppConfig['mediaProviders'] | null;
     syncMediaProviders?: boolean;
+    locale?: string | null;
   },
 ): Promise<OrbitRunStartResponse> {
   if (options?.syncMediaProviders !== false) {
@@ -3951,7 +3953,11 @@ export async function persistConfigAndRunOrbit(
     });
   }
   await syncConfigToDaemon(config, { throwOnError: true });
-  const response = await fetch('/api/orbit/run', { method: 'POST' });
+  const response = await fetch('/api/orbit/run', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ locale: options?.locale ?? null }),
+  });
   if (!response.ok) throw new Error('Orbit run failed');
   return await response.json() as OrbitRunStartResponse;
 }
@@ -4015,7 +4021,7 @@ function OrbitSection({
    *  parent dialog can persist any unsaved Orbit edits and close itself. */
   onLeaveForOrbitProject: (runConfig: AppConfig) => void;
 }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const orbit = cfg.orbit ?? DEFAULT_ORBIT;
   const [status, setStatus] = useState<OrbitStatusResponse | null>(null);
   const [running, setRunning] = useState(false);
@@ -4170,6 +4176,7 @@ function OrbitSection({
         const payload = await persistConfigAndRunOrbit(runConfig, {
           daemonProviders: daemonMediaProviders,
           syncMediaProviders: daemonMediaProvidersFetchState === 'ok',
+          locale,
         });
         if (!payload.projectId) throw new Error('Orbit run did not return a project');
 
@@ -4802,6 +4809,7 @@ function MediaProvidersSection({
   onChange: () => void;
 }) {
   const { t } = useI18n();
+  const analytics = useAnalytics();
   const [reloadRunning, setReloadRunning] = useState(false);
   const [reloadNotice, setReloadNotice] = useState<{ kind: 'error' | 'success'; message: string } | null>(null);
   const [visibleApiKeys, setVisibleApiKeys] = useState<ReadonlySet<string>>(
@@ -4933,7 +4941,14 @@ function MediaProvidersSection({
             className={`ghost media-provider-reload-btn${
               reloadNotice?.kind === 'success' ? ' is-success-flash' : ''
             }`}
-            onClick={() => void handleReload()}
+            onClick={() => {
+              trackSettingsMediaProvidersClick(analytics.track, {
+                page_name: 'settings',
+                area: 'media_providers',
+                element: 'reload',
+              });
+              void handleReload();
+            }}
             disabled={reloadRunning}
             aria-live="polite"
           >
@@ -5014,6 +5029,15 @@ function MediaProvidersSection({
                     placeholder={isSavedState ? t('settings.connectorsReplaceKeyPlaceholder') : t('settings.mediaProviderPlaceholder')}
                     aria-label={`${provider.label} ${t('settings.mediaProviderApiKey')}`}
                     disabled={disabled}
+                    onFocus={() => {
+                      trackSettingsMediaProvidersClick(analytics.track, {
+                        page_name: 'settings',
+                        area: 'media_providers',
+                        element: 'key_input',
+                        providers_id: provider.id,
+                        is_configured: clearable,
+                      });
+                    }}
                     onChange={(e) => updateProvider(provider, { apiKey: e.target.value })}
                   />
                   <button
@@ -5036,6 +5060,15 @@ function MediaProvidersSection({
                   placeholder={provider.defaultBaseUrl || t('settings.mediaProviderBaseUrlPlaceholder')}
                   aria-label={`${provider.label} ${t('settings.mediaProviderBaseUrl')}`}
                   disabled={disabled}
+                  onFocus={() => {
+                    trackSettingsMediaProvidersClick(analytics.track, {
+                      page_name: 'settings',
+                      area: 'media_providers',
+                      element: 'url_input',
+                      providers_id: provider.id,
+                      is_configured: clearable,
+                    });
+                  }}
                   onChange={(e) => updateProvider(provider, { baseUrl: e.target.value })}
                 />
                 {supportsCustomModel ? (
@@ -5052,6 +5085,17 @@ function MediaProvidersSection({
                   className="ghost"
                   disabled={!clearable}
                   onClick={() => {
+                    trackSettingsMediaProvidersClick(analytics.track, {
+                      page_name: 'settings',
+                      area: 'media_providers',
+                      element: 'clear',
+                      providers_id: provider.id,
+                      // The click reports the state at the moment the
+                      // user pressed Clear; the actual clear only lands
+                      // after they confirm the dialog below, but the
+                      // dashboard cares about the intent signal.
+                      is_configured: clearable,
+                    });
                     // Match the existing window.confirm guard the rest of
                     // the app uses for destructive actions (conversation
                     // delete, design delete, file delete in FileWorkspace).
@@ -5093,15 +5137,14 @@ function MediaProvidersSection({
         <details className="library-group media-provider-coming-soon">
           <summary className="memory-details-summary">
             <span className="memory-details-title">
-              Coming soon
+              {t('tasks.comingSoon')}
             </span>
             <span className="filter-pill-count">
               {comingSoonProviders.length}
             </span>
           </summary>
           <p className="hint" style={{ marginTop: 4, marginBottom: 8 }}>
-            We track these for the roadmap; the daemon doesn’t ship a
-            client yet, so there’s nothing to configure.
+            {t('settings.mediaProviderComingSoonHint')}
           </p>
           <ul className="media-provider-coming-soon-list">
             {comingSoonProviders.map((provider) => {
@@ -5126,7 +5169,7 @@ function MediaProvidersSection({
                       rel="noopener noreferrer"
                       className="ghost-link"
                     >
-                      Docs
+                      {t('settings.agentInstall.docs')}
                       <Icon name="external-link" size={11} />
                     </a>
                   ) : null}

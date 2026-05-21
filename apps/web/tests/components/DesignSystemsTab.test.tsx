@@ -102,6 +102,28 @@ describe('DesignSystemsTab', () => {
     fireEvent.click(screen.getByText('Edit'));
     expect(onOpenSystem).toHaveBeenCalledWith('user:acme');
   });
+
+  it('omits the built-in library Open button while keeping preview clicks', () => {
+    const onOpenSystem = vi.fn();
+    const onPreview = vi.fn();
+    render(
+      <DesignSystemsTab
+        systems={systems}
+        selectedId={null}
+        onSelect={() => {}}
+        onPreview={onPreview}
+        onCreate={() => {}}
+        onOpenSystem={onOpenSystem}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: 'Open' })).toBeNull();
+
+    fireEvent.click(screen.getByTestId('design-system-preview-linear'));
+
+    expect(onPreview).toHaveBeenCalledWith('linear');
+    expect(onOpenSystem).not.toHaveBeenCalledWith('linear');
+  });
 });
 
 // --- #2062: built-in library surface-chip filtering -----------------------

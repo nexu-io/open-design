@@ -66,6 +66,57 @@ export type OrbitRunHandler = (request: {
   template: OrbitTemplateSelection | null;
 }) => Promise<OrbitRunHandlerStart>;
 
+type OrbitOutputLocale = 'en' | 'zh-CN' | 'zh-TW';
+
+function normalizeOrbitOutputLocale(locale?: string | null): OrbitOutputLocale {
+  const normalized = locale?.trim().toLowerCase();
+  if (!normalized) return 'en';
+  const localeParts = normalized.split('-').filter(Boolean);
+  const hasTraditionalChineseScript = localeParts.includes('hant');
+  const hasTraditionalChineseRegion = localeParts.some((part) => part === 'tw' || part === 'hk' || part === 'mo');
+  if (normalized === 'zh-tw' || normalized === 'zh-hk' || normalized === 'zh-mo' || normalized === 'zh-hant' || hasTraditionalChineseScript || hasTraditionalChineseRegion) {
+    return 'zh-TW';
+  }
+  if (normalized.startsWith('zh')) return 'zh-CN';
+  return 'en';
+}
+
+function localizeOrbitTemplateExamplePrompt(
+  template: OrbitTemplateSelection | null,
+  locale: OrbitOutputLocale,
+): OrbitTemplateSelection | null {
+  if (!template || locale === 'en') return template;
+  const localizedExamplePrompt = locale === 'zh-TW'
+    ? {
+        'orbit-general': '生成今天的 Open Orbit 晨間簡報。我已連接約 10 個整合（GitHub、Linear、Notion、Calendar、飛書、Sentry、Vercel、Slack、Gmail、Drive）。請拉取昨天各來源的活動，並將其渲染為編輯感 bento 儀表板。',
+        'orbit-github': '生成今天的 Open Orbit GitHub 簡報。GitHub 是我唯一已連接的整合——請拉取昨天的 PR、審查請求、Issue、CI 執行與合併記錄，並將其渲染為 GitHub Notifications + PR diff 風格頁面。',
+      }[template.id]
+    : {
+        'orbit-general': '生成今天的 Open Orbit 早间简报。我已连接约 10 个集成（GitHub、Linear、Notion、Calendar、飞书、Sentry、Vercel、Slack、Gmail、Drive）。请拉取昨天各来源的活动，并将其渲染为编辑感 bento 仪表板。',
+        'orbit-github': '生成今天的 Open Orbit GitHub 简报。GitHub 是我唯一已连接的集成——请拉取昨天的 PR、审查请求、Issue、CI 运行与合并记录，并将其渲染为 GitHub Notifications + PR diff 风格页面。',
+      }[template.id];
+  if (!localizedExamplePrompt) return template;
+  return { ...template, examplePrompt: localizedExamplePrompt };
+}
+
+function buildOrbitOutputLanguageDirective(locale: OrbitOutputLocale): string[] {
+  if (locale === 'zh-TW') {
+    return [
+      'App language: Traditional Chinese (zh-TW).',
+      'Write all user-facing artifact copy, labels, headings, summaries, timestamps, and recommendations in Traditional Chinese unless a proper noun or source identifier must remain unchanged.',
+      'If the selected template guidance or examples are written in another language, treat them as structural and visual guidance only. The final Orbit artifact itself must stay in Traditional Chinese.',
+    ];
+  }
+  if (locale === 'zh-CN') {
+    return [
+      'App language: Simplified Chinese (zh-CN).',
+      'Write all user-facing artifact copy, labels, headings, summaries, timestamps, and recommendations in Simplified Chinese unless a proper noun or source identifier must remain unchanged.',
+      'If the selected template guidance or examples are written in another language, treat them as structural and visual guidance only. The final Orbit artifact itself must stay in Simplified Chinese.',
+    ];
+  }
+  return [];
+}
+
 export function formatLocalProjectTimestamp(iso: string): string {
   const d = new Date(iso);
   const yyyy = d.getFullYear();
@@ -275,21 +326,50 @@ function renderMarkdown(summary: Omit<OrbitActivitySummary, 'markdown'>): string
   return lines.join('\n').trimEnd();
 }
 
-export function buildOrbitPrompt(now = new Date(), template?: OrbitTemplateSelection | null): string {
+export function buildOrbitPrompt(
+  now = new Date(),
+  template?: OrbitTemplateSelection | null,
+  locale?: string | null,
+): string {
+  const outputLocale = normalizeOrbitOutputLocale(locale);
   const end = formatLocalOrbitPromptTimestamp(now);
   const start = formatLocalOrbitPromptTimestamp(new Date(now.getTime() - 24 * 60 * 60_000));
-  const lines = [
-    'Create today\'s Orbit daily digest as a Live Artifact.',
-    '',
-    `Use my connected work data from ${start} through ${end}.`,
-  ];
+  const lines = outputLocale === 'zh-TW'
+    ? [
+        '請將今天的 Orbit 每日摘要製作成 Live Artifact。',
+        '',
+        `使用我從 ${start} 到 ${end} 的已連接工作資料。`,
+      ]
+    : outputLocale === 'zh-CN'
+      ? [
+          '请将今天的 Orbit 每日摘要制作成 Live Artifact。',
+          '',
+          `使用我从 ${start} 到 ${end} 的已连接工作数据。`,
+        ]
+      : [
+          'Create today\'s Orbit daily digest as a Live Artifact.',
+          '',
+          `Use my connected work data from ${start} through ${end}.`,
+        ];
   if (template) {
-    lines.push('', `Use the selected Orbit template: ${template.name}.`);
+    lines.push(
+      '',
+      outputLocale === 'zh-TW'
+        ? `使用已選取的 Orbit 範本：${template.name}。`
+        : outputLocale === 'zh-CN'
+          ? `使用已选中的 Orbit 模板：${template.name}。`
+          : `Use the selected Orbit template: ${template.name}.`,
+    );
   }
   return lines.join('\n');
 }
 
-export function buildOrbitSystemPrompt(now = new Date(), template?: OrbitTemplateSelection | null): string {
+export function buildOrbitSystemPrompt(
+  now = new Date(),
+  template?: OrbitTemplateSelection | null,
+  locale?: string | null,
+): string {
+  const outputLocale = normalizeOrbitOutputLocale(locale);
   const end = now.toISOString();
   const start = new Date(now.getTime() - 24 * 60 * 60_000).toISOString();
   const lines = [
@@ -297,6 +377,8 @@ export function buildOrbitSystemPrompt(now = new Date(), template?: OrbitTemplat
     '',
     `Time window: ${start} through ${end}.`,
     '',
+    ...buildOrbitOutputLanguageDirective(outputLocale),
+    ...(outputLocale === 'en' ? [] : ['']),
     'Work autonomously. Do not ask follow-up questions, do not emit a question form, and do not wait for user input. Use sensible defaults and proceed.',
     'Optimize for fast completion: sample at most 3 relevant data sources. DAILY DIGEST CONNECTOR CURATION IS REQUIRED WHEN SUPPORTED: first run `tools connectors list --use-case personal_daily_digest --format compact` with a 120s timeout, and if that curated list command times out or returns no output, retry it once with another 120s timeout. If the curated command is unsupported, rejected, or succeeds but returns no usable tools, immediately fall back to the unfiltered read-only list via `tools connectors list --format compact`; do not stop just because `--use-case` is unsupported. If connector discovery still fails, or if both the curated and fallback lists yield zero usable connected read-only data tools, do not create an empty-state artifact; send one concise final message explaining that data loading failed and stop. For individual source calls after discovery succeeds, if a source fails because of auth, permissions, timeout, malformed output, empty output, oversized output, or any other data-loading problem, do not get stuck trying to fix it; drop that source and continue with the others. After the artifact is registered successfully, send one concise final message with the artifact id and stop.',
     '',
@@ -402,20 +484,26 @@ export class OrbitService {
     };
   }
 
-  async start(trigger: 'manual' | 'scheduled'): Promise<{ projectId: string; agentRunId: string }> {
+  async start(
+    trigger: 'manual' | 'scheduled',
+    options?: { locale?: string | null },
+  ): Promise<{ projectId: string; agentRunId: string }> {
     if (this.inflight && this.inflightProjectId && this.inflightAgentRunId) {
       return { projectId: this.inflightProjectId, agentRunId: this.inflightAgentRunId };
     }
     if (this.starting) return this.starting;
     if (!this.runHandler) throw new Error('Orbit agent runner is not configured');
 
-    this.starting = this.startRun(trigger).finally(() => {
+    this.starting = this.startRun(trigger, options).finally(() => {
       this.starting = null;
     });
     return this.starting;
   }
 
-  private async startRun(trigger: 'manual' | 'scheduled'): Promise<{ projectId: string; agentRunId: string }> {
+  private async startRun(
+    trigger: 'manual' | 'scheduled',
+    options?: { locale?: string | null },
+  ): Promise<{ projectId: string; agentRunId: string }> {
     if (!this.runHandler) throw new Error('Orbit agent runner is not configured');
 
     const startedAt = new Date().toISOString();
@@ -424,16 +512,20 @@ export class OrbitService {
     const template = configuredTemplateSkillId && this.templateResolver
       ? await this.templateResolver(configuredTemplateSkillId).catch(() => null)
       : null;
+    const localizedTemplate = localizeOrbitTemplateExamplePrompt(
+      template,
+      normalizeOrbitOutputLocale(options?.locale),
+    );
     const now = new Date(startedAt);
-    const prompt = buildOrbitPrompt(now, template);
-    const systemPrompt = buildOrbitSystemPrompt(now, template);
+    const prompt = buildOrbitPrompt(now, localizedTemplate, options?.locale);
+    const systemPrompt = buildOrbitSystemPrompt(now, localizedTemplate, options?.locale);
     const handlerStart = await this.runHandler({
       runId,
       trigger,
       startedAt,
       prompt,
       systemPrompt,
-      template,
+      template: localizedTemplate,
     });
 
     this.inflightProjectId = handlerStart.projectId;

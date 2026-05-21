@@ -5,6 +5,7 @@ import type {
   OpenDesignHostActionResult,
   OpenDesignHostFailure,
   OpenDesignHostProjectImportResult,
+  OpenDesignHostProjectReplaceWorkingDirResult,
   OpenDesignHostUpdaterActionOptions,
   OpenDesignHostUpdaterStatusListener,
   OpenDesignHostUpdaterStatusSnapshot,
@@ -40,6 +41,32 @@ function actionFailure(reason: string, details?: unknown): OpenDesignHostActionR
 
 function importFailure(reason: string): OpenDesignHostProjectImportResult {
   return failure(reason);
+}
+
+function replaceWorkingDirFailure(reason: string): OpenDesignHostProjectReplaceWorkingDirResult {
+  return failure(reason);
+}
+
+function normalizeProjectReplaceWorkingDirResult(input: unknown): OpenDesignHostProjectReplaceWorkingDirResult {
+  if (!isRecord(input)) return failure('desktop working-dir replace returned an invalid response', input);
+  if (input.ok !== true) {
+    if (input.canceled === true) return { canceled: true, ok: false };
+    return failure(
+      typeof input.reason === 'string' && input.reason.length > 0 ? input.reason : 'unknown failure',
+      input.details,
+    );
+  }
+
+  const response = input.response;
+  if (!isRecord(response)) return failure('daemon working-dir response was not an object', response);
+  const baseDir = typeof response.baseDir === 'string' ? response.baseDir : null;
+  const entryFile =
+    typeof response.entryFile === 'string' ? response.entryFile : null;
+  if (baseDir == null) {
+    return failure('daemon working-dir response did not include baseDir', response);
+  }
+
+  return { baseDir, entryFile, ok: true };
 }
 
 function normalizeProjectImportResult(input: unknown): OpenDesignHostProjectImportResult {
@@ -100,6 +127,10 @@ const project = {
     ipcRenderer.invoke('dialog:pick-and-import', init ?? null)
       .then(normalizeProjectImportResult)
       .catch((error: unknown) => importFailure(reasonFromError(error))),
+  pickAndReplaceWorkingDir: (projectId: string): Promise<OpenDesignHostProjectReplaceWorkingDirResult> =>
+    ipcRenderer.invoke('dialog:pick-and-replace-working-dir', { projectId })
+      .then(normalizeProjectReplaceWorkingDirResult)
+      .catch((error: unknown) => replaceWorkingDirFailure(reasonFromError(error))),
 };
 
 const shell = {

@@ -14,8 +14,21 @@ hosted AI design tools.
 - Systems: https://open-design.ai/systems/
 - Craft: https://open-design.ai/craft/
 - Templates: https://open-design.ai/templates/
+- HTML Anything (sister project): https://open-design.ai/html-anything/
 - RSS: https://open-design.ai/blog/rss.xml
 - Sitemap: https://open-design.ai/sitemap-index.xml
+
+## Sister Projects
+
+HTML Anything (alternately written as "html-anything" or "htmlanything")
+is the agentic HTML editor from the same team. It reuses whichever
+coding-agent CLI you already authenticated — Claude Code, Cursor Agent,
+Codex, Gemini CLI, GitHub Copilot CLI, OpenCode, Qwen Coder, or Aider —
+to turn Markdown, CSV, JSON, or Excel into ship-ready HTML for WeChat,
+X, Zhihu, and Xiaohongshu. Apache-2.0 open source.
+
+- Landing page: https://open-design.ai/html-anything/
+- Source: https://github.com/nexu-io/html-anything
 
 ## Key Blog Posts
 

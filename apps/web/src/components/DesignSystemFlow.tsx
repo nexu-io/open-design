@@ -68,6 +68,7 @@ import type {
   TrackingDesignSystemStatus,
   TrackingDesignSystemsEntryFrom,
 } from '@open-design/contracts/analytics';
+import { useI18n } from '../i18n';
 
 interface CreationProps {
   onBack: () => void;
@@ -459,7 +460,7 @@ export function DesignSystemCreationFlow({
             Back
           </button>
           <span className="ds-setup-mark">
-            <Icon name="palette" />
+            <Icon name="blocks" />
           </span>
           <button
             type="button"
@@ -473,7 +474,7 @@ export function DesignSystemCreationFlow({
               setStep('confirm');
             }}
           >
-            Generate
+            Continue to generation
             <Icon name="chevron-right" />
           </button>
         </header>
@@ -647,6 +648,7 @@ export function DesignSystemDetailView({
   onSystemsRefresh,
   onProjectsRefresh,
 }: DetailProps) {
+  const { locale } = useI18n();
   const [system, setSystem] = useState<DesignSystemDetail | null>(null);
   const [body, setBody] = useState('');
   const [tab, setTab] = useState<ReviewTab>('system');
@@ -1160,6 +1162,7 @@ export function DesignSystemDetailView({
         commentAttachments,
         model: selectedModel?.model ?? null,
         reasoning: selectedModel?.reasoning ?? null,
+        locale,
         handlers: {
           onDelta: (delta) => {
             updateAssistant((message) => ({
@@ -1292,6 +1295,7 @@ export function DesignSystemDetailView({
       ensureWorkspaceProject,
       feedbackSection,
       introChatMessages,
+      locale,
       onProjectsRefresh,
       persistProjectMessage,
       projectChatMessages,

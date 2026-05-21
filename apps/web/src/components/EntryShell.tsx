@@ -10,15 +10,11 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-  defaultScenarioPluginIdForKind,
+  defaultScenarioPluginIdForProjectMetadata,
   type ConnectorDetail,
   type InstalledPluginRecord,
 } from '@open-design/contracts';
-import {
-  isOpenDesignHostAvailable,
-  pickAndImportHostProject,
-  type OpenDesignHostProjectImportSuccess,
-} from '@open-design/host';
+import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackHomeNavClick,
@@ -53,7 +49,6 @@ import type {
   ProviderModelsResponse,
   SkillSummary,
 } from '../types';
-import { formatPickAndImportFailure } from '../utils/pickAndImportError';
 import { CenteredLoader } from './Loading';
 import { DesignsTab } from './DesignsTab';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
@@ -80,7 +75,6 @@ import type {
   PluginShareProjectOutcome,
 } from '../state/projects';
 import { TasksView } from './TasksView';
-import { Toast } from './Toast';
 import {
   API_KEY_PLACEHOLDERS,
   API_PROTOCOL_TABS,
@@ -98,13 +92,13 @@ import { fetchProviderModels } from '../providers/provider-models';
 // markup — both surfaces are always present, and CSS toggles
 // `display` based on `--compact-topbar` breakpoint (900px).
 
-// Default scenario plugin for each project kind. The mapping lives in
-// `@open-design/contracts` so the daemon's `/api/projects` and
-// `/api/runs` fallbacks resolve to the same plugin id when no
+// Default scenario plugin for each project kind/intent. The mapping
+// lives in `@open-design/contracts` so the daemon's `/api/projects`
+// and `/api/runs` fallbacks resolve to the same plugin id when no
 // `pluginId` is on the request body — plan §3.3 of
 // `specs/current/plugin-driven-flow-plan.md`.
-function defaultPluginIdForKind(metadata: ProjectMetadata): string | null {
-  return defaultScenarioPluginIdForKind(metadata.kind);
+function defaultPluginIdForMetadata(metadata: ProjectMetadata): string | null {
+  return defaultScenarioPluginIdForProjectMetadata(metadata);
 }
 
 function defaultPluginInputsForCreate(
@@ -355,11 +349,6 @@ export function EntryShell({
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [newProjectInitialTab, setNewProjectInitialTab] =
     useState<CreateTab>('prototype');
-  const [folderImportError, setFolderImportError] = useState<{
-    message: string;
-    details?: string;
-  } | null>(null);
-  const [chipImporting, setChipImporting] = useState(false);
   const [integrationTab, setIntegrationTab] = useState<IntegrationTab>(integrationInitialTab);
   const [homePromptHandoff, setHomePromptHandoff] = useState<HomePromptHandoff | null>(null);
   const analytics = useAnalytics();
@@ -419,7 +408,7 @@ export function EntryShell({
     // is intentionally explicit so future kind-specific scenarios
     // (e.g. a deck- or image-specialized pipeline) can take over a
     // single row without touching the form.
-    const pluginId = defaultPluginIdForKind(input.metadata);
+    const pluginId = defaultPluginIdForMetadata(input.metadata);
     const pluginInputs = defaultPluginInputsForCreate(input, pluginId);
     return onCreateProject({
       ...input,
@@ -463,11 +452,12 @@ export function EntryShell({
       ...(payload.contextConnectors && payload.contextConnectors.length > 0
         ? { contextConnectors: payload.contextConnectors }
         : {}),
+      ...(payload.workingDir ? { userWorkingDir: payload.workingDir } : {}),
     };
     onCreateProject({
       name,
       skillId: payload.skillId ?? null,
-      designSystemId: null,
+      designSystemId: payload.designSystemId ?? null,
       metadata,
       pendingPrompt: payload.prompt,
       ...(payload.pluginId ? { pluginId: payload.pluginId } : {}),
@@ -480,38 +470,6 @@ export function EntryShell({
         : {}),
       autoSendFirstMessage: true,
     });
-  }
-
-  // Stage B of plugin-driven-flow-plan: the rail's "From folder" chip
-  // dispatcher. Prefers the Electron-native folder picker when
-  // available so a single click lands the user in an imported
-  // project. Browser-only shells fall back to the existing modal
-  // path so the user can paste a baseDir.
-  async function handleChipFolderImport() {
-    if (chipImporting) return;
-    // PR #974 trust boundary: the renderer cannot pick a folder directly
-    // anymore — the host exposes `pickAndImport` instead (atomic pick +
-    // HMAC-gated import). On the web, fall back to opening the New
-    // Project modal so the user can paste a baseDir manually.
-    if (
-      isOpenDesignHostAvailable() &&
-      onImportFolderResponse
-    ) {
-      setChipImporting(true);
-      try {
-        const result = await pickAndImportHostProject();
-        if (!result || ('canceled' in result && result.canceled === true)) return;
-        if (result.ok === true) {
-          await onImportFolderResponse(result);
-          return;
-        }
-        setFolderImportError(formatPickAndImportFailure(result));
-      } finally {
-        setChipImporting(false);
-      }
-      return;
-    }
-    openNewProject('prototype');
   }
 
   function finishOnboarding() {
@@ -622,11 +580,12 @@ export function EntryShell({
               <HomeView
                 projects={projects}
                 projectsLoading={projectsLoading}
+                designSystems={designSystems}
+                defaultDesignSystemId={defaultDesignSystemId}
                 onSubmit={handlePluginLoopSubmit}
                 onOpenProject={onOpenProject}
                 onViewAllProjects={() => changeView('projects')}
                 onBrowseRegistry={() => changeView('plugins')}
-                onImportFolder={handleChipFolderImport}
                 onOpenNewProject={(tab) => {
                   // Stage B of plugin-driven-flow-plan: the rail's
                   // "From template" chip wires through here so the
@@ -687,6 +646,7 @@ export function EntryShell({
                   </header>
                   <DesignSystemsTab
                     systems={designSystems}
+                    templates={templates}
                     selectedId={defaultDesignSystemId}
                     onSelect={onChangeDefaultDesignSystem}
                     onCreate={onCreateDesignSystem}
@@ -729,20 +689,13 @@ export function EntryShell({
         onCreate={handleCreate}
         onImportClaudeDesign={onImportClaudeDesign}
         {...(onImportFolder ? { onImportFolder } : {})}
+        {...(onImportFolderResponse ? { onImportFolderResponse } : {})}
         onOpenConnectorsTab={() => {
           setNewProjectOpen(false);
           openIntegrationTab('connectors');
         }}
         onClose={() => setNewProjectOpen(false)}
       />
-      {folderImportError ? (
-        <Toast
-          message={folderImportError.message}
-          details={folderImportError.details ?? null}
-          role="alert"
-          onDismiss={() => setFolderImportError(null)}
-        />
-      ) : null}
     </div>
   );
 }

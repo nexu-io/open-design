@@ -999,6 +999,27 @@ export function appendMessageStatusEvent(db: SqliteDb, messageId: string, event:
   return next;
 }
 
+export function appendMessageAgentEvent(db: SqliteDb, messageId: string, event: DbRow) {
+  if (!event || typeof event !== 'object') return null;
+  const kind = typeof event.kind === 'string' ? event.kind : '';
+  if (!kind) return null;
+  const row = db
+    .prepare(`SELECT content, events_json AS eventsJson FROM messages WHERE id = ?`)
+    .get(messageId) as DbRow | undefined;
+  if (!row) return null;
+  const parsed = parseJsonOrUndef(row.eventsJson);
+  const events = Array.isArray(parsed) ? parsed : [];
+  const last = events[events.length - 1];
+  if (last && JSON.stringify(last) === JSON.stringify(event)) {
+    return events;
+  }
+  const next = [...events, event];
+  const textDelta = kind === 'text' && typeof event.text === 'string' ? event.text : '';
+  db.prepare(`UPDATE messages SET content = COALESCE(content, '') || ?, events_json = ? WHERE id = ?`)
+    .run(textDelta, JSON.stringify(next), messageId);
+  return next;
+}
+
 export function deleteMessage(db: SqliteDb, id: string) {
   db.prepare(`DELETE FROM messages WHERE id = ?`).run(id);
 }
