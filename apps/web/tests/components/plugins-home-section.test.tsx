@@ -2,24 +2,18 @@
 
 // Plugins home section — UI contract.
 //
-// The section renders a curated workflow bar (Import / Create / Export /
-// Refine / Extend) plus a scoped child row for the active lane. Picking
-// a category filters the grid; the All pill clears the category filter.
-// A Featured chip sits orthogonal to the row and overrides the category
-// selection. This suite locks in:
-//
-//   1. The category row renders with All + the curated buckets that
-//      have at least one plugin.
-//   2. Picking a category filters the grid to plugins in that
-//      bucket.
-//   3. Concrete create types appear in the scoped child row, not as
-//      peers of Create.
-//   4. Featured chip overrides the category selection and only shows
-//      curator-promoted plugins.
+// The section renders artifact-kind filters for the starter grid:
+// Prototype / Slides / Image / Video / HyperFrames / Audio. Prototype,
+// Slides, Image, and Video expose a second row of scene buckets; the
+// smaller HyperFrames and Audio slices stay flat. Saved is an
+// orthogonal user collection override, and sparse buckets should fall
+// back to the normal empty-filter state rather than rendering synthetic
+// cards.
 
 import { describe, expect, it, afterEach, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import type { InstalledPluginRecord } from '@open-design/contracts';
+import type { ComponentProps } from 'react';
 import { PluginsHomeSection } from '../../src/components/PluginsHomeSection';
 
 function makePlugin(overrides: {
@@ -28,7 +22,7 @@ function makePlugin(overrides: {
   tags?: string[];
   featured?: boolean;
   mode?: string;
-  taskKind?: 'new-generation' | 'code-migration' | 'figma-migration' | 'tune-collab';
+  kind?: 'scenario' | 'atom';
 }): InstalledPluginRecord {
   return {
     id: overrides.id,
@@ -44,8 +38,7 @@ function makePlugin(overrides: {
       title: overrides.title ?? overrides.id,
       ...(overrides.tags ? { tags: overrides.tags } : {}),
       od: {
-        kind: 'scenario',
-        ...(overrides.taskKind ? { taskKind: overrides.taskKind } : {}),
+        kind: overrides.kind ?? 'scenario',
         ...(overrides.mode ? { mode: overrides.mode } : {}),
         ...(overrides.featured ? { featured: true } : {}),
       },
@@ -56,306 +49,185 @@ function makePlugin(overrides: {
   };
 }
 
+function renderSection(
+  plugins: InstalledPluginRecord[] = sample,
+  props: Partial<ComponentProps<typeof PluginsHomeSection>> = {},
+) {
+  return render(
+    <PluginsHomeSection
+      plugins={plugins}
+      loading={false}
+      activePluginId={null}
+      pendingApplyId={null}
+      onUse={() => {}}
+      onOpenDetails={() => {}}
+      {...props}
+    />,
+  );
+}
+
+function pluginIds(): Array<string | null> {
+  return within(screen.getByRole('list'))
+    .getAllByRole('listitem')
+    .map((i) => i.getAttribute('data-plugin-id'));
+}
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  window.localStorage.clear();
 });
 
 const sample: InstalledPluginRecord[] = [
-  makePlugin({ id: 'a', mode: 'design-system' }),
-  makePlugin({ id: 'b', mode: 'prototype' }),
-  makePlugin({ id: 'c', mode: 'image' }),
-  makePlugin({ id: 'd', mode: 'video' }),
-  makePlugin({ id: 'e', mode: 'video', tags: ['hyperframes'] }),
-  makePlugin({ id: 'f', mode: 'deck' }),
-  makePlugin({ id: 'g', mode: 'scenario', taskKind: 'figma-migration' }),
-  makePlugin({ id: 'h', mode: 'export', tags: ['export', 'react'] }),
-  makePlugin({ id: 'k', mode: 'export', tags: ['export', 'nextjs', 'react'] }),
-  makePlugin({ id: 'l', mode: 'export', tags: ['export', 'vuejs'] }),
-  makePlugin({ id: 'm', mode: 'export', tags: ['export', 'sveltejs'] }),
-  makePlugin({ id: 'n', mode: 'utility', tags: ['html-to-pptx'] }),
-  makePlugin({ id: 'o', mode: 'utility', tags: ['pdf-guide'] }),
-  makePlugin({ id: 'i', mode: 'scenario', taskKind: 'tune-collab' }),
-  makePlugin({ id: 'j', mode: 'scenario', taskKind: 'new-generation', tags: ['plugin-authoring'] }),
+  makePlugin({ id: 'prototype-dashboard', mode: 'prototype', tags: ['dashboard'] }),
+  makePlugin({ id: 'prototype-app', mode: 'prototype', tags: ['mobile-app'] }),
+  makePlugin({ id: 'deck-pitch', mode: 'deck', tags: ['pitch-deck'], featured: true }),
+  makePlugin({ id: 'image-logo', mode: 'image', tags: ['logo'] }),
+  makePlugin({ id: 'video-short', mode: 'video', tags: ['short-form'] }),
+  makePlugin({ id: 'video-cinematic', mode: 'video', tags: ['cinematic'] }),
+  makePlugin({ id: 'hyperframes-composition', mode: 'video', tags: ['hyperframes'] }),
+  makePlugin({ id: 'audio-voice', mode: 'audio' }),
+  makePlugin({ id: 'hidden-atom', mode: 'prototype', tags: ['dashboard'], kind: 'atom' }),
 ];
 
 describe('PluginsHomeSection (category bar)', () => {
-  it('frames the home shelf as official starters and can jump to registry', () => {
+  it('frames the home shelf as community and can jump to registry', () => {
     const onBrowseRegistry = vi.fn();
-    render(
-      <PluginsHomeSection
-        plugins={sample}
-        loading={false}
-        activePluginId={null}
-        pendingApplyId={null}
-        onUse={() => {}}
-        onOpenDetails={() => {}}
-        onBrowseRegistry={onBrowseRegistry}
-      />,
-    );
-    expect(screen.getByText('Official starters')).toBeTruthy();
+    renderSection(sample, { onBrowseRegistry });
+
+    expect(screen.getByText('Community')).toBeTruthy();
     fireEvent.click(screen.getByTestId('plugins-home-browse-registry'));
     expect(onBrowseRegistry).toHaveBeenCalledTimes(1);
   });
 
-  it('renders a single category row with All + curated buckets', () => {
-    render(
-      <PluginsHomeSection
-        plugins={sample}
-        loading={false}
-        activePluginId={null}
-        pendingApplyId={null}
-        onUse={() => {}}
-        onOpenDetails={() => {}}
-      />,
-    );
+  it('renders the artifact category row and the default Prototype scene row', () => {
+    renderSection();
+
     expect(screen.getByTestId('plugins-home-row-category')).toBeTruthy();
+    expect(screen.getByTestId('plugins-home-chip-saved').textContent).toContain('Saved');
     expect(screen.getByTestId('plugins-home-pill-category-all')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-category-import')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-category-create')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-category-export')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-category-share')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-category-deploy')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-category-refine')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-category-extend')).toBeTruthy();
-    expect(screen.queryByTestId('plugins-home-pill-category-from-figma')).toBeNull();
-    expect(screen.queryByTestId('plugins-home-pill-category-deck')).toBeNull();
-    expect(screen.queryByTestId('plugins-home-pill-category-prototype')).toBeNull();
-    expect(screen.queryByTestId('plugins-home-pill-category-design-system')).toBeNull();
-    expect(screen.queryByTestId('plugins-home-pill-category-hyperframes')).toBeNull();
-    expect(screen.queryByTestId('plugins-home-pill-category-video')).toBeNull();
-    expect(screen.queryByTestId('plugins-home-pill-category-image')).toBeNull();
-    expect(screen.queryByTestId('plugins-home-pill-category-reactjs')).toBeNull();
-    expect(screen.getByTestId('plugins-home-row-subcategory-create')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-subcategory-create-prototype')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-subcategory-create-deck')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-subcategory-create-design-system')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-subcategory-create-hyperframes')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-subcategory-create-image')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-subcategory-create-video')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-subcategory-create-audio')).toBeTruthy();
-    // Surface / Type / Scenario rows and the More disclosure are gone.
-    expect(screen.queryByTestId('plugins-home-row-surface')).toBeNull();
-    expect(screen.queryByTestId('plugins-home-row-type')).toBeNull();
-    expect(screen.queryByTestId('plugins-home-row-scenario')).toBeNull();
-    expect(screen.queryByTestId('plugins-home-more')).toBeNull();
+    expect(screen.getByTestId('plugins-home-pill-category-prototype')).toBeTruthy();
+    expect(screen.getByTestId('plugins-home-pill-category-deck')).toBeTruthy();
+    expect(screen.getByTestId('plugins-home-pill-category-image')).toBeTruthy();
+    expect(screen.getByTestId('plugins-home-pill-category-video')).toBeTruthy();
+    expect(screen.getByTestId('plugins-home-pill-category-hyperframes')).toBeTruthy();
+    expect(screen.getByTestId('plugins-home-pill-category-audio')).toBeTruthy();
+    expect(screen.queryByTestId('plugins-home-pill-category-import')).toBeNull();
+    expect(screen.queryByTestId('plugins-home-pill-category-create')).toBeNull();
+    expect(screen.queryByTestId('plugins-home-pill-category-export')).toBeNull();
+
+    expect(screen.getByTestId('plugins-home-row-subcategory-prototype')).toBeTruthy();
+    expect(screen.getByTestId('plugins-home-pill-subcategory-prototype-business-dashboards')).toBeTruthy();
+    expect(screen.getByTestId('plugins-home-pill-subcategory-prototype-app-prototypes')).toBeTruthy();
+    expect(screen.getByTestId('plugins-home-pill-subcategory-prototype-developer-tools')).toBeTruthy();
   });
 
-  it('keeps planned subcategory buckets visible even when they have zero plugins', () => {
-    render(
-      <PluginsHomeSection
-        plugins={sample}
-        loading={false}
-        activePluginId={null}
-        pendingApplyId={null}
-        onUse={() => {}}
-        onOpenDetails={() => {}}
-      />,
-    );
-    expect(screen.getByTestId('plugins-home-pill-subcategory-create-audio')).toBeTruthy();
+  it('filters Video separately from HyperFrames', () => {
+    renderSection();
+
+    fireEvent.click(screen.getByTestId('plugins-home-pill-category-video'));
+    expect(pluginIds().sort()).toEqual(['video-cinematic', 'video-short']);
+    expect(screen.getByTestId('plugins-home-row-subcategory-video')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('plugins-home-pill-category-hyperframes'));
+    expect(pluginIds()).toEqual(['hyperframes-composition']);
+    expect(screen.queryByTestId('plugins-home-row-subcategory-hyperframes')).toBeNull();
   });
 
-  it('filters by a category pill when clicked', () => {
-    render(
-      <PluginsHomeSection
-        plugins={sample}
-        loading={false}
-        activePluginId={null}
-        pendingApplyId={null}
-        onUse={() => {}}
-        onOpenDetails={() => {}}
-      />,
-    );
+  it('keeps sparse subcategories as real filters without adding contribution cards', () => {
+    renderSection();
+
+    fireEvent.click(screen.getByTestId('plugins-home-pill-category-video'));
+    fireEvent.click(screen.getByTestId('plugins-home-pill-subcategory-video-social-short-form'));
+
+    expect(pluginIds()).toEqual(['video-short']);
+    expect(screen.queryByTestId('plugins-home-contribution-card')).toBeNull();
+    expect(screen.queryByText(/Contribute a/i)).toBeNull();
+  });
+
+  it('saves a plugin, updates the Saved chip, and shows a toast', () => {
+    renderSection();
+
+    fireEvent.click(screen.getByTestId('plugins-home-save-prototype-dashboard'));
+
+    expect(screen.getByTestId('plugins-home-save-prototype-dashboard').textContent).toContain('Saved');
+    expect(screen.getByTestId('plugins-home-chip-saved').textContent).toContain('1');
+    expect(screen.getByRole('status').textContent).toContain('Saved prototype-dashboard.');
+
+    fireEvent.click(screen.getByTestId('plugins-home-chip-saved'));
+    expect(pluginIds()).toEqual(['prototype-dashboard']);
+  });
+
+  it('shows the normal empty-filter state for planned empty buckets', () => {
+    renderSection();
+
+    fireEvent.click(screen.getByTestId('plugins-home-pill-category-video'));
+    fireEvent.click(screen.getByTestId('plugins-home-pill-subcategory-video-data-explainers'));
+
+    expect(screen.queryByRole('list')).toBeNull();
+    expect(screen.getByText(/No plugins match the current filters/i)).toBeTruthy();
+    expect(screen.queryByTestId('plugins-home-contribution-card')).toBeNull();
+  });
+
+  it('keeps HyperFrames and Audio flat', () => {
+    renderSection();
+
+    fireEvent.click(screen.getByTestId('plugins-home-pill-category-hyperframes'));
+    expect(pluginIds()).toEqual(['hyperframes-composition']);
+    expect(screen.queryByTestId('plugins-home-row-subcategory-hyperframes')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('plugins-home-pill-category-audio'));
+    expect(pluginIds()).toEqual(['audio-voice']);
+    expect(screen.queryByTestId('plugins-home-row-subcategory-audio')).toBeNull();
+  });
+
+  it('All pill clears the category filter and only shows user-facing plugins', () => {
+    renderSection();
+
     fireEvent.click(screen.getByTestId('plugins-home-pill-category-all'));
-    fireEvent.click(screen.getByTestId('plugins-home-pill-category-create'));
-    const items = within(screen.getByRole('list')).getAllByRole('listitem');
-    expect(items.map((i) => i.getAttribute('data-plugin-id')).sort()).toEqual([
-      'a',
-      'b',
-      'c',
-      'd',
-      'e',
-      'f',
+    expect(pluginIds().sort()).toEqual([
+      'audio-voice',
+      'deck-pitch',
+      'hyperframes-composition',
+      'image-logo',
+      'prototype-app',
+      'prototype-dashboard',
+      'video-cinematic',
+      'video-short',
     ]);
   });
 
-  it('workflow pills filter source and export plugins', () => {
-    render(
-      <PluginsHomeSection
-        plugins={sample}
-        loading={false}
-        activePluginId={null}
-        pendingApplyId={null}
-        onUse={() => {}}
-        onOpenDetails={() => {}}
-      />,
-    );
-    fireEvent.click(screen.getByTestId('plugins-home-pill-category-export'));
-    let items = within(screen.getByRole('list')).getAllByRole('listitem');
-    expect(items.map((i) => i.getAttribute('data-plugin-id')).sort()).toEqual([
-      'h',
-      'k',
-      'l',
-      'm',
-      'n',
-      'o',
+  it('Saved chip overrides the category selection and shows only saved plugins', () => {
+    renderSection();
+
+    fireEvent.click(screen.getByTestId('plugins-home-save-prototype-dashboard'));
+    fireEvent.click(screen.getByTestId('plugins-home-pill-category-video'));
+    fireEvent.click(screen.getByTestId('plugins-home-chip-saved'));
+
+    expect(pluginIds()).toEqual(['prototype-dashboard']);
+  });
+
+  it('Clear filters from the Saved empty state escapes Saved mode back to the full catalog', () => {
+    // Fresh browser, no saved plugins yet. Clicking Saved lands the
+    // user on the empty filter state — the recovery CTA must take
+    // them all the way back to the catalog, not just re-render the
+    // same Saved empty view.
+    renderSection();
+
+    fireEvent.click(screen.getByTestId('plugins-home-chip-saved'));
+    expect(screen.queryByRole('list')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Clear filters/i }));
+
+    expect(pluginIds().sort()).toEqual([
+      'audio-voice',
+      'deck-pitch',
+      'hyperframes-composition',
+      'image-logo',
+      'prototype-app',
+      'prototype-dashboard',
+      'video-cinematic',
+      'video-short',
     ]);
-    expect(screen.getByTestId('plugins-home-row-subcategory-export')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-subcategory-export-pptx')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-subcategory-export-pdf')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-subcategory-export-nextjs')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-subcategory-export-reactjs')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-subcategory-export-vuejs')).toBeTruthy();
-    expect(screen.getByTestId('plugins-home-pill-subcategory-export-sveltejs')).toBeTruthy();
-
-    fireEvent.click(screen.getByTestId('plugins-home-pill-subcategory-export-pptx'));
-    items = within(screen.getByRole('list')).getAllByRole('listitem');
-    expect(items.map((i) => i.getAttribute('data-plugin-id'))).toEqual(['n']);
-
-    fireEvent.click(screen.getByTestId('plugins-home-pill-category-import'));
-    items = within(screen.getByRole('list')).getAllByRole('listitem');
-    expect(items.map((i) => i.getAttribute('data-plugin-id'))).toEqual(['g']);
-  });
-
-  it('shows a contribution card for sparse workflow lanes and starts plugin creation', () => {
-    const onCreatePlugin = vi.fn();
-    render(
-      <PluginsHomeSection
-        plugins={sample}
-        loading={false}
-        activePluginId={null}
-        pendingApplyId={null}
-        onUse={() => {}}
-        onOpenDetails={() => {}}
-        onCreatePlugin={onCreatePlugin}
-      />,
-    );
-    fireEvent.click(screen.getByTestId('plugins-home-pill-category-import'));
-    expect(screen.getByTestId('plugins-home-contribution-card')).toBeTruthy();
-    fireEvent.click(screen.getByTestId('plugins-home-contribution-create'));
-    expect(onCreatePlugin).toHaveBeenCalledWith(
-      expect.stringContaining('imports a source into a project'),
-    );
-  });
-
-  it('shows contribution placeholders for planned empty lanes', () => {
-    const onCreatePlugin = vi.fn();
-    render(
-      <PluginsHomeSection
-        plugins={sample}
-        loading={false}
-        activePluginId={null}
-        pendingApplyId={null}
-        onUse={() => {}}
-        onOpenDetails={() => {}}
-        onCreatePlugin={onCreatePlugin}
-      />,
-    );
-    fireEvent.click(screen.getByTestId('plugins-home-pill-category-deploy'));
-    expect(screen.getByTestId('plugins-home-contribution-card').textContent).toContain(
-      'Contribute a Deploy plugin',
-    );
-    expect(screen.getByTestId('plugins-home-pill-subcategory-deploy-vercel')).toBeTruthy();
-
-    fireEvent.click(screen.getByTestId('plugins-home-pill-subcategory-deploy-vercel'));
-    expect(screen.getByTestId('plugins-home-contribution-card').textContent).toContain(
-      'Contribute a Vercel plugin',
-    );
-    fireEvent.click(screen.getByTestId('plugins-home-contribution-create'));
-    expect(onCreatePlugin).toHaveBeenCalledWith(
-      expect.stringContaining('deploys an accepted web artifact to Vercel'),
-    );
-  });
-
-  it('subcategory pills filter within the active workflow lane', () => {
-    render(
-      <PluginsHomeSection
-        plugins={sample}
-        loading={false}
-        activePluginId={null}
-        pendingApplyId={null}
-        onUse={() => {}}
-        onOpenDetails={() => {}}
-      />,
-    );
-    let items = within(screen.getByRole('list')).getAllByRole('listitem');
-    expect(items.map((i) => i.getAttribute('data-plugin-id'))).toEqual(['f']);
-    expect(screen.getByTestId('plugins-home-pill-subcategory-create-deck').getAttribute('aria-selected'))
-      .toBe('true');
-
-    fireEvent.click(screen.getByTestId('plugins-home-pill-subcategory-create-all'));
-    fireEvent.click(screen.getByTestId('plugins-home-pill-subcategory-create-hyperframes'));
-    items = within(screen.getByRole('list')).getAllByRole('listitem');
-    expect(items.map((i) => i.getAttribute('data-plugin-id'))).toEqual(['e']);
-  });
-
-  it('Extend separates plugin authoring from normal creation', () => {
-    render(
-      <PluginsHomeSection
-        plugins={sample}
-        loading={false}
-        activePluginId={null}
-        pendingApplyId={null}
-        onUse={() => {}}
-        onOpenDetails={() => {}}
-      />,
-    );
-    fireEvent.click(screen.getByTestId('plugins-home-pill-category-extend'));
-    const items = within(screen.getByRole('list')).getAllByRole('listitem');
-    expect(items.map((i) => i.getAttribute('data-plugin-id'))).toEqual(['j']);
-  });
-
-  it('All pill clears the category filter', () => {
-    render(
-      <PluginsHomeSection
-        plugins={sample}
-        loading={false}
-        activePluginId={null}
-        pendingApplyId={null}
-        onUse={() => {}}
-        onOpenDetails={() => {}}
-      />,
-    );
-    fireEvent.click(screen.getByTestId('plugins-home-pill-category-create'));
-    fireEvent.click(screen.getByTestId('plugins-home-pill-category-all'));
-    const items = within(screen.getByRole('list')).getAllByRole('listitem');
-    expect(items.map((i) => i.getAttribute('data-plugin-id')).sort()).toEqual([
-      'a',
-      'b',
-      'c',
-      'd',
-      'e',
-      'f',
-      'g',
-      'h',
-      'i',
-      'j',
-      'k',
-      'l',
-      'm',
-      'n',
-      'o',
-    ]);
-  });
-
-  it('Featured chip overrides the category selection and shows only featured plugins', () => {
-    const plugins = [
-      makePlugin({ id: 'star', mode: 'design-system', featured: true }),
-      ...sample,
-    ];
-    render(
-      <PluginsHomeSection
-        plugins={plugins}
-        loading={false}
-        activePluginId={null}
-        pendingApplyId={null}
-        onUse={() => {}}
-        onOpenDetails={() => {}}
-      />,
-    );
-    fireEvent.click(screen.getByTestId('plugins-home-pill-category-create'));
-    fireEvent.click(screen.getByTestId('plugins-home-chip-featured'));
-    const items = within(screen.getByRole('list')).getAllByRole('listitem');
-    expect(items.map((i) => i.getAttribute('data-plugin-id'))).toEqual(['star']);
   });
 });

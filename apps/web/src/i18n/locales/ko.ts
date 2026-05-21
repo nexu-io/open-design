@@ -768,8 +768,7 @@ export const ko: Dict = {
     '"{title}" 대화를 삭제하시겠습니까? 관련 메시지가 모두 삭제됩니다.',
   'chat.untitledConversation': '제목 없는 대화',
   'chat.startTitle': '대화 시작하기',
-  'chat.startHint':
-    '시각적 참조를 위해 이미지를 붙여넣거나 끌어다 놓으세요. @를 입력하여 이 프로젝트의 파일을 첨부할 수도 있습니다. 아래 추천 질문으로 시작할 수도 있습니다:',
+  'chat.startHint': "생성하고 싶은 내용을 설명하거나 아래 예시에서 시작하세요:",
   'chat.fillInputTitle': '클릭하여 입력창에 채우기',
   'chat.jumpToLatest': '최신 내용으로 이동',
   'chat.scrollToLatest': '최신 내용으로 스크롤',
@@ -777,10 +776,8 @@ export const ko: Dict = {
   'chat.openFile': '{name} 열기',
   'chat.copyPrompt': '프롬프트 복사',
   'chat.copyDone': '복사됨!',
-  'chat.composerPlaceholder':
-    '원하는 디자인을 설명하세요 — 이미지 붙여넣기/끌어놓기 가능, @로 파일이나 스킬 참조…',
-  'chat.composerHint':
-    '⌘/Ctrl + Enter 로 전송 · 이미지 붙여넣기 · @로 파일/스킬 참조 · /로 명령어',
+  'chat.composerPlaceholder': "생성하고 싶은 내용을 설명하세요…",
+  'chat.composerHint': "⌘/Ctrl + Enter로 보내기 · 목표, 내용, 스타일, 형식을 포함하세요",
   'chat.cliSettingsTitle': 'CLI 및 모델 설정',
   'chat.cliSettingsAria': 'CLI 및 모델 설정 열기',
   'chat.attachTitle': '파일 첨부 (또는 붙여넣기 / 끌어놓기)',
@@ -1026,7 +1023,7 @@ export const ko: Dict = {
   'fileViewer.presentFullscreen': '전체 화면',
   'fileViewer.presentNewTab': '새 탭에서',
   'fileViewer.exitPresentation': '프레젠테이션 종료',
-  'fileViewer.shareLabel': '내보내기',
+  'fileViewer.shareLabel': "공유",
   'fileViewer.exportPdf': 'PDF로 내보내기',
   'fileViewer.exportPdfAllSlides': 'PDF로 내보내기 (모든 슬라이드)',
   'fileViewer.exportPptxBusy': '현재 작업이 끝날 때까지 기다려 주세요.',

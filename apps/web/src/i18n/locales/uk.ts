@@ -790,8 +790,7 @@ export const uk: Dict = {
     'Видалити "{title}"? Це видалить усі її повідомлення.',
   'chat.untitledConversation': 'Розмова без назви',
   'chat.startTitle': 'Почніть розмову',
-  'chat.startHint':
-    'Перенесіть або вставте зображення для візуального посилання, або введіть @, щоб прикріпити файл з цього проекту. Або спробуйте один з цих стартерів:',
+  'chat.startHint': "Опишіть, що хочете згенерувати, або почніть з одного з цих прикладів:",
   'chat.fillInputTitle': 'Натисніть, щоб заповнити введення',
   'chat.jumpToLatest': 'Перейти до останнього',
   'chat.scrollToLatest': 'Прокрутити до останнього',
@@ -799,10 +798,8 @@ export const uk: Dict = {
   'chat.openFile': 'Відкрити {name}',
   'chat.copyPrompt': 'Копіювати запит',
   'chat.copyDone': 'Скопійовано!',
-  'chat.composerPlaceholder':
-    'Опишіть дизайн, який ви хочете — вставте або перенесіть зображення, або скористайтеся @ для посилання на файл чи навичку…',
-  'chat.composerHint':
-    '⌘/Ctrl + Enter для надіслання · вставляння зображень · @ для файлів або навичок · / для команд',
+  'chat.composerPlaceholder': "Опишіть, що хочете згенерувати…",
+  'chat.composerHint': "⌘/Ctrl + Enter, щоб надіслати · вкажіть мету, зміст, стиль і формат",
   'chat.cliSettingsTitle': 'Налаштування CLI та моделі',
   'chat.cliSettingsAria': 'Відкрити налаштування CLI та моделі',
   'chat.attachTitle': 'Прикріпити файли (або вставити / перенести)',
@@ -1068,7 +1065,7 @@ export const uk: Dict = {
   'fileViewer.presentFullscreen': 'Повноекранний режим',
   'fileViewer.presentNewTab': 'Нова вкладка',
   'fileViewer.exitPresentation': 'Вийти з режиму презентації',
-  'fileViewer.shareLabel': 'Експортувати',
+  'fileViewer.shareLabel': "Поділитися",
   'fileViewer.exportPdf': 'Експортувати як PDF',
   'fileViewer.exportPdfAllSlides': 'Експортувати як PDF (усі слайди)',
   'fileViewer.exportPptxBusy': 'Чекайте, поки поточна черга завершиться.',

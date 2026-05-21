@@ -24,7 +24,7 @@ test('captures the home plugin catalog surface', async ({ page }) => {
 
   await expect(page.getByTestId('recent-projects-strip')).toBeVisible();
   await expect(page.getByTestId('plugins-home-section')).toBeVisible();
-  await expect(page.getByTestId('plugins-home-chip-featured')).toBeVisible();
+  await expect(page.getByTestId('plugins-home-chip-saved')).toBeVisible();
 
   await captureVisual(page, 'visual-home-catalog');
 });
@@ -33,9 +33,8 @@ test('captures the home plugin filtered surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
-  await page.getByTestId('plugins-home-pill-category-import').click();
-  await expect(page.getByTestId('plugins-home-pill-category-import')).toHaveAttribute('aria-selected', 'true');
-  await expect(page.locator('[data-plugin-id="visual-figma-importer"]')).toBeVisible();
+  await page.getByTestId('plugins-home-pill-category-deck').click();
+  await expect(page.locator('article.plugins-home__card[data-plugin-id="visual-deck-writer"]')).toBeVisible();
 
   await captureVisual(page, 'visual-home-plugin-filter');
 });
@@ -44,7 +43,8 @@ test('captures the home plugin detail surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
 
-  const card = page.locator('[data-plugin-id="visual-deck-writer"]').first();
+  await page.getByTestId('plugins-home-pill-category-deck').click();
+  const card = page.locator('article.plugins-home__card[data-plugin-id="visual-deck-writer"]');
   await expect(card).toBeVisible();
   await card.hover();
   await page.getByTestId('plugins-home-details-visual-deck-writer').click({ force: true });

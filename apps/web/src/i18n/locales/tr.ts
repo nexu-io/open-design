@@ -757,8 +757,7 @@ export const tr: Dict = {
     '"{title}"’ı sil? Bu mesajları silecektir.',
   'chat.untitledConversation': 'Başlıksız konuşma',
   'chat.startTitle': 'Bir konuşma başlat',
-  'chat.startHint':
-    'Görsel referans için görsel sürükleyin veya yapıştırın, veya bu projeden bir dosya iliştirmek için @ yazın. Veya bu başlatıcılardan birini deneyin:',
+  'chat.startHint': "Oluşturmak istediğiniz şeyi açıklayın veya bu örneklerden biriyle başlayın:",
   'chat.fillInputTitle': 'İstemi doldurmak için tıklayın',
   'chat.jumpToLatest': 'En son mesaja atla',
   'chat.scrollToLatest': 'En son mesaja kaydır',
@@ -766,10 +765,8 @@ export const tr: Dict = {
   'chat.openFile': '{name}’ı aç',
   'chat.copyPrompt': 'Promptu kopyala',
   'chat.copyDone': 'Kopyalandı!',
-  'chat.composerPlaceholder':
-    'İstediğiniz tasarımı açıklayın — görsel yapıştırın veya sürükleyin, veya @ ile bir dosya ya da skill seçin…',
-  'chat.composerHint':
-    'Göndermek için ⌘/Ctrl + Enter · görsel yapıştır · @ ile dosya veya skill · / ile komut',
+  'chat.composerPlaceholder': "Oluşturmak istediğiniz şeyi açıklayın…",
+  'chat.composerHint': "Göndermek için ⌘/Ctrl + Enter · hedef, içerik, stil ve formatı belirtin",
   'chat.cliSettingsTitle': 'CLI & model ayarları',
   'chat.cliSettingsAria': 'CLI ve model ayarlarını aç',
   'chat.attachTitle': 'Dosyaları iliştirin (veya yapıştırın / sürükleyin)',
@@ -1013,7 +1010,7 @@ export const tr: Dict = {
   'fileViewer.presentFullscreen': 'Tam ekran',
   'fileViewer.presentNewTab': 'Yeni sekme',
   'fileViewer.exitPresentation': 'Sunumdan ayrıl',
-  'fileViewer.shareLabel': 'Dışa aktar',
+  'fileViewer.shareLabel': "Paylaş",
   'fileViewer.exportPdf': 'PDF olarak dışa aktar',
   'fileViewer.exportPdfAllSlides': 'PDF olarak dışa aktar (tüm slaytlar)',
   'fileViewer.exportPptxBusy': 'Güncel sıranın bitmesini bekleyin.',

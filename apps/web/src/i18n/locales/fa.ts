@@ -790,8 +790,7 @@ export const fa: Dict = {
     'آیا «{title}» حذف شود؟ این کار پیام‌های آن را حذف می‌کند.',
   'chat.untitledConversation': 'مکالمه بدون عنوان',
   'chat.startTitle': 'یک مکالمه شروع کنید',
-  'chat.startHint':
-    'تصاویر را برای مرجع بصری رها کنید یا بچسبانید، یا @ را تایپ کنید تا یک فایل از این پروژه را ضمیمه کنید. یا یکی از این شروع‌کننده‌ها را امتحان کنید:',
+  'chat.startHint': "آنچه می‌خواهید بسازید را توصیف کنید، یا از یکی از این نمونه‌ها شروع کنید:",
   'chat.fillInputTitle': 'برای پر کردن ورودی کلیک کنید',
   'chat.jumpToLatest': 'رفتن به آخرین',
   'chat.scrollToLatest': 'اسکرول به آخرین',
@@ -799,10 +798,8 @@ export const fa: Dict = {
   'chat.openFile': 'باز کردن {name}',
   'chat.copyPrompt': 'کپی پرامپت',
   'chat.copyDone': 'کپی شد!',
-  'chat.composerPlaceholder':
-    'طرح مورد نظر خود را توصیف کنید — تصاویر را بچسبانید یا رها کنید، یا @ برای مرجع فایل یا مهارت…',
-  'chat.composerHint':
-    '⌘/Ctrl + Enter برای ارسال · چسباندن تصاویر · @ برای فایل‌ها یا مهارت‌ها · / برای دستورها',
+  'chat.composerPlaceholder': "آنچه می‌خواهید بسازید را توصیف کنید…",
+  'chat.composerHint': "⌘/Ctrl + Enter برای ارسال · هدف، محتوا، سبک و قالب را ذکر کنید",
   'chat.cliSettingsTitle': 'تنظیمات CLI و مدل',
   'chat.cliSettingsAria': 'باز کردن تنظیمات CLI و مدل',
   'chat.attachTitle': 'ضمیمه کردن فایل‌ها (یا چسباندن / رها کردن)',
@@ -1050,7 +1047,7 @@ export const fa: Dict = {
   'fileViewer.presentFullscreen': 'تمام صفحه',
   'fileViewer.presentNewTab': 'تب جدید',
   'fileViewer.exitPresentation': 'خروج از ارائه',
-  'fileViewer.shareLabel': 'خروجی گرفتن',
+  'fileViewer.shareLabel': "اشتراک‌گذاری",
   'fileViewer.exportPdf': 'صادرکردن به PDF',
   'fileViewer.exportPdfAllSlides': 'صادرکردن به PDF (همه اسلایدها)',
   'fileViewer.exportPptxBusy': 'منتظر پایان نوبت فعلی باشید.',

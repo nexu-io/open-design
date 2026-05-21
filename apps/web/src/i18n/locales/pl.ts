@@ -768,8 +768,7 @@ export const pl: Dict = {
       'Usunąć „{title}”? Spowoduje to usunięcie wszystkich wiadomości.',
   'chat.untitledConversation': 'Rozmowa bez tytułu',
   'chat.startTitle': 'Zacznij rozmowę',
-  'chat.startHint':
-      'Przeciągnij lub wklej obrazy jako referencję wizualną lub wpisz @, aby załączyć plik z tego projektu. Możesz też wypróbować jeden z tematów na start:',
+  'chat.startHint': "Opisz, co chcesz wygenerować, albo zacznij od jednego z tych przykładów:",
   'chat.fillInputTitle': 'Kliknij, aby wypełnić pole tekstowe',
   'chat.jumpToLatest': 'Skocz do najnowszych',
   'chat.scrollToLatest': 'Przewiń do najnowszych',
@@ -777,10 +776,8 @@ export const pl: Dict = {
   'chat.openFile': 'Otwórz {name}',
   'chat.copyPrompt': 'Kopiuj prompt',
   'chat.copyDone': 'Skopiowano!',
-  'chat.composerPlaceholder':
-      'Opisz projekt, który chcesz stworzyć — wklej obrazy lub użyj @, aby wskazać plik lub skill…',
-  'chat.composerHint':
-      '⌘/Ctrl + Enter aby wysłać · wklej obrazy · @ pliki lub skille · / komendy',
+  'chat.composerPlaceholder': "Opisz, co chcesz wygenerować…",
+  'chat.composerHint': "⌘/Ctrl + Enter, aby wysłać · podaj cel, treść, styl i format",
   'chat.cliSettingsTitle': 'Ustawienia CLI i modelu',
   'chat.cliSettingsAria': 'Otwórz ustawienia CLI i modelu',
   'chat.attachTitle': 'Załącz pliki (lub wklej / przeciągnij)',
@@ -1026,7 +1023,7 @@ export const pl: Dict = {
   'fileViewer.presentFullscreen': 'Pełny ekran',
   'fileViewer.presentNewTab': 'Nowa karta',
   'fileViewer.exitPresentation': 'Wyjdź z prezentacji',
-  'fileViewer.shareLabel': 'Eksportuj',
+  'fileViewer.shareLabel': "Udostępnij",
   'fileViewer.exportPdf': 'Eksportuj jako PDF',
   'fileViewer.exportPdfAllSlides': 'Eksportuj jako PDF (wszystkie slajdy)',
   'fileViewer.exportPptxBusy': 'Poczekaj, aż bieżąca tura zostanie zakończona.',

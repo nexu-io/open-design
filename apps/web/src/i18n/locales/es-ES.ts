@@ -657,8 +657,7 @@ export const esES: Dict = {
     '¿Eliminar «{title}»? Se borrarán sus mensajes.',
   'chat.untitledConversation': 'Conversación sin título',
   'chat.startTitle': 'Empieza una conversación',
-  'chat.startHint':
-    'Suelta o pega imágenes como referencia visual, o escribe @ para adjuntar un archivo de este proyecto. O prueba uno de estos comienzos:',
+  'chat.startHint': "Describe lo que quieres generar o empieza con uno de estos ejemplos:",
   'chat.fillInputTitle': 'Haz clic para rellenar el campo',
   'chat.jumpToLatest': 'Ir al más reciente',
   'chat.scrollToLatest': 'Desplazar al más reciente',
@@ -666,10 +665,8 @@ export const esES: Dict = {
   'chat.openFile': 'Abrir {name}',
   'chat.copyPrompt': 'Copiar prompt',
   'chat.copyDone': '¡Copiado!',
-  'chat.composerPlaceholder':
-    'Describe el diseño que quieres: pega o suelta imágenes, o usa @ para referenciar un archivo o skill…',
-  'chat.composerHint':
-    '⌘/Ctrl + Intro para enviar · pega imágenes · @ para archivos o skills · / para comandos',
+  'chat.composerPlaceholder': "Describe lo que quieres generar…",
+  'chat.composerHint': "⌘/Ctrl + Enter para enviar · incluye objetivo, contenido, estilo y formato",
   'chat.cliSettingsTitle': 'Ajustes de CLI y modelo',
   'chat.cliSettingsAria': 'Abrir ajustes de CLI y modelo',
   'chat.attachTitle': 'Adjuntar archivos (o pegar / soltar)',
@@ -915,7 +912,7 @@ export const esES: Dict = {
   'fileViewer.presentFullscreen': 'Pantalla completa',
   'fileViewer.presentNewTab': 'Pestaña nueva',
   'fileViewer.exitPresentation': 'Salir de la presentación',
-  'fileViewer.shareLabel': 'Exportar',
+  'fileViewer.shareLabel': "Compartir",
   'fileViewer.exportPdf': 'Exportar como PDF',
   'fileViewer.exportPdfAllSlides': 'Exportar como PDF (todas las diapositivas)',
   'fileViewer.exportPptxBusy': 'Espera a que termine el turno actual.',

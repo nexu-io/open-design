@@ -1,31 +1,30 @@
 // Plugins discovery section on Home.
 //
-// Renders a curated workflow bar (Lovart-style) over the plugin catalog:
-// Import · Create · Export · Refine · Extend. A scoped child row appears
-// inside the active lane, e.g. Create -> Prototype / Slides / Design
-// system / Media. A small Featured chip sits orthogonal to the rows for
-// quick access to curator-promoted picks.
+// Renders an artifact-kind bar over the plugin catalog: Prototype ·
+// Slides · Image · Video · HyperFrames · Audio. Prototype, Slides,
+// Image, and Video can reveal scene buckets from the user-prompt
+// taxonomy; HyperFrames and Audio stay flat. A small Saved chip
+// sits orthogonal to the rows for quick access to user-saved picks.
 //
 // The category list is curated — finer metadata (surface, role tags,
-// scenario domains) lives on each plugin card and detail surface, not
-// in the filter bar.
+// scenario domains) lives on each plugin card and detail surface.
 //
 // Derivation, catalog building and category-based filtering live in
-// `./plugins-home/facets.ts`; selection state and the Featured
+// `./plugins-home/facets.ts`; selection state and the Saved
 // override live in `./plugins-home/usePluginFacets.ts`. This file
 // owns layout only.
 
+import { useState } from 'react';
 import type { InstalledPluginRecord } from '@open-design/contracts';
 import { useT } from '../i18n';
 import type { PluginShareAction } from '../state/projects';
 import { Icon } from './Icon';
 import { PluginCard } from './plugins-home/PluginCard';
-import {
-  usePluginFacets,
-  type FilterMode,
-} from './plugins-home/usePluginFacets';
-import type { FacetOption, FacetSelection } from './plugins-home/facets';
+import { isFeaturedPlugin, type FacetOption, type FacetSelection } from './plugins-home/facets';
+import { usePluginFacets } from './plugins-home/usePluginFacets';
+import { useSavedPluginIds } from './plugins-home/savedPlugins';
 import type { PluginUseAction } from './plugins-home/useActions';
+import { Toast } from './Toast';
 
 interface Props {
   plugins: InstalledPluginRecord[];
@@ -39,12 +38,11 @@ interface Props {
     record: InstalledPluginRecord,
     action: PluginShareAction,
   ) => void;
-  onCreatePlugin?: (goal?: string) => void;
   onBrowseRegistry?: () => void;
   preferDefaultFacet?: boolean;
   // Optional external selection. When the Home chip rail picks
-  // "Slide deck", HomeView passes { category: 'create', subcategory:
-  // 'deck' } so the Official starters grid scrolls to the matching
+  // "Slide deck", HomeView passes { category: 'deck', subcategory:
+  // null } so the Community grid scrolls to the matching
   // slice instead of staying on its default. The hook only re-applies
   // when this identity changes, so manual facet clicks still win.
   presetSelection?: FacetSelection | null;
@@ -52,8 +50,6 @@ interface Props {
   subtitle?: string;
   emptyMessage?: string;
 }
-
-const CONTRIBUTION_CARD_THRESHOLD = 3;
 
 export function PluginsHomeSection({
   plugins,
@@ -64,7 +60,6 @@ export function PluginsHomeSection({
   onUse,
   onOpenDetails,
   onPluginShareAction,
-  onCreatePlugin,
   onBrowseRegistry,
   preferDefaultFacet = true,
   presetSelection = null,
@@ -73,9 +68,11 @@ export function PluginsHomeSection({
   emptyMessage,
 }: Props) {
   const t = useT();
+  const { savedPluginIds, savePluginId } = useSavedPluginIds();
+  const [saveToast, setSaveToast] = useState<string | null>(null);
   const {
     visiblePlugins,
-    featuredList,
+    savedList,
     filtered,
     catalog,
     selection,
@@ -87,13 +84,23 @@ export function PluginsHomeSection({
     query,
     setQuery,
     totalVisible,
-  } = usePluginFacets({ plugins, preferDefaultFacet, presetSelection });
-  const contributionTarget = onCreatePlugin
-    ? resolveContributionTarget(catalog, selection)
-    : null;
-  const showContributionCard =
-    contributionTarget !== null &&
-    shouldShowContributionCard(filtered.length, selection.category);
+  } = usePluginFacets({
+    plugins,
+    savedPluginIds,
+    preferDefaultFacet,
+    presetSelection,
+  });
+
+  function handleSavePlugin(record: InstalledPluginRecord): void {
+    const result = savePluginId(record.id);
+    if (result === 'saved') {
+      setSaveToast(`Saved ${record.title}.`);
+    } else if (result === 'already-saved') {
+      setSaveToast(`${record.title} is already saved.`);
+    } else {
+      setSaveToast('Could not save this plugin in this browser.');
+    }
+  }
 
   return (
     <section className="plugins-home" data-testid="plugins-home-section">
@@ -136,10 +143,10 @@ export function PluginsHomeSection({
               selectedSlug={selection.category}
               totalVisible={totalVisible}
               onPick={pickCategory}
-              featuredCount={featuredList.length}
-              featuredActive={mode === 'featured'}
-              onToggleFeatured={() =>
-                setMode(mode === 'featured' ? 'all' : 'featured')
+              savedCount={savedList.length}
+              savedActive={mode === 'saved'}
+              onToggleSaved={() =>
+                setMode(mode === 'saved' ? 'all' : 'saved')
               }
               query={query}
               onQueryChange={setQuery}
@@ -154,7 +161,7 @@ export function PluginsHomeSection({
             ) : null}
           </div>
 
-          {filtered.length === 0 && !showContributionCard ? (
+          {filtered.length === 0 ? (
             <div className="plugins-home__empty plugins-home__empty--filtered">
               {t('pluginsHome.emptyFiltered')}{' '}
               <button
@@ -175,86 +182,26 @@ export function PluginsHomeSection({
                   isPending={pendingApplyId === p.id}
                   pendingAny={pendingApplyId !== null}
                   pendingShareAction={pendingShareAction}
-                  isFeatured={featuredList.some((f) => f.id === p.id)}
+                  isFeatured={isFeaturedPlugin(p)}
+                  isSaved={savedPluginIds.has(p.id)}
                   onUse={onUse}
                   onOpenDetails={onOpenDetails}
+                  onSave={handleSavePlugin}
                   onShareAction={onPluginShareAction}
                 />
               ))}
-              {showContributionCard && contributionTarget ? (
-                <ContributionCard
-                  label={contributionTarget.label}
-                  starterPrompt={contributionTarget.starterPrompt}
-                  onCreatePlugin={() => onCreatePlugin?.(contributionTarget.starterPrompt)}
-                  t={t}
-                />
-              ) : null}
             </div>
           )}
         </>
       )}
+      {saveToast ? (
+        <Toast
+          message={saveToast}
+          ttlMs={2200}
+          onDismiss={() => setSaveToast(null)}
+        />
+      ) : null}
     </section>
-  );
-}
-
-function shouldShowContributionCard(count: number, category: string | null): boolean {
-  return Boolean(category) && count < CONTRIBUTION_CARD_THRESHOLD;
-}
-
-function resolveContributionTarget(
-  catalog: ReturnType<typeof usePluginFacets>['catalog'],
-  selection: ReturnType<typeof usePluginFacets>['selection'],
-): FacetOption | null {
-  if (!selection.category) return null;
-  if (selection.subcategory) {
-    const sub = catalog.subcategory[selection.category]?.find(
-      (opt) => opt.slug === selection.subcategory,
-    );
-    if (sub) return sub;
-  }
-  return catalog.category.find((opt) => opt.slug === selection.category) ?? null;
-}
-
-function ContributionCard({
-  label,
-  starterPrompt,
-  onCreatePlugin,
-  t,
-}: {
-  label: string;
-  starterPrompt: string;
-  onCreatePlugin: () => void;
-  t: ReturnType<typeof useT>;
-}) {
-  return (
-    <article
-      role="listitem"
-      className="plugins-home__card plugins-home__card--contribute"
-      data-testid="plugins-home-contribution-card"
-    >
-      <div className="plugins-home__contribute-inner">
-        <span className="plugins-home__contribute-icon" aria-hidden>
-          <Icon name="plus" size={18} />
-        </span>
-        <div>
-          <h3>{t('pluginsHome.contributeTitle', { label })}</h3>
-          <p>
-            {t('pluginsHome.contributeBody')}
-          </p>
-          <p className="plugins-home__contribute-template">
-            {t('pluginsHome.starterPrefix', { starter: starterPrompt })}
-          </p>
-        </div>
-        <button
-          type="button"
-          className="plugins-home__action plugins-home__action--primary"
-          onClick={onCreatePlugin}
-          data-testid="plugins-home-contribution-create"
-        >
-          {t('homeHero.chip.createPlugin')}
-        </button>
-      </div>
-    </article>
   );
 }
 
@@ -263,14 +210,14 @@ interface CategoryRowProps {
   selectedSlug: string | null;
   totalVisible: number;
   onPick: (slug: string | null) => void;
-  featuredCount: number;
-  featuredActive: boolean;
-  onToggleFeatured: () => void;
+  savedCount: number;
+  savedActive: boolean;
+  onToggleSaved: () => void;
   query: string;
   onQueryChange: (next: string) => void;
 }
 
-// Single combined filter bar: Featured override chip + category pills
+// Single combined filter bar: Saved override chip + category pills
 // on the left, search field on the right. Each chip carries its own
 // count, and the "All" chip doubles as a clear-filters affordance,
 // so a separate `X / Y` counter and `Clear` link would just repeat
@@ -280,9 +227,9 @@ function CategoryRow({
   selectedSlug,
   totalVisible,
   onPick,
-  featuredCount,
-  featuredActive,
-  onToggleFeatured,
+  savedCount,
+  savedActive,
+  onToggleSaved,
   query,
   onQueryChange,
 }: CategoryRowProps) {
@@ -298,25 +245,23 @@ function CategoryRow({
         role="tablist"
         aria-label={t('pluginsHome.categoryFilterAria')}
       >
-        {featuredCount > 0 ? (
-          <button
-            type="button"
-            className={[
-              'plugins-home__chip',
-              'plugins-home__chip--featured',
-              featuredActive ? 'is-active' : '',
-            ]
-              .filter(Boolean)
-              .join(' ')}
-            onClick={onToggleFeatured}
-            aria-pressed={featuredActive}
-            data-testid="plugins-home-chip-featured"
-          >
-            <Icon name="star" size={11} />
-            <span>{t('pluginsHome.featured')}</span>
-            <span className="plugins-home__chip-count">{featuredCount}</span>
-          </button>
-        ) : null}
+        <button
+          type="button"
+          className={[
+            'plugins-home__chip',
+            'plugins-home__chip--saved',
+            savedActive ? 'is-active' : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
+          onClick={onToggleSaved}
+          aria-pressed={savedActive}
+          data-testid="plugins-home-chip-saved"
+        >
+          <Icon name="star" size={11} />
+          <span>{t('pluginsHome.featured')}</span>
+          <span className="plugins-home__chip-count">{savedCount}</span>
+        </button>
         <CategoryPill
           slug={null}
           label={t('common.all')}
@@ -415,14 +360,10 @@ function CategoryPill({ slug, label, count, active, variant, testId, onPick }: C
         .filter(Boolean)
         .join(' ')}
       onClick={() => onPick(slug)}
-      // Empty lanes are intentionally kept in the strip so the
-      // overall workflow shape (Import / Create / Export / Share /
-      // Deploy / Refine / Extend) is visible at a glance, and
-      // clicking one surfaces a "Contribute a X plugin" card. The
-      // `data-empty` flag drives a faded treatment in CSS so users
-      // can tell at a glance which chips are populated vs which
-      // are open-invite buckets — without that hint, "Deploy 0"
-      // and "Create 375" read as the same kind of control.
+      // Planned child buckets stay visible even before the catalog
+      // has examples for each scene. The `data-empty` flag gives
+      // those zero-count buckets a lighter treatment without adding
+      // placeholder cards to the starter grid.
       data-empty={count === 0 ? 'true' : 'false'}
       data-testid={testId ?? `plugins-home-pill-category-${slug ?? 'all'}`}
     >

@@ -768,8 +768,7 @@ export const hu: Dict = {
     'Törlöd a(z) „{title}" beszélgetést? Ez eltávolítja az üzeneteit.',
   'chat.untitledConversation': 'Cím nélküli beszélgetés',
   'chat.startTitle': 'Indíts beszélgetést',
-  'chat.startHint':
-    'Húzz vagy illessz be képeket vizuális hivatkozásként, vagy gépelj @-et a projekt egy fájljának csatolásához. Vagy próbáld ki ezeket a kezdéseket:',
+  'chat.startHint': "Írd le, mit szeretnél létrehozni, vagy indulj ki az egyik példából:",
   'chat.fillInputTitle': 'Kattints a beviteli mező kitöltéséhez',
   'chat.jumpToLatest': 'Ugrás a legutóbbira',
   'chat.scrollToLatest': 'Görgetés a legutóbbira',
@@ -777,10 +776,8 @@ export const hu: Dict = {
   'chat.openFile': '{name} megnyitása',
   'chat.copyPrompt': 'Prompt másolása',
   'chat.copyDone': 'Másolva!',
-  'chat.composerPlaceholder':
-    'Írd le a kívánt designt — illessz be vagy húzz képeket, vagy @-tel hivatkozz fájlra vagy skillre…',
-  'chat.composerHint':
-    '⌘/Ctrl + Enter: küldés · képek beillesztése · @ fájl vagy skill · / parancsok',
+  'chat.composerPlaceholder': "Írd le, mit szeretnél létrehozni…",
+  'chat.composerHint': "⌘/Ctrl + Enter küldéshez · add meg a célt, tartalmat, stílust és formátumot",
   'chat.cliSettingsTitle': 'CLI- és modellbeállítások',
   'chat.cliSettingsAria': 'CLI- és modellbeállítások megnyitása',
   'chat.attachTitle': 'Fájlok csatolása (vagy beillesztés / húzás)',
@@ -1026,7 +1023,7 @@ export const hu: Dict = {
   'fileViewer.presentFullscreen': 'Teljes képernyő',
   'fileViewer.presentNewTab': 'Új lap',
   'fileViewer.exitPresentation': 'Bemutató bezárása',
-  'fileViewer.shareLabel': 'Exportálás',
+  'fileViewer.shareLabel': "Megosztás",
   'fileViewer.exportPdf': 'Exportálás PDF-ként',
   'fileViewer.exportPdfAllSlides': 'Exportálás PDF-ként (minden dia)',
   'fileViewer.exportPptxBusy': 'Várj, amíg az aktuális kör befejeződik.',

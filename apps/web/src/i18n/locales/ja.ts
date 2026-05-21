@@ -655,8 +655,7 @@ export const ja: Dict = {
     '"{title}" を削除しますか？メッセージも削除されます。',
   'chat.untitledConversation': '無題の会話',
   'chat.startTitle': '会話を始める',
-  'chat.startHint':
-    '画像をドロップまたは貼り付けてビジュアルリファレンスにするか、@ でこのプロジェクトのファイルを添付してください。またはこれらのスターターをお試しください:',
+  'chat.startHint': "生成したい内容を説明するか、以下の例から始めてください:",
   'chat.fillInputTitle': 'クリックして入力欄に入力',
   'chat.jumpToLatest': '最新にジャンプ',
   'chat.scrollToLatest': '最新にスクロール',
@@ -664,10 +663,8 @@ export const ja: Dict = {
   'chat.openFile': '{name} を開く',
   'chat.copyPrompt': 'プロンプトをコピー',
   'chat.copyDone': 'コピーしました！',
-  'chat.composerPlaceholder':
-    '欲しいデザインを説明してください — 画像を貼り付けるかドロップ、または @ でファイルやスキルを参照…',
-  'chat.composerHint':
-    '⌘/Ctrl + Enter で送信 · 画像を貼り付け · @ でファイル/スキルを参照 · / でコマンド',
+  'chat.composerPlaceholder': "生成したい内容を説明してください…",
+  'chat.composerHint': "⌘/Ctrl + Enter で送信 · 目的、内容、スタイル、形式を含める",
   'chat.cliSettingsTitle': 'CLI とモデルの設定',
   'chat.cliSettingsAria': 'CLI とモデルの設定を開く',
   'chat.attachTitle': 'ファイルを添付（または貼り付け / ドロップ）',
@@ -913,7 +910,7 @@ export const ja: Dict = {
   'fileViewer.presentFullscreen': 'フルスクリーン',
   'fileViewer.presentNewTab': '新しいタブ',
   'fileViewer.exitPresentation': 'プレゼンを終了',
-  'fileViewer.shareLabel': 'エクスポート',
+  'fileViewer.shareLabel': "共有",
   'fileViewer.exportPdf': 'PDFとしてエクスポート',
   'fileViewer.exportPdfAllSlides': 'PDFとしてエクスポート（全スライド）',
   'fileViewer.exportPptxBusy': '現在のターンが終わるまでお待ちください。',

@@ -35,6 +35,14 @@ const pageHtml = renderToStaticMarkup(
       <link rel="alternate" hreflang={item.hreflang} href={new URL(item.href, Astro.site).toString()} />
     ))}
 
+    {/*
+     * Favicon links. Modern browsers prefer the explicit PNG. We also
+     * publish `/favicon.ico` and link it because many SEO crawlers,
+     * link-preview services, and older clients hard-probe that exact
+     * path — without a real ICO at that URL they get the SPA fallback
+     * HTML and render an empty/broken icon in third-party UIs.
+     */}
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 

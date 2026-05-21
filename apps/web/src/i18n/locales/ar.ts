@@ -768,8 +768,7 @@ export const ar: Dict = {
     'هل تريد حذف "{title}"؟ سيؤدي هذا لإزالة رسائلها.',
   'chat.untitledConversation': 'محادثة بدون عنوان',
   'chat.startTitle': 'ابدأ محادثة',
-  'chat.startHint':
-    'اسحب وأفلت الصور للمرجع البصري، أو اكتب @ لإرفاق ملف من هذا المشروع. أو جرب أحد هذه البدايات:',
+  'chat.startHint': "صِف ما تريد إنشاءه، أو ابدأ من أحد هذه الأمثلة:",
   'chat.fillInputTitle': 'اضغط لملء المدخلات',
   'chat.jumpToLatest': 'انتقال للأحدث',
   'chat.scrollToLatest': 'التمرير للأحدث',
@@ -777,10 +776,8 @@ export const ar: Dict = {
   'chat.openFile': 'فتح {name}',
   'chat.copyPrompt': 'نسخ الأمر',
   'chat.copyDone': 'تم النسخ!',
-  'chat.composerPlaceholder':
-    'صف التصميم الذي تريده - الصق أو اسحب الصور، أو @ لملف أو مهارة...',
-  'chat.composerHint':
-    '⌘/Ctrl + Enter للإرسال · الصق الصور · @ للملفات أو المهارات · / للأوامر',
+  'chat.composerPlaceholder': "صِف ما تريد إنشاءه…",
+  'chat.composerHint': "⌘/Ctrl + Enter للإرسال · اذكر الهدف والمحتوى والأسلوب والتنسيق",
   'chat.cliSettingsTitle': 'إعدادات CLI والنموذج',
   'chat.cliSettingsAria': 'فتح إعدادات CLI والنموذج',
   'chat.attachTitle': 'إرفاق ملفات (أو الصق / اسحب)',
@@ -1026,7 +1023,7 @@ export const ar: Dict = {
   'fileViewer.presentFullscreen': 'ملء الشاشة',
   'fileViewer.presentNewTab': 'علامة تبويب جديدة',
   'fileViewer.exitPresentation': 'الخروج من العرض',
-  'fileViewer.shareLabel': 'تصدير',
+  'fileViewer.shareLabel': "مشاركة",
   'fileViewer.exportPdf': 'تصدير كـ PDF',
   'fileViewer.exportPdfAllSlides': 'تصدير كـ PDF (كل الشرائح)',
   'fileViewer.exportPptxBusy': 'انتظر انتهاء الدور الحالي.',

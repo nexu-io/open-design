@@ -252,13 +252,6 @@
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
-/* The logo doubles as the Home destination; when the home view is
-   active it gets the same accent treatment as a primary nav button
-   so users still see "you are here" without a dedicated Home icon. */
-.entry-nav-rail__logo.is-active {
-  background: var(--accent-tint);
-  border-color: color-mix(in srgb, var(--accent) 18%, transparent);
-}
 .entry-nav-rail__logo-img {
   width: 100%;
   height: 100%;
@@ -1748,6 +1741,8 @@
   color: var(--text-faint);
 }
 .entry-star-badge__count {
+  display: inline-block;
+  min-width: 5ch;
   color: var(--text);
   font-variant-numeric: tabular-nums;
   transition: opacity 160ms ease;

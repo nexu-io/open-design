@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import type { Page, Request } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
+const SAVED_PLUGIN_IDS_KEY = 'open-design:saved-plugin-ids';
 const LOCAL_CLI_LABEL = /Local CLI|本机 CLI|本地 CLI/i;
 const STARTER_PLUGIN = makeStarterPlugin({
   id: 'localized-plugin',
@@ -64,9 +65,10 @@ const DESIGN_SYSTEMS = [
 ] as const;
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript((key) => {
+  await page.addInitScript(({ configKey, savedKey }) => {
+    window.localStorage.removeItem(savedKey);
     window.localStorage.setItem(
-      key,
+      configKey,
       JSON.stringify({
         mode: 'daemon',
         apiKey: '',
@@ -81,7 +83,7 @@ test.beforeEach(async ({ page }) => {
         telemetry: { metrics: false, content: false, artifactManifest: false },
       }),
     );
-  }, STORAGE_KEY);
+  }, { configKey: STORAGE_KEY, savedKey: SAVED_PLUGIN_IDS_KEY });
 
   await page.route('**/api/agents', async (route) => {
     await route.fulfill({
@@ -158,25 +160,24 @@ test('entry chrome settings dialog opens with brand header and no pet rail', asy
 test('entry top navigation matches the current home tab structure', async ({ page }) => {
   await gotoEntryHome(page);
 
-  // The brand logo doubles as the Home destination; there is no
-  // separate Home button in the primary nav group. The logo carries
-  // the active `aria-current="page"` treatment when home is showing.
-  await expect(page.getByTestId('entry-nav-logo')).toHaveAttribute('aria-current', 'page');
-  await expect(page.getByTestId('entry-nav-home')).toHaveCount(0);
+  await expect(page.getByTestId('entry-nav-logo')).toBeVisible();
+  await expect(page.getByTestId('entry-nav-home')).toHaveAttribute('aria-current', 'page');
   await expect(page.getByTestId('entry-nav-new-project')).toBeVisible();
   await expect(page.getByTestId('entry-nav-projects')).toBeVisible();
   await expect(page.getByTestId('entry-nav-tasks')).toBeVisible();
-  await expect(page.getByTestId('entry-nav-plugins')).toBeVisible();
   await expect(page.getByTestId('entry-nav-design-systems')).toBeVisible();
-  await expect(page.getByTestId('entry-nav-integrations')).toBeVisible();
-  await expect(page.getByTestId('home-hero-type-tabs')).toHaveCount(0);
-  const activeTypeChip = page.getByTestId('home-hero-active-type-chip');
-  await expect(activeTypeChip).toBeVisible();
-  await expect(activeTypeChip).toHaveAttribute('data-chip-id', 'prototype');
-  await expect(page.getByTestId('home-hero-footer-options')).toBeVisible();
-  await expect(page.getByTestId('home-hero-footer-option-designSystem')).toBeVisible();
-  await expect(page.getByTestId('home-hero-footer-option-fidelity')).toBeVisible();
-  await expect(page.getByTestId('home-hero-plugin-presets')).toBeVisible();
+  await expect(page.locator('.entry-nav-rail__group').getByTestId('entry-nav-plugins')).toBeVisible();
+  await expect(page.locator('.entry-nav-rail__group').getByTestId('entry-nav-integrations')).toBeVisible();
+  await expect(page.locator('.entry-nav-rail__footer').getByTestId('entry-nav-plugins')).toHaveCount(0);
+  await expect(page.locator('.entry-nav-rail__footer').getByTestId('entry-nav-integrations')).toHaveCount(0);
+  await expect(page.getByTestId('home-hero-type-tabs')).toBeVisible();
+  await expect(page.getByTestId('home-hero-active-type-chip')).toHaveCount(0);
+  await expect(page.getByTestId('home-hero-rail-prototype')).toHaveAttribute('aria-selected', 'false');
+  await expect(page.getByTestId('home-hero-footer-options')).toHaveCount(0);
+  await expect(page.getByTestId('home-hero-plugin-presets')).toHaveCount(0);
+  await expect(page.getByTestId('plugins-home-pill-category-all')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('plugins-home-pill-category-prototype')).toHaveAttribute('aria-selected', 'false');
+  await expect(page.getByTestId('plugins-home-row-subcategory-prototype')).toHaveCount(0);
 });
 
 test('home view exposes the redesigned hero, recent projects, starters, and modal entry points', async ({ page }) => {
@@ -195,7 +196,7 @@ test('home view exposes the redesigned hero, recent projects, starters, and moda
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('new-project-modal')).toHaveCount(0);
   await expect(page.getByTestId('home-hero')).toBeVisible();
-  await expect(page.getByTestId('entry-nav-logo')).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByTestId('entry-nav-home')).toHaveAttribute('aria-current', 'page');
 
   await page.getByTestId('entry-nav-projects').click();
   await expect(page).toHaveURL(/\/projects$/);
@@ -599,14 +600,15 @@ test('home starters search and facet filters narrow the visible gallery', async 
 
   await gotoEntryHome(page);
 
-  await expect(page.getByTestId('plugins-home-chip-featured')).toBeVisible();
+  await expect(page.getByTestId('plugins-home-chip-saved')).toBeVisible();
+  await expect(page.getByTestId('plugins-home-chip-saved')).toContainText('0');
   await expect(page.getByTestId('plugins-home-pill-category-all')).toContainText('4');
 
-  await page.getByTestId('plugins-home-pill-category-import').click();
-  await expect(page.locator('[data-plugin-id="figma-importer"]')).toBeVisible();
+  await page.getByTestId('plugins-home-pill-category-deck').click();
+  await expect(page.locator('[data-plugin-id="deck-writer"]')).toBeVisible();
+  await expect(page.locator('[data-plugin-id="figma-importer"]')).toHaveCount(0);
   await expect(page.locator('[data-plugin-id="localized-plugin"]')).toHaveCount(0);
   await expect(page.locator('[data-plugin-id="hyperframes-video"]')).toHaveCount(0);
-  await expect(page.locator('[data-plugin-id="deck-writer"]')).toHaveCount(0);
 
   await page.getByTestId('plugins-home-pill-category-all').click();
   await expect(page.locator('[data-plugin-id="figma-importer"]')).toBeVisible();
@@ -621,7 +623,10 @@ test('home starters search and facet filters narrow the visible gallery', async 
   await expect(page.locator('[data-plugin-id="hyperframes-video"]')).toHaveCount(0);
   await page.getByTestId('plugins-home-search-clear').click();
 
-  await page.getByTestId('plugins-home-chip-featured').click();
+  await page.getByTestId('plugins-home-save-localized-plugin').click();
+  await page.getByTestId('plugins-home-save-hyperframes-video').click();
+  await expect(page.getByTestId('plugins-home-chip-saved')).toContainText('2');
+  await page.getByTestId('plugins-home-chip-saved').click();
   await expect(page.locator('[data-plugin-id="localized-plugin"]')).toBeVisible();
   await expect(page.locator('[data-plugin-id="hyperframes-video"]')).toBeVisible();
   await expect(page.locator('[data-plugin-id="deck-writer"]')).toHaveCount(0);

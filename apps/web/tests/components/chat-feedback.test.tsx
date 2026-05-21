@@ -144,12 +144,12 @@ describe('chat assistant feedback', () => {
     vi.restoreAllMocks();
   });
 
-  it('collects feedback only after an assistant turn produces an artifact', () => {
+  it('collects feedback after any successfully completed assistant turn', () => {
     renderChatPane({
       messages: [completedAssistant()],
     });
 
-    expect(screen.queryByRole('group', { name: 'Feedback' })).toBeNull();
+    expect(screen.getByRole('group', { name: 'Feedback' })).toBeTruthy();
   });
 
   it('collects positive and negative feedback on completed artifact results', () => {

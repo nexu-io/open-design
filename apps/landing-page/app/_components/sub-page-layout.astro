@@ -80,6 +80,10 @@ const ldArray = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
       <link rel="alternate" hreflang={item.hreflang} href={new URL(item.href, Astro.site).toString()} />
     ))}
 
+    {/* See `index.astro` for why we publish + link `/favicon.ico` in
+     * addition to the PNG: SEO crawlers and link-preview services
+     * hard-probe that exact path. */}
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
