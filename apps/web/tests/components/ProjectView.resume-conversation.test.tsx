@@ -44,6 +44,7 @@ vi.mock('../../src/providers/daemon', () => ({
   listProjectRuns: vi.fn().mockResolvedValue([]),
   reattachDaemonRun: vi.fn(),
   streamViaDaemon: vi.fn(),
+  streamByokViaDaemon: vi.fn(),
 }));
 
 vi.mock('../../src/providers/project-events', () => ({
