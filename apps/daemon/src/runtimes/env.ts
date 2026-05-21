@@ -98,17 +98,39 @@ export function spawnEnvForAgent(
   // "internel") are treated as a hard error so the bad configuration is
   // surfaced immediately instead of silently sending traffic to the wrong
   // network region.
+  // Canonicalize CODEBUDDY_INTERNET_ENVIRONMENT: on Windows, env key names
+  // are case-insensitive at the OS level but Node's process.env preserves
+  // the original casing. A merged env can contain both an inherited alias
+  // like `Codebuddy_Internet_Environment=internel` and the configured
+  // override `CODEBUDDY_INTERNET_ENVIRONMENT=public`. We must:
+  //   1. Remove all case-insensitive duplicates.
+  //   2. Let the configured (expandConfiguredEnv) value win over inherited.
+  //   3. Validate the single canonical key's value.
+  // This mirrors the ANTHROPIC_API_KEY case-insensitive cleanup above.
   if (agentId === 'codebuddy') {
+    const CANONICAL = 'CODEBUDDY_INTERNET_ENVIRONMENT';
+    const aliases: string[] = [];
     for (const key of Object.keys(env)) {
-      if (key.toUpperCase() === 'CODEBUDDY_INTERNET_ENVIRONMENT') {
-        const value = env[key];
-        if (typeof value === 'string' && value.trim() && !CODEBUDDY_INTERNET_ENV_ALLOWED.has(value.trim())) {
-          throw new Error(
-            `[env] Invalid inherited CODEBUDDY_INTERNET_ENVIRONMENT="${value}".` +
-            ` Valid values: ${[...CODEBUDDY_INTERNET_ENV_ALLOWED].join(', ')}.`,
-          );
-        }
+      if (key.toUpperCase() === CANONICAL && key !== CANONICAL) {
+        aliases.push(key);
       }
+    }
+    // Configured value (from expandConfiguredEnv) was merged last, so
+    // env[CANONICAL] is already the winning value when it exists.
+    // For non-canonical aliases, only adopt if the canonical key is absent.
+    for (const alias of aliases) {
+      if (!(CANONICAL in env) && typeof env[alias] === 'string') {
+        env[CANONICAL] = env[alias];
+      }
+      delete env[alias];
+    }
+    // Now validate the single canonical key.
+    const value = env[CANONICAL];
+    if (typeof value === 'string' && value.trim() && !CODEBUDDY_INTERNET_ENV_ALLOWED.has(value.trim())) {
+      throw new Error(
+        `[env] Invalid inherited CODEBUDDY_INTERNET_ENVIRONMENT="${value}".` +
+        ` Valid values: ${[...CODEBUDDY_INTERNET_ENV_ALLOWED].join(', ')}.`,
+      );
     }
   }
   return env;

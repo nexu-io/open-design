@@ -221,7 +221,14 @@ export function validateAgentCliEnv(
     const enums = AGENT_CLI_ENV_ENUMS.get(agentId);
     for (const [envKey, envValue] of Object.entries(value as Record<string, unknown>)) {
       if (!allowed.has(envKey)) continue;
-      if (typeof envValue !== 'string') continue;
+      if (typeof envValue !== 'string') {
+        if (throwOnInvalid) {
+          throw new Error(
+            `[app-config] ${agentId}.${envKey}: expected string, got ${typeof envValue}`,
+          );
+        }
+        continue;
+      }
       const trimmed = envValue.trim();
       if (!trimmed) continue;
       const allowedValues = enums?.get(envKey);

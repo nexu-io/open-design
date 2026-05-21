@@ -1159,6 +1159,63 @@ test('spawnEnvForAgent throws on invalid inherited CODEBUDDY_INTERNET_ENVIRONMEN
   ).toThrow(/Invalid inherited CODEBUDDY_INTERNET_ENVIRONMENT/);
 });
 
+test('spawnEnvForAgent canonicalizes mixed-case CODEBUDDY_INTERNET_ENVIRONMENT aliases', () => {
+  // On Windows, env key names are case-insensitive at the OS level but
+  // Node's process.env preserves original casing. A merged env can contain
+  // both an inherited alias and a configured canonical key. We must remove
+  // the alias, let the configured value win, and validate only once.
+  const env = spawnEnvForAgent(
+    'codebuddy',
+    {
+      Codebuddy_Internet_Environment: 'internel',  // inherited alias (bad)
+      CODEBUDDY_INTERNET_ENVIRONMENT: 'public',     // configured override (good)
+      PATH: '/usr/bin',
+    },
+    {},
+  );
+
+  // The alias must be removed; only the canonical key remains.
+  assert.equal(env.CODEBUDDY_INTERNET_ENVIRONMENT, 'public');
+  const aliases = Object.keys(env).filter(
+    (k) => k.toUpperCase() === 'CODEBUDDY_INTERNET_ENVIRONMENT' && k !== 'CODEBUDDY_INTERNET_ENVIRONMENT',
+  );
+  assert.deepEqual(aliases, []);
+});
+
+test('spawnEnvForAgent adopts non-canonical CODEBUDDY_INTERNET_ENVIRONMENT when canonical is absent', () => {
+  // When only a non-canonical alias exists (no configured override), the
+  // value should be adopted into the canonical key before validation.
+  const env = spawnEnvForAgent(
+    'codebuddy',
+    {
+      Codebuddy_Internet_Environment: 'internal',  // inherited alias (valid)
+      PATH: '/usr/bin',
+    },
+    {},
+  );
+
+  assert.equal(env.CODEBUDDY_INTERNET_ENVIRONMENT, 'internal');
+  const aliases = Object.keys(env).filter(
+    (k) => k.toUpperCase() === 'CODEBUDDY_INTERNET_ENVIRONMENT' && k !== 'CODEBUDDY_INTERNET_ENVIRONMENT',
+  );
+  assert.deepEqual(aliases, []);
+});
+
+test('spawnEnvForAgent throws on invalid non-canonical CODEBUDDY_INTERNET_ENVIRONMENT without canonical', () => {
+  // When only a non-canonical alias exists with an invalid value, it should
+  // be adopted into the canonical key and then validated — throwing.
+  expect(() =>
+    spawnEnvForAgent(
+      'codebuddy',
+      {
+        Codebuddy_Internet_Environment: 'internel',  // inherited alias (bad)
+        PATH: '/usr/bin',
+      },
+      {},
+    ),
+  ).toThrow(/Invalid inherited CODEBUDDY_INTERNET_ENVIRONMENT/);
+});
+
 test('detectAgents isolates CodeBuddy probe failure from other agents', async () => {
   // When an invalid inherited CODEBUDDY_INTERNET_ENVIRONMENT causes the
   // CodeBuddy probe to throw, other agents must still appear in the
