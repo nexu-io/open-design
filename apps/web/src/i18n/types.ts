@@ -345,6 +345,9 @@ export interface Dict {
   'settings.cliEnvCodebuddyBaseUrl': string;
   'settings.cliEnvCodebuddyApiKey': string;
   'settings.cliEnvCodebuddyInternetEnvironment': string;
+  'settings.cliEnvCodebuddyInternetEnvDefault': string;
+  'settings.cliEnvCodebuddyInternetEnvInternal': string;
+  'settings.cliEnvCodebuddyInternetEnvIoa': string;
   'settings.cliEnvCodexHome': string;
   'settings.cliEnvCodexBin': string;
   'settings.cliEnvCodexBaseUrl': string;

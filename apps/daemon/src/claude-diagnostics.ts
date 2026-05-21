@@ -132,6 +132,16 @@ function diagnoseCliFailure(
     /(auth|oauth|credential|token).*(fail|invalid|missing|expired|not found|none|unauthorized)/i.test(text) ||
     /(unauthorized|invalid api key|missing api key|could not authenticate|authentication failed)/i.test(text);
   if (authFailure && hasCustomBaseUrl) {
+    if (config.apiKeyIsPrimaryAuth) {
+      const hasApiKey = envValue(input.env, config.apiKeyEnvKey) !== null;
+      const message = hasApiKey
+        ? `${config.brandName} could not authenticate with the configured custom ${config.endpointLabel} endpoint.`
+        : `${config.brandName} could not authenticate with the configured custom ${config.endpointLabel} endpoint. No API key is configured.`;
+      const detail = hasApiKey
+        ? `Check ${config.apiKeyEnvKey}, ${config.baseUrlEnvKey}, proxy credentials, and model access in Settings.`
+        : `Set ${config.apiKeyEnvKey} in Settings so the spawned ${config.brandName} process can authenticate against the custom endpoint, then retry.`;
+      return withContext(message, detail, input, config);
+    }
     return withContext(
       `${config.brandName} could not authenticate with the configured custom ${config.endpointLabel} endpoint.`,
       `Check ${config.baseUrlEnvKey}, proxy credentials, endpoint authentication environment, and model access. Remove the custom endpoint only if you want to retry with standard ${config.brandName} auth.`,

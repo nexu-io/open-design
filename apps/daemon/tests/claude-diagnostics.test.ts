@@ -124,7 +124,7 @@ describe('diagnoseClaudeCliFailure', () => {
     expect(diagnostic?.detail).not.toContain('/login');
   });
 
-  it('maps CodeBuddy custom endpoint auth failures to endpoint guidance', () => {
+  it('maps CodeBuddy custom endpoint auth failures without API key to setup guidance', () => {
     const diagnostic = diagnoseClaudeCliFailure({
       agentId: 'codebuddy',
       exitCode: 1,
@@ -133,6 +133,22 @@ describe('diagnoseClaudeCliFailure', () => {
     });
 
     expect(diagnostic?.message).toContain('custom CodeBuddy endpoint');
+    expect(diagnostic?.message).toContain('API key');
+    expect(diagnostic?.detail).toContain('CODEBUDDY_API_KEY');
+    expect(diagnostic?.detail).toContain('CODEBUDDY_BASE_URL');
+    expect(diagnostic?.detail).not.toContain('/login');
+  });
+
+  it('maps CodeBuddy custom endpoint auth failures with API key to key-check guidance', () => {
+    const diagnostic = diagnoseClaudeCliFailure({
+      agentId: 'codebuddy',
+      exitCode: 1,
+      stderrTail: '{"apiKeySource":"none","error_status":401}',
+      env: { CODEBUDDY_BASE_URL: 'https://proxy.example.com', CODEBUDDY_API_KEY: 'cb-test-key' },
+    });
+
+    expect(diagnostic?.message).toContain('custom CodeBuddy endpoint');
+    expect(diagnostic?.detail).toContain('CODEBUDDY_API_KEY');
     expect(diagnostic?.detail).toContain('CODEBUDDY_BASE_URL');
     expect(diagnostic?.detail).not.toContain('/login');
   });

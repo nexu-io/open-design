@@ -518,9 +518,9 @@ const AGENT_CLI_ENV_FIELDS = [
     envKey: 'CODEBUDDY_INTERNET_ENVIRONMENT',
     labelKey: 'settings.cliEnvCodebuddyInternetEnvironment',
     options: [
-      { value: '', label: 'International (default)' },
-      { value: 'internal', label: 'internal (China)' },
-      { value: 'ioa', label: 'ioa (iOA enterprise)' },
+      { value: '', labelKey: 'settings.cliEnvCodebuddyInternetEnvDefault' },
+      { value: 'internal', labelKey: 'settings.cliEnvCodebuddyInternetEnvInternal' },
+      { value: 'ioa', labelKey: 'settings.cliEnvCodebuddyInternetEnvIoa' },
     ],
   },
   {
@@ -3196,7 +3196,7 @@ export function SettingsDialog({
                               >
                                 {field.options.map((opt) => (
                                   <option key={opt.value} value={opt.value}>
-                                    {opt.label}
+                                    {t(opt.labelKey)}
                                   </option>
                                 ))}
                               </select>
