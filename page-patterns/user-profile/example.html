@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Profile — Pattern Preview</title>
+    <style>
+      :root {
+        --bg: #fafaf9;
+        --card: #ffffff;
+        --border: #e5e7eb;
+        --text: #18181b;
+        --muted: #71717a;
+        --accent: #18181b;
+        --accent-fg: #ffffff;
+        --cover-a: #e7e5e4;
+        --cover-b: #d4d4d8;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0; padding: 0; min-height: 100%;
+        font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+        background: var(--bg); color: var(--text);
+      }
+      .cover {
+        height: 160px;
+        background: linear-gradient(135deg, var(--cover-a), var(--cover-b));
+      }
+      main {
+        max-width: 880px; margin: 0 auto;
+        padding: 0 24px 60px;
+      }
+      .identity {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 18px;
+        margin-top: -56px;
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 18px; align-items: end;
+      }
+      .avatar {
+        width: 96px; height: 96px; border-radius: 50%;
+        background: #d4d4d8;
+        border: 4px solid var(--card);
+        margin-top: -64px;
+      }
+      .id-text { min-width: 0; }
+      .display-name {
+        font-size: 20px; font-weight: 600;
+        margin: 0 0 2px;
+      }
+      .handle {
+        font-size: 13px; color: var(--muted);
+        margin-bottom: 8px;
+      }
+      .bio {
+        font-size: 14px; line-height: 1.5;
+        color: var(--text);
+      }
+      .stats {
+        display: flex; gap: 18px;
+        margin-top: 10px;
+        font-size: 13px; color: var(--muted);
+      }
+      .stats b { color: var(--text); font-weight: 600; }
+      .actions {
+        display: flex; gap: 8px;
+      }
+      .actions button {
+        padding: 8px 14px; font-size: 13px;
+        border-radius: 8px; cursor: pointer;
+      }
+      .btn-secondary {
+        background: #fff; color: var(--text);
+        border: 1px solid var(--border);
+      }
+      .btn-primary {
+        background: var(--accent); color: var(--accent-fg);
+        border: 0; font-weight: 600;
+      }
+      .tabs {
+        display: flex; gap: 4px;
+        margin: 24px 0 16px;
+        border-bottom: 1px solid var(--border);
+      }
+      .tabs button {
+        background: transparent; border: 0;
+        padding: 10px 14px;
+        font-size: 14px; color: var(--muted);
+        cursor: pointer;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -1px;
+      }
+      .tabs button.active {
+        color: var(--text);
+        border-bottom-color: var(--text);
+        font-weight: 500;
+      }
+      .post {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 12px;
+      }
+      .post-title {
+        font-size: 15px; font-weight: 500;
+        margin: 0 0 6px;
+      }
+      .post-meta { font-size: 12px; color: var(--muted); }
+      .post-snippet {
+        font-size: 14px; color: var(--text);
+        margin-top: 8px; line-height: 1.5;
+      }
+      @media (max-width: 640px) {
+        .identity {
+          grid-template-columns: 1fr;
+          align-items: start;
+        }
+        .actions { justify-content: flex-start; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="cover" role="img" aria-label="Cover image placeholder"></div>
+    <main>
+      <section class="identity" aria-label="User identity">
+        <span class="avatar" role="img" aria-label="Priya"></span>
+        <div class="id-text">
+          <h1 class="display-name">Priya Ravindran</h1>
+          <div class="handle">@priya</div>
+          <p class="bio">Design systems engineer. Building the diagram surface for site composition.</p>
+          <div class="stats">
+            <span><b>128</b> posts</span>
+            <span><b>4,210</b> followers</span>
+            <span><b>312</b> following</span>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="btn-primary" type="button">Edit profile</button>
+          <button class="btn-secondary" type="button">Settings</button>
+        </div>
+      </section>
+
+      <nav class="tabs" aria-label="Profile sections">
+        <button class="active" type="button">Posts</button>
+        <button type="button">Activity</button>
+        <button type="button">Saved</button>
+      </nav>
+
+      <article class="post">
+        <h2 class="post-title">Pattern library wishlist</h2>
+        <div class="post-meta">3 days ago · 27 comments</div>
+        <p class="post-snippet">
+          We have a working board list, a gallery grid, and a passable
+          signup flow. The next bottleneck is the diagram surface.
+        </p>
+      </article>
+      <article class="post">
+        <h2 class="post-title">Typed I/O notes</h2>
+        <div class="post-meta">1 week ago · 9 comments</div>
+        <p class="post-snippet">
+          Every pattern needs typed I/O — what kind of data it expects
+          in, what kind of navigation it offers out.
+        </p>
+      </article>
+      <article class="post">
+        <h2 class="post-title">Diagram surface sketches</h2>
+        <div class="post-meta">2 weeks ago · 5 comments</div>
+        <p class="post-snippet">
+          First sketches of the multi-page composition canvas. Page
+          nodes connect by named outputs.
+        </p>
+      </article>
+    </main>
+  </body>
+</html>
