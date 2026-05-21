@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   BYOK_SENSEAUDIO_TOOLS,
   executeGenerateImage,
+  executeGenerateSpeech,
   executeGenerateVideo,
 } from '../src/byok-tools.js';
 
@@ -17,7 +18,8 @@ describe('BYOK_SENSEAUDIO_TOOLS', () => {
     expect(tool).toBeDefined();
     expect(tool!.type).toBe('function');
     expect(tool!.function.parameters.required).toEqual(['prompt']);
-    expect(tool!.function.parameters.properties.aspect_ratio.enum).toEqual([
+    const properties = tool!.function.parameters.properties as Record<string, any>;
+    expect(properties.aspect_ratio.enum).toEqual([
       '1:1',
       '16:9',
       '9:16',
@@ -26,9 +28,9 @@ describe('BYOK_SENSEAUDIO_TOOLS', () => {
     ]);
   });
 
-  it('exposes both generate_image and generate_video tools', () => {
+  it('exposes image, speech, and video tools', () => {
     const names = BYOK_SENSEAUDIO_TOOLS.map((t) => t.function.name).sort();
-    expect(names).toEqual(['generate_image', 'generate_video']);
+    expect(names).toEqual(['generate_image', 'generate_speech', 'generate_video']);
   });
 });
 
@@ -378,6 +380,81 @@ describe('BYOK_SENSEAUDIO_TOOLS — video', () => {
     expect(props.resolution.enum).toEqual(['480p', '720p', '1080p']);
     expect(props.duration).toMatchObject({ type: 'integer', minimum: 4, maximum: 15 });
     expect(props.generate_audio.type).toBe('boolean');
+  });
+});
+
+describe('executeGenerateSpeech', () => {
+  let root: string;
+  let projectsRoot: string;
+  const PROJECT_ID = 'test-project';
+  const realFetch = globalThis.fetch;
+
+  beforeEach(async () => {
+    root = await mkdtemp(path.join(tmpdir(), 'od-byok-speech-'));
+    projectsRoot = path.join(root, 'projects');
+  });
+
+  afterEach(async () => {
+    globalThis.fetch = realFetch;
+    vi.unstubAllGlobals();
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it('calls /v1/t2a_v2, persists mp3 bytes, and returns a daemon URL', async () => {
+    const audioBytes = Buffer.from([0x49, 0x44, 0x33, 0x04]);
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      expect(String(input)).toBe('https://api.senseaudio.cn/v1/t2a_v2');
+      expect(init?.method).toBe('POST');
+      expect(init?.headers).toMatchObject({
+        authorization: 'Bearer sa-byok-key',
+        'content-type': 'application/json',
+      });
+      expect(JSON.parse(String(init?.body))).toEqual({
+        model: 'senseaudio-tts-1.5-260319',
+        text: 'Meet saddle2 — the way work was supposed to feel.',
+        stream: false,
+        voice_setting: {
+          voice_id: 'female_0033_b',
+          speed: 1,
+          vol: 1,
+          pitch: 0,
+        },
+        audio_setting: {
+          format: 'mp3',
+          sample_rate: 32000,
+          bitrate: 128000,
+          channel: 2,
+        },
+      });
+      return new Response(
+        JSON.stringify({
+          data: { audio: audioBytes.toString('hex') },
+          base_resp: { status_code: 0, status_msg: 'success' },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await executeGenerateSpeech(
+      { text: 'Meet saddle2 — the way work was supposed to feel.' },
+      {
+        projectRoot: root,
+        projectsRoot,
+        projectId: PROJECT_ID,
+        upstreamApiKey: 'sa-byok-key',
+        upstreamBaseUrl: 'https://api.senseaudio.cn',
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.url).toMatch(
+      new RegExp(`^/api/projects/${PROJECT_ID}/files/byok-speech-[a-z0-9-]+\\.mp3$`),
+    );
+
+    const filename = result.url!.split('/').pop()!;
+    const onDisk = await readFile(path.join(projectsRoot, PROJECT_ID, filename));
+    expect(onDisk.equals(audioBytes)).toBe(true);
   });
 });
 
