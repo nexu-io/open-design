@@ -4289,17 +4289,28 @@ const DEFAULT_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS = 60 * 1000;
 //      legitimate work (e.g. Copilot from #2467) raise the ceiling
 //      without every operator having to set an env var.
 //   3. The 10-minute global default.
-// Both env and def values pass through the same clamp because Node
-// silently downgrades signed-32-bit-overflowing setTimeout delays to
-// 1ms — without the clamp an oversized hint would fire the watchdog
-// almost immediately while reporting the huge timeout to the user.
+//
+// The env path is lenient (silently normalizes / falls back) because it
+// comes from a runtime knob an operator can mis-type at any time. The
+// def path is strict (throws on non-finite or negative) because the
+// value lives in checked-in source — a typo like `inactivityTimeoutMs: -1`
+// should crash loudly at chat-run time rather than silently disable the
+// watchdog for that agent. Both paths still pass through the 24-hour
+// clamp because Node silently downgrades signed-32-bit-overflowing
+// setTimeout delays to 1ms.
 export function resolveChatRunInactivityTimeoutMs(agentDefault?: number) {
   const env = Number(process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS);
   if (Number.isFinite(env)) {
     return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(env)));
   }
-  if (typeof agentDefault === 'number' && Number.isFinite(agentDefault)) {
-    return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(agentDefault)));
+  if (agentDefault !== undefined) {
+    if (!Number.isFinite(agentDefault) || agentDefault < 0 || !Number.isInteger(agentDefault)) {
+      throw new RangeError(
+        `RuntimeAgentDef.inactivityTimeoutMs must be a non-negative integer, got ${String(agentDefault)}. ` +
+          'Fix the runtime def — invalid values used to silently disable the watchdog.',
+      );
+    }
+    return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, agentDefault);
   }
   return DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
 }

@@ -75,14 +75,43 @@ describe('resolveChatRunInactivityTimeoutMs', () => {
     expect(resolveChatRunInactivityTimeoutMs(TWENTY_FOUR_HOURS_MS * 100)).toBe(TWENTY_FOUR_HOURS_MS);
   });
 
-  it('treats a non-finite def hint as if it were absent (defends against bad runtime configs)', () => {
+  it('throws RangeError on a non-finite def hint — runtime defs are checked-in source and a typo must fail loudly, not silently disable the watchdog', () => {
+    // The previous draft normalized NaN/Infinity to the global default,
+    // which made a runtime def like `inactivityTimeoutMs: Number.NaN`
+    // look fine in source review while quietly losing the agent-specific
+    // ceiling at runtime. The reviewer-correctness fix: fast-fail on the
+    // checked-in side so the bug surfaces in dev, not in production logs.
     delete process.env[ENV_KEY];
-    expect(resolveChatRunInactivityTimeoutMs(Number.NaN)).toBe(TEN_MINUTES_MS);
+    expect(() => resolveChatRunInactivityTimeoutMs(Number.NaN)).toThrow(
+      /RuntimeAgentDef\.inactivityTimeoutMs/,
+    );
   });
 
-  it('floors negative def hints to 0 rather than scheduling a negative-delay timer', () => {
+  it('throws RangeError on a negative def hint — `-1` would silently disable the agent-specific watchdog otherwise', () => {
     delete process.env[ENV_KEY];
-    expect(resolveChatRunInactivityTimeoutMs(-1)).toBe(0);
+    expect(() => resolveChatRunInactivityTimeoutMs(-1)).toThrow(
+      /must be a non-negative integer/,
+    );
+  });
+
+  it('throws RangeError on a fractional def hint — Math.floor would mask a wrong-units typo (e.g. seconds instead of ms)', () => {
+    // A def value like `inactivityTimeoutMs: 30` (seconds, written
+    // forgetting the unit is ms) is a real footgun; refusing
+    // non-integer floats keeps such typos from getting silently
+    // floored to a 0ms or 30ms timer. Operators can still pass
+    // anything via the env override.
+    delete process.env[ENV_KEY];
+    expect(() => resolveChatRunInactivityTimeoutMs(60.5)).toThrow(
+      /must be a non-negative integer/,
+    );
+  });
+
+  it('keeps the env override lenient when its value is bogus and no def hint is provided (falls back to the global default)', () => {
+    // env comes from operator-supplied configuration that can be
+    // mistyped at any time. Unlike the def path it must not crash the
+    // chat run — fall back to the 10-minute default instead.
+    process.env[ENV_KEY] = 'not-a-number';
+    expect(resolveChatRunInactivityTimeoutMs()).toBe(TEN_MINUTES_MS);
   });
 });
 

@@ -242,9 +242,11 @@ function stripFns(
   // (reasoningOptions, streamFormat, name, bin, etc.). `models` is
   // populated separately by `fetchModels`, so we strip the static
   // `fallbackModels` slot here too. `helpArgs` / `capabilityFlags` /
-  // `fallbackBins` / `maxPromptArgBytes` / `env` / `inactivityTimeoutMs`
-  // are probe-or-spawn-only metadata and shouldn't bleed into the API
-  // response either.
+  // `fallbackBins` / `maxPromptArgBytes` / `env` are probe-or-spawn-only
+  // metadata and shouldn't bleed into the API response either.
+  // `inactivityTimeoutMs` is a spawn-time hint for the chat-run watchdog
+  // and is not part of the public AgentInfo contract — strip it here so
+  // the runtime registry stays the only consumer.
   const {
     buildArgs,
     listModels,
