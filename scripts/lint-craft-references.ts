@@ -84,15 +84,15 @@ function stripSlugDecorators(value: string): string {
   return value.trim().replace(/^["'`]+/, "").replace(/["'`]+$/, "").trim();
 }
 
-function parseInlineSlugList(rawValue: string): string[] {
+function parseInlineSlugList(rawValue: string): string[] | null {
   const trimmed = rawValue.trim();
-  if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) return [];
+  if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) return null;
 
   return trimmed
     .slice(1, -1)
     .split(",")
     .map(stripSlugDecorators)
-    .filter((value) => slugPattern.test(value));
+    .filter((value) => value.length > 0);
 }
 
 function parseBlockSlugList(lines: string[], startIndex: number, parentIndent: number): string[] {
@@ -109,7 +109,7 @@ function parseBlockSlugList(lines: string[], startIndex: number, parentIndent: n
     if (!match) continue;
 
     const slug = stripSlugDecorators(match[1] ?? "");
-    if (slugPattern.test(slug)) slugs.push(slug);
+    if (slug) slugs.push(slug);
   }
 
   return slugs;
@@ -130,7 +130,7 @@ function extractRequiresFromCraftBlock(lines: string[], craftIndex: number): str
     if (!match) continue;
 
     const inlineSlugs = parseInlineSlugList(match[1] ?? "");
-    if (inlineSlugs.length > 0) {
+    if (inlineSlugs) {
       slugs.push(...inlineSlugs);
       continue;
     }
@@ -141,7 +141,7 @@ function extractRequiresFromCraftBlock(lines: string[], craftIndex: number): str
   return slugs;
 }
 
-function extractCraftRequiresSlugs(source: string): string[] {
+export function extractCraftRequiresSlugs(source: string): string[] {
   const frontmatter = extractFrontmatter(source);
   if (!frontmatter) return [];
 
@@ -239,6 +239,21 @@ function groupReferencesBySlug(references: CraftReference[]): Map<string, string
   );
 }
 
+export function findInvalidCraftReferences(references: CraftReference[]): CraftReference[] {
+  return references.filter((reference) => !slugPattern.test(reference.slug));
+}
+
+function printInvalidReferences(invalid: Map<string, string[]>): void {
+  console.error(`Invalid craft slug syntax: ${invalid.size}`);
+  for (const [slug, manifestPaths] of invalid) {
+    console.error(`  '${slug}' is not a valid craft slug and is referenced by ${manifestPaths.length} manifest(s):`);
+    for (const manifestPath of manifestPaths) {
+      console.error(`    - ${manifestPath}`);
+    }
+  }
+  console.error("Use lowercase letters, digits, and hyphens only; slugs must start with a letter or digit.");
+}
+
 function printUnresolvedReferences(unresolved: Map<string, string[]>): void {
   console.error(`Unresolved craft slugs: ${unresolved.size}`);
   for (const [slug, manifestPaths] of unresolved) {
@@ -261,17 +276,21 @@ export async function checkCraftReferences(options: CraftLintOptions = {}): Prom
   console.log(`craft sections present: ${existingSlugs.size} (${formatSlugList(existingSlugs)})`);
   console.log(`craft sections marked future-only: ${futureSlugs.size} (${formatSlugList(futureSlugs)})`);
 
-  const unresolvedReferences = references.filter(
+  const invalidReferences = findInvalidCraftReferences(references);
+  const validReferences = references.filter((reference) => slugPattern.test(reference.slug));
+  const unresolvedReferences = validReferences.filter(
     (reference) => !existingSlugs.has(reference.slug) && !futureSlugs.has(reference.slug),
   );
+  const invalid = groupReferencesBySlug(invalidReferences);
   const unresolved = groupReferencesBySlug(unresolvedReferences);
 
-  if (unresolved.size === 0) {
+  if (invalid.size === 0 && unresolved.size === 0) {
     console.log("Craft reference check passed: every od.craft.requires slug resolves or is listed as planned.");
     return true;
   }
 
-  printUnresolvedReferences(unresolved);
+  if (invalid.size > 0) printInvalidReferences(invalid);
+  if (unresolved.size > 0) printUnresolvedReferences(unresolved);
   return !strict;
 }
 
