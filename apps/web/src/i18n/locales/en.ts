@@ -409,7 +409,7 @@ export const en: Dict = {
   'workspaceTabs.pluginDetails': 'Plugin details',
   'workspaceTabs.marketplace': 'Marketplace',
   'homeHero.title': 'What do you want to design?',
-  'homeHero.subtitlePrefix': "Describe what you want to generate, then press",
+  'homeHero.subtitlePrefix': 'The open-source alternative to Claude Design.',
   'homeHero.placeholder': 'Describe what you want to generate…',
   'homeHero.placeholderActive': 'Edit the example query or write your own…',
   'homeHero.skills': 'Skills',

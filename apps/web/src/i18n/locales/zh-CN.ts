@@ -409,7 +409,7 @@ export const zhCN: Dict = {
   'workspaceTabs.pluginDetails': '插件详情',
   'workspaceTabs.marketplace': '插件市场',
   'homeHero.title': '你想设计什么？',
-  'homeHero.subtitlePrefix': "描述你想生成的内容，然后按",
+  'homeHero.subtitlePrefix': 'Claude Design 的开源替代方案。',
   'homeHero.placeholder': '描述你想生成的内容…',
   'homeHero.placeholderActive': '编辑示例请求，或写下你自己的需求…',
   'homeHero.skills': '技能',

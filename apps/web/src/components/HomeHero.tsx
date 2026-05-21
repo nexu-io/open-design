@@ -600,7 +600,7 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
       </div>
       <h1 className="home-hero__title">{t('homeHero.title')}</h1>
       <p className="home-hero__subtitle">
-        {t('homeHero.subtitlePrefix')} <kbd>Enter</kbd>.
+        {t('homeHero.subtitlePrefix')}
       </p>
 
       <div
