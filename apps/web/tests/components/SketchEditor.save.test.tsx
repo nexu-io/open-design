@@ -87,7 +87,7 @@ describe('SketchEditor save', () => {
   });
 
   it('shows the checkmark icon after save completes', async () => {
-    const onSave = vi.fn().mockResolvedValue(undefined);
+    const onSave = vi.fn().mockResolvedValue(true);
     renderEditor({ dirty: true, onSave });
     await act(async () => {
       fireEvent.click(saveButton());
@@ -114,5 +114,16 @@ describe('SketchEditor save', () => {
     });
     expect(saveButton().textContent).toBe('common.save');
     expect(saveButton().disabled).toBe(false);
+  });
+
+  it('does not show the checkmark when save fails', async () => {
+    const onSave = vi.fn().mockResolvedValue(false);
+    renderEditor({ dirty: true, onSave });
+    await act(async () => {
+      fireEvent.click(saveButton());
+    });
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(saveButton().textContent).toBe('common.save');
+    expect(saveButton().querySelector('svg')).toBeNull();
   });
 });

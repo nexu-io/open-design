@@ -15,7 +15,7 @@ interface Props {
   hasPreservedRawItems?: boolean;
   onItemsChange: (items: SketchItem[]) => void;
   onClear?: () => void;
-  onSave: () => Promise<void> | void;
+  onSave: () => Promise<boolean | void> | boolean | void;
   onCancel?: () => void;
   saving?: boolean;
   dirty?: boolean;
@@ -195,7 +195,8 @@ export function SketchEditor({
   }
 
   const handleSave = useCallback(async () => {
-    await onSave();
+    const ok = await onSave();
+    if (ok === false) return;
     setShowSaved(true);
     clearTimeout(savedTimerRef.current);
     savedTimerRef.current = setTimeout(() => setShowSaved(false), SAVED_VISIBLE_MS);

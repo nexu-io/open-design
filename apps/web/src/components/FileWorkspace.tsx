@@ -754,8 +754,10 @@ export function FileWorkspace({
       });
       setActiveTab(name);
       await onRefreshFiles();
+      return true;
     } else {
       setSketches((curr) => ({ ...curr, [name]: { ...curr[name]!, saving: false } }));
+      return false;
     }
   }
 
