@@ -182,16 +182,29 @@ test("tauri-migration-status reports complete after M6 without requiring pre-M5 
   });
   await initGitFixture(fixture);
   const automationDir = join(fixture, "automations");
+  const handoffDir = join(fixture, "handoff");
+  const reportDir = join(fixture, "reports");
   await mkdir(automationDir, { recursive: true });
 
-  const result = await runStatus(fixture, "--automation-dir", automationDir);
+  const result = await runStatus(
+    fixture,
+    "--automation-dir",
+    automationDir,
+    "--handoff-dir",
+    handoffDir,
+    "--report-dir",
+    reportDir,
+  );
   const parsed = JSON.parse(result.stdout) as {
     heartbeat?: unknown;
+    handoff?: unknown;
+    handoffArchive?: unknown;
     m4Evidence: {
       problems: string[];
       remoteEvidence: boolean;
     };
     nextActions: string[];
+    platformReports?: unknown;
     phase: string;
   };
 
@@ -199,6 +212,9 @@ test("tauri-migration-status reports complete after M6 without requiring pre-M5 
   assert.equal(parsed.m4Evidence.remoteEvidence, true);
   assert.deepEqual(parsed.m4Evidence.problems, []);
   assert.equal(parsed.heartbeat, undefined);
+  assert.equal(parsed.handoff, undefined);
+  assert.equal(parsed.handoffArchive, undefined);
+  assert.equal(parsed.platformReports, undefined);
   assert.match(parsed.nextActions.join("\n"), /No migration phase actions remain/);
 });
 

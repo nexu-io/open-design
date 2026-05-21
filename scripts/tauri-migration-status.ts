@@ -317,14 +317,15 @@ async function readMigrationStatus(
   ];
   const m4Evidence = readM4EvidenceStatus(groups, migrationDoc, gitStatus.head);
   const phase = currentPhase(groups, m4Evidence);
-  const handoff = handoffDir == null ? undefined : await readHandoffStatus(handoffDir, gitStatus);
+  const phaseComplete = phase === "complete";
+  const handoff = phaseComplete || handoffDir == null ? undefined : await readHandoffStatus(handoffDir, gitStatus);
   const handoffArchive =
-    handoffDir == null
+    phaseComplete || handoffDir == null
       ? undefined
       : await readHandoffArchiveStatus(handoffArchiveArg ?? handoffArchivePath(handoffDir), handoff);
   const remoteStatus = remote == null ? undefined : await readRemoteStatus(root, remote, gitStatus, handoff);
-  const platformReports = await resolvePlatformReportsStatus(winReport, linuxReport, reportDir);
-  const heartbeat = phase === "complete" || automationDir == null ? undefined : await readHeartbeatStatus(automationDir);
+  const platformReports = phaseComplete ? undefined : await resolvePlatformReportsStatus(winReport, linuxReport, reportDir);
+  const heartbeat = phaseComplete || automationDir == null ? undefined : await readHeartbeatStatus(automationDir);
   const status: MigrationStatus = {
     defaults: {
       releaseBeta: readReleaseBetaDefault(releaseBetaWorkflow),
