@@ -2,6 +2,7 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import FontStylesheet from '../../_components/font-stylesheet.astro';
+import GoogleAnalytics from '../../_components/google-analytics.astro';
 import HomeEnhancer from '../../_components/home-enhancer.astro';
 import LocaleSwitcherEnhancer from '../../_components/locale-switcher-enhancer.astro';
 import PreciseLazyload from '../../_components/precise-lazyload.astro';
@@ -70,6 +71,7 @@ const pageHtml = renderToStaticMarkup(
     <meta property="og:url" content={canonical} />
     <meta property="og:image" content={heroImage} />
     <meta name="twitter:card" content="summary_large_image" />
+    <GoogleAnalytics />
   </head>
   <body>
     <Fragment set:html={pageHtml} />

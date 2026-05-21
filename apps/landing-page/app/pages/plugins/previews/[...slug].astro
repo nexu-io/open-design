@@ -1,4 +1,5 @@
 ---
+import { injectGoogleAnalytics } from '../../../_lib/google-analytics';
 import { getPluginPreviewHtml, getPublicPlugins } from '../../../plugin-registry';
 
 export function getStaticPaths() {
@@ -14,6 +15,7 @@ export function getStaticPaths() {
 }
 
 const { html } = Astro.props as { html: string };
+const pageHtml = injectGoogleAnalytics(html);
 ---
 
-<Fragment set:html={html} />
+<Fragment set:html={pageHtml} />

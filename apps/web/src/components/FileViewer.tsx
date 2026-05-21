@@ -868,6 +868,7 @@ export function LiveArtifactViewer({
     [projectId, liveArtifact.artifactId, reloadKey],
   );
   const previewScale = zoom / 100;
+  const previewActive = mode === 'preview';
 
   function bumpZoom(delta: number) {
     setZoom((z) => Math.max(25, Math.min(200, z + delta)));
@@ -1008,15 +1009,15 @@ export function LiveArtifactViewer({
           </div>
           <div
             className="viewer-preview-controls"
-            data-active={mode === 'preview' ? 'true' : 'false'}
-            aria-hidden={mode === 'preview' ? undefined : true}
+            data-active={previewActive ? 'true' : 'false'}
+            aria-hidden={previewActive ? undefined : true}
           >
             <span className="viewer-divider" aria-hidden />
             <PreviewViewportControls
               viewport={previewViewport}
               onViewport={setPreviewViewport}
               t={t}
-              tabIndex={mode === 'preview' ? 0 : -1}
+              tabIndex={previewActive ? 0 : -1}
             />
             <span className="viewer-divider" aria-hidden />
             <button
@@ -1025,7 +1026,7 @@ export function LiveArtifactViewer({
               onClick={() => bumpZoom(-25)}
               title={t('fileViewer.zoomOut')}
               aria-label={t('fileViewer.zoomOut')}
-              tabIndex={mode === 'preview' ? 0 : -1}
+              tabIndex={previewActive ? 0 : -1}
             >
               <Icon name="minus" size={14} />
             </button>
@@ -1034,7 +1035,7 @@ export function LiveArtifactViewer({
               className="viewer-action viewer-zoom-level"
               onClick={() => setZoom(100)}
               title={t('fileViewer.resetZoom')}
-              tabIndex={mode === 'preview' ? 0 : -1}
+              tabIndex={previewActive ? 0 : -1}
             >
               <span style={{ fontVariantNumeric: 'tabular-nums' }}>{zoom}%</span>
             </button>
@@ -1044,7 +1045,7 @@ export function LiveArtifactViewer({
               onClick={() => bumpZoom(25)}
               title={t('fileViewer.zoomIn')}
               aria-label={t('fileViewer.zoomIn')}
-              tabIndex={mode === 'preview' ? 0 : -1}
+              tabIndex={previewActive ? 0 : -1}
             >
               <Icon name="plus" size={14} />
             </button>
@@ -1054,7 +1055,7 @@ export function LiveArtifactViewer({
               href={liveArtifactPreviewUrl(projectId, liveArtifact.artifactId)}
               target="_blank"
               rel="noreferrer noopener"
-              tabIndex={mode === 'preview' ? 0 : -1}
+              tabIndex={previewActive ? 0 : -1}
             >
               {t('fileViewer.open')}
             </a>
@@ -1107,26 +1108,27 @@ export function LiveArtifactViewer({
             action={t('liveArtifact.refresh.failureAction')}
           />
         ) : null}
-        {mode === 'preview' ? (
-          <div
-            className={`live-artifact-preview-layer preview-viewport preview-viewport-${previewViewport}`}
-            style={previewViewportStyle(previewViewport, previewScale, previewBodySize)}
-          >
-            <div className="preview-frame-clip">
-              <div style={previewScaleShellStyle(previewViewport, previewScale)}>
-                <PreviewDrawOverlay>
-                  <iframe
-                    ref={iframeRef}
-                    data-testid="live-artifact-preview-frame"
-                    title={liveArtifact.title}
-                    sandbox="allow-scripts allow-popups allow-downloads"
-                    src={previewUrl}
-                  />
-                </PreviewDrawOverlay>
-              </div>
+        <div
+          className={`live-artifact-preview-layer preview-viewport preview-viewport-${previewViewport}`}
+          data-active={previewActive ? 'true' : 'false'}
+          aria-hidden={previewActive ? undefined : true}
+          style={previewViewportStyle(previewViewport, previewScale, previewBodySize)}
+        >
+          <div className="preview-frame-clip">
+            <div style={previewScaleShellStyle(previewViewport, previewScale)}>
+              <PreviewDrawOverlay>
+                <iframe
+                  ref={iframeRef}
+                  data-testid="live-artifact-preview-frame"
+                  title={liveArtifact.title}
+                  sandbox="allow-scripts allow-popups allow-downloads"
+                  src={previewUrl}
+                />
+              </PreviewDrawOverlay>
             </div>
           </div>
-        ) : loading ? (
+        </div>
+        {previewActive ? null : loading ? (
           <div className="viewer-empty">{t('fileViewer.loading')}</div>
         ) : mode === 'code' ? (
           <LiveArtifactCodePanel

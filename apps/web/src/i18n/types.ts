@@ -895,8 +895,11 @@ export interface Dict {
   'integrations.lede': string;
   'integrations.agentReady': string;
   'integrations.areasAria': string;
+  'integrations.tabLabel.mcp': string;
+  'integrations.tabLabel.skills': string;
   'integrations.tabHint.mcp': string;
   'integrations.tabHint.connectors': string;
+  'integrations.tabHint.useEverywhere': string;
   'integrations.skillsTitle': string;
   'integrations.skillsBody': string;
   'mcpClient.title': string;
@@ -1398,6 +1401,8 @@ export interface Dict {
   'designs.deleteSelected': string;
   'designs.selectedCount': string;
   'designs.deleteSelectedConfirm': string;
+  'designs.deleteSelectedSuccess': string;
+  'designs.deleteSelectedPartial': string;
   'designs.tagPrototype': string;
   'designs.tagLiveArtifact': string;
   'designs.tagSlide': string;

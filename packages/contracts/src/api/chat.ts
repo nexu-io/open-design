@@ -33,6 +33,8 @@ export interface ChatRequest {
   commentAttachments?: ChatCommentAttachment[];
   model?: string | null;
   reasoning?: string | null;
+  /** UI locale selected by the client, used by prompt composition for user-visible generated UI. */
+  locale?: string;
   research?: ResearchOptions;
   context?: RunContextSelection;
 }

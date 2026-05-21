@@ -19,6 +19,7 @@ import '../sub-pages.css';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import FontStylesheet from './font-stylesheet.astro';
+import GoogleAnalytics from './google-analytics.astro';
 import HeaderEnhancer from './header-enhancer.astro';
 import LocaleSwitcherEnhancer from './locale-switcher-enhancer.astro';
 import { Header, type HeaderProps } from './header';
@@ -80,6 +81,10 @@ const ldArray = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
       <link rel="alternate" hreflang={item.hreflang} href={new URL(item.href, Astro.site).toString()} />
     ))}
 
+    {/* See `index.astro` for why we publish + link `/favicon.ico` in
+     * addition to the PNG: SEO crawlers and link-preview services
+     * hard-probe that exact path. */}
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
@@ -101,6 +106,7 @@ const ldArray = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
     {ldArray.map((data) => (
       <script is:inline type="application/ld+json" set:html={JSON.stringify(data)} />
     ))}
+    <GoogleAnalytics />
   </head>
   <body class="sub-page">
     <div class="shell">

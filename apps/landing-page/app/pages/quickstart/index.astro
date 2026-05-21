@@ -1,0 +1,180 @@
+---
+/*
+ * /quickstart/ — install-and-run intent.
+ *
+ * Captures "open design install", "open design quickstart", "open-design
+ * getting started", "od cli" queries and lands them directly on a page
+ * that gives commands, expected output, and the troubleshooting checklist
+ * most users need.
+ *
+ * HowTo JSON-LD describes the three visible install steps; the rest of
+ * the page is reference material that complements the GitHub README
+ * without duplicating it.
+ */
+import Layout from '../../_components/sub-page-layout.astro';
+import { getGithubRepoMeta } from '../../_lib/github';
+
+const SITE = Astro.site?.toString() ?? 'https://open-design.ai/';
+const REPO = 'https://github.com/nexu-io/open-design';
+const REPO_RELEASES = `${REPO}/releases`;
+const DISCORD = 'https://discord.gg/9ptkbbqRu';
+
+const github = await getGithubRepoMeta();
+
+const title = 'Open Design quickstart — Install in three commands (Node 24, pnpm)';
+const description =
+  'Install Open Design locally with three commands. Requirements (Node 24, pnpm 10.33.2), commands, expected output, troubleshooting, and how to generate your first design artifact with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen.';
+
+const requirements = [
+  { label: 'Node.js 24', body: 'install via your platform package manager or nodejs.org. Node 22 is not supported.' },
+  { label: 'pnpm 10.33.2', body: 'enabled through Corepack so the lockfile-pinned version is used.' },
+  { label: 'git', body: 'any recent version.' },
+  { label: 'An agent', body: 'Claude Code, Codex, Cursor, Gemini CLI, OpenCode, or Qwen.' },
+];
+
+const steps = [
+  {
+    name: 'Clone and install',
+    text: 'Clone the open-design repository and install workspace dependencies with pnpm. Requires Node 24 and pnpm 10.33.2.',
+    code: 'git clone https://github.com/nexu-io/open-design\ncd open-design\npnpm install',
+  },
+  {
+    name: 'Start the daemon and web UI',
+    text: 'Run tools-dev to start the local daemon and web runtime. This is the only lifecycle entry point.',
+    code: 'pnpm tools-dev',
+  },
+  {
+    name: 'Generate your first artifact',
+    text: 'Open the web UI, pick a skill from the catalog, and let your agent render it. Or drive the daemon directly with the od CLI.',
+    code: 'od skill run open-design-landing --output ./artifact.html',
+  },
+];
+
+const troubleshooting = [
+  { label: 'EBADENGINE on pnpm install', body: 'wrong Node major. Switch to Node 24.' },
+  { label: 'better-sqlite3 build hangs on Windows', body: 'expected on Node 24; install Visual Studio Build Tools first.' },
+  { label: 'Port already in use', body: 'pass --daemon-port and --web-port, or stop the previous run.' },
+  { label: 'Agent does not show up', body: 'check /agents/ and your .od/media-config.json credentials.' },
+  { label: 'Permission prompt loops', body: 'pnpm tools-dev check verifies the environment and prints missing setup.' },
+];
+
+const nextItems = [
+  { label: 'Browse the skill catalog', href: '/skills/', body: 'and pick one to render.' },
+  { label: 'Pick a DESIGN.md system', href: '/systems/', body: 'so generated artifacts inherit a brand.' },
+  { label: 'Compare Open Design', href: '/compare/', body: 'with Claude Design, Figma Make, v0, and Lovable.' },
+  { label: 'Subscribe to GitHub releases', href: REPO_RELEASES, body: 'for new versions.' },
+];
+
+const jsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Open Design', item: SITE },
+      { '@type': 'ListItem', position: 2, name: 'Quickstart', item: `${SITE}quickstart/` },
+    ],
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'HowTo',
+    name: 'Install Open Design in three commands',
+    description,
+    totalTime: 'PT5M',
+    step: steps.map((s, idx) => ({
+      '@type': 'HowToStep',
+      position: idx + 1,
+      name: s.name,
+      text: s.text,
+    })),
+  },
+];
+---
+
+<Layout title={title} description={description} active="home" jsonLd={jsonLd}>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <a href="/">Open Design</a>
+    <span>/</span>
+    <span aria-current="page">Quickstart</span>
+  </nav>
+
+  <article class="info-page">
+    <header class="catalog-head">
+      <span class="label">Install · Nº 01</span>
+      <h1 class="display">Open Design quickstart<span class="dot">.</span></h1>
+      <p class="lead">
+        Open Design runs entirely on your machine. Three commands gets you from a clean checkout to a running daemon, web UI, and your first generated design artifact.
+      </p>
+      <p>Latest stable release: <a class="inline-link" href={REPO_RELEASES} target="_blank" rel="noreferrer noopener">{github.versionLabel}</a></p>
+    </header>
+
+    <section class="info-section">
+      <h2>Requirements</h2>
+      <ul>
+        {requirements.map((r) => (
+          <li><strong>{r.label}</strong> — {r.body}</li>
+        ))}
+      </ul>
+    </section>
+
+    <section class="info-section">
+      <h2>Three commands to ship</h2>
+      <p>Run these commands from a clean shell:</p>
+      {steps.map((s, idx) => (
+        <>
+          <h3>{idx + 1}. {s.name}</h3>
+          <p>{s.text}</p>
+          <code class="code-block">{s.code}</code>
+        </>
+      ))}
+      <p>Full notes live in <a class="inline-link" href={`${REPO}/blob/main/QUICKSTART.md`} target="_blank" rel="noreferrer noopener">QUICKSTART.md</a>.</p>
+    </section>
+
+    <section class="info-section">
+      <h2>What you should see</h2>
+      <p>When <code>pnpm tools-dev</code> is healthy, the terminal reports the daemon, web runtime, and sidecar IPC namespace as ready.</p>
+      <p>The exact ports come from your <code>tools-dev</code> flags (<code>--daemon-port</code>, <code>--web-port</code>); defaults are stable across runs.</p>
+    </section>
+
+    <section class="info-section">
+      <h2>Troubleshooting</h2>
+      <ul>
+        {troubleshooting.map((t) => (
+          <li><strong>{t.label}</strong> — {t.body}</li>
+        ))}
+      </ul>
+    </section>
+
+    <section class="info-section">
+      <h2>Next steps</h2>
+      <ul>
+        {nextItems.map((n) => {
+          const isExt = n.href.startsWith('http');
+          return (
+            <li>
+              <a class="inline-link" href={n.href} target={isExt ? '_blank' : undefined} rel={isExt ? 'noreferrer noopener' : undefined}>
+                {n.label}
+              </a> — {n.body}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+
+    <section class="info-cta" aria-label="Open Design call to action">
+      <div>
+        <h2>Three commands. <em>Yours to keep.</em></h2>
+        <p>You have the install path. Star the repo, grab the desktop build, or join Discord if anything breaks on first run.</p>
+      </div>
+      <div class="info-cta-actions">
+        <a class="btn btn-primary" href={REPO} target="_blank" rel="noreferrer noopener">Star on GitHub</a>
+        <a class="btn btn-ghost" href={REPO_RELEASES} target="_blank" rel="noreferrer noopener">Download desktop</a>
+        <a class="btn btn-ghost" href={DISCORD} target="_blank" rel="noreferrer noopener">Join Discord</a>
+      </div>
+      <div class="info-cta-meta">
+        <span class="stamp">● Local-first</span>
+        <span>BYOK · Apache-2.0</span>
+        <span>macOS · Windows · Linux</span>
+      </div>
+    </section>
+  </article>
+</Layout>

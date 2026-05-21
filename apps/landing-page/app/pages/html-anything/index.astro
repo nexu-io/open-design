@@ -139,11 +139,38 @@ const jsonLd: Array<Record<string, unknown>> = [
     '@context': 'https://schema.org',
     '@type': 'SoftwareApplication',
     name: 'HTML Anything',
-    alternateName: 'The agentic HTML editor',
+    /*
+     * alternateName fed as an array so Google understands the project
+     * is searched as: hyphenated, spaced, joined, capitalized variants,
+     * and the tagline. Each entry is a real query users type — keeping
+     * them in this list signals canonical-name equivalence rather than
+     * leaving the matching to Google's tokenizer alone.
+     */
+    alternateName: [
+      'html anything',
+      'html-anything',
+      'htmlanything',
+      'HTML Anything Editor',
+      'The agentic HTML editor',
+    ],
     applicationCategory: 'DeveloperApplication',
     operatingSystem: 'macOS, Linux, Windows',
     description,
-    url: HA_URL,
+    /*
+     * `url` is the canonical surface for this entity. JSON-LD lives on
+     * the landing page, so the landing page IS the canonical URL —
+     * Google uses this field to decide which page to attribute the
+     * SoftwareApplication entity to. Pointing it at the GitHub repo
+     * would tell crawlers "the canonical home of HTML Anything is
+     * github.com/...", which is exactly the opposite of what this SEO
+     * pass is trying to achieve. The BreadcrumbList block below also
+     * uses the landing page URL — keep both blocks aligned.
+     *
+     * `sameAs` carries the OTHER reference surfaces that identify the
+     * same entity. The GitHub repo belongs there.
+     */
+    url: 'https://open-design.ai/html-anything/',
+    sameAs: [HA_URL],
     license: 'https://www.apache.org/licenses/LICENSE-2.0',
     offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
     author: {

@@ -1,0 +1,175 @@
+---
+/*
+ * /agents/ — agent-name long tail.
+ *
+ * Captures "claude code design", "codex design", "cursor agent design",
+ * "gemini cli design", "opencode design", "qwen design" queries. Each
+ * agent gets a short card explaining how it plugs into Open Design.
+ * Per-agent detail pages (e.g. `/agents/claude-code/`) will follow as
+ * P2 work — this hub is the SEO entry point.
+ */
+import Layout from '../../_components/sub-page-layout.astro';
+
+const SITE = Astro.site?.toString() ?? 'https://open-design.ai/';
+const REPO = 'https://github.com/nexu-io/open-design';
+const REPO_RELEASES = `${REPO}/releases`;
+const DISCORD = 'https://discord.gg/9ptkbbqRu';
+
+const title = 'Open Design agents — 17 BYOK adapters';
+const description =
+  'Open Design ships 17 BYOK adapters out of the box. Drive design from the same agent you use for code — no separate vendor login.';
+
+// 17 first-party adapters live in `apps/daemon/src/runtimes/defs/`. Keep
+// this list in lockstep with that directory.
+const tiers = [
+  {
+    label: 'Tier 1 — first-party tested',
+    blurb: 'Battle-tested daily by the Open Design maintainers. Stream-JSON IPC where supported, full AskUserQuestion mid-turn, skill-aware system prompts.',
+    agents: [
+      { slug: 'claude-code', name: 'Claude Code', vendor: 'Anthropic', key: 'Anthropic API key (BYOK) or Claude subscription' },
+      { slug: 'codex', name: 'Codex', vendor: 'OpenAI', key: 'OpenAI API key (BYOK) or ChatGPT subscription' },
+      { slug: 'cursor', name: 'Cursor Agent', vendor: 'Cursor', key: 'Cursor account (uses your provider keys)' },
+      { slug: 'gemini', name: 'Gemini CLI', vendor: 'Google', key: 'Google AI Studio key (BYOK)' },
+      { slug: 'copilot', name: 'GitHub Copilot CLI', vendor: 'GitHub', key: 'GitHub Copilot subscription' },
+      { slug: 'opencode', name: 'OpenCode', vendor: 'community', key: 'Provider keys via OpenCode config (BYOK)' },
+      { slug: 'qwen', name: 'Qwen', vendor: 'Alibaba', key: 'DashScope / Qwen API key (BYOK)' },
+    ],
+  },
+  {
+    label: 'Tier 2 — supported adapters',
+    blurb: 'Wired through the same skill protocol. Slightly less daily exposure than Tier 1 but still maintained in-tree.',
+    agents: [
+      { slug: 'grok', name: 'Grok', vendor: 'xAI', key: 'xAI SuperGrok OAuth (`grok login --oauth`)' },
+      { slug: 'hermes', name: 'Hermes', vendor: 'community', key: 'xAI / OpenAI / Anthropic keys via `hermes auth add`' },
+      { slug: 'kimi', name: 'Kimi CLI', vendor: 'Moonshot', key: 'Moonshot API key (BYOK)' },
+      { slug: 'devin', name: 'Devin for Terminal', vendor: 'Cognition', key: 'Devin account' },
+      { slug: 'deepseek', name: 'DeepSeek TUI', vendor: 'DeepSeek', key: 'DeepSeek API key (BYOK)' },
+      { slug: 'pi', name: 'Pi', vendor: 'Inflection', key: 'Pi account (interactive auth)' },
+    ],
+  },
+  {
+    label: 'Tier 3 — community / experimental',
+    blurb: 'Newer adapters with narrower coverage. Useful where the vendor offers a workflow Tier 1 does not.',
+    agents: [
+      { slug: 'vibe', name: 'Mistral Vibe CLI', vendor: 'Mistral', key: 'Mistral API key (BYOK)' },
+      { slug: 'kiro', name: 'Kiro CLI', vendor: 'Amazon (preview)', key: 'AWS credentials (BYOK)' },
+      { slug: 'kilo', name: 'Kilo', vendor: 'community', key: 'Provider keys via Kilo config (BYOK)' },
+      { slug: 'qoder', name: 'Qoder CLI', vendor: 'community', key: 'Provider keys via Qoder config (BYOK)' },
+    ],
+  },
+];
+
+const allAgents = tiers.flatMap((t) => t.agents);
+
+const byokItems = [
+  'Credentials live in .od/media-config.json or your shell env.',
+  'API calls go from your machine straight to your provider.',
+  'Switching providers is a key swap, not a re-onboard.',
+  'API spend bills to your account on each provider.',
+];
+
+const nextItems = [
+  { label: 'Quickstart', href: '/quickstart/', body: 'install in three commands.' },
+  { label: 'Browse the skill catalog', href: '/skills/', body: 'choose the workflow you want to run.' },
+  { label: 'Browse design systems', href: '/systems/', body: 'pick the brand contract.' },
+  { label: 'Claude Design alternative', href: '/alternatives/claude-design/', body: 'full comparison.' },
+];
+
+const jsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Open Design', item: SITE },
+      { '@type': 'ListItem', position: 2, name: 'Agents', item: `${SITE}agents/` },
+    ],
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: 'Open Design supported agents',
+    numberOfItems: allAgents.length,
+    itemListElement: allAgents.map((a, idx) => ({
+      '@type': 'ListItem',
+      position: idx + 1,
+      name: a.name,
+      url: `${SITE}agents/#${a.slug}`,
+    })),
+  },
+];
+---
+
+<Layout title={title} description={description} active="home" jsonLd={jsonLd}>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <a href="/">Open Design</a>
+    <span>/</span>
+    <span aria-current="page">Agents</span>
+  </nav>
+
+  <article class="info-page">
+    <header class="catalog-head">
+      <span class="label">Adapters · Nº 04</span>
+      <h1 class="display">{allAgents.length} BYOK agents, one skill protocol<span class="dot">.</span></h1>
+      <p class="lead">
+        Open Design ships {allAgents.length} first-party adapters out of the box. The same composable skills and portable DESIGN.md systems work with every one. BYOK throughout — your keys, your spend, your data.
+      </p>
+    </header>
+
+    <section class="info-section">
+      <h2>How adapters plug in</h2>
+      <p>Every adapter is a thin shim between the agent native message format and Open Design skill protocol. Adding a new adapter is a single file — no fork required.</p>
+    </section>
+
+    {tiers.map((tier) => (
+      <section class="info-section">
+        <h2>{tier.label}</h2>
+        <p>{tier.blurb}</p>
+        <ul class="agent-grid">
+          {tier.agents.map((a) => (
+            <li class="agent-card" id={a.slug}>
+              <h3>{a.name}</h3>
+              <p><strong>Vendor:</strong> {a.vendor}</p>
+              <p><strong>Credential:</strong> {a.key}</p>
+            </li>
+          ))}
+        </ul>
+      </section>
+    ))}
+
+    <section class="info-section" id="byok">
+      <h2>What BYOK means here</h2>
+      <p>BYOK ("bring your own key") in Open Design keeps credentials and spend on your side:</p>
+      <ul>
+        {byokItems.map((item) => (
+          <li>{item}</li>
+        ))}
+      </ul>
+    </section>
+
+    <section class="info-section" id="next">
+      <h2>Next steps</h2>
+      <ul>
+        {nextItems.map((n) => (
+          <li><a class="inline-link" href={n.href}>{n.label}</a> — {n.body}</li>
+        ))}
+      </ul>
+    </section>
+
+    <section class="info-cta" aria-label="Open Design call to action">
+      <div>
+        <h2>{allAgents.length} adapters. <em>Your agent.</em></h2>
+        <p>Pick the agent already on your laptop, point Open Design at it, and start rendering.</p>
+      </div>
+      <div class="info-cta-actions">
+        <a class="btn btn-primary" href={REPO} target="_blank" rel="noreferrer noopener">Star on GitHub</a>
+        <a class="btn btn-ghost" href={REPO_RELEASES} target="_blank" rel="noreferrer noopener">Download desktop</a>
+        <a class="btn btn-ghost" href={DISCORD} target="_blank" rel="noreferrer noopener">Request an adapter</a>
+      </div>
+      <div class="info-cta-meta">
+        <span class="stamp">● BYOK</span>
+        <span>{allAgents.length} adapters · Apache-2.0</span>
+        <span>macOS · Windows · Linux</span>
+      </div>
+    </section>
+  </article>
+</Layout>

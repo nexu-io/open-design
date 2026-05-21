@@ -1,0 +1,13 @@
+---
+/* Locale-prefixed wrapper for `/quickstart/`. See `[locale]/agents/index.astro`
+ * for the rationale; same shape, English content per locale until
+ * translations land. */
+import { PREFIXED_LOCALES } from '../../../_lib/i18n';
+import QuickstartPage from '../../quickstart/index.astro';
+
+export function getStaticPaths() {
+  return PREFIXED_LOCALES.map((locale) => ({ params: { locale } }));
+}
+---
+
+<QuickstartPage />

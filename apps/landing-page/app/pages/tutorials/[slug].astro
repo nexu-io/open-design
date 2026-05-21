@@ -11,6 +11,7 @@
 import { getCollection, render } from 'astro:content';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import GoogleAnalytics from '../../_components/google-analytics.astro';
 import HeaderEnhancer from '../../_components/header-enhancer.astro';
 import { Header, type HeaderProps } from '../../_components/header';
 import SeoHead from '../../_components/seo-head.astro';
@@ -76,6 +77,7 @@ const fmtDuration = (seconds: number) => {
       datePublished={entry.data.date}
       category={entry.data.category}
     />
+    <GoogleAnalytics />
   </head>
   <body>
     <div class='shell'>

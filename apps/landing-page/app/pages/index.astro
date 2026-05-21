@@ -4,6 +4,7 @@ import '../globals.css';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import FontStylesheet from '../_components/font-stylesheet.astro';
+import GoogleAnalytics from '../_components/google-analytics.astro';
 import HomeEnhancer from '../_components/home-enhancer.astro';
 import LocaleSwitcherEnhancer from '../_components/locale-switcher-enhancer.astro';
 import PreciseLazyload from '../_components/precise-lazyload.astro';
@@ -35,6 +36,14 @@ const pageHtml = renderToStaticMarkup(
       <link rel="alternate" hreflang={item.hreflang} href={new URL(item.href, Astro.site).toString()} />
     ))}
 
+    {/*
+     * Favicon links. Modern browsers prefer the explicit PNG. We also
+     * publish `/favicon.ico` and link it because many SEO crawlers,
+     * link-preview services, and older clients hard-probe that exact
+     * path — without a real ICO at that URL they get the SPA fallback
+     * HTML and render an empty/broken icon in third-party UIs.
+     */}
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
@@ -68,6 +77,7 @@ const pageHtml = renderToStaticMarkup(
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={heroImage} />
+    <GoogleAnalytics />
   </head>
   <body>
     <Fragment set:html={pageHtml} />

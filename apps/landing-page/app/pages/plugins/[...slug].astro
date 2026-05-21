@@ -3,6 +3,7 @@ import '../../globals.css';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import FontStylesheet from '../../_components/font-stylesheet.astro';
+import GoogleAnalytics from '../../_components/google-analytics.astro';
 import { Header } from '../../_components/header';
 import LazyImg from '../../_components/lazy-img.astro';
 import PreciseLazyload from '../../_components/precise-lazyload.astro';
@@ -134,6 +135,7 @@ const breadcrumbJsonLd = {
     <meta name='twitter:description' content={description} />
     <script is:inline type='application/ld+json' set:html={JSON.stringify(pluginJsonLd)}></script>
     <script is:inline type='application/ld+json' set:html={JSON.stringify(breadcrumbJsonLd)}></script>
+    <GoogleAnalytics />
   </head>
   <body>
     <div class='side-rail right' aria-hidden='true'>

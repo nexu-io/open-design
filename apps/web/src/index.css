@@ -8517,12 +8517,14 @@ button.connector-action.is-loading {
   position: fixed;
   inset: 0;
   z-index: 100;
-  background: color-mix(in srgb, #000 42%, transparent);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
+  background: color-mix(in srgb, #111827 18%, transparent);
+  backdrop-filter: blur(1px);
+  -webkit-backdrop-filter: blur(1px);
   display: flex;
   justify-content: flex-end;
-  animation: connector-drawer-fade 180ms ease;
+  align-items: flex-end;
+  padding: 24px 24px 12px;
+  animation: connector-drawer-fade 180ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 @keyframes connector-drawer-fade {
   from { opacity: 0; }
@@ -8532,25 +8534,27 @@ button.connector-action.is-loading {
   position: relative;
   display: flex;
   flex-direction: column;
-  width: min(480px, 92vw);
-  height: 100%;
+  width: min(456px, 92vw);
+  height: clamp(480px, 68vh, 640px);
+  max-height: calc(100vh - 36px);
   background: var(--bg-panel);
-  border-left: 1px solid var(--border);
-  box-shadow: -24px 0 48px -20px rgba(0, 0, 0, 0.32);
-  animation: connector-drawer-slide 240ms cubic-bezier(0.22, 0.9, 0.3, 1);
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: 12px;
+  box-shadow: 0 24px 64px -34px rgba(15, 23, 42, 0.5);
+  overflow: hidden;
+  animation: connector-drawer-slide 220ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 @keyframes connector-drawer-slide {
-  from { transform: translateX(24px); opacity: 0; }
+  from { transform: translateX(18px); opacity: 0; }
   to { transform: translateX(0); opacity: 1; }
 }
 .connector-drawer-head {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  padding: 20px 22px 16px;
-  border-bottom: 1px solid var(--border);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--bg-subtle) 60%, transparent) 0%, transparent 100%);
+  gap: 14px;
+  padding: 22px 22px 18px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-subtle) 36%, var(--bg-panel));
 }
 .connector-drawer-titles {
   flex: 1 1 auto;
@@ -8562,26 +8566,41 @@ button.connector-action.is-loading {
 .connector-drawer-eyebrow {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   font-size: 11px;
   font-weight: 500;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
   color: var(--text-faint);
 }
 .connector-drawer-titles h2 {
   margin: 0;
-  font-size: 22px;
+  font-size: 21px;
   font-weight: 600;
   line-height: 1.2;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   color: var(--text);
 }
 .connector-drawer-status {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   flex-wrap: wrap;
+}
+.connector-drawer-tool-count-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  max-width: 100%;
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+  background: color-mix(in srgb, var(--bg-panel) 72%, var(--bg-subtle));
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.2;
 }
 .connector-drawer-close {
   flex: 0 0 auto;
@@ -8600,16 +8619,24 @@ button.connector-action.is-loading {
 }
 .connector-drawer-body {
   flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
-  padding: 20px 22px 24px;
+  padding: 18px 22px 14px;
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 20px;
 }
 .connector-drawer-section {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+.connector-drawer-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
 }
 .connector-drawer-section-title {
   margin: 0;
@@ -8621,6 +8648,18 @@ button.connector-action.is-loading {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+.connector-drawer-inline-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 28px;
+  padding: 4px 9px;
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 .connector-drawer-count {
   display: inline-flex;
@@ -8642,34 +8681,30 @@ button.connector-action.is-loading {
   margin: 0;
   color: var(--text);
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.55;
 }
 .connector-drawer-details {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 2px;
+  gap: 0;
   margin: 0;
-  padding: 2px 0;
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-  background: var(--bg-subtle);
-  overflow: hidden;
+  padding: 2px 0 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
 }
 .connector-drawer-details > div {
   display: grid;
-  grid-template-columns: 110px 1fr;
+  grid-template-columns: minmax(96px, 0.38fr) minmax(0, 1fr);
   align-items: baseline;
   gap: 12px;
-  padding: 10px 14px;
-  background: var(--bg-panel);
+  padding: 8px 0;
 }
 .connector-drawer-details > div + div {
-  border-top: 1px solid var(--border);
+  border-top: 1px solid color-mix(in srgb, var(--border) 42%, transparent);
 }
 .connector-drawer-details dt {
   margin: 0;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 500;
 }
 .connector-drawer-details dd {
@@ -8683,8 +8718,8 @@ button.connector-action.is-loading {
 }
 .connector-drawer-empty {
   margin: 0;
-  padding: 14px 16px;
-  border: 1px dashed var(--border);
+  padding: 12px 14px;
+  border: 1px dashed color-mix(in srgb, var(--border) 78%, transparent);
   border-radius: var(--radius);
   color: var(--text-muted);
   font-size: 13px;
@@ -8696,41 +8731,45 @@ button.connector-action.is-loading {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 .connector-drawer-tool {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 12px 14px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
+  gap: 5px;
+  padding: 9px 11px;
+  background: color-mix(in srgb, var(--bg-panel) 74%, var(--bg-subtle));
+  border: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
   border-radius: var(--radius);
   transition: border-color 140ms ease, background 140ms ease;
 }
 .connector-drawer-tool:hover {
-  border-color: color-mix(in srgb, var(--text) 20%, var(--border));
+  background: var(--bg-panel);
+  border-color: color-mix(in srgb, var(--text) 16%, var(--border));
 }
 .connector-drawer-tool-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
 }
 .connector-drawer-tool-title {
-  font-size: 13px;
+  min-width: 0;
+  font-size: 12.5px;
   font-weight: 600;
   color: var(--text);
+  line-height: 1.35;
 }
 .connector-drawer-tool-badge {
   display: inline-flex;
   align-items: center;
-  padding: 1px 7px;
+  flex: 0 0 auto;
+  padding: 1px 6px;
   border-radius: var(--radius-pill);
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   background: var(--bg-subtle);
   border: 1px solid var(--border);
   color: var(--text-muted);
@@ -8753,15 +8792,15 @@ button.connector-action.is-loading {
 .connector-drawer-tool-desc {
   margin: 0;
   color: var(--text-muted);
-  font-size: 12.5px;
-  line-height: 1.5;
+  font-size: 12px;
+  line-height: 1.42;
 }
 .connector-drawer-tool-name {
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--text-faint);
-  background: var(--bg-subtle);
-  padding: 2px 6px;
+  background: color-mix(in srgb, var(--bg-subtle) 76%, transparent);
+  padding: 2px 5px;
   border-radius: 4px;
   align-self: flex-start;
   max-width: 100%;
@@ -8779,18 +8818,30 @@ button.connector-action.is-loading {
   padding: 7px 14px;
 }
 .connector-drawer-foot {
-  padding: 14px 22px 18px;
-  border-top: 1px solid var(--border);
+  padding: 12px 22px 16px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  background: var(--bg-panel);
+  background: color-mix(in srgb, var(--bg-subtle) 28%, var(--bg-panel));
 }
 .connector-drawer-foot button.connector-action {
   padding: 7px 18px;
   font-size: 13px;
 }
 @media (max-width: 520px) {
+  .connector-drawer-backdrop {
+    align-items: stretch;
+    padding: 0;
+  }
+  .connector-drawer {
+    width: 100%;
+    max-height: none;
+    height: 100%;
+    border-radius: 0;
+    border-right: 0;
+    border-left: 0;
+  }
   .connector-drawer-head {
     padding: 16px 16px 14px;
   }
@@ -8799,6 +8850,11 @@ button.connector-action.is-loading {
   }
   .connector-drawer-foot {
     padding: 12px 16px 16px;
+  }
+  .connector-drawer-section-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
   }
   .connector-drawer-details > div {
     grid-template-columns: 1fr;
@@ -11723,6 +11779,9 @@ button.connector-action.is-loading {
   width: 100%;
   height: 100%;
   min-height: 0;
+}
+.live-artifact-preview-layer.preview-viewport[data-active='false'] {
+  display: none;
 }
 .preview-viewport:not(.preview-viewport-desktop) {
   overflow: auto;

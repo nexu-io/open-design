@@ -18,12 +18,14 @@
 import { ogDefaultImage } from '../image-assets';
 import {
   DEFAULT_LOCALE,
+  LOCALES,
   LOCALE_OG,
   alternateLinks,
   localePath,
   stripLocale,
   type Locale,
 } from '../_lib/i18n';
+import FaviconLinks from './favicon-links.astro';
 
 export interface SeoHeadProps {
   /** 'website' for landing/list pages, 'article' for blog posts. */
@@ -88,6 +90,7 @@ const articleJsonLd =
         '@type': 'Article',
         headline: props.title,
         description: props.description,
+        inLanguage: locale,
         image: [image],
         datePublished: isoPublished,
         dateModified: isoModified,
@@ -121,6 +124,8 @@ const websiteJsonLd =
         name: SITE_NAME,
         alternateName: TAGLINE,
         url: Astro.site?.toString() ?? 'https://open-design.ai/',
+        inLanguage: locale,
+        availableLanguage: LOCALES,
       }
     : null;
 
@@ -132,6 +137,7 @@ const blogJsonLd =
         name: 'Open Design — Blog',
         description: props.description,
         url: canonical,
+        inLanguage: locale,
         publisher: {
           '@type': 'Organization',
           name: SITE_NAME,
@@ -139,6 +145,17 @@ const blogJsonLd =
         },
       }
     : null;
+
+/*
+ * x-default canonical hreflang. Per Google's guidance the x-default link
+ * should point at the URL shown to users whose preferred language is
+ * unknown. We use the unprefixed English path — alternateLinks() emits
+ * the per-locale variants, this fills the implicit "default" slot.
+ */
+const xDefaultPath = localePath(stripLocale(props.pathname).path, DEFAULT_LOCALE, {
+  prefixDefault: false,
+});
+const xDefaultHref = new URL(xDefaultPath, Astro.site).toString();
 ---
 
 <title>{fullTitle}</title>
@@ -149,6 +166,8 @@ const blogJsonLd =
 {alternateLinks(props.pathname).map((item) => (
   <link rel='alternate' hreflang={item.hreflang} href={new URL(item.href, Astro.site).toString()} />
 ))}
+<link rel='alternate' hreflang='x-default' href={xDefaultHref} />
+<FaviconLinks />
 
 {props.googleSiteVerification && (
   <meta name='google-site-verification' content={props.googleSiteVerification} />
@@ -161,6 +180,9 @@ const blogJsonLd =
 <meta property='og:url' content={canonical} />
 <meta property='og:image' content={image} />
 <meta property='og:locale' content={LOCALE_OG[locale]} />
+{LOCALES.filter((l) => l !== locale).map((l) => (
+  <meta property='og:locale:alternate' content={LOCALE_OG[l]} />
+))}
 
 {props.kind === 'article' && (
   <>

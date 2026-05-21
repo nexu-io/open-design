@@ -143,12 +143,9 @@ export function Header({
       <div className='container nav-inner'>
         <a href={localizedBrandHref} className='brand'>
           <span className='brand-mark'>
-            <img src='/logo.webp' alt='' width={36} height={36} />
+            <img src='/logo.webp' alt='' width={44} height={44} />
           </span>
-          <span>Open Design</span>
-          <span className='brand-meta'>
-            <b>Studio Nº 01</b>Berlin / Open / Earth
-          </span>
+          <span className='brand-name'>Open Design</span>
         </a>
         {/*
           Mobile / tablet hamburger. Hidden by CSS at ≥1100px (the desktop
@@ -224,26 +221,107 @@ export function Header({
                 </li>
               </ul>
             </li>
-            <li>
-              <a href={href('/skills/')} className={linkClass('skills')}>
-                {copy.navSkills}<span className='num'>{counts.skills}</span>
+            {/*
+              Library — catalog facets (Skills / Systems / Templates / Craft).
+              Each is a top-level entry-point in its own right and keeps its
+              own count badge inside the panel, but they share the same
+              shape (catalog list → detail page), so the surface treats them
+              as facets of one library group instead of competing for nav
+              real estate one row at a time.
+
+              The trigger highlights when any one of the four facet pages
+              is active. The same CSS-only :hover / :focus-within mechanic
+              from Product applies — no JS, no React runtime in the browser.
+            */}
+            <li className='has-dropdown'>
+              <a
+                href={href('/skills/')}
+                className={
+                  active === 'skills' ||
+                  active === 'systems' ||
+                  active === 'templates' ||
+                  active === 'craft'
+                    ? 'is-active'
+                    : undefined
+                }
+                aria-haspopup='true'
+                aria-expanded='false'
+              >
+                Library
+                <span className='dropdown-caret' aria-hidden='true'>▾</span>
               </a>
+              <ul className='nav-dropdown' role='menu'>
+                <li role='none'>
+                  <a
+                    role='menuitem'
+                    href={href('/skills/')}
+                    className={linkClass('skills')}
+                  >
+                    <span className='dropdown-name'>
+                      {copy.navSkills}
+                      <span className='dropdown-num'>{counts.skills}</span>
+                    </span>
+                    <span className='dropdown-blurb'>
+                      Composable skill templates the agent invokes mid-task.
+                    </span>
+                  </a>
+                </li>
+                <li role='none'>
+                  <a
+                    role='menuitem'
+                    href={href('/systems/')}
+                    className={linkClass('systems')}
+                  >
+                    <span className='dropdown-name'>
+                      {copy.navSystems}
+                      <span className='dropdown-num'>{counts.systems}</span>
+                    </span>
+                    <span className='dropdown-blurb'>
+                      Brand-grade design systems — tokens, type, voice.
+                    </span>
+                  </a>
+                </li>
+                <li role='none'>
+                  <a
+                    role='menuitem'
+                    href={href('/templates/')}
+                    className={linkClass('templates')}
+                  >
+                    <span className='dropdown-name'>
+                      {copy.navTemplates}
+                      <span className='dropdown-num'>{counts.templates}</span>
+                    </span>
+                    <span className='dropdown-blurb'>
+                      Ready-to-fork artifact bundles with sample data.
+                    </span>
+                  </a>
+                </li>
+                <li role='none'>
+                  <a
+                    role='menuitem'
+                    href={href('/craft/')}
+                    className={linkClass('craft')}
+                  >
+                    <span className='dropdown-name'>
+                      {copy.navCraft}
+                      <span className='dropdown-num'>{counts.craft}</span>
+                    </span>
+                    <span className='dropdown-blurb'>
+                      Universal craft principles a skill can opt into.
+                    </span>
+                  </a>
+                </li>
+              </ul>
             </li>
-            <li>
-              <a href={href('/systems/')} className={linkClass('systems')}>
-                {copy.navSystems}<span className='num'>{counts.systems}</span>
-              </a>
-            </li>
-            <li>
-              <a href={href('/templates/')} className={linkClass('templates')}>
-                {copy.navTemplates}<span className='num'>{counts.templates}</span>
-              </a>
-            </li>
-            <li>
-              <a href={href('/craft/')} className={linkClass('craft')}>
-                {copy.navCraft}<span className='num'>{counts.craft}</span>
-              </a>
-            </li>
+            {/*
+              Tutorials and Blog stay as standalone top-row links rather
+              than nesting under a Learn group: they're the only two
+              editorial reading surfaces, and rolling two items into a
+              dropdown adds a click without earning back any horizontal
+              space. The Library grouping above is what reclaimed the
+              row — Tutorials/Blog can live side by side at the cost of
+              one extra slot.
+            */}
             <li>
               <a href={href('/tutorials/')} className={linkClass('tutorials')}>
                 Tutorials
@@ -254,11 +332,12 @@ export function Header({
                 {copy.navBlog}
               </a>
             </li>
-            <li>
-              <a href={contactHref}>
-                {copy.navContact}
-              </a>
-            </li>
+            {/*
+              Contact intentionally NOT exposed in the top nav: it's a
+              page-internal anchor (`#contact` on the homepage CTA section)
+              that the footer already surfaces. Keeping it out of the bar
+              frees a slot at narrow widths where the row was overflowing.
+            */}
           </ul>
         </nav>
         <div className='nav-side'>

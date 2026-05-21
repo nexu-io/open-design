@@ -347,32 +347,46 @@ body::before {
   color: var(--ink);
   text-decoration: none;
   font-size: 18px;
+  /*
+   * Keep the brand block on a single line. At narrow widths the
+   * "Open Design" wordmark was wrapping to two lines once enough
+   * top-row links accumulated to push the brand against the next
+   * column. The hamburger fallback already hides everything past
+   * the brand at ≤1080px, so the brand has plenty of horizontal
+   * room — wrapping was a layout glitch, not a constraint.
+   */
+  white-space: nowrap;
 }
 .brand-mark {
-  width: 36px; height: 36px;
+  /*
+   * Bumped from 36px → 44px (≈22% larger). The previous size felt
+   * undersized against the wordmark's optical weight, especially on
+   * the new black brand mark where the negative space inside the
+   * speech bubble visually shrinks the glyph further.
+   */
+  width: 44px; height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 .brand-mark img {
   width: 100%;
   height: 100%;
   object-fit: contain;
   display: block;
+  /*
+   * Round the corners of the brand glyph. The source PNG is a
+   * solid-fill square; clipping the corners gives the mark the
+   * modern app-icon silhouette (~22% of side length, matching the
+   * iOS / macOS visual convention) so it sits cleanly next to the
+   * "Open Design" wordmark instead of looking like a raw screenshot.
+   */
+  border-radius: 10px;
 }
-.brand-meta {
-  font-family: var(--sans);
-  font-size: 10px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
-  line-height: 1.3;
-  margin-left: 4px;
-  border-left: 1px solid var(--line);
-  padding-left: 14px;
+.brand-name {
+  white-space: nowrap;
 }
-.brand-meta b { display: block; color: var(--ink); font-weight: 600; }
-
 .nav-links {
   display: flex;
   gap: 38px;
@@ -472,6 +486,20 @@ body::before {
   font-size: 14px;
   font-weight: 600;
   margin-bottom: 2px;
+}
+/*
+ * Inline count badge inside a dropdown row (e.g. "Skills 132"). Uses
+ * a distinct class from the absolutely-positioned `.num` on top-row
+ * nav links — there the count floats above the link as a superscript;
+ * here we want it inline beside the label, more like a tag.
+ */
+.nav-dropdown .dropdown-num {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-faint);
+  letter-spacing: 0.02em;
 }
 .nav-dropdown .dropdown-blurb {
   display: block;
@@ -2183,12 +2211,10 @@ footer {
 @media (max-width: 1200px) {
   .topbar-inner .mid { display: none; }
 }
-/* nav: between 1080 and 1180 the brand tail + nav links + 2 CTAs + dot
- * crowd the row. Drop the brand sub-meta first, then tighten link spacing,
- * so the Star CTA never has to compress. */
+/* nav: between 1080 and 1180 the brand + nav links + 2 CTAs + dot
+ * crowd the row. Tighten link spacing so the Star CTA never compresses. */
 @media (max-width: 1180px) {
   .nav-inner { gap: 18px; }
-  .brand-meta { display: none; }
   .nav-links { gap: 28px; }
 }
 
@@ -2352,10 +2378,9 @@ footer {
   .foot-bottom { flex-direction: column; align-items: flex-start; gap: 12px; }
   .foot-bottom .right { flex-wrap: wrap; gap: 12px 20px; }
   /* nav — at ≤880px tighten padding; nav-links stay reachable through
-   * the hamburger panel introduced at ≤1080px. Brand meta and Download
-   * stay hidden; Star CTA still pings in the bar. */
+   * the hamburger panel introduced at ≤1080px. Download stays hidden;
+   * Star CTA still pings in the bar. */
   .nav { padding: 16px 0; }
-  .brand-meta { display: none; }
   .nav-side .nav-cta.ghost { display: none; }
 }
 @media (max-width: 640px) {

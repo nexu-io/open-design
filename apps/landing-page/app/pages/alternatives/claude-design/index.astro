@@ -1,0 +1,210 @@
+---
+/*
+ * /alternatives/claude-design/ — primary commercial-intent page.
+ *
+ * Highest-leverage SEO surface per growth/seo-opendesigner-analysis.md §8.
+ * Captures "claude design alternative", "open source claude design", and
+ * "claude design vs open design" queries.
+ *
+ * Structure follows the spec: TL;DR, why-people-search, local-first +
+ * BYOK explanation, feature comparison table, who-should-use-which,
+ * migration / first run, and a visible FAQ that matches FAQPage JSON-LD.
+ */
+import Layout from '../../../_components/sub-page-layout.astro';
+
+const SITE = Astro.site?.toString() ?? 'https://open-design.ai/';
+const REPO = 'https://github.com/nexu-io/open-design';
+const REPO_RELEASES = `${REPO}/releases`;
+
+const title = 'Open-source Claude Design alternative — Open Design (BYOK, local-first)';
+const description =
+  'Open Design is the open-source, local-first alternative to Claude Design. BYOK with Claude Code, Codex, Cursor, Gemini, OpenCode, or Qwen.';
+
+const toc = ['Why people search', 'Local-first + BYOK', 'Feature comparison', 'Who should pick which', 'Migration / first run', 'FAQ'];
+
+const reasons = [
+  { label: 'Data ownership.', body: 'Designs should live as files in a repo, not documents in a vendor DB.' },
+  { label: 'BYOK economics.', body: 'Bring your own provider key; API spend bills to your account.' },
+  { label: 'Agent choice.', body: 'Drive design from the agent you already use for code.' },
+  { label: 'Brand portability.', body: 'One DESIGN.md file encodes a brand for every skill.' },
+  { label: 'Self-host / fork.', body: 'Apache-2.0, full source, rebrandable for your studio or company.' },
+];
+
+const localByokBody = [
+  'Open Design runs a desktop app, a local daemon, and Markdown skill/system catalogs on your machine.',
+  'No design output is forced through a vendor cloud. Credentials stay in local config or environment variables.',
+];
+
+const features = [
+  { name: 'License', od: 'Apache-2.0, full source on GitHub', cd: 'Closed-source, hosted product' },
+  { name: 'Runtime', od: 'Local daemon on your machine', cd: 'Vendor cloud' },
+  { name: 'Agent', od: 'BYOK: Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen', cd: 'Vendor-managed agent' },
+  { name: 'API spend', od: 'Bills to your account', cd: 'Bundled into vendor subscription' },
+  { name: 'Design system', od: 'Portable DESIGN.md in your repo', cd: 'Stored in vendor DB' },
+  { name: 'Skills', od: 'Composable SKILL.md you can fork', cd: 'Built-in templates' },
+  { name: 'Self-host', od: 'Yes, run anywhere Node 24 runs', cd: 'No' },
+  { name: 'Pricing', od: 'Free product; you pay agent API costs', cd: 'Vendor subscription' },
+  { name: 'CLI / CI', od: 'Yes via od CLI + HTTP daemon', cd: 'Web UI only' },
+  { name: 'Artifact ownership', od: 'Files in your project directory', cd: 'Vendor-hosted documents' },
+];
+
+const pickClaude = [
+  'You want zero local setup and one vendor bill.',
+  'You are already deep in a Claude-first workflow.',
+  'Your team prefers a hosted UI over Markdown files.',
+];
+
+const pickOpen = [
+  'You want design artifacts as version-controlled files.',
+  'You want BYOK with your existing coding agent.',
+  'You want to fork, rebrand, embed in CLI, or self-host.',
+  'You want one DESIGN.md per brand that every skill respects.',
+];
+
+const migrateSteps = [
+  'Install Open Design from the quickstart.',
+  'Open the web UI and point your agent at a Claude Design artifact you like.',
+  'Ask the agent to extract the brand into a DESIGN.md file.',
+  'Pick a skill and render it against your new brand.',
+];
+
+const faq = [
+  { name: 'Is Open Design really a drop-in alternative to Claude Design?', text: 'Not literally, but they overlap on prompt-to-design-artifact use cases.' },
+  { name: 'Can I use Claude as my agent in Open Design?', text: 'Yes. Open Design supports Claude Code and Anthropic API BYOK flows.' },
+  { name: 'What happens to my Claude Design designs?', text: 'You can keep using Claude Design alongside Open Design; migration is manual today.' },
+  { name: 'Does Open Design generate the same artifact types?', text: 'Yes for common types: landing pages, decks, dashboards, social posts, brand systems, and prototypes.' },
+  { name: 'Why "open-source Claude Design" vs "open-source AI design tool"?', text: 'That is how many users describe the product shape they are searching for.' },
+  { name: 'Who builds and maintains Open Design?', text: 'The project lives at github.com/nexu-io/open-design and is Apache-2.0.' },
+];
+
+const jsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Open Design', item: SITE },
+      { '@type': 'ListItem', position: 2, name: 'Open-source Claude Design alternative', item: `${SITE}alternatives/claude-design/` },
+    ],
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faq.map((q) => ({
+      '@type': 'Question',
+      name: q.name,
+      acceptedAnswer: { '@type': 'Answer', text: q.text },
+    })),
+  },
+];
+---
+
+<Layout title={title} description={description} active="home" jsonLd={jsonLd}>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <a href="/">Open Design</a>
+    <span>/</span>
+    <span aria-current="page">Open-source Claude Design alternative</span>
+  </nav>
+
+  <article class="info-page">
+    <header class="catalog-head">
+      <span class="label">Alternative · Nº 03</span>
+      <h1 class="display">Open-source <em>Claude Design</em> alternative<span class="dot">.</span></h1>
+      <p class="lead">
+        Open Design is the official open-source, local-first alternative to Claude Design. BYOK with the agent you already use, keep your brand as a portable DESIGN.md file, and ship artifacts as files in your project.
+      </p>
+    </header>
+
+    <aside class="tldr-card">
+      <h3>TL;DR</h3>
+      <p>Same use case, different posture: local-first, BYOK, open source (Apache-2.0), with portable DESIGN.md systems and composable SKILL.md skills.</p>
+    </aside>
+
+    <nav class="info-toc" aria-label="On this page">
+      <span>On this page:</span>
+      {toc.map((label, idx) => (
+        <a href={`#section-${idx}`}>{label}</a>
+      ))}
+    </nav>
+
+    <section class="info-section" id="section-0">
+      <h2>Why people search for a Claude Design alternative</h2>
+      <p>Five reasons keep showing up in support threads, GitHub discussions, and Discord:</p>
+      <ul>
+        {reasons.map((r) => (
+          <li><strong>{r.label}</strong> {r.body}</li>
+        ))}
+      </ul>
+    </section>
+
+    <section class="info-section" id="section-1">
+      <h2>Local-first + BYOK, explained</h2>
+      {localByokBody.map((para) => <p>{para}</p>)}
+    </section>
+
+    <section class="info-section" id="section-2">
+      <h2>Feature comparison</h2>
+      <div class="compare-table-wrap">
+        <table class="compare-table">
+          <thead>
+            <tr>
+              <th>Feature</th>
+              <th>Open Design</th>
+              <th>Claude Design</th>
+            </tr>
+          </thead>
+          <tbody>
+            {features.map((f) => (
+              <tr>
+                <th scope="row">{f.name}</th>
+                <td class="yes">{f.od}</td>
+                <td class="no">{f.cd}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="info-section" id="section-3">
+      <h2>Who should pick which</h2>
+      <h3>Pick Claude Design if</h3>
+      <ul>{pickClaude.map((it) => <li>{it}</li>)}</ul>
+      <h3>Pick Open Design if</h3>
+      <ul>{pickOpen.map((it) => <li>{it}</li>)}</ul>
+    </section>
+
+    <section class="info-section" id="section-4">
+      <h2>Migration / first run</h2>
+      <p>There is no automatic import from Claude Design today; use a one-time brand-extraction run:</p>
+      <ol>{migrateSteps.map((it) => <li>{it}</li>)}</ol>
+      <p>From then on, every skill renders in your brand without re-prompting.</p>
+    </section>
+
+    <section class="info-section" id="section-5">
+      <h2>FAQ</h2>
+      {faq.map((q) => (
+        <>
+          <h3>{q.name}</h3>
+          <p>{q.text}</p>
+        </>
+      ))}
+    </section>
+
+    <section class="info-cta" aria-label="Open Design call to action">
+      <div>
+        <h2>Switch in <em>three commands</em>.</h2>
+        <p>Star the repo, grab the desktop build, or run the install in your terminal. Your DESIGN.md system stays in your repo from the first render onward.</p>
+      </div>
+      <div class="info-cta-actions">
+        <a class="btn btn-primary" href={REPO} target="_blank" rel="noreferrer noopener">Star on GitHub</a>
+        <a class="btn btn-ghost" href={REPO_RELEASES} target="_blank" rel="noreferrer noopener">Download desktop</a>
+        <a class="btn btn-ghost" href="/quickstart/">Quickstart</a>
+      </div>
+      <div class="info-cta-meta">
+        <span class="stamp">● Local-first</span>
+        <span>BYOK · Apache-2.0</span>
+        <span>macOS · Windows · Linux</span>
+      </div>
+    </section>
+  </article>
+</Layout>

@@ -13,6 +13,7 @@
 import { getCollection } from 'astro:content';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import GoogleAnalytics from '../../_components/google-analytics.astro';
 import HeaderEnhancer from '../../_components/header-enhancer.astro';
 import { Header, type HeaderProps } from '../../_components/header';
 import SeoHead from '../../_components/seo-head.astro';
@@ -85,6 +86,7 @@ const cardTutorials = tutorials.slice(1);
       description={seoDescription}
       pathname={Astro.url.pathname}
     />
+    <GoogleAnalytics />
   </head>
   <body>
     <div class='shell'>

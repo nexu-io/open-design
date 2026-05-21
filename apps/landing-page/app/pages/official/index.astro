@@ -1,0 +1,154 @@
+---
+/*
+ * /official/ — brand-authority surface.
+ *
+ * Exists to satisfy "Open Design vs OpenDesigner / opendesign.ai"
+ * brand-confusion queries. Lists every canonical link, names every
+ * alias the project is searched under, and points at the GitHub
+ * source of truth.
+ *
+ * Per growth/seo-opendesigner-analysis.md §2 + §8, the page must:
+ * - lead with canonical links (site, GitHub, releases, docs, Discord)
+ * - explain the OpenDesign / open-design / opendesign alias relationship
+ * - never call third-party capture sites "fake" in visible copy
+ * - publish Organization JSON-LD with the same alternateNames as `/`
+ */
+import Layout from '../../_components/sub-page-layout.astro';
+import { getGithubRepoMeta } from '../../_lib/github';
+
+const SITE = Astro.site?.toString() ?? 'https://open-design.ai/';
+const REPO = 'https://github.com/nexu-io/open-design';
+const REPO_RELEASES = `${REPO}/releases`;
+const REPO_ISSUES = `${REPO}/issues`;
+const DISCORD = 'https://discord.gg/9ptkbbqRu';
+
+const github = await getGithubRepoMeta();
+
+const title = 'Official Open Design — Source page, GitHub, releases, and aliases';
+const description =
+  'Official source page for Open Design (also searched as OpenDesign, open-design, opendesign, Open Design AI, OD). Canonical site, GitHub repository, releases, Discord, license, and maintainer identity in one place.';
+
+const sources = [
+  { label: 'Official website', name: 'open-design.ai', href: 'https://open-design.ai/' },
+  { label: 'GitHub repository', name: 'nexu-io/open-design', href: REPO },
+  { label: 'Latest release', name: github.versionLabel, href: REPO_RELEASES },
+  { label: 'Issues / discussion', name: 'GitHub issues', href: REPO_ISSUES },
+  { label: 'Community', name: 'Discord', href: DISCORD },
+  { label: 'Documentation', name: 'GitHub README', href: REPO },
+  { label: 'License', name: 'Apache-2.0', href: `${REPO}/blob/main/LICENSE` },
+  { label: 'Skills catalog', name: '/skills/', href: '/skills/' },
+  { label: 'Systems catalog', name: '/systems/', href: '/systems/' },
+  { label: 'Templates catalog', name: '/templates/', href: '/templates/' },
+];
+
+const aliases = [
+  { label: 'Open Design', body: 'display name in the product UI, blog, and READMEs.' },
+  { label: 'OpenDesign', body: 'common one-word search variant; same project.' },
+  { label: 'open-design', body: 'repository / package slug.' },
+  { label: 'opendesign', body: 'lowercase alias used in URLs and CLI invocations.' },
+  { label: 'Open Design AI', body: 'long-form search variant for AI-design queries.' },
+  { label: 'OD', body: 'internal abbreviation for the runtime and CLI bin.' },
+];
+
+const runtimeItems = [
+  { label: 'Desktop app', body: 'packaged Electron build for macOS, Windows, Linux.' },
+  { label: 'Daemon (od)', body: 'local HTTP daemon and CLI for agents, shell, or CI.' },
+  { label: 'Skills + Systems', body: 'Markdown bundles you can fork, edit, and ship.' },
+];
+
+const nextItems = [
+  { label: 'Quickstart', href: '/quickstart/', body: 'install in three commands.' },
+  { label: 'Agents', href: '/agents/', body: 'Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen.' },
+  { label: 'Claude Design alternative', href: '/alternatives/claude-design/', body: 'comparison and migration.' },
+  { label: 'Skills catalog', href: '/skills/', body: 'every shippable design skill.' },
+  { label: 'Systems catalog', href: '/systems/', body: 'every portable DESIGN.md brand system.' },
+];
+
+const jsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Open Design', item: SITE },
+      { '@type': 'ListItem', position: 2, name: 'Official', item: `${SITE}official/` },
+    ],
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    name: 'Open Design',
+    alternateName: ['OpenDesign', 'open-design', 'opendesign', 'Open Design AI', 'OD'],
+    url: SITE,
+    sameAs: [REPO, DISCORD],
+    logo: `${SITE}android-chrome-512x512.png`,
+  },
+];
+---
+
+<Layout title={title} description={description} active="home" jsonLd={jsonLd}>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <a href="/">Open Design</a>
+    <span>/</span>
+    <span aria-current="page">Official</span>
+  </nav>
+
+  <article class="info-page">
+    <header class="catalog-head">
+      <span class="label">Source · Nº 00</span>
+      <h1 class="display">Official Open Design source page<span class="dot">.</span></h1>
+      <p class="lead">
+        Open Design (also searched as OpenDesign, open-design, opendesign, or Open Design AI) is the official open-source AI design workspace from the <a class="inline-link" href={REPO} target="_blank" rel="noreferrer noopener">nexu-io/open-design</a> project. This page lists every canonical surface so you can verify the source for yourself.
+      </p>
+    </header>
+
+    <section class="info-section">
+      <h2>Canonical surfaces</h2>
+      <p>Bookmark <code>open-design.ai</code> and the GitHub repo. Everything else points back to one of these two.</p>
+      <div class="source-card">
+        {sources.map((s) => (
+          <a href={s.href} target={s.href.startsWith('http') ? '_blank' : undefined} rel={s.href.startsWith('http') ? 'noreferrer noopener' : undefined}>
+            <span><span class="label">{s.label}</span><br />{s.name}</span>
+            <span class="arrow">→</span>
+          </a>
+        ))}
+      </div>
+    </section>
+
+    <section class="info-section">
+      <h2>Naming &amp; aliases</h2>
+      <p>The project is searched and written several ways depending on the tool, audience, and locale:</p>
+      <ul>
+        {aliases.map((a) => (
+          <li><strong>{a.label}</strong> — {a.body}</li>
+        ))}
+      </ul>
+      <p>All six names refer to this same project. The canonical URL is always <code>open-design.ai</code>.</p>
+    </section>
+
+    <section class="info-section">
+      <h2>Maintainer &amp; license</h2>
+      <p>
+        Open Design is developed in the open at <a class="inline-link" href={REPO} target="_blank" rel="noreferrer noopener">github.com/nexu-io/open-design</a> and released under the Apache-2.0 license. Issues, RFCs, and roadmap conversations happen on <a class="inline-link" href={REPO_ISSUES} target="_blank" rel="noreferrer noopener">GitHub Issues</a> and <a class="inline-link" href={DISCORD} target="_blank" rel="noreferrer noopener">Discord</a>.
+      </p>
+    </section>
+
+    <section class="info-section">
+      <h2>What runs on your machine</h2>
+      <p>Open Design ships three runnable surfaces — all open source, all local-first:</p>
+      <ul>
+        {runtimeItems.map((r) => (
+          <li><strong>{r.label}</strong> — {r.body}</li>
+        ))}
+      </ul>
+    </section>
+
+    <section class="info-section">
+      <h2>Where to go next</h2>
+      <ul>
+        {nextItems.map((n) => (
+          <li><a class="inline-link" href={n.href}>{n.label}</a> — {n.body}</li>
+        ))}
+      </ul>
+    </section>
+  </article>
+</Layout>

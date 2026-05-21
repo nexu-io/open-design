@@ -10,6 +10,7 @@ import { getCollection, render } from 'astro:content';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import FontStylesheet from '../../_components/font-stylesheet.astro';
+import GoogleAnalytics from '../../_components/google-analytics.astro';
 import HeaderEnhancer from '../../_components/header-enhancer.astro';
 import { Header, type HeaderProps } from '../../_components/header';
 import SeoHead from '../../_components/seo-head.astro';
@@ -91,6 +92,7 @@ const fmtDate = (d: Date) =>
       category={post.data.category}
     />
     <FontStylesheet />
+    <GoogleAnalytics />
   </head>
   <body>
     <div class='shell'>

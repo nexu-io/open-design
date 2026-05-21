@@ -939,3 +939,330 @@ body.sub-page {
   .sub-footer-grid { grid-template-columns: 1fr; gap: 32px; }
   .sub-footer { padding: 40px 0 24px; }
 }
+
+
+/* =========================================================
+ * SEO landing pages — /official/, /quickstart/, /compare/,
+ * /alternatives/claude-design/, /agents/
+ * =========================================================
+ *
+ * Shared layout primitives for the high-intent, mostly-textual
+ * pages. These reuse Atelier Zero tokens; they avoid the editorial
+ * side rails and full hero, since these pages are query-legible first.
+ */
+.info-page {
+  max-width: 920px;
+}
+.info-page .info-section + .info-section { margin-top: 64px; }
+.info-page h2 {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: clamp(26px, 3.4vw, 36px);
+  letter-spacing: -0.012em;
+  color: var(--ink);
+  margin: 0 0 14px;
+}
+.info-page h2 em {
+  font-style: italic;
+  font-weight: 600;
+  color: var(--coral);
+}
+.info-page h3 {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 20px;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+  margin: 28px 0 10px;
+}
+.info-page p {
+  font-family: var(--sans);
+  font-size: 15.5px;
+  line-height: 1.7;
+  color: var(--ink-soft);
+  margin: 0 0 14px;
+  max-width: 70ch;
+}
+.info-page p code,
+.info-page li code {
+  font-family: var(--mono);
+  font-size: 0.92em;
+  background: rgba(237, 111, 92, 0.08);
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: var(--ink);
+}
+.info-page ul,
+.info-page ol {
+  margin: 0 0 18px;
+  padding-left: 1.4em;
+  color: var(--ink-soft);
+}
+.info-page li {
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.7;
+  margin-bottom: 6px;
+}
+.info-page strong { color: var(--ink); }
+.info-page a.inline-link {
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 1px solid var(--coral);
+}
+.info-page a.inline-link:hover { color: var(--coral); }
+
+/* Source-of-truth "official links" card used on /official/ and
+ * elsewhere we need to lead with the canonical surface. */
+.source-card {
+  border: 1px solid var(--ink);
+  background: var(--paper-warm);
+  padding: 24px 28px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px 28px;
+  margin: 0 0 32px;
+}
+.source-card a {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line-soft);
+  text-decoration: none;
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14.5px;
+  transition: color 0.16s ease;
+}
+.source-card a:hover { color: var(--coral); }
+.source-card a span.label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.source-card a span.arrow { color: var(--coral); }
+
+@media (max-width: 720px) {
+  .source-card { grid-template-columns: 1fr; padding: 18px 20px; }
+}
+
+/* Comparison table for /compare/ and /alternatives/claude-design/. */
+.compare-table-wrap {
+  overflow-x: auto;
+  margin: 0 0 32px;
+  border: 1px solid var(--line);
+}
+.compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--sans);
+  font-size: 14px;
+  min-width: 720px;
+}
+.compare-table th,
+.compare-table td {
+  text-align: left;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.compare-table thead th {
+  background: var(--paper-warm);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.compare-table tbody tr:last-child td { border-bottom: none; }
+.compare-table tbody th {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 14.5px;
+  color: var(--ink);
+  width: 28%;
+}
+.compare-table td.yes { color: var(--ink); }
+.compare-table td.no { color: var(--ink-faint); }
+.compare-table td .check { color: var(--coral); font-weight: 600; margin-right: 6px; }
+
+/* Code block for /quickstart/ command sequences. */
+.code-block {
+  display: block;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.6;
+  background: var(--ink);
+  color: var(--paper);
+  padding: 18px 22px;
+  margin: 0 0 18px;
+  overflow-x: auto;
+  white-space: pre;
+  border-radius: 2px;
+}
+.code-block .prompt { color: var(--coral); }
+.code-block .comment { color: rgba(255, 255, 255, 0.5); }
+
+/* Agent / comparison cards grid used on /compare/, /agents/. */
+.agent-grid,
+.compare-grid {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  padding: 0;
+  margin: 0 0 32px;
+}
+.agent-card,
+.compare-card {
+  border: 1px solid var(--line);
+  background: var(--paper-warm);
+  padding: 22px 24px;
+  transition: border-color 0.16s ease, transform 0.16s ease;
+}
+.agent-card:hover,
+.compare-card:hover { border-color: var(--coral); transform: translateY(-2px); }
+.agent-card h3,
+.compare-card h3 { margin: 0 0 10px; }
+.agent-card p,
+.compare-card p {
+  margin: 0 0 12px;
+  font-size: 14.5px;
+  color: var(--ink-soft);
+}
+.agent-card a,
+.compare-card a {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 1px solid var(--coral);
+}
+.agent-card a:hover,
+.compare-card a:hover { color: var(--coral); }
+
+@media (max-width: 720px) {
+  .agent-grid,
+  .compare-grid { grid-template-columns: 1fr; }
+}
+
+/* In-page TOC for the longer alternative + compare pages. */
+.info-toc {
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 18px 0;
+  margin: 0 0 40px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.info-toc span {
+  color: var(--ink-mute);
+}
+.info-toc a {
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.16s ease;
+}
+.info-toc a:hover { border-bottom-color: var(--coral); }
+
+/* Closing CTA strip — used at the bottom of /quickstart/, /agents/,
+ * /alternatives/claude-design/. Gives the documentation-heavy SEO
+ * pages a concrete exit point: Star · Download · Discord. */
+.info-cta {
+  margin-top: 56px;
+  padding: 36px 0 28px;
+  border-top: 1px solid var(--ink);
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 32px;
+  align-items: end;
+}
+.info-cta h2 {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: clamp(26px, 3.4vw, 36px);
+  letter-spacing: -0.012em;
+  color: var(--ink);
+  margin: 0 0 8px;
+}
+.info-cta h2 em {
+  font-style: italic;
+  color: var(--coral);
+}
+.info-cta p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 15px;
+  line-height: 1.6;
+}
+.info-cta-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: flex-end;
+}
+.info-cta-actions .btn {
+  white-space: nowrap;
+}
+.info-cta-meta {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  padding-top: 18px;
+  margin-top: 8px;
+  border-top: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.info-cta-meta .stamp {
+  color: var(--coral);
+  font-weight: 600;
+}
+
+@media (max-width: 720px) {
+  .info-cta {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .info-cta-actions {
+    justify-content: flex-start;
+  }
+}
+
+/* TL;DR / Summary card. */
+.tldr-card {
+  border-left: 3px solid var(--coral);
+  padding: 14px 0 14px 20px;
+  margin: 0 0 32px;
+}
+.tldr-card h3 {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--coral);
+  margin: 0 0 8px;
+}
+.tldr-card p {
+  font-family: var(--serif);
+  font-size: 18px;
+  line-height: 1.5;
+  color: var(--ink);
+  margin: 0;
+  max-width: none;
+}
