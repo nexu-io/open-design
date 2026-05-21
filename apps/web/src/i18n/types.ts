@@ -711,6 +711,20 @@ export interface Dict {
   'entry.navDesignSystems': string;
   'entry.navPagePatterns': string;
   'entry.navIntegrations': string;
+  // Page patterns gallery (Q2 2026 Phase 1). Korean / Chinese values
+  // ship in PR-3; only English exists in PR-2.
+  'pagePatterns.title': string;
+  'pagePatterns.lede': string;
+  'pagePatterns.searchPlaceholder': string;
+  'pagePatterns.categoryAll': string;
+  'pagePatterns.category.auth': string;
+  'pagePatterns.category.list': string;
+  'pagePatterns.category.detail': string;
+  'pagePatterns.category.dashboard': string;
+  'pagePatterns.category.profile': string;
+  'pagePatterns.useAction': string;
+  'pagePatterns.previewAction': string;
+  'pagePatterns.empty': string;
   'workspaceTabs.project': string;
   'workspaceTabs.pluginDetails': string;
   'workspaceTabs.marketplace': string;
