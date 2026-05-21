@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import {
   APP_KEYS,
@@ -220,8 +220,10 @@ describe("inspectPackedLinuxApp", () => {
 });
 
 describe("stopPackedLinuxApp", () => {
-  it("accepts a tools-pack stamped AppImage command even when /proc AppImage env is unavailable", async () => {
+  it("accepts a live tools-pack AppImage marker executable when /proc ownership data is unavailable", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-linux-lifecycle-"));
+    const markerMountRoot = join("/tmp", `.mount_open-design-${process.pid}`);
+    const markerExecutablePath = join(markerMountRoot, "usr", "bin", "open-design-desktop-tauri");
     try {
       const config = makeConfig(root);
       const markerPath = join(config.roots.runtime.namespaceRoot, "runtime", "desktop-root.json");
@@ -233,11 +235,13 @@ describe("stopPackedLinuxApp", () => {
         source: SIDECAR_SOURCES.TOOLS_PACK,
       };
       await mkdir(join(markerPath, ".."), { recursive: true });
+      await mkdir(dirname(markerExecutablePath), { recursive: true });
+      await writeFile(markerExecutablePath, "#!/bin/sh\n", "utf8");
       await writeFile(
         markerPath,
         `${JSON.stringify({
           appPath: "/tmp/.mount_open-design/usr/lib/open-design",
-          executablePath: "/tmp/.mount_open-design/usr/bin/open-design-desktop-tauri",
+          executablePath: markerExecutablePath,
           logPath: join(config.roots.runtime.namespaceRoot, "logs", APP_KEYS.DESKTOP, "latest.log"),
           namespaceRoot: config.roots.runtime.namespaceRoot,
           pid: 1234,
@@ -256,7 +260,6 @@ describe("stopPackedLinuxApp", () => {
           ppid: 1,
         },
       ]);
-      vi.mocked(platform.matchesStampedProcess).mockReturnValueOnce(true);
       vi.mocked(platform.collectProcessTreePids).mockReturnValueOnce([1234]);
       vi.mocked(platform.stopProcesses).mockResolvedValueOnce({
         alreadyStopped: false,
@@ -277,6 +280,7 @@ describe("stopPackedLinuxApp", () => {
       );
     } finally {
       await rm(root, { force: true, recursive: true });
+      await rm(markerMountRoot, { force: true, recursive: true });
     }
   });
 });

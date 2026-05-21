@@ -248,14 +248,19 @@ export function matchesAppImageProcess(
   installPath: string,
 ): boolean {
   if (snapshot.executable === installPath) return true;
-  // Two AppImage launch modes leave different executable paths in /proc/<pid>/exe:
+  // In both cases the AppImage runtime sets $APPIMAGE to the original install path.
+  if (!isAppImageRuntimeExecutable(snapshot.executable)) return false;
+  return snapshot.env.APPIMAGE === installPath;
+}
+
+function isAppImageRuntimeExecutable(executable: string): boolean {
+  // Two AppImage launch modes leave different executable paths:
   //   FUSE-mounted: /tmp/.mount_<hex>/AppRun or the runtime's inner binary
   //   --appimage-extract-and-run: /tmp/appimage_extracted_<hex>/.../<binary>
-  // In both cases the AppImage runtime sets $APPIMAGE to the original install path.
-  const isMountedRunner = /^\/tmp\/\.mount_[^/]+\/.+$/.test(snapshot.executable);
-  const isExtractedRunner = /^\/tmp\/appimage_extracted_[^/]+\/.+$/.test(snapshot.executable);
-  if (!isMountedRunner && !isExtractedRunner) return false;
-  return snapshot.env.APPIMAGE === installPath;
+  return (
+    /^\/tmp\/\.mount_[^/]+\/.+$/.test(executable) ||
+    /^\/tmp\/appimage_extracted_[^/]+\/.+$/.test(executable)
+  );
 }
 
 // --- Step 1: LinuxPaths type and resolveLinuxPaths ---
@@ -909,8 +914,13 @@ async function validateDesktopAppImageMarker(
   const stampedCommandOk =
     marker.stamp.source === SIDECAR_SOURCES.TOOLS_PACK &&
     matchesStampedProcess(candidate, marker.stamp, OPEN_DESIGN_SIDECAR_CONTRACT);
+  const markerExecutableOk =
+    marker.stamp.source === SIDECAR_SOURCES.TOOLS_PACK &&
+    isAppImageRuntimeExecutable(marker.executablePath) &&
+    (await pathExists(marker.executablePath));
   const cmdOk =
     stampedCommandOk ||
+    markerExecutableOk ||
     (candidateAppImagePath != null && matchesAppImageProcess(
       { pid: marker.pid, executable: exePath, env },
       candidateAppImagePath,
