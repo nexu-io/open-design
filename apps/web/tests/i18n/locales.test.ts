@@ -157,6 +157,31 @@ describe('i18n locales', () => {
     }
   });
 
+  it('keeps Routines settings page copy translated in Chinese (issue #1372)', () => {
+    const translatedKeys: Array<keyof Dict> = [
+      'routines.title',
+      'routines.subtitle',
+      'routines.newAutomation',
+      'routines.runNow',
+      'routines.pause',
+      'routines.resume',
+      'routines.history',
+      'routines.delete',
+      'routines.describe.daily',
+      'routines.describe.weekly',
+      'routines.status.succeeded',
+      'routines.status.failed',
+      'routines.modeCreate',
+      'routines.confirmDelete',
+      'routines.errorPickProject',
+    ];
+
+    for (const key of translatedKeys) {
+      expect(zhCN[key], `zh-CN.${key}`).not.toBe(en[key]);
+      expect(zhTW[key], `zh-TW.${key}`).not.toBe(en[key]);
+    }
+  });
+
   it('declares CI-sensitive Indonesian fallback keys explicitly', () => {
     const explicitKeys = new Set(explicitLocaleKeys('id'));
     const requiredExplicitKeys = Object.keys(en).filter((key) => {
