@@ -106,14 +106,15 @@ describe('initProjectHistory', () => {
     expect(dotGit).toContain(sandbox.repoDir);
     // Default .gitignore was written
     expect(existsSync(path.join(sandbox.projectDir, '.gitignore'))).toBe(true);
-    // The migration commit's SHA was returned
-    expect(result.revisionId).toMatch(/^[0-9a-f]{40}$/);
-    // project_revisions has a 'migration' row for this SHA
+    // revisionId is a substrate-opaque UUID, not the git SHA
+    expect(result.revisionId).toMatch(/^[0-9a-f-]{36}$/);
+    // project_revisions has a 'migration' row; the git SHA lives in git_sha
     const row = sandbox.db.prepare(
-      `SELECT id, source, parent_id, actor_identity_id FROM project_revisions WHERE id = ?`,
-    ).get(result.revisionId) as { id: string; source: string; parent_id: string | null; actor_identity_id: string };
+      `SELECT id, source, parent_id, git_sha, actor_identity_id FROM project_revisions WHERE id = ?`,
+    ).get(result.revisionId) as { id: string; source: string; parent_id: string | null; git_sha: string; actor_identity_id: string };
     expect(row.source).toBe('migration');
     expect(row.parent_id).toBeNull();
+    expect(row.git_sha).toMatch(/^[0-9a-f]{40}$/);
     expect(row.actor_identity_id).toBe('local:default');
     // current_revision_id was advanced
     const proj = sandbox.db.prepare(`SELECT current_revision_id FROM projects WHERE id = 'p1'`).get() as { current_revision_id: string };
@@ -194,7 +195,7 @@ describe('initProjectHistory', () => {
     });
     expect(result.kind).toBe('initialized');
     if (result.kind === 'initialized') {
-      expect(result.revisionId).toMatch(/^[0-9a-f]{40}$/);
+      expect(result.revisionId).toMatch(/^[0-9a-f-]{36}$/);
     }
   });
 
@@ -214,8 +215,12 @@ describe('initProjectHistory', () => {
     });
     expect(result.kind).toBe('initialized');
     if (result.kind !== 'initialized') return;
-    // Inspect the actual commit's author email via git
-    const author = execFileSync('git', ['log', '-1', '--format=%ae', result.revisionId], {
+    // revisionId is the substrate-opaque UUID; resolve the actual
+    // git SHA via the DB row before asking git about the commit.
+    const row = sandbox.db.prepare(
+      `SELECT git_sha FROM project_revisions WHERE id = ?`,
+    ).get(result.revisionId) as { git_sha: string };
+    const author = execFileSync('git', ['log', '-1', '--format=%ae', row.git_sha], {
       cwd: sandbox.projectDir,
     }).toString().trim();
     expect(author).toBe('local_default@open-design.local');
@@ -256,17 +261,21 @@ describe('recordRevisionForRun', () => {
 
     expect(result.kind).toBe('recorded');
     if (result.kind !== 'recorded') return;
-    expect(result.revisionId).toMatch(/^[0-9a-f]{40}$/);
+    // revisionId is now a substrate-opaque UUID; the git SHA lives in
+    // the git_sha column.
+    expect(result.revisionId).toMatch(/^[0-9a-f-]{36}$/);
     expect(result.filesChanged).toBe(1);
     expect(result.bytesAdded).toBe(1);
 
-    // Revision row stored with run_id + source='agent-run'
+    // Revision row stored with run_id + source='agent-run'.
+    // parent_id is the parent's UUID (the migration revision), not its SHA.
     const row = sandbox.db.prepare(
-      `SELECT source, run_id, actor_identity_id, parent_id FROM project_revisions WHERE id = ?`,
-    ).get(result.revisionId) as { source: string; run_id: string; actor_identity_id: string; parent_id: string | null };
+      `SELECT source, run_id, actor_identity_id, parent_id, git_sha FROM project_revisions WHERE id = ?`,
+    ).get(result.revisionId) as { source: string; run_id: string; actor_identity_id: string; parent_id: string | null; git_sha: string };
     expect(row.source).toBe('agent-run');
     expect(row.run_id).toBe('run-1');
     expect(row.actor_identity_id).toBe('local:default');
+    expect(row.git_sha).toMatch(/^[0-9a-f]{40}$/);
     expect(row.parent_id).not.toBeNull(); // we have the migration parent
 
     // current_revision_id advanced
@@ -308,6 +317,44 @@ describe('recordRevisionForRun', () => {
     });
 
     expect(result.kind).toBe('not-initialized');
+  });
+
+  it('parent_id chains revisions by UUID (not git SHA) so cross-repo SHA collisions cannot break the chain', async () => {
+    // Initial state (from beforeEach): one migration revision exists.
+    // Write a file and record a first agent-run revision.
+    writeFileSync(path.join(sandbox.projectDir, 'a.txt'), 'a\n');
+    const first = await recordRevisionForRun({
+      projectId: sandbox.projectId,
+      projectDir: sandbox.projectDir,
+      repoDir: sandbox.repoDir,
+      run: { id: 'run-chain-1', identity: TEST_IDENTITY },
+      message: 'first',
+      db: sandbox.db,
+    });
+    if (first.kind !== 'recorded') throw new Error('expected first to record');
+
+    // Second run on top — parent should be the first revision's UUID.
+    writeFileSync(path.join(sandbox.projectDir, 'b.txt'), 'b\n');
+    const second = await recordRevisionForRun({
+      projectId: sandbox.projectId,
+      projectDir: sandbox.projectDir,
+      repoDir: sandbox.repoDir,
+      run: { id: 'run-chain-2', identity: TEST_IDENTITY },
+      message: 'second',
+      db: sandbox.db,
+    });
+    if (second.kind !== 'recorded') throw new Error('expected second to record');
+
+    const secondRow = sandbox.db.prepare(
+      `SELECT parent_id FROM project_revisions WHERE id = ?`,
+    ).get(second.revisionId) as { parent_id: string };
+    expect(secondRow.parent_id).toBe(first.revisionId);
+
+    // first's parent points at the migration revision (a UUID, not a SHA)
+    const firstRow = sandbox.db.prepare(
+      `SELECT parent_id FROM project_revisions WHERE id = ?`,
+    ).get(first.revisionId) as { parent_id: string };
+    expect(firstRow.parent_id).toMatch(/^[0-9a-f-]{36}$/);
   });
 
   it('serializes concurrent record calls so each run gets its own revision', async () => {

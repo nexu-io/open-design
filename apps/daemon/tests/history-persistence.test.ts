@@ -69,6 +69,7 @@ describe('migrateProjectRevisions', () => {
       'id',
       'project_id',
       'parent_id',
+      'git_sha',
       'created_at',
       'source',
       'message',
@@ -79,6 +80,36 @@ describe('migrateProjectRevisions', () => {
       'bytes_added',
       'bytes_removed',
     ]));
+  });
+
+  it('enforces uniqueness on (project_id, git_sha) — two projects with the same SHA do not collide', () => {
+    // Set up a second project so we can insert two rows under
+    // different project_ids with the same git_sha (the collision
+    // scenario the synthetic-UUID-id fix addresses).
+    db.exec(`INSERT INTO projects (id, name, created_at, updated_at) VALUES ('p2', 'p2', 0, 0)`);
+
+    const sharedSha = 'a'.repeat(40);
+    const insert = db.prepare(`
+      INSERT INTO project_revisions (id, project_id, parent_id, git_sha, created_at, source, message)
+      VALUES (?, ?, NULL, ?, ?, 'migration', 'shared content')
+    `);
+    // Two projects, same SHA, different revision UUIDs — both inserts succeed.
+    expect(() => insert.run('uuid-1', 'p1', sharedSha, 1)).not.toThrow();
+    expect(() => insert.run('uuid-2', 'p2', sharedSha, 2)).not.toThrow();
+
+    // But the same (project_id, git_sha) pair would violate the unique partial index.
+    expect(() => insert.run('uuid-3', 'p1', sharedSha, 3)).toThrow();
+  });
+
+  it('allows multiple NULL git_sha rows (non-git substrates do not violate the unique index)', () => {
+    const insert = db.prepare(`
+      INSERT INTO project_revisions (id, project_id, parent_id, git_sha, created_at, source, message)
+      VALUES (?, 'p1', NULL, NULL, ?, 'migration', 'no sha')
+    `);
+    // Partial index ignores NULL git_sha — many rows without SHAs is fine.
+    expect(() => insert.run('uuid-n1', 1)).not.toThrow();
+    expect(() => insert.run('uuid-n2', 2)).not.toThrow();
+    expect(() => insert.run('uuid-n3', 3)).not.toThrow();
   });
 
   it('adds current_revision_id to projects (nullable)', () => {

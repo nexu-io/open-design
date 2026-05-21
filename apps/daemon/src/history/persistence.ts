@@ -22,11 +22,22 @@ type DbRow = Record<string, unknown>;
 export function migrateProjectRevisions(db: Database.Database): void {
   // project_revisions — one row per recorded revision on a project. ON
   // DELETE CASCADE so removing a project cleans up its history rows.
+  //
+  // `id` is a substrate-opaque UUID, not the git commit SHA. SHA1
+  // commits are only unique within a repo: two separate project
+  // gitdirs with identical initial content / author / message /
+  // second-level timestamp can produce the same commit SHA (e.g.,
+  // two empty-tree migration commits created in the same second by
+  // LocalFallbackProvider). Using a synthetic id sidesteps that
+  // collision and lets a future OD-owned substrate plug in without
+  // schema changes. The actual git commit SHA lives in `git_sha`,
+  // unique per project via a partial index.
   db.exec(`
     CREATE TABLE IF NOT EXISTS project_revisions (
       id                    TEXT PRIMARY KEY,
       project_id            TEXT NOT NULL,
       parent_id             TEXT,
+      git_sha               TEXT,
       created_at            INTEGER NOT NULL,
       source                TEXT NOT NULL CHECK (source IN
         ('agent-run','manual-snapshot','restore','migration')),
@@ -42,7 +53,24 @@ export function migrateProjectRevisions(db: Database.Database): void {
 
     CREATE INDEX IF NOT EXISTS idx_project_revisions_project_created
       ON project_revisions(project_id, created_at DESC);
+
+    -- (project_id, git_sha) is unique when git_sha is set. Lets the
+    -- substrate map "parent SHA" → "parent's project_revisions.id"
+    -- at insert time without a full table scan, and prevents the
+    -- (project_id, git_sha) pair from ever being duplicated.
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_project_revisions_project_sha
+      ON project_revisions(project_id, git_sha)
+      WHERE git_sha IS NOT NULL;
   `);
+
+  // Idempotent column-add for git_sha (in case a pre-fix migration
+  // ran against this database with id=SHA). Existing rows get NULL
+  // git_sha — that's a one-time inconsistency only relevant for the
+  // author's reference deployment (no one else has run P0 yet).
+  const revisionCols = db.prepare(`PRAGMA table_info(project_revisions)`).all() as DbRow[];
+  if (!revisionCols.some((c) => c.name === 'git_sha')) {
+    db.exec(`ALTER TABLE project_revisions ADD COLUMN git_sha TEXT`);
+  }
 
   // current_revision_id pointer on projects. Nullable — populated once
   // the project's first revision exists.

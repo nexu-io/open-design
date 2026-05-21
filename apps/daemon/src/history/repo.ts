@@ -11,6 +11,7 @@
 // `ensureProject` / `startChatRun` / route handlers.
 
 import { promises as fs } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import type Database from 'better-sqlite3';
 
@@ -208,19 +209,19 @@ async function initProjectHistoryLocked(
   );
 
   const sha = (await runGit(projectDir, ['rev-parse', 'HEAD'], signal)).trim();
-
+  const revisionId = randomUUID();
   const now = Date.now();
   db.prepare(
     `INSERT INTO project_revisions (
-       id, project_id, parent_id, created_at, source, message,
+       id, project_id, parent_id, git_sha, created_at, source, message,
        actor_identity_id, actor_display_name, run_id,
        files_changed_count, bytes_added, bytes_removed
-     ) VALUES (?, ?, NULL, ?, 'migration', ?, ?, ?, NULL, 0, 0, 0)`,
-  ).run(sha, projectId, now, MIGRATION_COMMIT_MESSAGE, identity.id, identity.displayName);
+     ) VALUES (?, ?, NULL, ?, ?, 'migration', ?, ?, ?, NULL, 0, 0, 0)`,
+  ).run(revisionId, projectId, sha, now, MIGRATION_COMMIT_MESSAGE, identity.id, identity.displayName);
 
-  db.prepare(`UPDATE projects SET current_revision_id = ? WHERE id = ?`).run(sha, projectId);
+  db.prepare(`UPDATE projects SET current_revision_id = ? WHERE id = ?`).run(revisionId, projectId);
 
-  return { kind: 'initialized', revisionId: sha };
+  return { kind: 'initialized', revisionId };
 }
 
 export interface RecordRevisionForRunArgs {
@@ -287,25 +288,36 @@ async function recordRevisionForRunLocked(
   await runGit(projectDir, ['commit', '-m', message], signal);
 
   const sha = (await runGit(projectDir, ['rev-parse', 'HEAD'], signal)).trim();
-  // Probe for the parent — exit 128 means HEAD has no parent (initial
-  // commit). Under recordRevisionForRun's normal flow this can't
-  // happen because initProjectHistory's migration commit is always
-  // present, but defending against an orphaned HEAD (corrupted
-  // gitdir, manual history rewrite) keeps the contract clean.
-  const parent = (await runGit(projectDir, ['rev-parse', 'HEAD^'], signal, { softFail128: true })).trim() || null;
+  // Probe for the parent SHA — exit 128 means HEAD has no parent
+  // (initial commit). Under recordRevisionForRun's normal flow this
+  // can't happen because initProjectHistory's migration commit is
+  // always present, but defending against an orphaned HEAD
+  // (corrupted gitdir, manual history rewrite) keeps the contract clean.
+  const parentSha = (await runGit(projectDir, ['rev-parse', 'HEAD^'], signal, { softFail128: true })).trim() || null;
   const stats = await parseLastCommitStats(projectDir, signal);
 
+  // project_revisions.parent_id refers to the parent's id (UUID),
+  // not its git SHA. Resolve via the (project_id, git_sha) unique
+  // index. A null parentSha (initial commit) maps to null parent_id.
+  const parentId = parentSha
+    ? (db.prepare(
+        `SELECT id FROM project_revisions WHERE project_id = ? AND git_sha = ?`,
+      ).get(projectId, parentSha) as { id: string } | undefined)?.id ?? null
+    : null;
+
+  const revisionId = randomUUID();
   const now = Date.now();
   db.prepare(
     `INSERT INTO project_revisions (
-       id, project_id, parent_id, created_at, source, message,
+       id, project_id, parent_id, git_sha, created_at, source, message,
        actor_identity_id, actor_display_name, run_id,
        files_changed_count, bytes_added, bytes_removed
-     ) VALUES (?, ?, ?, ?, 'agent-run', ?, ?, ?, ?, ?, ?, ?)`,
+     ) VALUES (?, ?, ?, ?, ?, 'agent-run', ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
-    sha,
+    revisionId,
     projectId,
-    parent,
+    parentId,
+    sha,
     now,
     message,
     run.identity.id,
@@ -316,11 +328,11 @@ async function recordRevisionForRunLocked(
     stats.bytesRemoved,
   );
 
-  db.prepare(`UPDATE projects SET current_revision_id = ? WHERE id = ?`).run(sha, projectId);
+  db.prepare(`UPDATE projects SET current_revision_id = ? WHERE id = ?`).run(revisionId, projectId);
 
   return {
     kind: 'recorded',
-    revisionId: sha,
+    revisionId,
     filesChanged: stats.filesChanged,
     bytesAdded: stats.bytesAdded,
     bytesRemoved: stats.bytesRemoved,
