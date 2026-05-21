@@ -321,7 +321,7 @@ export const th: Dict = {
   'settings.cliEnvClaudeConfigDir': 'ไดเรกทอรีการตั้งค่า Claude Code',
   'settings.cliEnvCodebuddyConfigDir': 'ไดเรกทอรีการตั้งค่า CodeBuddy',
   'settings.cliEnvCodebuddyBaseUrl': 'CodeBuddy proxy base URL',
-  'settings.cliEnvCodebuddyApiKey': 'CodeBuddy proxy API key',
+  'settings.cliEnvCodebuddyApiKey': 'CodeBuddy API key',
   'settings.cliEnvCodebuddyInternetEnvironment': 'สภาพแวดล้อมอินเทอร์เน็ต CodeBuddy',
   'settings.cliEnvCodexHome': 'Codex home',
   'settings.cliEnvCodexBin': 'เส้นทางไฟล์เรียกทำงาน Codex',

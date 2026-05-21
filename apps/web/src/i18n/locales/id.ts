@@ -326,7 +326,7 @@ export const id: Dict = {
   'settings.cliEnvClaudeApiKey': 'Claude proxy API key',
   'settings.cliEnvCodebuddyConfigDir': 'Direktori konfigurasi CodeBuddy',
   'settings.cliEnvCodebuddyBaseUrl': 'CodeBuddy proxy base URL',
-  'settings.cliEnvCodebuddyApiKey': 'CodeBuddy proxy API key',
+  'settings.cliEnvCodebuddyApiKey': 'CodeBuddy API key',
   'settings.cliEnvCodebuddyInternetEnvironment': 'CodeBuddy internet environment',
   'settings.cliEnvCodexHome': 'Home Codex',
   'settings.cliEnvCodexBin': 'Path executable Codex',

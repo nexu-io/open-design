@@ -197,6 +197,16 @@ function diagnoseCliFailure(
     /(config|profile|session|credential|oauth)/i.test(text) &&
     /(stale|corrupt|expired|different|missing|not found|invalid)/i.test(text);
   if (configStateFailure) {
+    if (config.apiKeyIsPrimaryAuth) {
+      const hasApiKey = envValue(input.env, config.apiKeyEnvKey) !== null;
+      const message = hasApiKey
+        ? `${config.brandName} failed with a configuration or credential error.`
+        : `${config.brandName} failed with a configuration or credential error. No API key is configured.`;
+      const detail = hasApiKey
+        ? `Check ${config.apiKeyEnvKey} and related settings in Settings, then retry.`
+        : `Set ${config.apiKeyEnvKey} in Settings so the spawned ${config.brandName} process can authenticate, then retry.`;
+      return withContext(message, detail, input, config);
+    }
     const message = hasConfigDir
       ? `${config.brandName} failed while using the configured ${config.profileLabel} profile.`
       : `${config.brandName} may be using a different or stale local profile than your terminal.`;
@@ -216,6 +226,16 @@ function diagnoseCliFailure(
   }
 
   if (!text.trim() && input.exitCode === 1) {
+    if (config.apiKeyIsPrimaryAuth) {
+      const hasApiKey = envValue(input.env, config.apiKeyEnvKey) !== null;
+      const message = hasApiKey
+        ? `${config.brandName} exited before producing diagnostics.`
+        : `${config.brandName} exited before producing diagnostics. No API key is configured.`;
+      const detail = hasApiKey
+        ? `Check ${config.apiKeyEnvKey} and related settings in Settings, then retry.`
+        : `Set ${config.apiKeyEnvKey} in Settings so the spawned ${config.brandName} process can authenticate, then retry.`;
+      return withContext(message, detail, input, config);
+    }
     const message = hasConfigDir
       ? `${config.brandName} exited before producing diagnostics while using the configured ${config.profileLabel} profile.`
       : `${config.brandName} exited before producing diagnostics.`;

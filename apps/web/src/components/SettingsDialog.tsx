@@ -510,7 +510,7 @@ const AGENT_CLI_ENV_FIELDS = [
     agentId: 'codebuddy',
     envKey: 'CODEBUDDY_API_KEY',
     labelKey: 'settings.cliEnvCodebuddyApiKey',
-    placeholder: 'Paste proxy API key',
+    placeholder: 'Paste API key',
     secret: true,
   },
   {

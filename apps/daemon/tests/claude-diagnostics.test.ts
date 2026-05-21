@@ -137,7 +137,7 @@ describe('diagnoseClaudeCliFailure', () => {
     expect(diagnostic?.detail).not.toContain('/login');
   });
 
-  it('maps CodeBuddy silent configured-profile exits to profile guidance', () => {
+  it('maps CodeBuddy silent configured-profile exits to API key guidance', () => {
     const diagnostic = diagnoseClaudeCliFailure({
       agentId: 'codebuddy',
       exitCode: 1,
@@ -146,9 +146,10 @@ describe('diagnoseClaudeCliFailure', () => {
       env: { CODEBUDDY_CONFIG_DIR: '/tmp/codebuddy-alt' },
     });
 
-    expect(diagnostic?.message).toContain('configured CodeBuddy profile');
-    expect(diagnostic?.detail).toContain('Re-run `codebuddy` and `/login` for that profile');
-    expect(diagnostic?.detail).toContain('Effective CODEBUDDY_CONFIG_DIR: /tmp/codebuddy-alt');
+    expect(diagnostic?.message).toContain('CodeBuddy');
+    expect(diagnostic?.message).toContain('API key');
+    expect(diagnostic?.detail).toContain('CODEBUDDY_API_KEY');
+    expect(diagnostic?.detail).not.toContain('/login');
   });
 
   it('maps CodeBuddy auth failures with API key set to API key guidance', () => {
@@ -192,6 +193,33 @@ describe('diagnoseClaudeCliFailure', () => {
 
     expect(diagnostic?.message).toContain('CodeBuddy Code');
     expect(diagnostic?.message).toContain('API key');
+    expect(diagnostic?.detail).toContain('CODEBUDDY_API_KEY');
+    expect(diagnostic?.detail).not.toContain('/login');
+  });
+
+  it('maps CodeBuddy config-state failure with API key to key-check guidance', () => {
+    const diagnostic = diagnoseClaudeCliFailure({
+      agentId: 'codebuddy',
+      exitCode: 1,
+      stderrTail: 'OAuth credential expired for session',
+      env: { CODEBUDDY_API_KEY: 'cb-test-key' },
+    });
+
+    expect(diagnostic?.message).toContain('CodeBuddy');
+    expect(diagnostic?.detail).toContain('CODEBUDDY_API_KEY');
+    expect(diagnostic?.detail).not.toContain('/login');
+  });
+
+  it('maps CodeBuddy silent exit with API key to key-check guidance', () => {
+    const diagnostic = diagnoseClaudeCliFailure({
+      agentId: 'codebuddy',
+      exitCode: 1,
+      stderrTail: '',
+      stdoutTail: '',
+      env: { CODEBUDDY_API_KEY: 'cb-test-key' },
+    });
+
+    expect(diagnostic?.message).toContain('CodeBuddy');
     expect(diagnostic?.detail).toContain('CODEBUDDY_API_KEY');
     expect(diagnostic?.detail).not.toContain('/login');
   });
