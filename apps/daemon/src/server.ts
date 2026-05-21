@@ -1323,11 +1323,32 @@ async function refreshAndPersistToken(dataDir, serverId, current) {
 
 const activeChatAgentEventSinks = new Map();
 const activeProjectEventSinks = new Map();
+// Per-chat-run handles, keyed by runId. Lets non-stream side effects
+// (live-artifact create, project events) reach back into the chat
+// run's local state — currently used by the artifact quiet-period
+// shortcut (#1451) so a successful artifact registration can shorten
+// the inactivity watchdog without the chat path having to poll a
+// store.
+const activeChatRunHandles = new Map();
 
 function emitChatAgentEvent(runId, payload) {
   const sink = activeChatAgentEventSinks.get(runId);
   if (!sink) return false;
   return sink(payload);
+}
+
+// Exported for tests covering the artifact quiet-period plumbing
+// (#1451). The chat run path is a deep closure inside startServer, so
+// pin the hook contract at the emit/handle boundary instead of
+// driving a full fake-agent e2e for every invariant.
+export const __forTestChatRunHandles = activeChatRunHandles;
+
+export function __forTestEmitLiveArtifactEvent(
+  grant: { runId?: string; projectId?: string },
+  action: 'created' | 'updated' | 'deleted',
+  artifact: { id: string; projectId?: string; title?: string; refreshStatus?: string },
+) {
+  return emitLiveArtifactEvent(grant, action, artifact);
 }
 
 function emitLiveArtifactEvent(grant, action, artifact) {
@@ -1342,6 +1363,18 @@ function emitLiveArtifactEvent(grant, action, artifact) {
   };
   let emitted = emitProjectEvent(payload.projectId, payload);
   if (grant?.runId) emitted = emitChatAgentEvent(grant.runId, payload) || emitted;
+  // After the deliverable exists, switch the chat run into a shorter
+  // "quiet period" watchdog: agents sometimes keep their child process
+  // alive after a successful artifact write (post-write reasoning, log
+  // flushes, claude-code stream-json's idle stdin) and the 10-minute
+  // default leaves the UI parked on Working until the watchdog fires
+  // an unrelated "stalled" error. See #1451.
+  if (action === 'created' && grant?.runId) {
+    const handle = activeChatRunHandles.get(grant.runId);
+    if (handle?.noteArtifactRegistered) {
+      try { handle.noteArtifactRegistered(); } catch {}
+    }
+  }
   return emitted;
 }
 
@@ -2770,6 +2803,12 @@ export interface StartServerOptions {
 
 const DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000;
 const MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+// After a successful live-artifact registration the daemon switches the
+// chat-run inactivity watchdog from the long pre-artifact ceiling
+// (DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS) down to a much shorter
+// "quiet period" — the deliverable exists, so further silence almost
+// always means the agent is winding down or hanging. See #1451.
+const DEFAULT_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS = 60 * 1000;
 
 function resolveChatRunInactivityTimeoutMs() {
   const raw = Number(process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS);
@@ -2780,6 +2819,16 @@ function resolveChatRunInactivityTimeoutMs() {
   // Node clamps delays larger than a signed 32-bit integer down to 1ms, which
   // makes an oversized override fail almost immediately while reporting a huge
   // timeout. Keep explicit overrides bounded to a practical, timer-safe value.
+  return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(raw)));
+}
+
+// Resolve the post-artifact quiet-period window. Same clamp as the outer
+// inactivity watchdog so an oversized override doesn't get Node-downgraded
+// to a 1ms timer. Exported so tests can pin the env behavior without
+// reaching into chat-run internals.
+export function resolveChatRunArtifactQuietPeriodMs() {
+  const raw = Number(process.env.OD_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS);
+  if (!Number.isFinite(raw)) return DEFAULT_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS;
   return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(raw)));
 }
 
@@ -9584,11 +9633,18 @@ export async function startServer({
 
     const send = (event, data) => design.runs.emit(run, event, data);
     const inactivityTimeoutMs = resolveChatRunInactivityTimeoutMs();
+    const artifactQuietPeriodMs = resolveChatRunArtifactQuietPeriodMs();
     const inactivityKillGraceMs = 3_000;
     let inactivityTimer = null;
     let childStdoutSeen = false;
     let lastAgentEventPhase = 'spawn pending';
     let lastToolResultChars = 0;
+    // Becomes true once any live-artifact create has been registered for
+    // this run. Subsequent watchdog scheduling uses the shorter quiet
+    // period, and a watchdog trip after this point is treated as
+    // "agent finished the deliverable and went idle" rather than
+    // "agent stalled with nothing to show" (issue #1451).
+    let artifactRegistered = false;
     const summarizeAgentEventForInactivity = (payload) => {
       const type = payload?.type ? String(payload.type) : 'unknown';
       if (type === 'tool_result') {
@@ -9623,13 +9679,31 @@ export async function startServer({
     };
     const failForInactivity = () => {
       if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
+      clearInactivityWatchdog();
+      if (artifactRegistered) {
+        // The deliverable already exists. The agent process is either
+        // genuinely idle (claude-code's stream-json child sitting on an
+        // open stdin) or wedged in post-write reasoning that never
+        // emits stdout. Either way, finishing the run via the normal
+        // child-exit path (status decision in child.on('close') below)
+        // is safer than tearing it down with a failure banner — the
+        // tool token, cancel state, and exit-code classification stay
+        // owned by the existing lifecycle. SIGTERM the child and let
+        // the close handler classify the run as succeeded (via the
+        // artifactQuietShutdown branch).
+        if (acpSession?.abort) {
+          acpSession.abort();
+        }
+        if (child && !child.killed) child.kill('SIGTERM');
+        scheduleForcedChildShutdown();
+        return;
+      }
       const message =
         `Agent stalled without emitting any new output for ${Math.round(inactivityTimeoutMs / 1000)}s. ` +
         'The model or CLI likely hung while generating. ' +
         `Phase details: spawned agent binary ${resolvedBin}; stdout arrived: ${childStdoutSeen ? 'yes' : 'no'}; ` +
         `last agent event: ${lastAgentEventPhase}; largest tool result observed: ${lastToolResultChars} chars. ` +
         'Retry the turn, pick a different model, or start a new conversation if the prior context is very large.';
-      clearInactivityWatchdog();
       send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', message, { retryable: true }));
       design.runs.finish(run, 'failed', 1, null);
       if (acpSession?.abort) {
@@ -9638,14 +9712,27 @@ export async function startServer({
       if (child && !child.killed) child.kill('SIGTERM');
       scheduleForcedChildShutdown();
     };
+    const activeInactivityTimeoutMs = () =>
+      artifactRegistered ? artifactQuietPeriodMs : inactivityTimeoutMs;
     const noteAgentActivity = () => {
-      if (inactivityTimeoutMs <= 0) return;
+      const delay = activeInactivityTimeoutMs();
+      if (delay <= 0) return;
       clearInactivityWatchdog();
-      inactivityTimer = setTimeout(failForInactivity, inactivityTimeoutMs);
+      inactivityTimer = setTimeout(failForInactivity, delay);
       inactivityTimer.unref?.();
     };
+    const noteArtifactRegistered = () => {
+      if (artifactRegistered) return;
+      artifactRegistered = true;
+      // Switch the watchdog to the shorter quiet-period window
+      // immediately so we don't have to wait for the next agent event
+      // before the new ceiling takes effect.
+      if (inactivityTimer) noteAgentActivity();
+    };
     const unregisterChatAgentEventSink = () => {
-      activeChatAgentEventSinks.delete(toolTokenGrant?.runId ?? runId);
+      const sinkRunId = toolTokenGrant?.runId ?? runId;
+      activeChatAgentEventSinks.delete(sinkRunId);
+      activeChatRunHandles.delete(sinkRunId);
     };
     if (toolTokenGrant?.runId) {
       activeChatAgentEventSinks.set(toolTokenGrant.runId, (payload) => {
@@ -9653,6 +9740,7 @@ export async function startServer({
         noteAgentActivity();
         send('agent', payload);
       });
+      activeChatRunHandles.set(toolTokenGrant.runId, { noteArtifactRegistered });
     }
     // If detection can't find the binary, surface a friendly SSE error
     // pointing at /api/agents instead of silently falling back to
@@ -10286,9 +10374,20 @@ export async function startServer({
         acpSession.completedSuccessfully();
       const acpForcedShutdown =
         code === null && signal === 'SIGTERM' && acpCleanCompletion;
+      // The artifact quiet-period path SIGTERMs the child after the
+      // deliverable has been registered (see failForInactivity above).
+      // Without this branch the run would be marked `failed` because
+      // signal-exit children take the `else` branch — the artifact has
+      // already been emitted to the chat, so completing as `succeeded`
+      // matches what the user actually got (#1451).
+      const artifactQuietShutdown =
+        artifactRegistered &&
+        !run.cancelRequested &&
+        code === null &&
+        (signal === 'SIGTERM' || signal === 'SIGKILL');
       const status = run.cancelRequested
         ? 'canceled'
-        : code === 0 || acpForcedShutdown
+        : code === 0 || acpForcedShutdown || artifactQuietShutdown
           ? 'succeeded'
           : 'failed';
       if (status === 'failed') {
