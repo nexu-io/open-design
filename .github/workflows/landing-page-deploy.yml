@@ -87,6 +87,8 @@ jobs:
         run: pnpm --filter @open-design/landing-page previews
 
       - name: Build landing page
+        env:
+          PUBLIC_GA_MEASUREMENT_ID: ${{ vars.PUBLIC_GA_MEASUREMENT_ID }}
         run: pnpm --filter @open-design/landing-page build
 
       - name: Verify zero external JavaScript

@@ -1,5 +1,8 @@
 ---
-import { GOOGLE_ANALYTICS_HEAD_HTML } from '../_lib/google-analytics';
+import { googleAnalyticsHeadHtml } from '../_lib/google-analytics';
+
+const measurementId = import.meta.env.PUBLIC_GA_MEASUREMENT_ID;
+const headHtml = googleAnalyticsHeadHtml(measurementId);
 ---
 
-<Fragment set:html={GOOGLE_ANALYTICS_HEAD_HTML} />
+<Fragment set:html={headHtml} />
