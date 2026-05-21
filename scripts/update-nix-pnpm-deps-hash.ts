@@ -13,23 +13,8 @@ const nixCommand = ["build", ".#web", "--print-build-logs"];
 const maxNixOutputBufferBytes = 32 * 1024 * 1024;
 
 function extractExpectedHash(output: string): string | null {
-  const patterns = [
-    /got:\s*(sha256-[A-Za-z0-9+/=]+)/g,
-    /(sha256-[A-Za-z0-9+/=]+)/g,
-  ];
-
-  for (const pattern of patterns) {
-    const matches = [...output.matchAll(pattern)];
-    if (matches.length === 0) {
-      continue;
-    }
-    const hash = matches.at(-1)?.[1];
-    if (hash) {
-      return hash;
-    }
-  }
-
-  return null;
+  const matches = [...output.matchAll(/got:\s*(sha256-[A-Za-z0-9+/=]+)/g)];
+  return matches.at(-1)?.[1] ?? null;
 }
 
 async function main(): Promise<void> {
@@ -56,11 +41,18 @@ async function main(): Promise<void> {
       throw new Error(`Failed to execute nix: ${result.error.message}`);
     }
 
+    if (result.status === 0) {
+      throw new Error(
+        "nix build unexpectedly succeeded after replacing the fixed-output hash with lib.fakeHash.",
+      );
+    }
+
     const combinedOutput = `${result.stdout}${result.stderr}`;
     const nextHash = extractExpectedHash(combinedOutput);
     if (!nextHash) {
       throw new Error(
-        `Could not parse the expected pnpm deps hash from nix output.\n\n${combinedOutput}`,
+        "nix build failed without reporting a fixed-output hash mismatch (`got: sha256-...`). " +
+          `Refusing to update ${path.relative(repoRoot, sharedHashPath)}.\n\n${combinedOutput}`,
       );
     }
 
