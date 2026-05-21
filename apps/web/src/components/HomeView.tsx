@@ -417,6 +417,7 @@ export function HomeView({
     setPendingAuthoringPrompt(promptHandoff.prompt);
     setPendingAuthoringInputs(promptHandoff.inputs);
     setPendingAuthoringChipId('create-plugin');
+    setPendingChipId('create-plugin');
   }, [promptHandoff]);
 
   const activeContextItemCount = useMemo(
