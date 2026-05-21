@@ -10,6 +10,8 @@ import type {
   ImportGitHubDesignSystemResponse,
   ImportLocalDesignSystemRequest,
   ImportLocalDesignSystemResponse,
+  PagePatternListResponse,
+  PagePatternSummary,
   ReplaceProjectWorkingDirResponse,
 } from '@open-design/contracts';
 import type {
@@ -133,6 +135,22 @@ export async function fetchDesignTemplate(id: string): Promise<SkillDetail | nul
     return (await resp.json()) as SkillDetail;
   } catch {
     return null;
+  }
+}
+
+// Page patterns (Q2 2026 Phase 1) — the gallery surface shares
+// SkillSummary so we can reuse the same lazy-iframe + search /
+// filter UI. The list endpoint returns a camelCase
+// `PagePatternListResponse`; the daemon owns the snake_case →
+// camelCase mapping for the three page-pattern-specific fields.
+export async function fetchPagePatterns(): Promise<PagePatternSummary[]> {
+  try {
+    const resp = await fetch('/api/page-patterns');
+    if (!resp.ok) return [];
+    const json = (await resp.json()) as PagePatternListResponse;
+    return json.patterns ?? [];
+  } catch {
+    return [];
   }
 }
 
