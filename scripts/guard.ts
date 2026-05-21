@@ -49,6 +49,7 @@ const residualSkippedDirectories = new Set([
   ".tmp",
   ".vite",
   "dist",
+  "local",
   "node_modules",
   "out",
 ]);
