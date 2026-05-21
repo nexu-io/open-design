@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type {
   ApplyResult,
   InstalledPluginRecord,
+  ProjectMetadata,
 } from '@open-design/contracts';
 import {
   applyPlugin,
@@ -12,6 +13,7 @@ import {
 import { useI18n } from '../i18n';
 import { Icon } from './Icon';
 import { PluginDetailsModal } from './PluginDetailsModal';
+import { TrustBadge } from './TrustBadge';
 import { authorInitials, derivePluginSourceLinks } from '../runtime/plugin-source';
 
 export interface PluginLoopSubmit {
@@ -23,6 +25,9 @@ export interface PluginLoopSubmit {
   taskKind: string | null;
   pluginInputs?: Record<string, unknown> | null;
   contextPlugins?: Array<{ id: string; title: string; description?: string }> | null;
+  contextMcpServers?: Array<{ id: string; label?: string; transport?: string; url?: string; command?: string }> | null;
+  contextConnectors?: Array<{ id: string; name: string; provider?: string; category?: string; status?: string; accountLabel?: string }> | null;
+  designSystemId?: string | null;
   // Stage B of plugin-driven-flow-plan: when the user picked a Home
   // chip the rail tells the submit handler which `ProjectKind` to
   // stamp on the new project's metadata. The daemon-side default
@@ -32,6 +37,8 @@ export interface PluginLoopSubmit {
   // free-form fallback uses `other` and binds the hidden od-default
   // router plugin so the agent asks for the exact task type in-chat.
   projectKind?: 'prototype' | 'deck' | 'template' | 'image' | 'video' | 'audio' | 'other' | null;
+  projectMetadata?: ProjectMetadata | null;
+  workingDir?: string | null;
   // Files staged on Home before the project exists. App uploads them
   // into the created project's Design Files before the first auto-send.
   attachments?: File[];
@@ -237,11 +244,7 @@ export function PluginLoopHome({ onSubmit }: Props) {
               >
                 <div className="plugin-loop-home__card-head">
                   <span className="plugin-loop-home__card-title">{p.title}</span>
-                  <span
-                    className={`plugin-loop-home__card-trust trust-${p.trust}`}
-                  >
-                    {p.trust}
-                  </span>
+                  <TrustBadge trust={p.trust} />
                 </div>
                 {p.manifest?.description ? (
                   <div className="plugin-loop-home__card-desc">

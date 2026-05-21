@@ -1,0 +1,104 @@
+name: Stale issues
+
+# Mark issues as stale after 30 days of inactivity, and close them after a
+# further 7 days if no activity resumes.
+#
+# Exemption policy:
+# - Label-based exemptions: issues carrying any of the labels in
+#   EXEMPT_LABELS are never marked stale (security, contributor-invite,
+#   priority, awaiting product direction, etc.).
+# - Author-based exemption: issues opened by org members, owners, or
+#   collaborators are also exempt. Since actions/stale only supports
+#   label-based exemptions, a pre-step labels qualifying issues with
+#   `exempt-from-stale` so the stale step honors the same rule.
+#
+# PRs are handled separately by pr-author-inactivity.yml; this workflow
+# disables PR processing by setting the PR thresholds to -1.
+
+on:
+  schedule:
+    - cron: '30 1 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  issues: write
+  pull-requests: read
+
+concurrency:
+  group: stale-issues
+  cancel-in-progress: false
+
+jobs:
+  stale:
+    if: github.repository == 'nexu-io/open-design'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Exempt org-member issues from staling
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const EXEMPT_LABEL = 'exempt-from-stale';
+            const EXEMPT_ASSOCIATIONS = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
+
+            // Ensure the exempt label exists so the stale step can match it.
+            try {
+              await github.rest.issues.getLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: EXEMPT_LABEL,
+              });
+            } catch (err) {
+              if (err.status !== 404) throw err;
+              await github.rest.issues.createLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: EXEMPT_LABEL,
+                color: 'cccccc',
+                description: 'Issue is exempt from automatic stale handling (set by stale-issues workflow).',
+              });
+            }
+
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100,
+            });
+
+            let labeled = 0;
+
+            for (const issue of issues) {
+              if (issue.pull_request) continue;
+              if (!EXEMPT_ASSOCIATIONS.has(issue.author_association)) continue;
+              if (issue.labels.some((l) => (typeof l === 'string' ? l : l.name) === EXEMPT_LABEL)) continue;
+
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: [EXEMPT_LABEL],
+              });
+              labeled += 1;
+            }
+
+            core.info(`Applied ${EXEMPT_LABEL} to ${labeled} org-member issue(s).`);
+
+      - name: Mark and close stale issues
+        uses: actions/stale@v9
+        with:
+          days-before-issue-stale: 30
+          days-before-issue-close: 7
+          # Disable PR processing; PRs are handled by pr-author-inactivity.yml.
+          days-before-pr-stale: -1
+          days-before-pr-close: -1
+          stale-issue-label: 'stale'
+          exempt-issue-labels: 'good first issue,help wanted,security,exempt-from-stale'
+          stale-issue-message: |
+            This issue has been inactive for 30 days and is being marked as stale. If it is still relevant, please leave a comment or push an update — otherwise it will be closed in 7 days.
+
+            This is only a queue-management step, not a rejection of the report. Closed issues can be reopened when work resumes.
+          close-issue-message: |
+            Closing this issue for now because it has been inactive for more than 37 days. If it is still relevant, please leave a comment and reopen — context is preserved and we can pick it back up.
+          remove-issue-stale-when-updated: true
+          operations-per-run: 100
+          ascending: true

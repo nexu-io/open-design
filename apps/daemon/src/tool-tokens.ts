@@ -9,6 +9,7 @@ export const CHAT_TOOL_ENDPOINTS = [
   '/api/tools/live-artifacts/update',
   '/api/tools/connectors/list',
   '/api/tools/connectors/execute',
+  '/api/tools/design-systems/read',
 ] as const;
 
 export const CHAT_TOOL_OPERATIONS = [
@@ -18,6 +19,7 @@ export const CHAT_TOOL_OPERATIONS = [
   'live-artifacts:update',
   'connectors:list',
   'connectors:execute',
+  'design-systems:read',
 ] as const;
 
 export type ToolEndpoint = (typeof CHAT_TOOL_ENDPOINTS)[number] | (string & {});

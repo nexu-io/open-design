@@ -2,9 +2,11 @@ import type http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import {
   chmodSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   promises as fsp,
+  readFileSync,
   realpathSync,
   rmSync,
   symlinkSync,
@@ -23,6 +25,7 @@ import {
   validateCodexGeneratedImagesDir,
 } from '../src/server.js';
 import { getAgentDef } from '../src/agents.js';
+import { readMemoryConfig, writeMemoryConfig } from '../src/memory.js';
 import { renderCodexImagegenOverride } from '../src/prompts/system.js';
 
 function symlinkDir(target: string, link: string): void {
@@ -60,11 +63,19 @@ async function withFakeAgent<T>(
 describe('/api/chat', () => {
   let server: http.Server;
   let baseUrl: string;
+  let originalMemoryConfig: Awaited<ReturnType<typeof readMemoryConfig>> | null = null;
   const originalPath = process.env.PATH;
   const originalAgentHome = process.env.OD_AGENT_HOME;
   const tempDirs: string[] = [];
 
   beforeAll(async () => {
+    if (process.env.OD_DATA_DIR) {
+      originalMemoryConfig = await readMemoryConfig(process.env.OD_DATA_DIR);
+      await writeMemoryConfig(process.env.OD_DATA_DIR, {
+        enabled: false,
+        extraction: null,
+      });
+    }
     const started = await startServer({ port: 0, returnServer: true }) as {
       url: string;
       server: http.Server;
@@ -86,12 +97,19 @@ describe('/api/chat', () => {
     }
   });
 
-  afterAll(() => {
+  afterAll(async () => {
     for (const dir of tempDirs.splice(0)) {
       rmSync(dir, { recursive: true, force: true });
     }
-    if (!server) return;
-    return new Promise<void>((resolve) => server.close(() => resolve()));
+    if (server) {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+    if (process.env.OD_DATA_DIR && originalMemoryConfig) {
+      await writeMemoryConfig(process.env.OD_DATA_DIR, {
+        enabled: originalMemoryConfig.enabled,
+        extraction: originalMemoryConfig.extraction,
+      });
+    }
   });
 
   it('does not reference an out-of-scope response while starting a run', async () => {
@@ -538,7 +556,7 @@ setInterval(() => {}, 1000);
 
   it('keeps Claude stream runs alive while structured output is still flowing', async () => {
     const previous = process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
-    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '1800';
+    process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '3000';
     try {
       await withFakeAgent(
         'claude',
@@ -552,6 +570,7 @@ const lines = [
   JSON.stringify({ type: 'result', usage: { input_tokens: 1, output_tokens: 2 }, duration_ms: 700, stop_reason: 'end_turn' }),
 ];
 let index = 0;
+console.log(lines[index++]);
 const timer = setInterval(() => {
   if (index >= lines.length) {
     clearInterval(timer);
@@ -559,7 +578,7 @@ const timer = setInterval(() => {
     return;
   }
   console.log(lines[index++]);
-}, 400);
+}, 750);
 `,
         async () => {
           const createResponse = await fetch(`${baseUrl}/api/runs`, {
@@ -701,6 +720,76 @@ setInterval(() => {}, 1000);
       }
     }
   });
+
+  it('marks submitted discovery form answers as the active turn before the transcript', async () => {
+    const captureDir = mkdtempSync(join(tmpdir(), 'od-form-answer-prompt-'));
+    tempDirs.push(captureDir);
+    const capturePath = join(captureDir, 'prompt.txt');
+    const previousCapturePath = process.env.OD_CAPTURE_PROMPT_PATH;
+    process.env.OD_CAPTURE_PROMPT_PATH = capturePath;
+    try {
+      await withFakeAgent(
+        'opencode',
+        `
+const fs = require('node:fs');
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { input += chunk; });
+process.stdin.on('end', () => {
+  fs.writeFileSync(process.env.OD_CAPTURE_PROMPT_PATH, input, 'utf8');
+  console.log(JSON.stringify({ type: 'text', part: { text: 'building now' } }));
+});
+`,
+        async () => {
+          const formAnswers = [
+            '[form answers — discovery]',
+            '- output: Dashboard / tool UI',
+            '- brand: Pick a direction for me [value: pick_direction]',
+          ].join('\n');
+          const transcript = [
+            '## user',
+            'Design a metrics dashboard.',
+            '',
+            '## assistant',
+            '<question-form id="discovery" title="Quick brief — 30 seconds"></question-form>',
+            '',
+            '## user',
+            formAnswers,
+          ].join('\n');
+
+          const createResponse = await fetch(`${baseUrl}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'opencode',
+              message: transcript,
+              currentPrompt: formAnswers,
+            }),
+          });
+          expect(createResponse.status).toBe(202);
+          const { runId } = await createResponse.json() as { runId: string };
+          const statusBody = await waitForRunStatus(baseUrl, runId);
+
+          expect(statusBody.status).toBe('succeeded');
+          expect(existsSync(capturePath)).toBe(true);
+          const prompt = readFileSync(capturePath, 'utf8');
+          const transitionIdx = prompt.indexOf('## Latest user turn - form answers submitted');
+          const transcriptIdx = prompt.indexOf('## Full conversation transcript');
+          expect(transitionIdx).toBeGreaterThan(-1);
+          expect(transcriptIdx).toBeGreaterThan(transitionIdx);
+          expect(prompt).toContain('The user has answered the discovery form. Do not emit another discovery form.');
+          expect(prompt).toContain('Continue with RULE 2 / RULE 3 now.');
+          expect(prompt).toContain(formAnswers);
+        },
+      );
+    } finally {
+      if (previousCapturePath == null) {
+        delete process.env.OD_CAPTURE_PROMPT_PATH;
+      } else {
+        process.env.OD_CAPTURE_PROMPT_PATH = previousCapturePath;
+      }
+    }
+  });
 });
 
 describe('daemon run creation during shutdown', () => {
@@ -776,13 +865,15 @@ async function waitForRunStatus(
   runId: string,
   done: (status: string) => boolean = (status) => status !== 'queued' && status !== 'running',
 ): Promise<{ status: string }> {
-  for (let attempt = 0; attempt < 120; attempt += 1) {
+  let lastStatus = 'unknown';
+  for (let attempt = 0; attempt < 500; attempt += 1) {
     const statusResponse = await fetch(`${baseUrl}/api/runs/${runId}`);
     const statusBody = await statusResponse.json() as { status: string };
+    lastStatus = statusBody.status;
     if (done(statusBody.status)) return statusBody;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
-  throw new Error('run did not reach expected status');
+  throw new Error(`run did not reach expected status; last status: ${lastStatus}`);
 }
 
 describe('chat prompt helpers', () => {

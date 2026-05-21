@@ -6,9 +6,12 @@
 // the UI can stay rendered when the daemon is briefly unreachable.
 
 import type {
+  ApiError,
   AppliedPluginSnapshot,
   ApplyResult,
   CreatePluginShareProjectResponse,
+  HandoffRequest,
+  HandoffResponse,
   ImportFolderRequest,
   ImportFolderResponse,
   InstalledPluginRecord,
@@ -249,6 +252,44 @@ export async function createConversation(
     if (!resp.ok) return null;
     const json = (await resp.json()) as { conversation: Conversation };
     return json.conversation;
+  } catch {
+    return null;
+  }
+}
+
+// Outcome of a handoff synthesis call. The daemon route classifies its
+// failures (RATE_LIMITED, EMPTY_TRANSCRIPT, an upstream 400 with provider
+// detail, ...); `{ error }` carries that structured error through so the
+// caller can show the real reason instead of a generic message. `null`
+// is reserved for a transport failure or an unparseable error body.
+export type HandoffOutcome = HandoffResponse | { error: ApiError } | null;
+
+// Synthesizes a self-contained "first user message" from the project's
+// chat transcript so a fresh conversation can resume work without the
+// user replaying context by hand. A transport failure returns null; a
+// daemon-classified failure returns `{ error }` so the caller keeps the
+// daemon's message/details rather than collapsing every case into one
+// generic toast.
+export async function synthesizeHandoff(
+  projectId: string,
+  body: HandoffRequest,
+): Promise<HandoffOutcome> {
+  try {
+    const resp = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/handoff`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+    );
+    if (!resp.ok) {
+      const payload = (await resp.json().catch(() => null)) as
+        | { error?: ApiError }
+        | null;
+      return payload?.error ? { error: payload.error } : null;
+    }
+    return (await resp.json()) as HandoffResponse;
   } catch {
     return null;
   }
@@ -786,6 +827,7 @@ export interface PluginMarketplaceEntry {
   };
   homepage?: string;
   license?: string;
+  permissions?: string[];
   capabilitiesSummary?: string[];
   deprecated?: boolean | string;
   yanked?: boolean;

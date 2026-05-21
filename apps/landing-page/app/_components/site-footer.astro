@@ -7,6 +7,7 @@ interface Props {
 
 const { counts } = Astro.props;
 const REPO = 'https://github.com/nexu-io/open-design';
+const DISCORD = 'https://discord.gg/9ptkbbqRu';
 ---
 
 <footer class='sub-footer' data-od-id='sub-footer'>
@@ -15,7 +16,7 @@ const REPO = 'https://github.com/nexu-io/open-design';
       <div class='sub-footer-brand'>
         <a href='/' class='brand'>
           <span class='brand-mark'>
-            <img src='/logo.png' alt='' width='36' height='36' />
+            <img src='/logo.webp' alt='' width='36' height='36' />
           </span>
           <span>Open Design</span>
         </a>
@@ -39,6 +40,7 @@ const REPO = 'https://github.com/nexu-io/open-design';
           <li><a href={REPO} target='_blank' rel='noopener'>GitHub</a></li>
           <li><a href={`${REPO}/issues`} target='_blank' rel='noopener'>Issues</a></li>
           <li><a href={`${REPO}/releases`} target='_blank' rel='noopener'>Releases</a></li>
+          <li><a href={DISCORD} target='_blank' rel='noopener'>Discord</a></li>
           <li><a href='/blog/rss.xml'>RSS</a></li>
           <li><a href='/#contact'>Contact</a></li>
         </ul>

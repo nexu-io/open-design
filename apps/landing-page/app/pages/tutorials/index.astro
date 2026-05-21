@@ -1,0 +1,613 @@
+---
+/*
+ * Tutorials index — `/tutorials/`
+ *
+ * Editorial gallery of Open Design YouTube tutorials. One card per video.
+ * Cards link to `/tutorials/<slug>/` where the video plays inline via a
+ * privacy-enhanced `youtube-nocookie.com` iframe.
+ *
+ * Entries come from the `tutorials` Content Collection defined in
+ * `app/content.config.ts`. Sorted by date descending. The category strip
+ * mirrors the `/blog/` filter UX so the magazine aesthetic stays uniform.
+ */
+import { getCollection } from 'astro:content';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import HeaderEnhancer from '../../_components/header-enhancer.astro';
+import { Header, type HeaderProps } from '../../_components/header';
+import SeoHead from '../../_components/seo-head.astro';
+import SiteFooter from '../../_components/site-footer.astro';
+import Topbar from '../../_components/topbar.astro';
+import { getCatalogCounts } from '../../_lib/catalog';
+import { getGithubRepoMeta } from '../../_lib/github';
+import '../../globals.css';
+import '../../sub-pages.css';
+
+const tutorials = (await getCollection('tutorials')).sort(
+  (a, b) => b.data.date.getTime() - a.data.date.getTime(),
+);
+
+const counts = await getCatalogCounts();
+const github = await getGithubRepoMeta();
+const headerHtml = renderToStaticMarkup(
+  createElement<HeaderProps>(Header, {
+    counts,
+    github,
+    brandHref: '/',
+    active: 'tutorials',
+  }),
+);
+
+const seoTitle = 'Tutorials — Open Design';
+const seoDescription =
+  'Watch Open Design from the inside — getting-started walkthroughs, plugin tutorials, demos, and community deep-dives, curated from YouTube and embedded for in-page playback.';
+
+const categoryChips = [
+  { label: 'All', value: 'all' },
+  { label: 'Getting started', value: 'getting-started' },
+  { label: 'Tutorials', value: 'tutorial' },
+  { label: 'Demos', value: 'demo' },
+  { label: 'Reviews', value: 'review' },
+  { label: 'Community', value: 'community' },
+];
+
+const fmtDate = (d: Date) =>
+  d.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+
+const fmtDuration = (seconds: number) => {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return `${m}:${String(s).padStart(2, '0')}`;
+};
+
+const categoryValue = (category: string) => category.toLowerCase().replace(/\s+/g, '-');
+
+const ytThumb = (id: string) => `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
+
+const featuredTutorial = tutorials[0];
+const cardTutorials = tutorials.slice(1);
+---
+
+<!doctype html>
+<html lang='en'>
+  <head>
+    <meta charset='utf-8' />
+    <meta name='viewport' content='width=device-width, initial-scale=1' />
+    <SeoHead
+      kind='website'
+      title={seoTitle}
+      description={seoDescription}
+      pathname={Astro.url.pathname}
+    />
+  </head>
+  <body>
+    <div class='shell'>
+      <Topbar github={github} />
+      <Fragment set:html={headerHtml} />
+
+      <main class='tut-shell'>
+        <section class='tut-masthead'>
+          <div class='container'>
+            <h1 class='tut-title'>Tutorials</h1>
+            <p class='tut-sub'>
+              Watch Open Design from the inside — getting-started walkthroughs,
+              plugin tutorials, demos, and community deep-dives. Each video
+              plays in-page; the source link points back to the original
+              YouTube channel.
+            </p>
+          </div>
+        </section>
+
+        {
+          featuredTutorial && (
+            <section
+              class='tut-feature'
+              data-featured
+              data-category={categoryValue(featuredTutorial.data.category)}
+            >
+              <div class='container'>
+                <a
+                  class='tut-feature-card'
+                  href={`/tutorials/${featuredTutorial.id}/`}
+                  style={`--accent-index: 1;`}
+                >
+                  <span class='tut-feature-thumb'>
+                    <img
+                      src={featuredTutorial.data.thumbnail ?? ytThumb(featuredTutorial.data.youtubeId)}
+                      alt={`Thumbnail for ${featuredTutorial.data.title}`}
+                      loading='eager'
+                    />
+                    <span class='tut-play' aria-hidden='true'>▶</span>
+                    <span class='tut-duration-pill'>
+                      {fmtDuration(featuredTutorial.data.durationSeconds)}
+                    </span>
+                  </span>
+                  <span class='tut-feature-copy'>
+                    <span class='tut-card-cat'>
+                      {featuredTutorial.data.category}
+                      {featuredTutorial.data.official && (
+                        <span class='tut-badge-official'>Official</span>
+                      )}
+                    </span>
+                    <h2 class='tut-feature-title'>{featuredTutorial.data.title}</h2>
+                    <p class='tut-feature-summary'>{featuredTutorial.data.summary}</p>
+                    <span class='tut-feature-meta'>
+                      <span>{featuredTutorial.data.author}</span>
+                      <span>·</span>
+                      <span>{fmtDate(featuredTutorial.data.date)}</span>
+                      <span class='tut-feature-cta'>Watch →</span>
+                    </span>
+                  </span>
+                </a>
+              </div>
+            </section>
+          )
+        }
+
+        <section class='tut-categories'>
+          <div class='container'>
+            <div class='tut-category-strip' aria-label='Tutorial categories'>
+              {categoryChips.map((category, index) => (
+                <a
+                  class:list={['tut-chip', index === 0 && 'is-active']}
+                  href={category.value === 'all' ? '/tutorials/' : `/tutorials/?category=${category.value}`}
+                  data-category-filter={category.value}
+                >
+                  {category.label}
+                </a>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section class='tut-list'>
+          <div class='container'>
+            {
+              tutorials.length === 0 ? (
+                <p class='tut-empty'>
+                  No tutorials yet. We're curating the first batch — check back soon, or
+                  <a href='https://github.com/nexu-io/open-design/issues/new' target='_blank' rel='noreferrer noopener'>
+                    {' '}suggest a video
+                  </a>.
+                </p>
+              ) : cardTutorials.length === 0 ? null : (
+                <ol class='tut-grid'>
+                  {cardTutorials.map((entry, idx) => (
+                    <li
+                      class='tut-card'
+                      data-tut-item
+                      data-category={categoryValue(entry.data.category)}
+                    >
+                      <a
+                        class='tut-card-link'
+                        href={`/tutorials/${entry.id}/`}
+                        style={`--accent-index: ${idx + 2};`}
+                      >
+                        <span class='tut-card-thumb'>
+                          <img
+                            src={entry.data.thumbnail ?? ytThumb(entry.data.youtubeId)}
+                            alt={`Thumbnail for ${entry.data.title}`}
+                            loading='lazy'
+                          />
+                          <span class='tut-play' aria-hidden='true'>▶</span>
+                          <span class='tut-duration-pill'>
+                            {fmtDuration(entry.data.durationSeconds)}
+                          </span>
+                        </span>
+                        <span class='tut-card-body'>
+                          <span class='tut-card-cat'>
+                            {entry.data.category}
+                            {entry.data.official && (
+                              <span class='tut-badge-official'>Official</span>
+                            )}
+                          </span>
+                          <h2 class='tut-card-title'>{entry.data.title}</h2>
+                          <p class='tut-card-summary'>{entry.data.summary}</p>
+                          <span class='tut-card-foot'>
+                            <span class='tut-card-author'>{entry.data.author}</span>
+                            <span class='tut-card-date'>{fmtDate(entry.data.date)}</span>
+                            <span class='tut-card-cta'>Watch →</span>
+                          </span>
+                        </span>
+                      </a>
+                    </li>
+                  ))}
+                </ol>
+              )
+            }
+            <p class='tut-empty is-filter-empty' data-tut-empty hidden>
+              No tutorials in this category yet. More are on the way.
+            </p>
+          </div>
+        </section>
+      </main>
+      <SiteFooter counts={counts} />
+    </div>
+
+    <script is:inline>
+      (() => {
+        const normalize = (value) => (value || 'all').toLowerCase();
+        const params = new URLSearchParams(window.location.search);
+        const active = normalize(params.get('category'));
+        const filters = document.querySelectorAll('[data-category-filter]');
+        const items = document.querySelectorAll('[data-tut-item]');
+        const featured = document.querySelector('[data-featured]');
+        const empty = document.querySelector('[data-tut-empty]');
+
+        let visibleCount = 0;
+        for (const item of items) {
+          const matches =
+            active === 'all' || item.getAttribute('data-category') === active;
+          item.hidden = !matches;
+          if (matches) visibleCount += 1;
+        }
+        if (featured) {
+          const matches =
+            active === 'all' || featured.getAttribute('data-category') === active;
+          featured.hidden = !matches;
+          if (matches) visibleCount += 1;
+        }
+
+        for (const filter of filters) {
+          const isActive = filter.getAttribute('data-category-filter') === active;
+          filter.classList.toggle('is-active', isActive);
+          if (isActive) filter.setAttribute('aria-current', 'page');
+          else filter.removeAttribute('aria-current');
+        }
+
+        if (empty) empty.hidden = visibleCount !== 0;
+      })();
+    </script>
+    <HeaderEnhancer />
+
+    <style>
+      .tut-shell {
+        position: relative;
+        z-index: 2;
+      }
+      .tut-shell + .sub-footer {
+        margin-top: 0;
+      }
+      .tut-masthead {
+        padding: 24px 0 14px;
+        border-bottom: 1px solid var(--line-soft);
+      }
+      .tut-title {
+        font-family: var(--sans);
+        font-weight: 800;
+        letter-spacing: -0.028em;
+        font-size: clamp(46px, 5.4vw, 78px);
+        line-height: 0.94;
+        color: var(--ink);
+        margin: 0 0 8px;
+      }
+      .tut-sub {
+        font-family: var(--body);
+        font-size: 17px;
+        line-height: 1.48;
+        color: var(--ink-soft);
+        max-width: 64ch;
+        margin-bottom: 0;
+      }
+      .tut-categories {
+        padding: 12px 0 0;
+      }
+      .tut-category-strip {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin: 0 0 14px;
+      }
+      .tut-chip {
+        display: inline-flex;
+        align-items: center;
+        min-height: 34px;
+        padding: 8px 14px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        font-family: var(--sans);
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--ink-mute);
+        background: rgba(247, 241, 222, 0.38);
+        text-decoration: none;
+        transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+      }
+      .tut-chip:hover {
+        color: var(--ink);
+        border-color: rgba(21, 20, 15, 0.42);
+        background: rgba(247, 241, 222, 0.72);
+      }
+      .tut-chip.is-active {
+        color: var(--paper);
+        background: var(--ink);
+        border-color: var(--ink);
+      }
+      .tut-feature {
+        padding: 14px 0 16px;
+      }
+      .tut-feature-card {
+        display: grid;
+        grid-template-columns: minmax(0, 1.04fr) minmax(320px, 0.96fr);
+        min-height: 252px;
+        border: 1px solid var(--line);
+        background: var(--bone);
+        color: var(--ink);
+        text-decoration: none;
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+      .tut-feature-thumb,
+      .tut-card-thumb {
+        position: relative;
+        display: block;
+        overflow: hidden;
+        background: var(--bone);
+        border-bottom: 1px solid var(--line);
+      }
+      .tut-feature-thumb {
+        min-height: 252px;
+        height: clamp(232px, 25vw, 282px);
+        border-right: 1px solid var(--line);
+        border-bottom: 0;
+      }
+      .tut-card-thumb {
+        aspect-ratio: 16 / 9;
+        min-height: 0;
+      }
+      .tut-feature-thumb img,
+      .tut-card-thumb img {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: center;
+        filter: saturate(0.96) contrast(1.02);
+      }
+      .tut-feature-thumb::before,
+      .tut-card-thumb::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        pointer-events: none;
+        background-image: linear-gradient(
+          180deg,
+          rgba(247, 241, 222, 0.06),
+          rgba(21, 20, 15, 0.18)
+        );
+      }
+      .tut-play {
+        position: absolute;
+        z-index: 2;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        background: rgba(21, 20, 15, 0.78);
+        color: var(--paper);
+        font-size: 18px;
+        line-height: 56px;
+        text-align: center;
+        padding-left: 4px;
+        backdrop-filter: blur(2px);
+        transition: transform 180ms ease, background 180ms ease;
+      }
+      .tut-card-link:hover .tut-play,
+      .tut-feature-card:hover .tut-play {
+        background: var(--coral);
+        transform: translate(-50%, -50%) scale(1.05);
+      }
+      .tut-duration-pill {
+        position: absolute;
+        z-index: 2;
+        right: 12px;
+        bottom: 12px;
+        padding: 4px 8px;
+        border-radius: 3px;
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.06em;
+        background: rgba(21, 20, 15, 0.82);
+        color: var(--paper);
+      }
+      .tut-feature-copy {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 11px;
+        padding: 26px 36px;
+      }
+      .tut-feature-title {
+        font-family: var(--serif);
+        font-size: clamp(31px, 3vw, 43px);
+        font-weight: 500;
+        line-height: 1.06;
+        letter-spacing: -0.02em;
+        color: var(--ink);
+      }
+      .tut-feature-summary {
+        font-family: var(--body);
+        font-size: 15px;
+        line-height: 1.42;
+        color: var(--ink-mute);
+        max-width: 56ch;
+      }
+      .tut-feature-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        padding-top: 12px;
+        border-top: 1px solid var(--line-soft);
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.06em;
+        color: var(--ink-faint);
+      }
+      .tut-feature-cta {
+        margin-left: auto;
+        font-family: var(--sans);
+        font-size: 13px;
+        letter-spacing: 0;
+        color: var(--ink);
+      }
+      .tut-list {
+        padding: 4px 0 64px;
+      }
+      .tut-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 22px;
+        list-style: none;
+      }
+      .tut-card {
+        min-width: 0;
+      }
+      .tut-card-link {
+        display: flex;
+        flex-direction: column;
+        min-height: 100%;
+        border: 1px solid var(--line);
+        background: rgba(247, 241, 222, 0.46);
+        color: var(--ink);
+        text-decoration: none;
+        overflow: hidden;
+        transition: background 180ms ease, transform 180ms ease;
+      }
+      .tut-card-link:hover {
+        background: var(--paper-warm);
+        transform: translateY(-2px);
+      }
+      .tut-card-body {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        gap: 12px;
+        padding: 22px 24px;
+      }
+      .tut-card-cat {
+        font-family: var(--sans);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: var(--coral);
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .tut-card-cat::before {
+        content: '';
+        width: 18px;
+        height: 1px;
+        background: var(--coral);
+      }
+      .tut-badge-official {
+        margin-left: 2px;
+        padding: 2px 7px;
+        border: 1px solid var(--coral);
+        border-radius: 999px;
+        font-size: 9.5px;
+        letter-spacing: 0.16em;
+        color: var(--coral);
+      }
+      .tut-card-title {
+        font-family: var(--serif);
+        font-weight: 500;
+        font-size: clamp(22px, 1.8vw, 28px);
+        line-height: 1.16;
+        letter-spacing: -0.012em;
+        color: var(--ink);
+      }
+      .tut-card-summary {
+        font-family: var(--body);
+        font-size: 14.5px;
+        line-height: 1.55;
+        color: var(--ink-mute);
+      }
+      .tut-card-foot {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-top: auto;
+        padding-top: 16px;
+        border-top: 1px solid var(--line-soft);
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.06em;
+        color: var(--ink-faint);
+      }
+      .tut-card-cta {
+        margin-left: auto;
+        color: var(--ink);
+        font-family: var(--sans);
+        font-size: 13px;
+        letter-spacing: 0;
+      }
+      .tut-empty {
+        font-family: var(--body);
+        color: var(--ink-mute);
+        padding: 32px 0;
+      }
+      .tut-empty a {
+        color: var(--coral);
+        text-decoration: underline;
+        text-underline-offset: 3px;
+      }
+      .tut-empty.is-filter-empty {
+        border-top: 1px solid var(--line);
+      }
+      @media (max-width: 980px) {
+        .tut-feature-card {
+          grid-template-columns: 1fr;
+        }
+        .tut-feature-thumb {
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+          aspect-ratio: 16 / 9;
+          height: auto;
+        }
+        .tut-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+      @media (max-width: 760px) {
+        .tut-masthead {
+          padding: 22px 0 18px;
+        }
+        .tut-title {
+          font-size: clamp(42px, 13vw, 50px);
+          margin-bottom: 10px;
+        }
+        .tut-sub {
+          font-size: 15.5px;
+          line-height: 1.35;
+          margin-bottom: 12px;
+        }
+        .tut-feature-copy {
+          padding: 22px 20px;
+        }
+        .tut-feature-title {
+          font-size: clamp(25px, 7vw, 32px);
+        }
+        .tut-grid {
+          grid-template-columns: 1fr;
+        }
+        .tut-card-body {
+          padding: 20px 20px;
+        }
+      }
+    </style>
+  </body>
+</html>

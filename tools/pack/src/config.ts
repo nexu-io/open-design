@@ -10,9 +10,8 @@ import {
 import { resolveNamespace } from "@open-design/sidecar";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ENTRY_DIR_NAME = path.basename(__dirname);
 
-export const WORKSPACE_ROOT = resolve(__dirname, ENTRY_DIR_NAME === "dist" ? "../../.." : "../../..");
+export const WORKSPACE_ROOT = resolve(__dirname, "../../..");
 
 export type ToolPackPlatform = "mac" | "win" | "linux";
 export type ToolPackBuildOutput = "all" | "app" | "appimage" | "dir" | "dmg" | "nsis" | "zip";
@@ -38,6 +37,7 @@ export type ToolPackCliOptions = {
   signed?: boolean;
   silent?: boolean;
   to?: string;
+  updateAction?: string;
 };
 
 export type ToolPackRoots = {

@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { createServer } from 'node:net';
+import { extname } from 'node:path';
 import { promisify } from 'node:util';
 
 import { e2eWorkspaceRoot, type SmokeSuite } from './smoke-suite.ts';
@@ -7,6 +8,7 @@ import { e2eWorkspaceRoot, type SmokeSuite } from './smoke-suite.ts';
 const execFileAsync = promisify(execFile);
 const pnpmCommand = process.env.OD_E2E_PNPM_COMMAND ?? 'pnpm';
 const pnpmExecPath = process.env.npm_execpath;
+const nodeLoadablePackageManagerExtensions = new Set(['.js', '.cjs', '.mjs']);
 
 export type ToolsDevAppStatus = {
   pid?: number;
@@ -140,10 +142,13 @@ export async function readToolsDevLogs(suite: SmokeSuite): Promise<Record<string
 }
 
 async function runToolsDevJson<T>(suite: SmokeSuite, args: string[]): Promise<T> {
-  const command = process.env.OD_E2E_PNPM_COMMAND == null && pnpmExecPath
+  const useNpmExecPathWithNode = process.env.OD_E2E_PNPM_COMMAND == null
+    && pnpmExecPath != null
+    && nodeLoadablePackageManagerExtensions.has(extname(pnpmExecPath).toLowerCase());
+  const command = useNpmExecPathWithNode
     ? process.execPath
-    : pnpmCommand;
-  const commandArgs = command === process.execPath && process.env.OD_E2E_PNPM_COMMAND == null && pnpmExecPath
+    : (process.env.OD_E2E_PNPM_COMMAND == null && pnpmExecPath ? pnpmExecPath : pnpmCommand);
+  const commandArgs = useNpmExecPathWithNode
     ? [pnpmExecPath, 'tools-dev', ...args]
     : ['tools-dev', ...args];
   const { stdout } = await execFileAsync(command, commandArgs, {

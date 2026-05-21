@@ -50,7 +50,9 @@ namespace paths, and the packaged sidecar launcher passes daemon managed paths v
 own default fallback for non-packaged launches, but packaged runtime must not rely on fallback inference from Electron
 `userData`, app bundle names, or ports.
 
-Runtime updater integration remains a later phase.
+Packaged desktop can check the release metadata feed, download a verified mac DMG or Windows installer, and expose
+update actions through desktop IPC. This runtime updater phase still opens the downloaded installer for manual
+replacement instead of applying an in-place update.
 
 Electron-builder resources live under `tools/pack/resources/mac/`. The current logo is staged there as the mac icon/DMG
 placeholder so future design-provided assets can replace the resource files without changing packaging code.

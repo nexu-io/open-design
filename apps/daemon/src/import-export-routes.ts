@@ -7,7 +7,7 @@ import {
   type InlineAssetReader,
 } from './inline-assets.js';
 
-export interface RegisterImportRoutesDeps extends RouteDeps<'db' | 'http' | 'uploads' | 'node' | 'ids' | 'paths' | 'imports' | 'auth' | 'projectStore' | 'conversations' | 'projectFiles'> {}
+export interface RegisterImportRoutesDeps extends RouteDeps<'db' | 'http' | 'uploads' | 'node' | 'ids' | 'paths' | 'imports' | 'auth' | 'projectStore' | 'conversations' | 'projectFiles' | 'validation'> {}
 
 export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps) {
   const { db } = ctx;
@@ -24,9 +24,10 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
     pruneExpiredImportNonces,
     verifyDesktopImportToken,
   } = ctx.auth;
-  const { insertProject } = ctx.projectStore;
+  const { getProject, insertProject, updateProject } = ctx.projectStore;
   const { insertConversation } = ctx.conversations;
   const { setTabs } = ctx.projectFiles;
+  const { validateProjectDesignSystemId } = ctx.validation;
   app.post(
     '/api/import/claude-design',
     importUpload.single('file'),
@@ -92,6 +93,111 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
   // No copy, no shadow tree — the user owns the workspace and is
   // responsible for their own version control (git, time machine, etc.),
   // mirroring how Cursor / Claude Code / Aider behave.
+  // Replace an existing project's working directory in-place. Mirrors
+  // the same trust-gate, realpath, and data-dir checks as folder import,
+  // but updates metadata.baseDir on an existing project record.
+  app.post('/api/projects/:id/working-dir', async (req, res) => {
+    try {
+      const projectId = req.params.id;
+      const existing = getProject(db, projectId);
+      if (!existing) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      const { baseDir } = req.body || {};
+      if (typeof baseDir !== 'string' || !baseDir.trim()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'baseDir required');
+      }
+      let trustedPickerImport = false;
+      if (isDesktopAuthGateActive()) {
+        const secret = desktopAuthSecret();
+        if (secret == null) {
+          return sendApiError(
+            res,
+            503,
+            'DESKTOP_AUTH_PENDING',
+            'desktop auth required but secret not yet registered',
+            {
+              details: { hint: 'restart desktop or wait for sidecar registration' },
+              retryable: true,
+            },
+          );
+        }
+        const headerValue = req.get('x-od-desktop-import-token');
+        const token = typeof headerValue === 'string' ? headerValue : '';
+        const now = Date.now();
+        pruneExpiredImportNonces(now);
+        const verification = verifyDesktopImportToken(
+          secret,
+          baseDir,
+          token,
+          now,
+          consumedImportNonces,
+        );
+        if (!verification.ok) {
+          return sendApiError(
+            res,
+            403,
+            'FORBIDDEN',
+            'desktop import token rejected',
+            { details: { reason: verification.reason } },
+          );
+        }
+        consumedImportNonces.set(verification.nonce, verification.exp);
+        trustedPickerImport = true;
+      }
+
+      const trimmedInput = baseDir.trim();
+      if (!path.isAbsolute(path.normalize(trimmedInput))) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'baseDir must be absolute');
+      }
+      let normalizedPath: string;
+      try {
+        normalizedPath = await fs.promises.realpath(trimmedInput);
+      } catch {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'folder not found');
+      }
+      let dirStat;
+      try {
+        dirStat = await fs.promises.lstat(normalizedPath);
+      } catch {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'folder not found');
+      }
+      if (!dirStat.isDirectory()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'path must be a directory');
+      }
+      if (path.parse(normalizedPath).root === normalizedPath) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'cannot point at the filesystem root');
+      }
+      if (
+        normalizedPath === RUNTIME_DATA_DIR_CANONICAL ||
+        normalizedPath.startsWith(RUNTIME_DATA_DIR_CANONICAL + path.sep)
+      ) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'cannot point at the data directory');
+      }
+
+      const entryFile = await detectEntryFile(normalizedPath);
+      const existingMeta = existing.metadata ?? {};
+      const nextMeta = {
+        ...existingMeta,
+        kind: existingMeta.kind ?? 'prototype',
+        baseDir: normalizedPath,
+        importedFrom: 'folder' as const,
+        entryFile,
+        ...(trustedPickerImport ? { fromTrustedPicker: true as const } : {}),
+      };
+      const updated = updateProject(db, projectId, { metadata: nextMeta });
+      if (!updated) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      if (entryFile) setTabs(db, projectId, [entryFile], entryFile);
+      /** @type {import('@open-design/contracts').ReplaceProjectWorkingDirResponse} */
+      const body = { project: updated, baseDir: normalizedPath, entryFile };
+      res.json(body);
+    } catch (err: any) {
+      sendApiError(res, 400, 'BAD_REQUEST', String(err));
+    }
+  });
+
   app.post('/api/import/folder', async (req, res) => {
     try {
       const { baseDir, name, skillId, designSystemId } = req.body || {};
@@ -185,12 +291,21 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
           ? name.trim()
           : path.basename(normalizedPath);
       const entryFile = await detectEntryFile(normalizedPath);
+      const designSystemValidation = await validateProjectDesignSystemId(designSystemId);
+      if (!designSystemValidation.ok) {
+        return sendApiError(
+          res,
+          400,
+          designSystemValidation.code,
+          designSystemValidation.message,
+        );
+      }
 
       const project = insertProject(db, {
         id,
         name: projectName,
         skillId: skillId ?? null,
-        designSystemId: designSystemId ?? null,
+        designSystemId: designSystemValidation.id,
         pendingPrompt: null,
         metadata: {
           kind: 'prototype',
@@ -534,9 +649,16 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
   const { PROJECTS_DIR, DESIGN_SYSTEMS_DIR } = ctx.paths;
   const { getProject } = ctx.projectStore;
   const { isSafeId, validateExternalApiBaseUrl } = ctx.validation;
-  const { finalizeDesignPackage, FinalizePackageLockedError, FinalizeUpstreamError, redactSecrets } = ctx.finalize;
-  app.post('/api/projects/:id/finalize/anthropic', async (req, res) => {
-    const { apiKey, baseUrl, model, maxTokens } = req.body || {};
+  const {
+    defaultBaseUrlForFinalizeProtocol,
+    finalizeDesignPackage,
+    FinalizePackageLockedError,
+    FinalizeUpstreamError,
+    isFinalizeProviderProtocol,
+    redactSecrets,
+  } = ctx.finalize;
+  app.post('/api/projects/:id/finalize/:provider', async (req, res) => {
+    const { apiKey, baseUrl, model, maxTokens, apiVersion, protocol: bodyProtocol } = req.body || {};
     try {
       // Centralized path-traversal guard. `isSafeId` (apps/daemon/src/projects.ts)
       // rejects pure-dot ids (`.`, `..`, etc.) which would otherwise pass
@@ -548,28 +670,49 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
         return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project id');
       }
 
+      const protocol = req.params.provider;
+      if (!isFinalizeProviderProtocol(protocol)) {
+        return sendApiError(
+          res,
+          400,
+          'BAD_REQUEST',
+          'provider must be one of anthropic|openai|azure|google|ollama',
+        );
+      }
+      if (bodyProtocol !== undefined && bodyProtocol !== protocol) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'body protocol must match route provider');
+      }
+
       if (typeof apiKey !== 'string' || !apiKey.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'apiKey is required');
       }
       if (typeof model !== 'string' || !model.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'model is required');
       }
+      let effectiveBaseUrl = defaultBaseUrlForFinalizeProtocol(protocol);
       if (baseUrl !== undefined) {
         if (typeof baseUrl !== 'string' || !baseUrl.trim()) {
           return sendApiError(res, 400, 'BAD_REQUEST', 'baseUrl must be a non-empty string when provided');
         }
-        const validated = await validateExternalApiBaseUrl(baseUrl);
-        if (validated.error) {
-          return sendApiError(
-            res,
-            validated.forbidden ? 403 : 400,
-            validated.forbidden ? 'FORBIDDEN' : 'BAD_REQUEST',
-            validated.error,
-          );
-        }
+        effectiveBaseUrl = baseUrl.trim();
+      }
+      if (!effectiveBaseUrl) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'baseUrl is required for this provider');
+      }
+      const validated = await validateExternalApiBaseUrl(effectiveBaseUrl);
+      if (validated.error) {
+        return sendApiError(
+          res,
+          validated.forbidden ? 403 : 400,
+          validated.forbidden ? 'FORBIDDEN' : 'BAD_REQUEST',
+          validated.error,
+        );
       }
       if (maxTokens !== undefined && (typeof maxTokens !== 'number' || maxTokens <= 0)) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'maxTokens must be a positive number when provided');
+      }
+      if (apiVersion !== undefined && typeof apiVersion !== 'string') {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'apiVersion must be a string when provided');
       }
 
       const project = getProject(db, req.params.id);
@@ -590,7 +733,17 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
           PROJECTS_DIR,
           DESIGN_SYSTEMS_DIR,
           req.params.id,
-          { apiKey, baseUrl, model, maxTokens, signal: finalizeAbort.signal },
+          {
+            protocol,
+            apiKey,
+            baseUrl: effectiveBaseUrl,
+            model,
+            maxTokens,
+            ...(typeof apiVersion === 'string' && apiVersion.trim()
+              ? { apiVersion: apiVersion.trim() }
+              : {}),
+            signal: finalizeAbort.signal,
+          },
         );
       } finally {
         res.off('close', abortFromRequest);
@@ -604,9 +757,9 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
         return sendApiError(res, 409, 'CONFLICT', err.message);
       }
 
-      // Upstream Anthropic error - status-aware mapping using shared
+      // Upstream provider error - status-aware mapping using shared
       // ApiErrorCode values. Run the raw upstream body through
-      // redactSecrets so the API key cannot leak even if Anthropic
+      // redactSecrets so the API key cannot leak even if the provider
       // echoes the inbound headers. Codes per @lefarcen P2 on PR #832:
       // 401 -> UNAUTHORIZED, 429 -> RATE_LIMITED, others -> UPSTREAM_UNAVAILABLE.
       if (err instanceof FinalizeUpstreamError) {
@@ -635,7 +788,7 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
       // Log via console.error per the daemon convention; client sees a
       // generic 500 with the shared INTERNAL_ERROR code. Run the message
       // through redactSecrets defensively.
-      console.error('[finalize/anthropic]', err);
+      console.error('[finalize]', err);
       const safeMsg = redactSecrets(String(err?.message || err), [apiKey]);
       return sendApiError(res, 500, 'INTERNAL_ERROR', safeMsg);
     }

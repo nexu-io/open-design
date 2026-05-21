@@ -13,7 +13,7 @@ export type WinInstallIdentity = {
 };
 
 function isChannelNamespace(namespace: string, channel: "beta" | "preview"): boolean {
-  return new RegExp(`(^|[-_.])${channel}($|[-_.])`, "i").test(namespace);
+  return namespace.toLowerCase() === `release-${channel}-win`;
 }
 
 function sanitizeNamespace(value: string): string {

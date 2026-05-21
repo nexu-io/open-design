@@ -9,6 +9,7 @@
  * scan-friendly for both humans and search engines.
  */
 import Layout from '../../_components/sub-page-layout.astro';
+import LazyImg from '../../_components/lazy-img.astro';
 import { getSkillRecords, type SkillRecord } from '../../_lib/catalog';
 
 export async function getStaticPaths() {
@@ -92,7 +93,11 @@ const jsonLd = [
 
     {skill.previewUrl && (
       <figure class="detail-preview">
-        <img src={skill.previewUrl} alt={`${skill.name} example output`} loading="lazy" decoding="async" />
+        <LazyImg
+          src={skill.previewUrl}
+          alt={`${skill.name} example output`}
+          loading="priority"
+        />
         <figcaption>
           Rendered from <code>skills/{skill.slug}/example.html</code>
         </figcaption>

@@ -104,6 +104,7 @@ export async function ensurePackagedNamespacePaths(
     mkdir(paths.logsRoot, { recursive: true }),
     mkdir(paths.desktopLogsRoot, { recursive: true }),
     mkdir(paths.runtimeRoot, { recursive: true }),
+    mkdir(paths.updateRoot, { recursive: true }),
     mkdir(paths.electronUserDataRoot, { recursive: true }),
     mkdir(paths.electronSessionDataRoot, { recursive: true }),
   ]);

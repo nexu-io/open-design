@@ -21,8 +21,8 @@
   },
   "devDependencies": {
     "@types/node": "24.12.2",
-    "esbuild": "0.27.7",
-    "vitest": "^2.1.8",
+    "esbuild": "0.28.0",
+    "vitest": "4.1.6",
     "typescript": "6.0.3"
   },
   "engines": {

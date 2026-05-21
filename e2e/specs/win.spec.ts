@@ -1,8 +1,9 @@
 // @vitest-environment node
 
-import { execFile } from 'node:child_process';
+import { execFile, spawn, type ChildProcessByStdio } from 'node:child_process';
 import { mkdir, readFile, stat } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
+import type { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
@@ -16,13 +17,36 @@ const workspaceRoot = dirname(e2eRoot);
 const toolsPackDir = resolveFromWorkspace(process.env.OD_PACKAGED_E2E_TOOLS_PACK_DIR ?? '.tmp/tools-pack');
 const namespace = process.env.OD_PACKAGED_E2E_NAMESPACE ?? 'release-beta-win';
 const toolsPackBin = join(workspaceRoot, 'tools', 'pack', 'bin', 'tools-pack.mjs');
+const toolsServeBin = join(workspaceRoot, 'tools', 'serve', 'bin', 'tools-serve.mjs');
 const maxInstallDurationMs = Number.parseInt(process.env.OD_PACKAGED_E2E_WIN_MAX_INSTALL_MS ?? '120000', 10);
+const verifyReinstallWhileRunning = process.env.OD_PACKAGED_E2E_WIN_VERIFY_REINSTALL !== '0';
 const installIdentity = resolveInstallIdentity(namespace);
 
 const outputNamespaceRoot = join(toolsPackDir, 'out', 'win', 'namespaces', namespace);
 const runtimeNamespaceRoot = join(toolsPackDir, 'runtime', 'win', 'namespaces', namespace);
 const screenshotPath = join(toolsPackDir, 'screenshots', `${namespace}.png`);
 const healthExpression = "fetch('/api/health').then(async response => ({ health: await response.json(), href: location.href, status: response.status, title: document.title }))";
+const updaterPopupExpression = `
+  (() => {
+    const popup = document.querySelector('[data-testid="updater-popup"]');
+    const button = document.querySelector('[data-testid="updater-install-button"]');
+    return {
+      installButtonVisible: button instanceof HTMLButtonElement && !button.disabled,
+      text: popup?.textContent?.trim() ?? null,
+      title: popup?.querySelector('h2')?.textContent?.trim() ?? null,
+      visible: popup instanceof HTMLElement,
+    };
+  })()
+`;
+const clickUpdaterInstallExpression = `
+  (() => {
+    const button = document.querySelector('[data-testid="updater-install-button"]');
+    if (!(button instanceof HTMLButtonElement)) return { clicked: false, reason: 'missing-install-button' };
+    if (button.disabled) return { clicked: false, reason: 'install-button-disabled' };
+    button.click();
+    return { clicked: true };
+  })()
+`;
 
 type DesktopStatus = {
   state?: string;
@@ -96,6 +120,21 @@ type WinInspectResult = {
     path: string;
   };
   status: DesktopStatus | null;
+  update?: {
+    availableVersion?: string;
+    channel?: string;
+    currentVersion?: string;
+    downloadPath?: string;
+    error?: {
+      code: string;
+      message: string;
+    };
+    installResult?: {
+      dryRun?: boolean;
+      path: string;
+    };
+    state: string;
+  };
 };
 
 type LogsResult = {
@@ -130,6 +169,26 @@ type DirectInstallerResult = {
   nsisLogTail: string[];
 };
 
+type UpdaterFixtureProcess = {
+  close: () => Promise<void>;
+  info: {
+    metadataUrl: string;
+    version: string;
+  };
+};
+
+type UpdaterPopupEvalValue = {
+  installButtonVisible: boolean;
+  text: string | null;
+  title: string | null;
+  visible: boolean;
+};
+
+type UpdaterClickEvalValue = {
+  clicked: boolean;
+  reason?: string;
+};
+
 const shouldRunPackagedWinSmoke = process.platform === 'win32' && process.env.OD_PACKAGED_E2E_WIN === '1';
 const winDescribe = shouldRunPackagedWinSmoke ? describe : describe.skip;
 
@@ -139,6 +198,8 @@ winDescribe('packaged windows runtime smoke', () => {
 
   test('installs, starts, inspects with eval and screenshot, stops, and uninstalls the built windows artifact', async () => {
     const report = await createPackagedSmokeReport('win');
+    const updateEnv = captureUpdateEnv();
+    let updaterFixture: UpdaterFixtureProcess | null = null;
     let passed = false;
     const timings: SmokeTiming[] = [];
     try {
@@ -177,6 +238,13 @@ winDescribe('packaged windows runtime smoke', () => {
         );
       }
 
+      updaterFixture = await startUpdaterFixtureProcess();
+      process.env.OD_UPDATE_ENABLED = '1';
+      process.env.OD_UPDATE_METADATA_URL = updaterFixture.info.metadataUrl;
+      process.env.OD_UPDATE_CURRENT_VERSION = '99.0.0-beta.0';
+      process.env.OD_UPDATE_OPEN_DRY_RUN = '1';
+      process.env.OD_UPDATE_AUTO_CHECK = '1';
+
       let start = await measureSmokeStep(timings, 'start', async () => runToolsPackJson<WinStartResult>('start'));
       started = true;
 
@@ -196,26 +264,56 @@ winDescribe('packaged windows runtime smoke', () => {
       expect(value.health.ok).toBe(true);
       expect(value.health.version).toEqual(expect.any(String));
 
-      const reinstall = await measureSmokeStep(timings, 'direct reinstall while running', async () =>
-        runDirectInstaller(install.installerPath, install.installDir),
-      );
-      started = false;
-      expect(reinstall.code).toBe(0);
-      expect(reinstall.nsisLogTail.join('\n')).toContain('running instances detected before silent install');
-      expect(reinstall.nsisLogTail.join('\n')).toContain('running instances close exit=0');
+      const popup = await measureSmokeStep(timings, 'wait updater popup', async () => waitForUpdaterPopup());
+      expect(popup.visible).toBe(true);
+      expect(popup.title).toBe('Update ready');
+      expect(popup.installButtonVisible).toBe(true);
+      expect(popup.text ?? '').toContain(updaterFixture.info.version);
 
-      start = await measureSmokeStep(timings, 'restart after direct reinstall', async () =>
-        runToolsPackJson<WinStartResult>('start'),
+      const updateStatus = await measureSmokeStep(timings, 'inspect updater status', async () =>
+        runToolsPackJson<WinInspectResult>('inspect', ['--update-action', 'status']),
       );
-      started = true;
-      expect(start.namespace).toBe(namespace);
-      expect(start.source).toBe('installed');
-      expectPathInside(start.executablePath, install.installDir);
+      expect(updateStatus.update?.state).toBe('downloaded');
+      expect(updateStatus.update?.channel).toBe('beta');
+      expect(updateStatus.update?.currentVersion).toBe('99.0.0-beta.0');
+      expect(updateStatus.update?.availableVersion).toBe(updaterFixture.info.version);
+      expectPathInside(updateStatus.update?.downloadPath ?? '', join(runtimeNamespaceRoot, 'updates'));
 
-      const postReinstallInspect = await measureSmokeStep(timings, 'wait healthy inspect after reinstall', async () =>
-        waitForHealthyDesktop(),
+      const clickInstall = await measureSmokeStep(timings, 'click updater installer', async () =>
+        runToolsPackJson<WinInspectResult>('inspect', ['--expr', clickUpdaterInstallExpression]),
       );
-      expect(postReinstallInspect.status?.state).toBe('running');
+      const clickValue = assertUpdaterClickEvalValue(clickInstall.eval?.value);
+      expect(clickValue.clicked).toBe(true);
+      const updateInstall = await measureSmokeStep(timings, 'wait updater installer opened', async () =>
+        waitForUpdaterInstallerOpened(),
+      );
+      expect(updateInstall.update?.state).toBe('downloaded');
+      expect(updateInstall.update?.installResult?.dryRun).toBe(true);
+      expectPathInside(updateInstall.update?.installResult?.path ?? '', join(runtimeNamespaceRoot, 'updates'));
+
+      let reinstall: DirectInstallerResult | { skipped: true } = { skipped: true };
+      if (verifyReinstallWhileRunning) {
+        reinstall = await measureSmokeStep(timings, 'direct reinstall while running', async () =>
+          runDirectInstaller(install.installerPath, install.installDir),
+        );
+        started = false;
+        expect(reinstall.code).toBe(0);
+        expect(reinstall.nsisLogTail.join('\n')).toContain('running instances detected before silent install');
+        expect(reinstall.nsisLogTail.join('\n')).toContain('running instances close exit=0');
+
+        start = await measureSmokeStep(timings, 'restart after direct reinstall', async () =>
+          runToolsPackJson<WinStartResult>('start'),
+        );
+        started = true;
+        expect(start.namespace).toBe(namespace);
+        expect(start.source).toBe('installed');
+        expectPathInside(start.executablePath, install.installDir);
+
+        const postReinstallInspect = await measureSmokeStep(timings, 'wait healthy inspect after reinstall', async () =>
+          waitForHealthyDesktop(),
+        );
+        expect(postReinstallInspect.status?.state).toBe('running');
+      }
 
       await mkdir(dirname(screenshotPath), { recursive: true });
       const screenshot = await measureSmokeStep(timings, 'inspect screenshot', async () =>
@@ -273,9 +371,18 @@ winDescribe('packaged windows runtime smoke', () => {
         stop,
         timings,
         uninstall,
+        update: {
+          install: updateInstall.update,
+          popup,
+          status: updateStatus.update,
+        },
       });
       passed = true;
     } finally {
+      restoreUpdateEnv(updateEnv);
+      await updaterFixture?.close().catch((error: unknown) => {
+        console.error('failed to close updater fixture', error);
+      });
       if (!passed) {
         await printPackagedLogs().catch((error: unknown) => {
           console.error('failed to read packaged windows logs after failure', error);
@@ -358,6 +465,86 @@ async function runToolsPackJson<T>(action: string, extraArgs: string[] = []): Pr
   }
 }
 
+const UPDATE_ENV_KEYS = [
+  'OD_UPDATE_AUTO_CHECK',
+  'OD_UPDATE_ENABLED',
+  'OD_UPDATE_METADATA_URL',
+  'OD_UPDATE_CURRENT_VERSION',
+  'OD_UPDATE_OPEN_DRY_RUN',
+] as const;
+
+function captureUpdateEnv(): Partial<Record<(typeof UPDATE_ENV_KEYS)[number], string>> {
+  return Object.fromEntries(
+    UPDATE_ENV_KEYS
+      .map((key) => [key, process.env[key]] as const)
+      .filter((entry): entry is readonly [(typeof UPDATE_ENV_KEYS)[number], string] => entry[1] != null),
+  );
+}
+
+function restoreUpdateEnv(previous: Partial<Record<(typeof UPDATE_ENV_KEYS)[number], string>>): void {
+  for (const key of UPDATE_ENV_KEYS) {
+    if (previous[key] == null) delete process.env[key];
+    else process.env[key] = previous[key];
+  }
+}
+
+async function startUpdaterFixtureProcess(): Promise<UpdaterFixtureProcess> {
+  const child = spawn(
+    process.execPath,
+    [toolsServeBin, 'start', 'updater', '--json', '--channel', 'beta', '--version', '99.0.0-beta.1', '--platform', 'win'],
+    {
+      cwd: workspaceRoot,
+      env: process.env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  );
+  const info = await readUpdaterFixtureInfo(child);
+  return {
+    async close() {
+      if (child.exitCode != null) return;
+      child.kill('SIGTERM');
+      await new Promise<void>((resolveClose) => {
+        child.once('exit', () => resolveClose());
+        setTimeout(resolveClose, 2000).unref();
+      });
+    },
+    info,
+  };
+}
+
+async function readUpdaterFixtureInfo(child: ChildProcessByStdio<null, Readable, Readable>): Promise<UpdaterFixtureProcess['info']> {
+  let stdout = '';
+  let stderr = '';
+  return await new Promise<UpdaterFixtureProcess['info']>((resolveInfo, rejectInfo) => {
+    const timeout = setTimeout(() => {
+      rejectInfo(new Error(`tools-serve updater did not report metadata in time\nstdout:\n${stdout}\nstderr:\n${stderr}`));
+    }, 10_000);
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString();
+      const line = stdout.split('\n').find((entry) => entry.trim().startsWith('{'));
+      if (line == null) return;
+      clearTimeout(timeout);
+      try {
+        const parsed = JSON.parse(line) as UpdaterFixtureProcess['info'];
+        resolveInfo(parsed);
+      } catch (error) {
+        rejectInfo(error);
+      }
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.once('exit', (code, signal) => {
+      clearTimeout(timeout);
+      rejectInfo(new Error(`tools-serve updater exited before ready (code=${code}, signal=${signal ?? 'none'})\nstderr:\n${stderr}`));
+    });
+    child.once('error', (error) => {
+      clearTimeout(timeout);
+      rejectInfo(error);
+    });
+  });
+}
+
 async function runDirectInstaller(installerPath: string, installDir: string): Promise<DirectInstallerResult> {
   const previousLogLines = await readNsisLogLines();
   const error = await execFileAsync(installerPath, ['/S', `/D=${installDir}`], {
@@ -403,6 +590,47 @@ async function waitForHealthyDesktop(): Promise<WinInspectResult> {
   }
 
   throw new Error(`packaged windows runtime did not become healthy: ${formatUnknown(lastResult)}`);
+}
+
+async function waitForUpdaterPopup(): Promise<UpdaterPopupEvalValue> {
+  const timeoutMs = 90_000;
+  const startedAt = Date.now();
+  let lastResult: unknown = null;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const inspect = await runToolsPackJson<WinInspectResult>('inspect', ['--expr', updaterPopupExpression]);
+      lastResult = inspect;
+      if (inspect.status?.state === 'running' && inspect.eval?.ok === true) {
+        const value = asUpdaterPopupEvalValue(inspect.eval.value);
+        if (value?.visible === true && value.installButtonVisible === true) return value;
+      }
+    } catch (error) {
+      lastResult = error;
+    }
+    await delay(1000);
+  }
+
+  throw new Error(`packaged windows updater popup did not appear: ${formatUnknown(lastResult)}`);
+}
+
+async function waitForUpdaterInstallerOpened(): Promise<WinInspectResult> {
+  const timeoutMs = 60_000;
+  const startedAt = Date.now();
+  let lastResult: unknown = null;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const inspect = await runToolsPackJson<WinInspectResult>('inspect', ['--update-action', 'status']);
+      lastResult = inspect;
+      if (inspect.update?.installResult?.path != null) return inspect;
+    } catch (error) {
+      lastResult = error;
+    }
+    await delay(1000);
+  }
+
+  throw new Error(`packaged windows updater did not observe installer open: ${formatUnknown(lastResult)}`);
 }
 
 function assertLogPathsAndContent(result: LogsResult): void {
@@ -451,11 +679,35 @@ function assertHealthEvalValue(value: unknown): HealthEvalValue {
   return normalized;
 }
 
+function assertUpdaterClickEvalValue(value: unknown): UpdaterClickEvalValue {
+  const normalized = asUpdaterClickEvalValue(value);
+  if (normalized == null) {
+    throw new Error(`unexpected updater click eval value: ${formatUnknown(value)}`);
+  }
+  return normalized;
+}
+
 function asHealthEvalValue(value: unknown): HealthEvalValue | null {
   if (!isRecord(value)) return null;
   if (typeof value.href !== 'string' || typeof value.status !== 'number' || typeof value.title !== 'string') return null;
   if (!isRecord(value.health)) return null;
   return value as HealthEvalValue;
+}
+
+function asUpdaterPopupEvalValue(value: unknown): UpdaterPopupEvalValue | null {
+  if (!isRecord(value)) return null;
+  if (typeof value.visible !== 'boolean') return null;
+  if (typeof value.installButtonVisible !== 'boolean') return null;
+  if (value.title != null && typeof value.title !== 'string') return null;
+  if (value.text != null && typeof value.text !== 'string') return null;
+  return value as UpdaterPopupEvalValue;
+}
+
+function asUpdaterClickEvalValue(value: unknown): UpdaterClickEvalValue | null {
+  if (!isRecord(value)) return null;
+  if (typeof value.clicked !== 'boolean') return null;
+  if (value.reason != null && typeof value.reason !== 'string') return null;
+  return value as UpdaterClickEvalValue;
 }
 
 function expectPathInside(filePath: string, expectedRoot: string): void {

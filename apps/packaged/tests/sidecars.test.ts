@@ -163,6 +163,7 @@ describe('buildPackagedDaemonSpawnEnv', () => {
       namespaceRoot: '/tmp/od-pkg',
       resourceRoot: '/tmp/od-pkg/resources',
       runtimeRoot: '/tmp/od-pkg/runtime',
+      updateRoot: '/tmp/od-pkg/updates',
       webIdentityPath: '/tmp/od-pkg/runtime/web-root.json',
     };
   }

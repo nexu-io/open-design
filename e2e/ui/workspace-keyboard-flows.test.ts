@@ -194,6 +194,7 @@ test('quick switcher still activates another file after the project reloads', as
   await gotoEntryHome(page);
   await createProject(page, 'Quick switcher after reload');
   await expectWorkspaceReady(page);
+  const projectId = currentProjectId(page);
 
   await uploadTinyPng(page, 'reload-alpha.png');
   await uploadTinyPng(page, 'reload-beta.png');
@@ -220,12 +221,14 @@ test('quick switcher still activates another file after the project reloads', as
   await expect(quickSwitcher).toBeHidden();
   await expect(betaTab).toHaveAttribute('aria-selected', 'true');
   await expect(alphaTab).toHaveAttribute('aria-selected', 'false');
+  await expectProjectFilesToIncludeSuffixes(page, projectId, ['reload-alpha.png', 'reload-beta.png']);
 });
 
 test('quick switcher only lists files from the active project after switching projects', async ({ page }) => {
   await gotoEntryHome(page);
   await createProject(page, 'Quick switcher Project Alpha');
   await expectWorkspaceReady(page);
+  const alphaProjectId = currentProjectId(page);
 
   await uploadTinyPng(page, 'alpha-project-file.png');
   await uploadTinyPng(page, 'alpha-project-secondary.png');
@@ -234,6 +237,7 @@ test('quick switcher only lists files from the active project after switching pr
 
   await createProject(page, 'Quick switcher Project Beta');
   await expectWorkspaceReady(page);
+  const betaProjectId = currentProjectId(page);
 
   await uploadTinyPng(page, 'beta-project-file.png');
   await uploadTinyPng(page, 'beta-project-secondary.png');
@@ -248,6 +252,8 @@ test('quick switcher only lists files from the active project after switching pr
   await expect(page.getByRole('option', { name: /beta-project-secondary\.png/i })).toBeVisible();
   await expect(page.getByRole('option', { name: /alpha-project-file\.png/i })).toHaveCount(0);
   await expect(page.getByRole('option', { name: /alpha-project-secondary\.png/i })).toHaveCount(0);
+  await expectProjectFilesToIncludeSuffixes(page, betaProjectId, ['beta-project-file.png', 'beta-project-secondary.png']);
+  await expectProjectFilesToIncludeSuffixes(page, alphaProjectId, ['alpha-project-file.png', 'alpha-project-secondary.png']);
 
   await quickSwitcherInput.press('Escape');
   await expect(quickSwitcher).toBeHidden();
@@ -397,6 +403,7 @@ test('quick switcher can restore a generated artifact tab after reload in a mixe
   await gotoEntryHome(page);
   await createProject(page, 'Quick switcher mixed reload');
   await expectWorkspaceReady(page);
+  const projectId = currentProjectId(page);
 
   await sendPrompt(page, 'Create a reload-mixed artifact');
   const artifactTab = page.getByRole('tab', { name: /reload-mixed-artifact\.html/i });
@@ -430,6 +437,7 @@ test('quick switcher can restore a generated artifact tab after reload in a mixe
       name: 'Reload Mixed Artifact',
     }),
   ).toBeVisible();
+  await expectProjectFilesToIncludeSuffixes(page, projectId, ['reload-mixed-artifact.html', 'reload-mixed-file.png']);
 });
 
 async function createProject(
@@ -443,7 +451,8 @@ async function createProject(
 }
 
 async function gotoEntryHome(page: Page) {
-  await page.goto('/');
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await page.getByText('Loading Open Design…').waitFor({ state: 'detached', timeout: 10_000 }).catch(() => {});
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
   if (await privacyDialog.isVisible().catch(() => false)) {
     await privacyDialog.getByRole('button', { name: /not now/i }).click();
@@ -455,6 +464,7 @@ async function gotoEntryHome(page: Page) {
 
 async function openNewProjectModal(page: Page) {
   await page.getByTestId('entry-nav-new-project').click();
+  await expect(page.getByTestId('new-project-modal')).toBeVisible();
   await expect(page.getByTestId('new-project-panel')).toBeVisible();
 }
 
@@ -487,6 +497,26 @@ async function uploadTinyPng(
     buffer: pngBytes,
   });
   await expect(tabBySuffix(page, name)).toBeVisible();
+}
+
+async function listProjectFiles(page: Page, projectId: string) {
+  const response = await page.request.get(`/api/projects/${projectId}/files`);
+  expect(response.ok()).toBeTruthy();
+  const body = (await response.json()) as { files: Array<{ name: string }> };
+  return body.files;
+}
+
+async function expectProjectFilesToIncludeSuffixes(
+  page: Page,
+  projectId: string,
+  suffixes: string[],
+) {
+  await expect
+    .poll(async () => {
+      const names = (await listProjectFiles(page, projectId)).map((file) => file.name);
+      return suffixes.every((suffix) => names.some((name) => name.endsWith(suffix)));
+    })
+    .toBe(true);
 }
 
 async function readChatPanelWidth(handle: Locator): Promise<number> {
@@ -541,6 +571,13 @@ async function sendPrompt(
 
 function tabBySuffix(page: Page, name: string): Locator {
   return page.getByRole('tab', { name: new RegExp(`${escapeRegExp(name)}$`, 'i') });
+}
+
+function currentProjectId(page: Page): string {
+  const url = new URL(page.url());
+  const [, projectId] = url.pathname.match(/\/projects\/([^/]+)/) ?? [];
+  expect(projectId).toBeTruthy();
+  return projectId!;
 }
 
 function selectedBaseName(selectionText: string | null): string {

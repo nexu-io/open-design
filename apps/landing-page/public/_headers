@@ -1,0 +1,63 @@
+# Cloudflare Pages custom headers.
+# https://developers.cloudflare.com/pages/configuration/headers/
+#
+# Why this file exists:
+#   Without it CF Pages serves HTML with `cache-control: public, max-age=0,
+#   must-revalidate` AND `cf-cache-status: DYNAMIC` — i.e. every HTML request
+#   roundtrips to the Pages origin. TTFB observed from a Seattle POP is
+#   650–900ms; Asia-Pacific users pay an additional ~200–400ms RTT.
+#
+# How edge caching here works:
+#   - `max-age=0, must-revalidate`        → browser always revalidates.
+#   - `s-maxage=3600`                     → Cloudflare edge caches HTML 1h.
+#   - `stale-while-revalidate=86400`      → if edge copy is stale, serve it
+#                                           immediately and revalidate async.
+#   Because CF Pages auto-purges the deployment on every successful build,
+#   users see new content within seconds of deploy. The 1h s-maxage is the
+#   ceiling that only matters when content is changed *without* a deploy
+#   (rare; usually impossible for this static site).
+
+# HTML pages (Astro emits `<route>/index.html`; CF Pages serves them at
+# either `<route>/` or `<route>/index.html`).
+/
+  Cache-Control: public, max-age=0, s-maxage=3600, stale-while-revalidate=86400, must-revalidate
+
+/*/
+  Cache-Control: public, max-age=0, s-maxage=3600, stale-while-revalidate=86400, must-revalidate
+
+/*.html
+  Cache-Control: public, max-age=0, s-maxage=3600, stale-while-revalidate=86400, must-revalidate
+
+# Astro hash-named bundles (e.g. `globals.CnvQ8Wom.css`). Content-addressed
+# so they can be cached forever; a new build emits new filenames.
+/_astro/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# RSS / sitemap / robots — small, refresh on deploy.
+/blog/rss.xml
+  Cache-Control: public, max-age=0, s-maxage=3600, stale-while-revalidate=86400, must-revalidate
+
+/sitemap-index.xml
+  Cache-Control: public, max-age=0, s-maxage=3600, stale-while-revalidate=86400, must-revalidate
+
+/sitemap-*.xml
+  Cache-Control: public, max-age=0, s-maxage=3600, stale-while-revalidate=86400, must-revalidate
+
+/robots.txt
+  Cache-Control: public, max-age=3600
+
+/llms.txt
+  Cache-Control: public, max-age=3600
+
+# Static assets in public/. Filenames don't carry a content hash, so we use
+# a moderate browser TTL and rely on edge purge from CF Pages on deploy.
+/favicon.png
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+/apple-touch-icon.png
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+/logo.webp
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+
+# Share function records a click and 302s — must not be cached.
+/share/*
+  Cache-Control: no-store

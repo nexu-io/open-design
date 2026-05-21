@@ -77,15 +77,15 @@ describe('palette bridge — CSS custom properties (#1393)', () => {
     expect(win.document.documentElement.style.getPropertyValue('--bg')).toBe('');
   });
 
-  it('walks @media-nested :root rules so dark-mode palette variables are also shifted', async () => {
+  it('walks @media-nested :root rules so media-scoped palette variables are also shifted', async () => {
     const { win } = setupPaletteDom(
-      '<style>@media (prefers-color-scheme: dark) { :root { --bg-dark: #00aaff; } }</style>',
+      '<style>@media all { :root { --bg-media: #00aaff; } }</style>',
       '<main>Hero</main>',
     );
 
     await postPalette(win, 'coral');
 
-    const override = win.document.documentElement.style.getPropertyValue('--bg-dark');
+    const override = win.document.documentElement.style.getPropertyValue('--bg-media');
     expect(override).not.toBe('');
     expect(override).toMatch(/^rgb\(/);
     expect(override).not.toBe('rgb(0, 170, 255)');

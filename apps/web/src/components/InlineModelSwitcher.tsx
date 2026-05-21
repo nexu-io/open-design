@@ -129,10 +129,15 @@ export function InlineModelSwitcher({
       : config.model.trim() || t('inlineSwitcher.modelDefault');
 
   return (
-    <div className="inline-switcher" ref={wrapRef}>
+    <div
+      className="inline-switcher"
+      ref={wrapRef}
+      data-testid="inline-model-switcher"
+    >
       <button
         type="button"
         className="inline-switcher__chip"
+        data-testid="inline-model-switcher-chip"
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
@@ -166,7 +171,11 @@ export function InlineModelSwitcher({
       </button>
 
       {open ? (
-        <div className="inline-switcher__popover" role="menu">
+        <div
+          className="inline-switcher__popover"
+          role="menu"
+          data-testid="inline-model-switcher-popover"
+        >
           <div className="inline-switcher__row">
             <span className="inline-switcher__label">
               {t('inlineSwitcher.modeLabel')}
@@ -180,6 +189,7 @@ export function InlineModelSwitcher({
                   'inline-switcher__seg-btn' +
                   (config.mode === 'daemon' ? ' is-active' : '')
                 }
+                data-testid="inline-model-switcher-mode-daemon"
                 disabled={!daemonLive && config.mode !== 'daemon'}
                 onClick={() => {
                   // Optional-call so a transient Fast Refresh state where a
@@ -208,6 +218,7 @@ export function InlineModelSwitcher({
                   'inline-switcher__seg-btn' +
                   (config.mode === 'api' ? ' is-active' : '')
                 }
+                data-testid="inline-model-switcher-mode-api"
                 onClick={() => onModeChange?.('api')}
                 title={t('inlineSwitcher.useByok')}
               >
@@ -243,6 +254,7 @@ export function InlineModelSwitcher({
                             'inline-switcher__agent' +
                             (active ? ' is-active' : '')
                           }
+                          data-testid={`inline-model-switcher-agent-${a.id}`}
                           onClick={() => onAgentChange?.(a.id)}
                           title={a.version ? `${a.name} · ${a.version}` : a.name}
                         >
@@ -266,6 +278,7 @@ export function InlineModelSwitcher({
                   </span>
                   <select
                     className="inline-switcher__select"
+                    data-testid="inline-model-switcher-agent-model"
                     value={currentModelId ?? ''}
                     onChange={(e) =>
                       onAgentModelChange?.(currentAgent.id, {
@@ -303,6 +316,7 @@ export function InlineModelSwitcher({
                           'inline-switcher__chip-tab' +
                           (active ? ' is-active' : '')
                         }
+                        data-testid={`inline-model-switcher-provider-${tab.id}`}
                         onClick={() => onApiProtocolChange?.(tab.id)}
                       >
                         {tab.title}
@@ -319,6 +333,7 @@ export function InlineModelSwitcher({
                 {apiModelOptions.length > 0 ? (
                   <select
                     className="inline-switcher__select"
+                    data-testid="inline-model-switcher-api-model"
                     value={config.model}
                     onChange={(e) => onApiModelChange?.(e.target.value)}
                   >
@@ -352,6 +367,7 @@ export function InlineModelSwitcher({
           <button
             type="button"
             className="inline-switcher__more"
+            data-testid="inline-model-switcher-open-settings"
             onClick={() => {
               setOpen(false);
               onOpenSettings?.('execution');

@@ -47,6 +47,75 @@
     page-break-after: always;
   }
   .slide + .slide { border-top: 1px solid var(--hairline); }
+  body.deck-nav-ready { overflow: hidden; }
+  body.deck-nav-ready .deck {
+    height: 100vh;
+    overflow: hidden;
+  }
+  body.deck-nav-ready .slide {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 420ms var(--ease);
+  }
+  body.deck-nav-ready .slide.active {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  body.deck-nav-ready .slide + .slide { border-top: 0; }
+
+  .deck-progress {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    z-index: 40;
+    background: var(--hairline-soft);
+  }
+  .deck-progress span {
+    display: block;
+    width: 0;
+    height: 100%;
+    background: var(--accent);
+    transition: width 220ms var(--ease);
+  }
+  #deck-nav {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 11px;
+    border: 1px solid rgba(26, 26, 25, 0.12);
+    border-radius: 999px;
+    background: rgba(251, 251, 250, 0.72);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  #deck-nav .dot {
+    width: 7px;
+    height: 7px;
+    border: 0;
+    border-radius: 999px;
+    padding: 0;
+    background: rgba(26, 26, 25, 0.24);
+    cursor: pointer;
+    transition: width 220ms var(--ease), background 220ms var(--ease), transform 220ms var(--ease);
+  }
+  #deck-nav .dot:hover { transform: scale(1.2); background: rgba(26, 26, 25, 0.42); }
+  #deck-nav .dot.active {
+    width: 22px;
+    background: var(--accent);
+  }
+  #deck-nav .dot:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
 
   /* Slide chrome */
   .meta-row {
@@ -295,6 +364,16 @@
   /* Print / preview */
   @media print {
     .slide { height: auto; min-height: 100vh; page-break-after: always; }
+    body.deck-nav-ready { overflow: visible; }
+    body.deck-nav-ready .deck { height: auto; overflow: visible; }
+    body.deck-nav-ready .slide {
+      position: relative;
+      inset: auto;
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .deck-progress,
+    #deck-nav { display: none; }
   }
 </style>
 </head>
@@ -486,5 +565,125 @@
   </section>
 
 </div>
+<div class="deck-progress" id="deck-progress" aria-hidden="true"><span></span></div>
+<nav id="deck-nav" aria-label="Slide navigation"></nav>
+<script>
+(function () {
+  var deck = document.querySelector('.deck');
+  if (!deck) return;
+
+  var slides = Array.prototype.filter.call(deck.children, function (el) {
+    return el.classList && el.classList.contains('slide');
+  });
+  var nav = document.getElementById('deck-nav');
+  var progress = document.querySelector('#deck-progress span');
+  if (!slides.length || !nav || !progress) return;
+
+  var idx = 0;
+  var wheelAcc = 0;
+  var wheelTimer = null;
+  var touchX = 0;
+  var touchY = 0;
+
+  document.body.classList.add('deck-nav-ready');
+  document.body.setAttribute('tabindex', '-1');
+  document.body.style.outline = 'none';
+
+  slides.forEach(function (_, i) {
+    var dot = document.createElement('button');
+    dot.className = 'dot';
+    dot.type = 'button';
+    dot.setAttribute('aria-label', 'Go to slide ' + (i + 1));
+    dot.addEventListener('click', function () { go(i); });
+    nav.appendChild(dot);
+  });
+
+  function clamp(n) {
+    return Math.max(0, Math.min(slides.length - 1, n));
+  }
+
+  function go(n) {
+    idx = clamp(n);
+    slides.forEach(function (slide, i) {
+      var active = i === idx;
+      slide.classList.toggle('active', active);
+      slide.classList.toggle('is-active', active);
+      slide.setAttribute('aria-hidden', active ? 'false' : 'true');
+    });
+    Array.prototype.forEach.call(nav.querySelectorAll('.dot'), function (dot, i) {
+      var active = i === idx;
+      dot.classList.toggle('active', active);
+      if (active) dot.setAttribute('aria-current', 'true');
+      else dot.removeAttribute('aria-current');
+    });
+    progress.style.width = (((idx + 1) / slides.length) * 100) + '%';
+  }
+
+  function shouldIgnoreKeyTarget(target) {
+    if (!target || !target.tagName) return false;
+    var tag = target.tagName.toLowerCase();
+    return tag === 'input' || tag === 'textarea' || tag === 'select' || target.isContentEditable;
+  }
+
+  function onKey(e) {
+    if (e.__tasteDeckHandled || shouldIgnoreKeyTarget(e.target)) return;
+    var next = null;
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') next = idx + 1;
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'PageUp') next = idx - 1;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = slides.length - 1;
+    if (next === null) return;
+    e.__tasteDeckHandled = true;
+    e.preventDefault();
+    go(next);
+  }
+
+  function onWheel(e) {
+    var delta = e.deltaY + e.deltaX;
+    if (Math.abs(delta) < 1) return;
+    e.preventDefault();
+    wheelAcc += delta;
+    if (Math.abs(wheelAcc) > 60) {
+      go(idx + (wheelAcc > 0 ? 1 : -1));
+      wheelAcc = 0;
+    }
+    clearTimeout(wheelTimer);
+    wheelTimer = setTimeout(function () { wheelAcc = 0; }, 150);
+  }
+
+  function onTouchStart(e) {
+    if (!e.touches || !e.touches.length) return;
+    touchX = e.touches[0].clientX;
+    touchY = e.touches[0].clientY;
+  }
+
+  function onTouchEnd(e) {
+    if (!e.changedTouches || !e.changedTouches.length) return;
+    var dx = e.changedTouches[0].clientX - touchX;
+    var dy = e.changedTouches[0].clientY - touchY;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+      go(idx + (dx < 0 ? 1 : -1));
+    }
+  }
+
+  function focusDeck() {
+    try {
+      window.focus();
+      document.body.focus({ preventScroll: true });
+    } catch (_) {}
+  }
+
+  window.addEventListener('keydown', onKey, true);
+  document.addEventListener('keydown', onKey, true);
+  window.addEventListener('wheel', onWheel, { passive: false });
+  window.addEventListener('touchstart', onTouchStart, { passive: true });
+  window.addEventListener('touchend', onTouchEnd, { passive: true });
+  document.addEventListener('mousedown', focusDeck);
+  window.addEventListener('load', focusDeck);
+
+  go(0);
+  focusDeck();
+})();
+</script>
 </body>
 </html>

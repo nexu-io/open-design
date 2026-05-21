@@ -181,6 +181,7 @@ describe('buildFacetCatalog', () => {
     expect((catalog.subcategory.create ?? []).map((o) => o.slug)).toEqual([
       'prototype',
       'deck',
+      'live-artifact',
       'design-system',
       'hyperframes',
       'image',

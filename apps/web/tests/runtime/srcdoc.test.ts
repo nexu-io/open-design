@@ -76,6 +76,9 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).toContain("type: 'od:preview-scroll'");
     expect(srcdoc).toContain("type: 'od:preview-scroll-request'");
     expect(srcdoc).toContain('data-od-selection-bridge-style');
+    expect(srcdoc).toContain('html[data-od-comment-mode] body iframe');
+    expect(srcdoc).toContain('html[data-od-inspect-mode] body iframe');
+    expect(srcdoc).toContain('pointer-events: none !important');
   });
 
   it('emits free-pin fallback coordinates in viewport space', () => {
@@ -230,6 +233,7 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).not.toContain('data-od-selection-bridge');
     expect(srcdoc).not.toContain("type: 'od:comment-target'");
     expect(srcdoc).not.toContain("type: 'od:inspect-overrides'");
+    expect(srcdoc).not.toContain('html[data-od-comment-mode] body iframe');
   });
 
   // Regression for nexu-io/open-design#892: imported designs (e.g. Claude
