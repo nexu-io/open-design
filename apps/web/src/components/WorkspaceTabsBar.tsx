@@ -495,7 +495,8 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
             </div>
           );
         })}
-        <div className="workspace-tabs-actions" ref={menuRef}>
+      </div>
+      <div className="workspace-tabs-actions" ref={menuRef}>
           <button
             type="button"
             className="workspace-tabs-new-btn"
@@ -582,7 +583,6 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
                 document.body,
               )
             : null}
-        </div>
       </div>
       {hoverPreview && typeof document !== 'undefined' && !tabsMenuOpen
         ? createPortal(
