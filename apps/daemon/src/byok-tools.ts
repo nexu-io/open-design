@@ -266,38 +266,50 @@ export async function executeGenerateSpeech(
       ? args.voice_id.trim()
       : SENSEAUDIO_DEFAULT_VOICE_ID;
   const trimmedBase = (ctx.upstreamBaseUrl || SENSEAUDIO_DEFAULT_BASE_URL).replace(/\/+$/, '');
-  const resp = await fetch(`${trimmedBase}/v1/t2a_v2`, {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${apiKey}`,
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: SENSEAUDIO_TTS_MODEL,
-      text,
-      stream: false,
-      voice_setting: {
-        voice_id: voiceId,
-        speed: 1,
-        vol: 1,
-        pitch: 0,
-      },
-      audio_setting: {
-        format: 'mp3',
-        sample_rate: 32000,
-        bitrate: 128000,
-        channel: 2,
-      },
-    }),
-  });
-  const respText = await resp.text();
-  if (!resp.ok) {
-    return { ok: false, error: `senseaudio speech ${resp.status}: ${respText.slice(0, 240)}` };
-  }
-  const data = JSON.parse(respText) as {
+  let data: {
     data?: { audio?: string };
     base_resp?: { status_code?: number; status_msg?: string };
   };
+  try {
+    const resp = await fetch(`${trimmedBase}/v1/t2a_v2`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: SENSEAUDIO_TTS_MODEL,
+        text,
+        stream: false,
+        voice_setting: {
+          voice_id: voiceId,
+          speed: 1,
+          vol: 1,
+          pitch: 0,
+        },
+        audio_setting: {
+          format: 'mp3',
+          sample_rate: 32000,
+          bitrate: 128000,
+          channel: 2,
+        },
+      }),
+    });
+    const respText = await resp.text();
+    if (!resp.ok) {
+      return { ok: false, error: `senseaudio speech ${resp.status}: ${respText.slice(0, 240)}` };
+    }
+    try {
+      data = JSON.parse(respText) as typeof data;
+    } catch {
+      return { ok: false, error: `senseaudio speech non-JSON: ${respText.slice(0, 200)}` };
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
   if (data?.base_resp && data.base_resp.status_code !== 0) {
     return {
       ok: false,

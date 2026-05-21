@@ -456,6 +456,54 @@ describe('executeGenerateSpeech', () => {
     const onDisk = await readFile(path.join(projectsRoot, PROJECT_ID, filename));
     expect(onDisk.equals(audioBytes)).toBe(true);
   });
+
+  it('returns { ok: false } when SenseAudio returns malformed JSON', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response('not json', {
+          status: 200,
+          headers: { 'content-type': 'text/plain' },
+        }),
+      ),
+    );
+
+    const result = await executeGenerateSpeech(
+      { text: 'hello' },
+      {
+        projectRoot: root,
+        projectsRoot,
+        projectId: PROJECT_ID,
+        upstreamApiKey: 'sa-byok-key',
+        upstreamBaseUrl: 'https://api.senseaudio.cn',
+      },
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/senseaudio speech non-JSON/);
+  });
+
+  it('returns { ok: false } when the SenseAudio request fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new Error('network down');
+      }),
+    );
+
+    const result = await executeGenerateSpeech(
+      { text: 'hello' },
+      {
+        projectRoot: root,
+        projectsRoot,
+        projectId: PROJECT_ID,
+        upstreamApiKey: 'sa-byok-key',
+        upstreamBaseUrl: 'https://api.senseaudio.cn',
+      },
+    );
+
+    expect(result).toEqual({ ok: false, error: 'network down' });
+  });
 });
 
 describe('executeGenerateVideo', () => {
