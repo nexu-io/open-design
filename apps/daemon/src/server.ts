@@ -1010,6 +1010,16 @@ const DESIGN_TEMPLATES_DIR = resolveDaemonResourceDir(
   'design-templates',
   path.join(PROJECT_ROOT, 'design-templates'),
 );
+// Page-level site patterns (auth-login, dashboard-metrics, …). Mirrors the
+// design-templates root layout (SKILL.md + example.html per folder) but
+// stays under a separate path so the EntryView Patterns gallery and CLI
+// `od page-pattern` surface only see page-pattern entries. See
+// docs/plans/2026-05-21-page-patterns.md.
+const PAGE_PATTERNS_DIR = resolveDaemonResourceDir(
+  DAEMON_RESOURCE_ROOT,
+  'page-patterns',
+  path.join(PROJECT_ROOT, 'page-patterns'),
+);
 const CRAFT_DIR = resolveDaemonResourceDir(
   DAEMON_RESOURCE_ROOT,
   'craft',
@@ -1221,22 +1231,30 @@ const PLUGIN_REGISTRY_ROOTS = registryRootsForDataDir(RUNTIME_DATA_DIR);
 // against DESIGN_TEMPLATES_DIR rather than SKILLS_DIR so the EntryView
 // Templates surface and the Settings → Skills surface stay decoupled.
 const USER_DESIGN_TEMPLATES_DIR = path.join(RUNTIME_DATA_DIR, 'design-templates');
+// User-imported page-patterns mirror USER_DESIGN_TEMPLATES_DIR. Page-patterns
+// share the SKILL.md + example.html layout but live under a separate root so
+// the new EntryView Patterns gallery sees only page-pattern entries.
+const USER_PAGE_PATTERNS_DIR = path.join(RUNTIME_DATA_DIR, 'page-patterns');
 // Multi-root tuples used everywhere the daemon resolves a skill / template
 // id without knowing which surface it came from. SKILL_ROOTS drives
 // Settings → Skills; DESIGN_TEMPLATE_ROOTS drives the EntryView Templates
-// gallery; ALL_SKILL_LIKE_ROOTS spans both for chat run system-prompt
-// composition and the orbit template resolver, where stored project ids
-// can resolve to either root after the split.
+// gallery; PAGE_PATTERN_ROOTS drives the Patterns gallery / CLI;
+// ALL_SKILL_LIKE_ROOTS spans all three for chat run system-prompt
+// composition, the orbit template resolver, and the shared example /
+// assets routes, where stored project ids can resolve to any root.
 const SKILL_ROOTS = [USER_SKILLS_DIR, SKILLS_DIR];
 const DESIGN_TEMPLATE_ROOTS = [USER_DESIGN_TEMPLATES_DIR, DESIGN_TEMPLATES_DIR];
+const PAGE_PATTERN_ROOTS = [USER_PAGE_PATTERNS_DIR, PAGE_PATTERNS_DIR];
 const ALL_SKILL_LIKE_ROOTS = [
   USER_SKILLS_DIR,
   USER_DESIGN_TEMPLATES_DIR,
+  USER_PAGE_PATTERNS_DIR,
   SKILLS_DIR,
   DESIGN_TEMPLATES_DIR,
+  PAGE_PATTERNS_DIR,
 ];
 fs.mkdirSync(PROJECTS_DIR, { recursive: true });
-for (const dir of [USER_SKILLS_DIR, USER_DESIGN_SYSTEMS_DIR, USER_DESIGN_TEMPLATES_DIR, PLUGIN_REGISTRY_ROOTS.userPluginsRoot]) {
+for (const dir of [USER_SKILLS_DIR, USER_DESIGN_SYSTEMS_DIR, USER_DESIGN_TEMPLATES_DIR, USER_PAGE_PATTERNS_DIR, PLUGIN_REGISTRY_ROOTS.userPluginsRoot]) {
   fs.mkdirSync(dir, { recursive: true });
 }
 fs.mkdirSync(CRITIQUE_ARTIFACTS_DIR, { recursive: true });
@@ -2995,10 +3013,20 @@ export async function startServer({
     return listSkills(DESIGN_TEMPLATE_ROOTS);
   }
 
-  // Spans both roots so chat run system-prompt composition and the orbit
-  // template resolver can resolve a stored project.skillId regardless of
-  // which surface created the project after the skills/design-templates
-  // split. Keep in sync with SKILL_ROOTS + DESIGN_TEMPLATE_ROOTS above.
+  // Page-level site patterns. Same SkillInfo shape as listAllSkills /
+  // listAllDesignTemplates; the /api/page-patterns routes layer on the
+  // snake_case → camelCase frontmatter projection (page_type → pageType,
+  // page_inputs → pageInputs, page_outputs → pageOutputs) so the wire
+  // shape matches PagePatternSummary from @open-design/contracts.
+  async function listAllPagePatterns() {
+    return listSkills(PAGE_PATTERN_ROOTS);
+  }
+
+  // Spans all roots so chat run system-prompt composition, the orbit
+  // template resolver, and the shared /api/skills/:id/{example,assets/*}
+  // routes can resolve a stored project.skillId regardless of which
+  // surface created the project after the skills/design-templates/
+  // page-patterns splits. Keep in sync with the *_ROOTS tuples above.
   async function listAllSkillLikeEntries() {
     return listSkills(ALL_SKILL_LIKE_ROOTS);
   }
@@ -4568,6 +4596,7 @@ export async function startServer({
     resources: {
       listAllSkills,
       listAllDesignTemplates,
+      listAllPagePatterns,
       listAllSkillLikeEntries,
       listAllDesignSystems,
       mimeFor,
@@ -11417,6 +11446,7 @@ export async function startServer({
     resources: {
       listAllSkills,
       listAllDesignTemplates,
+      listAllPagePatterns,
       listAllSkillLikeEntries,
       listAllDesignSystems,
       mimeFor,

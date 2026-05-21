@@ -62,6 +62,7 @@ describe('static resource mutation routes', () => {
               return [];
             },
             listAllDesignTemplates: async () => [],
+            listAllPagePatterns: async () => [],
             listAllSkillLikeEntries: async () => [],
             mimeFor: () => 'application/octet-stream',
           },

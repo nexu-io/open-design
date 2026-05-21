@@ -1,7 +1,12 @@
 import type { Express } from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
+import type {
+  PagePatternIO,
+  PagePatternSummary,
+} from '@open-design/contracts';
 import { detectAgents } from './agents.js';
+import { parseFrontmatter } from './frontmatter.js';
 import {
   SkillImportError,
   deleteUserSkill,
@@ -45,6 +50,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
   const {
     listAllSkills,
     listAllDesignTemplates,
+    listAllPagePatterns,
     listAllSkillLikeEntries,
     listAllDesignSystems,
     mimeFor,
@@ -121,6 +127,87 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       res.json(serializable);
     } catch (err: any) {
       res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // Page patterns — page-level site patterns (auth-login, dashboard-metrics,
+  // gallery-grid, …). Shares the SkillInfo scanner with /api/skills and
+  // /api/design-templates, then projects three additional snake_case
+  // frontmatter fields out of `od.page_type` / `od.page_inputs` /
+  // `od.page_outputs` into the camelCase PagePatternSummary contract.
+  // The example.html + assets/ routes piggyback on the existing
+  // /api/skills/:id/example + /api/skills/:id/assets/* paths via the
+  // listAllSkillLikeEntries aggregator; the mirror routes below keep
+  // /api/page-patterns/:id/* working so the web gallery and CLI never
+  // need to know about the underlying root split.
+  app.get('/api/page-patterns', async (_req, res) => {
+    try {
+      const patterns = await listAllPagePatterns();
+      res.json({
+        patterns: patterns.map((entry) => projectPagePatternSummary(entry, { includeBody: false })),
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  app.get('/api/page-patterns/:id', async (req, res) => {
+    try {
+      const patterns = await listAllPagePatterns();
+      const pattern = findSkillById(patterns, req.params.id);
+      if (!pattern) return res.status(404).json({ error: 'page pattern not found' });
+      res.json({ pattern: projectPagePatternSummary(pattern, { includeBody: true }) });
+    } catch (err: any) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // Mirror routes onto /api/page-patterns/:id/{example,assets/*} so the new
+  // gallery does not have to fall back to /api/skills/:id/... URLs (which
+  // would leak the root-split detail into web/CLI clients). Resolution
+  // still spans listAllSkillLikeEntries so the aggregator change in
+  // server.ts (PAGE_PATTERN_ROOTS appended to ALL_SKILL_LIKE_ROOTS) is the
+  // only place we add the new root.
+  app.get('/api/page-patterns/:id/example', async (req, res) => {
+    try {
+      const entries = await listAllSkillLikeEntries();
+      const entry = findSkillById(entries, req.params.id);
+      if (!entry) {
+        return res.status(404).type('text/plain').send('page pattern not found');
+      }
+      const baked = path.join(entry.dir, 'example.html');
+      if (!fs.existsSync(baked)) {
+        return res.status(404).type('text/plain').send('example.html not found');
+      }
+      const html = await fs.promises.readFile(baked, 'utf8');
+      res.type('text/html').send(rewriteSkillAssetUrls(html, entry.id));
+    } catch (err: any) {
+      res.status(500).type('text/plain').send(String(err));
+    }
+  });
+
+  app.get('/api/page-patterns/:id/assets/*', async (req, res) => {
+    try {
+      const entries = await listAllSkillLikeEntries();
+      const entry = findSkillById(entries, req.params.id);
+      if (!entry) {
+        return res.status(404).type('text/plain').send('page pattern not found');
+      }
+      const relPath = String((req.params as any)[0] || '');
+      const assetsRoot = path.resolve(entry.dir, 'assets');
+      const target = path.resolve(assetsRoot, relPath);
+      if (target !== assetsRoot && !target.startsWith(assetsRoot + path.sep)) {
+        return res.status(400).type('text/plain').send('invalid asset path');
+      }
+      if (!fs.existsSync(target)) {
+        return res.status(404).type('text/plain').send('asset not found');
+      }
+      if (req.headers.origin === 'null') {
+        res.header('Access-Control-Allow-Origin', '*');
+      }
+      res.type(mimeFor(target)).sendFile(target);
+    } catch (err: any) {
+      res.status(500).type('text/plain').send(String(err));
     }
   });
 
@@ -756,4 +843,79 @@ function rewriteSkillAssetUrls(html: string, skillId: string) {
       return `${attr}${openQuote}${prefix}${relPath}${closeQuote}`;
     },
   );
+}
+
+// Projects one snake_case YAML inputs/outputs entry into the camelCase
+// PagePatternIO contract shape. Defaults `kind` to 'navigation' when the
+// frontmatter omits or mistypes it, and only attaches `targetPageType`
+// when `target_page_type` is a non-empty string. Drops nameless entries
+// silently to keep the wire payload tight.
+function normalizePagePatternIO(value: unknown): PagePatternIO[] {
+  if (!Array.isArray(value)) return [];
+  const out: PagePatternIO[] = [];
+  for (const item of value) {
+    if (typeof item !== 'object' || item === null) continue;
+    const record = item as Record<string, unknown>;
+    const name = typeof record.name === 'string' ? record.name : '';
+    if (name.length === 0) continue;
+    const rawKind = record.kind;
+    const kind: 'navigation' | 'data' | 'action' =
+      rawKind === 'data' || rawKind === 'action' ? rawKind : 'navigation';
+    const target =
+      typeof record.target_page_type === 'string' && record.target_page_type.length > 0
+        ? record.target_page_type
+        : undefined;
+    out.push(target ? { name, kind, targetPageType: target } : { name, kind });
+  }
+  return out;
+}
+
+// Lifts one SkillInfo entry from the page-patterns roots into a
+// PagePatternSummary. The base scanner intentionally drops the raw
+// frontmatter dict, so we re-read SKILL.md to project the three
+// snake_case fields (`page_type`, `page_inputs`, `page_outputs`) into
+// their camelCase wire form. The cost is one extra file read per entry
+// per request; the scanner is already lazy per-request and the seed
+// catalogue is small, so this stays cheap and avoids leaking
+// page-pattern-specific fields into SkillInfo.
+function projectPagePatternSummary(
+  entry: import('./skills.js').SkillInfo & { source?: string },
+  options: { includeBody: boolean },
+): PagePatternSummary & { body?: string } {
+  let pageType = '';
+  let pageInputs: PagePatternIO[] = [];
+  let pageOutputs: PagePatternIO[] = [];
+  try {
+    const raw = fs.readFileSync(path.join(entry.dir, 'SKILL.md'), 'utf8');
+    const { data } = parseFrontmatter(raw);
+    const od = (data && typeof data === 'object' ? (data as Record<string, unknown>).od : null) as
+      | Record<string, unknown>
+      | null
+      | undefined;
+    if (od && typeof od === 'object') {
+      pageType = typeof od.page_type === 'string' ? od.page_type : '';
+      pageInputs = normalizePagePatternIO(od.page_inputs);
+      pageOutputs = normalizePagePatternIO(od.page_outputs);
+    }
+  } catch {
+    // Missing / malformed SKILL.md: leave the projection empty rather
+    // than 500. The base scanner has already validated the file exists.
+  }
+  const { body, dir: _dir, ...rest } = entry;
+  // The base SkillInfo carries a few daemon-only fields (`aggregatesExamples`,
+  // `critiquePolicy`) that don't belong in the public PagePatternSummary
+  // contract. They were already projected through /api/skills and
+  // /api/design-templates via the same loose `...rest` spread, so we follow
+  // that precedent here rather than enumerating each field.
+  const summary = {
+    ...rest,
+    hasBody: typeof body === 'string' && body.length > 0,
+    pageType,
+    pageInputs,
+    pageOutputs,
+  } as PagePatternSummary & { body?: string };
+  if (options.includeBody && typeof body === 'string') {
+    summary.body = body;
+  }
+  return summary;
 }

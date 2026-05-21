@@ -41,10 +41,17 @@ export interface ResourceDeps {
   // Mirrors listAllSkills but scans DESIGN_TEMPLATE_ROOTS so the Templates
   // surface only sees rendering-catalogue entries.
   listAllDesignTemplates: () => Promise<Array<SkillInfo & { source?: string }>>;
-  // Spans both functional skills and design templates so cross-surface
-  // resolvers (chat run system prompt, orbit template resolver,
-  // /api/skills/:id/example, /api/skills/:id/assets/*) keep working when
-  // a stored project.skillId points at either root.
+  // Page-level site patterns (auth-login, dashboard-metrics, …) scanned
+  // out of `page-patterns/`. Same SkillInfo shape as design-templates plus
+  // the snake_case → camelCase `pageType` / `pageInputs` / `pageOutputs`
+  // projection performed by the /api/page-patterns route. See
+  // docs/plans/2026-05-21-page-patterns.md.
+  listAllPagePatterns: () => Promise<Array<SkillInfo & { source?: string }>>;
+  // Spans functional skills, design templates and page-patterns so
+  // cross-surface resolvers (chat run system prompt, orbit template
+  // resolver, /api/skills/:id/example, /api/skills/:id/assets/*,
+  // /api/page-patterns/:id/example) keep working when a stored
+  // project.skillId points at any of the three roots.
   listAllSkillLikeEntries: () => Promise<Array<SkillInfo & { source?: string }>>;
   mimeFor: (filePath: string) => string;
 }
