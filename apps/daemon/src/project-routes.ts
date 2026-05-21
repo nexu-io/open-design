@@ -5,6 +5,11 @@ import {
   defaultScenarioPluginIdForProjectMetadata,
   type PluginManifest,
 } from '@open-design/contracts';
+import {
+  ROUTE_PERSIST_SCRIPT,
+  SELECTION_BRIDGE_SCRIPT,
+  SELECTION_BRIDGE_STYLE,
+} from '@open-design/contracts/preview-bridges';
 import { createProjectArtifactFile } from './artifact-create.js';
 import { ArtifactPublicationBlockedError } from './artifact-publication-guard.js';
 import { ArtifactRegressionError } from './artifact-stub-guard.js';
@@ -149,6 +154,53 @@ function injectUrlPreviewScrollBridge(html: string): string {
     return `${html.slice(0, bodyCloseIndex)}${URL_PREVIEW_SCROLL_BRIDGE}${html.slice(bodyCloseIndex)}`;
   }
   return `${html}${URL_PREVIEW_SCROLL_BRIDGE}`;
+}
+
+// Issue #2143 — when serving an HTML artifact in URL-load mode, inject the
+// shared selection bridge + style + route-persist so the iframe can host
+// comment / inspect picking AND survive React-Router-style navigation
+// across mode toggles. With the bridge in URL-load HTML, the host no
+// longer needs to flip transports on commentMode/inspectMode (see
+// apps/web/src/components/file-viewer-render-mode.ts) — staying in the
+// same iframe means no remount, no state wipe.
+//
+// All injectors are idempotent via marker attrs; we still skip-fast if a
+// marker is already present (e.g. when an upstream proxy already injected
+// the same bridge or the artifact author shipped their own copy).
+function injectAtHeadEnd(html: string, payload: string): string {
+  const headEnd = html.search(/<\/head\s*>/i);
+  if (headEnd >= 0) return html.slice(0, headEnd) + payload + html.slice(headEnd);
+  const headOpen = html.search(/<head\b[^>]*>/i);
+  if (headOpen >= 0) {
+    const after = headOpen + html.slice(headOpen).match(/<head\b[^>]*>/i)![0].length;
+    return html.slice(0, after) + payload + html.slice(after);
+  }
+  return payload + html;
+}
+
+function injectAtBodyEnd(html: string, payload: string): string {
+  const htmlEnd = html.toLowerCase().lastIndexOf('</html>');
+  const limit = htmlEnd >= 0 ? htmlEnd : html.length;
+  const bodyEnd = html.toLowerCase().lastIndexOf('</body>', limit - 1);
+  if (bodyEnd >= 0) return html.slice(0, bodyEnd) + payload + html.slice(bodyEnd);
+  return html + payload;
+}
+
+function injectPreviewBridgesIntoHtml(html: string): string {
+  let out = html;
+  if (!out.includes('data-od-route-persist')) {
+    out = injectAtHeadEnd(out, ROUTE_PERSIST_SCRIPT);
+  }
+  if (!out.includes('data-od-selection-bridge-style')) {
+    out = injectAtHeadEnd(out, SELECTION_BRIDGE_STYLE);
+  }
+  // Use the script's exact opening tag as the marker so the style block's
+  // suffix ('data-od-selection-bridge-style') doesn't false-positive this
+  // check and skip script injection. Bug found 2026-05-21.
+  if (!out.includes('<script data-od-selection-bridge>')) {
+    out = injectAtBodyEnd(out, SELECTION_BRIDGE_SCRIPT);
+  }
+  return out;
 }
 
 export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDeps) {
@@ -1483,9 +1535,24 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
           ) {
             return injectUrlPreviewScrollBridge(file.buffer.toString('utf8'));
           }
-          return file.buffer;
-        },
-      );
+        });
+        stream.pipe(res);
+        return;
+      }
+
+      const file = await readProjectFile(PROJECTS_DIR, projectId, relPath, project?.metadata);
+      // Issue #2143 — when this file is served as the URL-load preview's
+      // top-level document, splice in a tiny route-persist script so SPA
+      // navigation survives the iframe remount that mode toggles trigger.
+      // Skips inline assets (only top-level HTML carries history state) and
+      // anything that already opted in via the artifact-owned bridge.
+      if (file.mime.startsWith('text/html')) {
+        const html = file.buffer.toString('utf8');
+        const patched = injectPreviewBridgesIntoHtml(html);
+        res.type(file.mime).send(patched);
+        return;
+      }
+      res.type(file.mime).send(file.buffer);
     } catch (err: any) {
       const status = err && err.code === 'ENOENT' ? 404 : 400;
       sendApiError(

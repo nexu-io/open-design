@@ -7892,6 +7892,64 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
                 error={inspectError}
               />
             ) : null}
+            {/*
+              Hint banner for Inspect / Picker modes. The bridge in
+              `apps/web/src/runtime/srcdoc.ts` posts `od:comment-targets`
+              with every element annotated with `data-od-id` /
+              `data-screen-label`, so `liveCommentTargets.size` is the
+              authoritative annotation count for the current artifact.
+
+              Two states:
+              - "has targets": the existing copy ("Click any element with
+                `data-od-id` to tune its style.") for users who just don't
+                see the crosshair cursor.
+              - "no targets" (issue #890): a freeform-generated artifact
+                (e.g. PRD → HTML through a Claude-Code-compatible CLI
+                without a skill) ships zero `data-od-id` annotations. The
+                bridge's click handler walks up to <html>, finds nothing,
+                and bails — clicks no-op silently. The static copy made
+                this look broken; the empty-state copy explains what's
+                missing and how to fix it. Mirrored across Inspect and
+                element-pick annotation mode because the failure surface is identical.
+            */}
+            {inspectMode
+              && openHintBox
+              && !activeInspectTarget
+              && !activeCommentTarget ? (
+              <div
+                className={`inspect-empty-hint-container${
+                  commentPanelOpen && !commentSidePanelCollapsed ? ' comment-side-panel-open' : ''
+                }`}
+                data-testid="inspect-empty-hint-container"
+              >
+                {liveCommentTargets.size === 0 && inspectMode ? (
+                  <div
+                    className="inspect-empty-hint"
+                    data-testid="inspect-empty-hint-no-targets"
+                  >
+                    {inspectMode
+                      ? t('chat.inspect.noEditableTargets')
+                      : t('chat.inspect.noCommentTargets')}
+                  </div>
+                ) : (
+                  <div
+                    className="inspect-empty-hint"
+                    data-testid="inspect-empty-hint"
+                  >
+                    {inspectMode ? t('chat.inspect.editHint') : t('chat.inspect.commentHint')}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  title="Close Inspect Hint"
+                  aria-label="Close Inspect Hint"
+                  onClick={() => setOpenHintBox(false)}
+                  className="orbit-artifact-ghost"
+                >
+                  <Icon className="" name="close" size={12} />
+                </button>
+              </div>
+            ) : null}
           </div>
         ) : (
           <pre className="viewer-source">{source}</pre>

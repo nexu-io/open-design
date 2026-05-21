@@ -75,10 +75,16 @@ export function shouldUrlLoadHtmlPreview(d: UrlLoadDecision): boolean {
   if (d.mode !== 'preview') return false;
   if (d.isDeck) return false;
   if (d.commentMode && !d.urlModeBridge) return false;
-  // Inspect needs the selection bridge injected via buildSrcdoc; a raw
-  // URL-loaded iframe has no listener to apply per-element overrides.
-  if (d.inspectMode) return false;
-  if (d.editMode && !d.urlModeBridge) return false;
+  // Issue #2143 — when the URL-loaded HTML carries our injected selection
+  // bridge (daemon-side, see project-routes.ts injectPreviewBridgesIntoHtml),
+  // inspect mode can stay on URL-load too. Without the bridge the host has
+  // no listener to apply per-element overrides, so we still fall back to
+  // srcDoc the way upstream does.
+  if (d.inspectMode && !d.urlModeBridge) return false;
+  // Manual edit needs the edit-mode bridge which is srcDoc-only — the
+  // daemon-injected URL-load bridge ships selection only, not manual edit.
+  // Always fall back to srcDoc when editMode is on.
+  if (d.editMode) return false;
   // Palette tweaks need the srcDoc-side bridge — `<iframe src=URL>` has
   // no parent-injected listener to recolor against.
   if (d.paletteActive) return false;

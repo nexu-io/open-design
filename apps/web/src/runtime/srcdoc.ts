@@ -20,6 +20,11 @@ import {
   MANUAL_EDIT_DISCOVERY_SELECTOR,
   MANUAL_EDIT_SOURCE_PATH_ATTR,
 } from '../edit-mode/bridge';
+import {
+  SELECTION_BRIDGE_SCRIPT,
+  SELECTION_BRIDGE_STYLE,
+  ROUTE_PERSIST_SCRIPT,
+} from '@open-design/contracts/preview-bridges';
 
 export type SrcdocOptions = {
   deck?: boolean;
@@ -79,7 +84,15 @@ export function buildSrcdoc(
   // it to a per-call option would force iframe srcdoc regeneration (and a
   // visible flash) every time the host toggle flips.
   const withTweaks = injectTweaksBridge(withEdit);
-  return injectSrcdocTransportActivationBridge(injectSnapshotBridge(withTweaks));
+  // Issue #2143 — preserve in-iframe SPA route across mode toggles.
+  // Mode flips (comment / draw / inspect / edit / tweaks) re-render the
+  // srcDoc string and remount the iframe, wiping React-Router state. The
+  // bridge stamps the artifact's history.{push,replace}State + popstate +
+  // hashchange events into sessionStorage and restores the path before any
+  // user script runs on the next mount, so the artifact comes back where
+  // the user left it instead of jumping to the entry document.
+  const withRoutePersist = injectRoutePersistBridge(withTweaks);
+  return injectSrcdocTransportActivationBridge(injectSnapshotBridge(withRoutePersist));
 }
 
 /**
@@ -582,6 +595,18 @@ function annotateMissingOdIds(doc: string): string {
 function injectManualEditBridge(doc: string): string {
   const withStyle = injectBeforeHeadEnd(doc, buildManualEditBridgeStyle());
   return injectBeforeBodyEnd(withStyle, buildManualEditBridge(true));
+}
+
+// Run before user scripts so React-Router reads the restored path on its
+// initial render instead of the entry path. Idempotent across remounts via
+// data-od-route-persist marker. Storage key is per-origin (sessionStorage
+// is keyed to the iframe's "null" srcdoc origin which is stable across
+// remounts within the same parent doc); we partition by document.title +
+// pathname-prefix when present so two artifacts in the same session don't
+// collide. Failure modes are silent — sandboxed iframes without storage
+// fall back to memory-only which still survives same-tab remounts.
+function injectRoutePersistBridge(doc: string): string {
+  return injectBeforeHeadEnd(doc, ROUTE_PERSIST_SCRIPT);
 }
 
 function injectBeforeHeadEnd(doc: string, payload: string): string {
