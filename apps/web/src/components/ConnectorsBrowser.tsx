@@ -1236,6 +1236,7 @@ function ConnectorDetailDrawer({
   const showToolsBadge = connector.toolCount !== undefined || actualToolCount > 0 || toolsLoaded;
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
   const categoryLabel = connectorCategoryLabel(connector.category, t);
+  const toolsBadgeLabel = formatToolsBadge(toolCount, t);
 
   function continueAuthorization(event: SyntheticEvent) {
     event.stopPropagation();
@@ -1293,9 +1294,8 @@ function ConnectorDetailDrawer({
                 {isAuthorizationPending ? t('connectors.authorizationPending') : statusLabel(connector.status, t)}
               </span>
               {showToolsBadge ? (
-                <span className="connector-tools-badge is-ready" title={formatToolsBadge(toolCount, t)}>
-                  <Icon name="settings" size={10} />
-                  <span>{formatToolsBadge(toolCount, t)}</span>
+                <span className="connector-drawer-tool-count-chip" title={toolsBadgeLabel}>
+                  <span>{toolsBadgeLabel}</span>
                 </span>
               ) : null}
             </div>
@@ -1347,7 +1347,21 @@ function ConnectorDetailDrawer({
           ) : null}
 
           <section className="connector-drawer-section">
-            <h3 className="connector-drawer-section-title">{t('connectors.detailsLabel')}</h3>
+            <div className="connector-drawer-section-head">
+              <h3 className="connector-drawer-section-title">{t('connectors.detailsLabel')}</h3>
+              {isConnected ? (
+                <button
+                  type="button"
+                  className={`ghost connector-drawer-inline-action connector-action is-disconnect${isDisconnecting ? ' is-loading' : ''}`}
+                  disabled={!canDisconnect}
+                  aria-busy={isDisconnecting || undefined}
+                  onClick={() => onDisconnect(connector.id)}
+                >
+                  {isDisconnecting ? <Icon name="spinner" size={12} /> : null}
+                  <span>{t('connectors.disconnect')}</span>
+                </button>
+              ) : null}
+            </div>
             <dl className="connector-drawer-details">
               <div>
                 <dt>{t('connectors.statusLabel')}</dt>
@@ -1423,19 +1437,8 @@ function ConnectorDetailDrawer({
           </section>
         </div>
 
-        <footer className="connector-drawer-foot">
-          {isConnected ? (
-            <button
-              type="button"
-              className={`ghost connector-action is-disconnect${isDisconnecting ? ' is-loading' : ''}`}
-              disabled={!canDisconnect}
-              aria-busy={isDisconnecting || undefined}
-              onClick={() => onDisconnect(connector.id)}
-            >
-              {isDisconnecting ? <Icon name="spinner" size={12} /> : null}
-              <span>{t('connectors.disconnect')}</span>
-            </button>
-          ) : (
+        {!isConnected ? (
+          <footer className="connector-drawer-foot">
             <button
               type="button"
               className={`primary connector-action is-connect${isConnecting || isAuthorizationPending ? ' is-loading' : ''}`}
@@ -1446,17 +1449,17 @@ function ConnectorDetailDrawer({
               {isConnecting || isAuthorizationPending ? <Icon name="spinner" size={12} /> : null}
               <span>{isAuthorizationPending ? t('connectors.authorizationPending') : t('connectors.connect')}</span>
             </button>
-          )}
-          {isAuthorizationPending ? (
-            <button
-              type="button"
-              className="ghost connector-action is-cancel-authorization"
-              onClick={() => onCancelAuthorization(connector.id)}
-            >
-              <span>{t('connectors.cancelAuthorization')}</span>
-            </button>
-          ) : null}
-        </footer>
+            {isAuthorizationPending ? (
+              <button
+                type="button"
+                className="ghost connector-action is-cancel-authorization"
+                onClick={() => onCancelAuthorization(connector.id)}
+              >
+                <span>{t('connectors.cancelAuthorization')}</span>
+              </button>
+            ) : null}
+          </footer>
+        ) : null}
       </aside>
     </div>
   );
