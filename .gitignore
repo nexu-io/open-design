@@ -4,6 +4,7 @@ out/
 .next/
 .next-*/
 .tmp/
+.worktrees/
 .DS_Store
 *.log
 /OpenDesign.exe
