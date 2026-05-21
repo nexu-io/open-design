@@ -250,7 +250,7 @@ export function SketchEditor({
           </button>
         ) : null}
         <button
-          className="primary"          
+          className="primary"
           onClick={handleSave}
           disabled={saving || !canSave}
         >
