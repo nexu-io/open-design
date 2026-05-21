@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Settings — Pattern Preview</title>
+    <style>
+      :root {
+        --bg: #fafaf9;
+        --card: #ffffff;
+        --border: #e5e7eb;
+        --text: #18181b;
+        --muted: #71717a;
+        --accent: #18181b;
+        --accent-fg: #ffffff;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0; padding: 0; min-height: 100%;
+        font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+        background: var(--bg); color: var(--text);
+        line-height: 1.5;
+      }
+      .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+      header.page {
+        padding: 40px 0 24px;
+      }
+      header.page h1 { margin: 0 0 4px; font-size: 24px; letter-spacing: -0.01em; }
+      header.page p { margin: 0; color: var(--muted); font-size: 14px; }
+      main.body {
+        display: grid; grid-template-columns: 220px 1fr; gap: 24px;
+        padding-bottom: 96px;
+      }
+      nav.side {
+        position: sticky; top: 24px; align-self: start;
+        background: var(--card);
+        border: 1px solid var(--border); border-radius: 12px;
+        padding: 8px;
+      }
+      nav.side ul { list-style: none; margin: 0; padding: 0; }
+      nav.side a {
+        display: block; padding: 8px 12px; border-radius: 8px;
+        font-size: 14px; color: var(--muted); text-decoration: none;
+      }
+      nav.side a.active {
+        background: #f4f4f5; color: var(--text); font-weight: 600;
+      }
+      section.pane {
+        background: var(--card);
+        border: 1px solid var(--border); border-radius: 12px;
+        padding: 28px;
+      }
+      section.pane h2 {
+        margin: 0 0 6px; font-size: 18px;
+      }
+      section.pane > p.lead {
+        margin: 0 0 22px; color: var(--muted); font-size: 14px;
+      }
+      .group { padding: 18px 0; border-top: 1px solid var(--border); }
+      .group:first-of-type { padding-top: 0; border-top: 0; }
+      .group h3 { margin: 0 0 10px; font-size: 14px; color: var(--text); }
+      .row.avatar {
+        display: flex; align-items: center; gap: 16px;
+      }
+      .avatar-preview {
+        width: 64px; height: 64px; border-radius: 50%;
+        background: #e5e7eb;
+      }
+      label {
+        display: block; font-size: 13px; color: var(--muted);
+        margin-bottom: 6px;
+      }
+      input[type=text], textarea {
+        width: 100%; padding: 10px 12px;
+        border: 1px solid var(--border); border-radius: 8px;
+        font-size: 14px; background: #fff; color: inherit;
+        font-family: inherit;
+      }
+      textarea { min-height: 96px; resize: vertical; }
+      .hint {
+        margin-top: 6px; font-size: 12px; color: var(--muted);
+      }
+      .btn {
+        display: inline-block; padding: 9px 14px;
+        border-radius: 8px; font-size: 14px; font-weight: 600;
+        border: 1px solid var(--border); background: #fff; color: inherit;
+        cursor: pointer;
+      }
+      .btn.primary {
+        background: var(--accent); color: var(--accent-fg);
+        border-color: var(--accent);
+      }
+      .actionbar {
+        position: sticky; bottom: 0; left: 0; right: 0;
+        background: rgba(255, 255, 255, 0.92);
+        backdrop-filter: blur(8px);
+        border-top: 1px solid var(--border);
+        margin-top: 32px;
+      }
+      .actionbar .row {
+        display: flex; justify-content: flex-end; gap: 12px;
+        padding: 14px 24px;
+        max-width: 1080px; margin: 0 auto;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="page wrap">
+      <h1>Settings</h1>
+      <p>Manage your profile and account preferences.</p>
+    </header>
+
+    <main class="body wrap">
+      <nav class="side" aria-label="Settings sections">
+        <ul>
+          <li><a href="#profile" class="active" aria-current="page">Profile</a></li>
+          <li><a href="#account">Account</a></li>
+          <li><a href="#notifications">Notifications</a></li>
+          <li><a href="#billing">Billing</a></li>
+        </ul>
+      </nav>
+
+      <section class="pane" id="profile">
+        <h2>Profile</h2>
+        <p class="lead">Public details shown on your profile and shared links.</p>
+
+        <form>
+          <div class="group">
+            <h3>Avatar</h3>
+            <div class="row avatar">
+              <div class="avatar-preview" aria-hidden="true"></div>
+              <button type="button" class="btn">Change photo</button>
+            </div>
+          </div>
+
+          <div class="group">
+            <h3>Display name</h3>
+            <label for="name">Name</label>
+            <input id="name" type="text" value="Avery Sun" />
+          </div>
+
+          <div class="group">
+            <h3>Bio</h3>
+            <label for="bio">About you</label>
+            <textarea id="bio" maxlength="240">Builder, occasional writer. Currently shipping page patterns.</textarea>
+            <div class="hint">Up to 240 characters.</div>
+          </div>
+        </form>
+      </section>
+    </main>
+
+    <div class="actionbar">
+      <div class="row">
+        <button type="button" class="btn">Cancel</button>
+        <button type="submit" class="btn primary">Save changes</button>
+      </div>
+    </div>
+  </body>
+</html>
