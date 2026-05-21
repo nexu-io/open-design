@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sign up — Pattern Preview</title>
+    <style>
+      :root {
+        --bg: #fafaf9;
+        --card: #ffffff;
+        --border: #e5e7eb;
+        --text: #18181b;
+        --muted: #71717a;
+        --accent: #18181b;
+        --accent-fg: #ffffff;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0; padding: 0; height: 100%;
+        font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+        background: var(--bg); color: var(--text);
+      }
+      main {
+        min-height: 100%;
+        display: grid; place-items: center;
+        padding: 48px 24px;
+      }
+      .card {
+        width: 100%; max-width: 380px;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 32px 28px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+      }
+      .brand {
+        font-weight: 600; font-size: 18px;
+        text-align: center; margin-bottom: 8px;
+      }
+      .subtitle {
+        font-size: 13px; color: var(--muted);
+        text-align: center; margin-bottom: 24px;
+      }
+      label {
+        display: block; font-size: 13px; color: var(--muted);
+        margin-bottom: 6px;
+      }
+      input[type=email], input[type=password] {
+        width: 100%; padding: 10px 12px;
+        border: 1px solid var(--border); border-radius: 8px;
+        font-size: 14px; background: #fff; color: inherit;
+      }
+      .field + .field { margin-top: 14px; }
+      .consent {
+        display: flex; align-items: flex-start; gap: 8px;
+        margin-top: 16px; font-size: 12px; color: var(--muted);
+        line-height: 1.5;
+      }
+      .consent input { margin-top: 2px; }
+      .consent a { color: var(--text); }
+      .submit {
+        margin-top: 18px; width: 100%; padding: 10px 12px;
+        border: 0; border-radius: 8px; cursor: pointer;
+        background: var(--accent); color: var(--accent-fg);
+        font-weight: 600; font-size: 14px;
+      }
+      .divider {
+        display: flex; align-items: center; gap: 12px;
+        color: var(--muted); font-size: 12px;
+        margin: 20px 0 16px;
+      }
+      .divider::before, .divider::after {
+        content: ""; flex: 1; height: 1px; background: var(--border);
+      }
+      .social { display: grid; gap: 10px; }
+      .social button {
+        width: 100%; padding: 9px 12px;
+        background: #fff; border: 1px solid var(--border);
+        border-radius: 8px; cursor: pointer;
+        font-size: 14px; color: inherit;
+        display: flex; align-items: center; gap: 10px; justify-content: center;
+      }
+      footer {
+        margin-top: 22px;
+        text-align: center; font-size: 13px; color: var(--muted);
+      }
+      footer a { color: var(--text); text-decoration: none; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="card" aria-label="Sign up">
+        <div class="brand">Acme</div>
+        <div class="subtitle">Create your account</div>
+        <form>
+          <div class="field">
+            <label for="email">Email</label>
+            <input id="email" type="email" autocomplete="email" placeholder="you@company.com" />
+          </div>
+          <div class="field">
+            <label for="password">Password</label>
+            <input id="password" type="password" autocomplete="new-password" />
+          </div>
+          <div class="field">
+            <label for="confirm">Confirm password</label>
+            <input id="confirm" type="password" autocomplete="new-password" />
+          </div>
+          <label class="consent">
+            <input type="checkbox" />
+            <span>I agree to the <a href="#">Terms</a> and <a href="#">Privacy Policy</a>.</span>
+          </label>
+          <button class="submit" type="submit">Create account</button>
+        </form>
+        <div class="divider">or sign up with</div>
+        <div class="social">
+          <button type="button">Continue with Google</button>
+          <button type="button">Continue with Apple</button>
+        </div>
+        <footer>
+          Already have an account? <a href="#">Sign in</a>
+        </footer>
+      </section>
+    </main>
+  </body>
+</html>
