@@ -99,10 +99,13 @@ jobs:
           fi
           pr_number="$WORKFLOW_PR_NUMBER"
           if [ -z "$pr_number" ]; then
+            pr_number="$manifest_pr_number"
+          fi
+          if [ -z "$pr_number" ] && [ -n "$WORKFLOW_HEAD_SHA" ]; then
             pr_number="$(gh api "repos/$GITHUB_REPOSITORY/commits/$WORKFLOW_HEAD_SHA/pulls" --jq '.[0].number // empty')"
           fi
           if ! [[ "$pr_number" =~ ^[0-9]+$ ]]; then
-            echo "Unable to derive PR number for workflow head $WORKFLOW_HEAD_SHA from GitHub event/API." >&2
+            echo "Unable to derive PR number from workflow event, capture manifest, or GitHub API for workflow head $WORKFLOW_HEAD_SHA." >&2
             exit 1
           fi
           if [ "$manifest_pr_number" != "$pr_number" ]; then
