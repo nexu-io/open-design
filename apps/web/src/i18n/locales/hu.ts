@@ -232,6 +232,7 @@ export const hu: Dict = {
   'settings.azureDeploymentModelHint':
     'Azure OpenAI esetén ez a mező a /openai/deployments/<model> deployment neveként szerepel. Add meg az Azure-ban létrehozott deployment nevét.',
   'settings.apiVersion': 'API-verzió',
+  'settings.byokMediaModels': 'Médiamodellek',
   'settings.byokImageModel': 'Képgenerálási modell',
   'settings.byokVideoModel': 'Videógeneráló modell',
   'settings.byokAudioModel': 'Hanggeneráló modell',

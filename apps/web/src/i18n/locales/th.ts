@@ -228,6 +228,7 @@ export const th: Dict = {
   'settings.azureDeploymentModel': 'ชื่อ Deployment',
   'settings.azureDeploymentModelHint': 'สำหรับ Azure OpenAI ฟิลด์นี้ใช้เป็นชื่อ Deployment ใน /openai/deployments/<model> ป้อนชื่อ Deployment ที่คุณสร้างใน Azure',
   'settings.apiVersion': 'เวอร์ชัน API',
+  'settings.byokMediaModels': 'โมเดลสื่อ',
   'settings.byokImageModel': 'โมเดลสร้างภาพ',
   'settings.byokVideoModel': 'โมเดลสร้างวิดีโอ',
   'settings.byokAudioModel': 'โมเดลสร้างเสียง',

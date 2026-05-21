@@ -232,6 +232,7 @@ export const ar: Dict = {
   'settings.azureDeploymentModelHint':
     'في Azure OpenAI، يُستخدم هذا الحقل كاسم النشر في /openai/deployments/<model>. أدخل اسم النشر الذي أنشأته في Azure.',
   'settings.apiVersion': 'إصدار API',
+  'settings.byokMediaModels': 'نماذج الوسائط',
   'settings.byokImageModel': 'نموذج إنشاء الصور',
   'settings.byokVideoModel': 'نموذج توليد الفيديو',
   'settings.byokAudioModel': 'نموذج توليد الصوت',

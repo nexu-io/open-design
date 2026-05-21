@@ -231,6 +231,7 @@ export const zhTW: Dict = {
   'settings.azureDeploymentModelHint':
     '對於 Azure OpenAI，此欄位會作為 /openai/deployments/<model> 中的部署名稱使用。請填入你在 Azure 中建立的部署名稱。',
   'settings.apiVersion': 'API 版本',
+  'settings.byokMediaModels': '媒體模型',
   'settings.byokImageModel': '圖片生成模型',
   'settings.byokVideoModel': '影片生成模型',
   'settings.byokAudioModel': '音訊生成模型',

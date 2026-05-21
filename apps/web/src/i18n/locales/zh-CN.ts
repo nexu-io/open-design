@@ -246,6 +246,7 @@ export const zhCN: Dict = {
   'settings.azureModelFetchHint':
     '对于 Azure OpenAI，请填写你在 Azure 中创建的部署名称。当前 BYOK 端点无法自动发现 deployment。',
   'settings.apiVersion': 'API 版本',
+  'settings.byokMediaModels': '媒体模型',
   'settings.byokImageModel': '图片生成模型',
   'settings.byokVideoModel': '视频生成模型',
   'settings.byokAudioModel': '音频生成模型',

@@ -232,6 +232,7 @@ export const ja: Dict = {
   'settings.azureDeploymentModelHint':
     'Azure OpenAI では、このフィールドが /openai/deployments/<model> のデプロイ名として使われます。Azure で作成したデプロイ名を入力してください。',
   'settings.apiVersion': 'API バージョン',
+  'settings.byokMediaModels': 'メディアモデル',
   'settings.byokImageModel': '画像生成モデル',
   'settings.byokVideoModel': '動画生成モデル',
   'settings.byokAudioModel': '音声生成モデル',

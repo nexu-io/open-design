@@ -232,6 +232,7 @@ export const tr: Dict = {
   'settings.azureDeploymentModelHint':
     'Azure OpenAI icin bu alan /openai/deployments/<model> icindeki dagitim adi olarak kullanilir. Azureda olusturdugunuz dagitim adini girin.',
   'settings.apiVersion': 'API sürümü',
+  'settings.byokMediaModels': 'Medya modelleri',
   'settings.byokImageModel': 'Görüntü oluşturma modeli',
   'settings.byokVideoModel': 'Video oluşturma modeli',
   'settings.byokAudioModel': 'Ses oluşturma modeli',

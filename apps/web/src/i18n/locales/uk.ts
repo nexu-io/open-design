@@ -233,6 +233,7 @@ export const uk: Dict = {
   'settings.azureDeploymentModelHint':
     'Для Azure OpenAI це поле використовується як назва розгортання в /openai/deployments/<model>. Введіть назву розгортання, створену в Azure.',
   'settings.apiVersion': 'Версія API',
+  'settings.byokMediaModels': 'Медіамоделі',
   'settings.byokImageModel': 'Модель генерації зображень',
   'settings.byokVideoModel': 'Модель генерації відео',
   'settings.byokAudioModel': 'Модель генерації аудіо',

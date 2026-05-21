@@ -246,6 +246,7 @@ export const en: Dict = {
   'settings.azureModelFetchHint':
     'For Azure OpenAI, enter the deployment name you created in Azure. Automatic deployment discovery is not available from this BYOK endpoint.',
   'settings.apiVersion': 'API version',
+  'settings.byokMediaModels': 'Media models',
   'settings.byokImageModel': 'Image generation model',
   'settings.byokVideoModel': 'Video generation model',
   'settings.byokAudioModel': 'Audio generation model',

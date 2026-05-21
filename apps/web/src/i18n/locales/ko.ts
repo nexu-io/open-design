@@ -235,6 +235,7 @@ export const ko: Dict = {
   'settings.azureDeploymentModelHint':
     'Azure OpenAI에서는 이 필드가 /openai/deployments/<model>의 배포 이름으로 사용됩니다. Azure에서 만든 배포 이름을 입력하세요.',
   'settings.apiVersion': 'API 버전',
+  'settings.byokMediaModels': '미디어 모델',
   'settings.byokImageModel': '이미지 생성 모델',
   'settings.byokVideoModel': '비디오 생성 모델',
   'settings.byokAudioModel': '오디오 생성 모델',

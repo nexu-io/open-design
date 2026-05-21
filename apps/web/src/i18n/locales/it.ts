@@ -229,6 +229,7 @@ export const it: Dict = {
   'settings.azureDeploymentModelHint':
     'Per Azure OpenAI, questo campo viene utilizzato come nome del deployment in /openai/deployments/<model>. Inserisci il nome del deployment creato in Azure.',
   'settings.apiVersion': 'Versione API',
+  'settings.byokMediaModels': 'Modelli multimediali',
   'settings.byokImageModel': 'Modello di generazione immagini',
   'settings.byokVideoModel': 'Modello di generazione video',
   'settings.byokAudioModel': 'Modello di generazione audio',

@@ -212,9 +212,20 @@ function ByokMediaModelSelect({
   const groups = groupByProvider(models);
   const defaultModel = models.find((m) => m.default) ?? models[0];
   return (
-    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      <Icon name={iconName} size={13} />
-      <label htmlFor={testid} style={{ flexShrink: 0 }}>
+    <span
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        justifyContent: 'space-between',
+        width: '100%',
+      }}
+    >
+      <label
+        htmlFor={testid}
+        style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}
+      >
+        <Icon name={iconName} size={13} />
         {label}
       </label>
       <select
@@ -223,13 +234,13 @@ function ByokMediaModelSelect({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         style={{
-          background: 'transparent',
+          background: 'var(--bg-panel, transparent)',
           border: '1px solid var(--border, #444)',
           borderRadius: 4,
           padding: '2px 6px',
           color: 'inherit',
           fontSize: 12,
-          maxWidth: 220,
+          maxWidth: 200,
         }}
       >
         <option value="">
@@ -246,6 +257,145 @@ function ByokMediaModelSelect({
         ))}
       </select>
     </span>
+  );
+}
+
+/**
+ * Collapses the per-surface BYOK media-model selects into a single composer
+ * button + popover so the inline row doesn't crowd the composer. The popover
+ * stacks the image / video / audio pickers vertically and closes on outside
+ * click or Escape.
+ */
+function ByokMediaModelsPopover({
+  label,
+  imageLabel,
+  videoLabel,
+  audioLabel,
+  imageModel,
+  onChangeImage,
+  videoModel,
+  onChangeVideo,
+  audioModel,
+  onChangeAudio,
+}: {
+  label: string;
+  imageLabel: string;
+  videoLabel: string;
+  audioLabel: string;
+  imageModel: string;
+  onChangeImage: (model: string) => void;
+  videoModel: string;
+  onChangeVideo?: (model: string) => void;
+  audioModel: string;
+  onChangeAudio?: (model: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    function onPointer(e: MouseEvent) {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('mousedown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return (
+    <div
+      ref={wrapRef}
+      data-testid="composer-byok-image-model"
+      style={{ position: 'relative', padding: '2px 8px' }}
+    >
+      <button
+        type="button"
+        data-testid="composer-byok-media-models-trigger"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
+          background: 'transparent',
+          border: 'none',
+          padding: '2px 4px',
+          fontSize: 12,
+          color: 'var(--text-muted, #888)',
+          cursor: 'pointer',
+        }}
+      >
+        <Icon name="image" size={13} />
+        {label}
+        <Icon
+          name="chevron-down"
+          size={12}
+          style={{ transform: open ? 'rotate(180deg)' : undefined }}
+        />
+      </button>
+      {open ? (
+        <div
+          role="dialog"
+          style={{
+            position: 'absolute',
+            bottom: '100%',
+            left: 8,
+            marginBottom: 6,
+            zIndex: 30,
+            minWidth: 320,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10,
+            padding: 12,
+            fontSize: 12,
+            color: 'var(--text-muted, #888)',
+            background: 'var(--bg-panel, #1e1e1e)',
+            border: '1px solid var(--border, #444)',
+            borderRadius: 8,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+          }}
+        >
+          <ByokMediaModelSelect
+            testid="composer-byok-image-model-select"
+            iconName="image"
+            label={imageLabel}
+            value={imageModel}
+            onChange={onChangeImage}
+            models={IMAGE_MODELS}
+          />
+          {onChangeVideo ? (
+            <ByokMediaModelSelect
+              testid="composer-byok-video-model-select"
+              iconName="play"
+              label={videoLabel}
+              value={videoModel}
+              onChange={onChangeVideo}
+              models={VIDEO_MODELS}
+            />
+          ) : null}
+          {onChangeAudio ? (
+            <ByokMediaModelSelect
+              testid="composer-byok-audio-model-select"
+              iconName="mic"
+              label={audioLabel}
+              value={audioModel}
+              onChange={onChangeAudio}
+              models={[
+                ...AUDIO_MODELS_BY_KIND.speech,
+                ...AUDIO_MODELS_BY_KIND.music,
+                ...AUDIO_MODELS_BY_KIND.sfx,
+              ]}
+            />
+          ) : null}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -1264,52 +1414,18 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             />
           ) : null}
           {byokApiProtocol === 'senseaudio' && onChangeByokImageModel ? (
-            <div
-              className="composer-byok-media-models"
-              data-testid="composer-byok-image-model"
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                alignItems: 'center',
-                gap: 12,
-                padding: '4px 8px',
-                fontSize: 12,
-                color: 'var(--text-muted, #888)',
-              }}
-            >
-              <ByokMediaModelSelect
-                testid="composer-byok-image-model-select"
-                iconName="image"
-                label={t('settings.byokImageModel')}
-                value={byokImageModel ?? ''}
-                onChange={onChangeByokImageModel}
-                models={IMAGE_MODELS}
-              />
-              {onChangeByokVideoModel ? (
-                <ByokMediaModelSelect
-                  testid="composer-byok-video-model-select"
-                  iconName="play"
-                  label={t('settings.byokVideoModel')}
-                  value={byokVideoModel ?? ''}
-                  onChange={onChangeByokVideoModel}
-                  models={VIDEO_MODELS}
-                />
-              ) : null}
-              {onChangeByokAudioModel ? (
-                <ByokMediaModelSelect
-                  testid="composer-byok-audio-model-select"
-                  iconName="mic"
-                  label={t('settings.byokAudioModel')}
-                  value={byokAudioModel ?? ''}
-                  onChange={onChangeByokAudioModel}
-                  models={[
-                    ...AUDIO_MODELS_BY_KIND.speech,
-                    ...AUDIO_MODELS_BY_KIND.music,
-                    ...AUDIO_MODELS_BY_KIND.sfx,
-                  ]}
-                />
-              ) : null}
-            </div>
+            <ByokMediaModelsPopover
+              label={t('settings.byokMediaModels')}
+              imageLabel={t('settings.byokImageModel')}
+              videoLabel={t('settings.byokVideoModel')}
+              audioLabel={t('settings.byokAudioModel')}
+              imageModel={byokImageModel ?? ''}
+              onChangeImage={onChangeByokImageModel}
+              videoModel={byokVideoModel ?? ''}
+              onChangeVideo={onChangeByokVideoModel}
+              audioModel={byokAudioModel ?? ''}
+              onChangeAudio={onChangeByokAudioModel}
+            />
           ) : null}
           {/*
             Spec §8.4 — context bar above the composer input. The

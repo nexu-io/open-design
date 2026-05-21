@@ -269,6 +269,7 @@ export interface Dict {
   'settings.azureDeploymentModelHint': string;
   'settings.azureModelFetchHint': string;
   'settings.apiVersion': string;
+  'settings.byokMediaModels': string;
   'settings.byokImageModel': string;
   'settings.byokVideoModel': string;
   'settings.byokAudioModel': string;
