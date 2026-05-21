@@ -1693,4 +1693,18 @@ export const ko: Dict = {
   'diagnostics.exporting': '내보내는 중…',
   'diagnostics.exportSuccess': '진단 정보를 {path}에 저장했습니다',
   'diagnostics.exportFailed': '진단 정보 내보내기 실패: {message}',
+  // Page patterns
+  'entry.navPagePatterns': '페이지 패턴',
+  'pagePatterns.title': '페이지 패턴',
+  'pagePatterns.lede': '로그인·게시판 리스트·갤러리 같은 페이지급 패턴을 골라 한 페이지 프로젝트로 바로 시작하거나 미리 살펴보세요.',
+  'pagePatterns.searchPlaceholder': '페이지 패턴 검색…',
+  'pagePatterns.categoryAll': '전체',
+  'pagePatterns.category.auth': '인증',
+  'pagePatterns.category.list': '리스트',
+  'pagePatterns.category.detail': '상세',
+  'pagePatterns.category.dashboard': '대시보드',
+  'pagePatterns.category.profile': '프로필',
+  'pagePatterns.useAction': '이 패턴으로 새 프로젝트',
+  'pagePatterns.previewAction': '미리보기',
+  'pagePatterns.empty': '검색어와 일치하는 페이지 패턴이 없습니다.',
 };
