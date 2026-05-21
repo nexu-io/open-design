@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Gallery — Pattern Preview</title>
+    <style>
+      :root {
+        --bg: #fafaf9;
+        --card: #ffffff;
+        --border: #e5e7eb;
+        --text: #18181b;
+        --muted: #71717a;
+        --tile-1: #e4e4e7;
+        --tile-2: #d4d4d8;
+        --tile-3: #e7e5e4;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0; padding: 0; min-height: 100%;
+        font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+        background: var(--bg); color: var(--text);
+      }
+      main {
+        max-width: 1080px; margin: 0 auto;
+        padding: 40px 24px;
+      }
+      .page-header {
+        display: flex; align-items: baseline; gap: 12px;
+        margin-bottom: 24px;
+      }
+      .page-title { font-size: 22px; font-weight: 600; margin: 0; }
+      .count { font-size: 13px; color: var(--muted); }
+      .toolbar {
+        display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap;
+      }
+      .chip {
+        padding: 6px 12px;
+        background: #fff; color: var(--text);
+        border: 1px solid var(--border); border-radius: 999px;
+        font-size: 13px; cursor: pointer;
+      }
+      .chip.active {
+        background: var(--text); color: #fff; border-color: var(--text);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 16px;
+      }
+      @media (max-width: 880px) {
+        .grid { grid-template-columns: repeat(3, 1fr); }
+      }
+      @media (max-width: 640px) {
+        .grid { grid-template-columns: repeat(2, 1fr); }
+      }
+      @media (max-width: 420px) {
+        .grid { grid-template-columns: 1fr; }
+      }
+      .tile {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+        cursor: pointer;
+      }
+      .thumb {
+        aspect-ratio: 4 / 3;
+        background: var(--tile-1);
+        display: grid; place-items: center;
+        color: var(--muted); font-size: 12px;
+      }
+      .tile:nth-child(3n) .thumb { background: var(--tile-2); }
+      .tile:nth-child(4n) .thumb { background: var(--tile-3); }
+      .caption {
+        padding: 12px 14px;
+      }
+      .caption .name {
+        font-size: 14px; font-weight: 500;
+        margin: 0 0 4px;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      .caption .meta {
+        font-size: 12px; color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header class="page-header">
+        <h1 class="page-title">Gallery</h1>
+        <span class="count">128 items</span>
+      </header>
+      <div class="toolbar">
+        <button class="chip active" type="button">All</button>
+        <button class="chip" type="button">Landscapes</button>
+        <button class="chip" type="button">Portraits</button>
+        <button class="chip" type="button">Studio</button>
+      </div>
+      <section class="grid" aria-label="Gallery items">
+        <article class="tile">
+          <div class="thumb" role="img" aria-label="Landscape photo placeholder">Image</div>
+          <div class="caption">
+            <p class="name">Northern Ridge</p>
+            <div class="meta">Alice · Mar 4</div>
+          </div>
+        </article>
+        <article class="tile">
+          <div class="thumb" role="img" aria-label="Portrait photo placeholder">Image</div>
+          <div class="caption">
+            <p class="name">Studio Series 02</p>
+            <div class="meta">Marcus · Mar 2</div>
+          </div>
+        </article>
+        <article class="tile">
+          <div class="thumb" role="img" aria-label="Cityscape photo placeholder">Image</div>
+          <div class="caption">
+            <p class="name">City After Rain</p>
+            <div class="meta">Priya · Feb 28</div>
+          </div>
+        </article>
+        <article class="tile">
+          <div class="thumb" role="img" aria-label="Macro photo placeholder">Image</div>
+          <div class="caption">
+            <p class="name">Petal Macro</p>
+            <div class="meta">Lee · Feb 26</div>
+          </div>
+        </article>
+        <article class="tile">
+          <div class="thumb" role="img" aria-label="Forest photo placeholder">Image</div>
+          <div class="caption">
+            <p class="name">Quiet Trail</p>
+            <div class="meta">Sam · Feb 22</div>
+          </div>
+        </article>
+        <article class="tile">
+          <div class="thumb" role="img" aria-label="Architecture photo placeholder">Image</div>
+          <div class="caption">
+            <p class="name">Concrete Lines</p>
+            <div class="meta">Jordan · Feb 18</div>
+          </div>
+        </article>
+        <article class="tile">
+          <div class="thumb" role="img" aria-label="Coast photo placeholder">Image</div>
+          <div class="caption">
+            <p class="name">Tide Markers</p>
+            <div class="meta">Alice · Feb 14</div>
+          </div>
+        </article>
+        <article class="tile">
+          <div class="thumb" role="img" aria-label="Studio still life placeholder">Image</div>
+          <div class="caption">
+            <p class="name">Still Life No. 7</p>
+            <div class="meta">Marcus · Feb 10</div>
+          </div>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>
