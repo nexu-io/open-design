@@ -959,6 +959,22 @@ function linuxDesktopStamp(config: ToolPackConfig): SidecarStamp {
   };
 }
 
+function isToolsPackDesktopMarkerForConfig(config: ToolPackConfig, marker: DesktopRootIdentityMarker): boolean {
+  const expectedIpc = resolveAppIpcPath({
+    app: APP_KEYS.DESKTOP,
+    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    namespace: config.namespace,
+  });
+  return (
+    marker.namespaceRoot === config.roots.runtime.namespaceRoot &&
+    marker.stamp.app === APP_KEYS.DESKTOP &&
+    marker.stamp.mode === SIDECAR_MODES.RUNTIME &&
+    marker.stamp.namespace === config.namespace &&
+    marker.stamp.ipc === expectedIpc &&
+    marker.stamp.source === SIDECAR_SOURCES.TOOLS_PACK
+  );
+}
+
 async function waitForMarker(markerPath: string, timeoutMs: number): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -1103,6 +1119,26 @@ export async function stopPackedLinuxApp(config: ToolPackConfig): Promise<LinuxS
   }
 
   if (validation.status === "invalid") {
+    if (isToolsPackDesktopMarkerForConfig(config, marker)) {
+      const treePids = collectProcessTreePids(snapshots, [marker.pid]);
+      const result = await stopProcesses(treePids);
+      if (result.remainingPids.length === 0) {
+        await rm(desktopIdentityPath(config), { force: true }).catch(() => undefined);
+      }
+      return {
+        fallback: {
+          ...fallback,
+          marker: { pid: marker.pid, stamp: marker.stamp },
+          processCommand: validation.processCommand,
+          reason: "marker-validation-failed-tools-pack-stopped",
+        },
+        gracefulRequested: false,
+        namespace: config.namespace,
+        remainingPids: result.remainingPids,
+        status: result.remainingPids.length === 0 ? "stopped" : "partial",
+        stoppedPids: result.stoppedPids,
+      };
+    }
     return {
       fallback: {
         ...fallback,
