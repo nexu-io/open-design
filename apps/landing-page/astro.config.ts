@@ -137,6 +137,14 @@ export default defineConfig({
   srcDir: './app',
   outDir: './out',
   trailingSlash: 'always',
+  build: {
+    // Inline every emitted stylesheet directly into the HTML <head>.
+    // Trade-off: HTML pages grow by ~10-15KB (already Brotli-compressed
+    // on CF). Win: zero render-blocking CSS roundtrip. Combined with the
+    // self-hosted variable fonts (see globals.css), this drops the
+    // PageSpeed "Render-blocking requests" estimate from ~2.3s to ~0.
+    inlineStylesheets: 'always',
+  },
   markdown: {
     // Use our paper-toned theme for fenced code blocks. Astro ships
     // Shiki under the hood and the default theme (`github-dark`)

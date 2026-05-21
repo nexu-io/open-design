@@ -18,7 +18,6 @@ import '../globals.css';
 import '../sub-pages.css';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import FontStylesheet from './font-stylesheet.astro';
 import FaviconLinks from './favicon-links.astro';
 import HeaderEnhancer from './header-enhancer.astro';
 import { Header, type HeaderProps } from './header';
@@ -78,7 +77,6 @@ const ldArray = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
 
     <FaviconLinks />
 
-    <FontStylesheet />
 
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Open Design" />
