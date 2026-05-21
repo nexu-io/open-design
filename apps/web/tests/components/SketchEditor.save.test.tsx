@@ -96,7 +96,7 @@ describe('SketchEditor save', () => {
     const btn = saveButton();
     expect(btn.textContent).not.toBe('common.save');
     expect(btn.querySelector('svg')).not.toBeNull();
-    expect(btn.disabled).toBe(true);
+    expect(btn.disabled).toBe(false);
   });
 
   it('reverts to the Save label after the saved indicator expires', async () => {
