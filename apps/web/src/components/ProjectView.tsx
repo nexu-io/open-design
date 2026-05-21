@@ -1850,7 +1850,7 @@ export function ProjectView({
                   ...prev,
                   content: needsFullReplay ? replayedContent : prev.content,
                   events: needsFullReplay ? replayedEvents : prev.events,
-                  runStatus: 'succeeded',
+                  runStatus: resolveSucceededRunStatus(prev.runStatus),
                   endedAt: prev.endedAt ?? Date.now(),
                 }),
                 true,
@@ -1884,9 +1884,8 @@ export function ProjectView({
                     nextFiles = await refreshProjectFiles();
                   }
                 }
-                const produced = recoveredExistingArtifact
-                  ? [recoveredExistingArtifact]
-                  : nextFiles.filter((f) => !beforeFileNames.has(f.name));
+                const diff = nextFiles.filter((f) => !beforeFileNames.has(f.name));
+                const produced = mergeRecoveredArtifact(diff, recoveredExistingArtifact);
                 if (produced.length > 0) {
                   updateMessageById(
                     message.id,
@@ -3966,6 +3965,18 @@ export function computeProducedFiles(
   if (!beforeNames) return undefined;
   const set = beforeNames instanceof Set ? beforeNames : new Set(beforeNames);
   return next.filter((f) => !set.has(f.name));
+}
+
+// Reattach with a recovered (on-disk) artifact must still include any
+// other files the turn produced before the artifact write — replacing
+// the diff with a single file was the regression noted on PR #2383.
+export function mergeRecoveredArtifact(
+  diff: readonly ProjectFile[],
+  recovered: ProjectFile | null,
+): ProjectFile[] {
+  if (!recovered) return [...diff];
+  if (diff.some((f) => f.name === recovered.name)) return [...diff];
+  return [...diff, recovered];
 }
 
 export function clearStreamingConversationMarker(

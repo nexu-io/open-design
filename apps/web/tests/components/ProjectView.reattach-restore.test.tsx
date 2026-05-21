@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ProjectView,
   computeProducedFiles,
+  mergeRecoveredArtifact,
 } from '../../src/components/ProjectView';
 import type { ChatMessage } from '../../src/types';
 
@@ -148,6 +149,29 @@ describe('computeProducedFiles', () => {
   });
 });
 
+describe('mergeRecoveredArtifact', () => {
+  const fileA = { name: 'helper.txt', path: '/p/helper.txt', size: 1, updatedAt: 0 };
+  const artifact = { name: 'deck.html', path: '/p/deck.html', size: 9, updatedAt: 0 };
+
+  it('keeps pre-artifact files when a recovered artifact is appended', () => {
+    const merged = mergeRecoveredArtifact([fileA] as never, artifact as never);
+    expect(merged.map((f) => f.name)).toEqual(['helper.txt', 'deck.html']);
+  });
+
+  it('does not duplicate the artifact if the diff already contains it', () => {
+    const merged = mergeRecoveredArtifact(
+      [fileA, artifact] as never,
+      artifact as never,
+    );
+    expect(merged.map((f) => f.name)).toEqual(['helper.txt', 'deck.html']);
+  });
+
+  it('returns the diff unchanged when no artifact was recovered', () => {
+    const merged = mergeRecoveredArtifact([fileA] as never, null);
+    expect(merged.map((f) => f.name)).toEqual(['helper.txt']);
+  });
+});
+
 describe('ProjectView daemon reattach restore', () => {
   afterEach(() => {
     cleanup();
@@ -277,6 +301,115 @@ describe('ProjectView daemon reattach restore', () => {
         .map((call) => call[2] as ChatMessage)
         .find((m) => m?.id === 'msg-late' && m.runStatus === 'succeeded');
       expect(succeeded).toBeTruthy();
+    });
+  });
+
+  it('preserves failed runStatus when onRunStatus records failure before onDone fires', async () => {
+    const startedAt = Date.now();
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-fail',
+        role: 'assistant',
+        content: '',
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-fail',
+        runStatus: 'running',
+        preTurnFileNames: [],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-fail',
+      status: 'failed',
+      createdAt: startedAt,
+      updatedAt: startedAt,
+      exitCode: 1,
+      signal: null,
+    });
+    listActiveChatRuns.mockResolvedValue([]);
+
+    let captured: {
+      onDone: () => void;
+      onRunStatus: (s: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled') => void;
+    } | null = null;
+    reattachDaemonRun.mockImplementation(async (options: any) => {
+      captured = { onDone: options.handlers.onDone, onRunStatus: options.onRunStatus };
+      return new Promise<void>(() => {});
+    });
+
+    renderProjectView();
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+    expect(captured).not.toBeNull();
+
+    captured!.onRunStatus('failed');
+    captured!.onDone();
+
+    await waitFor(() => {
+      const finalSave = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .filter((m) => m?.id === 'msg-fail' && (m.runStatus === 'failed' || m.runStatus === 'succeeded'))
+        .at(-1);
+      expect(finalSave?.runStatus).toBe('failed');
+    });
+  });
+
+  it('preserves canceled runStatus when onRunStatus records cancellation before onDone fires', async () => {
+    const startedAt = Date.now();
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-cancel',
+        role: 'assistant',
+        content: '',
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-cancel',
+        runStatus: 'running',
+        preTurnFileNames: [],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-cancel',
+      status: 'canceled',
+      createdAt: startedAt,
+      updatedAt: startedAt,
+      exitCode: null,
+      signal: 'SIGTERM',
+    });
+    listActiveChatRuns.mockResolvedValue([]);
+
+    let captured: { onDone: () => void; onRunStatus: (s: any) => void } | null = null;
+    reattachDaemonRun.mockImplementation(async (options: any) => {
+      captured = { onDone: options.handlers.onDone, onRunStatus: options.onRunStatus };
+      return new Promise<void>(() => {});
+    });
+
+    renderProjectView();
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+    captured!.onRunStatus('canceled');
+    captured!.onDone();
+
+    await waitFor(() => {
+      const finalSave = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .filter((m) => m?.id === 'msg-cancel' && (m.runStatus === 'canceled' || m.runStatus === 'succeeded'))
+        .at(-1);
+      expect(finalSave?.runStatus).toBe('canceled');
     });
   });
 });
