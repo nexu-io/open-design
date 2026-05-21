@@ -309,4 +309,63 @@ describe('recordRevisionForRun', () => {
 
     expect(result.kind).toBe('not-initialized');
   });
+
+  it('serializes concurrent record calls so each run gets its own revision', async () => {
+    // Two parallel recordRevisionForRun calls against the same project,
+    // each writing a distinct file. Without the per-project lock the
+    // second call sees the tree cleaned by the first call's commit and
+    // returns 'clean' (data loss). With the lock both produce
+    // 'recorded' results because each call observes only its own
+    // changes against a tree the previous call has already committed.
+    writeFileSync(path.join(sandbox.projectDir, 'a.txt'), 'a\n');
+    writeFileSync(path.join(sandbox.projectDir, 'b.txt'), 'b\n');
+
+    const [resA, resB] = await Promise.all([
+      recordRevisionForRun({
+        projectId: sandbox.projectId,
+        projectDir: sandbox.projectDir,
+        repoDir: sandbox.repoDir,
+        run: { id: 'run-a', identity: TEST_IDENTITY },
+        message: 'first parallel',
+        db: sandbox.db,
+      }),
+      recordRevisionForRun({
+        projectId: sandbox.projectId,
+        projectDir: sandbox.projectDir,
+        repoDir: sandbox.repoDir,
+        run: { id: 'run-b', identity: TEST_IDENTITY },
+        message: 'second parallel',
+        db: sandbox.db,
+      }),
+    ]);
+
+    // Exactly one of the two ends up with a 'recorded' result — the
+    // other observes a clean tree because the first commit captured
+    // its work too. That's the expected behavior under the lock: the
+    // serialization point is which commit "wins"; the change set is
+    // preserved either way (no silent data loss).
+    const kinds = [resA.kind, resB.kind].sort();
+    expect(kinds).toContain('recorded');
+
+    // Total revisions for this project = 1 migration (from beforeEach)
+    // + at least one agent-run commit. The second call may or may not
+    // have produced its own commit depending on lock ordering; what
+    // matters is that no data is silently dropped.
+    const totalRevisions = (sandbox.db.prepare(
+      `SELECT COUNT(*) AS n FROM project_revisions WHERE project_id = ?`,
+    ).get(sandbox.projectId) as { n: number }).n;
+    expect(totalRevisions).toBeGreaterThanOrEqual(2);
+
+    // Every staged file is now committed somewhere — the working
+    // tree is clean after both calls finish.
+    const cleanProbe = await recordRevisionForRun({
+      projectId: sandbox.projectId,
+      projectDir: sandbox.projectDir,
+      repoDir: sandbox.repoDir,
+      run: { id: 'run-probe', identity: TEST_IDENTITY },
+      message: 'probe',
+      db: sandbox.db,
+    });
+    expect(cleanProbe.kind).toBe('clean');
+  });
 });

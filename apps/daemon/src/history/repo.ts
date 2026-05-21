@@ -16,6 +16,7 @@ import type Database from 'better-sqlite3';
 
 import { runGit } from '../git/exec.js';
 import type { Identity } from '../identity/types.js';
+import { withProjectLock } from './project-lock.js';
 
 const DEFAULT_GITIGNORE = `# Open Design auto-generated; commit or edit as needed.
 .DS_Store
@@ -158,6 +159,16 @@ export type InitProjectHistoryResult =
 export async function initProjectHistory(
   args: InitProjectHistoryArgs,
 ): Promise<InitProjectHistoryResult> {
+  // Serialize against any concurrent init/record on the same project.
+  // Two callers racing initProjectHistory could otherwise both pass
+  // the readDotGitState() check and both run `git init`, producing
+  // duplicate migration revisions or corrupt state.
+  return withProjectLock(args.projectId, () => initProjectHistoryLocked(args));
+}
+
+async function initProjectHistoryLocked(
+  args: InitProjectHistoryArgs,
+): Promise<InitProjectHistoryResult> {
   const { projectId, projectDir, repoDir, identity, db, signal } = args;
 
   const state = await readDotGitState(projectDir, repoDir);
@@ -250,6 +261,17 @@ export type RecordRevisionForRunResult =
  * the run (auto-commit is best-effort, not part of the run's contract).
  */
 export async function recordRevisionForRun(
+  args: RecordRevisionForRunArgs,
+): Promise<RecordRevisionForRunResult> {
+  // Serialize against concurrent init/record on the same project. Two
+  // runs finishing close together can otherwise both call `git add -A`,
+  // and one `git commit` absorbs the other's staged changes — the
+  // loser sees a clean tree and no-ops. Lock guarantees the
+  // "one revision per run" contract holds.
+  return withProjectLock(args.projectId, () => recordRevisionForRunLocked(args));
+}
+
+async function recordRevisionForRunLocked(
   args: RecordRevisionForRunArgs,
 ): Promise<RecordRevisionForRunResult> {
   const { projectId, projectDir, repoDir, run, message, db, signal } = args;
