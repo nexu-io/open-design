@@ -9,7 +9,7 @@ type RuntimeEnvMap = NodeJS.ProcessEnv | Record<string, string>;
 
 // Valid values for CODEBUDDY_INTERNET_ENVIRONMENT (closed enum per IAM docs).
 // Must stay in sync with AGENT_CLI_ENV_ENUMS in app-config.ts.
-const CODEBUDDY_INTERNET_ENV_ALLOWED = new Set(['public', 'internal', 'ioa']);
+const CODEBUDDY_INTERNET_ENV_ALLOWED = new Set(['internal', 'ioa']);
 
 /** Typed error for invalid agent env/config — caught by detection.ts
  *  to surface a per-agent "unavailable" result without crashing other agents.
@@ -95,9 +95,11 @@ export function spawnEnvForAgent(
   // Do not strip it — the key is the primary auth path, not a fallback.
   // See https://www.codebuddy.cn/docs/cli/env-vars.
   //
-  // CODEBUDDY_INTERNET_ENVIRONMENT is a closed enum (public/internal/ioa;
-  // empty or unset = international/public default). When the user selects
-  // "Inherit / unset" in Settings, no configured value is persisted. In that
+  // CODEBUDDY_INTERNET_ENVIRONMENT is a closed enum (internal/ioa;
+  // empty or unset = international/default). Per the CLI docs, only
+  // `internal` and `ioa` are documented values; the international/default
+  // path is represented by leaving the variable unset, not by setting it
+  // to "public". When the user selects "Inherit / unset" in Settings, no configured value is persisted. In that
   // case we preserve any inherited value from the parent process (e.g.
   //   CODEBUDDY_INTERNET_ENVIRONMENT=internal pnpm tools-dev
   // ) so that China/iOA installs launched with the env var on the command

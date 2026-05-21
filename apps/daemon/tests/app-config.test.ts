@@ -460,18 +460,20 @@ describe('app-config', () => {
       expect(cfg.agentCliEnv).toEqual({
         codebuddy: { CODEBUDDY_INTERNET_ENVIRONMENT: 'ioa' },
       });
+    });
 
-      await writeAppConfig(dataDir, {
-        agentCliEnv: {
-          codebuddy: {
-            CODEBUDDY_INTERNET_ENVIRONMENT: 'public',
+    it('rejects CODEBUDDY_INTERNET_ENVIRONMENT=public on write (undocumented value)', async () => {
+      // "public" is not a documented CLI value — the international/default
+      // path is represented by leaving the variable unset (empty string).
+      await expect(
+        writeAppConfig(dataDir, {
+          agentCliEnv: {
+            codebuddy: {
+              CODEBUDDY_INTERNET_ENVIRONMENT: 'public',
+            },
           },
-        },
-      });
-      cfg = await readAppConfig(dataDir);
-      expect(cfg.agentCliEnv).toEqual({
-        codebuddy: { CODEBUDDY_INTERNET_ENVIRONMENT: 'public' },
-      });
+        }),
+      ).rejects.toThrow(/CODEBUDDY_INTERNET_ENVIRONMENT/);
     });
 
     it('clears agentCliEnv when null or an empty object is sent', async () => {

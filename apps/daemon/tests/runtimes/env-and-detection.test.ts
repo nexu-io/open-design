@@ -1133,17 +1133,29 @@ test('spawnEnvForAgent keeps CODEBUDDY_INTERNET_ENVIRONMENT when configured over
   assert.equal(env.CODEBUDDY_INTERNET_ENVIRONMENT, 'ioa');
 });
 
-test('spawnEnvForAgent overrides inherited internal with configured public', () => {
+test('spawnEnvForAgent overrides inherited internal with configured ioa', () => {
   // When the parent process has CODEBUDDY_INTERNET_ENVIRONMENT=internal but
-  // the user explicitly selects "public (International)" in Settings, the
+  // the user explicitly selects "ioa (iOA enterprise)" in Settings, the
   // configured value should override the inherited one.
   const env = spawnEnvForAgent(
     'codebuddy',
     { CODEBUDDY_API_KEY: 'cb-test-key', CODEBUDDY_INTERNET_ENVIRONMENT: 'internal', PATH: '/usr/bin' },
-    { CODEBUDDY_INTERNET_ENVIRONMENT: 'public' },
+    { CODEBUDDY_INTERNET_ENVIRONMENT: 'ioa' },
   );
 
-  assert.equal(env.CODEBUDDY_INTERNET_ENVIRONMENT, 'public');
+  assert.equal(env.CODEBUDDY_INTERNET_ENVIRONMENT, 'ioa');
+});
+
+test('spawnEnvForAgent rejects configured CODEBUDDY_INTERNET_ENVIRONMENT=public', () => {
+  // "public" is not a documented CLI value. The international/default path
+  // is represented by leaving the variable unset, not setting it to "public".
+  expect(() =>
+    spawnEnvForAgent(
+      'codebuddy',
+      { CODEBUDDY_API_KEY: 'cb-test-key', PATH: '/usr/bin' },
+      { CODEBUDDY_INTERNET_ENVIRONMENT: 'public' },
+    ),
+  ).toThrow(/Invalid inherited CODEBUDDY_INTERNET_ENVIRONMENT/);
 });
 
 test('spawnEnvForAgent throws on invalid inherited CODEBUDDY_INTERNET_ENVIRONMENT', () => {
@@ -1191,14 +1203,14 @@ test('spawnEnvForAgent canonicalizes mixed-case CODEBUDDY_INTERNET_ENVIRONMENT a
     'codebuddy',
     {
       Codebuddy_Internet_Environment: 'internel',  // inherited alias (bad)
-      CODEBUDDY_INTERNET_ENVIRONMENT: 'public',     // configured override (good)
+      CODEBUDDY_INTERNET_ENVIRONMENT: 'internal',  // configured override (good)
       PATH: '/usr/bin',
     },
     {},
   );
 
   // The alias must be removed; only the canonical key remains.
-  assert.equal(env.CODEBUDDY_INTERNET_ENVIRONMENT, 'public');
+  assert.equal(env.CODEBUDDY_INTERNET_ENVIRONMENT, 'internal');
   const aliases = Object.keys(env).filter(
     (k) => k.toUpperCase() === 'CODEBUDDY_INTERNET_ENVIRONMENT' && k !== 'CODEBUDDY_INTERNET_ENVIRONMENT',
   );
