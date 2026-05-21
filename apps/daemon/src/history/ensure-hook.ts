@@ -9,7 +9,7 @@
 import type Database from 'better-sqlite3';
 
 import { setProjectEnsuredHook } from '../projects.js';
-import { LocalFallbackProvider } from '../identity/types.js';
+import { resolveIdentity } from '../identity/types.js';
 import { isHistoryEnabled } from './feature-flag.js';
 import { initProjectHistory, projectRepoPath } from './repo.js';
 
@@ -33,12 +33,18 @@ export interface InstallHistoryEnsureHookArgs {
  * calls (the projects module's hook is a single slot; calling this
  * twice just re-registers).
  *
- * The migration commit's author is the LocalFallbackProvider's
- * identity — substrate init runs in a non-request-scoped context
- * (ensure happens from many paths, not all HTTP-driven) so we
- * deliberately don't try to thread req.identity here. User-driven
- * commits land via the chat-run lifecycle hook (P0.7), where
- * req.identity is properly available via run.identity.
+ * The migration commit's author comes from the identity seam's
+ * resolveIdentity(emptyReq, env) — substrate init runs in a non-
+ * request-scoped context (ensure happens from many paths, not all
+ * HTTP-driven) so we pass an empty req-shape and let the registered
+ * provider chain do its job. Today only LocalFallbackProvider is
+ * registered, so this returns the placeholder identity. When future
+ * providers register ahead of the fallback, those would (correctly)
+ * fail to match against an empty request and fall through; new
+ * substrate init paths that want to attribute to a specific user
+ * should pass the real req through instead. User-driven commits
+ * land via the chat-run lifecycle hook (P0.7), where req.identity
+ * is properly available via run.identity.
  */
 /**
  * Shape the projects-module hook passes to its registered callback.
@@ -66,11 +72,11 @@ export function installHistoryEnsureHook(args: InstallHistoryEnsureHookArgs): vo
     if (typeof metadata?.baseDir === 'string') return;
 
     const repoDir = projectRepoPath(reposRoot, projectId);
-    const identity = LocalFallbackProvider.resolve({}, env) ?? {
-      id: 'local:default',
-      displayName: 'Local User',
-      source: 'local-fallback',
-    };
+    // Route through the identity seam, not LocalFallbackProvider directly:
+    // when future multi-user providers register ahead of the fallback,
+    // they get a chance to match (and correctly fall through to the
+    // fallback for empty-req substrate-init paths).
+    const identity = resolveIdentity({}, env);
 
     const result = await initProjectHistory({
       projectId,
