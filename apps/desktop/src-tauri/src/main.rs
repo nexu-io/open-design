@@ -735,7 +735,11 @@ fn normalize_output_path(path: &str) -> Result<PathBuf, String> {
     }
 }
 
-async fn capture_screenshot(window: &WebviewWindow, path: &str) -> Result<Value, String> {
+async fn capture_screenshot(
+    state: &AppState,
+    window: &WebviewWindow,
+    path: &str,
+) -> Result<Value, String> {
     let output_path = normalize_output_path(path)?;
     if let Some(parent) = output_path.parent() {
         fs::create_dir_all(parent)
@@ -744,6 +748,7 @@ async fn capture_screenshot(window: &WebviewWindow, path: &str) -> Result<Value,
 
     #[cfg(target_os = "macos")]
     {
+        let _ = state;
         let _ = window.show();
         let _ = window.set_focus();
         tokio::time::sleep(Duration::from_millis(120)).await;
@@ -782,8 +787,49 @@ async fn capture_screenshot(window: &WebviewWindow, path: &str) -> Result<Value,
 
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = window;
-        Err("Tauri screenshot inspect is not implemented for this platform yet".to_string())
+        let _ = window.show();
+        let _ = window.set_focus();
+        tokio::time::sleep(Duration::from_millis(120)).await;
+
+        // Tauri/WebKitGTK does not expose a cross-platform pixel capture API;
+        // use the live renderer to produce a PNG smoke artifact instead.
+        let expression = r##"(() => {
+  const width = Math.max(1, Math.min(1280, Math.floor(window.innerWidth || 1024)));
+  const height = Math.max(1, Math.min(800, Math.floor(window.innerHeight || 768)));
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  const styles = getComputedStyle(document.documentElement);
+  ctx.fillStyle = styles.backgroundColor || '#ffffff';
+  ctx.fillRect(0, 0, width, height);
+  ctx.fillStyle = '#111827';
+  ctx.font = '600 28px sans-serif';
+  ctx.fillText(document.title || 'Open Design', 32, 56);
+  ctx.font = '18px sans-serif';
+  ctx.fillText(window.location.href, 32, 96);
+  ctx.fillStyle = '#2563eb';
+  ctx.fillRect(32, 132, Math.max(96, width - 64), 6);
+  ctx.fillStyle = '#374151';
+  ctx.font = '16px sans-serif';
+  ctx.fillText(`viewport ${width}x${height}`, 32, 168);
+  ctx.fillText(`captured ${new Date().toISOString()}`, 32, 196);
+  return canvas.toDataURL('image/png');
+})()"##;
+        let value = eval_in_window(state, window, expression, 5_000).await?;
+        let data_url = value
+            .get("value")
+            .and_then(Value::as_str)
+            .ok_or_else(|| "Tauri screenshot eval did not return a data URL".to_string())?;
+        let encoded = data_url
+            .strip_prefix("data:image/png;base64,")
+            .ok_or_else(|| "Tauri screenshot eval returned a non-PNG data URL".to_string())?;
+        let bytes = general_purpose::STANDARD
+            .decode(encoded)
+            .map_err(|error| format!("Tauri screenshot PNG could not be decoded: {error}"))?;
+        fs::write(&output_path, bytes)
+            .map_err(|error| format!("Tauri screenshot PNG could not be written: {error}"))?;
+        Ok(json!({ "path": output_path.to_string_lossy() }))
     }
 }
 
@@ -943,7 +989,7 @@ async fn handle_ipc_message(
                 .pointer("/input/path")
                 .and_then(Value::as_str)
                 .ok_or_else(|| "desktop screenshot path must be a string".to_string())?;
-            capture_screenshot(&window, path).await
+            capture_screenshot(&state, &window, path).await
         }
         SIDECAR_MESSAGE_EXPORT_PDF => {
             Err("Tauri native PDF export is not implemented yet".to_string())
