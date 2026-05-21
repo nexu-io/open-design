@@ -223,19 +223,27 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
             'protocol must be one of anthropic|openai|azure|google|ollama|senseaudio',
           );
         }
+        // Local Ollama installs ship without auth; the empty-key flow is
+        // documented and the BYOK UI's "Use it" banner explicitly clears
+        // the key field. Keep baseUrl + model required for every protocol
+        // (those are not optional anywhere), but only require apiKey for
+        // protocols that actually authenticate — issue #2549.
+        const apiKeyOptional = protocol === 'ollama';
         if (
           typeof body.baseUrl !== 'string' ||
           typeof body.apiKey !== 'string' ||
           typeof body.model !== 'string' ||
           !body.baseUrl.trim() ||
-          !body.apiKey.trim() ||
+          (!apiKeyOptional && !body.apiKey.trim()) ||
           !body.model.trim()
         ) {
           return sendApiError(
             res,
             400,
             'BAD_REQUEST',
-            'baseUrl, apiKey, and model are required',
+            apiKeyOptional
+              ? 'baseUrl and model are required'
+              : 'baseUrl, apiKey, and model are required',
           );
         }
         try {
