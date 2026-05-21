@@ -159,7 +159,14 @@ export function spawnEnvForAgent(
   if (agentId === 'codebuddy') {
     // Canonicalize all CodeBuddy env keys to remove Windows case-insensitive
     // aliases, then validate the closed-enum INTERNET_ENVIRONMENT value.
-    canonicalizeEnvKeys(env, CODEBUDDY_CANONICAL_KEYS);
+    // On Windows, env key names are case-insensitive at the OS level but
+    // Node's process.env preserves original casing — a merged env can
+    // contain both Codebuddy_Api_Key and CODEBUDDY_API_KEY. On POSIX,
+    // env names are case-sensitive: codebuddy_bin and CODEBUDDY_BIN are
+    // unrelated variables, so canonicalization must not run there.
+    if (process.platform === 'win32') {
+      canonicalizeEnvKeys(env, CODEBUDDY_CANONICAL_KEYS);
+    }
 
     const CANONICAL = 'CODEBUDDY_INTERNET_ENVIRONMENT';
     const value = env[CANONICAL];
