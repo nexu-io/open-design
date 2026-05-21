@@ -603,7 +603,7 @@ describe('HomeView prompt handoff', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  it('uses example preset cards as plain-text prompt fillers without binding plugin inputs', async () => {
+  it('uses example preset cards as plain-text prompt fillers while preserving selected chip inputs', async () => {
     const fetchMock = vi.fn<typeof fetch>(async (url) => {
       if (typeof url === 'string' && url === '/api/plugins') {
         return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }), {
@@ -621,11 +621,14 @@ describe('HomeView prompt handoff', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     stubAnimationFrame();
+    const onSubmit = vi.fn();
 
     render(
       <HomeView
         projects={[]}
-        onSubmit={() => undefined}
+        designSystems={[REFLY_DESIGN_SYSTEM]}
+        defaultDesignSystemId="ds-refly"
+        onSubmit={onSubmit}
         onOpenProject={() => undefined}
         onViewAllProjects={() => undefined}
       />,
@@ -644,12 +647,45 @@ describe('HomeView prompt handoff', () => {
     expect(fetchMock.mock.calls.some(([url]) => (
       typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply')
     ))).toBe(false);
-    expect(screen.queryByTestId('home-hero-active-type-chip')).toBeNull();
+    expect(screen.getByTestId('home-hero-active-type-chip').textContent).toContain('Prototype');
+    expect(
+      screen.getByTestId('home-hero-footer-option-designSystem').textContent,
+    ).toContain('Auto');
+    expect(screen.getByTestId('home-hero-footer-option-fidelity').textContent).toContain('High fidelity');
     expect(screen.queryByTestId('plugin-inputs-form')).toBeNull();
     expect(screen.queryByTestId('home-hero-prompt-slot-fidelity')).toBeNull();
     expect(screen.queryByTestId('home-hero-prompt-slot-artifactKind')).toBeNull();
     expect(screen.queryByTestId('home-hero-prompt-slot-designSystem')).toBeNull();
     expect(screen.queryByTestId('home-hero-prompt-slot-template')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/plugins/example-web-prototype/apply',
+      expect.anything(),
+    ));
+    const applyCall = fetchMock.mock.calls.find(([url]) => (
+      typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply')
+    ));
+    expect(JSON.parse(String((applyCall?.[1] as RequestInit).body))).toMatchObject({
+      inputs: {
+        artifactKind: 'web prototype',
+        fidelity: 'high-fidelity',
+        audience: 'product evaluators',
+        designSystem: 'Refly Design System',
+        template: 'the bundled web prototype seed',
+      },
+    });
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      pluginId: 'example-web-prototype',
+      projectKind: 'prototype',
+      prompt: 'Build a high-fidelity web prototype for product evaluators using the active project design system from the bundled web prototype seed.',
+      designSystemId: 'ds-refly',
+      projectMetadata: expect.objectContaining({
+        kind: 'prototype',
+        fidelity: 'high-fidelity',
+      }),
+    })));
   });
 
   it('submits live-artifact example presets with chip metadata while keeping them plain-text only', async () => {
@@ -703,12 +739,18 @@ describe('HomeView prompt handoff', () => {
     expect(fetchMock.mock.calls.some(([url]) => (
       typeof url === 'string' && url.includes('/apply')
     ))).toBe(false);
-    expect(screen.queryByTestId('home-hero-active-type-chip')).toBeNull();
+    expect(screen.getByTestId('home-hero-active-type-chip').textContent).toContain('Live artifact');
     expect(screen.queryByTestId('plugin-inputs-form')).toBeNull();
 
     fireEvent.click(screen.getByTestId('home-hero-submit'));
 
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/plugins/example-live-artifact/apply',
+      expect.anything(),
+    ));
     await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      pluginId: 'example-live-artifact',
+      appliedPluginSnapshotId: 'snap-live-artifact',
       projectKind: 'prototype',
       projectMetadata: expect.objectContaining({
         kind: 'prototype',

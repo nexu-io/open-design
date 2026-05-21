@@ -862,16 +862,7 @@ export function HomeView({
     focusPromptAtEnd();
   }
 
-  function useExamplePlugin(record: InstalledPluginRecord, chipId: string, promptText: string) {
-    const projectKind = projectKindForExamplePlugin(record, chipId);
-    const projectMetadata = projectMetadataForExamplePlugin(chipId);
-    activePluginApplyRequestRef.current += 1;
-    setActive(null);
-    setActiveSkill(null);
-    setFallbackProjectKind(projectKind);
-    setFallbackProjectMetadata(projectMetadata);
-    setPendingApplyId(null);
-    setPendingChipId(null);
+  function useExamplePlugin(_record: InstalledPluginRecord, _chipId: string, promptText: string) {
     setError(null);
     setPrompt(promptText);
     setPromptEditedByUser(false);
@@ -1464,46 +1455,6 @@ function projectKindForSkill(skill: SkillSummary | null): ProjectKind | null {
   if (skill.mode === 'video' || skill.surface === 'video') return 'video';
   if (skill.mode === 'audio' || skill.surface === 'audio') return 'audio';
   return 'other';
-}
-
-function projectKindForExamplePlugin(
-  record: InstalledPluginRecord,
-  chipId: string,
-): ProjectKind {
-  const chip = findChip(chipId);
-  if (
-    chip?.action.kind === 'apply-scenario' ||
-    chip?.action.kind === 'apply-figma-migration'
-  ) {
-    return chip.action.projectKind;
-  }
-  const mode = homePluginManifestField(record, 'mode');
-  const surface = homePluginManifestField(record, 'surface');
-  if (mode === 'deck') return 'deck';
-  if (mode === 'prototype') return 'prototype';
-  if (mode === 'image' || surface === 'image') return 'image';
-  if (mode === 'video' || surface === 'video') return 'video';
-  if (mode === 'audio' || surface === 'audio') return 'audio';
-  return 'other';
-}
-
-function projectMetadataForExamplePlugin(chipId: string): ProjectMetadata | null {
-  const chip = findChip(chipId);
-  if (
-    chip?.action.kind === 'apply-scenario' ||
-    chip?.action.kind === 'apply-figma-migration'
-  ) {
-    return chip.action.projectMetadata ?? null;
-  }
-  return null;
-}
-
-function homePluginManifestField(
-  record: InstalledPluginRecord,
-  key: string,
-): string | null {
-  const value = (record.manifest?.od ?? {})[key];
-  return typeof value === 'string' ? value.toLowerCase() : null;
 }
 
 function defaultPluginIdForChip(chipId: string | null): string | null {
