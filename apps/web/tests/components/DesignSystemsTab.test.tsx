@@ -152,6 +152,42 @@ describe('DesignSystemsTab', () => {
     expect(screen.queryByText('Your systems')).toBeNull();
     expect(screen.queryByText('Built-in library')).toBeNull();
   });
+
+  it('keeps untranslated design system summaries visible and searchable in Simplified Chinese', () => {
+    const englishOnlySystem: DesignSystemSummary = {
+      id: 'reviewer-only-system',
+      title: 'Reviewer Only System',
+      category: 'Productivity & SaaS',
+      summary: 'Specific compliance dashboard primitives for enterprise workflows.',
+      surface: 'web',
+      source: 'built-in',
+      status: 'published',
+      isEditable: false,
+    };
+
+    render(
+      <I18nProvider initial="zh-CN">
+        <DesignSystemsTab
+          systems={[englishOnlySystem]}
+          selectedId={null}
+          onSelect={() => {}}
+          onPreview={() => {}}
+          onCreate={() => {}}
+          onOpenSystem={() => {}}
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByText('Specific compliance dashboard primitives for enterprise workflows.')).toBeTruthy();
+    expect(screen.queryByText('Reviewer Only System 风格设计体系，适合效率与 SaaS 相关界面。')).toBeNull();
+
+    fireEvent.change(screen.getByTestId('design-systems-search'), {
+      target: { value: 'compliance dashboard' },
+    });
+
+    expect(screen.getByText('Reviewer Only System')).toBeTruthy();
+    expect(screen.getByText('Specific compliance dashboard primitives for enterprise workflows.')).toBeTruthy();
+  });
 });
 
 // --- #2062: built-in library surface-chip filtering -----------------------

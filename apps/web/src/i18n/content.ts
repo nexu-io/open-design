@@ -1097,13 +1097,6 @@ export function localizeDesignSystemSummary(
 ): string {
   const translated = getLocalizedContent(locale)?.designSystemSummaries[system.id];
   if (translated) return translated;
-  if (locale === 'zh-CN') {
-    const category = localizeDesignSystemCategory(
-      locale,
-      system.category || 'Uncategorized',
-    );
-    return `${system.title} 风格设计体系，适合${category}相关界面。`;
-  }
   return system.summary || system.category || '';
 }
 

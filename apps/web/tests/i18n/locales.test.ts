@@ -231,4 +231,13 @@ describe('i18n locales', () => {
         'If you need to add new keys, declare them with their Chinese values directly.',
     ).not.toMatch(/\.\.\.en\b/);
   });
+
+  it('keeps Simplified Chinese manual editor copy translated', () => {
+    const manualEditKeys = Object.keys(en)
+      .filter((key): key is keyof Dict => key.startsWith('manualEdit.'));
+
+    for (const key of manualEditKeys) {
+      expect(zhCN[key], key).not.toBe(en[key]);
+    }
+  });
 });

@@ -73,6 +73,19 @@ describe('localized resource content', () => {
     expect(localizeDesignSystemSummary('fr', englishOnlySystem)).toBe(' English summary from source. ');
   });
 
+  it('keeps source design system summaries for zh-CN until per-system copy exists', () => {
+    const englishOnlySystem = {
+      id: 'reviewer-only-system',
+      title: 'Reviewer Only',
+      summary: 'Specific dashboard terms from the source summary.',
+      category: 'Productivity & SaaS',
+    } as DesignSystemSummary;
+
+    expect(localizeDesignSystemSummary('zh-CN', englishOnlySystem)).toBe(
+      'Specific dashboard terms from the source summary.',
+    );
+  });
+
   it('prefers localized prompt template fields and falls back to english fields and tags', () => {
     const translatedTemplate = {
       id: '3d-stone-staircase-evolution-infographic',
