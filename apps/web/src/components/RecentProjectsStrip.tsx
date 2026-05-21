@@ -9,6 +9,7 @@
 import type { CSSProperties } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useT } from '../i18n';
+import { useRunningProjectIds } from '../hooks/useRunningProjectIds';
 import { fetchProjectFiles, projectFileUrl } from '../providers/registry';
 import type { Project, ProjectDisplayStatus, ProjectFile } from '../types';
 import { Icon } from './Icon';
@@ -31,6 +32,7 @@ export function RecentProjectsStrip({
   limit = 6,
 }: Props) {
   const t = useT();
+  const runningProjectIds = useRunningProjectIds();
   const recent = useMemo(
     () => [...projects]
       .sort((a, b) => b.updatedAt - a.updatedAt)
@@ -139,16 +141,37 @@ export function RecentProjectsStrip({
           const status: ProjectDisplayStatus = project.status?.value ?? 'not_started';
           const isActive =
             status === 'running' || status === 'queued' || status === 'awaiting_input';
+          // Live background run for this project (real-time, from the run
+          // registry) — distinct from the persisted project.status above.
+          const isRunning = runningProjectIds.has(project.id);
           return (
             <button
               key={project.id}
               type="button"
               role="listitem"
               className={`recent-projects__card${designSystemProject ? ' is-design-system-project' : ''}`}
+              style={{ position: 'relative' }}
               onClick={() => onOpen(project.id)}
               title={project.name}
               data-project-id={project.id}
             >
+              {isRunning ? (
+                <span
+                  data-testid="recent-projects-running-dot"
+                  title={t('designs.status.running')}
+                  style={{
+                    position: 'absolute',
+                    top: 8,
+                    right: 8,
+                    width: 9,
+                    height: 9,
+                    borderRadius: '50%',
+                    background: 'var(--green, #22c55e)',
+                    boxShadow: '0 0 0 3px color-mix(in srgb, var(--green, #22c55e) 28%, transparent)',
+                    zIndex: 2,
+                  }}
+                />
+              ) : null}
               <div
                 className={`recent-projects__card-thumb recent-projects__card-thumb-${cover.kind}`}
                 style={cover.style}

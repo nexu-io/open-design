@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useT } from '../i18n';
+import { useRunningProjectIds } from '../hooks/useRunningProjectIds';
 import { navigate, type EntryHomeView, type Route } from '../router';
 import type { Project } from '../types';
 import { Icon, type IconName } from './Icon';
@@ -250,6 +251,7 @@ const HOVER_PREVIEW_DELAY_MS = 380;
 
 export function WorkspaceTabsBar({ route, projects }: Props) {
   const t = useT();
+  const runningProjectIds = useRunningProjectIds();
   const [state, setState] = useState<WorkspaceTabsState>(() => initialTabsState(route));
   const [tabsMenuOpen, setTabsMenuOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -462,6 +464,10 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
         {state.tabs.map((tab) => {
           const display = displayTabById.get(tab.id) ?? displayTabFor(tab, projectById, t);
           const active = tab.id === state.activeTabId;
+          // Live background run for this tab's project — real-time, from the
+          // run registry. Mirrors the green dot on the home recent-projects
+          // cards so an open tab shows it's still working.
+          const isRunning = tab.kind === 'project' && runningProjectIds.has(tab.projectId);
           return (
             <div
               key={tab.id}
@@ -482,6 +488,21 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
                 <span className="workspace-tab__icon" aria-hidden>
                   <Icon name={display.icon} size={14} />
                 </span>
+                {isRunning ? (
+                  <span
+                    data-testid="workspace-tab-running-dot"
+                    title={t('designs.status.running')}
+                    aria-hidden
+                    style={{
+                      width: 7,
+                      height: 7,
+                      borderRadius: '50%',
+                      background: 'var(--green, #22c55e)',
+                      flexShrink: 0,
+                      boxShadow: '0 0 0 2px color-mix(in srgb, var(--green, #22c55e) 28%, transparent)',
+                    }}
+                  />
+                ) : null}
                 <span className="workspace-tab__label">{display.title}</span>
               </button>
               <button
