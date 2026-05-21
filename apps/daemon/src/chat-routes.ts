@@ -1190,7 +1190,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
 
     const url = appendVersionedApiPath(effectiveBaseUrl, '/chat/completions');
     console.log(
-      `[proxy:senseaudio] ${req.method} ${validated.parsed?.hostname ?? '?'} model=${model} project=${projectId}`,
+      `[proxy:senseaudio] ${req.method} ${validated.parsed?.hostname ?? '?'} model=${model} project=${projectId} pin[img=${byokImageModel ?? '-'} vid=${byokVideoModel ?? '-'} aud=${byokAudioModel ?? '-'}]`,
     );
 
     const workingMessages: any[] = Array.isArray(messages) ? [...messages] : [];

@@ -2617,6 +2617,13 @@ export function ProjectView({
       clearActiveRunRefs,
       onProjectsRefresh,
       onProjectChange,
+      // The per-session BYOK media-model picks are read inside this callback
+      // when building the proxy body — without them in deps, handleSend would
+      // close over the initial empty values and the composer picker would have
+      // no effect on what gets generated.
+      byokImageModelOverride,
+      byokVideoModelOverride,
+      byokAudioModelOverride,
     ],
   );
 
