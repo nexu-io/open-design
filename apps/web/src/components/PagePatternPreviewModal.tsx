@@ -1,60 +1,45 @@
-// Page pattern preview modal — surfaces the full
-// `/api/page-patterns/:id/example` HTML inside a sandboxed iframe.
-//
-// Mirrors the lightweight design-system overlay we already use
-// elsewhere: clicking the backdrop or pressing Escape dismisses;
-// clicks that bubble out of the iframe content are stopped by the
-// inner wrapper so users can scroll / interact inside without
-// accidentally closing the modal.
-//
-// PR-2 keeps the surface minimal. PR-3 may extend this with the
-// same two-tab layout we ship for design systems (showcase + spec),
-// but the gallery only needs single-iframe parity for now.
-
-import { useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useT } from '../i18n';
+import { fetchPagePatternExample } from '../providers/registry';
+import type { PagePatternSummary } from '@open-design/contracts';
+import { PreviewModal } from './PreviewModal';
 
 interface Props {
-  patternId: string;
+  pattern: PagePatternSummary;
   onClose: () => void;
 }
 
-export function PagePatternPreviewModal({ patternId, onClose }: Props) {
+// Wraps the shared PreviewModal with a single "Preview" view backed by
+// /api/page-patterns/:id/example. Mirrors how DesignSystemPreviewModal
+// composes its showcase + tokens views so positioning, fullscreen,
+// share, and dismissal behavior stay consistent across all gallery
+// preview modals.
+export function PagePatternPreviewModal({ pattern, onClose }: Props) {
+  const t = useT();
+  const [html, setHtml] = useState<string | null | undefined>(undefined);
+
+  const handleView = useCallback(
+    (viewId: string) => {
+      if (viewId !== 'preview' || html !== undefined) return;
+      setHtml(null);
+      void fetchPagePatternExample(pattern.id).then((value) => setHtml(value));
+    },
+    [pattern.id, html],
+  );
+
   useEffect(() => {
-    const handler = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [onClose]);
+    setHtml(undefined);
+  }, [pattern.id]);
 
   return (
-    <div
-      className="ds-preview-backdrop"
-      data-testid="page-pattern-preview-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Preview — ${patternId}`}
-      onClick={(event) => {
-        // Backdrop click only — don't close when the click started
-        // on an inner element (handled by stopPropagation below).
-        if (event.target === event.currentTarget) {
-          onClose();
-        }
-      }}
-    >
-      <div
-        className="ds-preview"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <iframe
-          title={`Preview — ${patternId}`}
-          sandbox="allow-scripts"
-          src={`/api/page-patterns/${encodeURIComponent(patternId)}/example`}
-          loading="lazy"
-        />
-      </div>
-    </div>
+    <PreviewModal
+      title={pattern.name}
+      subtitle={pattern.pageType || pattern.description}
+      views={[{ id: 'preview', label: t('pagePatterns.previewAction'), html }]}
+      initialViewId="preview"
+      onView={handleView}
+      exportTitleFor={() => pattern.name}
+      onClose={onClose}
+    />
   );
 }

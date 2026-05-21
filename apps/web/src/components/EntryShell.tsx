@@ -13,6 +13,7 @@ import {
   defaultScenarioPluginIdForProjectMetadata,
   type ConnectorDetail,
   type InstalledPluginRecord,
+  type PagePatternSummary,
 } from '@open-design/contracts';
 import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
 import { useAnalytics } from '../analytics/provider';
@@ -353,7 +354,7 @@ export function EntryShell({
   // emits a `page-pattern-use` HomePromptHandoff (PR-3, Task 17) which
   // seeds the home composer with the pattern's example prompt; the
   // preview modal is opened independently from the preview button.
-  const [previewPagePatternId, setPreviewPagePatternId] = useState<string | null>(null);
+  const [previewPagePattern, setPreviewPagePattern] = useState<PagePatternSummary | null>(null);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [newProjectInitialTab, setNewProjectInitialTab] =
     useState<CreateTab>('prototype');
@@ -675,7 +676,7 @@ export function EntryShell({
                     changeView('home');
                   }}
                   onPreview={(pattern) => {
-                    setPreviewPagePatternId(pattern.id);
+                    setPreviewPagePattern(pattern);
                   }}
                 />
               </div>
@@ -697,10 +698,10 @@ export function EntryShell({
           onClose={() => setPreviewSystemId(null)}
         />
       ) : null}
-      {previewPagePatternId ? (
+      {previewPagePattern ? (
         <PagePatternPreviewModal
-          patternId={previewPagePatternId}
-          onClose={() => setPreviewPagePatternId(null)}
+          pattern={previewPagePattern}
+          onClose={() => setPreviewPagePattern(null)}
         />
       ) : null}
       <NewProjectModal

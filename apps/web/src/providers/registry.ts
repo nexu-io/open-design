@@ -1837,6 +1837,16 @@ export async function fetchDesignSystemShowcase(id: string): Promise<string | nu
   }
 }
 
+export async function fetchPagePatternExample(id: string): Promise<string | null> {
+  try {
+    const resp = await fetch(`/api/page-patterns/${encodeURIComponent(id)}/example`);
+    if (!resp.ok) return null;
+    return await resp.text();
+  } catch {
+    return null;
+  }
+}
+
 // Fetch the sandboxed HTML preview the daemon serves for a plugin.
 // Mirrors fetchSkillExample's discriminated result so the modal can
 // surface a Retry button instead of staying stuck at "Loading…" when
