@@ -733,6 +733,7 @@ export function FileWorkspace({
       entry.items,
     );
     const file = await writeProjectTextFile(projectId, name, JSON.stringify(doc, null, 2));
+    await new Promise((resolve) => setTimeout(resolve, 500)); // Ensures saving UI shows so the button does not flicker
     if (file) {
       setSketches((curr) => ({
         ...curr,
