@@ -50,9 +50,11 @@ import {
 } from "./config.js";
 import {
   appendStartupLogDiagnostics,
+  createUnsupportedNodeRuntimeError,
   createStartupLogDiagnostics,
   detectLogDiagnostics,
   formatLogDiagnostics,
+  isSupportedNodeRuntime,
   type LogDiagnostic,
 } from "./diagnostics.js";
 import {
@@ -98,6 +100,10 @@ function output(payload: unknown, options: CliOptions = {}): void {
     return;
   }
   printJson(payload);
+}
+
+function assertSupportedNodeRuntimeForStart(): void {
+  if (!isSupportedNodeRuntime()) throw createUnsupportedNodeRuntimeError();
 }
 
 function normalizeDisplayUrl(url: string): string {
@@ -1057,6 +1063,7 @@ function addPortOptions(command: ReturnType<typeof cli.command>) {
 
 addPortOptions(addSharedOptions(cli.command("start [app]", "Start daemon, web, desktop, or all when app is omitted"))).action(
   async (appName: string | undefined, options: CliOptions) => {
+    assertSupportedNodeRuntimeForStart();
     const config = resolveToolDevConfig(options);
     const targets = resolveStartApps(appName);
     const result = await runSequential(targets, (target) => startApp(config, target, options, { targets }));
@@ -1066,6 +1073,7 @@ addPortOptions(addSharedOptions(cli.command("start [app]", "Start daemon, web, d
 
 addPortOptions(addSharedOptions(cli.command("run [app]", "Start apps and keep this command alive until interrupted"))).action(
   async (appName: string | undefined, options: CliOptions) => {
+    assertSupportedNodeRuntimeForStart();
     await runForeground(resolveToolDevConfig(options), appName, options);
   },
 );
@@ -1087,6 +1095,7 @@ addSharedOptions(cli.command("stop [app]", "Stop daemon, web, desktop, or all wh
 
 addPortOptions(addSharedOptions(cli.command("restart [app]", "Restart daemon, web, desktop, or all when app is omitted"))).action(
   async (appName: string | undefined, options: CliOptions) => {
+    assertSupportedNodeRuntimeForStart();
     printRestartResult(await restartTargets(resolveToolDevConfig(options), appName, options), options);
   },
 );

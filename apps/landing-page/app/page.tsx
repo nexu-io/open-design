@@ -9,6 +9,7 @@
  * islands only when behavior is needed.
  */
 
+import type { ReactNode } from 'react';
 import { Header, type HeaderProps } from './_components/header';
 import { Wire } from './_components/wire';
 import {
@@ -17,6 +18,8 @@ import {
   imageAsset,
   PRECISE_LAZY_PLACEHOLDER,
 } from './image-assets';
+import { DEFAULT_LOCALE, getCopy, type Locale } from './_lib/i18n';
+import { getHomeCopy, type HomeCopy } from './_lib/home-copy';
 
 /**
  * `<img>` wrapper for non-hero homepage images. Outputs `data-precise-src`
@@ -133,6 +136,9 @@ interface PageProps {
     starsLabel: string;
     versionLabel: string;
   };
+  locale?: Locale;
+  pathname?: string;
+  prefixDefaultLocale?: boolean;
 }
 
 /**
@@ -151,12 +157,107 @@ function pad2(n: number | undefined): string {
   return n < 10 ? `0${n}` : String(n);
 }
 
-export default function Page({ counts, github }: PageProps) {
+/**
+ * Render a translated footer-pitch sentence with brand mentions
+ * replaced by `<a className="inline-link">…</a>` links. The pitch
+ * string already contains the literal project names (e.g.
+ * `huashu-design`) in whatever locale, so we tokenize on the longest
+ * project slug first to avoid partial matches.
+ */
+function renderFooterPitch(
+  template: string,
+  links: Record<string, string>,
+): ReactNode[] {
+  const names = Object.keys(links).sort((a, b) => b.length - a.length);
+  const pattern = new RegExp(
+    `(${names.map((name) => name.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')).join('|')})`,
+    'g',
+  );
+  const out: ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null = pattern.exec(template);
+  let key = 0;
+  while (match) {
+    if (match.index > lastIndex) {
+      out.push(template.slice(lastIndex, match.index));
+    }
+    const name = match[1] ?? '';
+    const href = links[name];
+    if (href) {
+      out.push(
+        <a
+          key={`footer-pitch-${key++}`}
+          className='inline-link'
+          href={href}
+          target='_blank'
+          rel='noreferrer noopener'
+        >
+          {name}
+        </a>,
+      );
+    } else {
+      out.push(name);
+    }
+    lastIndex = match.index + name.length;
+    match = pattern.exec(template);
+  }
+  if (lastIndex < template.length) {
+    out.push(template.slice(lastIndex));
+  }
+  return out;
+}
+
+export default function Page({
+  counts,
+  github,
+  locale = DEFAULT_LOCALE,
+  pathname = '/',
+  prefixDefaultLocale = false,
+}: PageProps) {
   const skills = fmt(counts.skills);
   const systems = fmt(counts.systems);
   const deckCount = pad2(counts.byMode?.deck);
   const prototypeCount = pad2(counts.byMode?.prototype);
   const mobileCount = pad2(counts.byPlatform?.mobile);
+  const copy = getCopy(locale);
+  const home: HomeCopy = getHomeCopy(locale);
+
+  /**
+   * Inline `{skills}` / `{systems}` / `{cmd}` placeholders inside a
+   * translation string. `cmd` is the only one that renders a JSX node,
+   * so we split on it and let the caller wrap the text fragments.
+   */
+  const fill = (template: string) =>
+    template.replace(/\{skills\}/g, skills).replace(/\{systems\}/g, systems);
+  const fillWithCmd = (template: string, cmd: ReactNode) => {
+    const filled = fill(template);
+    const parts = filled.split('{cmd}');
+    return parts.flatMap((part, idx) => (idx === 0 ? [part] : [cmd, part]));
+  };
+  /**
+   * Inline a literal token (e.g. `SKILL.md`) inside a translated card
+   * body, wrapping the token in a monospaced code chip while leaving
+   * the surrounding prose as plain translated text. Works for any
+   * locale: the token sits inside the translation verbatim and we
+   * split on it.
+   */
+  const fillCardBody = (template: string, token: string) => {
+    const filled = fill(template);
+    const parts = filled.split(token);
+    return parts.flatMap((part, idx) =>
+      idx === 0
+        ? [part]
+        : [
+            <code
+              key={`${token}-${idx}`}
+              style={{ fontFamily: 'var(--mono)', fontSize: 12 }}
+            >
+              {token}
+            </code>,
+            part,
+          ],
+    );
+  };
 
   return (
     <>
@@ -189,30 +290,21 @@ export default function Page({ counts, github }: PageProps) {
             <span className='right'>
               <a className='topbar-link' href={REPO_RELEASES} {...ext}>
                 <span className='pulse' />
-                Live · <span data-github-version>{github.versionLabel}</span>
+                {copy.live} · <span data-github-version>{github.versionLabel}</span>
               </a>
-              <span className='locale-switch'>
-                <b>EN</b>
-                {' · '}
-                <a className='topbar-link' href={REPO} {...ext} title='Localization in progress — open the repo on GitHub'>
-                  DE
-                </a>
-                {' · '}
-                <a className='topbar-link' href={REPO} {...ext} title='Localization in progress — open the repo on GitHub'>
-                  中文
-                </a>
-                {' · '}
-                <a className='topbar-link' href={REPO} {...ext} title='Localization in progress — open the repo on GitHub'>
-                  日本語
-                </a>
-              </span>
             </span>
           </div>
         </div>
 
         {/* ====== NAV ====== */}
         {/* Headroom-style sticky header with live GitHub star count. */}
-        <Header counts={counts} github={github} />
+        <Header
+          counts={counts}
+          github={github}
+          locale={locale}
+          prefixDefaultLocale={prefixDefaultLocale}
+          pathname={pathname}
+        />
 
         {/* ====== HERO ====== */}
         <section className='hero' id='top' data-od-id='hero'>
@@ -226,29 +318,27 @@ export default function Page({ counts, github }: PageProps) {
                 data-reveal
               >
                 <span aria-hidden='true'>●</span>
-                Join Discord
+                {home.heroJoinDiscord}
               </a>
               <span className='label' data-reveal>
-                Open-source design studio <span className='ix'>· Nº 01</span>
+                {home.heroLabel}
               </span>
               <h1 className='display' data-reveal>
-                Designing <em>intelligence</em> with skills, <em>taste,</em> and{' '}
-                <em>code</em>
+                {home.heroTitleA} <em>{home.heroTitleEmphasis1}</em>{' '}
+                {home.heroTitleB} <em>{home.heroTitleEmphasis2}</em>{' '}
+                {home.heroTitleC} <em>{home.heroTitleEmphasis3}</em>
                 <span className='dot'>.</span>
               </h1>
               <p className='lead' data-reveal>
-                The open-source alternative to Claude Design. Your existing
-                coding agent — Claude · Codex · Cursor · Gemini · OpenCode ·
-                Qwen — becomes the design engine, driven by {skills} composable
-                skills and {systems} brand-grade design systems.
+                {fill(home.heroLead)}
               </p>
               <div className='hero-actions' data-reveal>
                 <a className='btn btn-primary' href={REPO} {...ext}>
-                  Star us on GitHub
+                  {home.heroCtaStar}
                   <span className='arrow'>{arrowOut}</span>
                 </a>
                 <a className='btn btn-ghost' href={REPO_RELEASES} {...ext}>
-                  Download desktop
+                  {home.heroCtaDownload}
                   <span className='arrow'>{arrowPlus}</span>
                 </a>
               </div>
@@ -256,27 +346,27 @@ export default function Page({ counts, github }: PageProps) {
                 <div className='stat'>
                   <span className='ring solid'>{skills}</span>
                   <span className='stat-label'>
-                    <b>skills</b>shippable
+                    <b>{home.heroStatSkillsBold}</b>
+                    {home.heroStatSkillsLabel}
                   </span>
                 </div>
                 <div className='stat'>
                   <span className='ring'>{systems}</span>
                   <span className='stat-label'>
-                    <b>systems</b>portable
+                    <b>{home.heroStatSystemsBold}</b>
+                    {home.heroStatSystemsLabel}
                   </span>
                 </div>
                 <div className='stat'>
                   <span className='ring coral'>12</span>
                   <span className='stat-label'>
-                    <b>CLIs</b>BYO agent
+                    <b>{home.heroStatCLIsBold}</b>
+                    {home.heroStatCLIsLabel}
                   </span>
                 </div>
               </div>
               <div className='hero-foot' data-reveal>
-                <span className='meta'>
-                  ↳{NBSP}{NBSP}pnpm tools-dev{NBSP}{NBSP}·{NBSP}{NBSP}3 commands
-                  to start
-                </span>
+                <span className='meta'>{home.heroFootCommands}</span>
                 <span className='coord'>
                   52.5200° N{NBSP}·{NBSP}13.4050° E
                 </span>
@@ -350,28 +440,28 @@ export default function Page({ counts, github }: PageProps) {
             </div>
             <div className='about-grid'>
               <div className='about-copy' data-reveal>
-                <span className='label'>
-                  About the studio <span className='ix'>· Nº 02</span>
-                </span>
+                <span className='label'>{home.aboutLabel}</span>
                 <h2 className='display'>
-                  We treat <em>your agent</em> as a creative{' '}
-                  <em>collaborator,</em> not a black box
+                  {home.aboutTitleA} <em>{home.aboutTitleEmphasis1}</em>{' '}
+                  {home.aboutTitleB} <em>{home.aboutTitleEmphasis2}</em>{' '}
+                  {home.aboutTitleC}
                   <span className='dot'>.</span>
                 </h2>
                 <p className='lead'>
-                  The strongest coding agents already live on your laptop. We
-                  don&rsquo;t ship one — we wire them into a skill-driven design
-                  workflow that runs locally with{' '}
-                  <code className='code-inline'>pnpm tools-dev</code>, deploys
-                  the web layer to Vercel, and stays BYOK at every layer.
+                  {fillWithCmd(
+                    home.aboutLead,
+                    <code key='cmd' className='code-inline'>
+                      pnpm tools-dev
+                    </code>,
+                  )}
                 </p>
                 <a className='btn btn-ghost' href={REPO_DAEMON} {...ext}>
-                  Read our approach
+                  {home.aboutCtaApproach}
                   <span className='arrow'>{arrowOut}</span>
                 </a>
                 <div className='footer-row'>
                   <span className='mark'>Ø</span>
-                  <span>Research · Design · Engineering · Repeat</span>
+                  <span>{home.aboutFooterRow}</span>
                   <span className='stamp'>
                     <span>Studio practice</span>
                     <span style={{ color: 'var(--ink)' }}>Est. MMXXVI</span>
@@ -382,19 +472,12 @@ export default function Page({ counts, github }: PageProps) {
                 <LazyImg src={imageAsset('about.png', { width: 1024, quality: 82 })} />
                 <div className='about-side-note'>
                   <b />
-                  From model behavior
-                  <br />
-                  to visual taste, we
-                  <br />
-                  prototype the full
-                  <br />
-                  stack of creative
-                  <br />
-                  systems.
+                  {home.aboutSideNote}
                 </div>
                 <div className='about-caption'>
-                  <b>Studies in form · perception · machine imagination.</b>
-                  (Open Design, MMXXVI)
+                  <b>{home.aboutCaption}</b>
+                  {' '}
+                  {home.aboutCaptionCredit}
                 </div>
               </div>
             </div>
@@ -428,22 +511,17 @@ export default function Page({ counts, github }: PageProps) {
                 </div>
               </div>
               <div className='capabilities-copy' data-reveal>
-                <span className='label'>
-                  Capabilities <span className='ix'>· Nº 03</span>
-                </span>
+                <span className='label'>{home.capLabel}</span>
                 <h2 className='display'>
-                  Skills, systems, and surfaces <em>for creative</em>{' '}
-                  intelligence<span className='dot'>.</span>
+                  {home.capTitleA} <em>{home.capTitleEmphasis}</em>{' '}
+                  {home.capTitleB}
+                  <span className='dot'>.</span>
                 </h2>
-                <p className='lead'>
-                  We blend human taste with whichever agent you already trust to
-                  ship interfaces, decks, and editorial pages that feel
-                  intentional, expressive, and alive.
-                </p>
+                <p className='lead'>{home.capLead}</p>
                 <div className='cards'>
                   <div className='card' data-reveal>
                     <div className='num'>
-                      01<span className='tag'>Skills</span>
+                      01<span className='tag'>{home.capCard1Tag}</span>
                     </div>
                     <svg
                       className='icon'
@@ -455,17 +533,9 @@ export default function Page({ counts, github }: PageProps) {
                       <circle cx='9' cy='9' r='5' />
                       <path d='M14 14l5 5' />
                     </svg>
-                    <h3>
-                      Skills,
-                      <br />
-                      not plugins
-                    </h3>
+                    <h3>{home.capCard1Title}</h3>
                     <p>
-                      {skills} file-based{' '}
-                      <code style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>
-                        SKILL.md
-                      </code>{' '}
-                      bundles. Drop a folder in, restart the daemon, it appears.
+                      {fillCardBody(home.capCard1Body, 'SKILL.md')}
                     </p>
                     <a
                       className='arrow-mark'
@@ -478,7 +548,7 @@ export default function Page({ counts, github }: PageProps) {
                   </div>
                   <div className='card' data-reveal>
                     <div className='num'>
-                      02<span className='tag'>Systems</span>
+                      02<span className='tag'>{home.capCard2Tag}</span>
                     </div>
                     <svg
                       className='icon'
@@ -492,17 +562,9 @@ export default function Page({ counts, github }: PageProps) {
                       <rect x='3.5' y='12.5' width='8' height='8' />
                       <rect x='12.5' y='12.5' width='8' height='8' />
                     </svg>
-                    <h3>
-                      Design Systems
-                      <br />
-                      as Markdown
-                    </h3>
+                    <h3>{home.capCard2Title}</h3>
                     <p>
-                      {systems} portable{' '}
-                      <code style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>
-                        DESIGN.md
-                      </code>{' '}
-                      systems — Linear, Vercel, Stripe, Apple, Cursor, Figma…
+                      {fillCardBody(home.capCard2Body, 'DESIGN.md')}
                     </p>
                     <a
                       className='arrow-mark'
@@ -515,7 +577,7 @@ export default function Page({ counts, github }: PageProps) {
                   </div>
                   <div className='card' data-reveal>
                     <div className='num'>
-                      03<span className='tag'>Adapters</span>
+                      03<span className='tag'>{home.capCard3Tag}</span>
                     </div>
                     <svg
                       className='icon'
@@ -527,16 +589,8 @@ export default function Page({ counts, github }: PageProps) {
                       <circle cx='8' cy='12' r='4.5' />
                       <circle cx='16' cy='12' r='4.5' />
                     </svg>
-                    <h3>
-                      12 Agent
-                      <br />
-                      Adapters
-                    </h3>
-                    <p>
-                      Claude · Codex · Gemini · Cursor · Copilot · OpenCode ·
-                      Devin · Hermes · Pi · Kimi · Kiro · Qwen — auto-detected
-                      on $PATH.
-                    </p>
+                    <h3>{home.capCard3Title}</h3>
+                    <p>{home.capCard3Body}</p>
                     <a
                       className='arrow-mark'
                       href={REPO_DAEMON}
@@ -548,7 +602,7 @@ export default function Page({ counts, github }: PageProps) {
                   </div>
                   <div className='card' data-reveal>
                     <div className='num'>
-                      04<span className='tag'>BYOK</span>
+                      04<span className='tag'>{home.capCard4Tag}</span>
                     </div>
                     <svg
                       className='icon'
@@ -560,15 +614,8 @@ export default function Page({ counts, github }: PageProps) {
                       <path d='M5 8h14v8H5z' />
                       <path d='M9 12h6M12 9v6' />
                     </svg>
-                    <h3>
-                      BYOK
-                      <br />
-                      at every layer
-                    </h3>
-                    <p>
-                      OpenAI-compatible proxy. DeepSeek, Groq, OpenRouter, your
-                      self-hosted vLLM — paste a baseUrl + key, ship.
-                    </p>
+                    <h3>{home.capCard4Title}</h3>
+                    <p>{home.capCard4Body}</p>
                     <a
                       className='arrow-mark'
                       href={REPO}
@@ -598,41 +645,43 @@ export default function Page({ counts, github }: PageProps) {
             </div>
             <div className='labs-head'>
               <div data-reveal>
-                <span className='label'>
-                  Labs <span className='ix'>· Nº 04</span>
-                </span>
+                <span className='label'>{home.labsLabel}</span>
                 <h2 className='display' style={{ marginTop: 30 }}>
-                  A living archive of <em>experiments</em> in skills, decks, and
-                  machine-made form<span className='dot'>.</span>
+                  {home.labsTitleA} <em>{home.labsTitleEmphasis}</em>{' '}
+                  {home.labsTitleB}
+                  <span className='dot'>.</span>
                 </h2>
               </div>
               <div className='pills' data-reveal='right'>
                 <a className='pill active' href='/skills/'>
-                  All<span className='count'>{skills}</span>
+                  {home.labsFilterAll}
+                  <span className='count'>{skills}</span>
                 </a>
                 <a className='pill' href='/skills/mode/prototype/'>
-                  Prototype<span className='count'>{prototypeCount}</span>
+                  {home.labsFilterPrototype}
+                  <span className='count'>{prototypeCount}</span>
                 </a>
                 <a className='pill' href='/skills/mode/deck/'>
-                  Deck<span className='count'>{deckCount}</span>
+                  {home.labsFilterDeck}
+                  <span className='count'>{deckCount}</span>
                 </a>
                 <a className='pill' href='/skills/'>
-                  Mobile<span className='count'>{mobileCount}</span>
+                  {home.labsFilterMobile}
+                  <span className='count'>{mobileCount}</span>
                 </a>
                 <a className='pill' href='/skills/'>
-                  Office<span className='count'>—</span>
+                  {home.labsFilterOffice}
+                  <span className='count'>—</span>
                 </a>
               </div>
             </div>
             <div className='labs-meta'>
               <span className='ring'>05</span>
               <div className='meta-text'>
-                <b>Ongoing experiments</b>
-                documenting ideas in flux
-                <br />
-                building intelligence
-                <br />
-                through making
+                <b>{home.labsMetaBold}</b>
+                {home.labsMetaText.split('\n').flatMap((line, idx) =>
+                  idx === 0 ? [line] : [<br key={`labs-meta-${idx}`} />, line],
+                )}
               </div>
             </div>
             <div className='labs-grid'>
@@ -640,48 +689,40 @@ export default function Page({ counts, github }: PageProps) {
                 {
                   badge: 'Deck',
                   num: 'Nº 01',
-                  title: 'Magazine Decks',
-                  body: (
-                    <>
-                      Editorial-grade slide decks with{' '}
-                      <code style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>
-                        guizang-ppt
-                      </code>
-                      . Magazine layout, WebGL hero.
-                    </>
-                  ),
+                  title: home.lab1Title,
+                  body: fillCardBody(home.lab1Body, 'guizang-ppt'),
                   src: imageAsset('lab-1.png', { width: 768, quality: 82 }),
                   href: `${REPO_SKILLS}/guizang-ppt`,
                 },
                 {
                   badge: 'Media',
                   num: 'Nº 02',
-                  title: 'Synthetic Matter',
-                  body: 'Gpt-image-2 + Seedance + HyperFrames. Image, video, audio — same chat surface as code.',
+                  title: home.lab2Title,
+                  body: home.lab2Body,
                   src: imageAsset('lab-2.png', { width: 768, quality: 82 }),
                   href: `${REPO_SKILLS}/hyperframes`,
                 },
                 {
                   badge: 'Loop',
                   num: 'Nº 03',
-                  title: 'Prompt Choreography',
-                  body: 'The interactive question form pops before a single pixel is improvised. 30s of radios beats 30min of redirects.',
+                  title: home.lab3Title,
+                  body: home.lab3Body,
                   src: imageAsset('lab-3.png', { width: 768, quality: 82 }),
                   href: `${REPO_SKILLS}/design-brief`,
                 },
                 {
                   badge: 'Critique',
                   num: 'Nº 04',
-                  title: 'Visual Reasoning',
-                  body: '5-dim self-critique gates every artifact: philosophy · hierarchy · execution · specificity · restraint.',
+                  title: home.lab4Title,
+                  body: home.lab4Body,
                   src: imageAsset('lab-4.png', { width: 768, quality: 82 }),
                   href: `${REPO_SKILLS}/critique`,
                 },
                 {
                   badge: 'Runtime',
                   num: 'Nº 05',
-                  title: 'Soft Systems',
-                  body: 'Sandboxed iframe preview. Streaming todos. Real-cwd filesystem. Adaptive loops between human and machine.',
+                  title: home.lab5Title,
+                  body: home.lab5Body,
                   src: imageAsset('lab-5.png', { width: 768, quality: 82 }),
                   href: REPO_DAEMON,
                 },
@@ -726,7 +767,7 @@ export default function Page({ counts, github }: PageProps) {
                   className='library-link'
                   style={{ color: 'var(--coral)' }}
                 >
-                  VIEW FULL LIBRARY →
+                  {home.labsViewFullLibrary}
                 </a>
               </span>
             </div>
@@ -747,45 +788,42 @@ export default function Page({ counts, github }: PageProps) {
             </div>
             <div className='method-head'>
               <div data-reveal>
-                <span className='label'>
-                  Method <span className='ix'>· Nº 05</span>
-                </span>
+                <span className='label'>{home.methodLabel}</span>
                 <h2 className='display' style={{ marginTop: 30 }}>
-                  From <em>signals</em> to systems<span className='dot'>.</span>
+                  {home.methodTitleA} <em>{home.methodTitleEmphasis}</em>{' '}
+                  {home.methodTitleB}
+                  <span className='dot'>.</span>
                 </h2>
               </div>
               <div className='right' data-reveal='right'>
                 <span className='plus'>+</span>
-                <p>
-                  Every stage is iterative, visual, and research-driven —
-                  composable files, not opaque prompts.
-                </p>
+                <p>{home.methodLead}</p>
               </div>
             </div>
             <div className='method-grid'>
               {[
                 {
                   num: '01',
-                  title: 'Detect',
-                  body: `The daemon scans your $PATH for 12 coding agents and auto-loads ${skills} skills + ${systems} systems on boot.`,
+                  title: home.method1Title,
+                  body: fill(home.method1Body),
                   src: imageAsset('method-1.png', { width: 816, quality: 82 }),
                 },
                 {
                   num: '02',
-                  title: 'Discover',
-                  body: 'Turn 1 is a question form — surface, audience, tone, scale, brand context. Locked in 30 seconds.',
+                  title: home.method2Title,
+                  body: home.method2Body,
                   src: imageAsset('method-2.png', { width: 816, quality: 82 }),
                 },
                 {
                   num: '03',
-                  title: 'Direct',
-                  body: 'Pick one of 5 deterministic visual directions. Palette in OKLch, font stack, layout posture cues.',
+                  title: home.method3Title,
+                  body: home.method3Body,
                   src: imageAsset('method-3.png', { width: 816, quality: 82 }),
                 },
                 {
                   num: '04',
-                  title: 'Deliver',
-                  body: 'The agent writes to disk, you preview in a sandboxed iframe, export HTML / PDF / PPTX / ZIP / Markdown.',
+                  title: home.method4Title,
+                  body: home.method4Body,
                   src: imageAsset('method-4.png', { width: 816, quality: 82 }),
                 },
               ].map((step) => (
@@ -804,7 +842,7 @@ export default function Page({ counts, github }: PageProps) {
             <div className='method-foot'>
               <div className='left'>
                 <span className='ring' />
-                <span>Skills inform everything. Files make it real.</span>
+                <span>{home.methodFootText}</span>
               </div>
               <div className='right'>
                 <a className='method-repo-link' href={REPO} {...ext}>
@@ -830,14 +868,14 @@ export default function Page({ counts, github }: PageProps) {
             </div>
             <div className='work-grid'>
               <div className='work-copy' data-reveal>
-                <span className='label'>Selected work</span>
+                <span className='label'>{home.workLabel}</span>
                 <h2>
-                  Skills that turn briefs into <em>memorable</em> shippable{' '}
-                  <em>artifacts</em>
+                  {home.workTitleA} <em>{home.workTitleEmphasis1}</em>{' '}
+                  {home.workTitleB} <em>{home.workTitleEmphasis2}</em>
                   <span className='dot'>.</span>
                 </h2>
                 <a className='work-link' href='/skills/'>
-                  View all {skills} skills
+                  {fill(home.workViewAll)}
                 </a>
               </div>
               <a
@@ -847,14 +885,11 @@ export default function Page({ counts, github }: PageProps) {
                 {...ext}
               >
                 <div className='label-row'>
-                  <span className='small-label'>Featured skill</span>
+                  <span className='small-label'>{home.workFeaturedTag}</span>
                   <span className='index'>01 / {skills}</span>
                 </div>
                 <h3>guizang-ppt</h3>
-                <p>
-                  Magazine-style web PPT for product launches and pitch decks.
-                  Bundled verbatim, original LICENSE preserved.
-                </p>
+                <p>{home.work1Body}</p>
                 <div className='img'>
                   <LazyImg src={imageAsset('work-1.png', { width: 768, quality: 82 })} />
                 </div>
@@ -870,15 +905,11 @@ export default function Page({ counts, github }: PageProps) {
                 {...ext}
               >
                 <div className='label-row'>
-                  <span className='small-label'>Companion system</span>
+                  <span className='small-label'>{home.workCompanionTag}</span>
                   <span className='index'>04 / {systems}</span>
                 </div>
                 <h3>kami</h3>
-                <p>
-                  An editorial paper system. Warm parchment canvas, ink-blue
-                  accent, serif-led hierarchy — multilingual by design (EN ·
-                  zh-CN · ja).
-                </p>
+                <p>{home.work2Body}</p>
                 <div className='img'>
                   <LazyImg src={imageAsset('work-2.png', { width: 768, quality: 82 })} />
                 </div>
@@ -931,27 +962,24 @@ export default function Page({ counts, github }: PageProps) {
             </div>
             <div className='testimonial-grid'>
               <div className='testimonial-copy' data-reveal>
-                <span className='label'>
-                  Collaborators <span className='ix'>· Nº 06</span>
-                </span>
+                <span className='label'>{home.testimonialLabel}</span>
                 <h2 style={{ marginTop: 30 }}>
-                  &ldquo;Open Design helped us turn vague <em>AI ideas</em> into
-                  a visual system that felt <em>sharp, believable,</em> and
-                  genuinely new.&rdquo;
+                  {home.testimonialQuotePre}{' '}
+                  <em>{home.testimonialQuoteEm1}</em>{' '}
+                  {home.testimonialQuoteMid}{' '}
+                  <em>{home.testimonialQuoteEm2}</em>{' '}
+                  {home.testimonialQuotePost}
                 </h2>
                 <div className='author'>
                   <span className='avatar'>m</span>
                   <p>
                     Mina Kovac
                     <br />
-                    <span>Creative Director · North Form</span>
+                    <span>{home.testimonialAuthorRole}</span>
                   </p>
                 </div>
                 <div className='divider' />
-                <p className='partners-text'>
-                  Standing on the shoulders of teams shipping open-source design
-                  culture.
-                </p>
+                <p className='partners-text'>{home.testimonialPartnersText}</p>
                 <div className='partners'>
                   <a
                     className='partner'
@@ -970,7 +998,7 @@ export default function Page({ counts, github }: PageProps) {
                       </svg>
                     </div>
                     <span>huashu-design</span>
-                    <small>Philosophy</small>
+                    <small>{home.partnerHuashu}</small>
                   </a>
                   <a
                     className='partner'
@@ -989,7 +1017,7 @@ export default function Page({ counts, github }: PageProps) {
                       </svg>
                     </div>
                     <span>guizang-ppt</span>
-                    <small>Decks</small>
+                    <small>{home.partnerGuizang}</small>
                   </a>
                   <a
                     className='partner'
@@ -1009,7 +1037,7 @@ export default function Page({ counts, github }: PageProps) {
                       </svg>
                     </div>
                     <span>open-codesign</span>
-                    <small>UX</small>
+                    <small>{home.partnerCodesign}</small>
                   </a>
                   <a
                     className='partner'
@@ -1028,7 +1056,7 @@ export default function Page({ counts, github }: PageProps) {
                       </svg>
                     </div>
                     <span>Devin CLI</span>
-                    <small>Terminal</small>
+                    <small>{home.partnerDevin}</small>
                   </a>
                   <a
                     className='partner'
@@ -1048,11 +1076,11 @@ export default function Page({ counts, github }: PageProps) {
                       </svg>
                     </div>
                     <span>hyperframes</span>
-                    <small>Frames</small>
+                    <small>{home.partnerHyperframes}</small>
                   </a>
                 </div>
                 <a className='read-more' href={REPO} {...ext}>
-                  Read more stories
+                  {home.testimonialReadMore}
                 </a>
               </div>
               <div className='testimonial-art' data-reveal='right'>
@@ -1076,30 +1104,33 @@ export default function Page({ counts, github }: PageProps) {
             </div>
             <div className='cta-grid'>
               <div data-reveal>
-                <span className='label'>
-                  Start a conversation <span className='ix'>· Nº 07</span>
-                </span>
+                <span className='label'>{home.ctaLabel}</span>
                 <h2 className='display'>
-                  Let&rsquo;s build something <em>open</em> and{' '}
-                  <em>visually</em> unforgettable<span className='dot'>.</span>
+                  {home.ctaTitleA} <em>{home.ctaTitleEmphasis1}</em>{' '}
+                  {home.ctaTitleB} <em>{home.ctaTitleEmphasis2}</em>{' '}
+                  {home.ctaTitleC}
+                  <span className='dot'>.</span>
                 </h2>
                 <p className='lead'>
-                  Star us on GitHub, drop into the issues, or run{' '}
-                  <code className='code-inline'>pnpm tools-dev</code> tonight.
-                  Three commands and the loop is yours.
+                  {fillWithCmd(
+                    home.ctaLead,
+                    <code key='cmd' className='code-inline'>
+                      pnpm tools-dev
+                    </code>,
+                  )}
                 </p>
                 <div className='cta-actions'>
                   <a className='btn btn-primary' href={REPO} {...ext}>
-                    Star on GitHub
+                    {home.ctaPrimary}
                     <span className='arrow'>{arrowOut}</span>
                   </a>
                   <a className='email-pill' href={REPO_ISSUES} {...ext}>
-                    Open an issue
+                    {home.ctaSecondary}
                     <span className='arrow-circle'>→</span>
                   </a>
                 </div>
                 <div className='cta-foot'>
-                  <span className='stamp'>● Live</span>
+                  <span className='stamp'>{home.ctaFootLive}</span>
                   <span>
                     <span data-github-version>{github.versionLabel}</span> / Apache-2.0
                   </span>
@@ -1131,40 +1162,12 @@ export default function Page({ counts, github }: PageProps) {
                   <span>Open Design</span>
                 </a>
                 <p style={{ marginTop: 18 }}>
-                  The open-source alternative to Claude Design. Built on the
-                  shoulders of{' '}
-                  <a
-                    className='inline-link'
-                    href={LINEAGE['huashu-design']}
-                    {...ext}
-                  >
-                    huashu-design
-                  </a>
-                  ,{' '}
-                  <a
-                    className='inline-link'
-                    href={LINEAGE['guizang-ppt']}
-                    {...ext}
-                  >
-                    guizang-ppt
-                  </a>
-                  ,{' '}
-                  <a
-                    className='inline-link'
-                    href={LINEAGE['multica-ai']}
-                    {...ext}
-                  >
-                    multica-ai
-                  </a>
-                  , and{' '}
-                  <a
-                    className='inline-link'
-                    href={LINEAGE['open-codesign']}
-                    {...ext}
-                  >
-                    open-codesign
-                  </a>
-                  .
+                  {renderFooterPitch(home.footPitch, {
+                    'huashu-design': LINEAGE['huashu-design'],
+                    'guizang-ppt': LINEAGE['guizang-ppt'],
+                    'multica-ai': LINEAGE['multica-ai'],
+                    'open-codesign': LINEAGE['open-codesign'],
+                  })}
                 </p>
                 <a
                   className='foot-cta'
@@ -1172,52 +1175,57 @@ export default function Page({ counts, github }: PageProps) {
                   aria-label='Download the Open Design desktop app'
                   {...ext}
                 >
-                  Download desktop
+                  {home.footDownloadDesktop}
                   <span className='meta'>
-                    macOS · <span data-github-version>{github.versionLabel}</span>
+                    {home.footDownloadMeta} ·{' '}
+                    <span data-github-version>{github.versionLabel}</span>
                   </span>
                 </a>
               </div>
               <div className='foot-col'>
-                <h5>Studio</h5>
+                <h5>{home.footStudio}</h5>
                 <ul>
                   <li>
-                    <a href='#agents'>Capabilities</a>
+                    <a href='#agents'>{home.footCapabilities}</a>
                   </li>
                   <li>
-                    <a href='#labs'>Labs</a>
+                    <a href='#labs'>{home.footLabs}</a>
                   </li>
                   <li>
                     <a href={REPO_DAEMON} {...ext}>
-                      Method
+                      {home.footMethod}
                     </a>
                   </li>
                   <li>
                     <a href={REPO} {...ext}>
-                      Manifesto
+                      {home.footManifesto}
                     </a>
                   </li>
                 </ul>
               </div>
               <div className='foot-col'>
-                <h5>Library</h5>
+                <h5>{home.footLibrary}</h5>
                 <ul>
                   <li>
-                    <a href='/skills/'>{skills} Skills</a>
+                    <a href='/skills/'>
+                      {skills} {copy.navSkills}
+                    </a>
                   </li>
                   <li>
-                    <a href='/systems/'>{systems} Systems</a>
+                    <a href='/systems/'>
+                      {systems} {copy.navSystems}
+                    </a>
                   </li>
                   <li>
-                    <a href='/templates/'>Templates</a>
+                    <a href='/templates/'>{copy.navTemplates}</a>
                   </li>
                   <li>
-                    <a href='/craft/'>Craft</a>
+                    <a href='/craft/'>{copy.navCraft}</a>
                   </li>
                 </ul>
               </div>
               <div className='foot-col'>
-                <h5>Connect</h5>
+                <h5>{home.footConnect}</h5>
                 <ul>
                   <li>
                     <a href={REPO} {...ext}>
@@ -1231,7 +1239,7 @@ export default function Page({ counts, github }: PageProps) {
                   </li>
                   <li>
                     <a href={REPO_CONTRIBUTORS} {...ext}>
-                      Contributors
+                      {home.footContributors}
                     </a>
                   </li>
                   <li>
@@ -1247,26 +1255,26 @@ export default function Page({ counts, github }: PageProps) {
                 </ul>
               </div>
               <div className='foot-col'>
-                <h5>Docs</h5>
+                <h5>{home.footDocs}</h5>
                 <ul>
                   <li>
                     <a href={REPO_DOCS('QUICKSTART.md')} {...ext}>
-                      Quickstart
+                      {home.footQuickstart}
                     </a>
                   </li>
                   <li>
                     <a href={REPO_DOCS('docs/architecture.md')} {...ext}>
-                      Architecture
+                      {home.footArchitecture}
                     </a>
                   </li>
                   <li>
                     <a href={REPO_DOCS('docs/skills-protocol.md')} {...ext}>
-                      Skill Protocol
+                      {home.footSkillProtocol}
                     </a>
                   </li>
                   <li>
                     <a href={REPO_DOCS('docs/roadmap.md')} {...ext}>
-                      Roadmap
+                      {home.footRoadmap}
                     </a>
                   </li>
                 </ul>

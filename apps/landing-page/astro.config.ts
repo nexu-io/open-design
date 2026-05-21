@@ -104,6 +104,7 @@ const editorialPaperTheme: ShikiThemeObject = {
 // builds (Cloudflare Pages preview deployments, local previews on a
 // different host) can stamp their own URL without forking the config.
 const site = process.env.OD_LANDING_SITE ?? 'https://open-design.ai';
+const locales = ['en', 'id', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ar', 'ja', 'ko', 'pl', 'hu', 'fr', 'uk', 'tr', 'th', 'it'];
 const changefreq = {
   daily: 'daily' as SitemapItem['changefreq'],
   weekly: 'weekly' as SitemapItem['changefreq'],
@@ -122,6 +123,12 @@ for (const file of readdirSync(blogDir)) {
     blogDates.set(`/blog/${slug}/`, match[1]!);
   }
 }
+
+const localePrefixPattern = new RegExp(`^/(${locales.join('|').replaceAll('-', '\\-')})(?=/|$)`);
+const stripLocalePrefix = (path: string) => {
+  const stripped = path.replace(localePrefixPattern, '');
+  return stripped.length > 0 ? stripped : '/';
+};
 
 export default defineConfig({
   output: 'static',
@@ -151,21 +158,22 @@ export default defineConfig({
       filter: (page) => !page.includes('/og/'),
       serialize(item: SitemapItem) {
         const path = new URL(item.url).pathname;
-        if (path === '/') {
+        const canonicalPath = stripLocalePrefix(path);
+        if (canonicalPath === '/') {
           item.priority = 1.0;
           item.changefreq = changefreq.daily;
-        } else if (path === '/blog/') {
+        } else if (canonicalPath === '/blog/') {
           item.priority = 0.9;
           item.changefreq = changefreq.daily;
-        } else if (path.startsWith('/blog/')) {
+        } else if (canonicalPath.startsWith('/blog/')) {
           item.priority = 0.8;
           item.changefreq = changefreq.weekly;
-          const date = blogDates.get(path);
+          const date = blogDates.get(canonicalPath);
           if (date) item.lastmod = date;
         } else if (
-          path === '/skills/' ||
-          path === '/systems/' ||
-          path === '/craft/'
+          canonicalPath === '/skills/' ||
+          canonicalPath === '/systems/' ||
+          canonicalPath === '/craft/'
         ) {
           item.priority = 0.7;
           item.changefreq = changefreq.weekly;

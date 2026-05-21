@@ -8,6 +8,11 @@ import { ChatPane } from '../../src/components/ChatPane';
 import type { Conversation, ProjectMetadata } from '../../src/types';
 
 vi.mock('../../src/i18n', () => ({
+  useI18n: () => ({
+    locale: 'en',
+    setLocale: () => undefined,
+    t: (key: string) => key,
+  }),
   useT: () => (key: string) => key,
 }));
 

@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
 } from "react";
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
@@ -32,7 +33,7 @@ import { buildVisualAnnotationAttachment } from '../comments';
 import { Icon } from "./Icon";
 import { PluginDetailsModal } from "./PluginDetailsModal";
 import { PluginsSection, type PluginsSectionHandle } from "./PluginsSection";
-import { BUILT_IN_PETS, CUSTOM_PET_ID, resolveActivePet } from "./pet/pets";
+import { BUILT_IN_PETS, CUSTOM_PET_ID } from "./pet/pets";
 import {
   buildInlineMentionParts,
   inlineMentionToken,
@@ -145,6 +146,7 @@ interface Props {
   // ActivePluginChip on each user message (see UserMessage in
   // ChatPane). Pass `null` (or omit) to render the full rail.
   pinnedPluginId?: string | null;
+  footerAccessory?: ReactNode;
 }
 
 // Imperative handle so ancestors (e.g. example chips in ChatPane) can
@@ -187,7 +189,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       skills = [],
       onSend,
       onStop,
-      onOpenSettings,
       onOpenMcpSettings,
       petConfig,
       onAdoptPet,
@@ -202,6 +203,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       currentSkillId = null,
       onProjectSkillChange,
       pinnedPluginId = null,
+      footerAccessory,
     },
     ref
   ) {
@@ -415,9 +417,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
 
     // Resolve which tabs to surface in the consolidated tools popover.
     // Plugins is always visible while a project is active so users can
-    // apply context without leaving the composer. MCP and Pet tabs only
-    // show when their respective wiring was provided by the parent (App);
-    // Import is always available (folder linking is unconditional).
+    // apply context without leaving the composer. MCP shows when wired by
+    // the parent (App); Import is always available. Pet controls stay out
+    // of the project context picker so the @ panel remains project-scoped.
     const availableTabs = useMemo<ToolsTab[]>(() => {
       const tabs: ToolsTab[] = [];
       if (projectId) {
@@ -426,9 +428,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       }
       if (onOpenMcpSettings) tabs.push('mcp');
       tabs.push('import');
-      if (petEnabled) tabs.push('pet');
       return tabs;
-    }, [projectId, onOpenMcpSettings, petEnabled]);
+    }, [projectId, onOpenMcpSettings]);
 
     // When the popover opens, snap the active tab to the first available one
     // so the user never lands on an empty / hidden tab if their config
@@ -1452,14 +1453,6 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                             <span>{t('chat.importLabel')}</span>
                           </>
                         ) : null}
-                        {tab === 'pet' ? (
-                          <>
-                            <span className="composer-tools-tab-glyph" aria-hidden>
-                              {resolveActivePet(petConfig)?.glyph ?? '🐾'}
-                            </span>
-                            <span>{t('pet.composerMenuTitle')}</span>
-                          </>
-                        ) : null}
                       </button>
                     ))}
                   </div>
@@ -1529,45 +1522,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                         }}
                       />
                     ) : null}
-                    {toolsTab === 'pet' && petEnabled ? (
-                      <ToolsPetPanel
-                        t={t}
-                        petConfig={petConfig}
-                        onTogglePet={() => {
-                          onTogglePet?.();
-                          setToolsOpen(false);
-                        }}
-                        onAdoptPet={(id) => {
-                          onAdoptPet?.(id);
-                          setToolsOpen(false);
-                        }}
-                        onOpenPetSettings={() => {
-                          onOpenPetSettings?.();
-                          setToolsOpen(false);
-                        }}
-                      />
-                    ) : null}
                   </div>
-
-                  {onOpenSettings ? (
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="composer-tools-settings"
-                      onClick={() => {
-                        trackChatPanelClick(analytics.track, {
-                          page_name: 'chat_panel',
-                          area: 'chat_panel',
-                          element: 'composer_settings',
-                        });
-                        setToolsOpen(false);
-                        onOpenSettings?.();
-                      }}
-                    >
-                      <Icon name="settings" size={13} />
-                      <span>{t('pet.composerOpenSettings')}</span>
-                    </button>
-                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -1592,6 +1547,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 <Icon name="attach" size={15} />
               )}
             </button>
+            {footerAccessory}
             <span className="composer-spacer" />
             {streaming ? (
               <button
@@ -2312,67 +2268,6 @@ function ToolsImportPanel({
       />
       <ImportItem icon="sparkles" label={t('chat.importSkills')} t={t} />
       <ImportItem icon="file" label={t('chat.importProject')} t={t} />
-    </div>
-  );
-}
-
-function ToolsPetPanel({
-  t,
-  petConfig,
-  onTogglePet,
-  onAdoptPet,
-  onOpenPetSettings,
-}: {
-  t: TranslateFn;
-  petConfig: AppConfig['pet'] | undefined;
-  onTogglePet: () => void;
-  onAdoptPet: (id: string) => void;
-  onOpenPetSettings: () => void;
-}) {
-  return (
-    <div className="composer-tools-pet">
-      <div className="composer-tools-pet-head">
-        <span className="hint">{t('pet.composerMenuHint')}</span>
-      </div>
-      {petConfig?.adopted ? (
-        <button
-          type="button"
-          role="menuitem"
-          className="composer-tools-row composer-tools-row-toggle"
-          onClick={onTogglePet}
-        >
-          <Icon name={petConfig.enabled ? 'eye' : 'sparkles'} size={12} />
-          <span>{petConfig.enabled ? t('pet.tuck') : t('pet.wake')}</span>
-        </button>
-      ) : null}
-      <div className="composer-tools-pet-grid">
-        {BUILT_IN_PETS.map((p) => {
-          const active = petConfig?.adopted && petConfig.petId === p.id;
-          return (
-            <button
-              type="button"
-              role="menuitem"
-              key={p.id}
-              className={`composer-tools-pet-item${active ? ' active' : ''}`}
-              onClick={() => onAdoptPet(p.id)}
-              style={{ ['--pet-accent' as string]: p.accent }}
-              title={p.flavor}
-            >
-              <span aria-hidden>{p.glyph}</span>
-              <span>{p.name}</span>
-            </button>
-          );
-        })}
-      </div>
-      <button
-        type="button"
-        role="menuitem"
-        className="composer-tools-row composer-tools-row-action"
-        onClick={onOpenPetSettings}
-      >
-        <Icon name="settings" size={12} />
-        <span>{t('pet.composerOpenSettings')}</span>
-      </button>
     </div>
   );
 }

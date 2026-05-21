@@ -1343,10 +1343,26 @@
 }
 .ds-manager-toolbar {
   align-items: stretch;
-  padding: 14px 18px 0;
+  width: min(100% - 36px, 1280px);
+  margin: 14px auto 0;
+  padding: 0;
 }
 .ds-manager-toolbar > input {
   min-height: 38px;
+}
+.design-systems-manager .examples-filter-row {
+  width: min(100% - 36px, 1280px);
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 14px;
+  padding: 0;
+  margin-bottom: 28px;
+}
+.design-systems-manager .ds-grid {
+  width: min(100% - 36px, 1280px);
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 0;
 }
 .ds-manager-eyebrow {
   display: block;

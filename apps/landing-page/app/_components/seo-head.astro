@@ -16,6 +16,14 @@
  */
 
 import { ogDefaultImage } from '../image-assets';
+import {
+  DEFAULT_LOCALE,
+  LOCALE_OG,
+  alternateLinks,
+  localePath,
+  stripLocale,
+  type Locale,
+} from '../_lib/i18n';
 
 export interface SeoHeadProps {
   /** 'website' for landing/list pages, 'article' for blog posts. */
@@ -42,6 +50,10 @@ export interface SeoHeadProps {
    * Domain property type uses DNS TXT instead and doesn't need this.
    */
   googleSiteVerification?: string;
+  /** Active locale for canonical, OpenGraph and hreflang output. */
+  locale?: Locale;
+  /** Whether this render is under `/en/...` instead of the default English route. */
+  prefixDefaultLocale?: boolean;
 }
 
 const props = Astro.props as SeoHeadProps;
@@ -49,8 +61,12 @@ const props = Astro.props as SeoHeadProps;
 const SITE_NAME = 'Open Design';
 const TAGLINE = 'Design with the agent already on your laptop.';
 const isArticle = props.kind === 'article';
+const locale = props.locale ?? DEFAULT_LOCALE;
 
-const canonical = new URL(props.pathname, Astro.site).toString();
+const canonicalPath = localePath(props.pathname, locale, {
+  prefixDefault: props.prefixDefaultLocale,
+});
+const canonical = new URL(canonicalPath, Astro.site).toString();
 const image = props.image ?? new URL(ogDefaultImage, Astro.site).toString();
 const rssUrl = new URL('/blog/rss.xml', Astro.site).toString();
 
@@ -98,7 +114,7 @@ const articleJsonLd =
     : null;
 
 const websiteJsonLd =
-  props.kind === 'website' && props.pathname === '/'
+  props.kind === 'website' && stripLocale(props.pathname).path === '/'
     ? {
         '@context': 'https://schema.org',
         '@type': 'WebSite',
@@ -109,7 +125,7 @@ const websiteJsonLd =
     : null;
 
 const blogJsonLd =
-  props.kind === 'website' && props.pathname === '/blog/'
+  props.kind === 'website' && stripLocale(props.pathname).path === '/blog/'
     ? {
         '@context': 'https://schema.org',
         '@type': 'Blog',
@@ -130,6 +146,9 @@ const blogJsonLd =
 <meta name='theme-color' content='#efe7d2' />
 <link rel='canonical' href={canonical} />
 <link rel='alternate' type='application/rss+xml' title='Open Design Blog' href={rssUrl} />
+{alternateLinks(props.pathname).map((item) => (
+  <link rel='alternate' hreflang={item.hreflang} href={new URL(item.href, Astro.site).toString()} />
+))}
 
 {props.googleSiteVerification && (
   <meta name='google-site-verification' content={props.googleSiteVerification} />
@@ -141,7 +160,7 @@ const blogJsonLd =
 <meta property='og:description' content={props.description} />
 <meta property='og:url' content={canonical} />
 <meta property='og:image' content={image} />
-<meta property='og:locale' content='en_US' />
+<meta property='og:locale' content={LOCALE_OG[locale]} />
 
 {props.kind === 'article' && (
   <>
@@ -158,11 +177,11 @@ const blogJsonLd =
 <meta name='twitter:image' content={image} />
 
 {articleJsonLd && (
-  <script type='application/ld+json' set:html={JSON.stringify(articleJsonLd)} />
+  <script is:inline type='application/ld+json' set:html={JSON.stringify(articleJsonLd)} />
 )}
 {websiteJsonLd && (
-  <script type='application/ld+json' set:html={JSON.stringify(websiteJsonLd)} />
+  <script is:inline type='application/ld+json' set:html={JSON.stringify(websiteJsonLd)} />
 )}
 {blogJsonLd && (
-  <script type='application/ld+json' set:html={JSON.stringify(blogJsonLd)} />
+  <script is:inline type='application/ld+json' set:html={JSON.stringify(blogJsonLd)} />
 )}

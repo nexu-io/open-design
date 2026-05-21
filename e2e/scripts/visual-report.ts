@@ -13,8 +13,14 @@ const marker = '<!-- visual-regression-bot -->';
 const visualPrefix = 'visual-regression';
 const inlineCaseLimit = 20;
 const pixelThreshold = 0.1;
+const diffBoxPadding = 6;
+const diffBoxMergeDistance = 12;
+const diffBoxStrokeWidth = 3;
+const diffBoxColor = [255, 0, 0, 255] as const;
+const maxDiffBoxRegions = 2_000;
 const maxCaseCount = 40;
 const maxPngBytes = 10 * 1024 * 1024;
+const maxPngPixels = 4_000_000;
 const caseNamePattern = /^visual-[a-z0-9][a-z0-9-_]{0,80}$/u;
 
 type CommandName = 'upload-baseline' | 'compare-pr';
@@ -51,16 +57,24 @@ type ComparedCase = {
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const e2eDir = path.resolve(scriptDir, '..');
 
-const args = parseArgs(process.argv.slice(2));
-const command = args._[0] as CommandName | undefined;
+const isDirectRun = process.argv[1] != null && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
 
-if (command === 'upload-baseline') {
-  await uploadBaseline(args);
-} else if (command === 'compare-pr') {
-  await comparePr(args);
-} else {
-  printUsage();
-  process.exitCode = 1;
+if (isDirectRun) {
+  await main(process.argv.slice(2));
+}
+
+async function main(argv: string[]): Promise<void> {
+  const args = parseArgs(argv);
+  const command = args._[0] as CommandName | undefined;
+
+  if (command === 'upload-baseline') {
+    await uploadBaseline(args);
+  } else if (command === 'compare-pr') {
+    await comparePr(args);
+  } else {
+    printUsage();
+    process.exitCode = 1;
+  }
 }
 
 async function uploadBaseline(options: ParsedArgs): Promise<void> {
@@ -199,20 +213,227 @@ async function compareCase(input: {
 async function writeDiffPng(mainPath: string, prPath: string, diffPath: string): Promise<number> {
   const main = PNG.sync.read(await readFile(mainPath));
   const pr = PNG.sync.read(await readFile(prPath));
+  assertPngSize(main, mainPath);
+  assertPngSize(pr, prPath);
   const width = Math.max(main.width, pr.width);
   const height = Math.max(main.height, pr.height);
+  assertPngPixels(width, height, `${mainPath} vs ${prPath} normalized diff canvas`);
   const normalizedMain = normalizePng(main, width, height);
   const normalizedPr = normalizePng(pr, width, height);
-  const diff = new PNG({ width, height });
-  const diffPixels = pixelmatch(normalizedMain.data, normalizedPr.data, diff.data, width, height, {
+  const diffMask = new PNG({ width, height });
+  const diffPixels = pixelmatch(normalizedMain.data, normalizedPr.data, diffMask.data, width, height, {
     threshold: pixelThreshold,
     alpha: 0.2,
-    diffColor: [255, 0, 0],
+    diffColor: [diffBoxColor[0], diffBoxColor[1], diffBoxColor[2]],
   });
+  const diff = clonePng(normalizedPr);
+  const boxes = mergeDiffBoxes(diffBoxesFromMask(diffMask), diffBoxMergeDistance);
+  for (const box of boxes) {
+    drawBox(diff, padBox(box, diffBoxPadding, width, height), diffBoxStrokeWidth);
+  }
 
   await mkdir(path.dirname(diffPath), { recursive: true });
   await writeFile(diffPath, PNG.sync.write(diff));
   return diffPixels;
+}
+
+export type DiffBox = {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+};
+
+function clonePng(source: PNG): PNG {
+  const target = new PNG({ width: source.width, height: source.height });
+  source.data.copy(target.data);
+  return target;
+}
+
+export function diffBoxesFromMask(maskPng: PNG): DiffBox[] {
+  const { width, height } = maskPng;
+  const changed = new Uint8Array(width * height);
+  let overall: DiffBox | null = null;
+  for (let index = 0; index < changed.length; index += 1) {
+    const dataIndex = index << 2;
+    if (
+      maskPng.data[dataIndex] === diffBoxColor[0]
+      && maskPng.data[dataIndex + 1] === diffBoxColor[1]
+      && maskPng.data[dataIndex + 2] === diffBoxColor[2]
+    ) {
+      changed[index] = 1;
+      const x = index % width;
+      const y = Math.floor(index / width);
+      overall = overall == null
+        ? { minX: x, minY: y, maxX: x, maxY: y }
+        : {
+            minX: Math.min(overall.minX, x),
+            minY: Math.min(overall.minY, y),
+            maxX: Math.max(overall.maxX, x),
+            maxY: Math.max(overall.maxY, y),
+          };
+    }
+  }
+
+  if (overall == null) {
+    return [];
+  }
+
+  const boxes: DiffBox[] = [];
+  const queue = new Int32Array(width * height);
+  for (let index = 0; index < changed.length; index += 1) {
+    if (changed[index] === 0) continue;
+
+    let head = 0;
+    let tail = 0;
+    let minX = index % width;
+    let maxX = minX;
+    let minY = Math.floor(index / width);
+    let maxY = minY;
+    changed[index] = 0;
+    queue[tail] = index;
+    tail += 1;
+
+    while (head < tail) {
+      const current = queue[head] ?? -1;
+      head += 1;
+      if (current < 0) continue;
+      const x = current % width;
+      const y = Math.floor(current / width);
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+      minY = Math.min(minY, y);
+      maxY = Math.max(maxY, y);
+
+      tail = enqueueChanged(changed, queue, tail, x > 0 ? current - 1 : -1);
+      tail = enqueueChanged(changed, queue, tail, x < width - 1 ? current + 1 : -1);
+      tail = enqueueChanged(changed, queue, tail, y > 0 ? current - width : -1);
+      tail = enqueueChanged(changed, queue, tail, y < height - 1 ? current + width : -1);
+    }
+
+    boxes.push({ minX, minY, maxX, maxY });
+    if (boxes.length > maxDiffBoxRegions) {
+      return [overall];
+    }
+  }
+  return boxes;
+}
+
+function enqueueChanged(changed: Uint8Array, queue: Int32Array, tail: number, index: number): number {
+  if (index < 0 || changed[index] === 0) return tail;
+  changed[index] = 0;
+  queue[tail] = index;
+  return tail + 1;
+}
+
+export function mergeDiffBoxes(boxes: DiffBox[], distance: number): DiffBox[] {
+  if (boxes.length < 2) {
+    return boxes.map((box) => ({ ...box }));
+  }
+
+  const parents = new Int32Array(boxes.length);
+  for (let index = 0; index < parents.length; index += 1) {
+    parents[index] = index;
+  }
+
+  for (let outer = 0; outer < boxes.length; outer += 1) {
+    for (let inner = outer + 1; inner < boxes.length; inner += 1) {
+      const first = boxes[outer];
+      const second = boxes[inner];
+      if (first == null || second == null || !boxesAreClose(first, second, distance)) continue;
+      unionBoxIndex(parents, outer, inner);
+    }
+  }
+
+  const merged = new Map<number, DiffBox>();
+  for (let index = 0; index < boxes.length; index += 1) {
+    const box = boxes[index];
+    if (box == null) continue;
+    const root = findBoxRoot(parents, index);
+    const existing = merged.get(root);
+    if (existing == null) {
+      merged.set(root, { ...box });
+      continue;
+    }
+    existing.minX = Math.min(existing.minX, box.minX);
+    existing.minY = Math.min(existing.minY, box.minY);
+    existing.maxX = Math.max(existing.maxX, box.maxX);
+    existing.maxY = Math.max(existing.maxY, box.maxY);
+  }
+
+  return [...merged.values()];
+}
+
+function findBoxRoot(parents: Int32Array, index: number): number {
+  let root = index;
+  while (parents[root] !== root) {
+    root = parents[root] ?? root;
+  }
+  while (parents[index] !== index) {
+    const parent = parents[index] ?? index;
+    parents[index] = root;
+    index = parent;
+  }
+  return root;
+}
+
+function unionBoxIndex(parents: Int32Array, first: number, second: number): void {
+  const firstRoot = findBoxRoot(parents, first);
+  const secondRoot = findBoxRoot(parents, second);
+  if (firstRoot === secondRoot) return;
+  parents[secondRoot] = firstRoot;
+}
+
+function boxesAreClose(first: DiffBox, second: DiffBox, distance: number): boolean {
+  return first.minX - distance <= second.maxX
+    && first.maxX + distance >= second.minX
+    && first.minY - distance <= second.maxY
+    && first.maxY + distance >= second.minY;
+}
+
+export function padBox(box: DiffBox, padding: number, width: number, height: number): DiffBox {
+  return {
+    minX: Math.max(0, box.minX - padding),
+    minY: Math.max(0, box.minY - padding),
+    maxX: Math.min(width - 1, box.maxX + padding),
+    maxY: Math.min(height - 1, box.maxY + padding),
+  };
+}
+
+export function drawBox(png: PNG, box: DiffBox, strokeWidth: number): void {
+  for (let offset = 0; offset < strokeWidth; offset += 1) {
+    const minX = Math.min(box.maxX, box.minX + offset);
+    const minY = Math.min(box.maxY, box.minY + offset);
+    const maxX = Math.max(box.minX, box.maxX - offset);
+    const maxY = Math.max(box.minY, box.maxY - offset);
+    for (let x = minX; x <= maxX; x += 1) {
+      setPixel(png, x, minY, diffBoxColor);
+      setPixel(png, x, maxY, diffBoxColor);
+    }
+    for (let y = minY; y <= maxY; y += 1) {
+      setPixel(png, minX, y, diffBoxColor);
+      setPixel(png, maxX, y, diffBoxColor);
+    }
+  }
+}
+
+function setPixel(png: PNG, x: number, y: number, color: readonly [number, number, number, number]): void {
+  const index = (png.width * y + x) << 2;
+  png.data[index] = color[0];
+  png.data[index + 1] = color[1];
+  png.data[index + 2] = color[2];
+  png.data[index + 3] = color[3];
+}
+
+function assertPngSize(png: PNG, filePath: string): void {
+  assertPngPixels(png.width, png.height, filePath);
+}
+
+export function assertPngPixels(width: number, height: number, label: string): void {
+  const pixels = width * height;
+  if (pixels > maxPngPixels) {
+    throw new Error(`Visual case ${label} is ${width}x${height}; maximum allowed is ${maxPngPixels} pixels`);
+  }
 }
 
 function normalizePng(source: PNG, width: number, height: number): PNG {

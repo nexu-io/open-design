@@ -6,7 +6,6 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -88,10 +87,13 @@ function isSameOriginApiCall(url: unknown): boolean {
 // App version is read from a runtime endpoint rather than at build time so
 // the same web bundle reports the daemon-pinned version even when running
 // against a newer/older daemon during dev. Falls back to '0.0.0' until the
-// fetch resolves; analytics events fired before resolution simply have a
-// stale version string and are not re-emitted.
-function useAppVersion(): string {
-  const versionRef = useRef('0.0.0');
+// fetch resolves, then the resolved value flows through state so every
+// downstream effect that depends on `appVersion` re-runs and re-registers
+// the PostHog super-property with the real version. Earlier `useRef` shape
+// silently broke this: ref writes don't trigger re-renders, so every event
+// shipped with `app_version='0.0.0'`.
+export function useAppVersion(): string {
+  const [version, setVersion] = useState('0.0.0');
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -100,7 +102,8 @@ function useAppVersion(): string {
         if (!res.ok) return;
         const body = (await res.json()) as { version?: { version?: string } };
         if (cancelled) return;
-        if (body?.version?.version) versionRef.current = body.version.version;
+        const next = body?.version?.version;
+        if (next) setVersion(next);
       } catch {
         // Best-effort.
       }
@@ -109,7 +112,7 @@ function useAppVersion(): string {
       cancelled = true;
     };
   }, []);
-  return versionRef.current;
+  return version;
 }
 
 export function AnalyticsProvider({ children }: { children: ReactNode }) {

@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import net from 'node:net';
 import {
-  defaultScenarioPluginIdForKind,
+  defaultScenarioPluginIdForProjectMetadata,
   PLUGIN_SHARE_ACTION_PLUGIN_IDS,
 } from '@open-design/contracts';
 import {
@@ -183,6 +183,7 @@ import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
 import { createChatRunService } from './runs.js';
+import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
 import { reportRunCompletedFromDaemon } from './langfuse-bridge.js';
 import {
   createAnalyticsService,
@@ -299,6 +300,7 @@ import { validateArtifactManifestInput } from './artifact-manifest.js';
 import { ArtifactPublicationBlockedError } from './artifact-publication-guard.js';
 import { readCurrentAppVersionInfo } from './app-version.js';
 import {
+  appendMessageAgentEvent,
   appendMessageStatusEvent,
   deleteConversation,
   deletePreviewComment,
@@ -358,6 +360,7 @@ import { LiveArtifactRefreshUnavailableError, refreshLiveArtifact } from './live
 import { LiveArtifactRefreshAbortError } from './live-artifacts/refresh.js';
 import { registerConnectorRoutes } from './connectors/routes.js';
 import { registerActiveContextRoutes } from './active-context-routes.js';
+import { registerHostToolsRoutes } from './host-tools-routes.js';
 import { registerMcpRoutes } from './mcp-routes.js';
 import { registerXaiRoutes } from './xai-routes.js';
 import { registerLiveArtifactRoutes } from './live-artifact-routes.js';
@@ -1873,6 +1876,122 @@ function reconcileAssistantMessageOnRunEnd(db, runs, run) {
     .catch((err) => {
       console.warn('[runs] message reconciliation failed', err);
     });
+}
+
+function persistRunEventToAssistantMessage(db, run, event, data) {
+  if (!run.assistantMessageId) return;
+  const persisted = runSseEventToPersistedAgentEvent(event, data);
+  if (!persisted) return;
+  try {
+    appendMessageAgentEvent(db, run.assistantMessageId, persisted);
+  } catch (err) {
+    console.warn('[runs] message event persistence failed', err);
+  }
+}
+
+function runSseEventToPersistedAgentEvent(event, data) {
+  if (event === 'start') {
+    return {
+      kind: 'status',
+      label: 'starting',
+      ...(typeof data?.bin === 'string' ? { detail: data.bin } : {}),
+    };
+  }
+  if (event === 'stdout') {
+    const chunk = typeof data?.chunk === 'string' ? data.chunk : '';
+    return chunk ? { kind: 'text', text: chunk } : null;
+  }
+  if (event === 'error') {
+    const message = typeof data?.error?.message === 'string'
+      ? data.error.message
+      : typeof data?.message === 'string'
+        ? data.message
+        : '';
+    return {
+      kind: 'status',
+      label: 'error',
+      ...(message ? { detail: message } : {}),
+    };
+  }
+  if (event !== 'agent') return null;
+  return daemonAgentPayloadToPersistedAgentEvent(data);
+}
+
+function daemonAgentPayloadToPersistedAgentEvent(data) {
+  const type = data?.type;
+  if (type === 'status' && typeof data.label === 'string') {
+    const detail =
+      typeof data.detail === 'string'
+        ? data.detail
+        : typeof data.model === 'string'
+          ? data.model
+          : typeof data.ttftMs === 'number'
+            ? `first token in ${Math.round(data.ttftMs / 100) / 10}s`
+            : undefined;
+    return { kind: 'status', label: data.label, ...(detail ? { detail } : {}) };
+  }
+  if (type === 'text_delta' && typeof data.delta === 'string') {
+    return { kind: 'text', text: data.delta };
+  }
+  if (type === 'thinking_delta' && typeof data.delta === 'string') {
+    return { kind: 'thinking', text: data.delta };
+  }
+  if (type === 'thinking_start') return { kind: 'status', label: 'thinking' };
+  if (type === 'live_artifact') {
+    return {
+      kind: 'live_artifact',
+      action: data.action,
+      projectId: data.projectId,
+      artifactId: data.artifactId,
+      title: data.title,
+      ...(data.refreshStatus ? { refreshStatus: data.refreshStatus } : {}),
+    };
+  }
+  if (type === 'live_artifact_refresh') {
+    return {
+      kind: 'live_artifact_refresh',
+      phase: data.phase,
+      projectId: data.projectId,
+      artifactId: data.artifactId,
+      ...(data.refreshId ? { refreshId: data.refreshId } : {}),
+      ...(data.title ? { title: data.title } : {}),
+      ...(typeof data.refreshedSourceCount === 'number'
+        ? { refreshedSourceCount: data.refreshedSourceCount }
+        : {}),
+      ...(data.error ? { error: data.error } : {}),
+    };
+  }
+  if (type === 'tool_use' && typeof data.id === 'string' && typeof data.name === 'string') {
+    return { kind: 'tool_use', id: data.id, name: data.name, input: normalizePersistedToolInput(data.input) };
+  }
+  if (type === 'tool_result' && typeof data.toolUseId === 'string') {
+    return {
+      kind: 'tool_result',
+      toolUseId: data.toolUseId,
+      content: String(data.content ?? ''),
+      isError: Boolean(data.isError),
+    };
+  }
+  if (type === 'usage') {
+    const usage = data.usage && typeof data.usage === 'object' ? data.usage : {};
+    return {
+      kind: 'usage',
+      inputTokens: usage.input_tokens,
+      outputTokens: usage.output_tokens,
+      ...(typeof data.costUsd === 'number' ? { costUsd: data.costUsd } : {}),
+      ...(typeof data.durationMs === 'number' ? { durationMs: data.durationMs } : {}),
+    };
+  }
+  if (type === 'raw' && typeof data.line === 'string') return { kind: 'raw', line: data.line };
+  return null;
+}
+
+function normalizePersistedToolInput(input) {
+  if (!input || typeof input !== 'object') return input;
+  if ('filePath' in input && typeof input.filePath === 'string') {
+    return { ...input, file_path: input.filePath };
+  }
+  return input;
 }
 
 function pinAssistantMessageOnRunCreate(db, run) {
@@ -4414,6 +4533,13 @@ export async function startServer({
     http: httpDeps,
     projectStore: projectStoreDeps,
   });
+  registerHostToolsRoutes(app, {
+    db,
+    http: httpDeps,
+    paths: pathDeps,
+    projectStore: projectStoreDeps,
+    projectFiles: projectFileDeps,
+  });
   registerProjectRoutes(app, {
     db,
     design,
@@ -5876,7 +6002,31 @@ export async function startServer({
         return;
       }
       let contentPath = resolved;
+      let contentRel = resolvedRel;
       let buf = await fsp.readFile(resolved);
+      if (resolvedRel && /\.html?$/i.test(resolvedRel)) {
+        const shellTarget = iframeOnlyHtmlShellTarget(buf.toString('utf8'));
+        if (shellTarget) {
+          const targetFull = path.resolve(path.dirname(resolved), shellTarget);
+          const rootDir = path.resolve(plugin.fsPath);
+          const insideRoot =
+            (targetFull + path.sep).startsWith(root) ||
+            targetFull === rootDir;
+          if (insideRoot) {
+            try {
+              const st = await fsp.stat(targetFull);
+              const lst = await fsp.lstat(targetFull);
+              if (!lst.isSymbolicLink() && st.isFile() && st.size <= 5 * 1024 * 1024) {
+                buf = await fsp.readFile(targetFull);
+                contentPath = targetFull;
+                contentRel = path.relative(plugin.fsPath, targetFull).split(path.sep).join('/');
+              }
+            } catch {
+              // Keep the wrapper HTML if the iframe target cannot be read.
+            }
+          }
+        }
+      }
       if (resolvedRel && /(^|\/)example-slides\.html$/i.test(resolvedRel)) {
         const templateRel = resolvedRel.replace(
           /(^|\/)example-slides\.html$/i,
@@ -5901,6 +6051,7 @@ export async function startServer({
               const slidesHtml = buf.toString('utf8');
               buf = Buffer.from(assembleExample(tplHtml, slidesHtml, title), 'utf8');
               contentPath = templateFull;
+              contentRel = templateRel;
             }
           } catch {
             // Keep the raw fallback if the companion template is missing.
@@ -5923,10 +6074,77 @@ export async function startServer({
         : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
         : 'application/octet-stream';
       res.setHeader('Content-Type', ct);
+      if (ext === '.html' && typeof contentRel === 'string') {
+        buf = Buffer.from(
+          rewritePluginAssetUrls(
+            buf.toString('utf8'),
+            req.params.id,
+            path.posix.dirname(contentRel.replace(/\\/g, '/')),
+          ),
+          'utf8',
+        );
+      }
       res.send(buf);
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }
+  }
+
+  function iframeOnlyHtmlShellTarget(html: string): string | null {
+    if (typeof html !== 'string' || html.length === 0) return null;
+    const bodyMatch = /<body\b[^>]*>([\s\S]*?)<\/body>/i.exec(html);
+    if (!bodyMatch) return null;
+    const body = bodyMatch[1].replace(/<!--[\s\S]*?-->/g, '').trim();
+    const iframeMatch = /^<iframe\b[^>]*\bsrc\s*=\s*(['"])([^'"]+)\1[^>]*>\s*(?:<\/iframe>)?\s*$/i.exec(body);
+    if (!iframeMatch) return null;
+    const src = iframeMatch[2].trim();
+    if (
+      !src ||
+      src.startsWith('/') ||
+      src.startsWith('//') ||
+      src.includes('\0') ||
+      /^[a-z][a-z0-9+.-]*:/i.test(src)
+    ) {
+      return null;
+    }
+    const pathOnly = src.split(/[?#]/)[0] ?? '';
+    if (!/\.html?$/i.test(pathOnly)) return null;
+    return pathOnly;
+  }
+
+  function rewritePluginAssetUrls(html: string, pluginId: string, baseDir: string) {
+    if (typeof html !== 'string' || html.length === 0) return html;
+    const safeBase = baseDir === '.' ? '' : baseDir;
+    return html.replace(
+      /(\s(?:src|href|poster)\s*=\s*)(['"])([^'"]+)(\2)/gi,
+      (match, attr, quote, rawValue, closeQuote) => {
+        const value = String(rawValue).trim();
+        if (
+          !value ||
+          value.startsWith('#') ||
+          value.startsWith('/') ||
+          value.startsWith('//') ||
+          value.includes('\0') ||
+          /^[a-z][a-z0-9+.-]*:/i.test(value)
+        ) {
+          return match;
+        }
+        const splitAt = value.search(/[?#]/);
+        const rel = splitAt === -1 ? value : value.slice(0, splitAt);
+        const suffix = splitAt === -1 ? '' : value.slice(splitAt);
+        const normalized = path.posix.normalize(path.posix.join(safeBase, rel));
+        if (
+          normalized === '.' ||
+          normalized === '..' ||
+          normalized.startsWith('../') ||
+          path.posix.isAbsolute(normalized)
+        ) {
+          return match;
+        }
+        const url = `/api/plugins/${encodeURIComponent(pluginId)}/asset/${normalized}${suffix}`;
+        return `${attr}${quote}${url}${closeQuote}`;
+      },
+    );
   }
 
   // Plan §6 Phase 2B + spec §11.6 / §9.2 — plugin preview + examples.
@@ -9591,7 +9809,10 @@ export async function startServer({
       return design.runs.finish(run, 'failed', 1, null);
     }
 
-    const send = (event, data) => design.runs.emit(run, event, data);
+    const send = (event, data) => {
+      persistRunEventToAssistantMessage(db, run, event, data);
+      design.runs.emit(run, event, data);
+    };
     const inactivityTimeoutMs = resolveChatRunInactivityTimeoutMs();
     const inactivityKillGraceMs = 3_000;
     let inactivityTimer = null;
@@ -10570,11 +10791,11 @@ export async function startServer({
     //
     // Stage A of plugin-driven-flow-plan: when neither the body nor the
     // project carries plugin info we fall back to the bundled scenario
-    // plugin for the project's `metadata.kind` so direct callers (CLI /
-    // SDK / agent-headless runs) get the same auto-binding the web
-    // create flow already produces. The fallback is silent — a bundled
-    // scenario that is not installed leaves the run plugin-less, which
-    // matches the legacy path.
+    // plugin for the project's metadata kind/intent so direct callers
+    // (CLI / SDK / agent-headless runs) get the same auto-binding the
+    // web create flow already produces. The fallback is silent — a
+    // bundled scenario that is not installed leaves the run plugin-less,
+    // which matches the legacy path.
     let resolvedSnapshot = null;
     if (typeof req.body?.projectId === 'string' && req.body.projectId) {
       let registryView;
@@ -10592,9 +10813,7 @@ export async function startServer({
           typeof projectRow?.appliedPluginSnapshotId === 'string'
           && projectRow.appliedPluginSnapshotId.length > 0;
         if (!hasPin) {
-          const fallbackPluginId = defaultScenarioPluginIdForKind(
-            projectRow?.metadata?.kind,
-          );
+          const fallbackPluginId = defaultScenarioPluginIdForProjectMetadata(projectRow?.metadata);
           if (fallbackPluginId && getInstalledPlugin(db, fallbackPluginId)) {
             runResolveBody = { ...req.body, pluginId: fallbackPluginId };
           }
@@ -10808,26 +11027,13 @@ export async function startServer({
         exitCode?: number | null;
         signal?: string | null;
       }) => {
-        const result =
-          status.status === 'succeeded'
-            ? 'success'
-            : status.status === 'canceled'
-              ? 'cancelled'
-              : 'failed';
-        let errorCode: string | undefined;
-        if (result === 'failed') {
-          errorCode = status.errorCode ?? undefined;
-          if (!errorCode) {
-            if (status.signal) errorCode = `AGENT_SIGNAL_${status.signal}`;
-            else if (typeof status.exitCode === 'number' && status.exitCode !== 0) {
-              errorCode = `AGENT_EXIT_${status.exitCode}`;
-            } else {
-              errorCode = 'AGENT_TERMINATED_UNKNOWN';
-            }
-          }
-        } else if (result === 'cancelled') {
-          errorCode = status.errorCode ?? undefined;
-        }
+        // `deriveRunErrorCode` is the invariant: when `result === 'failed'`
+        // it always returns a non-empty string so dashboards keyed on
+        // `error_code` never see a blank cell. Live in `run-result.ts`
+        // with unit coverage for the fall-through cases (ACP fatal,
+        // child close without error event, etc.).
+        const result = runResultFromStatus(status.status);
+        const errorCode = deriveRunErrorCode(status);
         let inputTokens: number | undefined;
         let outputTokens: number | undefined;
         for (let i = run.events.length - 1; i >= 0; i -= 1) {

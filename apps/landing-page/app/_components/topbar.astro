@@ -1,12 +1,20 @@
 ---
-const REPO = 'https://github.com/nexu-io/open-design';
-const REPO_RELEASES = `${REPO}/releases`;
+import { DEFAULT_LOCALE, getCopy, type Locale } from '../_lib/i18n';
+
+const REPO_RELEASES = 'https://github.com/nexu-io/open-design/releases';
 const ext = {
   target: '_blank',
   rel: 'noreferrer noopener',
 } as const;
 const NBSP = '\u00A0';
-const { github = { versionLabel: 'v0.3.0' } } = Astro.props;
+const {
+  github = { versionLabel: 'v0.3.0' },
+  locale = DEFAULT_LOCALE,
+} = Astro.props as {
+  github?: { versionLabel: string };
+  locale?: Locale;
+};
+const copy = getCopy(locale);
 ---
 
 <div class='topbar' data-od-id='topbar'>
@@ -23,38 +31,8 @@ const { github = { versionLabel: 'v0.3.0' } } = Astro.props;
     <span class='right'>
       <a class='topbar-link' href={REPO_RELEASES} {...ext}>
         <span class='pulse'></span>
-        Live · <span data-github-version>{github.versionLabel}</span>
+        {copy.live} · <span data-github-version>{github.versionLabel}</span>
       </a>
-      <span class='locale-switch'>
-        <b>EN</b>
-        {' · '}
-        <a
-          class='topbar-link'
-          href={REPO}
-          {...ext}
-          title='Localization in progress — open the repo on GitHub'
-        >
-          DE
-        </a>
-        {' · '}
-        <a
-          class='topbar-link'
-          href={REPO}
-          {...ext}
-          title='Localization in progress — open the repo on GitHub'
-        >
-          中文
-        </a>
-        {' · '}
-        <a
-          class='topbar-link'
-          href={REPO}
-          {...ext}
-          title='Localization in progress — open the repo on GitHub'
-        >
-          日本語
-        </a>
-      </span>
     </span>
   </div>
 </div>

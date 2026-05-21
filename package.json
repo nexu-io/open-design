@@ -30,7 +30,7 @@
     "@open-design/tools-pr": "workspace:*",
     "@open-design/tools-serve": "workspace:*",
     "@types/node": "20.19.39",
-    "tsx": "4.22.2",
+    "tsx": "4.22.3",
     "typescript": "5.9.3"
   },
   "engines": {
@@ -44,7 +44,8 @@
       "fast-uri": "3.1.2",
       "hono": "4.12.19",
       "ip-address": "10.2.0",
-      "postcss": "8.5.14",
+      "postcss": "8.5.15",
+      "protobufjs": "8.4.0",
       "yaml": "2.9.0"
     },
     "onlyBuiltDependencies": [

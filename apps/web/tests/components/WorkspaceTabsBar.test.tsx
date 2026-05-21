@@ -11,6 +11,11 @@ import { navigate, type Route } from '../../src/router';
 import type { Project } from '../../src/types';
 
 vi.mock('../../src/i18n', () => ({
+  useI18n: () => ({
+    locale: 'en',
+    setLocale: () => undefined,
+    t: (key: string) => key,
+  }),
   useT: () => (key: string) => {
     const labels: Record<string, string> = {
       'app.brand': 'Open Design',

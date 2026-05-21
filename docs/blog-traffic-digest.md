@@ -21,24 +21,27 @@ deeper history.
 
 ---
 
-## 2026-05-20 — Daily blog traffic digest
+## 2026-05-21 — Daily blog traffic digest
 
 ### T-3 spotlight
 
-> No posts published exactly three days ago (looking for `2026-05-17`).
+> Posts published exactly three days ago (2026-05-18). 3-day GSC window: `2026-05-17 → 2026-05-19`.
 
-_No posts shipped exactly three days ago._
+| Post | Category | Impressions | Clicks | CTR | Position | Indexed |
+|---|---|---:|---:|---:|---:|---|
+| [The layout layer the canvas used to hide](https://open-design.ai/blog/layout-layer-canvas-used-to-hide/) | Community | 0 | 0 | 0.0% | — | ✓ indexed |
+| [How to port a Figma workflow into an Open Design plugin](https://open-design.ai/blog/port-figma-workflow-open-design-plugin/) | Use cases | 0 | 0 | 0.0% | — | ✓ indexed |
 
 ### Rolling 30-day cohort
 
-> Every post 1–30 days old, with its latest 3-day Search Analytics window. Totals: 49 impressions · 1 clicks · 2.0% CTR.
+> Every post 1–30 days old, with its latest 3-day Search Analytics window. Totals: 92 impressions · 4 clicks · 4.3% CTR.
 
 | Post | Age | Category | Impressions | Clicks | CTR | Position |
 |---|---:|---|---:|---:|---:|---:|
-| [The open-source alternative to Claude Design](https://open-design.ai/blog/open-source-alternative-to-claude-design/) | 6d | Guides | 49 | 1 | 2.0% | 8.9 |
-| [The layout layer the canvas used to hide](https://open-design.ai/blog/layout-layer-canvas-used-to-hide/) | 2d | Community | 0 | 0 | 0.0% | — |
-| [How to port a Figma workflow into an Open Design plugin](https://open-design.ai/blog/port-figma-workflow-open-design-plugin/) | 2d | Use cases | 0 | 0 | 0.0% | — |
-| [BYOK reality check: 5 things that break in Open Design today](https://open-design.ai/blog/byok-reality-check-5-things-that-break/) | 6d | Guides | 0 | 0 | 0.0% | — |
-| [31 skills, 72 systems: how the Open Design library works](https://open-design.ai/blog/31-skills-72-systems-how-the-library-works/) | 7d | Guides | 0 | 0 | 0.0% | — |
-| [BYOK design workflow: run Claude, Codex, or Qwen on your own key](https://open-design.ai/blog/byok-design-workflow-claude-codex-qwen/) | 7d | Guides | 0 | 0 | 0.0% | — |
-| [Why we built Open Design as a skill layer, not a product](https://open-design.ai/blog/why-we-built-open-design-as-a-skill-layer/) | 7d | Product | 0 | 0 | 0.0% | — |
+| [The open-source alternative to Claude Design](https://open-design.ai/blog/open-source-alternative-to-claude-design/) | 7d | Guides | 92 | 4 | 4.3% | 8.2 |
+| [The layout layer the canvas used to hide](https://open-design.ai/blog/layout-layer-canvas-used-to-hide/) | 3d | Community | 0 | 0 | 0.0% | — |
+| [How to port a Figma workflow into an Open Design plugin](https://open-design.ai/blog/port-figma-workflow-open-design-plugin/) | 3d | Use cases | 0 | 0 | 0.0% | — |
+| [BYOK reality check: 5 things that break in Open Design today](https://open-design.ai/blog/byok-reality-check-5-things-that-break/) | 7d | Guides | 0 | 0 | 0.0% | — |
+| [31 skills, 72 systems: how the Open Design library works](https://open-design.ai/blog/31-skills-72-systems-how-the-library-works/) | 8d | Guides | 0 | 0 | 0.0% | — |
+| [BYOK design workflow: run Claude, Codex, or Qwen on your own key](https://open-design.ai/blog/byok-design-workflow-claude-codex-qwen/) | 8d | Guides | 0 | 0 | 0.0% | — |
+| [Why we built Open Design as a skill layer, not a product](https://open-design.ai/blog/why-we-built-open-design-as-a-skill-layer/) | 8d | Product | 0 | 0 | 0.0% | — |
