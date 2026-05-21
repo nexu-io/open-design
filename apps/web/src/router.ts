@@ -137,6 +137,14 @@ export function buildPath(route: Route): string {
 // Centralized navigation. Components call this instead of mutating
 // `window.location` directly so we can fan the change out to any
 // `useRoute()` subscriber via a custom event.
+//
+// The `popstate` dispatch is deferred to a microtask so that callers
+// can safely invoke `navigate()` from inside a `useState` updater or
+// during a render commit phase without triggering React's
+// "Cannot update a component while rendering a different component"
+// warning. The `history` API call itself stays synchronous so the URL
+// bar updates immediately; only the `useRoute()` subscriber updates
+// are deferred past the current render.
 export function navigate(route: Route, opts: { replace?: boolean } = {}): void {
   const target = buildPath(route);
   const current = window.location.pathname;
@@ -146,7 +154,9 @@ export function navigate(route: Route, opts: { replace?: boolean } = {}): void {
   } else {
     window.history.pushState(null, '', target);
   }
-  window.dispatchEvent(new PopStateEvent('popstate'));
+  queueMicrotask(() => {
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  });
 }
 
 export function useRoute(): Route {
