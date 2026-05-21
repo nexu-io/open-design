@@ -4062,6 +4062,12 @@ function HtmlViewer({
   const [manualEditViewportWidth, setManualEditViewportWidth] = useState<number | null>(null);
   const [commentPortalHost, setCommentPortalHost] = useState<HTMLElement | null>(null);
   const [previewBodyRef, previewBodySize] = usePreviewCanvasSize<HTMLDivElement>();
+  // Project-relative path of the sub-page the url-load iframe has navigated to
+  // (e.g. `screens/teacher/teacher-console.html`), or null when on the entry
+  // file. Lets a comment/inspect toggle that forces srcDoc keep the sub-page
+  // instead of snapping back to the entry/list page.
+  const [urlLoadSubPath, setUrlLoadSubPath] = useState<string | null>(null);
+  const [subPageSource, setSubPageSource] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const urlPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);
   const srcDocPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -4562,17 +4568,41 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     };
   }, [source, effectiveDeck, projectId, file.name, useUrlLoadPreview]);
 
+  // Reset the tracked sub-page whenever the previewed entry file changes.
+  useEffect(() => {
+    setUrlLoadSubPath(null);
+  }, [file.name]);
+  // When a comment/inspect toggle forces the preview off the url-load path
+  // while the iframe was on a sub-page, fetch that sub-page's HTML so the
+  // srcDoc renders the page the user was actually looking at.
+  useEffect(() => {
+    if (useUrlLoadPreview || !urlLoadSubPath || urlLoadSubPath === file.name) {
+      setSubPageSource(null);
+      return;
+    }
+    let ignore = false;
+    void fetchProjectFileText(projectId, urlLoadSubPath, { cacheBustKey: reloadKey }).then((text) => {
+      if (!ignore) setSubPageSource(text);
+    });
+    return () => {
+      ignore = true;
+    };
+  }, [useUrlLoadPreview, urlLoadSubPath, file.name, projectId, reloadKey]);
+
+  const usingSubPageSrcDoc = !useUrlLoadPreview && subPageSource != null && !!urlLoadSubPath && urlLoadSubPath !== file.name;
+  const srcDocSource = usingSubPageSrcDoc ? subPageSource : previewSource;
+  const srcDocBaseDir = usingSubPageSrcDoc ? baseDirFor(urlLoadSubPath) : baseDirFor(file.name);
   const srcDoc = useMemo(
-    () => (previewSource ? buildSrcdoc(previewSource, {
+    () => (srcDocSource ? buildSrcdoc(srcDocSource, {
       deck: effectiveDeck,
-      baseHref: projectRawUrl(projectId, baseDirFor(file.name)),
+      baseHref: projectRawUrl(projectId, srcDocBaseDir),
       initialSlideIndex: htmlPreviewSlideState.get(previewStateKey)?.active ?? 0,
       selectionBridge: true,
       editBridge: manualEditMode,
       paletteBridge: false,
       previewFocusGuard: true,
     }) : ''),
-    [previewSource, effectiveDeck, projectId, file.name, previewStateKey, manualEditMode],
+    [srcDocSource, srcDocBaseDir, effectiveDeck, projectId, previewStateKey, manualEditMode],
   );
   const lazySrcDocTransport = useMemo(() => buildLazySrcdocTransport(), []);
   const [srcDocTransportResetKey, setSrcDocTransportResetKey] = useState(0);
@@ -4774,15 +4804,44 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
         }, '*');
       }
     }
+    function onUrlLoadLoc(ev: MessageEvent) {
+      if (!isOurPreviewIframeSource(ev.source)) return;
+      if (!isActivePreviewIframeSource(ev.source)) return;
+      const data = ev.data as { type?: string; pathname?: string } | null;
+      if (!data || data.type !== 'od:url-load-loc') return;
+      const rawPrefix = projectRawUrl(projectId, '');
+      const pathname = typeof data.pathname === 'string' ? data.pathname : '';
+      const idx = pathname.indexOf(rawPrefix);
+      const relative = idx >= 0
+        ? pathname
+            .slice(idx + rawPrefix.length)
+            .split('/')
+            .map((segment) => {
+              try {
+                return decodeURIComponent(segment);
+              } catch {
+                return segment;
+              }
+            })
+            .join('/')
+        : '';
+      if (!relative || relative === file.name || !/\.html?$/i.test(relative)) {
+        setUrlLoadSubPath(null);
+        return;
+      }
+      setUrlLoadSubPath(relative);
+    }
     window.addEventListener('message', onMessage);
     window.addEventListener('message', onRestoreRequest);
     window.addEventListener('message', onDcViewportMessage);
+    window.addEventListener('message', onUrlLoadLoc);
     return () => {
       window.removeEventListener('message', onMessage);
       window.removeEventListener('message', onRestoreRequest);
       window.removeEventListener('message', onDcViewportMessage);
+      window.removeEventListener('message', onUrlLoadLoc);
     };
-  }, [isActivePreviewIframeSource, isOurPreviewIframeSource]);
+  }, [isActivePreviewIframeSource, isOurPreviewIframeSource, projectId, file.name]);
 
   useEffect(() => {
     if (!effectiveDeck) {

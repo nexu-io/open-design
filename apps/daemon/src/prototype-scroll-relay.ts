@@ -42,6 +42,14 @@ const SCROLL_RELAY_SCRIPT = `<script ${SCROLL_RELAY_MARKER}>(function(){
   window.addEventListener('pagehide', remember);
   document.addEventListener('visibilitychange', function(){ if (document.visibilityState === 'hidden') remember(); });
   document.addEventListener('click', function(e){ var a = e.target && e.target.closest && e.target.closest('a[href]'); if (a) remember(); }, true);
+  // Report the page the url-load preview iframe is currently showing. The host
+  // cannot read location across the sandboxed (no allow-same-origin) frame, so
+  // it needs this to know which sub-page a multi-page prototype navigated to
+  // (e.g. to render that page, not the entry file, when a srcDoc-only bridge
+  // like Comment/Inspect mode is toggled).
+  function reportLoc(){ try { (window.parent || window).postMessage({ type: 'od:url-load-loc', pathname: location.pathname, search: location.search, hash: location.hash }, '*'); } catch (e) {} }
+  reportLoc();
+  window.addEventListener('hashchange', reportLoc);
 })();</script>`;
 
 /**
