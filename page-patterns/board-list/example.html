@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Board — Pattern Preview</title>
+    <style>
+      :root {
+        --bg: #fafaf9;
+        --card: #ffffff;
+        --border: #e5e7eb;
+        --text: #18181b;
+        --muted: #71717a;
+        --accent: #18181b;
+        --accent-fg: #ffffff;
+        --row-hover: #f4f4f5;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0; padding: 0; min-height: 100%;
+        font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+        background: var(--bg); color: var(--text);
+      }
+      main {
+        max-width: 960px; margin: 0 auto;
+        padding: 40px 24px;
+      }
+      .page-header {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 20px;
+      }
+      .page-title { font-size: 22px; font-weight: 600; margin: 0; }
+      .btn-primary {
+        background: var(--accent); color: var(--accent-fg);
+        border: 0; border-radius: 8px;
+        padding: 8px 14px; font-size: 13px; font-weight: 600;
+        cursor: pointer;
+      }
+      .toolbar {
+        display: flex; gap: 8px; margin-bottom: 14px;
+      }
+      .toolbar input {
+        flex: 1; padding: 8px 12px;
+        border: 1px solid var(--border); border-radius: 8px;
+        font-size: 13px; background: #fff; color: inherit;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      table {
+        width: 100%; border-collapse: collapse;
+        font-size: 14px;
+      }
+      thead th {
+        text-align: left;
+        font-size: 12px; font-weight: 600;
+        color: var(--muted);
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border);
+        background: #fafafa;
+      }
+      thead th.sort-active::after {
+        content: " \25BE"; color: var(--text);
+      }
+      tbody td {
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--border);
+        color: var(--text);
+      }
+      tbody tr:last-child td { border-bottom: 0; }
+      tbody tr:hover { background: var(--row-hover); cursor: pointer; }
+      .title-cell { font-weight: 500; }
+      .muted { color: var(--muted); font-size: 13px; }
+      .num { text-align: right; font-variant-numeric: tabular-nums; }
+      .pagination {
+        display: flex; justify-content: center; gap: 6px;
+        margin-top: 18px;
+      }
+      .pagination button {
+        min-width: 32px; padding: 6px 10px;
+        background: #fff; color: var(--text);
+        border: 1px solid var(--border); border-radius: 6px;
+        font-size: 13px; cursor: pointer;
+      }
+      .pagination button.active {
+        background: var(--accent); color: var(--accent-fg);
+        border-color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header class="page-header">
+        <h1 class="page-title">Posts</h1>
+        <button class="btn-primary" type="button">New post</button>
+      </header>
+      <div class="toolbar">
+        <input type="search" placeholder="Search posts..." />
+      </div>
+      <div class="card">
+        <table>
+          <thead>
+            <tr>
+              <th class="sort-active">Title</th>
+              <th>Author</th>
+              <th>Posted</th>
+              <th class="num">Comments</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="title-cell">Welcome to the board</td>
+              <td class="muted">Alice</td>
+              <td class="muted">2 hours ago</td>
+              <td class="num">12</td>
+            </tr>
+            <tr>
+              <td class="title-cell">How do I configure the dashboard?</td>
+              <td class="muted">Marcus</td>
+              <td class="muted">Yesterday</td>
+              <td class="num">4</td>
+            </tr>
+            <tr>
+              <td class="title-cell">Pattern library wishlist</td>
+              <td class="muted">Priya</td>
+              <td class="muted">3 days ago</td>
+              <td class="num">27</td>
+            </tr>
+            <tr>
+              <td class="title-cell">Release notes — v1.2</td>
+              <td class="muted">Lee</td>
+              <td class="muted">5 days ago</td>
+              <td class="num">9</td>
+            </tr>
+            <tr>
+              <td class="title-cell">Re: typography guidelines</td>
+              <td class="muted">Sam</td>
+              <td class="muted">Last week</td>
+              <td class="num">2</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <nav class="pagination" aria-label="Pagination">
+        <button type="button">Prev</button>
+        <button type="button" class="active">1</button>
+        <button type="button">2</button>
+        <button type="button">3</button>
+        <button type="button">Next</button>
+      </nav>
+    </main>
+  </body>
+</html>
