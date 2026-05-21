@@ -141,19 +141,19 @@ function diagnoseCliFailure(
   }
   if (authFailure) {
     const hasApiKey = envValue(input.env, config.apiKeyEnvKey) !== null;
-    // CodeBuddy authenticates via API key in -p mode; when the key is
-    // present but auth fails, the fix is to verify the key/endpoint
-    // rather than redirecting to /login.
-    if (config.apiKeyIsPrimaryAuth && hasApiKey) {
+    // CodeBuddy authenticates via API key in -p mode; all auth failures
+    // point at API key setup, not /login (which -p never uses).
+    if (config.apiKeyIsPrimaryAuth) {
       const configHint = hasConfigDir
         ? `Check ${config.apiKeyEnvKey} and ${config.configDirEnvKey} in Settings.`
-        : `Check ${config.apiKeyEnvKey} in Settings. If you use multiple ${config.profileLabel} profiles, also set ${config.configDirEnvKey} so Open Design uses the correct one.`;
-      return withContext(
-        `${config.brandName} could not authenticate with the configured API key.`,
-        `The spawned ${config.brandName} process has ${config.apiKeyEnvKey} set but still exited before producing a response. ${configHint}`,
-        input,
-        config,
-      );
+        : `Set ${config.apiKeyEnvKey} in Settings. If you use multiple ${config.profileLabel} profiles, also set ${config.configDirEnvKey} so Open Design uses the correct one.`;
+      const message = hasApiKey
+        ? `${config.brandName} could not authenticate with the configured API key.`
+        : `${config.brandName} could not authenticate. No API key is configured.`;
+      const detail = hasApiKey
+        ? `The spawned ${config.brandName} process has ${config.apiKeyEnvKey} set but still exited before producing a response. ${configHint}`
+        : `The spawned ${config.brandName} process requires ${config.apiKeyEnvKey} for authentication in -p mode. ${configHint}`;
+      return withContext(message, detail, input, config);
     }
     const configHint = hasConfigDir
       ? `The configured ${config.profileLabel} config directory may contain stale or expired auth state.`

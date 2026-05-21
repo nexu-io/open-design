@@ -109,7 +109,7 @@ describe('diagnoseClaudeCliFailure', () => {
     expect(diagnostic?.detail).toContain('Effective CLAUDE_CONFIG_DIR: /tmp/claude-alt');
   });
 
-  it('maps CodeBuddy auth failures to /login guidance', () => {
+  it('maps CodeBuddy auth failures without API key to API key setup guidance', () => {
     const diagnostic = diagnoseClaudeCliFailure({
       agentId: 'codebuddy',
       exitCode: 1,
@@ -118,9 +118,10 @@ describe('diagnoseClaudeCliFailure', () => {
     });
 
     expect(diagnostic?.message).toContain('CodeBuddy Code');
-    expect(diagnostic?.message).toContain('/login');
-    expect(diagnostic?.detail).toContain('CODEBUDDY_CONFIG_DIR');
-    expect(diagnostic?.detail).not.toContain('codebuddy login');
+    expect(diagnostic?.message).toContain('API key');
+    expect(diagnostic?.message).toContain('No API key');
+    expect(diagnostic?.detail).toContain('CODEBUDDY_API_KEY');
+    expect(diagnostic?.detail).not.toContain('/login');
   });
 
   it('maps CodeBuddy custom endpoint auth failures to endpoint guidance', () => {
@@ -181,7 +182,7 @@ describe('diagnoseClaudeCliFailure', () => {
     expect(diagnostic?.detail).not.toContain('/login');
   });
 
-  it('maps CodeBuddy config state failures to /login guidance', () => {
+  it('maps CodeBuddy config state failures without API key to API key setup guidance', () => {
     const diagnostic = diagnoseClaudeCliFailure({
       agentId: 'codebuddy',
       exitCode: 1,
@@ -190,8 +191,9 @@ describe('diagnoseClaudeCliFailure', () => {
     });
 
     expect(diagnostic?.message).toContain('CodeBuddy Code');
-    expect(diagnostic?.detail).toContain('/login');
-    expect(diagnostic?.detail).not.toContain('codebuddy login');
+    expect(diagnostic?.message).toContain('API key');
+    expect(diagnostic?.detail).toContain('CODEBUDDY_API_KEY');
+    expect(diagnostic?.detail).not.toContain('/login');
   });
 
   it('does not classify unrelated agent failures', () => {
