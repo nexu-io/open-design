@@ -1159,6 +1159,29 @@ test('spawnEnvForAgent throws on invalid inherited CODEBUDDY_INTERNET_ENVIRONMEN
   ).toThrow(/Invalid inherited CODEBUDDY_INTERNET_ENVIRONMENT/);
 });
 
+test('spawnEnvForAgent normalizes whitespace in CODEBUDDY_INTERNET_ENVIRONMENT', () => {
+  // An inherited value like " internal " should pass validation and be
+  // written back as the trimmed canonical literal "internal", not forwarded
+  // with surrounding whitespace that the CLI would not recognize.
+  const env = spawnEnvForAgent(
+    'codebuddy',
+    { CODEBUDDY_INTERNET_ENVIRONMENT: ' internal ', PATH: '/usr/bin' },
+    {},
+  );
+
+  assert.equal(env.CODEBUDDY_INTERNET_ENVIRONMENT, 'internal');
+});
+
+test('spawnEnvForAgent deletes empty/whitespace-only CODEBUDDY_INTERNET_ENVIRONMENT', () => {
+  const env = spawnEnvForAgent(
+    'codebuddy',
+    { CODEBUDDY_INTERNET_ENVIRONMENT: '   ', PATH: '/usr/bin' },
+    {},
+  );
+
+  assert.equal('CODEBUDDY_INTERNET_ENVIRONMENT' in env, false);
+});
+
 test('spawnEnvForAgent canonicalizes mixed-case CODEBUDDY_INTERNET_ENVIRONMENT aliases', () => {
   // On Windows, env key names are case-insensitive at the OS level but
   // Node's process.env preserves original casing. A merged env can contain
@@ -1218,8 +1241,10 @@ test('spawnEnvForAgent throws on invalid non-canonical CODEBUDDY_INTERNET_ENVIRO
 
 test('detectAgents isolates CodeBuddy probe failure from other agents', async () => {
   // When an invalid inherited CODEBUDDY_INTERNET_ENVIRONMENT causes the
-  // CodeBuddy probe to throw, other agents must still appear in the
-  // /api/agents response.
+  // CodeBuddy probe to throw an AgentEnvConfigError, other agents must
+  // still appear in the /api/agents response and the CodeBuddy entry
+  // should retain standard unavailable metadata (installUrl, docsUrl, etc.)
+  // plus the validation error as authMessage.
   const dir = mkdtempSync(join(tmpdir(), 'od-isolated-probe-'));
   try {
     return await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CODEBUDDY_INTERNET_ENVIRONMENT'], async () => {
@@ -1227,6 +1252,11 @@ test('detectAgents isolates CodeBuddy probe failure from other agents', async ()
       const claudeBin = join(dir, 'claude');
       writeFileSync(claudeBin, '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "1.0.0"; exit 0; fi\nif [ "$1" = "-p" ] && [ "$2" = "--help" ]; then echo "--add-dir --include-partial-messages"; exit 0; fi\nexit 0\n');
       chmodSync(claudeBin, 0o755);
+      // Provide a codebuddy binary so the probe reaches spawnEnvForAgent
+      // where the invalid env triggers AgentEnvConfigError.
+      const codebuddyBin = join(dir, 'codebuddy');
+      writeFileSync(codebuddyBin, '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "1.0.0"; exit 0; fi\nexit 0\n');
+      chmodSync(codebuddyBin, 0o755);
       process.env.PATH = dir;
       process.env.OD_AGENT_HOME = dir;
       process.env.CODEBUDDY_INTERNET_ENVIRONMENT = 'internel';
@@ -1238,10 +1268,15 @@ test('detectAgents isolates CodeBuddy probe failure from other agents', async ()
       assert.ok(claudeAgent);
       assert.equal(claudeAgent.available, true);
 
-      // CodeBuddy should be unavailable (the invalid env caused a probe failure).
+      // CodeBuddy should be unavailable (the invalid env caused an AgentEnvConfigError).
       const codebuddyAgent = agents.find((a) => a.id === 'codebuddy');
       assert.ok(codebuddyAgent);
       assert.equal(codebuddyAgent.available, false);
+      // The fallback should include standard unavailable metadata.
+      assert.ok(codebuddyAgent.installUrl || codebuddyAgent.docsUrl,
+        'CodeBuddy fallback should retain install/docs metadata from unavailableAgent()');
+      // The validation error should be surfaced as authMessage.
+      assert.match(codebuddyAgent.authMessage ?? '', /Invalid inherited CODEBUDDY_INTERNET_ENVIRONMENT/);
     });
   } finally {
     rmSync(dir, { recursive: true, force: true });

@@ -11,6 +11,16 @@ type RuntimeEnvMap = NodeJS.ProcessEnv | Record<string, string>;
 // Must stay in sync with AGENT_CLI_ENV_ENUMS in app-config.ts.
 const CODEBUDDY_INTERNET_ENV_ALLOWED = new Set(['public', 'internal', 'ioa']);
 
+/** Typed error for invalid agent env/config — caught by detection.ts
+ *  to surface a per-agent "unavailable" result without crashing other agents.
+ *  Unexpected probe bugs (not env/config errors) should still fail fast. */
+export class AgentEnvConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AgentEnvConfigError';
+  }
+}
+
 // Build the env passed to spawn() for a given agent adapter.
 //
 // The claude adapter strips ANTHROPIC_API_KEY so Claude Code's own auth
@@ -124,13 +134,24 @@ export function spawnEnvForAgent(
       }
       delete env[alias];
     }
-    // Now validate the single canonical key.
+    // Now validate the single canonical key, normalizing whitespace.
     const value = env[CANONICAL];
-    if (typeof value === 'string' && value.trim() && !CODEBUDDY_INTERNET_ENV_ALLOWED.has(value.trim())) {
-      throw new Error(
-        `[env] Invalid inherited CODEBUDDY_INTERNET_ENVIRONMENT="${value}".` +
-        ` Valid values: ${[...CODEBUDDY_INTERNET_ENV_ALLOWED].join(', ')}.`,
-      );
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed) {
+        if (!CODEBUDDY_INTERNET_ENV_ALLOWED.has(trimmed)) {
+          throw new AgentEnvConfigError(
+            `[env] Invalid inherited CODEBUDDY_INTERNET_ENVIRONMENT="${value}".` +
+            ` Valid values: ${[...CODEBUDDY_INTERNET_ENV_ALLOWED].join(', ')}.`,
+          );
+        }
+        // Write back the trimmed value so the child process receives
+        // a canonical enum literal, not " internal " with whitespace.
+        env[CANONICAL] = trimmed;
+      } else {
+        // Empty or whitespace-only: delete so the CLI uses its default.
+        delete env[CANONICAL];
+      }
     }
   }
   return env;

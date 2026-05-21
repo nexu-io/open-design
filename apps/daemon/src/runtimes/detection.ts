@@ -2,7 +2,7 @@ import { execAgentFile } from './invocation.js';
 import { AGENT_DEFS } from './registry.js';
 import { DEFAULT_MODEL_OPTION, rememberLiveModels } from './models.js';
 import { applyAgentLaunchEnv, resolveAgentLaunch } from './launch.js';
-import { spawnEnvForAgent } from './env.js';
+import { spawnEnvForAgent, AgentEnvConfigError } from './env.js';
 import { probeAgentAuthStatus } from './auth.js';
 import { agentCapabilities } from './capabilities.js';
 import { installMetaForAgent } from './metadata.js';
@@ -228,17 +228,16 @@ async function safeProbe(
   try {
     return await probe(def, configuredEnv);
   } catch (err) {
-    // Fault isolation (issue #2297): one adapter's probe blowing up
-    // — e.g. a synchronous filesystem throw during PATH walking on a
-    // packaged Windows daemon, or an async rejection from one of the
-    // post-launch probes — must not collapse the whole agent picker.
-    // Without this guard the bare `Promise.all` rejected and the
-    // `/api/agents` catch arm returned `[]`, so the UI silently lost
-    // every CLI option and fell back to BYOK / Cloud only.
-    return {
-      ...unavailableAgent(def),
-      ...(err instanceof Error ? { authMessage: err.message } : {}),
-    };
+    // Only recover from typed env/config errors (e.g. invalid inherited
+    // CODEBUDDY_INTERNET_ENVIRONMENT). Unexpected probe bugs should still
+    // fail fast so they are not silently hidden as "agent unavailable".
+    if (err instanceof AgentEnvConfigError) {
+      return {
+        ...unavailableAgent(def),
+        authMessage: err.message,
+      };
+    }
+    throw err;
   }
 }
 
