@@ -1,9 +1,8 @@
 {{- if .Values.ingress.enabled -}}
-{{- if not .Values.config.publicBaseUrl -}}
-  {{- $firstHostBlock := index .Values.ingress.hosts 0 }}
-  {{- range $firstHostBlock.paths }}
+{{- range .Values.ingress.hosts }}
+  {{- range .paths }}
     {{- if ne .path "/" }}
-      {{- fail "CRITICAL ERROR: A non-root ingress path prefix is configured. You must explicitly set config.publicBaseUrl to include the sub-path." }}
+      {{- fail "CRITICAL ERROR: Non-root ingress path prefixes (sub-paths) are not supported by the proxy routing stack. Ingress paths must be fixed to '/'." }}
     {{- end }}
   {{- end }}
 {{- end }}
