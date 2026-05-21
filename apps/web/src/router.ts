@@ -137,6 +137,15 @@ export function buildPath(route: Route): string {
 // Centralized navigation. Components call this instead of mutating
 // `window.location` directly so we can fan the change out to any
 // `useRoute()` subscriber via a custom event.
+//
+// The popstate dispatch is queued onto a microtask so callers who
+// invoke navigate() from a render-phase code path (post-fetch effects
+// that redirect, computed-from-route guards, etc.) don't drive
+// `useRoute()`'s `setState` synchronously during another component's
+// render — that's the "Cannot update a component (`Router`) while
+// rendering a different component (`App`)" warning React 18 emits.
+// History entry mutation stays synchronous so `window.location`
+// reads from the same task see the new path.
 export function navigate(route: Route, opts: { replace?: boolean } = {}): void {
   const target = buildPath(route);
   const current = window.location.pathname;
@@ -146,7 +155,9 @@ export function navigate(route: Route, opts: { replace?: boolean } = {}): void {
   } else {
     window.history.pushState(null, '', target);
   }
-  window.dispatchEvent(new PopStateEvent('popstate'));
+  queueMicrotask(() => {
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  });
 }
 
 export function useRoute(): Route {

@@ -112,3 +112,50 @@ describe('parseRoute / buildPath (issue #1505)', () => {
     expect(parseRoute('/projects')).toEqual({ kind: 'home', view: 'projects' });
   });
 });
+
+// @vitest-environment jsdom
+import { navigate } from '../src/router';
+
+describe('navigate() defers popstate dispatch (render-safety)', () => {
+  it('mutates window.history synchronously but defers the popstate dispatch', async () => {
+    const initialPath = '/';
+    window.history.replaceState(null, '', initialPath);
+    const received: string[] = [];
+    const listener = () => received.push(window.location.pathname);
+    window.addEventListener('popstate', listener);
+
+    try {
+      navigate({ kind: 'home', view: 'integrations' });
+      // History entry must have moved synchronously so callers reading
+      // window.location in the same task see the new path.
+      expect(window.location.pathname).toBe('/integrations');
+      // But the popstate event (which `useRoute()` translates into a
+      // setState) must NOT have fired yet — that's exactly what triggers
+      // the React render-phase setState warning when navigate is called
+      // from a post-fetch effect that resolves during another render.
+      expect(received).toEqual([]);
+      // Microtask flush — the deferred dispatch should land now.
+      await Promise.resolve();
+      expect(received).toEqual(['/integrations']);
+    } finally {
+      window.removeEventListener('popstate', listener);
+      window.history.replaceState(null, '', initialPath);
+    }
+  });
+
+  it('is a no-op when the target path equals the current path', async () => {
+    const path = '/';
+    window.history.replaceState(null, '', path);
+    const received: string[] = [];
+    const listener = () => received.push(window.location.pathname);
+    window.addEventListener('popstate', listener);
+
+    try {
+      navigate({ kind: 'home', view: 'home' });
+      await Promise.resolve();
+      expect(received).toEqual([]);
+    } finally {
+      window.removeEventListener('popstate', listener);
+    }
+  });
+});
