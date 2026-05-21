@@ -71,21 +71,17 @@ async function main(): Promise<void> {
     );
 
     if (updatedSharedHash === originalSharedHash) {
-      throw new Error(
-        `Expected to update the hash assignment in ${path.relative(repoRoot, sharedHashPath)}`,
+      process.stdout.write(
+        `${path.relative(repoRoot, sharedHashPath)} already pins ${nextHash}; no update needed.\n`,
       );
+      return;
     }
 
     await writeFile(sharedHashPath, updatedSharedHash, "utf8");
-
-    if (result.status === 0) {
-      process.stdout.write(`nix build succeeded; ${nextHash} is already current.\n`);
-    } else {
-      process.stdout.write(
-        `Updated ${path.relative(repoRoot, sharedHashPath)} to ${nextHash}.\n` +
-          `Re-run \`nix flake check --print-build-logs --keep-going\` to confirm.\n`,
-      );
-    }
+    process.stdout.write(
+      `Updated ${path.relative(repoRoot, sharedHashPath)} to ${nextHash}.\n` +
+        `Re-run \`nix flake check --print-build-logs --keep-going\` to confirm.\n`,
+    );
   } finally {
     await writeFile(consumerPath, originalConsumer, "utf8");
   }
