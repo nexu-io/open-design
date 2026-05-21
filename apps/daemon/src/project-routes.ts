@@ -15,6 +15,7 @@ import {
   resolvePluginSnapshot,
 } from './plugins/index.js';
 import { connectorService } from './connectors/service.js';
+import { injectScrollRelay } from './prototype-scroll-relay.js';
 import type { RouteDeps } from './server-context.js';
 import { listSkills } from './skills.js';
 import { auditDesignSystemPackage } from './tools-connectors-cli.js';
@@ -947,6 +948,13 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       }
 
       const file = await readProjectFile(PROJECTS_DIR, projectId, relPath, project?.metadata);
+      // url-load HTML is served raw; inject the scroll-position relay so
+      // multi-page prototypes keep their place on back-navigation without any
+      // per-project code. Non-HTML files are sent byte-for-byte.
+      if (file.mime.startsWith('text/html')) {
+        res.type(file.mime).send(injectScrollRelay(file.buffer.toString('utf8')));
+        return;
+      }
       res.type(file.mime).send(file.buffer);
     } catch (err: any) {
       const status = err && err.code === 'ENOENT' ? 404 : 400;
