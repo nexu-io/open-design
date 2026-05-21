@@ -400,11 +400,10 @@ describe('HomeHero intent rail', () => {
       .closest('[data-rail-group]');
 
     expect(createPluginGroup?.getAttribute('data-rail-group')).toBe('migrate');
-    for (const id of ['figma', 'template']) {
+    for (const id of ['figma', 'folder', 'template']) {
       expect(screen.getByTestId(`home-hero-rail-${id}`).closest('[data-rail-group]'))
         .toBe(createPluginGroup);
     }
-    expect(screen.queryByTestId('home-hero-rail-folder')).toBeNull();
   });
 
   it('keeps the generic fallback in the free-form prompt instead of an Other chip', () => {
@@ -417,7 +416,7 @@ describe('HomeHero intent rail', () => {
   it('migration chips carry the right action discriminator', () => {
     expect(findChip('create-plugin')?.action).toMatchObject({ kind: 'create-plugin' });
     expect(findChip('figma')?.action).toMatchObject({ kind: 'apply-figma-migration' });
-    expect(findChip('folder')).toBeUndefined();
+    expect(findChip('folder')?.action).toMatchObject({ kind: 'import-folder' });
     expect(findChip('template')?.action).toMatchObject({ kind: 'open-template-picker' });
   });
 
