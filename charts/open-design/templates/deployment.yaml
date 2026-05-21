@@ -18,6 +18,7 @@ spec:
     metadata:
       annotations:
           checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+          checksum/proxy-config: {{ include (print $.Template.BasePath "/proxy-configmap.yaml") . | sha256sum }}
           checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
       labels:
         {{- include "open-design.selectorLabels" . | nindent 8 }}
