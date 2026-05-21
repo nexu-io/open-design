@@ -72,29 +72,80 @@ function scanTemplate(
   return { literalBefore, slots };
 }
 
+/**
+ * Score a slot-text occurrence against the template's adjacent literals.
+ * Each character that matches the trailing portion of the preceding
+ * literal (or the leading portion of the following literal) earns one
+ * point. The highest-scoring occurrence wins; this is what stops a
+ * user-typed `birds` between `5 ` and `page deck` from stealing the
+ * topic slot away from the real `about birds.` later in the prompt.
+ * Reviewer @nettee on #2329.
+ */
+function scoreSlotMatch(
+  prompt: string,
+  idx: number,
+  slotText: string,
+  literalBefore: string,
+  literalAfter: string,
+): number {
+  let score = 0;
+  const maxBackward = Math.min(literalBefore.length, idx);
+  for (let k = 0; k < maxBackward; k += 1) {
+    if (prompt[idx - 1 - k] !== literalBefore[literalBefore.length - 1 - k]) break;
+    score += 1;
+  }
+  const afterIdx = idx + slotText.length;
+  const maxForward = Math.min(literalAfter.length, prompt.length - afterIdx);
+  for (let k = 0; k < maxForward; k += 1) {
+    if (prompt[afterIdx + k] !== literalAfter[k]) break;
+    score += 1;
+  }
+  return score;
+}
+
 export function buildPromptHighlightParts(
   template: string | null,
   values: Record<string, unknown>,
   prompt: string,
 ): PromptHighlightPart[] | null {
   if (!template) return null;
-  const { slots } = scanTemplate(template, values);
+  const { literalBefore, slots } = scanTemplate(template, values);
   if (slots.length === 0) return null;
 
   // Walk the prompt, claiming each slot's text in order. The cursor only
   // moves forward, so a slot's text in the prompt cannot be re-used by a
   // later slot — duplicate slot values map to their distinct positions.
+  //
+  // When the same slot value appears in multiple places (because the
+  // user typed prose that happens to include it), pick the occurrence
+  // whose surrounding context best matches the template literals on
+  // either side. Highest score wins; ties keep the earliest match.
   const parts: PromptHighlightPart[] = [];
   let cursor = 0;
-  for (const slot of slots) {
+  for (let i = 0; i < slots.length; i += 1) {
+    const slot = slots[i]!;
     if (!slot.text) return null;
-    const found = prompt.indexOf(slot.text, cursor);
-    if (found < 0) return null;
-    if (found > cursor) {
-      parts.push({ kind: 'text', text: prompt.slice(cursor, found) });
+    const before = literalBefore[i] ?? '';
+    const after = literalBefore[i + 1] ?? '';
+    let bestIndex = -1;
+    let bestScore = -1;
+    let from = cursor;
+    while (true) {
+      const candidate = prompt.indexOf(slot.text, from);
+      if (candidate < 0) break;
+      const score = scoreSlotMatch(prompt, candidate, slot.text, before, after);
+      if (score > bestScore) {
+        bestScore = score;
+        bestIndex = candidate;
+      }
+      from = candidate + 1;
+    }
+    if (bestIndex < 0) return null;
+    if (bestIndex > cursor) {
+      parts.push({ kind: 'text', text: prompt.slice(cursor, bestIndex) });
     }
     parts.push({ kind: 'slot', key: slot.key, text: slot.text, filled: slot.filled });
-    cursor = found + slot.text.length;
+    cursor = bestIndex + slot.text.length;
   }
   if (cursor < prompt.length) {
     parts.push({ kind: 'text', text: prompt.slice(cursor) });

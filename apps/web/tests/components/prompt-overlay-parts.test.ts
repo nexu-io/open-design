@@ -71,6 +71,22 @@ describe('buildPromptHighlightParts (#2090)', () => {
     expect(buildPromptHighlightParts(TEMPLATE, VALUES, edited)).toBeNull();
   });
 
+  it('anchors a slot to its template-adjacent literal even when its value also appears in user-typed prose (review feedback)', () => {
+    // nettee's #2329 review case: the literal `birds` the user typed
+    // between `5 ` and ` page deck` must NOT swallow the topic slot —
+    // the real slot lives after `about ` and stays anchored there.
+    const edited = 'Make a 5 birds page deck about birds.';
+    const parts = buildPromptHighlightParts(TEMPLATE, VALUES, edited);
+    expect(parts).not.toBeNull();
+    const sequence = kinds(parts);
+    // The "birds" right after "about " (preceded by the literal that
+    // sits next to {{topic}} in the template) is the slot; the earlier
+    // user-typed "birds" stays inside the surrounding text part.
+    expect(sequence).toBe(
+      'text("Make a ") | slot(page-count=5) | text(" birds page deck about ") | slot(topic=birds) | text(".")',
+    );
+  });
+
   it('treats duplicate slot values as distinct positions when both still appear in order', () => {
     const template = 'A {{a}} and another {{a}}.';
     const values = { a: '5' };
