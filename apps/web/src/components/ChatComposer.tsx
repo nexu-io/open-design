@@ -217,7 +217,15 @@ function ByokMediaModelSelect({
   // a normal React onClick that always commits.
   const [open, setOpen] = useState(false);
   const groups = groupByProvider(models);
-  const defaultModel = models.find((m) => m.default) ?? models[0];
+  // The "(default)" option must name the model the daemon actually uses when
+  // nothing is picked — for this SenseAudio BYOK chat that's the SenseAudio
+  // model for the surface, NOT the global catalogue default (gpt-image-2).
+  // Showing gpt-image-2 here misled users into thinking it was selected when
+  // the empty default actually routed to senseaudio-image-2.0.
+  const defaultModel =
+    models.find((m) => m.provider === 'senseaudio')
+    ?? models.find((m) => m.default)
+    ?? models[0];
   const selected = models.find((m) => m.id === value);
   const displayLabel = value
     ? selected?.label ?? value

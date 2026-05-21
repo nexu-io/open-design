@@ -119,7 +119,7 @@ export const BYOK_MEDIA_TOOLS = [
             type: 'string',
             enum: [...BYOK_IMAGE_MODEL_IDS],
             description:
-              'Optional model override. Omit to use the user-selected default from the composer. The chosen model routes to its provider, which must have credentials configured in Settings → Media.',
+              'Optional. OMIT this unless the user explicitly named a specific image model in their message (e.g. "use gpt-image-2"). When omitted, the user\'s composer-selected default model is used. Only set it to honor an explicit user request — do not pick a model on your own. The chosen model routes to its provider, which must have credentials configured in Settings → Media.',
           },
         },
         required: ['prompt'],
@@ -156,7 +156,7 @@ export const BYOK_MEDIA_TOOLS = [
             type: 'string',
             enum: [...BYOK_VIDEO_MODEL_IDS],
             description:
-              'Optional model override. Omit to use the user-selected default from the composer. Routes to the model\'s provider, which must have credentials configured in Settings → Media.',
+              'Optional. OMIT this unless the user explicitly named a specific video model in their message. When omitted, the user\'s composer-selected default model is used. Only set it to honor an explicit user request — do not pick a model on your own. Routes to the model\'s provider, which must have credentials configured in Settings → Media.',
           },
         },
         required: ['prompt'],
@@ -190,7 +190,7 @@ export const BYOK_MEDIA_TOOLS = [
             type: 'string',
             enum: [...BYOK_AUDIO_MODEL_IDS],
             description:
-              'Optional model override. Omit to use the user-selected default from the composer. Routes to the model\'s provider, which must have credentials configured in Settings → Media.',
+              'Optional. OMIT this unless the user explicitly named a specific audio model in their message. When omitted, the user\'s composer-selected default model is used. Only set it to honor an explicit user request — do not pick a model on your own. Routes to the model\'s provider, which must have credentials configured in Settings → Media.',
           },
         },
         required: ['prompt'],
@@ -214,16 +214,17 @@ export interface BYOKToolContext {
   projectsRoot: string;
   /** Active project id (validated upstream via isSafeId). */
   projectId: string;
-  /** The user's explicit composer pick. AUTHORITATIVE — it overrides any
-   *  `model` the LLM passes in the tool call, so the picker actually controls
-   *  what gets generated (otherwise the model could silently fall back to its
-   *  own choice). Set only when the user pinned a specific model. */
-  pinnedImageModel?: string;
-  pinnedVideoModel?: string;
-  pinnedAudioModel?: string;
-  /** Surface fallback used when nothing is pinned AND the LLM omits a model.
-   *  Validated against the registry; an unknown id falls back to the
-   *  catalogue default. */
+  /** The user's composer pick — the DEFAULT model for this surface. Used when
+   *  the user did not name a specific model in their chat message (i.e. the
+   *  LLM omits `model`). An explicit `model` from the LLM — meaning the user
+   *  asked for a particular model in chat — takes precedence over this. Set
+   *  only when the user picked something in the composer. */
+  composerImageModel?: string;
+  composerVideoModel?: string;
+  composerAudioModel?: string;
+  /** Surface fallback used when the user neither named a model in chat nor
+   *  picked one in the composer. Validated against the registry; an unknown
+   *  id falls back to the catalogue default. */
   defaultImageModel?: string;
   defaultVideoModel?: string;
   defaultAudioModel?: string;
@@ -291,11 +292,12 @@ export async function executeGenerateImage(
 ): Promise<MediaToolResult> {
   const prompt = trimmedPrompt(args.prompt);
   if (!prompt) return { ok: false, error: 'prompt is required', kind: 'image' };
-  // Pinned (user) wins over the LLM's arg wins over the surface fallback.
-  const model = isImageModel(ctx.pinnedImageModel)
-    ? ctx.pinnedImageModel
-    : isImageModel(args.model)
-      ? args.model
+  // An explicit model from the LLM (the user named one in chat) wins over the
+  // composer default, which wins over the surface fallback.
+  const model = isImageModel(args.model)
+    ? args.model
+    : isImageModel(ctx.composerImageModel)
+      ? ctx.composerImageModel
       : isImageModel(ctx.defaultImageModel)
         ? ctx.defaultImageModel
         : DEFAULT_IMAGE_MODEL;
@@ -326,10 +328,10 @@ export async function executeGenerateVideo(
 ): Promise<MediaToolResult> {
   const prompt = trimmedPrompt(args.prompt);
   if (!prompt) return { ok: false, error: 'prompt is required', kind: 'video' };
-  const model = isVideoModel(ctx.pinnedVideoModel)
-    ? ctx.pinnedVideoModel
-    : isVideoModel(args.model)
-      ? args.model
+  const model = isVideoModel(args.model)
+    ? args.model
+    : isVideoModel(ctx.composerVideoModel)
+      ? ctx.composerVideoModel
       : isVideoModel(ctx.defaultVideoModel)
         ? ctx.defaultVideoModel
         : DEFAULT_VIDEO_MODEL;
@@ -359,10 +361,10 @@ export async function executeGenerateAudio(
 ): Promise<MediaToolResult> {
   const prompt = trimmedPrompt(args.prompt);
   if (!prompt) return { ok: false, error: 'prompt is required', kind: 'audio' };
-  const model = isAudioModel(ctx.pinnedAudioModel)
-    ? ctx.pinnedAudioModel
-    : isAudioModel(args.model)
-      ? args.model
+  const model = isAudioModel(args.model)
+    ? args.model
+    : isAudioModel(ctx.composerAudioModel)
+      ? ctx.composerAudioModel
       : isAudioModel(ctx.defaultAudioModel)
         ? ctx.defaultAudioModel
         : DEFAULT_SPEECH_MODEL;

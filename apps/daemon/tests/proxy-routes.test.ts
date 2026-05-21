@@ -839,10 +839,10 @@ describe('API proxy routes', () => {
   });
 
   // Proves the composer model picker is wired through end-to-end (not a
-  // decoration): the per-session `byokImageModel` selection flows into the
-  // tool's default, and when the model calls generate_image WITHOUT a model
-  // arg the daemon generates with the SELECTED model — here a non-default
-  // SenseAudio image model — visible on the upstream /v1/image/sync body.
+  // decoration): the per-session `byokImageModel` selection is the DEFAULT, so
+  // when the user didn't name a model (the tool call omits `model`) the daemon
+  // generates with the composer pick — here a non-default SenseAudio image
+  // model — visible on the upstream /v1/image/sync body.
   it('generates with the composer-selected image model when the tool omits one', async () => {
     const pngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
     let imageSyncModel: string | undefined;
@@ -864,9 +864,9 @@ describe('API proxy routes', () => {
         chatCallIndex++;
         if (chatCallIndex === 1) {
           return sseResponse([
-            // The model tries to use the 2.0 model in its tool call — the
-            // pinned composer selection (1.0) must override it.
-            'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_pick","type":"function","function":{"name":"generate_image","arguments":"{\\"prompt\\":\\"a cat\\",\\"model\\":\\"senseaudio-image-2.0-260319\\"}"}}]},"finish_reason":null}]}',
+            // The tool call omits `model` (the user didn't name one), so the
+            // composer-selected default (1.0) must be used.
+            'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_pick","type":"function","function":{"name":"generate_image","arguments":"{\\"prompt\\":\\"a cat\\"}"}}]},"finish_reason":null}]}',
             '',
             'data: {"choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}',
             '',
@@ -893,8 +893,8 @@ describe('API proxy routes', () => {
       projectId: 'test-project',
       model: 'senseaudio-s2',
       messages: [{ role: 'user', content: 'draw a cat' }],
-      // The composer pinned the 1.0 model; even though the LLM asked for 2.0
-      // in its tool call, generation must use the pinned 1.0.
+      // The composer picked 1.0 as the default; the tool omits `model`, so
+      // generation uses the composer default 1.0.
       byokImageModel: 'senseaudio-image-1.0-260319',
     });
 

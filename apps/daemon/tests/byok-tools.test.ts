@@ -87,20 +87,36 @@ describe('executeGenerateImage', () => {
     );
   });
 
-  it('lets the pinned composer model win over the model the LLM passes', async () => {
+  it('uses the composer default when the LLM omits a model', async () => {
     generateMediaMock.mockResolvedValue({ name: 'p.png' });
     await executeGenerateImage(
-      // The LLM tries to use gpt-image-2, but the user pinned an OpenAI-free
-      // SenseAudio model in the composer — the pin must win.
-      { prompt: 'x', model: 'gpt-image-2' },
+      // No model arg → the user didn't name one → use the composer pick.
+      { prompt: 'x' },
       {
         ...CTX,
-        pinnedImageModel: 'senseaudio-image-1.0-260319',
+        composerImageModel: 'senseaudio-image-1.0-260319',
         defaultImageModel: SENSEAUDIO_DEFAULT_IMAGE_MODEL,
       },
     );
     expect(generateMediaMock).toHaveBeenCalledWith(
       expect.objectContaining({ model: 'senseaudio-image-1.0-260319' }),
+    );
+  });
+
+  it('lets an explicit LLM model override the composer default', async () => {
+    generateMediaMock.mockResolvedValue({ name: 'e.png' });
+    await executeGenerateImage(
+      // The user named gpt-image-2 in chat → the LLM forwards it → it wins
+      // over the composer pick (senseaudio-image-1.0).
+      { prompt: 'x', model: 'gpt-image-2' },
+      {
+        ...CTX,
+        composerImageModel: 'senseaudio-image-1.0-260319',
+        defaultImageModel: SENSEAUDIO_DEFAULT_IMAGE_MODEL,
+      },
+    );
+    expect(generateMediaMock).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'gpt-image-2' }),
     );
   });
 

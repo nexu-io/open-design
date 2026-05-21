@@ -1220,13 +1220,12 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       defaultImageModel: SENSEAUDIO_DEFAULT_IMAGE_MODEL,
       defaultVideoModel: SENSEAUDIO_DEFAULT_VIDEO_MODEL,
       defaultAudioModel: SENSEAUDIO_DEFAULT_AUDIO_MODEL,
-      // The composer pick is authoritative — it overrides any model the LLM
-      // tries to pass, so picking e.g. an OpenAI model really routes there
-      // (and errors clearly if that provider has no key) instead of the model
-      // silently falling back to SenseAudio.
-      ...(isImageModel(byokImageModel) ? { pinnedImageModel: byokImageModel } : {}),
-      ...(isVideoModel(byokVideoModel) ? { pinnedVideoModel: byokVideoModel } : {}),
-      ...(isAudioModel(byokAudioModel) ? { pinnedAudioModel: byokAudioModel } : {}),
+      // The composer pick is the DEFAULT for each surface — used when the user
+      // didn't name a model in chat. An explicit model in the user's message
+      // (which the LLM forwards as the tool's `model` arg) takes precedence.
+      ...(isImageModel(byokImageModel) ? { composerImageModel: byokImageModel } : {}),
+      ...(isVideoModel(byokVideoModel) ? { composerVideoModel: byokVideoModel } : {}),
+      ...(isAudioModel(byokAudioModel) ? { composerAudioModel: byokAudioModel } : {}),
     };
 
     // Run one round-trip: POST to upstream, stream text deltas to the
