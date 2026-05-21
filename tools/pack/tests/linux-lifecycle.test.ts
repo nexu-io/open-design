@@ -220,7 +220,10 @@ describe("inspectPackedLinuxApp", () => {
 });
 
 describe("stopPackedLinuxApp", () => {
-  it("stops a tools-pack marker when AppImage ownership probes are unavailable", async () => {
+  it.each([
+    ["tools-pack", SIDECAR_SOURCES.TOOLS_PACK],
+    ["packaged", SIDECAR_SOURCES.PACKAGED],
+  ])("stops a current %s marker when AppImage ownership probes are unavailable", async (_label, source) => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-linux-lifecycle-"));
     try {
       const config = makeConfig(root);
@@ -230,7 +233,7 @@ describe("stopPackedLinuxApp", () => {
         ipc: "/tmp/open-design/ipc/linux-tauri/desktop.sock",
         mode: SIDECAR_MODES.RUNTIME,
         namespace: config.namespace,
-        source: SIDECAR_SOURCES.TOOLS_PACK,
+        source,
       };
       await mkdir(join(markerPath, ".."), { recursive: true });
       await writeFile(
@@ -268,13 +271,15 @@ describe("stopPackedLinuxApp", () => {
       const result = await stopPackedLinuxApp(config);
 
       expect(result.status).toBe("stopped");
-      expect(result.fallback?.reason).toBe("marker-validation-failed-tools-pack-stopped");
+      expect(result.fallback?.reason).toBe("marker-validation-failed-current-marker-stopped");
       expect(result.remainingPids).toEqual([]);
-      expect(platform.matchesStampedProcess).toHaveBeenCalledWith(
-        expect.objectContaining({ pid: 1234 }),
-        stamp,
-        OPEN_DESIGN_SIDECAR_CONTRACT,
-      );
+      if (source === SIDECAR_SOURCES.TOOLS_PACK) {
+        expect(platform.matchesStampedProcess).toHaveBeenCalledWith(
+          expect.objectContaining({ pid: 1234 }),
+          stamp,
+          OPEN_DESIGN_SIDECAR_CONTRACT,
+        );
+      }
     } finally {
       await rm(root, { force: true, recursive: true });
     }
