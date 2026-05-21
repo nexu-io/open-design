@@ -9,6 +9,12 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEPLOY_DIR="$(dirname "$SCRIPT_DIR")"
 ENV_FILE="${DEPLOY_DIR}/.env"
 COMPOSE_FILE="${DEPLOY_DIR}/docker-compose.yml"
+OVERRIDE_FILE="${DEPLOY_DIR}/docker-compose.override.yml"
+
+COMPOSE_FILES=(-f "$COMPOSE_FILE")
+if [ -f "$OVERRIDE_FILE" ]; then
+  COMPOSE_FILES+=(-f "$OVERRIDE_FILE")
+fi
 
 # ---------------------------------------------------------------------------
 # Colors & formatting
@@ -98,8 +104,12 @@ printf "\n"
 # ---------------------------------------------------------------------------
 # Find data volume (Compose prepends project name)
 # ---------------------------------------------------------------------------
+CONTAINER_NAME="${COMPOSE_CONTAINER_NAME:-open-design}"
+VOLUME_BASE="${COMPOSE_VOLUME_NAME:-open_design_data}"
+PROJECT_NAME="${COMPOSE_PROJECT_NAME:-open-design}"
+
 DATA_VOLUME=""
-for _vol in "open-design_open_design_data" "open_design_data"; do
+for _vol in "${PROJECT_NAME}_${VOLUME_BASE}" "${VOLUME_BASE}"; do
   if $RUNTIME volume inspect "$_vol" >/dev/null 2>&1; then
     DATA_VOLUME="$_vol"
     break
@@ -118,8 +128,8 @@ _do_backup() {
   step "Backing up user data to ${_dest}..."
 
   # Try container cp first (works if container exists, running or stopped)
-  if $RUNTIME inspect open-design >/dev/null 2>&1; then
-    $RUNTIME cp open-design:/app/.od/. "$_dest/" 2>/dev/null
+  if $RUNTIME inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
+    $RUNTIME cp "$CONTAINER_NAME":/app/.od/. "$_dest/" 2>/dev/null
   fi
 
   # If container cp didn't work or container doesn't exist, use temp container
@@ -174,15 +184,15 @@ fi
 # ---------------------------------------------------------------------------
 # Stop and remove containers
 # ---------------------------------------------------------------------------
-if $COMPOSE_CMD -f "$COMPOSE_FILE" ps -q 2>/dev/null | grep -q .; then
+if $COMPOSE_CMD "${COMPOSE_FILES[@]}" ps -q 2>/dev/null | grep -q .; then
   step "Stopping containers..."
-  $COMPOSE_CMD -f "$COMPOSE_FILE" down
+  $COMPOSE_CMD "${COMPOSE_FILES[@]}" down
   ok "Containers stopped."
 else
   # Try removing stopped container directly
-  if $RUNTIME inspect open-design >/dev/null 2>&1; then
+  if $RUNTIME inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
     step "Removing stopped container..."
-    $RUNTIME rm -f open-design 2>/dev/null || true
+    $RUNTIME rm -f "$CONTAINER_NAME" 2>/dev/null || true
   else
     step "No containers found."
   fi

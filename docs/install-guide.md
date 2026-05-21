@@ -6,13 +6,11 @@ Deploy Open Design on Linux or macOS with a single command. The installer wraps 
 
 ## Quick reference
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/nexu-io/open-design/main/deploy/scripts/install.sh | sh
-```
-
-Or clone the repo and run locally:
+Clone the repository and run the installer:
 
 ```bash
+git clone https://github.com/nexu-io/open-design.git
+cd open-design
 bash deploy/scripts/install.sh
 ```
 

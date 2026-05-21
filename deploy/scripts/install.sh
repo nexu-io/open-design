@@ -3,7 +3,7 @@
 # Docker Compose wrapper for Linux and macOS
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/nexu-io/open-design/main/deploy/scripts/install.sh | sh
+#   Clone this repo, then run:
 #   ./install.sh [--non-interactive] [--port 7456] [--image <ref>] [--skip-docker-install] [--no-systemd]
 set -euo pipefail
 
@@ -14,10 +14,26 @@ DEFAULT_PORT=7456
 DEFAULT_IMAGE="docker.io/vanjayak/open-design:latest"
 DEFAULT_MEM_LIMIT="384m"
 HEALTH_TIMEOUT=60
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEPLOY_DIR="$(dirname "$SCRIPT_DIR")"
-ENV_FILE="${DEPLOY_DIR}/.env"
 COMPOSE_FILE="${DEPLOY_DIR}/docker-compose.yml"
+OVERRIDE_FILE="${DEPLOY_DIR}/docker-compose.override.yml"
+
+# Build the -f argument list: always include the base file,
+# and add the override if it exists (used by tests for isolation).
+COMPOSE_FILES=(-f "$COMPOSE_FILE")
+if [ -f "$OVERRIDE_FILE" ]; then
+  COMPOSE_FILES+=(-f "$OVERRIDE_FILE")
+fi
+
+if [ ! -f "$COMPOSE_FILE" ]; then
+  echo "WARN: docker-compose.yml not found at ${COMPOSE_FILE}" >&2
+  echo "       Clone the repository and run this script from deploy/scripts/." >&2
+  exit 1
+fi
+
+ENV_FILE="${DEPLOY_DIR}/.env"
 
 # ---------------------------------------------------------------------------
 # Colors & formatting
@@ -281,6 +297,27 @@ step "Runtime: ${CONTAINER_RUNTIME} ${RUNTIME_VERSION}"
 step "Compose: ${COMPOSE_VERSION}"
 
 # ---------------------------------------------------------------------------
+# 2b. Check if Open Design is already running
+# ---------------------------------------------------------------------------
+if $CONTAINER_CMD ps --filter "name=open-design" --format '{{.Names}}' 2>/dev/null | grep -q 'open-design'; then
+  STATUS="$($CONTAINER_CMD inspect --format '{{.State.Status}}' open-design 2>/dev/null || echo 'unknown')"
+  IMAGE="$($CONTAINER_CMD inspect --format '{{.Config.Image}}' open-design 2>/dev/null || echo 'unknown')"
+  PORTS="$($CONTAINER_CMD port open-design 2>/dev/null || echo 'unknown')"
+
+  error "Open Design is already running."
+  printf "\n"
+  printf "  Container:  open-design\n"
+  printf "  Status:     %s\n" "$STATUS"
+  printf "  Image:      %s\n" "$IMAGE"
+  printf "  Ports:      %s\n" "$PORTS"
+  printf "\n"
+  step "To update:  ${SCRIPT_DIR}/update.sh"
+  step "To remove:  ${SCRIPT_DIR}/uninstall.sh"
+  printf "\n"
+  exit 1
+fi
+
+# ---------------------------------------------------------------------------
 # 3. Port conflict detection
 # ---------------------------------------------------------------------------
 PORT="${OPT_PORT:-$DEFAULT_PORT}"
@@ -361,10 +398,10 @@ ok "Written ${ENV_FILE}"
 # 6. Pull and start
 # ---------------------------------------------------------------------------
 step "Pulling image: ${IMAGE}"
-$COMPOSE_CMD -f "$COMPOSE_FILE" pull
+$COMPOSE_CMD "${COMPOSE_FILES[@]}" pull
 
 step "Starting Open Design..."
-$COMPOSE_CMD -f "$COMPOSE_FILE" up -d --no-build
+$COMPOSE_CMD "${COMPOSE_FILES[@]}" up -d --no-build
 
 # ---------------------------------------------------------------------------
 # 7. Health check
@@ -397,7 +434,7 @@ if [ "$HEALTH_OK" = "1" ]; then
   ok "Daemon is healthy (${HTTP_CODE} OK)"
 else
   warn "Health check did not pass within ${HEALTH_TIMEOUT}s."
-  step "Check status: ${COMPOSE_CMD} -f ${COMPOSE_FILE} logs"
+  step "Check status: ${COMPOSE_CMD} \"${COMPOSE_FILES[@]}\" logs"
 fi
 
 # ---------------------------------------------------------------------------
@@ -424,8 +461,13 @@ if [ "$OS" = "Linux" ] && [ "$OPT_NO_SYSTEMD" = "0" ]; then
       echo "Type=oneshot"
       echo "RemainAfterExit=yes"
       echo "WorkingDirectory=${DEPLOY_DIR}"
-      echo "ExecStart=${CONTAINER_BIN} compose -f ${COMPOSE_FILE} up -d --no-build"
-      echo "ExecStop=${CONTAINER_BIN} compose -f ${COMPOSE_FILE} down"
+      if [ -f "$OVERRIDE_FILE" ]; then
+        echo "ExecStart=${CONTAINER_BIN} compose -f ${COMPOSE_FILE} -f ${OVERRIDE_FILE} up -d --no-build"
+        echo "ExecStop=${CONTAINER_BIN} compose -f ${COMPOSE_FILE} -f ${OVERRIDE_FILE} down"
+      else
+        echo "ExecStart=${CONTAINER_BIN} compose -f ${COMPOSE_FILE} up -d --no-build"
+        echo "ExecStop=${CONTAINER_BIN} compose -f ${COMPOSE_FILE} down"
+      fi
       echo "TimeoutStartSec=120"
       echo ""
       echo "[Install]"
@@ -458,6 +500,6 @@ printf "\n"
 printf "  Next steps:\n"
 printf "    Update:    %s/update.sh\n" "$SCRIPT_DIR"
 printf "    Uninstall: %s/uninstall.sh\n" "$SCRIPT_DIR"
-printf "    Logs:      %s -f %s logs -f\n" "$COMPOSE_CMD" "$COMPOSE_FILE"
+printf "    Logs:      %s logs -f\n" "$COMPOSE_CMD"
 printf "\n"
 printf "  Open http://127.0.0.1:%s in your browser\n\n" "$PORT"

@@ -8,7 +8,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEPLOY_DIR="$(dirname "$SCRIPT_DIR")"
 COMPOSE_FILE="${DEPLOY_DIR}/docker-compose.yml"
+OVERRIDE_FILE="${DEPLOY_DIR}/docker-compose.override.yml"
 HEALTH_TIMEOUT=60
+
+COMPOSE_FILES=(-f "$COMPOSE_FILE")
+if [ -f "$OVERRIDE_FILE" ]; then
+  COMPOSE_FILES+=(-f "$OVERRIDE_FILE")
+fi
 
 # ---------------------------------------------------------------------------
 # Colors & formatting
@@ -45,9 +51,10 @@ fi
 OPT_IMAGE=""
 NON_INTERACTIVE=0
 
-for arg in "$@"; do
-  case "$arg" in
-    --image=*) OPT_IMAGE="${arg#--image=}" ;;
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --image) shift; OPT_IMAGE="$1" ;;
+    --image=*) OPT_IMAGE="${1#--image=}" ;;
     --non-interactive) NON_INTERACTIVE=1 ;;
     --help|-h)
       echo "Usage: update.sh [options]"
@@ -56,6 +63,7 @@ for arg in "$@"; do
       exit 0
       ;;
   esac
+  shift
 done
 
 # ---------------------------------------------------------------------------
@@ -85,11 +93,11 @@ fi
 
 # Pull latest image
 step "Pulling latest image..."
-$COMPOSE_CMD -f "$COMPOSE_FILE" pull
+$COMPOSE_CMD "${COMPOSE_FILES[@]}" pull
 
 # Restart with new image
 step "Restarting service..."
-$COMPOSE_CMD -f "$COMPOSE_FILE" up -d --no-build
+$COMPOSE_CMD "${COMPOSE_FILES[@]}" up -d --no-build
 
 # Health check
 step "Waiting for health check (up to ${HEALTH_TIMEOUT}s)..."
@@ -118,7 +126,7 @@ if [ "$HEALTH_OK" = "1" ]; then
   ok "Update complete. Daemon is healthy."
 else
   warn "Health check did not pass."
-  step "Check logs: ${COMPOSE_CMD} -f ${COMPOSE_FILE} logs"
+  step "Check logs: ${COMPOSE_CMD} \"${COMPOSE_FILES[@]}\" logs"
 fi
 
 # Clean up dangling images
