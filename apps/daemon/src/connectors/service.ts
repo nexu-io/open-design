@@ -75,13 +75,12 @@ function boundedJsonValueIncludesAuthStaleSignal(value: BoundedJsonValue | undef
   return Object.values(value).some(boundedJsonValueIncludesAuthStaleSignal);
 }
 
-function isConnectorAuthStaleError(error: unknown): boolean {
-  if (error instanceof ConnectorServiceError) {
-    return error.status === 401
-      || boundedJsonValueIncludesAuthStaleSignal(error.details);
-  }
-  if (error instanceof Error) return boundedJsonValueIncludesAuthStaleSignal(error.message);
-  return boundedJsonValueIncludesAuthStaleSignal(String(error));
+function isConnectorAuthStaleError(error: unknown, request: Pick<ConnectorExecuteRequest, 'connectorId' | 'toolName'>): boolean {
+  if (!(error instanceof ConnectorServiceError) || error.code !== 'CONNECTOR_EXECUTION_FAILED') return false;
+  const details = error.details;
+  return details?.connectorId === request.connectorId
+    && details.toolName === request.toolName
+    && boundedJsonValueIncludesAuthStaleSignal(details.error);
 }
 
 function connectorAuthExpiredMessage(definition: ConnectorCatalogDefinition): string {
@@ -815,7 +814,7 @@ export class ConnectorService {
     try {
       providerOutput = await this.executeConnectorProviderTool(request, context, definition, tool);
     } catch (error) {
-      if (isConnectorAuthStaleError(error)) {
+      if (isConnectorAuthStaleError(error, request)) {
         this.statusService.markAuthenticationExpired(definition, connectorAuthExpiredMessage(definition), connector.accountLabel);
       }
       throw error;
