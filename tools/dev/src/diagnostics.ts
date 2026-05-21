@@ -34,8 +34,7 @@ function parseNodeMajor(nodeVersion: string): number | null {
 }
 
 export function isSupportedNodeRuntime(nodeVersion = process.version): boolean {
-  const major = parseNodeMajor(nodeVersion);
-  return major === SUPPORTED_NODE_MAJOR || major === 22;
+  return parseNodeMajor(nodeVersion) === SUPPORTED_NODE_MAJOR;
 }
 
 export function formatUnsupportedNodeRuntimeMessage(runtime: NodeRuntimeDiagnosticInput = currentNodeRuntime()): string {

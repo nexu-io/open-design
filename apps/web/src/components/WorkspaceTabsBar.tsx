@@ -241,7 +241,7 @@ function syncStateToRoute(state: WorkspaceTabsState, route: Route): WorkspaceTab
   const current = normalizeTabsState(state);
   const currentActive = current.tabs.find((tab) => tab.id === current.activeTabId) ?? null;
 
-  // 1. If we are navigating to Home, and a Home tab already exists:
+  // 1. If we are navigating to Home:
   if (route.kind === 'home' && route.view === 'home') {
     const existingHomeTab = current.tabs.find(
       (tab) => tab.kind === 'entry' && tab.view === 'home',
@@ -255,6 +255,12 @@ function syncStateToRoute(state: WorkspaceTabsState, route: Route): WorkspaceTab
             : tab,
         ),
         activeTabId: existingHomeTab.id,
+      });
+    } else {
+      const nextTab = tabFromRoute(route, timestamp);
+      return normalizeTabsState({
+        tabs: [...current.tabs, nextTab],
+        activeTabId: nextTab.id,
       });
     }
   }

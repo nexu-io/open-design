@@ -68,7 +68,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
 
   it('keeps Home tab as a singleton and avoids duplication', async () => {
     const { rerender } = render(
-      <WorkspaceTabsBar route={homeRoute} projects={[project]} />,
+      <WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[project]} />,
     );
 
     expect(screen.getAllByRole('tab')).toHaveLength(1);
@@ -82,8 +82,8 @@ describe('WorkspaceTabsBar navigation semantics', () => {
       expect(labels.filter((label) => label.includes('Home'))).toHaveLength(1);
     });
 
-    // Create/open a project tab via openWorkspaceTab (this is how project creation works)
-    openWorkspaceTab(projectRoute);
+    // Navigate to projectRoute using rerender with a fresh object reference
+    rerender(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project]} />);
 
     await waitFor(() => {
       const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
@@ -92,8 +92,8 @@ describe('WorkspaceTabsBar navigation semantics', () => {
       expect(labels.some((label) => label.includes('Project Alpha'))).toBe(true);
     });
 
-    // Return to Home by navigating back to homeRoute
-    rerender(<WorkspaceTabsBar route={homeRoute} projects={[project]} />);
+    // Return to Home by navigating back with a fresh route object reference
+    rerender(<WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[project]} />);
 
     await waitFor(() => {
       const tabs = screen.getAllByRole('tab');
@@ -106,15 +106,54 @@ describe('WorkspaceTabsBar navigation semantics', () => {
   });
 
   it('can append and focus a project tab for create-project flows', async () => {
-    render(<WorkspaceTabsBar route={homeRoute} projects={[project]} />);
+    render(<WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[project]} />);
 
-    openWorkspaceTab(projectRoute);
+    openWorkspaceTab({ ...projectRoute });
 
     await waitFor(() => {
       const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
       expect(labels).toHaveLength(2);
       expect(labels.some((label) => label.includes('Home'))).toBe(true);
       expect(labels.some((label) => label.includes('Project Alpha'))).toBe(true);
+    });
+  });
+
+  it('appends and activates a new Home tab when Home is closed and user navigates back to Home', async () => {
+    window.localStorage.setItem(
+      'open-design:workspace-tabs:v1',
+      JSON.stringify({
+        activeTabId: 'project:project-alpha',
+        tabs: [
+          {
+            id: 'project:project-alpha',
+            kind: 'project',
+            projectId: 'project-alpha',
+            createdAt: 1,
+            lastActiveAt: 1,
+          },
+        ],
+      }),
+    );
+
+    const { rerender } = render(
+      <WorkspaceTabsBar route={{ ...projectRoute }} projects={[project]} />,
+    );
+
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels).toHaveLength(1);
+      expect(labels[0]).toContain('Project Alpha');
+    });
+
+    // Navigate to Home
+    rerender(<WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[project]} />);
+
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      // It should append a new Home tab, resulting in 2 tabs total (Project Alpha and Home)
+      expect(labels).toHaveLength(2);
+      expect(labels.filter((label) => label.includes('Home'))).toHaveLength(1);
+      expect(labels.filter((label) => label.includes('Project Alpha'))).toHaveLength(1);
     });
   });
 
@@ -142,7 +181,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
       }),
     );
 
-    render(<WorkspaceTabsBar route={homeRoute} projects={[project]} />);
+    render(<WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[project]} />);
 
     await waitFor(() => {
       const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
@@ -152,7 +191,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
   });
 
   it('creates a replacement Home tab when the last tab is closed', async () => {
-    render(<WorkspaceTabsBar route={homeRoute} projects={[project]} />);
+    render(<WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[project]} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
 
