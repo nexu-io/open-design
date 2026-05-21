@@ -676,6 +676,7 @@ function displayTabFor(
     tasks: t('entry.navTasks'),
     plugins: t('entry.navPlugins'),
     'design-systems': t('entry.navDesignSystems'),
+    'page-patterns': t('entry.navPagePatterns'),
     integrations: t('entry.navIntegrations'),
   };
   const entryIcon: Record<EntryHomeView, IconName> = {
@@ -685,6 +686,7 @@ function displayTabFor(
     tasks: 'kanban',
     plugins: 'grid',
     'design-systems': 'blocks',
+    'page-patterns': 'layout',
     integrations: 'link',
   };
   return {
