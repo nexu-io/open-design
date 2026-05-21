@@ -737,7 +737,6 @@ export function FileWorkspace({
     const elapsed = Date.now() - startedAt;
     // Ensures saving UI shows so the button does not flicker
     if (elapsed < 500) await new Promise((resolve) => setTimeout(resolve, 500 - elapsed));
-    
     if (file) {
       setSketches((curr) => ({
         ...curr,
