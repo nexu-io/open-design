@@ -864,7 +864,9 @@ describe('API proxy routes', () => {
         chatCallIndex++;
         if (chatCallIndex === 1) {
           return sseResponse([
-            'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_pick","type":"function","function":{"name":"generate_image","arguments":"{\\"prompt\\":\\"a cat\\"}"}}]},"finish_reason":null}]}',
+            // The model tries to use the 2.0 model in its tool call — the
+            // pinned composer selection (1.0) must override it.
+            'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_pick","type":"function","function":{"name":"generate_image","arguments":"{\\"prompt\\":\\"a cat\\",\\"model\\":\\"senseaudio-image-2.0-260319\\"}"}}]},"finish_reason":null}]}',
             '',
             'data: {"choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}',
             '',
@@ -891,7 +893,8 @@ describe('API proxy routes', () => {
       projectId: 'test-project',
       model: 'senseaudio-s2',
       messages: [{ role: 'user', content: 'draw a cat' }],
-      // The composer picked the 1.0 model (not the 2.0 default).
+      // The composer pinned the 1.0 model; even though the LLM asked for 2.0
+      // in its tool call, generation must use the pinned 1.0.
       byokImageModel: 'senseaudio-image-1.0-260319',
     });
 

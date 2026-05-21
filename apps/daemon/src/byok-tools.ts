@@ -214,13 +214,18 @@ export interface BYOKToolContext {
   projectsRoot: string;
   /** Active project id (validated upstream via isSafeId). */
   projectId: string;
-  /** Composer-selected default image model, used when the LLM omits `model`.
+  /** The user's explicit composer pick. AUTHORITATIVE — it overrides any
+   *  `model` the LLM passes in the tool call, so the picker actually controls
+   *  what gets generated (otherwise the model could silently fall back to its
+   *  own choice). Set only when the user pinned a specific model. */
+  pinnedImageModel?: string;
+  pinnedVideoModel?: string;
+  pinnedAudioModel?: string;
+  /** Surface fallback used when nothing is pinned AND the LLM omits a model.
    *  Validated against the registry; an unknown id falls back to the
    *  catalogue default. */
   defaultImageModel?: string;
-  /** Composer-selected default video model. */
   defaultVideoModel?: string;
-  /** Composer-selected default audio model. */
   defaultAudioModel?: string;
 }
 
@@ -286,11 +291,14 @@ export async function executeGenerateImage(
 ): Promise<MediaToolResult> {
   const prompt = trimmedPrompt(args.prompt);
   if (!prompt) return { ok: false, error: 'prompt is required', kind: 'image' };
-  const model = isImageModel(args.model)
-    ? args.model
-    : isImageModel(ctx.defaultImageModel)
-      ? ctx.defaultImageModel
-      : DEFAULT_IMAGE_MODEL;
+  // Pinned (user) wins over the LLM's arg wins over the surface fallback.
+  const model = isImageModel(ctx.pinnedImageModel)
+    ? ctx.pinnedImageModel
+    : isImageModel(args.model)
+      ? args.model
+      : isImageModel(ctx.defaultImageModel)
+        ? ctx.defaultImageModel
+        : DEFAULT_IMAGE_MODEL;
   try {
     const file = await generateMedia({
       projectRoot: ctx.projectRoot,
@@ -318,11 +326,13 @@ export async function executeGenerateVideo(
 ): Promise<MediaToolResult> {
   const prompt = trimmedPrompt(args.prompt);
   if (!prompt) return { ok: false, error: 'prompt is required', kind: 'video' };
-  const model = isVideoModel(args.model)
-    ? args.model
-    : isVideoModel(ctx.defaultVideoModel)
-      ? ctx.defaultVideoModel
-      : DEFAULT_VIDEO_MODEL;
+  const model = isVideoModel(ctx.pinnedVideoModel)
+    ? ctx.pinnedVideoModel
+    : isVideoModel(args.model)
+      ? args.model
+      : isVideoModel(ctx.defaultVideoModel)
+        ? ctx.defaultVideoModel
+        : DEFAULT_VIDEO_MODEL;
   try {
     const file = await generateMedia({
       projectRoot: ctx.projectRoot,
@@ -349,11 +359,13 @@ export async function executeGenerateAudio(
 ): Promise<MediaToolResult> {
   const prompt = trimmedPrompt(args.prompt);
   if (!prompt) return { ok: false, error: 'prompt is required', kind: 'audio' };
-  const model = isAudioModel(args.model)
-    ? args.model
-    : isAudioModel(ctx.defaultAudioModel)
-      ? ctx.defaultAudioModel
-      : DEFAULT_SPEECH_MODEL;
+  const model = isAudioModel(ctx.pinnedAudioModel)
+    ? ctx.pinnedAudioModel
+    : isAudioModel(args.model)
+      ? args.model
+      : isAudioModel(ctx.defaultAudioModel)
+        ? ctx.defaultAudioModel
+        : DEFAULT_SPEECH_MODEL;
   const audioKind = audioKindForModel(model);
   try {
     const file = await generateMedia({

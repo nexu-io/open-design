@@ -1213,18 +1213,20 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       projectRoot: ctx.paths.PROJECT_ROOT,
       projectsRoot: ctx.paths.PROJECTS_DIR,
       projectId,
-      // Prefer the composer selection; otherwise default to the SenseAudio
-      // model for that surface (this chat only has the SenseAudio key seeded,
-      // so the catalogue default — gpt-image-2 etc. — would fail without keys).
-      defaultImageModel: isImageModel(byokImageModel)
-        ? byokImageModel
-        : SENSEAUDIO_DEFAULT_IMAGE_MODEL,
-      defaultVideoModel: isVideoModel(byokVideoModel)
-        ? byokVideoModel
-        : SENSEAUDIO_DEFAULT_VIDEO_MODEL,
-      defaultAudioModel: isAudioModel(byokAudioModel)
-        ? byokAudioModel
-        : SENSEAUDIO_DEFAULT_AUDIO_MODEL,
+      // Surface fallback when nothing is pinned and the LLM omits a model:
+      // the SenseAudio model for that surface (this chat only has the
+      // SenseAudio key seeded, so the catalogue default — gpt-image-2 etc. —
+      // would fail without keys).
+      defaultImageModel: SENSEAUDIO_DEFAULT_IMAGE_MODEL,
+      defaultVideoModel: SENSEAUDIO_DEFAULT_VIDEO_MODEL,
+      defaultAudioModel: SENSEAUDIO_DEFAULT_AUDIO_MODEL,
+      // The composer pick is authoritative — it overrides any model the LLM
+      // tries to pass, so picking e.g. an OpenAI model really routes there
+      // (and errors clearly if that provider has no key) instead of the model
+      // silently falling back to SenseAudio.
+      ...(isImageModel(byokImageModel) ? { pinnedImageModel: byokImageModel } : {}),
+      ...(isVideoModel(byokVideoModel) ? { pinnedVideoModel: byokVideoModel } : {}),
+      ...(isAudioModel(byokAudioModel) ? { pinnedAudioModel: byokAudioModel } : {}),
     };
 
     // Run one round-trip: POST to upstream, stream text deltas to the

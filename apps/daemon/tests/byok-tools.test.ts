@@ -76,7 +76,7 @@ describe('executeGenerateImage', () => {
     );
   });
 
-  it('honours an explicit registry model arg over the composer default', async () => {
+  it('honours an explicit registry model arg over the surface fallback', async () => {
     generateMediaMock.mockResolvedValue({ name: 'o.png' });
     await executeGenerateImage(
       { prompt: 'x', model: 'gpt-image-2' },
@@ -84,6 +84,23 @@ describe('executeGenerateImage', () => {
     );
     expect(generateMediaMock).toHaveBeenCalledWith(
       expect.objectContaining({ model: 'gpt-image-2' }),
+    );
+  });
+
+  it('lets the pinned composer model win over the model the LLM passes', async () => {
+    generateMediaMock.mockResolvedValue({ name: 'p.png' });
+    await executeGenerateImage(
+      // The LLM tries to use gpt-image-2, but the user pinned an OpenAI-free
+      // SenseAudio model in the composer — the pin must win.
+      { prompt: 'x', model: 'gpt-image-2' },
+      {
+        ...CTX,
+        pinnedImageModel: 'senseaudio-image-1.0-260319',
+        defaultImageModel: SENSEAUDIO_DEFAULT_IMAGE_MODEL,
+      },
+    );
+    expect(generateMediaMock).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'senseaudio-image-1.0-260319' }),
     );
   });
 
