@@ -34,9 +34,13 @@ data:
     {{- end }}
     {{- $origins = join "," $hostList }}
   {{- else if not $origins }}
-    {{- /* Synthesize default local origins for port-forwarding when Ingress is disabled */ -}}
-    {{- $localProxy := printf "http://localhost:%v" .Values.authProxy.port }}
-    {{- $localSvc := printf "http://localhost:%v" .Values.service.port }}
-    {{- $origins = printf "%s,%s" $localProxy $localSvc }}
+    {{- if or (eq .Values.service.type "LoadBalancer") (eq .Values.service.type "NodePort") }}
+      {{- fail "CRITICAL ERROR: service.type is set to LoadBalancer or NodePort but config.allowedOrigins is empty. You must explicitly configure config.allowedOrigins when exposing the service directly without an Ingress." }}
+    {{- else }}
+      {{- /* Synthesize default local origins for port-forwarding when Ingress is disabled */ -}}
+      {{- $localProxy := printf "http://localhost:%v" .Values.authProxy.port }}
+      {{- $localSvc := printf "http://localhost:%v" .Values.service.port }}
+      {{- $origins = printf "%s,%s" $localProxy $localSvc }}
+    {{- end }}
   {{- end }}
   OD_ALLOWED_ORIGINS: {{ $origins | quote }}

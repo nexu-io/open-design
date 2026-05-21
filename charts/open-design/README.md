@@ -36,7 +36,7 @@ nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
 ```
 
 #### Authentication Proxy
-An authentication proxy (NGINX) is introduced to front the application. By default (`authProxy.enabled: true`), this proxy runs as a sidecar container alongside the main application. The Kubernetes Service routes traffic to the proxy, which handles authentication for the API and health checks, proxying valid requests to the application.
+An authentication proxy (NGINX) is introduced to front the application. This proxy runs as a mandatory sidecar container alongside the main application. The Kubernetes Service routes traffic to the proxy, which handles authentication for the API and health checks, proxying valid requests to the application.
 
 #### Security Context
 This chart adheres to strict security defaults:
@@ -62,10 +62,9 @@ This chart adheres to strict security defaults:
 | ---------------------- | ---------------------------------------------------------- | ----------------------- |
 | `config.nodeEnv`       | Node.js environment (`production` or `development`)        | `production`            |
 | `config.allowedOrigins`| CORS allowed origins (leave empty for default)             | `""`                    |
-| `config.publicBaseUrl` | Public base URL used by the application                    | `http://localhost:7456` |
+| `config.publicBaseUrl` | Public base URL used by the application (derived dynamically if empty) | `""`                    |
 | `config.nodeOptions`   | V8 engine memory optimizations                             | `--max-old-space-size=192`|
 | `config.webPort`       | Web server listening port                                  | `7456`                  |
-| `config.proxyPort`     | Proxy server listening port                                | `8080`                  |
 | `config.bindHost`      | Host to bind the web server to                             | `"127.0.0.1"`           |
 | `config.apiToken`      | API authentication token (auto-generated and persisted if empty) | `""`                    |
 
@@ -73,7 +72,6 @@ This chart adheres to strict security defaults:
 
 | Name                                   | Description                                       | Value                                            |
 | -------------------------------------- | ------------------------------------------------- | ------------------------------------------------ |
-| `authProxy.enabled`                    | Enable the NGINX authentication proxy             | `true`                                           |
 | `authProxy.image`                      | NGINX proxy image                                 | `nginxinc/nginx-unprivileged:1.25-alpine-slim`   |
 | `authProxy.port`                       | Proxy server port inside the container            | `8080`                                           |
 | `authProxy.securityContext`            | Security context for the proxy container          | `{...}`                                          |
