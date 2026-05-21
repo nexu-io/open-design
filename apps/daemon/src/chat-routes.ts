@@ -379,6 +379,88 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     });
   };
 
+  // ---- BYOK proxy ↔ run-registry bridge -----------------------------------
+  // BYOK chats used to stream straight from the upstream LLM into the POST
+  // response, so navigating away tore the stream down with no way to resume —
+  // the chat froze mid-output. To give BYOK the same background + reattach
+  // capability the agent path has, every proxy/*/stream handler now runs its
+  // work as a registry run: the POST returns `202 { runId }` immediately and
+  // the worker emits into the run's event buffer. A disconnected client
+  // leaves the worker running and the buffer intact, so the web layer can
+  // reattach via GET /api/runs/:id/events?after=<lastEventId> exactly as it
+  // does for agent runs.
+  //
+  // The adapter exposes the same `{ send, end }` shape the handlers already
+  // use against `createSseResponse`, so each handler keeps its per-protocol
+  // streaming/tool-loop logic untouched — only the sink changes. Event names
+  // are translated to the daemon-run vocabulary the web's consumeDaemonRun
+  // understands: `delta` → `stdout {chunk}`, `error` is buffered verbatim
+  // (its `{message, error:{…}}` shape matches what the consumer parses), and
+  // `end` is finalized through runs.finish so the run reaches a terminal
+  // status with a buffered `end` event.
+  const makeRunBackedProxyStream = (run: any) => {
+    let finished = false;
+    let errored = false;
+    return {
+      send(event: string, data: any) {
+        if (event === 'delta') {
+          design.runs.emit(run, 'stdout', {
+            chunk: String(data?.delta ?? data?.text ?? ''),
+          });
+        } else if (event === 'start') {
+          design.runs.emit(run, 'start', data ?? {});
+        } else if (event === 'error') {
+          errored = true;
+          design.runs.emit(run, 'error', data);
+        } else if (event === 'end') {
+          // Terminal transition is owned by end() so the run status and the
+          // buffered `end` event stay consistent; ignore the bare frame.
+        } else {
+          design.runs.emit(run, event, data);
+        }
+      },
+      end() {
+        if (finished) return;
+        finished = true;
+        if (run.cancelRequested) {
+          design.runs.finish(run, 'canceled', null, 'SIGTERM');
+        } else {
+          design.runs.finish(
+            run,
+            errored ? 'failed' : 'succeeded',
+            errored ? 1 : 0,
+            null,
+          );
+        }
+      },
+    };
+  };
+
+  // Create a registry run for a BYOK proxy request, answer the POST with the
+  // runId, and execute `work` in the background. `work` receives the
+  // run-backed stream plus an AbortSignal wired to POST /api/runs/:id/cancel
+  // (BYOK runs have no OS child, so cancellation is cooperative — the worker
+  // must pass the signal to its upstream fetch and bail when it aborts).
+  const runByokProxy = (
+    res: any,
+    meta: { projectId?: unknown; conversationId?: unknown; assistantMessageId?: unknown },
+    work: (args: { sse: any; signal: AbortSignal; run: any }) => Promise<void>,
+  ) => {
+    const run = design.runs.create({
+      projectId: typeof meta.projectId === 'string' ? meta.projectId : null,
+      conversationId: typeof meta.conversationId === 'string' ? meta.conversationId : null,
+      assistantMessageId:
+        typeof meta.assistantMessageId === 'string' ? meta.assistantMessageId : null,
+    });
+    const abort = new AbortController();
+    run.onCancel = () => abort.abort();
+    res.status(202).json({ runId: run.id });
+    const sse = makeRunBackedProxyStream(run);
+    design.runs.start(run, async () => {
+      await work({ sse, signal: abort.signal, run });
+    });
+  };
+
   const appendVersionedApiPath = (baseUrl: string, path: string) => {
     const url = new URL(baseUrl);
     // `URL.pathname` setter normalizes an empty string back to "/", so
@@ -576,59 +658,62 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       payload.system = systemPrompt;
     }
 
-    const sse = createSseResponse(res);
-    sse.send('start', { model });
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify(payload),
-        redirect: 'error',
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(
-          `[proxy:anthropic] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
-        );
-        sendProxyError(sse, `Upstream error: ${response.status}`, {
-          code: proxyErrorCode(response.status),
-          details: errorText,
-          retryable: response.status === 429 || response.status >= 500,
+    runByokProxy(res, proxyBody, async ({ sse, signal }) => {
+      sse.send('start', { model });
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify(payload),
+          redirect: 'error',
+          signal,
         });
-        return sse.end();
-      }
 
-      let ended = false;
-      await streamUpstreamSse(response, ({ event, data }: any) => {
-        if (!data) return false;
-        if (event === 'error' || data.type === 'error') {
-          const message = data.error?.message || data.message || 'Anthropic upstream error';
-          sendProxyError(sse, message, { details: data });
-          ended = true;
-          return true;
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(
+            `[proxy:anthropic] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
+          );
+          sendProxyError(sse, `Upstream error: ${response.status}`, {
+            code: proxyErrorCode(response.status),
+            details: errorText,
+            retryable: response.status === 429 || response.status >= 500,
+          });
+          return sse.end();
         }
-        if (event === 'content_block_delta' && typeof data.delta?.text === 'string') {
-          sse.send('delta', { delta: data.delta.text });
-        }
-        if (event === 'message_stop') {
-          sse.send('end', {});
-          ended = true;
-          return true;
-        }
-        return false;
-      });
-      if (!ended) sse.send('end', {});
-      sse.end();
-    } catch (err: any) {
-      console.error(`[proxy:anthropic] internal error: ${err.message}`);
-      sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
-      sse.end();
-    }
+
+        let ended = false;
+        await streamUpstreamSse(response, ({ event, data }: any) => {
+          if (!data) return false;
+          if (event === 'error' || data.type === 'error') {
+            const message = data.error?.message || data.message || 'Anthropic upstream error';
+            sendProxyError(sse, message, { details: data });
+            ended = true;
+            return true;
+          }
+          if (event === 'content_block_delta' && typeof data.delta?.text === 'string') {
+            sse.send('delta', { delta: data.delta.text });
+          }
+          if (event === 'message_stop') {
+            sse.send('end', {});
+            ended = true;
+            return true;
+          }
+          return false;
+        });
+        if (!ended) sse.send('end', {});
+        sse.end();
+      } catch (err: any) {
+        if (err?.name === 'AbortError') return sse.end();
+        console.error(`[proxy:anthropic] internal error: ${err.message}`);
+        sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
+        sse.end();
+      }
+    });
   });
 
   app.post('/api/proxy/openai/stream', async (req, res) => {
@@ -674,57 +759,60 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       stream: true,
     };
 
-    const sse = createSseResponse(res);
-    sse.send('start', { model });
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify(payload),
-        redirect: 'error',
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(
-          `[proxy:openai] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
-        );
-        sendProxyError(sse, `Upstream error: ${response.status}`, {
-          code: proxyErrorCode(response.status),
-          details: errorText,
-          retryable: response.status === 429 || response.status >= 500,
+    runByokProxy(res, proxyBody, async ({ sse, signal }) => {
+      sse.send('start', { model });
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify(payload),
+          redirect: 'error',
+          signal,
         });
-        return sse.end();
-      }
 
-      let ended = false;
-      await streamUpstreamSse(response, ({ payload, data }: any) => {
-        if (payload === '[DONE]') {
-          sse.send('end', {});
-          ended = true;
-          return true;
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(
+            `[proxy:openai] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
+          );
+          sendProxyError(sse, `Upstream error: ${response.status}`, {
+            code: proxyErrorCode(response.status),
+            details: errorText,
+            retryable: response.status === 429 || response.status >= 500,
+          });
+          return sse.end();
         }
-        if (!data) return false;
-        const streamError = extractStreamErrorMessage(data);
-        if (streamError) {
-          sendProxyError(sse, `Provider error: ${streamError}`, { details: data });
-          ended = true;
-          return true;
-        }
-        const delta = extractOpenAIText(data);
-        if (delta) sse.send('delta', { delta });
-        return false;
-      });
-      if (!ended) sse.send('end', {});
-      sse.end();
-    } catch (err: any) {
-      console.error(`[proxy:openai] internal error: ${err.message}`);
-      sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
-      sse.end();
-    }
+
+        let ended = false;
+        await streamUpstreamSse(response, ({ payload, data }: any) => {
+          if (payload === '[DONE]') {
+            sse.send('end', {});
+            ended = true;
+            return true;
+          }
+          if (!data) return false;
+          const streamError = extractStreamErrorMessage(data);
+          if (streamError) {
+            sendProxyError(sse, `Provider error: ${streamError}`, { details: data });
+            ended = true;
+            return true;
+          }
+          const delta = extractOpenAIText(data);
+          if (delta) sse.send('delta', { delta });
+          return false;
+        });
+        if (!ended) sse.send('end', {});
+        sse.end();
+      } catch (err: any) {
+        if (err?.name === 'AbortError') return sse.end();
+        console.error(`[proxy:openai] internal error: ${err.message}`);
+        sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
+        sse.end();
+      }
+    });
   });
 
   app.post('/api/proxy/azure/stream', async (req, res) => {
@@ -787,57 +875,60 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       stream: true,
     };
 
-    const sse = createSseResponse(res);
-    sse.send('start', { model });
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'api-key': apiKey,
-        },
-        body: JSON.stringify(payload),
-        redirect: 'error',
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(
-          `[proxy:azure] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
-        );
-        sendProxyError(sse, `Upstream error: ${response.status}`, {
-          code: proxyErrorCode(response.status),
-          details: errorText,
-          retryable: response.status === 429 || response.status >= 500,
+    runByokProxy(res, proxyBody, async ({ sse, signal }) => {
+      sse.send('start', { model });
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'api-key': apiKey,
+          },
+          body: JSON.stringify(payload),
+          redirect: 'error',
+          signal,
         });
-        return sse.end();
-      }
 
-      let ended = false;
-      await streamUpstreamSse(response, ({ payload: ssePayload, data }: any) => {
-        if (ssePayload === '[DONE]') {
-          sse.send('end', {});
-          ended = true;
-          return true;
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(
+            `[proxy:azure] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
+          );
+          sendProxyError(sse, `Upstream error: ${response.status}`, {
+            code: proxyErrorCode(response.status),
+            details: errorText,
+            retryable: response.status === 429 || response.status >= 500,
+          });
+          return sse.end();
         }
-        if (!data) return false;
-        const streamError = extractStreamErrorMessage(data);
-        if (streamError) {
-          sendProxyError(sse, `Azure error: ${streamError}`, { details: data });
-          ended = true;
-          return true;
-        }
-        const delta = extractOpenAIText(data);
-        if (delta) sse.send('delta', { delta });
-        return false;
-      });
-      if (!ended) sse.send('end', {});
-      sse.end();
-    } catch (err: any) {
-      console.error(`[proxy:azure] internal error: ${err.message}`);
-      sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
-      sse.end();
-    }
+
+        let ended = false;
+        await streamUpstreamSse(response, ({ payload: ssePayload, data }: any) => {
+          if (ssePayload === '[DONE]') {
+            sse.send('end', {});
+            ended = true;
+            return true;
+          }
+          if (!data) return false;
+          const streamError = extractStreamErrorMessage(data);
+          if (streamError) {
+            sendProxyError(sse, `Azure error: ${streamError}`, { details: data });
+            ended = true;
+            return true;
+          }
+          const delta = extractOpenAIText(data);
+          if (delta) sse.send('delta', { delta });
+          return false;
+        });
+        if (!ended) sse.send('end', {});
+        sse.end();
+      } catch (err: any) {
+        if (err?.name === 'AbortError') return sse.end();
+        console.error(`[proxy:azure] internal error: ${err.message}`);
+        sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
+        sse.end();
+      }
+    });
   });
 
   app.post('/api/proxy/google/stream', async (req, res) => {
@@ -886,58 +977,61 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       payload.systemInstruction = { parts: [{ text: systemPrompt }] };
     }
 
-    const sse = createSseResponse(res);
-    sse.send('start', { model });
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': apiKey,
-        },
-        body: JSON.stringify(payload),
-        redirect: 'error',
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(
-          `[proxy:google] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
-        );
-        sendProxyError(sse, `Upstream error: ${response.status}`, {
-          code: proxyErrorCode(response.status),
-          details: errorText,
-          retryable: response.status === 429 || response.status >= 500,
+    runByokProxy(res, proxyBody, async ({ sse, signal }) => {
+      sse.send('start', { model });
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': apiKey,
+          },
+          body: JSON.stringify(payload),
+          redirect: 'error',
+          signal,
         });
-        return sse.end();
-      }
 
-      let ended = false;
-      await streamUpstreamSse(response, ({ data }: any) => {
-        if (!data) return false;
-        const streamError = extractStreamErrorMessage(data);
-        if (streamError) {
-          sendProxyError(sse, `Gemini error: ${streamError}`, { details: data });
-          ended = true;
-          return true;
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(
+            `[proxy:google] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
+          );
+          sendProxyError(sse, `Upstream error: ${response.status}`, {
+            code: proxyErrorCode(response.status),
+            details: errorText,
+            retryable: response.status === 429 || response.status >= 500,
+          });
+          return sse.end();
         }
-        const delta = extractGeminiText(data);
-        if (delta) sse.send('delta', { delta });
-        const blockMessage = extractGeminiBlockMessage(data);
-        if (blockMessage) {
-          sendProxyError(sse, blockMessage, { details: data });
-          ended = true;
-          return true;
-        }
-        return false;
-      });
-      if (!ended) sse.send('end', {});
-      sse.end();
-    } catch (err: any) {
-      console.error(`[proxy:google] internal error: ${err.message}`);
-      sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
-      sse.end();
-    }
+
+        let ended = false;
+        await streamUpstreamSse(response, ({ data }: any) => {
+          if (!data) return false;
+          const streamError = extractStreamErrorMessage(data);
+          if (streamError) {
+            sendProxyError(sse, `Gemini error: ${streamError}`, { details: data });
+            ended = true;
+            return true;
+          }
+          const delta = extractGeminiText(data);
+          if (delta) sse.send('delta', { delta });
+          const blockMessage = extractGeminiBlockMessage(data);
+          if (blockMessage) {
+            sendProxyError(sse, blockMessage, { details: data });
+            ended = true;
+            return true;
+          }
+          return false;
+        });
+        if (!ended) sse.send('end', {});
+        sse.end();
+      } catch (err: any) {
+        if (err?.name === 'AbortError') return sse.end();
+        console.error(`[proxy:google] internal error: ${err.message}`);
+        sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
+        sse.end();
+      }
+    });
   });
 
   app.post('/api/proxy/ollama/stream', async (req, res) => {
@@ -973,46 +1067,49 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       payload.options = { num_predict: maxTokens };
     }
 
-    const sse = createSseResponse(res);
-    sse.send('start', { model });
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify(payload),
-        redirect: 'error',
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[proxy:ollama] upstream error: ${response.status} ${redactAuthTokens(errorText)}`);
-        sendProxyError(sse, `Upstream error: ${response.status}`, {
-          code: proxyErrorCode(response.status),
-          details: errorText,
-          retryable: response.status === 429 || response.status >= 500,
+    runByokProxy(res, proxyBody, async ({ sse, signal }) => {
+      sse.send('start', { model });
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+          body: JSON.stringify(payload),
+          redirect: 'error',
+          signal,
         });
-        return sse.end();
-      }
 
-      let ended = false;
-      await streamUpstreamNdjson(response, ({ data }: any) => {
-        if (!data) return false;
-        if (data.done) {
-          sse.send('end', {});
-          ended = true;
-          return true;
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`[proxy:ollama] upstream error: ${response.status} ${redactAuthTokens(errorText)}`);
+          sendProxyError(sse, `Upstream error: ${response.status}`, {
+            code: proxyErrorCode(response.status),
+            details: errorText,
+            retryable: response.status === 429 || response.status >= 500,
+          });
+          return sse.end();
         }
-        const content = data.message?.content;
-        if (typeof content === 'string' && content) sse.send('delta', { delta: content });
-        return false;
-      });
-      if (!ended) sse.send('end', {});
-      sse.end();
-    } catch (err: any) {
-      console.error(`[proxy:ollama] internal error: ${err.message}`);
-      sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
-      sse.end();
-    }
+
+        let ended = false;
+        await streamUpstreamNdjson(response, ({ data }: any) => {
+          if (!data) return false;
+          if (data.done) {
+            sse.send('end', {});
+            ended = true;
+            return true;
+          }
+          const content = data.message?.content;
+          if (typeof content === 'string' && content) sse.send('delta', { delta: content });
+          return false;
+        });
+        if (!ended) sse.send('end', {});
+        sse.end();
+      } catch (err: any) {
+        if (err?.name === 'AbortError') return sse.end();
+        console.error(`[proxy:ollama] internal error: ${err.message}`);
+        sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
+        sse.end();
+      }
+    });
   });
 
   // SenseAudio chat completions. Wire-compatible with OpenAI (POST
@@ -1130,6 +1227,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     const runSenseAudioTurn = async (
       sse: any,
       messagesForTurn: any[],
+      signal: AbortSignal,
     ): Promise<TurnResult> => {
       const payload: any = {
         model,
@@ -1148,6 +1246,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         },
         body: JSON.stringify(payload),
         redirect: 'error',
+        signal,
       });
 
       if (!response.ok) {
@@ -1278,9 +1377,6 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       return { ...result, kind: 'video' };
     };
 
-    const sse = createSseResponse(res);
-    sse.send('start', { model });
-
     // SenseAudio's gateway issues one API key that works for both
     // /v1/chat/completions and the image / TTS surfaces. Mirror the
     // BYOK key into media-config so the CLI agent path (`od media
@@ -1306,63 +1402,69 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         );
       });
 
-    try {
-      for (let loop = 0; loop < MAX_BYOK_TOOL_LOOPS; loop++) {
-        const turn = await runSenseAudioTurn(sse, workingMessages);
-        if (turn.kind === 'error') return sse.end();
-        if (turn.kind === 'text_end') {
-          sse.send('end', {});
-          return sse.end();
-        }
-        // turn.kind === 'tool_calls'
-        workingMessages.push(turn.assistantMessage);
-        for (const call of turn.toolCalls) {
-          const result = await executeOneTool(call);
-          // The tool result is delivered to the model as a `tool` role
-          // message — a structured payload the model can interpret. We
-          // also surface a daemon-side log line so a user reporting "no
-          // image showed up" can grep for the call id. The kind field
-          // distinguishes image vs video so the daemon picks the right
-          // embedding hint for the model (markdown image syntax for
-          // PNG, markdown link for MP4 since the chat renderer doesn't
-          // currently render <video> tags).
-          const toolName = call?.function?.name ?? 'unknown';
-          if (result.ok) {
-            console.log(
-              `[proxy:senseaudio] ${toolName} OK: ${call.id} → ${result.url}`,
-            );
-          } else {
-            console.warn(
-              `[proxy:senseaudio] ${toolName} FAILED: ${call.id} — ${result.error}`,
-            );
+    runByokProxy(res, proxyBody, async ({ sse, signal, run }) => {
+      sse.send('start', { model });
+      try {
+        for (let loop = 0; loop < MAX_BYOK_TOOL_LOOPS; loop++) {
+          if (run.cancelRequested) return sse.end();
+          const turn = await runSenseAudioTurn(sse, workingMessages, signal);
+          if (turn.kind === 'error') return sse.end();
+          if (turn.kind === 'text_end') {
+            sse.send('end', {});
+            return sse.end();
           }
-          const content = result.ok
-            ? result.kind === 'video'
-              ? `Video generated successfully. URL: ${result.url}. Reply to the user with a clickable markdown link, e.g. [▶ Play video](${result.url}). Do NOT use markdown image syntax — the chat renderer does not embed <video> tags.`
-              : `Image generated successfully. URL: ${result.url}. Reply to the user with: ![generated image](${result.url})`
-            : result.kind === 'video'
-              ? `Video generation failed: ${result.error}. Apologize briefly and suggest a retry with a more specific prompt or a shorter duration.`
-              : `Image generation failed: ${result.error}. Apologize briefly and suggest a retry with a more specific prompt.`;
-          workingMessages.push({
-            role: 'tool',
-            tool_call_id: call.id,
-            content,
-          });
+          // turn.kind === 'tool_calls'
+          workingMessages.push(turn.assistantMessage);
+          for (const call of turn.toolCalls) {
+            if (run.cancelRequested) return sse.end();
+            const result = await executeOneTool(call);
+            // The tool result is delivered to the model as a `tool` role
+            // message — a structured payload the model can interpret. We
+            // also surface a daemon-side log line so a user reporting "no
+            // image showed up" can grep for the call id. The kind field
+            // distinguishes image vs video so the daemon picks the right
+            // embedding hint for the model (markdown image syntax for
+            // PNG, markdown link for MP4 since the chat renderer doesn't
+            // currently render <video> tags).
+            const toolName = call?.function?.name ?? 'unknown';
+            if (result.ok) {
+              console.log(
+                `[proxy:senseaudio] ${toolName} OK: ${call.id} → ${result.url}`,
+              );
+            } else {
+              console.warn(
+                `[proxy:senseaudio] ${toolName} FAILED: ${call.id} — ${result.error}`,
+              );
+            }
+            const content = result.ok
+              ? result.kind === 'video'
+                ? `Video generated successfully. URL: ${result.url}. Reply to the user with a clickable markdown link, e.g. [▶ Play video](${result.url}). Do NOT use markdown image syntax — the chat renderer does not embed <video> tags.`
+                : `Image generated successfully. URL: ${result.url}. Reply to the user with: ![generated image](${result.url})`
+              : result.kind === 'video'
+                ? `Video generation failed: ${result.error}. Apologize briefly and suggest a retry with a more specific prompt or a shorter duration.`
+                : `Image generation failed: ${result.error}. Apologize briefly and suggest a retry with a more specific prompt.`;
+            workingMessages.push({
+              role: 'tool',
+              tool_call_id: call.id,
+              content,
+            });
+          }
         }
+        // Tool loop exhausted — the model still wants to call tools but we
+        // refuse a 4th round. Close the stream gracefully; the last text
+        // delta the model emitted (if any) is already on the wire.
+        console.warn(
+          '[proxy:senseaudio] tool loop bounded at MAX_BYOK_TOOL_LOOPS=3',
+        );
+        sse.send('end', {});
+        return sse.end();
+      } catch (err: any) {
+        if (err?.name === 'AbortError') return sse.end();
+        console.error(`[proxy:senseaudio] internal error: ${err.message}`);
+        sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
+        sse.end();
       }
-      // Tool loop exhausted — the model still wants to call tools but we
-      // refuse a 4th round. Close the stream gracefully; the last text
-      // delta the model emitted (if any) is already on the wire.
-      console.warn(
-        '[proxy:senseaudio] tool loop bounded at MAX_BYOK_TOOL_LOOPS=3',
-      );
-      sse.send('end', {});
-      return sse.end();
-    } catch (err: any) {
-      console.error(`[proxy:senseaudio] internal error: ${err.message}`);
-      sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
-      sse.end();
-    }
+    });
   });
 
 }

@@ -311,6 +311,114 @@ export async function streamViaDaemon({
   }
 }
 
+// Maps a BYOK chat protocol to its daemon proxy endpoint. Anthropic with the
+// default base url still routes through the proxy (not the in-browser SDK) so
+// every BYOK protocol gets the same registry-backed run.
+const BYOK_PROXY_ENDPOINTS: Record<string, string> = {
+  anthropic: '/api/proxy/anthropic/stream',
+  openai: '/api/proxy/openai/stream',
+  azure: '/api/proxy/azure/stream',
+  google: '/api/proxy/google/stream',
+  ollama: '/api/proxy/ollama/stream',
+  senseaudio: '/api/proxy/senseaudio/stream',
+};
+
+export interface ByokDaemonStreamOptions {
+  /** BYOK chat protocol (cfg.apiProtocol). Selects the proxy endpoint. */
+  protocol: string;
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  apiVersion?: string;
+  systemPrompt: string;
+  history: ChatMessage[];
+  maxTokens: number;
+  /** Stops the current browser-side SSE subscription. The daemon run continues. */
+  signal: AbortSignal;
+  /** Explicit user cancellation. Maps to POST /api/runs/:id/cancel. */
+  cancelSignal?: AbortSignal;
+  handlers: DaemonStreamHandlers;
+  projectId?: string | null;
+  conversationId?: string | null;
+  assistantMessageId?: string | null;
+  byokImageModel?: string;
+  initialLastEventId?: string | null;
+  onRunCreated?: (runId: string) => void;
+  onRunStatus?: (status: ChatRunStatus) => void;
+  onRunEventId?: (eventId: string) => void;
+}
+
+/**
+ * BYOK analogue of {@link streamViaDaemon}: POST the chat to the protocol's
+ * proxy stream endpoint (which now answers 202 { runId } and runs the
+ * upstream call as a registry run), then consume the run's event stream via
+ * the shared {@link consumeDaemonRun}. Because the run lives in the daemon's
+ * registry, navigating away only detaches this SSE subscription — the run
+ * keeps streaming into its event buffer and the same reattach path the agent
+ * runs use (GET /api/runs/:id/events?after=) resumes it on return.
+ *
+ * The create POST intentionally omits `signal` so a navigation that races the
+ * 202 still leaves the run created (and its id persisted via onRunCreated)
+ * for reattach — matching streamViaDaemon.
+ */
+export async function streamByokViaDaemon(opts: ByokDaemonStreamOptions): Promise<void> {
+  const emitRunStatus = (status: ChatRunStatus) => {
+    opts.onRunStatus?.(status);
+    notifyRunsChanged();
+  };
+  const endpoint = BYOK_PROXY_ENDPOINTS[opts.protocol] ?? '/api/proxy/openai/stream';
+  const baseUrl =
+    opts.baseUrl || (opts.protocol === 'anthropic' ? 'https://api.anthropic.com' : '');
+  const body = JSON.stringify({
+    baseUrl,
+    apiKey: opts.apiKey,
+    model: opts.model,
+    systemPrompt: opts.systemPrompt,
+    messages: opts.history.map((m) => ({ role: m.role, content: m.content })),
+    maxTokens: opts.maxTokens,
+    ...(opts.apiVersion ? { apiVersion: opts.apiVersion } : {}),
+    ...(opts.projectId ? { projectId: opts.projectId } : {}),
+    ...(opts.conversationId ? { conversationId: opts.conversationId } : {}),
+    ...(opts.assistantMessageId ? { assistantMessageId: opts.assistantMessageId } : {}),
+    ...(opts.byokImageModel ? { byokImageModel: opts.byokImageModel } : {}),
+  });
+
+  try {
+    const createResp = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-OD-Client': detectClientType(),
+      },
+      body,
+    });
+    if (!createResp.ok) {
+      const text = await createResp.text().catch(() => '');
+      emitRunStatus('failed');
+      opts.handlers.onError(new Error(`proxy ${createResp.status}: ${text || 'no body'}`));
+      return;
+    }
+    const created = (await createResp.json()) as ChatRunCreateResponse;
+    const runId = created.runId;
+    opts.onRunCreated?.(runId);
+    notifyRunsChanged();
+    emitRunStatus('queued');
+    await consumeDaemonRun({
+      runId,
+      signal: opts.signal,
+      cancelSignal: opts.cancelSignal,
+      handlers: opts.handlers,
+      initialLastEventId: opts.initialLastEventId,
+      onRunStatus: emitRunStatus,
+      onRunEventId: opts.onRunEventId,
+    });
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') return;
+    emitRunStatus('failed');
+    opts.handlers.onError(err instanceof Error ? err : new Error(String(err)));
+  }
+}
+
 export async function reattachDaemonRun(options: DaemonReattachOptions): Promise<void> {
   await consumeDaemonRun({
     ...options,

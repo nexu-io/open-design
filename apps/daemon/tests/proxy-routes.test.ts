@@ -25,6 +25,34 @@ describe('API proxy routes', () => {
 
   afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
 
+  // BYOK proxy handlers now answer `202 { runId }` and stream their work into
+  // the run registry (so a disconnected client can reattach). Tests read the
+  // buffered events via GET /api/runs/:id/events. Draining that stream to
+  // completion also guarantees the background worker finished before the test
+  // ends — otherwise its async fetches could leak into the next test's mock.
+  // Event vocabulary is the daemon-run one: text arrives as `stdout {chunk}`
+  // rather than the old `delta {delta}`; `start`/`end`/`error` are unchanged.
+  async function collectRun(
+    path: string,
+    body: unknown,
+  ): Promise<{ status: number; runId?: string; sse: string; json?: any }> {
+    const post = await realFetch(`${baseUrl}${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (post.status !== 202) {
+      const json = await post.json().catch(() => undefined);
+      return { status: post.status, sse: '', json };
+    }
+    const { runId } = (await post.json()) as { runId: string };
+    const events = await realFetch(
+      `${baseUrl}/api/runs/${encodeURIComponent(runId)}/events`,
+    );
+    const sse = await events.text();
+    return { status: post.status, runId, sse };
+  }
+
   it('converts OpenAI-compatible CRLF SSE chunks into proxy delta/end events', async () => {
     const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
       const url = String(input);
@@ -39,7 +67,47 @@ describe('API proxy routes', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+    const { sse } = await collectRun(`/api/proxy/openai/stream`, {
+      baseUrl: 'https://api.example.com/v1',
+      apiKey: 'sk-test',
+      model: 'gpt-test',
+      messages: [{ role: 'user', content: 'hello' }],
+    });
+
+    expect(sse).toContain('event: stdout\ndata: {"chunk":"hi"}');
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.example.com/v1/chat/completions',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer sk-test' }),
+        redirect: 'error',
+      }),
+    );
+  });
+
+  // Regression for the "BYOK chat freezes mid-output after navigating away"
+  // bug: BYOK proxy runs must live in the run registry so they keep streaming
+  // after the client disconnects and a returning client can reattach via
+  // GET /api/runs/:id/events?after=<lastEventId>. Before the fix the proxy
+  // streamed straight into the POST response with no buffer, so a dropped
+  // connection lost the run permanently.
+  it('keeps a BYOK run alive after the client disconnects and replays via ?after=', async () => {
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      return Promise.resolve(sseResponse([
+        'data: {"choices":[{"delta":{"content":"alpha"}}]}',
+        '',
+        'data: {"choices":[{"delta":{"content":"beta"}}]}',
+        '',
+        'data: [DONE]',
+        '',
+      ].join('\n')));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    // The POST answers 202 { runId } immediately; the upstream work runs in
+    // the background and buffers events, decoupled from any client.
+    const post = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -49,15 +117,28 @@ describe('API proxy routes', () => {
         messages: [{ role: 'user', content: 'hello' }],
       }),
     });
+    expect(post.status).toBe(202);
+    const { runId } = (await post.json()) as { runId: string };
+    expect(typeof runId).toBe('string');
 
-    await expect(res.text()).resolves.toContain('event: delta\ndata: {"delta":"hi"}');
-    expect(fetchMock).toHaveBeenCalledWith(
-      'https://api.example.com/v1/chat/completions',
-      expect.objectContaining({
-        headers: expect.objectContaining({ Authorization: 'Bearer sk-test' }),
-        redirect: 'error',
-      }),
-    );
+    // A first subscriber drains the full buffered stream.
+    const full = await (
+      await realFetch(`${baseUrl}/api/runs/${runId}/events`)
+    ).text();
+    expect(full).toContain('event: stdout\ndata: {"chunk":"alpha"}');
+    expect(full).toContain('event: stdout\ndata: {"chunk":"beta"}');
+    expect(full).toContain('event: end');
+
+    // Reattach after the first stdout event — the daemon replays only newer
+    // buffered events, proving the run survived for a returning client.
+    const firstStdoutId = Number(/id: (\d+)\nevent: stdout/.exec(full)?.[1]);
+    expect(Number.isFinite(firstStdoutId)).toBe(true);
+    const replay = await (
+      await realFetch(`${baseUrl}/api/runs/${runId}/events?after=${firstStdoutId}`)
+    ).text();
+    expect(replay).not.toContain('"chunk":"alpha"');
+    expect(replay).toContain('event: stdout\ndata: {"chunk":"beta"}');
+    expect(replay).toContain('event: end');
   });
 
   // Regression: appendVersionedApiPath needs to thread three shapes:
@@ -162,19 +243,15 @@ describe('API proxy routes', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        baseUrl: 'http://localhost:11434/v1',
-        apiKey: 'sk-local',
-        model: 'llama-local',
-        messages: [{ role: 'user', content: 'hello' }],
-      }),
+    const { status, sse } = await collectRun(`/api/proxy/openai/stream`, {
+      baseUrl: 'http://localhost:11434/v1',
+      apiKey: 'sk-local',
+      model: 'llama-local',
+      messages: [{ role: 'user', content: 'hello' }],
     });
 
-    expect(res.status).toBe(200);
-    await expect(res.text()).resolves.toContain('event: end');
+    expect(status).toBe(202);
+    expect(sse).toContain('event: end');
     expect(fetchMock).toHaveBeenCalledWith(
       'http://localhost:11434/v1/chat/completions',
       expect.objectContaining({
@@ -192,19 +269,15 @@ describe('API proxy routes', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        baseUrl: 'http://[::ffff:127.0.0.1]:11434/v1',
-        apiKey: 'sk-local',
-        model: 'llama-local',
-        messages: [{ role: 'user', content: 'hello' }],
-      }),
+    const { status, sse } = await collectRun(`/api/proxy/openai/stream`, {
+      baseUrl: 'http://[::ffff:127.0.0.1]:11434/v1',
+      apiKey: 'sk-local',
+      model: 'llama-local',
+      messages: [{ role: 'user', content: 'hello' }],
     });
 
-    expect(res.status).toBe(200);
-    await expect(res.text()).resolves.toContain('event: end');
+    expect(status).toBe(202);
+    expect(sse).toContain('event: end');
     expect(String(fetchMock.mock.calls[0]![0])).toBe(
       'http://[::ffff:7f00:1]:11434/v1/chat/completions',
     );
@@ -266,18 +339,14 @@ describe('API proxy routes', () => {
       return Promise.resolve(sseResponse('data: {"error":{"message":"bad model"}}\n\n'));
     }));
 
-    const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        baseUrl: 'https://api.example.com/v1',
-        apiKey: 'sk-test',
-        model: 'bad-model',
-        messages: [{ role: 'user', content: 'hello' }],
-      }),
+    const { sse } = await collectRun(`/api/proxy/openai/stream`, {
+      baseUrl: 'https://api.example.com/v1',
+      apiKey: 'sk-test',
+      model: 'bad-model',
+      messages: [{ role: 'user', content: 'hello' }],
     });
 
-    await expect(res.text()).resolves.toContain('Provider error: bad model');
+    expect(sse).toContain('Provider error: bad model');
   });
 
   it('uses Azure deployment URLs and api-key auth', async () => {
@@ -345,14 +414,9 @@ describe('API proxy routes', () => {
     };
     if (provider === 'azure') requestBody.apiVersion = '2024-10-21';
 
-    const res = await realFetch(`${baseUrl}/api/proxy/${provider}/stream`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(requestBody),
-    });
+    const { sse } = await collectRun(`/api/proxy/${provider}/stream`, requestBody);
 
-    const text = await res.text();
-    expect(text).toContain('event: error');
+    expect(sse).toContain('event: error');
     const [upstreamUrl, upstreamInit] = fetchMock.mock.calls[0]!;
     expect(String(upstreamUrl)).toBe(expectedUrl);
     expect(upstreamInit?.redirect).toBe('error');
@@ -447,18 +511,14 @@ describe('API proxy routes', () => {
       return Promise.resolve(sseResponse('data: {"promptFeedback":{"blockReason":"SAFETY"}}\n\n'));
     }));
 
-    const res = await realFetch(`${baseUrl}/api/proxy/google/stream`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        baseUrl: 'https://generativelanguage.googleapis.com',
-        apiKey: 'google-key',
-        model: 'gemini-2.0-flash',
-        messages: [{ role: 'user', content: 'hello' }],
-      }),
+    const { sse } = await collectRun(`/api/proxy/google/stream`, {
+      baseUrl: 'https://generativelanguage.googleapis.com',
+      apiKey: 'google-key',
+      model: 'gemini-2.0-flash',
+      messages: [{ role: 'user', content: 'hello' }],
     });
 
-    await expect(res.text()).resolves.toContain('Gemini blocked the prompt (SAFETY).');
+    expect(sse).toContain('Gemini blocked the prompt (SAFETY).');
   });
 
   it('forwards maxTokens to Gemini generation config', async () => {
@@ -536,19 +596,15 @@ describe('API proxy routes', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const res = await realFetch(`${baseUrl}/api/proxy/senseaudio/stream`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        baseUrl: 'https://api.senseaudio.cn',
-        apiKey: 'sa-test',
-        projectId: 'test-project',
-        model: 'senseaudio-s2',
-        messages: [{ role: 'user', content: 'hello' }],
-      }),
+    const { sse } = await collectRun(`/api/proxy/senseaudio/stream`, {
+      baseUrl: 'https://api.senseaudio.cn',
+      apiKey: 'sa-test',
+      projectId: 'test-project',
+      model: 'senseaudio-s2',
+      messages: [{ role: 'user', content: 'hello' }],
     });
 
-    await expect(res.text()).resolves.toContain('event: delta\ndata: {"delta":"sense"}');
+    expect(sse).toContain('event: stdout\ndata: {"chunk":"sense"}');
     expect(fetchMock).toHaveBeenCalledWith(
       'https://api.senseaudio.cn/v1/chat/completions',
       expect.objectContaining({
@@ -736,23 +792,18 @@ describe('API proxy routes', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const res = await realFetch(`${baseUrl}/api/proxy/senseaudio/stream`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        baseUrl: 'https://api.senseaudio.cn',
-        apiKey: 'sa-test',
-        projectId: 'test-project',
-        model: 'senseaudio-s2',
-        messages: [{ role: 'user', content: 'draw a cat' }],
-      }),
+    const { status, sse: body } = await collectRun(`/api/proxy/senseaudio/stream`, {
+      baseUrl: 'https://api.senseaudio.cn',
+      apiKey: 'sa-test',
+      projectId: 'test-project',
+      model: 'senseaudio-s2',
+      messages: [{ role: 'user', content: 'draw a cat' }],
     });
 
-    expect(res.status).toBe(200);
-    const body = await res.text();
+    expect(status).toBe(202);
 
     // Final assistant text streams through to the client
-    expect(body).toContain('event: delta');
+    expect(body).toContain('event: stdout');
     expect(body).toContain('Here is your cat');
     expect(body).toContain('![cat](generated)');
     expect(body).toContain('event: end');
@@ -825,20 +876,15 @@ describe('API proxy routes', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const res = await realFetch(`${baseUrl}/api/proxy/senseaudio/stream`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        baseUrl: 'https://api.senseaudio.cn',
-        apiKey: 'sa-test',
-        projectId: 'test-project',
-        model: 'senseaudio-s2',
-        messages: [{ role: 'user', content: 'draw something blocked' }],
-      }),
+    const { status, sse: body } = await collectRun(`/api/proxy/senseaudio/stream`, {
+      baseUrl: 'https://api.senseaudio.cn',
+      apiKey: 'sa-test',
+      projectId: 'test-project',
+      model: 'senseaudio-s2',
+      messages: [{ role: 'user', content: 'draw something blocked' }],
     });
 
-    expect(res.status).toBe(200);
-    const body = await res.text();
+    expect(status).toBe(202);
     expect(body).toContain('Sorry, that one was blocked');
 
     expect(upstreamChatBodies).toHaveLength(2);
@@ -879,20 +925,15 @@ describe('API proxy routes', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const res = await realFetch(`${baseUrl}/api/proxy/senseaudio/stream`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        baseUrl: 'https://api.senseaudio.cn',
-        apiKey: 'sa-test',
-        projectId: 'test-project',
-        model: 'senseaudio-s2',
-        messages: [{ role: 'user', content: 'infinite' }],
-      }),
+    const { status, sse: body } = await collectRun(`/api/proxy/senseaudio/stream`, {
+      baseUrl: 'https://api.senseaudio.cn',
+      apiKey: 'sa-test',
+      projectId: 'test-project',
+      model: 'senseaudio-s2',
+      messages: [{ role: 'user', content: 'infinite' }],
     });
 
-    expect(res.status).toBe(200);
-    const body = await res.text();
+    expect(status).toBe(202);
     expect(body).toContain('event: end');
     // Loop ran exactly MAX_BYOK_TOOL_LOOPS times before bailing.
     expect(chatCallIndex).toBe(3);
@@ -946,19 +987,15 @@ describe('API proxy routes', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const proxyRes = await realFetch(`${baseUrl}/api/proxy/senseaudio/stream`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        baseUrl: 'https://api.senseaudio.cn',
-        apiKey: 'sa-test',
-        projectId: 'test-project',
-        model: 'senseaudio-s2',
-        messages: [{ role: 'user', content: 'gen' }],
-      }),
+    // collectRun drains the run's event stream, so the tool loop fully
+    // completes (image written) before we assert.
+    await collectRun(`/api/proxy/senseaudio/stream`, {
+      baseUrl: 'https://api.senseaudio.cn',
+      apiKey: 'sa-test',
+      projectId: 'test-project',
+      model: 'senseaudio-s2',
+      messages: [{ role: 'user', content: 'gen' }],
     });
-    // Drain the SSE body so the tool loop fully completes before we assert.
-    await proxyRes.text();
 
     expect(capturedUrl).toBeDefined();
     // The URL the tool emits is relative — same-origin via Next.js

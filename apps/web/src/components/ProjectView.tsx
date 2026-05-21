@@ -13,12 +13,12 @@ import { resolveHtmlPointerArtifactTarget } from '../artifacts/pointer';
 import { validateHtmlArtifact } from '../artifacts/validate';
 import { createArtifactParser } from '../artifacts/parser';
 import { useT } from '../i18n';
-import { streamMessage } from '../providers/anthropic';
 import {
   fetchChatRunStatus,
   listActiveChatRuns,
   listProjectRuns,
   reattachDaemonRun,
+  streamByokViaDaemon,
   streamViaDaemon,
 } from '../providers/daemon';
 import { fetchElevenLabsVoiceOptions } from '../providers/elevenlabs-voices';
@@ -40,6 +40,7 @@ import { useCoalescedCallback } from '../hooks/useCoalescedCallback';
 import {
   composeSystemPrompt,
   type AudioVoiceOption,
+  type ChatRunStatus,
   type MemorySystemPromptResponse,
   type ResearchOptions,
 } from '@open-design/contracts';
@@ -1628,7 +1629,10 @@ export function ProjectView({
   );
 
   useEffect(() => {
-    if (config.mode !== 'daemon' || !daemonLive || !activeConversationId || streaming) return;
+    // Both daemon-agent and BYOK chats now create registry runs, so reattach
+    // applies to either mode — the only requirement is a reachable daemon
+    // (the run + events endpoints live there) and an active conversation.
+    if (!daemonLive || !activeConversationId || streaming) return;
     let cancelled = false;
     const reattachConversationId = activeConversationId;
 
@@ -2395,6 +2399,45 @@ export function ProjectView({
         },
       };
 
+      // Run-lifecycle callbacks shared by the daemon-agent path and the
+      // BYOK path. Both now create a registry run, so both pin the runId /
+      // status / lastEventId onto the assistant row the same way — that's
+      // what lets navigating away and back reattach to an in-flight run.
+      const onRunCreated = (runId: string) => {
+        const pinnedAssistant = {
+          ...latestAssistantMsg,
+          runId,
+          runStatus: 'queued' as const,
+        };
+        latestAssistantMsg = pinnedAssistant;
+        // The view may already be on a different project/conversation;
+        // pin the run to the original row so returning can reattach.
+        void saveMessage(project.id, runConversationId, pinnedAssistant);
+        updateMessageById(assistantId, (prev) => ({ ...prev, runId, runStatus: 'queued' }));
+      };
+      const onRunStatus = (runStatus: ChatRunStatus) => {
+        const endedAt = isTerminalRunStatus(runStatus) ? Date.now() : undefined;
+        updateMessageById(
+          assistantId,
+          (prev) => ({
+            ...prev,
+            runStatus,
+            endedAt: endedAt === undefined ? prev.endedAt : prev.endedAt ?? endedAt,
+          }),
+          true,
+          runStatus === 'canceled' ? { telemetryFinalized: true } : undefined,
+        );
+        updateConversationLatestRun(runStatus, endedAt);
+        if (isTerminalRunStatus(runStatus)) {
+          clearActiveRunRefs(runConversationId, controller, cancelController);
+          clearStreamingMarker(runConversationId);
+        }
+      };
+      const onRunEventId = (lastRunEventId: string) => {
+        updateMessageById(assistantId, (prev) => ({ ...prev, lastRunEventId }));
+        persistAssistantSoon();
+      };
+
       if (config.mode === 'daemon') {
         if (!config.agentId) {
           handlers.onError(new Error('Pick a local agent first (top bar).'));
@@ -2420,40 +2463,9 @@ export function ProjectView({
           research: meta?.research,
           model: choice?.model ?? null,
           reasoning: choice?.reasoning ?? null,
-          onRunCreated: (runId) => {
-            const pinnedAssistant = {
-              ...latestAssistantMsg,
-              runId,
-              runStatus: 'queued' as const,
-            };
-            latestAssistantMsg = pinnedAssistant;
-            // The view may already be on a different project/conversation;
-            // pin the daemon run to the original row so returning can reattach.
-            void saveMessage(project.id, runConversationId, pinnedAssistant);
-            updateMessageById(assistantId, (prev) => ({ ...prev, runId, runStatus: 'queued' }));
-          },
-          onRunStatus: (runStatus) => {
-            const endedAt = isTerminalRunStatus(runStatus) ? Date.now() : undefined;
-            updateMessageById(
-              assistantId,
-              (prev) => ({
-                ...prev,
-                runStatus,
-                endedAt: endedAt === undefined ? prev.endedAt : prev.endedAt ?? endedAt,
-              }),
-              true,
-              runStatus === 'canceled' ? { telemetryFinalized: true } : undefined,
-            );
-            updateConversationLatestRun(runStatus, endedAt);
-            if (isTerminalRunStatus(runStatus)) {
-              clearActiveRunRefs(runConversationId, controller, cancelController);
-              clearStreamingMarker(runConversationId);
-            }
-          },
-          onRunEventId: (lastRunEventId) => {
-            updateMessageById(assistantId, (prev) => ({ ...prev, lastRunEventId }));
-            persistAssistantSoon();
-          },
+          onRunCreated,
+          onRunStatus,
+          onRunEventId,
         });
       } else {
         // Mirror the daemon chat-route memory hook for BYOK chats. The
@@ -2515,23 +2527,28 @@ export function ProjectView({
           projectFiles,
         );
         pushEvent({ kind: 'status', label: 'requesting', detail: config.model });
+        // BYOK now flows through the daemon run registry (same as the agent
+        // path) so the chat survives navigating away and reattaches on
+        // return. The handlers below wrap the shared `handlers` only to (a)
+        // accumulate the assistant text for the post-turn memory-extract
+        // call and (b) keep onAgentEvent/onError delegating unchanged.
         let accumulatedAssistantText = '';
-        void streamMessage(config, systemPrompt, apiHistory, controller.signal, {
-          onDelta: (delta) => {
+        const byokHandlers = {
+          onDelta: (delta: string) => {
             accumulatedAssistantText += delta;
             handlers.onDelta(delta);
-            handlers.onAgentEvent({ kind: 'text', text: delta });
           },
-          onDone: () => {
-            handlers.onDone();
-            const assistantText = accumulatedAssistantText.trim();
+          onAgentEvent: handlers.onAgentEvent,
+          onDone: (full: string) => {
+            handlers.onDone(full);
+            const assistantText = (accumulatedAssistantText || full).trim();
             if (userText.length === 0 || assistantText.length === 0) return;
             void fetch('/api/memory/extract', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 userMessage: userText,
-                assistantMessage: accumulatedAssistantText,
+                assistantMessage: assistantText,
                 projectId: project.id,
                 conversationId: runConversationId,
                 chatProvider: byokChatProvider,
@@ -2541,13 +2558,30 @@ export function ProjectView({
             });
           },
           onError: handlers.onError,
-        }, {
+        };
+        void streamByokViaDaemon({
+          protocol: config.apiProtocol ?? 'openai',
+          baseUrl: config.baseUrl ?? '',
+          apiKey: config.apiKey ?? '',
+          model: config.model,
+          apiVersion: config.apiProtocol === 'azure' ? config.apiVersion ?? '' : undefined,
+          systemPrompt,
+          history: apiHistory,
+          maxTokens: effectiveMaxTokens(config),
+          signal: controller.signal,
+          cancelSignal: cancelController.signal,
+          handlers: byokHandlers,
           projectId: project.id,
+          conversationId: runConversationId,
+          assistantMessageId: assistantId,
           // SenseAudio BYOK chat reads this to pre-fill the tool param's
           // default model. Prefer the live composer override; fall back
           // to the Settings default when the composer dropdown is on
           // "use default". Other protocols ignore unknown body fields.
           byokImageModel: byokImageModelOverride || config.byokImageModel,
+          onRunCreated,
+          onRunStatus,
+          onRunEventId,
         });
       }
     },

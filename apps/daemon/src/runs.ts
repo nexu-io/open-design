@@ -191,6 +191,19 @@ export function createChatRunService({
     if (!TERMINAL_RUN_STATUSES.has(run.status)) {
       run.cancelRequested = true;
       run.updatedAt = Date.now();
+      // Cooperative cancel hook for runs with no OS child process — e.g.
+      // BYOK proxy streams, whose "work" is an in-process fetch + tool
+      // loop. The hook (set by the worker) aborts the upstream fetch so a
+      // canceled BYOK run stops streaming instead of running to completion
+      // against a torn-down client. Agent runs leave it unset and rely on
+      // the acpSession / child.kill paths below.
+      if (typeof run.onCancel === 'function') {
+        try {
+          run.onCancel();
+        } catch {
+          // Best-effort; the finish() / kill fallbacks below still apply.
+        }
+      }
       // Prefer RPC-level abort for agents that support it (pi, ACP adapters).
       // abort() sends the graceful shutdown signal; cancel() owns the
       // SIGTERM fallback so that a misbehaving session can't leave the
