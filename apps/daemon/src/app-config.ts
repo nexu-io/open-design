@@ -171,6 +171,13 @@ const AGENT_CLI_ENV_KEYS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ['vibe', new Set(['VIBE_BIN'])],
 ]);
 
+// Closed-enum env keys: value must be one of the listed strings or empty.
+const AGENT_CLI_ENV_ENUMS: ReadonlyMap<string, ReadonlyMap<string, ReadonlySet<string>>> = new Map([
+  ['codebuddy', new Map([
+    ['CODEBUDDY_INTERNET_ENVIRONMENT', new Set(['internal', 'ioa'])],
+  ])],
+]);
+
 function isValidAgentModelEntry(v: unknown): v is AgentModelPrefs {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return false;
   const obj = v as Record<string, unknown>;
@@ -207,11 +214,14 @@ export function validateAgentCliEnv(raw: unknown): AgentCliEnvPrefs | undefined 
       continue;
     }
     const env: Record<string, string> = Object.create(null);
+    const enums = AGENT_CLI_ENV_ENUMS.get(agentId);
     for (const [envKey, envValue] of Object.entries(value as Record<string, unknown>)) {
       if (!allowed.has(envKey)) continue;
       if (typeof envValue !== 'string') continue;
       const trimmed = envValue.trim();
       if (!trimmed) continue;
+      const allowedValues = enums?.get(envKey);
+      if (allowedValues && !allowedValues.has(trimmed)) continue;
       env[envKey] = trimmed;
     }
     if (Object.keys(env).length > 0) result[agentId] = env;

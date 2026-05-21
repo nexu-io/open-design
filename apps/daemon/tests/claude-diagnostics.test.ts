@@ -150,6 +150,37 @@ describe('diagnoseClaudeCliFailure', () => {
     expect(diagnostic?.detail).toContain('Effective CODEBUDDY_CONFIG_DIR: /tmp/codebuddy-alt');
   });
 
+  it('maps CodeBuddy auth failures with API key set to API key guidance', () => {
+    const diagnostic = diagnoseClaudeCliFailure({
+      agentId: 'codebuddy',
+      exitCode: 1,
+      stderrTail: '{"apiKeySource":"none","error_status":401}',
+      env: { CODEBUDDY_API_KEY: 'cb-test-key' },
+    });
+
+    expect(diagnostic?.message).toContain('API key');
+    expect(diagnostic?.message).toContain('CodeBuddy');
+    expect(diagnostic?.detail).toContain('CODEBUDDY_API_KEY');
+    expect(diagnostic?.detail).not.toContain('/login');
+  });
+
+  it('maps CodeBuddy auth failures with API key and config dir to combined guidance', () => {
+    const diagnostic = diagnoseClaudeCliFailure({
+      agentId: 'codebuddy',
+      exitCode: 1,
+      stderrTail: '{"apiKeySource":"none","error_status":401}',
+      env: {
+        CODEBUDDY_API_KEY: 'cb-test-key',
+        CODEBUDDY_CONFIG_DIR: '/tmp/codebuddy-alt',
+      },
+    });
+
+    expect(diagnostic?.message).toContain('API key');
+    expect(diagnostic?.detail).toContain('CODEBUDDY_API_KEY');
+    expect(diagnostic?.detail).toContain('CODEBUDDY_CONFIG_DIR');
+    expect(diagnostic?.detail).not.toContain('/login');
+  });
+
   it('maps CodeBuddy config state failures to /login guidance', () => {
     const diagnostic = diagnoseClaudeCliFailure({
       agentId: 'codebuddy',

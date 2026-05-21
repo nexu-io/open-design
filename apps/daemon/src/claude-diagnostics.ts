@@ -28,6 +28,10 @@ interface AgentDiagnosticConfig {
   baseUrlEnvKey: string;
   apiKeyEnvKey: string;
   endpointLabel: string;
+  // When true, the agent authenticates primarily via its apiKeyEnvKey in -p
+  // mode (not OAuth /login). Diagnostics should surface API-key guidance
+  // when the key is present and auth fails, rather than redirecting to /login.
+  apiKeyIsPrimaryAuth?: boolean;
 }
 
 const CLAUDE_DIAGNOSTIC_CONFIG: AgentDiagnosticConfig = {
@@ -50,6 +54,7 @@ const CODEBUDDY_DIAGNOSTIC_CONFIG: AgentDiagnosticConfig = {
   baseUrlEnvKey: 'CODEBUDDY_BASE_URL',
   apiKeyEnvKey: 'CODEBUDDY_API_KEY',
   endpointLabel: 'CodeBuddy',
+  apiKeyIsPrimaryAuth: true,
 };
 
 const AGENT_DIAGNOSTIC_CONFIGS = new Map<string, AgentDiagnosticConfig>([
@@ -135,6 +140,21 @@ function diagnoseCliFailure(
     );
   }
   if (authFailure) {
+    const hasApiKey = envValue(input.env, config.apiKeyEnvKey) !== null;
+    // CodeBuddy authenticates via API key in -p mode; when the key is
+    // present but auth fails, the fix is to verify the key/endpoint
+    // rather than redirecting to /login.
+    if (config.apiKeyIsPrimaryAuth && hasApiKey) {
+      const configHint = hasConfigDir
+        ? `Check ${config.apiKeyEnvKey} and ${config.configDirEnvKey} in Settings.`
+        : `Check ${config.apiKeyEnvKey} in Settings. If you use multiple ${config.profileLabel} profiles, also set ${config.configDirEnvKey} so Open Design uses the correct one.`;
+      return withContext(
+        `${config.brandName} could not authenticate with the configured API key.`,
+        `The spawned ${config.brandName} process has ${config.apiKeyEnvKey} set but still exited before producing a response. ${configHint}`,
+        input,
+        config,
+      );
+    }
     const configHint = hasConfigDir
       ? `The configured ${config.profileLabel} config directory may contain stale or expired auth state.`
       : `If you use multiple ${config.profileLabel} profiles, set ${config.configDirEnvKey} in Settings so Open Design spawns the same profile that works in your terminal.`;

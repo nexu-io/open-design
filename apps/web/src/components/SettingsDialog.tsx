@@ -517,7 +517,11 @@ const AGENT_CLI_ENV_FIELDS = [
     agentId: 'codebuddy',
     envKey: 'CODEBUDDY_INTERNET_ENVIRONMENT',
     labelKey: 'settings.cliEnvCodebuddyInternetEnvironment',
-    placeholder: 'internal / ioa',
+    options: [
+      { value: '', label: 'International (default)' },
+      { value: 'internal', label: 'internal (China)' },
+      { value: 'ioa', label: 'ioa (iOA enterprise)' },
+    ],
   },
   {
     agentId: 'codex',
@@ -3172,31 +3176,57 @@ export function SettingsDialog({
                                 ? ` (${field.labelSuffix})`
                                 : ''}
                             </span>
-                            <input
-                              type={
-                                'secret' in field && field.secret
-                                  ? 'password'
-                                  : 'text'
-                              }
-                              value={
-                                cfg.agentCliEnv?.[field.agentId]?.[
-                                  field.envKey
-                                ] ?? ''
-                              }
-                              placeholder={field.placeholder}
-                              spellCheck={false}
-                              autoComplete="off"
-                              onChange={(e) =>
-                                setCfg((c) =>
-                                  updateAgentCliEnvValue(
-                                    c,
-                                    field.agentId,
-                                    field.envKey,
-                                    e.target.value,
-                                  ),
-                                )
-                              }
-                            />
+                            {'options' in field && field.options ? (
+                              <select
+                                value={
+                                  cfg.agentCliEnv?.[field.agentId]?.[
+                                    field.envKey
+                                  ] ?? ''
+                                }
+                                onChange={(e) =>
+                                  setCfg((c) =>
+                                    updateAgentCliEnvValue(
+                                      c,
+                                      field.agentId,
+                                      field.envKey,
+                                      e.target.value,
+                                    ),
+                                  )
+                                }
+                              >
+                                {field.options.map((opt) => (
+                                  <option key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <input
+                                type={
+                                  'secret' in field && field.secret
+                                    ? 'password'
+                                    : 'text'
+                                }
+                                value={
+                                  cfg.agentCliEnv?.[field.agentId]?.[
+                                    field.envKey
+                                  ] ?? ''
+                                }
+                                placeholder={field.placeholder}
+                                spellCheck={false}
+                                autoComplete="off"
+                                onChange={(e) =>
+                                  setCfg((c) =>
+                                    updateAgentCliEnvValue(
+                                      c,
+                                      field.agentId,
+                                      field.envKey,
+                                      e.target.value,
+                                    ),
+                                  )
+                                }
+                              />
+                            )}
                           </label>
                         ))}
                       </div>
