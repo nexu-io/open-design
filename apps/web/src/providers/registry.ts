@@ -1655,6 +1655,23 @@ export interface UploadProjectFilesResult {
   error?: string;
 }
 
+function parseProjectUploadError(
+  payload: { code?: string; error?: string | { code?: string; message?: string }; message?: string } | null,
+  status: number,
+): { code?: string; message: string } {
+  const nestedError = typeof payload?.error === 'object' ? payload.error : undefined;
+  const message =
+    nestedError?.message ??
+    (typeof payload?.error === 'string' ? payload.error : undefined) ??
+    payload?.message ??
+    `upload failed (${status})`;
+  const code = nestedError?.code ?? payload?.code;
+  return {
+    message,
+    ...(typeof code === 'string' && code.length > 0 ? { code } : {}),
+  };
+}
+
 export async function uploadProjectFiles(
   projectId: string,
   files: File[],
@@ -1682,14 +1699,15 @@ export async function uploadProjectFiles(
 
       if (!resp.ok) {
         const payload = (await resp.json().catch(() => null)) as
-          | { code?: string; error?: string }
+          | { code?: string; error?: string | { code?: string; message?: string }; message?: string }
           | null;
-        error = payload?.error ?? `upload failed (${resp.status})`;
+        const apiError = parseProjectUploadError(payload, resp.status);
+        error = apiError.message;
         for (const f of batch) {
-          failed.push({ name: f.name, code: payload?.code, error: error });
+          failed.push({ name: f.name, code: apiError.code, error });
         }
         for (const f of remaining) {
-          failed.push({ name: f.name, code: payload?.code, error: error });
+          failed.push({ name: f.name, code: apiError.code, error });
         }
         break;
       }

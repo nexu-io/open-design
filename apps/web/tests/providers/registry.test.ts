@@ -759,6 +759,46 @@ describe('uploadProjectFiles', () => {
       { path: 't1-brief.txt', name: 'brief.txt', kind: 'file', size: 4 },
     ]);
   });
+
+  it('surfaces nested daemon error details for rejected folder batches', async () => {
+    const existing = new File(['component'], 'App.tsx', { type: 'text/plain' });
+    Object.defineProperty(existing, 'webkitRelativePath', {
+      value: 'demo/src/App.tsx',
+      configurable: true,
+    });
+    const later = new File(['later'], 'Later.tsx', { type: 'text/plain' });
+    Object.defineProperty(later, 'webkitRelativePath', {
+      value: 'demo/src/Later.tsx',
+      configurable: true,
+    });
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({
+        error: {
+          code: 'CONFLICT',
+          message: 'project file already exists: demo/src/App.tsx',
+        },
+      }), { status: 409 })),
+    );
+
+    const result = await uploadProjectFiles('project-1', [existing, later]);
+
+    expect(result.uploaded).toEqual([]);
+    expect(result.error).toBe('project file already exists: demo/src/App.tsx');
+    expect(result.failed).toEqual([
+      {
+        name: 'App.tsx',
+        code: 'CONFLICT',
+        error: 'project file already exists: demo/src/App.tsx',
+      },
+      {
+        name: 'Later.tsx',
+        code: 'CONFLICT',
+        error: 'project file already exists: demo/src/App.tsx',
+      },
+    ]);
+  });
 });
 
 describe('deploy provider registry helpers', () => {
