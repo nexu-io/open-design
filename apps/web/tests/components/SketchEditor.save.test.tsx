@@ -126,4 +126,23 @@ describe('SketchEditor save', () => {
     expect(saveButton().textContent).toBe('common.save');
     expect(saveButton().querySelector('svg')).toBeNull();
   });
+
+  it('hides the checkmark when save fails if success indicator is still visible', async () => {
+    vi.useFakeTimers();
+    const onSave = vi.fn()
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+    renderEditor({ dirty: true, onSave });
+
+    await act(async () => {
+      fireEvent.click(saveButton());
+    });
+    expect(saveButton().textContent).not.toBe('common.save');
+
+    await act(async () => {
+      fireEvent.click(saveButton());
+    });
+    expect(saveButton().textContent).toBe('common.save');
+    expect(saveButton().querySelector('svg')).toBeNull();
+  });
 });

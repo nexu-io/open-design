@@ -201,11 +201,15 @@ export function SketchEditor({
 
   const handleSave = useCallback(async () => {
     const ok = await onSave();
-    if (ok === false) return;
+    if (ok === false) {
+      clearTimeout(savedTimerRef.current);
+      setShowSaved(false);
+      return;
+    }
     setShowSaved(true);
     clearTimeout(savedTimerRef.current);
     savedTimerRef.current = setTimeout(() => setShowSaved(false), SAVED_VISIBLE_MS);
-  }, [onSave]);
+}, [onSave]);
 
   return (
     <div className="sketch-editor">
