@@ -66,30 +66,42 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     cleanup();
   });
 
-  it('keeps each new Home tab independent when one tab navigates', async () => {
+  it('keeps Home tab as a singleton and avoids duplication', async () => {
     const { rerender } = render(
       <WorkspaceTabsBar route={homeRoute} projects={[project]} />,
     );
 
     expect(screen.getAllByRole('tab')).toHaveLength(1);
 
+    // Clicking 'New tab' when a Home tab already exists should activate the existing Home tab
     fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
     fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
 
     await waitFor(() => {
       const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
-      expect(labels.filter((label) => label.includes('Home'))).toHaveLength(3);
+      expect(labels.filter((label) => label.includes('Home'))).toHaveLength(1);
     });
-    expect(navigate).toHaveBeenCalledWith(homeRoute);
 
-    rerender(<WorkspaceTabsBar route={projectRoute} projects={[project]} />);
+    // Create/open a project tab via openWorkspaceTab (this is how project creation works)
+    openWorkspaceTab(projectRoute);
+
+    await waitFor(() => {
+      const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
+      expect(labels).toHaveLength(2);
+      expect(labels.some((label) => label.includes('Home'))).toBe(true);
+      expect(labels.some((label) => label.includes('Project Alpha'))).toBe(true);
+    });
+
+    // Return to Home by navigating back to homeRoute
+    rerender(<WorkspaceTabsBar route={homeRoute} projects={[project]} />);
 
     await waitFor(() => {
       const tabs = screen.getAllByRole('tab');
       const labels = tabs.map((tab) => tab.textContent ?? '');
-      expect(tabs).toHaveLength(3);
-      expect(labels.filter((label) => label.includes('Home'))).toHaveLength(2);
-      expect(labels.some((label) => label.includes('Project Alpha'))).toBe(true);
+      // Expect that we still have 2 tabs (Home and Project Alpha)
+      expect(tabs).toHaveLength(2);
+      expect(labels.filter((label) => label.includes('Home'))).toHaveLength(1);
+      expect(labels.filter((label) => label.includes('Project Alpha'))).toHaveLength(1);
     });
   });
 
@@ -106,7 +118,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     });
   });
 
-  it('preserves restored Home tabs instead of collapsing them by route', async () => {
+  it('deduplicates and cleans up restored Home tabs from old sessions', async () => {
     window.localStorage.setItem(
       'open-design:workspace-tabs:v1',
       JSON.stringify({
@@ -134,7 +146,8 @@ describe('WorkspaceTabsBar navigation semantics', () => {
 
     await waitFor(() => {
       const labels = screen.getAllByRole('tab').map((tab) => tab.textContent ?? '');
-      expect(labels.filter((label) => label.includes('Home'))).toHaveLength(2);
+      // Expect that the duplicate Home tabs are deduplicated to exactly one Home tab
+      expect(labels.filter((label) => label.includes('Home'))).toHaveLength(1);
     });
   });
 
