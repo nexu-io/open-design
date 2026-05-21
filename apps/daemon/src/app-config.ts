@@ -209,7 +209,14 @@ export function validateAgentCliEnv(
 ): AgentCliEnvPrefs | undefined {
   const throwOnInvalid = options?.throwOnInvalid ?? false;
   if (raw === undefined || raw === null) return undefined;
-  if (typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  if (typeof raw !== 'object' || Array.isArray(raw)) {
+    if (throwOnInvalid) {
+      throw new Error(
+        `[app-config] agentCliEnv: expected object, got ${Array.isArray(raw) ? 'array' : typeof raw}`,
+      );
+    }
+    return undefined;
+  }
   const result: AgentCliEnvPrefs = Object.create(null);
   for (const [agentId, value] of Object.entries(raw as Record<string, unknown>)) {
     if (agentId === '__proto__' || agentId === 'constructor') continue;

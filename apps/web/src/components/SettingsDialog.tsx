@@ -3014,7 +3014,7 @@ export function SettingsDialog({
                           const installUrl = sanitizeHttpsUrl(a.installUrl);
                           const docsUrl = sanitizeHttpsUrl(a.docsUrl);
                           const hasLinks = Boolean(installUrl || docsUrl);
-                          const description = AGENT_SHORT_DESCRIPTIONS[a.id];
+                          const description = a.authMessage ?? AGENT_SHORT_DESCRIPTIONS[a.id];
                           const agentName = displayAgentName(a);
                           const cardLabel = `${agentName} · ${t('common.notInstalled')}`;
                           return (
