@@ -11,6 +11,15 @@ type RuntimeEnvMap = NodeJS.ProcessEnv | Record<string, string>;
 // Must stay in sync with AGENT_CLI_ENV_ENUMS in app-config.ts.
 const CODEBUDDY_INTERNET_ENV_ALLOWED = new Set(['internal', 'ioa']);
 
+// CodeBuddy env keys that need case-insensitive canonicalization on Windows.
+const CODEBUDDY_CANONICAL_KEYS = [
+  'CODEBUDDY_API_KEY',
+  'CODEBUDDY_BASE_URL',
+  'CODEBUDDY_CONFIG_DIR',
+  'CODEBUDDY_BIN',
+  'CODEBUDDY_INTERNET_ENVIRONMENT',
+] as const;
+
 /** Typed error for invalid agent env/config — caught by detection.ts
  *  to surface a per-agent "unavailable" result without crashing other agents.
  *  Unexpected probe bugs (not env/config errors) should still fail fast. */
@@ -18,6 +27,34 @@ export class AgentEnvConfigError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'AgentEnvConfigError';
+  }
+}
+
+// Remove case-insensitive aliases for a set of canonical env key names.
+// On Windows, env key names are case-insensitive at the OS level but
+// Node's process.env preserves original casing. A merged env can contain
+// both an inherited alias and a configured canonical key. We must remove
+// the alias and let the configured value (merged last by expandConfiguredEnv)
+// win. If only a non-canonical alias exists, adopt its value into the
+// canonical key.
+function canonicalizeEnvKeys(
+  env: NodeJS.ProcessEnv,
+  canonicalKeys: readonly string[],
+): void {
+  for (const canonical of canonicalKeys) {
+    const upper = canonical.toUpperCase();
+    const aliases: string[] = [];
+    for (const key of Object.keys(env)) {
+      if (key.toUpperCase() === upper && key !== canonical) {
+        aliases.push(key);
+      }
+    }
+    for (const alias of aliases) {
+      if (!(canonical in env) && typeof env[alias] === 'string') {
+        env[canonical] = env[alias];
+      }
+      delete env[alias];
+    }
   }
 }
 
@@ -114,29 +151,17 @@ export function spawnEnvForAgent(
   // are case-insensitive at the OS level but Node's process.env preserves
   // the original casing. A merged env can contain both an inherited alias
   // like `Codebuddy_Internet_Environment=internel` and the configured
-  // override `CODEBUDDY_INTERNET_ENVIRONMENT=public`. We must:
+  // override `CODEBUDDY_INTERNET_ENVIRONMENT=internal`. We must:
   //   1. Remove all case-insensitive duplicates.
   //   2. Let the configured (expandConfiguredEnv) value win over inherited.
   //   3. Validate the single canonical key's value.
   // This mirrors the ANTHROPIC_API_KEY case-insensitive cleanup above.
   if (agentId === 'codebuddy') {
+    // Canonicalize all CodeBuddy env keys to remove Windows case-insensitive
+    // aliases, then validate the closed-enum INTERNET_ENVIRONMENT value.
+    canonicalizeEnvKeys(env, CODEBUDDY_CANONICAL_KEYS);
+
     const CANONICAL = 'CODEBUDDY_INTERNET_ENVIRONMENT';
-    const aliases: string[] = [];
-    for (const key of Object.keys(env)) {
-      if (key.toUpperCase() === CANONICAL && key !== CANONICAL) {
-        aliases.push(key);
-      }
-    }
-    // Configured value (from expandConfiguredEnv) was merged last, so
-    // env[CANONICAL] is already the winning value when it exists.
-    // For non-canonical aliases, only adopt if the canonical key is absent.
-    for (const alias of aliases) {
-      if (!(CANONICAL in env) && typeof env[alias] === 'string') {
-        env[CANONICAL] = env[alias];
-      }
-      delete env[alias];
-    }
-    // Now validate the single canonical key, normalizing whitespace.
     const value = env[CANONICAL];
     if (typeof value === 'string') {
       const trimmed = value.trim();
@@ -147,11 +172,8 @@ export function spawnEnvForAgent(
             ` Valid values: ${[...CODEBUDDY_INTERNET_ENV_ALLOWED].join(', ')}.`,
           );
         }
-        // Write back the trimmed value so the child process receives
-        // a canonical enum literal, not " internal " with whitespace.
         env[CANONICAL] = trimmed;
       } else {
-        // Empty or whitespace-only: delete so the CLI uses its default.
         delete env[CANONICAL];
       }
     }

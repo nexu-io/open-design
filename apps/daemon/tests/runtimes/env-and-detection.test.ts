@@ -1251,6 +1251,44 @@ test('spawnEnvForAgent throws on invalid non-canonical CODEBUDDY_INTERNET_ENVIRO
   ).toThrow(/Invalid inherited CODEBUDDY_INTERNET_ENVIRONMENT/);
 });
 
+test('spawnEnvForAgent canonicalizes mixed-case CODEBUDDY_API_KEY alias with configured override', () => {
+  // On Windows, both an inherited alias and a configured canonical key can
+  // coexist in the merged env. The configured value must win and the alias
+  // must be removed.
+  const env = spawnEnvForAgent(
+    'codebuddy',
+    {
+      Codebuddy_Api_Key: 'old-inherited-key',  // inherited alias
+      CODEBUDDY_API_KEY: 'new-configured-key', // configured override
+      PATH: '/usr/bin',
+    },
+    {},
+  );
+
+  assert.equal(env.CODEBUDDY_API_KEY, 'new-configured-key');
+  const aliases = Object.keys(env).filter(
+    (k) => k.toUpperCase() === 'CODEBUDDY_API_KEY' && k !== 'CODEBUDDY_API_KEY',
+  );
+  assert.deepEqual(aliases, []);
+});
+
+test('spawnEnvForAgent adopts non-canonical CODEBUDDY_API_KEY when canonical is absent', () => {
+  const env = spawnEnvForAgent(
+    'codebuddy',
+    {
+      codebuddy_api_key: 'inherited-key',  // lowercase alias
+      PATH: '/usr/bin',
+    },
+    {},
+  );
+
+  assert.equal(env.CODEBUDDY_API_KEY, 'inherited-key');
+  const aliases = Object.keys(env).filter(
+    (k) => k.toUpperCase() === 'CODEBUDDY_API_KEY' && k !== 'CODEBUDDY_API_KEY',
+  );
+  assert.deepEqual(aliases, []);
+});
+
 test('detectAgents isolates CodeBuddy probe failure from other agents', async () => {
   // When an invalid inherited CODEBUDDY_INTERNET_ENVIRONMENT causes the
   // CodeBuddy probe to throw an AgentEnvConfigError, other agents must

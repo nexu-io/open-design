@@ -410,6 +410,27 @@ describe('app-config', () => {
       });
     });
 
+    it('rejects non-object agent env block on write without clearing prior agentCliEnv', async () => {
+      // A string or array value for an allowlisted agent should throw
+      // on the strict write path, not silently drop and clear the block.
+      await writeAppConfig(dataDir, {
+        agentCliEnv: {
+          codebuddy: { CODEBUDDY_API_KEY: 'cb-test-key' },
+        },
+      });
+      await expect(
+        writeAppConfig(dataDir, {
+          agentCliEnv: {
+            codebuddy: 'bad',
+          },
+        }),
+      ).rejects.toThrow(/codebuddy.*expected object/);
+      const cfg = await readAppConfig(dataDir);
+      expect(cfg.agentCliEnv).toEqual({
+        codebuddy: { CODEBUDDY_API_KEY: 'cb-test-key' },
+      });
+    });
+
     it('tolerates persisted invalid CODEBUDDY_INTERNET_ENVIRONMENT on read', async () => {
       // Manually write a config file with an invalid enum value (simulating
       // a stale or hand-edited config). readAppConfig should not throw;

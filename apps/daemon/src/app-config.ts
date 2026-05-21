@@ -215,6 +215,11 @@ export function validateAgentCliEnv(
     if (agentId === '__proto__' || agentId === 'constructor') continue;
     const allowed = AGENT_CLI_ENV_KEYS.get(agentId);
     if (!allowed || typeof value !== 'object' || value === null || Array.isArray(value)) {
+      if (throwOnInvalid && allowed && (typeof value !== 'object' || value === null || Array.isArray(value))) {
+        throw new Error(
+          `[app-config] ${agentId}: expected object, got ${Array.isArray(value) ? 'array' : typeof value}`,
+        );
+      }
       continue;
     }
     const env: Record<string, string> = Object.create(null);
