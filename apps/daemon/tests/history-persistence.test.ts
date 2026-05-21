@@ -101,6 +101,55 @@ describe('migrateProjectRevisions', () => {
     expect(() => insert.run('uuid-3', 'p1', sharedSha, 3)).toThrow();
   });
 
+  it('migrates a legacy database that already has project_revisions without git_sha', () => {
+    // Simulate a database that ran the pre-fix migration (id=SHA, no
+    // git_sha column). The fixed migration must add the column before
+    // creating the (project_id, git_sha) partial unique index, otherwise
+    // SQLite errors with `no such column: git_sha` and migration aborts
+    // before the backfill can run.
+    const legacyDb = new Database(':memory:');
+    legacyDb.pragma('foreign_keys = ON');
+    legacyDb.exec(`
+      CREATE TABLE projects (id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+      CREATE TABLE conversations (id TEXT PRIMARY KEY, project_id TEXT NOT NULL, title TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+      CREATE TABLE messages (id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, role TEXT NOT NULL, content TEXT, created_at INTEGER NOT NULL);
+      CREATE TABLE project_revisions (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        parent_id TEXT,
+        created_at INTEGER NOT NULL,
+        source TEXT NOT NULL,
+        message TEXT NOT NULL,
+        actor_identity_id TEXT,
+        actor_display_name TEXT,
+        run_id TEXT,
+        files_changed_count INTEGER NOT NULL DEFAULT 0,
+        bytes_added INTEGER NOT NULL DEFAULT 0,
+        bytes_removed INTEGER NOT NULL DEFAULT 0
+      );
+      INSERT INTO projects (id, name, created_at, updated_at) VALUES ('p1', 'p1', 0, 0);
+      -- A legacy revision row with id=SHA, no git_sha column populated
+      INSERT INTO project_revisions (id, project_id, created_at, source, message)
+      VALUES ('a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2', 'p1', 1, 'migration', 'legacy');
+    `);
+
+    expect(() => migrateProjectRevisions(legacyDb)).not.toThrow();
+
+    // git_sha column now exists; legacy row's value is NULL (expected)
+    const cols = legacyDb.prepare(`PRAGMA table_info(project_revisions)`).all() as DbRow[];
+    expect(cols.map((c) => c.name)).toContain('git_sha');
+    const legacyRow = legacyDb.prepare(`SELECT git_sha FROM project_revisions LIMIT 1`).get() as DbRow;
+    expect(legacyRow.git_sha).toBeNull();
+
+    // The partial unique index exists
+    const idx = legacyDb
+      .prepare(`SELECT name FROM sqlite_master WHERE type='index' AND name='idx_project_revisions_project_sha'`)
+      .get() as { name: string } | undefined;
+    expect(idx?.name).toBe('idx_project_revisions_project_sha');
+
+    legacyDb.close();
+  });
+
   it('allows multiple NULL git_sha rows (non-git substrates do not violate the unique index)', () => {
     const insert = db.prepare(`
       INSERT INTO project_revisions (id, project_id, parent_id, git_sha, created_at, source, message)
