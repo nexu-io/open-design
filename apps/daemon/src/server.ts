@@ -11484,6 +11484,18 @@ export async function startServer({
     let server;
     try {
       server = app.listen(port, host, () => {
+        // SSE survives behind nginx/socat/docker bridges only when the HTTP
+        // keep-alive idle window is wider than the in-band keepalive cadence
+        // (SSE_KEEPALIVE_INTERVAL_MS = 25_000). Node's default keepAliveTimeout
+        // is 5_000ms, which closes any idle SSE connection long before the
+        // next `: keepalive` byte flushes — callers then see TCP RST and the
+        // browser surfaces it as a generic "network error" mid-stream.
+        // 120s leaves comfortable headroom for the 25s in-band ping.
+        if (server) {
+          server.keepAliveTimeout = 120_000;
+          server.headersTimeout = 125_000; // must exceed keepAliveTimeout (Node convention)
+          server.requestTimeout = 0; // disable per-request timeout; SSE runs as long as the agent does
+        }
         const address = server.address();
         // `address()` can in theory return `string | AddressInfo | null`. For
         // a TCP listener it's always `AddressInfo` with a `.port` — the guard
