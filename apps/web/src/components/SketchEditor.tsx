@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useT } from '../i18n';
+import { Icon } from './Icon';
 import type { SketchItem } from './sketch-model';
+
+const SAVED_VISIBLE_MS = 2000;
 
 export type Tool = 'select' | 'pen' | 'text' | 'rect' | 'arrow' | 'eraser';
 
@@ -38,6 +41,9 @@ export function SketchEditor({
   const [size, setSize] = useState(2);
   const drawingRef = useRef<SketchItem | null>(null);
   const [, force] = useState(0);
+  const [showSaved, setShowSaved] = useState(false);
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
   // Text-tool modal. Replaces window.prompt() because Electron 28+
   // disables that API by default and silently returns null, making
   // the text tool a no-op in the desktop app. Same root cause as
@@ -188,6 +194,13 @@ export function SketchEditor({
     textAnchorRef.current = null;
   }
 
+  const handleSave = useCallback(async () => {
+    await onSave();
+    setShowSaved(true);
+    clearTimeout(savedTimerRef.current);
+    savedTimerRef.current = setTimeout(() => setShowSaved(false), SAVED_VISIBLE_MS);
+  }, [onSave]);
+
   return (
     <div className="sketch-editor">
       <div className="sketch-toolbar">
@@ -232,11 +245,11 @@ export function SketchEditor({
           </button>
         ) : null}
         <button
-          className="primary"
-          onClick={() => void onSave()}
-          disabled={saving || !canSave}
+          className="primary"          
+          onClick={handleSave}
+          disabled={saving || showSaved || !canSave}
         >
-          {saving ? t('sketch.saving') : t('common.save')}
+          {saving ? t('sketch.saving') : showSaved ? <Icon name="check" size={14} /> : t('common.save')}
         </button>
       </div>
       <div className="sketch-canvas-wrap" ref={wrapRef}>
