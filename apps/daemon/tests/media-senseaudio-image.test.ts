@@ -126,7 +126,9 @@ describe('senseaudio image generation', () => {
     const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
       const urlStr = String(input);
       if (urlStr === `${TEST_SENSEAUDIO_BASE_URL}/v1/image/sync`) {
-        expect(JSON.parse(String(init?.body)).size).toBe('1280x720');
+        // senseaudio-image-1.0 rejects 1024x1024 / 1280x720; its valid
+        // 16:9-ish size is 1664x928. Size map is per-model now.
+        expect(JSON.parse(String(init?.body)).size).toBe('1664x928');
         return buildOkResponse();
       }
       return buildImageFetchResponse(TEST_IMAGE_BYTES);

@@ -2284,15 +2284,47 @@ async function renderSenseAudioTTS(ctx: MediaContext, credentials: ProviderConfi
 
 const SENSEAUDIO_IMAGE_PROMPT_LIMIT = 2000;
 
-// SenseAudio's image gateway rejects non-standard pixel sizes with a 400
-// `参数错误：size`. Keep this table in sync with byok-tools.ts's
-// ASPECT_TO_SIZE — both paths hit the same /v1/image/sync endpoint.
-function senseAudioImageSize(aspect?: string): string {
-  if (aspect === '16:9') return '1280x720';
-  if (aspect === '9:16') return '720x1280';
-  if (aspect === '4:3') return '1024x768';
-  if (aspect === '3:4') return '768x1024';
-  return '1024x1024';
+// SenseAudio's image gateway rejects any size not in the model's fixed set
+// with a 400 `参数错误：size`, and EACH model accepts a DIFFERENT set (e.g.
+// 2.0 takes 1024x1024 but 1.0 does not). Source:
+// https://docs.senseaudio.cn/api-reference/endpoint/image/sync. We keep a
+// per-model list of accepted sizes and pick the one whose width/height ratio
+// is closest to the requested aspect, so any catalogue model + any aspect
+// resolves to a size the gateway will accept.
+const SENSEAUDIO_IMAGE_SIZES: Record<string, string[]> = {
+  'senseaudio-image-2.0-260319': [
+    '1024x1024', '1536x864', '864x1536', '2048x1152', '1152x2048',
+  ],
+  'senseaudio-image-1.0-260319': [
+    '1328x1328', '1664x928', '928x1664', '1472x1140', '1140x1472',
+  ],
+  'doubao-seedream-5-0-260128': [
+    '2048x2048', '2848x1600', '1600x2848', '2304x1728', '1728x2304',
+  ],
+};
+const SENSEAUDIO_IMAGE_DEFAULT_SIZES = SENSEAUDIO_IMAGE_SIZES['senseaudio-image-2.0-260319']!;
+const ASPECT_RATIO_VALUE: Record<string, number> = {
+  '1:1': 1,
+  '16:9': 16 / 9,
+  '9:16': 9 / 16,
+  '4:3': 4 / 3,
+  '3:4': 3 / 4,
+};
+
+function senseAudioImageSize(model: string, aspect?: string): string {
+  const sizes = SENSEAUDIO_IMAGE_SIZES[model] ?? SENSEAUDIO_IMAGE_DEFAULT_SIZES;
+  const target = ASPECT_RATIO_VALUE[aspect ?? '1:1'] ?? 1;
+  let best = sizes[0]!;
+  let bestDiff = Infinity;
+  for (const s of sizes) {
+    const [w, h] = s.split('x').map(Number);
+    const diff = Math.abs(w! / h! - target);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      best = s;
+    }
+  }
+  return best;
 }
 
 async function renderSenseAudioImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
@@ -2313,7 +2345,7 @@ async function renderSenseAudioImage(ctx: MediaContext, credentials: ProviderCon
     promptRaw.length > SENSEAUDIO_IMAGE_PROMPT_LIMIT
       ? promptRaw.slice(0, SENSEAUDIO_IMAGE_PROMPT_LIMIT)
       : promptRaw;
-  const size = senseAudioImageSize(ctx.aspect);
+  const size = senseAudioImageSize(ctx.wireModel, ctx.aspect);
   const reference = ctx.imageRef?.dataUrl;
 
   const body: Record<string, unknown> = {
