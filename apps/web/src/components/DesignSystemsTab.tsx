@@ -62,11 +62,11 @@ function isUserSystem(system: DesignSystemSummary): boolean {
   return system.source === 'user' || system.isEditable === true;
 }
 
-function formatShortDate(value: string | undefined): string {
-  if (!value) return 'just now';
+function formatShortDate(value: string | undefined, locale: string, justNow: string): string {
+  if (!value) return justNow;
   const time = Date.parse(value);
   if (!Number.isFinite(time)) return value;
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(locale, {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
@@ -235,7 +235,7 @@ export function DesignSystemsTab({
   }
 
   async function deleteSystem(system: DesignSystemSummary) {
-    const ok = window.confirm(`Delete "${system.title}"? This removes the draft design system from this device.`);
+    const ok = window.confirm(t('ds.manager.row.deleteConfirm', { title: system.title }));
     if (!ok) return;
     setBusyId(system.id);
     try {
@@ -255,36 +255,36 @@ export function DesignSystemsTab({
 
   return (
     <div className="tab-panel design-systems-manager" data-testid="design-systems-tab">
-      <section className="ds-settings-card" aria-label="Design Systems">
+      <section className="ds-settings-card" aria-label={t('ds.manager.cardAria')}>
         <div className="ds-settings-card__head">
           <div>
-            <span className="ds-manager-eyebrow">Design Systems</span>
-            <h2>Your systems</h2>
+            <span className="ds-manager-eyebrow">{t('ds.manager.eyebrow')}</span>
+            <h2>{t('ds.manager.yourSystems')}</h2>
           </div>
           <select
-            aria-label="Filter design systems"
+            aria-label={t('ds.manager.userFilterAria')}
             value={userFilter}
             onChange={(event) => setUserFilter(event.target.value as UserListFilter)}
           >
-            <option value="all">All</option>
-            <option value="published">Published</option>
-            <option value="draft">Draft</option>
+            <option value="all">{t('ds.manager.userFilter.all')}</option>
+            <option value="published">{t('ds.manager.userFilter.published')}</option>
+            <option value="draft">{t('ds.manager.userFilter.draft')}</option>
           </select>
         </div>
 
         {onCreate ? (
           <button type="button" className="ds-create-row" onClick={onCreate}>
             <span>
-              <strong>Create new design system</strong>
-              <small>Teach Open Design your brand, product, code, assets, and design references.</small>
+              <strong>{t('ds.manager.create.title')}</strong>
+              <small>{t('ds.manager.create.hint')}</small>
             </span>
-            <span className="ds-create-row__action">Create</span>
+            <span className="ds-create-row__action">{t('ds.manager.create.action')}</span>
           </button>
         ) : null}
 
         {userSystems.length === 0 ? (
           <div className="ds-user-empty">
-            No design systems yet. Create one from real product context, review the draft, then publish it for future projects.
+            {t('ds.manager.userEmpty')}
           </div>
         ) : (
           <div className="ds-user-list">
@@ -302,10 +302,10 @@ export function DesignSystemsTab({
                   >
                     <span className="ds-user-row__title">
                       <span>{system.title}</span>
-                      {selected ? <span className="ds-card-badge">Default</span> : null}
+                      {selected ? <span className="ds-card-badge">{t('ds.badgeDefault')}</span> : null}
                     </span>
                     <span className="ds-user-row__meta">
-                      You · updated {formatShortDate(system.updatedAt)}
+                      {t('ds.manager.row.youUpdated', { date: formatShortDate(system.updatedAt, locale, t('ds.manager.row.justNow')) })}
                     </span>
                   </button>
                   <div className="ds-user-row__actions">
@@ -316,7 +316,7 @@ export function DesignSystemsTab({
                         onClick={() => onOpenSystem(system.id)}
                         disabled={busy}
                       >
-                        Edit
+                        {t('ds.manager.row.edit')}
                       </button>
                     ) : null}
                     {!selected && canUseInProjects ? (
@@ -326,7 +326,7 @@ export function DesignSystemsTab({
                         onClick={() => onSelect(system.id)}
                         disabled={busy}
                       >
-                        Make default
+                        {t('ds.manager.row.makeDefault')}
                       </button>
                     ) : null}
                     <button
@@ -336,14 +336,14 @@ export function DesignSystemsTab({
                       onClick={() => void togglePublished(system)}
                       disabled={busy}
                     >
-                      <span>{status === 'published' ? 'Published' : 'Draft'}</span>
+                      <span>{status === 'published' ? t('ds.manager.row.published') : t('ds.manager.row.draft')}</span>
                       <i aria-hidden />
                     </button>
                     {onOpenSystem ? (
                       <button
                         type="button"
                         className="icon-btn"
-                        aria-label={`Open ${system.title}`}
+                        aria-label={t('ds.manager.row.openAria', { title: system.title })}
                         onClick={() => onOpenSystem(system.id)}
                       >
                         <Icon name="external-link" />
@@ -352,7 +352,7 @@ export function DesignSystemsTab({
                     <button
                       type="button"
                       className="icon-btn danger"
-                      aria-label={`Delete ${system.title}`}
+                      aria-label={t('ds.manager.row.deleteAria', { title: system.title })}
                       onClick={() => void deleteSystem(system)}
                       disabled={busy}
                     >
@@ -366,25 +366,25 @@ export function DesignSystemsTab({
         )}
       </section>
 
-      <section className="ds-settings-card ds-templates-card" aria-label="Templates">
+      <section className="ds-settings-card ds-templates-card" aria-label={t('ds.manager.templates.aria')}>
         <div className="ds-settings-card__head">
           <div>
-            <span className="ds-manager-eyebrow">Templates</span>
-            <h2>Templates</h2>
+            <span className="ds-manager-eyebrow">{t('ds.manager.templates.eyebrow')}</span>
+            <h2>{t('ds.manager.templates.heading')}</h2>
           </div>
         </div>
         <div className="ds-user-empty">
-          No templates yet. Create one from any generated project via Share once template publishing is enabled.
+          {t('ds.manager.templates.empty')}
         </div>
       </section>
 
-      <p className="ds-private-note">Only you can view these settings.</p>
+      <p className="ds-private-note">{t('ds.manager.privateNote')}</p>
 
-      <section className="ds-settings-card" aria-label="Built-in design systems">
+      <section className="ds-settings-card" aria-label={t('ds.manager.library.aria')}>
         <div className="ds-settings-card__head">
           <div>
-            <span className="ds-manager-eyebrow">Library</span>
-            <h2>Built-in library</h2>
+            <span className="ds-manager-eyebrow">{t('ds.manager.library.eyebrow')}</span>
+            <h2>{t('ds.manager.library.heading')}</h2>
           </div>
         </div>
         <div className="tab-panel-toolbar ds-manager-toolbar">
