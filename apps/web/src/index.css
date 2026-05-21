@@ -14841,6 +14841,10 @@ button.ghost.mcp-copy-btn:hover:not(:disabled) {
   padding: 1px 6px;
   border-radius: 4px;
   color: var(--text-muted);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .op-waiting-hint {
   flex-basis: 100%;
