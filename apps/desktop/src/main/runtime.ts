@@ -306,6 +306,13 @@ export type DesktopRuntimeOptions = {
    * and the runtime falls back to `discoverUrl` for API calls too.
   */
   discoverDaemonUrl?: () => Promise<string | null>;
+  /**
+   * BCP-47 locale string read from the OS by main process, forwarded
+   * to the preload via `webPreferences.additionalArguments` so the
+   * renderer can mirror it onto `__od__.client.osLocale`. Optional;
+   * when omitted the renderer falls back to navigator/localStorage.
+   */
+  osLocale?: string;
   preloadPath?: string;
   /**
    * Round-5 (lefarcen P1, mrcfps): lazy re-handshake hook. The runtime
@@ -1109,6 +1116,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     title: "Open Design",
     ...MAC_WINDOW_CHROME,
     webPreferences: {
+      additionalArguments: options.osLocale ? [`--od-os-locale=${options.osLocale}`] : undefined,
       contextIsolation: true,
       nodeIntegration: false,
       preload: preloadPath,

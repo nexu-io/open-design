@@ -10,6 +10,7 @@ import {
   createSidecarLaunchEnv,
   resolveAppIpcPath,
 } from "@open-design/sidecar";
+import { applyOsLocaleSwitch } from "@open-design/desktop/main";
 import { readProcessStamp } from "@open-design/platform";
 import { join } from "node:path";
 import { app, dialog } from "electron";
@@ -59,6 +60,13 @@ function applyLaunchEnv(base: string, stamp: SidecarStamp): void {
 }
 
 async function main(): Promise<void> {
+  // Must run BEFORE `app.whenReady()` below, because Chromium consumes
+  // `--lang` at session bootstrap. Doing it here lets the packaged
+  // renderer's `navigator.language` follow the OS instead of Chromium's
+  // en-US default. runDesktopMain (called later) calls the same helper
+  // again to recover the resolved locale string for the BrowserWindow.
+  applyOsLocaleSwitch(app);
+
   const config = await readPackagedConfig();
   const argvStamp = readProcessStamp(process.argv.slice(1), OPEN_DESIGN_SIDECAR_CONTRACT);
   const namespace = argvStamp?.namespace ?? config.namespace;

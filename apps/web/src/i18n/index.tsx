@@ -82,10 +82,22 @@ export function resolveSystemLocale(languages: readonly string[]): Locale | null
   return null;
 }
 
-// First-run defaults to the user's browser/system language when possible.
-// An explicit user pick saved to localStorage always wins; unsupported
-// languages fall back to English.
-function detectInitialLocale(): Locale {
+// Read the OS locale main process attached to `__od__.client.osLocale`.
+// Packaged desktop builds need this because Chromium otherwise reports
+// en-US through navigator.language regardless of the OS setting.
+function readDesktopHostOsLocale(): string | undefined {
+  if (typeof window === 'undefined') return undefined;
+  const host = (window as { __od__?: { client?: { osLocale?: unknown } } }).__od__;
+  const value = host?.client?.osLocale;
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+// First-run defaults to the user's OS / browser language when possible.
+// Priority: explicit user pick saved to localStorage > OS locale that the
+// desktop host injected (packaged Electron) > navigator.languages > 'en'.
+// Exported so tests can pin the priority chain without spinning up the
+// full I18nProvider.
+export function detectInitialLocale(): Locale {
   if (typeof window === 'undefined') return 'en';
   try {
     const stored = window.localStorage.getItem(LS_KEY);
@@ -94,6 +106,11 @@ function detectInitialLocale(): Locale {
     }
   } catch {
     /* ignore */
+  }
+  const hostOsLocale = readDesktopHostOsLocale();
+  if (hostOsLocale) {
+    const fromHost = resolveSystemLocale([hostOsLocale]);
+    if (fromHost) return fromHost;
   }
   const detected = resolveSystemLocale(
     navigator.languages?.length ? navigator.languages : [navigator.language],
