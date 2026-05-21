@@ -653,9 +653,21 @@ describe("matchesAppImageProcess", () => {
     expect(ok).toBe(true);
   });
 
-  it("matches extracted-mode (env.APPIMAGE === installPath, executable matches /tmp/.mount_*/AppRun)", () => {
+  it("matches mounted AppRun mode (env.APPIMAGE === installPath, executable matches /tmp/.mount_*/AppRun)", () => {
     const ok = matchesAppImageProcess(
       { pid: 1234, executable: "/tmp/.mount_abc123/AppRun", env: { APPIMAGE: installPath } },
+      installPath,
+    );
+    expect(ok).toBe(true);
+  });
+
+  it("matches mounted Tauri inner binaries when APPIMAGE points at the install path", () => {
+    const ok = matchesAppImageProcess(
+      {
+        pid: 1234,
+        executable: "/tmp/.mount_open-design/usr/bin/open-design-desktop-tauri",
+        env: { APPIMAGE: installPath },
+      },
       installPath,
     );
     expect(ok).toBe(true);

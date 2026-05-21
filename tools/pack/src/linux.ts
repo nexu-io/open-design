@@ -248,10 +248,10 @@ export function matchesAppImageProcess(
 ): boolean {
   if (snapshot.executable === installPath) return true;
   // Two AppImage launch modes leave different executable paths in /proc/<pid>/exe:
-  //   FUSE-mounted: /tmp/.mount_<hex>/AppRun
+  //   FUSE-mounted: /tmp/.mount_<hex>/AppRun or the runtime's inner binary
   //   --appimage-extract-and-run: /tmp/appimage_extracted_<hex>/.../<binary>
   // In both cases the AppImage runtime sets $APPIMAGE to the original install path.
-  const isMountedRunner = /^\/tmp\/\.mount_[^/]+\/AppRun$/.test(snapshot.executable);
+  const isMountedRunner = /^\/tmp\/\.mount_[^/]+\/.+$/.test(snapshot.executable);
   const isExtractedRunner = /^\/tmp\/appimage_extracted_[^/]+\/.+$/.test(snapshot.executable);
   if (!isMountedRunner && !isExtractedRunner) return false;
   return snapshot.env.APPIMAGE === installPath;
