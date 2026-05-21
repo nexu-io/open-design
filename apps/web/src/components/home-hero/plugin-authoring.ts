@@ -17,6 +17,14 @@ export type HomePromptHandoff =
     source: 'plugin-use';
     action: PluginUseAction;
     inputs?: Record<string, unknown>;
+  }
+  | {
+    id: number;
+    focus: boolean;
+    source: 'page-pattern-use';
+    patternId: string;
+    prompt: string;
+    pageType: string;
   };
 
 export const PLUGIN_AUTHORING_GOAL_INPUT = 'pluginGoal';
@@ -109,5 +117,45 @@ export function createPluginUseHandoff(
     ...(options.inputs ? { inputs: options.inputs } : {}),
     focus: true,
     source: 'plugin-use',
+  };
+}
+
+/**
+ * Build a handoff that seeds the home composer with a page pattern's
+ * example prompt. Falls back through examplePrompt -> description -> a
+ * synthesized "Use the X pattern." sentence so the prompt is never empty
+ * when the user lands on Home.
+ *
+ * Phase 1 deliberately does NOT bind a plugin record — page patterns
+ * are catalog entries, not installed plugins, so the user can hit Enter
+ * against the default scenario router (see HomeView's free-form submit
+ * path) to kick off a new project. The `pageType` field is forwarded so
+ * downstream surfaces (design-system hints, future diagram nodes) can
+ * pick it up without re-querying the catalog.
+ */
+export function createPagePatternUseHandoff(
+  id: number,
+  pattern: {
+    id: string;
+    examplePrompt?: string;
+    description?: string;
+    name: string;
+    pageType: string;
+  },
+): HomePromptHandoff {
+  const examplePrompt = pattern.examplePrompt?.trim();
+  const description = pattern.description?.trim();
+  const prompt = examplePrompt && examplePrompt.length > 0
+    ? examplePrompt
+    : description && description.length > 0
+      ? description
+      : `Use the ${pattern.name} pattern.`;
+  return {
+    id,
+    source: 'page-pattern-use',
+    patternId: pattern.id,
+    prompt,
+    pageType: pattern.pageType,
+    focus: true,
   };
 }

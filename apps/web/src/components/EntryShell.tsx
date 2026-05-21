@@ -59,6 +59,7 @@ import { EntryNavRail, type EntryView as EntryViewKind } from './EntryNavRail';
 import { GithubStarBadge } from './GithubStarBadge';
 import { HomeView } from './HomeView';
 import {
+  createPagePatternUseHandoff,
   createPluginAuthoringHandoff,
   createPluginUseHandoff,
   type HomePromptHandoff,
@@ -348,9 +349,10 @@ export function EntryShell({
   const route = useRoute();
   const view: EntryViewKind = route.kind === 'home' ? route.view : 'home';
   const [previewSystemId, setPreviewSystemId] = useState<string | null>(null);
-  // Page-patterns preview modal. PR-3 will replace the placeholder
-  // onUsePattern handoff with a real `pendingPluginUseHandoff`-style
-  // channel; for PR-2 the "Use" button just navigates back to home.
+  // Page-patterns preview modal. The "Use" button on a pattern card
+  // emits a `page-pattern-use` HomePromptHandoff (PR-3, Task 17) which
+  // seeds the home composer with the pattern's example prompt; the
+  // preview modal is opened independently from the preview button.
   const [previewPagePatternId, setPreviewPagePatternId] = useState<string | null>(null);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [newProjectInitialTab, setNewProjectInitialTab] =
@@ -666,12 +668,10 @@ export function EntryShell({
             {view === 'page-patterns' ? (
               <div className="entry-section">
                 <PagePatternsTab
-                  onUsePattern={() => {
-                    // PR-2 placeholder: send the user back home so the
-                    // existing prompt-loop UI catches focus. PR-3 wires
-                    // this into the real plugin-use handoff so the chosen
-                    // pattern seeds the prompt and the active design
-                    // system on a fresh project.
+                  onUsePattern={(pattern) => {
+                    setHomePromptHandoff(
+                      createPagePatternUseHandoff(Date.now(), pattern),
+                    );
                     changeView('home');
                   }}
                   onPreview={(pattern) => {

@@ -403,6 +403,26 @@ export function HomeView({
       return;
     }
 
+    if (promptHandoff.source === 'page-pattern-use') {
+      // Page patterns are catalog entries, not installed plugins, so we
+      // don't bind an active plugin record. Seeding the composer with
+      // the pattern's example prompt is enough for the user to press
+      // Enter and submit through the default scenario router; the
+      // pattern's pageType is preserved on the handoff for downstream
+      // surfaces that want to consume it.
+      setActive(null);
+      setActiveSkill(null);
+      setSelectedPluginContexts([]);
+      setSelectedMcpContexts([]);
+      setSelectedConnectorContexts([]);
+      setFallbackProjectKind('other');
+      setPrompt(promptHandoff.prompt);
+      if (promptHandoff.focus) {
+        requestAnimationFrame(() => inputRef.current?.focus());
+      }
+      return;
+    }
+
     setActive(null);
     setActiveSkill(null);
     setSelectedPluginContexts([]);
