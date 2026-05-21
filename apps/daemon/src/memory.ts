@@ -147,6 +147,7 @@ const VALID_EXTRACTION_PROVIDERS = new Set([
   'azure',
   'google',
   'ollama',
+  'kimi',
 ]);
 
 function normalizeExtractionPatch(input) {

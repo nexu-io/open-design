@@ -4300,6 +4300,7 @@ export async function startServer({
           || provider === 'azure'
           || provider === 'google'
           || provider === 'ollama'
+          || provider === 'kimi'
         ) {
           chatProvider = {
             provider,
