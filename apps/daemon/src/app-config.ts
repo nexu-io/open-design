@@ -231,8 +231,16 @@ export function validateAgentCliEnv(
   for (const [agentId, value] of Object.entries(raw as Record<string, unknown>)) {
     if (agentId === '__proto__' || agentId === 'constructor') continue;
     const allowed = AGENT_CLI_ENV_KEYS.get(agentId);
-    if (!allowed || typeof value !== 'object' || value === null || Array.isArray(value)) {
-      if (throwOnInvalid && allowed && (typeof value !== 'object' || value === null || Array.isArray(value))) {
+    if (!allowed) {
+      if (throwOnInvalid) {
+        throw new AppConfigValidationError(
+          `[app-config] agentCliEnv: unknown agent "${agentId}"`,
+        );
+      }
+      continue;
+    }
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      if (throwOnInvalid) {
         throw new AppConfigValidationError(
           `[app-config] ${agentId}: expected object, got ${Array.isArray(value) ? 'array' : typeof value}`,
         );
@@ -242,7 +250,14 @@ export function validateAgentCliEnv(
     const env: Record<string, string> = Object.create(null);
     const enums = AGENT_CLI_ENV_ENUMS.get(agentId);
     for (const [envKey, envValue] of Object.entries(value as Record<string, unknown>)) {
-      if (!allowed.has(envKey)) continue;
+      if (!allowed.has(envKey)) {
+        if (throwOnInvalid) {
+          throw new AppConfigValidationError(
+            `[app-config] ${agentId}.${envKey}: unknown env key`,
+          );
+        }
+        continue;
+      }
       if (typeof envValue !== 'string') {
         if (throwOnInvalid) {
           throw new AppConfigValidationError(

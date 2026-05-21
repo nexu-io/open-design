@@ -306,7 +306,7 @@ describe('app-config', () => {
       expect(cfg.agentModels).toBeUndefined();
     });
 
-    it('persists supported per-agent CLI env keys and drops everything else', async () => {
+    it('persists supported per-agent CLI env keys and rejects unknown keys', async () => {
       await writeAppConfig(dataDir, {
         agentCliEnv: {
           claude: {
@@ -326,9 +326,6 @@ describe('app-config', () => {
           },
           'trae-cli': {
             TRAE_CLI_BIN: '  ~/bin/traecli-public  ',
-          },
-          gemini: {
-            GEMINI_API_KEY: 'should-not-persist',
           },
           __proto__: {
             CLAUDE_CONFIG_DIR: 'bad',
@@ -350,26 +347,25 @@ describe('app-config', () => {
       });
     });
 
-    it('drops agentCliEnv entries that collide with Object.prototype keys', async () => {
-      await writeAppConfig(dataDir, {
-        agentCliEnv: {
-          toString: {
-            CODEX_HOME: '~/.codex-prototype',
+    it('rejects agentCliEnv entries that collide with Object.prototype keys', async () => {
+      // `toString` and `hasOwnProperty` are not valid agent ids, so the
+      // strict write path should reject the entire payload rather than
+      // silently dropping the prototype-polluting entries.
+      await expect(
+        writeAppConfig(dataDir, {
+          agentCliEnv: {
+            toString: {
+              CODEX_HOME: '~/.codex-prototype',
+            },
+            hasOwnProperty: {
+              CLAUDE_CONFIG_DIR: '~/.claude-prototype',
+            },
+            claude: {
+              CLAUDE_CONFIG_DIR: '~/.claude-2',
+            },
           },
-          hasOwnProperty: {
-            CLAUDE_CONFIG_DIR: '~/.claude-prototype',
-          },
-          claude: {
-            CLAUDE_CONFIG_DIR: '~/.claude-2',
-          },
-        },
-      });
-
-      const cfg = await readAppConfig(dataDir);
-
-      expect(cfg.agentCliEnv).toEqual({
-        claude: { CLAUDE_CONFIG_DIR: '~/.claude-2' },
-      });
+        }),
+      ).rejects.toThrow(/unknown agent/);
     });
 
     it('rejects CODEBUDDY_INTERNET_ENVIRONMENT with invalid enum value on write', async () => {
@@ -521,6 +517,48 @@ describe('app-config', () => {
           },
         }),
       ).rejects.toThrow(/CODEBUDDY_INTERNET_ENVIRONMENT/);
+    });
+
+    it('rejects unknown agent id on write without clearing prior agentCliEnv', async () => {
+      // A typoed agent id like "codebudy" should throw on the strict write
+      // path, not silently drop and clear the existing agentCliEnv block.
+      await writeAppConfig(dataDir, {
+        agentCliEnv: {
+          codebuddy: { CODEBUDDY_API_KEY: 'cb-test-key' },
+        },
+      });
+      await expect(
+        writeAppConfig(dataDir, {
+          agentCliEnv: {
+            codebudy: { CODEBUDDY_API_KEY: 'x' },
+          },
+        }),
+      ).rejects.toThrow(/unknown agent "codebudy"/);
+      const cfg = await readAppConfig(dataDir);
+      expect(cfg.agentCliEnv).toEqual({
+        codebuddy: { CODEBUDDY_API_KEY: 'cb-test-key' },
+      });
+    });
+
+    it('rejects unknown env key on write without clearing prior agentCliEnv', async () => {
+      // A typoed env key like "CODEBUDDY_APIKYE" should throw on the strict
+      // write path, not silently drop and clear the existing agentCliEnv block.
+      await writeAppConfig(dataDir, {
+        agentCliEnv: {
+          codebuddy: { CODEBUDDY_API_KEY: 'cb-test-key' },
+        },
+      });
+      await expect(
+        writeAppConfig(dataDir, {
+          agentCliEnv: {
+            codebuddy: { CODEBUDDY_APIKYE: 'x' },
+          },
+        }),
+      ).rejects.toThrow(/CODEBUDDY_APIKYE.*unknown env key/);
+      const cfg = await readAppConfig(dataDir);
+      expect(cfg.agentCliEnv).toEqual({
+        codebuddy: { CODEBUDDY_API_KEY: 'cb-test-key' },
+      });
     });
 
     it('clears agentCliEnv when null or an empty object is sent', async () => {
