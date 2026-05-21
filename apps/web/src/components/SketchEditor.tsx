@@ -44,6 +44,10 @@ export function SketchEditor({
   const [showSaved, setShowSaved] = useState(false);
   const savedTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
+  useEffect(() => {
+    return () => clearTimeout(savedTimerRef.current);
+  }, []);
+
   // Text-tool modal. Replaces window.prompt() because Electron 28+
   // disables that API by default and silently returns null, making
   // the text tool a no-op in the desktop app. Same root cause as
