@@ -20,6 +20,7 @@
 @import '@fontsource-variable/inter';
 @import '@fontsource-variable/inter-tight';
 @import '@fontsource-variable/playfair-display';
+@import '@fontsource-variable/playfair-display/wght-italic.css';
 @import '@fontsource-variable/jetbrains-mono';
 
 :root {
