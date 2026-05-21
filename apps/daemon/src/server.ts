@@ -2832,6 +2832,25 @@ export function resolveChatRunArtifactQuietPeriodMs() {
   return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(raw)));
 }
 
+// Pure resolver for the chat run's *currently active* inactivity
+// ceiling. Used by both `noteAgentActivity` and `noteArtifactRegistered`
+// to pick between the pre-artifact watchdog and the shortened quiet
+// period. Extracted so the `OD_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS=0`
+// "disable the quiet period" semantics can be pinned with focused unit
+// tests (#1451 review: a 0-value override must not strand the pre-artifact
+// timer or stop further reschedules — it has to fall back to the
+// pre-artifact ceiling so subsequent activity keeps refreshing the timer).
+export function resolveActiveInactivityTimeoutMs(params: {
+  inactivityTimeoutMs: number;
+  artifactQuietPeriodMs: number;
+  artifactRegistered: boolean;
+}): number {
+  if (params.artifactRegistered && params.artifactQuietPeriodMs > 0) {
+    return params.artifactQuietPeriodMs;
+  }
+  return params.inactivityTimeoutMs;
+}
+
 // Pure final-status classifier for the chat run's child-close handler.
 // Extracted so the per-branch invariants can be unit-tested without
 // driving a full child process — in particular:
@@ -9757,7 +9776,11 @@ export async function startServer({
       scheduleForcedChildShutdown();
     };
     const activeInactivityTimeoutMs = () =>
-      artifactRegistered ? artifactQuietPeriodMs : inactivityTimeoutMs;
+      resolveActiveInactivityTimeoutMs({
+        inactivityTimeoutMs,
+        artifactQuietPeriodMs,
+        artifactRegistered,
+      });
     const noteAgentActivity = () => {
       const delay = activeInactivityTimeoutMs();
       if (delay <= 0) return;

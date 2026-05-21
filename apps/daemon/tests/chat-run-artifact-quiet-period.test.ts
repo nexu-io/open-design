@@ -22,6 +22,7 @@ import {
   __forTestChatRunHandles,
   __forTestEmitLiveArtifactEvent,
   classifyChatRunCloseStatus,
+  resolveActiveInactivityTimeoutMs,
   resolveChatRunArtifactQuietPeriodMs,
 } from '../src/server.js';
 
@@ -166,6 +167,68 @@ describe('live-artifact create → chat-run handle hook (#1451)', () => {
         { id: 'artifact-1', projectId: 'project-1' },
       ),
     ).not.toThrow();
+  });
+});
+
+describe('resolveActiveInactivityTimeoutMs (#1451 quiet-period switch)', () => {
+  const TEN_MIN = 10 * 60 * 1000;
+  const ONE_MIN = 60 * 1000;
+
+  it('returns the pre-artifact ceiling when no artifact has been registered yet', () => {
+    expect(
+      resolveActiveInactivityTimeoutMs({
+        inactivityTimeoutMs: TEN_MIN,
+        artifactQuietPeriodMs: ONE_MIN,
+        artifactRegistered: false,
+      }),
+    ).toBe(TEN_MIN);
+  });
+
+  it('switches to the quiet ceiling once an artifact has been registered', () => {
+    expect(
+      resolveActiveInactivityTimeoutMs({
+        inactivityTimeoutMs: TEN_MIN,
+        artifactQuietPeriodMs: ONE_MIN,
+        artifactRegistered: true,
+      }),
+    ).toBe(ONE_MIN);
+  });
+
+  it('treats artifactQuietPeriodMs=0 as "disable the quiet period" — keeps the pre-artifact ceiling after registration', () => {
+    // The bug from the #2585 review: when an operator sets
+    // OD_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS=0, the prior implementation
+    // dropped the active ceiling to 0 once the artifact was registered,
+    // which made noteAgentActivity() early-return without rescheduling,
+    // stranding the pre-artifact timer. Falling back to the pre-artifact
+    // ceiling instead means subsequent activity keeps the timer fresh
+    // and the existing pre-artifact stalled-error path still works.
+    expect(
+      resolveActiveInactivityTimeoutMs({
+        inactivityTimeoutMs: TEN_MIN,
+        artifactQuietPeriodMs: 0,
+        artifactRegistered: true,
+      }),
+    ).toBe(TEN_MIN);
+  });
+
+  it('keeps a 0 pre-artifact ceiling at 0 when no artifact is registered (watchdog fully disabled)', () => {
+    expect(
+      resolveActiveInactivityTimeoutMs({
+        inactivityTimeoutMs: 0,
+        artifactQuietPeriodMs: ONE_MIN,
+        artifactRegistered: false,
+      }),
+    ).toBe(0);
+  });
+
+  it('honors a 0 pre-artifact ceiling after artifact registration when quiet is also 0 (both disabled)', () => {
+    expect(
+      resolveActiveInactivityTimeoutMs({
+        inactivityTimeoutMs: 0,
+        artifactQuietPeriodMs: 0,
+        artifactRegistered: true,
+      }),
+    ).toBe(0);
   });
 });
 
