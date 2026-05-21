@@ -1,13 +1,10 @@
-import { execFile } from 'node:child_process';
 import { lstat, readFile, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { promisify } from 'node:util';
 
+import { runGit } from '../git/exec.js';
 import { listFiles, projectDir, readProjectFile, validateProjectPath } from '../projects.js';
 import type { BoundedJsonObject, BoundedJsonValue, LiveArtifact, LiveArtifactRefreshSourceMetadata, LiveArtifactSource } from './schema.js';
 import { validateBoundedJsonObject } from './schema.js';
-
-const execFileAsync = promisify(execFile);
 
 export const DEFAULT_LIVE_ARTIFACT_SOURCE_TIMEOUT_MS = 30_000;
 export const DEFAULT_LIVE_ARTIFACT_TOTAL_TIMEOUT_MS = 120_000;
@@ -609,17 +606,6 @@ async function executeProjectFilesReadJson(options: ExecuteLocalDaemonRefreshSou
 
 function compactExecOutput(value: string): string[] {
   return value.split('\n').map((line) => line.trimEnd()).filter(Boolean).slice(0, 100);
-}
-
-async function runGit(projectPath: string, args: string[], signal: AbortSignal | undefined): Promise<string> {
-  try {
-    const result = await execFileAsync('git', args, { cwd: projectPath, signal, timeout: 10_000, maxBuffer: 128 * 1024 });
-    return result.stdout.toString();
-  } catch (error) {
-    const maybeError = error as { stdout?: string | Buffer; stderr?: string | Buffer; message?: string; code?: unknown };
-    if (maybeError.code === 128) return '';
-    throw new Error(maybeError.stderr?.toString().trim() || maybeError.message || 'git command failed');
-  }
 }
 
 async function executeGitSummary(options: ExecuteLocalDaemonRefreshSourceOptions): Promise<BoundedJsonObject> {
