@@ -143,21 +143,21 @@ function buildScheduleSummaryNode(schedule: RoutineSchedule): ReactNode {
   const parts = decomposeSchedule(schedule);
   if (parts.kind === 'hourly') {
     return (
-      <>
+      <span className="automation-pill__segments">
         <span className="automation-pill__freq">Hourly</span>
         <span className="automation-pill__sep">·</span>
         <span className="automation-pill__time">:{parts.minute}</span>
-      </>
+      </span>
     );
   }
   return (
-    <>
+    <span className="automation-pill__segments">
       <span className="automation-pill__freq">{parts.freq}</span>
       <span className="automation-pill__sep">·</span>
       <span className="automation-pill__time">{parts.time}</span>
       <span className="automation-pill__sep">·</span>
       <span className="automation-pill__tz">{parts.tz}</span>
-    </>
+    </span>
   );
 }
 

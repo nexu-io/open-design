@@ -109,8 +109,7 @@
   gap: 6px;
   height: 34px;
   padding: 0 13px;
-  border: 1px solid
-    color-mix(in srgb, var(--accent, #79a8ff) 48%, var(--border));
+  border: 1px solid color-mix(in srgb, var(--accent, #79a8ff) 48%, var(--border));
   border-radius: 8px;
   background: color-mix(in srgb, var(--accent, #79a8ff) 16%, var(--bg-panel));
   color: var(--text-strong);
@@ -211,8 +210,7 @@
   width: 100%;
   min-height: 84px;
   padding: 18px 20px;
-  border: 1px dashed
-    color-mix(in srgb, var(--border-strong, var(--border)) 72%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--border-strong, var(--border)) 72%, transparent);
   border-radius: 12px;
   background: color-mix(in srgb, var(--bg-panel) 70%, transparent);
   color: var(--text);
@@ -226,11 +224,7 @@
 
 .automation-empty:hover {
   border-style: solid;
-  border-color: color-mix(
-    in srgb,
-    var(--accent, #79a8ff) 38%,
-    var(--border-strong, var(--border))
-  );
+  border-color: color-mix(in srgb, var(--accent, #79a8ff) 38%, var(--border-strong, var(--border)));
   background: var(--bg-panel);
   box-shadow: var(--shadow-xs);
 }
@@ -647,8 +641,7 @@
 .automation-ingest-field textarea:focus {
   outline: none;
   border-color: color-mix(in srgb, var(--accent, #79a8ff) 44%, var(--border));
-  box-shadow: 0 0 0 3px
-    color-mix(in srgb, var(--accent, #79a8ff) 14%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #79a8ff) 14%, transparent);
 }
 
 .automation-ingest-field--body {
@@ -752,7 +745,8 @@
   font-weight: 600;
   letter-spacing: -0.005em;
   cursor: pointer;
-  transition: color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+  transition: 
+    color 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 .automations-template-tab:hover {
@@ -795,8 +789,7 @@
   gap: 12px;
   align-items: center;
   padding: 14px 16px;
-  border: 1px dashed
-    color-mix(in srgb, var(--border-strong, var(--border)) 70%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--border-strong, var(--border)) 70%, transparent);
   border-radius: 10px;
   background: color-mix(in srgb, var(--bg-panel) 76%, transparent);
 }
@@ -949,22 +942,14 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: color-mix(
-    in srgb,
-    var(--scrim, rgba(0, 0, 0, 0.45)) 92%,
-    transparent
-  );
+  background: color-mix(in srgb, var(--scrim, rgba(0, 0, 0, 0.45)) 92%, transparent);
   backdrop-filter: blur(3px);
   animation: automation-modal-fade-in 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 @keyframes automation-modal-fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .automation-modal {
@@ -1109,8 +1094,7 @@
 .automation-modal__prompt:focus {
   outline: none;
   border-color: color-mix(in srgb, var(--accent, #79a8ff) 44%, var(--border));
-  box-shadow: 0 0 0 3px
-    color-mix(in srgb, var(--accent, #79a8ff) 14%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, #79a8ff) 14%, transparent);
 }
 
 .automation-modal__prompt-wrap.is-mentioning .automation-modal__prompt {
@@ -1360,6 +1344,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
+}
+
+.automation-pill__segments {
   display: inline-flex;
   align-items: center;
   gap: 5px;
