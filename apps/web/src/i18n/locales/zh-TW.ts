@@ -2288,6 +2288,7 @@ export const zhTW: Dict = {
   'pluginsHome.publishGithubAria': '將 {title} 發布為 GitHub 儲存庫',
   'pluginsHome.publishGithubTitle': '將外掛發布為 GitHub 儲存庫',
   'pluginsHome.contributeAria': '將 {title} 貢獻至 Open Design',
+  'pluginsHome.contributeTitle': '透過 pull request 將外掛貢獻至 Open Design',
   'pluginsHome.starting': '啟動中…',
   'pluginsHome.publish': '發布',
   'pluginsHome.contribute': '貢獻',

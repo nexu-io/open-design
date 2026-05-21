@@ -2779,6 +2779,7 @@ export interface Dict {
   'pluginsHome.publishGithubAria': string;
   'pluginsHome.publishGithubTitle': string;
   'pluginsHome.contributeAria': string;
+  'pluginsHome.contributeTitle': string;
   'pluginsHome.starting': string;
   'pluginsHome.publish': string;
   'pluginsHome.contribute': string;

@@ -1968,6 +1968,7 @@ export const ar: Dict = {
   'pluginsHome.publishGithubAria': 'Publish {title} as a GitHub repository',
   'pluginsHome.publishGithubTitle': 'Publish plugin as a GitHub repository',
   'pluginsHome.contributeAria': 'Contribute {title} to Open Design',
+  'pluginsHome.contributeTitle': 'Contribute plugin to Open Design with a pull request',
   'pluginsHome.starting': 'Starting…',
   'pluginsHome.publish': 'Publish',
   'pluginsHome.contribute': 'Contribute',

@@ -32,7 +32,8 @@ import type { IconName } from '../Icon';
 // independently of the default-binding mapping.
 export type ChipScenarioPluginId =
   | DefaultScenarioPluginId
-  | 'example-hyperframes';
+  | 'example-hyperframes'
+  | 'example-live-artifact';
 
 export type ChipAction =
   | {
@@ -96,9 +97,11 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   {
     id: 'live-artifact',
     label: 'Live artifact',
+    labelKey: 'homeHero.chip.liveArtifact',
     icon: 'refresh',
     group: 'create',
     hint: 'Build a refreshable artifact backed by connector or local data.',
+    hintKey: 'homeHero.chip.liveArtifactHint',
     action: {
       kind: 'apply-scenario',
       pluginId: 'example-live-artifact',

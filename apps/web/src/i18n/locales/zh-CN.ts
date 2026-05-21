@@ -2731,6 +2731,7 @@ export const zhCN: Dict = {
   'pluginsHome.publishGithubAria': '将 {title} 发布为 GitHub 仓库',
   'pluginsHome.publishGithubTitle': '将插件发布为 GitHub 仓库',
   'pluginsHome.contributeAria': '将 {title} 贡献给 Open Design',
+  'pluginsHome.contributeTitle': '通过拉取请求将插件贡献给 Open Design',
   'pluginsHome.starting': '启动中…',
   'pluginsHome.publish': '发布',
   'pluginsHome.contribute': '贡献',
