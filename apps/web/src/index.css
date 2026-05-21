@@ -2050,6 +2050,17 @@ a.avatar-item:visited {
   color: var(--red);
   padding: 10px 12px;
   border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.chat-error-text { min-width: 0; }
+.chat-error-retry {
+  flex: 0 0 auto;
+  border-color: var(--red-border);
+  color: var(--red);
+  padding: 4px 10px;
 }
 
 /* -------- Composer -------------------------------------------------- */
