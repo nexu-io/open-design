@@ -222,11 +222,16 @@ Never inline a secret with `pkgs.writeText` or `home.file`.
 
 `nix/pnpm-deps.nix` is the single source of truth for the vendored pnpm
 store hash used by both `nix/package-daemon.nix` and
-`nix/package-web.nix`. If `pnpm-lock.yaml` changes, temporarily switch the
-`hash = pnpmDepsHash;` line in one of those package files to
-`hash = lib.fakeHash;`, run the relevant `nix build` or
-`nix flake check`, then copy the expected hash back into
-`nix/pnpm-deps.nix`.
+`nix/package-web.nix`. If `pnpm-lock.yaml` changes, run:
+
+```bash
+pnpm nix:update-hash
+```
+
+The script temporarily swaps one consumer to `lib.fakeHash`, runs
+`nix build .#web --print-build-logs`, extracts the expected hash from the
+failure output, writes it back into `nix/pnpm-deps.nix`, and restores the
+consumer file.
 
 ## CI
 
