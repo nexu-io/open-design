@@ -35,6 +35,7 @@ const SIDECAR_MESSAGE_REGISTER_DESKTOP_AUTH: &str = "register-desktop-auth";
 const SIDECAR_MESSAGE_SCREENSHOT: &str = "screenshot";
 const SIDECAR_MESSAGE_SHUTDOWN: &str = "shutdown";
 const SIDECAR_MESSAGE_STATUS: &str = "status";
+const SIDECAR_MESSAGE_UPDATE: &str = "update";
 const STAMP_APP_FLAG: &str = "--od-stamp-app";
 const STAMP_IPC_FLAG: &str = "--od-stamp-ipc";
 const STAMP_MODE_FLAG: &str = "--od-stamp-mode";
@@ -155,8 +156,15 @@ fn now_rfc3339() -> String {
 }
 
 fn read_flag(args: &[String], flag: &str) -> Option<String> {
-    args.windows(2)
-        .find_map(|pair| (pair[0] == flag).then(|| pair[1].clone()))
+    let inline_prefix = format!("{flag}=");
+    args.iter().enumerate().find_map(|(index, argument)| {
+        if argument == flag {
+            return args.get(index + 1).cloned();
+        }
+        argument
+            .strip_prefix(&inline_prefix)
+            .map(|value| value.to_string())
+    })
 }
 
 fn read_stamp() -> Result<RuntimeStamp, String> {
@@ -994,6 +1002,7 @@ async fn handle_ipc_message(
         SIDECAR_MESSAGE_EXPORT_PDF => {
             Err("Tauri native PDF export is not implemented yet".to_string())
         }
+        SIDECAR_MESSAGE_UPDATE => Err("Tauri native update is not implemented yet".to_string()),
         SIDECAR_MESSAGE_SHUTDOWN => {
             let handle = window.app_handle().clone();
             let shutdown_state = state.clone();

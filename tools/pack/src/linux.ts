@@ -36,7 +36,6 @@ const execFileAsync = promisify(execFile);
 const PRODUCT_NAME = "Open Design";
 const APP_IMAGE_PRODUCT_NAME = "Open-Design";
 const DESKTOP_LOG_ECHO_ENV = "OD_DESKTOP_LOG_ECHO";
-const DESKTOP_MARKER_FRESH_MS = 60_000;
 // The containerized build sets this to the standalone pnpm binary fetched by
 // buildDockerArgs; runProductionInstall reads it to avoid invoking `npm` inside
 // `electronuserland/builder:base`, which strips npm/npx/corepack.
@@ -960,22 +959,18 @@ function linuxDesktopStamp(config: ToolPackConfig): SidecarStamp {
   };
 }
 
-function isFreshDesktopMarker(marker: DesktopRootIdentityMarker, now = Date.now()): boolean {
-  const updatedAtMs = Date.parse(marker.updatedAt);
-  return Number.isFinite(updatedAtMs) && updatedAtMs <= now + 5_000 && now - updatedAtMs <= DESKTOP_MARKER_FRESH_MS;
-}
-
-function isCurrentDesktopMarkerForConfig(
-  config: ToolPackConfig,
-  marker: DesktopRootIdentityMarker,
-  markerPath: string,
-): boolean {
+function isCurrentDesktopMarkerForConfig(config: ToolPackConfig, marker: DesktopRootIdentityMarker): boolean {
+  const expectedIpc = resolveAppIpcPath({
+    app: APP_KEYS.DESKTOP,
+    contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+    namespace: config.namespace,
+  });
   return (
-    markerPath === desktopIdentityPath(config) &&
-    isFreshDesktopMarker(marker) &&
+    marker.namespaceRoot === config.roots.runtime.namespaceRoot &&
     marker.stamp.app === APP_KEYS.DESKTOP &&
     marker.stamp.mode === SIDECAR_MODES.RUNTIME &&
     marker.stamp.namespace === config.namespace &&
+    marker.stamp.ipc === expectedIpc &&
     (marker.stamp.source === SIDECAR_SOURCES.TOOLS_PACK ||
       marker.stamp.source === SIDECAR_SOURCES.PACKAGED)
   );
@@ -1125,7 +1120,7 @@ export async function stopPackedLinuxApp(config: ToolPackConfig): Promise<LinuxS
   }
 
   if (validation.status === "invalid") {
-    if (isCurrentDesktopMarkerForConfig(config, marker, fallback.markerPath)) {
+    if (isCurrentDesktopMarkerForConfig(config, marker)) {
       const treePids = collectProcessTreePids(snapshots, [marker.pid]);
       const result = await stopProcesses(treePids);
       if (result.remainingPids.length === 0) {

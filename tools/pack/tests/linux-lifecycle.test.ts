@@ -228,7 +228,6 @@ describe("stopPackedLinuxApp", () => {
     try {
       const config = makeConfig(root);
       const markerPath = join(config.roots.runtime.namespaceRoot, "runtime", "desktop-root.json");
-      const markerTimestamp = new Date().toISOString();
       const stamp = {
         app: APP_KEYS.DESKTOP,
         ipc: "/tmp/open-design/ipc/linux-tauri/desktop.sock",
@@ -247,8 +246,8 @@ describe("stopPackedLinuxApp", () => {
           pid: 1234,
           ppid: 1,
           stamp,
-          startedAt: markerTimestamp,
-          updatedAt: markerTimestamp,
+          startedAt: "2026-05-20T00:00:00.000Z",
+          updatedAt: "2026-05-20T00:00:00.000Z",
           version: 1,
         }, null, 2)}\n`,
         "utf8",
@@ -281,53 +280,6 @@ describe("stopPackedLinuxApp", () => {
           OPEN_DESIGN_SIDECAR_CONTRACT,
         );
       }
-    } finally {
-      await rm(root, { force: true, recursive: true });
-    }
-  });
-
-  it("keeps stale invalid markers unmanaged", async () => {
-    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-linux-lifecycle-"));
-    try {
-      const config = makeConfig(root);
-      const markerPath = join(config.roots.runtime.namespaceRoot, "runtime", "desktop-root.json");
-      const stamp = {
-        app: APP_KEYS.DESKTOP,
-        ipc: "/tmp/open-design/ipc/linux-tauri/desktop.sock",
-        mode: SIDECAR_MODES.RUNTIME,
-        namespace: config.namespace,
-        source: SIDECAR_SOURCES.PACKAGED,
-      };
-      await mkdir(join(markerPath, ".."), { recursive: true });
-      await writeFile(
-        markerPath,
-        `${JSON.stringify({
-          appPath: "/tmp/.mount_open-design/usr/lib/open-design",
-          executablePath: "/tmp/.mount_open-design-missing/usr/bin/open-design-desktop-tauri",
-          logPath: join(config.roots.runtime.namespaceRoot, "logs", APP_KEYS.DESKTOP, "latest.log"),
-          namespaceRoot: config.roots.runtime.namespaceRoot,
-          pid: 1234,
-          ppid: 1,
-          stamp,
-          startedAt: "2026-05-20T00:00:00.000Z",
-          updatedAt: "2026-05-20T00:00:00.000Z",
-          version: 1,
-        }, null, 2)}\n`,
-        "utf8",
-      );
-      vi.mocked(platform.listProcessSnapshots).mockResolvedValueOnce([
-        {
-          command: "/tmp/.mount_open-design/usr/bin/open-design-desktop-tauri --fake-stamp",
-          pid: 1234,
-          ppid: 1,
-        },
-      ]);
-
-      const result = await stopPackedLinuxApp(config);
-
-      expect(result.status).toBe("unmanaged");
-      expect(result.remainingPids).toEqual([1234]);
-      expect(platform.stopProcesses).not.toHaveBeenCalled();
     } finally {
       await rm(root, { force: true, recursive: true });
     }

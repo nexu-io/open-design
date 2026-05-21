@@ -43,6 +43,12 @@ describe("Tauri sidecar contract constants", () => {
     }
   });
 
+  it("accepts inline and split sidecar stamp flags", () => {
+    expect(rustSource).toContain('let inline_prefix = format!("{flag}=");');
+    expect(rustSource).toContain("argument == flag");
+    expect(rustSource).toContain("strip_prefix(&inline_prefix)");
+  });
+
   it("keeps JSON IPC response envelopes aligned with sidecar runtime framing", () => {
     expect(rustSource).toContain('json!({ "ok": true, "result": result })');
     expect(rustSource).toContain('json!({ "ok": false, "error": { "message": message.into() } })');
