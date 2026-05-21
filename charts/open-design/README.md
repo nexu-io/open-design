@@ -35,6 +35,8 @@ nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
 nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
 ```
 
+**Path Constraints**: If you configure a non-root ingress path (e.g., `/app`), the chart enforces a strict guardrail: you **must** explicitly set `config.publicBaseUrl` to include this sub-path. Otherwise, the deployment will cleanly fail during rendering.
+
 #### Authentication Proxy
 An authentication proxy (NGINX) is introduced to front the application. This proxy runs as a mandatory sidecar container alongside the main application. The Kubernetes Service routes traffic to the proxy, which handles authentication for the API and health checks, proxying valid requests to the application.
 
@@ -66,7 +68,7 @@ This chart adheres to strict security defaults:
 | `config.nodeOptions`   | V8 engine memory optimizations                             | `--max-old-space-size=192`|
 | `config.webPort`       | Web server listening port                                  | `7456`                  |
 | `config.bindHost`      | Host to bind the web server to                             | `"127.0.0.1"`           |
-| `config.apiToken`      | API authentication token (auto-generated and persisted if empty) | `""`                    |
+| `config.apiToken`      | API authentication token (must be changed from default) | `"secure-default-token-change-me"` |
 
 ### Auth Proxy Parameters
 
