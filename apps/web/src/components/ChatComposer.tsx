@@ -209,8 +209,30 @@ function ByokMediaModelSelect({
   onChange: (model: string) => void;
   models: MediaModel[];
 }) {
+  // A custom button-list dropdown rather than a native <select>. A native
+  // select nested in an absolutely-positioned popover misbehaves in Electron:
+  // clicking an option in the native OS dropdown can fire the popover's
+  // outside-click handler, unmounting the select before its change commits —
+  // so the user's pick silently never reached React state. Plain buttons fire
+  // a normal React onClick that always commits.
+  const [open, setOpen] = useState(false);
   const groups = groupByProvider(models);
   const defaultModel = models.find((m) => m.default) ?? models[0];
+  const selected = models.find((m) => m.id === value);
+  const displayLabel = value
+    ? selected?.label ?? value
+    : `${defaultModel?.label ?? 'default'} (default)`;
+  const itemStyle = {
+    display: 'block',
+    width: '100%',
+    textAlign: 'left' as const,
+    background: 'transparent',
+    border: 'none',
+    padding: '4px 10px',
+    color: 'inherit',
+    fontSize: 12,
+    cursor: 'pointer',
+  };
   return (
     <span
       style={{
@@ -221,41 +243,98 @@ function ByokMediaModelSelect({
         width: '100%',
       }}
     >
-      <label
-        htmlFor={testid}
-        style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}
-      >
+      <label style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
         <Icon name={iconName} size={13} />
         {label}
       </label>
-      <select
-        id={testid}
-        data-testid={testid}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        style={{
-          background: 'var(--bg-panel, transparent)',
-          border: '1px solid var(--border, #444)',
-          borderRadius: 4,
-          padding: '2px 6px',
-          color: 'inherit',
-          fontSize: 12,
-          maxWidth: 200,
-        }}
-      >
-        <option value="">
-          {(defaultModel?.label ?? 'default') + ' (default)'}
-        </option>
-        {groups.map((group) => (
-          <optgroup key={group.provider.id} label={group.provider.label}>
-            {group.models.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.label}
-              </option>
+      <span style={{ position: 'relative' }}>
+        <button
+          type="button"
+          data-testid={testid}
+          onClick={() => setOpen((v) => !v)}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            maxWidth: 200,
+            background: 'var(--bg-panel, transparent)',
+            border: '1px solid var(--border, #444)',
+            borderRadius: 4,
+            padding: '2px 6px',
+            color: 'inherit',
+            fontSize: 12,
+            cursor: 'pointer',
+          }}
+        >
+          <span
+            style={{
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {displayLabel}
+          </span>
+          <Icon name="chevron-down" size={12} />
+        </button>
+        {open ? (
+          <div
+            role="listbox"
+            style={{
+              position: 'absolute',
+              right: 0,
+              top: '100%',
+              marginTop: 4,
+              minWidth: 200,
+              maxHeight: 260,
+              overflowY: 'auto',
+              zIndex: 40,
+              background: 'var(--bg-panel, #1e1e1e)',
+              border: '1px solid var(--border, #444)',
+              borderRadius: 6,
+              boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+              padding: '4px 0',
+            }}
+          >
+            <button
+              type="button"
+              style={{ ...itemStyle, fontWeight: value ? 'normal' : 'bold' }}
+              onClick={() => {
+                onChange('');
+                setOpen(false);
+              }}
+            >
+              {(defaultModel?.label ?? 'default') + ' (default)'}
+            </button>
+            {groups.map((group) => (
+              <div key={group.provider.id}>
+                <div
+                  style={{
+                    padding: '4px 10px 2px',
+                    fontSize: 11,
+                    opacity: 0.6,
+                  }}
+                >
+                  {group.provider.label}
+                </div>
+                {group.models.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    style={{ ...itemStyle, fontWeight: m.id === value ? 'bold' : 'normal' }}
+                    onClick={() => {
+                      onChange(m.id);
+                      setOpen(false);
+                    }}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
             ))}
-          </optgroup>
-        ))}
-      </select>
+          </div>
+        ) : null}
+      </span>
     </span>
   );
 }
