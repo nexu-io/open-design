@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Post — Pattern Preview</title>
+    <style>
+      :root {
+        --bg: #fafaf9;
+        --card: #ffffff;
+        --border: #e5e7eb;
+        --text: #18181b;
+        --muted: #71717a;
+        --accent: #18181b;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0; padding: 0; min-height: 100%;
+        font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+        background: var(--bg); color: var(--text);
+        line-height: 1.6;
+      }
+      main {
+        max-width: 720px; margin: 0 auto;
+        padding: 32px 24px 80px;
+      }
+      .back {
+        display: inline-flex; align-items: center; gap: 6px;
+        text-decoration: none; color: var(--muted);
+        font-size: 13px; margin-bottom: 24px;
+      }
+      .back::before { content: "←"; }
+      .title {
+        font-size: 32px; font-weight: 700;
+        margin: 0 0 16px; line-height: 1.2;
+      }
+      .author-row {
+        display: flex; align-items: center; gap: 12px;
+        margin-bottom: 24px;
+      }
+      .avatar {
+        width: 40px; height: 40px; border-radius: 50%;
+        background: #d4d4d8; flex-shrink: 0;
+      }
+      .author-name {
+        font-size: 14px; font-weight: 500;
+        color: var(--text); text-decoration: none;
+      }
+      .meta { font-size: 12px; color: var(--muted); }
+      .tags { display: flex; gap: 6px; margin-bottom: 28px; flex-wrap: wrap; }
+      .tag {
+        font-size: 12px; color: var(--muted);
+        padding: 3px 10px;
+        border: 1px solid var(--border); border-radius: 999px;
+      }
+      article p { margin: 0 0 16px; font-size: 16px; }
+      article h2 {
+        font-size: 20px; margin: 32px 0 12px;
+      }
+      article blockquote {
+        margin: 16px 0; padding: 8px 16px;
+        border-left: 3px solid var(--border);
+        color: var(--muted); font-style: italic;
+      }
+      .comments {
+        margin-top: 48px;
+        border-top: 1px solid var(--border);
+        padding-top: 28px;
+      }
+      .comments h2 {
+        font-size: 18px; margin: 0 0 16px;
+      }
+      .composer {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 12px;
+        margin-bottom: 20px;
+      }
+      .composer textarea {
+        width: 100%; min-height: 72px;
+        border: 0; resize: vertical;
+        font: inherit; color: inherit; background: transparent;
+      }
+      .composer-actions {
+        display: flex; justify-content: flex-end; margin-top: 8px;
+      }
+      .btn-primary {
+        background: var(--accent); color: #fff; border: 0;
+        padding: 7px 14px; border-radius: 8px;
+        font-size: 13px; font-weight: 600; cursor: pointer;
+      }
+      .comment {
+        display: flex; gap: 12px;
+        padding: 14px 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .comment:last-child { border-bottom: 0; }
+      .comment .body { flex: 1; font-size: 14px; }
+      .comment .head {
+        display: flex; align-items: baseline; gap: 8px;
+        margin-bottom: 4px;
+      }
+      .comment .head .name { font-weight: 500; }
+      .comment .head .when { font-size: 12px; color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <a href="#" class="back">Back to board</a>
+      <article>
+        <h1 class="title">Pattern library wishlist</h1>
+        <div class="author-row">
+          <span class="avatar" role="img" aria-label="Priya"></span>
+          <div>
+            <a href="#" class="author-name">Priya</a>
+            <div class="meta">Posted 3 days ago · 6 min read</div>
+          </div>
+        </div>
+        <div class="tags">
+          <span class="tag">design-system</span>
+          <span class="tag">site-builder</span>
+          <span class="tag">discussion</span>
+        </div>
+        <p>
+          We have a working board list, a gallery grid, and a passable
+          signup flow. The next bottleneck is the diagram surface that
+          composes these page patterns into a multi-page site.
+        </p>
+        <p>
+          To get there, every pattern needs typed I/O — what kind of
+          data it expects in, what kind of navigation it offers out.
+          The first cut of that metadata landed last week.
+        </p>
+        <h2>What's next</h2>
+        <p>
+          A few items on the wishlist before the diagram surface
+          unblocks:
+        </p>
+        <blockquote>
+          Patterns should self-describe enough that the agent can
+          decide where each new page belongs without prompting.
+        </blockquote>
+        <p>
+          The eight seeds we just added cover roughly 80% of the page
+          archetypes most sites need. The remaining 20% will follow
+          once we have real usage data.
+        </p>
+      </article>
+      <section class="comments">
+        <h2>Comments (3)</h2>
+        <div class="composer">
+          <textarea placeholder="Add a comment..."></textarea>
+          <div class="composer-actions">
+            <button class="btn-primary" type="button">Post comment</button>
+          </div>
+        </div>
+        <div class="comment">
+          <span class="avatar" role="img" aria-label="Alice"></span>
+          <div class="body">
+            <div class="head">
+              <span class="name">Alice</span>
+              <span class="when">2 hours ago</span>
+            </div>
+            <div>Strong agree on typed I/O — it's what makes the diagram surface tractable.</div>
+          </div>
+        </div>
+        <div class="comment">
+          <span class="avatar" role="img" aria-label="Marcus"></span>
+          <div class="body">
+            <div class="head">
+              <span class="name">Marcus</span>
+              <span class="when">Yesterday</span>
+            </div>
+            <div>Should we treat auth-guarded outputs as a separate kind, or fold them into action?</div>
+          </div>
+        </div>
+        <div class="comment">
+          <span class="avatar" role="img" aria-label="Lee"></span>
+          <div class="body">
+            <div class="head">
+              <span class="name">Lee</span>
+              <span class="when">12 hours ago</span>
+            </div>
+            <div>Folded into action with an optional target_page_type — the diagram can still draw the edge.</div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
