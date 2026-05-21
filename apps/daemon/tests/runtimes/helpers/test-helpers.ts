@@ -90,8 +90,11 @@ export const qwen = requireAgent('qwen');
 export const opencode = requireAgent('opencode');
 export const grokBuild = requireAgent('grok-build');
 export const aider = requireAgent('aider');
+<<<<<<< HEAD
 export const antigravity = requireAgent('antigravity');
+=======
 export const codebuddy = requireAgent('codebuddy');
+>>>>>>> da7bb0863 (fix(daemon): gate --add-dir on positive probe for CodeBuddy)
 export const deepseekMaxPromptArgBytes = (() => {
   assert.ok(
     deepseek.maxPromptArgBytes !== undefined,

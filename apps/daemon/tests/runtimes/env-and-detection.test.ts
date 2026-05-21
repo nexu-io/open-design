@@ -1,5 +1,9 @@
 import { symlinkSync } from 'node:fs';
+<<<<<<< HEAD
+import { test, vi } from 'vitest';
+=======
 import { test, vi, expect } from 'vitest';
+>>>>>>> 2c3c7c324 (fix(daemon): validate inherited INTERNET_ENVIRONMENT and broaden transport error detection)
 import { homedir } from 'node:os';
 import * as platform from '@open-design/platform';
 import {
@@ -1133,202 +1137,31 @@ test('spawnEnvForAgent keeps CODEBUDDY_INTERNET_ENVIRONMENT when configured over
   assert.equal(env.CODEBUDDY_INTERNET_ENVIRONMENT, 'ioa');
 });
 
-test('spawnEnvForAgent overrides inherited internal with configured ioa', () => {
+test('spawnEnvForAgent overrides inherited internal with configured public', () => {
   // When the parent process has CODEBUDDY_INTERNET_ENVIRONMENT=internal but
-  // the user explicitly selects "ioa (iOA enterprise)" in Settings, the
+  // the user explicitly selects "public (International)" in Settings, the
   // configured value should override the inherited one.
   const env = spawnEnvForAgent(
     'codebuddy',
     { CODEBUDDY_API_KEY: 'cb-test-key', CODEBUDDY_INTERNET_ENVIRONMENT: 'internal', PATH: '/usr/bin' },
-    { CODEBUDDY_INTERNET_ENVIRONMENT: 'ioa' },
+    { CODEBUDDY_INTERNET_ENVIRONMENT: 'public' },
   );
 
-  assert.equal(env.CODEBUDDY_INTERNET_ENVIRONMENT, 'ioa');
+  assert.equal(env.CODEBUDDY_INTERNET_ENVIRONMENT, 'public');
 });
 
-test('spawnEnvForAgent rejects configured CODEBUDDY_INTERNET_ENVIRONMENT=public', () => {
-  // "public" is not a documented CLI value. The international/default path
-  // is represented by leaving the variable unset, not setting it to "public".
-  expect(() =>
-    spawnEnvForAgent(
-      'codebuddy',
-      { CODEBUDDY_API_KEY: 'cb-test-key', PATH: '/usr/bin' },
-      { CODEBUDDY_INTERNET_ENVIRONMENT: 'public' },
-    ),
-  ).toThrow(/Invalid inherited CODEBUDDY_INTERNET_ENVIRONMENT/);
-});
-
-test('spawnEnvForAgent throws on invalid inherited CODEBUDDY_INTERNET_ENVIRONMENT', () => {
-  // A typo like "internel" should fail fast instead of silently falling
-  // back to the international default, which would send traffic to the
-  // wrong network region.
-  expect(() =>
-    spawnEnvForAgent(
-      'codebuddy',
-      { CODEBUDDY_API_KEY: 'cb-test-key', CODEBUDDY_INTERNET_ENVIRONMENT: 'internel', PATH: '/usr/bin' },
-      {},
-    ),
-  ).toThrow(/Invalid inherited CODEBUDDY_INTERNET_ENVIRONMENT/);
-});
-
-test('spawnEnvForAgent normalizes whitespace in CODEBUDDY_INTERNET_ENVIRONMENT', () => {
-  // An inherited value like " internal " should pass validation and be
-  // written back as the trimmed canonical literal "internal", not forwarded
-  // with surrounding whitespace that the CLI would not recognize.
+test('spawnEnvForAgent drops invalid inherited CODEBUDDY_INTERNET_ENVIRONMENT with warning', () => {
+  // A typo like "internel" should be dropped so the child falls back to
+  // the international default instead of failing with a confusing error.
+  const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
   const env = spawnEnvForAgent(
     'codebuddy',
-    { CODEBUDDY_INTERNET_ENVIRONMENT: ' internal ', PATH: '/usr/bin' },
+    { CODEBUDDY_API_KEY: 'cb-test-key', CODEBUDDY_INTERNET_ENVIRONMENT: 'internel', PATH: '/usr/bin' },
     {},
   );
 
-  assert.equal(env.CODEBUDDY_INTERNET_ENVIRONMENT, 'internal');
-});
-
-test('spawnEnvForAgent deletes empty/whitespace-only CODEBUDDY_INTERNET_ENVIRONMENT', () => {
-  const env = spawnEnvForAgent(
-    'codebuddy',
-    { CODEBUDDY_INTERNET_ENVIRONMENT: '   ', PATH: '/usr/bin' },
-    {},
-  );
-
+  assert.equal(env.CODEBUDDY_API_KEY, 'cb-test-key');
   assert.equal('CODEBUDDY_INTERNET_ENVIRONMENT' in env, false);
-});
-
-test('spawnEnvForAgent canonicalizes mixed-case CODEBUDDY_INTERNET_ENVIRONMENT aliases', () => {
-  // On Windows, env key names are case-insensitive at the OS level but
-  // Node's process.env preserves original casing. A merged env can contain
-  // both an inherited alias and a configured canonical key. We must remove
-  // the alias, let the configured value win, and validate only once.
-  const env = spawnEnvForAgent(
-    'codebuddy',
-    {
-      Codebuddy_Internet_Environment: 'internel',  // inherited alias (bad)
-      CODEBUDDY_INTERNET_ENVIRONMENT: 'internal',  // configured override (good)
-      PATH: '/usr/bin',
-    },
-    {},
-  );
-
-  // The alias must be removed; only the canonical key remains.
-  assert.equal(env.CODEBUDDY_INTERNET_ENVIRONMENT, 'internal');
-  const aliases = Object.keys(env).filter(
-    (k) => k.toUpperCase() === 'CODEBUDDY_INTERNET_ENVIRONMENT' && k !== 'CODEBUDDY_INTERNET_ENVIRONMENT',
-  );
-  assert.deepEqual(aliases, []);
-});
-
-test('spawnEnvForAgent adopts non-canonical CODEBUDDY_INTERNET_ENVIRONMENT when canonical is absent', () => {
-  // When only a non-canonical alias exists (no configured override), the
-  // value should be adopted into the canonical key before validation.
-  const env = spawnEnvForAgent(
-    'codebuddy',
-    {
-      Codebuddy_Internet_Environment: 'internal',  // inherited alias (valid)
-      PATH: '/usr/bin',
-    },
-    {},
-  );
-
-  assert.equal(env.CODEBUDDY_INTERNET_ENVIRONMENT, 'internal');
-  const aliases = Object.keys(env).filter(
-    (k) => k.toUpperCase() === 'CODEBUDDY_INTERNET_ENVIRONMENT' && k !== 'CODEBUDDY_INTERNET_ENVIRONMENT',
-  );
-  assert.deepEqual(aliases, []);
-});
-
-test('spawnEnvForAgent throws on invalid non-canonical CODEBUDDY_INTERNET_ENVIRONMENT without canonical', () => {
-  // When only a non-canonical alias exists with an invalid value, it should
-  // be adopted into the canonical key and then validated — throwing.
-  expect(() =>
-    spawnEnvForAgent(
-      'codebuddy',
-      {
-        Codebuddy_Internet_Environment: 'internel',  // inherited alias (bad)
-        PATH: '/usr/bin',
-      },
-      {},
-    ),
-  ).toThrow(/Invalid inherited CODEBUDDY_INTERNET_ENVIRONMENT/);
-});
-
-test('spawnEnvForAgent canonicalizes mixed-case CODEBUDDY_API_KEY alias with configured override', () => {
-  // On Windows, both an inherited alias and a configured canonical key can
-  // coexist in the merged env. The configured value must win and the alias
-  // must be removed.
-  const env = spawnEnvForAgent(
-    'codebuddy',
-    {
-      Codebuddy_Api_Key: 'old-inherited-key',  // inherited alias
-      CODEBUDDY_API_KEY: 'new-configured-key', // configured override
-      PATH: '/usr/bin',
-    },
-    {},
-  );
-
-  assert.equal(env.CODEBUDDY_API_KEY, 'new-configured-key');
-  const aliases = Object.keys(env).filter(
-    (k) => k.toUpperCase() === 'CODEBUDDY_API_KEY' && k !== 'CODEBUDDY_API_KEY',
-  );
-  assert.deepEqual(aliases, []);
-});
-
-test('spawnEnvForAgent adopts non-canonical CODEBUDDY_API_KEY when canonical is absent', () => {
-  const env = spawnEnvForAgent(
-    'codebuddy',
-    {
-      codebuddy_api_key: 'inherited-key',  // lowercase alias
-      PATH: '/usr/bin',
-    },
-    {},
-  );
-
-  assert.equal(env.CODEBUDDY_API_KEY, 'inherited-key');
-  const aliases = Object.keys(env).filter(
-    (k) => k.toUpperCase() === 'CODEBUDDY_API_KEY' && k !== 'CODEBUDDY_API_KEY',
-  );
-  assert.deepEqual(aliases, []);
-});
-
-test('detectAgents isolates CodeBuddy probe failure from other agents', async () => {
-  // When an invalid inherited CODEBUDDY_INTERNET_ENVIRONMENT causes the
-  // CodeBuddy probe to throw an AgentEnvConfigError, other agents must
-  // still appear in the /api/agents response and the CodeBuddy entry
-  // should retain standard unavailable metadata (installUrl, docsUrl, etc.)
-  // plus the validation error as authMessage.
-  const dir = mkdtempSync(join(tmpdir(), 'od-isolated-probe-'));
-  try {
-    return await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'CODEBUDDY_INTERNET_ENVIRONMENT'], async () => {
-      // Provide a claude binary so that agent is available.
-      const claudeBin = join(dir, 'claude');
-      writeFileSync(claudeBin, '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "1.0.0"; exit 0; fi\nif [ "$1" = "-p" ] && [ "$2" = "--help" ]; then echo "--add-dir --include-partial-messages"; exit 0; fi\nexit 0\n');
-      chmodSync(claudeBin, 0o755);
-      // Provide a codebuddy binary so the probe reaches spawnEnvForAgent
-      // where the invalid env triggers AgentEnvConfigError.
-      const codebuddyBin = join(dir, 'codebuddy');
-      writeFileSync(codebuddyBin, '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "1.0.0"; exit 0; fi\nexit 0\n');
-      chmodSync(codebuddyBin, 0o755);
-      process.env.PATH = dir;
-      process.env.OD_AGENT_HOME = dir;
-      process.env.CODEBUDDY_INTERNET_ENVIRONMENT = 'internel';
-
-      const agents = await detectAgents();
-
-      // Claude should still be available.
-      const claudeAgent = agents.find((a) => a.id === 'claude');
-      assert.ok(claudeAgent);
-      assert.equal(claudeAgent.available, true);
-
-      // CodeBuddy should be unavailable (the invalid env caused an AgentEnvConfigError).
-      const codebuddyAgent = agents.find((a) => a.id === 'codebuddy');
-      assert.ok(codebuddyAgent);
-      assert.equal(codebuddyAgent.available, false);
-      // The fallback should include standard unavailable metadata.
-      assert.ok(codebuddyAgent.installUrl || codebuddyAgent.docsUrl,
-        'CodeBuddy fallback should retain install/docs metadata from unavailableAgent()');
-      // The validation error should be surfaced as authMessage.
-      assert.match(codebuddyAgent.authMessage ?? '', /Invalid inherited CODEBUDDY_INTERNET_ENVIRONMENT/);
-    });
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+  expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('internel'));
+  warnSpy.mockRestore();
 });

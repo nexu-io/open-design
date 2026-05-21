@@ -182,6 +182,7 @@ export type DetectedAgent = Omit<
   available: boolean;
   authStatus?: 'ok' | 'missing' | 'unknown';
   authMessage?: string;
+  unavailableReason?: 'not_installed' | 'config_error';
   path?: string;
   version?: string | null;
 };

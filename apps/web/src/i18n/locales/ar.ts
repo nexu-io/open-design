@@ -244,6 +244,7 @@ export const ar: Dict = {
     'أكمِل المصادقة في CLI الخاص بالمزوّد (تسجيل الدخول أو إضافة بيانات اعتماد API) قبل العودة إلى Open Design.',
   'settings.agentInstall.stepRescan': 'انقر إعادة المسح في هذا القسم.',
   'settings.agentInstall.stepSelect': 'اختر بطاقة الوكيل عندما يظهر كأنه مثبت.',
+  'settings.agentConfigError': 'Configuration error',
   'settings.noAgentsDetected':
     'لم يتم اكتشاف أي وكلاء بعد. قم بتثبيت Claude Code أو Codex أو Devin أو Gemini CLI أو OpenCode أو Cursor Agent أو Qwen أو GitHub Copilot CLI، ثم اضغط على إعادة المسح.',
   'settings.agentInstalledGroup': 'واجهات CLI لديك ({count})',

@@ -319,7 +319,7 @@ import {
   readAllTokens,
   setToken,
 } from './mcp-tokens.js';
-import { agentCliEnvForAgent, readAppConfig, readPluginEnvKnobs, writeAppConfig } from './app-config.js';
+import { agentCliEnvForAgent, AppConfigValidationError, readAppConfig, readPluginEnvKnobs, writeAppConfig } from './app-config.js';
 import { OrbitService, formatLocalProjectTimestamp, renderOrbitTemplateSystemPrompt } from './orbit.js';
 import { buildOrbitNoLiveArtifactSummary } from './orbit-agent-summary.js';
 import {
@@ -9787,6 +9787,11 @@ export async function startServer({
       orbitService.configure(config.orbit);
       res.json({ config });
     } catch (err) {
+      if (err instanceof AppConfigValidationError) {
+        return res
+          .status(400)
+          .json({ error: err.message });
+      }
       res
         .status(500)
         .json({ error: String(err && err.message ? err.message : err) });

@@ -123,6 +123,7 @@ function unavailableAgent(def: RuntimeAgentDef): DetectedAgent {
     models: def.fallbackModels ?? [DEFAULT_MODEL_OPTION],
     modelsSource: 'fallback',
     available: false,
+    unavailableReason: 'not_installed',
     ...installMetaForAgent(def.id),
   };
 }
@@ -234,6 +235,7 @@ async function safeProbe(
     if (err instanceof AgentEnvConfigError) {
       return {
         ...unavailableAgent(def),
+        unavailableReason: 'config_error',
         authMessage: err.message,
       };
     }

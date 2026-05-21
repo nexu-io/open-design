@@ -236,6 +236,7 @@ export const zhCN: Dict = {
     '返回 Open Design 之前，请先在对应 CLI 中完成认证（登录或添加 API 凭据）。',
   'settings.agentInstall.stepRescan': '在此区域点击“重新扫描”。',
   'settings.agentInstall.stepSelect': '当代理显示为已安装后，选择该代理卡片。',
+  'settings.agentConfigError': '配置错误',
   'settings.noAgentsDetected':
     '尚未检测到任何代理。请安装 Claude Code、Codex、Gemini CLI、OpenCode、Cursor Agent、Qwen 或 GitHub Copilot CLI 中的一个，然后点击「重新扫描」。',
   'settings.agentInstalledGroup': '你的 CLI（{count}）',

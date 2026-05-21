@@ -244,6 +244,7 @@ export const id: Dict = {
     'Lakukan autentikasi di CLI vendor (masuk atau tambahkan kredensial API) sebelum kembali ke Open Design.',
   'settings.agentInstall.stepRescan': 'Klik Pindai ulang di bagian ini.',
   'settings.agentInstall.stepSelect': 'Pilih kartu agen setelah statusnya terpasang.',
+  'settings.agentConfigError': 'Configuration error',
   'settings.noAgentsDetected':
     'Belum ada agent terdeteksi. Pasang salah satu dari Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen, atau GitHub Copilot CLI, lalu klik pindai ulang.',
   'settings.agentInstalledGroup': 'CLI Anda ({count})',

@@ -14,7 +14,7 @@ import {
   vi,
 } from 'vitest';
 
-import { readAppConfig, writeAppConfig } from '../src/app-config.js';
+import { AppConfigValidationError, readAppConfig, writeAppConfig } from '../src/app-config.js';
 import { isLocalSameOrigin } from '../src/origin-validation.js';
 
 // Default telemetry preference applied when an existing config has no
@@ -772,6 +772,45 @@ describe('app-config telemetry prefs', () => {
     expect(cfg.agentId).toBe('claude');
     // telemetry is replaced (not deep-merged) — matches the agentModels semantics.
     expect(cfg.telemetry).toEqual({ content: true });
+  });
+});
+
+describe('app-config validation error type', () => {
+  it('invalid agentCliEnv writes throw AppConfigValidationError (not plain Error)', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'od-valtype-'));
+    try {
+      // Save valid config first.
+      await writeAppConfig(dataDir, {
+        agentCliEnv: { codebuddy: { CODEBUDDY_API_KEY: 'cb-test-key' } },
+      });
+      // A bad top-level shape should throw AppConfigValidationError.
+      try {
+        await writeAppConfig(dataDir, { agentCliEnv: 'bad' });
+        expect.unreachable('should have thrown');
+      } catch (err) {
+        expect(err).toBeInstanceOf(AppConfigValidationError);
+        expect((err as Error).message).toContain('agentCliEnv');
+      }
+      // An invalid enum value should also throw AppConfigValidationError.
+      try {
+        await writeAppConfig(dataDir, {
+          agentCliEnv: { codebuddy: { CODEBUDDY_INTERNET_ENVIRONMENT: 'internel' } },
+        });
+        expect.unreachable('should have thrown');
+      } catch (err) {
+        expect(err).toBeInstanceOf(AppConfigValidationError);
+      }
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it('AppConfigValidationError instances are distinguishable from generic errors', () => {
+    const valErr = new AppConfigValidationError('test');
+    expect(valErr.name).toBe('AppConfigValidationError');
+    expect(valErr).toBeInstanceOf(Error);
+    // A plain Error should NOT match.
+    expect(new Error('test')).not.toBeInstanceOf(AppConfigValidationError);
   });
 });
 

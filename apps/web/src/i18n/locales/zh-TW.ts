@@ -247,6 +247,7 @@ export const zhTW: Dict = {
     '返回 Open Design 前，請先在對應 CLI 完成驗證（登入或新增 API 憑證）。',
   'settings.agentInstall.stepRescan': '在此區域點擊「重新掃描」。',
   'settings.agentInstall.stepSelect': '當代理顯示為已安裝後，選擇該代理卡片。',
+  'settings.agentConfigError': '配置错误',
   'settings.noAgentsDetected':
     '尚未偵測到任何代理。請安裝 Claude Code、Codex、Gemini CLI、OpenCode、Cursor Agent 或 Qwen 其中之一，然後點擊「重新掃描」。',
   'settings.agentInstalledGroup': '你的 CLI（{count}）',

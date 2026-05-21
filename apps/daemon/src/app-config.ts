@@ -12,6 +12,16 @@
 // Codex). Those values are local-only and should not be logged or returned
 // outside this machine.
 
+/** Typed error for config validation failures — caught by the HTTP route
+ *  to return 400 instead of 500, so clients can distinguish bad input
+ *  from daemon breakage. */
+export class AppConfigValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AppConfigValidationError';
+  }
+}
+
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
@@ -209,9 +219,9 @@ export function validateAgentCliEnv(
 ): AgentCliEnvPrefs | undefined {
   const throwOnInvalid = options?.throwOnInvalid ?? false;
   if (raw === undefined || raw === null) return undefined;
-  if (typeof raw !== 'object' || Array.isArray(raw)) {
+    if (typeof raw !== 'object' || Array.isArray(raw)) {
     if (throwOnInvalid) {
-      throw new Error(
+      throw new AppConfigValidationError(
         `[app-config] agentCliEnv: expected object, got ${Array.isArray(raw) ? 'array' : typeof raw}`,
       );
     }
@@ -223,7 +233,7 @@ export function validateAgentCliEnv(
     const allowed = AGENT_CLI_ENV_KEYS.get(agentId);
     if (!allowed || typeof value !== 'object' || value === null || Array.isArray(value)) {
       if (throwOnInvalid && allowed && (typeof value !== 'object' || value === null || Array.isArray(value))) {
-        throw new Error(
+        throw new AppConfigValidationError(
           `[app-config] ${agentId}: expected object, got ${Array.isArray(value) ? 'array' : typeof value}`,
         );
       }
@@ -235,7 +245,7 @@ export function validateAgentCliEnv(
       if (!allowed.has(envKey)) continue;
       if (typeof envValue !== 'string') {
         if (throwOnInvalid) {
-          throw new Error(
+          throw new AppConfigValidationError(
             `[app-config] ${agentId}.${envKey}: expected string, got ${typeof envValue}`,
           );
         }
@@ -246,7 +256,7 @@ export function validateAgentCliEnv(
       const allowedValues = enums?.get(envKey);
       if (allowedValues && !allowedValues.has(trimmed)) {
         if (throwOnInvalid) {
-          throw new Error(
+          throw new AppConfigValidationError(
             `[app-config] ${agentId}.${envKey}: invalid value "${trimmed}",` +
             ` expected one of: ${[...allowedValues].join(', ')}`,
           );
