@@ -64,9 +64,46 @@ describe('diagnoseClaudeCliFailure', () => {
 
     expect(diagnostic?.message).toContain('could not reach');
     expect(diagnostic?.detail).toContain('ANTHROPIC_BASE_URL');
-    expect(diagnostic?.detail).toContain('refused the connection');
+    expect(diagnostic?.detail).toContain('could not be reached');
     expect(diagnostic?.detail).not.toContain('could not authenticate');
     expect(diagnostic?.detail).not.toContain('use `/login`');
+  });
+
+  it('maps custom endpoint DNS failures (ENOTFOUND) to endpoint guidance', () => {
+    const diagnostic = diagnoseClaudeCliFailure({
+      agentId: 'claude',
+      exitCode: 1,
+      stderrTail: 'Error: getaddrinfo ENOTFOUND proxy.internal.local',
+      env: { ANTHROPIC_BASE_URL: 'https://proxy.internal.local' },
+    });
+
+    expect(diagnostic?.message).toContain('could not reach');
+    expect(diagnostic?.detail).toContain('ANTHROPIC_BASE_URL');
+    expect(diagnostic?.detail).not.toContain('could not authenticate');
+  });
+
+  it('maps custom endpoint timeout (ETIMEDOUT) to endpoint guidance', () => {
+    const diagnostic = diagnoseClaudeCliFailure({
+      agentId: 'claude',
+      exitCode: 1,
+      stderrTail: 'Error: connect ETIMEDOUT 10.0.0.1:443',
+      env: { ANTHROPIC_BASE_URL: 'https://slow-proxy.example.com' },
+    });
+
+    expect(diagnostic?.message).toContain('could not reach');
+    expect(diagnostic?.detail).toContain('ANTHROPIC_BASE_URL');
+  });
+
+  it('maps CodeBuddy custom endpoint TLS errors to endpoint guidance', () => {
+    const diagnostic = diagnoseClaudeCliFailure({
+      agentId: 'codebuddy',
+      exitCode: 1,
+      stderrTail: 'Error: unable to verify the first certificate',
+      env: { CODEBUDDY_BASE_URL: 'https://self-signed.example.com' },
+    });
+
+    expect(diagnostic?.message).toContain('could not reach');
+    expect(diagnostic?.detail).toContain('CODEBUDDY_BASE_URL');
   });
 
   it('maps silent custom endpoint exits to endpoint guidance', () => {

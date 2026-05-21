@@ -7,6 +7,10 @@ import { amrVelaProfileEnv } from '../integrations/vela-profile.js';
 
 type RuntimeEnvMap = NodeJS.ProcessEnv | Record<string, string>;
 
+// Valid values for CODEBUDDY_INTERNET_ENVIRONMENT (closed enum per IAM docs).
+// Must stay in sync with AGENT_CLI_ENV_ENUMS in app-config.ts.
+const CODEBUDDY_INTERNET_ENV_ALLOWED = new Set(['public', 'internal', 'ioa']);
+
 // Build the env passed to spawn() for a given agent adapter.
 //
 // The claude adapter strips ANTHROPIC_API_KEY so Claude Code's own auth
@@ -81,14 +85,33 @@ export function spawnEnvForAgent(
   // Do not strip it — the key is the primary auth path, not a fallback.
   // See https://www.codebuddy.cn/docs/cli/env-vars.
   //
-  // CODEBUDDY_INTERNET_ENVIRONMENT is a closed enum (internal/ioa; empty
-  // or unset = international). When the user selects "Inherit / unset" in
-  // Settings, no configured value is persisted. In that case we preserve
-  // any inherited value from the parent process (e.g.
+  // CODEBUDDY_INTERNET_ENVIRONMENT is a closed enum (public/internal/ioa;
+  // empty or unset = international/public default). When the user selects
+  // "Inherit / unset" in Settings, no configured value is persisted. In that
+  // case we preserve any inherited value from the parent process (e.g.
   //   CODEBUDDY_INTERNET_ENVIRONMENT=internal pnpm tools-dev
   // ) so that China/iOA installs launched with the env var on the command
   // line continue to work. When the user explicitly selects a value in
   // Settings, expandConfiguredEnv will override the inherited value.
+  //
+  // However, inherited values outside the closed enum (e.g. a typo like
+  // "internel") are dropped with a console.warn so the child process
+  // falls back to the international default instead of failing with a
+  // confusing auth/connectivity error.
+  if (agentId === 'codebuddy') {
+    for (const key of Object.keys(env)) {
+      if (key.toUpperCase() === 'CODEBUDDY_INTERNET_ENVIRONMENT') {
+        const value = env[key];
+        if (typeof value === 'string' && value.trim() && !CODEBUDDY_INTERNET_ENV_ALLOWED.has(value.trim())) {
+          console.warn(
+            `[env] Dropping invalid inherited CODEBUDDY_INTERNET_ENVIRONMENT="${value}".` +
+            ` Valid values: ${[...CODEBUDDY_INTERNET_ENV_ALLOWED].join(', ')}.`,
+          );
+          delete env[key];
+        }
+      }
+    }
+  }
   return env;
   return env;
 }

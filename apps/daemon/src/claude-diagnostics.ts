@@ -124,11 +124,19 @@ function diagnoseCliFailure(
     hasCustomBaseUrl &&
     (/connectionrefused/i.test(text) ||
       /connection refused/i.test(text) ||
-      /econnrefused/i.test(text));
+      /econnrefused/i.test(text) ||
+      /enotfound/i.test(text) ||
+      /eai_again/i.test(text) ||
+      /etimedout/i.test(text) ||
+      /econnreset/i.test(text) ||
+      /certificate/i.test(text) ||
+      /self.signed/i.test(text) ||
+      /unable to verify/i.test(text) ||
+      /ERR_TLS/i.test(text));
   if (customEndpointConnectionFailure) {
     return withContext(
       `${config.brandName} could not reach the configured custom ${config.endpointLabel} endpoint.`,
-      `${config.baseUrlEnvKey} appears to point at a local or proxy endpoint that refused the connection. Start or fix that proxy, clear the stale endpoint, or remove the custom endpoint to retry with standard ${config.brandName} auth.`,
+      `${config.baseUrlEnvKey} appears to point at an endpoint that could not be reached (DNS failure, connection refused/reset, timeout, or TLS error). Start or fix that endpoint, clear the stale URL, or remove the custom endpoint to retry with standard ${config.brandName} auth.`,
       input,
       config,
     );

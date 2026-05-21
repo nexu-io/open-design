@@ -1,5 +1,5 @@
 import { symlinkSync } from 'node:fs';
-import { test, vi } from 'vitest';
+import { test, vi, expect } from 'vitest';
 import { homedir } from 'node:os';
 import * as platform from '@open-design/platform';
 import {
@@ -1144,4 +1144,20 @@ test('spawnEnvForAgent overrides inherited internal with configured public', () 
   );
 
   assert.equal(env.CODEBUDDY_INTERNET_ENVIRONMENT, 'public');
+});
+
+test('spawnEnvForAgent drops invalid inherited CODEBUDDY_INTERNET_ENVIRONMENT with warning', () => {
+  // A typo like "internel" should be dropped so the child falls back to
+  // the international default instead of failing with a confusing error.
+  const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  const env = spawnEnvForAgent(
+    'codebuddy',
+    { CODEBUDDY_API_KEY: 'cb-test-key', CODEBUDDY_INTERNET_ENVIRONMENT: 'internel', PATH: '/usr/bin' },
+    {},
+  );
+
+  assert.equal(env.CODEBUDDY_API_KEY, 'cb-test-key');
+  assert.equal('CODEBUDDY_INTERNET_ENVIRONMENT' in env, false);
+  expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('internel'));
+  warnSpy.mockRestore();
 });
