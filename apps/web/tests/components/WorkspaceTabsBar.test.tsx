@@ -127,6 +127,27 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     expect(navigate).toHaveBeenCalledWith(homeRoute);
   });
 
+  it('adds Home without replacing the active project tab', async () => {
+    render(<WorkspaceTabsBar route={projectRoute} projects={[project]} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'New tab' }));
+
+    await waitFor(() => {
+      const tabs = screen.getAllByRole('tab');
+      const labels = tabs.map((tab) => tab.textContent ?? '');
+      const selectedLabels = tabs
+        .filter((tab) => tab.getAttribute('aria-selected') === 'true')
+        .map((tab) => tab.textContent ?? '');
+
+      expect(tabs).toHaveLength(2);
+      expect(labels.some((label) => label.includes('Project Alpha'))).toBe(true);
+      expect(labels.some((label) => label.includes('Home'))).toBe(true);
+      expect(selectedLabels).toHaveLength(1);
+      expect(selectedLabels[0]).toContain('Home');
+    });
+    expect(navigate).toHaveBeenCalledWith(homeRoute);
+  });
+
   it('collapses restored duplicate Home tabs to a single Home tab', async () => {
     window.localStorage.setItem(
       'open-design:workspace-tabs:v1',

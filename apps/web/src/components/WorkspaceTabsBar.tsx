@@ -202,6 +202,23 @@ function activateTabInState(
   });
 }
 
+function openRouteInState(
+  state: WorkspaceTabsState,
+  route: Route,
+  timestamp = Date.now(),
+): WorkspaceTabsState {
+  const normalized = normalizeTabsState(state);
+  const reusableTab = findReusableTabForRoute(normalized.tabs, route);
+  if (reusableTab) {
+    return activateTabInState(normalized, reusableTab.id, timestamp);
+  }
+  const nextTab = tabFromRoute(route, timestamp);
+  return normalizeTabsState({
+    tabs: [...normalized.tabs, nextTab],
+    activeTabId: nextTab.id,
+  });
+}
+
 function normalizeTabsState(state: WorkspaceTabsState): WorkspaceTabsState {
   const sourceTabs = state.tabs.length > 0 ? state.tabs : [createEntryTab('home')];
   const usedIds = new Set<string>();
@@ -379,18 +396,7 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
       const detail = (event as CustomEvent<{ route?: Route }>).detail;
       const nextRoute = detail?.route;
       if (!nextRoute) return;
-      const nextTab = tabFromRoute(nextRoute);
-      setState((current) => {
-        const normalized = normalizeTabsState(current);
-        const reusableTab = findReusableTabForRoute(normalized.tabs, nextRoute);
-        if (reusableTab) {
-          return activateTabInState(normalized, reusableTab.id);
-        }
-        return normalizeTabsState({
-          tabs: [...normalized.tabs, nextTab],
-          activeTabId: nextTab.id,
-        });
-      });
+      setState((current) => openRouteInState(current, nextRoute));
       setTabsMenuOpen(false);
     }
 
@@ -467,7 +473,7 @@ export function WorkspaceTabsBar({ route, projects }: Props) {
 
   function createNewTab() {
     const nextRoute: Route = { kind: 'home', view: 'home' };
-    setState((current) => syncStateToRoute(current, nextRoute));
+    setState((current) => openRouteInState(current, nextRoute));
     setTabsMenuOpen(false);
     navigate(nextRoute);
   }
