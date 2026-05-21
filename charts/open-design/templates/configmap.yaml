@@ -5,15 +5,21 @@ metadata:
   labels:
     {{- include "open-design.labels" . | nindent 4 }}
 data:
-  OD_BIND_HOST: {{ if .Values.authProxy.enabled }}{{ .Values.config.bindHost | quote }}{{ else }}"0.0.0.0"{{ end }}
+  OD_BIND_HOST: {{ .Values.config.bindHost | quote }}
   OD_PORT: {{ .Values.config.webPort | quote }}
   OD_WEB_PORT: {{ .Values.config.webPort | quote }}
   PROXY_PORT: {{ .Values.authProxy.port | quote }}
   NODE_ENV: {{ .Values.config.nodeEnv | quote }}
   NODE_OPTIONS: {{ .Values.config.nodeOptions | quote }}
-{{- if .Values.config.publicBaseUrl }}
-  OD_PUBLIC_BASE_URL: {{ .Values.config.publicBaseUrl | quote }}
-  {{- end }}
+{{- $publicBaseUrl := .Values.config.publicBaseUrl }}
+{{- if and (not $publicBaseUrl) .Values.ingress.enabled .Values.ingress.hosts }}
+  {{- $scheme := ternary "https://" "http://" (gt (len .Values.ingress.tls) 0) }}
+  {{- $firstHost := (index .Values.ingress.hosts 0).host }}
+  {{- $publicBaseUrl = printf "%s%s" $scheme $firstHost }}
+{{- end }}
+{{- if $publicBaseUrl }}
+  OD_PUBLIC_BASE_URL: {{ $publicBaseUrl | quote }}
+{{- end }}
 
 {{- $origins := .Values.config.allowedOrigins }}
   {{- if and .Values.ingress.enabled (not $origins) }}

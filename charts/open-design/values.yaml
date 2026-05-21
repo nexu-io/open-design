@@ -78,7 +78,6 @@ podSecurityContext:
   fsGroup: 1001
 
 authProxy:
-  enabled: true
   image: "nginxinc/nginx-unprivileged:1.25-alpine-slim"
   port: 8080
   securityContext:

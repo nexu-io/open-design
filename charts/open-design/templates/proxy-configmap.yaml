@@ -1,4 +1,3 @@
-{{- if .Values.authProxy.enabled }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -42,4 +41,3 @@ data:
             http2_push_preload on;
         }
     }
-{{- end }}
