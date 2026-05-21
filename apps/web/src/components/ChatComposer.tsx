@@ -2849,7 +2849,9 @@ function selectChatUploadFiles(files: File[]): { accepted: File[]; skipped: numb
 }
 
 function shouldSkipChatUploadFile(file: File): boolean {
-  const path = chatUploadRelativePath(file).toLowerCase();
+  const browserPath = (file as File & { webkitRelativePath?: string }).webkitRelativePath;
+  if (!browserPath) return false;
+  const path = normalizeChatUploadPath(browserPath).toLowerCase();
   if (!path) return true;
   const parts = path.split('/').filter(Boolean);
   const leaf = parts.at(-1) ?? '';
@@ -2860,7 +2862,11 @@ function shouldSkipChatUploadFile(file: File): boolean {
 
 function chatUploadRelativePath(file: File): string {
   const browserPath = (file as File & { webkitRelativePath?: string }).webkitRelativePath;
-  return (browserPath || file.name).replace(/\\/g, '/').split('/').filter(Boolean).join('/');
+  return normalizeChatUploadPath(browserPath || file.name);
+}
+
+function normalizeChatUploadPath(path: string): string {
+  return path.replace(/\\/g, '/').split('/').filter(Boolean).join('/');
 }
 
 function looksLikeImage(name: string): boolean {

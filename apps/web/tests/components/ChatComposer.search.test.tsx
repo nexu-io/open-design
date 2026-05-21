@@ -116,6 +116,70 @@ describe('ChatComposer /search command', () => {
     expect(await screen.findByText('Button.tsx')).toBeTruthy();
   });
 
+  it('keeps explicitly selected dot-env files uploadable', async () => {
+    mockedUploadProjectFiles.mockResolvedValue({
+      uploaded: [{ path: '.env', name: '.env', kind: 'file', size: 11 }],
+      failed: [],
+    });
+
+    render(
+      <ChatComposer
+        projectId="project-1"
+        projectFiles={[]}
+        streaming={false}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    const file = new File(['API_KEY=dev'], '.env', { type: 'text/plain' });
+    fireEvent.change(screen.getByTestId('chat-file-input'), {
+      target: { files: [file] },
+    });
+
+    await waitFor(() => expect(mockedUploadProjectFiles).toHaveBeenCalledWith('project-1', [file]));
+    expect(await screen.findByText('.env')).toBeTruthy();
+    expect(screen.queryByText(/Skipped 1 sensitive or generated folder file/)).toBeNull();
+  });
+
+  it('skips sensitive files discovered inside folder uploads', async () => {
+    mockedUploadProjectFiles.mockResolvedValue({
+      uploaded: [{ path: 'demo/src/Button.tsx', name: 'Button.tsx', kind: 'file', size: 9 }],
+      failed: [],
+    });
+
+    render(
+      <ChatComposer
+        projectId="project-1"
+        projectFiles={[]}
+        streaming={false}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    const accepted = new File(['component'], 'Button.tsx', { type: 'text/plain' });
+    Object.defineProperty(accepted, 'webkitRelativePath', {
+      value: 'demo/src/Button.tsx',
+      configurable: true,
+    });
+    const skipped = new File(['API_KEY=dev'], '.env', { type: 'text/plain' });
+    Object.defineProperty(skipped, 'webkitRelativePath', {
+      value: 'demo/.env',
+      configurable: true,
+    });
+
+    fireEvent.change(screen.getByTestId('chat-folder-input'), {
+      target: { files: [accepted, skipped] },
+    });
+
+    await waitFor(() => expect(mockedUploadProjectFiles).toHaveBeenCalledWith('project-1', [accepted]));
+    expect(await screen.findByText('Button.tsx')).toBeTruthy();
+    expect(screen.getByText('Skipped 1 sensitive or generated folder file(s).')).toBeTruthy();
+  });
+
   it('shows a clear attachment error when no project can be created yet', async () => {
     render(
       <ChatComposer
