@@ -51,11 +51,40 @@ export function resolveProjectDir(projectsRoot, projectId, metadata?) {
   return path.join(projectsRoot, projectId);
 }
 
+// Optional post-ensure hook registered once at daemon startup. The
+// history feature (#1241) uses this to run `initProjectHistory` after
+// every ensureProject call without requiring callers (13+ across the
+// codebase) to thread DB / identity / repo paths through their args.
+// The hook is invoked after the directory exists; it must be idempotent
+// (ensureProject is called repeatedly throughout a project's lifetime)
+// and never throw — errors are best-effort logged by the hook itself,
+// not surfaced to the ensureProject caller. Null when no hook is wired.
+let projectEnsuredHook = null;
+
+/**
+ * Register a callback to run after every ensureProject call. Called once
+ * at daemon startup by the history feature. Subsequent calls overwrite
+ * the previous hook; pass null to detach (mainly for tests).
+ */
+export function setProjectEnsuredHook(hook) {
+  projectEnsuredHook = hook;
+}
+
 export async function ensureProject(projectsRoot, projectId, metadata?) {
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   // Git-linked folders already exist; skip mkdir to avoid side-effects.
   if (typeof metadata?.baseDir !== 'string') {
     await mkdir(dir, { recursive: true });
+  }
+  if (projectEnsuredHook) {
+    try {
+      await projectEnsuredHook({ projectsRoot, projectId, projectDir: dir, metadata });
+    } catch (err) {
+      // ensureProject's existing contract is "return the directory"; a
+      // hook failure must not break that. The hook is responsible for
+      // its own logging.
+      console.warn(`[projects] ensureProject hook failed for ${projectId}:`, err);
+    }
   }
   return dir;
 }

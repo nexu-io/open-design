@@ -390,6 +390,7 @@ import { configureComposioConfigStore } from './connectors/composio-config.js';
 import { CHAT_TOOL_ENDPOINTS, CHAT_TOOL_OPERATIONS, toolTokenRegistry } from './tool-tokens.js';
 import { createIdentityMiddleware } from './identity/middleware.js';
 import { resolveIdentity } from './identity/types.js';
+import { installHistoryEnsureHook } from './history/ensure-hook.js';
 import {
   aggregateCloudflarePagesStatus,
   buildDeployFileSet,
@@ -1224,6 +1225,10 @@ const ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'artifacts');
 // read path so project-membership, size, and CSP guards cannot be bypassed.
 const CRITIQUE_ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'critique-artifacts');
 const PROJECTS_DIR = path.join(RUNTIME_DATA_DIR, 'projects');
+// Per-project gitdirs for the history feature (#1241). Sibling to
+// PROJECTS_DIR so backup stories that already cover OD_DATA_DIR pick
+// it up transparently. Only used when OD_GIT_INTEGRATION_ENABLED is on.
+const REPOS_DIR = path.join(RUNTIME_DATA_DIR, 'repos');
 const USER_SKILLS_DIR = path.join(RUNTIME_DATA_DIR, 'skills');
 const USER_DESIGN_SYSTEMS_DIR = path.join(RUNTIME_DATA_DIR, 'design-systems');
 const PLUGIN_REGISTRY_ROOTS = registryRootsForDataDir(RUNTIME_DATA_DIR);
@@ -3509,6 +3514,11 @@ export async function startServer({
   projectMetadataLookup = (id) => {
     try { return getProject(db, id)?.metadata ?? null; } catch { return null; }
   };
+  // Register the history feature's post-ensure hook. No-op when
+  // OD_GIT_INTEGRATION_ENABLED is unset; otherwise auto-initializes
+  // the substrate (git init + initial migration commit) on first
+  // ensure for each project. Idempotent across subsequent ensures.
+  installHistoryEnsureHook({ db, reposRoot: REPOS_DIR });
   configureConnectorCredentialStore(new FileConnectorCredentialStore(RUNTIME_DATA_DIR));
   configureComposioConfigStore(RUNTIME_DATA_DIR);
   composioConnectorProvider.configureCatalogCache(RUNTIME_DATA_DIR);
