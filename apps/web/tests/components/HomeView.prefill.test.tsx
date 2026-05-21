@@ -783,6 +783,11 @@ describe('HomeView prompt handoff', () => {
       expect(badge.textContent).toContain('Create plugin');
       expect(badge.textContent).not.toContain('Plugin authoring');
     });
+    const input = screen.getByTestId('home-hero-input') as HTMLTextAreaElement;
+    const inputCard = input.closest('.home-hero__input-card') as HTMLElement | null;
+    expect(input.value).toBe(PLUGIN_AUTHORING_PROMPT);
+    expect(inputCard?.classList.contains('home-hero__input-card--compact-authoring')).toBe(true);
+    expect(inputCard?.style.getPropertyValue('--home-hero-prompt-max-height')).toBe('132px');
     fireEvent.click(await screen.findByTestId('home-hero-submit'));
 
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({

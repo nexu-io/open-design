@@ -17,12 +17,13 @@ import {
   useState,
 } from 'react';
 import type {
+  CSSProperties,
   ClipboardEvent as ReactClipboardEvent,
   DragEvent as ReactDragEvent,
   ForwardedRef,
   KeyboardEvent as ReactKeyboardEvent,
-  RefObject,
   ReactNode,
+  RefObject,
 } from 'react';
 import type {
   ConnectorDetail,
@@ -407,6 +408,18 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
       : [],
     [activeChipId, activeExamplePlugins.length, locale],
   );
+  const workingDirLabel = useMemo(() => {
+    if (!workingDir) return null;
+    return workingDir.split(/[\\/]/).filter(Boolean).slice(-1)[0] ?? workingDir;
+  }, [workingDir]);
+  const authoringLayoutActive = activeChipId === 'create-plugin';
+  const promptMaxHeight = authoringLayoutActive
+    ? HOME_HERO_AUTHORING_PROMPT_MAX_HEIGHT
+    : HOME_HERO_PROMPT_MAX_HEIGHT;
+  const inputCardStyle = {
+    '--home-hero-prompt-max-height': `${promptMaxHeight}px`,
+  } as CSSProperties;
+
   useEffect(() => {
     if (selectedIndex >= visiblePickerOptions.length) setSelectedIndex(0);
   }, [selectedIndex, visiblePickerOptions.length]);
@@ -448,16 +461,16 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
     const el = inputElementRef.current;
     if (!el) return;
     el.style.height = 'auto';
-    const nextHeight = Math.min(el.scrollHeight, HOME_HERO_PROMPT_MAX_HEIGHT);
+    const nextHeight = Math.min(el.scrollHeight, promptMaxHeight);
     el.style.height = `${nextHeight}px`;
-    el.style.overflowY = el.scrollHeight > HOME_HERO_PROMPT_MAX_HEIGHT ? 'auto' : 'hidden';
-    if (el.scrollHeight <= HOME_HERO_PROMPT_MAX_HEIGHT && el.scrollTop !== 0) {
+    el.style.overflowY = el.scrollHeight > promptMaxHeight ? 'auto' : 'hidden';
+    if (el.scrollHeight <= promptMaxHeight && el.scrollTop !== 0) {
       el.scrollTop = 0;
       setPromptScrollTop(0);
     } else {
       setPromptScrollTop(el.scrollTop);
     }
-  }, [pluginInputValues, prompt, promptOverlayParts]);
+  }, [pluginInputValues, prompt, promptMaxHeight, promptOverlayParts]);
 
   const setInputRef = useCallback(
     (node: HTMLTextAreaElement | null) => {
@@ -601,7 +614,10 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
       </p>
 
       <div
-        className={`home-hero__input-card${dragActive ? ' is-drag-active' : ''}`}
+        className={`home-hero__input-card${
+          authoringLayoutActive ? ' home-hero__input-card--compact-authoring' : ''
+        }${dragActive ? ' is-drag-active' : ''}`}
+        style={inputCardStyle}
         onDragEnter={(event) => {
           if (event.dataTransfer.types.includes('Files')) setDragActive(true);
         }}
@@ -1280,6 +1296,7 @@ interface PromptHighlightPart {
 
 const INPUT_PLACEHOLDER_PATTERN = /\{\{\s*([a-zA-Z_][\w-]*)\s*\}\}/g;
 const HOME_HERO_PROMPT_MAX_HEIGHT = 180;
+const HOME_HERO_AUTHORING_PROMPT_MAX_HEIGHT = 132;
 
 function buildPromptHighlightParts(
   template: string | null,
