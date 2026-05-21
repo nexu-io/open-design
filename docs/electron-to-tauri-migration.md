@@ -25,15 +25,17 @@ The migration has passed native package parity and the M6 cleanup. Tauri is the 
 
 ## Schedule
 
-| Phase | Dates | Goal | Exit Criteria |
-| --- | --- | --- | --- |
-| M0 Runtime parity | 2026-05-20 to 2026-05-22 | Make the Tauri dev runtime inspectable and usable enough for daily smoke. | `status`, `eval`, `click`, `console`, and `screenshot` work through the existing desktop sidecar message shapes on macOS dev. |
-| M1 Cross-platform IPC | 2026-05-25 to 2026-05-29 | Remove Unix-only assumptions from the Rust desktop runtime. | Windows named-pipe IPC and Linux/macOS Unix socket IPC pass the same status/eval/click tests. |
-| M2 Bridge hardening | 2026-06-01 to 2026-06-03 | Prove renderer bridge parity. | `openExternal`, `pickAndImport`, `openProjectPath`, analytics desktop detection, and browser print fallback are covered by web + runtime smoke. |
-| M3 Packaging parallel path | 2026-06-04 to 2026-06-10 | Add Tauri as an opt-in `tools-pack` runtime. | `tools-pack mac|win|linux build --desktop-runtime tauri` produces namespace-mapped artifacts and keeps existing install/start/stop/logs/inspect command shape. |
-| M4 Platform package smoke | 2026-06-11 to 2026-06-17 | Validate installable Tauri artifacts. | mac `.app/.dmg`, Windows NSIS, and Linux AppImage/headless flows start daemon/web/desktop and pass inspect status/eval/screenshot; Windows/Linux also prove stop plus uninstall/removal evidence. MSI is tracked as a post-flip release follow-up unless release ownership makes it mandatory. |
-| M5 Default flip | 2026-06-18 to 2026-06-19 | Make Tauri the default desktop runtime. | `tools-dev`, `tools-pack`, and `release-beta` default to Tauri; Electron remains available behind an explicit fallback flag for one release window. |
-| M6 Electron removal | 2026-06-22 to 2026-06-24 | Remove Electron-only runtime code and dependencies. | Electron deps, builder hooks, packaged Electron entry glue, and Electron-only docs/tests are removed or replaced. |
+All phases completed on 2026-05-21, ahead of the original planning window. The planned dates remain here as the scheduling record used to sequence the work.
+
+| Phase | Planned Dates | Completion | Goal | Exit Criteria |
+| --- | --- | --- | --- | --- |
+| M0 Runtime parity | 2026-05-20 to 2026-05-22 | Complete | Make the Tauri dev runtime inspectable and usable enough for daily smoke. | `status`, `eval`, `click`, `console`, and `screenshot` work through the existing desktop sidecar message shapes on macOS dev. |
+| M1 Cross-platform IPC | 2026-05-25 to 2026-05-29 | Complete | Remove Unix-only assumptions from the Rust desktop runtime. | Windows named-pipe IPC and Linux/macOS Unix socket IPC pass the same status/eval/click tests. |
+| M2 Bridge hardening | 2026-06-01 to 2026-06-03 | Complete | Prove renderer bridge parity. | `openExternal`, `pickAndImport`, `openProjectPath`, analytics desktop detection, and browser print fallback are covered by web + runtime smoke. |
+| M3 Packaging parallel path | 2026-06-04 to 2026-06-10 | Complete | Add Tauri as an opt-in `tools-pack` runtime. | `tools-pack mac|win|linux build --desktop-runtime tauri` produces namespace-mapped artifacts and keeps existing install/start/stop/logs/inspect command shape. |
+| M4 Platform package smoke | 2026-06-11 to 2026-06-17 | Complete | Validate installable Tauri artifacts. | mac `.app/.dmg`, Windows NSIS, and Linux AppImage/headless flows start daemon/web/desktop and pass inspect status/eval/screenshot; Windows/Linux also prove stop plus uninstall/removal evidence. MSI is tracked as a post-flip release follow-up unless release ownership makes it mandatory. |
+| M5 Default flip | 2026-06-18 to 2026-06-19 | Complete | Make Tauri the default desktop runtime. | `tools-dev`, `tools-pack`, and `release-beta` default to Tauri; Electron remains available behind an explicit fallback flag for one release window. |
+| M6 Electron removal | 2026-06-22 to 2026-06-24 | Complete | Remove Electron-only runtime code and dependencies. | Electron deps, builder hooks, packaged Electron entry glue, and Electron-only docs/tests are removed or replaced. |
 
 ## Continuation Cadence
 
@@ -82,6 +84,8 @@ If the push is still blocked, keep the archive, `.sha256`, `.commands.sh`, and `
 The Codex thread should keep exactly one active heartbeat for this migration, named `Tauri migration follow-up` with id `tauri-migration-follow-up`, scheduled daily at 09:00 local thread time. The heartbeat prompt must start from this document and the current `tauri-migration-status` output using the handoff directory, handoff archive, remote, and report directory above, then use the matching `scripts/continue-tauri-migration.ts ... --dry-run` command before taking mutating action.
 
 Do not create duplicate reminders for the same work. If the continuation sequence changes, update that heartbeat prompt instead. The heartbeat must keep the goal active until M4 native evidence, M5 default flip, and M6 Electron cleanup are all complete and verified.
+
+After `tauri-migration-status` reports `Phase: complete`, delete the heartbeat instead of repairing it; the migration no longer needs scheduled continuation.
 
 ## Work Breakdown
 
@@ -519,6 +523,8 @@ M4 closes from two native CI report artifacts, not from three manually gathered 
 
 - 2026-05-21: Verified pushed migration branch head with `scripts/verify-tauri-migration-remote.ts` before M5.
   Remote `https://github.com/sunseol/open-design.git/codex/electron-to-tauri-migration` matched `47820003d1668c4bd6826dd0763f02ca58df9bfe` before M4 evidence was recorded and M5 defaults were applied.
+
+- 2026-05-21: Completed the M6 Electron cleanup, pushed the final Tauri-only branch to the write-capable fork remote, and removed the daily follow-up heartbeat after `tauri-migration-status` reported the migration phase complete.
 
 ### Platform Gate Runners
 

@@ -162,6 +162,46 @@ test("tauri-migration-status stays in M4 when remote head evidence is stale for 
   assert.doesNotMatch(parsed.nextActions.join("\n"), /apply-tauri-migration-m5/);
 });
 
+test("tauri-migration-status reports complete after M6 without requiring pre-M5 evidence for the final cleanup head", async (t) => {
+  const fixture = await createFixtureRoot(t, {
+    checked: [
+      ...m4PlatformGateLabels,
+      m5ToolsDevDefaultLabel,
+      m5ToolsPackDefaultLabel,
+      m5ReleaseBetaDefaultLabel,
+      m5ElectronFallbackLabel,
+      m5PrimaryDocsLabel,
+      m6ElectronDepsLabel,
+      m6ElectronRuntimeLabel,
+      m6ElectronResourcesLabel,
+      m6ElectronTestsLabel,
+      m6ElectronGuidanceLabel,
+    ],
+    defaults: "tauri",
+    extraDocLines: [m4EvidenceLogMarker, ...verifiedRemoteEvidence],
+  });
+  await initGitFixture(fixture);
+  const automationDir = join(fixture, "automations");
+  await mkdir(automationDir, { recursive: true });
+
+  const result = await runStatus(fixture, "--automation-dir", automationDir);
+  const parsed = JSON.parse(result.stdout) as {
+    heartbeat?: unknown;
+    m4Evidence: {
+      problems: string[];
+      remoteEvidence: boolean;
+    };
+    nextActions: string[];
+    phase: string;
+  };
+
+  assert.equal(parsed.phase, "complete");
+  assert.equal(parsed.m4Evidence.remoteEvidence, true);
+  assert.deepEqual(parsed.m4Evidence.problems, []);
+  assert.equal(parsed.heartbeat, undefined);
+  assert.match(parsed.nextActions.join("\n"), /No migration phase actions remain/);
+});
+
 test("tauri-migration-status stays in M4 when remote head evidence is missing", async (t) => {
   const fixture = await createFixtureRoot(t, {
     checked: [...m4PlatformGateLabels],

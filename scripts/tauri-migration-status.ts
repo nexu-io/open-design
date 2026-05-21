@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 
 import { commandSidecarProblems, commandSidecarSyntaxProblem } from "./tauri-migration-command-sidecar.ts";
 import {
+  hasM4RemoteEvidence,
   m4EvidenceLogMarker,
   m4PlatformGateLabels,
   hasM4RemoteEvidenceForHead,
@@ -323,7 +324,7 @@ async function readMigrationStatus(
       : await readHandoffArchiveStatus(handoffArchiveArg ?? handoffArchivePath(handoffDir), handoff);
   const remoteStatus = remote == null ? undefined : await readRemoteStatus(root, remote, gitStatus, handoff);
   const platformReports = await resolvePlatformReportsStatus(winReport, linuxReport, reportDir);
-  const heartbeat = automationDir == null ? undefined : await readHeartbeatStatus(automationDir);
+  const heartbeat = phase === "complete" || automationDir == null ? undefined : await readHeartbeatStatus(automationDir);
   const status: MigrationStatus = {
     defaults: {
       releaseBeta: readReleaseBetaDefault(releaseBetaWorkflow),
@@ -483,9 +484,13 @@ function checklistGroup(name: ChecklistGroupStatus["name"], source: string, labe
 
 function readM4EvidenceStatus(groups: ChecklistGroupStatus[], migrationDoc: string, expectedHead?: string): M4EvidenceStatus {
   const m4 = groups.find((group) => group.name === "M4");
+  const m6 = groups.find((group) => group.name === "M6");
   const platformGatesChecked = m4 != null && m4.checked === m4.total;
   const nativeEvidence = migrationDoc.includes(m4EvidenceLogMarker);
-  const remoteEvidence = hasM4RemoteEvidenceForHead(migrationDoc, expectedHead);
+  const m6Complete = m6 != null && m6.checked === m6.total;
+  const remoteEvidence = m6Complete
+    ? hasM4RemoteEvidence(migrationDoc)
+    : hasM4RemoteEvidenceForHead(migrationDoc, expectedHead);
   const problems: string[] = [];
   if (platformGatesChecked && !nativeEvidence) {
     problems.push("missing native Windows/Linux verifier evidence marker");
@@ -607,7 +612,7 @@ function nextActionsForPhase(
       "Remove electron from DESKTOP_RUNTIME_KINDS only when the M6 cleanup checkboxes move together.",
     ];
   }
-  return [...heartbeatActions, "Run the full QA plan and archive the migration document as completed evidence."];
+  return [...heartbeatActions, "No migration phase actions remain; rerun the QA plan only if new changes are made."];
 }
 
 function handoffTransferIdentity(branch: string, expectedHead: string, archive: HandoffArchiveStatus): string {
