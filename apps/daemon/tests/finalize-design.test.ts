@@ -220,6 +220,68 @@ describe('resolveCurrentArtifact', () => {
     expect(out).toBeNull();
   });
 
+  it('reconciles an active HTML artifact that is missing its sidecar', async () => {
+    const { db, projectsRoot } = setupResolverFixture();
+
+    // Mirrors a resumed/Continue run that wrote the HTML deliverable but
+    // terminated before durable artifact sidecar registration completed.
+    await writeProjectFile(projectsRoot, PROJECT_ID, 'resumed.html', '<p>resumed</p>');
+    setActiveTab(db, 'resumed.html');
+
+    const out = await resolveCurrentArtifact(db, projectsRoot, PROJECT_ID);
+
+    expect(out).not.toBeNull();
+    expect(out!.name).toBe('resumed.html');
+    expect(out!.body).toBe('<p>resumed</p>');
+    expect(out!.manifest?.entry).toBe('resumed.html');
+    expect(out!.manifest?.kind).toBe('html');
+    const sidecarPath = path.join(projectsRoot, PROJECT_ID, 'resumed.html.artifact.json');
+    expect(fs.existsSync(sidecarPath)).toBe(true);
+    const sidecar = JSON.parse(fs.readFileSync(sidecarPath, 'utf8')) as {
+      entry?: string;
+      kind?: string;
+      metadata?: { inferred?: boolean; reconciled?: boolean };
+    };
+    expect(sidecar.entry).toBe('resumed.html');
+    expect(sidecar.kind).toBe('html');
+    expect(sidecar.metadata?.inferred).toBe(true);
+    expect(sidecar.metadata?.reconciled).toBe(true);
+  });
+
+  it('keeps a newer persisted artifact ahead of an older reconciled HTML file when no tab is active', async () => {
+    const { db, projectsRoot } = setupResolverFixture();
+    const projectDir = path.join(projectsRoot, PROJECT_ID);
+    const staleHtmlMtime = new Date('2026-05-01T00:00:00.000Z');
+
+    await writeProjectFile(projectsRoot, PROJECT_ID, 'newer.html', '<p>newer</p>', {
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Newer',
+        entry: 'newer.html',
+        renderer: 'html',
+        exports: ['html'],
+        updatedAt: '2026-05-07T00:00:00.000Z',
+      },
+    });
+    await writeProjectFile(projectsRoot, PROJECT_ID, 'stale.html', '<p>stale</p>');
+    fs.utimesSync(path.join(projectDir, 'stale.html'), staleHtmlMtime, staleHtmlMtime);
+
+    const out = await resolveCurrentArtifact(db, projectsRoot, PROJECT_ID);
+
+    expect(out).not.toBeNull();
+    expect(out!.name).toBe('newer.html');
+    expect(out!.body).toBe('<p>newer</p>');
+    const sidecarPath = path.join(projectDir, 'stale.html.artifact.json');
+    expect(fs.existsSync(sidecarPath)).toBe(true);
+    const sidecar = JSON.parse(fs.readFileSync(sidecarPath, 'utf8')) as {
+      updatedAt?: string;
+      metadata?: { reconciled?: boolean };
+    };
+    expect(sidecar.metadata?.reconciled).toBe(true);
+    expect(sidecar.updatedAt).toBe(staleHtmlMtime.toISOString());
+  });
+
   // PR #832 P3 fix from @lefarcen: a malformed tabs row (e.g. an
   // attacker with DB write access setting tabs.name = `../../../etc/passwd`)
   // would otherwise cause path.join to compose a probe URL outside the
@@ -508,6 +570,65 @@ describe('finalizeDesignPackage (pipeline integration)', () => {
     expect(dirEntries.filter((n) => n.startsWith('DESIGN.md.tmp.'))).toEqual([]);
     // Lock is released.
     expect(dirEntries).not.toContain('.finalize.lock');
+  });
+
+  it('uses Google Gemini generateContent when finalize protocol is google', async () => {
+    const { db, projectsRoot, designSystemsRoot } = setupPipeline({
+      designSystemId: 'shadcn',
+      designSystemBody: '# shadcn\n',
+    });
+    const fetchImpl = vi.fn(async (_url: string, _init: RequestInit) =>
+      new Response(
+        JSON.stringify({
+          candidates: [
+            {
+              content: {
+                parts: [
+                  { text: '# DESIGN.md\n' },
+                  { text: '## Summary\nGemini synthesis.\n' },
+                ],
+              },
+            },
+          ],
+          usageMetadata: {
+            promptTokenCount: 4321,
+            candidatesTokenCount: 876,
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+
+    const result = await finalizeDesignPackage(db, projectsRoot, designSystemsRoot, PROJECT_ID, {
+      protocol: 'google',
+      apiKey: 'AIza-test-key',
+      baseUrl: 'https://generativelanguage.googleapis.com',
+      model: 'gemini-2.0-flash',
+      fetchImpl: fetchImpl as any,
+    } as any);
+
+    expect(result.model).toBe('gemini-2.0-flash');
+    expect(result.inputTokens).toBe(4321);
+    expect(result.outputTokens).toBe(876);
+    expect(fs.readFileSync(result.designMdPath, 'utf8')).toBe(
+      '# DESIGN.md\n## Summary\nGemini synthesis.\n',
+    );
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchImpl.mock.calls[0]!;
+    expect(url).toBe(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
+    );
+    expect((init as RequestInit).headers).toMatchObject({
+      'content-type': 'application/json',
+      'x-goog-api-key': 'AIza-test-key',
+    });
+    const body = JSON.parse((init as RequestInit).body as string);
+    expect(body.systemInstruction.parts[0].text).toContain('# DESIGN.md');
+    expect(body.contents).toHaveLength(1);
+    expect(body.contents[0].role).toBe('user');
+    expect(body.contents[0].parts[0].text).toContain('Synthesize DESIGN.md');
+    expect(body.generationConfig.maxOutputTokens).toBe(16000);
   });
 
   it('response carries every documented field with correct types', async () => {

@@ -70,6 +70,7 @@ describe('routine routes', () => {
     app.use(express.json());
     registerRoutineRoutes(app, {
       db,
+      paths: { RUNTIME_DATA_DIR: tempDir },
       routines: {
         routineService: {
           nextRunAt,
@@ -82,6 +83,39 @@ describe('routine routes', () => {
 
     return { app, db, nextRunAt, rescheduleOne, runNow, unschedule };
   }
+
+  it('lists and fetches built-in automation templates', async () => {
+    const { app } = buildApp();
+    const { server, port } = await listen(app);
+    try {
+      const listRes = await fetch(`http://127.0.0.1:${port}/api/automation-templates`);
+      expect(listRes.status).toBe(200);
+      const listJson = await listRes.json() as {
+        templates: Array<{ id: string; outputSinks: string[]; tokenCompression: string }>;
+      };
+      expect(listJson.templates.map((template) => template.id)).toEqual(expect.arrayContaining([
+        'ingest-source-memory-tree',
+        'extract-design-system',
+        'crystallize-run-into-skill',
+      ]));
+
+      const templateRes = await fetch(`http://127.0.0.1:${port}/api/automation-templates/extract-design-system`);
+      expect(templateRes.status).toBe(200);
+      const templateJson = await templateRes.json() as {
+        template: { id: string; outputSinks: string[]; tokenCompression: string };
+      };
+      expect(templateJson.template).toMatchObject({
+        id: 'extract-design-system',
+        outputSinks: ['design-system', 'memory'],
+        tokenCompression: 'balanced',
+      });
+
+      const missingRes = await fetch(`http://127.0.0.1:${port}/api/automation-templates/missing`);
+      expect(missingRes.status).toBe(404);
+    } finally {
+      server.close();
+    }
+  });
 
   it('creates a reuse-mode routine and includes the computed next run', async () => {
     const { app, db, rescheduleOne } = buildApp();
@@ -108,6 +142,12 @@ describe('routine routes', () => {
             timezone: 'UTC',
           },
           target: { mode: 'reuse', projectId: 'proj-1' },
+          context: {
+            skillIds: ['live-artifact'],
+            pluginIds: ['od-new-generation'],
+            mcpServerIds: ['figma-mcp'],
+            connectorIds: ['github'],
+          },
           enabled: true,
         }),
       });
@@ -118,15 +158,28 @@ describe('routine routes', () => {
           id: string;
           name: string;
           target: { mode: string; projectId: string };
+          context: {
+            skillIds?: string[];
+            pluginIds?: string[];
+            mcpServerIds?: string[];
+            connectorIds?: string[];
+          };
           nextRunAt: number;
         };
       };
       expect(json.routine.name).toBe('Weekly digest');
       expect(json.routine.target).toEqual({ mode: 'reuse', projectId: 'proj-1' });
+      expect(json.routine.context).toEqual({
+        skillIds: ['live-artifact'],
+        pluginIds: ['od-new-generation'],
+        mcpServerIds: ['figma-mcp'],
+        connectorIds: ['github'],
+      });
       expect(json.routine.nextRunAt).toBe(new Date('2026-05-13T01:00:00.000Z').getTime());
 
       const stored = getRoutine(db, json.routine.id);
       expect(stored?.projectId).toBe('proj-1');
+      expect(JSON.parse(stored?.contextJson ?? '{}')).toEqual(json.routine.context);
       expect(rescheduleOne).toHaveBeenCalledWith(json.routine.id);
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -255,6 +308,110 @@ describe('routine routes', () => {
     }
   });
 
+  it('crystallizes a succeeded routine run into skill and memory proposals', async () => {
+    const { app, db } = buildApp();
+    const { server, port } = await listen(app);
+    try {
+      const createRes = await fetch(`http://127.0.0.1:${port}/api/routines`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Artifact polish loop',
+          prompt: 'Review a generated artifact and extract durable layout guidance.',
+          schedule: { kind: 'daily', time: '09:00', timezone: 'UTC' },
+          target: { mode: 'create_each_run' },
+          enabled: true,
+        }),
+      });
+      const created = await createRes.json() as { routine: { id: string } };
+      insertRoutineRun(db, {
+        id: 'run-succeeded-1',
+        routineId: created.routine.id,
+        trigger: 'manual',
+        status: 'succeeded',
+        projectId: 'proj-crystallize',
+        conversationId: 'conv-crystallize',
+        agentRunId: 'agent-crystallize',
+        startedAt: Date.now() - 5_000,
+        completedAt: Date.now(),
+        summary: 'Use compact control panels, keep artifact previews unframed, and promote repeatable QA steps.',
+      });
+
+      const res = await fetch(
+        `http://127.0.0.1:${port}/api/routines/${created.routine.id}/runs/run-succeeded-1/crystallize`,
+        { method: 'POST' },
+      );
+      expect(res.status).toBe(200);
+      const json = await res.json() as {
+        routineId: string;
+        runId: string;
+        packet: { sourceKind: string; sourceRef: string; metadata?: Record<string, unknown> };
+        proposals: Array<{ targetKind: string; title: string }>;
+      };
+      expect(json.routineId).toBe(created.routine.id);
+      expect(json.runId).toBe('run-succeeded-1');
+      expect(json.packet).toMatchObject({
+        sourceKind: 'chat',
+        sourceRef: 'routine-run:run-succeeded-1',
+      });
+      expect(json.packet.metadata).toMatchObject({
+        routineId: created.routine.id,
+        routineRunId: 'run-succeeded-1',
+        agentRunId: 'agent-crystallize',
+        templateId: 'crystallize-run-into-skill',
+      });
+      expect(json.proposals.map((proposal) => proposal.targetKind).sort()).toEqual([
+        'memory-node',
+        'skill',
+      ]);
+      expect(json.proposals.map((proposal) => proposal.title)).toEqual(expect.arrayContaining([
+        'Skill: Artifact polish loop run',
+        'Memory: Artifact polish loop run',
+      ]));
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it('rejects crystallizing routine runs that have not succeeded', async () => {
+    const { app, db } = buildApp();
+    const { server, port } = await listen(app);
+    try {
+      const createRes = await fetch(`http://127.0.0.1:${port}/api/routines`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Daily digest',
+          prompt: 'Summarize activity.',
+          schedule: { kind: 'daily', time: '09:00', timezone: 'UTC' },
+          target: { mode: 'create_each_run' },
+          enabled: true,
+        }),
+      });
+      const created = await createRes.json() as { routine: { id: string } };
+      insertRoutineRun(db, {
+        id: 'run-running-1',
+        routineId: created.routine.id,
+        trigger: 'manual',
+        status: 'running',
+        projectId: 'proj-running',
+        conversationId: 'conv-running',
+        agentRunId: 'agent-running',
+        startedAt: Date.now(),
+      });
+
+      const res = await fetch(
+        `http://127.0.0.1:${port}/api/routines/${created.routine.id}/runs/run-running-1/crystallize`,
+        { method: 'POST' },
+      );
+      expect(res.status).toBe(400);
+      const json = await res.json() as { error: string };
+      expect(json.error).toBe('only succeeded routine runs can be crystallized');
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
   it('maps the latest persisted run into the routine contract', async () => {
     const { app, db } = buildApp();
     const { server, port } = await listen(app);
@@ -284,6 +441,7 @@ describe('routine routes', () => {
         completedAt: Date.now(),
         summary: 'Connector auth failed',
         error: 'provider rejected credentials',
+        errorCode: 'AGENT_AUTH_REQUIRED',
       });
 
       const getRes = await fetch(`http://127.0.0.1:${port}/api/routines/${created.routine.id}`);
@@ -298,6 +456,8 @@ describe('routine routes', () => {
             conversationId: string;
             agentRunId: string;
             summary: string;
+            error: string;
+            errorCode: string;
             completedAt: number;
           } | null;
         };
@@ -310,6 +470,8 @@ describe('routine routes', () => {
         conversationId: 'conv-failed',
         agentRunId: 'agent-run-failed',
         summary: 'Connector auth failed',
+        error: 'provider rejected credentials',
+        errorCode: 'AGENT_AUTH_REQUIRED',
       });
       expect(json.routine.lastRun?.completedAt).toBeTypeOf('number');
     } finally {

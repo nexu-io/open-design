@@ -1,0 +1,241 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-design.ai/schemas/plugin.v1.json",
+  "title": "Open Design plugin manifest (v1)",
+  "description": "Schema for `open-design.json` sidecar files. Companion of `SKILL.md`; never duplicates skill body content. See docs/plugins-spec.md §5.",
+  "type": "object",
+  "required": ["specVersion", "name", "version"],
+  "additionalProperties": true,
+  "properties": {
+    "$schema": { "type": "string", "format": "uri" },
+    "specVersion": { "type": "string", "minLength": 1 },
+    "name": { "type": "string", "minLength": 1, "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+    "title": { "type": "string", "minLength": 1 },
+    "version": { "type": "string", "minLength": 1 },
+    "description": { "type": "string" },
+    "author": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "url":  { "type": "string", "format": "uri" }
+      },
+      "additionalProperties": true
+    },
+    "license":  { "type": "string" },
+    "homepage": { "type": "string", "format": "uri" },
+    "icon":     { "type": "string" },
+    "tags":     { "type": "array", "items": { "type": "string" } },
+    "compat": {
+      "type": "object",
+      "properties": {
+        "agentSkills":   { "type": "array", "items": { "$ref": "#/$defs/RefPath" } },
+        "claudePlugins": { "type": "array", "items": { "$ref": "#/$defs/RefPath" } }
+      },
+      "additionalProperties": true
+    },
+    "od": {
+      "type": "object",
+      "properties": {
+        "kind":     { "type": "string", "enum": ["skill", "scenario", "atom", "bundle"] },
+        "taskKind": { "type": "string", "enum": ["new-generation", "code-migration", "figma-migration", "tune-collab"] },
+        "mode":     { "type": "string" },
+        "platform": { "type": "string" },
+        "scenario": { "type": "string" },
+        "engineRequirements": {
+          "type": "object",
+          "properties": { "od": { "type": "string" } },
+          "additionalProperties": true
+        },
+        "preview": {
+          "type": "object",
+          "properties": {
+            "type":   { "type": "string" },
+            "entry":  { "type": "string" },
+            "poster": { "type": "string" },
+            "video":  { "type": "string" },
+            "gif":    { "type": "string" }
+          },
+          "additionalProperties": true
+        },
+        "useCase": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "oneOf": [
+                { "type": "string" },
+                { "$ref": "#/$defs/LocalizedText" }
+              ]
+            },
+            "exampleOutputs": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["path"],
+                "properties": {
+                  "path":  { "type": "string" },
+                  "title": { "type": "string" }
+                },
+                "additionalProperties": true
+              }
+            }
+          },
+          "additionalProperties": true
+        },
+        "context": {
+          "type": "object",
+          "properties": {
+            "skills":        { "type": "array", "items": { "$ref": "#/$defs/Reference" } },
+            "designSystem":  {
+              "oneOf": [
+                { "$ref": "#/$defs/Reference" },
+                { "type": "object", "properties": { "ref": { "type": "string" }, "primary": { "type": "boolean" } }, "additionalProperties": true }
+              ]
+            },
+            "craft":         { "type": "array", "items": { "type": "string" } },
+            "assets":        { "type": "array", "items": { "type": "string" } },
+            "claudePlugins": { "type": "array", "items": { "$ref": "#/$defs/Reference" } },
+            "mcp":           { "type": "array", "items": { "$ref": "#/$defs/McpServerSpec" } },
+            "atoms":         { "type": "array", "items": { "type": "string" } }
+          },
+          "additionalProperties": true
+        },
+        "pipeline": {
+          "type": "object",
+          "required": ["stages"],
+          "properties": {
+            "stages": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["id", "atoms"],
+                "properties": {
+                  "id":        { "type": "string", "minLength": 1 },
+                  "atoms":     { "type": "array", "items": { "type": "string" } },
+                  "repeat":    { "type": "boolean" },
+                  "until":     { "type": "string" },
+                  "onFailure": { "type": "string", "enum": ["abort", "skip", "retry"] }
+                },
+                "additionalProperties": true
+              }
+            }
+          },
+          "additionalProperties": true
+        },
+        "genui": {
+          "type": "object",
+          "properties": {
+            "surfaces": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/GenUISurface" }
+            }
+          },
+          "additionalProperties": true
+        },
+        "connectors": {
+          "type": "object",
+          "properties": {
+            "required": { "type": "array", "items": { "$ref": "#/$defs/ConnectorRef" } },
+            "optional": { "type": "array", "items": { "$ref": "#/$defs/ConnectorRef" } }
+          },
+          "additionalProperties": true
+        },
+        "inputs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/InputField" }
+        },
+        "capabilities": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "RefPath": {
+      "type": "object",
+      "required": ["path"],
+      "properties": { "path": { "type": "string", "minLength": 1 } },
+      "additionalProperties": true
+    },
+    "LocalizedText": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "type": "string" }
+    },
+    "Reference": {
+      "type": "object",
+      "properties": {
+        "ref":  { "type": "string" },
+        "path": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "McpServerSpec": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name":    { "type": "string" },
+        "command": { "type": "string" },
+        "args":    { "type": "array", "items": { "type": "string" } },
+        "env":     { "type": "object", "additionalProperties": { "type": "string" } },
+        "url":     { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "GenUISurface": {
+      "type": "object",
+      "required": ["id", "kind", "persist"],
+      "properties": {
+        "id":      { "type": "string", "minLength": 1 },
+        "kind":    { "type": "string", "enum": ["form", "choice", "confirmation", "oauth-prompt"] },
+        "persist": { "type": "string", "enum": ["run", "conversation", "project"] },
+        "trigger": {
+          "type": "object",
+          "properties": {
+            "stageId": { "type": "string" },
+            "atom":    { "type": "string" }
+          },
+          "additionalProperties": true
+        },
+        "schema":               { "type": "object" },
+        "prompt":               { "type": "string" },
+        "capabilitiesRequired": { "type": "array", "items": { "type": "string" } },
+        "timeout":              { "type": "integer", "minimum": 1 },
+        "onTimeout":            { "type": "string", "enum": ["abort", "default", "skip"] },
+        "default":              {},
+        "oauth": {
+          "type": "object",
+          "required": ["route"],
+          "properties": {
+            "route":       { "type": "string", "enum": ["connector", "mcp", "plugin"] },
+            "connectorId": { "type": "string" },
+            "mcpServerId": { "type": "string" }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "ConnectorRef": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id":    { "type": "string" },
+        "tools": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": true
+    },
+    "InputField": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name":        { "type": "string", "minLength": 1 },
+        "label":       { "type": "string" },
+        "type":        { "type": "string", "enum": ["string", "text", "select", "number", "boolean", "file"] },
+        "required":    { "type": "boolean" },
+        "options":     { "type": "array", "items": { "type": "string" } },
+        "placeholder": { "type": "string" },
+        "default":     {}
+      },
+      "additionalProperties": true
+    }
+  }
+}

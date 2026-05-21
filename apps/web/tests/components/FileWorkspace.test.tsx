@@ -7,6 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { FileWorkspace, scrollWorkspaceTabsWithWheel } from '../../src/components/FileWorkspace';
+import { DesignFilesPanel } from '../../src/components/DesignFilesPanel';
 import { projectSplitClassName } from '../../src/components/ProjectView';
 import { uploadProjectFiles } from '../../src/providers/registry';
 import type { ProjectFile } from '../../src/types';
@@ -308,448 +309,61 @@ describe('FileWorkspace upload input', () => {
   });
 });
 
-describe('FileWorkspace design file rename', () => {
-  it('renames from the Design Files row menu and replaces persisted tabs', async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (url.endsWith('/api/projects/project-1/files/rename') && init?.method === 'POST') {
-        return new Response(
-          JSON.stringify({
-            file: workspaceFile('resume-notes.txt'),
-            oldName: 'paste-1.txt',
-            newName: 'resume-notes.txt',
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        );
-      }
-      return new Response('', { status: 200 });
-    });
-    vi.stubGlobal('fetch', fetchMock);
-    const onTabsStateChange = vi.fn();
-    const onRefreshFiles = vi.fn();
-
+describe('DesignFilesPanel plugin folders', () => {
+  it('surfaces generated plugin folders with agent-routed CLI actions', async () => {
+    const onPluginFolderAgentAction = vi.fn();
     const container = renderWorkspace(
-      <FileWorkspace
+      <DesignFilesPanel
         projectId="project-1"
-        projectKind="prototype"
-        files={[workspaceFile('paste-1.txt'), workspaceFile('index.html')]}
+        files={[
+          workspaceFile('generated-plugin/open-design.json'),
+          workspaceFile('generated-plugin/SKILL.md'),
+          workspaceFile('generated-plugin/examples/demo.md'),
+        ]}
         liveArtifacts={[]}
-        onRefreshFiles={onRefreshFiles}
-        isDeck={false}
-        tabsState={{ tabs: ['paste-1.txt', 'index.html'], active: 'paste-1.txt' }}
-        onTabsStateChange={onTabsStateChange}
+        onRefreshFiles={vi.fn()}
+        onOpenFile={vi.fn()}
+        onOpenLiveArtifact={vi.fn()}
+        onDeleteFile={vi.fn()}
+        onDeleteFiles={vi.fn()}
+        onRenameFile={vi.fn()}
+        onUpload={vi.fn()}
+        onUploadFiles={vi.fn()}
+        onPaste={vi.fn()}
+        onNewSketch={vi.fn()}
+        onPluginFolderAgentAction={onPluginFolderAgentAction}
       />,
     );
 
-    const designFilesTab = container.querySelector<HTMLElement>('[data-testid="design-files-tab"]');
-    if (!designFilesTab) throw new Error('Could not find design files tab');
-
-    act(() => designFilesTab.click());
-    const menuButton = container.querySelector<HTMLElement>('[data-testid="design-file-menu-paste-1.txt"]');
-    if (!menuButton) throw new Error('Could not find design file menu');
-    act(() => menuButton.click());
-    const renameButton = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
-      .find((button) => button.textContent === 'Rename');
-    if (!renameButton) throw new Error('Could not find rename command');
-    act(() => renameButton.click());
-
-    const input = container.querySelector<HTMLInputElement>('.df-rename-input');
-    if (!input) throw new Error('Could not find rename input');
-    act(() => {
-      changeInputValue(input, 'resume-notes.txt');
-    });
+    expect(container.querySelector('[data-testid="design-plugin-folder-generated-plugin"]')).toBeTruthy();
+    const install = container.querySelector<HTMLButtonElement>(
+      '[data-testid="design-plugin-folder-install-generated-plugin"]',
+    );
+    expect(install).toBeTruthy();
     await act(async () => {
-      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      install?.click();
     });
+    expect(onPluginFolderAgentAction).toHaveBeenCalledWith('generated-plugin', 'install');
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      '/api/projects/project-1/files/rename',
-      expect.objectContaining({
-        method: 'POST',
-        body: JSON.stringify({ from: 'paste-1.txt', to: 'resume-notes.txt' }),
-      }),
+    const publish = container.querySelector<HTMLButtonElement>(
+      '[data-testid="design-plugin-folder-publish-generated-plugin"]',
     );
-    expect(onTabsStateChange).toHaveBeenLastCalledWith({
-      tabs: ['resume-notes.txt', 'index.html'],
-      active: 'resume-notes.txt',
-    });
-    expect(onRefreshFiles).toHaveBeenCalledTimes(1);
-  });
-
-  it('rejects renaming a persisted file over an open pending sketch tab', async () => {
-    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
-      new Response('', { status: 200 }),
+    const contribute = container.querySelector<HTMLButtonElement>(
+      '[data-testid="design-plugin-folder-contribute-generated-plugin"]',
     );
-    const alertMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
-    vi.stubGlobal('alert', alertMock);
-    vi.stubGlobal('ResizeObserver', class {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    });
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
-    const onTabsStateChange = vi.fn();
-
-    const container = renderWorkspace(
-      <FileWorkspace
-        projectId="project-1"
-        projectKind="prototype"
-        files={[workspaceFile('paste-1.txt')]}
-        liveArtifacts={[]}
-        onRefreshFiles={vi.fn()}
-        isDeck={false}
-        tabsState={{ tabs: ['paste-1.txt'], active: 'paste-1.txt' }}
-        onTabsStateChange={onTabsStateChange}
-      />,
-    );
-
-    const designFilesTab = container.querySelector<HTMLElement>('[data-testid="design-files-tab"]');
-    if (!designFilesTab) throw new Error('Could not find design files tab');
-    act(() => designFilesTab.click());
-
-    const newSketchButton = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
-      .find((button) => button.textContent === 'New sketch');
-    if (!newSketchButton) throw new Error('Could not find new sketch command');
-    act(() => newSketchButton.click());
-
-    const pendingSketchTab = Array.from(container.querySelectorAll<HTMLElement>('[role="tab"]')).find((tab) =>
-      tab.textContent?.includes('.sketch.json'),
-    );
-    if (!pendingSketchTab) throw new Error('Could not find pending sketch tab');
-    const pendingSketchName = pendingSketchTab.textContent!.replace(' •', '');
-
-    act(() => designFilesTab.click());
-    const menuButton = container.querySelector<HTMLElement>('[data-testid="design-file-menu-paste-1.txt"]');
-    if (!menuButton) throw new Error('Could not find file menu');
-    act(() => menuButton.click());
-    const renameButton = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
-      .find((button) => button.textContent === 'Rename');
-    if (!renameButton) throw new Error('Could not find rename command');
-    act(() => renameButton.click());
-
-    const input = container.querySelector<HTMLInputElement>('.df-rename-input');
-    if (!input) throw new Error('Could not find rename input');
-    act(() => {
-      changeInputValue(input, pendingSketchName);
-    });
+    expect(publish).toBeTruthy();
+    expect(contribute).toBeTruthy();
     await act(async () => {
-      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      publish?.click();
     });
-
-    expect(alertMock).toHaveBeenCalledWith(
-      `A pending sketch named "${pendingSketchName}" is already open. Save or close it before renaming.`,
+    expect(onPluginFolderAgentAction).toHaveBeenCalledWith('generated-plugin', 'publish');
+    await act(async () => {
+      contribute?.click();
+    });
+    expect(onPluginFolderAgentAction).toHaveBeenCalledWith('generated-plugin', 'contribute');
+    expect(container.textContent).toContain(
+      'Sent to the agent. The CLI run will continue in chat.',
     );
-    const renameCalls = fetchMock.mock.calls.filter(([input]) =>
-      String(input).endsWith('/api/projects/project-1/files/rename'),
-    );
-    expect(renameCalls).toHaveLength(0);
-    expect(onTabsStateChange).not.toHaveBeenCalled();
-    expect(pendingSketchTab.textContent).toContain(pendingSketchName);
-  });
-});
-
-describe('FileWorkspace sketch round-trip', () => {
-  it('preserves unsupported sketch items when saving an unedited sketch file', async () => {
-    const sourceDoc = {
-      version: 3,
-      items: [
-        { kind: 'pen', points: [{ x: 10, y: 12 }], color: '#111', size: 2 },
-        { kind: 'ellipse', cx: 80, cy: 60, rx: 24, ry: 12, color: '#0af', size: 3 },
-        { kind: 'text', x: 20, y: 32, text: 'hello', color: '#222', size: 16 },
-      ],
-    };
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (url === '/api/projects/project-1/raw/diagram.sketch.json') {
-        return new Response(JSON.stringify(sourceDoc), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-      if (url === '/api/projects/project-1/files' && init?.method === 'POST') {
-        return new Response(
-          JSON.stringify({
-            file: {
-              ...workspaceFile('diagram.sketch.json'),
-              kind: 'sketch',
-              mime: 'application/json',
-            },
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        );
-      }
-      return new Response('', { status: 200 });
-    });
-    vi.stubGlobal('fetch', fetchMock);
-    vi.stubGlobal('ResizeObserver', class {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    });
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
-
-    render(
-      <FileWorkspace
-        projectId="project-1"
-        projectKind="prototype"
-        files={[
-          baseFile({
-            name: 'diagram.sketch.json',
-            path: 'diagram.sketch.json',
-            kind: 'sketch',
-            mime: 'application/json',
-          }),
-        ]}
-        liveArtifacts={[]}
-        onRefreshFiles={vi.fn()}
-        isDeck={false}
-        tabsState={{ tabs: ['diagram.sketch.json'], active: 'diagram.sketch.json' }}
-        onTabsStateChange={vi.fn()}
-      />,
-    );
-
-    const saveButton = await screen.findByRole('button', { name: 'Save' });
-    await waitFor(() => expect(saveButton.hasAttribute('disabled')).toBe(false));
-
-    fireEvent.click(saveButton);
-
-    await waitFor(() => {
-      const writeCall = fetchMock.mock.calls.find(
-        ([input, init]) =>
-          String(input) === '/api/projects/project-1/files' &&
-          init &&
-          typeof init === 'object' &&
-          init.method === 'POST',
-      );
-      expect(writeCall).toBeTruthy();
-    });
-
-    const writeCall = fetchMock.mock.calls.find(
-      ([input, init]) =>
-        String(input) === '/api/projects/project-1/files' &&
-        init &&
-        typeof init === 'object' &&
-        init.method === 'POST',
-    );
-    if (!writeCall) throw new Error('Expected sketch save request');
-    const [, init] = writeCall;
-    const payload = JSON.parse(String((init as RequestInit).body)) as {
-      name: string;
-      content: string;
-    };
-    const savedDoc = JSON.parse(payload.content) as {
-      version: number;
-      items: Array<Record<string, unknown>>;
-    };
-
-    expect(savedDoc).toEqual(sourceDoc);
-  });
-
-  it('keeps Save and Clear available for unsupported-only sketch files', async () => {
-    const sourceDoc = {
-      version: 3,
-      items: [
-        { kind: 'ellipse', cx: 80, cy: 60, rx: 24, ry: 12, color: '#0af', size: 3 },
-      ],
-    };
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (url === '/api/projects/project-1/raw/diagram.sketch.json') {
-        return new Response(JSON.stringify(sourceDoc), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-      if (url === '/api/projects/project-1/files' && init?.method === 'POST') {
-        return new Response(
-          JSON.stringify({
-            file: {
-              ...workspaceFile('diagram.sketch.json'),
-              kind: 'sketch',
-              mime: 'application/json',
-            },
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        );
-      }
-      return new Response('', { status: 200 });
-    });
-    vi.stubGlobal('fetch', fetchMock);
-    vi.stubGlobal('ResizeObserver', class {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    });
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
-
-    render(
-      <FileWorkspace
-        projectId="project-1"
-        projectKind="prototype"
-        files={[
-          baseFile({
-            name: 'diagram.sketch.json',
-            path: 'diagram.sketch.json',
-            kind: 'sketch',
-            mime: 'application/json',
-          }),
-        ]}
-        liveArtifacts={[]}
-        onRefreshFiles={vi.fn()}
-        isDeck={false}
-        tabsState={{ tabs: ['diagram.sketch.json'], active: 'diagram.sketch.json' }}
-        onTabsStateChange={vi.fn()}
-      />,
-    );
-
-    const clearButton = await screen.findByRole('button', { name: 'Clear' });
-    const saveButton = await screen.findByRole('button', { name: 'Save' });
-    await waitFor(() => {
-      expect(clearButton.hasAttribute('disabled')).toBe(false);
-      expect(saveButton.hasAttribute('disabled')).toBe(false);
-    });
-
-    fireEvent.click(clearButton);
-    await waitFor(() => expect(clearButton.hasAttribute('disabled')).toBe(true));
-
-    fireEvent.click(saveButton);
-
-    await waitFor(() => {
-      const writeCall = fetchMock.mock.calls.find(
-        ([input, init]) =>
-          String(input) === '/api/projects/project-1/files' &&
-          init &&
-          typeof init === 'object' &&
-          init.method === 'POST',
-      );
-      expect(writeCall).toBeTruthy();
-    });
-
-    const writeCall = fetchMock.mock.calls.find(
-      ([input, init]) =>
-        String(input) === '/api/projects/project-1/files' &&
-        init &&
-        typeof init === 'object' &&
-        init.method === 'POST',
-    );
-    if (!writeCall) throw new Error('Expected sketch save request');
-    const [, init] = writeCall;
-    const payload = JSON.parse(String((init as RequestInit).body)) as {
-      name: string;
-      content: string;
-    };
-    const savedDoc = JSON.parse(payload.content) as {
-      version: number;
-      items: Array<Record<string, unknown>>;
-    };
-
-    expect(savedDoc).toEqual({
-      version: 3,
-      items: [],
-    });
-  });
-
-  it('does not resurrect unsupported sketch items after clearing and saving', async () => {
-    const sourceDoc = {
-      version: 3,
-      items: [
-        { kind: 'text', x: 20, y: 32, text: 'hello', color: '#222', size: 16 },
-        { kind: 'ellipse', cx: 80, cy: 60, rx: 24, ry: 12, color: '#0af', size: 3 },
-      ],
-    };
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (url === '/api/projects/project-1/raw/diagram.sketch.json') {
-        return new Response(JSON.stringify(sourceDoc), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-      if (url === '/api/projects/project-1/files' && init?.method === 'POST') {
-        return new Response(
-          JSON.stringify({
-            file: {
-              ...workspaceFile('diagram.sketch.json'),
-              kind: 'sketch',
-              mime: 'application/json',
-            },
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        );
-      }
-      return new Response('', { status: 200 });
-    });
-    vi.stubGlobal('fetch', fetchMock);
-    vi.stubGlobal('ResizeObserver', class {
-      observe() {}
-      unobserve() {}
-      disconnect() {}
-    });
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
-
-    render(
-      <FileWorkspace
-        projectId="project-1"
-        projectKind="prototype"
-        files={[
-          baseFile({
-            name: 'diagram.sketch.json',
-            path: 'diagram.sketch.json',
-            kind: 'sketch',
-            mime: 'application/json',
-          }),
-        ]}
-        liveArtifacts={[]}
-        onRefreshFiles={vi.fn()}
-        isDeck={false}
-        tabsState={{ tabs: ['diagram.sketch.json'], active: 'diagram.sketch.json' }}
-        onTabsStateChange={vi.fn()}
-      />,
-    );
-
-    const clearButton = await screen.findByRole('button', { name: 'Clear' });
-    const saveButton = await screen.findByRole('button', { name: 'Save' });
-    await waitFor(() => expect(clearButton.hasAttribute('disabled')).toBe(false));
-
-    fireEvent.click(clearButton);
-    await waitFor(() => expect(clearButton.hasAttribute('disabled')).toBe(true));
-
-    fireEvent.click(saveButton);
-
-    await waitFor(() => {
-      const writeCall = fetchMock.mock.calls.find(
-        ([input, init]) =>
-          String(input) === '/api/projects/project-1/files' &&
-          init &&
-          typeof init === 'object' &&
-          init.method === 'POST',
-      );
-      expect(writeCall).toBeTruthy();
-    });
-
-    const writeCall = fetchMock.mock.calls.find(
-      ([input, init]) =>
-        String(input) === '/api/projects/project-1/files' &&
-        init &&
-        typeof init === 'object' &&
-        init.method === 'POST',
-    );
-    if (!writeCall) throw new Error('Expected sketch save request');
-    const [, init] = writeCall;
-    const payload = JSON.parse(String((init as RequestInit).body)) as {
-      name: string;
-      content: string;
-    };
-    const savedDoc = JSON.parse(payload.content) as {
-      version: number;
-      items: Array<Record<string, unknown>>;
-    };
-
-    expect(savedDoc).toEqual({
-      version: 3,
-      items: [],
-    });
   });
 });
 

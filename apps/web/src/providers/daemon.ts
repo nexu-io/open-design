@@ -20,6 +20,7 @@ import type {
   ChatSseStartPayload,
   DaemonAgentPayload,
   ResearchOptions,
+  RunContextSelection,
   SseErrorPayload,
 } from '@open-design/contracts';
 import type { StreamHandlers } from './anthropic';
@@ -58,6 +59,10 @@ function truncateForTranscript(content: string): string {
   if (content.length <= MAX_TRANSCRIPT_MESSAGE_CHARS) return content;
   const omitted = content.length - MAX_TRANSCRIPT_MESSAGE_CHARS;
   return `${content.slice(0, MAX_TRANSCRIPT_MESSAGE_CHARS)}\n\n[Open Design truncated ${omitted} chars from this prior message before sending it to the agent. Full content remains in persisted history.]`;
+}
+
+function escapeTranscriptRoleDelimiters(content: string): string {
+  return content.replace(/^(## (?:user|assistant)[ \t]*)(\r?)$/gm, '\\$1$2');
 }
 
 function compactInput(input: unknown): string {
@@ -117,11 +122,23 @@ function buildPriorRunContextWarning(history: ChatMessage[]): string | null {
   ].join('\n');
 }
 
-export function buildDaemonTranscript(history: ChatMessage[]): string {
-  const transcript = history
-    .map((m) => `## ${m.role}\n${truncateForTranscript(m.content.trim())}`)
+function scopeHistoryToAgent(history: ChatMessage[], targetAgentId?: string): ChatMessage[] {
+  if (!targetAgentId) return history;
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    const message = history[i];
+    if (message?.role === 'assistant' && message.agentId && message.agentId !== targetAgentId) {
+      return history.slice(i + 1);
+    }
+  }
+  return history;
+}
+
+export function buildDaemonTranscript(history: ChatMessage[], targetAgentId?: string): string {
+  const scopedHistory = scopeHistoryToAgent(history, targetAgentId);
+  const transcript = scopedHistory
+    .map((m) => `## ${m.role}\n${escapeTranscriptRoleDelimiters(truncateForTranscript(m.content.trim()))}`)
     .join('\n\n');
-  const warning = buildPriorRunContextWarning(history);
+  const warning = buildPriorRunContextWarning(scopedHistory);
   return warning ? `${warning}\n\n${transcript}` : transcript;
 }
 
@@ -163,6 +180,8 @@ export interface DaemonStreamOptions {
   model?: string | null;
   reasoning?: string | null;
   research?: ResearchOptions;
+  context?: RunContextSelection;
+  locale?: string;
   initialLastEventId?: string | null;
   onRunCreated?: (runId: string) => void;
   onRunStatus?: (status: ChatRunStatus) => void;
@@ -177,6 +196,13 @@ export interface DaemonReattachOptions {
   initialLastEventId?: string | null;
   onRunStatus?: (status: ChatRunStatus) => void;
   onRunEventId?: (eventId: string) => void;
+}
+
+export const RUNS_CHANGED_EVENT = 'open-design:runs-changed';
+
+function notifyRunsChanged() {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new Event(RUNS_CHANGED_EVENT));
 }
 
 function daemonSseErrorMessage(data: SseErrorPayload): string {
@@ -210,15 +236,21 @@ export async function streamViaDaemon({
   model,
   reasoning,
   research,
+  context,
+  locale,
   initialLastEventId,
   onRunCreated,
   onRunStatus,
   onRunEventId,
 }: DaemonStreamOptions): Promise<void> {
+  const emitRunStatus = (status: ChatRunStatus) => {
+    onRunStatus?.(status);
+    notifyRunsChanged();
+  };
   // Local CLIs are single-turn print-mode programs, so we collapse the whole
   // chat into one string. If this becomes too noisy for long histories, the
   // fix is to only include the final user turn.
-  const transcript = buildDaemonTranscript(history);
+  const transcript = buildDaemonTranscript(history, agentId);
   const request: ChatRequest = {
     agentId,
     message: transcript,
@@ -234,6 +266,8 @@ export async function streamViaDaemon({
     commentAttachments: commentAttachments ?? [],
     model: model ?? null,
     reasoning: reasoning ?? null,
+    locale,
+    ...(context ? { context } : {}),
     ...(research ? { research } : {}),
   };
   const body = JSON.stringify(request);
@@ -254,7 +288,7 @@ export async function streamViaDaemon({
 
     if (!createResp.ok) {
       const text = await createResp.text().catch(() => '');
-      onRunStatus?.('failed');
+      emitRunStatus('failed');
       handlers.onError(new Error(`daemon ${createResp.status}: ${text || 'no body'}`));
       return;
     }
@@ -262,25 +296,32 @@ export async function streamViaDaemon({
     const created = (await createResp.json()) as ChatRunCreateResponse;
     const runId = created.runId;
     onRunCreated?.(runId);
-    onRunStatus?.('queued');
+    notifyRunsChanged();
+    emitRunStatus('queued');
     await consumeDaemonRun({
       runId,
       signal,
       cancelSignal,
       handlers,
       initialLastEventId,
-      onRunStatus,
+      onRunStatus: emitRunStatus,
       onRunEventId,
     });
   } catch (err) {
     if ((err as Error).name === 'AbortError') return;
-    onRunStatus?.('failed');
+    emitRunStatus('failed');
     handlers.onError(err instanceof Error ? err : new Error(String(err)));
   }
 }
 
 export async function reattachDaemonRun(options: DaemonReattachOptions): Promise<void> {
-  await consumeDaemonRun(options);
+  await consumeDaemonRun({
+    ...options,
+    onRunStatus: (status) => {
+      options.onRunStatus?.(status);
+      notifyRunsChanged();
+    },
+  });
 }
 
 export async function fetchChatRunStatus(runId: string): Promise<ChatRunStatusResponse | null> {
@@ -293,6 +334,30 @@ export async function fetchChatRunStatus(runId: string): Promise<ChatRunStatusRe
   }
 }
 
+// Push a `tool_result` content block back into a running stream-json child.
+// Used to answer Claude's `AskUserQuestion` tool: the host card collects the
+// user's pick, formats it as one text string, and we route it through the
+// daemon's POST /api/runs/:id/tool-result. The daemon writes it as a JSONL
+// line on the still-open stdin so claude-code can resume mid-call instead
+// of auto-erroring the tool in headless mode.
+export async function submitChatRunToolResult(
+  runId: string,
+  toolUseId: string,
+  content: string,
+  options: { isError?: boolean } = {},
+): Promise<{ ok: boolean; status?: number }> {
+  try {
+    const resp = await fetch(`/api/runs/${encodeURIComponent(runId)}/tool-result`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ toolUseId, content, isError: !!options.isError }),
+    });
+    return { ok: resp.ok, status: resp.status };
+  } catch {
+    return { ok: false };
+  }
+}
+
 export async function listActiveChatRuns(
   projectId: string,
   conversationId: string,
@@ -300,6 +365,17 @@ export async function listActiveChatRuns(
   try {
     const qs = new URLSearchParams({ projectId, conversationId, status: 'active' });
     const resp = await fetch(`/api/runs?${qs.toString()}`);
+    if (!resp.ok) return [];
+    const body = (await resp.json()) as ChatRunListResponse;
+    return body.runs ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export async function listProjectRuns(): Promise<ChatRunStatusResponse[]> {
+  try {
+    const resp = await fetch('/api/runs');
     if (!resp.ok) return [];
     const body = (await resp.json()) as ChatRunListResponse;
     return body.runs ?? [];
@@ -465,6 +541,7 @@ async function consumeDaemonRun({
         serverDeclaredSuccess = status.status === 'succeeded';
         onRunStatus?.(endStatus);
       } else {
+        onRunStatus?.('failed');
         handlers.onError(new Error('daemon stream disconnected before run completed'));
         return;
       }

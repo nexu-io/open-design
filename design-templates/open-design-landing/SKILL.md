@@ -22,7 +22,6 @@ od:
   category: brand-page
   surface: web
   scenario: marketing
-  featured: 1
   audience: founders, design studios, OSS maintainers
   tone: editorial, restrained, premium
   scale: viewport-anchored long-form single page

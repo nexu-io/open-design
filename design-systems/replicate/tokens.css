@@ -1,0 +1,125 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/replicate/tokens.css
+ *
+ * Structured token bindings for "Design System Inspired by Replicate".
+ * Developer playground: explosive gradient energy, pill-shaped geometry,
+ * massive display typography, high-contrast black/white + red brand.
+ *
+ * Key brand decisions encoded here:
+ *   - Pure white body canvas with Replicate Dark (#202020) for text/borders
+ *   - Replicate Red (#ea2804) — brand accent for gradients and accent borders
+ *   - EVERYTHING is pill-shaped (9999px) — the absolute design commitment
+ *   - rb-freigeist-neue at weight 700 for display — thundering headlines
+ *   - basier-square at weight 400 for body — quiet counterpart to heavy display
+ *   - Links use dotted underline (#bbbbbb) — developer notebook aesthetic
+ *   - Depth via borders and background color, not shadows
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ─────────────────────────────────────────────────────
+   * Pure white body. The hero gradient section provides its own
+   * background — no warm canvas tinting. */
+  --bg: #ffffff;
+  --surface: #f8f8f8;        /* Subtle gray for alternate sections */
+  --surface-warm: var(--surface); /* no warm tier */
+
+  /* ─── Foreground ──────────────────────────────────────────────────
+   * Replicate Dark (#202020) — warmer than pure black, the anchor
+   * for all text and borders. */
+  --fg: #202020;             /* Replicate Dark */
+  --fg-2: #4e4e4e;           /* Warm Gray — emphasized secondary */
+  --muted: #646464;          /* Medium Gray — secondary body text */
+  --meta: #8d8d8d;           /* Mid Silver — tertiary, footnotes */
+
+  /* ─── Border ──────────────────────────────────────────────────────
+   * The primary containment mechanism. Replicate uses heavy dark
+   * borders (1px solid #202020) rather than shadows. */
+  --border: #202020;         /* Dark border — primary card/button containment */
+  --border-soft: #e5e5e5;    /* Lighter — inner dividers, less prominent */
+
+  /* ─── Accent ──────────────────────────────────────────────────────
+   * Replicate Red — used for gradients and accent borders.
+   * NOT used as a surface fill — it's for the hero gradient and highlights. */
+  --accent: #ea2804;
+  --accent-on: #ffffff;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 16%);
+
+  /* ─── Semantic ────────────────────────────────────────────────────
+   * Status Green is the Replicate brand green for operational badges.
+   * Replaces the default success color to reinforce the community vibe. */
+  --success: #2b9a66;        /* Status Green — "running" and operational badges */
+  --warn: #eab308;
+  --danger: #dc2626;
+
+  /* ─── Typography ──────────────────────────────────────────────────
+   * Two-voice system: heavy display (rb-freigeist-neue 700) vs
+   * quiet body (basier-square 400). The contrast is extreme and intentional.
+   * JetBrains Mono for all code — primary content for developers. */
+  --font-display: "rb-freigeist-neue", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "basier-square", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "jetbrains-mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Type scale — DESIGN.md §3. 128px manifesto, 72px hero, 48px section.
+   * "128px is a real size" — the design equivalent of shouting from a rooftop. */
+  --text-xs: 12px;           /* Tag — lowercase transform */
+  --text-sm: 14px;           /* Code Small / Caption */
+  --text-base: 16px;         /* Body / Button */
+  --text-lg: 18px;           /* Body Large */
+  --text-xl: 30px;           /* Sub-heading */
+  --text-2xl: 48px;          /* Section Heading */
+  --text-3xl: 72px;          /* Display / Hero */
+  --text-4xl: 128px;         /* Display Mega — closing manifesto */
+
+  --leading-body: 1.5;
+  --leading-tight: 1.0;      /* Tight at all display sizes */
+  --tracking-display: -0.025em; /* ≈ -1.8px at 72px — dense hero text */
+
+  /* ─── Spacing ─────────────────────────────────────────────────────
+   * Very generous section spacing (96–192px). Dense within galleries. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  --section-y-desktop: 96px; /* Bold and generous — distinct content zones */
+  --section-y-tablet: 64px;
+  --section-y-phone: 48px;
+
+  /* ─── Radius ──────────────────────────────────────────────────────
+   * EVERYTHING is pill-shaped (9999px). This is the most extreme pill
+   * commitment in any major tech brand. All four tiers collapse to pill.
+   * The only acceptable alternative is the hero gradient section itself. */
+  --radius-sm: 9999px;       /* Even small elements are pill-shaped */
+  --radius-md: 9999px;       /* All cards, containers — pill */
+  --radius-lg: 9999px;       /* All featured containers — still pill */
+  --radius-pill: 9999px;     /* Explicit pill */
+
+  /* ─── Elevation ───────────────────────────────────────────────────
+   * No drop shadows — depth comes from borders and background color.
+   * The --elev-raised uses the accent border to highlight featured items. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 0 0 1px var(--accent); /* Accent border ring for featured items */
+
+  /* ─── Focus ring ──────────────────────────────────────────────────
+   * Orange-red tinted focus — consistent with the brand energy. */
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+
+  /* ─── Motion ──────────────────────────────────────────────────────
+   * Developer energy: snappy transitions, no decoration. */
+  --motion-fast: 120ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ─── Layout ──────────────────────────────────────────────────────
+   * Fluid width, responsive grid. Hero full-width gradient. */
+  --container-max: 1200px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 16px;
+  --container-gutter-phone: 12px;
+}

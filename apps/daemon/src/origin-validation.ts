@@ -8,6 +8,7 @@ export interface RequestWithOriginHeaders {
   headers?: {
     host?: unknown;
     origin?: unknown;
+    'sec-fetch-site'?: unknown;
   };
 }
 
@@ -67,6 +68,16 @@ export function isPrivateIpv4(hostname: unknown): boolean {
     (a === 192 && b === 168) ||
     (a === 169 && b === 254)
   );
+}
+
+export function isIpLiteralHostname(hostname: unknown): boolean {
+  const host = String(hostname || '').trim();
+  if (!host) return false;
+  if (host.startsWith('[') && host.endsWith(']')) return true;
+  const parts = host.split('.');
+  if (parts.length !== 4) return false;
+  if (!parts.every((part) => /^\d+$/.test(part))) return false;
+  return parts.map(Number).every((n) => Number.isInteger(n) && n >= 0 && n <= 255);
 }
 
 export function isLoopbackOrPrivateLanHost(hostname: unknown): boolean {
@@ -151,9 +162,37 @@ export function isLocalSameOrigin(
   const ports = allowedBrowserPorts(port, env);
   const bindHost = env.OD_BIND_HOST || '127.0.0.1';
   const extraAllowedOrigins = configuredAllowedOrigins(env);
+  const ipOnlyExtraOrigins = extraAllowedOrigins.filter((o) =>
+    isIpLiteralHostname(new URL(o).hostname),
+  );
 
-  const localHostAllowed = isAllowedBrowserHost(host, ports, bindHost, []);
-  if (origin == null || origin === '') return localHostAllowed;
+  const localHostAllowed = isAllowedBrowserHost(host, ports, bindHost, ipOnlyExtraOrigins);
+  if (origin == null || origin === '') {
+    if (localHostAllowed) return true;
+    // Browsers (Firefox, Chrome) omit Origin on same-origin GET subresource
+    // requests per the Fetch spec, which made hostname entries in
+    // OD_ALLOWED_ORIGINS unreachable for legitimate same-origin GETs
+    // through a reverse proxy. Sec-Fetch-Site is set by the user agent and
+    // cannot be modified by JavaScript, so a value of "same-origin"
+    // attests that the request originated from the same origin as the
+    // target — a cross-site `<img>`/`<script>` exploit would carry
+    // "cross-site" instead. Only consult the broader allow-list once that
+    // signal is present.
+    const fetchSite = headerValue(req.headers?.['sec-fetch-site']);
+    if (fetchSite === 'same-origin') {
+      return isAllowedBrowserHost(host, ports, bindHost, extraAllowedOrigins);
+    }
+    return false;
+  }
+  // Reverse-proxy deployments (e.g. Nginx in front of the daemon) terminate
+  // the browser connection at the proxy and open a fresh upstream
+  // connection to the daemon. The Host header the daemon sees is the
+  // proxy upstream's address, not the browser-visible origin, so the host
+  // check below fails even when the user explicitly listed their proxy
+  // origin in OD_ALLOWED_ORIGINS. Trust the Origin header in that case:
+  // a client-supplied origin that exactly matches an explicitly allow-
+  // listed entry is the documented escape hatch for these deployments.
+  if (extraAllowedOrigins.includes(origin)) return true;
   if (!isAllowedBrowserHost(host, ports, bindHost, extraAllowedOrigins)) return false;
   return isAllowedBrowserOrigin(origin, host, ports, bindHost, extraAllowedOrigins);
 }

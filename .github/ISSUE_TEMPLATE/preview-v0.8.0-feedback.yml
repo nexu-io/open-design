@@ -1,23 +1,28 @@
-name: 🧪 Preview v0.8.0 feedback
-description: Report a bug, suggest an improvement, or share feedback about the preview/v0.8.0 branch (Skills + Automations).
+name: 🧪 Open Design 0.8.0 — preview feedback
+description: 0.8.0 is here as a preview on `main`. Bugs, suggestions, "this feels off", first impressions — drop them here.
 labels: ["preview/v0.8.0"]
-title: "[preview/v0.8.0] "
+title: "[0.8.0] "
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for trying `preview/v0.8.0`! This template is for feedback about the **Skills tab in `/integrations`** and the **Automations cards** that are being previewed before they land in `main`.
+        **Open Design 0.8.0 is shipping as a preview.** The rebuilt core (plugins, headless, agent-native) is on `main` and we're hardening it before tagging 0.8.0 stable.
 
-        For general bugs unrelated to the preview, please open a regular issue instead.
+        This template is the fast lane for anything you noticed while trying 0.8.0 — bugs, UX rough edges, missing features, half-formed thoughts. Small reports are the most useful.
+
+        For issues that aren't about 0.8.0 specifically, the regular **Bug report** / **Feature request** templates still work fine.
 
   - type: dropdown
     id: feature
     attributes:
-      label: Which feature does this relate to?
+      label: Which area does this relate to?
       options:
+        - Plugins / plugin authoring
         - Skills tab (/integrations)
-        - Automations cards (Routines / Schedules / Live artifacts)
-        - Both / general preview build
+        - Automations (Routines / Schedules / Live artifacts)
+        - Headless / CLI / agent-driven flow
+        - Desktop app shell
+        - General 0.8.0 experience
         - Other / not sure
     validations:
       required: true
@@ -30,6 +35,7 @@ body:
         - Bug / broken behavior
         - UX or design concern
         - Suggestion / feature request
+        - First impression / general thought
         - Question
     validations:
       required: true

@@ -1,0 +1,97 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "od-plugin-authoring",
+  "title": "Plugin authoring",
+  "version": "0.1.0",
+  "description": "Guided scenario for creating a local Open Design plugin folder that can be added to My plugins.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/scenarios/od-plugin-authoring",
+  "tags": [
+    "scenario",
+    "first-party",
+    "plugin-authoring",
+    "my-plugins"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "scenario": "plugin-authoring",
+    "mode": "scenario",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "discovery",
+          "atoms": [
+            "discovery-question-form"
+          ]
+        },
+        {
+          "id": "plan",
+          "atoms": [
+            "direction-picker",
+            "todo-write"
+          ]
+        },
+        {
+          "id": "generate-plugin",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        },
+        {
+          "id": "review-plugin",
+          "atoms": [
+            "critique-theater"
+          ],
+          "repeat": true,
+          "until": "critique.score>=4 || iterations>=3"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ],
+    "useCase": {
+      "query": {
+        "en": "Create an Open Design plugin for {{pluginGoal}}. Produce a folder named generated-plugin with SKILL.md, open-design.json, and any useful examples or assets. Follow docs/plugins-spec.md and finish with a readiness summary plus next actions: Add to My plugins, Publish repo, or Open Design PR.",
+        "zh-CN": "为 {{pluginGoal}} 创建一个 Open Design 插件。请生成名为 generated-plugin 的文件夹，包含 SKILL.md、open-design.json，以及有用的 examples 或 assets。遵循 docs/plugins-spec.md，并在最后总结它是否可以添加到 My plugins，同时给出下一步操作：添加到 My plugins、发布仓库或创建 Open Design PR。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./examples/generated-plugin/open-design.json",
+          "title": "Generated plugin manifest"
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "pluginGoal",
+        "type": "string",
+        "required": false,
+        "default": "a reusable workflow described by the user's prompt",
+        "label": "Plugin goal",
+        "placeholder": "turn a brand brief into a launch landing page workflow"
+      }
+    ]
+  }
+}

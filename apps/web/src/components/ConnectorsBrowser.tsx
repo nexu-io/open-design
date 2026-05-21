@@ -18,11 +18,13 @@ import {
   fetchConnectorDiscovery,
   fetchConnectors,
   fetchConnectorStatuses,
+  openExternalUrl,
 } from '../providers/registry';
 import {
   isTrustedConnectorCallbackOrigin,
   sortConnectorsForSearch,
 } from './EntryView';
+import { ConnectorLogo, useResolvedTheme } from './ConnectorLogo';
 import { Icon } from './Icon';
 import { CenteredLoader } from './Loading';
 
@@ -31,177 +33,14 @@ const CONNECTOR_AUTH_PENDING_STORAGE_KEY = 'od-connectors-authorization-pending'
 const CONNECTOR_AUTH_PENDING_POLL_MS = 2_000;
 const CONNECTOR_TOOL_PREVIEW_LIMIT = 50;
 const AUTHORIZATION_CANCEL_FAILED_MESSAGE = "Couldn't cancel authorization. Try again.";
+const CONNECTOR_AUTH_CONTINUE_LABEL = 'Continue in browser';
 
 interface ConnectorAuthorizationPending {
   expiresAt?: string;
+  redirectUrl?: string;
 }
 
 type ConnectorAuthorizationPendingState = Record<string, ConnectorAuthorizationPending>;
-
-const COMPOSIO_LOGO_SLUG_OVERRIDES: Record<string, string> = {
-  google_drive: 'googledrive',
-};
-
-/**
- * Composio publishes per-toolkit logos at `logos.composio.dev`, keyed by the
- * lowercased toolkit slug (`AIRTABLE` → `airtable`, `ZOHO_BOOKS` →
- * `zoho_books`). Our connector ids are mostly already that shape. A small
- * override map handles CDN exceptions such as Google Drive, whose logo slug
- * is `googledrive` even though the toolkit id remains `google_drive`.
- */
-function composioLogoSlug(connector: ConnectorDetail): string {
-  const normalized = connector.id.toLowerCase().replace(/[^a-z0-9_]/g, '');
-  return COMPOSIO_LOGO_SLUG_OVERRIDES[normalized] ?? normalized;
-}
-
-/**
- * Build the Composio logo URL for a given connector + theme. Returns `null`
- * when the slug normalizes to empty so the fallback tile renders without a
- * pointless 404 round trip.
- */
-function composioLogoUrl(
-  connector: ConnectorDetail,
-  theme: 'light' | 'dark',
-): string | null {
-  const slug = composioLogoSlug(connector);
-  if (!slug) return null;
-  return `/api/connectors/logos/${encodeURIComponent(slug)}?theme=${theme}`;
-}
-
-/**
- * Resolve the live theme from `<html data-theme>`, falling back to the OS
- * preference when the user is on the implicit "system" mode (no attribute
- * set). Lightweight on purpose — the color of an icon doesn't deserve a
- * full theme provider/context here. The hook listens for both the data
- * attribute changing and the OS-level `prefers-color-scheme` toggling so
- * the logo stays in lockstep with the rest of the chrome.
- */
-function useResolvedTheme(): 'light' | 'dark' {
-  const read = (): 'light' | 'dark' => {
-    if (typeof document === 'undefined') return 'dark';
-    const attr = document.documentElement.getAttribute('data-theme');
-    if (attr === 'light' || attr === 'dark') return attr;
-    if (typeof window !== 'undefined' && window.matchMedia) {
-      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-    }
-    return 'dark';
-  };
-  const [theme, setTheme] = useState<'light' | 'dark'>(read);
-  useEffect(() => {
-    const update = () => setTheme(read());
-    update();
-    const observer = new MutationObserver(update);
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-    const media = window.matchMedia?.('(prefers-color-scheme: dark)');
-    media?.addEventListener?.('change', update);
-    return () => {
-      observer.disconnect();
-      media?.removeEventListener?.('change', update);
-    };
-  }, []);
-  return theme;
-}
-
-/**
- * Tiny hash → palette index. Stable across reloads so a connector's
- * fallback tile keeps the same hue, which makes the catalog feel coherent
- * even when many logos are missing (e.g. dev fixtures, network blocked).
- */
-function fallbackPaletteIndex(seed: string): number {
-  let hash = 0;
-  for (let i = 0; i < seed.length; i++) {
-    hash = (hash * 31 + seed.charCodeAt(i)) | 0;
-  }
-  return Math.abs(hash) % 6;
-}
-
-function fallbackInitials(name: string): string {
-  const cleaned = name.trim();
-  if (!cleaned) return '?';
-  const parts = cleaned.split(/\s+/u);
-  if (parts.length === 1) {
-    const single = parts[0]!;
-    return (single[0] ?? '').toUpperCase() + (single[1] ?? '').toLowerCase();
-  }
-  const first = parts[0]?.[0] ?? '';
-  const second = parts[1]?.[0] ?? '';
-  return (first + second).toUpperCase();
-}
-
-/**
- * Connector brand mark. Tries the Composio logo CDN first (theme-aware) and
- * gracefully degrades to a colored initials tile if the request fails or no
- * slug is derivable. Decorative by default — the surrounding caption (card
- * title / drawer heading) is the accessible label, so the image carries an
- * empty alt and `aria-hidden="true"`.
- */
-function ConnectorLogo({
-  connector,
-  theme,
-  size = 'sm',
-}: {
-  connector: ConnectorDetail;
-  theme: 'light' | 'dark';
-  /** `sm` for catalog cards (compact 28px), `lg` for the detail drawer mark (44px). */
-  size?: 'sm' | 'lg';
-}) {
-  const url = composioLogoUrl(connector, theme);
-  const imageRef = useRef<HTMLImageElement | null>(null);
-  // Track load state per (connector, theme, size) instance. Resetting on
-  // url change means switching themes mid-session retries the new URL
-  // instead of being stuck on a previously-failed request.
-  const [state, setState] = useState<'pending' | 'loaded' | 'error'>(
-    url ? 'pending' : 'error',
-  );
-  useEffect(() => {
-    if (!url) {
-      setState('error');
-      return;
-    }
-    setState('pending');
-    const image = imageRef.current;
-    // Some browsers can complete tiny cached SVGs before React's onLoad
-    // listener observes the event. The image is visually available, but the
-    // wrapper stays in `state-pending`, leaving the neutral fallback over it.
-    // Reconcile against the DOM image state after mount/theme changes so
-    // cached logos still promote to the visible loaded state.
-    if (image?.complete) {
-      setState(image.naturalWidth > 0 ? 'loaded' : 'error');
-    }
-  }, [url]);
-  const initials = fallbackInitials(connector.name);
-  const palette = fallbackPaletteIndex(connector.id || connector.name);
-  const showImage = url !== null && state !== 'error';
-  return (
-    <span
-      className={`connector-logo size-${size} state-${state}${showImage ? '' : ' is-fallback'}`}
-      data-palette={palette}
-      aria-hidden="true"
-    >
-      {showImage ? (
-        <img
-          key={url}
-          ref={imageRef}
-          className="connector-logo-img"
-          src={url}
-          alt=""
-          loading="lazy"
-          decoding="async"
-          referrerPolicy="no-referrer"
-          draggable={false}
-          onLoad={() => setState('loaded')}
-          onError={() => setState('error')}
-        />
-      ) : null}
-      {/* Fallback tile is always rendered underneath. While the image is
-          pending it shows as a soft skeleton; if the image errors we keep
-          the fallback visible and the image is unmounted so no broken-icon
-          chrome can leak through. Once the image resolves it covers the
-          fallback completely. */}
-      <span className="connector-logo-fallback">{initials}</span>
-    </span>
-  );
-}
 
 function mergeConnectors(current: ConnectorDetail[], incoming: ConnectorDetail[]): ConnectorDetail[] {
   if (current.length === 0) return incoming;
@@ -237,7 +76,11 @@ function loadConnectorAuthorizationPending(): ConnectorAuthorizationPendingState
       if (!connectorId) continue;
       if (state && typeof state === 'object' && !Array.isArray(state)) {
         const expiresAt = (state as Record<string, unknown>).expiresAt;
-        pending[connectorId] = typeof expiresAt === 'string' && expiresAt.trim() ? { expiresAt } : {};
+        const redirectUrl = (state as Record<string, unknown>).redirectUrl;
+        pending[connectorId] = {
+          ...(typeof expiresAt === 'string' && expiresAt.trim() ? { expiresAt } : {}),
+          ...(typeof redirectUrl === 'string' && redirectUrl.trim() ? { redirectUrl } : {}),
+        };
       } else {
         pending[connectorId] = {};
       }
@@ -269,7 +112,10 @@ export function pruneConnectorAuthorizationPending(
   for (const [connectorId, state] of Object.entries(pending)) {
     const expiresAtMs = state.expiresAt ? Date.parse(state.expiresAt) : Number.NaN;
     if (Number.isFinite(expiresAtMs) && expiresAtMs <= nowMs) continue;
-    next[connectorId] = state.expiresAt ? { expiresAt: state.expiresAt } : {};
+    next[connectorId] = {
+      ...(state.expiresAt ? { expiresAt: state.expiresAt } : {}),
+      ...(state.redirectUrl ? { redirectUrl: state.redirectUrl } : {}),
+    };
   }
   return next;
 }
@@ -282,7 +128,10 @@ export function updateConnectorAuthorizationPendingFromConnectResponse(
   const connectorId = response.connector.id;
   const next = { ...pending };
   if (response.auth?.kind === 'redirect_required' || response.auth?.kind === 'pending') {
-    next[connectorId] = response.auth.expiresAt ? { expiresAt: response.auth.expiresAt } : {};
+    next[connectorId] = {
+      ...(response.auth.expiresAt ? { expiresAt: response.auth.expiresAt } : {}),
+      ...(response.auth.redirectUrl ? { redirectUrl: response.auth.redirectUrl } : {}),
+    };
     return pruneConnectorAuthorizationPending(next, nowMs);
   }
   delete next[connectorId];
@@ -314,6 +163,21 @@ export function clearConnectorAuthorizationErrorsForConnected(
     }
   }
   return mutated ? next : errors;
+}
+
+export function clearConnectorAuthorizationCancelFailuresForConnected(
+  failures: Record<string, boolean>,
+  statuses: ConnectorStatusResponse['statuses'],
+): Record<string, boolean> {
+  let mutated = false;
+  const next = { ...failures };
+  for (const [connectorId, status] of Object.entries(statuses)) {
+    if (status.status === 'connected' && next[connectorId] !== undefined) {
+      delete next[connectorId];
+      mutated = true;
+    }
+  }
+  return mutated ? next : failures;
 }
 
 export function clearConnectorAuthorizationPending(
@@ -387,6 +251,25 @@ function applyConnectorStatuses(
 interface ConnectorsBrowserProps {
   composioConfigured: boolean;
   catalogRefreshKey?: string | number;
+  /** Optional analytics hook for the integrations surface. The parent
+   *  (IntegrationsView → ConnectorSection) wires this so provider-tab
+   *  / search clicks emit on `page_name: 'integrations'`; when omitted
+   *  (SettingsDialog uses the settings page family instead), no event
+   *  is fired. */
+  onConnectorsTabClick?: (
+    element: 'provider_chip' | 'search_connectors',
+  ) => void;
+  /** Analytics hook for the per-connector authorization result. The
+   *  daemon emits its own server-side telemetry but the click→outcome
+   *  loop happens in the browser; this lets the parent emit
+   *  `settings_connector_auth_result` for the completed connect /
+   *  disconnect attempts the user kicked off here. */
+  onConnectorAuthResult?: (params: {
+    connectorId: string;
+    action: 'connect' | 'disconnect' | 'refresh';
+    result: 'success' | 'failed' | 'cancelled';
+    errorCode?: string;
+  }) => void;
 }
 
 /**
@@ -543,6 +426,8 @@ const CONNECTOR_CATEGORY_KEYS = {
 export function ConnectorsBrowser({
   composioConfigured,
   catalogRefreshKey = 0,
+  onConnectorsTabClick,
+  onConnectorAuthResult,
 }: ConnectorsBrowserProps) {
   const t = useT();
   const [connectors, setConnectors] = useState<ConnectorDetail[]>([]);
@@ -563,6 +448,7 @@ export function ConnectorsBrowser({
   const [filter, setFilter] = useState('');
   const [selectedProvider, setSelectedProvider] = useState<string>(DEFAULT_PROVIDER_TAB_ID);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const searchTrackedRef = useRef(false);
   const logoTheme = useResolvedTheme();
   const toolPreviewRetryToken = `${composioConfigured ? 'configured' : 'unconfigured'}:${String(catalogRefreshKey)}`;
 
@@ -571,6 +457,54 @@ export function ConnectorsBrowser({
     setConnectors((curr) => applyConnectorStatuses(curr, statuses));
     setConnectorAuthorizationPending((curr) => updateConnectorAuthorizationPendingFromStatuses(curr, statuses));
     setConnectorAuthorizationError((curr) => clearConnectorAuthorizationErrorsForConnected(curr, statuses));
+    setConnectorAuthorizationCancelFailed((curr) => clearConnectorAuthorizationCancelFailuresForConnected(curr, statuses));
+    return statuses;
+  }, []);
+
+  const connectorAuthorizationPendingRef = useRef(connectorAuthorizationPending);
+  useEffect(() => {
+    connectorAuthorizationPendingRef.current = connectorAuthorizationPending;
+  }, [connectorAuthorizationPending]);
+
+  const cancelStaleAuthorizations = useCallback(async (
+    pendingBeforeReload: ConnectorAuthorizationPendingState,
+    statuses: ConnectorStatusResponse['statuses'],
+    nowMs = Date.now(),
+  ) => {
+    const stuck = Object.keys(pendingBeforeReload).filter((connectorId) => {
+      if (statuses[connectorId]?.status === 'connected') return false;
+      const expiresAt = pendingBeforeReload[connectorId]?.expiresAt;
+      if (!expiresAt) return false;
+      const expiresAtMs = Date.parse(expiresAt);
+      return Number.isFinite(expiresAtMs) && expiresAtMs <= nowMs;
+    });
+    if (stuck.length === 0) return;
+    await Promise.allSettled(stuck.map(async (connectorId) => {
+      let connector: ConnectorDetail | null = null;
+      try {
+        connector = await cancelConnectorAuthorizationRequest(connectorId);
+      } catch {
+        connector = null;
+      }
+      if (!connector) {
+        setConnectorAuthorizationCancelFailed((curr) => ({ ...curr, [connectorId]: true }));
+        return;
+      }
+      updateConnector(connector);
+      setConnectorAuthorizationCancelFailed((curr) => {
+        if (curr[connectorId] === undefined) return curr;
+        const next = { ...curr };
+        delete next[connectorId];
+        return next;
+      });
+      setConnectorAuthorizationError((curr) => {
+        if (curr[connectorId] === undefined) return curr;
+        const next = { ...curr };
+        delete next[connectorId];
+        return next;
+      });
+      setConnectorAuthorizationPending((curr) => clearConnectorAuthorizationPending(curr, connectorId));
+    }));
   }, []);
 
   useEffect(() => {
@@ -650,14 +584,19 @@ export function ConnectorsBrowser({
   }, [reloadConnectorStatuses]);
 
   // System-browser auth flows have no opener to post back to; refresh
-  // whenever the window regains focus so the UI catches up silently.
+  // whenever the window regains focus so the UI catches up silently. If a
+  // pending authorization is still not connected after the refresh, the
+  // user closed the auth flow without completing it — auto-cancel so the
+  // card recovers to its default state instead of staying stuck loading.
   useEffect(() => {
-    function onFocus() {
-      void reloadConnectorStatuses();
+    async function onFocus() {
+      const pendingBeforeReload = connectorAuthorizationPendingRef.current;
+      const statuses = await reloadConnectorStatuses();
+      await cancelStaleAuthorizations(pendingBeforeReload, statuses);
     }
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
-  }, [reloadConnectorStatuses]);
+  }, [reloadConnectorStatuses, cancelStaleAuthorizations]);
 
   // The local Composio API-key state is authoritative for masking. Cached
   // connector auth can be stale immediately after the user clears the key.
@@ -682,6 +621,24 @@ export function ConnectorsBrowser({
 
   const hasQuery = filter.trim().length > 0;
   const hasNoResults = hasQuery && filteredConnectors.length === 0;
+  const connectorPanelAlerts = useMemo(() => {
+    const alerts: Array<{ connectorId: string; connectorName: string; message: string }> = [];
+    for (const connector of connectors) {
+      if (connector.id === detailConnectorId) continue;
+      const message = connectorAuthorizationError[connector.id];
+      if (message) {
+        alerts.push({ connectorId: connector.id, connectorName: connector.name, message });
+      }
+      if (connectorAuthorizationCancelFailed[connector.id]) {
+        alerts.push({
+          connectorId: connector.id,
+          connectorName: connector.name,
+          message: AUTHORIZATION_CANCEL_FAILED_MESSAGE,
+        });
+      }
+    }
+    return alerts;
+  }, [connectorAuthorizationCancelFailed, connectorAuthorizationError, connectors, detailConnectorId]);
 
   function updateConnector(next: ConnectorDetail | null) {
     if (!next) return;
@@ -707,18 +664,39 @@ export function ConnectorsBrowser({
           delete next[connectorId];
           return next;
         });
-        const result = await connectConnector(connectorId);
-        updateConnector(result.connector);
-        if (result.connector && !result.error) {
-          setConnectorAuthorizationPending((curr) => updateConnectorAuthorizationPendingFromConnectResponse(curr, {
-            connector: result.connector!,
-            ...(result.auth === undefined ? {} : { auth: result.auth }),
-          }));
-        } else {
-          setConnectorAuthorizationPending((curr) => clearConnectorAuthorizationPending(curr, connectorId));
-          if (result.error) {
-            setConnectorAuthorizationError((curr) => ({ ...curr, [connectorId]: result.error! }));
+        try {
+          const result = await connectConnector(connectorId);
+          updateConnector(result.connector);
+          if (result.connector && !result.error) {
+            setConnectorAuthorizationPending((curr) => updateConnectorAuthorizationPendingFromConnectResponse(curr, {
+              connector: result.connector!,
+              ...(result.auth === undefined ? {} : { auth: result.auth }),
+            }));
+            onConnectorAuthResult?.({
+              connectorId,
+              action: 'connect',
+              result: 'success',
+            });
+          } else {
+            setConnectorAuthorizationPending((curr) => clearConnectorAuthorizationPending(curr, connectorId));
+            if (result.error) {
+              setConnectorAuthorizationError((curr) => ({ ...curr, [connectorId]: result.error! }));
+            }
+            onConnectorAuthResult?.({
+              connectorId,
+              action: 'connect',
+              result: 'failed',
+              ...(result.error ? { errorCode: result.error } : {}),
+            });
           }
+        } catch (err) {
+          onConnectorAuthResult?.({
+            connectorId,
+            action: 'connect',
+            result: 'failed',
+            errorCode: err instanceof Error ? err.message : String(err),
+          });
+          throw err;
         }
       } else {
         setConnectorAuthorizationPending((curr) => clearConnectorAuthorizationPending(curr, connectorId));
@@ -728,7 +706,22 @@ export function ConnectorsBrowser({
           delete next[connectorId];
           return next;
         });
-        updateConnector(await disconnectConnector(connectorId));
+        try {
+          updateConnector(await disconnectConnector(connectorId));
+          onConnectorAuthResult?.({
+            connectorId,
+            action: 'disconnect',
+            result: 'success',
+          });
+        } catch (err) {
+          onConnectorAuthResult?.({
+            connectorId,
+            action: 'disconnect',
+            result: 'failed',
+            errorCode: err instanceof Error ? err.message : String(err),
+          });
+          throw err;
+        }
       }
     } finally {
       setPendingConnectorAction(null);
@@ -810,6 +803,12 @@ export function ConnectorsBrowser({
       setConnectorAuthorizationPending((curr) => clearConnectorAuthorizationPending(curr, connectorId));
       return;
     }
+    try {
+      const statuses = await reloadConnectorStatuses();
+      if (statuses[connectorId]?.status === 'connected') return;
+    } catch {
+      // Keep the local failure visible when the status refresh itself fails.
+    }
     setConnectorAuthorizationCancelFailed((curr) => ({ ...curr, [connectorId]: true }));
   }
 
@@ -837,7 +836,10 @@ export function ConnectorsBrowser({
                   role="tab"
                   aria-selected={active}
                   className={`connectors-provider-tab${active ? ' is-active' : ''}`}
-                  onClick={() => setSelectedProvider(provider.id)}
+                  onClick={() => {
+                    onConnectorsTabClick?.('provider_chip');
+                    setSelectedProvider(provider.id);
+                  }}
                   data-testid={`connectors-provider-tab-${provider.id}`}
                 >
                   {provider.label}
@@ -853,6 +855,11 @@ export function ConnectorsBrowser({
               ref={searchInputRef}
               type="search"
               value={filter}
+              onFocus={() => {
+                if (searchTrackedRef.current) return;
+                searchTrackedRef.current = true;
+                onConnectorsTabClick?.('search_connectors');
+              }}
               onChange={(event) => setFilter(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === 'Escape' && filter) {
@@ -883,6 +890,32 @@ export function ConnectorsBrowser({
           </div>
         </div>
       </div>
+      {connectorPanelAlerts.length > 0 ? (
+        <div className="connector-panel-alerts">
+          {connectorPanelAlerts.map((alert) => (
+            <div
+              key={`${alert.connectorId}:${alert.message}`}
+              className="connector-panel-alert"
+              title={`${alert.connectorName}: ${alert.message}`}
+            >
+              <p className="connector-panel-alert-copy" role="status">
+                <strong title={alert.connectorName}>{alert.connectorName}</strong>
+                <span className="sr-only">: </span>
+                <span title={alert.message}>{alert.message}</span>
+              </p>
+              <button
+                type="button"
+                className="icon-only connector-panel-alert-action"
+                aria-label={t('connectors.openDetailsAria', { name: alert.connectorName })}
+                title={t('connectors.openDetailsAria', { name: alert.connectorName })}
+                onClick={() => openConnectorDetails(alert.connectorId)}
+              >
+                <Icon name="external-link" size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
       {loading ? (
         <CenteredLoader label={t('common.loading')} />
       ) : (
@@ -929,7 +962,6 @@ export function ConnectorsBrowser({
                   }
                   authorizationPending={connectorAuthorizationPending[connector.id]}
                   authorizationCancelFailed={connectorAuthorizationCancelFailed[connector.id] === true}
-                  authorizationError={connectorAuthorizationError[connector.id] ?? null}
                   toolsLoading={toolsLoading}
                   toolsLoaded={toolsLoaded}
                   logoTheme={logoTheme}
@@ -996,7 +1028,6 @@ function ConnectorCard({
   pendingAction,
   authorizationPending,
   authorizationCancelFailed,
-  authorizationError,
   toolsLoading: _toolsLoading,
   toolsLoaded,
   logoTheme,
@@ -1010,7 +1041,6 @@ function ConnectorCard({
   pendingAction: 'connect' | 'disconnect' | null;
   authorizationPending?: ConnectorAuthorizationPending;
   authorizationCancelFailed: boolean;
-  authorizationError: string | null;
   toolsLoading: boolean;
   toolsLoaded: boolean;
   logoTheme: 'light' | 'dark';
@@ -1046,6 +1076,12 @@ function ConnectorCard({
 
   function stop(event: SyntheticEvent) {
     event.stopPropagation();
+  }
+
+  function continueAuthorization(event: SyntheticEvent) {
+    stop(event);
+    if (!authorizationPending?.redirectUrl) return;
+    void openExternalUrl(authorizationPending.redirectUrl);
   }
 
   return (
@@ -1173,15 +1209,20 @@ function ConnectorCard({
           ) : null}
         </div>
       </div>
-      {authorizationError ? (
-        <p className="connector-authorization-hint connector-authorization-error" role="alert">
-          {authorizationError}
-        </p>
-      ) : null}
       {authorizationCancelFailed ? (
         <p className="connector-authorization-hint connector-authorization-error" role="alert">
           {AUTHORIZATION_CANCEL_FAILED_MESSAGE}
         </p>
+      ) : null}
+      {isAuthorizationPending && authorizationPending.redirectUrl ? (
+        <button
+          type="button"
+          className="connector-authorization-link"
+          title={t('connectors.authorizationPendingHint')}
+          onClick={continueAuthorization}
+        >
+          {CONNECTOR_AUTH_CONTINUE_LABEL}
+        </button>
       ) : null}
     </article>
   );
@@ -1261,6 +1302,13 @@ function ConnectorDetailDrawer({
   const showToolsBadge = connector.toolCount !== undefined || actualToolCount > 0 || toolsLoaded;
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
   const categoryLabel = connectorCategoryLabel(connector.category, t);
+  const toolsBadgeLabel = formatToolsBadge(toolCount, t);
+
+  function continueAuthorization(event: SyntheticEvent) {
+    event.stopPropagation();
+    if (!authorizationPending?.redirectUrl) return;
+    void openExternalUrl(authorizationPending.redirectUrl);
+  }
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -1312,9 +1360,8 @@ function ConnectorDetailDrawer({
                 {isAuthorizationPending ? t('connectors.authorizationPending') : statusLabel(connector.status, t)}
               </span>
               {showToolsBadge ? (
-                <span className="connector-tools-badge is-ready" title={formatToolsBadge(toolCount, t)}>
-                  <Icon name="settings" size={10} />
-                  <span>{formatToolsBadge(toolCount, t)}</span>
+                <span className="connector-drawer-tool-count-chip" title={toolsBadgeLabel}>
+                  <span>{toolsBadgeLabel}</span>
                 </span>
               ) : null}
             </div>
@@ -1337,9 +1384,20 @@ function ConnectorDetailDrawer({
               <h3 className="connector-drawer-section-title">{t('connectors.aboutLabel')}</h3>
               <p className="connector-drawer-description">{connector.description}</p>
               {isAuthorizationPending ? (
-                <p className="connector-authorization-hint" role="status">
-                  {t('connectors.authorizationPendingHint')}
-                </p>
+                <div className="connector-authorization-block" role="status">
+                  <p className="connector-authorization-hint">
+                    {t('connectors.authorizationPendingHint')}
+                  </p>
+                  {authorizationPending.redirectUrl ? (
+                    <button
+                      type="button"
+                      className="connector-authorization-link"
+                      onClick={continueAuthorization}
+                    >
+                      {CONNECTOR_AUTH_CONTINUE_LABEL}
+                    </button>
+                  ) : null}
+                </div>
               ) : null}
             </section>
           ) : null}
@@ -1355,7 +1413,21 @@ function ConnectorDetailDrawer({
           ) : null}
 
           <section className="connector-drawer-section">
-            <h3 className="connector-drawer-section-title">{t('connectors.detailsLabel')}</h3>
+            <div className="connector-drawer-section-head">
+              <h3 className="connector-drawer-section-title">{t('connectors.detailsLabel')}</h3>
+              {isConnected ? (
+                <button
+                  type="button"
+                  className={`ghost connector-drawer-inline-action connector-action is-disconnect${isDisconnecting ? ' is-loading' : ''}`}
+                  disabled={!canDisconnect}
+                  aria-busy={isDisconnecting || undefined}
+                  onClick={() => onDisconnect(connector.id)}
+                >
+                  {isDisconnecting ? <Icon name="spinner" size={12} /> : null}
+                  <span>{t('connectors.disconnect')}</span>
+                </button>
+              ) : null}
+            </div>
             <dl className="connector-drawer-details">
               <div>
                 <dt>{t('connectors.statusLabel')}</dt>
@@ -1431,19 +1503,8 @@ function ConnectorDetailDrawer({
           </section>
         </div>
 
-        <footer className="connector-drawer-foot">
-          {isConnected ? (
-            <button
-              type="button"
-              className={`ghost connector-action is-disconnect${isDisconnecting ? ' is-loading' : ''}`}
-              disabled={!canDisconnect}
-              aria-busy={isDisconnecting || undefined}
-              onClick={() => onDisconnect(connector.id)}
-            >
-              {isDisconnecting ? <Icon name="spinner" size={12} /> : null}
-              <span>{t('connectors.disconnect')}</span>
-            </button>
-          ) : (
+        {!isConnected ? (
+          <footer className="connector-drawer-foot">
             <button
               type="button"
               className={`primary connector-action is-connect${isConnecting || isAuthorizationPending ? ' is-loading' : ''}`}
@@ -1454,17 +1515,17 @@ function ConnectorDetailDrawer({
               {isConnecting || isAuthorizationPending ? <Icon name="spinner" size={12} /> : null}
               <span>{isAuthorizationPending ? t('connectors.authorizationPending') : t('connectors.connect')}</span>
             </button>
-          )}
-          {isAuthorizationPending ? (
-            <button
-              type="button"
-              className="ghost connector-action is-cancel-authorization"
-              onClick={() => onCancelAuthorization(connector.id)}
-            >
-              <span>{t('connectors.cancelAuthorization')}</span>
-            </button>
-          ) : null}
-        </footer>
+            {isAuthorizationPending ? (
+              <button
+                type="button"
+                className="ghost connector-action is-cancel-authorization"
+                onClick={() => onCancelAuthorization(connector.id)}
+              >
+                <span>{t('connectors.cancelAuthorization')}</span>
+              </button>
+            ) : null}
+          </footer>
+        ) : null}
       </aside>
     </div>
   );

@@ -18,6 +18,7 @@ const fetchDesignSystem = vi.fn();
 const getTemplate = vi.fn();
 const fetchChatRunStatus = vi.fn();
 const listActiveChatRuns = vi.fn();
+const listProjectRuns = vi.fn();
 const reattachDaemonRun = vi.fn();
 const streamViaDaemon = vi.fn();
 const streamMessage = vi.fn();
@@ -30,6 +31,11 @@ const playSound = vi.fn();
 const showCompletionNotification = vi.fn();
 
 vi.mock('../../src/i18n', () => ({
+  useI18n: () => ({
+    locale: 'zh-CN',
+    setLocale: () => undefined,
+    t: (key: string) => key,
+  }),
   useT: () => (key: string) => key,
 }));
 
@@ -40,6 +46,7 @@ vi.mock('../../src/providers/anthropic', () => ({
 vi.mock('../../src/providers/daemon', () => ({
   fetchChatRunStatus: (...args: unknown[]) => fetchChatRunStatus(...args),
   listActiveChatRuns: (...args: unknown[]) => listActiveChatRuns(...args),
+  listProjectRuns: (...args: unknown[]) => listProjectRuns(...args),
   reattachDaemonRun: (...args: unknown[]) => reattachDaemonRun(...args),
   streamViaDaemon: (...args: unknown[]) => streamViaDaemon(...args),
 }));
@@ -246,6 +253,7 @@ describe('ProjectView conversation run isolation', () => {
     fetchDesignSystem.mockResolvedValue(null);
     getTemplate.mockResolvedValue(null);
     listActiveChatRuns.mockResolvedValue([]);
+    listProjectRuns.mockResolvedValue([]);
     fetchChatRunStatus.mockResolvedValue({
       id: 'run-a',
       status: 'running',
@@ -292,6 +300,7 @@ describe('ProjectView conversation run isolation', () => {
       expect.objectContaining({
         projectId: 'project-1',
         conversationId: 'conv-b',
+        locale: 'zh-CN',
       }),
     );
   });
@@ -416,6 +425,37 @@ describe('ProjectView conversation run isolation', () => {
     expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false);
   });
 
+  it('does not rename an existing named project when sending the first message in an empty conversation', async () => {
+    const namedProject: Project = {
+      ...project,
+      name: 'Imported Client Folder',
+      metadata: { kind: 'prototype', nameSource: 'user' },
+    };
+    const emptyConversation: Conversation = {
+      id: 'conv-empty',
+      projectId: namedProject.id,
+      title: null,
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    listConversations.mockResolvedValue([emptyConversation]);
+    listMessages.mockResolvedValue([]);
+    fetchChatRunStatus.mockResolvedValue(null);
+
+    renderProjectView(config, namedProject);
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-empty'));
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+
+    fireEvent.click(screen.getByTestId('send-message'));
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    expect(patchProject).not.toHaveBeenCalledWith(
+      namedProject.id,
+      expect.objectContaining({ name: expect.any(String) }),
+    );
+  });
+
   it('notifies when an API-mode chat completes without a daemon run status transition', async () => {
     listMessages.mockResolvedValue([]);
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }));
@@ -449,10 +489,10 @@ describe('ProjectView conversation run isolation', () => {
   });
 });
 
-function renderProjectView(renderConfig = config) {
+function renderProjectView(renderConfig = config, renderProject: Project = project) {
   return render(
     <ProjectView
-      project={project}
+      project={renderProject}
       routeFileName={null}
       config={renderConfig}
       agents={[{ id: 'agent-1', name: 'OpenCode', bin: 'opencode', available: true, models: [] }]}

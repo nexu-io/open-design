@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { DaemonStatusSnapshot } from '@open-design/sidecar-proto';
 
-import { resetDesktopAuthForTests, setDesktopAuthSecret } from '../src/server.js';
+import { resetDesktopAuthForTests, setDesktopAuthSecret } from '../src/desktop-auth.js';
 import { withCurrentDesktopAuthGate } from '../src/sidecar/server.js';
 
 /**
@@ -83,4 +83,5 @@ describe('withCurrentDesktopAuthGate', () => {
     const result = withCurrentDesktopAuthGate(stale);
     expect(result.desktopAuthGateActive).toBe(false);
   });
+
 });

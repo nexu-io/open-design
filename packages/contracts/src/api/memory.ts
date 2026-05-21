@@ -9,6 +9,8 @@
 // llm_wiki, gbrain, memU. Kept deliberately small so every read/write
 // stays a plain `cat` / `editor` round trip — no DB, no fancy schema.
 
+import type { MemoryTreeNode } from './automations.js';
+
 export type MemoryType = 'user' | 'feedback' | 'project' | 'reference';
 
 export const MEMORY_TYPES: readonly MemoryType[] = [
@@ -39,10 +41,29 @@ export interface MemoryEntry extends MemoryEntrySummary {
   body: string;
 }
 
+export interface MemorySuggestion {
+  /** Stable id for this suggestion batch, not the final memory file id. */
+  id: string;
+  name: string;
+  description: string;
+  type: MemoryType;
+  body: string;
+  source?: {
+    kind: 'connector';
+    connectorId?: string;
+    connectorName?: string;
+    accountLabel?: string;
+    toolName?: string;
+    toolTitle?: string;
+  };
+}
+
 // GET /api/memory
 export interface MemoryListResponse {
   /** True when the daemon will inject memory into the next system prompt. */
   enabled: boolean;
+  /** True when new chat turns may create memory suggestions/extractions. */
+  chatExtractionEnabled: boolean;
   /** Absolute path to the memory directory (informational, for the settings UI). */
   rootDir: string;
   /** The MEMORY.md index body — usually a list of `- [Name](file.md) — hook` lines. */
@@ -59,16 +80,19 @@ export interface MemoryListResponse {
 /** Provider/protocol the memory extractor calls. Mirrors the chat
  *  BYOK form's protocols — anthropic + openai-compatible + azure
  *  (openai-compatible at a different URL/header) + google gemini +
- *  ollama (also openai-compatible, just hosted on Ollama Cloud) — so
- *  the memory picker can offer the same options as the chat picker
- *  above it. The daemon routes ollama through the same callOpenAI
- *  path since the wire protocol is identical. */
+ *  ollama (also openai-compatible, just hosted on Ollama Cloud) +
+ *  senseaudio (also openai-compatible, SenseAudio's OpenAI-shaped
+ *  /v1/chat/completions gateway) — so the memory picker can offer the
+ *  same options as the chat picker above it. The daemon routes both
+ *  ollama and senseaudio through the same callOpenAI path since the
+ *  wire protocol is identical. */
 export type MemoryExtractionProvider =
   | 'anthropic'
   | 'openai'
   | 'azure'
   | 'google'
-  | 'ollama';
+  | 'ollama'
+  | 'senseaudio';
 
 /** Masked version of MemoryExtractionConfig returned by GET endpoints —
  *  the api key field is replaced with a 4-char tail so the settings UI
@@ -90,6 +114,31 @@ export interface MemoryExtractionMaskedConfig {
 // GET /api/memory/:id
 export interface MemoryEntryResponse {
   entry: MemoryEntry;
+}
+
+// GET /api/memory/tree — tree-aware view over the same markdown store.
+// Folder nodes are derived from entry type buckets; entry nodes point at
+// the underlying <id>.md files and remain editable through the normal
+// memory entry API. This gives agents a stable tree contract without
+// introducing a second memory persistence layer.
+export interface MemoryTreeListResponse {
+  enabled: boolean;
+  rootDir: string;
+  tree: MemoryTreeNode[];
+}
+
+// PATCH /api/memory/tree/:id — edit an entry node from tree-aware callers.
+// Folder nodes are currently derived, so only entry ids are patchable.
+export interface UpdateMemoryTreeNodeRequest {
+  name?: string;
+  description?: string;
+  type?: MemoryType;
+  body?: string;
+}
+
+export interface UpdateMemoryTreeNodeResponse {
+  entry: MemoryEntry;
+  tree: MemoryTreeNode[];
 }
 
 // POST /api/memory      → upsert (id supplied → update; missing → create)
@@ -117,6 +166,7 @@ export interface UpdateMemoryIndexRequest {
 // and/or override the LLM extraction provider.
 export interface UpdateMemoryConfigRequest {
   enabled?: boolean;
+  chatExtractionEnabled?: boolean;
   /** Pass `null` to clear the override and fall back to auto-pick. Pass an
    *  object to commit a custom provider. Omit to leave unchanged. */
   extraction?: MemoryExtractionConfig | null;
@@ -124,6 +174,7 @@ export interface UpdateMemoryConfigRequest {
 
 export interface MemoryConfigResponse {
   enabled: boolean;
+  chatExtractionEnabled: boolean;
   extraction: MemoryExtractionConfig | null;
 }
 
@@ -242,7 +293,7 @@ export interface MemoryChangeEvent {
   count?: number;
   /** Where the change came from. Useful for UX (e.g., suppress toasts on
    *  manual edits since the user just clicked Save themselves). */
-  source?: 'heuristic' | 'llm' | 'manual';
+  source?: 'heuristic' | 'llm' | 'manual' | 'connector';
   /** Only on `kind: 'config'` — the new enabled flag. */
   enabled?: boolean;
   /** Unix milliseconds. */
@@ -267,7 +318,49 @@ export interface MemoryChangeEvent {
 
 /** Which extractor produced the attempt. `'llm'` is the legacy default
  *  for records written before this field existed. */
-export type MemoryExtractionKind = 'heuristic' | 'llm';
+export type MemoryExtractionKind = 'heuristic' | 'llm' | 'connector';
+
+// POST /api/memory/connectors/suggest and /extract — read approved,
+// read-only data from selected connected apps and feed the compacted result
+// through the memory extractor. The daemon chooses safe read tools per
+// connector; the UI only supplies connector ids and an optional search hint.
+export interface ConnectorMemoryExtractionRequest {
+  connectorIds?: string[];
+  query?: string;
+  projectId?: string | null;
+  /** Current Local CLI agent selected for chat. Connector memory uses this
+   *  to keep "Same as chat" extraction on the user's active CLI even before
+   *  the debounced settings save reaches the daemon. */
+  chatAgentId?: string | null;
+  /** Current chat model for `chatAgentId`, forwarded with connector memory
+   *  requests for the same reason as `chatAgentId`. */
+  chatModel?: string | null;
+}
+
+export interface ConnectorMemoryExtractionResult {
+  connectorId: string;
+  connectorName: string;
+  accountLabel?: string;
+  status: 'succeeded' | 'skipped' | 'failed';
+  toolName?: string;
+  toolTitle?: string;
+  summary: string;
+  error?: string;
+}
+
+export interface ConnectorMemoryExtractionResponse {
+  changed: MemoryEntrySummary[];
+  attemptedLLM: boolean;
+  connectors: ConnectorMemoryExtractionResult[];
+  contextBytes: number;
+}
+
+export interface ConnectorMemorySuggestionResponse {
+  suggestions: MemorySuggestion[];
+  attemptedLLM: boolean;
+  connectors: ConnectorMemoryExtractionResult[];
+  contextBytes: number;
+}
 
 export type MemoryExtractionPhase =
   | 'running'
@@ -290,6 +383,7 @@ export type MemoryExtractionPhase =
 export type MemoryExtractionSkipReason =
   | 'no-provider'
   | 'memory-disabled'
+  | 'chat-disabled'
   | 'empty-message'
   | 'no-match';
 
@@ -319,8 +413,15 @@ export interface MemoryExtractionRecord {
      *  the OpenAI key the user configured under Settings → Media
      *  providers; `'chat-byok'` = the live BYOK chat provider/key/
      *  baseUrl threaded through `/api/memory/extract` for "Same as
-     *  chat" extraction in API mode. */
-    credentialSource: 'memory-config' | 'env' | 'media-config' | 'chat-byok';
+     *  chat" extraction in API mode; `'chat-cli'` = the current Local
+     *  CLI run in background one-shot mode for "Same as chat"
+     *  extraction in CLI mode. */
+    credentialSource:
+      | 'memory-config'
+      | 'env'
+      | 'media-config'
+      | 'chat-byok'
+      | 'chat-cli';
   };
   /** First ~120 chars of the user's message for display in the list. */
   userMessagePreview: string;

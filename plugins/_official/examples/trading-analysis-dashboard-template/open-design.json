@@ -1,0 +1,89 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-trading-analysis-dashboard-template",
+  "title": "Trading Analysis Dashboard Template",
+  "version": "0.1.0",
+  "description": "Professional trading analysis dashboard template (single-file HTML) with\nlight/dark theme switch, dense market panels, chart interactions, demo/live\nplayback, and command palette behavior.\nUse when users ask for a Wall-Street-style analytics terminal, trading cockpit,\nor high-tech financial dashboard template with realistic data layout.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/trading-analysis-dashboard-template",
+  "tags": [
+    "example",
+    "first-party",
+    "template",
+    "live-artifacts",
+    "web",
+    "desktop",
+    "trading-analysis-dashboard-template",
+    "wall-street-dashboard-template",
+    "financial-terminal-template",
+    "trading-cockpit-template",
+    "untitled",
+    "dashboard"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "template",
+    "platform": "desktop",
+    "scenario": "live-artifacts",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create a Wall-Street-grade trading analysis dashboard template with a left rail, risk cockpit, market charts, live/demo mode, and realistic dense data. Keep it single-file HTML.",
+        "zh-CN": "使用这个插件完成以下任务：Create a Wall-Street-grade trading analysis dashboard template with a left rail, risk cockpit, market charts, live/demo mode, and realistic dense data. Keep it single-file HTML."
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Trading Analysis Dashboard Template"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "designSystem": {
+        "primary": true
+      },
+      "assets": [
+        "./example.html",
+        "./assets/template.html",
+        "./references/checklist.md"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

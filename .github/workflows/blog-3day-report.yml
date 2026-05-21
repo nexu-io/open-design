@@ -1,0 +1,195 @@
+name: blog-3day-report
+
+# Daily Search Console snapshot for recent blog posts. Runs at
+# 10:00 Asia/Shanghai (UTC 02:00), refreshes
+# `docs/blog-traffic-digest.md`, and opens / updates a PR on the
+# `automation/blog-traffic-digest` branch so the diff is reviewable
+# before it lands on `main`.
+#
+# Note: this cron coincides with `blog-indexing-monitor.yml` (same
+# 02:00 UTC slot). The two workflows write to different files and
+# different bot PR branches, so they do not conflict.
+#
+# This is the reporting half of the blog-indexing-automation skill.
+# The indexing half (IndexNow / sitemap / URL Inspection escalation)
+# lives in blog-indexing-on-deploy.yml + blog-indexing-monitor.yml.
+# This workflow is read-only against Google APIs: it never requests
+# indexing, only Search Analytics + URL Inspection coverage state.
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      today:
+        description: 'Override the report date (YYYY-MM-DD). Defaults to today UTC.'
+        required: false
+      skip_inspect:
+        description: 'Skip URL Inspection calls (faster, no coverage column).'
+        required: false
+        default: 'false'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: blog-3day-report
+  cancel-in-progress: false
+
+jobs:
+  report:
+    name: Daily 3-day traffic digest
+    if: github.repository == 'nexu-io/open-design'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check GSC / bot configuration
+        id: config
+        env:
+          GSC_OAUTH_CLIENT_ID: ${{ secrets.GSC_OAUTH_CLIENT_ID }}
+          GSC_OAUTH_CLIENT_SECRET: ${{ secrets.GSC_OAUTH_CLIENT_SECRET }}
+          GSC_OAUTH_REFRESH_TOKEN: ${{ secrets.GSC_OAUTH_REFRESH_TOKEN }}
+          GSC_SERVICE_ACCOUNT_KEY: ${{ secrets.GSC_SERVICE_ACCOUNT_KEY }}
+          BOT_APP_ID: ${{ secrets.BOT_APP_ID }}
+          BOT_APP_PRIVATE_KEY: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+          FEISHU_BLOG_DIGEST_WEBHOOK: ${{ secrets.FEISHU_BLOG_DIGEST_WEBHOOK }}
+        run: |
+          gsc=false
+          bot=false
+          feishu=false
+          if { [ -n "$GSC_OAUTH_CLIENT_ID" ] && [ -n "$GSC_OAUTH_CLIENT_SECRET" ] && [ -n "$GSC_OAUTH_REFRESH_TOKEN" ]; } || [ -n "$GSC_SERVICE_ACCOUNT_KEY" ]; then
+            gsc=true
+          fi
+          if [ -n "$BOT_APP_ID" ] && [ -n "$BOT_APP_PRIVATE_KEY" ]; then
+            bot=true
+          fi
+          if [ -n "$FEISHU_BLOG_DIGEST_WEBHOOK" ]; then
+            feishu=true
+          fi
+          echo "gsc=$gsc" >> "$GITHUB_OUTPUT"
+          echo "bot=$bot" >> "$GITHUB_OUTPUT"
+          echo "feishu=$feishu" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Blog 3-day report configuration"
+            echo "- GSC auth configured: \`$gsc\`"
+            echo "- Open Design bot configured: \`$bot\`"
+            echo "- Feishu digest webhook configured: \`$feishu\`"
+            if [ "$gsc" != "true" ]; then
+              echo ""
+              echo "Search Analytics and URL Inspection steps will be skipped — the digest will not refresh today."
+            fi
+            if [ "$bot" != "true" ]; then
+              echo ""
+              echo "PR creation will be skipped — generated digest will be uploaded as an artefact instead."
+            fi
+            if [ "$feishu" != "true" ]; then
+              echo ""
+              echo "Feishu delivery will be skipped — add \`FEISHU_BLOG_DIGEST_WEBHOOK\` to enable group push."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$gsc" != "true" ]; then
+            echo "::warning title=blog-3day-report skipped::GSC auth is not configured."
+          fi
+
+      - name: Generate digest
+        id: generate
+        if: steps.config.outputs.gsc == 'true'
+        env:
+          GSC_OAUTH_CLIENT_ID: ${{ secrets.GSC_OAUTH_CLIENT_ID }}
+          GSC_OAUTH_CLIENT_SECRET: ${{ secrets.GSC_OAUTH_CLIENT_SECRET }}
+          GSC_OAUTH_REFRESH_TOKEN: ${{ secrets.GSC_OAUTH_REFRESH_TOKEN }}
+          GSC_SERVICE_ACCOUNT_KEY: ${{ secrets.GSC_SERVICE_ACCOUNT_KEY }}
+        run: |
+          mkdir -p .blog-indexing
+          flags=""
+          if [ -n "${{ github.event.inputs.today }}" ]; then
+            flags="$flags --today ${{ github.event.inputs.today }}"
+          fi
+          if [ "${{ github.event.inputs.skip_inspect }}" = "true" ]; then
+            flags="$flags --no-inspect"
+          fi
+          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/report-3day.ts \
+            --summary-out ../../.blog-indexing/blog-traffic-digest-summary.json \
+            $flags
+          # Surface the latest section in the run summary for quick review.
+          {
+            echo "### Latest digest section"
+            echo ""
+            sed -n '/^## /,/^## /p' docs/blog-traffic-digest.md | sed '$d' | head -120
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Send digest to Feishu
+        if: steps.config.outputs.gsc == 'true'
+        env:
+          FEISHU_BLOG_DIGEST_WEBHOOK: ${{ secrets.FEISHU_BLOG_DIGEST_WEBHOOK }}
+        run: |
+          pnpm --filter @open-design/landing-page exec tsx scripts/blog-indexing/post-feishu-digest.ts \
+            --summary ../../.blog-indexing/blog-traffic-digest-summary.json
+
+      - name: Upload digest as artefact
+        if: steps.config.outputs.gsc == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: blog-traffic-digest
+          path: |
+            docs/blog-traffic-digest.md
+            .blog-indexing/blog-traffic-digest-summary.json
+          retention-days: 30
+
+      - name: Generate Open Design bot token
+        if: steps.config.outputs.gsc == 'true' && steps.config.outputs.bot == 'true'
+        id: open-design-bot-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+          owner: nexu-io
+          repositories: open-design
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Open digest PR
+        if: steps.config.outputs.gsc == 'true' && steps.config.outputs.bot == 'true'
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ steps.open-design-bot-token.outputs.token }}
+          add-paths: |
+            docs/blog-traffic-digest.md
+          branch: automation/blog-traffic-digest
+          delete-branch: true
+          commit-message: 'docs(blog): refresh 3-day traffic digest'
+          author: 'open-design-bot[bot] <282769551+open-design-bot[bot]@users.noreply.github.com>'
+          committer: 'open-design-bot[bot] <282769551+open-design-bot[bot]@users.noreply.github.com>'
+          title: 'docs(blog): refresh 3-day traffic digest'
+          body: |
+            Daily refresh of `docs/blog-traffic-digest.md`:
+
+            - **T-3 spotlight** — posts published exactly three days ago,
+              with their 3-day Search Analytics window plus current
+              URL Inspection coverage state.
+            - **Rolling 30-day cohort** — every post 1–30 days old with
+              its latest 3-day Search Analytics window.
+
+            Generated by `.github/workflows/blog-3day-report.yml`.
+            Script: `apps/landing-page/scripts/blog-indexing/report-3day.ts`.

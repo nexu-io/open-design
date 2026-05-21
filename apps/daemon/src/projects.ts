@@ -21,6 +21,10 @@ import {
   evaluateArtifactStubGuard,
   readArtifactStubGuardConfigFromEnv,
 } from './artifact-stub-guard.js';
+import {
+  assertArtifactPublicationAllowed,
+  isPublicationGuardedArtifactKind,
+} from './artifact-publication-guard.js';
 
 const FORBIDDEN_SEGMENT = /^$|^\.\.?$/;
 const RESERVED_PROJECT_FILE_SEGMENTS = new Set(['.live-artifacts']);
@@ -63,7 +67,7 @@ export async function listFiles(projectsRoot, projectId, opts = {}) {
   // Skip build/install dirs for linked folders so node_modules doesn't stall
   // the walk on large repos.
   const skipDirs = metadata?.baseDir ? SKIP_DIRS : undefined;
-  await collectFiles(dir, '', out, skipDirs);
+  await collectFiles(dir, '', out, skipDirs, dir);
   // Newest first — matches the visual order users expect after generating.
   out.sort((a, b) => b.mtime - a.mtime);
   const since = Number(opts.since);
@@ -100,7 +104,7 @@ export async function detectEntryFile(dir: string): Promise<string | null> {
   return null;
 }
 
-async function collectFiles(dir, relDir, out, skipDirs?: Set<string>) {
+async function collectFiles(dir, relDir, out, skipDirs?: Set<string>, projectRoot = dir) {
   let entries = [];
   try {
     entries = await readdir(dir, { withFileTypes: true });
@@ -114,13 +118,13 @@ async function collectFiles(dir, relDir, out, skipDirs?: Set<string>) {
     const full = path.join(dir, e.name);
     if (e.isDirectory()) {
       if (skipDirs && skipDirs.has(e.name)) continue;
-      await collectFiles(full, rel, out, skipDirs);
+      await collectFiles(full, rel, out, skipDirs, projectRoot);
       continue;
     }
     if (!e.isFile()) continue;
     if (e.name.endsWith('.artifact.json')) continue;
     const st = await stat(full);
-    const manifest = await readManifestForPath(dir, rel);
+    const manifest = await readManifestForPath(projectRoot, rel);
     out.push({
       name: rel,
       path: rel,
@@ -626,7 +630,9 @@ export async function writeProjectFile(
   if (!overwrite) {
     try {
       await stat(target);
-      throw new Error('file already exists');
+      const err = new Error('file already exists');
+      err.code = 'EEXIST';
+      throw err;
     } catch (err) {
       if (!err || err.code !== 'ENOENT') throw err;
     }
@@ -638,6 +644,15 @@ export async function writeProjectFile(
     const validated = validateArtifactManifestInput(artifactManifest, safeName);
     if (validated.ok && validated.value) {
       validatedManifest = validated.value;
+      // Publication guard: HTML/deck artifacts that still contain template
+      // placeholders (e.g. pitch-deck `Name to confirm`, `$X.XM`) must not
+      // land as published files. Runs at the write boundary so it covers
+      // every artifact that flows through writeProjectFile, regardless of
+      // which agent/atom produced the body. Throws
+      // ArtifactPublicationBlockedError which the route layer maps to 422.
+      if (isPublicationGuardedArtifactKind(validatedManifest.kind)) {
+        assertArtifactPublicationAllowed(body);
+      }
       const identifier = typeof validatedManifest.metadata?.identifier === 'string'
         ? validatedManifest.metadata.identifier
         : '';
@@ -701,6 +716,63 @@ export async function writeProjectFile(
 
 function artifactManifestNameFor(name) {
   return `${name}.artifact.json`;
+}
+
+export async function reconcileHtmlArtifactManifest(projectsRoot, projectId, name, metadata?) {
+  const dir = resolveProjectDir(projectsRoot, projectId, metadata);
+  const safeName = validateProjectPath(name);
+  const ext = path.extname(safeName).toLowerCase();
+  if (ext !== '.html' && ext !== '.htm') return null;
+
+  let target;
+  try {
+    target = await resolveSafeReal(dir, safeName);
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return null;
+    throw err;
+  }
+
+  let targetStat;
+  try {
+    targetStat = await stat(target);
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return null;
+    throw err;
+  }
+  if (!targetStat.isFile()) return null;
+
+  const manifestFileName = artifactManifestNameFor(safeName);
+  const manifestTarget = await resolveSafeReal(dir, manifestFileName);
+  try {
+    const raw = await readFile(manifestTarget, 'utf8');
+    return parseManifest(raw);
+  } catch (err) {
+    if (!err || err.code !== 'ENOENT') throw err;
+  }
+
+  const inferred = inferLegacyManifest(safeName);
+  if (!inferred) return null;
+  const inferredMetadata =
+    inferred.metadata && typeof inferred.metadata === 'object' && !Array.isArray(inferred.metadata)
+      ? inferred.metadata
+      : {};
+  const validated = validateArtifactManifestInput(
+    {
+      ...inferred,
+      createdAt: new Date(targetStat.mtimeMs).toISOString(),
+      updatedAt: new Date(targetStat.mtimeMs).toISOString(),
+      metadata: {
+        ...inferredMetadata,
+        inferred: true,
+        reconciled: true,
+      },
+    },
+    safeName,
+    { preserveUpdatedAt: true },
+  );
+  if (!validated.ok || !validated.value) return null;
+  await writeFile(manifestTarget, JSON.stringify(validated.value, null, 2));
+  return validated.value;
 }
 
 async function readManifestForPath(projectDirPath, relPath) {

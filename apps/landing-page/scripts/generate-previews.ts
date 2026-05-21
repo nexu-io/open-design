@@ -5,6 +5,7 @@
  * to `apps/landing-page/public/previews/<bucket>/<slug>.webp`:
  *
  *   skills/<slug>/example.html               → /previews/skills/<slug>.webp
+ *   design-templates/<slug>/example.html     → /previews/templates/<slug>.webp
  *   templates/live-artifacts/<slug>/index.html → /previews/templates/live-<slug>.webp
  *   templates/live-artifacts/<slug>/preview.png → reused verbatim where it exists
  *
@@ -29,10 +30,12 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const LANDING_ROOT = path.resolve(HERE, '..');
 const REPO_ROOT = path.resolve(LANDING_ROOT, '../..');
 const SKILLS_DIR = path.join(REPO_ROOT, 'skills');
+const DESIGN_TEMPLATES_DIR = path.join(REPO_ROOT, 'design-templates');
 const TEMPLATES_DIR = path.join(REPO_ROOT, 'templates/live-artifacts');
 const OUT_DIR = path.join(LANDING_ROOT, 'public/previews');
 
 const VIEWPORT = { width: 1440, height: 900 } as const;
+const NAVIGATION_TIMEOUT_MS = 30000;
 const SETTLE_MS = 800; // wait after `load` for fonts / R2 images / JS
 
 interface Job {
@@ -56,6 +59,30 @@ async function discoverJobs(): Promise<Job[]> {
         slug: entry.name,
         htmlPath: example,
       });
+    }
+  }
+
+  if (existsSync(DESIGN_TEMPLATES_DIR)) {
+    const designTemplateEntries = await readdir(DESIGN_TEMPLATES_DIR, { withFileTypes: true });
+    for (const entry of designTemplateEntries) {
+      if (!entry.isDirectory()) continue;
+      const dir = path.join(DESIGN_TEMPLATES_DIR, entry.name);
+      const example = path.join(dir, 'example.html');
+      const ready = path.join(dir, 'preview.png');
+      if (existsSync(ready)) {
+        jobs.push({
+          bucket: 'templates',
+          slug: entry.name,
+          htmlPath: example,
+          reuseFrom: ready,
+        });
+      } else if (existsSync(example)) {
+        jobs.push({
+          bucket: 'templates',
+          slug: entry.name,
+          htmlPath: example,
+        });
+      }
     }
   }
 
@@ -111,7 +138,7 @@ async function captureOne(browser: Browser, job: Job): Promise<{
   try {
     await page.goto(pathToFileURL(job.htmlPath).toString(), {
       waitUntil: 'load',
-      timeout: 15000,
+      timeout: NAVIGATION_TIMEOUT_MS,
     });
     await page.waitForTimeout(SETTLE_MS);
     await page.screenshot({

@@ -12,6 +12,7 @@ import {
   type DesktopEvalResult,
   type DesktopScreenshotResult,
   type DesktopStatusSnapshot,
+  type DesktopUpdateResult,
   type SidecarStamp,
 } from "@open-design/sidecar-proto";
 import { createSidecarLaunchEnv, requestJsonIpc, resolveAppIpcPath } from "@open-design/sidecar";
@@ -27,12 +28,14 @@ import {
 } from "@open-design/platform";
 import type { ToolPackConfig } from "../config.js";
 import { PACKAGED_CONFIG_PATH_ENV, writeLaunchPackagedConfig } from "./app-config.js";
-import { DESKTOP_LOG_ECHO_ENV, PRODUCT_NAME } from "./constants.js";
+import { DESKTOP_LOG_ECHO_ENV } from "./constants.js";
 import { clearQuarantine, pathExists } from "./fs.js";
+import { resolveMacInstallIdentity } from "./identity.js";
 import { desktopIdentityPath, desktopLogPath, macAppExecutablePath, resolveMacPaths } from "./paths.js";
 import type { DesktopRootIdentityFallback, DesktopRootIdentityMarker, MacCleanupResult, MacInspectResult, MacInstallResult, MacStartResult, MacStartSource, MacStopResult, MacUninstallResult } from "./types.js";
 
 const execFileAsync = promisify(execFile);
+const UPDATE_ACTION_TIMEOUT_MS = 10 * 60 * 1000;
 
 function desktopStamp(config: ToolPackConfig): SidecarStamp {
   return {
@@ -132,7 +135,7 @@ function commandMatchesDesktopMarker(
   command: string,
   marker: DesktopRootIdentityMarker,
 ): boolean {
-  return command.includes(marker.executablePath) || command.includes(macAppExecutablePath(marker.appPath));
+  return command.includes(marker.executablePath) || command.includes(macAppExecutablePath(marker.appPath, basename(marker.executablePath)));
 }
 
 async function resolveDesktopRootIdentityFallback(config: ToolPackConfig): Promise<{
@@ -445,6 +448,7 @@ async function resolvePackedMacStartTarget(config: ToolPackConfig): Promise<{
   source: MacStartSource;
 }> {
   const paths = resolveMacPaths(config);
+  const identity = resolveMacInstallIdentity(config);
   const candidates: Array<{ appPath: string; source: MacStartSource }> = [
     { appPath: paths.installedAppPath, source: "installed" },
     { appPath: paths.userApplicationsAppPath, source: "user-applications" },
@@ -453,7 +457,7 @@ async function resolvePackedMacStartTarget(config: ToolPackConfig): Promise<{
   ];
 
   for (const candidate of candidates) {
-    const executablePath = macAppExecutablePath(candidate.appPath);
+    const executablePath = macAppExecutablePath(candidate.appPath, identity.executableName);
     if (await pathExists(executablePath)) {
       return { ...candidate, executablePath };
     }
@@ -480,6 +484,7 @@ async function detachMount(mountPoint: string): Promise<boolean> {
 
 export async function installPackedMacDmg(config: ToolPackConfig): Promise<MacInstallResult> {
   const paths = resolveMacPaths(config);
+  const identity = resolveMacInstallIdentity(config);
   if (!(await pathExists(paths.dmgPath))) {
     throw new Error(`no mac dmg found at ${paths.dmgPath}; run tools-pack mac build --to all first`);
   }
@@ -499,7 +504,7 @@ export async function installPackedMacDmg(config: ToolPackConfig): Promise<MacIn
       "-nobrowse",
       "-quiet",
     ]);
-    await execFileAsync("ditto", [join(paths.mountPoint, `${PRODUCT_NAME}.app`), paths.installedAppPath]);
+    await execFileAsync("ditto", [join(paths.mountPoint, identity.publicAppBundleName), paths.installedAppPath]);
     await clearQuarantine(paths.installedAppPath);
   } finally {
     detached = await detachMount(paths.mountPoint);
@@ -672,13 +677,20 @@ export async function readPackedMacLogs(config: ToolPackConfig) {
   };
 }
 
-export async function inspectPackedMacApp(config: ToolPackConfig, options: { expr?: string; path?: string }): Promise<MacInspectResult> {
+function resolveUpdateAction(value: string | undefined): "status" | "check" | "download" | "install" | null {
+  if (value == null) return null;
+  if (value === "status" || value === "check" || value === "download" || value === "install") return value;
+  throw new Error("--update-action must be status, check, download, or install");
+}
+
+export async function inspectPackedMacApp(config: ToolPackConfig, options: { expr?: string; path?: string; updateAction?: string }): Promise<MacInspectResult> {
   const stamp = desktopStamp(config);
   const status = await requestJsonIpc<DesktopStatusSnapshot>(
     stamp.ipc,
     { type: SIDECAR_MESSAGES.STATUS },
     { timeoutMs: 2000 },
   ).catch(() => null);
+  const updateAction = resolveUpdateAction(options.updateAction);
 
   return {
     ...(options.expr == null ? {} : {
@@ -693,6 +705,13 @@ export async function inspectPackedMacApp(config: ToolPackConfig, options: { exp
         stamp.ipc,
         { input: { path: options.path }, type: SIDECAR_MESSAGES.SCREENSHOT },
         { timeoutMs: 10000 },
+      ),
+    }),
+    ...(updateAction == null ? {} : {
+      update: await requestJsonIpc<DesktopUpdateResult>(
+        stamp.ipc,
+        { input: { action: updateAction }, type: SIDECAR_MESSAGES.UPDATE },
+        { timeoutMs: UPDATE_ACTION_TIMEOUT_MS },
       ),
     }),
     status,

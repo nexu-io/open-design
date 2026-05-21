@@ -58,6 +58,38 @@ const PROMPT_SAFE_HTTP_STATUS_LABELS: Record<string, string> = {
   '504': 'Gateway Timeout',
 };
 
+function renderUiLocalePrompt(locale: string | undefined): string {
+  const normalized = locale?.trim();
+  if (!normalized || normalized.toLowerCase() === 'en') return '';
+  const languageName = normalized === 'zh-CN'
+    ? 'Simplified Chinese'
+    : normalized === 'zh-TW'
+      ? 'Traditional Chinese'
+      : normalized;
+  const lines = [
+    '# UI locale override',
+    '',
+    `The Open Design UI locale for this run is \`${normalized}\` (${languageName}). All user-visible chat prose and generated UI controls must follow this locale, especially \`<question-form>\` titles, descriptions, labels, placeholders, helper text, and option labels. Keep machine-readable ids and object option \`value\` fields exact and unlocalized.`,
+    'Exception: for the default task-type form, keep the `taskType` option labels as the canonical routing choices: `Prototype`, `Live artifact`, `Slide deck`, `Image`, `Video`, `HyperFrames`, `Audio`, `Other`. Do not translate, reorder, or rewrite those option labels.',
+  ];
+  if (normalized === 'zh-CN') {
+    lines.push(
+      '',
+      'For the default quick brief in Simplified Chinese, use copy like:',
+      '- title: `快速简报 — 30 秒`',
+      '- description: `开始生成前我会先确认这些信息。不适用的可以跳过，我会补上默认值。`',
+      '- output label/options: `我们要做什么？` / `幻灯片 / 路演稿`, `单页网页原型 / 落地页`, `多屏应用原型`, `数据看板 / 工具界面`, `编辑式 / 营销页面`, `其他 — 我来描述`',
+      '- platform label/options: `目标平台` / `响应式网页`, `桌面网页`, `iOS 应用`, `Android 应用`, `平板应用`, `桌面应用`, `固定画布 (1920×1080)`',
+      '- audience label/placeholder: `目标用户` / `例如：早期投资人、开发者工具采购者、内部高管评审`',
+      '- tone label/options: `视觉调性` / `编辑 / 杂志感`, `现代极简`, `活泼 / 插画感`, `科技 / 工具型`, `奢华 / 精致`, `粗野 / 实验性`, `人性化 / 亲切`',
+      '- brand label/options: `品牌背景` / `帮我选一个方向`, `我有品牌规范 — 稍后分享`, `参考网站 / 截图 — 稍后附上`',
+      '- scale label/placeholder: `大概需要多少内容？` / `例如：8 页幻灯片、1 个落地页 + 3 个子页面、4 个移动端界面`',
+      '- constraints label/placeholder: `还有什么需要知道的吗？` / `真实文案、必须使用的字体、需要避免的内容、截止时间…`',
+    );
+  }
+  return lines.join('\n');
+}
+
 function normalizePromptText(value: string): string {
   return value
     .replace(/[\r\n]+/g, ' ')
@@ -90,7 +122,21 @@ export function formatElevenLabsVoiceOptionsErrorForPrompt(
 
 export const SKIP_DISCOVERY_BRIEF_OVERRIDE = `# Automated project mode — skip discovery form
 
-This project was created through the daemon API with \`skipDiscoveryBrief: true\`. Override the discovery rules below: do NOT emit \`<question-form id="discovery">\`, do NOT show "Quick brief — 30 seconds", and do NOT ask a first-turn clarification form. Treat the user's first message and project metadata as the brief, then proceed directly to planning/building under the normal artifact workflow. Ask at most one concise follow-up only if a required detail is impossible to infer safely.`;
+This project was created through the daemon API with \`skipDiscoveryBrief: true\`. Override the discovery rules below: do NOT emit \`<question-form id="discovery">\`, do NOT show "Quick brief — 30 seconds", and do NOT ask a first-turn clarification form. Do not call AskUserQuestion, do not emit any question form or choice card, and do not wait for user input. Treat the user's first message and project metadata as the brief, choose reasonable defaults for any missing details, then proceed directly to planning/building under the normal artifact workflow.`;
+
+const ACTIVE_DESIGN_SYSTEM_VISUAL_DIRECTION_OVERRIDE = `
+
+---
+
+## Active design system visual direction
+
+Active design system exception: the active design system is the visual direction for this project. Use its DESIGN.md palette, typography, spacing, component rules, and theme tokens as the source of truth for color and mood.
+
+- Do not ask the user to pick a separate theme color, visual direction, palette, typography mood, or direction card.
+- Do not emit a direction question-form, a \`direction-cards\` picker, or any visual-direction card while an active design system is present.
+- If an earlier discovery answer asks to "Pick a direction for me", treat that as already satisfied by the active design system and continue with the plan.
+- When a downstream framework mentions "active direction" or "theme tokens", bind those fields from the active design system instead of the built-in direction library.
+`;
 
 export interface ComposeInput {
   skillBody?: string | undefined;
@@ -121,6 +167,18 @@ export interface ComposeInput {
   // Snapshot of HTML files that the agent should treat as a starting
   // reference rather than a fixed deliverable.
   template?: ProjectTemplate | undefined;
+  // Optional `## Active plugin` / `## Plugin inputs` / `## Plugin atoms`
+  // block (PB1). Daemon callers feed in `renderPluginBlock(snapshot)`;
+  // contracts-side callers running the API fallback may still pass the
+  // block through. v1 spec §11.8 routes plugin runs through the daemon
+  // (web returns 409 when a plugin is bound), so contracts callers only
+  // see this on a daemon-bound run that uses the contracts composer.
+  pluginBlock?: string | undefined;
+  // Plan §3.L2 / spec §23.4 — pre-rendered `## Active stage` blocks
+  // produced by `renderActiveStageBlock(stageId, atomBodies)`. The
+  // contracts composer simply splices them in after the plugin block;
+  // every block is already self-contained markdown.
+  activeStageBlocks?: ReadonlyArray<string> | undefined;
   // Provider voice choices fetched by the app before composing the
   // prompt. Used for ElevenLabs speech discovery so the agent can
   // render a select question-form instead of asking the user to paste
@@ -133,6 +191,9 @@ export interface ComposeInput {
   // When set to 'plain', suppresses tool_calls so API/BYOK-mode models
   // only emit <artifact> blocks (they cannot execute tools).
   streamFormat?: string | undefined;
+  // UI locale selected by the client. User-visible generated form copy
+  // must follow this locale even when the user's initial prompt is brief.
+  locale?: string | undefined;
   // Free-form instructions the user set at the global (user-level)
   // settings panel. Injected after personal memory.
   userInstructions?: string | undefined;
@@ -150,9 +211,12 @@ export function composeSystemPrompt({
   memoryBody,
   metadata,
   template,
+  pluginBlock,
+  activeStageBlocks,
   audioVoiceOptions,
   audioVoiceOptionsError,
   streamFormat,
+  locale,
   userInstructions,
   projectInstructions,
 }: ComposeInput): string {
@@ -161,6 +225,7 @@ export function composeSystemPrompt({
   // checklist + critique before <artifact>) win precedence over softer
   // wording later in the official base prompt.
   const parts: string[] = [];
+  const activeDesignSystemBody = designSystemBody?.trim();
 
   // API/BYOK mode (streamFormat === 'plain'): no tools are wired through
   // to the model, but the discovery layer + base prompt below still tell
@@ -177,6 +242,12 @@ export function composeSystemPrompt({
 
   if (metadata?.skipDiscoveryBrief === true) {
     parts.push(SKIP_DISCOVERY_BRIEF_OVERRIDE);
+    parts.push('\n\n---\n\n');
+  }
+
+  const localePrompt = renderUiLocalePrompt(locale);
+  if (localePrompt) {
+    parts.push(localePrompt);
     parts.push('\n\n---\n\n');
   }
 
@@ -211,9 +282,9 @@ export function composeSystemPrompt({
     );
   }
 
-  if (designSystemBody && designSystemBody.trim().length > 0) {
+  if (activeDesignSystemBody && activeDesignSystemBody.length > 0) {
     parts.push(
-      `\n\n## Active design system${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nTreat the following DESIGN.md as authoritative for color, typography, spacing, and component rules. Do not invent tokens outside this palette. When you copy the active skill's seed template, bind these tokens into its \`:root\` block before generating any layout.\n\n${designSystemBody.trim()}`,
+      `\n\n## Active design system${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nTreat the following DESIGN.md as authoritative for color, typography, spacing, and component rules. Do not invent tokens outside this palette. When you copy the active skill's seed template, bind these tokens into its \`:root\` block before generating any layout.\n\n${activeDesignSystemBody}`,
     );
   }
 
@@ -222,6 +293,18 @@ export function composeSystemPrompt({
     parts.push(
       `\n\n## Active skill${skillName ? ` — ${skillName}` : ''}\n\nFollow this skill's workflow exactly.${preflight}\n\n${skillBody.trim()}`,
     );
+  }
+
+  if (pluginBlock && pluginBlock.trim().length > 0) {
+    parts.push(pluginBlock);
+  }
+
+  if (Array.isArray(activeStageBlocks) && activeStageBlocks.length > 0) {
+    for (const block of activeStageBlocks) {
+      if (typeof block === 'string' && block.trim().length > 0) {
+        parts.push(block);
+      }
+    }
   }
 
   const metaBlock = renderMetadataBlock(metadata, template, audioVoiceOptions, audioVoiceOptionsError);
@@ -244,10 +327,24 @@ export function composeSystemPrompt({
   // `derivePreflight` above, so we only fire the generic skeleton when no
   // skill seed is on offer.
   const isDeckProject = skillMode === 'deck' || metadata?.kind === 'deck';
+  const isFreeformProject = !skillMode && (!metadata || metadata.kind === 'other');
   const hasSkillSeed =
     !!skillBody && /assets\/template\.html/.test(skillBody);
   if (isDeckProject && !hasSkillSeed) {
     parts.push(`\n\n---\n\n${DECK_FRAMEWORK_DIRECTIVE}`);
+  } else if (isFreeformProject && !hasSkillSeed) {
+    // Freeform / kind=other projects skip the kind picker entirely and
+    // land here. If the user's brief is a deck/keynote/slides ("讲解",
+    // "presentation", "make a deck"), the agent used to invent its own
+    // scale-to-fit + slide visibility + nav script from scratch and
+    // shipped subtle CSS specificity bugs (per-slide layout classes
+    // overriding `.slide { display:none }`). Inject the same framework
+    // here, prefixed with a one-line conditional so the agent only
+    // adopts it when the brief actually is a deck — otherwise the
+    // directive is read as background reference and ignored.
+    parts.push(
+      `\n\n---\n\n## If this brief is a slide deck / keynote / presentation\n\nThe user did not pre-select a "Slide deck" surface, but their request may still call for one. **If — and only if — the brief reads as slides, keynote, presentation, deck, PPT, or 讲解, follow the framework below.** Otherwise ignore everything in this section and continue with the freeform output you would have written anyway.\n\n${DECK_FRAMEWORK_DIRECTIVE}`,
+    );
   }
 
   const isMediaSurface =
@@ -259,6 +356,10 @@ export function composeSystemPrompt({
     metadata?.kind === 'audio';
   if (isMediaSurface) {
     parts.push(MEDIA_GENERATION_CONTRACT);
+  }
+
+  if (activeDesignSystemBody && activeDesignSystemBody.length > 0) {
+    parts.push(ACTIVE_DESIGN_SYSTEM_VISUAL_DIRECTION_OVERRIDE);
   }
 
   return parts.join('');
@@ -479,6 +580,25 @@ function renderMetadataBlock(
     lines.push(
       `- **inspirationDesignSystemIds**: ${metadata.inspirationDesignSystemIds.join(', ')} — the user picked these systems as *additional* inspiration alongside the primary one. Borrow palette accents, typographic personality, or component patterns from them; don't replace the primary system's tokens.`,
     );
+  }
+
+  if (Array.isArray(metadata.contextPlugins) && metadata.contextPlugins.length > 0) {
+    lines.push('');
+    lines.push('### @ plugin context');
+    lines.push(
+      'The user selected these plugins as additive context via @ mentions. Treat them as requested references to combine with the brief; only the explicit active plugin block, if present, is the executable/pinned plugin snapshot.',
+    );
+    for (const plugin of metadata.contextPlugins) {
+      const id = typeof plugin.id === 'string' ? plugin.id : '';
+      const title = typeof plugin.title === 'string' && plugin.title.trim().length > 0
+        ? plugin.title.trim()
+        : id;
+      if (!id && !title) continue;
+      const description = typeof plugin.description === 'string' && plugin.description.trim().length > 0
+        ? ` — ${plugin.description.trim()}`
+        : '';
+      lines.push(`- ${title}${id ? ` (\`${id}\`)` : ''}${description}`);
+    }
   }
 
   // Curated prompt template reference for image/video projects. Inlined

@@ -88,16 +88,19 @@ const orbitTemplates = [
 
 const clipboardDescriptor = Object.getOwnPropertyDescriptor(window.navigator, 'clipboard');
 
+type OnPersist = (cfg: AppConfig, options?: { forceMediaProviderSync?: boolean }) => void | Promise<void>;
+type OnClose = () => void;
+
 function renderOrbitSettings(
   initial: Partial<AppConfig> = {},
   options: {
     composioApiKeyConfigured?: boolean;
-    onPersist?: ReturnType<typeof vi.fn>;
-    onClose?: ReturnType<typeof vi.fn>;
+    onPersist?: OnPersist;
+    onClose?: OnClose;
   } = {},
 ) {
-  const onPersist = options.onPersist ?? vi.fn();
-  const onClose = options.onClose ?? vi.fn();
+  const onPersist = options.onPersist ?? vi.fn<OnPersist>();
+  const onClose = options.onClose ?? vi.fn<OnClose>();
 
   render(
     <SettingsDialog
@@ -114,9 +117,9 @@ function renderOrbitSettings(
       appVersionInfo={null}
       initialSection="orbit"
       onPersist={onPersist}
-      onPersistComposioKey={vi.fn()}
+      onPersistComposioKey={vi.fn<(composio: AppConfig['composio']) => void>()}
       onClose={onClose}
-      onRefreshAgents={vi.fn()}
+      onRefreshAgents={vi.fn<() => void>()}
     />,
   );
 

@@ -1,0 +1,82 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-html-ppt-tech-sharing",
+  "title": "Html Ppt Tech Sharing",
+  "version": "0.1.0",
+  "description": "Conference / internal tech-talk deck — GitHub-dark, JetBrains Mono, terminal code blocks, agenda + Q&A pages. Use for engineering presentations, internal sharing sessions, conference talks, and code-heavy walkthroughs.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/html-ppt-tech-sharing",
+  "tags": [
+    "example",
+    "first-party",
+    "deck",
+    "engineering",
+    "web",
+    "tech-sharing",
+    "tech-talk",
+    "untitled",
+    "engineering-talk",
+    "conference-talk",
+    "dev-talk"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "deck",
+    "scenario": "engineering",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Use the html-ppt-tech-sharing template to create an 8-page technical sharing deck. First confirm the topic, target audience (coworkers, community, or customers), and whether to include code snippets and benchmarks. Use a GitHub dark theme with JetBrains Mono, and include agenda and Q&A slides.",
+        "zh-CN": "帮我用 html-ppt-tech-sharing 模板做一份 8 页的技术分享 PPT。先确认：分享主题、目标听众（同事 / 社区 / 客户）、要不要包含代码片段和 benchmark。GitHub 暗色主题 + JetBrains Mono，agenda + Q&A 页备好。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Html Ppt Tech Sharing"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

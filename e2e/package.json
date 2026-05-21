@@ -5,16 +5,20 @@
   "type": "module",
   "scripts": {
     "test": "vitest run -c vitest.config.ts",
-    "test:ui:critical": "playwright test -c playwright.config.ts ui/entry-chrome-flows.test.ts ui/entry-configuration-flows.test.ts ui/project-management-flows.test.ts",
-    "test:ui:extended": "OD_PLAYWRIGHT_TIMEOUT=10000 playwright test -c playwright.config.ts ui/app.test.ts ui/api-empty-response.test.ts ui/app-restoration.test.ts ui/app-manual-edit.test.ts ui/app-design-files.test.ts ui/settings-connectors-auth-happy-path.test.ts ui/settings-connectors-auth-recovery.test.ts ui/settings-api-protocol.test.ts ui/settings-local-cli-codex-fallback.test.ts ui/settings-memory-routines.test.ts ui/workspace-keyboard-flows.test.ts ui/examples-preview-core.test.ts ui/examples-preview-share.test.ts ui/real-daemon-run.test.ts ui/critique-theater.test.ts",
+    "test:ui:critical": "playwright test -c playwright.config.ts ui/critical-smoke.test.ts ui/entry-chrome-flows.test.ts",
+    "test:ui:extended": "OD_PLAYWRIGHT_TIMEOUT=10000 playwright test -c playwright.config.ts ui/app.test.ts ui/api-empty-response.test.ts ui/app-restoration.test.ts ui/app-manual-edit.test.ts ui/app-design-files.test.ts ui/entry-configuration-flows.test.ts ui/project-management-flows.test.ts ui/settings-connectors-auth-happy-path.test.ts ui/settings-connectors-auth-recovery.test.ts ui/settings-api-protocol.test.ts ui/settings-local-cli-codex-fallback.test.ts ui/settings-memory-routines.test.ts ui/workspace-keyboard-flows.test.ts ui/real-daemon-run.test.ts ui/critique-theater.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
-    "@playwright/test": "^1.59.1",
-    "@types/node": "^20.17.10",
-    "tsx": "4.21.0",
-    "typescript": "^5.6.3",
-    "vitest": "^2.1.8"
+    "@aws-sdk/client-s3": "3.1050.0",
+    "@playwright/test": "1.60.0",
+    "@types/node": "20.19.39",
+    "@types/pngjs": "6.0.5",
+    "pixelmatch": "7.2.0",
+    "pngjs": "7.0.0",
+    "tsx": "4.22.3",
+    "typescript": "5.9.3",
+    "vitest": "4.1.6"
   },
   "engines": {
     "node": "~24"

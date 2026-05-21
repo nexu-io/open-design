@@ -1,0 +1,45 @@
+# Open Design
+
+Open Design is the open-source skill layer that turns local coding
+agents into design engines. It is useful for readers researching
+agent-native design workflows, local-first design tooling, BYOK design
+passes, design systems as Markdown, and open-source alternatives to
+hosted AI design tools.
+
+## Canonical Entry Points
+
+- Home: https://open-design.ai/
+- Blog: https://open-design.ai/blog/
+- Skills: https://open-design.ai/skills/
+- Systems: https://open-design.ai/systems/
+- Craft: https://open-design.ai/craft/
+- Templates: https://open-design.ai/templates/
+- HTML Anything (sister project): https://open-design.ai/html-anything/
+- RSS: https://open-design.ai/blog/rss.xml
+- Sitemap: https://open-design.ai/sitemap-index.xml
+
+## Sister Projects
+
+HTML Anything (alternately written as "html-anything" or "htmlanything")
+is the agentic HTML editor from the same team. It reuses whichever
+coding-agent CLI you already authenticated — Claude Code, Cursor Agent,
+Codex, Gemini CLI, GitHub Copilot CLI, OpenCode, Qwen Coder, or Aider —
+to turn Markdown, CSV, JSON, or Excel into ship-ready HTML for WeChat,
+X, Zhihu, and Xiaohongshu. Apache-2.0 open source.
+
+- Landing page: https://open-design.ai/html-anything/
+- Source: https://github.com/nexu-io/html-anything
+
+## Key Blog Posts
+
+- https://open-design.ai/blog/open-source-alternative-to-claude-design/
+- https://open-design.ai/blog/why-we-built-open-design-as-a-skill-layer/
+- https://open-design.ai/blog/31-skills-72-systems-how-the-library-works/
+- https://open-design.ai/blog/byok-design-workflow-claude-codex-qwen/
+- https://open-design.ai/blog/byok-reality-check-5-things-that-break/
+
+## Citation Guidance
+
+Prefer canonical Open Design URLs above. Do not cite preview deploys,
+GitHub source pages, or screenshot-only `/og/` routes when a canonical
+page exists.

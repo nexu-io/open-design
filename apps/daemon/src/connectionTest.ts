@@ -17,6 +17,7 @@
 // contracts so Settings and daemon-side checks reject the same hosts.
 
 import { spawn } from 'node:child_process';
+import { promises as dnsPromises } from 'node:dns';
 import { promises as fsp } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -40,10 +41,13 @@ import {
   probeAgentAuthStatus,
 } from './runtimes/auth.js';
 import type { AgentCliEnvPrefs } from './app-config.js';
+import type { RuntimeAgentDef } from './runtimes/types.js';
 import {
+  isBlockedExternalApiHostname,
   isLoopbackApiHost,
   validateBaseUrl,
   type AgentTestRequest,
+  type BaseUrlValidationResult,
   type ConnectionTestKind,
   type ConnectionTestProtocol,
   type ConnectionTestResponse,
@@ -52,6 +56,103 @@ import {
 } from '@open-design/contracts/api/connectionTest';
 
 export { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
+
+// DNS-aware companion to `validateBaseUrl`. The contracts-side check only
+// inspects the literal hostname string, so a public DNS name pointing at
+// internal infrastructure (`internal.example.com → 10.0.0.5`) slips through
+// and the daemon ends up issuing a request to a private address on behalf of
+// whichever caller supplied the base URL. Resolve the hostname and re-run
+// the block-list against every address the system would actually connect to.
+//
+// Loopback is intentionally allowed for local LLM providers like Ollama; any
+// hostname that resolves to a loopback address (including `*.localhost` per
+// RFC 6761 and IPv4-mapped IPv6 loopback) follows that same carve-out.
+//
+// DNS lookup failures are *not* treated as a security signal — the caller is
+// going to surface a connection error from `fetch` anyway, and turning a
+// transient resolver hiccup into a 403 would just confuse users. The sync
+// hostname check still rejected the obvious literal-IP cases before we ever
+// got here.
+
+export type DnsLookupAddress = { address: string; family: number };
+export type DnsLookupFn = (hostname: string) => Promise<DnsLookupAddress[]>;
+
+const defaultDnsLookup: DnsLookupFn = async (hostname) => {
+  const result = await dnsPromises.lookup(hostname, { all: true, family: 0 });
+  return result.map(({ address, family }) => ({ address, family }));
+};
+
+function looksLikeIpLiteral(hostname: string): boolean {
+  const host = hostname.startsWith('[') && hostname.endsWith(']')
+    ? hostname.slice(1, -1)
+    : hostname;
+  if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)) return true;
+  return host.includes(':');
+}
+
+export async function validateBaseUrlResolved(
+  baseUrl: string,
+  lookup: DnsLookupFn = defaultDnsLookup,
+): Promise<BaseUrlValidationResult> {
+  const sync = validateBaseUrl(baseUrl);
+  if (sync.error || !sync.parsed) return sync;
+
+  const hostname = sync.parsed.hostname.toLowerCase();
+  if (isLoopbackApiHost(hostname)) return sync;
+  if (looksLikeIpLiteral(hostname)) return sync;
+
+  let addresses: DnsLookupAddress[];
+  try {
+    addresses = await lookup(hostname);
+  } catch {
+    return sync;
+  }
+
+  for (const addr of addresses) {
+    const ip = String(addr.address).toLowerCase();
+    if (isLoopbackApiHost(ip)) continue;
+    if (isBlockedExternalApiHostname(ip)) {
+      return { error: 'Internal IPs blocked', forbidden: true };
+    }
+  }
+
+  return sync;
+}
+
+/**
+ * SSRF guard for asset URLs handed back inside a successful API
+ * response — typically a `data.url` or `data.video_url` that points
+ * at the gateway's CDN, but is attacker-controllable when the
+ * upstream gateway is compromised or misconfigured. Routes the URL
+ * through `validateBaseUrlResolved` (DNS-resolve → reject loopback,
+ * RFC1918, link-local, CGNAT, metadata-service IPs) and returns a
+ * discriminated union so callers don't have to repeat the
+ * `validated.error || !validated.parsed` plumbing.
+ *
+ * Two callers today:
+ *   - `byok-tools.ts` for the chat-tool image/video downloads
+ *   - `media.ts` `renderSenseAudioImage` for the CLI agent path
+ * Both hand the URL straight to `fetch(...)` next, so pair this
+ * guard with `redirect: 'error'` on the fetch to also block a
+ * 3xx hop into private space.
+ */
+export async function assertExternalAssetUrl(
+  rawUrl: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (typeof rawUrl !== 'string' || !rawUrl) {
+    return { ok: false, error: 'empty download url' };
+  }
+  const validated = await validateBaseUrlResolved(rawUrl);
+  if (validated.error || !validated.parsed) {
+    return {
+      ok: false,
+      error: validated.forbidden
+        ? `blocked download url (${validated.error ?? 'internal address'})`
+        : `invalid download url: ${validated.error ?? 'unknown reason'}`,
+    };
+  }
+  return { ok: true };
+}
 
 // Aggressive but not punitive — happy paths usually return in under 2 s.
 // Override with OD_CONNECTION_TEST_PROVIDER_TIMEOUT_MS for slow networks
@@ -110,6 +211,23 @@ const SAMPLE_MAX_CHARS = 120;
 // before producing a visible `ok`.
 const PROVIDER_MAX_TOKENS = 100;
 const SMOKE_PROMPT = 'Reply with only: ok';
+
+function formatPromptForAgentStdin(
+  def: Pick<RuntimeAgentDef, 'promptInputFormat'>,
+  prompt: string,
+): string {
+  const promptInputFormat = def.promptInputFormat ?? 'text';
+  if (promptInputFormat === 'stream-json') {
+    return `${JSON.stringify({
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [{ type: 'text', text: prompt }],
+      },
+    })}\n`;
+  }
+  return prompt;
+}
 
 function codexExecutableGuidance(
   agentId: string,
@@ -232,10 +350,10 @@ function inspectProviderCompletion(
   const obj = data && typeof data === 'object' ? data as Record<string, unknown> : null;
   if (!obj) return { valid: false };
 
-  if (protocol === 'openai' || protocol === 'azure') {
+  if (protocol === 'openai' || protocol === 'azure' || protocol === 'senseaudio') {
     const responseModel = typeof obj.model === 'string' ? obj.model : '';
     if (
-      protocol === 'openai' &&
+      (protocol === 'openai' || protocol === 'senseaudio') &&
       enforceResponseModel &&
       responseModel &&
       requestedModel &&
@@ -435,6 +553,12 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
         },
       };
     case 'openai':
+    case 'senseaudio':
+      // SenseAudio is wire-compatible with OpenAI (POST /v1/chat/completions,
+      // Bearer auth, identical body + response shape), so the connection
+      // smoke test reuses the same call shape. We default the base URL
+      // upstream-side in chat-routes; this layer assumes the caller passed
+      // a concrete URL via the BYOK form.
       return {
         url: appendVersionedApiPath(baseUrl, '/chat/completions'),
         headers: {
@@ -557,7 +681,7 @@ export async function testProviderConnection(
 ): Promise<ConnectionTestResponse> {
   const start = Date.now();
   const model = String(input.model ?? '');
-  const validated = validateBaseUrl(input.baseUrl);
+  const validated = await validateBaseUrlResolved(input.baseUrl);
   if (validated.error || !validated.parsed) {
     const kind: ConnectionTestKind = validated.forbidden ? 'forbidden' : 'invalid_base_url';
     return {
@@ -1333,7 +1457,7 @@ async function testAgentConnectionInternal(
           });
         }
       });
-      child.stdin.end(SMOKE_PROMPT, 'utf8');
+      child.stdin.end(formatPromptForAgentStdin(def, SMOKE_PROMPT), 'utf8');
     }
     const cancellationPromise = new Promise<{ kind: 'timeout' } | { kind: 'aborted' }>((resolve) => {
       timer = setTimeout(() => resolve({ kind: 'timeout' }), agentTimeoutMs());

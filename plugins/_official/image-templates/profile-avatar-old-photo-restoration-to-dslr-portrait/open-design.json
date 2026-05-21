@@ -1,0 +1,82 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-profile-avatar-old-photo-restoration-to-dslr-portrait",
+  "title": "Profile / Avatar - Old Photo Restoration to DSLR Portrait",
+  "version": "0.1.0",
+  "description": "This prompt restores a damaged vintage 4-person family photo into a clean, colorized, high-resolution realistic portrait for photo repair and enhancement.",
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "摆烂程序媛",
+    "url": "https://x.com/wanerfu/status/2049006709692359015#reversed-1"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "profile-avatar",
+    "portrait",
+    "fantasy"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://cms-assets.youmind.com/media/1777453186815_er6vgp_HG-IvNXaIAALR4b.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "Using the provided reference image, restore the damaged old family photo into a natural-looking modern high-resolution portrait while keeping the same 4 people, pose, framing, clothing, and outdoor rural setting unchanged. Remove all visible age damage including tears, cracks, creases, stains, worn paper edges, scratches, and fading. Convert the black-and-white sepia image into realistic soft color, preserving accurate skin tones and neutral earth-toned clothing. Enhance fine detail, sharpen fabric and hair texture, improve contrast and dynamic range, and upscale it to professional DSLR-quality realism with clean focus and a subtle shallow depth of field, as if photographed on a {argument name=\"camera model\" default=\"Canon EOS R6 II\"}. Keep the result highly realistic, natural, and faithful to the original faces and proportions.",
+        "zh-CN": "使用这个插件完成以下任务：Using the provided reference image, restore the damaged old family photo into a natural-looking modern high-resolution portrait while keeping the same 4 people, pose, framing, clothing, and outdoor rural setting unchanged. Remove all visible age damage including tears, cracks, creases, stains, worn paper edges, scratches, and fading. Convert the black-and-white sepia image into realistic soft color, preserving accurate skin tones and neutral earth-toned clothing. Enhance fine detail, sharpen fabric and hair texture, improve contrast and dynamic range, and upscale it to professional DSLR-quality realism with clean focus and a subtle shallow depth of field, as if photographed on a {argument name=\"camera model\" default=\"Canon EOS R6 II\"}. Keep the result highly realistic, natural, and faithful to the original faces and proportions."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "1:1"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}

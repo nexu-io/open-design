@@ -1,0 +1,15 @@
+{
+  "title": "Open Design GitHub Dashboard",
+  "slug": "open-design-github-dashboard",
+  "status": "active",
+  "preview": {
+    "type": "html",
+    "entry": "index.html"
+  },
+  "document": {
+    "format": "html_template_v1",
+    "templatePath": "template.html",
+    "generatedPreviewPath": "index.html",
+    "dataPath": "data.json"
+  }
+}

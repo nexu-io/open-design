@@ -1,0 +1,82 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "image-template-social-media-post-travel-snapshot-collage-prompt",
+  "title": "Social Media Post - Travel Snapshot Collage Prompt",
+  "version": "0.1.0",
+  "description": "A detailed prompt for creating a nostalgic, 12-frame collage of smartphone-style travel photos depicting a solo journey.",
+  "license": "CC-BY-4.0",
+  "author": {
+    "name": "麻酱AI实验室",
+    "url": "https://x.com/zhongying14/status/2049128619134300200"
+  },
+  "homepage": "https://github.com/YouMind-OpenLab/awesome-gpt-image-2",
+  "tags": [
+    "image-template",
+    "first-party",
+    "image",
+    "social-media-post",
+    "cinematic",
+    "fantasy"
+  ],
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "image",
+    "scenario": "image",
+    "surface": "image",
+    "preview": {
+      "type": "image",
+      "poster": "https://cms-assets.youmind.com/media/1777453145397_amcmoh_HG_1BaQb0AAKXrk.jpg"
+    },
+    "useCase": {
+      "query": {
+        "en": "A 12-frame collage of candid, emotional snapshots of a young {argument name=\"ethnicity\" default=\"Chinese\"} woman traveling alone in {argument name=\"location\" default=\"Phuket Island\"}, casually captured on a {argument name=\"device\" default=\"smartphone\"}.\nEach frame feels like a fleeting personal memory — imperfect, sun-drenched, intimate, and unposed.\n\nThe woman has a naturally curvy figure with a soft, feminine silhouette, subtly emphasizing her bust without exaggeration. Her presence feels real and unstyled, like a private photo album.\n\nScenes include: walking barefoot on the beach, seaside under the strong sunlight, palm trees swaying, overexposed ocean reflections, small local cafés, a modest motel room, sunset the coast,  night markets, views from inside a moving car. \n\nShot with a smartphone aesthetic: slight motion blur, soft focus, blown-out highlights from tropical sunlight, lens flare, sun glare, high ISO noise at night, uneven framing, accidental cropping.\n\nComposition feels random and spontaneous — subject sometimes off-center, partially cut off, mid-motion, or obscured by light leaks.\n\nLighting varies: harsh midday sun, warm golden hour glow, deep sunset tones, humid night street lighting.\n\nColor grading: faded cinematic tones, slightly desaturated with warm highlights, nostalgic film-like look, subtle grain, lifted blacks.\n\nEmotion: solitude, fleeting youth, bittersweet nostalgia, quiet introspection, like memories from a trip taken alone.\n\nLayout: 12 images arranged in a loose, imperfect collage grid, slightly tilted and misaligned like a scrapbook.\n\nNo text, no watermark.",
+        "zh-CN": "使用这个插件完成以下任务：A 12-frame collage of candid, emotional snapshots of a young {argument name=\"ethnicity\" default=\"Chinese\"} woman traveling alone in {argument name=\"location\" default=\"Phuket Island\"}, casually captured on a {argument name=\"device\" default=\"smartphone\"}.\nEach frame feels like a fleeting personal memory — imperfect, sun-drenched, intimate, and unposed.\n\nThe woman has a naturally curvy figure with a soft, feminine silhouette, subtly emphasizing her bust without exaggeration. Her presence feels real and unstyled, like a private photo album.\n\nScenes include: walking barefoot on the beach, seaside under the strong sunlight, palm trees swaying, overexposed ocean reflections, small local cafés, a modest motel room, sunset the coast,  night markets, views from inside a moving car. \n\nShot with a smartphone aesthetic: slight motion blur, soft focus, blown-out highlights from tropical sunlight, lens flare, sun glare, high ISO noise at night, uneven framing, accidental cropping.\n\nComposition feels random and spontaneous — subject sometimes off-center, partially cut off, mid-motion, or obscured by light leaks.\n\nLighting varies: harsh midday sun, warm golden hour glow, deep sunset tones, humid night street lighting.\n\nColor grading: faded cinematic tones, slightly desaturated with warm highlights, nostalgic film-like look, subtle grain, lifted blacks.\n\nEmotion: solitude, fleeting youth, bittersweet nostalgia, quiet introspection, like memories from a trip taken alone.\n\nLayout: 12 images arranged in a loose, imperfect collage grid, slightly tilted and misaligned like a scrapbook.\n\nNo text, no watermark."
+      }
+    },
+    "inputs": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "select",
+        "options": [
+          "gpt-image-2"
+        ],
+        "default": "gpt-image-2"
+      },
+      {
+        "name": "aspect",
+        "label": "Aspect ratio",
+        "type": "select",
+        "options": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:5",
+          "3:2"
+        ],
+        "default": "1:1"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./template.json"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "image-generate"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "media:image-generate"
+    ]
+  }
+}
