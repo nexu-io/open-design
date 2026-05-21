@@ -27,7 +27,7 @@ export const DEFAULT_START_APPS = [APP_KEYS.DAEMON, APP_KEYS.WEB, APP_KEYS.DESKT
 export const DEFAULT_RUN_APPS = [APP_KEYS.DAEMON, APP_KEYS.WEB] as const;
 export const DEFAULT_STOP_APPS = [APP_KEYS.DESKTOP, APP_KEYS.WEB, APP_KEYS.DAEMON] as const;
 export const DESKTOP_RUNTIME_KINDS = ["electron", "tauri"] as const;
-export const DEFAULT_DESKTOP_RUNTIME = "electron" satisfies DesktopRuntimeKind;
+export const DEFAULT_DESKTOP_RUNTIME = "tauri" satisfies DesktopRuntimeKind;
 
 export type ToolDevAppName = (typeof ALL_APPS)[number];
 export type DesktopRuntimeKind = (typeof DESKTOP_RUNTIME_KINDS)[number];

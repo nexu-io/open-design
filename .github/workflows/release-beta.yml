@@ -24,13 +24,13 @@ on:
         type: boolean
         default: false
       desktop_runtime:
-        description: "Desktop runtime to package. Keep electron for public beta; use tauri for migration smoke."
+        description: "Desktop runtime to package. Tauri is the default release path; use electron only as the transition fallback."
         required: true
         type: choice
         options:
           - electron
           - tauri
-        default: electron
+        default: tauri
 
 permissions:
   actions: write

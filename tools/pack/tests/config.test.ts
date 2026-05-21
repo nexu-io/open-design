@@ -25,22 +25,22 @@ afterEach(() => {
 });
 
 describe("resolveToolPackConfig telemetry relay", () => {
-  it("defaults to the Electron desktop runtime during the parallel packaging phase", () => {
+  it("defaults to the Tauri desktop runtime during the transition window", () => {
     const config = resolveToolPackConfig("mac", { namespace: "runtime-default-test" });
-    expect(DEFAULT_DESKTOP_RUNTIME).toBe("electron");
+    expect(DEFAULT_DESKTOP_RUNTIME).toBe("tauri");
     expect(config.desktopRuntime).toBe(DEFAULT_DESKTOP_RUNTIME);
-  });
-
-  it("accepts the Tauri desktop runtime without changing namespace-scoped roots", () => {
-    const config = resolveToolPackConfig("mac", {
-      desktopRuntime: "tauri",
-      namespace: "runtime-tauri-test",
-    });
-    expect(config.desktopRuntime).toBe("tauri");
-    expect(config.roots.output.namespaceRoot).toContain("runtime-tauri-test");
-    expect(config.roots.runtime.namespaceRoot).toContain("runtime-tauri-test");
     expect(config.tauriCliPath).toContain("@tauri-apps");
     expect(config.tauriConfigPath).toContain("apps/desktop/src-tauri/tauri.conf.json");
+  });
+
+  it("accepts the explicit Electron fallback without changing namespace-scoped roots", () => {
+    const config = resolveToolPackConfig("mac", {
+      desktopRuntime: "electron",
+      namespace: "runtime-electron-test",
+    });
+    expect(config.desktopRuntime).toBe("electron");
+    expect(config.roots.output.namespaceRoot).toContain("runtime-electron-test");
+    expect(config.roots.runtime.namespaceRoot).toContain("runtime-electron-test");
   });
 
   it("rejects unsupported desktop runtimes", () => {

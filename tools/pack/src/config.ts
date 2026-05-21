@@ -20,7 +20,7 @@ export type ToolPackMacCompression = "store" | "normal" | "maximum";
 export type ToolPackWebOutputMode = "server" | "standalone";
 
 export const DESKTOP_RUNTIME_KINDS = ["electron", "tauri"] as const;
-export const DEFAULT_DESKTOP_RUNTIME = "electron" satisfies ToolPackDesktopRuntimeKind;
+export const DEFAULT_DESKTOP_RUNTIME = "tauri" satisfies ToolPackDesktopRuntimeKind;
 
 export type ToolPackCliOptions = {
   appVersion?: string;

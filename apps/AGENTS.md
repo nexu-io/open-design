@@ -6,7 +6,7 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 
 - `apps/web`: Next.js 16 App Router + React 18 web runtime. Entrypoints live in `apps/web/app/`; the main client shell is `apps/web/src/App.tsx`. During local `tools-dev` web runs, `apps/web/next.config.ts` rewrites `/api/*`, `/artifacts/*`, and `/frames/*` to `OD_PORT`.
 - `apps/daemon`: Express + SQLite local daemon and `od` bin. It owns REST/SSE APIs, agent CLI spawning, skills, design systems, artifact persistence, static serving, and local data under `.od/`.
-- `apps/desktop`: Desktop host runtime. Electron remains the default during the Tauri migration, and `src-tauri/` is the opt-in Tauri runtime. Desktop does not guess the web port; it reads runtime status through sidecar IPC and opens the reported web URL.
+- `apps/desktop`: Desktop host runtime. Tauri is the default during the transition window, and Electron remains available only as an explicit fallback until M6 cleanup. Desktop does not guess the web port; it reads runtime status through sidecar IPC and opens the reported web URL.
 - `apps/packaged`: Packaged runtime entries for Electron, Tauri sidecars, and headless Linux flows. The Electron path registers the `od://` entry protocol; all packaged desktop paths start packaged daemon/web sidecars and delegate host behavior to `apps/desktop`.
 
 ## Daemon layout

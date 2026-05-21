@@ -1,27 +1,27 @@
 # Electron to Tauri Migration
 
-Last updated: 2026-05-20
+Last updated: 2026-05-21
 
 ## Objective
 
 Replace the Electron desktop runtime with Tauri across dev and packaged flows while preserving the existing sidecar contract, daemon/web lifecycle entrypoints, desktop bridge trust boundaries, and namespace-scoped runtime paths.
 
-The migration stays parallel until parity is proven. Electron remains the default runtime until every acceptance gate below passes on macOS, Windows, and Linux.
+The migration is now in the transition window after native package parity. Tauri is the default runtime; Electron remains available only as an explicit fallback until M6 removes the Electron path.
 
 ## Current State
 
-- `apps/desktop/src-tauri` exists as an opt-in Tauri runtime.
+- `apps/desktop/src-tauri` is the default desktop runtime. The Electron path remains available only as an explicit transition fallback.
 - `apps/web` resolves desktop capabilities through `resolveDesktopBridge()` instead of directly calling `window.electronAPI`.
 - `tools-dev start desktop --desktop-runtime tauri` starts the Rust runtime, discovers the web sidecar URL, exposes desktop status IPC, and passes macOS dev inspect smoke for `status`, generic `eval`, `click`, `console`, and `screenshot`.
 - Tauri command IPC is permissioned through the generated app command manifest and confirmed from the remote web URL for `desktop_open_external`, `desktop_pick_and_import`, and `desktop_open_project_path`.
 - `tools-pack` accepts `--desktop-runtime electron|tauri`; the Tauri path assembles the existing packaged Node app, resource tree, bundled Node, and packaged config into Tauri bundle resources.
 - macOS Tauri `.app` and `.dmg` packaging now pass build/install where applicable/start/inspect eval/inspect screenshot/stop smoke.
-- Windows NSIS and Linux AppImage Tauri packaging, lifecycle, and uninstall paths are wired and have readiness tests, but remain platform smoke gates.
-- CI now has opt-in-by-change Tauri platform gates for Windows NSIS and Linux AppImage through `packaged_smoke_tauri_win` and `packaged_smoke_tauri_linux`; those jobs still need native runner evidence, including uninstall/removal evidence, before the M4 boxes below can close.
-- `release-beta` has an explicit `desktop_runtime` workflow input, defaulting to `electron`, so maintainers can run beta packaging with `tauri` before the default flip without changing public defaults.
+- Windows NSIS and Linux AppImage/headless Tauri packaging, lifecycle, and uninstall paths have native CI evidence and close the M4 platform gate.
+- CI has Tauri platform gates for Windows NSIS and Linux AppImage through `packaged_smoke_tauri_win` and `packaged_smoke_tauri_linux`; their artifacts now provide the native runner evidence used by the M4 verifier.
+- `release-beta` has an explicit `desktop_runtime` workflow input, defaulting to `tauri`, with `electron` retained as the explicit transition fallback.
 - MSI and Windows/Linux unpacked `--to dir` are not default-flip blockers. Tauri officially supports MSI via WiX, but this repository still needs a namespace-scoped MSI install/uninstall lifecycle before treating MSI as release-grade. Tauri's documented bundle targets are `deb`, `rpm`, `appimage`, `nsis`, `msi`, `app`, and `dmg`, with no `dir` target; Windows/Linux `--desktop-runtime tauri --to dir` now fails fast with guidance to use the installer target or the legacy Electron runtime. Reference: https://v2.tauri.app/reference/config/#bundletype
 - Tauri versions are pinned to `tauri@2.11.2`, `@tauri-apps/cli@2.11.2`, and `@tauri-apps/api@2.11.0`.
-- Electron remains the default runtime for `tools-dev` and `tools-pack`.
+- Tauri is the default runtime for `tools-dev` and `tools-pack`; Electron remains selectable through `--desktop-runtime electron` until M6 cleanup.
 
 ## Schedule
 
@@ -131,20 +131,20 @@ Do not create duplicate reminders for the same work. If the continuation sequenc
 
 - [x] macOS `.app`: build, start, inspect status/eval/screenshot, stop.
 - [x] macOS `.dmg`: build, install, start, inspect status/eval/screenshot, stop.
-- [ ] Windows NSIS: build, install, start, inspect status/eval/screenshot, stop, uninstall, and verify no residue.
+- [x] Windows NSIS: build, install, start, inspect status/eval/screenshot, stop, uninstall, and verify no residue.
 - [x] Windows MSI: out of scope for the default flip; reopen only if release ownership makes MSI mandatory.
-- [ ] Linux: build AppImage, install, start, inspect status/eval/screenshot, stop, uninstall, and verify removal.
+- [x] Linux: build AppImage, install, start, inspect status/eval/screenshot, stop, uninstall, and verify removal.
 - [x] Linux headless path has non-GUI lifecycle regression coverage.
-- [ ] Linux headless platform smoke remains supported and unaffected.
+- [x] Linux headless platform smoke remains supported and unaffected.
 - [x] Run e2e `tests/tools-dev/inspect.test.ts` against Tauri where the host supports a GUI.
 
 ### M5 Default flip
 
-- [ ] Change `tools-dev` default desktop runtime to Tauri.
-- [ ] Change `tools-pack` default desktop runtime to Tauri.
-- [ ] Change `release-beta` desktop runtime workflow default to Tauri.
-- [ ] Keep Electron fallback explicit during the transition window.
-- [ ] Update README, architecture docs, and directory guidance to describe Tauri as the primary runtime.
+- [x] Change `tools-dev` default desktop runtime to Tauri.
+- [x] Change `tools-pack` default desktop runtime to Tauri.
+- [x] Change `release-beta` desktop runtime workflow default to Tauri.
+- [x] Keep Electron fallback explicit during the transition window.
+- [x] Update README, architecture docs, and directory guidance to describe Tauri as the primary runtime.
 
 ### M6 Electron removal
 
@@ -513,6 +513,12 @@ M4 closes from two native CI report artifacts, not from three manually gathered 
 - 2026-05-20: Tightened `scripts/tauri-migration-status.ts` handoff-note validation so stale notes with fixed native report paths are no longer reported current; branch-head-bound download and direct advance commands must preserve the `TAURI_M4_REPORT_DIR` fallback.
 - 2026-05-20: Added a positive receiver smoke for the generated packaged handoff `.commands.sh` sidecar. `scripts/package-tauri-migration-handoff.test.ts` now runs the generated sidecar against a write-capable bare remote and verifies archive identity, bundle import, branch push, remote-head verification, migration-branch checkout, PR body generation, post-push status invocation, the `GITHUB_RUN_ID` rerun path, and the `TAURI_NATIVE_CI_WAIT=1` workflow-dispatch path that calls `scripts/download-tauri-m4-reports.ts --advance` with the verified branch head without requiring GitHub write access. `node --import tsx --test scripts/package-tauri-migration-handoff.test.ts scripts/push-tauri-migration-handoff.test.ts scripts/tauri-migration-status.test.ts`, `tsc -p scripts/tsconfig.json --noEmit`, `git diff --check`, `pnpm guard`, and `pnpm typecheck` passed.
 - 2026-05-20: Promoted the `TAURI_NATIVE_CI_WAIT=1` receiver path into the packaged command sidecar freshness contract. `scripts/tauri-migration-status.ts` and `scripts/push-tauri-migration-handoff.ts` now reject stale `.commands.sh` files that cannot dispatch native CI and then run the branch-head-bound `scripts/download-tauri-m4-reports.ts --wait --advance` continuation.
+
+- 2026-05-21: Verified native Windows/Linux M4 package smoke with `scripts/verify-tauri-platform-gates.ts --update-migration-doc`.
+  The verifier output contains the `Windows NSIS M4 evidence` and `Linux AppImage/headless M4 evidence` sections required to close M4 and proceed to M5.
+
+- 2026-05-21: Verified pushed migration branch head with `scripts/verify-tauri-migration-remote.ts` before M5.
+  Remote `https://github.com/sunseol/open-design.git/codex/electron-to-tauri-migration` matched `47820003d1668c4bd6826dd0763f02ca58df9bfe` before M4 evidence was recorded and M5 defaults were applied.
 
 ### Platform Gate Runners
 

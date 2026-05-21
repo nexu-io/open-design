@@ -386,7 +386,7 @@ fronted by an HMAC gate when the daemon is paired with a desktop:
   The bundled-targets path (`pnpm tools-dev`) is unaffected — its
   daemon was already spawned gated by the same-invocation trigger,
   so the helper is a single STATUS roundtrip with no side effects.
-  Packaged Electron and packaged headless modes are unaffected
+  Packaged Tauri, Electron fallback, and packaged headless modes are unaffected
   because their gate state is fixed at packaged-runtime startup.
 
 Shared API contract types live in [`packages/contracts/src`](../packages/contracts/src).

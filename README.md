@@ -73,8 +73,8 @@ OD stands on four open-source shoulders:
 | **Imports** | Drop a [Claude Design][cd] export ZIP onto the welcome dialog — `POST /api/import/claude-design` parses it into a real project so your agent can keep editing where Anthropic left off |
 | **Persistence** | SQLite at `.od/app.sqlite`: projects · conversations · messages · tabs · saved templates. Reopen tomorrow, todo card and open files are exactly where you left them. |
 | **Lifecycle** | One entry point: `pnpm tools-dev` (start / stop / run / status / logs / inspect / check) — boots daemon + web (+ desktop) under typed sidecar stamps |
-| **Desktop** | Optional desktop shell with sidecar IPC (STATUS / EVAL / SCREENSHOT / CONSOLE / CLICK / SHUTDOWN). Electron is the current default; Tauri is available behind explicit migration flags. |
-| **Deployable to** | Local (`pnpm tools-dev`) · Vercel web layer · packaged desktop app. Public downloads are still Electron artifacts while Tauri packaging parity is being gated. |
+| **Desktop** | Optional desktop shell with sidecar IPC (STATUS / EVAL / SCREENSHOT / CONSOLE / CLICK / SHUTDOWN). Tauri is the default; Electron remains available only through explicit transition flags. |
+| **Deployable to** | Local (`pnpm tools-dev`) · Vercel web layer · packaged desktop app. Public downloads use Tauri by default after platform parity; Electron artifacts remain available only as explicit transition fallback. |
 | **License** | Apache-2.0 |
 
 Linux AppImage packaging is available through the optional release lane and is covered by the Linux packaged smoke workflow, but public stable downloads remain gated until the release maintainers enable the Linux stable lane.
@@ -309,7 +309,7 @@ Every layer is composable. Every layer is a file you can edit. Read [`apps/daemo
 | Preview | Sandboxed iframe via `srcdoc` + per-skill `<artifact>` parser ([`apps/web/src/artifacts/parser.ts`](apps/web/src/artifacts/parser.ts)) |
 | Export | HTML (inline assets) · PDF (browser print, deck-aware) · PPTX (agent-driven via skill) · ZIP (archiver) · Markdown |
 | Lifecycle | `pnpm tools-dev start \| stop \| run \| status \| logs \| inspect \| check`; ports via `--daemon-port` / `--web-port`, namespaces via `--namespace` |
-| Desktop (optional) | Desktop shell — discovers the web URL through sidecar IPC, no port guessing; Electron is the default and Tauri is the explicit migration runtime. The same `STATUS`/`EVAL`/`SCREENSHOT`/`CONSOLE`/`CLICK`/`SHUTDOWN` channel powers `tools-dev inspect desktop …` for E2E |
+| Desktop (optional) | Desktop shell — discovers the web URL through sidecar IPC, no port guessing; Tauri is the default and Electron is the explicit transition fallback. The same `STATUS`/`EVAL`/`SCREENSHOT`/`CONSOLE`/`CLICK`/`SHUTDOWN` channel powers `tools-dev inspect desktop …` for E2E |
 
 ## Quickstart
 
@@ -560,7 +560,7 @@ Full file map, scripts, and troubleshooting → [`QUICKSTART.md`](QUICKSTART.md)
 
 ## Running the Project
 
-Open Design can run as a web app in your browser or as a desktop shell. Electron remains the default desktop runtime while the Tauri path is validated behind explicit flags; both modes share the same local daemon + web architecture.
+Open Design can run as a web app in your browser or as a desktop shell. Tauri is the default desktop runtime after native package parity; Electron remains available only behind explicit transition flags until M6 cleanup.
 
 ### Web / Localhost (Default)
 
@@ -600,7 +600,7 @@ pnpm tools-dev inspect desktop status
 pnpm tools-dev inspect desktop screenshot --path /tmp/open-design.png
 ```
 
-The desktop app discovers the web URL automatically via sidecar IPC — no port guessing required. During the Electron-to-Tauri migration, `--desktop-runtime tauri` selects the opt-in Tauri path where supported.
+The desktop app discovers the web URL automatically via sidecar IPC — no port guessing required. During the Electron-to-Tauri transition, `--desktop-runtime electron` selects the explicit Electron fallback where supported.
 
 ### Other Useful Commands
 
@@ -983,7 +983,7 @@ Long-form provenance write-up — what we take from each, what we deliberately d
 - [ ] Vercel + tunnel deployment recipe (Topology B)
 - [ ] One-command `npx od init` to scaffold a project with `DESIGN.md`
 - [ ] Skill marketplace (`od skills install <github-repo>`) and `od skill add | list | remove | test` CLI surface (drafted in [`docs/skills-protocol.md`](docs/skills-protocol.md), implementation pending)
-- [x] Packaged desktop build out of `apps/packaged/` — public macOS (Apple Silicon) and Windows (x64) downloads remain Electron while the Tauri package path is validated.
+- [x] Packaged desktop build out of `apps/packaged/` — public macOS (Apple Silicon), Windows (x64), and Linux downloads use Tauri by default after platform parity, with Electron retained only as an explicit transition fallback.
 
 Phased delivery → [`docs/roadmap.md`](docs/roadmap.md).
 

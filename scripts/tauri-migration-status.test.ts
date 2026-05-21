@@ -63,7 +63,7 @@ test("migration doc platform gate table includes verifier-required uninstall evi
   assert.ok(m4ScheduleRow);
   assert.match(m4ScheduleRow, /uninstall\/removal evidence/);
 
-  assert.match(source, /including uninstall\/removal evidence, before the M4 boxes below can close/);
+  assert.match(source, /Windows NSIS and Linux AppImage\/headless Tauri packaging, lifecycle, and uninstall paths have native CI evidence/);
 
   assert.ok(windowsRow);
   assert.match(windowsRow, /tools-pack win uninstall/);

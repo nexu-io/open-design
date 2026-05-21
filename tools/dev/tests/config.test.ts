@@ -7,13 +7,13 @@ import {
   resolveToolDevConfig,
 } from "../src/config.js";
 
-test("resolveDesktopRuntimeKind defaults to Electron during parallel migration", () => {
-  assert.equal(DEFAULT_DESKTOP_RUNTIME, "electron");
+test("resolveDesktopRuntimeKind defaults to Tauri during the transition window", () => {
+  assert.equal(DEFAULT_DESKTOP_RUNTIME, "tauri");
   assert.equal(resolveDesktopRuntimeKind(undefined), DEFAULT_DESKTOP_RUNTIME);
   assert.equal(resolveDesktopRuntimeKind(""), DEFAULT_DESKTOP_RUNTIME);
 });
 
-test("resolveDesktopRuntimeKind accepts the opt-in Tauri runtime", () => {
+test("resolveDesktopRuntimeKind accepts the explicit Electron fallback", () => {
   assert.equal(resolveDesktopRuntimeKind("electron"), "electron");
   assert.equal(resolveDesktopRuntimeKind("tauri"), "tauri");
 });
