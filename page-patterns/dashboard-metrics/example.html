@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Dashboard — Pattern Preview</title>
+    <style>
+      :root {
+        --bg: #fafaf9;
+        --card: #ffffff;
+        --border: #e5e7eb;
+        --text: #18181b;
+        --muted: #71717a;
+        --accent: #18181b;
+        --pos: #16a34a;
+        --neg: #dc2626;
+        --chart-line: #18181b;
+        --chart-fill: rgba(24, 24, 27, 0.08);
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0; padding: 0; min-height: 100%;
+        font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+        background: var(--bg); color: var(--text);
+      }
+      main {
+        max-width: 1100px; margin: 0 auto;
+        padding: 32px 24px;
+      }
+      .page-header {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 24px;
+      }
+      .page-title { font-size: 22px; font-weight: 600; margin: 0; }
+      .me {
+        width: 32px; height: 32px; border-radius: 50%;
+        background: #d4d4d8;
+        cursor: pointer; display: inline-block;
+      }
+      .kpis {
+        display: grid; grid-template-columns: repeat(4, 1fr);
+        gap: 14px; margin-bottom: 20px;
+      }
+      @media (max-width: 880px) {
+        .kpis { grid-template-columns: repeat(2, 1fr); }
+      }
+      .kpi {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 16px;
+      }
+      .kpi-label {
+        font-size: 12px; color: var(--muted);
+        text-transform: uppercase; letter-spacing: 0.04em;
+      }
+      .kpi-value {
+        font-size: 28px; font-weight: 600;
+        margin: 6px 0 4px;
+        font-variant-numeric: tabular-nums;
+      }
+      .kpi-delta {
+        font-size: 12px;
+      }
+      .kpi-delta.pos { color: var(--pos); }
+      .kpi-delta.neg { color: var(--neg); }
+      .chart-card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 18px;
+        margin-bottom: 20px;
+      }
+      .chart-head {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 14px;
+      }
+      .chart-title { font-size: 15px; font-weight: 600; }
+      .chart-tabs { display: flex; gap: 4px; }
+      .chart-tabs button {
+        background: transparent; border: 0;
+        font-size: 12px; color: var(--muted);
+        padding: 4px 10px; border-radius: 6px;
+        cursor: pointer;
+      }
+      .chart-tabs button.active {
+        background: #f4f4f5; color: var(--text);
+      }
+      .chart-area {
+        height: 200px;
+        background:
+          linear-gradient(to right, var(--border) 1px, transparent 1px) 0 0 / 16.66% 100%,
+          linear-gradient(to top, var(--border) 1px, transparent 1px) 0 0 / 100% 25%;
+        position: relative;
+        border-radius: 6px;
+      }
+      .chart-line {
+        position: absolute; inset: 8px 8px 24px 32px;
+      }
+      .chart-axis-y, .chart-axis-x {
+        position: absolute; font-size: 10px; color: var(--muted);
+      }
+      .chart-axis-y { left: 4px; top: 4px; }
+      .chart-axis-x { left: 32px; right: 8px; bottom: 4px;
+        display: flex; justify-content: space-between;
+      }
+      .table-card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      .table-head {
+        padding: 16px 18px 8px;
+        font-size: 15px; font-weight: 600;
+      }
+      table {
+        width: 100%; border-collapse: collapse;
+        font-size: 13px;
+      }
+      thead th {
+        text-align: left;
+        font-size: 11px; font-weight: 600;
+        color: var(--muted);
+        padding: 10px 16px;
+        border-bottom: 1px solid var(--border);
+        text-transform: uppercase; letter-spacing: 0.04em;
+      }
+      tbody td {
+        padding: 10px 16px;
+        border-bottom: 1px solid var(--border);
+      }
+      tbody tr:last-child td { border-bottom: 0; }
+      .muted { color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header class="page-header">
+        <h1 class="page-title">Dashboard</h1>
+        <span class="me" role="img" aria-label="Open your profile"></span>
+      </header>
+
+      <section class="kpis" aria-label="Key metrics">
+        <div class="kpi">
+          <div class="kpi-label">Active users</div>
+          <div class="kpi-value">12,408</div>
+          <div class="kpi-delta pos">+4.2% vs last week</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Sessions</div>
+          <div class="kpi-value">38,221</div>
+          <div class="kpi-delta pos">+1.1%</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Conversion</div>
+          <div class="kpi-value">3.42%</div>
+          <div class="kpi-delta neg">−0.3pp</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label">Revenue</div>
+          <div class="kpi-value">$18.6k</div>
+          <div class="kpi-delta pos">+6.0%</div>
+        </div>
+      </section>
+
+      <section class="chart-card" aria-label="Trend">
+        <div class="chart-head">
+          <span class="chart-title">Trend</span>
+          <div class="chart-tabs">
+            <button type="button">24h</button>
+            <button class="active" type="button">7d</button>
+            <button type="button">30d</button>
+          </div>
+        </div>
+        <div class="chart-area" role="img" aria-label="Trend line chart placeholder">
+          <span class="chart-axis-y">100%</span>
+          <svg class="chart-line" viewBox="0 0 100 60" preserveAspectRatio="none" aria-hidden="true">
+            <polyline fill="none" stroke="var(--chart-line)" stroke-width="1.2"
+                      points="0,40 14,32 28,36 42,22 56,28 70,16 84,20 100,12" />
+            <polygon fill="var(--chart-fill)"
+                     points="0,40 14,32 28,36 42,22 56,28 70,16 84,20 100,12 100,60 0,60" />
+          </svg>
+          <div class="chart-axis-x">
+            <span>Mon</span><span>Tue</span><span>Wed</span>
+            <span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="table-card" aria-label="Recent activity">
+        <div class="table-head">Recent activity</div>
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>User</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="muted">09:42</td>
+              <td>Alice</td>
+              <td>Signed in</td>
+            </tr>
+            <tr>
+              <td class="muted">09:31</td>
+              <td>Marcus</td>
+              <td>Updated billing details</td>
+            </tr>
+            <tr>
+              <td class="muted">09:18</td>
+              <td>Priya</td>
+              <td>Created project "Launch"</td>
+            </tr>
+            <tr>
+              <td class="muted">08:54</td>
+              <td>Lee</td>
+              <td>Invited 2 teammates</td>
+            </tr>
+            <tr>
+              <td class="muted">08:21</td>
+              <td>Sam</td>
+              <td>Exported analytics</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
+  </body>
+</html>
