@@ -21,6 +21,7 @@ export type EntryView =
   | 'tasks'
   | 'plugins'
   | 'design-systems'
+  | 'page-patterns'
   | 'integrations';
 
 interface Props {

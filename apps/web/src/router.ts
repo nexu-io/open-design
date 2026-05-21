@@ -16,6 +16,7 @@ export type EntryHomeView =
   | 'tasks'
   | 'plugins'
   | 'design-systems'
+  | 'page-patterns'
   | 'integrations';
 
 export type Route =
@@ -82,6 +83,9 @@ export function parseRoute(pathname: string): Route {
     }
     return { kind: 'home', view: 'design-systems' };
   }
+  if (parts[0] === 'page-patterns') {
+    return { kind: 'home', view: 'page-patterns' };
+  }
   if (parts[0] === 'automations' || parts[0] === 'tasks') {
     return { kind: 'home', view: 'tasks' };
   }
@@ -112,6 +116,7 @@ export function buildPath(route: Route): string {
     if (route.view === 'tasks') return '/automations';
     if (route.view === 'plugins') return '/plugins';
     if (route.view === 'design-systems') return '/design-systems';
+    if (route.view === 'page-patterns') return '/page-patterns';
     if (route.view === 'integrations') return '/integrations';
     return '/';
   }

@@ -111,4 +111,12 @@ describe('parseRoute / buildPath (issue #1505)', () => {
     expect(parseRoute('/something/else')).toEqual({ kind: 'home', view: 'home' });
     expect(parseRoute('/projects')).toEqual({ kind: 'home', view: 'projects' });
   });
+
+  it('parses /page-patterns to the home page-patterns view', () => {
+    expect(parseRoute('/page-patterns')).toEqual({ kind: 'home', view: 'page-patterns' });
+  });
+
+  it('builds /page-patterns from the home page-patterns route', () => {
+    expect(buildPath({ kind: 'home', view: 'page-patterns' })).toBe('/page-patterns');
+  });
 });
