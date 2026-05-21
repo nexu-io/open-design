@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Feed — Pattern Preview</title>
+    <style>
+      :root {
+        --bg: #fafaf9;
+        --card: #ffffff;
+        --border: #e5e7eb;
+        --text: #18181b;
+        --muted: #71717a;
+        --accent: #18181b;
+        --media: #e4e4e7;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0; padding: 0; min-height: 100%;
+        font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+        background: var(--bg); color: var(--text);
+      }
+      header.top {
+        position: sticky; top: 0; z-index: 1;
+        background: rgba(250, 250, 249, 0.85);
+        backdrop-filter: blur(8px);
+        border-bottom: 1px solid var(--border);
+        padding: 12px 20px;
+        display: flex; align-items: center; justify-content: space-between;
+      }
+      .brand { font-weight: 600; font-size: 16px; }
+      .me {
+        width: 32px; height: 32px; border-radius: 50%;
+        background: #d4d4d8;
+        display: inline-block; cursor: pointer;
+      }
+      main {
+        max-width: 600px; margin: 0 auto;
+        padding: 24px 20px 60px;
+      }
+      .composer {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 12px 16px;
+        margin-bottom: 18px;
+        font-size: 14px; color: var(--muted);
+      }
+      .post {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 14px;
+        cursor: pointer;
+      }
+      .post-head {
+        display: flex; align-items: center; gap: 10px;
+        margin-bottom: 10px;
+      }
+      .avatar {
+        width: 36px; height: 36px; border-radius: 50%;
+        background: #d4d4d8; flex-shrink: 0;
+        cursor: pointer;
+      }
+      .author { font-size: 14px; font-weight: 500; }
+      .meta { font-size: 12px; color: var(--muted); }
+      .post-body { font-size: 14px; line-height: 1.55; }
+      .media {
+        margin-top: 12px;
+        aspect-ratio: 16 / 9;
+        background: var(--media);
+        border-radius: 8px;
+        display: grid; place-items: center;
+        color: var(--muted); font-size: 12px;
+      }
+      .actions {
+        display: flex; gap: 18px;
+        margin-top: 12px;
+        font-size: 13px; color: var(--muted);
+      }
+      .actions button {
+        background: transparent; border: 0; color: inherit;
+        font-size: 13px; cursor: pointer;
+        display: inline-flex; align-items: center; gap: 6px;
+      }
+      .actions button .ico {
+        display: inline-block; width: 14px; height: 14px;
+        border: 1.5px solid var(--muted); border-radius: 3px;
+      }
+      .sentinel {
+        text-align: center; font-size: 12px; color: var(--muted);
+        padding: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="top">
+      <div class="brand">Feed</div>
+      <span class="me" role="img" aria-label="Open your profile"></span>
+    </header>
+    <main>
+      <div class="composer">Share something...</div>
+
+      <article class="post">
+        <div class="post-head">
+          <span class="avatar" role="img" aria-label="Alice"></span>
+          <div>
+            <div class="author">Alice</div>
+            <div class="meta">2 hours ago</div>
+          </div>
+        </div>
+        <div class="post-body">
+          Just shipped the new pattern library. The agent now has typed
+          page nodes to slot into a diagram surface — feels like a
+          watershed moment.
+        </div>
+        <div class="actions">
+          <button type="button"><span class="ico"></span>Like · 24</button>
+          <button type="button"><span class="ico"></span>Comment · 8</button>
+          <button type="button"><span class="ico"></span>Share</button>
+        </div>
+      </article>
+
+      <article class="post">
+        <div class="post-head">
+          <span class="avatar" role="img" aria-label="Marcus"></span>
+          <div>
+            <div class="author">Marcus</div>
+            <div class="meta">5 hours ago</div>
+          </div>
+        </div>
+        <div class="post-body">A walk-through of the gallery thumbnail layout:</div>
+        <div class="media" role="img" aria-label="Screenshot placeholder">Image</div>
+        <div class="actions">
+          <button type="button"><span class="ico"></span>Like · 47</button>
+          <button type="button"><span class="ico"></span>Comment · 12</button>
+          <button type="button"><span class="ico"></span>Share</button>
+        </div>
+      </article>
+
+      <article class="post">
+        <div class="post-head">
+          <span class="avatar" role="img" aria-label="Priya"></span>
+          <div>
+            <div class="author">Priya</div>
+            <div class="meta">Yesterday</div>
+          </div>
+        </div>
+        <div class="post-body">
+          Quick reminder: typed I/O means the diagram surface can
+          auto-suggest the next page based on the current node's outputs.
+        </div>
+        <div class="actions">
+          <button type="button"><span class="ico"></span>Like · 13</button>
+          <button type="button"><span class="ico"></span>Comment · 3</button>
+          <button type="button"><span class="ico"></span>Share</button>
+        </div>
+      </article>
+
+      <div class="sentinel">Loading more…</div>
+    </main>
+  </body>
+</html>
