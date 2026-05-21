@@ -10,6 +10,7 @@ const sharedHashPath = path.join(repoRoot, "nix/pnpm-deps.nix");
 const consumerHashLine = "      hash = pnpmDepsHash;";
 const fakeHashLine = "      hash = lib.fakeHash;";
 const nixCommand = ["build", ".#web", "--print-build-logs"];
+const maxNixOutputBufferBytes = 32 * 1024 * 1024;
 
 function extractExpectedHash(output: string): string | null {
   const patterns = [
@@ -47,6 +48,7 @@ async function main(): Promise<void> {
     const result = spawnSync("nix", nixCommand, {
       cwd: repoRoot,
       encoding: "utf8",
+      maxBuffer: maxNixOutputBufferBytes,
       stdio: ["inherit", "pipe", "pipe"],
     });
 
