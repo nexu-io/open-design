@@ -368,6 +368,39 @@ describe('app-config', () => {
       ).rejects.toThrow(/unknown agent/);
     });
 
+    it('rejects __proto__ and constructor agent ids on write without clearing prior config', async () => {
+      await writeAppConfig(dataDir, {
+        agentCliEnv: {
+          codebuddy: { CODEBUDDY_API_KEY: 'cb-test-key' },
+        },
+      });
+
+      // JSON.parse preserves __proto__ as an own enumerable key, while the
+      // object literal `{ __proto__: ... }` sets the prototype instead.
+      // Express's body parser uses JSON.parse, so we mirror that here.
+      const protoPayload = JSON.parse(
+        '{"agentCliEnv":{"__proto__":{"CODEBUDDY_API_KEY":"x"}}}',
+      );
+      await expect(
+        writeAppConfig(dataDir, protoPayload),
+      ).rejects.toThrow(/reserved agent id "__proto__"/);
+      const cfg1 = await readAppConfig(dataDir);
+      expect(cfg1.agentCliEnv).toEqual({
+        codebuddy: { CODEBUDDY_API_KEY: 'cb-test-key' },
+      });
+
+      const ctorPayload = JSON.parse(
+        '{"agentCliEnv":{"constructor":{"CODEBUDDY_API_KEY":"x"}}}',
+      );
+      await expect(
+        writeAppConfig(dataDir, ctorPayload),
+      ).rejects.toThrow(/reserved agent id "constructor"/);
+      const cfg2 = await readAppConfig(dataDir);
+      expect(cfg2.agentCliEnv).toEqual({
+        codebuddy: { CODEBUDDY_API_KEY: 'cb-test-key' },
+      });
+    });
+
     it('rejects CODEBUDDY_INTERNET_ENVIRONMENT with invalid enum value on write', async () => {
       await expect(
         writeAppConfig(dataDir, {

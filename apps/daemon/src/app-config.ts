@@ -229,7 +229,14 @@ export function validateAgentCliEnv(
   }
   const result: AgentCliEnvPrefs = Object.create(null);
   for (const [agentId, value] of Object.entries(raw as Record<string, unknown>)) {
-    if (agentId === '__proto__' || agentId === 'constructor') continue;
+    if (agentId === '__proto__' || agentId === 'constructor') {
+      if (throwOnInvalid) {
+        throw new AppConfigValidationError(
+          `[app-config] agentCliEnv: reserved agent id "${agentId}" is not allowed`,
+        );
+      }
+      continue;
+    }
     const allowed = AGENT_CLI_ENV_KEYS.get(agentId);
     if (!allowed) {
       if (throwOnInvalid) {

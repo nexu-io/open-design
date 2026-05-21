@@ -784,6 +784,18 @@ export async function fetchDaemonConfig(): Promise<AppConfigPrefs | null> {
   }
 }
 
+/** Thrown when the daemon rejects a config write (4xx). Always propagated
+ *  to the caller so the UI can surface the validation error. */
+export class DaemonConfigValidationError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+  ) {
+    super(message);
+    this.name = 'DaemonConfigValidationError';
+  }
+}
+
 export async function syncConfigToDaemon(
   config: AppConfig,
   options?: { throwOnError?: boolean },
@@ -809,8 +821,25 @@ export async function syncConfigToDaemon(
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(prefs),
     });
-    if (!response.ok) throw new Error(`Failed to sync app config (${response.status})`);
+    if (!response.ok) {
+      // 4xx errors are validation failures that must always propagate so
+      // the UI can surface the problem instead of showing "Saved".
+      if (response.status >= 400 && response.status < 500) {
+        const body = await response.json().catch(() => ({}) as () => Record<string, unknown>);
+        throw new DaemonConfigValidationError(
+          (body as Record<string, unknown>).error as string ?? `Failed to sync app config (${response.status})`,
+          response.status,
+        );
+      }
+      // 5xx / network errors are treated as daemon-unreachable and
+      // swallowed by default (localStorage keeps the user's copy).
+      if (options?.throwOnError) {
+        throw new Error(`Failed to sync app config (${response.status})`);
+      }
+    }
   } catch (error) {
+    // Validation errors must always propagate, even without throwOnError.
+    if (error instanceof DaemonConfigValidationError) throw error;
     if (options?.throwOnError) throw error;
     // Daemon offline; localStorage keeps the user's copy for the next save.
   }
