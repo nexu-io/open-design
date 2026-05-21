@@ -161,7 +161,7 @@ bash deploy/scripts/uninstall.sh --keep-data
 ```
 
 The uninstaller:
-1. Stops and removes containers (`docker compose down -v`).
+1. Stops and removes containers (`docker compose down`), then removes the data volume separately.
 2. On Linux: disables and removes the systemd unit.
 3. Removes `deploy/.env`.
 

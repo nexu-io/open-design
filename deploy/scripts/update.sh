@@ -1,9 +1,9 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # Open Design — Updater
 # Pulls the latest image and restarts the service
 #
 # Usage: ./update.sh [--image <ref>] [--non-interactive]
-set -eu
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEPLOY_DIR="$(dirname "$SCRIPT_DIR")"

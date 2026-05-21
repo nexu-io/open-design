@@ -1,11 +1,11 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # Open Design — One-Click Installer
 # Docker Compose wrapper for Linux and macOS
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/nexu-io/open-design/main/deploy/scripts/install.sh | sh
 #   ./install.sh [--non-interactive] [--port 7456] [--image <ref>] [--skip-docker-install] [--no-systemd]
-set -eu
+set -euo pipefail
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -411,23 +411,26 @@ if [ "$OS" = "Linux" ] && [ "$OPT_NO_SYSTEMD" = "0" ]; then
     mkdir -p "$SYSTEMD_DIR"
 
     CONTAINER_BIN="$(command -v "$CONTAINER_CMD")"
-    cat > "$SYSTEMD_UNIT" << UNIT
-[Unit]
-Description=Open Design daemon (${CONTAINER_RUNTIME} Compose)
-After=${CONTAINER_RUNTIME}.service
-Requires=${CONTAINER_RUNTIME}.service
 
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-WorkingDirectory=${DEPLOY_DIR}
-ExecStart=${CONTAINER_BIN} compose -f ${COMPOSE_FILE} up -d --no-build
-ExecStop=${CONTAINER_BIN} compose -f ${COMPOSE_FILE} down
-TimeoutStartSec=120
-
-[Install]
-WantedBy=default.target
-UNIT
+    {
+      echo "[Unit]"
+      echo "Description=Open Design daemon (${CONTAINER_RUNTIME} Compose)"
+      if [ "$CONTAINER_RUNTIME" = "docker" ]; then
+        echo "After=${CONTAINER_RUNTIME}.service"
+        echo "Requires=${CONTAINER_RUNTIME}.service"
+      fi
+      echo ""
+      echo "[Service]"
+      echo "Type=oneshot"
+      echo "RemainAfterExit=yes"
+      echo "WorkingDirectory=${DEPLOY_DIR}"
+      echo "ExecStart=${CONTAINER_BIN} compose -f ${COMPOSE_FILE} up -d --no-build"
+      echo "ExecStop=${CONTAINER_BIN} compose -f ${COMPOSE_FILE} down"
+      echo "TimeoutStartSec=120"
+      echo ""
+      echo "[Install]"
+      echo "WantedBy=default.target"
+    } > "$SYSTEMD_UNIT"
 
     systemctl --user daemon-reload
     systemctl --user enable open-design 2>/dev/null || true

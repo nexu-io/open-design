@@ -1,9 +1,9 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # Open Design — Uninstaller
 # Stops and removes the Docker Compose deployment
 #
 # Usage: ./uninstall.sh [--keep-data] [--non-interactive]
-set -eu
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEPLOY_DIR="$(dirname "$SCRIPT_DIR")"
