@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Contact — Pattern Preview</title>
+    <style>
+      :root {
+        --bg: #fafaf9;
+        --card: #ffffff;
+        --border: #e5e7eb;
+        --text: #18181b;
+        --muted: #71717a;
+        --accent: #18181b;
+        --accent-fg: #ffffff;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0; padding: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+        background: var(--bg); color: var(--text);
+        line-height: 1.5;
+      }
+      .wrap { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
+      header.page {
+        padding: 64px 0 32px; text-align: center;
+      }
+      .eyebrow {
+        display: inline-block;
+        font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
+        color: var(--muted);
+        padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px;
+        background: #fff;
+      }
+      header.page h1 {
+        font-size: 36px; letter-spacing: -0.02em;
+        margin: 16px 0 10px;
+      }
+      header.page p {
+        margin: 0 auto; max-width: 520px;
+        color: var(--muted); font-size: 15px;
+      }
+      .grid {
+        display: grid; grid-template-columns: 1fr 1fr; gap: 24px;
+        padding: 24px 0 80px;
+      }
+      .panel {
+        background: var(--card);
+        border: 1px solid var(--border); border-radius: 14px;
+        padding: 28px;
+      }
+      .panel h2 {
+        margin: 0 0 18px; font-size: 18px;
+      }
+      .info-row {
+        display: grid; grid-template-columns: 40px 1fr; align-items: flex-start;
+        gap: 14px; padding: 12px 0;
+        border-top: 1px solid var(--border);
+      }
+      .info-row:first-of-type { border-top: 0; }
+      .info-row .glyph {
+        width: 36px; height: 36px; border-radius: 8px;
+        background: #f4f4f5; color: var(--text);
+        display: grid; place-items: center;
+        font-weight: 700; font-size: 13px;
+      }
+      .info-row .label {
+        font-size: 12px; color: var(--muted);
+        text-transform: uppercase; letter-spacing: 0.06em;
+        margin: 4px 0 2px;
+      }
+      .info-row a {
+        color: var(--text); text-decoration: none; font-size: 15px;
+      }
+      .info-row .addr {
+        font-size: 14px; color: var(--text); line-height: 1.5;
+      }
+      .map {
+        margin-top: 16px;
+        height: 160px;
+        border: 1px solid var(--border); border-radius: 10px;
+        background:
+          linear-gradient(135deg, #f4f4f5 0%, #e4e4e7 60%, #f4f4f5 100%);
+      }
+      label {
+        display: block; font-size: 13px; color: var(--muted);
+        margin-bottom: 6px;
+      }
+      input[type=text], input[type=email], textarea {
+        width: 100%; padding: 10px 12px;
+        border: 1px solid var(--border); border-radius: 8px;
+        font-size: 14px; background: #fff; color: inherit;
+        font-family: inherit;
+      }
+      textarea { min-height: 120px; resize: vertical; }
+      .field + .field { margin-top: 14px; }
+      .submit {
+        margin-top: 18px; width: 100%; padding: 10px 12px;
+        border: 0; border-radius: 8px; cursor: pointer;
+        background: var(--accent); color: var(--accent-fg);
+        font-weight: 600; font-size: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="page wrap">
+      <span class="eyebrow">Contact</span>
+      <h1>Get in touch.</h1>
+      <p>Send us a note — we usually reply within one business day.</p>
+    </header>
+
+    <section class="wrap">
+      <div class="grid">
+        <aside class="panel" aria-label="Company info">
+          <h2>Acme HQ</h2>
+
+          <div class="info-row">
+            <div class="glyph" aria-hidden="true">P</div>
+            <div>
+              <div class="label">Phone</div>
+              <a href="tel:+15551234567">+1 (555) 123&#8209;4567</a>
+            </div>
+          </div>
+
+          <div class="info-row">
+            <div class="glyph" aria-hidden="true">@</div>
+            <div>
+              <div class="label">Email</div>
+              <a href="mailto:hello@acme.example">hello@acme.example</a>
+            </div>
+          </div>
+
+          <div class="info-row">
+            <div class="glyph" aria-hidden="true">A</div>
+            <div>
+              <div class="label">Address</div>
+              <div class="addr">
+                123 Builders Lane<br />
+                Suite 400<br />
+                Brooklyn, NY 11201
+              </div>
+            </div>
+          </div>
+
+          <div class="map" role="img" aria-label="Map placeholder"></div>
+        </aside>
+
+        <section class="panel" aria-label="Contact form">
+          <h2>Send a message</h2>
+          <form>
+            <div class="field">
+              <label for="name">Name</label>
+              <input id="name" type="text" autocomplete="name" />
+            </div>
+            <div class="field">
+              <label for="email">Email</label>
+              <input id="email" type="email" autocomplete="email" />
+            </div>
+            <div class="field">
+              <label for="company">Company</label>
+              <input id="company" type="text" autocomplete="organization" />
+            </div>
+            <div class="field">
+              <label for="message">Message</label>
+              <textarea id="message" placeholder="Tell us what you're working on…"></textarea>
+            </div>
+            <button class="submit" type="submit">Send message</button>
+          </form>
+        </section>
+      </div>
+    </section>
+  </body>
+</html>
