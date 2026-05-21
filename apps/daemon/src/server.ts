@@ -2832,6 +2832,38 @@ export function resolveChatRunArtifactQuietPeriodMs() {
   return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(raw)));
 }
 
+// Pure final-status classifier for the chat run's child-close handler.
+// Extracted so the per-branch invariants can be unit-tested without
+// driving a full child process — in particular:
+//   - cancel always wins over success/failure classification.
+//   - the ACP forced-shutdown override is scoped to SIGTERM + clean
+//     completion only (signed-32-bit-overflow SIGKILL or non-clean ACP
+//     state still report `failed`).
+//   - the artifact quiet-period override is gated on a daemon-initiated
+//     flag, NOT on `artifactRegistered` alone — see #1451 review:
+//     an external `kill -9` after the artifact write must still report
+//     `failed`, only the watchdog-initiated SIGTERM/SIGKILL escalation
+//     is allowed to flip the status to `succeeded`.
+export function classifyChatRunCloseStatus(params: {
+  cancelRequested: boolean;
+  code: number | null;
+  signal: NodeJS.Signals | string | null;
+  acpCleanCompletion: boolean;
+  artifactQuietShutdownRequested: boolean;
+}): 'canceled' | 'succeeded' | 'failed' {
+  if (params.cancelRequested) return 'canceled';
+  if (params.code === 0) return 'succeeded';
+  const acpForcedShutdown =
+    params.code === null && params.signal === 'SIGTERM' && params.acpCleanCompletion;
+  if (acpForcedShutdown) return 'succeeded';
+  const artifactQuietShutdown =
+    params.artifactQuietShutdownRequested &&
+    params.code === null &&
+    (params.signal === 'SIGTERM' || params.signal === 'SIGKILL');
+  if (artifactQuietShutdown) return 'succeeded';
+  return 'failed';
+}
+
 function resolveChatRunShutdownGraceMs() {
   const raw = Number(process.env.OD_CHAT_RUN_SHUTDOWN_GRACE_MS);
   if (!Number.isFinite(raw)) return 3_000;
@@ -9645,6 +9677,14 @@ export async function startServer({
     // "agent finished the deliverable and went idle" rather than
     // "agent stalled with nothing to show" (issue #1451).
     let artifactRegistered = false;
+    // Only daemon-initiated quiet-period termination should be treated
+    // as `succeeded` in the close handler. A later unrelated SIGTERM /
+    // SIGKILL (external `kill`, OOM, container shutdown) must keep its
+    // existing `failed` classification even when `artifactRegistered`
+    // is true — those signals don't mean the agent finished cleanly,
+    // they just terminated the process. Set strictly inside
+    // `failForInactivity`'s quiet-period branch.
+    let artifactQuietShutdownRequested = false;
     const summarizeAgentEventForInactivity = (payload) => {
       const type = payload?.type ? String(payload.type) : 'unknown';
       if (type === 'tool_result') {
@@ -9690,7 +9730,11 @@ export async function startServer({
         // tool token, cancel state, and exit-code classification stay
         // owned by the existing lifecycle. SIGTERM the child and let
         // the close handler classify the run as succeeded (via the
-        // artifactQuietShutdown branch).
+        // artifactQuietShutdown branch). Mark this termination as
+        // daemon-initiated so an unrelated later signal (external
+        // kill, OOM) is NOT silently reclassified to `succeeded` —
+        // only signals from this watchdog branch should be.
+        artifactQuietShutdownRequested = true;
         if (acpSession?.abort) {
           acpSession.abort();
         }
@@ -10372,24 +10416,13 @@ export async function startServer({
       const acpCleanCompletion =
         typeof acpSession?.completedSuccessfully === 'function' &&
         acpSession.completedSuccessfully();
-      const acpForcedShutdown =
-        code === null && signal === 'SIGTERM' && acpCleanCompletion;
-      // The artifact quiet-period path SIGTERMs the child after the
-      // deliverable has been registered (see failForInactivity above).
-      // Without this branch the run would be marked `failed` because
-      // signal-exit children take the `else` branch — the artifact has
-      // already been emitted to the chat, so completing as `succeeded`
-      // matches what the user actually got (#1451).
-      const artifactQuietShutdown =
-        artifactRegistered &&
-        !run.cancelRequested &&
-        code === null &&
-        (signal === 'SIGTERM' || signal === 'SIGKILL');
-      const status = run.cancelRequested
-        ? 'canceled'
-        : code === 0 || acpForcedShutdown || artifactQuietShutdown
-          ? 'succeeded'
-          : 'failed';
+      const status = classifyChatRunCloseStatus({
+        cancelRequested: !!run.cancelRequested,
+        code,
+        signal,
+        acpCleanCompletion,
+        artifactQuietShutdownRequested,
+      });
       if (status === 'failed') {
         const diagnostic = diagnoseClaudeCliFailure({
           agentId: def.id,

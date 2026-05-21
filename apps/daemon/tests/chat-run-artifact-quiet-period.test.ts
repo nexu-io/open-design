@@ -21,6 +21,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   __forTestChatRunHandles,
   __forTestEmitLiveArtifactEvent,
+  classifyChatRunCloseStatus,
   resolveChatRunArtifactQuietPeriodMs,
 } from '../src/server.js';
 
@@ -165,5 +166,127 @@ describe('live-artifact create → chat-run handle hook (#1451)', () => {
         { id: 'artifact-1', projectId: 'project-1' },
       ),
     ).not.toThrow();
+  });
+});
+
+describe('classifyChatRunCloseStatus (#1451 close-handler classification)', () => {
+  const base = {
+    cancelRequested: false,
+    code: 0 as number | null,
+    signal: null as string | null,
+    acpCleanCompletion: false,
+    artifactQuietShutdownRequested: false,
+  };
+
+  it('returns canceled when cancelRequested wins regardless of other signals', () => {
+    expect(
+      classifyChatRunCloseStatus({ ...base, cancelRequested: true, code: 0 }),
+    ).toBe('canceled');
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        cancelRequested: true,
+        code: null,
+        signal: 'SIGTERM',
+        artifactQuietShutdownRequested: true,
+      }),
+    ).toBe('canceled');
+  });
+
+  it('returns succeeded on clean exit code 0', () => {
+    expect(classifyChatRunCloseStatus({ ...base, code: 0 })).toBe('succeeded');
+  });
+
+  it('returns succeeded on ACP forced shutdown (SIGTERM + clean ACP completion)', () => {
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: null,
+        signal: 'SIGTERM',
+        acpCleanCompletion: true,
+      }),
+    ).toBe('succeeded');
+  });
+
+  it('returns failed when ACP shutdown was via SIGKILL (not the narrow override)', () => {
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: null,
+        signal: 'SIGKILL',
+        acpCleanCompletion: true,
+      }),
+    ).toBe('failed');
+  });
+
+  it('returns succeeded when the watchdog-initiated quiet-period SIGTERM fires', () => {
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: null,
+        signal: 'SIGTERM',
+        artifactQuietShutdownRequested: true,
+      }),
+    ).toBe('succeeded');
+  });
+
+  it('returns succeeded when the watchdog quiet-period escalates to SIGKILL (kill-grace timer)', () => {
+    // After SIGTERM the inactivityKillGraceMs timer escalates to
+    // SIGKILL if the child has not exited yet. Both signals belong to
+    // the same daemon-initiated shutdown, so the close handler must
+    // accept either when the flag is set.
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: null,
+        signal: 'SIGKILL',
+        artifactQuietShutdownRequested: true,
+      }),
+    ).toBe('succeeded');
+  });
+
+  it('returns failed when SIGTERM/SIGKILL arrive but no quiet-period shutdown was requested', () => {
+    // The reviewer-correctness fix: external `kill`, OOM, container
+    // shutdown after a successful artifact registration must NOT be
+    // silently reclassified as `succeeded`. The previous version only
+    // checked `artifactRegistered` (true here, implied via the flag
+    // being false because we never called failForInactivity), which
+    // would have flipped these to succeeded incorrectly.
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: null,
+        signal: 'SIGTERM',
+        artifactQuietShutdownRequested: false,
+      }),
+    ).toBe('failed');
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: null,
+        signal: 'SIGKILL',
+        artifactQuietShutdownRequested: false,
+      }),
+    ).toBe('failed');
+  });
+
+  it('returns failed on a non-zero exit code regardless of the quiet-period flag', () => {
+    // The quiet-period override is signal-only; a clean process exit
+    // that returned non-zero is a real failure (agent CLI bug, model
+    // error, etc.) and must propagate as such.
+    expect(
+      classifyChatRunCloseStatus({
+        ...base,
+        code: 1,
+        signal: null,
+        artifactQuietShutdownRequested: true,
+      }),
+    ).toBe('failed');
+  });
+
+  it('returns failed on the standard failure shape (non-zero exit, no special flags)', () => {
+    expect(
+      classifyChatRunCloseStatus({ ...base, code: 1, signal: null }),
+    ).toBe('failed');
   });
 });
