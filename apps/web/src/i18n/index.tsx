@@ -28,6 +28,7 @@ import { uk } from './locales/uk';
 import { tr } from './locales/tr';
 import { th } from './locales/th';
 import { it } from './locales/it';
+import { getOpenDesignHost } from '@open-design/host';
 import { LOCALES, type Dict, type Locale } from './types';
 
 export { LOCALES, LOCALE_LABEL } from './types';
@@ -82,12 +83,15 @@ export function resolveSystemLocale(languages: readonly string[]): Locale | null
   return null;
 }
 
-// Read the OS locale main process attached to `__od__.client.osLocale`.
+// Read the OS locale the desktop host attached to its client descriptor.
 // Packaged desktop builds need this because Chromium otherwise reports
-// en-US through navigator.language regardless of the OS setting.
+// en-US through navigator.language regardless of the OS setting. We go
+// through `getOpenDesignHost` rather than reading the bridge global by
+// name so the web/preload boundary stays single-source (see the
+// `host bridge boundary` guard test).
 function readDesktopHostOsLocale(): string | undefined {
   if (typeof window === 'undefined') return undefined;
-  const host = (window as { __od__?: { client?: { osLocale?: unknown } } }).__od__;
+  const host = getOpenDesignHost();
   const value = host?.client?.osLocale;
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
