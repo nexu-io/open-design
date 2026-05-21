@@ -134,8 +134,8 @@ describe('od page-pattern CLI', () => {
     const lines = result.stdout.trim().split('\n');
     // Two seeded entries, one row each.
     expect(lines).toHaveLength(2);
-    expect(lines[0].startsWith('auth-login\t')).toBe(true);
-    expect(lines[1].startsWith('dashboard-metrics\t')).toBe(true);
+    expect(lines[0]?.startsWith('auth-login\t')).toBe(true);
+    expect(lines[1]?.startsWith('dashboard-metrics\t')).toBe(true);
   });
 
   it('`od page-pattern show <id> --json` returns the detail payload with body', async () => {
