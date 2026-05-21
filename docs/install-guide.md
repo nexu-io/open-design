@@ -26,6 +26,8 @@ The only requirement is Docker with the Compose plugin.
 
 The installer checks for Docker and offers to install it automatically on Ubuntu/Debian, Fedora, and macOS (via Homebrew). Use `--skip-docker-install` to skip this step.
 
+> **MCP note:** Docker/Compose installs run the daemon inside the container. The MCP client snippets shown in Settings are stdio/local-path based and require a local/source install for now. Container-friendly MCP transport will be added in a follow-up.
+
 ## Interactive install walkthrough
 
 Running the installer without flags launches an interactive wizard:
