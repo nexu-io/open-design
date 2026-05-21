@@ -412,7 +412,8 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
     if (!workingDir) return null;
     return workingDir.split(/[\\/]/).filter(Boolean).slice(-1)[0] ?? workingDir;
   }, [workingDir]);
-  const authoringLayoutActive = activeChipId === 'create-plugin';
+  const authoringLayoutActive =
+    activeChipId === 'create-plugin' || pendingChipId === 'create-plugin';
   const promptMaxHeight = authoringLayoutActive
     ? HOME_HERO_AUTHORING_PROMPT_MAX_HEIGHT
     : HOME_HERO_PROMPT_MAX_HEIGHT;
