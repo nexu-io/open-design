@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'vitest';
 import {
-  AGENT_DEFS, aider, antigravity, assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, gemini, join, kilo, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
+  AGENT_DEFS, agentCapabilities, aider, antigravity, assert, claude, codebuddy, codex, copilot, cursorAgent, deepseek, devin, detectAgents, gemini, join, kilo, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
 } from './helpers/test-helpers.js';
 import { writeAntigravityModelSelection } from '../../src/runtimes/defs/antigravity.js';
 import type { TestAgentDef } from './helpers/test-helpers.js';
@@ -881,5 +881,51 @@ test('promptInputFormat is a string property (or undefined) on every promptViaSt
       expected,
       `${name}.promptInputFormat must equal ${JSON.stringify(expected)}`,
     );
+  }
+});
+
+// ---- CodeBuddy Code --add-dir capability (positive-probe gate) -------
+
+test('codebuddy buildArgs omits --add-dir when capability probe has not confirmed support', () => {
+  // Before any capability probe runs (or if probing failed), agentCapabilities
+  // has no entry for 'codebuddy'. buildArgs gets `caps = {}` ->
+  // caps.addDir is undefined -> undefined === true is false -> --add-dir
+  // is NOT added. This is the safe default: don't pass flags the CLI may
+  // not understand.
+  const args = codebuddy.buildArgs(
+    '',
+    [],
+    ['/repo/skills', '/repo/design-systems'],
+    {},
+  );
+
+  assert.equal(
+    args.includes('--add-dir'),
+    false,
+    '--add-dir must NOT be present when capability probe has not confirmed support',
+  );
+});
+
+test('codebuddy buildArgs includes --add-dir when capability probe confirms support', () => {
+  // Simulate a successful probe that found --add-dir in --help output.
+  const prev = agentCapabilities.get('codebuddy');
+  agentCapabilities.set('codebuddy', { addDir: true, partialMessages: true });
+  try {
+    const args = codebuddy.buildArgs(
+      '',
+      [],
+      ['/repo/skills'],
+      {},
+    );
+
+    const addDirIndex = args.indexOf('--add-dir');
+    assert.ok(addDirIndex >= 0, '--add-dir must be present when probe confirmed support');
+    assert.equal(args[addDirIndex + 1], '/repo/skills');
+  } finally {
+    if (prev) {
+      agentCapabilities.set('codebuddy', prev);
+    } else {
+      agentCapabilities.delete('codebuddy');
+    }
   }
 });

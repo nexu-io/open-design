@@ -22,9 +22,11 @@ import {
   resolveAgentExecutable,
   spawnEnvForAgent,
 } from '../../../src/agents.js';
+import { agentCapabilities } from '../../../src/runtimes/capabilities.js';
 import type { RuntimeAgentDef } from '../../../src/runtimes/types.js';
 
 export {
+  agentCapabilities,
   assert,
   AGENT_DEFS,
   applyAgentLaunchEnv,
@@ -89,6 +91,7 @@ export const opencode = requireAgent('opencode');
 export const grokBuild = requireAgent('grok-build');
 export const aider = requireAgent('aider');
 export const antigravity = requireAgent('antigravity');
+export const codebuddy = requireAgent('codebuddy');
 export const deepseekMaxPromptArgBytes = (() => {
   assert.ok(
     deepseek.maxPromptArgBytes !== undefined,

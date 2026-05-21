@@ -29,7 +29,7 @@ export const codebuddyAgentDef = {
       const dirs = (extraAllowedDirs || []).filter(
         (d) => typeof d === 'string' && d.length > 0,
       );
-      if (dirs.length > 0 && caps.addDir !== false) {
+      if (dirs.length > 0 && caps.addDir === true) {
         args.push('--add-dir', ...dirs);
       }
       args.push('--permission-mode', 'bypassPermissions', '-y');
