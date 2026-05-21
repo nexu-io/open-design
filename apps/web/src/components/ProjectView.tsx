@@ -518,6 +518,11 @@ export function ProjectView({
   const [byokImageModelOverride, setByokImageModelOverride] = useState<string>(
     config.byokImageModel ?? '',
   );
+  // Per-session video / audio model overrides for the BYOK chat's
+  // generate_video / generate_audio tools. Same lifecycle as the image
+  // override; empty means "use the catalogue default for that surface".
+  const [byokVideoModelOverride, setByokVideoModelOverride] = useState<string>('');
+  const [byokAudioModelOverride, setByokAudioModelOverride] = useState<string>('');
   // `closed` → no surface; `review` → read-only saved-state panel with a
   // preview + reopen-to-edit action (#1822); `edit` → the textarea editor.
   const [instructionsMode, setInstructionsMode] = useState<'closed' | 'review' | 'edit'>('closed');
@@ -2574,11 +2579,13 @@ export function ProjectView({
           projectId: project.id,
           conversationId: runConversationId,
           assistantMessageId: assistantId,
-          // SenseAudio BYOK chat reads this to pre-fill the tool param's
-          // default model. Prefer the live composer override; fall back
-          // to the Settings default when the composer dropdown is on
-          // "use default". Other protocols ignore unknown body fields.
+          // SenseAudio BYOK chat reads these to pre-fill each media tool's
+          // default model. Prefer the live composer override; fall back to
+          // the Settings default (image only) or empty → catalogue default.
+          // Other protocols ignore unknown body fields.
           byokImageModel: byokImageModelOverride || config.byokImageModel,
+          byokVideoModel: byokVideoModelOverride,
+          byokAudioModel: byokAudioModelOverride,
           onRunCreated,
           onRunStatus,
           onRunEventId,
@@ -3797,6 +3804,10 @@ export function ProjectView({
               byokApiProtocol={config.apiProtocol}
               byokImageModel={byokImageModelOverride}
               onChangeByokImageModel={setByokImageModelOverride}
+              byokVideoModel={byokVideoModelOverride}
+              onChangeByokVideoModel={setByokVideoModelOverride}
+              byokAudioModel={byokAudioModelOverride}
+              onChangeByokAudioModel={setByokAudioModelOverride}
               projectMetadata={project.metadata}
               onProjectMetadataChange={(metadata) => {
                 onProjectChange({ ...project, metadata });

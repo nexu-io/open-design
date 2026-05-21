@@ -233,6 +233,8 @@ export const hu: Dict = {
     'Azure OpenAI esetén ez a mező a /openai/deployments/<model> deployment neveként szerepel. Add meg az Azure-ban létrehozott deployment nevét.',
   'settings.apiVersion': 'API-verzió',
   'settings.byokImageModel': 'Képgenerálási modell',
+  'settings.byokVideoModel': 'Videógeneráló modell',
+  'settings.byokAudioModel': 'Hanggeneráló modell',
   'settings.maxTokens': 'Max tokenek (opcionális)',
   'settings.maxTokensHint':
     'A válasz hosszának felső határa. Minden modellnek van hangolt alapértelmezése (placeholderként látható); hagyd üresen az alkalmazásához, vagy adj meg számot a felülíráshoz.',

@@ -233,6 +233,8 @@ export const fa: Dict = {
     'در Azure OpenAI، این فیلد به عنوان نام استقرار در /openai/deployments/<model> استفاده می‌شود. نام استقراری را که در Azure ساخته‌اید وارد کنید.',
   'settings.apiVersion': 'نسخه API',
   'settings.byokImageModel': 'مدل تولید تصویر',
+  'settings.byokVideoModel': 'مدل تولید ویدیو',
+  'settings.byokAudioModel': 'مدل تولید صدا',
   'settings.maxTokens': 'حداکثر توکن (اختیاری)',
   'settings.maxTokensHint':
     'سقف طول پاسخ. هر مدل مقدار پیش‌فرض تنظیم‌شدهٔ خود را دارد (در placeholder نمایش داده می‌شود)؛ برای استفاده از آن خالی بگذارید، یا برای جایگزینی، عددی وارد کنید.',

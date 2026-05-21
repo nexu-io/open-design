@@ -3,119 +3,123 @@
 // Why this file exists: the BYOK chat proxy (e.g. /api/proxy/senseaudio/stream)
 // is a thin pass-through that doesn't have the agent-runtime scaffolding the
 // CLI agents (Claude Code / Codex / ...) carry. To let users ask their BYOK
-// chat to "draw me a cat" and get an actual rendered PNG back, the daemon
-// injects an OpenAI-shaped `tools` definition into the upstream completion
-// request, then loops on the model's tool_calls: execute → feed the result
-// back as a `role: 'tool'` message → re-issue the completion. The chat surface
-// stays the same; the tool dispatch happens entirely daemon-side.
+// chat to "draw me a cat" / "make a clip" / "read this aloud" and get a real
+// rendered file back, the daemon injects an OpenAI-shaped `tools` definition
+// into the upstream completion request, then loops on the model's tool_calls:
+// execute → feed the result back as a `role: 'tool'` message → re-issue the
+// completion. The chat surface stays the same; the tool dispatch happens
+// entirely daemon-side.
 //
-// Today we ship one tool — `generate_image` — backed by SenseAudio's
-// /v1/image/sync endpoint, since the BYOK chat session already authenticates
-// against SenseAudio with the same API key. Additional tools (TTS, video,
-// research) can be added here as the BYOK surface expands.
+// All three media tools route through the daemon's unified media dispatcher
+// (`generateMedia` in media.ts), which resolves the model's provider, loads
+// that provider's credentials (media-config / env — the BYOK key is mirrored
+// in by seedProviderIfMissing), dispatches to the right renderer, and writes
+// the bytes into the active project's folder. That means the chat can drive
+// ANY model in the catalogue (OpenAI / Volcengine / SenseAudio / ...), not
+// just SenseAudio — as long as the chosen provider has credentials configured
+// in Settings → Media.
 
-import path from 'node:path';
-import { writeFile } from 'node:fs/promises';
-import { randomBytes } from 'node:crypto';
-import { assertExternalAssetUrl } from './connectionTest.js';
-import { resolveProviderConfig } from './media-config.js';
-import { IMAGE_MODELS } from './media-models.js';
-import { ensureProject } from './projects.js';
+import type { AudioKind } from './media-models.js';
+import {
+  AUDIO_MODELS_BY_KIND,
+  IMAGE_MODELS,
+  VIDEO_MODELS,
+} from './media-models.js';
+import { generateMedia } from './media.js';
 
-// SenseAudio image model allowlist — derived from the shared media-models
-// registry so adding a new SenseAudio image model in one place (media-models)
-// auto-extends the BYOK tool param enum, the Settings dropdown, and the
-// daemon-side validation. No drift, no hand-maintained constant.
-export const BYOK_SENSEAUDIO_IMAGE_MODELS: readonly string[] = IMAGE_MODELS
-  .filter((m) => m.provider === 'senseaudio')
-  .map((m) => m.id);
-
-// Default falls back to the first entry from the registry (today
-// `senseaudio-image-2.0-260319` — the multi-aspect latest). Kept as a
-// computed constant so re-ordering the registry rotates the default
-// without code edits here.
-export const BYOK_SENSEAUDIO_DEFAULT_IMAGE_MODEL =
-  BYOK_SENSEAUDIO_IMAGE_MODELS[0] ?? 'senseaudio-image-2.0-260319';
-
-export function isSenseAudioImageModel(value: unknown): value is string {
-  return typeof value === 'string' && BYOK_SENSEAUDIO_IMAGE_MODELS.includes(value);
-}
-
-const SENSEAUDIO_DEFAULT_BASE_URL = 'https://api.senseaudio.cn';
 const PROMPT_MAX_LENGTH = 2000;
 
-// SenseAudio video — the API only documents one model today, so the
-// wire id is a const. The chat tool's `generate_video` param surface
-// (prompt, aspect_ratio, duration, resolution, generate_audio) covers
-// every knob the doubao-seedance gateway accepts.
-const SENSEAUDIO_VIDEO_MODEL = 'doubao-seedance-2-0-260128';
-const SENSEAUDIO_VIDEO_ASPECT_RATIOS = ['16:9', '9:16', '4:3', '3:4', '1:1'] as const;
-const SENSEAUDIO_VIDEO_RESOLUTIONS = ['480p', '720p', '1080p'] as const;
-const SENSEAUDIO_VIDEO_DURATION_MIN = 4;
-const SENSEAUDIO_VIDEO_DURATION_MAX = 15;
-const SENSEAUDIO_VIDEO_DURATION_DEFAULT = 5;
-// Polling: SenseAudio docs recommend 5–10 s intervals; we pick 5 s and
-// cap total attempts so a stuck job can't pin the chat stream forever.
-// 120 attempts × 5 s = 10 min ceiling — covers the real-world
-// doubao-seedance latency range (1080p + audio jobs frequently spend
-// 3–8 min on the gateway). Below this, the 5-min cap timed out otherwise
-// valid jobs; above this the chat surface starts feeling stuck.
-const SENSEAUDIO_VIDEO_POLL_INTERVAL_MS_DEFAULT = 5000;
-const SENSEAUDIO_VIDEO_MAX_POLLS = 120;
-// Periodic progress log every N polls so a long-running job emits some
-// signal to the daemon log — without flooding it with one line per
-// 5 s. 6 polls = ~30 s between progress lines.
-const SENSEAUDIO_VIDEO_PROGRESS_LOG_EVERY = 6;
+// Full-registry model id lists per surface. The tool `model` enums and the
+// composer pickers both offer every catalogue model; generateMedia routes
+// each id to its provider. Derived from the registry so adding a model in
+// one place auto-extends the tool surface — no hand-maintained constant.
+export const BYOK_IMAGE_MODEL_IDS: readonly string[] = IMAGE_MODELS.map((m) => m.id);
+export const BYOK_VIDEO_MODEL_IDS: readonly string[] = VIDEO_MODELS.map((m) => m.id);
+export const BYOK_AUDIO_MODELS = [
+  ...AUDIO_MODELS_BY_KIND.music,
+  ...AUDIO_MODELS_BY_KIND.speech,
+  ...AUDIO_MODELS_BY_KIND.sfx,
+];
+export const BYOK_AUDIO_MODEL_IDS: readonly string[] = BYOK_AUDIO_MODELS.map((m) => m.id);
 
-// SenseAudio's image gateway rejects non-standard pixel sizes with a 400
-// `参数错误：size` (verified against logs from a failed call on
-// 2026-05-16). We stick to common 16-multiple HD / SD sizes that the
-// gateway is known to accept: 1024×1024 for square, 1280×720 / 720×1280
-// for widescreen / portrait, 1024×768 / 768×1024 for the 4:3 family.
-// The table is duplicated in renderSenseAudioImage (media.ts) for the
-// CLI-agent path so both surfaces stay in sync.
-const ASPECT_TO_SIZE: Record<string, string> = {
-  '1:1': '1024x1024',
-  '16:9': '1280x720',
-  '9:16': '720x1280',
-  '4:3': '1024x768',
-  '3:4': '768x1024',
-};
+const DEFAULT_IMAGE_MODEL =
+  IMAGE_MODELS.find((m) => m.default)?.id ?? IMAGE_MODELS[0]!.id;
+const DEFAULT_VIDEO_MODEL =
+  VIDEO_MODELS.find((m) => m.default)?.id ?? VIDEO_MODELS[0]!.id;
+const DEFAULT_SPEECH_MODEL =
+  AUDIO_MODELS_BY_KIND.speech.find((m) => m.default)?.id
+  ?? AUDIO_MODELS_BY_KIND.speech[0]!.id;
+
+// SenseAudio-provider default per surface. The SenseAudio BYOK chat seeds
+// only its own key into media-config, so when the user hasn't picked a model
+// the tools must default to a SenseAudio model (which has credentials) rather
+// than the global catalogue default (gpt-image-2 etc., which would fail with
+// "no OpenAI credential"). The proxy handler passes these as the toolCtx
+// defaults; the user can still pick any other configured provider's model.
+export const SENSEAUDIO_DEFAULT_IMAGE_MODEL =
+  IMAGE_MODELS.find((m) => m.provider === 'senseaudio')?.id ?? DEFAULT_IMAGE_MODEL;
+export const SENSEAUDIO_DEFAULT_VIDEO_MODEL =
+  VIDEO_MODELS.find((m) => m.provider === 'senseaudio')?.id ?? DEFAULT_VIDEO_MODEL;
+export const SENSEAUDIO_DEFAULT_AUDIO_MODEL =
+  AUDIO_MODELS_BY_KIND.speech.find((m) => m.provider === 'senseaudio')?.id
+  ?? DEFAULT_SPEECH_MODEL;
+
+const VIDEO_DURATION_MIN = 3;
+const VIDEO_DURATION_MAX = 30;
+const VIDEO_DURATION_DEFAULT = 5;
+const IMAGE_ASPECTS = ['1:1', '16:9', '9:16', '4:3', '3:4'] as const;
+const VIDEO_ASPECTS = ['16:9', '9:16', '4:3', '3:4', '1:1'] as const;
+
+export function isImageModel(value: unknown): value is string {
+  return typeof value === 'string' && IMAGE_MODELS.some((m) => m.id === value);
+}
+export function isVideoModel(value: unknown): value is string {
+  return typeof value === 'string' && VIDEO_MODELS.some((m) => m.id === value);
+}
+export function isAudioModel(value: unknown): value is string {
+  return typeof value === 'string' && BYOK_AUDIO_MODELS.some((m) => m.id === value);
+}
+
+/** Each audio model belongs to exactly one kind; derive it so generateMedia
+ *  picks the right renderer (TTS vs music vs sfx) without a separate arg. */
+function audioKindForModel(id: string): AudioKind {
+  if (AUDIO_MODELS_BY_KIND.music.some((m) => m.id === id)) return 'music';
+  if (AUDIO_MODELS_BY_KIND.sfx.some((m) => m.id === id)) return 'sfx';
+  return 'speech';
+}
 
 /**
- * OpenAI-compatible tool definition for image generation. Injected into
- * the upstream `tools` array on every /api/proxy/senseaudio/stream
- * request so the LLM can decide on its own when to call it. The
- * description deliberately tells the model to embed the returned URL
- * in markdown — the chat UI already renders markdown images inline,
- * so no client-side wiring is required for the bytes to show up.
+ * OpenAI-compatible tool definitions injected into the upstream `tools` array
+ * on every BYOK media-chat request so the LLM can decide when to call them.
+ * Descriptions tell the model how to surface each result in markdown — the
+ * chat UI renders image markdown inline; video / audio fall back to links.
  */
-export const BYOK_SENSEAUDIO_TOOLS = [
+export const BYOK_MEDIA_TOOLS = [
   {
     type: 'function' as const,
     function: {
       name: 'generate_image',
       description:
-        'Generate an image from a text prompt using SenseAudio image models. Returns a URL pointing to the rendered PNG. After this tool succeeds, embed the URL in your reply with markdown image syntax — ![alt](url) — so the user sees the image inline. Use this whenever the user asks to draw, create, generate, design, or illustrate something visual.',
+        'Generate an image from a text prompt. Returns a URL to the rendered file. After this tool succeeds, embed the URL in your reply with markdown image syntax — ![alt](url) — so the user sees it inline. Use this whenever the user asks to draw, create, generate, design, or illustrate something visual.',
       parameters: {
         type: 'object',
         properties: {
           prompt: {
             type: 'string',
             description:
-              'Detailed visual description of the image (Chinese or English are both fine). Include subject, style, lighting, composition. Maximum 2000 characters.',
+              'Detailed visual description of the image (Chinese or English). Include subject, style, lighting, composition. Maximum 2000 characters.',
           },
           aspect_ratio: {
             type: 'string',
-            enum: ['1:1', '16:9', '9:16', '4:3', '3:4'],
+            enum: [...IMAGE_ASPECTS],
             description:
-              'Output aspect ratio. 1:1 for square avatars and product shots, 16:9 for hero banners, 9:16 for vertical phone posters, 4:3 for editorial covers, 3:4 for posters. Defaults to 1:1 when omitted.',
+              'Output aspect ratio. 1:1 square, 16:9 banner, 9:16 vertical, 4:3 / 3:4 editorial. Defaults to 1:1.',
           },
           model: {
             type: 'string',
-            enum: [...BYOK_SENSEAUDIO_IMAGE_MODELS],
+            enum: [...BYOK_IMAGE_MODEL_IDS],
             description:
-              'Optional model override. Omit this to use the user-configured default from Settings (or the SenseAudio 2.0 multi-aspect model when unset). Choose senseaudio-image-2.0-260319 for multi-aspect generation, senseaudio-image-1.0-260319 for standard sizes, or doubao-seedream-5-0-260128 for high-resolution output through the ByteDance Seedream gateway. The user explicitly picked a default in their Settings — only override when the user asks for a different style/resolution.',
+              'Optional model override. Omit to use the user-selected default from the composer. The chosen model routes to its provider, which must have credentials configured in Settings → Media.',
           },
         },
         required: ['prompt'],
@@ -127,38 +131,66 @@ export const BYOK_SENSEAUDIO_TOOLS = [
     function: {
       name: 'generate_video',
       description:
-        'Generate a short video (4–15 seconds) from a text prompt using SenseAudio\'s ByteDance Seedance gateway. This is an asynchronous call that can take 30 s to a few minutes — the daemon polls the job for you, so the user just sees the chat waiting. After this tool succeeds, embed the returned URL in your reply as a markdown link, e.g. `[▶ Play video](url)`, because the chat\'s markdown renderer does not currently render `<video>` tags inline. Use this whenever the user asks for a video, clip, animation, or motion graphic.',
+        'Generate a short video (a few seconds) from a text prompt. Asynchronous — the daemon polls the job for you, so the user just sees the chat waiting. After it succeeds, embed the returned URL as a markdown link, e.g. `[▶ Play video](url)`, because the chat renderer does not embed <video> tags. Use this whenever the user asks for a video, clip, animation, or motion graphic.',
       parameters: {
         type: 'object',
         properties: {
           prompt: {
             type: 'string',
             description:
-              'Detailed motion description of the video. Include subject, action / camera move / scene transitions, style, lighting. Chinese or English. Maximum 2000 characters.',
+              'Detailed motion description (subject, action / camera move, style, lighting). Chinese or English. Maximum 2000 characters.',
           },
           aspect_ratio: {
             type: 'string',
-            enum: [...SENSEAUDIO_VIDEO_ASPECT_RATIOS],
+            enum: [...VIDEO_ASPECTS],
             description:
-              'Output aspect ratio. 16:9 for cinematic, 9:16 for vertical (phone / TikTok), 1:1 for social square, 4:3 / 3:4 for editorial. Defaults to 16:9.',
+              'Output aspect ratio. 16:9 cinematic, 9:16 vertical, 1:1 square, 4:3 / 3:4 editorial. Defaults to 16:9.',
           },
           duration: {
             type: 'integer',
-            minimum: SENSEAUDIO_VIDEO_DURATION_MIN,
-            maximum: SENSEAUDIO_VIDEO_DURATION_MAX,
-            description:
-              `Video length in seconds (integer). Allowed range ${SENSEAUDIO_VIDEO_DURATION_MIN}–${SENSEAUDIO_VIDEO_DURATION_MAX}; defaults to ${SENSEAUDIO_VIDEO_DURATION_DEFAULT}. Shorter durations finish faster.`,
+            minimum: VIDEO_DURATION_MIN,
+            maximum: VIDEO_DURATION_MAX,
+            description: `Video length in seconds (integer ${VIDEO_DURATION_MIN}–${VIDEO_DURATION_MAX}; defaults to ${VIDEO_DURATION_DEFAULT}).`,
           },
-          resolution: {
+          model: {
             type: 'string',
-            enum: [...SENSEAUDIO_VIDEO_RESOLUTIONS],
+            enum: [...BYOK_VIDEO_MODEL_IDS],
             description:
-              'Output resolution. 480p (fastest), 720p (default, balanced), 1080p (best quality, slowest). Pick 1080p only when the user explicitly asks for high resolution.',
+              'Optional model override. Omit to use the user-selected default from the composer. Routes to the model\'s provider, which must have credentials configured in Settings → Media.',
           },
-          generate_audio: {
-            type: 'boolean',
+        },
+        required: ['prompt'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'generate_audio',
+      description:
+        'Generate audio (speech / music / sound effects) from a text prompt. Returns a URL to the rendered file. After it succeeds, give the user a markdown link, e.g. `[▶ Play audio](url)`, because the chat renderer does not embed an audio player. Use this for text-to-speech, voiceover, narration, background music, or sound effects.',
+      parameters: {
+        type: 'object',
+        properties: {
+          prompt: {
+            type: 'string',
             description:
-              'Whether the model also synthesises an audio track for the clip (background sound, ambience). Defaults to false to keep generation fast; flip to true when the user asks for sound, music, or a "video with audio".',
+              'The text to speak (TTS), the lyrics / style brief (music), or the sound description (SFX). Maximum 2000 characters.',
+          },
+          voice: {
+            type: 'string',
+            description:
+              'Optional voice id for speech models (e.g. a SenseAudio voice like female_0038_a). Ignored for music / SFX.',
+          },
+          duration: {
+            type: 'integer',
+            description: 'Optional target duration in seconds for music / SFX.',
+          },
+          model: {
+            type: 'string',
+            enum: [...BYOK_AUDIO_MODEL_IDS],
+            description:
+              'Optional model override. Omit to use the user-selected default from the composer. Routes to the model\'s provider, which must have credentials configured in Settings → Media.',
           },
         },
         required: ['prompt'],
@@ -168,431 +200,175 @@ export const BYOK_SENSEAUDIO_TOOLS = [
 ];
 
 /**
- * Runtime context the BYOK tool executor needs. Passed by the chat
- * route on every call so the tool layer stays free of global state and
- * can be unit-tested with a temp directory.
+ * Runtime context the BYOK tool executors need. Built once per request by the
+ * chat route. Credentials are NOT carried here — generateMedia resolves each
+ * provider's key from media-config (the BYOK key is mirrored in by the proxy
+ * handler's seedProviderIfMissing before the run starts).
  */
 export interface BYOKToolContext {
-  /** Daemon project root — used to look up media-config when the chat
-   *  session key is missing. */
+  /** Daemon project root — generateMedia reads media-config relative to it. */
   projectRoot: string;
-  /** Daemon's PROJECTS_DIR (the `<projectRoot>/.od/projects/` folder
-   *  that holds per-project file trees). Generated images land in
-   *  `<projectsRoot>/<projectId>/byok-<id>.png` so the project's
-   *  FileViewer / DesignFilesPanel discover them automatically and
-   *  the file travels with the project on export, archive, rename. */
+  /** Daemon's PROJECTS_DIR. Generated files land in
+   *  `<projectsRoot>/<projectId>/` so the project's FileViewer discovers them
+   *  and they travel with the project on export / archive / rename. */
   projectsRoot: string;
-  /** Active project id from the chat surface. Required — the BYOK
-   *  chat always runs inside a project, so the tool dispatch refuses
-   *  to fire without one rather than dump bytes into a global cache.
-   *  Validated upstream via `isSafeId`. */
+  /** Active project id (validated upstream via isSafeId). */
   projectId: string;
-  /** The BYOK chat session's API key — first credential we try. Bypasses
-   *  the media-config indirection so the same key the user just pasted
-   *  for chat is the same key the image call uses. */
-  upstreamApiKey: string;
-  /** The BYOK chat session's base URL (may be a custom gateway). Falls
-   *  back to api.senseaudio.cn. */
-  upstreamBaseUrl?: string;
-  /** Default image model the user picked in BYOK Settings, used when the
-   *  LLM didn't pass `model` in tool args. Validated upstream — anything
-   *  outside `BYOK_SENSEAUDIO_IMAGE_MODELS` is dropped so a stale
-   *  client-side config can't smuggle an unregistered model id through.
-   *  Falls back to `BYOK_SENSEAUDIO_DEFAULT_IMAGE_MODEL` (the registry's
-   *  first SenseAudio image entry) when missing. */
+  /** Composer-selected default image model, used when the LLM omits `model`.
+   *  Validated against the registry; an unknown id falls back to the
+   *  catalogue default. */
   defaultImageModel?: string;
-  /** Test-only override for the video polling interval (ms). Production
-   *  uses 5 s (SenseAudio's recommendation) — tests pass small values
-   *  (e.g. 1 ms) to keep the suite fast without changing the polling
-   *  semantics. */
-  videoPollIntervalMs?: number;
+  /** Composer-selected default video model. */
+  defaultVideoModel?: string;
+  /** Composer-selected default audio model. */
+  defaultAudioModel?: string;
 }
 
-export interface ImageToolResult {
+export interface MediaToolResult {
   ok: boolean;
   /** Daemon-served URL on success. */
   url?: string;
-  /** Short human-readable failure reason. Stuffed into the `tool` role
-   *  reply so the LLM can apologize / retry. */
+  /** What kind of media this result is, so the chat route picks the right
+   *  embedding hint (image markdown vs link). */
+  kind?: 'image' | 'video' | 'audio';
+  /** Short human-readable failure reason, fed back to the LLM so it can
+   *  apologize / retry. */
   error?: string;
 }
 
-function sanitizeAspectRatio(raw: unknown): string {
-  if (typeof raw !== 'string') return '1:1';
-  return ASPECT_TO_SIZE[raw] ? raw : '1:1';
+// Back-compat alias — older callers import ImageToolResult.
+export type ImageToolResult = MediaToolResult;
+
+function trimmedPrompt(raw: unknown): string {
+  const p = typeof raw === 'string' ? raw.trim() : '';
+  return p.length > PROMPT_MAX_LENGTH ? p.slice(0, PROMPT_MAX_LENGTH) : p;
+}
+
+function sanitizeImageAspect(raw: unknown): string {
+  return typeof raw === 'string' && (IMAGE_ASPECTS as readonly string[]).includes(raw)
+    ? raw
+    : '1:1';
+}
+function sanitizeVideoAspect(raw: unknown): string {
+  return typeof raw === 'string' && (VIDEO_ASPECTS as readonly string[]).includes(raw)
+    ? raw
+    : '16:9';
+}
+function sanitizeVideoDuration(raw: unknown): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return VIDEO_DURATION_DEFAULT;
+  const n = Math.round(raw);
+  if (n < VIDEO_DURATION_MIN) return VIDEO_DURATION_MIN;
+  if (n > VIDEO_DURATION_MAX) return VIDEO_DURATION_MAX;
+  return n;
+}
+
+function fileUrl(projectId: string, name: string): string {
+  // Relative URL through the project file route. The web's Next.js rewrites
+  // `/api/:path*` to the daemon, so the chat UI loads the file same-origin
+  // under the strict CSP without any CORS plumbing.
+  return `/api/projects/${encodeURIComponent(projectId)}/files/${encodeURIComponent(name)}`;
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
 
 /**
- * Execute the `generate_image` tool. Calls SenseAudio /v1/image/sync,
- * downloads the rendered bytes, writes them to <byokImagesDir>/<id>.png,
- * and returns a daemon-served URL. Pure async — caller is responsible
- * for emitting any SSE events (e.g. "tool result ready").
- *
- * Failure modes return `{ok: false, error}` rather than throwing so the
- * caller can feed the message back to the LLM as a tool_result; that
- * lets the model apologize / suggest a retry instead of the chat
- * silently stopping.
+ * Execute `generate_image`. Resolves the model (LLM arg > composer default >
+ * catalogue default), then dispatches through generateMedia, which routes to
+ * the model's provider, materialises the bytes, and writes them into the
+ * project folder. Failure modes return `{ok:false,error}` rather than throwing
+ * so the caller can feed the message back to the LLM as a tool_result.
  */
 export async function executeGenerateImage(
   args: { prompt?: unknown; aspect_ratio?: unknown; model?: unknown },
   ctx: BYOKToolContext,
-): Promise<ImageToolResult> {
-  const promptRaw = typeof args.prompt === 'string' ? args.prompt.trim() : '';
-  if (!promptRaw) return { ok: false, error: 'prompt is required' };
-  const prompt =
-    promptRaw.length > PROMPT_MAX_LENGTH
-      ? promptRaw.slice(0, PROMPT_MAX_LENGTH)
-      : promptRaw;
-
-  const aspect = sanitizeAspectRatio(args.aspect_ratio);
-  const size = ASPECT_TO_SIZE[aspect];
-
-  // Model resolution order — LLM args > user's Settings default > registry
-  // default. The allowlist guards every step so a hallucinated or stale id
-  // can never reach the senseaudio /v1/image/sync wire — the catalogue is
-  // the source of truth.
-  const senseAudioImageModel = isSenseAudioImageModel(args.model)
+): Promise<MediaToolResult> {
+  const prompt = trimmedPrompt(args.prompt);
+  if (!prompt) return { ok: false, error: 'prompt is required', kind: 'image' };
+  const model = isImageModel(args.model)
     ? args.model
-    : isSenseAudioImageModel(ctx.defaultImageModel)
+    : isImageModel(ctx.defaultImageModel)
       ? ctx.defaultImageModel
-      : BYOK_SENSEAUDIO_DEFAULT_IMAGE_MODEL;
-
-  // Resolve the project folder up front. ensureProject runs
-  // `isSafeId` internally, so an attacker who somehow bypassed the
-  // chat-routes guard and slipped `../escape` into projectId fails
-  // here before we make any upstream call. The returned `dir` is
-  // reused at writeFile time below.
-  let dir: string;
+      : DEFAULT_IMAGE_MODEL;
   try {
-    dir = await ensureProject(ctx.projectsRoot, ctx.projectId);
-  } catch (err) {
-    return {
-      ok: false,
-      error: `invalid projectId for image storage: ${err instanceof Error ? err.message : String(err)}`,
-    };
-  }
-
-  // Prefer the BYOK session's key (what the user is actively using).
-  // Fall back to media-config (env var > stored) so a user who set
-  // OD_SENSEAUDIO_API_KEY but forgot to fill the chat panel still
-  // gets a working tool call.
-  let apiKey = ctx.upstreamApiKey;
-  let baseUrl = ctx.upstreamBaseUrl || SENSEAUDIO_DEFAULT_BASE_URL;
-  if (!apiKey) {
-    const resolved = await resolveProviderConfig(ctx.projectRoot, 'senseaudio');
-    apiKey = resolved.apiKey || '';
-    if (resolved.baseUrl) baseUrl = resolved.baseUrl;
-  }
-  if (!apiKey) {
-    return { ok: false, error: 'no SenseAudio API key available' };
-  }
-
-  const trimmedBase = baseUrl.replace(/\/+$/, '');
-  let imageUrl: string;
-  try {
-    const resp = await fetch(`${trimmedBase}/v1/image/sync`, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${apiKey}`,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: senseAudioImageModel,
-        prompt,
-        size,
-      }),
+    const file = await generateMedia({
+      projectRoot: ctx.projectRoot,
+      projectsRoot: ctx.projectsRoot,
+      projectId: ctx.projectId,
+      surface: 'image',
+      model,
+      prompt,
+      aspect: sanitizeImageAspect(args.aspect_ratio),
     });
-    if (!resp.ok) {
-      const text = await resp.text().catch(() => '');
-      return {
-        ok: false,
-        error: `senseaudio image ${resp.status}: ${text.slice(0, 240)}`,
-      };
-    }
-    const data = (await resp.json()) as {
-      url?: string;
-      error_message?: string;
-      base_resp?: { status_code?: number; status_msg?: string };
-    };
-    if (data?.base_resp && data.base_resp.status_code !== 0) {
-      return {
-        ok: false,
-        error: `senseaudio image api error ${data.base_resp.status_code}: ${data.base_resp.status_msg || 'unknown'}`,
-      };
-    }
-    if (typeof data?.error_message === 'string' && data.error_message) {
-      return { ok: false, error: `senseaudio image: ${data.error_message}` };
-    }
-    if (typeof data?.url !== 'string' || !data.url) {
-      return { ok: false, error: 'senseaudio image response missing url' };
-    }
-    imageUrl = data.url;
+    return { ok: true, url: fileUrl(ctx.projectId, file.name), kind: 'image' };
   } catch (err) {
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : String(err),
-    };
+    return { ok: false, error: errorMessage(err), kind: 'image' };
   }
-
-  const imageUrlCheck = await assertExternalAssetUrl(imageUrl);
-  if (!imageUrlCheck.ok) return { ok: false, error: imageUrlCheck.error };
-
-  let bytes: Buffer;
-  try {
-    const imgResp = await fetch(imageUrl, { redirect: 'error' });
-    if (!imgResp.ok) {
-      return { ok: false, error: `image download ${imgResp.status}` };
-    }
-    bytes = Buffer.from(await imgResp.arrayBuffer());
-  } catch (err) {
-    return {
-      ok: false,
-      error: `image download failed: ${err instanceof Error ? err.message : String(err)}`,
-    };
-  }
-  if (bytes.length === 0) {
-    return { ok: false, error: 'image download returned zero bytes' };
-  }
-
-  // Persist into the active project's folder. `dir` was resolved up
-  // front via ensureProject — no DB write, no metadata side-effects —
-  // and the resulting path slots straight into the existing project
-  // file plumbing: listFiles enumerates it for the FileViewer,
-  // readProjectFile serves it via GET /api/projects/<id>/files/<filename>,
-  // and project archive / export pick it up automatically because it
-  // lives under the project's own directory.
-  //
-  // Filename pattern `byok-<timestamp>-<random>.png` keeps tool
-  // outputs distinguishable from user uploads at a glance while
-  // staying url-safe.
-  const id = `${Date.now().toString(36)}-${randomBytes(4).toString('hex')}`;
-  const filename = `byok-${id}.png`;
-  await writeFile(path.join(dir, filename), bytes);
-
-  // Return a relative URL through the project file serving route. The
-  // web's Next.js rewrites `/api/:path*` to the daemon (see
-  // apps/web/next.config.ts), so the chat UI loads the image
-  // same-origin — satisfying the strict CSP (`img-src 'self' data:
-  // blob:`) without any CORS plumbing.
-  return {
-    ok: true,
-    url: `/api/projects/${encodeURIComponent(ctx.projectId)}/files/${filename}`,
-  };
 }
 
-function sanitizeVideoAspectRatio(raw: unknown): (typeof SENSEAUDIO_VIDEO_ASPECT_RATIOS)[number] {
-  if (typeof raw !== 'string') return '16:9';
-  return (SENSEAUDIO_VIDEO_ASPECT_RATIOS as readonly string[]).includes(raw)
-    ? (raw as (typeof SENSEAUDIO_VIDEO_ASPECT_RATIOS)[number])
-    : '16:9';
-}
-
-function sanitizeVideoResolution(raw: unknown): (typeof SENSEAUDIO_VIDEO_RESOLUTIONS)[number] {
-  if (typeof raw !== 'string') return '720p';
-  return (SENSEAUDIO_VIDEO_RESOLUTIONS as readonly string[]).includes(raw)
-    ? (raw as (typeof SENSEAUDIO_VIDEO_RESOLUTIONS)[number])
-    : '720p';
-}
-
-function sanitizeVideoDuration(raw: unknown): number {
-  if (typeof raw !== 'number' || !Number.isFinite(raw)) return SENSEAUDIO_VIDEO_DURATION_DEFAULT;
-  const rounded = Math.round(raw);
-  if (rounded < SENSEAUDIO_VIDEO_DURATION_MIN) return SENSEAUDIO_VIDEO_DURATION_MIN;
-  if (rounded > SENSEAUDIO_VIDEO_DURATION_MAX) return SENSEAUDIO_VIDEO_DURATION_MAX;
-  return rounded;
-}
-
-const sleep = (ms: number): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, ms));
-
-/**
- * Execute the `generate_video` tool. SenseAudio's video API is
- * asynchronous-only: POST /v1/video/create returns a task_id, then
- * GET /v1/video/status?id=<task_id> reports `pending` / `processing`
- * → `completed` (with `video_url`) or `failed` (with `error_message`).
- * We poll every `videoPollIntervalMs` (default 5 s) and bail after
- * `SENSEAUDIO_VIDEO_MAX_POLLS` so a stuck upstream can't pin the
- * chat stream forever.
- *
- * The chat tool waits for the whole loop, so the daemon's outbound
- * SSE response from /api/proxy/senseaudio/stream stays open for the
- * duration. That's intentional — the next chat turn cannot begin
- * until we have a URL to feed back into the tool_result.
- */
+/** Execute `generate_video`. Async (the renderer polls); generateMedia owns
+ *  the poll loop and project write. */
 export async function executeGenerateVideo(
-  args: {
-    prompt?: unknown;
-    aspect_ratio?: unknown;
-    duration?: unknown;
-    resolution?: unknown;
-    generate_audio?: unknown;
-  },
+  args: { prompt?: unknown; aspect_ratio?: unknown; duration?: unknown; model?: unknown },
   ctx: BYOKToolContext,
-): Promise<ImageToolResult> {
-  const promptRaw = typeof args.prompt === 'string' ? args.prompt.trim() : '';
-  if (!promptRaw) return { ok: false, error: 'prompt is required' };
-  const prompt =
-    promptRaw.length > PROMPT_MAX_LENGTH
-      ? promptRaw.slice(0, PROMPT_MAX_LENGTH)
-      : promptRaw;
-
-  const ratio = sanitizeVideoAspectRatio(args.aspect_ratio);
-  const resolution = sanitizeVideoResolution(args.resolution);
-  const duration = sanitizeVideoDuration(args.duration);
-  const generateAudio = args.generate_audio === true;
-
-  let dir: string;
+): Promise<MediaToolResult> {
+  const prompt = trimmedPrompt(args.prompt);
+  if (!prompt) return { ok: false, error: 'prompt is required', kind: 'video' };
+  const model = isVideoModel(args.model)
+    ? args.model
+    : isVideoModel(ctx.defaultVideoModel)
+      ? ctx.defaultVideoModel
+      : DEFAULT_VIDEO_MODEL;
   try {
-    dir = await ensureProject(ctx.projectsRoot, ctx.projectId);
-  } catch (err) {
-    return {
-      ok: false,
-      error: `invalid projectId for video storage: ${err instanceof Error ? err.message : String(err)}`,
-    };
-  }
-
-  let apiKey = ctx.upstreamApiKey;
-  let baseUrl = ctx.upstreamBaseUrl || SENSEAUDIO_DEFAULT_BASE_URL;
-  if (!apiKey) {
-    const resolved = await resolveProviderConfig(ctx.projectRoot, 'senseaudio');
-    apiKey = resolved.apiKey || '';
-    if (resolved.baseUrl) baseUrl = resolved.baseUrl;
-  }
-  if (!apiKey) {
-    return { ok: false, error: 'no SenseAudio API key available' };
-  }
-  const trimmedBase = baseUrl.replace(/\/+$/, '');
-
-  // Step 1: POST /v1/video/create → task_id.
-  let taskId: string;
-  try {
-    const resp = await fetch(`${trimmedBase}/v1/video/create`, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${apiKey}`,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: SENSEAUDIO_VIDEO_MODEL,
-        content: [{ type: 'text', text: prompt }],
-        duration,
-        resolution,
-        ratio,
-        provider_specific: { generate_audio: generateAudio },
-      }),
+    const file = await generateMedia({
+      projectRoot: ctx.projectRoot,
+      projectsRoot: ctx.projectsRoot,
+      projectId: ctx.projectId,
+      surface: 'video',
+      model,
+      prompt,
+      aspect: sanitizeVideoAspect(args.aspect_ratio),
+      length: sanitizeVideoDuration(args.duration),
     });
-    if (!resp.ok) {
-      const text = await resp.text().catch(() => '');
-      return {
-        ok: false,
-        error: `senseaudio video create ${resp.status}: ${text.slice(0, 240)}`,
-      };
-    }
-    const data = (await resp.json()) as { task_id?: string };
-    if (typeof data?.task_id !== 'string' || !data.task_id) {
-      return { ok: false, error: 'senseaudio video create response missing task_id' };
-    }
-    taskId = data.task_id;
+    return { ok: true, url: fileUrl(ctx.projectId, file.name), kind: 'video' };
   } catch (err) {
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : String(err),
-    };
+    return { ok: false, error: errorMessage(err), kind: 'video' };
   }
-
-  // Step 2: poll /v1/video/status until completed / failed / timeout.
-  const pollIntervalMs = ctx.videoPollIntervalMs ?? SENSEAUDIO_VIDEO_POLL_INTERVAL_MS_DEFAULT;
-  let videoUrl = '';
-  for (let attempt = 0; attempt < SENSEAUDIO_VIDEO_MAX_POLLS; attempt++) {
-    await sleep(pollIntervalMs);
-    let statusResp: Response;
-    try {
-      statusResp = await fetch(
-        `${trimmedBase}/v1/video/status?id=${encodeURIComponent(taskId)}`,
-        {
-          method: 'GET',
-          headers: { authorization: `Bearer ${apiKey}` },
-        },
-      );
-    } catch (err) {
-      return {
-        ok: false,
-        error: `senseaudio video poll failed: ${err instanceof Error ? err.message : String(err)}`,
-      };
-    }
-    if (!statusResp.ok) {
-      const text = await statusResp.text().catch(() => '');
-      return {
-        ok: false,
-        error: `senseaudio video status ${statusResp.status}: ${text.slice(0, 240)}`,
-      };
-    }
-    const data = (await statusResp.json()) as {
-      status?: string;
-      progress?: number;
-      video_url?: string;
-      error_message?: string;
-    };
-    if (data?.status === 'completed') {
-      if (typeof data.video_url !== 'string' || !data.video_url) {
-        return { ok: false, error: 'senseaudio video status completed but missing video_url' };
-      }
-      videoUrl = data.video_url;
-      break;
-    }
-    if (data?.status === 'failed') {
-      return {
-        ok: false,
-        error: `senseaudio video failed: ${data.error_message || 'unknown reason'}`,
-      };
-    }
-    // pending / processing — continue polling. Emit a periodic log line
-    // so a stuck job surfaces in the daemon log instead of silently
-    // burning attempts.
-    if ((attempt + 1) % SENSEAUDIO_VIDEO_PROGRESS_LOG_EVERY === 0) {
-      const pct = typeof data.progress === 'number' ? data.progress : '?';
-      console.log(
-        `[proxy:senseaudio] generate_video poll ${attempt + 1}/${SENSEAUDIO_VIDEO_MAX_POLLS} task=${taskId} status=${data.status ?? 'unknown'} progress=${pct}`,
-      );
-    }
-  }
-  if (!videoUrl) {
-    return {
-      ok: false,
-      error: `senseaudio video timed out after ${SENSEAUDIO_VIDEO_MAX_POLLS} polls`,
-    };
-  }
-
-  // Step 3: download the mp4 bytes and persist into the project folder.
-  // Re-validate the returned URL through validateBaseUrlResolved so a
-  // malicious gateway can't point us at 169.254.169.254 (AWS / Azure
-  // metadata service) or RFC1918 hosts via the response payload.
-  const videoUrlCheck = await assertExternalAssetUrl(videoUrl);
-  if (!videoUrlCheck.ok) return { ok: false, error: videoUrlCheck.error };
-
-  let bytes: Buffer;
-  try {
-    const videoResp = await fetch(videoUrl, { redirect: 'error' });
-    if (!videoResp.ok) {
-      return { ok: false, error: `video download ${videoResp.status}` };
-    }
-    bytes = Buffer.from(await videoResp.arrayBuffer());
-  } catch (err) {
-    return {
-      ok: false,
-      error: `video download failed: ${err instanceof Error ? err.message : String(err)}`,
-    };
-  }
-  if (bytes.length === 0) {
-    return { ok: false, error: 'video download returned zero bytes' };
-  }
-  const id = `${Date.now().toString(36)}-${randomBytes(4).toString('hex')}`;
-  const filename = `byok-video-${id}.mp4`;
-  await writeFile(path.join(dir, filename), bytes);
-
-  return {
-    ok: true,
-    url: `/api/projects/${encodeURIComponent(ctx.projectId)}/files/${filename}`,
-  };
 }
 
+/** Execute `generate_audio` (speech / music / sfx). The audio kind is derived
+ *  from the resolved model so the right renderer fires. */
+export async function executeGenerateAudio(
+  args: { prompt?: unknown; voice?: unknown; duration?: unknown; model?: unknown },
+  ctx: BYOKToolContext,
+): Promise<MediaToolResult> {
+  const prompt = trimmedPrompt(args.prompt);
+  if (!prompt) return { ok: false, error: 'prompt is required', kind: 'audio' };
+  const model = isAudioModel(args.model)
+    ? args.model
+    : isAudioModel(ctx.defaultAudioModel)
+      ? ctx.defaultAudioModel
+      : DEFAULT_SPEECH_MODEL;
+  const audioKind = audioKindForModel(model);
+  try {
+    const file = await generateMedia({
+      projectRoot: ctx.projectRoot,
+      projectsRoot: ctx.projectsRoot,
+      projectId: ctx.projectId,
+      surface: 'audio',
+      model,
+      prompt,
+      audioKind,
+      ...(typeof args.voice === 'string' && args.voice.trim()
+        ? { voice: args.voice.trim() }
+        : {}),
+      ...(typeof args.duration === 'number' && Number.isFinite(args.duration)
+        ? { duration: Math.round(args.duration) }
+        : {}),
+    });
+    return { ok: true, url: fileUrl(ctx.projectId, file.name), kind: 'audio' };
+  } catch (err) {
+    return { ok: false, error: errorMessage(err), kind: 'audio' };
+  }
+}

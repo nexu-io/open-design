@@ -229,6 +229,8 @@ export const th: Dict = {
   'settings.azureDeploymentModelHint': 'สำหรับ Azure OpenAI ฟิลด์นี้ใช้เป็นชื่อ Deployment ใน /openai/deployments/<model> ป้อนชื่อ Deployment ที่คุณสร้างใน Azure',
   'settings.apiVersion': 'เวอร์ชัน API',
   'settings.byokImageModel': 'โมเดลสร้างภาพ',
+  'settings.byokVideoModel': 'โมเดลสร้างวิดีโอ',
+  'settings.byokAudioModel': 'โมเดลสร้างเสียง',
   'settings.maxTokens': 'Max tokens (เลือกได้)',
   'settings.maxTokensHint': 'ขีดจำกัดความยาวในการตอบกลับ',
   'settings.apiHint': 'คำสั่งจะถูกส่งผ่าน local daemon proxy ไปยัง base URL ที่คุณตั้งไว้ API Key จะถูกเก็บในเบราว์เซอร์นี้เท่านั้น',

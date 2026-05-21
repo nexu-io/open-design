@@ -342,6 +342,8 @@ export interface ByokDaemonStreamOptions {
   conversationId?: string | null;
   assistantMessageId?: string | null;
   byokImageModel?: string;
+  byokVideoModel?: string;
+  byokAudioModel?: string;
   initialLastEventId?: string | null;
   onRunCreated?: (runId: string) => void;
   onRunStatus?: (status: ChatRunStatus) => void;
@@ -381,6 +383,8 @@ export async function streamByokViaDaemon(opts: ByokDaemonStreamOptions): Promis
     ...(opts.conversationId ? { conversationId: opts.conversationId } : {}),
     ...(opts.assistantMessageId ? { assistantMessageId: opts.assistantMessageId } : {}),
     ...(opts.byokImageModel ? { byokImageModel: opts.byokImageModel } : {}),
+    ...(opts.byokVideoModel ? { byokVideoModel: opts.byokVideoModel } : {}),
+    ...(opts.byokAudioModel ? { byokAudioModel: opts.byokAudioModel } : {}),
   });
 
   try {

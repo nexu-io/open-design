@@ -270,6 +270,8 @@ export interface Dict {
   'settings.azureModelFetchHint': string;
   'settings.apiVersion': string;
   'settings.byokImageModel': string;
+  'settings.byokVideoModel': string;
+  'settings.byokAudioModel': string;
   'settings.apiHint': string;
   'settings.skipForNow': string;
   'settings.getStarted': string;

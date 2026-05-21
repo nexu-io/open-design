@@ -14,7 +14,13 @@ import { useAnalytics } from '../analytics/provider';
 import {
   trackChatPanelClick,
 } from '../analytics/events';
-import { IMAGE_MODELS } from "../media/models";
+import {
+  AUDIO_MODELS_BY_KIND,
+  IMAGE_MODELS,
+  VIDEO_MODELS,
+  groupByProvider,
+  type MediaModel,
+} from "../media/models";
 import { projectRawUrl, uploadProjectFiles, openFolderDialog, fetchConnectors } from "../providers/registry";
 import { patchProject } from "../state/projects";
 import { fetchMcpServers } from "../state/mcp";
@@ -30,7 +36,7 @@ import type {
   RunContextSelection,
 } from '@open-design/contracts';
 import { buildVisualAnnotationAttachment } from '../comments';
-import { Icon } from "./Icon";
+import { Icon, type IconName } from "./Icon";
 import { PluginDetailsModal } from "./PluginDetailsModal";
 import { PluginsSection, type PluginsSectionHandle } from "./PluginsSection";
 import { BUILT_IN_PETS, CUSTOM_PET_ID } from "./pet/pets";
@@ -127,14 +133,19 @@ interface Props {
   researchAvailable?: boolean;
   projectMetadata?: ProjectMetadata;
   onProjectMetadataChange?: (metadata: ProjectMetadata) => void;
-  // SenseAudio BYOK image-model picker shown above the textarea. Hidden
-  // when the active chat protocol is anything other than 'senseaudio',
-  // so the composer stays clean for every other BYOK tab. The state
-  // owner is ProjectView (per-session, reset on refresh); ChatComposer
-  // is a fully controlled select.
+  // SenseAudio BYOK media-model pickers shown above the textarea: which
+  // image / video / audio model the chat's generate_* tools default to.
+  // Hidden when the active chat protocol is anything other than
+  // 'senseaudio', so the composer stays clean for every other BYOK tab.
+  // The state owner is ProjectView (per-session, reset on refresh);
+  // ChatComposer renders fully controlled selects over the whole registry.
   byokApiProtocol?: AppConfig['apiProtocol'];
   byokImageModel?: string;
   onChangeByokImageModel?: (model: string) => void;
+  byokVideoModel?: string;
+  onChangeByokVideoModel?: (model: string) => void;
+  byokAudioModel?: string;
+  onChangeByokAudioModel?: (model: string) => void;
   currentSkillId?: string | null;
   onProjectSkillChange?: (skillId: string | null) => void;
   // Set when the project was created with a plugin already pinned
@@ -175,6 +186,69 @@ export interface ChatSendMeta {
  * Selecting one inserts `@<path>` into the prompt and stages it as an
  * attachment so the daemon also includes it explicitly.
  */
+/**
+ * Compact composer media-model picker: a labelled <select> over the whole
+ * registry for one surface, grouped by provider via <optgroup>. The empty
+ * option means "use the catalogue default"; the daemon falls back to the
+ * surface default when no model is pinned. Used for the SenseAudio BYOK tabs
+ * so the chat's generate_image / generate_video / generate_audio tools can be
+ * pointed at any configured provider's model.
+ */
+function ByokMediaModelSelect({
+  testid,
+  iconName,
+  label,
+  value,
+  onChange,
+  models,
+}: {
+  testid: string;
+  iconName: IconName;
+  label: string;
+  value: string;
+  onChange: (model: string) => void;
+  models: MediaModel[];
+}) {
+  const groups = groupByProvider(models);
+  const defaultModel = models.find((m) => m.default) ?? models[0];
+  return (
+    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <Icon name={iconName} size={13} />
+      <label htmlFor={testid} style={{ flexShrink: 0 }}>
+        {label}
+      </label>
+      <select
+        id={testid}
+        data-testid={testid}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={{
+          background: 'transparent',
+          border: '1px solid var(--border, #444)',
+          borderRadius: 4,
+          padding: '2px 6px',
+          color: 'inherit',
+          fontSize: 12,
+          maxWidth: 220,
+        }}
+      >
+        <option value="">
+          {(defaultModel?.label ?? 'default') + ' (default)'}
+        </option>
+        {groups.map((group) => (
+          <optgroup key={group.provider.id} label={group.provider.label}>
+            {group.models.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.label}
+              </option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+    </span>
+  );
+}
+
 export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
   function ChatComposer(
     {
@@ -200,6 +274,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       byokApiProtocol,
       byokImageModel,
       onChangeByokImageModel,
+      byokVideoModel,
+      onChangeByokVideoModel,
+      byokAudioModel,
+      onChangeByokAudioModel,
       currentSkillId = null,
       onProjectSkillChange,
       pinnedPluginId = null,
@@ -1187,49 +1265,50 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           ) : null}
           {byokApiProtocol === 'senseaudio' && onChangeByokImageModel ? (
             <div
-              className="composer-byok-image-model"
+              className="composer-byok-media-models"
               data-testid="composer-byok-image-model"
               style={{
                 display: 'flex',
+                flexWrap: 'wrap',
                 alignItems: 'center',
-                gap: 8,
+                gap: 12,
                 padding: '4px 8px',
                 fontSize: 12,
                 color: 'var(--text-muted, #888)',
               }}
             >
-              <Icon name="image" size={13} />
-              <label
-                htmlFor="composer-byok-image-model-select"
-                style={{ flexShrink: 0 }}
-              >
-                {t('settings.byokImageModel')}
-              </label>
-              <select
-                id="composer-byok-image-model-select"
+              <ByokMediaModelSelect
+                testid="composer-byok-image-model-select"
+                iconName="image"
+                label={t('settings.byokImageModel')}
                 value={byokImageModel ?? ''}
-                onChange={(e) => onChangeByokImageModel(e.target.value)}
-                style={{
-                  background: 'transparent',
-                  border: '1px solid var(--border, #444)',
-                  borderRadius: 4,
-                  padding: '2px 6px',
-                  color: 'inherit',
-                  fontSize: 12,
-                }}
-              >
-                <option value="">
-                  {(IMAGE_MODELS.find((m) => m.provider === 'senseaudio')?.label
-                    ?? 'senseaudio-image-2.0') + ' (default)'}
-                </option>
-                {IMAGE_MODELS.filter((m) => m.provider === 'senseaudio').map(
-                  (m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.label}
-                    </option>
-                  ),
-                )}
-              </select>
+                onChange={onChangeByokImageModel}
+                models={IMAGE_MODELS}
+              />
+              {onChangeByokVideoModel ? (
+                <ByokMediaModelSelect
+                  testid="composer-byok-video-model-select"
+                  iconName="play"
+                  label={t('settings.byokVideoModel')}
+                  value={byokVideoModel ?? ''}
+                  onChange={onChangeByokVideoModel}
+                  models={VIDEO_MODELS}
+                />
+              ) : null}
+              {onChangeByokAudioModel ? (
+                <ByokMediaModelSelect
+                  testid="composer-byok-audio-model-select"
+                  iconName="mic"
+                  label={t('settings.byokAudioModel')}
+                  value={byokAudioModel ?? ''}
+                  onChange={onChangeByokAudioModel}
+                  models={[
+                    ...AUDIO_MODELS_BY_KIND.speech,
+                    ...AUDIO_MODELS_BY_KIND.music,
+                    ...AUDIO_MODELS_BY_KIND.sfx,
+                  ]}
+                />
+              ) : null}
             </div>
           ) : null}
           {/*

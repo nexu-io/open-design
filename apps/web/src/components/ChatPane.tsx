@@ -298,6 +298,10 @@ interface Props {
   byokApiProtocol?: AppConfig['apiProtocol'];
   byokImageModel?: string;
   onChangeByokImageModel?: (model: string) => void;
+  byokVideoModel?: string;
+  onChangeByokVideoModel?: (model: string) => void;
+  byokAudioModel?: string;
+  onChangeByokAudioModel?: (model: string) => void;
   composerFooterAccessory?: ReactNode;
 }
 
@@ -354,6 +358,10 @@ export function ChatPane({
   byokApiProtocol,
   byokImageModel,
   onChangeByokImageModel,
+  byokVideoModel,
+  onChangeByokVideoModel,
+  byokAudioModel,
+  onChangeByokAudioModel,
   composerFooterAccessory,
 }: Props) {
   const t = useT();
@@ -959,6 +967,10 @@ export function ChatPane({
             byokApiProtocol={byokApiProtocol}
             byokImageModel={byokImageModel}
             onChangeByokImageModel={onChangeByokImageModel}
+            byokVideoModel={byokVideoModel}
+            onChangeByokVideoModel={onChangeByokVideoModel}
+            byokAudioModel={byokAudioModel}
+            onChangeByokAudioModel={onChangeByokAudioModel}
             currentSkillId={currentSkillId}
             onProjectSkillChange={onProjectSkillChange}
             pinnedPluginId={activePluginSnapshot?.pluginId ?? null}

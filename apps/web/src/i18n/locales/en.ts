@@ -247,6 +247,8 @@ export const en: Dict = {
     'For Azure OpenAI, enter the deployment name you created in Azure. Automatic deployment discovery is not available from this BYOK endpoint.',
   'settings.apiVersion': 'API version',
   'settings.byokImageModel': 'Image generation model',
+  'settings.byokVideoModel': 'Video generation model',
+  'settings.byokAudioModel': 'Audio generation model',
   'settings.maxTokens': 'Max tokens (optional)',
   'settings.maxTokensHint':
     'Cap on the response length. Each model has a tuned default (shown as a placeholder); leave blank to use it, or enter a number to override.',

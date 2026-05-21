@@ -233,6 +233,8 @@ export const pl: Dict = {
       'Dla Azure OpenAI to pole jest używane jako nazwa wdrożenia w /openai/deployments/<model>. Wpisz nazwę wdrożenia utworzonego w Azure.',
   'settings.apiVersion': 'Wersja API',
   'settings.byokImageModel': 'Model generowania obrazów',
+  'settings.byokVideoModel': 'Model generowania wideo',
+  'settings.byokAudioModel': 'Model generowania dźwięku',
   'settings.maxTokens': 'Maks. liczba tokenów (opcjonalnie)',
   'settings.maxTokensHint':
       'Limit długości odpowiedzi. Każdy model ma dostrojony domyślny limit (widoczny jako placeholder); pozostaw puste, aby go użyć, lub wpisz liczbę.',

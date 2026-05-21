@@ -2,10 +2,16 @@ import type { Express } from 'express';
 import type { RouteDeps } from './server-context.js';
 import { seedProviderIfMissing } from './media-config.js';
 import {
-  BYOK_SENSEAUDIO_TOOLS,
+  BYOK_MEDIA_TOOLS,
   executeGenerateImage,
   executeGenerateVideo,
-  isSenseAudioImageModel,
+  executeGenerateAudio,
+  isImageModel,
+  isVideoModel,
+  isAudioModel,
+  SENSEAUDIO_DEFAULT_IMAGE_MODEL,
+  SENSEAUDIO_DEFAULT_VIDEO_MODEL,
+  SENSEAUDIO_DEFAULT_AUDIO_MODEL,
   type BYOKToolContext,
 } from './byok-tools.js';
 import { isSafeId as isSafeProjectId } from './projects.js';
@@ -1146,6 +1152,8 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       maxTokens,
       projectId,
       byokImageModel,
+      byokVideoModel,
+      byokAudioModel,
     } = proxyBody;
     if (!apiKey || !model) {
       return sendApiError(
@@ -1190,33 +1198,33 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       workingMessages.unshift({ role: 'system', content: systemPrompt });
     }
 
-    // Tool execution context — built once per request. The image tool
-    // writes into `<projectsRoot>/<projectId>/byok-<id>.png` and returns
-    // a relative URL via `/api/projects/:id/files/:filename`. The web's
-    // Next.js rewrites `/api/:path*` to the daemon, so the chat UI
-    // loads images same-origin through the standard project file
-    // route — no CSP / CORS exceptions needed.
-    // User-configured BYOK default image model. Drop silently if the
-    // client sent an id outside the SenseAudio registry — the tool
-    // will fall back to the registry default and the LLM can still
-    // override per-call via the tool's `model` arg.
-    const validDefaultImageModel = isSenseAudioImageModel(byokImageModel)
-      ? byokImageModel
-      : undefined;
-
+    // Tool execution context — built once per request. The media tools
+    // write into `<projectsRoot>/<projectId>/` and return relative URLs via
+    // `/api/projects/:id/files/:filename`. The web's Next.js rewrites
+    // `/api/:path*` to the daemon, so the chat UI loads files same-origin
+    // through the standard project file route — no CSP / CORS exceptions.
+    //
+    // Composer-selected default models per surface. Drop silently if the
+    // client sent an id outside the registry — the tool falls back to the
+    // catalogue default and the LLM can still override per-call via `model`.
+    // Spread-conditional because tsconfig's exactOptionalPropertyTypes forbids
+    // `field: undefined` on an optional slot.
     const toolCtx: BYOKToolContext = {
       projectRoot: ctx.paths.PROJECT_ROOT,
       projectsRoot: ctx.paths.PROJECTS_DIR,
       projectId,
-      upstreamApiKey: apiKey,
-      upstreamBaseUrl: effectiveBaseUrl,
-      // Spread-conditional because tsconfig's exactOptionalPropertyTypes
-      // forbids `field: undefined` on an optional slot. The byok-tools
-      // executor reads `ctx.defaultImageModel` with `isSenseAudioImageModel`
-      // anyway, so a missing key and an undefined value behave the same.
-      ...(validDefaultImageModel
-        ? { defaultImageModel: validDefaultImageModel }
-        : {}),
+      // Prefer the composer selection; otherwise default to the SenseAudio
+      // model for that surface (this chat only has the SenseAudio key seeded,
+      // so the catalogue default — gpt-image-2 etc. — would fail without keys).
+      defaultImageModel: isImageModel(byokImageModel)
+        ? byokImageModel
+        : SENSEAUDIO_DEFAULT_IMAGE_MODEL,
+      defaultVideoModel: isVideoModel(byokVideoModel)
+        ? byokVideoModel
+        : SENSEAUDIO_DEFAULT_VIDEO_MODEL,
+      defaultAudioModel: isAudioModel(byokAudioModel)
+        ? byokAudioModel
+        : SENSEAUDIO_DEFAULT_AUDIO_MODEL,
     };
 
     // Run one round-trip: POST to upstream, stream text deltas to the
@@ -1235,7 +1243,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         max_tokens:
           typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
         stream: true,
-        tools: BYOK_SENSEAUDIO_TOOLS,
+        tools: BYOK_MEDIA_TOOLS,
         tool_choice: 'auto',
       };
       const response = await fetch(url, {
@@ -1354,9 +1362,13 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     const executeOneTool = async (call: {
       id: string;
       function: { name: string; arguments: string };
-    }): Promise<{ ok: boolean; url?: string; error?: string; kind?: 'image' | 'video' }> => {
+    }): Promise<{ ok: boolean; url?: string; error?: string; kind?: 'image' | 'video' | 'audio' }> => {
       const fnName = call?.function?.name ?? '';
-      if (fnName !== 'generate_image' && fnName !== 'generate_video') {
+      if (
+        fnName !== 'generate_image'
+        && fnName !== 'generate_video'
+        && fnName !== 'generate_audio'
+      ) {
         return {
           ok: false,
           error: `unknown tool: ${fnName || 'unnamed'}`,
@@ -1368,39 +1380,32 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       } catch {
         return { ok: false, error: 'tool arguments were not valid JSON' };
       }
-      if (fnName === 'generate_image') {
-        const result = await executeGenerateImage(args, toolCtx);
-        return { ...result, kind: 'image' };
-      }
-      // generate_video — longer (up to 5 min), async-with-polling.
-      const result = await executeGenerateVideo(args, toolCtx);
-      return { ...result, kind: 'video' };
+      if (fnName === 'generate_image') return executeGenerateImage(args, toolCtx);
+      if (fnName === 'generate_video') return executeGenerateVideo(args, toolCtx);
+      return executeGenerateAudio(args, toolCtx);
     };
 
-    // SenseAudio's gateway issues one API key that works for both
-    // /v1/chat/completions and the image / TTS surfaces. Mirror the
-    // BYOK key into media-config so the CLI agent path (`od media
-    // generate`) picks it up automatically — fire-and-forget; the
-    // chat stream must not block on the disk write. seedProviderIfMissing
-    // is idempotent and preserves env-var-resolved keys.
-    seedProviderIfMissing(ctx.paths.PROJECT_ROOT, 'senseaudio', {
-      apiKey,
-      baseUrl: effectiveBaseUrl,
-    })
-      .then((seeded) => {
-        if (seeded) {
-          console.log(
-            '[proxy:senseaudio] seeded media-config.senseaudio from BYOK key',
-          );
-        }
-      })
-      .catch((err: unknown) => {
-        console.warn(
-          `[proxy:senseaudio] seed media-config failed: ${
-            err instanceof Error ? err.message : String(err)
-          }`,
-        );
+    // SenseAudio's gateway issues one API key that works for /v1/chat/completions
+    // and the media surfaces alike. Mirror the BYOK key into media-config so the
+    // media tools (which now route through generateMedia and read media-config)
+    // and the CLI agent path (`od media generate`) both pick it up. Awaited so
+    // the SenseAudio credential is on disk before the first tool fires;
+    // seedProviderIfMissing is idempotent and preserves env-var-resolved keys.
+    try {
+      const seeded = await seedProviderIfMissing(ctx.paths.PROJECT_ROOT, 'senseaudio', {
+        apiKey,
+        baseUrl: effectiveBaseUrl,
       });
+      if (seeded) {
+        console.log('[proxy:senseaudio] seeded media-config.senseaudio from BYOK key');
+      }
+    } catch (err: unknown) {
+      console.warn(
+        `[proxy:senseaudio] seed media-config failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
 
     runByokProxy(res, proxyBody, async ({ sse, signal, run }) => {
       sse.send('start', { model });
@@ -1422,10 +1427,9 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
             // message — a structured payload the model can interpret. We
             // also surface a daemon-side log line so a user reporting "no
             // image showed up" can grep for the call id. The kind field
-            // distinguishes image vs video so the daemon picks the right
-            // embedding hint for the model (markdown image syntax for
-            // PNG, markdown link for MP4 since the chat renderer doesn't
-            // currently render <video> tags).
+            // picks the right embedding hint: markdown image for PNG,
+            // markdown link for video / audio (the chat renderer doesn't
+            // embed <video> / <audio> tags).
             const toolName = call?.function?.name ?? 'unknown';
             if (result.ok) {
               console.log(
@@ -1439,10 +1443,14 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
             const content = result.ok
               ? result.kind === 'video'
                 ? `Video generated successfully. URL: ${result.url}. Reply to the user with a clickable markdown link, e.g. [▶ Play video](${result.url}). Do NOT use markdown image syntax — the chat renderer does not embed <video> tags.`
-                : `Image generated successfully. URL: ${result.url}. Reply to the user with: ![generated image](${result.url})`
+                : result.kind === 'audio'
+                  ? `Audio generated successfully. URL: ${result.url}. Reply to the user with a clickable markdown link, e.g. [▶ Play audio](${result.url}). Do NOT use markdown image syntax — the chat renderer does not embed an <audio> player.`
+                  : `Image generated successfully. URL: ${result.url}. Reply to the user with: ![generated image](${result.url})`
               : result.kind === 'video'
                 ? `Video generation failed: ${result.error}. Apologize briefly and suggest a retry with a more specific prompt or a shorter duration.`
-                : `Image generation failed: ${result.error}. Apologize briefly and suggest a retry with a more specific prompt.`;
+                : result.kind === 'audio'
+                  ? `Audio generation failed: ${result.error}. Apologize briefly and suggest a retry, or check that the audio provider is configured in Settings → Media.`
+                  : `Image generation failed: ${result.error}. Apologize briefly and suggest a retry with a more specific prompt.`;
             workingMessages.push({
               role: 'tool',
               tool_call_id: call.id,

@@ -833,9 +833,69 @@ describe('API proxy routes', () => {
       role: 'tool',
       tool_call_id: 'call_abc',
       content: expect.stringMatching(
-        /Image generated successfully\. URL: \/api\/projects\/test-project\/files\/byok-[a-z0-9-]+\.png/,
+        /Image generated successfully\. URL: \/api\/projects\/test-project\/files\/[A-Za-z0-9._-]+\.png/,
       ),
     });
+  });
+
+  // Proves the composer model picker is wired through end-to-end (not a
+  // decoration): the per-session `byokImageModel` selection flows into the
+  // tool's default, and when the model calls generate_image WITHOUT a model
+  // arg the daemon generates with the SELECTED model — here a non-default
+  // SenseAudio image model — visible on the upstream /v1/image/sync body.
+  it('generates with the composer-selected image model when the tool omits one', async () => {
+    const pngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+    let imageSyncModel: string | undefined;
+    let chatCallIndex = 0;
+    const fetchMock = vi.fn(async (input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      if (url === 'https://api.senseaudio.cn/v1/image/sync') {
+        imageSyncModel = JSON.parse(String(init?.body || '{}')).model;
+        return new Response(
+          JSON.stringify({ url: 'https://cdn.example.test/pick.png' }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === 'https://cdn.example.test/pick.png') {
+        return new Response(pngBytes, { status: 200 });
+      }
+      if (url === 'https://api.senseaudio.cn/v1/chat/completions') {
+        chatCallIndex++;
+        if (chatCallIndex === 1) {
+          return sseResponse([
+            'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_pick","type":"function","function":{"name":"generate_image","arguments":"{\\"prompt\\":\\"a cat\\"}"}}]},"finish_reason":null}]}',
+            '',
+            'data: {"choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}',
+            '',
+            'data: [DONE]',
+            '',
+          ].join('\n'));
+        }
+        return sseResponse([
+          'data: {"choices":[{"index":0,"delta":{"content":"done"}}]}',
+          '',
+          'data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}',
+          '',
+          'data: [DONE]',
+          '',
+        ].join('\n'));
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await collectRun(`/api/proxy/senseaudio/stream`, {
+      baseUrl: 'https://api.senseaudio.cn',
+      apiKey: 'sa-test',
+      projectId: 'test-project',
+      model: 'senseaudio-s2',
+      messages: [{ role: 'user', content: 'draw a cat' }],
+      // The composer picked the 1.0 model (not the 2.0 default).
+      byokImageModel: 'senseaudio-image-1.0-260319',
+    });
+
+    expect(imageSyncModel).toBe('senseaudio-image-1.0-260319');
   });
 
   it('feeds a tool error message back to the model when generate_image fails', async () => {
@@ -960,7 +1020,7 @@ describe('API proxy routes', () => {
         // Capture URL the tool produced from the second turn's tool message.
         const toolMsg = body.messages?.find((m: any) => m.role === 'tool');
         if (toolMsg) {
-          const match = /URL: (\/api\/projects\/[A-Za-z0-9._-]+\/files\/byok-[a-z0-9-]+\.png)/.exec(toolMsg.content);
+          const match = /URL: (\/api\/projects\/[A-Za-z0-9._-]+\/files\/[A-Za-z0-9._-]+\.png)/.exec(toolMsg.content);
           if (match) capturedUrl = match[1];
         }
         const isToolTurn = !toolMsg;
