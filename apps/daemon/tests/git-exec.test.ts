@@ -60,12 +60,33 @@ describe('runGit', () => {
     expect(out.trim()).toBe('main');
   });
 
-  it('returns empty string when run in a non-repo directory (exit 128)', async () => {
+  it('throws by default when run in a non-repo directory (exit 128 is strict)', async () => {
     const dir = initEmptyDir();
     cleanup.push(dir);
 
-    const out = await runGit(dir, ['rev-parse', '--is-inside-work-tree'], undefined);
+    // Strict default — exit 128 surfaces as a thrown Error. This is
+    // the right behavior for mutating callers; silently mapping 128
+    // to '' would let a status probe against a corrupted gitdir be
+    // misread as "clean tree" and skip a needed commit.
+    await expect(runGit(dir, ['rev-parse', '--is-inside-work-tree'], undefined)).rejects.toThrow();
+  });
+
+  it('returns empty string on exit 128 when softFail128 is passed (probe semantics)', async () => {
+    const dir = initEmptyDir();
+    cleanup.push(dir);
+
+    const out = await runGit(dir, ['rev-parse', '--is-inside-work-tree'], undefined, { softFail128: true });
     expect(out).toBe('');
+  });
+
+  it('softFail128 does not silence non-128 errors', async () => {
+    const dir = initRepoWithOneCommit();
+    cleanup.push(dir);
+
+    // Unknown subcommand returns a different non-zero code; softFail128 must not catch it.
+    await expect(
+      runGit(dir, ['--not-a-real-flag'], undefined, { softFail128: true }),
+    ).rejects.toThrow();
   });
 
   it('throws with stderr text for non-128 errors (e.g., unknown subcommand)', async () => {

@@ -612,14 +612,18 @@ async function executeGitSummary(options: ExecuteLocalDaemonRefreshSourceOptions
   const input = options.source.input as GitSummaryInput;
   const maxCommits = optionalPositiveInteger(input.maxCommits, 'input.maxCommits', 10, 50);
   const dir = projectDir(options.projectsRoot, options.projectId);
-  const insideWorkTree = (await runGit(dir, ['rev-parse', '--is-inside-work-tree'], options.signal)).trim() === 'true';
+  // `git.summary` is a read-only probe — exit 128 carries a meaningful
+  // "no" (e.g., not a repo) and should not throw. Pass softFail128 on
+  // every sub-call so the probe semantics are preserved end-to-end.
+  const probeOpts = { softFail128: true } as const;
+  const insideWorkTree = (await runGit(dir, ['rev-parse', '--is-inside-work-tree'], options.signal, probeOpts)).trim() === 'true';
   if (!insideWorkTree) return asBoundedRefreshOutput({ toolName: 'git.summary', isRepository: false, branch: '', status: [], recentCommits: [], diffStat: [] });
 
   const [branch, status, recentCommits, diffStat] = await Promise.all([
-    runGit(dir, ['branch', '--show-current'], options.signal),
-    runGit(dir, ['status', '--short'], options.signal),
-    runGit(dir, ['log', `--max-count=${maxCommits}`, '--pretty=format:%h %s'], options.signal),
-    runGit(dir, ['diff', '--stat', '--', '.'], options.signal),
+    runGit(dir, ['branch', '--show-current'], options.signal, probeOpts),
+    runGit(dir, ['status', '--short'], options.signal, probeOpts),
+    runGit(dir, ['log', `--max-count=${maxCommits}`, '--pretty=format:%h %s'], options.signal, probeOpts),
+    runGit(dir, ['diff', '--stat', '--', '.'], options.signal, probeOpts),
   ]);
 
   return asBoundedRefreshOutput({

@@ -287,7 +287,12 @@ async function recordRevisionForRunLocked(
   await runGit(projectDir, ['commit', '-m', message], signal);
 
   const sha = (await runGit(projectDir, ['rev-parse', 'HEAD'], signal)).trim();
-  const parent = (await runGit(projectDir, ['rev-parse', 'HEAD^'], signal)).trim() || null;
+  // Probe for the parent — exit 128 means HEAD has no parent (initial
+  // commit). Under recordRevisionForRun's normal flow this can't
+  // happen because initProjectHistory's migration commit is always
+  // present, but defending against an orphaned HEAD (corrupted
+  // gitdir, manual history rewrite) keeps the contract clean.
+  const parent = (await runGit(projectDir, ['rev-parse', 'HEAD^'], signal, { softFail128: true })).trim() || null;
   const stats = await parseLastCommitStats(projectDir, signal);
 
   const now = Date.now();
