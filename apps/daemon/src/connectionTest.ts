@@ -350,10 +350,10 @@ function inspectProviderCompletion(
   const obj = data && typeof data === 'object' ? data as Record<string, unknown> : null;
   if (!obj) return { valid: false };
 
-  if (protocol === 'openai' || protocol === 'azure' || protocol === 'senseaudio') {
+  if (protocol === 'openai' || protocol === 'azure' || protocol === 'senseaudio' || protocol === 'kimi') {
     const responseModel = typeof obj.model === 'string' ? obj.model : '';
     if (
-      (protocol === 'openai' || protocol === 'senseaudio') &&
+      (protocol === 'openai' || protocol === 'senseaudio' || protocol === 'kimi') &&
       enforceResponseModel &&
       responseModel &&
       requestedModel &&
@@ -554,11 +554,12 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
       };
     case 'openai':
     case 'senseaudio':
-      // SenseAudio is wire-compatible with OpenAI (POST /v1/chat/completions,
-      // Bearer auth, identical body + response shape), so the connection
-      // smoke test reuses the same call shape. We default the base URL
-      // upstream-side in chat-routes; this layer assumes the caller passed
-      // a concrete URL via the BYOK form.
+    case 'kimi':
+      // SenseAudio and Kimi (Moonshot) are wire-compatible with OpenAI
+      // (POST /v1/chat/completions, Bearer auth, identical body + response
+      // shape), so the connection smoke test reuses the same call shape.
+      // We default the base URL upstream-side in chat-routes; this layer
+      // assumes the caller passed a concrete URL via the BYOK form.
       return {
         url: appendVersionedApiPath(baseUrl, '/chat/completions'),
         headers: {

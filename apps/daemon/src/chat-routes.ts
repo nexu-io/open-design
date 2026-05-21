@@ -215,7 +215,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         const protocol = body.protocol;
         if (
           typeof protocol !== 'string' ||
-          !['anthropic', 'openai', 'azure', 'google', 'ollama', 'senseaudio'].includes(protocol)
+          !['anthropic', 'openai', 'azure', 'google', 'ollama', 'senseaudio', 'kimi'].includes(protocol)
         ) {
           return sendApiError(
             res,

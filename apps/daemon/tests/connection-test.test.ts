@@ -558,6 +558,76 @@ describe('POST /api/test/connection provider mode', () => {
     );
   });
 
+  it('reports success and returns the OpenAI-shaped completion sample for a Kimi 200', async () => {
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      return Promise.resolve(
+        jsonResponse({
+          model: 'moonshot-v1-8k',
+          choices: [
+            { finish_reason: 'stop', message: { role: 'assistant', content: 'ok' } },
+          ],
+        }),
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'kimi',
+        baseUrl: 'https://api.moonshot.ai',
+        apiKey: 'sk-kimi-test',
+        model: 'moonshot-v1-8k',
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    expect(body.kind).toBe('success');
+    expect(body.model).toBe('moonshot-v1-8k');
+    expect(body.sample).toBe('ok');
+    // appendVersionedApiPath should inject /v1 for the bare host.
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.moonshot.ai/v1/chat/completions',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          authorization: 'Bearer sk-kimi-test',
+        }),
+      }),
+    );
+  });
+
+  it('maps a Kimi 401 to auth_failed', async () => {
+    vi.stubGlobal(
+      'fetch',
+      passThroughOrUpstream(() =>
+        jsonResponse({ error: { message: 'invalid api key' } }, { status: 401 }),
+      ),
+    );
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'kimi',
+        baseUrl: 'https://api.moonshot.ai',
+        apiKey: 'sk-kimi-bad',
+        model: 'moonshot-v1-8k',
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(false);
+    expect(body.kind).toBe('auth_failed');
+    expect(body.status).toBe(401);
+  });
+
   it('maps a 404 to not_found_model', async () => {
     vi.stubGlobal(
       'fetch',
