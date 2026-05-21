@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, Dispatch, SetStateAction } from 'react';
-import { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
+import { isLoopbackApiHost, validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 import {
   agentIdToTracking,
   byokProtocolToTracking,
@@ -46,6 +46,8 @@ import {
   syncMediaProvidersToDaemon,
 } from '../state/config';
 import type { KnownProvider } from '../state/config';
+import { fetchOllamaProbe } from '../state/projects';
+import type { OllamaProbeResult } from '../state/projects';
 import { navigate as navigateRoute, useRoute } from '../router';
 import {
   API_KEY_PLACEHOLDERS,
@@ -346,8 +348,11 @@ function providerConnectionTestKey(
 function isLocalOllamaBaseUrl(baseUrl: string): boolean {
   try {
     const parsed = new URL(baseUrl);
-    const hostname = parsed.hostname.toLowerCase();
-    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+    // Reuse the canonical loopback check so all of localhost, 127/8,
+    // ::1, and ::ffff:127.0.0.1 (the IPv4-mapped form Windows often
+    // resolves to) are recognized — the previous inline check missed
+    // the mapped-IPv6 case which contributed to issue #2549.
+    return isLoopbackApiHost(parsed.hostname.toLowerCase());
   } catch {
     return false;
   }
@@ -844,6 +849,11 @@ export function SettingsDialog({
   const [providerTestState, setProviderTestState] = useState<TestState>({
     status: 'idle',
   });
+  // Detected local Ollama instance. Refreshed when the user opens
+  // the Ollama BYOK tab so the auto-detected banner stays current
+  // without polling. `null` = not probed yet, `available: false` =
+  // probed but nothing running. Issue #2549.
+  const [ollamaProbe, setOllamaProbe] = useState<OllamaProbeResult | null>(null);
   const [byokPreconditionNotice, setByokPreconditionNotice] = useState<{
     action: ByokPreconditionAction;
     message: string;
@@ -1011,6 +1021,23 @@ export function SettingsDialog({
     cfg.baseUrl,
     cfg.apiVersion,
   ]);
+  // Auto-probe a local Ollama instance when the Ollama tab is open so
+  // users don't have to manually paste 127.0.0.1:11434 (#2549).
+  useEffect(() => {
+    if (cfg.apiProtocol !== 'ollama') {
+      setOllamaProbe(null);
+      return;
+    }
+    const controller = new AbortController();
+    let cancelled = false;
+    void fetchOllamaProbe(controller.signal).then((result) => {
+      if (!cancelled) setOllamaProbe(result);
+    });
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [cfg.apiProtocol]);
   // Releasing the abort controllers on unmount avoids the "setState after
   // unmount" warning if the dialog closes while a test is still running.
   useEffect(() => {
@@ -3142,6 +3169,39 @@ export function SettingsDialog({
               ) : null}
               {apiProtocol === 'ollama' ? (
                 <p className="hint">{t('settings.fetchModelsUnsupported')}</p>
+              ) : null}
+              {apiProtocol === 'ollama' && ollamaProbe?.available ? (
+                <div
+                  className="hint"
+                  role="status"
+                  data-testid="ollama-local-detected-banner"
+                  style={{
+                    padding: '8px 12px',
+                    border: '1px solid var(--ok, #28a745)',
+                    borderRadius: 6,
+                    marginTop: 8,
+                  }}
+                >
+                  <span>
+                    Detected local Ollama
+                    {ollamaProbe.version ? ` v${ollamaProbe.version}` : ''} at{' '}
+                    <code>{ollamaProbe.baseUrl}</code>.
+                  </span>{' '}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      updateApiConfig({
+                        baseUrl: ollamaProbe.baseUrl,
+                        apiKey: '',
+                        ...(ollamaProbe.models?.[0]
+                          ? { model: ollamaProbe.models[0] }
+                          : {}),
+                      });
+                    }}
+                  >
+                    Use it
+                  </button>
+                </div>
               ) : null}
               {apiModelCustomActive ? (
                 <label className="field">
