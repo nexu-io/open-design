@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  hasTweaksTemplate,
   hasUrlModeBridge,
   htmlNeedsSandboxShim,
   parseForceInline,
@@ -42,6 +43,13 @@ describe('shouldUrlLoadHtmlPreview', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, drawMode: true })).toBe(false);
   });
 
+  it('falls back to srcDoc when the artifact ships the class based tweaks template', () => {
+    // Without this, a plain `.tw-panel` artifact would URL load on first
+    // open, skip the tweaks bridge entirely, and leave the toolbar toggle
+    // disabled (no `od:tweaks-available` ever fires).
+    expect(shouldUrlLoadHtmlPreview({ ...base, tweaksBridge: true })).toBe(false);
+  });
+
   it('falls back to srcDoc when the user opts in via forceInline', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, forceInline: true })).toBe(false);
   });
@@ -54,7 +62,33 @@ describe('shouldUrlLoadHtmlPreview', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, isDeck: true, commentMode: true })).toBe(false);
     expect(shouldUrlLoadHtmlPreview({ ...base, isDeck: true, forceInline: true })).toBe(false);
     expect(shouldUrlLoadHtmlPreview({ ...base, commentMode: true, forceInline: true })).toBe(false);
+    expect(shouldUrlLoadHtmlPreview({ ...base, tweaksBridge: true, forceInline: true })).toBe(false);
     expect(shouldUrlLoadHtmlPreview({ ...base, commentMode: true, urlModeBridge: true, inspectMode: true })).toBe(false);
+  });
+});
+
+describe('hasTweaksTemplate', () => {
+  it('matches a plain `.tw-panel` artifact', () => {
+    const source = '<!doctype html><html><body><aside class="tw-panel"></aside></body></html>';
+    expect(hasTweaksTemplate(source)).toBe(true);
+  });
+
+  it('matches the `.tw-hidden` toggle class even without an explicit `.tw-panel`', () => {
+    // Defensive: the template ships both selectors and either one signals a
+    // tweaks-template artifact that needs the bridge.
+    const source = '<style>.tw-hidden { display: none; }</style>';
+    expect(hasTweaksTemplate(source)).toBe(true);
+  });
+
+  it('does not match unrelated identifiers that merely contain `tw`', () => {
+    expect(hasTweaksTemplate('<div class="container">tweet</div>')).toBe(false);
+    expect(hasTweaksTemplate('twk-panel, btw-panel, mtw-hidden')).toBe(false);
+  });
+
+  it('returns false for empty / null / undefined input', () => {
+    expect(hasTweaksTemplate('')).toBe(false);
+    expect(hasTweaksTemplate(null)).toBe(false);
+    expect(hasTweaksTemplate(undefined)).toBe(false);
   });
 });
 

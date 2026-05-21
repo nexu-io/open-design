@@ -10,11 +10,16 @@
  *   - DECK_FRAMEWORK_DIRECTIVE : the prompt fragment that tells the model
  *     what is fixed and what they're allowed to change.
  *
- * Pattern: 1920×1080 fixed canvas centered in the viewport via `display:grid;
- * place-items:center`, scaled with `transform: scale()` whose factor is
- * recomputed on every resize. Slides are `<section class="slide">` inside
- * the stage, only `.slide.active` is visible. Prev/next + counter live
- * OUTSIDE the scaled stage so they don't shrink with it.
+ * Pattern: 1920×1080 fixed canvas anchored at the shell's top-left,
+ * centered into the viewport by `fit()` with `transform-origin: top left`
+ * and an explicit `translate(tx, ty) scale(s)` whose factor is recomputed
+ * on every resize. The shell is intentionally NOT a grid/flex container —
+ * any extra centering layer would stack with the explicit translate and
+ * push the scaled stage off-screen (see the OD srcdoc bridge's deck-fix
+ * placement note in `apps/web/src/runtime/srcdoc.ts:injectDeckBridge`).
+ * Slides are `<section class="slide">` inside the stage, only
+ * `.slide.active` is visible. Prev/next + counter live OUTSIDE the scaled
+ * stage so they don't shrink with it.
  *
  * Why this pattern (not horizontal scroll-snap):
  *   - It matches what the model has the strongest prior on, so the framework
@@ -24,9 +29,11 @@
  *   - Print becomes trivial: render every slide as block, page-break between.
  *
  * Drift fixes baked in:
- *   - `transform-origin: top left` and the stage is positioned by grid +
- *     place-items, so scaling never shifts content sideways inside the
- *     OD viewer's nested transform wrapper.
+ *   - `transform-origin: top left` with an explicit
+ *     `translate(tx, ty) scale(s)`. The shell is plain block flow (no
+ *     grid/flex/place-content), so the stage's natural top-left is (0, 0)
+ *     and the translate centers it correctly even inside the OD viewer's
+ *     nested transform wrapper.
  *   - Capture-phase keydown on BOTH window and document so iframe focus
  *     quirks can't swallow arrow keys.
  *   - Auto-focus body on load and on every click.
@@ -80,8 +87,6 @@ export const DECK_SKELETON_HTML = `<!doctype html>
     .deck-shell {
       position: fixed;
       inset: 0;
-      display: grid;
-      place-items: center;
       overflow: hidden;
     }
     .deck-stage {
@@ -91,7 +96,6 @@ export const DECK_SKELETON_HTML = `<!doctype html>
       position: relative;
       transform-origin: top left;
       box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
-      flex-shrink: 0;
     }
     .slide {
       position: absolute;
@@ -250,11 +254,13 @@ export const DECK_SKELETON_HTML = `<!doctype html>
       var idx = 0;
 
       // ---- scale-to-fit ---------------------------------------------------
-      // The stage is 1920×1080 and positioned by .deck-shell's
-      // \`display:grid;place-items:center\`. We scale via transform with
-      // transform-origin:top-left, then re-center by translating to the
-      // remainder. This survives nested transforms (e.g. when the OD viewer
-      // wraps the iframe in its own scale wrapper at zoom != 100%).
+      // The stage is 1920×1080 and sits at .deck-shell's (0, 0) in normal
+      // block flow — the shell is intentionally NOT a grid/flex container,
+      // so the stage's natural top-left is (0, 0). We scale via transform
+      // with transform-origin:top-left, then translate by the remainder to
+      // center the scaled box in the viewport. This survives nested
+      // transforms (e.g. when the OD viewer wraps the iframe in its own
+      // scale wrapper at zoom != 100%).
       function fit() {
         var sw = window.innerWidth;
         var sh = window.innerHeight;

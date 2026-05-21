@@ -6,10 +6,11 @@ import {
   ProjectView,
   clearStreamingConversationMarker,
   finalizeActiveAssistantMessagesOnStop,
+  findExistingArtifactProjectFile,
   resolveSucceededRunStatus,
   shouldClearActiveRunRefs,
 } from '../../src/components/ProjectView';
-import type { ChatMessage } from '../../src/types';
+import type { Artifact, ChatMessage, ProjectFile } from '../../src/types';
 
 const listConversations = vi.fn();
 const listMessages = vi.fn();
@@ -31,8 +32,44 @@ const createConversation = vi.fn();
 const patchConversation = vi.fn();
 const patchProject = vi.fn();
 const saveTabs = vi.fn();
+const writeProjectTextFile = vi.fn();
+
+const replayArtifact: Artifact = {
+  identifier: 'real-daemon-smoke',
+  artifactType: 'text/html',
+  title: 'Real Daemon Smoke',
+  html: '<!doctype html><html><body><h1>Real Daemon Smoke</h1></body></html>',
+};
+
+function artifactProjectFile(name: string, mtime: number): ProjectFile {
+  return {
+    artifactManifest: {
+      entry: name,
+      exports: ['html'],
+      kind: 'html',
+      metadata: {
+        artifactType: 'text/html',
+        identifier: 'real-daemon-smoke',
+        inferred: false,
+      },
+      renderer: 'html',
+      title: 'Real Daemon Smoke',
+      version: 1,
+    },
+    kind: 'html',
+    mime: 'text/html',
+    mtime,
+    name,
+    size: 100,
+  };
+}
 
 vi.mock('../../src/i18n', () => ({
+  useI18n: () => ({
+    locale: 'en',
+    setLocale: () => undefined,
+    t: (key: string) => key,
+  }),
   useT: () => ((value: string) => value),
 }));
 
@@ -58,7 +95,7 @@ vi.mock('../../src/providers/registry', () => ({
   fetchSkill: (...args: unknown[]) => fetchSkill(...args),
   patchPreviewCommentStatus: vi.fn(),
   upsertPreviewComment: vi.fn(),
-  writeProjectTextFile: vi.fn(),
+  writeProjectTextFile: (...args: unknown[]) => writeProjectTextFile(...args),
 }));
 
 vi.mock('../../src/providers/project-events', () => ({
@@ -116,6 +153,19 @@ async function waitForReadyChatPaneProps() {
     initialDraft?: string;
   };
 }
+
+describe('terminal replay artifact recovery', () => {
+  it('only reuses existing artifacts created at or after the current run started', () => {
+    const runCreatedAt = 1_000;
+    const stale = artifactProjectFile('real-daemon-smoke.html', runCreatedAt - 1);
+    const current = artifactProjectFile('real-daemon-smoke-2.html', runCreatedAt + 1);
+
+    expect(findExistingArtifactProjectFile(replayArtifact, [stale], { minMtime: runCreatedAt }))
+      .toBeNull();
+    expect(findExistingArtifactProjectFile(replayArtifact, [stale, current], { minMtime: runCreatedAt }))
+      .toBe(current);
+  });
+});
 
 describe('ProjectView daemon cleanup', () => {
   beforeEach(() => {
@@ -570,7 +620,7 @@ describe('ProjectView daemon cleanup', () => {
     }
   });
 
-  it('audits design-system workspace output after first auto-send and auto-sends bounded repair prompts', async () => {
+  it('audits design-system workspace output after first auto-send and seeds a bounded repair prompt', async () => {
     listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
     listMessages.mockResolvedValue([]);
     fetchPreviewComments.mockResolvedValue([]);
@@ -593,13 +643,16 @@ describe('ProjectView daemon cleanup', () => {
       }],
       warnings: [],
     });
+    let streamCallCount = 0;
     streamViaDaemon.mockImplementation(async (options: {
       handlers: { onDone: () => void };
       onRunCreated?: (runId: string) => void;
     }) => {
-      options.onRunCreated?.('run-ds-1');
-      await Promise.resolve();
-      options.handlers.onDone();
+      streamCallCount += 1;
+      options.onRunCreated?.(`run-ds-${streamCallCount}`);
+      if (streamCallCount === 1) {
+        options.handlers.onDone();
+      }
     });
 
     chatPaneSpy.mockClear();
@@ -640,15 +693,8 @@ describe('ProjectView daemon cleanup', () => {
     );
 
     await waitFor(() => expect(fetchProjectDesignSystemPackageAudit).toHaveBeenCalledWith('project-ds'));
-    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(3));
-    const repairMessages = saveMessage.mock.calls.filter((call) =>
-      call[2]?.role === 'user'
-      && typeof call[2]?.content === 'string'
-      && call[2].content.includes('Fix the design-system package audit findings below.')
-      && call[2].content.includes('ui_kit_index_missing_runtime_bootstrap'),
-    );
-    expect(repairMessages).toHaveLength(2);
-    expect(window.sessionStorage.getItem('od:design-system-audit-auto-repair:project-ds')).toBeNull();
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalled());
+    expect(window.sessionStorage.getItem('od:design-system-audit-auto-repair:project-ds')).toBe('1');
     await waitFor(() => {
       const repairSeed = chatPaneSpy.mock.calls.find(
         (call) => typeof call[0]?.initialDraft === 'string'
@@ -945,5 +991,109 @@ describe('ProjectView daemon cleanup', () => {
         !call[2]?.runId,
     );
     expect(phantomSave).toBeUndefined();
+  });
+
+  it('relinks terminal replay to an existing artifact without writing a duplicate file', async () => {
+    const runCreatedAt = Date.now();
+    const existingArtifact = {
+      artifactManifest: {
+        entry: 'real-daemon-smoke.html',
+        exports: ['html'],
+        kind: 'html',
+        metadata: {
+          artifactType: 'text/html',
+          identifier: 'real-daemon-smoke',
+          inferred: false,
+        },
+        renderer: 'html',
+        title: 'Real Daemon Smoke',
+        version: 1,
+      },
+      kind: 'html',
+      mime: 'text/html',
+      mtime: runCreatedAt + 1,
+      name: 'real-daemon-smoke.html',
+      size: 100,
+    };
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-replay',
+        role: 'assistant',
+        content: '',
+        createdAt: Date.now(),
+        runId: 'run-replay',
+        runStatus: 'succeeded',
+        producedFiles: [],
+      },
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([existingArtifact]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-replay',
+      status: 'succeeded',
+      createdAt: runCreatedAt,
+      updatedAt: runCreatedAt + 1,
+      exitCode: 0,
+      signal: null,
+    });
+    listActiveChatRuns.mockResolvedValue([]);
+    reattachDaemonRun.mockImplementation(async (options: {
+      handlers: {
+        onDelta: (delta: string) => void;
+        onDone: () => void;
+      };
+    }) => {
+      options.handlers.onDelta(
+        '<artifact identifier="real-daemon-smoke" type="text/html" title="Real Daemon Smoke"><h1>Real Daemon Smoke</h1></artifact>',
+      );
+      options.handlers.onDone();
+    });
+
+    render(
+      <ProjectView
+        project={{ id: 'project-1', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(saveMessage.mock.calls).toEqual(
+        expect.arrayContaining([
+          expect.arrayContaining([
+            'project-1',
+            'conv-1',
+            expect.objectContaining({
+              id: 'msg-replay',
+              producedFiles: [existingArtifact],
+            }),
+          ]),
+        ]),
+      );
+    });
+    expect(writeProjectTextFile).not.toHaveBeenCalled();
   });
 });

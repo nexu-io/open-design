@@ -45,14 +45,23 @@ export type TrackingPageName =
   | 'automations'
   | 'plugins'
   | 'design_systems'
+  // `design_system_project` is the per-DS surface (preview / generation
+  // dialog inside a specific design system). Distinct from the
+  // `design_systems` list page.
+  | 'design_system_project'
   | 'integrations'
   | 'chat_panel'
   | 'file_manager'
-  | 'artifact';
+  | 'artifact'
+  | 'onboarding'
+  // `studio` is the in-project workspace that hosts the chat composer and
+  // the design system picker. Reported when a DS picker / module renders
+  // inside a project.
+  | 'studio'
+  | 'settings';
 
-// Settings events use `page=settings` (mirrors the CSV). Kept distinct from
-// `TrackingPageName` so the discriminator stays unambiguous between the
-// product surfaces and the settings dialog.
+// Alias kept for backwards-compatibility inside the contracts file; v2 wire
+// format uses the field name `page_name` for settings events too.
 export type TrackingSettingsPage = 'settings';
 
 // ---- Shared enums --------------------------------------------------------
@@ -177,22 +186,142 @@ export type TrackingFileSizeBucket =
 
 // ---- page_view ------------------------------------------------------------
 
-export interface PageViewProps {
-  page_name: TrackingPageName;
-  // `source` is supplied only by the chat_panel page_view (CSV row 41), where
-  // it records which surface launched the studio. The other page_view
-  // emissions leave it undefined.
-  source?:
-    | 'new_project'
-    | 'chat_composer'
-    | 'recent_project'
-    | 'projects_list'
-    | 'template'
-    | 'automation'
-    | 'deeplink'
-    | 'reload'
-    | 'unknown';
+// `source` is supplied only by the chat_panel page_view (CSV row 41), where
+// it records which surface launched the studio.
+export type TrackingChatPanelPageViewSource =
+  | 'new_project'
+  | 'chat_composer'
+  | 'recent_project'
+  | 'projects_list'
+  | 'template'
+  | 'automation'
+  | 'deeplink'
+  | 'reload'
+  | 'unknown';
+
+// --- Onboarding page_view (welcome flow) ---
+//
+// CSV row "Onboarding / page_view". Fires once per step exposure inside the
+// 4-step welcome flow: Connect → About you → Design system → Generation
+// progress. Each step's `step_index` / `step_name` must match the enum
+// pairs below. `onboarding_session_id` is generated once per session so
+// dashboards can stitch the funnel across the 4 events.
+export type TrackingOnboardingArea =
+  | 'runtime'
+  | 'about_you'
+  | 'design_system'
+  | 'generation_progress';
+
+// Mixed string enum: numeric steps render as the strings `'1' | '2' | '3'`
+// and the generation phase as `'progress'`. Mirrors the v2 doc literally.
+export type TrackingOnboardingStepIndex = '1' | '2' | '3' | 'progress';
+
+export type TrackingOnboardingStepName =
+  | 'connect'
+  | 'about_you'
+  | 'design_system'
+  | 'generation';
+
+export interface OnboardingPageViewProps {
+  page_name: 'onboarding';
+  area: TrackingOnboardingArea;
+  step_index: TrackingOnboardingStepIndex;
+  step_name: TrackingOnboardingStepName;
+  onboarding_session_id: string;
 }
+
+// --- Design systems page_view (multi-surface) ---
+//
+// Single shape covering the dedicated DS list / create / preview pages plus
+// the DS picker / generation-dialog exposures rendered inside home and
+// studio. `page_name` discriminates the host page; `area` + `view_type`
+// discriminate the specific surface; the rest carry the DS context needed
+// to stitch funnels (DS list → picker → project → run).
+export type TrackingDesignSystemsArea =
+  | 'design_system_list'
+  | 'design_system_create'
+  | 'design_system_generation'
+  | 'design_system_preview'
+  | 'design_system_picker'
+  | 'composer';
+
+export type TrackingDesignSystemsViewType =
+  | 'page'
+  | 'panel'
+  | 'dialog'
+  | 'popover'
+  | 'module';
+
+export type TrackingDesignSystemsEntryFrom =
+  | 'onboarding'
+  | 'design_systems_page'
+  | 'home_card'
+  | 'composer_picker'
+  | 'project_settings'
+  | 'unknown';
+
+// Origin of the design system itself. NOT the same field as
+// `TrackingDesignSystemSource` on run_created/run_finished, which records
+// *how the run picked* its DS. v2 doc reuses the field name
+// `design_system_source` for both contexts; the value sets are disjoint.
+export type TrackingDesignSystemOrigin =
+  | 'onboarding'
+  | 'manual_create'
+  | 'github_repo'
+  | 'local_code'
+  | 'fig'
+  | 'assets'
+  | 'official_preset'
+  | 'enterprise'
+  | 'template'
+  | 'mixed'
+  | 'unknown';
+
+export type TrackingDesignSystemStatus =
+  | 'draft'
+  | 'generating'
+  | 'ready'
+  | 'published'
+  | 'default'
+  | 'failed'
+  | 'archived'
+  | 'unknown';
+
+export interface DesignSystemsPageViewProps {
+  page_name: 'design_systems' | 'design_system_project' | 'home' | 'studio';
+  area: TrackingDesignSystemsArea;
+  view_type: TrackingDesignSystemsViewType;
+  entry_from: TrackingDesignSystemsEntryFrom;
+  design_system_id?: string;
+  // Re-uses the field name from the v2 doc; values are the
+  // `TrackingDesignSystemOrigin` set, NOT the run-time
+  // `TrackingDesignSystemSource` set.
+  design_system_source?: TrackingDesignSystemOrigin;
+  design_system_status?: TrackingDesignSystemStatus;
+  project_id?: string;
+  available_design_system_count?: number;
+}
+
+// --- Generic page_view (existing surfaces) ---
+//
+// Covers all page-level page_views that don't carry surface-specific
+// fields. `chat_panel` is the only one that uses the optional `source`.
+export interface GenericPageViewProps {
+  page_name: Exclude<
+    TrackingPageName,
+    'onboarding' | 'design_system_project' | 'studio'
+  >;
+  source?: TrackingChatPanelPageViewSource;
+}
+
+// Discriminated union by `page_name`. `home` and `design_systems` belong
+// to BOTH `GenericPageViewProps` (page-level visit) and
+// `DesignSystemsPageViewProps` (DS module / picker exposure on those
+// pages); call sites that pass `area` get narrowed to the DS shape.
+export type PageViewProps =
+  | GenericPageViewProps
+  | OnboardingPageViewProps
+  | DesignSystemsPageViewProps;
 
 // ---- ui_click ------------------------------------------------------------
 //
@@ -701,13 +830,13 @@ export type TrackingSettingsArea =
   | 'about';
 
 export interface SettingsSidebarClickProps {
-  page: TrackingSettingsPage;
+  page_name: TrackingSettingsPage;
   area: 'settings_sidebar';
   element: TrackingSettingsArea;
 }
 
 export interface SettingsExecutionModeTabClickProps {
-  page: TrackingSettingsPage;
+  page_name: TrackingSettingsPage;
   area: 'configure_execution_mode';
   element: 'execution_mode_tab';
   action: 'switch_execution_mode';
@@ -716,7 +845,7 @@ export interface SettingsExecutionModeTabClickProps {
 }
 
 export interface SettingsLocalCliClickProps {
-  page: TrackingSettingsPage;
+  page_name: TrackingSettingsPage;
   area: 'configure_execution_mode_local_cli';
   element: 'test' | 'rescan' | 'cli_provider' | 'install' | 'docs';
   cli_provider_id?: TrackingCliProviderId;
@@ -724,7 +853,7 @@ export interface SettingsLocalCliClickProps {
 }
 
 export interface SettingsByokProviderOptionClickProps {
-  page: TrackingSettingsPage;
+  page_name: TrackingSettingsPage;
   area: 'configure_execution_mode_byok';
   element: 'byok_provider_option';
   action: 'select_byok_provider';
@@ -733,7 +862,7 @@ export interface SettingsByokProviderOptionClickProps {
 }
 
 export interface SettingsByokFieldClickProps {
-  page: TrackingSettingsPage;
+  page_name: TrackingSettingsPage;
   area: 'configure_execution_mode_byok';
   element:
     | 'fetch_models'
@@ -749,7 +878,7 @@ export interface SettingsByokFieldClickProps {
 }
 
 export interface SettingsMediaProvidersClickProps {
-  page: TrackingSettingsPage;
+  page_name: TrackingSettingsPage;
   area: 'media_providers';
   element: 'reload' | 'key_input' | 'url_input' | 'clear';
   providers_id?: string;
@@ -757,7 +886,7 @@ export interface SettingsMediaProvidersClickProps {
 }
 
 export interface SettingsConnectorsClickProps {
-  page: TrackingSettingsPage;
+  page_name: TrackingSettingsPage;
   area: 'connectors';
   element:
     | 'api_key_input'
@@ -770,21 +899,21 @@ export interface SettingsConnectorsClickProps {
 }
 
 export interface SettingsLanguageClickProps {
-  page: TrackingSettingsPage;
+  page_name: TrackingSettingsPage;
   area: 'language';
   // Locale id, e.g. `english`, `bahasa_indonesia`, `zh_cn`.
   element: string;
 }
 
 export interface SettingsAppearanceClickProps {
-  page: TrackingSettingsPage;
+  page_name: TrackingSettingsPage;
   area: 'appearance';
   element: 'system' | 'light' | 'dark' | 'accent_color';
   color?: string;
 }
 
 export interface SettingsNotificationsClickProps {
-  page: TrackingSettingsPage;
+  page_name: TrackingSettingsPage;
   area: 'notifications';
   element:
     | 'completion_sound'
@@ -799,7 +928,7 @@ export interface SettingsNotificationsClickProps {
 }
 
 export interface SettingsPetsClickProps {
-  page: TrackingSettingsPage;
+  page_name: TrackingSettingsPage;
   area: 'pets';
   element:
     | 'tuck_away'
@@ -812,7 +941,7 @@ export interface SettingsPetsClickProps {
 }
 
 export interface SettingsPrivacyClickProps {
-  page: TrackingSettingsPage;
+  page_name: TrackingSettingsPage;
   area: 'privacy';
   element:
     | 'anonymous_metrics'
@@ -1048,12 +1177,12 @@ export interface FeedbackSubmitResultProps {
 
 // SETTINGS view + result events (page=settings)
 export interface SettingsViewProps {
-  page: TrackingSettingsPage;
+  page_name: TrackingSettingsPage;
   area: TrackingSettingsArea;
 }
 
 export interface SettingsCliTestResultProps {
-  page: TrackingSettingsPage;
+  page_name: TrackingSettingsPage;
   area: 'configure_execution_mode';
   cli_provider_id: TrackingCliProviderId;
   result: TrackingTestResult;
@@ -1062,7 +1191,7 @@ export interface SettingsCliTestResultProps {
 }
 
 export interface SettingsByokTestResultProps {
-  page: TrackingSettingsPage;
+  page_name: TrackingSettingsPage;
   // CSV row 67 names this area `execution_model`; keep that spelling so the
   // wire format matches the doc.
   area: 'execution_model';
@@ -1073,7 +1202,7 @@ export interface SettingsByokTestResultProps {
 }
 
 export interface SettingsConnectorAuthResultProps {
-  page: TrackingSettingsPage;
+  page_name: TrackingSettingsPage;
   area: 'connectors';
   connector_id: string;
   action: 'connect' | 'disconnect' | 'refresh';

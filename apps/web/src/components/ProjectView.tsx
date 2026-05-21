@@ -118,6 +118,8 @@ import {
 } from '../comments';
 import { AppChromeHeader } from './AppChromeHeader';
 import { AvatarMenu } from './AvatarMenu';
+import { HandoffButton } from './HandoffButton';
+import { ProjectDesignSystemPicker } from './ProjectDesignSystemPicker';
 import { ChatPane } from './ChatPane';
 import type { ChatSendMeta } from './ChatComposer';
 import {
@@ -133,6 +135,7 @@ import {
 } from './design-files/pluginFolderActions';
 import { CenteredLoader } from './Loading';
 import { Toast } from './Toast';
+import { WorkingDirPill } from './WorkingDirPill';
 import { useDesignMdState } from '../hooks/useDesignMdState';
 import { useFinalizeProject } from '../hooks/useFinalizeProject';
 import { useProjectDetail } from '../hooks/useProjectDetail';
@@ -1003,11 +1006,7 @@ export function ProjectView({
 
   const persistArtifact = useCallback(
     async (art: Artifact, projectFilesSnapshot?: ProjectFile[]) => {
-      const baseName = (art.identifier || art.title || 'artifact')
-        .toLowerCase()
-        .replace(/[^a-z0-9_-]+/g, '-')
-        .replace(/^-+|-+$/g, '')
-        .slice(0, 60) || 'artifact';
+      const baseName = artifactBaseNameFor(art);
       const ext = artifactExtensionFor(art);
       // Pick a name that doesn't collide with an existing project file.
       // The first run uses `<base>.<ext>`; subsequent runs append `-2`, `-3`…
@@ -1629,7 +1628,7 @@ export function ProjectView({
   );
 
   useEffect(() => {
-    if (!daemonLive || !activeConversationId || streaming) return;
+    if (config.mode !== 'daemon' || !daemonLive || !activeConversationId || streaming) return;
     let cancelled = false;
     const reattachConversationId = activeConversationId;
 
@@ -1866,11 +1865,25 @@ export function ProjectView({
                 const beforeFiles = await refreshProjectFiles();
                 const beforeFileNames = new Set(beforeFiles.map((f) => f.name));
                 let nextFiles = beforeFiles;
+                let recoveredExistingArtifact: ProjectFile | null = null;
                 if (parsedArtifact?.html) {
-                  await persistArtifact(parsedArtifact, nextFiles);
-                  nextFiles = await refreshProjectFiles();
+                  const runStartedAt = status.createdAt || message.startedAt || message.createdAt;
+                  recoveredExistingArtifact = findExistingArtifactProjectFile(
+                    parsedArtifact,
+                    nextFiles,
+                    { minMtime: runStartedAt },
+                  );
+                  if (recoveredExistingArtifact) {
+                    savedArtifactRef.current = recoveredExistingArtifact.name;
+                    requestOpenFile(recoveredExistingArtifact.name);
+                  } else {
+                    await persistArtifact(parsedArtifact, nextFiles);
+                    nextFiles = await refreshProjectFiles();
+                  }
                 }
-                const produced = nextFiles.filter((f) => !beforeFileNames.has(f.name));
+                const produced = recoveredExistingArtifact
+                  ? [recoveredExistingArtifact]
+                  : nextFiles.filter((f) => !beforeFileNames.has(f.name));
                 if (produced.length > 0) {
                   updateMessageById(
                     message.id,
@@ -1961,6 +1974,7 @@ export function ProjectView({
     };
   }, [
     daemonLive,
+    config.mode,
     activeConversationId,
     streaming,
     messages,
@@ -1973,6 +1987,7 @@ export function ProjectView({
     clearActiveRunRefs,
     refreshProjectFiles,
     persistArtifact,
+    requestOpenFile,
     onProjectsRefresh,
   ]);
 
@@ -2121,6 +2136,7 @@ export function ProjectView({
       const beforeFileNames = new Set(projectFiles.map((f) => f.name));
 
       const parser = createArtifactParser();
+      let parsedArtifact: Artifact | null = null;
       let liveHtml = '';
       let streamedText = '';
 
@@ -2202,14 +2218,22 @@ export function ProjectView({
         for (const ev of parser.feed(delta)) {
           if (ev.type === 'artifact:start') {
             liveHtml = '';
-            setArtifact({
+            parsedArtifact = {
               identifier: ev.identifier,
               artifactType: ev.artifactType,
               title: ev.title,
               html: '',
-            });
+            };
+            setArtifact(parsedArtifact);
           } else if (ev.type === 'artifact:chunk') {
             liveHtml += ev.delta;
+            parsedArtifact = parsedArtifact
+              ? { ...parsedArtifact, html: liveHtml }
+              : {
+                  identifier: ev.identifier,
+                  title: '',
+                  html: liveHtml,
+                };
             setArtifact((prev) =>
               prev
                 ? { ...prev, html: liveHtml }
@@ -2220,6 +2244,13 @@ export function ProjectView({
                   },
             );
           } else if (ev.type === 'artifact:end') {
+            parsedArtifact = parsedArtifact
+              ? { ...parsedArtifact, html: ev.fullContent }
+              : {
+                  identifier: ev.identifier,
+                  title: '',
+                  html: ev.fullContent,
+                };
             setArtifact((prev) => (prev ? { ...prev, html: ev.fullContent } : null));
           }
         }
@@ -2251,6 +2282,13 @@ export function ProjectView({
           cancelSendTextBuffer();
           for (const ev of parser.flush()) {
             if (ev.type === 'artifact:end') {
+              parsedArtifact = parsedArtifact
+                ? { ...parsedArtifact, html: ev.fullContent }
+                : {
+                    identifier: ev.identifier,
+                    title: '',
+                    html: ev.fullContent,
+                  };
               setArtifact((prev) => (prev ? { ...prev, html: ev.fullContent } : null));
             }
           }
@@ -2303,18 +2341,16 @@ export function ProjectView({
           clearActiveRunRefs(runConversationId, controller, cancelController);
           clearStreamingMarker(runConversationId);
           updateConversationLatestRun(finalRunStatus ?? 'succeeded', endedAt);
-          // Persist the finished artifact to the project folder so it shows
-          // up as a real tab (not just the synthetic "live" stream).
-          setArtifact((prev) => {
-            if (!prev || !prev.html) return prev;
-            void refreshProjectFiles().then((nextFiles) => persistArtifact(prev, nextFiles));
-            return prev;
-          });
           // Refetch the file list directly (rather than just bumping the
           // refresh signal) so we can diff against the pre-turn snapshot
           // and attach the new files to the assistant message as download
           // chips.
-          void refreshProjectFiles().then(async (nextFiles) => {
+          void (async () => {
+            let nextFiles = await refreshProjectFiles();
+            if (parsedArtifact?.html) {
+              await persistArtifact(parsedArtifact, nextFiles);
+              nextFiles = await refreshProjectFiles();
+            }
             const produced = nextFiles.filter((f) => !beforeFileNames.has(f.name));
             setMessages((curr) => {
               const updated = curr.map((m) =>
@@ -2327,7 +2363,7 @@ export function ProjectView({
               return updated;
             });
             await auditDesignSystemWorkspaceAfterRun(assistantId);
-          });
+          })();
           onProjectsRefresh();
         },
         onError: (err: Error) => {
@@ -2990,6 +3026,20 @@ export function ProjectView({
     [project, onProjectChange],
   );
 
+  const handleChangeDesignSystemId = useCallback(
+    (nextId: string | null) => {
+      if ((project.designSystemId ?? null) === nextId) return;
+      const updated: Project = {
+        ...project,
+        designSystemId: nextId,
+        updatedAt: Date.now(),
+      };
+      onProjectChange(updated);
+      void patchProject(project.id, { designSystemId: nextId });
+    },
+    [project, onProjectChange],
+  );
+
   const handleSaveInstructions = useCallback(async () => {
     const value = instructionsDraft.trim() || undefined;
     // After a save, land on the review panel so the saved value is read
@@ -3008,13 +3058,20 @@ export function ProjectView({
   }, [project, onProjectChange, instructionsDraft]);
 
   const projectMeta = useMemo(() => {
+    // Design system is rendered by the adjacent picker chip — keep the
+    // bare meta string focused on skill / mode so the two surfaces
+    // don't show the same label twice.
     const summary =
       skills.find((s) => s.id === project.skillId) ??
       designTemplates.find((s) => s.id === project.skillId);
     const skill = summary?.name;
-    const ds = designSystems.find((d) => d.id === project.designSystemId)?.title;
-    return [skill, ds].filter(Boolean).join(' · ') || t('project.metaFreeform');
-  }, [skills, designTemplates, designSystems, project.skillId, project.designSystemId, t]);
+    return skill ?? t('project.metaFreeform');
+  }, [skills, designTemplates, project.skillId, t]);
+
+  const activeDesignSystemSummary = useMemo(() => {
+    if (!project.designSystemId) return null;
+    return designSystems.find((d) => d.id === project.designSystemId) ?? null;
+  }, [designSystems, project.designSystemId]);
 
   const designSystemProject = useMemo(() => {
     if (project.metadata?.importedFrom !== 'design-system') return null;
@@ -3357,6 +3414,14 @@ export function ProjectView({
       cancelled = true;
     };
   }, [project.appliedPluginSnapshotId]);
+  const chatDesignSystemSummary = useMemo(() => {
+    if (activeDesignSystemSummary) return activeDesignSystemSummary;
+    const designSystemName = activePluginSnapshot?.inputs?.designSystem;
+    if (typeof designSystemName !== 'string') return null;
+    const normalized = designSystemName.trim();
+    if (!normalized || normalized === 'the active project design system') return null;
+    return designSystems.find((d) => d.title === normalized) ?? null;
+  }, [activeDesignSystemSummary, activePluginSnapshot?.inputs, designSystems]);
 
   // Lift finalize errors into the shared project-actions toast so the
   // user sees both the daemon's category message and any upstream
@@ -3497,17 +3562,20 @@ export function ProjectView({
         onBack={onBack}
         backLabel={t('project.backToProjects')}
         actions={(
-          <AvatarMenu
-            config={config}
-            agents={agents}
-            daemonLive={daemonLive}
-            onModeChange={onModeChange}
-            onAgentChange={onAgentChange}
-            onAgentModelChange={onAgentModelChange}
-            onOpenSettings={onOpenSettings}
-            onRefreshAgents={onRefreshAgents}
-            onBack={onBack}
-          />
+          <>
+            <HandoffButton projectId={project.id} />
+            <AvatarMenu
+              config={config}
+              agents={agents}
+              daemonLive={daemonLive}
+              onModeChange={onModeChange}
+              onAgentChange={onAgentChange}
+              onAgentModelChange={onAgentModelChange}
+              onOpenSettings={onOpenSettings}
+              onRefreshAgents={onRefreshAgents}
+              onBack={onBack}
+            />
+          </>
         )}
       >
         <div className="app-project-title">
@@ -3530,6 +3598,11 @@ export function ProjectView({
               {project.name}
             </span>
             <span className="meta" data-testid="project-meta">{projectMeta}</span>
+            <ProjectDesignSystemPicker
+              designSystems={designSystems}
+              selectedId={project.designSystemId ?? null}
+              onChange={handleChangeDesignSystemId}
+            />
             {(project.customInstructions ?? '').trim() ? (
               <button
                 type="button"
@@ -3651,6 +3724,7 @@ export function ProjectView({
               projectKindForTracking={projectKindToTracking(project.metadata?.kind)}
               projectFiles={projectFiles}
               hasActiveDesignSystem={!!project.designSystemId}
+              activeDesignSystem={chatDesignSystemSummary}
               projectFileNames={projectFileNames}
               skills={skills}
               onEnsureProject={handleEnsureProject}
@@ -3698,6 +3772,19 @@ export function ProjectView({
                 onProjectChange({ ...project, skillId });
               }}
               activePluginSnapshot={activePluginSnapshot}
+              composerFooterAccessory={
+                <WorkingDirPill
+                  projectId={project.id}
+                  resolvedDir={projectDetail.resolvedDir}
+                  onReplaced={(result) => {
+                    if (result.project) onProjectChange(result.project);
+                    void projectDetail.refresh();
+                    void refreshWorkspaceItems();
+                    onProjectsRefresh();
+                    if (result.entryFile) requestOpenFile(result.entryFile);
+                  }}
+                />
+              }
               onCollapse={() => setWorkspaceFocused(true)}
             />
           ) : (
@@ -3772,6 +3859,52 @@ function artifactExtensionFor(art: Artifact): '.html' | '.jsx' | '.tsx' {
     return '.jsx';
   }
   return '.html';
+}
+
+function artifactBaseNameFor(art: Artifact): string {
+  return (
+    (art.identifier || art.title || 'artifact')
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 60) || 'artifact'
+  );
+}
+
+export function findExistingArtifactProjectFile(
+  art: Artifact,
+  projectFiles: ProjectFile[],
+  options: { minMtime?: number } = {},
+): ProjectFile | null {
+  const ext = artifactExtensionFor(art);
+  const baseName = artifactBaseNameFor(art);
+  const candidateFileName = `${baseName}${ext}`;
+  const minMtime = options.minMtime;
+  const currentRunFiles = typeof minMtime === 'number' && Number.isFinite(minMtime)
+    ? projectFiles.filter((file) => file.mtime >= minMtime)
+    : projectFiles;
+
+  if (ext === '.html') {
+    const pointerTarget = resolveHtmlPointerArtifactTarget({
+      content: art.html,
+      candidateFileName,
+      projectFiles: currentRunFiles,
+    });
+    const pointerFile = pointerTarget
+      ? currentRunFiles.find((file) => file.name === pointerTarget || file.path === pointerTarget)
+      : null;
+    if (pointerFile) return pointerFile;
+  }
+
+  const identifier = art.identifier || '';
+  if (identifier) {
+    const manifestMatches = currentRunFiles
+      .filter((file) => file.artifactManifest?.metadata?.identifier === identifier)
+      .sort((a, b) => b.mtime - a.mtime);
+    if (manifestMatches[0]) return manifestMatches[0];
+  }
+
+  return currentRunFiles.find((file) => file.name === candidateFileName) ?? null;
 }
 
 function assistantAgentDisplayName(

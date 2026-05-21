@@ -97,16 +97,20 @@ jobs:
             echo "Invalid manifest pr_number: $manifest_pr_number" >&2
             exit 1
           fi
-          pr_number="$WORKFLOW_PR_NUMBER"
+          derived_pr_number="$WORKFLOW_PR_NUMBER"
+          if [ -z "$derived_pr_number" ] && [ -n "$WORKFLOW_HEAD_SHA" ]; then
+            derived_pr_number="$(gh api "repos/$GITHUB_REPOSITORY/commits/$WORKFLOW_HEAD_SHA/pulls" --jq '.[0].number // empty')"
+          fi
+          pr_number="$derived_pr_number"
           if [ -z "$pr_number" ]; then
-            pr_number="$(gh api "repos/$GITHUB_REPOSITORY/commits/$WORKFLOW_HEAD_SHA/pulls" --jq '.[0].number // empty')"
+            pr_number="$manifest_pr_number"
           fi
           if ! [[ "$pr_number" =~ ^[0-9]+$ ]]; then
-            echo "Unable to derive PR number for workflow head $WORKFLOW_HEAD_SHA from GitHub event/API." >&2
+            echo "Unable to derive PR number from workflow event, capture manifest, or GitHub API for workflow head $WORKFLOW_HEAD_SHA." >&2
             exit 1
           fi
-          if [ "$manifest_pr_number" != "$pr_number" ]; then
-            echo "Manifest pr_number ($manifest_pr_number) does not match GitHub-derived PR number ($pr_number)." >&2
+          if [ -n "$derived_pr_number" ] && [ "$manifest_pr_number" != "$derived_pr_number" ]; then
+            echo "Manifest pr_number ($manifest_pr_number) does not match GitHub-derived PR number ($derived_pr_number)." >&2
             exit 1
           fi
           if ! [[ "$base_sha" =~ ^[0-9a-f]{40}$ ]]; then

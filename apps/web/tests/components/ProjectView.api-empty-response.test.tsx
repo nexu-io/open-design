@@ -238,9 +238,16 @@ describe('ProjectView API empty response handling', () => {
     mockedFetchProjectFilePreview.mockResolvedValue(null);
     mockedFetchProjectFileText.mockResolvedValue(null);
     mockedFetchProjectFiles.mockResolvedValue([]);
+    mockedWriteProjectTextFile.mockResolvedValue({
+      name: 'landing-page.html',
+      path: 'landing-page.html',
+      kind: 'html',
+      mime: 'text/html',
+      size: 1,
+      mtime: 1,
+    });
     mockedListMessages.mockClear();
     mockedSaveMessage.mockClear();
-    mockedWriteProjectTextFile.mockClear();
     mockedPatchPreviewCommentStatus.mockClear();
     mockedPlaySound.mockClear();
   });
