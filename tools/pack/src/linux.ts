@@ -21,6 +21,7 @@ import {
   createPackageManagerInvocation,
   createProcessStampArgs,
   listProcessSnapshots,
+  matchesStampedProcess,
   readLogTail,
   spawnBackgroundProcess,
   stopProcesses,
@@ -905,10 +906,15 @@ async function validateDesktopAppImageMarker(
   // for not-yet-installed builds.
   const candidateAppImagePath =
     (await pathExists(paths.installAppImagePath)) ? paths.installAppImagePath : await findBuiltAppImage(paths);
-  const cmdOk = candidateAppImagePath != null && matchesAppImageProcess(
-    { pid: marker.pid, executable: exePath, env },
-    candidateAppImagePath,
-  );
+  const stampedCommandOk =
+    marker.stamp.source === SIDECAR_SOURCES.TOOLS_PACK &&
+    matchesStampedProcess(candidate, marker.stamp, OPEN_DESIGN_SIDECAR_CONTRACT);
+  const cmdOk =
+    stampedCommandOk ||
+    (candidateAppImagePath != null && matchesAppImageProcess(
+      { pid: marker.pid, executable: exePath, env },
+      candidateAppImagePath,
+    ));
 
   if (stampOk && cmdOk && marker.namespaceRoot === config.roots.runtime.namespaceRoot) {
     return { candidate, status: "valid" };

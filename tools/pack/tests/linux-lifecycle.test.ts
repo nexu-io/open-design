@@ -53,12 +53,14 @@ vi.mock("@open-design/platform", () => ({
   createPackageManagerInvocation: vi.fn(),
   createProcessStampArgs: vi.fn(() => []),
   listProcessSnapshots: vi.fn(async () => []),
+  matchesStampedProcess: vi.fn(() => false),
   readLogTail: vi.fn(async () => []),
   spawnBackgroundProcess,
   stopProcesses: vi.fn(async () => ({ remainingPids: [], stoppedPids: [] })),
 }));
 
-const { inspectPackedLinuxApp, startPackedLinuxApp, startPackedLinuxHeadless } = await import("../src/linux.js");
+const platform = await import("@open-design/platform");
+const { inspectPackedLinuxApp, startPackedLinuxApp, startPackedLinuxHeadless, stopPackedLinuxApp } = await import("../src/linux.js");
 
 function makeConfig(root: string, overrides: Partial<ToolPackConfig> = {}): ToolPackConfig {
   const namespace = "linux-tauri-lifecycle";
@@ -210,6 +212,68 @@ describe("inspectPackedLinuxApp", () => {
         "/tmp/open-design/ipc/linux-tauri/desktop.sock",
         { input: { path: "/tmp/open-design-linux.png" }, type: SIDECAR_MESSAGES.SCREENSHOT },
         { timeoutMs: 10000 },
+      );
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("stopPackedLinuxApp", () => {
+  it("accepts a tools-pack stamped AppImage command even when /proc AppImage env is unavailable", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-linux-lifecycle-"));
+    try {
+      const config = makeConfig(root);
+      const markerPath = join(config.roots.runtime.namespaceRoot, "runtime", "desktop-root.json");
+      const stamp = {
+        app: APP_KEYS.DESKTOP,
+        ipc: "/tmp/open-design/ipc/linux-tauri/desktop.sock",
+        mode: SIDECAR_MODES.RUNTIME,
+        namespace: config.namespace,
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      };
+      await mkdir(join(markerPath, ".."), { recursive: true });
+      await writeFile(
+        markerPath,
+        `${JSON.stringify({
+          appPath: "/tmp/.mount_open-design/usr/lib/open-design",
+          executablePath: "/tmp/.mount_open-design/usr/bin/open-design-desktop-tauri",
+          logPath: join(config.roots.runtime.namespaceRoot, "logs", APP_KEYS.DESKTOP, "latest.log"),
+          namespaceRoot: config.roots.runtime.namespaceRoot,
+          pid: 1234,
+          ppid: 1,
+          stamp,
+          startedAt: "2026-05-20T00:00:00.000Z",
+          updatedAt: "2026-05-20T00:00:00.000Z",
+          version: 1,
+        }, null, 2)}\n`,
+        "utf8",
+      );
+      vi.mocked(platform.listProcessSnapshots).mockResolvedValueOnce([
+        {
+          command: "/tmp/.mount_open-design/usr/bin/open-design-desktop-tauri --fake-stamp",
+          pid: 1234,
+          ppid: 1,
+        },
+      ]);
+      vi.mocked(platform.matchesStampedProcess).mockReturnValueOnce(true);
+      vi.mocked(platform.collectProcessTreePids).mockReturnValueOnce([1234]);
+      vi.mocked(platform.stopProcesses).mockResolvedValueOnce({
+        alreadyStopped: false,
+        forcedPids: [],
+        matchedPids: [1234],
+        remainingPids: [],
+        stoppedPids: [1234],
+      });
+
+      const result = await stopPackedLinuxApp(config);
+
+      expect(result.status).toBe("stopped");
+      expect(result.remainingPids).toEqual([]);
+      expect(platform.matchesStampedProcess).toHaveBeenCalledWith(
+        expect.objectContaining({ pid: 1234 }),
+        stamp,
+        OPEN_DESIGN_SIDECAR_CONTRACT,
       );
     } finally {
       await rm(root, { force: true, recursive: true });
