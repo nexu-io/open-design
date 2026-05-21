@@ -732,8 +732,12 @@ export function FileWorkspace({
       entry.discardRawItemsOnSave ? [] : entry.rawItems,
       entry.items,
     );
+    const startedAt = Date.now();
     const file = await writeProjectTextFile(projectId, name, JSON.stringify(doc, null, 2));
-    await new Promise((resolve) => setTimeout(resolve, 500)); // Ensures saving UI shows so the button does not flicker
+    const elapsed = Date.now() - startedAt;
+    // Ensures saving UI shows so the button does not flicker
+    if (elapsed < 500) await new Promise((resolve) => setTimeout(resolve, 500 - elapsed));
+    
     if (file) {
       setSketches((curr) => ({
         ...curr,
