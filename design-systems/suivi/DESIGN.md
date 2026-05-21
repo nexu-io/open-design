@@ -63,10 +63,10 @@ Each tag uses a light background paired with an accent color for text/badge:
 | Theme | Background | Accent | Use case |
 |-------|-----------|--------|----------|
 | Lavender Mist | `#F1E1FF` | `#7B4DB0` | Default/generic tags |
-| Lavender | `#E0D0FF` | `#6926FF` | Category emphasis |
-| Mint Green | `#D7FCE2` | `#0E9E6E` | Success/complete tags |
-| Pink Lace | `#FBEAFD` | `#E83064` | Urgent/priority tags |
-| Alice Blue | `#DAF0FF` | `#4A69FF` | Info/reference tags |
+| Lavender | `#E0D0FF` | `#6725FA` | Category emphasis |
+| Mint Green | `#D7FCE2` | `#0B7E58` | Success/complete tags |
+| Pink Lace | `#FBEAFD` | `#CC2A58` | Urgent/priority tags |
+| Alice Blue | `#DAF0FF` | `#425DE3` | Info/reference tags |
 | Lemon Chiffon | `#F6F7C6` | `#6B6B00` | Warning/attention tags |
 | Timberwolf | `#E0E0D6` | `#5C5E2E` | Neutral/archive tags |
 | Anti-flash White | `#F2EEED` | `#5F5F78` | Disabled/inactive tags |
