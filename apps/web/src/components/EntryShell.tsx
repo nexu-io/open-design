@@ -53,6 +53,7 @@ import { CenteredLoader } from './Loading';
 import { DesignsTab } from './DesignsTab';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { DesignSystemsTab } from './DesignSystemsTab';
+import { PagePatternPreviewModal } from './PagePatternPreviewModal';
 import { PagePatternsTab } from './PagePatternsTab';
 import { EntryNavRail, type EntryView as EntryViewKind } from './EntryNavRail';
 import { GithubStarBadge } from './GithubStarBadge';
@@ -694,6 +695,12 @@ export function EntryShell({
         <DesignSystemPreviewModal
           system={previewSystem}
           onClose={() => setPreviewSystemId(null)}
+        />
+      ) : null}
+      {previewPagePatternId ? (
+        <PagePatternPreviewModal
+          patternId={previewPagePatternId}
+          onClose={() => setPreviewPagePatternId(null)}
         />
       ) : null}
       <NewProjectModal
