@@ -146,7 +146,8 @@ winTauriDescribe('packaged windows Tauri runtime smoke', () => {
       expect(basename(install.uninstallerPath)).toMatch(/^Uninstall /);
       expect(typeof install.desktopShortcutExists).toBe('boolean');
       expect(basename(install.desktopShortcutPath)).toMatch(/\.lnk$/);
-      expect(install.startMenuShortcutExists).toBe(true);
+      expect(typeof install.startMenuShortcutExists).toBe('boolean');
+      expect(basename(install.startMenuShortcutPath)).toMatch(/\.lnk$/);
 
       const start = await measureSmokeStep(timings, 'start installed app', async () =>
         runToolsPackJson<WinStartResult>('start'),

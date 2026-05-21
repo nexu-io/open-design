@@ -40,6 +40,7 @@ const STAMP_IPC_FLAG: &str = "--od-stamp-ipc";
 const STAMP_MODE_FLAG: &str = "--od-stamp-mode";
 const STAMP_NAMESPACE_FLAG: &str = "--od-stamp-namespace";
 const STAMP_SOURCE_FLAG: &str = "--od-stamp-source";
+const SIDECAR_ENV_BASE: &str = "OD_SIDECAR_BASE";
 const SIDECAR_ENV_IPC_PATH: &str = "OD_SIDECAR_IPC_PATH";
 const SIDECAR_ENV_NAMESPACE: &str = "OD_SIDECAR_NAMESPACE";
 const SIDECAR_ENV_SOURCE: &str = "OD_SIDECAR_SOURCE";
@@ -72,7 +73,7 @@ type HmacSha256 = Hmac<Sha256>;
 type PendingEvalSender = oneshot::Sender<Value>;
 
 #[allow(dead_code)]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 struct RuntimeStamp {
     app: String,
     ipc: String,
@@ -301,6 +302,67 @@ fn start_packaged_sidecars(app: &tauri::App, state: &AppState) -> Result<Option<
         .spawn()
         .map(Some)
         .map_err(|error| format!("packaged Tauri sidecar helper failed to start: {error}"))
+}
+
+fn write_packaged_desktop_identity_marker(
+    app: &tauri::App,
+    state: &AppState,
+) -> Result<(), String> {
+    if state.stamp.source == SIDECAR_SOURCE_TOOLS_DEV {
+        return Ok(());
+    }
+    if state.stamp.source != SIDECAR_SOURCE_TOOLS_PACK && state.stamp.source != "packaged" {
+        return Ok(());
+    }
+
+    let runtime_root = env::var(SIDECAR_ENV_BASE)
+        .map(PathBuf::from)
+        .map_err(|_| format!("missing {SIDECAR_ENV_BASE} for packaged Tauri desktop identity"))?;
+    let namespace_root = runtime_root.parent().ok_or_else(|| {
+        format!(
+            "packaged Tauri runtime root did not have a namespace parent: {}",
+            runtime_root.display()
+        )
+    })?;
+    let logs_root = namespace_root.join("logs").join(APP_DESKTOP);
+    fs::create_dir_all(&runtime_root).map_err(|error| {
+        format!("packaged Tauri runtime directory could not be created: {error}")
+    })?;
+    fs::create_dir_all(&logs_root).map_err(|error| {
+        format!("packaged Tauri desktop log directory could not be created: {error}")
+    })?;
+
+    let executable_path = env::current_exe()
+        .map_err(|error| format!("current executable path could not be resolved: {error}"))?;
+    let app_path = resolve_resource_dir(app).unwrap_or_else(|_| {
+        executable_path
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| PathBuf::from(""))
+    });
+    let now = now_rfc3339();
+    let identity = json!({
+        "appPath": app_path.to_string_lossy(),
+        "executablePath": executable_path.to_string_lossy(),
+        "logPath": logs_root.join("latest.log").to_string_lossy(),
+        "namespaceRoot": namespace_root.to_string_lossy(),
+        "pid": process::id(),
+        "ppid": 0,
+        "stamp": &state.stamp,
+        "startedAt": now,
+        "updatedAt": now,
+        "version": 1,
+    });
+    let identity_path = runtime_root.join("desktop-root.json");
+    let payload = serde_json::to_vec_pretty(&identity).map_err(|error| {
+        format!("packaged Tauri desktop identity could not be encoded: {error}")
+    })?;
+    fs::write(&identity_path, payload).map_err(|error| {
+        format!(
+            "packaged Tauri desktop identity could not be written at {}: {error}",
+            identity_path.display()
+        )
+    })
 }
 
 fn terminate_child_process(child: &mut Child) {
@@ -1286,6 +1348,7 @@ fn main() {
             let window = app
                 .get_webview_window("main")
                 .ok_or_else(|| "missing main Tauri window".to_string())?;
+            write_packaged_desktop_identity_marker(app, &state)?;
             if let Some(child) = start_packaged_sidecars(app, &state)? {
                 *state
                     .packaged_sidecars

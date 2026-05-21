@@ -94,6 +94,7 @@ describe('dialog artifact consistency', () => {
 
       const page = await context.newPage();
       await page.goto('/', { waitUntil: 'domcontentloaded' });
+      await expectEntryRouteReady(page);
       await page.evaluate(({ projectId, conversationId }) => {
         const target = `/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}`;
         window.history.pushState(null, '', target);
@@ -197,6 +198,11 @@ async function expectWorkspaceReady(page: Page) {
   await playwrightExpect(page.getByTestId('chat-composer')).toBeVisible();
   await playwrightExpect(page.getByTestId('chat-composer-input')).toBeVisible();
   await playwrightExpect(page.getByTestId('file-workspace')).toBeVisible();
+}
+
+async function expectEntryRouteReady(page: Page) {
+  await waitForLoadingToClear(page);
+  await playwrightExpect(page.getByTestId('home-hero')).toBeVisible({ timeout: 15_000 });
 }
 
 async function waitForLoadingToClear(page: Page) {

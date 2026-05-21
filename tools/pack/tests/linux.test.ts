@@ -697,6 +697,18 @@ describe("matchesAppImageProcess", () => {
     expect(ok).toBe(true);
   });
 
+  it("matches --appimage-extract-and-run mode with nested Tauri AppImage executables", () => {
+    const ok = matchesAppImageProcess(
+      {
+        pid: 1234,
+        executable: "/tmp/appimage_extracted_fe548e54/usr/bin/open-design-desktop-tauri",
+        env: { APPIMAGE: installPath },
+      },
+      installPath,
+    );
+    expect(ok).toBe(true);
+  });
+
   it("rejects extract-and-run mode with mismatched APPIMAGE env", () => {
     const ok = matchesAppImageProcess(
       {
