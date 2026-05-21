@@ -325,6 +325,7 @@ export const th: Dict = {
   'settings.cliEnvCodebuddyApiKey': 'CodeBuddy API key',
   'settings.cliEnvCodebuddyInternetEnvironment': 'สภาพแวดล้อมอินเทอร์เน็ต CodeBuddy',
   'settings.cliEnvCodebuddyInternetEnvDefault': 'Inherit / unset',
+  'settings.cliEnvCodebuddyInternetEnvPublic': 'public (International)',
   'settings.cliEnvCodebuddyInternetEnvInternal': 'internal (China)',
   'settings.cliEnvCodebuddyInternetEnvIoa': 'ioa (iOA enterprise)',
   'settings.cliEnvCodexHome': 'Codex home',

@@ -1132,3 +1132,16 @@ test('spawnEnvForAgent keeps CODEBUDDY_INTERNET_ENVIRONMENT when configured over
 
   assert.equal(env.CODEBUDDY_INTERNET_ENVIRONMENT, 'ioa');
 });
+
+test('spawnEnvForAgent overrides inherited internal with configured public', () => {
+  // When the parent process has CODEBUDDY_INTERNET_ENVIRONMENT=internal but
+  // the user explicitly selects "public (International)" in Settings, the
+  // configured value should override the inherited one.
+  const env = spawnEnvForAgent(
+    'codebuddy',
+    { CODEBUDDY_API_KEY: 'cb-test-key', CODEBUDDY_INTERNET_ENVIRONMENT: 'internal', PATH: '/usr/bin' },
+    { CODEBUDDY_INTERNET_ENVIRONMENT: 'public' },
+  );
+
+  assert.equal(env.CODEBUDDY_INTERNET_ENVIRONMENT, 'public');
+});

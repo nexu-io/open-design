@@ -345,6 +345,7 @@ export const zhCN: Dict = {
   'settings.cliEnvCodebuddyApiKey': 'CodeBuddy API key',
   'settings.cliEnvCodebuddyInternetEnvironment': 'CodeBuddy 网络环境',
   'settings.cliEnvCodebuddyInternetEnvDefault': '继承 / 未设置',
+  'settings.cliEnvCodebuddyInternetEnvPublic': 'public（海外版）',
   'settings.cliEnvCodebuddyInternetEnvInternal': 'internal（中国版）',
   'settings.cliEnvCodebuddyInternetEnvIoa': 'ioa（iOA 企业版）',
   'settings.cliEnvCodexHome': 'Codex home',

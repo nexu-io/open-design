@@ -174,7 +174,7 @@ const AGENT_CLI_ENV_KEYS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 // Closed-enum env keys: value must be one of the listed strings or empty.
 const AGENT_CLI_ENV_ENUMS: ReadonlyMap<string, ReadonlyMap<string, ReadonlySet<string>>> = new Map([
   ['codebuddy', new Map([
-    ['CODEBUDDY_INTERNET_ENVIRONMENT', new Set(['internal', 'ioa'])],
+    ['CODEBUDDY_INTERNET_ENVIRONMENT', new Set(['public', 'internal', 'ioa'])],
   ])],
 ]);
 

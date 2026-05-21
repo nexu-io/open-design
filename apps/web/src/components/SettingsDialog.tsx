@@ -525,6 +525,7 @@ const AGENT_CLI_ENV_FIELDS = [
     labelKey: 'settings.cliEnvCodebuddyInternetEnvironment',
     options: [
       { value: '', labelKey: 'settings.cliEnvCodebuddyInternetEnvDefault' },
+      { value: 'public', labelKey: 'settings.cliEnvCodebuddyInternetEnvPublic' },
       { value: 'internal', labelKey: 'settings.cliEnvCodebuddyInternetEnvInternal' },
       { value: 'ioa', labelKey: 'settings.cliEnvCodebuddyInternetEnvIoa' },
     ],
