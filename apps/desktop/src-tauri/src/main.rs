@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     env, fs,
+    io::Write,
     path::{Path, PathBuf},
     process::{self, Child, Command, Stdio},
     sync::{Arc, Mutex},
@@ -294,6 +295,38 @@ fn start_packaged_sidecars(app: &tauri::App, state: &AppState) -> Result<Option<
             helper_path.display()
         ));
     }
+    let runtime_root = env::var(SIDECAR_ENV_BASE)
+        .map(PathBuf::from)
+        .map_err(|_| format!("missing {SIDECAR_ENV_BASE} for packaged Tauri sidecar helper"))?;
+    let namespace_root = runtime_root.parent().ok_or_else(|| {
+        format!(
+            "packaged Tauri runtime root did not have a namespace parent: {}",
+            runtime_root.display()
+        )
+    })?;
+    let desktop_log_path = namespace_root
+        .join("logs")
+        .join(APP_DESKTOP)
+        .join("latest.log");
+    if let Some(parent) = desktop_log_path.parent() {
+        fs::create_dir_all(parent).map_err(|error| {
+            format!("packaged Tauri desktop log directory could not be created: {error}")
+        })?;
+    }
+    let mut helper_log = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&desktop_log_path)
+        .map_err(|error| format!("packaged Tauri desktop log could not be opened: {error}"))?;
+    writeln!(
+        helper_log,
+        "[open-design tauri] starting sidecar helper {}",
+        helper_path.display()
+    )
+    .map_err(|error| format!("packaged Tauri sidecar helper log write failed: {error}"))?;
+    let helper_err_log = helper_log
+        .try_clone()
+        .map_err(|error| format!("packaged Tauri sidecar helper log clone failed: {error}"))?;
     let config_path = env::var(PACKAGED_CONFIG_PATH_ENV)
         .map(PathBuf::from)
         .unwrap_or_else(|_| resource_dir.join("open-design-config.json"));
@@ -304,8 +337,8 @@ fn start_packaged_sidecars(app: &tauri::App, state: &AppState) -> Result<Option<
         .env(TAURI_RESOURCE_DIR_ENV, &resource_dir)
         .env(PACKAGED_CONFIG_PATH_ENV, config_path)
         .stdin(Stdio::null())
-        .stdout(Stdio::inherit())
-        .stderr(Stdio::inherit());
+        .stdout(Stdio::from(helper_log))
+        .stderr(Stdio::from(helper_err_log));
     command
         .spawn()
         .map(Some)

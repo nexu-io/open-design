@@ -20,6 +20,7 @@ const screenshotPath = process.env.OD_PACKAGED_E2E_SCREENSHOT_PATH ?? join(tools
 const healthExpression = "fetch('/api/health').then(async response => ({ health: await response.json(), href: location.href, status: response.status, title: document.title }))";
 const reuseBuild = process.env.OD_PACKAGED_E2E_REUSE_BUILD === '1';
 const winTauriSmokeTimeoutMs = Number(process.env.OD_PACKAGED_E2E_WIN_TAURI_TIMEOUT_MS ?? 45 * 60_000);
+const winTauriHealthyTimeoutMs = Number(process.env.OD_PACKAGED_E2E_WIN_TAURI_HEALTH_TIMEOUT_MS ?? 4 * 60_000);
 
 type DesktopStatus = {
   state?: string;
@@ -345,11 +346,10 @@ async function readBuildJson<T>(): Promise<T> {
 }
 
 async function waitForHealthyDesktop(): Promise<WinInspectResult> {
-  const timeoutMs = 90_000;
   const startedAt = Date.now();
   let lastResult: unknown = null;
 
-  while (Date.now() - startedAt < timeoutMs) {
+  while (Date.now() - startedAt < winTauriHealthyTimeoutMs) {
     try {
       const inspect = await runToolsPackJson<WinInspectResult>('inspect', ['--expr', healthExpression]);
       lastResult = inspect;
