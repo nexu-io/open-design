@@ -1,4 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useAnalytics } from '../analytics/provider';
+import {
+  trackDesignSystemsTemplateCardClick,
+  trackDesignSystemsTopClick,
+  trackPageView,
+} from '../analytics/events';
 import { useI18n } from '../i18n';
 import {
   localizeDesignSystemCategory,
@@ -11,7 +17,7 @@ import {
 } from '../providers/registry';
 import { buildSrcdoc } from '../runtime/srcdoc';
 import { Icon } from './Icon';
-import type { DesignSystemSummary, Surface } from '../types';
+import type { DesignSystemSummary, ProjectTemplate, Surface } from '../types';
 
 interface Props {
   systems: DesignSystemSummary[];
@@ -21,6 +27,7 @@ interface Props {
   onCreate?: () => void;
   onOpenSystem?: (id: string) => void;
   onSystemsRefresh?: () => Promise<void> | void;
+  templates?: ProjectTemplate[];
 }
 
 const CATEGORY_ORDER = [
@@ -77,6 +84,26 @@ export function DesignSystemsTab({
   onSystemsRefresh,
 }: Props) {
   const { locale, t } = useI18n();
+  const analytics = useAnalytics();
+  const designSystemsPageViewFiredRef = useRef(false);
+  useEffect(() => {
+    if (designSystemsPageViewFiredRef.current) return;
+    designSystemsPageViewFiredRef.current = true;
+    // v2 doc: the DS list page also carries `area` / `view_type` /
+    // `entry_from` so it can stitch the cross-surface DS funnel.
+    // `entry_from` is `unknown` here because the tab is reached
+    // through the home nav rail; a router-aware entry mapper can
+    // refine this later.
+    trackPageView(analytics.track, {
+      page_name: 'design_systems',
+      area: 'design_system_list',
+      view_type: 'page',
+      entry_from: 'unknown',
+      available_design_system_count: systems.length,
+    });
+  }, [analytics.track, systems.length]);
+  const searchTrackedRef = useRef(false);
+  const categoryTrackedRef = useRef(false);
   const [filter, setFilter] = useState('');
   const [userFilter, setUserFilter] = useState<UserListFilter>('all');
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -105,7 +132,10 @@ export function DesignSystemsTab({
     return editable.filter((system) => (system.status ?? 'draft') === userFilter);
   }, [systems, userFilter]);
 
-  const surfaceCounts = useMemo(() => {
+  // Total systems per surface, ignoring every active filter. Drives the
+  // "this surface is now empty" fallback below — that guard must react to
+  // the catalog itself, not to a transient style/search filter.
+  const surfaceTotals = useMemo(() => {
     const counts: Record<SurfaceFilter, number> = { all: librarySystems.length, web: 0, image: 0, video: 0, audio: 0 };
     for (const s of librarySystems) counts[surfaceOf(s)]++;
     return counts;
@@ -124,17 +154,21 @@ export function DesignSystemsTab({
   // If the currently selected surface has zero items, fall back to 'all'.
   // If the current category is no longer present in the filtered list, fall back to 'All'.
   useEffect(() => {
-    if (surfaceFilter !== 'all' && surfaceCounts[surfaceFilter] === 0) {
+    if (surfaceFilter !== 'all' && surfaceTotals[surfaceFilter] === 0) {
       setSurfaceFilter('all');
       setCategory('All');
     } else if (category !== 'All' && !categories.includes(category)) {
       setCategory('All');
     }
-  }, [systems, surfaceFilter, surfaceCounts, category, categories]);
+  }, [systems, surfaceFilter, surfaceTotals, category, categories]);
 
-  const filtered = useMemo(() => {
+  // Systems matching the active style category and search text, before the
+  // surface filter is applied. Both the surface pill counts and the visible
+  // grid derive from this so a surface chip always reports its own result
+  // set rather than the unfiltered catalog total.
+  const queryScoped = useMemo(() => {
     const q = filter.trim().toLowerCase();
-    return surfaceScoped.filter((s) => {
+    return librarySystems.filter((s) => {
       if (category !== 'All' && (s.category || 'Uncategorized') !== category) return false;
       if (!q) return true;
       const summary = localizeDesignSystemSummary(locale, s).toLowerCase();
@@ -149,7 +183,22 @@ export function DesignSystemsTab({
         categoryLabel.includes(q)
       );
     });
-  }, [surfaceScoped, filter, category, locale]);
+  }, [librarySystems, filter, category, locale]);
+
+  const surfaceCounts = useMemo(() => {
+    const counts: Record<SurfaceFilter, number> = {
+      all: queryScoped.length, web: 0, image: 0, video: 0, audio: 0,
+    };
+    for (const s of queryScoped) counts[surfaceOf(s)]++;
+    return counts;
+  }, [queryScoped]);
+
+  const filtered = useMemo(
+    () => surfaceFilter === 'all'
+      ? queryScoped
+      : queryScoped.filter((s) => surfaceOf(s) === surfaceFilter),
+    [queryScoped, surfaceFilter],
+  );
 
   // Category metadata is authored in English; keep raw values in state for
   // filtering while localizing the visible labels for the current UI locale.
@@ -343,11 +392,29 @@ export function DesignSystemsTab({
             data-testid="design-systems-search"
             placeholder={t('ds.searchPlaceholder')}
             value={filter}
+            onFocus={() => {
+              if (searchTrackedRef.current) return;
+              searchTrackedRef.current = true;
+              trackDesignSystemsTopClick(analytics.track, {
+                page_name: 'design_systems',
+                area: 'design_systems',
+                element: 'search_input',
+              });
+            }}
             onChange={(e) => setFilter(e.target.value)}
           />
           <select
             data-testid="design-systems-category-select"
             value={category}
+            onFocus={() => {
+              if (categoryTrackedRef.current) return;
+              categoryTrackedRef.current = true;
+              trackDesignSystemsTopClick(analytics.track, {
+                page_name: 'design_systems',
+                area: 'design_systems',
+                element: 'search_dropdown',
+              });
+            }}
             onChange={(e) => setCategory(e.target.value)}
           >
             {categories.map((c) => (
@@ -363,7 +430,13 @@ export function DesignSystemsTab({
           aria-label={t('ds.surfaceLabel')}
         >
           <span className="examples-filter-label">{t('ds.surfaceLabel')}</span>
-          {SURFACE_PILLS.filter((p) => p.value === 'all' || surfaceCounts[p.value] > 0).map((p) => (
+          {/* Hide chips with no items in the active style/search filter, but
+              always keep "all" and the currently selected surface — otherwise a
+              transient search could remove the active chip and leave the grid
+              filtered with no chip showing aria-selected. */}
+          {SURFACE_PILLS.filter(
+            (p) => p.value === surfaceFilter || p.value === 'all' || surfaceCounts[p.value] > 0,
+          ).map((p) => (
             <button
               key={p.value}
               type="button"
@@ -372,8 +445,13 @@ export function DesignSystemsTab({
               data-testid={`design-systems-surface-${p.value}`}
               className={`filter-pill ${surfaceFilter === p.value ? 'active' : ''}`}
               onClick={() => {
+                trackDesignSystemsTopClick(analytics.track, {
+                  page_name: 'design_systems',
+                  area: 'design_systems',
+                  element: 'filter_chip',
+                  filter_name: p.value,
+                });
                 setSurfaceFilter(p.value);
-                setCategory('All');
               }}
             >
               {t(p.labelKey)}
@@ -392,9 +470,26 @@ export function DesignSystemsTab({
                 active={s.id === selectedId}
                 thumbHtml={thumbs[s.id]}
                 onIntersect={() => loadThumb(s.id)}
-                onSelect={() => onSelect(s.id)}
-                onOpenSystem={onOpenSystem ? () => onOpenSystem(s.id) : undefined}
-                onPreview={() => onPreview(s.id)}
+                onSelect={() => {
+                  trackDesignSystemsTemplateCardClick(analytics.track, {
+                    page_name: 'design_systems',
+                    area: 'templates_card',
+                    element: 'templates_card',
+                    templates_id: s.id,
+                    templates_type: s.source ?? 'library',
+                  });
+                  onSelect(s.id);
+                }}
+                onPreview={() => {
+                  trackDesignSystemsTemplateCardClick(analytics.track, {
+                    page_name: 'design_systems',
+                    area: 'templates_card',
+                    element: 'templates_card',
+                    templates_id: s.id,
+                    templates_type: s.source ?? 'library',
+                  });
+                  onPreview(s.id);
+                }}
               />
             ))}
           </div>
@@ -410,7 +505,6 @@ interface CardProps {
   thumbHtml: string | null | undefined;
   onIntersect: () => void;
   onSelect: () => void;
-  onOpenSystem?: () => void;
   onPreview: () => void;
 }
 
@@ -420,7 +514,6 @@ function DesignSystemCard({
   thumbHtml,
   onIntersect,
   onSelect,
-  onOpenSystem,
   onPreview,
 }: CardProps) {
   const { locale, t } = useI18n();
@@ -537,19 +630,6 @@ function DesignSystemCard({
             </div>
           ) : null}
         </div>
-        {onOpenSystem ? (
-          <button
-            type="button"
-            className="ghost"
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenSystem();
-            }}
-          >
-            <Icon name={system.isEditable ? 'edit' : 'external-link'} />
-            {system.isEditable ? 'Edit' : 'Open'}
-          </button>
-        ) : null}
       </div>
     </div>
   );

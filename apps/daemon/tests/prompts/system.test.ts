@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { composeSystemPrompt } from '../../src/prompts/system.js';
+import { composeSystemPrompt, resolveExclusiveSurface } from '../../src/prompts/system.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -81,6 +81,64 @@ describe('composeSystemPrompt — activeStageBlocks splice (spec §23.4)', () =>
 });
 
 describe('composeSystemPrompt', () => {
+  it('injects Chinese quick brief guidance when the UI locale is zh-CN', () => {
+    const prompt = composeSystemPrompt({ locale: 'zh-CN' });
+
+    expect(prompt).toContain('# UI locale override');
+    expect(prompt).toContain('`zh-CN` (Simplified Chinese)');
+    expect(prompt).toContain('快速简报 — 30 秒');
+    expect(prompt).toContain('目标用户');
+    expect(prompt).toContain('视觉调性');
+    expect(prompt).toContain('Keep machine-readable ids and object option `value` fields exact and unlocalized');
+  });
+
+  it('preserves canonical default task-type options under locale overrides', () => {
+    const prompt = composeSystemPrompt({ locale: 'zh-CN' });
+
+    expect(prompt).toContain(
+      'keep the `taskType` option labels as the canonical routing choices',
+    );
+    for (const option of [
+      'Prototype',
+      'Live artifact',
+      'Slide deck',
+      'Image',
+      'Video',
+      'HyperFrames',
+      'Audio',
+      'Other',
+    ]) {
+      expect(prompt).toContain(`"${option}"`);
+    }
+    expect(prompt).not.toContain('option labels as `原型`');
+    expect(prompt).not.toContain('`实时作品`');
+  });
+
+  it('preserves canonical default task-type options for zh-TW locale overrides', () => {
+    const prompt = composeSystemPrompt({ locale: 'zh-TW' });
+
+    expect(prompt).toContain('# UI locale override');
+    expect(prompt).toContain('`zh-TW` (Traditional Chinese)');
+    expect(prompt).toContain(
+      'keep the `taskType` option labels as the canonical routing choices',
+    );
+    for (const option of [
+      'Prototype',
+      'Live artifact',
+      'Slide deck',
+      'Image',
+      'Video',
+      'HyperFrames',
+      'Audio',
+      'Other',
+    ]) {
+      expect(prompt).toContain(`"${option}"`);
+    }
+    expect(prompt).not.toContain('快速简报 — 30 秒');
+    expect(prompt).not.toContain('option labels as `原型`');
+    expect(prompt).not.toContain('`实时作品`');
+  });
+
   it('treats an active design system as the visual direction', () => {
     const prompt = composeSystemPrompt({
       designSystemTitle: 'ComfyUI',
@@ -186,6 +244,34 @@ describe('composeSystemPrompt', () => {
     expect(prompt).toContain('- **kind**: deck');
     expect(prompt).not.toContain('**responsive web contract**');
     expect(prompt).not.toContain('**platformTargets**');
+  });
+
+  it('uses the primary skill surface when composed skill modes conflict', () => {
+    const prompt = composeSystemPrompt({
+      skillMode: 'image',
+      skillModes: ['deck', 'image'],
+    });
+
+    expect(prompt).toContain('## Media generation contract');
+    expect(prompt).not.toContain('# Slide deck — fixed framework');
+  });
+
+  it('lets metadata.kind win over conflicting composed skill modes', () => {
+    const prompt = composeSystemPrompt({
+      skillMode: 'image',
+      skillModes: ['deck', 'image'],
+      metadata: { kind: 'deck' } as any,
+    });
+
+    expect(prompt).toContain('# Slide deck — fixed framework');
+    expect(prompt).not.toContain('## Media generation contract');
+  });
+
+  it('resolves a non-media primary surface ahead of composed media mentions', () => {
+    expect(resolveExclusiveSurface({
+      skillMode: 'deck',
+      skillModes: ['deck', 'image'],
+    })).toBe('deck');
   });
 
   describe('artifact handoff no-emit clauses (#1143)', () => {
@@ -325,6 +411,31 @@ describe('composeSystemPrompt', () => {
       expect(prompt).toContain('class="btn btn-primary"');
     });
 
+    it('places USAGE.md before DESIGN.md so it acts as the package router', () => {
+      const prompt = composeSystemPrompt({
+        designSystemTitle: 'default',
+        designSystemBody: 'PROSE_BODY_MARKER',
+        designSystemUsageMd: 'Read Order: inspect the manifest cache before source evidence.',
+      });
+
+      const usageAt = prompt.indexOf('## How to use this design system — default');
+      const proseAt = prompt.indexOf('## Active design system — default');
+      expect(usageAt).toBeGreaterThan(0);
+      expect(proseAt).toBeGreaterThan(usageAt);
+      expect(prompt).toContain('Read Order: inspect the manifest cache before source evidence.');
+    });
+
+    it('injects a small default usage router for legacy brands with no USAGE.md', () => {
+      const prompt = composeSystemPrompt({
+        designSystemTitle: 'legacy',
+        designSystemBody: '# Legacy\n\nProse description.',
+      });
+
+      expect(prompt).toContain('## How to use this design system — legacy');
+      expect(prompt).toContain('Read DESIGN.md for visual principles');
+      expect(prompt).toContain('do not assume those files have already been loaded');
+    });
+
     it('prefers the component manifest over the full fixture when both are present', () => {
       const prompt = composeSystemPrompt({
         designSystemTitle: 'default',
@@ -384,6 +495,32 @@ describe('composeSystemPrompt', () => {
       });
       expect(manifestOnly).not.toContain('## Active design system tokens');
       expect(manifestOnly).toContain('## Reference component manifest — default');
+    });
+
+    it('adds the pull-layer index without loading pull-layer file contents', () => {
+      const prompt = composeSystemPrompt({
+        designSystemTitle: 'default',
+        designSystemBody: '# x\n\nbody',
+        designSystemPullIndex:
+          'Additional design-system files declared by manifest.json:\n- preview/colors.html: Colors; colors\n- source/evidence.md: import evidence notes',
+      });
+
+      expect(prompt).toContain('## Pull-layer files available on demand — default');
+      expect(prompt).toContain('preview/colors.html: Colors; colors');
+      expect(prompt).toContain('source/evidence.md: import evidence notes');
+      expect(prompt).toContain('Keep the push prompt light');
+    });
+
+    it('adds importMode guidance when the manifest declares consumption semantics', () => {
+      const prompt = composeSystemPrompt({
+        designSystemTitle: 'source-heavy',
+        designSystemBody: '# x\n\nbody',
+        designSystemImportMode: 'verbatim',
+      });
+
+      expect(prompt).toContain('## Design system import mode — source-heavy');
+      expect(prompt).toContain('Preserve source semantics and source naming');
+      expect(prompt).toContain('pull-layer source evidence or snippets');
     });
 
     it('places the tokens + component manifest blocks AFTER the DESIGN.md prose block (prose sets voice, structured form binds names)', () => {

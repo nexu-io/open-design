@@ -1,7 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { resolveSystemLocale } from '../../src/i18n';
 import { en } from '../../src/i18n/locales/en';
 import { id } from '../../src/i18n/locales/id';
+import { zhCN } from '../../src/i18n/locales/zh-CN';
+import { zhTW } from '../../src/i18n/locales/zh-TW';
 import { LOCALES, LOCALE_LABEL, type Dict, type Locale } from '../../src/i18n/types';
 
 const EXPECTED_LOCALES = ['en', 'id', 'de', 'zh-CN', 'zh-TW', 'pt-BR', 'es-ES', 'ru', 'fa', 'ar', 'ja', 'ko', 'pl', 'hu', 'fr', 'uk', 'tr', 'th', 'it'];
@@ -33,6 +36,15 @@ function explicitLocaleKeys(locale: Locale): string[] {
 }
 
 describe('i18n locales', () => {
+  it('resolves the initial locale from browser language preferences', () => {
+    expect(resolveSystemLocale(['zh-Hans-CN', 'en-US'])).toBe('zh-CN');
+    expect(resolveSystemLocale(['zh-Hant-HK', 'en-US'])).toBe('zh-TW');
+    expect(resolveSystemLocale(['pt-PT', 'en-US'])).toBe('pt-BR');
+    expect(resolveSystemLocale(['es-MX', 'en-US'])).toBe('es-ES');
+    expect(resolveSystemLocale(['nl-NL', 'en-US'])).toBe('en');
+    expect(resolveSystemLocale(['nl-NL'])).toBeNull();
+  });
+
   it('registers every supported locale in the language menu', () => {
     expect(LOCALES).toEqual(EXPECTED_LOCALES);
     expect((LOCALE_LABEL as Record<string, string>).id).toBe('Bahasa Indonesia');
@@ -111,6 +123,62 @@ describe('i18n locales', () => {
 
     for (const key of translatedKeys) {
       expect(id[key], key).not.toBe(en[key]);
+    }
+  });
+
+  it('keeps Chinese integrations copy translated instead of falling back to English', () => {
+    const translatedKeys: Array<keyof Dict> = [
+      'entry.navIntegrations',
+      'integrations.kicker',
+      'integrations.lede',
+      'integrations.agentReady',
+      'integrations.tabLabel.mcp',
+      'integrations.tabLabel.skills',
+      'integrations.tabHint.mcp',
+      'integrations.tabHint.connectors',
+      'integrations.tabHint.useEverywhere',
+      'integrations.skillsTitle',
+      'integrations.skillsBody',
+      'mcpClient.title',
+      'mcpClient.subtitle',
+      'mcpClient.addServer',
+      'mcpClient.emptyTitle',
+      'mcpClient.emptyBody',
+      'mcpClient.saveChanges',
+      'mcpClient.storedAt',
+      'mcpClient.daemonError',
+      'mcpClient.saveFailed',
+      'tasks.comingSoon',
+    ];
+
+    for (const key of translatedKeys) {
+      expect(zhCN[key], `zh-CN.${key}`).not.toBe(en[key]);
+      expect(zhTW[key], `zh-TW.${key}`).not.toBe(en[key]);
+    }
+  });
+
+  it('keeps Routines settings page copy translated in Chinese (issue #1372)', () => {
+    const translatedKeys: Array<keyof Dict> = [
+      'routines.title',
+      'routines.subtitle',
+      'routines.newAutomation',
+      'routines.runNow',
+      'routines.pause',
+      'routines.resume',
+      'routines.history',
+      'routines.delete',
+      'routines.describe.daily',
+      'routines.describe.weekly',
+      'routines.status.succeeded',
+      'routines.status.failed',
+      'routines.modeCreate',
+      'routines.confirmDelete',
+      'routines.errorPickProject',
+    ];
+
+    for (const key of translatedKeys) {
+      expect(zhCN[key], `zh-CN.${key}`).not.toBe(en[key]);
+      expect(zhTW[key], `zh-TW.${key}`).not.toBe(en[key]);
     }
   });
 

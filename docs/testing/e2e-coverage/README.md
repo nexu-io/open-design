@@ -13,6 +13,7 @@
 
 | 模块 | 覆盖重点 | 对应测试文件 |
 | --- | --- | --- |
+| [status.md](./status.md) | 当前 E2E 分层、最近补强范围、grouped run 状态、已知 intentional gap | `e2e/ui/app.test.ts`, `e2e/ui/real-daemon-run.test.ts`, `e2e/ui/app-design-files.test.ts`, `e2e/ui/app-restoration.test.ts`, `e2e/ui/project-management-flows.test.ts`, `e2e/ui/entry-configuration-flows.test.ts`, `e2e/ui/workspace-keyboard-flows.test.ts`, `e2e/tests/dialog/artifact-consistency.test.ts` |
 | [entry.md](./entry.md) | 入口页创建路径、连接器入口、提示词模板、资源驱动场景、顶部 chrome | `e2e/ui/app.test.ts`, `e2e/ui/entry-configuration-flows.test.ts`, `e2e/ui/entry-chrome-flows.test.ts` |
 | [project-management.md](./project-management.md) | 首页/项目管理、设计系统、项目重命名、删除流程、搜索与视图切换 | `e2e/ui/project-management-flows.test.ts` |
 | [workspace.md](./workspace.md) | 工作区标签、会话、文件流、快速切换器、手动编辑模式 | `e2e/ui/app.test.ts`, `e2e/ui/workspace-keyboard-flows.test.ts` |

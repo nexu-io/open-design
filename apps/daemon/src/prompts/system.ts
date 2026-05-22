@@ -51,6 +51,38 @@ const PROMPT_SAFE_HTTP_STATUS_LABELS: Record<string, string> = {
   '504': 'Gateway Timeout',
 };
 
+function renderUiLocalePrompt(locale: string | undefined): string {
+  const normalized = locale?.trim();
+  if (!normalized || normalized.toLowerCase() === 'en') return '';
+  const languageName = normalized === 'zh-CN'
+    ? 'Simplified Chinese'
+    : normalized === 'zh-TW'
+      ? 'Traditional Chinese'
+      : normalized;
+  const lines = [
+    '# UI locale override',
+    '',
+    `The Open Design UI locale for this run is \`${normalized}\` (${languageName}). All user-visible chat prose and generated UI controls must follow this locale, especially \`<question-form>\` titles, descriptions, labels, placeholders, helper text, and option labels. Keep machine-readable ids and object option \`value\` fields exact and unlocalized.`,
+    'Exception: for the default task-type form, keep the `taskType` option labels as the canonical routing choices: `Prototype`, `Live artifact`, `Slide deck`, `Image`, `Video`, `HyperFrames`, `Audio`, `Other`. Do not translate, reorder, or rewrite those option labels.',
+  ];
+  if (normalized === 'zh-CN') {
+    lines.push(
+      '',
+      'For the default quick brief in Simplified Chinese, use copy like:',
+      '- title: `快速简报 — 30 秒`',
+      '- description: `开始生成前我会先确认这些信息。不适用的可以跳过，我会补上默认值。`',
+      '- output label/options: `我们要做什么？` / `幻灯片 / 路演稿`, `单页网页原型 / 落地页`, `多屏应用原型`, `数据看板 / 工具界面`, `编辑式 / 营销页面`, `其他 — 我来描述`',
+      '- platform label/options: `目标平台` / `响应式网页`, `桌面网页`, `iOS 应用`, `Android 应用`, `平板应用`, `桌面应用`, `固定画布 (1920×1080)`',
+      '- audience label/placeholder: `目标用户` / `例如：早期投资人、开发者工具采购者、内部高管评审`',
+      '- tone label/options: `视觉调性` / `编辑 / 杂志感`, `现代极简`, `活泼 / 插画感`, `科技 / 工具型`, `奢华 / 精致`, `粗野 / 实验性`, `人性化 / 亲切`',
+      '- brand label/options: `品牌背景` / `帮我选一个方向`, `我有品牌规范 — 稍后分享`, `参考网站 / 截图 — 稍后附上`',
+      '- scale label/placeholder: `大概需要多少内容？` / `例如：8 页幻灯片、1 个落地页 + 3 个子页面、4 个移动端界面`',
+      '- constraints label/placeholder: `还有什么需要知道的吗？` / `真实文案、必须使用的字体、需要避免的内容、截止时间…`',
+    );
+  }
+  return lines.join('\n');
+}
+
 function normalizePromptText(value: string): string {
   return value
     .replace(/[\r\n]+/g, ' ')
@@ -127,6 +159,21 @@ type ProjectMetadata = {
     title?: string | null;
     description?: string | null;
   }> | null;
+  contextMcpServers?: Array<{
+    id?: string | null;
+    label?: string | null;
+    transport?: string | null;
+    url?: string | null;
+    command?: string | null;
+  }> | null;
+  contextConnectors?: Array<{
+    id?: string | null;
+    name?: string | null;
+    provider?: string | null;
+    category?: string | null;
+    status?: string | null;
+    accountLabel?: string | null;
+  }> | null;
 };
 type ProjectTemplate = { name: string; description?: string | null; files: Array<{ name: string; content: string }> };
 type AudioVoiceOption = {
@@ -135,6 +182,37 @@ type AudioVoiceOption = {
   category?: string | null;
   labels?: Record<string, string> | null;
 };
+
+type ExclusiveSurfaceMode = 'deck' | 'image' | 'video' | 'audio';
+
+const EXCLUSIVE_SURFACE_MODES = new Set<ExclusiveSurfaceMode>(['deck', 'image', 'video', 'audio']);
+
+export function resolveExclusiveSurface(args: {
+  metadata?: ProjectMetadata | undefined;
+  skillMode?: ComposeInput['skillMode'] | undefined;
+  skillModes?: ComposeInput['skillModes'] | undefined;
+}): ExclusiveSurfaceMode | null {
+  const activeSkillModes = new Set(
+    Array.isArray(args.skillModes)
+      ? args.skillModes.filter(Boolean)
+      : args.skillMode
+        ? [args.skillMode]
+        : [],
+  );
+  const metadataSurface = EXCLUSIVE_SURFACE_MODES.has(args.metadata?.kind as ExclusiveSurfaceMode)
+    ? args.metadata?.kind as ExclusiveSurfaceMode
+    : null;
+  const primarySkillSurface = EXCLUSIVE_SURFACE_MODES.has(args.skillMode as ExclusiveSurfaceMode)
+    ? args.skillMode as ExclusiveSurfaceMode
+    : null;
+  const composedSurfaceModes = Array.from(activeSkillModes).filter((mode): mode is ExclusiveSurfaceMode =>
+    EXCLUSIVE_SURFACE_MODES.has(mode as ExclusiveSurfaceMode),
+  );
+
+  return metadataSurface
+    ?? primarySkillSurface
+    ?? (composedSurfaceModes.length === 1 ? composedSurfaceModes[0] ?? null : null);
+}
 
 export const BASE_SYSTEM_PROMPT = OFFICIAL_DESIGNER_PROMPT;
 
@@ -156,6 +234,23 @@ Active design system exception: the active design system is the visual direction
 - When a downstream framework mentions "active direction" or "theme tokens", bind those fields from the active design system instead of the built-in direction library.
 `;
 
+const DEFAULT_DESIGN_SYSTEM_USAGE = `Read DESIGN.md for visual principles, paste tokens.css verbatim into the first <style> when it is provided, and match component shapes from the reference component manifest or fixture when available. Treat any pull-layer index as optional context for deeper inspection; do not assume those files have already been loaded.`;
+
+function renderDesignSystemImportModeGuidance(
+  importMode: ComposeInput['designSystemImportMode'],
+): string | undefined {
+  if (importMode === 'normalized') {
+    return 'This package is normalized. Treat tokens.css and DESIGN.md as the contract, and prefer OD token names over source-project names. Use pull-layer source evidence only as optional background.';
+  }
+  if (importMode === 'hybrid') {
+    return 'This package is hybrid. Build with OD-normalized tokens first, then inspect pull-layer source evidence or snippets only when original component behavior, density, or naming would materially improve fidelity.';
+  }
+  if (importMode === 'verbatim') {
+    return 'This package is verbatim-oriented. Preserve source semantics and source naming as much as possible. Before translating component behavior, inspect the relevant pull-layer source evidence or snippets when the runtime tool is available.';
+  }
+  return undefined;
+}
+
 export interface ComposeInput {
   agentId?: string | null | undefined;
   includeCodexImagegenOverride?: boolean | undefined;
@@ -171,6 +266,7 @@ export interface ComposeInput {
     | 'video'
     | 'audio'
     | undefined;
+  skillModes?: Array<'prototype' | 'deck' | 'template' | 'design-system' | 'image' | 'video' | 'audio'> | undefined;
   designSystemBody?: string | undefined;
   designSystemTitle?: string | undefined;
   // Compiled (machine-readable) form of the active brand's design system,
@@ -182,6 +278,8 @@ export interface ComposeInput {
   // prose still sets the high-level voice and the structured form
   // disambiguates token names + worked component shapes.
   //
+  // - `designSystemUsageMd`      — optional USAGE.md router that tells
+  //                                agents how to consume this package.
   // - `designSystemTokensCss`    — verbatim `tokens.css` :root contract
   //                                that the agent pastes into the
   //                                artifact's <style>.
@@ -190,9 +288,15 @@ export interface ComposeInput {
   // - `designSystemFixtureHtml`        — verbatim `components.html`
   //                                      fallback when no manifest can
   //                                      be derived.
+  // - `designSystemPullIndex`          — lightweight manifest-derived
+  //                                      list of richer files available
+  //                                      for later pull-channel work.
+  designSystemUsageMd?: string | undefined;
   designSystemTokensCss?: string | undefined;
   designSystemComponentsManifest?: string | undefined;
   designSystemFixtureHtml?: string | undefined;
+  designSystemPullIndex?: string | undefined;
+  designSystemImportMode?: 'normalized' | 'hybrid' | 'verbatim' | undefined;
   // Craft references the active skill opted into via `od.craft.requires`.
   // The daemon resolves the slug list to file contents and concatenates
   // them with section headers; we inject them between the DESIGN.md and
@@ -263,6 +367,9 @@ export interface ComposeInput {
   // Free-form instructions the user set on this specific project.
   // Injected after user-level instructions and before the design system.
   projectInstructions?: string | undefined;
+  // UI locale selected by the client. User-visible generated form copy
+  // must follow this locale even when the user's initial prompt is brief.
+  locale?: string | undefined;
 }
 
 export function composeSystemPrompt({
@@ -271,11 +378,15 @@ export function composeSystemPrompt({
   skillBody,
   skillName,
   skillMode,
+  skillModes,
   designSystemBody,
   designSystemTitle,
+  designSystemUsageMd,
   designSystemTokensCss,
   designSystemComponentsManifest,
   designSystemFixtureHtml,
+  designSystemPullIndex,
+  designSystemImportMode,
   craftBody,
   craftSections,
   memoryBody,
@@ -290,6 +401,7 @@ export function composeSystemPrompt({
   pluginBlock,
   activeStageBlocks,
   streamFormat,
+  locale,
   userInstructions,
   projectInstructions,
 }: ComposeInput): string {
@@ -299,6 +411,14 @@ export function composeSystemPrompt({
   // wording later in the official base prompt.
   const parts: string[] = [];
   const activeDesignSystemBody = designSystemBody?.trim();
+  const activeSkillModes = new Set(
+    Array.isArray(skillModes)
+      ? skillModes.filter(Boolean)
+      : skillMode
+        ? [skillMode]
+        : [],
+  );
+  const resolvedExclusiveSurface = resolveExclusiveSurface({ metadata, skillMode, skillModes });
 
   // API/BYOK mode (streamFormat === 'plain'): mirrors the same fix from
   // `@open-design/contracts`'s composer. The daemon hits this path for
@@ -315,6 +435,12 @@ export function composeSystemPrompt({
 
   if (metadata?.skipDiscoveryBrief === true) {
     parts.push(SKIP_DISCOVERY_BRIEF_OVERRIDE);
+    parts.push('\n\n---\n\n');
+  }
+
+  const localePrompt = renderUiLocalePrompt(locale);
+  if (localePrompt) {
+    parts.push(localePrompt);
     parts.push('\n\n---\n\n');
   }
 
@@ -343,9 +469,24 @@ export function composeSystemPrompt({
   }
 
   if (activeDesignSystemBody && activeDesignSystemBody.length > 0) {
+    const usageBlock =
+      designSystemUsageMd && designSystemUsageMd.trim().length > 0
+        ? designSystemUsageMd.trim()
+        : DEFAULT_DESIGN_SYSTEM_USAGE;
+    parts.push(
+      `\n\n## How to use this design system${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\n${usageBlock}`,
+    );
+
     parts.push(
       `\n\n## Active design system${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nTreat the following DESIGN.md as authoritative for color, typography, spacing, and component rules. Do not invent tokens outside this palette. When you copy the active skill's seed template, bind these tokens into its \`:root\` block before generating any layout.\n\n${activeDesignSystemBody}`,
     );
+
+    const importModeGuidance = renderDesignSystemImportModeGuidance(designSystemImportMode);
+    if (importModeGuidance) {
+      parts.push(
+        `\n\n## Design system import mode${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\n${importModeGuidance}`,
+      );
+    }
   }
 
   // Structured (compiled) form of the active brand. The DESIGN.md above
@@ -371,6 +512,12 @@ export function composeSystemPrompt({
   } else if (designSystemFixtureHtml && designSystemFixtureHtml.trim().length > 0) {
     parts.push(
       `\n\n## Reference fixture${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nA self-contained worked artifact in this design system. Match its component shapes (button structure, card structure, type-scale rhythm, focus ring, spacing cadence) when generating new artifacts. Copying fragments is encouraged as long as you keep the \`var(--*)\` references intact — they are already wired to the tokens above.\n\n\`\`\`html\n${designSystemFixtureHtml.trim()}\n\`\`\``,
+    );
+  }
+
+  if (designSystemPullIndex && designSystemPullIndex.trim().length > 0) {
+    parts.push(
+      `\n\n## Pull-layer files available on demand${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nThis design-system package declares richer files for inspection, source evidence, or human preview. Keep the push prompt light: use the index below to decide what to read later. When the runtime tool environment is available, read a listed path with \`\"$OD_NODE_BIN\" \"$OD_BIN\" tools design-systems read --path <path>\`; the daemon will reject paths outside this manifest allowlist.\n\n\`\`\`text\n${designSystemPullIndex.trim()}\n\`\`\``,
     );
   }
 
@@ -428,8 +575,8 @@ export function composeSystemPrompt({
   // skeleton would conflict. The skill-seed path takes over via
   // `derivePreflight` above, so we only fire the generic skeleton when no
   // skill seed is on offer.
-  const isDeckProject = skillMode === 'deck' || metadata?.kind === 'deck';
-  const isFreeformProject = !skillMode && (!metadata || metadata.kind === 'other');
+  const isDeckProject = resolvedExclusiveSurface === 'deck';
+  const isFreeformProject = activeSkillModes.size === 0 && (!metadata || metadata.kind === 'other');
   const hasSkillSeed =
     !!skillBody && /assets\/template\.html/.test(skillBody);
   if (isDeckProject && !hasSkillSeed) {
@@ -450,12 +597,9 @@ export function composeSystemPrompt({
   }
 
   const isMediaSurface =
-    skillMode === 'image' ||
-    skillMode === 'video' ||
-    skillMode === 'audio' ||
-    metadata?.kind === 'image' ||
-    metadata?.kind === 'video' ||
-    metadata?.kind === 'audio';
+    resolvedExclusiveSurface === 'image'
+    || resolvedExclusiveSurface === 'video'
+    || resolvedExclusiveSurface === 'audio';
   if (isMediaSurface) {
     parts.push(MEDIA_GENERATION_CONTRACT);
   }
@@ -871,6 +1015,44 @@ function renderMetadataBlock(
         ? ` — ${plugin.description.trim()}`
         : '';
       lines.push(`- ${title}${id ? ` (\`${id}\`)` : ''}${description}`);
+    }
+  }
+
+  if (Array.isArray(metadata.contextMcpServers) && metadata.contextMcpServers.length > 0) {
+    lines.push('');
+    lines.push('### @ MCP context');
+    lines.push(
+      'The user selected these MCP servers as context. Prefer their tools when mounted and relevant before asking where data should come from.',
+    );
+    for (const server of metadata.contextMcpServers) {
+      const id = typeof server.id === 'string' ? server.id : '';
+      const label = typeof server.label === 'string' && server.label.trim().length > 0
+        ? server.label.trim()
+        : id;
+      if (!id && !label) continue;
+      const transport = typeof server.transport === 'string' && server.transport.trim().length > 0
+        ? ` — ${server.transport.trim()}`
+        : '';
+      lines.push(`- ${label}${id ? ` (\`${id}\`)` : ''}${transport}`);
+    }
+  }
+
+  if (Array.isArray(metadata.contextConnectors) && metadata.contextConnectors.length > 0) {
+    lines.push('');
+    lines.push('### @ connector context');
+    lines.push(
+      'The user selected these connectors as context. Use daemon connector tools through the OD CLI wrapper when data from these sources is needed; do not ask the user to identify a source that is already selected.',
+    );
+    for (const connector of metadata.contextConnectors) {
+      const id = typeof connector.id === 'string' ? connector.id : '';
+      const name = typeof connector.name === 'string' && connector.name.trim().length > 0
+        ? connector.name.trim()
+        : id;
+      if (!id && !name) continue;
+      const meta = [connector.provider, connector.status, connector.accountLabel]
+        .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+        .join(' · ');
+      lines.push(`- ${name}${id ? ` (\`${id}\`)` : ''}${meta ? ` — ${meta}` : ''}`);
     }
   }
 

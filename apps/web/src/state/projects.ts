@@ -6,9 +6,12 @@
 // the UI can stay rendered when the daemon is briefly unreachable.
 
 import type {
+  ApiError,
   AppliedPluginSnapshot,
   ApplyResult,
   CreatePluginShareProjectResponse,
+  HandoffRequest,
+  HandoffResponse,
   ImportFolderRequest,
   ImportFolderResponse,
   InstalledPluginRecord,
@@ -254,6 +257,44 @@ export async function createConversation(
   }
 }
 
+// Outcome of a handoff synthesis call. The daemon route classifies its
+// failures (RATE_LIMITED, EMPTY_TRANSCRIPT, an upstream 400 with provider
+// detail, ...); `{ error }` carries that structured error through so the
+// caller can show the real reason instead of a generic message. `null`
+// is reserved for a transport failure or an unparseable error body.
+export type HandoffOutcome = HandoffResponse | { error: ApiError } | null;
+
+// Synthesizes a self-contained "first user message" from the project's
+// chat transcript so a fresh conversation can resume work without the
+// user replaying context by hand. A transport failure returns null; a
+// daemon-classified failure returns `{ error }` so the caller keeps the
+// daemon's message/details rather than collapsing every case into one
+// generic toast.
+export async function synthesizeHandoff(
+  projectId: string,
+  body: HandoffRequest,
+): Promise<HandoffOutcome> {
+  try {
+    const resp = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/handoff`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+    );
+    if (!resp.ok) {
+      const payload = (await resp.json().catch(() => null)) as
+        | { error?: ApiError }
+        | null;
+      return payload?.error ? { error: payload.error } : null;
+    }
+    return (await resp.json()) as HandoffResponse;
+  } catch {
+    return null;
+  }
+}
+
 export async function patchConversation(
   projectId: string,
   conversationId: string,
@@ -311,6 +352,11 @@ export async function listMessages(
 
 export interface SaveMessageOptions {
   telemetryFinalized?: boolean;
+  // Set during page-unload paths (pagehide / visibilitychange→hidden) so
+  // the in-flight PUT survives even if the document tears down before the
+  // response arrives. Without keepalive the browser cancels the fetch
+  // and the daemon never sees the final buffered text chunk.
+  keepalive?: boolean;
 }
 
 export async function saveMessage(
@@ -329,6 +375,7 @@ export async function saveMessage(
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
+        ...(options.keepalive ? { keepalive: true } : {}),
       },
     );
   } catch {

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import { useAnalytics } from './analytics/provider';
-import { trackAppLaunch, trackProjectCreateResult } from './analytics/events';
-import { detectClientType, detectLaunchSource } from './analytics/identity';
+import { trackProjectCreateResult } from './analytics/events';
+import { detectClientType } from './analytics/identity';
 import {
+  deriveConfigureGlobals,
   projectKindToTracking,
   fidelityToTracking,
 } from '@open-design/contracts/analytics';
@@ -16,7 +18,7 @@ import { PetOverlay, type PetTaskCenter } from './components/pet/PetOverlay';
 import { buildPetTaskCenter } from './components/pet/taskCenter';
 import { migrateCustomPetAtlas } from './components/pet/pets';
 import { ProjectView } from './components/ProjectView';
-import { WorkspaceTabsBar } from './components/WorkspaceTabsBar';
+import { openWorkspaceTab, WorkspaceTabsBar } from './components/WorkspaceTabsBar';
 import {
   DesignSystemCreationFlow,
   DesignSystemDetailView,
@@ -61,6 +63,7 @@ import {
   createProject,
   createPluginShareProject,
   deleteProject as deleteProjectApi,
+  getProject,
   importClaudeDesignZip,
   importFolderProject,
   listProjects,
@@ -72,6 +75,7 @@ import type {
   PluginShareAction,
   PluginShareProjectOutcome,
 } from './state/projects';
+import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
 import { useI18n } from './i18n';
 import { liveArtifactTabId } from './types';
 import type {
@@ -231,22 +235,11 @@ export function App() {
   const route = useRoute();
   const analytics = useAnalytics();
 
-  // app_launch — fired exactly once per page load. Mounting in App, not the
-  // RootLayout, so we capture after the first React tick and the analytics
-  // provider has had a chance to wire its identity. Gated on
-  // `config.telemetry?.metrics` so a freshly-opted-in user gets the event
-  // on their next reload, and a declined user fires nothing.
-  const appLaunchFiredRef = useRef(false);
-  useEffect(() => {
-    if (appLaunchFiredRef.current) return;
-    if (config.telemetry?.metrics !== true) return;
-    appLaunchFiredRef.current = true;
-    trackAppLaunch(analytics.track, {
-      page: 'app',
-      launch_source: detectLaunchSource(),
-      platform: detectClientType(),
-    });
-  }, [analytics.track, config.telemetry?.metrics]);
+  // v2 schema removed the standalone `app_launch` event; the initial
+  // page_view fires from each top-level page surface (home / projects /
+  // automations / plugins / design_systems / integrations) instead.
+  // `detectClientType` still feeds analytics identity via the provider.
+  void detectClientType;
 
   // Propagate the Privacy toggle through to PostHog without a reload —
   // posthog-js's opt_out_capturing flips a localStorage flag that makes
@@ -266,6 +259,47 @@ export function App() {
     if (config.telemetry?.metrics !== true) return;
     analytics.setIdentity(config.installationId ?? null);
   }, [analytics.setIdentity, config.installationId, config.telemetry?.metrics]);
+
+  // v2 analytics requires every event to carry the configure-state
+  // triplet (has_available_configure_cli / configure_type /
+  // configure_availability). We push it into the PostHog global register
+  // whenever the user's execution-mode config or the detected agent list
+  // changes; the next capture inherits the fresh values, so dashboards
+  // can segment by execution setup without per-helper boilerplate.
+  //
+  // Gated on `agentsLoading` so the cold-start probe (`fetchAgents()`
+  // lands asynchronously after this effect's first run) does not stamp
+  // the first home/projects/plugins page_view with
+  // has_available_configure_cli=false / configure_availability=unavailable
+  // on machines that DO have an installed CLI. While the probe is in
+  // flight we leave the boot defaults ('unknown'/'unknown') in place,
+  // matching what the helper would return for an empty agent list with
+  // no mode pinned.
+  useEffect(() => {
+    if (agentsLoading) return;
+    const byokConfigured = (() => {
+      const protocols = config.apiProtocolConfigs;
+      if (!protocols) return Boolean(config.apiKey?.trim());
+      return Object.values(protocols).some(
+        (cfg) => Boolean(cfg?.apiKey?.trim()),
+      );
+    })();
+    const globals = deriveConfigureGlobals({
+      mode: config.mode,
+      agentId: config.agentId,
+      agents: agents.map((a) => ({ id: a.id, available: a.available })),
+      byokConfigured,
+    });
+    analytics.setConfigureGlobals(globals);
+  }, [
+    analytics.setConfigureGlobals,
+    agentsLoading,
+    config.mode,
+    config.agentId,
+    config.apiKey,
+    config.apiProtocolConfigs,
+    agents,
+  ]);
 
   // Sync theme preference to the <html> element so CSS variables pick it up.
   // useLayoutEffect (vs useEffect) fires before the browser paints, so a
@@ -438,14 +472,11 @@ export function App() {
           void syncConfigToDaemon(next);
           void syncComposioConfigToDaemon(next.composio);
 
-          // Pop the onboarding modal only on the first run. Once the user
-          // has saved or skipped past it once, we trust their stored config
-          // and let them re-open Settings explicitly via the env pill. Hold
-          // the welcome modal until the privacy decision is resolved; the
-          // installation id can rotate later without re-opening the banner.
+          // Route first-run users through the global onboarding panel after
+          // privacy is resolved. The panel owns completion; Settings stays a
+          // configuration surface rather than the product onboarding path.
           if (!next.onboardingCompleted && next.privacyDecisionAt != null) {
-            setSettingsWelcome(true);
-            setSettingsOpen(true);
+            navigate({ kind: 'home', view: 'onboarding' }, { replace: true });
           }
           return next;
         });
@@ -739,7 +770,7 @@ export function App() {
         requestId?: string;
         pendingFiles?: File[];
       },
-    ) => {
+    ): Promise<boolean> => {
       // Honor an explicit `null` design system — the create panel defaults
       // to "None" for every kind now, and the user expects that to land
       // as a no-design-system project rather than silently inheriting the
@@ -768,19 +799,18 @@ export function App() {
         trackProjectCreateResult(
           analytics.track,
           {
-            page: 'home',
-            area: 'create_panel',
-            action_source: 'create_button',
+            page_name: 'home',
+            area: 'new_project',
+            project_source: 'create_button',
             project_id: null,
             project_kind: projectKindToTracking(kind),
-            creation_source: creationSource,
             fidelity,
             result: 'failed',
             error_code: 'CREATE_REQUEST_FAILED',
           },
           { requestId: input.requestId },
         );
-        return;
+        return false;
       }
       const pendingFiles = Array.isArray(input.pendingFiles)
         ? input.pendingFiles.filter((file): file is File => file instanceof File)
@@ -796,12 +826,11 @@ export function App() {
       trackProjectCreateResult(
         analytics.track,
         {
-          page: 'home',
-          area: 'create_panel',
-          action_source: 'create_button',
+          page_name: 'home',
+          area: 'new_project',
+          project_source: 'create_button',
           project_id: result.project.id,
           project_kind: projectKindToTracking(kind),
-          creation_source: creationSource,
           fidelity,
           result: 'success',
         },
@@ -842,15 +871,20 @@ export function App() {
             appliedPluginSnapshotId: result.appliedPluginSnapshotId,
           }
         : result.project;
-      setProjects((curr) => [
-        project,
-        ...curr.filter((p) => p.id !== project.id),
-      ]);
-      navigate({
+      flushSync(() => {
+        setProjects((curr) => [
+          project,
+          ...curr.filter((p) => p.id !== project.id),
+        ]);
+      });
+      const projectRoute = {
         kind: 'project',
         projectId: project.id,
         fileName: null,
-      });
+      } as const;
+      openWorkspaceTab(projectRoute);
+      navigate(projectRoute);
+      return true;
     },
     [analytics.track],
   );
@@ -916,16 +950,21 @@ export function App() {
     });
   }, []);
 
-  // PR #974: on Electron, the desktop main process owns the picker and
-  // the import POST atomically (`pickAndImport`). The renderer never
-  // sees the path or the HMAC token; it just receives the same
-  // ImportFolderResponse shape that `importFolderProject` would
-  // produce on web, and the App-level state update is identical.
-  const handleImportFolderResponse = useCallback(async (result: import('@open-design/contracts').ImportFolderResponse) => {
-    setProjects((curr) => [result.project, ...curr.filter((p) => p.id !== result.project.id)]);
+  // PR #974: on desktop, the host bridge owns the picker and import POST
+  // atomically. The renderer never sees the path, token, or daemon DTO;
+  // it receives host-owned project identifiers and refreshes project state
+  // through the normal daemon API.
+  const handleImportFolderResponse = useCallback(async (result: OpenDesignHostProjectImportSuccess) => {
+    const project = await getProject(result.projectId);
+    if (project != null) {
+      setProjects((curr) => [project, ...curr.filter((p) => p.id !== project.id)]);
+    } else {
+      const list = await listProjects();
+      setProjects(list);
+    }
     navigate({
       kind: 'project',
-      projectId: result.project.id,
+      projectId: result.projectId,
       fileName: result.entryFile,
     });
   }, []);
@@ -966,11 +1005,12 @@ export function App() {
 
   const handleDeleteProject = useCallback(async (id: string) => {
     const ok = await deleteProjectApi(id);
-    if (!ok) return;
+    if (!ok) return false;
     setProjects((curr) => curr.filter((p) => p.id !== id));
     if (route.kind === 'project' && route.projectId === id) {
       navigate({ kind: 'home', view: 'home' });
     }
+    return true;
   }, [route]);
 
   const handleRenameProject = useCallback(async (id: string, name: string) => {
@@ -1026,6 +1066,18 @@ export function App() {
     if (projects.some((p) => p.id === route.projectId)) return;
     let cancelled = false;
     (async () => {
+      const project = await getProject(route.projectId);
+      if (cancelled) return;
+      if (project) {
+        setProjects((curr) => {
+          const existingIndex = curr.findIndex((candidate) => candidate.id === project.id);
+          if (existingIndex < 0) {
+            return [...curr, project];
+          }
+          return curr.map((candidate) => (candidate.id === project.id ? project : candidate));
+        });
+        return;
+      }
       const list = await listProjects();
       if (cancelled) return;
       setProjects(list);
@@ -1064,6 +1116,16 @@ export function App() {
   const openMcpSettings = useCallback(() => {
     setIntegrationInitialTab('mcp');
     navigate({ kind: 'home', view: 'integrations' });
+  }, []);
+
+  const handleCompleteOnboarding = useCallback(() => {
+    const current = latestPersistedConfigRef.current;
+    if (current.onboardingCompleted) return;
+    const next: AppConfig = { ...current, onboardingCompleted: true };
+    latestPersistedConfigRef.current = next;
+    saveConfig(next);
+    void syncConfigToDaemon(next);
+    setConfig(next);
   }, []);
 
   // Cmd+, (mac) / Ctrl+, (win/linux) opens Settings. Capture phase so we
@@ -1279,6 +1341,8 @@ export function App() {
         onAgentModelChange={handleAgentModelChange}
         onApiProtocolChange={handleApiProtocolChange}
         onApiModelChange={handleApiModelChange}
+        onConfigPersist={handleConfigPersist}
+        onRefreshAgents={refreshAgents}
         onThemeChange={handleThemeChange}
         skillsLoading={skillsLoading}
         designSystemsLoading={dsLoading}
@@ -1295,10 +1359,35 @@ export function App() {
         onRenameProject={handleRenameProject}
         onChangeDefaultDesignSystem={handleChangeDefaultDesignSystem}
         onCreateDesignSystem={() => navigate({ kind: 'design-system-create' })}
+        renderDesignSystemCreation={(onBack) => (
+          <DesignSystemCreationFlow
+            chrome="embedded"
+            onBack={onBack}
+            onCreated={(projectId, project) => {
+              if (project) {
+                setProjects((curr) => [
+                  project,
+                  ...curr.filter((p) => p.id !== project.id),
+                ]);
+              }
+              navigate({ kind: 'project', projectId, conversationId: null, fileName: null });
+            }}
+            onProjectPrepared={(project) => {
+              setProjects((curr) => [
+                project,
+                ...curr.filter((p) => p.id !== project.id),
+              ]);
+            }}
+            onSystemsRefresh={refreshDesignSystems}
+            config={config}
+            onOpenConnectorsTab={() => openSettings('composio')}
+          />
+        )}
         onOpenDesignSystem={(id: string) => navigate({ kind: 'design-system-detail', designSystemId: id })}
         onDesignSystemsRefresh={refreshDesignSystems}
         onPersistComposioKey={handleConfigPersistComposioKey}
         onOpenSettings={openSettings}
+        onCompleteOnboarding={handleCompleteOnboarding}
       />
     );
   }
@@ -1373,12 +1462,8 @@ export function App() {
               privacyDecisionAt: Date.now(),
               telemetry: { metrics: true, content: true, artifactManifest: false },
             });
-            // Hand the foreground over to the welcome modal now that the
-            // privacy decision is recorded — bootstrap deferred opening
-            // it while consent was pending.
             if (!latestPersistedConfigRef.current.onboardingCompleted) {
-              setSettingsWelcome(true);
-              setSettingsOpen(true);
+              navigate({ kind: 'home', view: 'onboarding' });
             }
           }}
         />

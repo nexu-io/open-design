@@ -8,11 +8,17 @@
 
 import { Icon } from './Icon';
 import { useT } from '../i18n';
-import { formatStars, GITHUB_REPO_URL, useGithubStars } from './useGithubStars';
+import {
+  formatStars,
+  GITHUB_REPO_URL,
+  GITHUB_STARS_FALLBACK_LABEL,
+  useGithubStars,
+} from './useGithubStars';
 
 export function GithubStarBadge() {
   const t = useT();
   const count = useGithubStars();
+  const countLabel = count == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(count);
 
   return (
     <a
@@ -29,8 +35,8 @@ export function GithubStarBadge() {
       <span className="entry-star-badge__sep" aria-hidden>
         ·
       </span>
-      <span className="entry-star-badge__count" data-loading={count === null}>
-        {count === null ? '—' : formatStars(count)}
+      <span className="entry-star-badge__count">
+        {countLabel}
       </span>
     </a>
   );

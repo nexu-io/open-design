@@ -1,15 +1,16 @@
 // @vitest-environment jsdom
 
 import { cleanup, render, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ProjectView,
   clearStreamingConversationMarker,
   finalizeActiveAssistantMessagesOnStop,
+  findExistingArtifactProjectFile,
   resolveSucceededRunStatus,
   shouldClearActiveRunRefs,
 } from '../../src/components/ProjectView';
-import type { ChatMessage } from '../../src/types';
+import type { Artifact, ChatMessage, ProjectFile } from '../../src/types';
 
 const listConversations = vi.fn();
 const listMessages = vi.fn();
@@ -23,6 +24,7 @@ const fetchDesignSystem = vi.fn();
 const getTemplate = vi.fn();
 const fetchChatRunStatus = vi.fn();
 const listActiveChatRuns = vi.fn();
+const listProjectRuns = vi.fn();
 const reattachDaemonRun = vi.fn();
 const streamViaDaemon = vi.fn();
 const saveMessage = vi.fn();
@@ -30,8 +32,44 @@ const createConversation = vi.fn();
 const patchConversation = vi.fn();
 const patchProject = vi.fn();
 const saveTabs = vi.fn();
+const writeProjectTextFile = vi.fn();
+
+const replayArtifact: Artifact = {
+  identifier: 'real-daemon-smoke',
+  artifactType: 'text/html',
+  title: 'Real Daemon Smoke',
+  html: '<!doctype html><html><body><h1>Real Daemon Smoke</h1></body></html>',
+};
+
+function artifactProjectFile(name: string, mtime: number): ProjectFile {
+  return {
+    artifactManifest: {
+      entry: name,
+      exports: ['html'],
+      kind: 'html',
+      metadata: {
+        artifactType: 'text/html',
+        identifier: 'real-daemon-smoke',
+        inferred: false,
+      },
+      renderer: 'html',
+      title: 'Real Daemon Smoke',
+      version: 1,
+    },
+    kind: 'html',
+    mime: 'text/html',
+    mtime,
+    name,
+    size: 100,
+  };
+}
 
 vi.mock('../../src/i18n', () => ({
+  useI18n: () => ({
+    locale: 'en',
+    setLocale: () => undefined,
+    t: (value: string) => value,
+  }),
   useT: () => ((value: string) => value),
 }));
 
@@ -42,6 +80,7 @@ vi.mock('../../src/providers/anthropic', () => ({
 vi.mock('../../src/providers/daemon', () => ({
   fetchChatRunStatus: (...args: unknown[]) => fetchChatRunStatus(...args),
   listActiveChatRuns: (...args: unknown[]) => listActiveChatRuns(...args),
+  listProjectRuns: (...args: unknown[]) => listProjectRuns(...args),
   reattachDaemonRun: (...args: unknown[]) => reattachDaemonRun(...args),
   streamViaDaemon: (...args: unknown[]) => streamViaDaemon(...args),
 }));
@@ -56,7 +95,7 @@ vi.mock('../../src/providers/registry', () => ({
   fetchSkill: (...args: unknown[]) => fetchSkill(...args),
   patchPreviewCommentStatus: vi.fn(),
   upsertPreviewComment: vi.fn(),
-  writeProjectTextFile: vi.fn(),
+  writeProjectTextFile: (...args: unknown[]) => writeProjectTextFile(...args),
 }));
 
 vi.mock('../../src/providers/project-events', () => ({
@@ -115,7 +154,24 @@ async function waitForReadyChatPaneProps() {
   };
 }
 
+describe('terminal replay artifact recovery', () => {
+  it('only reuses existing artifacts created at or after the current run started', () => {
+    const runCreatedAt = 1_000;
+    const stale = artifactProjectFile('real-daemon-smoke.html', runCreatedAt - 1);
+    const current = artifactProjectFile('real-daemon-smoke-2.html', runCreatedAt + 1);
+
+    expect(findExistingArtifactProjectFile(replayArtifact, [stale], { minMtime: runCreatedAt }))
+      .toBeNull();
+    expect(findExistingArtifactProjectFile(replayArtifact, [stale, current], { minMtime: runCreatedAt }))
+      .toBe(current);
+  });
+});
+
 describe('ProjectView daemon cleanup', () => {
+  beforeEach(() => {
+    listProjectRuns.mockResolvedValue([]);
+  });
+
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
@@ -268,6 +324,163 @@ describe('ProjectView daemon cleanup', () => {
     expect(reattachDaemonRun).not.toHaveBeenCalled();
   });
 
+  it('persists a delayed daemon run id after switching projects so returning can reattach', async () => {
+    const projectOne = { id: 'project-1', name: 'Project One', skillId: null, designSystemId: null };
+    const projectTwo = { id: 'project-2', name: 'Project Two', skillId: null, designSystemId: null };
+    const messagesByConversation = new Map<string, ChatMessage[]>([
+      ['conv-1', []],
+      ['conv-2', []],
+    ]);
+
+    listConversations.mockImplementation(async (projectId: string) => [
+      projectId === 'project-1'
+        ? { id: 'conv-1', title: 'Conversation 1' }
+        : { id: 'conv-2', title: 'Conversation 2' },
+    ]);
+    listMessages.mockImplementation(async (_projectId: string, conversationId: string) =>
+      messagesByConversation.get(conversationId) ?? [],
+    );
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-delayed',
+      status: 'running',
+      createdAt: 1,
+      updatedAt: 1,
+      exitCode: null,
+      signal: null,
+    });
+    saveMessage.mockImplementation(async (_projectId: string, conversationId: string, message: ChatMessage) => {
+      const existing = messagesByConversation.get(conversationId) ?? [];
+      const next = existing.filter((item) => item.id !== message.id);
+      next.push(message);
+      messagesByConversation.set(conversationId, next);
+      return message;
+    });
+    reattachDaemonRun.mockImplementation(async () => new Promise<void>(() => {}));
+
+    let capturedRunCreated: ((runId: string) => void) | null = null;
+    let capturedStreamSignal: AbortSignal | null = null;
+    let capturedCancelSignal: AbortSignal | null = null;
+    let capturedAssistantMessageId: string | null = null;
+    streamViaDaemon.mockImplementation(async (options: {
+      assistantMessageId?: string;
+      signal: AbortSignal;
+      cancelSignal?: AbortSignal;
+      onRunCreated?: (runId: string) => void;
+    }) => {
+      capturedRunCreated = options.onRunCreated ?? null;
+      capturedStreamSignal = options.signal;
+      capturedCancelSignal = options.cancelSignal ?? null;
+      capturedAssistantMessageId = options.assistantMessageId ?? null;
+      return new Promise<void>(() => {});
+    });
+
+    const view = render(
+      <ProjectView
+        project={projectOne as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    const sendProps = await waitForReadyChatPaneProps();
+    await sendProps.onSend!('keep running', [], []);
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    expect(capturedRunCreated).not.toBeNull();
+
+    view.rerender(
+      <ProjectView
+        project={projectTwo as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => expect((capturedStreamSignal as AbortSignal | null)?.aborted).toBe(true));
+    expect((capturedCancelSignal as AbortSignal | null)?.aborted).toBe(false);
+
+    capturedRunCreated!('run-delayed');
+
+    await waitFor(() => {
+      const persistedAssistant = saveMessage.mock.calls.find(
+        (call) =>
+          call[0] === 'project-1' &&
+          call[1] === 'conv-1' &&
+          call[2]?.id === capturedAssistantMessageId &&
+          call[2]?.role === 'assistant' &&
+          call[2]?.runId === 'run-delayed' &&
+          call[2]?.runStatus === 'queued',
+      );
+      expect(persistedAssistant).toBeTruthy();
+    });
+
+    view.rerender(
+      <ProjectView
+        project={projectOne as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(reattachDaemonRun).toHaveBeenCalledWith(
+        expect.objectContaining({ runId: 'run-delayed' }),
+      );
+    });
+  });
+
   // Regression: when a project is created via PluginLoopHome with the
   // auto-send sessionStorage flag set, ProjectView used to seed
   // ChatComposer.initialDraft with project.pendingPrompt. The composer
@@ -407,7 +620,7 @@ describe('ProjectView daemon cleanup', () => {
     }
   });
 
-  it('audits design-system workspace output after first auto-send and auto-sends bounded repair prompts', async () => {
+  it('audits design-system workspace output after first auto-send and seeds a bounded repair prompt', async () => {
     listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
     listMessages.mockResolvedValue([]);
     fetchPreviewComments.mockResolvedValue([]);
@@ -430,12 +643,16 @@ describe('ProjectView daemon cleanup', () => {
       }],
       warnings: [],
     });
+    let streamCallCount = 0;
     streamViaDaemon.mockImplementation(async (options: {
       handlers: { onDone: () => void };
       onRunCreated?: (runId: string) => void;
     }) => {
-      options.onRunCreated?.('run-ds-1');
-      options.handlers.onDone();
+      streamCallCount += 1;
+      options.onRunCreated?.(`run-ds-${streamCallCount}`);
+      if (streamCallCount === 1) {
+        options.handlers.onDone();
+      }
     });
 
     chatPaneSpy.mockClear();
@@ -476,15 +693,8 @@ describe('ProjectView daemon cleanup', () => {
     );
 
     await waitFor(() => expect(fetchProjectDesignSystemPackageAudit).toHaveBeenCalledWith('project-ds'));
-    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(3));
-    const repairMessages = saveMessage.mock.calls.filter((call) =>
-      call[2]?.role === 'user'
-      && typeof call[2]?.content === 'string'
-      && call[2].content.includes('Fix the design-system package audit findings below.')
-      && call[2].content.includes('ui_kit_index_missing_runtime_bootstrap'),
-    );
-    expect(repairMessages).toHaveLength(2);
-    expect(window.sessionStorage.getItem('od:design-system-audit-auto-repair:project-ds')).toBeNull();
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalled());
+    expect(window.sessionStorage.getItem('od:design-system-audit-auto-repair:project-ds')).toBe('1');
     await waitFor(() => {
       const repairSeed = chatPaneSpy.mock.calls.find(
         (call) => typeof call[0]?.initialDraft === 'string'
@@ -781,5 +991,109 @@ describe('ProjectView daemon cleanup', () => {
         !call[2]?.runId,
     );
     expect(phantomSave).toBeUndefined();
+  });
+
+  it('relinks terminal replay to an existing artifact without writing a duplicate file', async () => {
+    const runCreatedAt = Date.now();
+    const existingArtifact = {
+      artifactManifest: {
+        entry: 'real-daemon-smoke.html',
+        exports: ['html'],
+        kind: 'html',
+        metadata: {
+          artifactType: 'text/html',
+          identifier: 'real-daemon-smoke',
+          inferred: false,
+        },
+        renderer: 'html',
+        title: 'Real Daemon Smoke',
+        version: 1,
+      },
+      kind: 'html',
+      mime: 'text/html',
+      mtime: runCreatedAt + 1,
+      name: 'real-daemon-smoke.html',
+      size: 100,
+    };
+
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-replay',
+        role: 'assistant',
+        content: '',
+        createdAt: Date.now(),
+        runId: 'run-replay',
+        runStatus: 'succeeded',
+        producedFiles: [],
+      },
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([existingArtifact]);
+    fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-replay',
+      status: 'succeeded',
+      createdAt: runCreatedAt,
+      updatedAt: runCreatedAt + 1,
+      exitCode: 0,
+      signal: null,
+    });
+    listActiveChatRuns.mockResolvedValue([]);
+    reattachDaemonRun.mockImplementation(async (options: {
+      handlers: {
+        onDelta: (delta: string) => void;
+        onDone: () => void;
+      };
+    }) => {
+      options.handlers.onDelta(
+        '<artifact identifier="real-daemon-smoke" type="text/html" title="Real Daemon Smoke"><h1>Real Daemon Smoke</h1></artifact>',
+      );
+      options.handlers.onDone();
+    });
+
+    render(
+      <ProjectView
+        project={{ id: 'project-1', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(saveMessage.mock.calls).toEqual(
+        expect.arrayContaining([
+          expect.arrayContaining([
+            'project-1',
+            'conv-1',
+            expect.objectContaining({
+              id: 'msg-replay',
+              producedFiles: [existingArtifact],
+            }),
+          ]),
+        ]),
+      );
+    });
+    expect(writeProjectTextFile).not.toHaveBeenCalled();
   });
 });

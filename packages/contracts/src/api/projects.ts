@@ -1,4 +1,9 @@
 import type { ChatMessage, ChatRunStatus } from './chat.js';
+import type {
+  ProjectContextConnectorRef,
+  ProjectContextMcpServerRef,
+  ProjectContextPluginRef,
+} from './context.js';
 
 export type ProjectKind =
   | 'prototype'
@@ -121,6 +126,10 @@ export interface ProjectMetadata {
   // it set `baseDir` outside the trusted flow. Privileged: rejected
   // by `POST /api/projects` and `PATCH /api/projects/:id`.
   fromTrustedPicker?: true;
+  // Hint stamped by the Home composer working-directory chip. It records
+  // where the user wanted the project to live without granting write access
+  // to that path; actual filesystem roots still use baseDir/import flows.
+  userWorkingDir?: string;
   imageModel?: string;
   imageAspect?: MediaAspect;
   imageStyle?: string;
@@ -143,7 +152,9 @@ export interface ProjectMetadata {
   // Plugins selected through @ mentions on Home. These are additive
   // context references; the explicit "Use plugin" snapshot, when present,
   // remains the primary executable plugin for the run.
-  contextPlugins?: Array<{ id: string; title: string; description?: string }>;
+  contextPlugins?: ProjectContextPluginRef[];
+  contextMcpServers?: ProjectContextMcpServerRef[];
+  contextConnectors?: ProjectContextConnectorRef[];
   // Stored on design-system projects so the review overview can remember
   // which generated sections were accepted or sent back for another pass.
   designSystemReview?: Record<string, DesignSystemReviewEntry>;
@@ -252,6 +263,16 @@ export interface ImportFolderRequest {
 export interface ImportFolderResponse {
   project: Project;
   conversationId: string;
+  entryFile: string | null;
+}
+
+export interface ReplaceProjectWorkingDirRequest {
+  baseDir: string;
+}
+
+export interface ReplaceProjectWorkingDirResponse {
+  project: Project;
+  baseDir: string;
   entryFile: string | null;
 }
 

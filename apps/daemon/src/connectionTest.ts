@@ -119,6 +119,41 @@ export async function validateBaseUrlResolved(
   return sync;
 }
 
+/**
+ * SSRF guard for asset URLs handed back inside a successful API
+ * response — typically a `data.url` or `data.video_url` that points
+ * at the gateway's CDN, but is attacker-controllable when the
+ * upstream gateway is compromised or misconfigured. Routes the URL
+ * through `validateBaseUrlResolved` (DNS-resolve → reject loopback,
+ * RFC1918, link-local, CGNAT, metadata-service IPs) and returns a
+ * discriminated union so callers don't have to repeat the
+ * `validated.error || !validated.parsed` plumbing.
+ *
+ * Two callers today:
+ *   - `byok-tools.ts` for the chat-tool image/video downloads
+ *   - `media.ts` `renderSenseAudioImage` for the CLI agent path
+ * Both hand the URL straight to `fetch(...)` next, so pair this
+ * guard with `redirect: 'error'` on the fetch to also block a
+ * 3xx hop into private space.
+ */
+export async function assertExternalAssetUrl(
+  rawUrl: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (typeof rawUrl !== 'string' || !rawUrl) {
+    return { ok: false, error: 'empty download url' };
+  }
+  const validated = await validateBaseUrlResolved(rawUrl);
+  if (validated.error || !validated.parsed) {
+    return {
+      ok: false,
+      error: validated.forbidden
+        ? `blocked download url (${validated.error ?? 'internal address'})`
+        : `invalid download url: ${validated.error ?? 'unknown reason'}`,
+    };
+  }
+  return { ok: true };
+}
+
 // Aggressive but not punitive — happy paths usually return in under 2 s.
 // Override with OD_CONNECTION_TEST_PROVIDER_TIMEOUT_MS for slow networks
 // or distant providers; invalid values fall back to the default.
@@ -315,10 +350,10 @@ function inspectProviderCompletion(
   const obj = data && typeof data === 'object' ? data as Record<string, unknown> : null;
   if (!obj) return { valid: false };
 
-  if (protocol === 'openai' || protocol === 'azure') {
+  if (protocol === 'openai' || protocol === 'azure' || protocol === 'senseaudio') {
     const responseModel = typeof obj.model === 'string' ? obj.model : '';
     if (
-      protocol === 'openai' &&
+      (protocol === 'openai' || protocol === 'senseaudio') &&
       enforceResponseModel &&
       responseModel &&
       requestedModel &&
@@ -518,6 +553,12 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
         },
       };
     case 'openai':
+    case 'senseaudio':
+      // SenseAudio is wire-compatible with OpenAI (POST /v1/chat/completions,
+      // Bearer auth, identical body + response shape), so the connection
+      // smoke test reuses the same call shape. We default the base URL
+      // upstream-side in chat-routes; this layer assumes the caller passed
+      // a concrete URL via the BYOK form.
       return {
         url: appendVersionedApiPath(baseUrl, '/chat/completions'),
         headers: {

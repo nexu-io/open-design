@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { setHostPetVisible } from '@open-design/host';
 import { RUNS_CHANGED_EVENT, listProjectRuns } from '../../providers/daemon';
 import { loadConfig } from '../../state/config';
 import { listProjects } from '../../state/projects';
@@ -36,7 +37,7 @@ export function DesktopPetSurface() {
   }, []);
 
   useEffect(() => {
-    window.electronAPI?.setDesktopPetVisible?.(Boolean(pet));
+    setHostPetVisible(Boolean(pet));
   }, [pet]);
 
   useEffect(() => {

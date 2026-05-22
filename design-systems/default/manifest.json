@@ -12,5 +12,51 @@
     "design": "DESIGN.md",
     "tokens": "tokens.css",
     "components": "components.html"
+  },
+  "usage": "USAGE.md",
+  "componentsManifest": "components.manifest.json",
+  "importMode": "normalized",
+  "craft": {
+    "applies": [],
+    "suggested": [
+      "color",
+      "accessibility-baseline"
+    ],
+    "exemptions": []
+  },
+  "preview": {
+    "dir": "preview",
+    "pages": [
+      {
+        "path": "preview/colors.html",
+        "role": "colors",
+        "title": "Colors"
+      },
+      {
+        "path": "preview/typography.html",
+        "role": "typography",
+        "title": "Typography"
+      },
+      {
+        "path": "preview/spacing.html",
+        "role": "spacing",
+        "title": "Spacing"
+      },
+      {
+        "path": "preview/components-buttons.html",
+        "role": "buttons",
+        "title": "Buttons"
+      },
+      {
+        "path": "preview/components-inputs.html",
+        "role": "inputs",
+        "title": "Inputs"
+      },
+      {
+        "path": "preview/app.html",
+        "role": "app",
+        "title": "App Preview"
+      }
+    ]
   }
 }

@@ -39,6 +39,7 @@ beforeEach(async () => {
   const folder = path.join(pluginRoot, PLUGIN_ID);
   await mkdir(path.join(folder, 'preview'), { recursive: true });
   await mkdir(path.join(folder, 'examples', 'desk-warm'), { recursive: true });
+  await mkdir(path.join(folder, 'examples', 'wrapped'), { recursive: true });
   await writeFile(
     path.join(folder, 'preview', 'index.html'),
     '<!DOCTYPE html><title>preview</title><p>preview body</p>',
@@ -46,6 +47,14 @@ beforeEach(async () => {
   await writeFile(
     path.join(folder, 'examples', 'desk-warm', 'index.html'),
     '<!DOCTYPE html><title>desk-warm</title><p>example body</p>',
+  );
+  await writeFile(
+    path.join(folder, 'examples', 'wrapped', 'index.html'),
+    '<!DOCTYPE html><body><!-- shell --><iframe src="./inner.html" title="wrapped"></iframe></body>',
+  );
+  await writeFile(
+    path.join(folder, 'examples', 'wrapped', 'inner.html'),
+    '<!DOCTYPE html><title>wrapped</title><img src="./hero.png"><p>wrapped body</p>',
   );
   await writeFile(
     path.join(folder, 'open-design.json'),
@@ -64,6 +73,7 @@ beforeEach(async () => {
           query: 'demo',
           exampleOutputs: [
             { path: 'examples/desk-warm/index.html', title: 'Desk warm' },
+            { path: 'examples/wrapped/index.html', title: 'Wrapped shell' },
           ],
         },
       },
@@ -159,6 +169,17 @@ describe('GET /api/plugins/:id/example/:name', () => {
       const body = await resp.text();
       expect(body).toContain('example body');
     }
+  });
+
+  it('unwraps iframe-only HTML shells and rewrites relative assets', async () => {
+    const resp = await fetch(`${baseUrl}/api/plugins/${PLUGIN_ID}/example/wrapped`);
+    expect(resp.status).toBe(200);
+    const body = await resp.text();
+    expect(body).toContain('wrapped body');
+    expect(body).not.toContain('<iframe');
+    expect(body).toContain(
+      `/api/plugins/${encodeURIComponent(PLUGIN_ID)}/asset/examples/wrapped/hero.png`,
+    );
   });
 
   it('rejects traversal segments with 400', async () => {

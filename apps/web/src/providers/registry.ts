@@ -8,8 +8,10 @@ import type {
   ConnectorStatusResponse,
   ImportGitHubDesignSystemRequest,
   ImportGitHubDesignSystemResponse,
+  OpenDesignGithubLatestReleaseResponse,
   ImportLocalDesignSystemRequest,
   ImportLocalDesignSystemResponse,
+  ReplaceProjectWorkingDirResponse,
 } from '@open-design/contracts';
 import type {
   AgentInfo,
@@ -54,8 +56,10 @@ import type {
   UpdateDeployConfigRequest,
 } from '../types';
 import type { ArtifactManifest } from '../artifacts/types';
-
-// Window.electronAPI is declared globally in apps/web/src/types/electron.d.ts.
+import {
+  isOpenDesignHostAvailable,
+  openHostExternalUrl,
+} from '@open-design/host';
 
 export const DEFAULT_DEPLOY_PROVIDER_ID = 'vercel-self';
 export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
@@ -742,6 +746,32 @@ function popupBlockedMessage(): string {
   return 'Popup blocked. Allow popups for Open Design and try again.';
 }
 
+export async function openExternalUrl(url: string): Promise<boolean> {
+  if (isOpenDesignHostAvailable()) {
+    const opened = await openHostExternalUrl(url);
+    if (opened.ok) return true;
+  }
+  try {
+    const resp = await fetch('/api/system/open-external', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    if (resp.ok) {
+      const json = (await resp.json().catch(() => null)) as { ok?: unknown } | null;
+      if (json?.ok === true) return true;
+    }
+  } catch {
+    // Fall through to current-tab navigation below.
+  }
+  try {
+    window.location.assign(url);
+  } catch {
+    return false;
+  }
+  return false;
+}
+
 async function decodeConnectorError(resp: Response): Promise<string> {
   try {
     const payload = (await resp.json()) as { error?: { message?: string } } | null;
@@ -753,8 +783,7 @@ async function decodeConnectorError(resp: Response): Promise<string> {
 
 export async function connectConnector(connectorId: string): Promise<ConnectorActionResult> {
   let authWindow: Window | null = null;
-  const openExternal = window.electronAPI?.openExternal;
-  const useExternalBrowser = typeof openExternal === 'function';
+  const useExternalBrowser = isOpenDesignHostAvailable();
   try {
     if (!useExternalBrowser) {
       authWindow = window.open('about:blank', '_blank');
@@ -783,8 +812,8 @@ export async function connectConnector(connectorId: string): Promise<ConnectorAc
     const json = (await resp.json()) as ConnectorConnectResponse;
     if (json.auth?.kind === 'redirect_required' && json.auth.redirectUrl) {
       if (useExternalBrowser) {
-        const opened = await openExternal(json.auth.redirectUrl);
-        if (!opened) {
+        const opened = await openHostExternalUrl(json.auth.redirectUrl);
+        if (!opened.ok) {
           return {
             connector: json.connector ?? null,
             auth: json.auth,
@@ -794,14 +823,11 @@ export async function connectConnector(connectorId: string): Promise<ConnectorAc
       } else if (authWindow) {
         openConnectorAuthRedirect(authWindow, json.auth.redirectUrl);
       } else {
-        const redirected = window.open(json.auth.redirectUrl, '_blank');
-        if (!redirected) {
-          return {
-            connector: json.connector ?? null,
-            auth: json.auth,
-            error: popupBlockedMessage(),
-          };
-        }
+        // The embedded browser can block even the synchronous placeholder
+        // popup. Ask the local daemon to open the system browser; if that
+        // route is unavailable, openExternalUrl falls back to current-tab
+        // navigation.
+        await openExternalUrl(json.auth.redirectUrl);
       }
     } else if (json.auth?.kind === 'connected') {
       renderConnectorAuthInfo(authWindow, {
@@ -1017,6 +1043,28 @@ export async function fetchAppVersionInfo(): Promise<AppVersionInfo | null> {
     if (!resp.ok) return null;
     const json = (await resp.json()) as Partial<AppVersionResponse>;
     return isAppVersionInfo(json.version) ? json.version : null;
+  } catch {
+    return null;
+  }
+}
+
+export type LatestGithubReleaseInfo = {
+  tagName: string;
+  htmlUrl: string;
+  stale: boolean;
+};
+
+export async function fetchLatestGithubReleaseInfo(): Promise<LatestGithubReleaseInfo | null> {
+  try {
+    const resp = await fetch('/api/github/open-design/releases/latest');
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as Partial<OpenDesignGithubLatestReleaseResponse>;
+    if (typeof json.tag_name !== 'string' || typeof json.html_url !== 'string') return null;
+    return {
+      tagName: json.tag_name,
+      htmlUrl: json.html_url,
+      stale: json.stale === true,
+    };
   } catch {
     return null;
   }
@@ -1715,6 +1763,63 @@ export async function openFolderDialog(): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+// "Replace working directory" — points an existing project at a new
+// folder. Mirrors the import-folder trust gate but updates the current
+// project record instead of creating a new project.
+export async function replaceProjectWorkingDir(
+  projectId: string,
+  baseDir: string,
+  desktopImportToken?: string,
+): Promise<ReplaceProjectWorkingDirResponse> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (desktopImportToken) {
+    headers['x-od-desktop-import-token'] = desktopImportToken;
+  }
+  const resp = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/working-dir`,
+    {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ baseDir }),
+    },
+  );
+  if (!resp.ok) {
+    const body = await readApiErrorBody(resp);
+    throw new Error(body.message);
+  }
+  return (await resp.json()) as ReplaceProjectWorkingDirResponse;
+}
+
+// Hand-off (open project in local app). The daemon enumerates installed
+// editors on demand (PATH probe + macOS bundle scan), and the POST
+// endpoint spawns the chosen app with the project's resolvedDir.
+export async function fetchHostEditors(): Promise<
+  import('@open-design/contracts').HostEditorsResponse
+> {
+  const resp = await fetch('/api/editors');
+  if (!resp.ok) throw new Error(`GET /api/editors failed: ${resp.status}`);
+  return (await resp.json()) as import('@open-design/contracts').HostEditorsResponse;
+}
+
+export async function openProjectInEditor(
+  projectId: string,
+  editorId: import('@open-design/contracts').HostEditorId,
+): Promise<import('@open-design/contracts').OpenProjectInEditorResponse> {
+  const resp = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/open-in`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ editorId }),
+    },
+  );
+  if (!resp.ok) {
+    const body = await readApiErrorBody(resp);
+    throw new Error(body.message);
+  }
+  return (await resp.json()) as import('@open-design/contracts').OpenProjectInEditorResponse;
 }
 
 export async function fetchDesignSystemPreview(id: string): Promise<string | null> {

@@ -7,8 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- Fixed: desktop "Export PDF" now opens a direct "Save as PDF" file dialog and writes the PDF to disk, instead of opening the macOS system print dialog. Fixes [#1774](https://github.com/nexu-io/open-design/issues/1774).
-- Docs: clarify that packaged macOS support includes a verified Intel x64 ZIP path on Monterey, and document the Finder `PATH` caveat for packaged CLI detection. Fixes [#327](https://github.com/nexu-io/open-design/issues/327).
+### Added
+
+- Critique Theater Settings toggle with i18n across 6 locales. ([#1484])
+- Custom select web component primitive. ([#1714])
+- AskUserQuestion tool wired through chat with TodoWrite pinning. ([#1743])
+- Structured tokens for Notion, Linear, GitHub design systems. ([#1825])
+- Structured tokens for Cursor, Apple, Stripe design systems. ([#1831])
+- OpenAI-compatible media providers in daemon. ([#1712])
+- Leonardo.ai image generation provider. ([#1123])
+- Italian (`it`) locale support. ([#1323])
+
+### Changed
+
+- Packaged client lazy-loads Electron to enable headless config imports. ([#1798])
+- Claude design import canvas no longer zooms on scroll. ([#1726])
+
+### Fixed
+
+#### Web / UI
+- Agent model select duplicate chevrons on macOS (wrapper+icon pattern). ([#1831])
+- Memory editor reveal after edit click. ([#1827])
+- Memory preview action distinct from delete. ([#1813], follow-up [#1863])
+- Settings subtab-pill hover contrast in dark theme. ([#1815])
+- Filter pill hover label readability across themes. ([#1828])
+- Comment marker numbering in panels. ([#1826])
+- Draw overlay scroll interaction. ([#1848])
+- Plugin publish footer spacing. ([#1849])
+- Picker hint clarity relative to comments panel. ([#1820])
+- Draw ink clears when exiting draw mode. ([#1821])
+- Chrome action icon alignment. ([#1783])
+- Manual folder import error feedback. ([#1666])
+- Template toolbar stickiness during scroll. ([#1785])
+- Comment panel string localization. ([#1443])
+- Resolved comments hidden from preview overlays. ([#1762])
+- HTML preview sandbox fallback to `srcDoc`. ([#1754])
+- BYOK chat inlines attached file context. ([#1730])
+
+#### Desktop
+- "Export PDF" now opens a direct "Save as PDF" file dialog and writes the PDF to disk, instead of opening the macOS system print dialog. Fixes [#1774](https://github.com/nexu-io/open-design/issues/1774).
+
+#### Daemon
+- Claude connection smoke wraps stdin properly. ([#1844])
+- BYOK proxy honors IP-literal `OD_ALLOWED_ORIGINS` in no-Origin Host check. ([#1775])
+- ACP stage timeout aligned to outer chat inactivity window. ([#1743])
+
+#### Documentation
+- Korean README desktop/background startup paragraph. ([#1876])
+- Windows troubleshooting link synced across 12 locale READMEs. ([#1875])
+- 0.8.0-preview banner pointing to Discussion [#1727]. ([#1781])
+- Clarify that packaged macOS support includes a verified Intel x64 ZIP path on Monterey, and document the Finder `PATH` caveat for packaged CLI detection. Fixes [#327](https://github.com/nexu-io/open-design/issues/327).
+
+#### Packaging
+- Nix flake `pnpmDepsHash` refresh after merging main. ([#1765])
+
+### Security
+
+- DNS-rebinding SSRF prevented by resolving hostname before approving external API base URLs. ([#1176])
+- Tightened `LiveArtifactSsePayload.refreshStatus` to the canonical `LiveArtifactRefreshStatus` enum, preventing future REST↔SSE type drift. ([#1871])
+- `nix-check.yml` workflow scoped to `permissions: contents: read`, matching the rest of the workflow suite. ([#1870])
+
+### Internal / Tests
+
+- Italian locale cleanup (`onImportFolder` signature + stale pet rail keys). ([#1814])
+- Linux packaged client parity smoke coverage. ([#1204])
+- Metrics PRs trigger required checks. ([#1801])
+- Packaged-linux runtime logs captured into headless artifact. ([#1823])
+- Memory preview icon assertion decoupled for test stability. ([#1863])
 
 ## [0.7.0] - 2026-05-12
 
@@ -1450,6 +1515,7 @@ First public release of Open Design — a local-first, open-source alternative t
 [#1105]: https://github.com/nexu-io/open-design/pull/1105
 [#1115]: https://github.com/nexu-io/open-design/pull/1115
 [#1117]: https://github.com/nexu-io/open-design/pull/1117
+[#1123]: https://github.com/nexu-io/open-design/pull/1123
 [#1126]: https://github.com/nexu-io/open-design/pull/1126
 [#1128]: https://github.com/nexu-io/open-design/pull/1128
 [#1132]: https://github.com/nexu-io/open-design/pull/1132
@@ -1463,11 +1529,13 @@ First public release of Open Design — a local-first, open-source alternative t
 [#1150]: https://github.com/nexu-io/open-design/pull/1150
 [#1156]: https://github.com/nexu-io/open-design/pull/1156
 [#1159]: https://github.com/nexu-io/open-design/pull/1159
+[#1176]: https://github.com/nexu-io/open-design/pull/1176
 [#1171]: https://github.com/nexu-io/open-design/pull/1171
 [#1173]: https://github.com/nexu-io/open-design/pull/1173
 [#1183]: https://github.com/nexu-io/open-design/pull/1183
 [#1188]: https://github.com/nexu-io/open-design/pull/1188
 [#1203]: https://github.com/nexu-io/open-design/pull/1203
+[#1204]: https://github.com/nexu-io/open-design/pull/1204
 [#1206]: https://github.com/nexu-io/open-design/pull/1206
 [#1205]: https://github.com/nexu-io/open-design/pull/1205
 [#1207]: https://github.com/nexu-io/open-design/pull/1207
@@ -1495,6 +1563,7 @@ First public release of Open Design — a local-first, open-source alternative t
 [#1300]: https://github.com/nexu-io/open-design/pull/1300
 [#1307]: https://github.com/nexu-io/open-design/pull/1307
 [#1308]: https://github.com/nexu-io/open-design/pull/1308
+[#1323]: https://github.com/nexu-io/open-design/pull/1323
 [#1328]: https://github.com/nexu-io/open-design/pull/1328
 [#1330]: https://github.com/nexu-io/open-design/pull/1330
 [#1161]: https://github.com/nexu-io/open-design/pull/1161
@@ -1510,3 +1579,40 @@ First public release of Open Design — a local-first, open-source alternative t
 [#1402]: https://github.com/nexu-io/open-design/pull/1402
 [#1439]: https://github.com/nexu-io/open-design/pull/1439
 [#1442]: https://github.com/nexu-io/open-design/pull/1442
+[#1443]: https://github.com/nexu-io/open-design/pull/1443
+[#1484]: https://github.com/nexu-io/open-design/pull/1484
+[#1666]: https://github.com/nexu-io/open-design/pull/1666
+[#1712]: https://github.com/nexu-io/open-design/pull/1712
+[#1714]: https://github.com/nexu-io/open-design/pull/1714
+[#1726]: https://github.com/nexu-io/open-design/pull/1726
+[#1727]: https://github.com/nexu-io/open-design/discussions/1727
+[#1730]: https://github.com/nexu-io/open-design/pull/1730
+[#1743]: https://github.com/nexu-io/open-design/pull/1743
+[#1754]: https://github.com/nexu-io/open-design/pull/1754
+[#1762]: https://github.com/nexu-io/open-design/pull/1762
+[#1765]: https://github.com/nexu-io/open-design/pull/1765
+[#1775]: https://github.com/nexu-io/open-design/pull/1775
+[#1781]: https://github.com/nexu-io/open-design/pull/1781
+[#1783]: https://github.com/nexu-io/open-design/pull/1783
+[#1785]: https://github.com/nexu-io/open-design/pull/1785
+[#1798]: https://github.com/nexu-io/open-design/pull/1798
+[#1801]: https://github.com/nexu-io/open-design/pull/1801
+[#1813]: https://github.com/nexu-io/open-design/pull/1813
+[#1814]: https://github.com/nexu-io/open-design/pull/1814
+[#1815]: https://github.com/nexu-io/open-design/pull/1815
+[#1820]: https://github.com/nexu-io/open-design/pull/1820
+[#1821]: https://github.com/nexu-io/open-design/pull/1821
+[#1823]: https://github.com/nexu-io/open-design/pull/1823
+[#1825]: https://github.com/nexu-io/open-design/pull/1825
+[#1826]: https://github.com/nexu-io/open-design/pull/1826
+[#1827]: https://github.com/nexu-io/open-design/pull/1827
+[#1828]: https://github.com/nexu-io/open-design/pull/1828
+[#1831]: https://github.com/nexu-io/open-design/pull/1831
+[#1844]: https://github.com/nexu-io/open-design/pull/1844
+[#1848]: https://github.com/nexu-io/open-design/pull/1848
+[#1849]: https://github.com/nexu-io/open-design/pull/1849
+[#1863]: https://github.com/nexu-io/open-design/pull/1863
+[#1870]: https://github.com/nexu-io/open-design/pull/1870
+[#1871]: https://github.com/nexu-io/open-design/pull/1871
+[#1875]: https://github.com/nexu-io/open-design/pull/1875
+[#1876]: https://github.com/nexu-io/open-design/pull/1876

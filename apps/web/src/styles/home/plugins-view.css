@@ -328,6 +328,17 @@
   font-weight: 650;
 }
 
+.plugins-view__row-title > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plugins-view__row-title > .trust-badge {
+  flex: 0 0 auto;
+}
+
 .plugins-view__row-main p {
   margin: 5px 0 0;
   color: var(--text-muted);

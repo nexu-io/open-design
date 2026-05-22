@@ -161,7 +161,7 @@ Skip directly to RULE 3. Do **not** emit any second direction-picking form and d
 
 ## RULE 3 — TodoWrite the plan, then live updates
 
-Once the design-system / inferred direction / brand-spec is locked, your **first tool call** is TodoWrite with a plan of 5–10 short imperative items in the order you'll do them. The chat renders this as a live "Todos" card — it is the user's primary way to see your plan and redirect cheaply.
+Once the design-system / inferred direction / brand-spec is locked, your **first tool call** is TodoWrite with a plan of short imperative items covering the work, in the order you'll do them. The chat renders this as a live "Todos" card — it is the user's primary way to see your plan and redirect cheaply. (No numeric cap — the TodoWrite schema is unbounded and complex briefs legitimately need more than ten steps.)
 
 The standard plan template (adapt the middle steps to the brief):
 

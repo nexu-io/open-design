@@ -9,13 +9,25 @@
 import { getCollection, render } from 'astro:content';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import GoogleAnalytics from '../../_components/google-analytics.astro';
 import HeaderEnhancer from '../../_components/header-enhancer.astro';
 import { Header, type HeaderProps } from '../../_components/header';
+import LocaleSwitcherScript from '../../_components/locale-switcher-script.astro';
 import SeoHead from '../../_components/seo-head.astro';
 import SiteFooter from '../../_components/site-footer.astro';
 import Topbar from '../../_components/topbar.astro';
 import { getCatalogCounts } from '../../_lib/catalog';
 import { getGithubRepoMeta } from '../../_lib/github';
+import {
+  explicitLocalizedString,
+  localizeBlogPostText,
+} from '../../content-i18n';
+import {
+  getLandingUiCopy,
+  getLocaleDefinition,
+  localeFromPath,
+  localizedHref,
+} from '../../i18n';
 import '../../globals.css';
 import '../../sub-pages.css';
 
@@ -29,21 +41,89 @@ export async function getStaticPaths() {
 
 const { post } = Astro.props;
 const { Content } = await render(post);
+const locale = localeFromPath(Astro.url.pathname);
+const localeDef = getLocaleDefinition(locale);
+const ui = getLandingUiCopy(locale);
+const href = (path: string) => localizedHref(path, locale);
+const localizedPostI18n = (post.data as typeof post.data & {
+  i18n?: Record<string, Partial<Record<'title' | 'summary' | 'category' | 'bodyHtml', string>>>;
+}).i18n?.[locale];
+const fallbackPost = localizeBlogPostText({
+  id: post.id,
+  title: post.data.title,
+  summary: post.data.summary,
+  category: post.data.category,
+  locale,
+});
+const localizedPostField = (field: 'title' | 'summary' | 'category') => {
+  return explicitLocalizedString(
+    localizedPostI18n?.[field] as Parameters<typeof explicitLocalizedString>[0],
+    locale,
+  ) ?? fallbackPost[field];
+};
+const localizedBodyHtml = explicitLocalizedString(
+  localizedPostI18n?.bodyHtml as Parameters<typeof explicitLocalizedString>[0],
+  locale,
+) ?? fallbackPost.bodyHtml;
+const DISCORD = 'https://discord.gg/9ptkbbqRu';
 const sourceUrl = `https://github.com/nexu-io/open-design/blob/main/apps/landing-page/app/content/blog/${post.id}.md`;
+const category = post.data.category.toLowerCase();
+const bottomCta =
+  category.includes('announcement') || category.includes('product')
+    ? {
+        title: ui.blog.cta.downloadTitle,
+        body: ui.blog.cta.downloadBody,
+        href: 'https://github.com/nexu-io/open-design/releases',
+        label: ui.blog.cta.downloadLabel,
+        external: true,
+      }
+    : category.includes('guide') || category.includes('use') || category.includes('case')
+      ? {
+          title: ui.blog.cta.skillsTitle,
+          body: ui.blog.cta.skillsBody,
+          href: '/skills/',
+          label: ui.blog.cta.skillsLabel,
+          external: false,
+        }
+      : {
+          title: ui.blog.cta.repoTitle,
+          body: ui.blog.cta.repoBody,
+          href: 'https://github.com/nexu-io/open-design',
+          label: ui.blog.cta.repoLabel,
+          external: true,
+        };
 
 const counts = await getCatalogCounts();
 const github = await getGithubRepoMeta();
+
+const origin = Astro.site?.toString() ?? 'https://open-design.ai/';
+const postUrl = new URL(Astro.url.pathname, Astro.site ?? 'https://open-design.ai/').toString();
+
+// BreadcrumbList for the blog post. SeoHead already emits the Article
+// JSON-LD via `kind='article'`; the breadcrumb here adds the trail
+// (Open Design → Blog → <post title>) so Google can render the post
+// with breadcrumb-style URLs in the SERP.
+const breadcrumbJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    { '@type': 'ListItem', position: 1, name: 'Open Design', item: origin },
+    { '@type': 'ListItem', position: 2, name: 'Blog', item: new URL('/blog/', origin).toString() },
+    { '@type': 'ListItem', position: 3, name: localizedPostField('title'), item: postUrl },
+  ],
+};
 const headerHtml = renderToStaticMarkup(
   createElement<HeaderProps>(Header, {
     counts,
     github,
     brandHref: '/',
     active: 'blog',
+    locale,
   }),
 );
 
 const fmtDate = (d: Date) =>
-  d.toLocaleDateString('en-US', {
+  d.toLocaleDateString(localeDef.htmlLang, {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -51,65 +131,95 @@ const fmtDate = (d: Date) =>
 ---
 
 <!doctype html>
-<html lang='en'>
+<html lang={localeDef.htmlLang} dir={localeDef.dir}>
   <head>
     <meta charset='utf-8' />
     <meta name='viewport' content='width=device-width, initial-scale=1' />
     <SeoHead
       kind='article'
-      title={post.data.title}
-      description={post.data.summary}
+      title={localizedPostField('title')}
+      description={localizedPostField('summary')}
       pathname={Astro.url.pathname}
       datePublished={post.data.date}
       category={post.data.category}
     />
+    <script is:inline type='application/ld+json' set:html={JSON.stringify(breadcrumbJsonLd)} />
+    <GoogleAnalytics />
   </head>
   <body>
     <div class='shell'>
-      <Topbar github={github} />
-      <Fragment set:html={headerHtml} />
+      <div class='site-chrome' data-chrome-headroom>
+        <Topbar github={github} locale={locale} />
+        <Fragment set:html={headerHtml} />
+      </div>
 
       <main class='post-shell'>
       <article class='post'>
         <div class='container'>
-          <a class='post-back' href='/blog/'>← Back to Blog</a>
+          <a class='post-back' href={href('/blog/')}>{ui.blog.backToBlog}</a>
 
-          <h1 class='post-title'>{post.data.title}</h1>
+          <h1 class='post-title'>{localizedPostField('title')}</h1>
 
-          <p class='post-summary'>{post.data.summary}</p>
+          <p class='post-summary'>{localizedPostField('summary')}</p>
 
           <div class='post-meta'>
             <span>{fmtDate(post.data.date)}</span>
-            <span>{post.data.readingTime} min read</span>
-            <span>{post.data.category}</span>
+            <span>{post.data.readingTime} {ui.blog.minRead}</span>
+            <span>{localizedPostField('category')}</span>
           </div>
 
           <hr class='post-rule' />
 
           <div class='post-body'>
-            <Content />
+            {localizedBodyHtml ? (
+              <Fragment set:html={localizedBodyHtml} />
+            ) : (
+              <Content />
+            )}
           </div>
+
+          <aside class='post-conversion' aria-labelledby='post-conversion-title'>
+            <div>
+              <span class='label'>{ui.blog.nextStep}</span>
+              <h2 id='post-conversion-title'>{bottomCta.title}</h2>
+              <p>{bottomCta.body}</p>
+            </div>
+            <div class='post-conversion-actions'>
+              <a
+                class='btn btn-primary'
+                href={bottomCta.external === false ? href(bottomCta.href) : bottomCta.href}
+                target={bottomCta.external === false ? undefined : '_blank'}
+                rel={bottomCta.external === false ? undefined : 'noreferrer noopener'}
+              >
+                {bottomCta.label}
+              </a>
+              <a class='btn btn-ghost' href={DISCORD} target='_blank' rel='noreferrer noopener'>
+                {ui.blog.joinDiscord}
+              </a>
+            </div>
+          </aside>
 
           <hr class='post-rule' />
 
           <div class='post-foot'>
-            <a class='post-back' href='/blog/'>← Back to Blog</a>
+            <a class='post-back' href={href('/blog/')}>{ui.blog.backToBlog}</a>
             <a
               class='post-github'
               href={sourceUrl}
               target='_blank'
               rel='noreferrer noopener'
             >
-              View source on GitHub ↗
+              {ui.blog.viewSource}
             </a>
           </div>
         </div>
       </article>
       </main>
-      <SiteFooter counts={counts} />
+      <SiteFooter counts={counts} locale={locale} />
     </div>
 
     <HeaderEnhancer />
+    <LocaleSwitcherScript />
 
     <style>
       .post-shell {
@@ -254,6 +364,18 @@ const fmtDate = (d: Date) =>
         font-size: 13px;
         line-height: 1.55;
       }
+      /*
+       * Astro/Shiki stamps an inline `background-color:#xxx; color:#xxx;`
+       * on `.astro-code` based on the configured theme. We supply a
+       * custom paper theme in `astro.config.ts`, but pin the background
+       * to `--bone` here as a belt-and-braces guard against a theme
+       * upgrade silently re-introducing a slate slab.
+       */
+      .post-body :global(pre.astro-code),
+      .post-body :global(pre.shiki) {
+        background-color: var(--bone) !important;
+        color: var(--ink) !important;
+      }
       .post-body :global(pre code) {
         background: transparent;
         padding: 0;
@@ -285,6 +407,42 @@ const fmtDate = (d: Date) =>
         margin: 2em 0;
       }
 
+      .post-conversion {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 24px;
+        align-items: center;
+        margin: 52px 0 40px;
+        padding: 28px;
+        border: 1px solid var(--line);
+        background: color-mix(in srgb, var(--paper-warm) 72%, white);
+      }
+      .post-conversion .label {
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--coral);
+      }
+      .post-conversion h2 {
+        margin: 10px 0 8px;
+        font-family: var(--serif);
+        font-size: clamp(28px, 3vw, 38px);
+        font-weight: 500;
+        color: var(--ink);
+      }
+      .post-conversion p {
+        margin: 0;
+        max-width: 52ch;
+        color: var(--ink-soft);
+      }
+      .post-conversion-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: flex-end;
+      }
+
       .post-foot {
         display: flex;
         justify-content: space-between;
@@ -313,6 +471,12 @@ const fmtDate = (d: Date) =>
         .post-foot {
           align-items: flex-start;
           flex-direction: column;
+        }
+        .post-conversion {
+          grid-template-columns: 1fr;
+        }
+        .post-conversion-actions {
+          justify-content: flex-start;
         }
       }
     </style>

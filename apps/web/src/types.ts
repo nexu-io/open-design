@@ -91,7 +91,7 @@ export type {
 } from '@open-design/contracts';
 
 export type ExecMode = 'daemon' | 'api';
-export type ApiProtocol = 'anthropic' | 'openai' | 'azure' | 'google' | 'ollama';
+export type ApiProtocol = 'anthropic' | 'openai' | 'azure' | 'google' | 'ollama' | 'senseaudio';
 
 export type LiveArtifactTabId = `live:${string}`;
 export type ProjectWorkspaceTabId = string | LiveArtifactTabId;
@@ -180,6 +180,13 @@ export interface ApiProtocolConfig {
   model: string;
   apiVersion?: string;
   apiProviderBaseUrl?: string | null;
+  /** SenseAudio BYOK only — default image model the daemon-side
+   *  `generate_image` tool uses when the LLM doesn't pass one. Carries
+   *  one of the SenseAudio image model ids (`senseaudio-image-2.0-260319`,
+   *  `senseaudio-image-1.0-260319`, `doubao-seedream-5-0-260128`). Stored
+   *  per-protocol so flipping between BYOK tabs doesn't reset the
+   *  SenseAudio image-model choice. */
+  byokImageModel?: string;
 }
 
 // Per-CLI model + reasoning the user picked in the model menu. Each agent
@@ -294,6 +301,11 @@ export interface AppConfig {
   model: string;
   apiProtocol?: ApiProtocol;
   apiVersion?: string;
+  /** SenseAudio BYOK only — default image model for the daemon-side
+   *  generate_image tool. Mirrors apiProtocolConfigs.senseaudio.byokImageModel
+   *  so the active protocol's value lives at the top level (consistent
+   *  with how apiKey / baseUrl / model are projected onto AppConfig). */
+  byokImageModel?: string;
   apiProtocolConfigs?: Partial<Record<ApiProtocol, ApiProtocolConfig>>;
   /** Internal config schema/migration version for localStorage upgrades. */
   configMigrationVersion?: number;

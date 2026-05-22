@@ -138,6 +138,11 @@ async function emitRun(promptText) {
     emitFailure();
     return;
   }
+  if (promptText.includes('Return an empty daemon smoke response')) {
+    emitEmptySuccess();
+    return;
+  }
+  const isDelayed = promptText.includes('Create a delayed deterministic smoke artifact');
   const isChunked = promptText.includes('Create a chunked deterministic smoke artifact');
   const isFollowUp = promptText.includes('Create a follow-up deterministic smoke artifact');
   const isDefaultSmoke = promptText.includes('Create a deterministic smoke artifact');
@@ -148,12 +153,18 @@ async function emitRun(promptText) {
   }
   const isRuntime = promptText.match(/Fake runtime smoke for ([a-z0-9-]+)/i);
   const runtimeId = isRuntime ? isRuntime[1] : agentId;
-  const heading = isChunked ? 'Chunked Daemon Smoke' : isFollowUp ? 'Follow-up Daemon Smoke' : isDefaultSmoke ? 'Real Daemon Smoke' : 'Fake Agent Runtime ' + runtimeId;
-  const identifier = isChunked ? 'chunked-daemon-smoke' : isFollowUp ? 'follow-up-daemon-smoke' : isDefaultSmoke ? 'real-daemon-smoke' : 'fake-agent-runtime-' + runtimeId;
-  const text = isChunked ? 'Chunked through the daemon run path.' : isFollowUp ? 'Generated after an earlier daemon turn.' : isDefaultSmoke ? 'Generated through the daemon run path.' : 'Generated through fake ' + runtimeId + ' runtime.';
+  const heading = isDelayed ? 'Delayed Daemon Smoke' : isChunked ? 'Chunked Daemon Smoke' : isFollowUp ? 'Follow-up Daemon Smoke' : isDefaultSmoke ? 'Real Daemon Smoke' : 'Fake Agent Runtime ' + runtimeId;
+  const identifier = isDelayed ? 'delayed-daemon-smoke' : isChunked ? 'chunked-daemon-smoke' : isFollowUp ? 'follow-up-daemon-smoke' : isDefaultSmoke ? 'real-daemon-smoke' : 'fake-agent-runtime-' + runtimeId;
+  const text = isDelayed ? 'Generated after a delayed daemon turn.' : isChunked ? 'Chunked through the daemon run path.' : isFollowUp ? 'Generated after an earlier daemon turn.' : isDefaultSmoke ? 'Generated through the daemon run path.' : 'Generated through fake ' + runtimeId + ' runtime.';
   const html = '<!doctype html><html><body><main><h1>' + heading + '</h1><p>' + text + '</p></main></body></html>';
   const artifact = '<artifact identifier="' + identifier + '" type="text/html" title="' + heading + '">' + html + '</artifact>';
-  emitSuccess(artifact, isChunked);
+  const assistantText = isDelayed
+    ? 'I recovered the delayed reasoning path and will persist the artifact now.\\n\\n' + artifact
+    : artifact;
+  if (isDelayed) {
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+  }
+  emitSuccess(assistantText, isChunked, isDelayed);
   process.exitCode = 0;
   exitSoon(0);
 }
@@ -166,7 +177,7 @@ function exitSoon(code) {
   setTimeout(() => process.exit(code), 10);
 }
 
-function emitSuccess(artifact, isChunked) {
+function emitSuccess(artifact, isChunked, includeThinking) {
   const first = artifact.slice(0, Math.ceil(artifact.length / 2));
   const second = artifact.slice(Math.ceil(artifact.length / 2));
   switch (agentId) {
@@ -183,7 +194,16 @@ function emitSuccess(artifact, isChunked) {
       return;
     case 'claude':
       writeJson({ type: 'system', subtype: 'init', model: 'fake-claude', session_id: 'fake-session' });
-      writeJson({ type: 'assistant', message: { id: 'msg-1', content: [{ type: 'text', text: artifact }] } });
+      writeJson({
+        type: 'assistant',
+        message: {
+          id: 'msg-1',
+          content: [
+            ...(includeThinking ? [{ type: 'thinking', thinking: 'Recovered delayed reasoning trace.' }] : []),
+            { type: 'text', text: artifact },
+          ],
+        },
+      });
       writeJson({ type: 'result', usage: { input_tokens: 1, output_tokens: 1 }, total_cost_usd: 0, duration_ms: 1, stop_reason: 'end_turn' });
       return;
     case 'gemini':
@@ -312,6 +332,21 @@ function emitFailure() {
       process.stderr.write('intentional fake ' + agentId + ' failure\\n');
       process.exitCode = 1;
       exitSoon(1);
+  }
+}
+
+function emitEmptySuccess() {
+  switch (agentId) {
+    case 'codex':
+      writeJson({ type: 'thread.started' });
+      writeJson({ type: 'turn.started' });
+      writeJson({ type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 0 } });
+      process.exitCode = 0;
+      exitSoon(0);
+      return;
+    default:
+      process.exitCode = 0;
+      exitSoon(0);
   }
 }
 }

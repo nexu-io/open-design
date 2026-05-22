@@ -132,9 +132,8 @@ export type PrintReadyPdfTarget = {
 };
 
 /**
- * Direct Save-as-PDF flow for the renderer's
- * `window.__odDesktop.printPdf()` bridge (the `od:print-pdf` IPC
- * handler).
+ * Direct Save-as-PDF flow for the renderer host PDF bridge (the
+ * `od:print-pdf` IPC handler).
  *
  * Unlike {@link exportPdfFromHtml}, the document handed over here is
  * already a fully-wrapped sandboxed preview carrying the print-ready

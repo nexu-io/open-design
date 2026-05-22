@@ -24,7 +24,7 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
     pruneExpiredImportNonces,
     verifyDesktopImportToken,
   } = ctx.auth;
-  const { insertProject } = ctx.projectStore;
+  const { getProject, insertProject, updateProject } = ctx.projectStore;
   const { insertConversation } = ctx.conversations;
   const { setTabs } = ctx.projectFiles;
   const { validateProjectDesignSystemId } = ctx.validation;
@@ -93,6 +93,111 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
   // No copy, no shadow tree — the user owns the workspace and is
   // responsible for their own version control (git, time machine, etc.),
   // mirroring how Cursor / Claude Code / Aider behave.
+  // Replace an existing project's working directory in-place. Mirrors
+  // the same trust-gate, realpath, and data-dir checks as folder import,
+  // but updates metadata.baseDir on an existing project record.
+  app.post('/api/projects/:id/working-dir', async (req, res) => {
+    try {
+      const projectId = req.params.id;
+      const existing = getProject(db, projectId);
+      if (!existing) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      const { baseDir } = req.body || {};
+      if (typeof baseDir !== 'string' || !baseDir.trim()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'baseDir required');
+      }
+      let trustedPickerImport = false;
+      if (isDesktopAuthGateActive()) {
+        const secret = desktopAuthSecret();
+        if (secret == null) {
+          return sendApiError(
+            res,
+            503,
+            'DESKTOP_AUTH_PENDING',
+            'desktop auth required but secret not yet registered',
+            {
+              details: { hint: 'restart desktop or wait for sidecar registration' },
+              retryable: true,
+            },
+          );
+        }
+        const headerValue = req.get('x-od-desktop-import-token');
+        const token = typeof headerValue === 'string' ? headerValue : '';
+        const now = Date.now();
+        pruneExpiredImportNonces(now);
+        const verification = verifyDesktopImportToken(
+          secret,
+          baseDir,
+          token,
+          now,
+          consumedImportNonces,
+        );
+        if (!verification.ok) {
+          return sendApiError(
+            res,
+            403,
+            'FORBIDDEN',
+            'desktop import token rejected',
+            { details: { reason: verification.reason } },
+          );
+        }
+        consumedImportNonces.set(verification.nonce, verification.exp);
+        trustedPickerImport = true;
+      }
+
+      const trimmedInput = baseDir.trim();
+      if (!path.isAbsolute(path.normalize(trimmedInput))) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'baseDir must be absolute');
+      }
+      let normalizedPath: string;
+      try {
+        normalizedPath = await fs.promises.realpath(trimmedInput);
+      } catch {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'folder not found');
+      }
+      let dirStat;
+      try {
+        dirStat = await fs.promises.lstat(normalizedPath);
+      } catch {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'folder not found');
+      }
+      if (!dirStat.isDirectory()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'path must be a directory');
+      }
+      if (path.parse(normalizedPath).root === normalizedPath) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'cannot point at the filesystem root');
+      }
+      if (
+        normalizedPath === RUNTIME_DATA_DIR_CANONICAL ||
+        normalizedPath.startsWith(RUNTIME_DATA_DIR_CANONICAL + path.sep)
+      ) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'cannot point at the data directory');
+      }
+
+      const entryFile = await detectEntryFile(normalizedPath);
+      const existingMeta = existing.metadata ?? {};
+      const nextMeta = {
+        ...existingMeta,
+        kind: existingMeta.kind ?? 'prototype',
+        baseDir: normalizedPath,
+        importedFrom: 'folder' as const,
+        entryFile,
+        ...(trustedPickerImport ? { fromTrustedPicker: true as const } : {}),
+      };
+      const updated = updateProject(db, projectId, { metadata: nextMeta });
+      if (!updated) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      if (entryFile) setTabs(db, projectId, [entryFile], entryFile);
+      /** @type {import('@open-design/contracts').ReplaceProjectWorkingDirResponse} */
+      const body = { project: updated, baseDir: normalizedPath, entryFile };
+      res.json(body);
+    } catch (err: any) {
+      sendApiError(res, 400, 'BAD_REQUEST', String(err));
+    }
+  });
+
   app.post('/api/import/folder', async (req, res) => {
     try {
       const { baseDir, name, skillId, designSystemId } = req.body || {};

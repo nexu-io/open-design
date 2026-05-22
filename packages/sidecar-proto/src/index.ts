@@ -138,6 +138,7 @@ export type ServiceRuntimeState = "idle" | "running" | "starting" | "stopped" | 
 export type DaemonStatusSnapshot = {
   pid?: number | null;
   state: ServiceRuntimeState;
+  trustedWebOriginPort?: number | null;
   updatedAt?: string;
   url: string | null;
   /**
@@ -268,7 +269,32 @@ export type DesktopUpdateInstallResult = {
   path: string;
 };
 
+export type DesktopUpdateReleaseSnapshot = {
+  arch: string;
+  artifact: DesktopUpdateArtifactSnapshot;
+  checksum: DesktopUpdateChecksumSnapshot;
+  channel: DesktopUpdateChannel;
+  downloadedAt: string;
+  key: string;
+  metadata?: Record<string, unknown>;
+  path: string;
+  platformKey: string;
+  version: string;
+};
+
+export type DesktopUpdateIncomingSnapshot = {
+  arch: string;
+  artifact: DesktopUpdateArtifactSnapshot;
+  channel: DesktopUpdateChannel;
+  key?: string;
+  metadata?: Record<string, unknown>;
+  progress?: DesktopUpdateProgressSnapshot;
+  startedAt: string;
+  version: string;
+};
+
 export type DesktopUpdateStatusSnapshot = {
+  active?: DesktopUpdateReleaseSnapshot;
   arch: string;
   artifact?: DesktopUpdateArtifactSnapshot;
   artifactUrl?: string;
@@ -280,6 +306,7 @@ export type DesktopUpdateStatusSnapshot = {
   downloadPath?: string;
   enabled: boolean;
   error?: DesktopUpdateErrorSnapshot;
+  incoming?: DesktopUpdateIncomingSnapshot;
   installResult?: DesktopUpdateInstallResult;
   lastCheckedAt?: string;
   metadata?: Record<string, unknown>;

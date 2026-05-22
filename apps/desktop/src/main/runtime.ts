@@ -1,13 +1,22 @@
 import { createHmac, randomBytes } from "node:crypto";
-import { mkdir, writeFile, realpath, stat } from "node:fs/promises";
+import { appendFile, mkdir, realpath, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { BrowserWindow, dialog, ipcMain, screen, shell } from "electron";
-import type { DesktopExportPdfInput, DesktopExportPdfResult } from "@open-design/sidecar-proto";
+import {
+  DESKTOP_UPDATE_CHANNELS,
+  DESKTOP_UPDATE_MODES,
+  DESKTOP_UPDATE_STATES,
+  type DesktopExportPdfInput,
+  type DesktopExportPdfResult,
+  type DesktopUpdateStatusSnapshot,
+} from "@open-design/sidecar-proto";
+import type { OpenDesignHostActionResult, OpenDesignHostUpdaterActionOptions } from "@open-design/host";
 
 import { createElectronPdfTarget, exportPdfFromHtml, savePrintReadyDocumentAsPdf } from "./pdf-export.js";
 import type { PrintReadyPdfOptions } from "./pdf-export.js";
+import type { DesktopUpdater } from "./updater.js";
 
 /**
  * Result of validating a candidate path before exposing it to a
@@ -208,6 +217,14 @@ const MAX_CONSOLE_ENTRIES = 200;
 const DESKTOP_PET_WINDOW_WIDTH = 360;
 const DESKTOP_PET_WINDOW_HEIGHT = 300;
 const DESKTOP_PET_WINDOW_MARGIN = 24;
+const UPDATER_STATUS_EVENT = "od:update:status-changed";
+const UPDATER_IPC_CHANNELS = [
+  "od:update:status",
+  "od:update:check",
+  "od:update:download",
+  "od:update:install",
+  "od:update:quit",
+] as const;
 
 export type DesktopEvalInput = {
   expression: string;
@@ -287,8 +304,9 @@ export type DesktopRuntimeOptions = {
    * calls bypass the protocol handler entirely. Optional so tools-dev
    * (where webUrl IS an http:// URL Node fetch can hit) can omit it
    * and the runtime falls back to `discoverUrl` for API calls too.
-   */
+  */
   discoverDaemonUrl?: () => Promise<string | null>;
+  preloadPath?: string;
   /**
    * Round-5 (lefarcen P1, mrcfps): lazy re-handshake hook. The runtime
    * calls this when the daemon answers `503 DESKTOP_AUTH_PENDING` so a
@@ -299,6 +317,14 @@ export type DesktopRuntimeOptions = {
    * skip it (the lazy retry then collapses into a single attempt).
    */
   registerDesktopAuthWithDaemon?: () => Promise<boolean>;
+  /**
+   * Optional file path to append renderer-process error/warning console
+   * messages to. Lets the diagnostics export pick up UI errors that would
+   * otherwise only live in DevTools.
+   */
+  rendererLogPath?: string | null;
+  requestQuit?: () => void;
+  updater?: DesktopUpdater;
 };
 
 const DESKTOP_IMPORT_TOKEN_HEADER = "X-OD-Desktop-Import-Token";
@@ -393,6 +419,100 @@ export async function pickAndImportFolder(
   // message, details, retryable } }`. The daemon-import-token-gate test
   // pins `body.error?.code === 'DESKTOP_AUTH_PENDING'` (line 215-216),
   // so we read the same path here — no new wire shape.
+  if (resp.status === 503 && deps.registerDesktopAuth != null) {
+    let body: unknown;
+    try {
+      body = await resp.clone().json();
+    } catch {
+      body = null;
+    }
+    const code =
+      body != null && typeof body === "object" && "error" in body && body.error != null && typeof body.error === "object" && "code" in body.error
+        ? (body.error as { code?: unknown }).code
+        : undefined;
+    if (code === "DESKTOP_AUTH_PENDING") {
+      const reregistered = await deps.registerDesktopAuth();
+      if (reregistered) {
+        const retry = await postOnce();
+        if ("reason" in retry) {
+          return { ok: false, reason: retry.reason };
+        }
+        resp = retry;
+      }
+    }
+  }
+
+  let body: unknown;
+  try {
+    body = await resp.json();
+  } catch {
+    body = null;
+  }
+  if (!resp.ok) {
+    return {
+      ok: false,
+      reason: `daemon returned HTTP ${resp.status}`,
+      ...(body == null ? {} : { details: body }),
+    };
+  }
+  return { ok: true, response: body };
+}
+
+/**
+ * Pure helper for the `dialog:pick-and-replace-working-dir` IPC handler.
+ * Mirrors `pickAndImportFolder` but targets the endpoint that re-points
+ * an existing project at a new local folder.
+ */
+export type PickAndReplaceWorkingDirDeps = {
+  apiBaseUrl: string;
+  baseDir: string;
+  desktopAuthSecret: Buffer;
+  fetchImpl?: typeof globalThis.fetch;
+  /** Injected for tests; defaults to the production HMAC mint. */
+  mintToken?: (secret: Buffer, baseDir: string) => string;
+  projectId: string;
+  registerDesktopAuth?: () => Promise<boolean>;
+};
+
+export type PickAndReplaceWorkingDirResult =
+  | { ok: true; response: unknown }
+  | { ok: false; canceled?: boolean; details?: unknown; reason?: string };
+
+export async function pickAndReplaceWorkingDir(
+  deps: PickAndReplaceWorkingDirDeps,
+): Promise<PickAndReplaceWorkingDirResult> {
+  const fetchImpl = deps.fetchImpl ?? globalThis.fetch;
+  const mint = deps.mintToken ?? mintImportToken;
+  if (typeof deps.projectId !== "string" || deps.projectId.length === 0) {
+    return { ok: false, reason: "project id must be a non-empty string" };
+  }
+  if (!/^[A-Za-z0-9._-]{1,128}$/.test(deps.projectId)) {
+    return { ok: false, reason: "project id contains disallowed characters" };
+  }
+  const workingDirUrl = `${deps.apiBaseUrl.replace(/\/+$/, "")}/api/projects/${encodeURIComponent(deps.projectId)}/working-dir`;
+  const requestBody = JSON.stringify({ baseDir: deps.baseDir });
+
+  async function postOnce(): Promise<Response | { ok: false; reason: string }> {
+    const token = mint(deps.desktopAuthSecret, deps.baseDir);
+    try {
+      return await fetchImpl(workingDirUrl, {
+        body: requestBody,
+        headers: {
+          "Content-Type": "application/json",
+          [DESKTOP_IMPORT_TOKEN_HEADER]: token,
+        },
+        method: "POST",
+      });
+    } catch (err) {
+      return { ok: false, reason: `daemon fetch failed: ${err instanceof Error ? err.message : String(err)}` };
+    }
+  }
+
+  let resp = await postOnce();
+  if ("reason" in resp) {
+    return { ok: false, reason: resp.reason };
+  }
+
   if (resp.status === 503 && deps.registerDesktopAuth != null) {
     let body: unknown;
     try {
@@ -775,8 +895,38 @@ function parsePrintReadyPdfOptions(value: unknown): PrintReadyPdfOptions {
   return deck === true ? { deck: true } : {};
 }
 
+function unavailableUpdaterStatus(): DesktopUpdateStatusSnapshot {
+  return {
+    arch: process.arch,
+    capabilities: {
+      canApplyInPlace: false,
+      canDownload: false,
+      canOpenInstaller: false,
+      requiresManualInstall: false,
+    },
+    channel: DESKTOP_UPDATE_CHANNELS.BETA,
+    currentVersion: "0.0.0",
+    enabled: false,
+    error: {
+      code: "updater-unavailable",
+      message: "Desktop updater is not available.",
+    },
+    mode: DESKTOP_UPDATE_MODES.PACKAGE_LAUNCHER,
+    platform: process.platform,
+    state: DESKTOP_UPDATE_STATES.UNSUPPORTED,
+    supported: false,
+  };
+}
+
+function checkOptionsFromHost(options: unknown): { autoDownload?: boolean } | undefined {
+  const input = options as OpenDesignHostUpdaterActionOptions | null | undefined;
+  const payload = input?.payload;
+  if (payload == null || typeof payload.autoDownload !== "boolean") return undefined;
+  return { autoDownload: payload.autoDownload };
+}
+
 export async function createDesktopRuntime(options: DesktopRuntimeOptions): Promise<DesktopRuntime> {
-  const preloadPath = join(dirname(fileURLToPath(import.meta.url)), "preload.cjs");
+  const preloadPath = options.preloadPath ?? join(dirname(fileURLToPath(import.meta.url)), "preload.cjs");
 
   // ipcMain.handle() registers a handler in an internal map that is *not*
   // surfaced via eventNames(); the previous `!eventNames().includes(...)`
@@ -785,8 +935,12 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   // hot-reload). removeHandler is a no-op when nothing is registered.
   ipcMain.removeHandler("dialog:pick-folder");
   ipcMain.removeHandler("dialog:pick-and-import");
+  ipcMain.removeHandler("dialog:pick-and-replace-working-dir");
   ipcMain.removeHandler("shell:open-external");
   ipcMain.removeHandler("shell:open-path");
+  for (const channel of UPDATER_IPC_CHANNELS) {
+    ipcMain.removeHandler(channel);
+  }
   ipcMain.handle("shell:open-external", async (_event, url: string) => {
     if (!isHttpUrl(url)) return false;
     try {
@@ -855,6 +1009,42 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
         baseDir,
         desktopAuthSecret: options.desktopAuthSecret,
         init,
+        registerDesktopAuth: options.registerDesktopAuthWithDaemon,
+      });
+    },
+  );
+  // Atomic counterpart to dialog:pick-and-import for replacing a
+  // project's working directory. The picker, HMAC mint, and daemon
+  // POST are a single main-process transaction.
+  ipcMain.handle(
+    "dialog:pick-and-replace-working-dir",
+    async (_event, init?: { projectId?: string }) => {
+      if (options.desktopAuthSecret == null) {
+        return { ok: false, reason: "desktop auth secret not registered" };
+      }
+      const projectId = typeof init?.projectId === "string" ? init.projectId : "";
+      if (projectId.length === 0) {
+        return { ok: false, reason: "project id is required" };
+      }
+      const apiBaseUrl =
+        (options.discoverDaemonUrl ? await options.discoverDaemonUrl() : null) ??
+        (await options.discoverUrl());
+      if (!apiBaseUrl) {
+        return { ok: false, reason: "daemon API URL not available" };
+      }
+      const result = await dialog.showOpenDialog({ properties: ["openDirectory"] });
+      if (result.canceled || result.filePaths.length === 0) {
+        return { ok: false, canceled: true };
+      }
+      const baseDir = result.filePaths[0].trim();
+      if (baseDir.length === 0) {
+        return { ok: false, reason: "picker returned an empty path" };
+      }
+      return await pickAndReplaceWorkingDir({
+        apiBaseUrl,
+        baseDir,
+        desktopAuthSecret: options.desktopAuthSecret,
+        projectId,
         registerDesktopAuth: options.registerDesktopAuthWithDaemon,
       });
     },
@@ -929,6 +1119,53 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   installWindowChromeCssHook(window);
   showWindowButtons(window);
   attachDownloadSaveAsDialog(window);
+
+  const sendUpdaterStatus = (status = options.updater?.snapshot() ?? unavailableUpdaterStatus()) => {
+    if (window.isDestroyed()) return;
+    window.webContents.send(UPDATER_STATUS_EVENT, status);
+  };
+  const unsubscribeUpdater = options.updater?.subscribe(() => sendUpdaterStatus()) ?? (() => undefined);
+  const requireMainWindowSender = (event: Electron.IpcMainInvokeEvent): void => {
+    if (event.sender !== window.webContents) {
+      throw new Error("updater IPC is only available to the main Open Design window");
+    }
+  };
+  ipcMain.handle("od:update:status", async (event) => {
+    requireMainWindowSender(event);
+    const status = await (options.updater?.status() ?? unavailableUpdaterStatus());
+    sendUpdaterStatus(status);
+    return status;
+  });
+  ipcMain.handle("od:update:check", async (event, updaterOptions: unknown) => {
+    requireMainWindowSender(event);
+    const status = await (options.updater?.checkForUpdates(checkOptionsFromHost(updaterOptions)) ?? unavailableUpdaterStatus());
+    sendUpdaterStatus(status);
+    return status;
+  });
+  ipcMain.handle("od:update:download", async (event) => {
+    requireMainWindowSender(event);
+    const status = await (options.updater?.downloadUpdate() ?? unavailableUpdaterStatus());
+    sendUpdaterStatus(status);
+    return status;
+  });
+  ipcMain.handle("od:update:install", async (event) => {
+    requireMainWindowSender(event);
+    const status = await (options.updater?.installUpdate() ?? unavailableUpdaterStatus());
+    sendUpdaterStatus(status);
+    return status;
+  });
+  ipcMain.handle("od:update:quit", async (event): Promise<OpenDesignHostActionResult> => {
+    requireMainWindowSender(event);
+    const status = await (options.updater?.status() ?? unavailableUpdaterStatus());
+    if (status.installResult == null) {
+      return { ok: false, reason: "installer has not been opened" };
+    }
+    if (options.requestQuit == null) {
+      return { ok: false, reason: "desktop quit is not available" };
+    }
+    setTimeout(() => options.requestQuit?.(), 0);
+    return { ok: true };
+  });
 
   ipcMain.removeAllListeners("desktop-pet:set-visible");
   ipcMain.on("desktop-pet:set-visible", (event, visible: unknown) => {
@@ -1027,16 +1264,39 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     });
   }
 
+  const rendererLogPath = options.rendererLogPath ?? null;
+  let rendererLogReady: Promise<void> | null = null;
+  const ensureRendererLogDir = async (): Promise<void> => {
+    if (rendererLogPath == null) return;
+    if (rendererLogReady == null) {
+      rendererLogReady = mkdir(dirname(rendererLogPath), { recursive: true }).then(() => undefined);
+    }
+    await rendererLogReady;
+  };
+  const persistRendererEntry = async (entry: DesktopConsoleEntry): Promise<void> => {
+    if (rendererLogPath == null) return;
+    if (entry.level !== "error" && entry.level !== "warn") return;
+    try {
+      await ensureRendererLogDir();
+      const line = `${JSON.stringify({ timestamp: entry.timestamp, level: entry.level, text: entry.text })}\n`;
+      await appendFile(rendererLogPath, line, "utf8");
+    } catch (error) {
+      console.error("desktop renderer log append failed", error);
+    }
+  };
+
   (window.webContents as any).on("console-message", (event: { level?: number | string; message?: string }) => {
     const level = typeof event.level === "number" ? mapConsoleLevel(event.level) : (event.level ?? "log");
-    consoleEntries.push({
+    const entry: DesktopConsoleEntry = {
       level,
       text: event.message ?? "",
       timestamp: new Date().toISOString(),
-    });
+    };
+    consoleEntries.push(entry);
     if (consoleEntries.length > MAX_CONSOLE_ENTRIES) {
       consoleEntries.splice(0, consoleEntries.length - MAX_CONSOLE_ENTRIES);
     }
+    void persistRendererEntry(entry);
   });
 
   await window.loadURL(createPendingHtml());
@@ -1099,7 +1359,11 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
         clearTimeout(timer);
         timer = null;
       }
+      unsubscribeUpdater();
       ipcMain.removeAllListeners("desktop-pet:set-visible");
+      for (const channel of UPDATER_IPC_CHANNELS) {
+        ipcMain.removeHandler(channel);
+      }
       if (!petWindow.isDestroyed()) petWindow.close();
       if (!window.isDestroyed()) window.close();
     },

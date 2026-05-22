@@ -27,10 +27,29 @@ the full architecture.
 
 | Slug | Verdict | Coverage state | Last Google crawl | Last inspected | 7d impressions | 7d clicks | 7d CTR | 28d avg position |
 |---|---|---|---|---|---|---|---|---|
-| _no inspections recorded yet — the first deploy after this file lands will populate the table_ | — | — | — | — | — | — | — | — |
+| 31-skills-72-systems-how-the-library-works | neutral | Discovered - currently not indexed | — | 2026-05-20 | 0 | 0 | 0.0% | — |
+| byok-design-workflow-claude-codex-qwen | neutral | Discovered - currently not indexed | — | 2026-05-20 | 0 | 0 | 0.0% | — |
+| byok-reality-check-5-things-that-break | neutral | Discovered - currently not indexed | — | 2026-05-21 | 0 | 0 | 0.0% | — |
+| layout-layer-canvas-used-to-hide | indexed | Submitted and indexed | 2026-05-19 | 2026-05-21 | 0 | 0 | 0.0% | — |
+| open-source-alternative-to-claude-design | indexed | Submitted and indexed | 2026-05-15 | 2026-05-21 | 107 | 4 | 3.7% | 7.9 |
+| port-figma-workflow-open-design-plugin | indexed | Submitted and indexed | 2026-05-19 | 2026-05-21 | 0 | 0 | 0.0% | — |
+| why-we-built-open-design-as-a-skill-layer | neutral | Discovered - currently not indexed | — | 2026-05-20 | 0 | 0 | 0.0% | — |
 
 ## Recent inspections
 
 | Inspected | Slug | Verdict | Coverage state | Canonical |
 |---|---|---|---|---|
-| _no inspections recorded yet_ | — | — | — | — |
+| 2026-05-21 | open-source-alternative-to-claude-design | indexed | Submitted and indexed | https://open-design.ai/blog/open-source-alternative-to-claude-design/ |
+| 2026-05-21 | byok-reality-check-5-things-that-break | neutral | Discovered - currently not indexed | — |
+| 2026-05-21 | port-figma-workflow-open-design-plugin | indexed | Submitted and indexed | https://open-design.ai/blog/port-figma-workflow-open-design-plugin/ |
+| 2026-05-21 | layout-layer-canvas-used-to-hide | indexed | Submitted and indexed | https://open-design.ai/blog/layout-layer-canvas-used-to-hide/ |
+| 2026-05-20 | why-we-built-open-design-as-a-skill-layer | neutral | Discovered - currently not indexed | — |
+| 2026-05-20 | byok-design-workflow-claude-codex-qwen | neutral | Discovered - currently not indexed | — |
+| 2026-05-20 | 31-skills-72-systems-how-the-library-works | neutral | Discovered - currently not indexed | — |
+| 2026-05-19 | why-we-built-open-design-as-a-skill-layer | neutral | Discovered - currently not indexed | — |
+| 2026-05-19 | port-figma-workflow-open-design-plugin | indexed | Submitted and indexed | https://open-design.ai/blog/port-figma-workflow-open-design-plugin/ |
+| 2026-05-19 | open-source-alternative-to-claude-design | indexed | Submitted and indexed | https://open-design.ai/blog/open-source-alternative-to-claude-design/ |
+| 2026-05-19 | layout-layer-canvas-used-to-hide | indexed | Submitted and indexed | https://open-design.ai/blog/layout-layer-canvas-used-to-hide/ |
+| 2026-05-19 | byok-reality-check-5-things-that-break | neutral | Discovered - currently not indexed | — |
+| 2026-05-19 | byok-design-workflow-claude-codex-qwen | neutral | Discovered - currently not indexed | — |
+| 2026-05-19 | 31-skills-72-systems-how-the-library-works | neutral | URL is unknown to Google | — |

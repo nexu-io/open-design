@@ -7,18 +7,17 @@
 // feature, it's "the same provider/CLI as chat, with a different (and
 // usually cheaper) model". So the picker is a single field that
 // borrows the surrounding chat picker's protocol, key, base URL, and
-// (for Azure) api-version automatically. The user only chooses the
-// model id.
+// (for Azure) api-version automatically in BYOK mode; in Local CLI
+// mode the default path follows the selected CLI itself.
 //
 // Three render branches:
 //   - "Same as chat" (default): clears the override on the daemon —
 //     auto-pick chooses a fast default on the chat protocol's key.
 //   - A suggested model: stores { provider: chatProtocol, model, ... }
 //     so the daemon calls the chat protocol's endpoint with the
-//     reduced model. In CLI mode the provider is *derived* from the
-//     picked model id (claude-* → anthropic, gemini-* → google,
-//     everything else → openai) since the CLI itself isn't an API
-//     provider.
+//     reduced model. In CLI mode the provider is derived from the
+//     selected agent/model only as metadata; the daemon can still run
+//     the supported local CLI runner for "same as chat".
 //   - "Custom..." sentinel: opens a free-text input. Same persistence
 //     as the suggested branch.
 //
@@ -121,6 +120,30 @@ function chatProtocolFromAgent(
   return null;
 }
 
+function cliAgentLabel(agentId: string | null | undefined): string | null {
+  if (!agentId) return null;
+  const id = agentId.trim().toLowerCase();
+  const labels: Record<string, string> = {
+    claude: 'Claude Code',
+    codex: 'Codex CLI',
+    gemini: 'Gemini CLI',
+    opencode: 'OpenCode',
+    qwen: 'Qwen Code',
+    qoder: 'Qoder CLI',
+    copilot: 'GitHub Copilot CLI',
+    pi: 'Pi',
+    kiro: 'Kiro CLI',
+    kilo: 'Kilo',
+    vibe: 'Mistral Vibe CLI',
+    deepseek: 'DeepSeek TUI',
+    kimi: 'Kimi',
+    hermes: 'Hermes',
+    devin: 'Devin',
+    'cursor-agent': 'Cursor Agent',
+  };
+  return labels[id] ?? agentId;
+}
+
 async function fetchMemoryExtraction(): Promise<MemoryExtractionMaskedConfig | null> {
   try {
     const resp = await fetch('/api/memory');
@@ -187,14 +210,15 @@ export function MemoryModelInline({
     return () => clearTimeout(id);
   }, [flash]);
 
-  // The protocol the daemon will actually call when extraction fires.
-  // BYOK: whatever protocol the chat picker has selected. CLI: derived
-  // from the agent id (claude → anthropic, codex → openai, …) so the
-  // memory dropdown can label its default with the real provider
-  // instead of the misleading openai-fallback that the daemon used to
-  // land on for Claude Code users.
+  // The protocol family used for metadata and explicit model overrides.
+  // BYOK: whatever protocol the chat picker has selected. CLI:
+  // derived from the agent id (claude → anthropic, codex → openai,
+  // …), while the "Same as chat" default can still run the selected
+  // local CLI directly on daemon-supported adapters.
   const effectiveChatProtocol: MemoryExtractionProvider | null =
     mode === 'api' ? apiProtocol : chatProtocolFromAgent(cliAgentId);
+  const sameAsChatCliLabel =
+    mode === 'daemon' ? cliAgentLabel(cliAgentId) : null;
 
   const modelOptions = useMemo<readonly string[]>(() => {
     if (mode === 'api') return SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol];
@@ -215,15 +239,10 @@ export function MemoryModelInline({
   //   - BYOK: provider + key + baseUrl + apiVersion all come from the
   //     surrounding chat config so the daemon can hit the API without
   //     a second round-trip through the user.
-  //   - CLI: there's no chat key to borrow. We derive a provider —
-  //     preferring the agent-id mapping (claude → anthropic) over
-  //     model-id pattern matching (claude-haiku-4-5 also says
-  //     anthropic, but `default` doesn't say anything) — and let the
-  //     daemon's pickProvider fall back to env vars or the media-
-  //     config OpenAI key. In practice this means CLI users still
-  //     need an env-var or media-config key for memory extraction to
-  //     fire — exactly the behaviour they had before this picker
-  //     existed; the picker just lets them pin the model.
+  //   - CLI: there's no browser-side chat key to borrow. We derive a
+  //     provider for metadata and for unsupported CLI adapters, while
+  //     the daemon can run supported Local CLIs directly when the
+  //     picker is on "Same as chat".
   const buildOverride = useCallback(
     (modelId: string): MemoryExtractionConfigShape => {
       const trimmedModel = modelId.trim();
@@ -407,7 +426,11 @@ export function MemoryModelInline({
         onChange={(e) => void onSelectChange(e.target.value)}
       >
         <option value={SAME_AS_CHAT_SENTINEL}>
-          {effectiveChatProtocol
+          {sameAsChatCliLabel
+            ? t('settings.memoryModelInlineSameAsChatWithModel', {
+                model: sameAsChatCliLabel,
+              })
+            : effectiveChatProtocol
             ? t('settings.memoryModelInlineSameAsChatWithProvider', {
                 provider: effectiveChatProtocol,
               })
@@ -458,7 +481,7 @@ export function MemoryModelInline({
       ) : null}
       <p className="hint" style={{ marginTop: 4, fontSize: 11 }}>
         {mode === 'api'
-          ? t('settings.memoryModelInlineHintByok')
+          ? t('settings.memoryModelInlineHintByokNeutral')
           : effectiveChatProtocol
             ? t('settings.memoryModelInlineHintCliConstrained', {
                 provider: effectiveChatProtocol,

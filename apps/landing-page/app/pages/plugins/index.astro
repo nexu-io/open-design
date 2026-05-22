@@ -2,13 +2,36 @@
 import '../../globals.css';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import FaviconLinks from '../../_components/favicon-links.astro';
+import ResourceHints from '../../_components/resource-hints.astro';
+import GoogleAnalytics from '../../_components/google-analytics.astro';
 import { Header } from '../../_components/header';
+import HeaderEnhancer from '../../_components/header-enhancer.astro';
+import LazyImg from '../../_components/lazy-img.astro';
+import LocaleSwitcherScript from '../../_components/locale-switcher-script.astro';
+import PreciseLazyload from '../../_components/precise-lazyload.astro';
+import Topbar from '../../_components/topbar.astro';
 import { getCatalogCounts } from '../../_lib/catalog';
+import { getGithubRepoMeta } from '../../_lib/github';
+import { localizeContentTag } from '../../content-i18n';
+import {
+  LANDING_LOCALES,
+  alternateLinksForPath,
+  getLandingUiCopy,
+  getLocaleDefinition,
+  localeFromPath,
+  localizedHref,
+} from '../../i18n';
 import { getPublicPlugins, getRegistryCounts } from '../../plugin-registry';
 
-const plugins = getPublicPlugins();
+const locale = localeFromPath(Astro.url.pathname);
+const localeDef = getLocaleDefinition(locale);
+const ui = getLandingUiCopy(locale);
+const href = (path: string) => localizedHref(path, locale);
+const plugins = getPublicPlugins(locale);
 const counts = getRegistryCounts(plugins);
 const catalogCounts = await getCatalogCounts();
+const github = await getGithubRepoMeta();
 const previewCount = plugins.filter((plugin) => plugin.preview).length;
 const surfaceCount = new Set(
   plugins.map((plugin) => plugin.mode ?? plugin.surface ?? plugin.visualKind),
@@ -24,11 +47,16 @@ const featuredPlugins = plugins
 const showcasePlugins =
   featuredPlugins.length >= 3 ? featuredPlugins : plugins.slice(0, 3);
 const site = Astro.site ?? new URL('https://open-design.ai');
-const canonical = new URL('/plugins/', site).toString();
-const title = 'Open Design Plugins — Official and community registries';
-const description = `Browse ${counts.all} Open Design plugins from official and community registries. Search installable agent-native design workflows with stable vendor/plugin IDs.`;
+const canonical = new URL(Astro.url.pathname, site).toString();
+const alternateLinks = alternateLinksForPath(Astro.url.pathname).map((entry) => ({
+  ...entry,
+  href: new URL(entry.hrefPath, site).toString(),
+}));
+const xDefaultHref = new URL(alternateLinks[0]!.hrefPath, site).toString();
+const title = ui.plugins.registryTitle;
+const description = ui.plugins.registryDescription(counts.all);
 const headerHtml = renderToStaticMarkup(
-  createElement(Header, { counts: catalogCounts, brandHref: '/' }),
+  createElement(Header, { counts: catalogCounts, brandHref: '/', locale }),
 );
 const itemListJsonLd = {
   '@context': 'https://schema.org',
@@ -40,7 +68,7 @@ const itemListJsonLd = {
   itemListElement: plugins.slice(0, 120).map((plugin, index) => ({
     '@type': 'ListItem',
     position: index + 1,
-    url: new URL(plugin.detailHref, site).toString(),
+    url: new URL(href(plugin.detailHref), site).toString(),
     name: plugin.title,
     description: plugin.description,
   })),
@@ -58,23 +86,29 @@ const breadcrumbJsonLd = {
     {
       '@type': 'ListItem',
       position: 2,
-      name: 'Plugins',
+      name: ui.plugins.registry,
       item: canonical,
     },
   ],
 };
 
 const displayKind = (plugin: (typeof plugins)[number]) =>
-  plugin.mode ?? plugin.surface ?? plugin.visualKind;
+  localizeContentTag(plugin.mode ?? plugin.surface ?? plugin.visualKind, locale) ??
+  plugin.mode ??
+  plugin.surface ??
+  plugin.visualKind;
 
 const primaryMeta = (plugin: (typeof plugins)[number]) =>
   [displayKind(plugin), plugin.preview?.label]
     .filter(Boolean)
     .join(' · ');
+
+const trustLabel = (plugin: (typeof plugins)[number]) =>
+  ui.plugins.trustLabels[plugin.trust] ?? plugin.trust;
 ---
 
 <!doctype html>
-<html lang='en'>
+<html lang={localeDef.htmlLang} dir={localeDef.dir}>
   <head>
     <meta charset='utf-8' />
     <meta name='viewport' content='width=device-width, initial-scale=1' />
@@ -82,80 +116,79 @@ const primaryMeta = (plugin: (typeof plugins)[number]) =>
     <meta name='description' content={description} />
     <meta name='robots' content='index,follow' />
     <link rel='canonical' href={canonical} />
+    {alternateLinks.map((entry) => (
+      <link rel='alternate' hreflang={entry.hreflang} href={entry.href} />
+    ))}
+    <link rel='alternate' hreflang='x-default' href={xDefaultHref} />
+    <FaviconLinks />
+    <ResourceHints />
     <meta property='og:type' content='website' />
     <meta property='og:site_name' content='Open Design' />
     <meta property='og:title' content={title} />
     <meta property='og:description' content={description} />
     <meta property='og:url' content={canonical} />
+    <meta property='og:locale' content={localeDef.ogLocale} />
+    {LANDING_LOCALES.filter((entry) => entry.code !== locale).map((entry) => (
+      <meta property='og:locale:alternate' content={entry.ogLocale} />
+    ))}
     <meta name='twitter:card' content='summary_large_image' />
     <meta name='twitter:title' content={title} />
     <meta name='twitter:description' content={description} />
     <script is:inline type='application/ld+json' set:html={JSON.stringify(itemListJsonLd)}></script>
     <script is:inline type='application/ld+json' set:html={JSON.stringify(breadcrumbJsonLd)}></script>
+    <GoogleAnalytics />
   </head>
   <body>
     <div class='side-rail right' aria-hidden='true'>
-      <span class='rail-text'>Open Design Registry · Official · Community</span>
+      <span class='rail-text'>{ui.plugins.directoryRailRight}</span>
     </div>
     <div class='side-rail left' aria-hidden='true'>
-      <span class='rail-text'>vendor/plugin-name · marketplace.json</span>
+      <span class='rail-text'>{ui.plugins.directoryRailLeft}</span>
     </div>
 
     <div class='shell plugin-shell'>
-      <div class='topbar'>
-        <div class='container topbar-inner'>
-          <span><b>OD / REGISTRY</b>&nbsp;·&nbsp;Public index</span>
-          <span class='mid'>
-            <span>Official · Community · Self-hosted</span>
-            <span>GitHub-backed today · database-ready later</span>
-          </span>
-          <span class='right'>
-            <a class='topbar-link' href='https://github.com/nexu-io/open-design/tree/main/plugins/registry' target='_blank' rel='noreferrer noopener'>
-              Source JSON
-            </a>
-          </span>
-        </div>
+      <div class='site-chrome' data-chrome-headroom>
+        <Topbar github={github} locale={locale} />
+        <Fragment set:html={headerHtml} />
       </div>
-
-      <Fragment set:html={headerHtml} />
 
       <main id='top' class='plugin-directory'>
         <section class='plugin-hero'>
           <div class='container plugin-hero__grid'>
             <div>
-              <span class='label'>Plugin Registry · public ecosystem</span>
-              <h1>Browse agent-native design plugins with live previews.</h1>
+              <span class='label'>{ui.plugins.heroLabel}</span>
+              <h1>{ui.plugins.heroTitle}</h1>
               <p>
-                Discover installable workflows, decks, image templates, design
-                systems, and atomic capabilities. Each entry keeps a stable
-                vendor/plugin ID, clear provenance, and a visual cue so browsing
-                the registry feels closer to choosing a creative tool than reading
-                a manifest dump.
+                {ui.plugins.heroBody}
               </p>
               <div class='plugin-hero__actions'>
                 <a class='btn btn-primary' href='#registry-results'>
-                  Browse registry
+                  {ui.plugins.browseRegistry}
                 </a>
                 <a class='btn btn-ghost' href='https://raw.githubusercontent.com/nexu-io/open-design/main/plugins/registry/community/open-design-marketplace.json' target='_blank' rel='noreferrer noopener'>
-                  Community marketplace.json
+                  {ui.plugins.communityMarketplace}
                 </a>
               </div>
             </div>
-            <aside class='plugin-hero__panel' aria-label='Registry preview'>
+            <aside class='plugin-hero__panel' aria-label={ui.plugins.preview}>
               <div class='plugin-showcase__head'>
-                <span>Registry preview</span>
+                <span>{ui.plugins.preview}</span>
                 <strong>{counts.all}</strong>
-                <small>installable entries</small>
+                <small>{ui.plugins.installableEntries}</small>
               </div>
               <div class='plugin-showcase__list'>
                 {showcasePlugins.map((plugin, index) => (
                   <a
                     class={`plugin-showcase-item plugin-showcase-item--${plugin.visualKind}`}
-                    href={plugin.detailHref}
+                    href={href(plugin.detailHref)}
                   >
                     <span class='plugin-showcase-item__visual' aria-hidden='true'>
                       {plugin.preview?.poster ? (
-                        <img src={plugin.preview.poster} alt='' loading='lazy' />
+                        <LazyImg
+                          src={plugin.preview.poster}
+                          alt=''
+                          loading={index < 4 ? 'eager' : 'precise'}
+                        />
                       ) : (
                         <>
                           <span />
@@ -175,15 +208,15 @@ const primaryMeta = (plugin: (typeof plugins)[number]) =>
               <dl class='plugin-hero__stats'>
                 <div>
                   <dt>{counts.official}</dt>
-                  <dd>official</dd>
+                  <dd>{ui.plugins.official.toLowerCase()}</dd>
                 </div>
                 <div>
                   <dt>{previewCount}</dt>
-                  <dd>with preview</dd>
+                  <dd>{ui.plugins.withPreview}</dd>
                 </div>
                 <div>
                   <dt>{surfaceCount}</dt>
-                  <dd>surfaces</dd>
+                  <dd>{ui.plugins.surfaces}</dd>
                 </div>
               </dl>
             </aside>
@@ -194,29 +227,29 @@ const primaryMeta = (plugin: (typeof plugins)[number]) =>
           <div class='container'>
             <div class='plugin-toolbar' data-plugin-toolbar>
               <div>
-                <span class='label'>Available from sources</span>
-                <h2>Registry entries</h2>
+                <span class='label'>{ui.plugins.availableFromSources}</span>
+                <h2>{ui.plugins.registryEntries}</h2>
               </div>
               <label class='plugin-search'>
-                <span class='sr-only'>Search plugins</span>
-                <input data-plugin-search type='search' placeholder='Search plugins, workflows, vendors...' autocomplete='off' />
+                <span class='sr-only'>{ui.plugins.searchPlugins}</span>
+                <input data-plugin-search type='search' placeholder={ui.plugins.searchPlaceholder} autocomplete='off' />
               </label>
             </div>
 
-            <div class='plugin-filter-row' aria-label='Registry filters'>
+            <div class='plugin-filter-row' aria-label={ui.plugins.filtersLabel}>
               <button class='plugin-filter is-active' type='button' data-plugin-filter='all' aria-pressed='true'>
-                All <span>{counts.all}</span>
+                {ui.plugins.all} <span>{counts.all}</span>
               </button>
               <button class='plugin-filter' type='button' data-plugin-filter='official' aria-pressed='false'>
-                Official <span>{counts.official}</span>
+                {ui.plugins.official} <span>{counts.official}</span>
               </button>
               <button class='plugin-filter' type='button' data-plugin-filter='community' aria-pressed='false'>
-                Community <span>{counts.community}</span>
+                {ui.plugins.community} <span>{counts.community}</span>
               </button>
             </div>
 
             <p class='plugin-result-count'>
-              <span data-plugin-visible-count>{counts.all}</span> visible plugins
+              <span data-plugin-visible-count>{counts.all}</span> {ui.plugins.visiblePlugins}
             </p>
 
             <div class='plugin-card-grid'>
@@ -229,11 +262,11 @@ const primaryMeta = (plugin: (typeof plugins)[number]) =>
                 >
                   <a
                     class={`plugin-card__preview plugin-card__preview--${plugin.visualKind}`}
-                    href={plugin.detailHref}
-                    aria-label={`Open ${plugin.title} details`}
+                    href={href(plugin.detailHref)}
+                    aria-label={ui.plugins.openDetails(plugin.title)}
                   >
                     {plugin.preview?.poster ? (
-                      <img src={plugin.preview.poster} alt='' loading='lazy' />
+                      <LazyImg src={plugin.preview.poster} alt='' loading='precise' />
                     ) : (
                       <span class='plugin-card__mock' aria-hidden='true'>
                         <span />
@@ -252,7 +285,7 @@ const primaryMeta = (plugin: (typeof plugins)[number]) =>
                     <span>{plugin.version}</span>
                   </div>
                   <h3>
-                    <a href={plugin.detailHref}>{plugin.title}</a>
+                    <a href={href(plugin.detailHref)}>{plugin.title}</a>
                   </h3>
                   <code>{plugin.id}</code>
                   <p>{plugin.description}</p>
@@ -263,8 +296,8 @@ const primaryMeta = (plugin: (typeof plugins)[number]) =>
                     ))}
                   </div>
                   <div class='plugin-card__footer'>
-                    <a href={plugin.detailHref}>Details</a>
-                    <span>{plugin.trust}</span>
+                    <a href={href(plugin.detailHref)}>{ui.plugins.details}</a>
+                    <span>{trustLabel(plugin)}</span>
                   </div>
                 </article>
               ))}
@@ -321,5 +354,8 @@ const primaryMeta = (plugin: (typeof plugins)[number]) =>
         })
         .catch(() => {});
     </script>
+    <HeaderEnhancer />
+    <LocaleSwitcherScript />
+    <PreciseLazyload />
   </body>
 </html>

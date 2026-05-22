@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import {
-  AGENT_DEFS, assert, chmodSync, codex, detectAgents, join, mkdtempSync, rmSync, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
+  AGENT_DEFS, assert, chmodSync, codex, cursorAgent, detectAgents, join, mkdtempSync, rmSync, tmpdir, withEnvSnapshot, withPlatform, writeFileSync,
 } from './helpers/test-helpers.js';
 import { readLocalAgentProfileDefs } from '../../src/runtimes/registry.js';
 
@@ -323,6 +323,23 @@ test('codex picker includes gpt-5.1 model family', () => {
 
   assert.equal(pickerModels.has('gpt-5.1'), true);
   assert.equal(pickerModels.has('gpt-5.1-codex-mini'), true);
+});
+
+test('cursor-agent parses live model ids separately from display labels', () => {
+  assert.ok(cursorAgent.listModels, 'cursor-agent must define live model discovery');
+  const parsed = cursorAgent.listModels.parse([
+    'Available models',
+    'auto - Auto',
+    'composer-2.5 - Composer 2.5 (current)',
+    'grok-4.3 - Grok 4.3 1M',
+  ].join('\n'));
+
+  assert.deepEqual(parsed, [
+    { id: 'default', label: 'Default (CLI config)' },
+    { id: 'auto', label: 'Auto' },
+    { id: 'composer-2.5', label: 'Composer 2.5 (current)' },
+    { id: 'grok-4.3', label: 'Grok 4.3 1M' },
+  ]);
 });
 
 // Recent Codex CLI versions reject a bare `-` argv sentinel; passing it

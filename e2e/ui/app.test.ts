@@ -3,6 +3,7 @@ import type { Dialog, Page, Request, Response } from '@playwright/test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { T } from '@/timeouts';
 import { automatedUiScenarios } from '@/playwright/resources';
 import type { UiScenario } from '@/playwright/resources';
 
@@ -354,6 +355,10 @@ for (const entry of automatedUiScenarios().filter(
       });
     }
 
+    if (entry.flow === 'file-mention') {
+      await routeMockSuccessfulRun(page, 'file-mention-run');
+    }
+
     await gotoEntryHome(page);
 
     if (entry.flow === 'design-system-selection') {
@@ -440,6 +445,8 @@ for (const entry of automatedUiScenarios().filter(
     if (entry.mockArtifact) {
       await expectArtifactVisible(page, entry);
     }
+    const { projectId } = await getCurrentProjectContext(page);
+    await expectScenarioProjectState(page, entry, projectId);
   });
 }
 
@@ -625,45 +632,18 @@ async function expectProjectShellReady(page: Page) {
   await expect(page.getByTestId('file-workspace')).toBeVisible();
 }
 
-async function sendPrompt(
-  page: Page,
-  prompt: string,
-) {
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const input = page.getByTestId('chat-composer-input');
-    const sendButton = page.getByTestId('chat-send');
-    await expect(input).toBeVisible({ timeout: 3_000 });
-    await input.click();
-    await input.fill(prompt);
-    try {
-      await expect(input).toHaveValue(prompt, { timeout: 1500 });
-      await expect(sendButton).toBeEnabled({ timeout: 1500 });
-      await Promise.all([
-        page.waitForResponse(isCreateRunResponse, { timeout: 5_000 }),
-        sendButton.evaluate((button: HTMLButtonElement) => button.click()),
-      ]);
-      return;
-    } catch (error) {
-      const retryInput = page.getByTestId('chat-composer-input');
-      const retrySendButton = page.getByTestId('chat-send');
-      await expect(retryInput).toBeVisible({ timeout: 3_000 });
-      await retryInput.click();
-      await retryInput.press(`${process.platform === 'darwin' ? 'Meta' : 'Control'}+A`);
-      await retryInput.press('Backspace');
-      await retryInput.pressSequentially(prompt);
-      try {
-        await expect(retryInput).toHaveValue(prompt, { timeout: 1500 });
-        await expect(retrySendButton).toBeEnabled({ timeout: 1500 });
-        await Promise.all([
-          page.waitForResponse(isCreateRunResponse, { timeout: 5_000 }),
-          retrySendButton.evaluate((button: HTMLButtonElement) => button.click()),
-        ]);
-        return;
-      } catch (retryError) {
-        if (attempt === 2) throw retryError;
-      }
-    }
-  }
+async function sendPrompt(page: Page, prompt: string) {
+  const input = page.getByTestId('chat-composer-input');
+  const sendButton = page.getByTestId('chat-send');
+  await expect(input).toBeVisible({ timeout: T.short });
+  await input.click();
+  await input.fill(prompt);
+  await expect(input).toHaveValue(prompt, { timeout: T.short });
+  await expect(sendButton).toBeEnabled({ timeout: T.short });
+  await Promise.all([
+    page.waitForResponse(isCreateRunResponse, { timeout: 5_000 }),
+    sendButton.evaluate((button: HTMLButtonElement) => button.click()),
+  ]);
 }
 
 function isCreateRunResponse(resp: Response): boolean {
@@ -701,6 +681,8 @@ async function runDesignSystemSelectionFlow(
   await expect(page).toHaveURL(/\/projects\//);
   await expect(page.getByTestId('project-meta')).toContainText('Nexu Soft Tech');
   await expect(page.getByTestId('chat-composer')).toBeVisible();
+  const { projectId } = await getCurrentProjectContext(page);
+  await expectScenarioProjectState(page, entry, projectId);
 }
 
 async function runExampleUsePromptFlow(
@@ -793,8 +775,10 @@ async function runPluginCreateImportFlow(
 
     const runRequest = await runRequestPromise;
     const runBody = runRequest.postDataJSON() as { message?: string };
-    expect(runBody.message).toContain(entry.prompt);
+    expectScenarioRunRequest(runBody, entry);
     await expect(page.locator('.msg.user .user-text').filter({ hasText: entry.prompt }).first()).toBeVisible();
+    const { projectId } = await getCurrentProjectContext(page);
+    await expectScenarioProjectState(page, entry, projectId);
   } finally {
     await rm(queryPluginFixture, { recursive: true, force: true });
   }
@@ -828,6 +812,8 @@ async function runHyperframesProjectRoutingFlow(
   await expectWorkspaceReady(page);
   await sendPrompt(page, entry.prompt);
   await expectArtifactVisible(page, entry);
+  const { projectId } = await getCurrentProjectContext(page);
+  await expectScenarioProjectState(page, entry, projectId);
 }
 
 async function runImageProjectRoutingFlow(
@@ -855,9 +841,7 @@ async function runImageProjectRoutingFlow(
 
   await expectWorkspaceReady(page);
   const { projectId } = await getCurrentProjectContext(page);
-  const project = await fetchProjectFromApi(page, projectId);
-  expect(project.metadata?.kind).toBe('image');
-  expect((project.metadata as Record<string, unknown> | undefined)?.imageModel).toBe('gpt-image-2');
+  await expectScenarioProjectState(page, entry, projectId);
 }
 
 async function runVideoProjectRoutingFlow(
@@ -889,12 +873,7 @@ async function runVideoProjectRoutingFlow(
 
   await expectWorkspaceReady(page);
   const { projectId } = await getCurrentProjectContext(page);
-  const project = await fetchProjectFromApi(page, projectId);
-  const metadata = project.metadata as Record<string, unknown> | undefined;
-  expect(metadata?.kind).toBe('video');
-  expect(metadata?.videoModel).toBe('doubao-seedance-2-0-260128');
-  expect(metadata?.videoAspect).toBe('16:9');
-  expect(metadata?.videoLength).toBe(5);
+  await expectScenarioProjectState(page, entry, projectId);
 }
 
 async function runAudioProjectRoutingFlow(
@@ -928,10 +907,8 @@ async function runAudioProjectRoutingFlow(
   await expectWorkspaceReady(page);
   const { projectId } = await getCurrentProjectContext(page);
   const project = await fetchProjectFromApi(page, projectId);
+  await expectScenarioProjectState(page, entry, projectId);
   const metadata = project.metadata as Record<string, unknown> | undefined;
-  expect(metadata?.kind).toBe('audio');
-  expect(metadata?.audioKind).toBe('sfx');
-  expect(metadata?.audioModel).toBe('elevenlabs-sfx');
   expect(metadata?.audioDuration).toBe(body.metadata?.audioDuration);
 }
 
@@ -962,11 +939,7 @@ async function runLiveArtifactProjectRoutingFlow(
 
   await expectWorkspaceReady(page);
   const { projectId } = await getCurrentProjectContext(page);
-  const project = await fetchProjectFromApi(page, projectId);
-  const metadata = project.metadata as Record<string, unknown> | undefined;
-  expect(metadata?.kind).toBe('prototype');
-  expect(metadata?.intent).toBe('live-artifact');
-  expect(metadata?.fidelity).toBe('high-fidelity');
+  await expectScenarioProjectState(page, entry, projectId);
 }
 
 
@@ -1011,7 +984,10 @@ async function runQuestionFormSubmitPersistenceFlow(
   page: Page,
   entry: UiScenario,
 ) {
+  const firstRunRequestPromise = page.waitForRequest(isCreateRunRequest);
   await sendPrompt(page, entry.prompt);
+  const firstRunBody = (await firstRunRequestPromise).postDataJSON() as Record<string, unknown>;
+  expectScenarioRunRequest(firstRunBody, entry);
 
   const form = page.locator('.question-form').first();
   await expect(form).toBeVisible();
@@ -1062,6 +1038,7 @@ async function runGenerationDoesNotCreateExtraFileFlow(
   const reloadedFiles = await listProjectFilesFromApi(page, projectId);
   expect(reloadedFiles.map((file) => file.name)).toEqual(initialFiles.map((file) => file.name));
   await expect(page.getByText(entry.mockArtifact!.fileName, { exact: true })).toBeVisible();
+  await expectScenarioProjectState(page, entry, projectId);
 }
 
 async function runCommentAttachmentFlow(
@@ -1234,7 +1211,7 @@ async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
-  if (await privacyDialog.isVisible().catch(() => false)) {
+  if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /not now/i }).click();
     await expect(privacyDialog).toHaveCount(0);
   }
@@ -1249,8 +1226,7 @@ async function openNewProjectModal(page: Page) {
 }
 
 async function waitForLoadingToClear(page: Page) {
-  const loading = page.getByText('Loading Open Design…');
-  await loading.waitFor({ state: 'detached', timeout: 10_000 }).catch(() => {});
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.medium });
 }
 
 async function getCurrentProjectContext(
@@ -1303,6 +1279,93 @@ async function listProjectFilesFromApi(
   return files;
 }
 
+async function expectScenarioProjectState(
+  page: Page,
+  entry: UiScenario,
+  projectId: string,
+) {
+  await expectScenarioProjectMetadata(page, entry, projectId);
+  await expectScenarioFiles(page, entry, projectId);
+  await expectScenarioPreviewText(page, entry);
+}
+
+async function expectScenarioProjectMetadata(
+  page: Page,
+  entry: UiScenario,
+  projectId: string,
+) {
+  if (!entry.expectedProjectMetadata) return;
+  const project = await fetchProjectFromApi(page, projectId);
+  const metadata = project.metadata as Record<string, unknown> | undefined;
+  expect(metadata).toBeDefined();
+  expectObjectContaining(metadata ?? {}, entry.expectedProjectMetadata);
+}
+
+async function expectScenarioFiles(
+  page: Page,
+  entry: UiScenario,
+  projectId: string,
+) {
+  if (!entry.expectedFiles?.length) return;
+  const files = await listProjectFilesFromApi(page, projectId);
+  for (const expectedFile of entry.expectedFiles) {
+    const actual = files.find((file) => file.name === expectedFile.name);
+    expect(actual, `missing expected file ${expectedFile.name}`).toBeDefined();
+    if (expectedFile.kind) {
+      expect(actual?.kind).toBe(expectedFile.kind);
+    }
+    if (expectedFile.previewText) {
+      await expectProjectFileToContain(page, projectId, expectedFile.name, expectedFile.previewText);
+    }
+  }
+}
+
+async function expectScenarioPreviewText(
+  page: Page,
+  entry: UiScenario,
+) {
+  if (!entry.expectedPreviewText) return;
+  const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
+  await expect(frame.getByText(entry.expectedPreviewText, { exact: false })).toBeVisible();
+}
+
+function expectScenarioRunRequest(
+  requestBody: Record<string, unknown>,
+  entry: UiScenario,
+) {
+  if (!entry.expectedRunRequest) return;
+  const normalizedActual = {
+    ...requestBody,
+    attachments: Array.isArray(requestBody.attachments)
+      ? requestBody.attachments
+      : [],
+  };
+  expectObjectContaining(normalizedActual, entry.expectedRunRequest);
+}
+
+function expectObjectContaining(
+  actual: Record<string, unknown>,
+  expected: Record<string, unknown>,
+) {
+  for (const [key, value] of Object.entries(expected)) {
+    const actualValue = actual[key];
+    if (Array.isArray(value)) {
+      expect(actualValue).toEqual(expect.arrayContaining(value));
+      continue;
+    }
+    if (value && typeof value === 'object') {
+      expect(actualValue).toBeTruthy();
+      expectObjectContaining(actualValue as Record<string, unknown>, value as Record<string, unknown>);
+      continue;
+    }
+    if (typeof value === 'string' && typeof actualValue === 'string') {
+      expect(actualValue).toContain(value);
+      continue;
+    }
+    expect(actualValue).toBe(value);
+  }
+}
+
 async function expectProjectFileToContain(
   page: Page,
   projectId: string,
@@ -1343,6 +1406,8 @@ async function runConversationPersistenceFlow(
   await sendPrompt(page, entry.prompt);
   await expect(page.getByText(entry.prompt, { exact: true })).toBeVisible();
   await expectArtifactVisible(page, entry);
+  const firstContext = await getCurrentProjectContext(page);
+  const firstConversationId = firstContext.conversationId;
 
   await page.getByTestId('new-conversation').click();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
@@ -1351,6 +1416,9 @@ async function runConversationPersistenceFlow(
   const nextPrompt = entry.secondaryPrompt!;
   await sendPrompt(page, nextPrompt);
   await expect(page.getByText(nextPrompt, { exact: true })).toBeVisible();
+  const secondContext = await getCurrentProjectContext(page);
+  const secondConversationId = secondContext.conversationId;
+  expect(secondConversationId).not.toBe(firstConversationId);
 
   await page.reload();
   await expect(page.getByTestId('chat-composer')).toBeVisible();
@@ -1368,6 +1436,15 @@ async function runConversationPersistenceFlow(
     .click();
 
   await expect(page.getByText(entry.prompt, { exact: true })).toBeVisible();
+  await expect(page.getByText(nextPrompt, { exact: true })).toHaveCount(0);
+  const { projectId } = await getCurrentProjectContext(page);
+  const conversationsResponse = await page.request.get(`/api/projects/${projectId}/conversations`);
+  expect(conversationsResponse.ok()).toBeTruthy();
+  const { conversations } = (await conversationsResponse.json()) as { conversations: Array<{ id: string }> };
+  expect(conversations.map((conversation) => conversation.id)).toEqual(
+    expect.arrayContaining([firstConversationId, secondConversationId]),
+  );
+  await expectScenarioProjectState(page, entry, projectId);
 }
 
 async function runFileMentionFlow(
@@ -1400,6 +1477,14 @@ async function runFileMentionFlow(
   await expect(page.getByTestId('staged-attachments')).toBeVisible();
   await expect(page.getByTestId('staged-attachments').getByText('reference.txt', { exact: true })).toBeVisible();
   await expect(page.getByTestId('chat-send')).toBeEnabled();
+
+  const runRequestPromise = page.waitForRequest(isCreateRunRequest);
+  await page.getByTestId('chat-send').click();
+  const runBody = (await runRequestPromise).postDataJSON() as Record<string, unknown>;
+  expectScenarioRunRequest(runBody, entry);
+  await expect(page.locator('.msg.user').filter({ hasText: 'Review @reference.txt' }).first()).toBeVisible();
+  await expect(page.locator('.user-attachments').getByText('reference.txt', { exact: true })).toBeVisible();
+  await expectScenarioProjectState(page, entry, projectId);
 }
 
 async function runDeepLinkPreviewFlow(
@@ -1428,12 +1513,14 @@ async function runDeepLinkPreviewFlow(
   await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
   const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
   await expect(frame.getByRole('heading', { name: entry.mockArtifact!.heading })).toBeVisible();
+  await expectScenarioProjectState(page, entry, projectId);
 }
 
 async function runFileUploadSendFlow(
   page: Page,
   entry: UiScenario,
 ) {
+  const { projectId } = await getCurrentProjectContext(page);
   const uploadResponse = page.waitForResponse(
     (resp: Response) => resp.url().includes('/upload') && resp.request().method() === 'POST',
     { timeout: 5000 },
@@ -1454,6 +1541,7 @@ async function runFileUploadSendFlow(
   await sendPrompt(page, entry.prompt);
   await expect(page.getByText(entry.prompt, { exact: true })).toBeVisible();
   await expect(page.locator('.user-attachments').getByText('reference.txt', { exact: true })).toBeVisible();
+  await expectScenarioProjectState(page, entry, projectId);
 }
 
 async function runConversationDeleteRecoveryFlow(

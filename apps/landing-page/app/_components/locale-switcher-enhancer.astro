@@ -1,0 +1,47 @@
+---
+/*
+ * Tiny progressive enhancement for the `<details data-od-id="nav-locale">`
+ * dropdown rendered by `header.tsx`. Native <details> does not close on
+ * outside click or Escape, which feels broken for a dropdown — this is
+ * the cheapest possible fix:
+ *
+ *   - click outside → close
+ *   - press Escape → close
+ *   - opening one menu closes any others on the page
+ *
+ * Designed to be included once per page (home + every locale home +
+ * every subpage layout). Re-runs are idempotent — listeners attach to
+ * fresh DOM each load.
+ */
+---
+
+<script is:inline>
+  (() => {
+    const localeMenus = document.querySelectorAll('[data-od-id="nav-locale"]');
+    if (localeMenus.length === 0) return;
+
+    for (const menu of localeMenus) {
+      menu.addEventListener('toggle', () => {
+        if (!menu.open) return;
+        for (const other of localeMenus) {
+          if (other !== menu && other.open) other.open = false;
+        }
+      });
+    }
+
+    document.addEventListener('click', (event) => {
+      const target = event.target instanceof Node ? event.target : null;
+      if (!target) return;
+      for (const menu of localeMenus) {
+        if (menu.open && !menu.contains(target)) menu.open = false;
+      }
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape') return;
+      for (const menu of localeMenus) {
+        if (menu.open) menu.open = false;
+      }
+    });
+  })();
+</script>

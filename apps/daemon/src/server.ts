@@ -12,12 +12,15 @@ import fs from 'node:fs';
 import os from 'node:os';
 import net from 'node:net';
 import {
-  defaultScenarioPluginIdForKind,
+  defaultScenarioPluginIdForProjectMetadata,
+  type OpenDesignGithubLatestReleaseResponse,
+  type OpenDesignGithubRepoResponse,
   PLUGIN_SHARE_ACTION_PLUGIN_IDS,
 } from '@open-design/contracts';
 import {
   composeSystemPrompt,
   renderCodexImagegenOverride,
+  resolveExclusiveSurface,
   shouldRenderCodexImagegenOverride,
 } from './prompts/system.js';
 import { expandHomePrefix, resolveProjectRelativePath } from './home-expansion.js';
@@ -56,7 +59,12 @@ export {
   signDesktopImportToken,
   verifyDesktopImportToken,
 } from './desktop-auth.js';
-import { findSkillById, listSkills, splitDerivedSkillId } from './skills.js';
+import {
+  findSkillById,
+  listSkills,
+  resolveSkillId,
+  splitDerivedSkillId,
+} from './skills.js';
 import { validateLinkedDirs } from './linked-dirs.js';
 import { installFromTarget, uninstallById, sanitizeRepoName } from './library-install.js';
 import { buildWindowsFolderDialogCommand, parseFolderDialogStdout } from './native-folder-dialog.js';
@@ -71,6 +79,7 @@ import {
   listUserDesignSystemFiles,
   listUserDesignSystemRevisions,
   readDesignSystem,
+  readDesignSystemPackageInfo,
   readUserDesignSystemFile,
   resolveDesignSystemAssets,
   updateUserDesignSystem,
@@ -116,6 +125,7 @@ import {
   revokeProjectSurface,
 } from './genui/index.js';
 import {
+  buildMemoryTree,
   composeMemoryBody,
   deleteMemoryEntry,
   extractFromMessage,
@@ -126,6 +136,7 @@ import {
   readMemoryConfig,
   readMemoryEntry,
   readMemoryIndex,
+  updateMemoryTreeNode,
   upsertMemoryEntry,
   writeMemoryConfig,
   writeMemoryIndex,
@@ -135,8 +146,25 @@ import {
   listExtractions as listMemoryExtractions,
   removeExtraction as removeMemoryExtraction,
 } from './memory-extractions.js';
+import {
+  extractMemoryFromConnectors,
+  suggestMemoryFromConnectors,
+} from './memory-connectors.js';
 import { attachAcpSession } from './acp.js';
 import { attachPiRpcSession } from './pi-rpc.js';
+import {
+  applyAutomationProposal,
+  createAutomationProposal,
+  getAutomationProposal,
+  listAutomationProposals,
+  rejectAutomationProposal,
+} from './automation-proposals.js';
+import {
+  getAutomationSourcePacket,
+  ingestAutomationSource,
+  listAutomationSourcePackets,
+} from './automation-ingestions.js';
+import { ingestRoutineConnectorEvolution } from './automation-routine-evolution.js';
 import { createClaudeStreamHandler } from './claude-stream.js';
 import { diagnoseClaudeCliFailure } from './claude-diagnostics.js';
 import { loadCritiqueConfigFromEnv } from './critique/config.js';
@@ -163,12 +191,18 @@ import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
 import { createChatRunService } from './runs.js';
+import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
 import { reportRunCompletedFromDaemon } from './langfuse-bridge.js';
 import {
   createAnalyticsService,
+  newInsertId,
   readAnalyticsContext,
   readPublicConfigResponse,
 } from './analytics.js';
+import {
+  agentIdToTracking,
+  deriveConfigureGlobals,
+} from '@open-design/contracts/analytics';
 import {
   redactSecrets,
   testAgentConnection,
@@ -189,12 +223,13 @@ import { listPromptTemplates, readPromptTemplate } from './prompt-templates.js';
 import { buildDocumentPreview } from './document-preview.js';
 import { lintArtifact, renderFindingsForAgent } from './lint-artifact.js';
 import { loadCraftSections } from './craft.js';
-import { stageActiveSkill } from './cwd-aliases.js';
+import { skillCwdAliasSegment, stageActiveSkill } from './cwd-aliases.js';
 import { buildDesktopPdfExportInput } from './pdf-export.js';
 import { generateMedia } from './media.js';
 import { listElevenLabsVoiceOptions } from './elevenlabs-voices.js';
 import { searchResearch, ResearchError } from './research/index.js';
 import { renderResearchCommandContract } from './prompts/research-contract.js';
+import { openBrowser } from './browser-open.js';
 import {
   AUDIO_DURATIONS_SEC,
   AUDIO_MODELS_BY_KIND,
@@ -218,6 +253,7 @@ import {
   MCP_TEMPLATES,
   buildAcpMcpServers,
   buildClaudeMcpJson,
+  buildOpenCodeMcpConfigContent,
   isManagedProjectCwd,
   readMcpConfig,
   writeMcpConfig,
@@ -244,6 +280,8 @@ import {
   validateTarget as validateRoutineTarget,
 } from './routines.js';
 import { buildMcpInstallPayload } from './mcp-install-info.js';
+import { createDiagnosticsExportHandler } from './diagnostics-export.js';
+import { DIAGNOSTICS_EXPORT_PATH } from '@open-design/diagnostics';
 import {
   buildProjectArchive,
   buildBatchArchive,
@@ -267,8 +305,10 @@ import {
   writeProjectFile,
 } from './projects.js';
 import { validateArtifactManifestInput } from './artifact-manifest.js';
+import { ArtifactPublicationBlockedError } from './artifact-publication-guard.js';
 import { readCurrentAppVersionInfo } from './app-version.js';
 import {
+  appendMessageAgentEvent,
   appendMessageStatusEvent,
   deleteConversation,
   deletePreviewComment,
@@ -328,13 +368,18 @@ import { LiveArtifactRefreshUnavailableError, refreshLiveArtifact } from './live
 import { LiveArtifactRefreshAbortError } from './live-artifacts/refresh.js';
 import { registerConnectorRoutes } from './connectors/routes.js';
 import { registerActiveContextRoutes } from './active-context-routes.js';
+import { registerHostToolsRoutes } from './host-tools-routes.js';
 import { registerMcpRoutes } from './mcp-routes.js';
 import { registerXaiRoutes } from './xai-routes.js';
 import { registerLiveArtifactRoutes } from './live-artifact-routes.js';
+import { registerDesignSystemToolRoutes } from './design-system-tool-routes.js';
 import { registerDeployRoutes, registerDeploymentCheckRoutes } from './deploy-routes.js';
 import { registerMediaRoutes } from './media-routes.js';
 import { registerProjectRoutes, registerProjectArtifactRoutes, registerProjectFileRoutes, registerProjectUploadRoutes } from './project-routes.js';
 import { registerFinalizeRoutes, registerImportRoutes, registerProjectExportRoutes } from './import-export-routes.js';
+import { registerHandoffRoutes } from './handoff-routes.js';
+import { EmptyTranscriptError, synthesizeHandoffPrompt } from './handoff-design.js';
+import { TranscriptExportLockedError } from './transcript-export.js';
 import { registerChatRoutes } from './chat-routes.js';
 import { registerStaticResourceRoutes } from './static-resource-routes.js';
 import { registerRoutineRoutes, routineDbRowToContract } from './routine-routes.js';
@@ -1013,6 +1058,31 @@ const PLUGIN_REGISTRY_DIR = resolveDaemonResourceDir(
 const OFFICIAL_MARKETPLACE_ID = 'official';
 const OFFICIAL_PLUGIN_SOURCE_REPO = 'github:nexu-io/open-design@main';
 
+export function isStaticSpaFallbackRequest(req) {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return false;
+  if (req.path === '/api' || req.path.startsWith('/api/')) return false;
+  if (req.path === '/artifacts' || req.path.startsWith('/artifacts/')) return false;
+  if (req.path === '/frames' || req.path.startsWith('/frames/')) return false;
+  if (req.path === '/_next' || req.path.startsWith('/_next/')) return false;
+
+  const accept = req.get?.('accept') ?? '';
+  return accept.length === 0 || accept.includes('text/html') || accept.includes('*/*');
+}
+
+export function resolveStaticSpaFallbackPath(req, staticDir) {
+  const indexPath = path.join(staticDir, 'index.html');
+  if (!fs.existsSync(indexPath) || !isStaticSpaFallbackRequest(req)) return null;
+  return indexPath;
+}
+
+export function registerStaticSpaFallback(app, staticDir) {
+  app.get('*', (req, res, next) => {
+    const indexPath = resolveStaticSpaFallbackPath(req, staticDir);
+    if (indexPath == null) return next();
+    res.sendFile(indexPath);
+  });
+}
+
 function defaultMarketplaceSeedConfig(id) {
   return {
     trust: id === OFFICIAL_MARKETPLACE_ID ? 'official' : 'restricted',
@@ -1264,11 +1334,32 @@ async function refreshAndPersistToken(dataDir, serverId, current) {
 
 const activeChatAgentEventSinks = new Map();
 const activeProjectEventSinks = new Map();
+// Per-chat-run handles, keyed by runId. Lets non-stream side effects
+// (live-artifact create, project events) reach back into the chat
+// run's local state — currently used by the artifact quiet-period
+// shortcut (#1451) so a successful artifact registration can shorten
+// the inactivity watchdog without the chat path having to poll a
+// store.
+const activeChatRunHandles = new Map();
 
 function emitChatAgentEvent(runId, payload) {
   const sink = activeChatAgentEventSinks.get(runId);
   if (!sink) return false;
   return sink(payload);
+}
+
+// Exported for tests covering the artifact quiet-period plumbing
+// (#1451). The chat run path is a deep closure inside startServer, so
+// pin the hook contract at the emit/handle boundary instead of
+// driving a full fake-agent e2e for every invariant.
+export const __forTestChatRunHandles = activeChatRunHandles;
+
+export function __forTestEmitLiveArtifactEvent(
+  grant: { runId?: string; projectId?: string },
+  action: 'created' | 'updated' | 'deleted',
+  artifact: { id: string; projectId?: string; title?: string; refreshStatus?: string },
+) {
+  return emitLiveArtifactEvent(grant, action, artifact);
 }
 
 function emitLiveArtifactEvent(grant, action, artifact) {
@@ -1283,6 +1374,18 @@ function emitLiveArtifactEvent(grant, action, artifact) {
   };
   let emitted = emitProjectEvent(payload.projectId, payload);
   if (grant?.runId) emitted = emitChatAgentEvent(grant.runId, payload) || emitted;
+  // After the deliverable exists, switch the chat run into a shorter
+  // "quiet period" watchdog: agents sometimes keep their child process
+  // alive after a successful artifact write (post-write reasoning, log
+  // flushes, claude-code stream-json's idle stdin) and the 10-minute
+  // default leaves the UI parked on Working until the watchdog fires
+  // an unrelated "stalled" error. See #1451.
+  if (action === 'created' && grant?.runId) {
+    const handle = activeChatRunHandles.get(grant.runId);
+    if (handle?.noteArtifactRegistered) {
+      try { handle.noteArtifactRegistered(); } catch {}
+    }
+  }
   return emitted;
 }
 
@@ -1348,12 +1451,40 @@ export function createAgentRuntimeEnv(
   toolTokenGrant: { token?: string } | null = null,
   nodeBin: string = process.execPath,
 ): NodeJS.ProcessEnv {
-  const env = {
+  const env: NodeJS.ProcessEnv = {
     ...baseEnv,
     OD_DATA_DIR: RUNTIME_DATA_DIR,
     OD_DAEMON_URL: daemonUrl,
     OD_NODE_BIN: nodeBin,
   };
+
+  // Ensure the node binary directory is on PATH so agent sub-processes —
+  // in particular npm .cmd shims on Windows that run `"node" script.js` —
+  // can find the same node binary that runs the daemon even when the daemon
+  // was launched with a full path to node and the directory was not on PATH.
+  const nodeBinDir = path.dirname(nodeBin);
+  if (nodeBinDir) {
+    // On Windows, process.env spreads with the search path under 'Path' rather
+    // than 'PATH'. Locate the key case-insensitively so we read and write the
+    // same entry that child_process.spawn consults. If we blindly write a new
+    // 'PATH' key alongside an existing 'Path', Node's case-insensitive env
+    // de-duplication on Windows lets the new key win — dropping all inherited
+    // directories (git, npm, agent shims, etc.) from the child's search path.
+    const pathKey = Object.keys(env).find((k) => k.toLowerCase() === 'path') ?? 'PATH';
+    const existingPath = typeof env[pathKey] === 'string' ? (env[pathKey] as string) : '';
+    const parts = existingPath.split(path.delimiter).filter((p) => p.length > 0);
+    const normalize = (p: string) => p.replace(/[/\\]+$/, '');
+    const normalizedDir = normalize(nodeBinDir);
+    const alreadyIncluded = parts.some((p) => {
+      const n = normalize(p);
+      return process.platform === 'win32'
+        ? n.toLowerCase() === normalizedDir.toLowerCase()
+        : n === normalizedDir;
+    });
+    if (!alreadyIncluded) {
+      env[pathKey] = [nodeBinDir, ...parts].join(path.delimiter);
+    }
+  }
 
   if (toolTokenGrant?.token) {
     env.OD_TOOL_TOKEN = toolTokenGrant.token;
@@ -1382,6 +1513,120 @@ export function createAgentRuntimeToolPrompt(
     tokenLine,
     '- Prefer project wrapper commands through `OD_NODE_BIN` + `OD_BIN` over raw HTTP. The wrappers read these environment values automatically.',
   ].join('\n');
+}
+
+function normalizeRunContextSelection(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const stringList = (items) => {
+    if (!Array.isArray(items)) return [];
+    const out = [];
+    const seen = new Set();
+    for (const item of items) {
+      if (typeof item !== 'string') continue;
+      const trimmed = item.trim();
+      if (!trimmed || seen.has(trimmed)) continue;
+      seen.add(trimmed);
+      out.push(trimmed);
+    }
+    return out;
+  };
+  return {
+    skillIds: stringList(value.skillIds),
+    pluginIds: stringList(value.pluginIds),
+    mcpServerIds: stringList(value.mcpServerIds),
+    connectorIds: stringList(value.connectorIds),
+  };
+}
+
+function mergeRunContextSelections(...contexts) {
+  const merged = { skillIds: [], pluginIds: [], mcpServerIds: [], connectorIds: [] };
+  for (const context of contexts) {
+    const normalized = normalizeRunContextSelection(context);
+    for (const key of Object.keys(merged)) {
+      const seen = new Set(merged[key]);
+      for (const id of normalized[key] ?? []) {
+        if (!seen.has(id)) {
+          seen.add(id);
+          merged[key].push(id);
+        }
+      }
+    }
+  }
+  return Object.fromEntries(
+    Object.entries(merged).filter(([, ids]) => ids.length > 0),
+  );
+}
+
+function projectMetadataContextSelection(metadata) {
+  if (!metadata || typeof metadata !== 'object') return {};
+  return {
+    pluginIds: Array.isArray(metadata.contextPlugins)
+      ? metadata.contextPlugins.map((item) => item?.id).filter((id) => typeof id === 'string')
+      : [],
+    mcpServerIds: Array.isArray(metadata.contextMcpServers)
+      ? metadata.contextMcpServers.map((item) => item?.id).filter((id) => typeof id === 'string')
+      : [],
+    connectorIds: Array.isArray(metadata.contextConnectors)
+      ? metadata.contextConnectors.map((item) => item?.id).filter((id) => typeof id === 'string')
+      : [],
+  };
+}
+
+function formatContextRefList(ids, refs, titleKey = 'title') {
+  const byId = new Map();
+  if (Array.isArray(refs)) {
+    for (const ref of refs) {
+      if (ref && typeof ref.id === 'string') byId.set(ref.id, ref);
+    }
+  }
+  return ids
+    .map((id) => {
+      const ref = byId.get(id);
+      const label =
+        typeof ref?.[titleKey] === 'string' && ref[titleKey].trim()
+          ? ref[titleKey].trim()
+          : typeof ref?.label === 'string' && ref.label.trim()
+            ? ref.label.trim()
+            : typeof ref?.name === 'string' && ref.name.trim()
+              ? ref.name.trim()
+              : id;
+      const meta = [
+        ref?.provider,
+        ref?.transport,
+        ref?.status,
+        ref?.accountLabel,
+      ].filter((value) => typeof value === 'string' && value.trim()).join(' · ');
+      return `- ${label} (\`${id}\`)${meta ? ` — ${meta}` : ''}`;
+    })
+    .join('\n');
+}
+
+function renderRunContextPrompt(selection, metadata) {
+  const context = mergeRunContextSelections(projectMetadataContextSelection(metadata), selection);
+  const lines = [];
+  if (Array.isArray(context.pluginIds) && context.pluginIds.length > 0) {
+    lines.push('### Selected plugins');
+    lines.push(
+      'The user selected these plugins as run context. When an active plugin snapshot is pinned, follow that executable plugin block; otherwise combine these plugins as requested references.',
+    );
+    lines.push(formatContextRefList(context.pluginIds, metadata?.contextPlugins ?? [], 'title'));
+  }
+  if (Array.isArray(context.mcpServerIds) && context.mcpServerIds.length > 0) {
+    lines.push('### Selected MCP servers');
+    lines.push(
+      'The user selected these MCP servers for this run. Prefer their tools when they are mounted and relevant before asking where data should come from.',
+    );
+    lines.push(formatContextRefList(context.mcpServerIds, metadata?.contextMcpServers ?? [], 'label'));
+  }
+  if (Array.isArray(context.connectorIds) && context.connectorIds.length > 0) {
+    lines.push('### Selected connectors');
+    lines.push(
+      'The user selected these connectors for this run. Discover available read-only connector tools first with `"$OD_NODE_BIN" "$OD_BIN" tools connectors list --format compact`, then execute relevant tools through `tools connectors execute`; do not ask for a data source that is already selected.',
+    );
+    lines.push(formatContextRefList(context.connectorIds, metadata?.contextConnectors ?? [], 'name'));
+  }
+  if (lines.length === 0) return '';
+  return ['## Selected run context', ...lines].join('\n');
 }
 
 export function normalizeProjectDisplayStatus(status) {
@@ -1665,6 +1910,152 @@ function reconcileAssistantMessageOnRunEnd(db, runs, run) {
     });
 }
 
+function persistRunEventToAssistantMessage(db, run, event, data) {
+  if (!run.assistantMessageId) return;
+  const persisted = runSseEventToPersistedAgentEvent(event, data);
+  if (!persisted) return;
+  try {
+    appendMessageAgentEvent(db, run.assistantMessageId, persisted);
+  } catch (err) {
+    console.warn('[runs] message event persistence failed', err);
+  }
+}
+
+function runSseEventToPersistedAgentEvent(event, data) {
+  if (event === 'start') {
+    return {
+      kind: 'status',
+      label: 'starting',
+      ...(typeof data?.bin === 'string' ? { detail: data.bin } : {}),
+    };
+  }
+  if (event === 'stdout') {
+    const chunk = typeof data?.chunk === 'string' ? data.chunk : '';
+    return chunk ? { kind: 'text', text: chunk } : null;
+  }
+  if (event === 'error') {
+    const message = typeof data?.error?.message === 'string'
+      ? data.error.message
+      : typeof data?.message === 'string'
+        ? data.message
+        : '';
+    return {
+      kind: 'status',
+      label: 'error',
+      ...(message ? { detail: message } : {}),
+    };
+  }
+  if (event !== 'agent') return null;
+  return daemonAgentPayloadToPersistedAgentEvent(data);
+}
+
+function daemonAgentPayloadToPersistedAgentEvent(data) {
+  const type = data?.type;
+  if (type === 'status' && typeof data.label === 'string') {
+    const detail =
+      typeof data.detail === 'string'
+        ? data.detail
+        : typeof data.model === 'string'
+          ? data.model
+          : typeof data.ttftMs === 'number'
+            ? `first token in ${Math.round(data.ttftMs / 100) / 10}s`
+            : undefined;
+    return { kind: 'status', label: data.label, ...(detail ? { detail } : {}) };
+  }
+  if (type === 'text_delta' && typeof data.delta === 'string') {
+    return { kind: 'text', text: data.delta };
+  }
+  if (type === 'thinking_delta' && typeof data.delta === 'string') {
+    return { kind: 'thinking', text: data.delta };
+  }
+  if (type === 'thinking_start') return { kind: 'status', label: 'thinking' };
+  if (type === 'live_artifact') {
+    return {
+      kind: 'live_artifact',
+      action: data.action,
+      projectId: data.projectId,
+      artifactId: data.artifactId,
+      title: data.title,
+      ...(data.refreshStatus ? { refreshStatus: data.refreshStatus } : {}),
+    };
+  }
+  if (type === 'live_artifact_refresh') {
+    return {
+      kind: 'live_artifact_refresh',
+      phase: data.phase,
+      projectId: data.projectId,
+      artifactId: data.artifactId,
+      ...(data.refreshId ? { refreshId: data.refreshId } : {}),
+      ...(data.title ? { title: data.title } : {}),
+      ...(typeof data.refreshedSourceCount === 'number'
+        ? { refreshedSourceCount: data.refreshedSourceCount }
+        : {}),
+      ...(data.error ? { error: data.error } : {}),
+    };
+  }
+  if (type === 'tool_use' && typeof data.id === 'string' && typeof data.name === 'string') {
+    return { kind: 'tool_use', id: data.id, name: data.name, input: normalizePersistedToolInput(data.input) };
+  }
+  if (type === 'tool_result' && typeof data.toolUseId === 'string') {
+    return {
+      kind: 'tool_result',
+      toolUseId: data.toolUseId,
+      content: String(data.content ?? ''),
+      isError: Boolean(data.isError),
+    };
+  }
+  if (type === 'usage') {
+    const usage = data.usage && typeof data.usage === 'object' ? data.usage : {};
+    return {
+      kind: 'usage',
+      inputTokens: usage.input_tokens,
+      outputTokens: usage.output_tokens,
+      ...(typeof data.costUsd === 'number' ? { costUsd: data.costUsd } : {}),
+      ...(typeof data.durationMs === 'number' ? { durationMs: data.durationMs } : {}),
+    };
+  }
+  if (type === 'raw' && typeof data.line === 'string') return { kind: 'raw', line: data.line };
+  return null;
+}
+
+function normalizePersistedToolInput(input) {
+  if (!input || typeof input !== 'object') return input;
+  if ('filePath' in input && typeof input.filePath === 'string') {
+    return { ...input, file_path: input.filePath };
+  }
+  return input;
+}
+
+function pinAssistantMessageOnRunCreate(db, run) {
+  if (!run.conversationId || !run.assistantMessageId) return;
+  const existing = db
+    .prepare(`SELECT id FROM messages WHERE id = ?`)
+    .get(run.assistantMessageId);
+  if (existing) {
+    db.prepare(
+      `UPDATE messages
+          SET run_id = ?,
+              run_status = CASE
+                WHEN run_status IN ('succeeded', 'failed', 'canceled') THEN run_status
+                ELSE ?
+              END,
+              started_at = COALESCE(started_at, ?)
+        WHERE id = ?`,
+    ).run(run.id, run.status, run.createdAt, run.assistantMessageId);
+    return;
+  }
+  upsertMessage(db, run.conversationId, {
+    id: run.assistantMessageId,
+    role: 'assistant',
+    content: '',
+    agentId: run.agentId ?? undefined,
+    events: [],
+    runId: run.id,
+    runStatus: run.status,
+    startedAt: run.createdAt,
+  });
+}
+
 export function shouldReportRunCompletedFromMessage(saved, body = {}) {
   return Boolean(
     saved &&
@@ -1677,6 +2068,48 @@ export function shouldReportRunCompletedFromMessage(saved, body = {}) {
 
 export function telemetryPromptFromRunRequest(message, currentPrompt) {
   return typeof currentPrompt === 'string' ? currentPrompt : message;
+}
+
+const FORM_ANSWERS_HEADER_RE = /^\s*\[form answers\s+(?:\u2014|-)\s*([^\]\r\n]+)\]/i;
+
+function formAnswerTransitionForCurrentPrompt(currentPrompt) {
+  if (typeof currentPrompt !== 'string') return null;
+  const trimmed = currentPrompt.trim();
+  if (!trimmed) return null;
+  const match = FORM_ANSWERS_HEADER_RE.exec(trimmed);
+  if (!match) return null;
+  const rawFormId = (match[1] || 'form').trim() || 'form';
+  const formId = rawFormId.replace(/[^\w.-]/g, '') || 'form';
+  const lines = [
+    '## Latest user turn - form answers submitted',
+    trimmed,
+    '',
+    `The user has answered the ${formId} form. Do not emit another ${formId} form.`,
+  ];
+  if (formId.toLowerCase() === 'discovery') {
+    lines.push(
+      'Continue with RULE 2 / RULE 3 now. For Branch B answers, build now instead of asking another brief.',
+    );
+  } else {
+    lines.push(
+      'Treat these form answers as the active user turn instead of replaying the transcript as a fresh request.',
+    );
+  }
+  return lines.join('\n');
+}
+
+export function composeChatUserRequestForAgent(message, currentPrompt) {
+  const body =
+    typeof message === 'string' && message.trim()
+      ? message
+      : '(No extra typed instruction.)';
+  const transition = formAnswerTransitionForCurrentPrompt(currentPrompt);
+  if (!transition) return body;
+  return [
+    transition,
+    '## Full conversation transcript',
+    body,
+  ].join('\n\n');
 }
 
 export function createFinalizedMessageTelemetryReporter({
@@ -2089,6 +2522,122 @@ function setLiveArtifactCodeHeaders(res) {
   res.setHeader('Referrer-Policy', 'no-referrer');
 }
 
+const OPEN_DESIGN_GITHUB_REPO_API = 'https://api.github.com/repos/nexu-io/open-design';
+const OPEN_DESIGN_GITHUB_RELEASE_LATEST_API = 'https://api.github.com/repos/nexu-io/open-design/releases/latest';
+const OPEN_DESIGN_GITHUB_CACHE_TTL_MS = 60 * 60 * 1000;
+const OPEN_DESIGN_GITHUB_TIMEOUT_MS = 4_000;
+
+let openDesignGithubRepoCache = null;
+let openDesignGithubRepoInflight = null;
+let openDesignGithubLatestReleaseCache = null;
+let openDesignGithubLatestReleaseInflight = null;
+
+async function readOpenDesignGithubRepoStats() {
+  const now = Date.now();
+  if (
+    openDesignGithubRepoCache &&
+    now - openDesignGithubRepoCache.fetchedAt < OPEN_DESIGN_GITHUB_CACHE_TTL_MS
+  ) {
+    return { ...openDesignGithubRepoCache, stale: false };
+  }
+
+  if (openDesignGithubRepoInflight) {
+    return openDesignGithubRepoInflight;
+  }
+
+  openDesignGithubRepoInflight = (async () => {
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), OPEN_DESIGN_GITHUB_TIMEOUT_MS);
+    try {
+      const response = await fetch(OPEN_DESIGN_GITHUB_REPO_API, {
+        headers: {
+          accept: 'application/vnd.github+json',
+          'user-agent': 'open-design-daemon',
+        },
+        signal: ctrl.signal,
+      });
+      if (!response.ok) {
+        throw new Error(`GitHub repo metadata request failed with HTTP ${response.status}`);
+      }
+      const payload = await response.json();
+      const count = payload && typeof payload.stargazers_count === 'number'
+        ? payload.stargazers_count
+        : null;
+      if (!Number.isFinite(count) || count == null || count < 0) {
+        throw new Error('GitHub repo metadata did not include a numeric stargazers_count');
+      }
+      openDesignGithubRepoCache = {
+        stargazersCount: count,
+        fetchedAt: Date.now(),
+      };
+      return { ...openDesignGithubRepoCache, stale: false };
+    } catch (error) {
+      if (openDesignGithubRepoCache) {
+        return { ...openDesignGithubRepoCache, stale: true };
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+      openDesignGithubRepoInflight = null;
+    }
+  })();
+
+  return openDesignGithubRepoInflight;
+}
+
+async function readOpenDesignLatestReleaseInfo() {
+  const now = Date.now();
+  if (
+    openDesignGithubLatestReleaseCache &&
+    now - openDesignGithubLatestReleaseCache.fetchedAt < OPEN_DESIGN_GITHUB_CACHE_TTL_MS
+  ) {
+    return { ...openDesignGithubLatestReleaseCache, stale: false };
+  }
+
+  if (openDesignGithubLatestReleaseInflight) {
+    return openDesignGithubLatestReleaseInflight;
+  }
+
+  openDesignGithubLatestReleaseInflight = (async () => {
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), OPEN_DESIGN_GITHUB_TIMEOUT_MS);
+    try {
+      const response = await fetch(OPEN_DESIGN_GITHUB_RELEASE_LATEST_API, {
+        headers: {
+          accept: 'application/vnd.github+json',
+          'user-agent': 'open-design-daemon',
+        },
+        signal: ctrl.signal,
+      });
+      if (!response.ok) {
+        throw new Error(`GitHub latest release request failed with HTTP ${response.status}`);
+      }
+      const payload = await response.json();
+      const tagName = payload && typeof payload.tag_name === 'string' ? payload.tag_name : null;
+      const htmlUrl = payload && typeof payload.html_url === 'string' ? payload.html_url : null;
+      if (!tagName || !htmlUrl) {
+        throw new Error('GitHub latest release metadata did not include tag_name/html_url');
+      }
+      openDesignGithubLatestReleaseCache = {
+        tagName,
+        htmlUrl,
+        fetchedAt: Date.now(),
+      };
+      return { ...openDesignGithubLatestReleaseCache, stale: false };
+    } catch (error) {
+      if (openDesignGithubLatestReleaseCache) {
+        return { ...openDesignGithubLatestReleaseCache, stale: true };
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+      openDesignGithubLatestReleaseInflight = null;
+    }
+  })();
+
+  return openDesignGithubLatestReleaseInflight;
+}
+
 function bearerTokenFromRequest(req) {
   const header = req.get('authorization');
   if (typeof header !== 'string') return undefined;
@@ -2476,15 +3025,33 @@ export function createSseResponse(
 
 export type DesktopPdfExporter = (input: DesktopExportPdfInput) => Promise<DesktopExportPdfResult>;
 
+// Loosely typed shape — we only access `namespace`, `base`, `mode`, and
+// `source` from the runtime context when building the diagnostics export.
+// Anything richer would force a dependency from server.ts into the sidecar
+// package, which the boundary checks explicitly forbid.
+export interface DaemonRuntimeContext {
+  namespace: string;
+  base: string;
+  mode?: string;
+  source?: string;
+}
+
 export interface StartServerOptions {
   desktopPdfExporter?: DesktopPdfExporter | null;
   host?: string;
   port?: number;
   returnServer?: boolean;
+  runtime?: DaemonRuntimeContext | null;
 }
 
 const DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000;
 const MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+// After a successful live-artifact registration the daemon switches the
+// chat-run inactivity watchdog from the long pre-artifact ceiling
+// (DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS) down to a much shorter
+// "quiet period" — the deliverable exists, so further silence almost
+// always means the agent is winding down or hanging. See #1451.
+const DEFAULT_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS = 60 * 1000;
 
 function resolveChatRunInactivityTimeoutMs() {
   const raw = Number(process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS);
@@ -2496,6 +3063,67 @@ function resolveChatRunInactivityTimeoutMs() {
   // makes an oversized override fail almost immediately while reporting a huge
   // timeout. Keep explicit overrides bounded to a practical, timer-safe value.
   return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(raw)));
+}
+
+// Resolve the post-artifact quiet-period window. Same clamp as the outer
+// inactivity watchdog so an oversized override doesn't get Node-downgraded
+// to a 1ms timer. Exported so tests can pin the env behavior without
+// reaching into chat-run internals.
+export function resolveChatRunArtifactQuietPeriodMs() {
+  const raw = Number(process.env.OD_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS);
+  if (!Number.isFinite(raw)) return DEFAULT_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS;
+  return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(raw)));
+}
+
+// Pure resolver for the chat run's *currently active* inactivity
+// ceiling. Used by both `noteAgentActivity` and `noteArtifactRegistered`
+// to pick between the pre-artifact watchdog and the shortened quiet
+// period. Extracted so the `OD_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS=0`
+// "disable the quiet period" semantics can be pinned with focused unit
+// tests (#1451 review: a 0-value override must not strand the pre-artifact
+// timer or stop further reschedules — it has to fall back to the
+// pre-artifact ceiling so subsequent activity keeps refreshing the timer).
+export function resolveActiveInactivityTimeoutMs(params: {
+  inactivityTimeoutMs: number;
+  artifactQuietPeriodMs: number;
+  artifactRegistered: boolean;
+}): number {
+  if (params.artifactRegistered && params.artifactQuietPeriodMs > 0) {
+    return params.artifactQuietPeriodMs;
+  }
+  return params.inactivityTimeoutMs;
+}
+
+// Pure final-status classifier for the chat run's child-close handler.
+// Extracted so the per-branch invariants can be unit-tested without
+// driving a full child process — in particular:
+//   - cancel always wins over success/failure classification.
+//   - the ACP forced-shutdown override is scoped to SIGTERM + clean
+//     completion only (signed-32-bit-overflow SIGKILL or non-clean ACP
+//     state still report `failed`).
+//   - the artifact quiet-period override is gated on a daemon-initiated
+//     flag, NOT on `artifactRegistered` alone — see #1451 review:
+//     an external `kill -9` after the artifact write must still report
+//     `failed`, only the watchdog-initiated SIGTERM/SIGKILL escalation
+//     is allowed to flip the status to `succeeded`.
+export function classifyChatRunCloseStatus(params: {
+  cancelRequested: boolean;
+  code: number | null;
+  signal: NodeJS.Signals | string | null;
+  acpCleanCompletion: boolean;
+  artifactQuietShutdownRequested: boolean;
+}): 'canceled' | 'succeeded' | 'failed' {
+  if (params.cancelRequested) return 'canceled';
+  if (params.code === 0) return 'succeeded';
+  const acpForcedShutdown =
+    params.code === null && params.signal === 'SIGTERM' && params.acpCleanCompletion;
+  if (acpForcedShutdown) return 'succeeded';
+  const artifactQuietShutdown =
+    params.artifactQuietShutdownRequested &&
+    params.code === null &&
+    (params.signal === 'SIGTERM' || params.signal === 'SIGKILL');
+  if (artifactQuietShutdown) return 'succeeded';
+  return 'failed';
 }
 
 function resolveChatRunShutdownGraceMs() {
@@ -2572,6 +3200,7 @@ export async function startServer({
   host = process.env.OD_BIND_HOST || '127.0.0.1',
   returnServer = false,
   desktopPdfExporter = null,
+  runtime = null,
 }: StartServerOptions = {}) {
   let resolvedPort = port;
   let daemonShuttingDown = false;
@@ -2685,6 +3314,16 @@ export async function startServer({
     return (
       (await readDesignSystem(DESIGN_SYSTEMS_DIR, id))
       ?? (await readDesignSystem(USER_DESIGN_SYSTEMS_DIR, id))
+    );
+  }
+
+  async function readAvailableDesignSystemPackageInfo(id) {
+    if (typeof id === 'string' && id.startsWith('user:')) {
+      return readDesignSystemPackageInfo(USER_DESIGN_SYSTEMS_DIR, id, { idPrefix: 'user:' });
+    }
+    return (
+      (await readDesignSystemPackageInfo(DESIGN_SYSTEMS_DIR, id))
+      ?? (await readDesignSystemPackageInfo(USER_DESIGN_SYSTEMS_DIR, id))
     );
   }
 
@@ -3085,6 +3724,41 @@ export async function startServer({
     res.json({ version });
   });
 
+  app.get('/api/github/open-design', async (_req, res) => {
+    try {
+      const stats = await readOpenDesignGithubRepoStats();
+      const payload = /** @type {OpenDesignGithubRepoResponse} */ ({
+        repo: 'nexu-io/open-design',
+        stargazers_count: stats.stargazersCount,
+        fetchedAt: stats.fetchedAt,
+        stale: stats.stale,
+      });
+      res.json(payload);
+    } catch (error) {
+      res.status(502).json({
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+  app.get('/api/github/open-design/releases/latest', async (_req, res) => {
+    try {
+      const release = await readOpenDesignLatestReleaseInfo();
+      const payload = /** @type {OpenDesignGithubLatestReleaseResponse} */ ({
+        repo: 'nexu-io/open-design',
+        tag_name: release.tagName,
+        html_url: release.htmlUrl,
+        fetchedAt: release.fetchedAt,
+        stale: release.stale,
+      });
+      res.json(payload);
+    } catch (error) {
+      res.status(502).json({
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
   // Plan §3.F2 / spec §11.7 — daemon lifecycle status. Returns the
   // host / port the server is bound to plus the data dir,
   // so `od daemon status --json` can render a one-shot health snapshot
@@ -3312,6 +3986,17 @@ export async function startServer({
     composio: composioConnectorProvider,
   });
 
+  // Gate the diagnostics export behind requireLocalDaemonRequest so it stays
+  // unreachable when daemon binds to a non-loopback address (Tailscale,
+  // 0.0.0.0, etc.). The bundle contains daemon/web/desktop logs, host
+  // metadata, and crash reports — same threat tier as connector / live-
+  // artifact endpoints, which all use the same guard.
+  app.get(
+    DIAGNOSTICS_EXPORT_PATH,
+    requireLocalDaemonRequest,
+    createDiagnosticsExportHandler({ runtime, projectRoot: PROJECT_ROOT }),
+  );
+
   // ---- Projects (DB-backed) -------------------------------------------------
 
 
@@ -3328,6 +4013,7 @@ export async function startServer({
       ]);
       res.json({
         enabled: config.enabled,
+        chatExtractionEnabled: config.chatExtractionEnabled,
         rootDir: memoryDir(RUNTIME_DATA_DIR),
         index,
         entries,
@@ -3341,6 +4027,38 @@ export async function startServer({
   // Static sub-resources (`/index`, `/config`, `/extract`) registered
   // BEFORE the `:id` catch-alls so an `index` / `config` / `extract` slug
   // can't shadow the real handlers.
+  app.get('/api/memory/tree', async (_req, res) => {
+    try {
+      const [config, tree] = await Promise.all([
+        readMemoryConfig(RUNTIME_DATA_DIR),
+        buildMemoryTree(RUNTIME_DATA_DIR),
+      ]);
+      res.json({
+        enabled: config.enabled,
+        rootDir: memoryDir(RUNTIME_DATA_DIR),
+        tree,
+      });
+    } catch (err) {
+      res.status(500).json({ error: String((err && err.message) || err) });
+    }
+  });
+
+  app.patch('/api/memory/tree/:id', async (req, res) => {
+    try {
+      const body = req.body && typeof req.body === 'object' ? req.body : {};
+      const entry = await updateMemoryTreeNode(
+        RUNTIME_DATA_DIR,
+        req.params.id,
+        body,
+      );
+      const tree = await buildMemoryTree(RUNTIME_DATA_DIR);
+      res.json({ entry, tree });
+    } catch (err) {
+      const message = String((err && err.message) || err);
+      res.status(message === 'memory not found' ? 404 : 400).json({ error: message });
+    }
+  });
+
   app.put('/api/memory/index', async (req, res) => {
     try {
       const body = req.body && typeof req.body === 'object' ? req.body : {};
@@ -3357,6 +4075,9 @@ export async function startServer({
       const body = req.body && typeof req.body === 'object' ? req.body : {};
       const patch = {};
       if (typeof body.enabled === 'boolean') patch.enabled = body.enabled;
+      if (typeof body.chatExtractionEnabled === 'boolean') {
+        patch.chatExtractionEnabled = body.chatExtractionEnabled;
+      }
       // Three-state extraction handling so the UI can: (a) leave the
       // override alone (omit `extraction`), (b) clear it back to
       // auto-pick (`extraction: null`), or (c) commit a custom override
@@ -3419,6 +4140,7 @@ export async function startServer({
       const next = await writeMemoryConfig(RUNTIME_DATA_DIR, patch);
       res.json({
         enabled: next.enabled,
+        chatExtractionEnabled: next.chatExtractionEnabled,
         extraction: maskMemoryExtractionConfig(next.extraction),
       });
     } catch (err) {
@@ -3476,10 +4198,104 @@ export async function startServer({
     }
   });
 
-  app.delete('/api/memory/extractions/:id', async (req, res) => {
-    try {
-      const removed = removeMemoryExtraction(req.params.id);
-      res.json({ removed });
+	  app.delete('/api/memory/extractions/:id', async (req, res) => {
+	    try {
+	      const removed = removeMemoryExtraction(req.params.id);
+	      res.json({ removed });
+	    } catch (err) {
+	      res.status(400).json({ error: String((err && err.message) || err) });
+	    }
+	  });
+
+	  app.post('/api/memory/connectors/suggest', requireLocalDaemonRequest, async (req, res) => {
+	    try {
+	      const body = req.body && typeof req.body === 'object' ? req.body : {};
+	      const connectorIds = Array.isArray(body.connectorIds)
+	        ? body.connectorIds
+	          .filter((id) => typeof id === 'string')
+	          .map((id) => id.trim())
+	          .filter(Boolean)
+	          .slice(0, 12)
+	        : undefined;
+	      const query =
+	        typeof body.query === 'string' ? body.query.trim().slice(0, 240) : '';
+	      const projectId =
+	        typeof body.projectId === 'string' && body.projectId.trim()
+	          ? body.projectId.trim()
+	          : null;
+	      const appConfig = await readAppConfig(RUNTIME_DATA_DIR).catch(() => ({}));
+	      const chatAgentId =
+	        typeof body.chatAgentId === 'string' && body.chatAgentId.trim()
+	          ? body.chatAgentId.trim()
+	          : typeof appConfig.agentId === 'string' && appConfig.agentId.trim()
+	            ? appConfig.agentId.trim()
+	            : null;
+	      const requestChatModel =
+	        typeof body.chatModel === 'string' && body.chatModel.trim()
+	          ? body.chatModel.trim()
+	          : null;
+	      const chatModel =
+	        requestChatModel
+	        || (chatAgentId && appConfig.agentModels?.[chatAgentId]?.model
+	          ? appConfig.agentModels[chatAgentId].model
+	          : null);
+	      const result = await suggestMemoryFromConnectors(RUNTIME_DATA_DIR, {
+	        projectsRoot: PROJECTS_DIR,
+	        projectRoot: PROJECT_ROOT,
+	        projectId,
+	        connectorIds,
+	        query,
+	        chatAgentId,
+	        chatModel,
+	      });
+	      res.json(result);
+	    } catch (err) {
+	      res.status(400).json({ error: String((err && err.message) || err) });
+	    }
+	  });
+
+	  app.post('/api/memory/connectors/extract', requireLocalDaemonRequest, async (req, res) => {
+	    try {
+	      const body = req.body && typeof req.body === 'object' ? req.body : {};
+      const connectorIds = Array.isArray(body.connectorIds)
+        ? body.connectorIds
+          .filter((id) => typeof id === 'string')
+          .map((id) => id.trim())
+          .filter(Boolean)
+          .slice(0, 12)
+        : undefined;
+      const query =
+        typeof body.query === 'string' ? body.query.trim().slice(0, 240) : '';
+      const projectId =
+        typeof body.projectId === 'string' && body.projectId.trim()
+          ? body.projectId.trim()
+          : null;
+      const appConfig = await readAppConfig(RUNTIME_DATA_DIR).catch(() => ({}));
+      const chatAgentId =
+        typeof body.chatAgentId === 'string' && body.chatAgentId.trim()
+          ? body.chatAgentId.trim()
+          : typeof appConfig.agentId === 'string' && appConfig.agentId.trim()
+            ? appConfig.agentId.trim()
+            : null;
+      const requestChatModel =
+        typeof body.chatModel === 'string' && body.chatModel.trim()
+          ? body.chatModel.trim()
+          : null;
+      const chatModel =
+        requestChatModel
+        || (chatAgentId && appConfig.agentModels?.[chatAgentId]?.model
+          ? appConfig.agentModels[chatAgentId].model
+          : null);
+      const result = await extractMemoryFromConnectors(RUNTIME_DATA_DIR, {
+        projectsRoot: PROJECTS_DIR,
+        projectRoot: PROJECT_ROOT,
+        projectId,
+        connectorIds,
+        query,
+        chatAgentId,
+        chatModel,
+      });
+      res.json(result);
     } catch (err) {
       res.status(400).json({ error: String((err && err.message) || err) });
     }
@@ -3513,6 +4329,10 @@ export async function startServer({
       const assistantMessage =
         typeof body.assistantMessage === 'string' ? body.assistantMessage : '';
       const hasAssistant = assistantMessage.trim().length > 0;
+      const memoryConfig = await readMemoryConfig(RUNTIME_DATA_DIR);
+      if (memoryConfig.chatExtractionEnabled === false) {
+        return res.json({ changed: [], attemptedLLM: false });
+      }
       const changed = hasAssistant
         ? []
         : await extractFromMessage(RUNTIME_DATA_DIR, userMessage);
@@ -3582,6 +4402,95 @@ export async function startServer({
       res.json({ body });
     } catch (err) {
       res.status(500).json({ error: String((err && err.message) || err) });
+    }
+  });
+
+  app.get('/api/automation-source-packets', async (req, res) => {
+    try {
+      const limit = typeof req.query.limit === 'string' ? Number(req.query.limit) : undefined;
+      const packets = await listAutomationSourcePackets(RUNTIME_DATA_DIR, { limit });
+      res.json({ packets });
+    } catch (err) {
+      res.status(500).json({ error: String((err && err.message) || err) });
+    }
+  });
+
+  app.post('/api/automation-ingestions', async (req, res) => {
+    try {
+      const body = req.body && typeof req.body === 'object' ? req.body : {};
+      const result = await ingestAutomationSource(RUNTIME_DATA_DIR, body);
+      res.json(result);
+    } catch (err) {
+      res.status(400).json({ error: String((err && err.message) || err) });
+    }
+  });
+
+  app.get('/api/automation-source-packets/:id', async (req, res) => {
+    try {
+      const packet = await getAutomationSourcePacket(RUNTIME_DATA_DIR, req.params.id);
+      if (!packet) return res.status(404).json({ error: 'automation source packet not found' });
+      res.json({ packet });
+    } catch (err) {
+      res.status(400).json({ error: String((err && err.message) || err) });
+    }
+  });
+
+  app.get('/api/automation-proposals', async (req, res) => {
+    try {
+      const rawStatus = typeof req.query.status === 'string' ? req.query.status : 'all';
+      const proposals = await listAutomationProposals(RUNTIME_DATA_DIR, {
+        status: rawStatus,
+      });
+      res.json({ proposals });
+    } catch (err) {
+      res.status(500).json({ error: String((err && err.message) || err) });
+    }
+  });
+
+  app.post('/api/automation-proposals', async (req, res) => {
+    try {
+      const body = req.body && typeof req.body === 'object' ? req.body : {};
+      const proposal = await createAutomationProposal(RUNTIME_DATA_DIR, body);
+      res.json({ proposal });
+    } catch (err) {
+      res.status(400).json({ error: String((err && err.message) || err) });
+    }
+  });
+
+  app.get('/api/automation-proposals/:id', async (req, res) => {
+    try {
+      const proposal = await getAutomationProposal(RUNTIME_DATA_DIR, req.params.id);
+      if (!proposal) return res.status(404).json({ error: 'automation proposal not found' });
+      res.json({ proposal });
+    } catch (err) {
+      res.status(400).json({ error: String((err && err.message) || err) });
+    }
+  });
+
+  app.post('/api/automation-proposals/:id/apply', async (req, res) => {
+    try {
+      const result = await applyAutomationProposal(RUNTIME_DATA_DIR, req.params.id);
+      res.json(result);
+    } catch (err) {
+      const message = String((err && err.message) || err);
+      const status = message.includes('not found') ? 404 : 400;
+      res.status(status).json({ error: message });
+    }
+  });
+
+  app.post('/api/automation-proposals/:id/reject', async (req, res) => {
+    try {
+      const body = req.body && typeof req.body === 'object' ? req.body : {};
+      const proposal = await rejectAutomationProposal(
+        RUNTIME_DATA_DIR,
+        req.params.id,
+        typeof body.reason === 'string' ? body.reason : undefined,
+      );
+      res.json({ proposal });
+    } catch (err) {
+      const message = String((err && err.message) || err);
+      const status = message.includes('not found') ? 404 : 400;
+      res.status(status).json({ error: message });
     }
   });
 
@@ -3886,6 +4795,13 @@ export async function startServer({
     isFinalizeProviderProtocol,
     redactSecrets,
   };
+  const handoffDeps = {
+    synthesizeHandoffPrompt,
+    FinalizeUpstreamError,
+    TranscriptExportLockedError,
+    EmptyTranscriptError,
+    redactSecrets,
+  };
   const validationDeps = { isSafeId, validateExternalApiBaseUrl, validateBaseUrl, validateProjectDesignSystemId };
   const agentDeps = {
     listProviderModels,
@@ -3918,6 +4834,13 @@ export async function startServer({
     db,
     http: httpDeps,
     projectStore: projectStoreDeps,
+  });
+  registerHostToolsRoutes(app, {
+    db,
+    http: httpDeps,
+    paths: pathDeps,
+    projectStore: projectStoreDeps,
+    projectFiles: projectFileDeps,
   });
   registerProjectRoutes(app, {
     db,
@@ -3976,6 +4899,12 @@ export async function startServer({
     liveArtifacts: liveArtifactDeps,
     projectStore: projectStoreDeps,
   });
+  registerDesignSystemToolRoutes(app, {
+    auth: authDeps,
+    http: httpDeps,
+    paths: pathDeps,
+    projects: { getProject },
+  });
   app.use('/artifacts', express.static(ARTIFACTS_DIR));
   registerDeployRoutes(app, {
     db,
@@ -3992,6 +4921,15 @@ export async function startServer({
     projectStore: projectStoreDeps,
     validation: validationDeps,
     finalize: finalizeDeps,
+  });
+  registerHandoffRoutes(app, {
+    db,
+    http: httpDeps,
+    paths: pathDeps,
+    projectStore: projectStoreDeps,
+    conversations: conversationDeps,
+    validation: validationDeps,
+    handoff: handoffDeps,
   });
   registerDeploymentCheckRoutes(app, { db, http: httpDeps, deploy: deployDeps });
   app.use('/frames', express.static(FRAMES_DIR));
@@ -4345,7 +5283,7 @@ export async function startServer({
 
   app.get('/api/skills', async (_req, res) => {
     try {
-      const skills = await listSkills(SKILLS_DIR);
+      const skills = await listAllSkills();
       // Strip full body + on-disk dir from the listing — frontend fetches the
       // body via /api/skills/:id when needed (keeps the listing payload small).
       res.json({
@@ -4361,7 +5299,7 @@ export async function startServer({
 
   app.get('/api/skills/:id', async (req, res) => {
     try {
-      const skills = await listSkills(SKILLS_DIR);
+      const skills = await listAllSkills();
       const skill = findSkillById(skills, req.params.id);
       if (!skill) return res.status(404).json({ error: 'skill not found' });
       const { dir: _dir, ...serializable } = skill;
@@ -4546,7 +5484,8 @@ export async function startServer({
       const body = projectBody ?? await readAvailableDesignSystem(req.params.id);
       if (body === null || !summary)
         return res.status(404).json({ error: 'design system not found' });
-      const detail = { ...summary, body };
+      const packageInfo = await readAvailableDesignSystemPackageInfo(req.params.id);
+      const detail = { ...summary, body, ...(packageInfo ? { packageInfo } : {}) };
       res.json({ ...detail, designSystem: detail });
     } catch (err) {
       res.status(500).json({ error: String(err) });
@@ -4991,8 +5930,8 @@ export async function startServer({
   // first-party catalog. Project-scoped overrides arrive in Phase 4.
   async function loadPluginRegistryView() {
     const [skills, designSystems] = await Promise.all([
-      listSkills(SKILLS_DIR),
-      listDesignSystems(DESIGN_SYSTEMS_DIR),
+      listAllSkills(),
+      listAllDesignSystems(),
     ]);
     // Spec §23.3.3: surface the bundled scenario plugins so apply()
     // can fall back to the matching scenario's pipeline when the
@@ -5365,7 +6304,31 @@ export async function startServer({
         return;
       }
       let contentPath = resolved;
+      let contentRel = resolvedRel;
       let buf = await fsp.readFile(resolved);
+      if (resolvedRel && /\.html?$/i.test(resolvedRel)) {
+        const shellTarget = iframeOnlyHtmlShellTarget(buf.toString('utf8'));
+        if (shellTarget) {
+          const targetFull = path.resolve(path.dirname(resolved), shellTarget);
+          const rootDir = path.resolve(plugin.fsPath);
+          const insideRoot =
+            (targetFull + path.sep).startsWith(root) ||
+            targetFull === rootDir;
+          if (insideRoot) {
+            try {
+              const st = await fsp.stat(targetFull);
+              const lst = await fsp.lstat(targetFull);
+              if (!lst.isSymbolicLink() && st.isFile() && st.size <= 5 * 1024 * 1024) {
+                buf = await fsp.readFile(targetFull);
+                contentPath = targetFull;
+                contentRel = path.relative(plugin.fsPath, targetFull).split(path.sep).join('/');
+              }
+            } catch {
+              // Keep the wrapper HTML if the iframe target cannot be read.
+            }
+          }
+        }
+      }
       if (resolvedRel && /(^|\/)example-slides\.html$/i.test(resolvedRel)) {
         const templateRel = resolvedRel.replace(
           /(^|\/)example-slides\.html$/i,
@@ -5390,6 +6353,7 @@ export async function startServer({
               const slidesHtml = buf.toString('utf8');
               buf = Buffer.from(assembleExample(tplHtml, slidesHtml, title), 'utf8');
               contentPath = templateFull;
+              contentRel = templateRel;
             }
           } catch {
             // Keep the raw fallback if the companion template is missing.
@@ -5412,10 +6376,77 @@ export async function startServer({
         : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
         : 'application/octet-stream';
       res.setHeader('Content-Type', ct);
+      if (ext === '.html' && typeof contentRel === 'string') {
+        buf = Buffer.from(
+          rewritePluginAssetUrls(
+            buf.toString('utf8'),
+            req.params.id,
+            path.posix.dirname(contentRel.replace(/\\/g, '/')),
+          ),
+          'utf8',
+        );
+      }
       res.send(buf);
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }
+  }
+
+  function iframeOnlyHtmlShellTarget(html: string): string | null {
+    if (typeof html !== 'string' || html.length === 0) return null;
+    const bodyMatch = /<body\b[^>]*>([\s\S]*?)<\/body>/i.exec(html);
+    if (!bodyMatch) return null;
+    const body = bodyMatch[1].replace(/<!--[\s\S]*?-->/g, '').trim();
+    const iframeMatch = /^<iframe\b[^>]*\bsrc\s*=\s*(['"])([^'"]+)\1[^>]*>\s*(?:<\/iframe>)?\s*$/i.exec(body);
+    if (!iframeMatch) return null;
+    const src = iframeMatch[2].trim();
+    if (
+      !src ||
+      src.startsWith('/') ||
+      src.startsWith('//') ||
+      src.includes('\0') ||
+      /^[a-z][a-z0-9+.-]*:/i.test(src)
+    ) {
+      return null;
+    }
+    const pathOnly = src.split(/[?#]/)[0] ?? '';
+    if (!/\.html?$/i.test(pathOnly)) return null;
+    return pathOnly;
+  }
+
+  function rewritePluginAssetUrls(html: string, pluginId: string, baseDir: string) {
+    if (typeof html !== 'string' || html.length === 0) return html;
+    const safeBase = baseDir === '.' ? '' : baseDir;
+    return html.replace(
+      /(\s(?:src|href|poster)\s*=\s*)(['"])([^'"]+)(\2)/gi,
+      (match, attr, quote, rawValue, closeQuote) => {
+        const value = String(rawValue).trim();
+        if (
+          !value ||
+          value.startsWith('#') ||
+          value.startsWith('/') ||
+          value.startsWith('//') ||
+          value.includes('\0') ||
+          /^[a-z][a-z0-9+.-]*:/i.test(value)
+        ) {
+          return match;
+        }
+        const splitAt = value.search(/[?#]/);
+        const rel = splitAt === -1 ? value : value.slice(0, splitAt);
+        const suffix = splitAt === -1 ? '' : value.slice(splitAt);
+        const normalized = path.posix.normalize(path.posix.join(safeBase, rel));
+        if (
+          normalized === '.' ||
+          normalized === '..' ||
+          normalized.startsWith('../') ||
+          path.posix.isAbsolute(normalized)
+        ) {
+          return match;
+        }
+        const url = `/api/plugins/${encodeURIComponent(pluginId)}/asset/${normalized}${suffix}`;
+        return `${attr}${quote}${url}${closeQuote}`;
+      },
+    );
   }
 
   // Plan §6 Phase 2B + spec §11.6 / §9.2 — plugin preview + examples.
@@ -6249,7 +7280,7 @@ export async function startServer({
   //      a real preview on its parent card instead of returning 404.
   app.get('/api/skills/:id/example', async (req, res) => {
     try {
-      const skills = await listSkills(SKILLS_DIR);
+      const skills = await listAllSkills();
 
       // 1. Derived `<parent>:<child>` id — resolve straight to the matching
       // file under <parentDir>/examples/. Done before findSkillById so the
@@ -6371,7 +7402,7 @@ export async function startServer({
   // contributors can preview `example.html` straight from disk.
   app.get('/api/skills/:id/assets/*', async (req, res) => {
     try {
-      const skills = await listSkills(SKILLS_DIR);
+      const skills = await listAllSkills();
       const skill = findSkillById(skills, req.params.id);
       if (!skill) {
         return res.status(404).type('text/plain').send('skill not found');
@@ -7647,6 +8678,11 @@ export async function startServer({
         const body = { file: meta };
         res.json(body);
       } catch (err) {
+        if (err instanceof ArtifactPublicationBlockedError) {
+          return sendApiError(res, 422, 'ARTIFACT_PUBLICATION_BLOCKED', err.message, {
+            details: { placeholders: err.placeholders },
+          });
+        }
         sendApiError(res, 500, 'INTERNAL_ERROR', 'upload failed');
       }
     },
@@ -7752,7 +8788,8 @@ export async function startServer({
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
-      res.json(await orbitService.start('manual'));
+      const locale = typeof req.body?.locale === 'string' ? req.body.locale : null;
+      res.json(await orbitService.start('manual', { locale }));
     } catch (err) {
       res
         .status(500)
@@ -7760,9 +8797,33 @@ export async function startServer({
     }
   });
 
-  // Native OS folder picker dialog. Returns { path: string | null }.
-  app.post('/api/dialog/open-folder', async (req, res) => {
+  app.post('/api/system/open-external', async (req, res) => {
     if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      const url = typeof req.body?.url === 'string' ? req.body.url.trim() : '';
+      let parsed;
+      try {
+        parsed = new URL(url);
+      } catch {
+        return res.status(400).json({ ok: false, error: 'url must be a valid URL' });
+      }
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        return res.status(400).json({ ok: false, error: 'url must be http or https' });
+      }
+      const child = openBrowser(parsed.toString());
+      res.json({ ok: Boolean(child) });
+    } catch (err) {
+      res
+        .status(500)
+        .json({ ok: false, error: String(err && err.message ? err.message : err) });
+    }
+  });
+
+	  // Native OS folder picker dialog. Returns { path: string | null }.
+	  app.post('/api/dialog/open-folder', async (req, res) => {
+	    if (!isLocalSameOrigin(req, resolvedPort)) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
@@ -8015,8 +9076,10 @@ export async function startServer({
     agentId,
     projectId,
     skillId,
+    skillIds,
     designSystemId,
     streamFormat,
+    locale,
     connectedExternalMcp,
     appliedPluginSnapshotId,
   }) => {
@@ -8031,33 +9094,129 @@ export async function startServer({
         ? designSystemId
         : project?.designSystemId;
     const metadata = project?.metadata;
+    let allSkillsPromise: ReturnType<typeof listAllSkillLikeEntries> | null = null;
+    const loadAllSkills = async () => {
+      allSkillsPromise ??= listAllSkillLikeEntries();
+      return await allSkillsPromise;
+    };
+
+    // Per-turn skills picked via the composer's @-mention popover. They
+    // never persist on the project — we just append their bodies after the
+    // primary skill so the agent sees one combined block this turn.
+    const effectiveCanonicalSkillId =
+      typeof effectiveSkillId === 'string' && effectiveSkillId
+        ? resolveSkillId(effectiveSkillId)
+        : null;
+    const adHocSkillIds = Array.isArray(skillIds)
+      ? skillIds
+          .map((s) => (typeof s === 'string' ? s.trim() : ''))
+          .filter(Boolean)
+          .filter((id) => resolveSkillId(id) !== effectiveCanonicalSkillId)
+      : [];
 
     let skillBody;
     let skillName;
     let skillMode;
+    const skillModes = new Set<NonNullable<Parameters<typeof composeSystemPrompt>[0]['skillMode']>>();
     let skillCraftRequires = [];
     let activeSkillDir = null;
+    const activeSkillDirs: string[] = [];
     // Per-skill Critique Theater override sourced from
     // `od.critique.policy` in the resolved skill's SKILL.md frontmatter.
     // `null` means the skill has no opinion and the lower-priority tiers
     // (project override, env override, rollout phase default) decide.
     let skillCritiquePolicy: SkillCritiquePolicy = null;
+    let critiqueSkillId = effectiveCanonicalSkillId;
+    const registerSkillMode = (
+      mode: NonNullable<Parameters<typeof composeSystemPrompt>[0]['skillMode']> | null | undefined,
+    ) => {
+      if (!mode) return;
+      skillModes.add(mode);
+    };
+    const registerPrimarySkillMode = (
+      mode: NonNullable<Parameters<typeof composeSystemPrompt>[0]['skillMode']> | null | undefined,
+    ) => {
+      if (!mode) return;
+      skillMode ??= mode;
+      registerSkillMode(mode);
+    };
+    const registerSkillDir = (dir: string | null | undefined) => {
+      if (typeof dir !== 'string' || dir.length === 0) return;
+      if (!activeSkillDir) activeSkillDir = dir;
+      if (!activeSkillDirs.includes(dir)) activeSkillDirs.push(dir);
+    };
+    const mergeSkillCritiquePolicy = (
+      current: SkillCritiquePolicy,
+      next: SkillCritiquePolicy,
+    ): SkillCritiquePolicy => {
+      if (next === 'opt-out') return 'opt-out';
+      if (next === 'required') return current === 'opt-out' ? current : 'required';
+      if (next === 'opt-in') {
+        return current === 'required' || current === 'opt-out' ? current : 'opt-in';
+      }
+      return current;
+    };
     if (effectiveSkillId) {
       // Span both functional skills and design templates so a project
       // saved against either surface keeps its system prompt after the
       // skills/design-templates split. See specs/current/skills-and-design-templates.md.
-      const skill = findSkillById(
-        await listAllSkillLikeEntries(),
-        effectiveSkillId,
-      );
+      const allSkills = await loadAllSkills();
+      const skill = findSkillById(allSkills, effectiveSkillId);
       if (skill) {
         skillBody = skill.body;
         skillName = skill.name;
-        skillMode = skill.mode;
-        activeSkillDir = skill.dir;
-        skillCritiquePolicy = skill.critiquePolicy;
+        registerPrimarySkillMode(skill.mode);
+        registerSkillDir(skill.dir);
+        skillCritiquePolicy = mergeSkillCritiquePolicy(
+          skillCritiquePolicy,
+          skill.critiquePolicy,
+        );
         if (Array.isArray(skill.craftRequires))
           skillCraftRequires = skill.craftRequires;
+      }
+    }
+    let composedSkillBlocks = '';
+    if (adHocSkillIds.length > 0) {
+      const allSkills = await loadAllSkills();
+      const seen = new Set(
+        effectiveCanonicalSkillId ? [String(effectiveCanonicalSkillId)] : [],
+      );
+      const blocks = [];
+      const baseBody = skillBody && skillBody.trim().length > 0 ? skillBody : '';
+      for (const id of adHocSkillIds) {
+        const canonicalId = resolveSkillId(id);
+        if (typeof canonicalId !== 'string' || canonicalId.length === 0) continue;
+        if (seen.has(canonicalId)) continue;
+        seen.add(canonicalId);
+        const extra = findSkillById(allSkills, id);
+        if (!extra) continue;
+        registerSkillDir(extra.dir);
+        registerSkillMode(extra.mode);
+        if (!effectiveCanonicalSkillId && adHocSkillIds.length === 1) {
+          registerPrimarySkillMode(extra.mode);
+        }
+        if (!critiqueSkillId || extra.critiquePolicy !== null) critiqueSkillId = canonicalId;
+        skillCritiquePolicy = mergeSkillCritiquePolicy(
+          skillCritiquePolicy,
+          extra.critiquePolicy,
+        );
+        if (Array.isArray(extra.craftRequires)) {
+          for (const craft of extra.craftRequires) {
+            if (!skillCraftRequires.includes(craft)) skillCraftRequires.push(craft);
+          }
+        }
+        blocks.push(
+          `\n\n---\n\n## Composed skill — ${extra.name || id}\n\n${(extra.body || '').trim()}`,
+        );
+      }
+      if (blocks.length > 0) {
+        composedSkillBlocks = blocks.join('');
+        skillBody = baseBody + composedSkillBlocks;
+        if (!skillName) {
+          skillName = adHocSkillIds.length === 1
+            ? findSkillById(allSkills, adHocSkillIds[0])?.name ?? null
+            : 'composed';
+        }
       }
     }
 
@@ -8079,9 +9238,10 @@ export async function startServer({
             const { loadPluginLocalSkill } = await import('./plugins/local-skill.js');
             const local = await loadPluginLocalSkill(plugin);
             if (local) {
-              skillBody = local.body;
+              skillBody = local.body + composedSkillBlocks;
               skillName = local.name;
               activeSkillDir = local.dir;
+              registerSkillDir(local.dir);
             }
           }
         }
@@ -8094,13 +9254,6 @@ export async function startServer({
 
     let craftBody;
     let craftSections;
-    if (skillCraftRequires.length > 0) {
-      const loaded = await loadCraftSections(CRAFT_DIR, skillCraftRequires);
-      if (loaded.body) {
-        craftBody = loaded.body;
-        craftSections = loaded.sections;
-      }
-    }
 
     // Personal-memory body is always recomputed at compose time so a
     // memory the user just edited in settings shows up on the very next
@@ -8140,9 +9293,14 @@ export async function startServer({
     // including the structured ones. Any other value (unset, `1`,
     // `true`, etc.) keeps the new default. Drift on prose-only brands
     // is pinned by `scripts/check-design-system-flag-parity.ts`.
+    let designSystemUsageMd;
     let designSystemTokensCss;
     let designSystemComponentsManifest;
     let designSystemFixtureHtml;
+    let designSystemPullIndex;
+    let designSystemImportMode;
+    let designSystemCraftApplies = [];
+    let designSystemCraftExemptions = [];
     if (effectiveDesignSystemId) {
       let systems = await listAllDesignSystems();
       let summary = systems.find((s) => s.id === effectiveDesignSystemId);
@@ -8168,9 +9326,26 @@ export async function startServer({
           DESIGN_SYSTEMS_DIR,
           USER_DESIGN_SYSTEMS_DIR,
         );
+        designSystemUsageMd = assets.usageMd;
         designSystemTokensCss = assets.tokensCss;
         designSystemComponentsManifest = assets.componentsManifest;
         designSystemFixtureHtml = assets.fixtureHtml;
+        designSystemPullIndex = assets.pullIndex;
+        designSystemImportMode = assets.importMode;
+        designSystemCraftApplies = Array.isArray(assets.craftApplies) ? assets.craftApplies : [];
+        designSystemCraftExemptions = Array.isArray(assets.craftExemptions) ? assets.craftExemptions : [];
+      }
+    }
+
+    const excludedCraft = new Set(designSystemCraftExemptions);
+    const requestedCraft = Array.from(
+      new Set([...skillCraftRequires, ...designSystemCraftApplies]),
+    ).filter((slug) => !excludedCraft.has(slug));
+    if (requestedCraft.length > 0) {
+      const loaded = await loadCraftSections(CRAFT_DIR, requestedCraft);
+      if (loaded.body) {
+        craftBody = loaded.body;
+        craftSections = loaded.sections;
       }
     }
 
@@ -8235,8 +9410,8 @@ export async function startServer({
       && typeof designSystemBody === 'string'
       ? { name: designSystemTitle, design_md: designSystemBody }
       : undefined;
-    const critiqueSkill = critiqueEnabledForRun && typeof effectiveSkillId === 'string'
-      ? { id: effectiveSkillId }
+    const critiqueSkill = critiqueEnabledForRun && typeof critiqueSkillId === 'string'
+      ? { id: critiqueSkillId }
       : undefined;
     // Single-source-of-truth eligibility check. The composer downstream
     // appends <CRITIQUE_RUN> instructions only when this check passes, and
@@ -8250,13 +9425,15 @@ export async function startServer({
     // panel addendum has to be suppressed here too: otherwise the model
     // is instructed to emit Critique Theater tags that no orchestrator
     // consumes.
+    const resolvedExclusiveSurface = resolveExclusiveSurface({
+      metadata,
+      skillMode,
+      skillModes: skillModes.size > 0 ? Array.from(skillModes) : undefined,
+    });
     const isMediaSurface =
-      skillMode === 'image' ||
-      skillMode === 'video' ||
-      skillMode === 'audio' ||
-      metadata?.kind === 'image' ||
-      metadata?.kind === 'video' ||
-      metadata?.kind === 'audio';
+      resolvedExclusiveSurface === 'image'
+      || resolvedExclusiveSurface === 'video'
+      || resolvedExclusiveSurface === 'audio';
     const isPlainAdapter = (streamFormat ?? 'plain') === 'plain';
     const critiqueShouldRun = critiqueEnabledForRun
       && critiqueBrand !== undefined
@@ -8323,11 +9500,15 @@ export async function startServer({
       skillBody,
       skillName,
       skillMode,
+      skillModes: skillModes.size > 0 ? Array.from(skillModes) : undefined,
       designSystemBody,
       designSystemTitle,
+      designSystemUsageMd,
       designSystemTokensCss,
       designSystemComponentsManifest,
       designSystemFixtureHtml,
+      designSystemPullIndex,
+      designSystemImportMode,
       craftBody,
       craftSections,
       memoryBody,
@@ -8347,6 +9528,7 @@ export async function startServer({
       critique: critiqueShouldRun ? { ...critiqueCfg, enabled: true } : undefined,
       critiqueBrand: critiqueShouldRun ? critiqueBrand : undefined,
       critiqueSkill: critiqueShouldRun ? critiqueSkill : undefined,
+      locale: typeof locale === 'string' ? locale : undefined,
       streamFormat,
       connectedExternalMcp: Array.isArray(connectedExternalMcp)
         ? connectedExternalMcp
@@ -8362,7 +9544,7 @@ export async function startServer({
     // `listSkills()` scan in `startChatRun`. critiqueShouldRun threads
     // the same panel-eligibility decision down to the spawn-path
     // orchestrator gate so prompt and orchestrator stay in lockstep.
-    return { prompt, activeSkillDir, critiqueShouldRun };
+    return { prompt, activeSkillDir, activeSkillDirs, critiqueShouldRun };
   };
 
   // Plan §3.I1 / §3.D / spec §10.1: fire the pipeline schedule on a
@@ -8452,12 +9634,15 @@ export async function startServer({
       assistantMessageId,
       clientRequestId,
       skillId,
+      skillIds,
       designSystemId,
       attachments = [],
       commentAttachments = [],
       model,
       reasoning,
+      locale,
       research,
+      context,
     } = chatBody;
     if (typeof projectId === 'string' && projectId) run.projectId = projectId;
     if (typeof conversationId === 'string' && conversationId)
@@ -8572,6 +9757,7 @@ export async function startServer({
       typeof projectId === 'string' && projectId
         ? getProject(db, projectId)
         : null;
+    const runContextPrompt = renderRunContextPrompt(context, projectRecord?.metadata);
     const linkedDirs = (() => {
       if (!Array.isArray(projectRecord?.metadata?.linkedDirs)) return [];
       const v = validateLinkedDirs(projectRecord.metadata.linkedDirs);
@@ -8684,13 +9870,19 @@ export async function startServer({
       .filter((s) => typeof oauthTokensForSpawn[s.id] === 'string')
       .map((s) => ({ id: s.id, label: s.label }));
 
-    const { prompt: daemonSystemPrompt, activeSkillDir, critiqueShouldRun } =
+    const {
+      prompt: daemonSystemPrompt,
+      activeSkillDirs,
+      critiqueShouldRun,
+    } =
       await composeDaemonSystemPrompt({
         agentId,
         projectId,
         skillId,
+        skillIds,
         designSystemId,
         streamFormat: def?.streamFormat ?? 'plain',
+        locale,
         connectedExternalMcp,
         // Plan §3.M2 / §3.V1 — forward the run's snapshot id so the
         // prompt composer can splice in `## Active stage` blocks.
@@ -8703,11 +9895,11 @@ export async function startServer({
     // advertises both the cwd-relative path (1) and the absolute path
     // (2/3) so the agent can pick whichever works.
     //
-    //   1. CWD-relative copy. Stage the *active* skill into
+    //   1. CWD-relative copy. Stage every active/composed skill into
     //      `<cwd>/.od-skills/<folder>/` so any agent CLI — not just the
     //      ones that honour `--add-dir` — can reach those files via a
     //      path inside its working directory. We copy (not symlink) so
-    //      the staged directory is a true write barrier — agents cannot
+    //      each staged directory is a true write barrier — agents cannot
     //      mutate the shipped repo resource through their cwd.
     //   2. `--add-dir` allowlist. For non-Codex agents, pass `SKILLS_DIR`
     //      and `DESIGN_SYSTEMS_DIR` so the absolute fallback path in the
@@ -8725,17 +9917,19 @@ export async function startServer({
     // daemon and folded into the system prompt directly (see
     // `readDesignSystem`), so an agent never has to open them via the
     // filesystem.
-    if (cwd && activeSkillDir) {
-      const result = await stageActiveSkill(
-        cwd,
-        path.basename(activeSkillDir),
-        activeSkillDir,
-        (msg) => console.warn(msg),
-      );
-      if (!result.staged) {
-        console.warn(
-          `[od] skill-stage skipped: ${result.reason ?? 'unknown reason'}; falling back to absolute paths`,
+    if (cwd && activeSkillDirs.length > 0) {
+      for (const skillDir of activeSkillDirs) {
+        const result = await stageActiveSkill(
+          cwd,
+          skillCwdAliasSegment(skillDir),
+          skillDir,
+          (msg) => console.warn(msg),
         );
+        if (!result.staged) {
+          console.warn(
+            `[od] skill-stage skipped: ${result.reason ?? 'unknown reason'}; falling back to absolute paths`,
+          );
+        }
       }
     }
     // Resolve the agent's effective working directory once and use it
@@ -8778,7 +9972,11 @@ export async function startServer({
       research,
       message,
     );
-    const clientInstructionPrompt = [researchCommandContract, systemPrompt]
+    const userRequestPrompt = composeChatUserRequestForAgent(
+      message,
+      currentPrompt,
+    );
+    const clientInstructionPrompt = [researchCommandContract, runContextPrompt, systemPrompt]
       .map((part) => (typeof part === 'string' ? part.trim() : ''))
       .filter(Boolean)
       .join('\n\n---\n\n');
@@ -8796,7 +9994,7 @@ export async function startServer({
           : linkedDirsHint
             ? `# Instructions${linkedDirsHint}\n\n---\n`
             : '',
-      `# User request\n\n${message || '(No extra typed instruction.)'}${attachmentHint}${commentHint}`,
+      `# User request\n\n${userRequestPrompt}${attachmentHint}${commentHint}`,
       safeImages.length
         ? `\n\n${safeImages.map((p) => `@${p}`).join(' ')}`
         : '',
@@ -8854,7 +10052,17 @@ export async function startServer({
     // We also unlink a stale `.mcp.json` we previously wrote when the user has
     // since disabled all servers, so removing a server actually takes effect
     // on the next run.
-    if (def.id === 'claude' && isManagedProjectCwd(cwd, PROJECTS_DIR)) {
+    // Dispatch on `def.externalMcpInjection` rather than hard-coding agent
+    // id / stream-format checks. The three branches are functionally
+    // equivalent to the previous shape (claude/acp), with the OpenCode
+    // env-content branch added to fix #2142. Runtimes that leave the field
+    // undefined fall through unchanged — the settings UI surfaces an
+    // explicit "external MCP is not forwarded to <agent>" banner for them
+    // so the previous silent-failure UX is gone.
+    if (
+      def.externalMcpInjection === 'claude-mcp-json' &&
+      isManagedProjectCwd(cwd, PROJECTS_DIR)
+    ) {
       {
         const target = path.join(cwd, '.mcp.json');
         if (enabledExternalMcp.length > 0) {
@@ -8891,9 +10099,38 @@ export async function startServer({
         }
       }
     }
-    if (enabledExternalMcp.length > 0 && def.streamFormat === 'acp-json-rpc') {
+    if (
+      enabledExternalMcp.length > 0 &&
+      def.externalMcpInjection === 'acp-merge'
+    ) {
       const acpExternal = buildAcpMcpServers(enabledExternalMcp);
       mcpServers.push(...acpExternal);
+    }
+    // OpenCode: serialise enabled MCP servers into its `mcp` config schema
+    // and hand the JSON to the child via `OPENCODE_CONFIG_CONTENT`. The env
+    // var is *merged* with the user's saved `~/.config/opencode/opencode
+    // .json` (per OpenCode's documented config layering), so adding a
+    // server here does not erase whatever the user already has in their
+    // global config. We deliberately leave the env unset when no servers
+    // are enabled — overwriting with `{}` would wipe the user's saved
+    // mcp section for this single invocation, which is exactly the kind
+    // of surprise the previous silent-failure UX taught us to avoid.
+    let opencodeConfigContent: string | null = null;
+    if (
+      def.externalMcpInjection === 'opencode-env-content' &&
+      enabledExternalMcp.length > 0
+    ) {
+      try {
+        opencodeConfigContent = buildOpenCodeMcpConfigContent(
+          enabledExternalMcp,
+          oauthTokensForSpawn,
+        );
+      } catch (err) {
+        console.warn(
+          '[mcp-config] failed to build OPENCODE_CONFIG_CONTENT:',
+          err && err.message ? err.message : err,
+        );
+      }
     }
 
     // Pre-flight the composed prompt against any argv-byte budget the
@@ -8991,13 +10228,31 @@ export async function startServer({
       return design.runs.finish(run, 'failed', 1, null);
     }
 
-    const send = (event, data) => design.runs.emit(run, event, data);
+    const send = (event, data) => {
+      persistRunEventToAssistantMessage(db, run, event, data);
+      design.runs.emit(run, event, data);
+    };
     const inactivityTimeoutMs = resolveChatRunInactivityTimeoutMs();
+    const artifactQuietPeriodMs = resolveChatRunArtifactQuietPeriodMs();
     const inactivityKillGraceMs = 3_000;
     let inactivityTimer = null;
     let childStdoutSeen = false;
     let lastAgentEventPhase = 'spawn pending';
     let lastToolResultChars = 0;
+    // Becomes true once any live-artifact create has been registered for
+    // this run. Subsequent watchdog scheduling uses the shorter quiet
+    // period, and a watchdog trip after this point is treated as
+    // "agent finished the deliverable and went idle" rather than
+    // "agent stalled with nothing to show" (issue #1451).
+    let artifactRegistered = false;
+    // Only daemon-initiated quiet-period termination should be treated
+    // as `succeeded` in the close handler. A later unrelated SIGTERM /
+    // SIGKILL (external `kill`, OOM, container shutdown) must keep its
+    // existing `failed` classification even when `artifactRegistered`
+    // is true — those signals don't mean the agent finished cleanly,
+    // they just terminated the process. Set strictly inside
+    // `failForInactivity`'s quiet-period branch.
+    let artifactQuietShutdownRequested = false;
     const summarizeAgentEventForInactivity = (payload) => {
       const type = payload?.type ? String(payload.type) : 'unknown';
       if (type === 'tool_result') {
@@ -9032,13 +10287,35 @@ export async function startServer({
     };
     const failForInactivity = () => {
       if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
+      clearInactivityWatchdog();
+      if (artifactRegistered) {
+        // The deliverable already exists. The agent process is either
+        // genuinely idle (claude-code's stream-json child sitting on an
+        // open stdin) or wedged in post-write reasoning that never
+        // emits stdout. Either way, finishing the run via the normal
+        // child-exit path (status decision in child.on('close') below)
+        // is safer than tearing it down with a failure banner — the
+        // tool token, cancel state, and exit-code classification stay
+        // owned by the existing lifecycle. SIGTERM the child and let
+        // the close handler classify the run as succeeded (via the
+        // artifactQuietShutdown branch). Mark this termination as
+        // daemon-initiated so an unrelated later signal (external
+        // kill, OOM) is NOT silently reclassified to `succeeded` —
+        // only signals from this watchdog branch should be.
+        artifactQuietShutdownRequested = true;
+        if (acpSession?.abort) {
+          acpSession.abort();
+        }
+        if (child && !child.killed) child.kill('SIGTERM');
+        scheduleForcedChildShutdown();
+        return;
+      }
       const message =
         `Agent stalled without emitting any new output for ${Math.round(inactivityTimeoutMs / 1000)}s. ` +
         'The model or CLI likely hung while generating. ' +
         `Phase details: spawned agent binary ${resolvedBin}; stdout arrived: ${childStdoutSeen ? 'yes' : 'no'}; ` +
         `last agent event: ${lastAgentEventPhase}; largest tool result observed: ${lastToolResultChars} chars. ` +
         'Retry the turn, pick a different model, or start a new conversation if the prior context is very large.';
-      clearInactivityWatchdog();
       send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', message, { retryable: true }));
       design.runs.finish(run, 'failed', 1, null);
       if (acpSession?.abort) {
@@ -9047,14 +10324,41 @@ export async function startServer({
       if (child && !child.killed) child.kill('SIGTERM');
       scheduleForcedChildShutdown();
     };
+    const activeInactivityTimeoutMs = () =>
+      resolveActiveInactivityTimeoutMs({
+        inactivityTimeoutMs,
+        artifactQuietPeriodMs,
+        artifactRegistered,
+      });
     const noteAgentActivity = () => {
-      if (inactivityTimeoutMs <= 0) return;
+      const delay = activeInactivityTimeoutMs();
+      if (delay <= 0) return;
       clearInactivityWatchdog();
-      inactivityTimer = setTimeout(failForInactivity, inactivityTimeoutMs);
+      inactivityTimer = setTimeout(failForInactivity, delay);
       inactivityTimer.unref?.();
     };
+    const noteArtifactRegistered = () => {
+      if (artifactRegistered) return;
+      artifactRegistered = true;
+      // Switch the watchdog to the shorter quiet-period window
+      // immediately so we don't have to wait for the next agent event
+      // before the new ceiling takes effect. Call unconditionally:
+      // an earlier `if (inactivityTimer)` gate left the run in limbo
+      // when `OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS=0` but
+      // `OD_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS>0` — noteAgentActivity()
+      // had returned early at run start (pre-artifact delay = 0,
+      // no timer set), so the guard then skipped the re-arm and the
+      // newly-positive quiet-period delay never armed a timer at all.
+      // `noteAgentActivity` itself is the one that decides whether to
+      // schedule (it bails when the active delay is 0), so leaving the
+      // decision there keeps the behavior coherent across all four
+      // combinations of pre / quiet timeouts.
+      noteAgentActivity();
+    };
     const unregisterChatAgentEventSink = () => {
-      activeChatAgentEventSinks.delete(toolTokenGrant?.runId ?? runId);
+      const sinkRunId = toolTokenGrant?.runId ?? runId;
+      activeChatAgentEventSinks.delete(sinkRunId);
+      activeChatRunHandles.delete(sinkRunId);
     };
     if (toolTokenGrant?.runId) {
       activeChatAgentEventSinks.set(toolTokenGrant.runId, (payload) => {
@@ -9062,6 +10366,7 @@ export async function startServer({
         noteAgentActivity();
         send('agent', payload);
       });
+      activeChatRunHandles.set(toolTokenGrant.runId, { noteArtifactRegistered });
     }
     // If detection can't find the binary, surface a friendly SSE error
     // pointing at /api/agents instead of silently falling back to
@@ -9138,6 +10443,19 @@ export async function startServer({
         // launched from Open Design's source tree instead of the artifact dir.
         PWD: effectiveCwd,
         ...odMediaEnv,
+        // OpenCode external-MCP injection (issue #2142). Layered AFTER
+        // spawnEnvForAgent / odMediaEnv / configuredAgentEnv so the
+        // daemon-built MCP config wins over a stale value the user
+        // might have exported in their shell — that would let an
+        // outdated content string suppress the user's freshly-saved
+        // MCP servers, which is exactly the bug we are fixing.
+        // `opencodeConfigContent === null` means "no enabled servers";
+        // we deliberately leave the env unset in that case so the
+        // user's saved `~/.config/opencode/opencode.json` continues
+        // to apply as-is.
+        ...(opencodeConfigContent
+          ? { OPENCODE_CONFIG_CONTENT: opencodeConfigContent }
+          : {}),
       }, agentLaunch);
       spawnedAgentEnv = env;
       const invocation = createCommandInvocation({
@@ -9162,7 +10480,12 @@ export async function startServer({
         // crash the daemon. Swallow it — the regular exit/close handlers
         // below already route the underlying failure to SSE via stderr.
         child.stdin.on('error', (err) => {
-          if (err.code !== 'EPIPE') {
+          // EPIPE = Unix broken-pipe when child closes its stdin read end
+          // early. 'write EOF' (err.code 'EOF') = Windows equivalent of
+          // the same condition via UV_EOF. Both mean the child exited before
+          // reading stdin — the process exit/close handlers already route
+          // the underlying failure to SSE via stderr, so swallow these here.
+          if (err.code !== 'EPIPE' && err.code !== 'EOF' && err.message !== 'write EOF') {
             send(
               'error',
               createSseErrorPayload(
@@ -9225,11 +10548,12 @@ export async function startServer({
               userMessage: userMsg,
               assistantMessage: captured,
             },
-            {
-              projectRoot: PROJECT_ROOT,
-              chatAgentId: typeof agentId === 'string' ? agentId : null,
-            },
-          ),
+              {
+                projectRoot: PROJECT_ROOT,
+                chatAgentId: typeof agentId === 'string' ? agentId : null,
+                chatModel: typeof safeModel === 'string' ? safeModel : null,
+              },
+            ),
         )
         .catch((err) => console.warn('[memory-llm] background failed', err));
     });
@@ -9689,13 +11013,13 @@ export async function startServer({
       const acpCleanCompletion =
         typeof acpSession?.completedSuccessfully === 'function' &&
         acpSession.completedSuccessfully();
-      const acpForcedShutdown =
-        code === null && signal === 'SIGTERM' && acpCleanCompletion;
-      const status = run.cancelRequested
-        ? 'canceled'
-        : code === 0 || acpForcedShutdown
-          ? 'succeeded'
-          : 'failed';
+      const status = classifyChatRunCloseStatus({
+        cancelRequested: !!run.cancelRequested,
+        code,
+        signal,
+        acpCleanCompletion,
+        artifactQuietShutdownRequested,
+      });
       if (status === 'failed') {
         const diagnostic = diagnoseClaudeCliFailure({
           agentId: def.id,
@@ -9878,7 +11202,7 @@ export async function startServer({
       const cwd = await ensureProject(PROJECTS_DIR, projectId);
       const result = await stageActiveSkill(
         cwd,
-        path.basename(template.dir),
+        skillCwdAliasSegment(template.dir),
         template.dir,
         (msg) => console.warn(msg),
       );
@@ -9966,11 +11290,11 @@ export async function startServer({
     //
     // Stage A of plugin-driven-flow-plan: when neither the body nor the
     // project carries plugin info we fall back to the bundled scenario
-    // plugin for the project's `metadata.kind` so direct callers (CLI /
-    // SDK / agent-headless runs) get the same auto-binding the web
-    // create flow already produces. The fallback is silent — a bundled
-    // scenario that is not installed leaves the run plugin-less, which
-    // matches the legacy path.
+    // plugin for the project's metadata kind/intent so direct callers
+    // (CLI / SDK / agent-headless runs) get the same auto-binding the
+    // web create flow already produces. The fallback is silent — a
+    // bundled scenario that is not installed leaves the run plugin-less,
+    // which matches the legacy path.
     let resolvedSnapshot = null;
     if (typeof req.body?.projectId === 'string' && req.body.projectId) {
       let registryView;
@@ -9988,9 +11312,7 @@ export async function startServer({
           typeof projectRow?.appliedPluginSnapshotId === 'string'
           && projectRow.appliedPluginSnapshotId.length > 0;
         if (!hasPin) {
-          const fallbackPluginId = defaultScenarioPluginIdForKind(
-            projectRow?.metadata?.kind,
-          );
+          const fallbackPluginId = defaultScenarioPluginIdForProjectMetadata(projectRow?.metadata);
           if (fallbackPluginId && getInstalledPlugin(db, fallbackPluginId)) {
             runResolveBody = { ...req.body, pluginId: fallbackPluginId };
           }
@@ -10030,6 +11352,24 @@ export async function startServer({
       }
     }
     const run = design.runs.create(meta);
+    try {
+      pinAssistantMessageOnRunCreate(db, run);
+    } catch (err) {
+      console.warn('[runs] message create pin failed', err);
+    }
+    // Capture clientType for downstream telemetry (Langfuse uses it on
+    // run-completed metadata; PostHog gets it via the request header
+    // bridge). Prefer the explicit `x-od-client` header from desktop /
+    // web sidecars, fall back to user-agent detection. Without this the
+    // run object's `clientType` stays undefined and Langfuse traces lose
+    // the surface dimension.
+    const declaredClient = String(req.get('x-od-client') ?? '').toLowerCase();
+    if (declaredClient === 'desktop' || declaredClient === 'web') {
+      run.clientType = declaredClient;
+    } else {
+      const ua = String(req.get('user-agent') ?? '');
+      run.clientType = ua.includes('Electron/') ? 'desktop' : 'web';
+    }
     if (resolvedSnapshot?.ok) {
       try {
         const { linkSnapshotToRun } = await import('./plugins/snapshots.js');
@@ -10068,6 +11408,173 @@ export async function startServer({
     }
     reconcileAssistantMessageOnRunEnd(db, design.runs, run);
     design.runs.start(run, () => startChatRun(meta, run));
+
+    // Analytics v2: emit run_created (daemon-side authoritative) and
+    // schedule run_finished on terminal state. The matching `chat-routes.ts`
+    // handler is shadowed by this earlier registration in Express; emit
+    // here so PostHog actually receives the event. Both fire under the
+    // same insert_id prefix so any web-side mirror dedupes by $insert_id.
+    const analyticsContext = readAnalyticsContext(req);
+    if (analyticsContext) {
+      const reqBody = (req.body || {}) as Record<string, unknown>;
+      const runInsertId = newInsertId();
+      const runStartedAt = Date.now();
+      // Configure-state triplet — v2 schema requires every event to carry
+      // these so PostHog dashboards can split run lifecycle by execution
+      // setup. Web-side captures inherit them from a PostHog global
+      // register, but daemon-side captures (run_created/run_finished) need
+      // to populate them at capture time. Best-effort derivation from
+      // `detectAgents()` + the request's `agentId`:
+      //   - has_available_configure_cli: any CLI on PATH appears installed
+      //   - configure_type: 'local_cli' when the run targets an installed
+      //     CLI, otherwise 'unknown' (BYOK keys live in the web client
+      //     storage and are not visible to the daemon at this layer)
+      //   - configure_availability: 'available' when the requested CLI is
+      //     installed; 'unavailable' when it's known but not installed;
+      //     'unknown' otherwise
+      const appCfgForAnalytics = await readAppConfig(RUNTIME_DATA_DIR).catch(
+        () => ({} as Record<string, unknown>),
+      );
+      const detectedAgentsForAnalytics = await detectAgents(
+        (appCfgForAnalytics as { agentCliEnv?: Record<string, unknown> }).agentCliEnv ?? {},
+      ).catch(() => [] as Array<{ id: string; available: boolean }>);
+      // BYOK credentials live in the web client (localStorage / store) and
+      // are not visible to the daemon at this layer, so we pass
+      // `byokConfigured: undefined` and let the helper fall back to the
+      // installed-CLI signal. Web-side captures use the same helper with
+      // the full credential view to keep dashboards aligned.
+      //
+      // `mode: 'daemon'` pins the call into the helper's daemon branch so
+      // `configure_availability` is judged from the requested agent's
+      // install status (not the cohort-wide "any CLI installed?" fallback).
+      // Without it, a run for an uninstalled agent would still report
+      // `available` whenever any unrelated CLI was on PATH — see PR #2285
+      // review.
+      const configureGlobals = deriveConfigureGlobals({
+        mode: 'daemon',
+        agentId: typeof reqBody.agentId === 'string' ? reqBody.agentId : null,
+        agents: detectedAgentsForAnalytics,
+      });
+      const promptText =
+        typeof reqBody.currentPrompt === 'string'
+          ? reqBody.currentPrompt
+          : typeof reqBody.message === 'string'
+            ? reqBody.message
+            : '';
+      const userQueryTokens = promptText.length > 0
+        ? Math.ceil(promptText.length / 4)
+        : 0;
+      // Only fields the current `/api/runs` create payload actually
+      // sends. The v2 schema documents extended context props
+      // (entry_from / project_kind / target_platforms / fidelity /
+      // companion_surfaces / connectors / use_speaker_notes /
+      // include_animations / reference_template / aspect /
+      // project_source) but `packages/contracts/src/api/chat.ts` and
+      // `apps/web/src/providers/daemon.ts` do not yet thread them onto
+      // the wire, so reading them here would always produce null/undef
+      // — better to omit until a follow-up extends the create payload.
+      const baseProps: Record<string, unknown> = {
+        page_name: 'chat_panel',
+        area: 'chat_composer',
+        ...configureGlobals,
+        project_id: typeof reqBody.projectId === 'string' ? reqBody.projectId : null,
+        conversation_id:
+          typeof reqBody.conversationId === 'string' ? reqBody.conversationId : null,
+        run_id: run.id,
+        design_system_id:
+          typeof reqBody.designSystemId === 'string'
+            ? reqBody.designSystemId
+            : undefined,
+        // `design_system_source` is required in the v2 contract
+        // (RunCreatedProps / RunFinishedProps). The daemon doesn't see
+        // whether the chosen design system was the workspace default,
+        // a user pick, or template-inherited — that signal lives only
+        // in the web client. Derive what we honestly know from the
+        // wire payload: 'not_applicable' when no design system was
+        // selected, 'unknown' otherwise. A follow-up that threads
+        // `designSystemSource` through `CreateRunRequest` can replace
+        // this with the precise value. See PR #2285 review 2026-05-20
+        // 04:35 for the rationale.
+        design_system_source:
+          typeof reqBody.designSystemId === 'string' && reqBody.designSystemId
+            ? 'unknown'
+            : 'not_applicable',
+        has_attachment: Array.isArray(reqBody.attachments)
+          ? (reqBody.attachments as unknown[]).length > 0
+          : false,
+        user_query_tokens: userQueryTokens,
+        model_id: typeof reqBody.model === 'string' ? reqBody.model : null,
+        agent_provider_id:
+          typeof reqBody.agentId === 'string'
+            ? agentIdToTracking(reqBody.agentId)
+            : null,
+        skill_id: typeof reqBody.skillId === 'string' ? reqBody.skillId : null,
+        mcp_id: null,
+        token_count_source: userQueryTokens > 0 ? 'estimated' : 'unknown',
+      };
+      design.analytics.capture({
+        eventName: 'run_created',
+        context: analyticsContext,
+        appVersion: design.getAppVersion(),
+        properties: baseProps,
+        insertId: runInsertId,
+      });
+      design.runs.wait(run).then((status: {
+        status: string;
+        error?: string | null;
+        errorCode?: string | null;
+        exitCode?: number | null;
+        signal?: string | null;
+      }) => {
+        // `deriveRunErrorCode` is the invariant: when `result === 'failed'`
+        // it always returns a non-empty string so dashboards keyed on
+        // `error_code` never see a blank cell. Live in `run-result.ts`
+        // with unit coverage for the fall-through cases (ACP fatal,
+        // child close without error event, etc.).
+        const result = runResultFromStatus(status.status);
+        const errorCode = deriveRunErrorCode(status);
+        let inputTokens: number | undefined;
+        let outputTokens: number | undefined;
+        for (let i = run.events.length - 1; i >= 0; i -= 1) {
+          const ev = run.events[i];
+          const data = ev?.data as
+            | { type?: string; usage?: Record<string, unknown> | null }
+            | null
+            | undefined;
+          if (ev?.event === 'agent' && data?.type === 'usage' && data.usage) {
+            const u = data.usage;
+            if (typeof u.input_tokens === 'number') inputTokens = u.input_tokens;
+            if (typeof u.output_tokens === 'number') outputTokens = u.output_tokens;
+            if (inputTokens !== undefined || outputTokens !== undefined) break;
+          }
+        }
+        const haveUsage = inputTokens !== undefined || outputTokens !== undefined;
+        const totalTokens =
+          inputTokens !== undefined && outputTokens !== undefined
+            ? inputTokens + outputTokens
+            : undefined;
+        design.analytics.capture({
+          eventName: 'run_finished',
+          context: analyticsContext,
+          appVersion: design.getAppVersion(),
+          properties: {
+            ...baseProps,
+            area: 'chat_panel',
+            result,
+            artifact_count: 0,
+            total_duration_ms: Date.now() - runStartedAt,
+            ...(errorCode ? { error_code: errorCode } : {}),
+            ...(inputTokens !== undefined ? { input_tokens: inputTokens } : {}),
+            ...(outputTokens !== undefined ? { output_tokens: outputTokens } : {}),
+            ...(totalTokens !== undefined ? { total_tokens: totalTokens } : {}),
+            ...(haveUsage ? { token_count_source: 'provider_usage' } : {}),
+          },
+          insertId: `${runInsertId}-finish`,
+        });
+      }).catch(() => {
+        // wait() can't reject in current runs.ts impl, but guard anyway.
+      });
+    }
   });
 
   app.get('/api/runs', (req, res) => {
@@ -10159,7 +11666,7 @@ export async function startServer({
 
   // Each routine fire resolves an agent, prepares project/conversation state,
   // and dispatches into the same chat runner used by manual runs.
-  routineService.setRunHandler(async ({ routine, trigger, startedAt }) => {
+  routineService.setRunHandler(async ({ routine, trigger, startedAt, runId }) => {
     const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
     let agentId = routine.agentId
       || (typeof appConfig.agentId === 'string' && appConfig.agentId ? appConfig.agentId : null);
@@ -10172,6 +11679,28 @@ export async function startServer({
     }
 
     const now = startedAt;
+    const routineContext = normalizeRunContextSelection(routine.context);
+    const routineSkillId = routine.skillId ?? routineContext.skillIds?.[0] ?? null;
+    const contextMetadata = {
+      ...(routineContext.pluginIds?.length
+        ? {
+            contextPlugins: routineContext.pluginIds.map((id) => {
+              const plugin = getInstalledPlugin(db, id);
+              return {
+                id,
+                title: plugin?.title ?? id,
+                ...(plugin?.manifest?.description ? { description: plugin.manifest.description } : {}),
+              };
+            }),
+          }
+        : {}),
+      ...(routineContext.mcpServerIds?.length
+        ? { contextMcpServers: routineContext.mcpServerIds.map((id) => ({ id })) }
+        : {}),
+      ...(routineContext.connectorIds?.length
+        ? { contextConnectors: routineContext.connectorIds.map((id) => ({ id, name: id })) }
+        : {}),
+    };
     const stamp = formatLocalProjectTimestamp(new Date(now).toISOString());
     let projectId;
     let projectName;
@@ -10186,10 +11715,17 @@ export async function startServer({
       insertProject(db, {
         id: projectId,
         name: projectName,
-        skillId: routine.skillId ?? null,
+        skillId: routineSkillId,
         designSystemId: appConfig.designSystemId ?? null,
         pendingPrompt: null,
-        metadata: { kind: 'other', intent: 'routine', routineId: routine.id, trigger },
+        metadata: {
+          kind: 'other',
+          intent: 'automation',
+          automationId: routine.id,
+          routineId: routine.id,
+          trigger,
+          ...contextMetadata,
+        },
         createdAt: now,
         updatedAt: now,
       });
@@ -10227,13 +11763,51 @@ export async function startServer({
     emitProjectEvent(projectId, conversationCreatedEvent);
 
     const assistantMessageId = `routine-assistant-${randomUUID()}`;
+    let resolvedRoutineSnapshot = null;
+    const primaryPluginId = routineContext.pluginIds?.[0] ?? null;
+    if (primaryPluginId) {
+      const registry = await loadPluginRegistryView();
+      const resolved = resolvePluginSnapshot({
+        db,
+        body: {
+          pluginId: primaryPluginId,
+          pluginInputs: { prompt: routine.prompt },
+        },
+        projectId,
+        conversationId,
+        registry,
+        activeProjectDesignSystem:
+          typeof appConfig.designSystemId === 'string' && appConfig.designSystemId.length > 0
+            ? { id: appConfig.designSystemId }
+            : undefined,
+      });
+      if (resolved && !resolved.ok) {
+        throw new Error(`Automation plugin ${primaryPluginId} could not be applied: ${JSON.stringify(resolved.body)}`);
+      }
+      resolvedRoutineSnapshot = resolved;
+    }
+
     const run = design.runs.create({
       projectId,
       conversationId,
       assistantMessageId,
       clientRequestId: `routine-${trigger}-${randomUUID()}`,
       agentId,
+      ...(resolvedRoutineSnapshot?.ok
+        ? {
+            appliedPluginSnapshotId: resolvedRoutineSnapshot.snapshotId,
+            pluginId: resolvedRoutineSnapshot.snapshot.pluginId,
+          }
+        : {}),
     });
+    if (resolvedRoutineSnapshot?.ok) {
+      try {
+        const { linkSnapshotToRun } = await import('./plugins/snapshots.js');
+        linkSnapshotToRun(db, resolvedRoutineSnapshot.snapshotId, run.id);
+      } catch {
+        // Snapshot linking is best-effort; the in-memory run still carries it.
+      }
+    }
     upsertMessage(db, conversationId, {
       id: `routine-user-${run.id}`,
       role: 'user',
@@ -10257,8 +11831,9 @@ export async function startServer({
       conversationId: run.conversationId,
       assistantMessageId: run.assistantMessageId,
       clientRequestId: run.clientRequestId,
-      skillId: routine.skillId ?? null,
+      skillId: routineSkillId,
       designSystemId: appConfig.designSystemId ?? null,
+      context: routineContext,
       model: modelPrefs.model ?? null,
       reasoning: modelPrefs.reasoning ?? null,
       message: routine.prompt,
@@ -10284,11 +11859,33 @@ export async function startServer({
       }
       db.prepare(`UPDATE messages SET run_status = ?, ended_at = ? WHERE id = ?`)
         .run(finalStatus.status, Date.now(), assistantMessageId);
+      let evolutionSummary = '';
+      if (finalStatus.status === 'succeeded' && routineContext.connectorIds?.length) {
+        try {
+          const evolution = await ingestRoutineConnectorEvolution(RUNTIME_DATA_DIR, {
+            routine,
+            runId,
+            trigger,
+            status: finalStatus.status,
+            projectId,
+            conversationId,
+            agentRunId: run.id,
+            summary: `Routine "${routine.name}" ${finalStatus.status}.`,
+            connectorIds: routineContext.connectorIds,
+            messages: listMessages(db, conversationId),
+          });
+          if (evolution?.proposals?.length) {
+            evolutionSummary = ` Created ${evolution.proposals.length} self-evolution proposal(s) from connector context.`;
+          }
+        } catch (error) {
+          evolutionSummary = ` Connector self-evolution ingestion failed: ${error instanceof Error ? error.message : String(error)}.`;
+        }
+      }
       return {
         status: finalStatus.status,
         summary: failureError
           ? `Routine "${routine.name}" failed: ${failureError}`
-          : `Routine "${routine.name}" ${finalStatus.status}.`,
+          : `Routine "${routine.name}" ${finalStatus.status}.${evolutionSummary}`,
         error: failureError ?? undefined,
         errorCode: failureErrorCode ?? undefined,
       };
@@ -10335,6 +11932,7 @@ export async function startServer({
     routines: { routineService },
     validation: validationDeps,
     finalize: finalizeDeps,
+    handoff: handoffDeps,
     chat: { startChatRun, submitToolResultToRun },
     agents: agentDeps,
     critique: critiqueDeps,
@@ -10343,6 +11941,7 @@ export async function startServer({
 
   registerRoutineRoutes(app, {
     db,
+    paths: { RUNTIME_DATA_DIR },
     routines: { routineService },
   });
 
@@ -10358,6 +11957,7 @@ export async function startServer({
     db,
     design,
     http: httpDeps,
+    paths: pathDeps,
     chat: { startChatRun, submitToolResultToRun },
     agents: agentDeps,
     critique: critiqueDeps,
@@ -10365,6 +11965,8 @@ export async function startServer({
     lifecycle: { isDaemonShuttingDown: () => daemonShuttingDown },
 
   });
+
+  registerStaticSpaFallback(app, STATIC_DIR);
 
   // Wait for `listen` to bind so callers always see the resolved URL —
   // critical when port=0 (ephemeral port) and when the embedding sidecar
