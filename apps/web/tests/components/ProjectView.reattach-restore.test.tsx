@@ -38,10 +38,6 @@ vi.mock('../../src/i18n', () => ({
     t: (value: string) => value,
   }),
   useT: () => ((value: string) => value),
-  useI18n: () => ({
-    locale: 'en',
-    t: (value: string) => value,
-  }),
 }));
 
 vi.mock('../../src/providers/anthropic', () => ({
