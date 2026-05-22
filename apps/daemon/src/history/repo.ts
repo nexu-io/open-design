@@ -251,10 +251,46 @@ async function initProjectHistoryLocked(
       .get(projectId) as { id: string } | undefined;
     if (existing) return { kind: 'already-initialized' };
 
-    // Half-init detected; reconstruct the missing migration row from
-    // the actual git HEAD so the schema and on-disk substrate are
-    // re-synchronized.
-    const sha = (await runGit(projectDir, ['rev-parse', 'HEAD'], signal)).trim();
+    // Half-init detected. Two sub-cases — probe HEAD with softFail128
+    // to distinguish:
+    //
+    //   (a) HEAD exists — the prior init got as far as `git commit
+    //       --allow-empty` but its post-commit DB write failed. We
+    //       just need to reconstruct the missing migration row from
+    //       the existing HEAD.
+    //   (b) HEAD is unborn (git rev-parse exits 128) — the prior
+    //       init crashed BEFORE the initial commit, after `git init`
+    //       created the gitdir and gitlink. We need to resume the
+    //       remaining init steps (excludes, author config, add,
+    //       initial commit) and only THEN write the DB row.
+    //
+    // Without the (b) branch, retries on the unborn-HEAD state would
+    // throw on rev-parse forever and the project would stay
+    // permanently broken.
+    let sha = (await runGit(projectDir, ['rev-parse', 'HEAD'], signal, { softFail128: true })).trim();
+
+    if (!sha) {
+      // (b) Unborn HEAD — resume the remaining init steps. Each is
+      // idempotent / safe to re-run against partial state from the
+      // crashed prior attempt:
+      //   - ensureHistoryManagedExcludes is marker-guarded
+      //   - applyAuthorConfig writes per-repo config, overwriting any prior
+      //   - git add -A is unconditional
+      //   - the commit creates the missing initial commit
+      await ensureHistoryManagedExcludes(repoDir);
+      await applyAuthorConfig(projectDir, identity, signal);
+      await runGit(projectDir, ['add', '-A'], signal);
+      await runGit(
+        projectDir,
+        ['commit', '--allow-empty', '-m', MIGRATION_COMMIT_MESSAGE],
+        signal,
+      );
+      sha = (await runGit(projectDir, ['rev-parse', 'HEAD'], signal)).trim();
+    }
+
+    // Reconstruct the missing migration row from HEAD's SHA (either
+    // the pre-existing one in case (a), or the one we just created
+    // in case (b)).
     const revisionId = randomUUID();
     const now = Date.now();
     db.prepare(

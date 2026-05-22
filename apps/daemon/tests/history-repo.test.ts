@@ -219,6 +219,74 @@ describe('initProjectHistory', () => {
     expect(third.kind).toBe('already-initialized');
   });
 
+  it('repairs a half-init with an unborn HEAD (gitdir exists, no initial commit)', async () => {
+    // The narrower half-init case: a crash between `git init` (creates
+    // gitdir + gitlink) and `git commit --allow-empty` (creates the
+    // initial commit). On retry, readDotGitState() returns 'ours' but
+    // HEAD is unborn — the previous repair (P0-fix.10) would call
+    // `git rev-parse HEAD` and throw on exit 128, leaving the project
+    // permanently broken. Fix: probe HEAD with softFail128 and, when
+    // absent, resume the remaining init steps before writing the row.
+    writeFileSync(path.join(sandbox.projectDir, 'README.md'), '# project\n');
+
+    // Manually create the unborn-HEAD half-state without running
+    // initProjectHistory at all. `git init --separate-git-dir` puts
+    // the gitdir at repoDir, writes the gitlink in projectDir, and
+    // creates HEAD pointing at refs/heads/main — but with no
+    // commits yet, so rev-parse HEAD exits 128 ("unknown revision").
+    mkdirSync(path.dirname(sandbox.repoDir), { recursive: true });
+    execFileSync('git', [
+      'init',
+      `--separate-git-dir=${sandbox.repoDir}`,
+      '--initial-branch=main',
+      sandbox.projectDir,
+    ], { stdio: 'ignore' });
+    // Sanity: rev-parse HEAD exits 128 on the unborn branch
+    expect(() => execFileSync('git', [`--git-dir=${sandbox.repoDir}`, 'rev-parse', 'HEAD'])).toThrow();
+
+    // initProjectHistory should detect 'ours' + no migration row + no
+    // HEAD, and resume the init from where the previous attempt died.
+    const result = await initProjectHistory({
+      projectId: sandbox.projectId,
+      projectDir: sandbox.projectDir,
+      repoDir: sandbox.repoDir,
+      identity: TEST_IDENTITY,
+      db: sandbox.db,
+    });
+    expect(result.kind).toBe('repaired');
+    if (result.kind !== 'repaired') return;
+
+    // After repair: HEAD exists, the initial commit was created.
+    const headSha = execFileSync('git', [`--git-dir=${sandbox.repoDir}`, 'rev-parse', 'HEAD']).toString().trim();
+    expect(headSha).toMatch(/^[0-9a-f]{40}$/);
+
+    // Migration row exists and matches HEAD
+    const row = sandbox.db.prepare(
+      `SELECT git_sha, source, actor_identity_id FROM project_revisions WHERE id = ?`,
+    ).get(result.revisionId) as { git_sha: string; source: string; actor_identity_id: string };
+    expect(row.source).toBe('migration');
+    expect(row.git_sha).toBe(headSha);
+    expect(row.actor_identity_id).toBe('local:default');
+
+    // info/exclude was populated with the daemon-managed block
+    const excludeBody = readFileSync(path.join(sandbox.repoDir, 'info', 'exclude'), 'utf8');
+    expect(excludeBody).toContain('.od-skills/');
+
+    // projects.current_revision_id was advanced
+    const proj = sandbox.db.prepare(`SELECT current_revision_id FROM projects WHERE id = 'p1'`).get() as { current_revision_id: string };
+    expect(proj.current_revision_id).toBe(result.revisionId);
+
+    // Subsequent call returns the no-op fast path
+    const second = await initProjectHistory({
+      projectId: sandbox.projectId,
+      projectDir: sandbox.projectDir,
+      repoDir: sandbox.repoDir,
+      identity: TEST_IDENTITY,
+      db: sandbox.db,
+    });
+    expect(second.kind).toBe('already-initialized');
+  });
+
   it('refuses to take ownership of a foreign .git directory', async () => {
     // Simulate a cloned repo: put a regular .git/ directory in the tree
     mkdirSync(path.join(sandbox.projectDir, '.git'), { recursive: true });
