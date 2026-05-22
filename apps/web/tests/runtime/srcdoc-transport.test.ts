@@ -5,7 +5,9 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   buildLazySrcdocTransport,
   canActivateSrcDocTransport,
+  selectSrcDocSource,
   type SrcDocActivationInputs,
+  type SrcDocSourceInputs,
 } from '../../src/runtime/srcdoc';
 
 function extractShellScript(shellHtml: string): string {
@@ -195,5 +197,58 @@ describe('canActivateSrcDocTransport (#2253)', () => {
         activatedHtml: '<html>previous</html>',
       }),
     ).toBe(true);
+  });
+});
+
+describe('selectSrcDocSource (Comment-mode first-page flash)', () => {
+  const ENTRY = '<html>gallery index</html>';
+  const SUB = '<html>admin console AD11</html>';
+  const SOURCE_BASE: SrcDocSourceInputs = {
+    useUrlLoadPreview: false,
+    urlLoadSubPath: 'screens/admin/admin-console.html',
+    fileName: 'index.html',
+    subPageSource: SUB,
+    previewSource: ENTRY,
+  };
+
+  it('renders the entry file when url-load is still active', () => {
+    const r = selectSrcDocSource({ ...SOURCE_BASE, useUrlLoadPreview: true });
+    expect(r.source).toBe(ENTRY);
+    expect(r.usingSubPage).toBe(false);
+    expect(r.pending).toBe(false);
+  });
+
+  it('renders the sub-page once its HTML has been fetched', () => {
+    const r = selectSrcDocSource(SOURCE_BASE);
+    expect(r.source).toBe(SUB);
+    expect(r.usingSubPage).toBe(true);
+    expect(r.pending).toBe(false);
+  });
+
+  it('holds a null source (NOT the entry file) while the sub-page is still loading', () => {
+    // This is the flash fix: a slow sub-page reports its location and is fetched
+    // only after the active iframe has swapped to srcDoc. Returning previewSource
+    // here would flash the gallery/first page; null keeps the shell blank.
+    const r = selectSrcDocSource({ ...SOURCE_BASE, subPageSource: null });
+    expect(r.source).toBeNull();
+    expect(r.source).not.toBe(ENTRY);
+    expect(r.usingSubPage).toBe(false);
+    expect(r.pending).toBe(true);
+  });
+
+  it('renders the entry file when no sub-page navigation happened', () => {
+    const r = selectSrcDocSource({ ...SOURCE_BASE, urlLoadSubPath: null });
+    expect(r.source).toBe(ENTRY);
+    expect(r.pending).toBe(false);
+  });
+
+  it('treats the entry file as itself, never as a pending sub-page', () => {
+    const r = selectSrcDocSource({
+      ...SOURCE_BASE,
+      urlLoadSubPath: 'index.html',
+      subPageSource: null,
+    });
+    expect(r.source).toBe(ENTRY);
+    expect(r.pending).toBe(false);
   });
 });

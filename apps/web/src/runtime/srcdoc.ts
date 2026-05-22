@@ -159,6 +159,52 @@ export function canActivateSrcDocTransport(state: SrcDocActivationInputs): boole
   return true;
 }
 
+export interface SrcDocSourceInputs {
+  /** Host is currently showing the URL-loaded iframe (no srcDoc needed). */
+  useUrlLoadPreview: boolean;
+  /** The sub-page the url-load iframe had navigated to, relative to the entry. */
+  urlLoadSubPath: string | null;
+  /** The entry file backing this preview (e.g. the gallery index.html). */
+  fileName: string;
+  /** Lazily-fetched HTML of `urlLoadSubPath`, or null while the fetch is in flight. */
+  subPageSource: string | null;
+  /** The entry file's own HTML. */
+  previewSource: string | null;
+}
+
+export interface SrcDocSourceDecision {
+  /** HTML the srcDoc should render, or null to keep the shell blank for now. */
+  source: string | null;
+  /** True when the resolved source is the navigated sub-page, not the entry. */
+  usingSubPage: boolean;
+  /** True when a sub-page is expected but its HTML has not arrived yet. */
+  pending: boolean;
+}
+
+/**
+ * Pure decision for which HTML the srcDoc preview should render once Comment /
+ * Inspect forces the host off the url-load path.
+ *
+ * The `pending` branch is the fix for the Comment-mode "first-page flash": a
+ * large sub-page (e.g. a 100KB admin console) reports its location and is then
+ * fetched only AFTER the active iframe has already swapped to srcDoc. During
+ * that gap `subPageSource` is still null. Falling back to `previewSource` (the
+ * entry/gallery file) would render it for those frames before snapping to the
+ * real sub-page. Returning a null source instead keeps the srcDoc shell blank
+ * (canActivateSrcDocTransport bails on empty html), so the user sees blank ->
+ * correct page rather than gallery -> correct page.
+ */
+export function selectSrcDocSource(inputs: SrcDocSourceInputs): SrcDocSourceDecision {
+  const hasSubPage =
+    !inputs.useUrlLoadPreview &&
+    !!inputs.urlLoadSubPath &&
+    inputs.urlLoadSubPath !== inputs.fileName;
+  const usingSubPage = hasSubPage && inputs.subPageSource != null;
+  const pending = hasSubPage && inputs.subPageSource == null;
+  const source = usingSubPage ? inputs.subPageSource : pending ? null : inputs.previewSource;
+  return { source, usingSubPage, pending };
+}
+
 function injectSrcdocTransportActivationBridge(doc: string): string {
   const script = `<script data-od-srcdoc-transport-activation>(function(){
   window.addEventListener('message', function(ev){
