@@ -770,18 +770,22 @@ export const BYOK_VENICE_IMAGE_MODELS = [
 ] as const;
 export const BYOK_VENICE_DEFAULT_IMAGE_MODEL = 'gpt-image-2';
 
+// The chat tool surfaces only text-to-video models because the
+// `executeVeniceGenerateVideo` executor below has no parameter to
+// supply an input image — every i2v / r2v slug would dispatch with
+// an empty `image_url` field and Venice would 400. The CLI path
+// (`renderVeniceVideo` in media.ts) handles i2v / r2v variants
+// correctly via `--image-ref`; chat-driven i2v is out of scope until
+// the tool definition grows an `image_url` parameter (and a way for
+// the chat agent to actually reference an image inside the project).
+//
+// Spotted in PR review by PerishCode on nexu-io/open-design#2759.
 export const BYOK_VENICE_VIDEO_MODELS = [
   'wan-2.6-text-to-video',
-  'wan-2.6-image-to-video',
   'wan-2.5-preview-text-to-video',
-  'wan-2.5-preview-image-to-video',
   'seedance-2-0-text-to-video',
-  'seedance-2-0-image-to-video',
-  'seedance-2-0-reference-to-video',
   'seedance-2-0-fast-text-to-video',
-  'seedance-2-0-fast-image-to-video',
   'grok-imagine-text-to-video',
-  'grok-imagine-image-to-video',
 ] as const;
 export const BYOK_VENICE_DEFAULT_VIDEO_MODEL = 'seedance-2-0-text-to-video';
 
@@ -858,7 +862,7 @@ export const BYOK_VENICE_TOOLS = [
             type: 'string',
             enum: ['1:1', '16:9', '9:16', '4:3', '3:4'],
             description:
-              'Output aspect ratio. Defaults to 16:9. Note: seedance-2-0-*image-to-video models ignore this field — output aspect derives from the input image.',
+              'Output aspect ratio. Defaults to 16:9.',
           },
           duration: {
             type: 'integer',
@@ -881,7 +885,7 @@ export const BYOK_VENICE_TOOLS = [
             type: 'string',
             enum: [...BYOK_VENICE_VIDEO_MODELS],
             description:
-              'Optional model override. Defaults to seedance-2-0-text-to-video. Pick wan-2.6-* for cinematic + audio, grok-imagine-* for 720p + native audio, seedance-2-0-image-to-video when an input image is supplied.',
+              'Optional model override. Defaults to seedance-2-0-text-to-video. Pick wan-2.6-text-to-video for cinematic + native audio, grok-imagine-text-to-video for 720p + native audio, seedance-2-0-fast-text-to-video for faster / cheaper iteration.',
           },
         },
         required: ['prompt'],
@@ -994,7 +998,6 @@ export async function executeVeniceGenerateImage(
     model: wireModel,
     prompt,
     format: 'png',
-    safe_mode: false,
   };
   if (resolutionTier.has(wireModel)) {
     body.aspect_ratio = aspect;

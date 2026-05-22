@@ -2985,7 +2985,6 @@ async function renderVeniceImage(ctx: MediaContext, credentials: ProviderConfig)
     model: wireSlug,
     prompt,
     format: 'png',
-    safe_mode: false,
   };
 
   // Sizing dispatch — order matters: resolution-tier models also expose

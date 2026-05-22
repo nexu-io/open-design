@@ -1771,6 +1771,58 @@ describe('API proxy routes', () => {
       expect(fetchMock).toHaveBeenCalled();
     });
 
+    // Regression test for PR #2759 review by PerishCode: the chat tool's
+    // generate_video enum used to advertise image-to-video models
+    // (seedance-2-0-image-to-video, wan-2.6-image-to-video, …) even
+    // though executeVeniceGenerateVideo has no `image_url` parameter to
+    // forward — those slugs would 400 at upstream. Lock the enum to
+    // text-to-video-only slugs so a future drift can't reintroduce the
+    // bug silently.
+    it('only advertises text-to-video models in the generate_video chat tool', async () => {
+      const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+        const url = String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        const body = JSON.parse(String((init as any)?.body)) as {
+          tools?: Array<{ function?: { name?: string; parameters?: { properties?: { model?: { enum?: string[] } } } } }>;
+        };
+        const videoTool = (body.tools || []).find(
+          (t) => t?.function?.name === 'generate_video',
+        );
+        const slugs = videoTool?.function?.parameters?.properties?.model?.enum ?? [];
+        expect(Array.isArray(slugs) && slugs.length > 0).toBe(true);
+        // Every slug must be a text-to-video variant; chat-driven
+        // image-to-video / reference-to-video would dispatch with an
+        // empty image_url and 400 at upstream (the chat tool has no
+        // parameter to supply an input image).
+        const i2vIndicators = ['image-to-video', 'reference-to-video'];
+        for (const slug of slugs) {
+          for (const banned of i2vIndicators) {
+            expect(
+              slug.includes(banned),
+              `chat tool advertises ${slug} but the executor cannot drive i2v/r2v models — the LLM picking it would always 400`,
+            ).toBe(false);
+          }
+        }
+        // And the headline default must be text-to-video specifically.
+        expect(slugs).toContain('seedance-2-0-text-to-video');
+        return Promise.resolve(sseResponse('data: [DONE]\n\n'));
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      await realFetch(`${baseUrl}/api/proxy/venice/stream`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          apiKey: 'venice-test',
+          projectId: 'test-project',
+          model: 'gpt-5',
+          messages: [{ role: 'user', content: 'hi' }],
+        }),
+      });
+
+      expect(fetchMock).toHaveBeenCalled();
+    });
+
     it('disables upstream redirects for venice proxy requests', async () => {
       const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
         const url = String(input);
