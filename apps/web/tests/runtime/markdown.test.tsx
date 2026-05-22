@@ -40,14 +40,60 @@ describe('renderMarkdown', () => {
     expect(out).toContain('md-link-bare');
   });
 
-  it('keeps trailing sentence punctuation outside bare autolinks', () => {
-    const out = html('Open https://example.com/demo, then visit https://example.com/final。');
-    expect(out).toContain('href="https://example.com/demo"');
-    expect(out).toContain('>https://example.com/demo</a>,');
-    expect(out).toContain('href="https://example.com/final"');
-    expect(out).toContain('>https://example.com/final</a>。');
-    expect(out).not.toContain('href="https://example.com/demo,"');
-    expect(out).not.toContain('href="https://example.com/final。"');
+  it.each([
+    {
+      name: 'ascii comma',
+      input: 'Open https://example.com/demo, please.',
+      href: 'https://example.com/demo',
+      rendered: '>https://example.com/demo</a>,',
+      excludedHref: 'https://example.com/demo,',
+    },
+    {
+      name: 'fullwidth full stop',
+      input: 'Visit https://example.com/final。',
+      href: 'https://example.com/final',
+      rendered: '>https://example.com/final</a>。',
+      excludedHref: 'https://example.com/final。',
+    },
+    {
+      name: 'wrapped in fullwidth parens',
+      input: '（https://example.com/a）',
+      href: 'https://example.com/a',
+      rendered: '（<a class="md-link" href="https://example.com/a"',
+      trailing: '>https://example.com/a</a>）',
+      excludedHref: 'https://example.com/a）',
+    },
+    {
+      name: 'lone trailing CJK quote',
+      input: 'https://example.com/b」',
+      href: 'https://example.com/b',
+      rendered: '>https://example.com/b</a>」',
+      excludedHref: 'https://example.com/b」',
+    },
+    {
+      name: 'stacked CJK punctuation',
+      input: 'https://example.com/c。）',
+      href: 'https://example.com/c',
+      rendered: '>https://example.com/c</a>。）',
+      excludedHref: 'https://example.com/c。）',
+    },
+    {
+      name: 'no trailing punctuation',
+      input: 'https://example.com/path',
+      href: 'https://example.com/path',
+      rendered: '>https://example.com/path</a>',
+      excludedHref: '',
+    },
+  ])('keeps bare autolink punctuation handling stable: $name', ({ input, href, rendered, excludedHref, trailing }) => {
+    const out = html(input);
+    expect(out).toContain(`href="${href}"`);
+    expect(out).toContain(rendered);
+    if (trailing) {
+      expect(out).toContain(trailing);
+    }
+    if (excludedHref) {
+      expect(out).not.toContain(`href="${excludedHref}"`);
+    }
   });
 
   it('does not autolink inside inline code spans', () => {
