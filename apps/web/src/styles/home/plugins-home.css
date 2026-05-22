@@ -954,9 +954,10 @@
   font-size: 12px;
   cursor: pointer;
 }
-.plugins-home__use-menu-item:hover,
-.plugins-home__use-menu-item:focus-visible {
-  background: rgba(17, 17, 17, 0.08);
+button.plugins-home__use-menu-item:hover:not(:disabled),
+button.plugins-home__use-menu-item:focus-visible {
+  background: #f3f3f3;
+  color: #111;
   outline: none;
 }
 .plugins-home__action--primary {
