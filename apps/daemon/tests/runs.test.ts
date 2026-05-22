@@ -92,6 +92,43 @@ describe('chat run service shutdown', () => {
     expect(child.signals).toEqual(['SIGTERM']);
     expect(run.status).toBe('canceled');
   });
+
+  it('cancel() marks run as canceled immediately when child is alive', () => {
+    const runs = createRuns();
+    const child = new FakeChildProcess({ closeOn: 'SIGTERM' });
+    const run = runs.create();
+    run.status = 'running';
+    (run as any).child = child;
+
+    runs.cancel(run);
+
+    expect(child.signals).toEqual(['SIGTERM']);
+    expect(run.status).toBe('canceled');
+    expect(run.cancelRequested).toBe(true);
+    expect(run.signal).toBe('SIGTERM');
+    // Idempotency: if the exit event fires later, finish() is a no-op.
+    expect(run.events.at(-1)).toMatchObject({
+      event: 'end',
+      data: { status: 'canceled', signal: 'SIGTERM' },
+    });
+  });
+
+  it('post-SIGTERM child output is not appended after the end event', () => {
+    const runs = createRuns();
+    const child = new FakeChildProcess({ closeOn: 'SIGTERM' });
+    const run = runs.create();
+    run.status = 'running';
+    (run as any).child = child;
+
+    runs.cancel(run);
+    // Simulate the child writing a final stdout chunk while handling SIGTERM —
+    // this arrives after finish() has already marked the run terminal.
+    runs.emit(run, 'stdout', { text: 'trailing output after SIGTERM' });
+
+    const lastEvent = run.events.at(-1);
+    expect(lastEvent).toMatchObject({ event: 'end' });
+    expect(run.events.some((e) => e.event === 'stdout')).toBe(false);
+  });
 });
 
 describe('chat run service stream replay', () => {

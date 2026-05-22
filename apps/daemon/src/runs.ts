@@ -73,6 +73,11 @@ export function createChatRunService({
   };
 
   const emit = (run, event, data) => {
+    // Drop any event that arrives after the run is terminal except for 'end'
+    // itself, which finish() emits after setting the terminal status.
+    // Without this guard, post-SIGTERM child output appends to run.events
+    // after the 'end' marker and breaks stream replay.
+    if (TERMINAL_RUN_STATUSES.has(run.status) && event !== 'end') return null;
     if (event === 'error') {
       const details = extractErrorDetails(data);
       if (details.error) run.error = details.error;
@@ -212,6 +217,7 @@ export function createChatRunService({
         }, graceMs).unref();
       } else if (run.child && !run.child.killed) {
         run.child.kill('SIGTERM');
+        finish(run, 'canceled', null, 'SIGTERM');
       } else {
         finish(run, 'canceled', null, 'SIGTERM');
       }
