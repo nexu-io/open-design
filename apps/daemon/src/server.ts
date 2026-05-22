@@ -1725,12 +1725,17 @@ function execFileBuffered(command, args, opts = {}) {
   });
 }
 
-async function readProjectPluginManifest(folder) {
+export async function readProjectPluginManifest(folder: string) {
   const raw = await fs.promises.readFile(path.join(folder, 'open-design.json'), 'utf8');
   const manifest = JSON.parse(raw);
   const name = typeof manifest.name === 'string' && manifest.name.trim()
     ? manifest.name.trim()
     : path.basename(folder);
+  if (/[/\\]/.test(name) || /^\.+$/.test(name)) {
+    throw new Error(
+      `open-design.json in ${folder}: name "${name}" must not contain path separators or consist only of dots`,
+    );
+  }
   return {
     name,
     title: typeof manifest.title === 'string' ? manifest.title : name,
