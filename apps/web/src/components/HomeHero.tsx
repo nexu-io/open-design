@@ -31,6 +31,7 @@ import type {
   McpServerConfig,
 } from '@open-design/contracts';
 import type { SkillSummary } from '../types';
+import { isImeComposing } from '../utils/imeComposing';
 import { Icon, type IconName } from './Icon';
 import { PluginInputsForm } from './PluginInputsForm';
 import {
@@ -2254,11 +2255,6 @@ function replaceMentionTokenWithText(
   const before = value.slice(0, mention.start).trimEnd();
   const after = value.slice(mention.end).trimStart();
   return [before, replacement.trim(), after].filter(Boolean).join(' ').trim();
-}
-
-function isImeComposing(event: ReactKeyboardEvent<HTMLTextAreaElement>, composing: boolean): boolean {
-  const nativeEvent = event.nativeEvent as KeyboardEvent & { keyCode?: number };
-  return composing || nativeEvent.isComposing || nativeEvent.keyCode === 229;
 }
 
 function pluginMatchesQuery(plugin: InstalledPluginRecord, query: string): boolean {
