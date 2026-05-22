@@ -5370,12 +5370,13 @@ export async function startServer({
   app.post('/api/plugins/upload-zip', (req, res) => {
     pluginUpload.single('file')(req, res, async (err) => {
       if (err) return sendMulterError(res, err);
+      let stagedFolder: string | undefined;
       try {
         const file = req.file;
         if (!file || !file.buffer) {
           return res.status(400).json({ error: 'file is required' });
         }
-        const stagedFolder = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'od-plugin-zip-'));
+        stagedFolder = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'od-plugin-zip-'));
         await extractPluginZipToFolder(file.buffer, stagedFolder);
         const result = await finishUploadedPluginInstall(
           stagedFolder,
@@ -5383,6 +5384,9 @@ export async function startServer({
         );
         res.status(result.ok ? 200 : 400).json(result);
       } catch (uploadErr) {
+        if (stagedFolder) {
+          await fs.promises.rm(stagedFolder, { recursive: true, force: true }).catch(() => undefined);
+        }
         res.status(400).json({
           ok: false,
           warnings: [],
