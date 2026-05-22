@@ -18,6 +18,16 @@ export type RuntimeBuildOptions = {
 
 export type RuntimeContext = {
   cwd?: string;
+  // Merged environment that will be made available to the spawned
+  // agent (host process.env overlaid with the per-agent overrides
+  // returned by `agentCliEnvForAgent(...)`). Adapters that surface a
+  // user-tunable behaviour via an env var should read it from this
+  // map rather than from `process.env`, so configured-env and
+  // process-env both resolve to the same value at argv-build time.
+  // PR #2556 (Siri-Ray): the OpenClaw adapter pulls
+  // `OD_OPENCLAW_SESSION` from here so model probe and chat spawn
+  // agree on the same gateway session id.
+  env?: Record<string, string | undefined>;
 };
 
 export type RuntimeCapabilityMap = Record<string, boolean>;

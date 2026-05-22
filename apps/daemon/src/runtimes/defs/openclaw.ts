@@ -59,7 +59,24 @@ export const openclawAgentDef = {
     },
   ],
   buildArgs: (_prompt, _imagePaths, _extraAllowedDirs, options, runtimeContext) => {
-    const args = ['acp', '--session', process.env.OD_OPENCLAW_SESSION || 'agent:main:main'];
+    // Read `OD_OPENCLAW_SESSION` from the merged spawn env passed in
+    // via `runtimeContext.env`, not from `process.env`. PR #2556
+    // review (Siri-Ray): `fetchModels` above reads the merged env, so
+    // the model probe enumerated session A; reading `process.env`
+    // here would silently fall back to `agent:main:main` whenever the
+    // user configured the override through OD's per-agent env
+    // settings rather than the daemon's own launch env, routing real
+    // chat work to a different gateway session than discovery did.
+    //
+    // Fall back to `process.env` for backwards compatibility — older
+    // server.ts revisions don't populate `runtimeContext.env`, and
+    // `connectionTest.ts` / `memory-llm.ts` still pass `{ cwd }`
+    // only. Final fallback is the canonical default session.
+    const session =
+      runtimeContext?.env?.OD_OPENCLAW_SESSION ||
+      process.env.OD_OPENCLAW_SESSION ||
+      'agent:main:main';
+    const args = ['acp', '--session', session];
     if (options?.model && options.model !== 'default') {
       // Forward chosen model id as a `--model` override for the agent turn.
       args.push('--model', options.model);

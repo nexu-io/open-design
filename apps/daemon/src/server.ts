@@ -11027,12 +11027,22 @@ export async function startServer({
       }
     }
 
+    // PR #2556 (Siri-Ray): pass the merged spawn env into `buildArgs`
+    // so adapters can read user-configured env vars (e.g.
+    // OpenClaw's OD_OPENCLAW_SESSION) from the same source the child
+    // process will see. Reading `process.env` inside `buildArgs`
+    // would only see the daemon's launch env and miss anything the
+    // user set through OD's per-agent CLI env settings, so model
+    // probe and chat spawn would resolve to different values.
     const args = def.buildArgs(
       composed,
       safeImages,
       extraAllowedDirs,
       agentOptions,
-      { cwd: effectiveCwd },
+      {
+        cwd: effectiveCwd,
+        env: { ...process.env, ...configuredAgentEnv },
+      },
     );
 
     // Second-pass budget check that knows about the Windows `.cmd` shim
