@@ -352,6 +352,11 @@ export async function listMessages(
 
 export interface SaveMessageOptions {
   telemetryFinalized?: boolean;
+  // Set during page-unload paths (pagehide / visibilitychange→hidden) so
+  // the in-flight PUT survives even if the document tears down before the
+  // response arrives. Without keepalive the browser cancels the fetch
+  // and the daemon never sees the final buffered text chunk.
+  keepalive?: boolean;
 }
 
 export async function saveMessage(
@@ -370,6 +375,7 @@ export async function saveMessage(
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
+        ...(options.keepalive ? { keepalive: true } : {}),
       },
     );
   } catch {

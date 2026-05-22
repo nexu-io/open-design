@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   BYOK_SENSEAUDIO_TOOLS,
   executeGenerateImage,
+  executeGenerateSpeech,
   executeGenerateVideo,
 } from '../src/byok-tools.js';
 
@@ -17,7 +18,8 @@ describe('BYOK_SENSEAUDIO_TOOLS', () => {
     expect(tool).toBeDefined();
     expect(tool!.type).toBe('function');
     expect(tool!.function.parameters.required).toEqual(['prompt']);
-    expect(tool!.function.parameters.properties.aspect_ratio.enum).toEqual([
+    const properties = tool!.function.parameters.properties as Record<string, any>;
+    expect(properties.aspect_ratio.enum).toEqual([
       '1:1',
       '16:9',
       '9:16',
@@ -26,9 +28,9 @@ describe('BYOK_SENSEAUDIO_TOOLS', () => {
     ]);
   });
 
-  it('exposes both generate_image and generate_video tools', () => {
+  it('exposes image, speech, and video tools', () => {
     const names = BYOK_SENSEAUDIO_TOOLS.map((t) => t.function.name).sort();
-    expect(names).toEqual(['generate_image', 'generate_video']);
+    expect(names).toEqual(['generate_image', 'generate_speech', 'generate_video']);
   });
 });
 
@@ -379,6 +381,212 @@ describe('BYOK_SENSEAUDIO_TOOLS — video', () => {
     expect(props.duration).toMatchObject({ type: 'integer', minimum: 4, maximum: 15 });
     expect(props.generate_audio.type).toBe('boolean');
   });
+});
+
+describe('executeGenerateSpeech', () => {
+  let root: string;
+  let projectsRoot: string;
+  const PROJECT_ID = 'test-project';
+  const realFetch = globalThis.fetch;
+
+  beforeEach(async () => {
+    root = await mkdtemp(path.join(tmpdir(), 'od-byok-speech-'));
+    projectsRoot = path.join(root, 'projects');
+  });
+
+  afterEach(async () => {
+    globalThis.fetch = realFetch;
+    vi.unstubAllGlobals();
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it('calls /v1/t2a_v2, persists mp3 bytes, and returns a daemon URL', async () => {
+    const audioBytes = Buffer.from([0x49, 0x44, 0x33, 0x04]);
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      expect(String(input)).toBe('https://api.senseaudio.cn/v1/t2a_v2');
+      expect(init?.method).toBe('POST');
+      expect(init?.redirect).toBe('error');
+      expect(init?.headers).toMatchObject({
+        authorization: 'Bearer sa-byok-key',
+        'content-type': 'application/json',
+      });
+      expect(JSON.parse(String(init?.body))).toEqual({
+        model: 'senseaudio-tts-1.5-260319',
+        text: 'Meet saddle2 — the way work was supposed to feel.',
+        stream: false,
+        voice_setting: {
+          voice_id: 'female_0033_b',
+          speed: 1,
+          vol: 1,
+          pitch: 0,
+        },
+        audio_setting: {
+          format: 'mp3',
+          sample_rate: 32000,
+          bitrate: 128000,
+          channel: 2,
+        },
+      });
+      return new Response(
+        JSON.stringify({
+          data: { audio: audioBytes.toString('hex') },
+          base_resp: { status_code: 0, status_msg: 'success' },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await executeGenerateSpeech(
+      { text: 'Meet saddle2 — the way work was supposed to feel.' },
+      {
+        projectRoot: root,
+        projectsRoot,
+        projectId: PROJECT_ID,
+        upstreamApiKey: 'sa-byok-key',
+        upstreamBaseUrl: 'https://api.senseaudio.cn',
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.url).toMatch(
+      new RegExp(`^/api/projects/${PROJECT_ID}/files/byok-speech-[a-z0-9-]+\\.mp3$`),
+    );
+
+    const filename = result.url!.split('/').pop()!;
+    const onDisk = await readFile(path.join(projectsRoot, PROJECT_ID, filename));
+    expect(onDisk.equals(audioBytes)).toBe(true);
+  });
+
+  it('does not duplicate /v1 when the BYOK gateway base URL is already versioned', async () => {
+    const audioBytes = Buffer.from([0x49, 0x44, 0x33, 0x04]);
+    const fetchMock = vi.fn(async (input: unknown) => {
+      expect(String(input)).toBe('https://gateway.example.com/api/v1/openai/t2a_v2');
+      return new Response(
+        JSON.stringify({
+          data: { audio: audioBytes.toString('hex') },
+          base_resp: { status_code: 0, status_msg: 'success' },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await executeGenerateSpeech(
+      { text: 'hello' },
+      {
+        projectRoot: root,
+        projectsRoot,
+        projectId: PROJECT_ID,
+        upstreamApiKey: 'sa-byok-key',
+        upstreamBaseUrl: 'https://gateway.example.com/api/v1/openai',
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns { ok: false } when SenseAudio returns malformed JSON', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () =>
+        new Response('not json', {
+          status: 200,
+          headers: { 'content-type': 'text/plain' },
+        }),
+      ),
+    );
+
+    const result = await executeGenerateSpeech(
+      { text: 'hello' },
+      {
+        projectRoot: root,
+        projectsRoot,
+        projectId: PROJECT_ID,
+        upstreamApiKey: 'sa-byok-key',
+        upstreamBaseUrl: 'https://api.senseaudio.cn',
+      },
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/senseaudio speech non-JSON/);
+  });
+
+  it('returns { ok: false } when the SenseAudio request fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new Error('network down');
+      }),
+    );
+
+    const result = await executeGenerateSpeech(
+      { text: 'hello' },
+      {
+        projectRoot: root,
+        projectsRoot,
+        projectId: PROJECT_ID,
+        upstreamApiKey: 'sa-byok-key',
+        upstreamBaseUrl: 'https://api.senseaudio.cn',
+      },
+    );
+
+    expect(result).toEqual({ ok: false, error: 'network down' });
+  });
+
+  it('asks fetch to reject redirected SenseAudio TTS upstreams', async () => {
+    const fetchMock = vi.fn(async (_input: unknown, init?: RequestInit) => {
+      expect(init?.redirect).toBe('error');
+      throw new TypeError('redirect mode is set to error');
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await executeGenerateSpeech(
+      { text: 'hello' },
+      {
+        projectRoot: root,
+        projectsRoot,
+        projectId: PROJECT_ID,
+        upstreamApiKey: 'sa-byok-key',
+        upstreamBaseUrl: 'https://api.senseaudio.cn',
+      },
+    );
+
+    expect(result).toEqual({ ok: false, error: 'redirect mode is set to error' });
+  });
+
+  it.each(['aaZZ', 'abc'])(
+    'returns { ok: false } when SenseAudio returns malformed hex audio: %s',
+    async (audio) => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () =>
+          new Response(
+            JSON.stringify({
+              data: { audio },
+              base_resp: { status_code: 0, status_msg: 'success' },
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+        ),
+      );
+
+      const result = await executeGenerateSpeech(
+        { text: 'hello' },
+        {
+          projectRoot: root,
+          projectsRoot,
+          projectId: PROJECT_ID,
+          upstreamApiKey: 'sa-byok-key',
+          upstreamBaseUrl: 'https://api.senseaudio.cn',
+        },
+      );
+
+      expect(result.ok).toBe(false);
+      expect(result.error).toMatch(/invalid hex audio/);
+    },
+  );
 });
 
 describe('executeGenerateVideo', () => {

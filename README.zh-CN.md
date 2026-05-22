@@ -1,15 +1,15 @@
-# Open Design
+# Open Design —— [Claude Design][cd] 的官方开源替代品
+
+> **Open Design 是 [Claude Design][cd] 的开源、本地优先替代品。** 可部署到 Vercel、每一层都 BYOK —— **16 套 coding-agent CLI** 在 `PATH` 上自动检测（Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI）就是设计引擎，由 **31 个可组合 Skills** 和 **72 套品牌级 Design System** 驱动。
 
 > [!IMPORTANT]
 > ### 🔥 `0.8.0-preview` 已发布。设计的旧世界，到此为止。
 >
-> 开源、agent-native 的 Claude Design / Figma 替代品 —— 上线两周，40k stars 在身，且仍在加速。**剩下的路，需要你和我们一起推完。**
+> Claude Design / Figma 的开源替代品 —— 上线两周，40k stars 在身，且仍在加速。**剩下的路，需要你和我们一起推完。**
 >
 > **正在 `main` 分支飞速迭代中** —— 0.8.0 是 Open Design 的下一阶段。提一个 PR、扔一个想法、报一个 bug —— 你带来的，就是这场运动接下来的样子。
 >
 > → [**读公告 · 下载安装包 · 加入这场运动**](https://github.com/nexu-io/open-design/discussions/1727) · 可与你现有的 0.7 并行安装。
-
-> **[Claude Design][cd] 的开源替代品。** 本地优先、可部署到 Vercel、每一层都 BYOK —— **16 套 coding-agent CLI** 在 `PATH` 上自动检测（Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI）就是设计引擎，由 **31 个可组合 Skills** 和 **72 套品牌级 Design System** 驱动。
 
 <p align="center">
   <img src="docs/assets/banner.png" alt="Open Design 封面：与本地 AI 智能体共同设计" width="100%" />
@@ -722,7 +722,7 @@ Daemon 启动时从 `PATH` 自动检测，无需配置。流式分发逻辑在 [
 感谢每一位让 Open Design 变得更好的朋友 —— 无论是写代码、修文档、提 issue、加 skill 还是加 design system，每一次真实贡献都会被记住。下面这面墙是最直观的「Thank you」。
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-18" alt="Open Design 贡献者" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-22" alt="Open Design 贡献者" />
 </a>
 
 第一次提 PR？欢迎从 [`good-first-issue`/`help-wanted`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22%2C%22help+wanted%22) 标签起步。
@@ -739,9 +739,9 @@ Daemon 启动时从 `PATH` 自动检测，无需配置。流式分发逻辑在 [
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-18" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-18" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-18" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-22" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-22" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-22" />
   </picture>
 </a>
 

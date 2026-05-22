@@ -1,14 +1,10 @@
 // Lovart-style left navigation rail for the entry view.
 //
-// Renders a narrow icon-only column. The first slot is the brand
-// logo, which doubles as the Home destination: clicking it always
-// navigates to home, and it carries the active `aria-current="page"`
-// treatment when the home view is showing, so we do not need a
-// separate Home button in the primary nav group. Primary actions
-// (new project, projects, automations, design systems) follow.
-// Secondary platform items (plugins, integrations) live in the footer
-// section alongside the help launcher — they are accessible but visually
-// de-emphasised relative to the daily-use primary destinations.
+// Renders a narrow icon-only column. The first slot is the brand logo,
+// followed by the primary destinations users expect to keep in reach:
+// Home, new project, projects, automations, design systems, plugins,
+// and integrations. Footer controls are reserved for lower-frequency
+// support affordances such as the help launcher.
 // Language switching and other account-scoped controls live behind the
 // floating settings cog in the top-right corner of the main content.
 
@@ -63,18 +59,16 @@ export function EntryNavRail({ view, onViewChange, onNewProject }: Props) {
   const brandLabel = t('app.brand');
   const homeLabel = t('entry.navHome');
   const isHome = view === 'home';
-  const logoTooltip = isHome ? brandLabel : `${brandLabel} · ${homeLabel}`;
 
   return (
     <nav className="entry-nav-rail" aria-label="Primary">
       <div className="entry-nav-rail__group">
         <button
           type="button"
-          className={`entry-nav-rail__logo${isHome ? ' is-active' : ''}`}
+          className="entry-nav-rail__logo"
           onClick={() => onViewChange('home')}
           aria-label={brandLabel}
-          aria-current={isHome ? 'page' : undefined}
-          data-tooltip={logoTooltip}
+          data-tooltip={brandLabel}
           data-testid="entry-nav-logo"
         >
           <img
@@ -84,6 +78,15 @@ export function EntryNavRail({ view, onViewChange, onNewProject }: Props) {
             draggable={false}
           />
         </button>
+        <NavButton
+          active={isHome}
+          ariaLabel={homeLabel}
+          tooltip={homeLabel}
+          onClick={() => onViewChange('home')}
+          testId="entry-nav-home"
+        >
+          <Icon name="home" size={18} />
+        </NavButton>
         <UpdaterPopup />
         <NavButton
           ariaLabel={t('entry.navNewProject')}
@@ -120,13 +123,10 @@ export function EntryNavRail({ view, onViewChange, onNewProject }: Props) {
         >
           <Icon name="blocks" size={18} />
         </NavButton>
-      </div>
-      <div className="entry-nav-rail__footer">
-        <div className="entry-nav-rail__divider" role="separator" />
         <NavButton
           active={view === 'plugins'}
-          ariaLabel="Plugins"
-          tooltip="Plugins"
+          ariaLabel={t('entry.navPlugins')}
+          tooltip={t('entry.navPlugins')}
           onClick={() => onViewChange('plugins')}
           testId="entry-nav-plugins"
         >
@@ -141,6 +141,9 @@ export function EntryNavRail({ view, onViewChange, onNewProject }: Props) {
         >
           <Icon name="link" size={18} />
         </NavButton>
+      </div>
+      <div className="entry-nav-rail__footer">
+        <div className="entry-nav-rail__divider" role="separator" />
         <EntryHelpMenu />
       </div>
     </nav>

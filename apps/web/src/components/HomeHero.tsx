@@ -1,8 +1,8 @@
 // Lovart-style centered hero for the entry Home view.
 //
 // The prompt textarea is the canonical creation surface: the user
-// either types freely or selects a type below to reveal example
-// prompts, then presses Run / Enter to spawn a project. The hero is
+// either types freely or selects a type below to reveal matching
+// starters, then presses Run / Enter to spawn a project. The hero is
 // kept dependency-free (no plugin list / project list) so it can be
 // composed with the recent-projects strip and plugins section
 // without owning their data lifecycles.
@@ -17,12 +17,13 @@ import {
   useState,
 } from 'react';
 import type {
+  CSSProperties,
   ClipboardEvent as ReactClipboardEvent,
   DragEvent as ReactDragEvent,
   ForwardedRef,
   KeyboardEvent as ReactKeyboardEvent,
-  RefObject,
   ReactNode,
+  RefObject,
 } from 'react';
 import type {
   ConnectorDetail,
@@ -31,6 +32,7 @@ import type {
   McpServerConfig,
 } from '@open-design/contracts';
 import type { SkillSummary } from '../types';
+import { isImeComposing } from '../utils/imeComposing';
 import { Icon, type IconName } from './Icon';
 import { PluginInputsForm } from './PluginInputsForm';
 import {
@@ -47,7 +49,6 @@ import { useI18n, useT } from '../i18n';
 import type { Locale } from '../i18n/types';
 import { PreviewSurface } from './plugins-home/cards/PreviewSurface';
 import { inferPluginPreview } from './plugins-home/preview';
-import { openFolderDialog } from '../providers/registry';
 
 export interface HomeHeroSubmitHandler {
   (): void;
@@ -80,8 +81,6 @@ interface Props {
   stagedFiles?: File[];
   onAddFiles?: (files: File[]) => void;
   onRemoveFile?: (index: number) => void;
-  workingDir?: string | null;
-  onChangeWorkingDir?: (dir: string | null) => void;
   pluginOptions: InstalledPluginRecord[];
   pluginsLoading: boolean;
   skillOptions?: SkillSummary[];
@@ -98,19 +97,6 @@ interface Props {
   onPickMcp?: (server: McpServerConfig, nextPrompt: string) => void;
   onPickConnector?: (connector: ConnectorDetail, nextPrompt: string) => void;
   onPickChip: (chip: HomeHeroChip) => void;
-  // Manus-style example-prompt suggestions. Each entry carries both
-  // the source plugin (we still dispatch the existing
-  // `requestPluginContextUse(record, 'use-with-query')` path on click)
-  // and a pre-resolved, locale-aware preview of the prompt the
-  // textarea will receive, so the card body shows the actual sentence
-  // the user is about to send. HomeView decides the slice (matching
-  // the active chip), how many, and whether the panel should be
-  // visible (chip selected + not dismissed). The panel stays mounted
-  // either way so the accordion exit animation runs on close.
-  exampleSuggestions?: ExampleSuggestion[];
-  showExamples?: boolean;
-  onPickExample?: (record: InstalledPluginRecord) => void;
-  onDismissExamples?: () => void;
   contextItemCount: number;
   error: string | null;
   showActivePluginChip?: boolean;
@@ -175,8 +161,6 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
     stagedFiles = [],
     onAddFiles = () => undefined,
     onRemoveFile = () => undefined,
-    workingDir = null,
-    onChangeWorkingDir,
     pluginOptions,
     pluginsLoading,
     skillOptions = [],
@@ -193,10 +177,6 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
     onPickMcp = () => undefined,
     onPickConnector = () => undefined,
     onPickChip,
-    exampleSuggestions = [],
-    showExamples = false,
-    onPickExample = () => undefined,
-    onDismissExamples = () => undefined,
     contextItemCount,
     error,
     showActivePluginChip = true,
@@ -211,7 +191,6 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
   const [dragActive, setDragActive] = useState(false);
   const [openInlineInputName, setOpenInlineInputName] = useState<string | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const [workingDirError, setWorkingDirError] = useState<string | null>(null);
   const composingRef = useRef(false);
   const inputElementRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -430,10 +409,14 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
       : [],
     [activeChipId, activeExamplePlugins.length, locale],
   );
-  const workingDirLabel = useMemo(() => {
-    if (!workingDir) return null;
-    return workingDir.split(/[\\/]/).filter(Boolean).slice(-1)[0] ?? workingDir;
-  }, [workingDir]);
+  const authoringLayoutActive =
+    activeChipId === 'create-plugin' || pendingChipId === 'create-plugin';
+  const promptMaxHeight = authoringLayoutActive
+    ? HOME_HERO_AUTHORING_PROMPT_MAX_HEIGHT
+    : HOME_HERO_PROMPT_MAX_HEIGHT;
+  const inputCardStyle = {
+    '--home-hero-prompt-max-height': `${promptMaxHeight}px`,
+  } as CSSProperties;
 
   useEffect(() => {
     if (selectedIndex >= visiblePickerOptions.length) setSelectedIndex(0);
@@ -476,16 +459,16 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
     const el = inputElementRef.current;
     if (!el) return;
     el.style.height = 'auto';
-    const nextHeight = Math.min(el.scrollHeight, HOME_HERO_PROMPT_MAX_HEIGHT);
+    const nextHeight = Math.min(el.scrollHeight, promptMaxHeight);
     el.style.height = `${nextHeight}px`;
-    el.style.overflowY = el.scrollHeight > HOME_HERO_PROMPT_MAX_HEIGHT ? 'auto' : 'hidden';
-    if (el.scrollHeight <= HOME_HERO_PROMPT_MAX_HEIGHT && el.scrollTop !== 0) {
+    el.style.overflowY = el.scrollHeight > promptMaxHeight ? 'auto' : 'hidden';
+    if (el.scrollHeight <= promptMaxHeight && el.scrollTop !== 0) {
       el.scrollTop = 0;
       setPromptScrollTop(0);
     } else {
       setPromptScrollTop(el.scrollTop);
     }
-  }, [pluginInputValues, prompt, promptOverlayParts]);
+  }, [pluginInputValues, prompt, promptMaxHeight, promptOverlayParts]);
 
   const setInputRef = useCallback(
     (node: HTMLTextAreaElement | null) => {
@@ -538,17 +521,6 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
   function handleFiles(files: File[]) {
     if (files.length === 0) return;
     onAddFiles(files);
-  }
-
-  async function handlePickWorkingDir() {
-    if (!onChangeWorkingDir) return;
-    setWorkingDirError(null);
-    const picked = await openFolderDialog();
-    if (!picked) {
-      setWorkingDirError(t('workingDirPicker.unavailable'));
-      return;
-    }
-    onChangeWorkingDir(picked);
   }
 
   function usePromptExample(example: string) {
@@ -640,7 +612,10 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
       </p>
 
       <div
-        className={`home-hero__input-card${dragActive ? ' is-drag-active' : ''}`}
+        className={`home-hero__input-card${
+          authoringLayoutActive ? ' home-hero__input-card--compact-authoring' : ''
+        }${dragActive ? ' is-drag-active' : ''}`}
+        style={inputCardStyle}
         onDragEnter={(event) => {
           if (event.dataTransfer.types.includes('Files')) setDragActive(true);
         }}
@@ -1043,35 +1018,6 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
             >
               <Icon name="attach" size={15} />
             </button>
-            {onChangeWorkingDir ? (
-              <div className="home-hero__working-dir-wrap">
-                <button
-                  type="button"
-                  className={`home-hero__working-dir${workingDir ? ' picked' : ''}`}
-                  data-testid="home-hero-working-dir-chip"
-                  onClick={() => void handlePickWorkingDir()}
-                  title={workingDir ?? t('workingDirPicker.homeTitle')}
-                  aria-label={t('workingDirPicker.select')}
-                >
-                  <Icon name="folder" size={13} />
-                  <span>{workingDirLabel ?? t('workingDirPicker.title')}</span>
-                </button>
-                {workingDir ? (
-                  <button
-                    type="button"
-                    className="home-hero__working-dir-clear"
-                    onClick={() => {
-                      setWorkingDirError(null);
-                      onChangeWorkingDir(null);
-                    }}
-                    title={t('workingDirPicker.clearAria')}
-                    aria-label={t('workingDirPicker.clearAria')}
-                  >
-                    <Icon name="close" size={10} />
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
             {activeCreateChip ? (
               <ActiveTypeChip chip={activeCreateChip} onClear={onClearActiveChip} />
             ) : null}
@@ -1169,26 +1115,9 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
         </div>
       ) : null}
 
-      {/* Always render the panel; toggle visibility via accordion class
-          so the exit animation runs on dismiss/chip-change. Hidden
-          when no chip is picked or when the user closed it for the
-          current chip. */}
-      <ExamplePromptPanel
-        suggestions={exampleSuggestions}
-        open={showExamples}
-        onPick={onPickExample}
-        onDismiss={onDismissExamples}
-        disabled={pluginsLoading || pendingPluginId !== null}
-      />
-
       {error ? (
         <div role="alert" className="home-hero__error">
           {error}
-        </div>
-      ) : null}
-      {workingDirError ? (
-        <div role="alert" className="home-hero__error">
-          {workingDirError}
         </div>
       ) : null}
     </section>
@@ -1365,6 +1294,7 @@ interface PromptHighlightPart {
 
 const INPUT_PLACEHOLDER_PATTERN = /\{\{\s*([a-zA-Z_][\w-]*)\s*\}\}/g;
 const HOME_HERO_PROMPT_MAX_HEIGHT = 180;
+const HOME_HERO_AUTHORING_PROMPT_MAX_HEIGHT = 132;
 
 function buildPromptHighlightParts(
   template: string | null,
@@ -2341,11 +2271,6 @@ function replaceMentionTokenWithText(
   return [before, replacement.trim(), after].filter(Boolean).join(' ').trim();
 }
 
-function isImeComposing(event: ReactKeyboardEvent<HTMLTextAreaElement>, composing: boolean): boolean {
-  const nativeEvent = event.nativeEvent as KeyboardEvent & { keyCode?: number };
-  return composing || nativeEvent.isComposing || nativeEvent.keyCode === 229;
-}
-
 function pluginMatchesQuery(plugin: InstalledPluginRecord, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
@@ -2424,90 +2349,6 @@ function getPluginQueryPreview(plugin: InstalledPluginRecord): string {
         : '';
   const trimmed = value.replace(/\s+/g, ' ').trim();
   return trimmed.length > 96 ? `${trimmed.slice(0, 96)}…` : trimmed;
-}
-
-// Each suggestion carries both the source plugin (so click can route
-// through the same `requestPluginContextUse(record, 'use-with-query')`
-// path the plugin card menu uses) and a pre-rendered, locale-aware
-// preview the card displays. HomeView resolves the preview through
-// the same renderer it'd use on submit, so the card body is exactly
-// the sentence the user is about to send.
-export interface ExampleSuggestion {
-  plugin: InstalledPluginRecord;
-  preview: string;
-}
-
-interface ExamplePromptPanelProps {
-  suggestions: ExampleSuggestion[];
-  open: boolean;
-  onPick: (record: InstalledPluginRecord) => void;
-  onDismiss: () => void;
-  disabled: boolean;
-}
-
-// Manus-style suggestion panel. Sits below the composer card + migrate
-// rail and surfaces 3-4 representative `useCase.query` previews as
-// content-bearing cards (not chip pills). The panel stays mounted so
-// the accordion exit animation runs on dismiss; `.accordion-collapsible
-// .open` toggles visibility per the shared motion contract in
-// `apps/web/src/index.css`. A small close button hides the panel for
-// the current chip; switching chips re-arms it (state lives in
-// HomeView).
-function ExamplePromptPanel({
-  suggestions,
-  open,
-  onPick,
-  onDismiss,
-  disabled,
-}: ExamplePromptPanelProps) {
-  const hasContent = suggestions.length > 0;
-  const isOpen = open && hasContent;
-  return (
-    <div
-      className={`home-hero__examples accordion-collapsible${isOpen ? ' open' : ''}`}
-      aria-hidden={isOpen ? undefined : true}
-      data-testid="home-hero-example-prompts"
-    >
-      <div className="accordion-collapsible-inner">
-        <section className="home-hero__examples-panel">
-          <header className="home-hero__examples-head">
-            <span className="home-hero__examples-title">Example prompts</span>
-            <button
-              type="button"
-              className="home-hero__examples-close"
-              onClick={onDismiss}
-              aria-label="Dismiss example prompts"
-              data-testid="home-hero-example-dismiss"
-              disabled={disabled || !isOpen}
-            >
-              <Icon name="close" size={12} />
-            </button>
-          </header>
-          <div className="home-hero__examples-grid" role="list">
-            {suggestions.map(({ plugin, preview }) => (
-              <button
-                key={plugin.id}
-                type="button"
-                role="listitem"
-                className="home-hero__example-card"
-                data-testid={`home-hero-example-${plugin.id}`}
-                onClick={() => onPick(plugin)}
-                disabled={disabled || !isOpen}
-                title={preview}
-              >
-                <span className="home-hero__example-card-body">{preview}</span>
-                <Icon
-                  name="arrow-up"
-                  size={12}
-                  className="home-hero__example-card-arrow"
-                />
-              </button>
-            ))}
-          </div>
-        </section>
-      </div>
-    </div>
-  );
 }
 
 interface RailGroupProps {
@@ -2704,7 +2545,6 @@ function homeHeroChipLabel(chipId: string, t: ReturnType<typeof useT>): string {
     case 'audio': return t('homeHero.chip.audio');
     case 'create-plugin': return t('homeHero.chip.createPlugin');
     case 'figma': return t('homeHero.chip.figma');
-    case 'folder': return t('homeHero.chip.folder');
     case 'template': return t('homeHero.chip.template');
     default: return chipId;
   }
@@ -2716,7 +2556,6 @@ function homeHeroChipTitle(chip: HomeHeroChip, t: ReturnType<typeof useT>): stri
     case 'hyperframes': return t('homeHero.chip.hyperframesHint');
     case 'create-plugin': return t('homeHero.chip.createPluginHint');
     case 'figma': return t('homeHero.chip.figmaHint');
-    case 'folder': return t('homeHero.chip.folderHint');
     case 'template': return t('homeHero.chip.templateHint');
     default: return homeHeroChipLabel(chip.id, t);
   }

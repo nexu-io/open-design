@@ -4,6 +4,7 @@ import { seedProviderIfMissing } from './media-config.js';
 import {
   BYOK_SENSEAUDIO_TOOLS,
   executeGenerateImage,
+  executeGenerateSpeech,
   executeGenerateVideo,
   isSenseAudioImageModel,
   type BYOKToolContext,
@@ -1255,23 +1256,28 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     const executeOneTool = async (call: {
       id: string;
       function: { name: string; arguments: string };
-    }): Promise<{ ok: boolean; url?: string; error?: string; kind?: 'image' | 'video' }> => {
+    }): Promise<{ ok: boolean; url?: string; error?: string; kind?: 'image' | 'video' | 'speech' }> => {
       const fnName = call?.function?.name ?? '';
-      if (fnName !== 'generate_image' && fnName !== 'generate_video') {
+      if (fnName !== 'generate_image' && fnName !== 'generate_video' && fnName !== 'generate_speech') {
         return {
           ok: false,
           error: `unknown tool: ${fnName || 'unnamed'}`,
         };
       }
+      const toolKind = fnName === 'generate_image' ? 'image' : fnName === 'generate_video' ? 'video' : 'speech';
       let args: any = {};
       try {
         args = JSON.parse(call.function.arguments || '{}');
       } catch {
-        return { ok: false, error: 'tool arguments were not valid JSON' };
+        return { ok: false, error: 'tool arguments were not valid JSON', kind: toolKind };
       }
       if (fnName === 'generate_image') {
         const result = await executeGenerateImage(args, toolCtx);
         return { ...result, kind: 'image' };
+      }
+      if (fnName === 'generate_speech') {
+        const result = await executeGenerateSpeech(args, toolCtx);
+        return { ...result, kind: 'speech' };
       }
       // generate_video — longer (up to 5 min), async-with-polling.
       const result = await executeGenerateVideo(args, toolCtx);
@@ -1339,9 +1345,13 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
           const content = result.ok
             ? result.kind === 'video'
               ? `Video generated successfully. URL: ${result.url}. Reply to the user with a clickable markdown link, e.g. [▶ Play video](${result.url}). Do NOT use markdown image syntax — the chat renderer does not embed <video> tags.`
+              : result.kind === 'speech'
+                ? `Speech generated successfully. URL: ${result.url}. Reply to the user with a clickable markdown link to the MP3, e.g. [▶ Play voiceover](${result.url}).`
               : `Image generated successfully. URL: ${result.url}. Reply to the user with: ![generated image](${result.url})`
             : result.kind === 'video'
               ? `Video generation failed: ${result.error}. Apologize briefly and suggest a retry with a more specific prompt or a shorter duration.`
+              : result.kind === 'speech'
+                ? `Speech generation failed: ${result.error}. Apologize briefly and suggest a retry with a shorter script or a valid voice id.`
               : `Image generation failed: ${result.error}. Apologize briefly and suggest a retry with a more specific prompt.`;
           workingMessages.push({
             role: 'tool',

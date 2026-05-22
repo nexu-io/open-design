@@ -33,6 +33,8 @@ export interface ChatRequest {
   commentAttachments?: ChatCommentAttachment[];
   model?: string | null;
   reasoning?: string | null;
+  /** UI locale selected by the client, used by prompt composition for user-visible generated UI. */
+  locale?: string;
   research?: ResearchOptions;
   context?: RunContextSelection;
 }
@@ -171,6 +173,8 @@ export interface ChatMessage {
   attachments?: ChatAttachment[];
   commentAttachments?: ChatCommentAttachment[];
   producedFiles?: ProjectFile[];
+  // Diff baseline so reattach can rebuild producedFiles after reload.
+  preTurnFileNames?: string[];
   feedback?: ChatMessageFeedback;
   /**
    * Request-only marker for the final assistant-message persistence pass.

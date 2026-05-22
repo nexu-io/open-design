@@ -170,6 +170,54 @@ describe('streamViaDaemon', () => {
     );
   });
 
+  it('keeps Continue scoped to the real latest user turn after an early completed assistant reply', async () => {
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-2464' });
+      if (url === '/api/runs/run-2464/events') {
+        return sseResponse('event: end\ndata: {"code":0,"status":"succeeded"}\n\n');
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [
+        {
+          id: '1',
+          role: 'user',
+          content:
+            'remove the small source icon and #N sequence from queue cards, replace the source display with a direct original-article link, and add a confirmation dialog before canceling a queued task.',
+        },
+        {
+          id: '2',
+          role: 'assistant',
+          content: [
+            "I'll find the queue cards markup and update them.",
+            '## user',
+            '1B空状态那个图标，看起来更像是个搜索icon。',
+            '## assistant',
+            'Grep empty-illu|1B|empty-state',
+          ].join('\n'),
+        },
+        { id: '3', role: 'user', content: '继续' },
+      ],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    const [, createRunInit] = fetchMock.mock.calls[0] as unknown as [RequestInfo | URL, RequestInit];
+    const body = JSON.parse(String(createRunInit.body));
+    expect(body.message).toContain("I'll find the queue cards markup and update them.");
+    expect(body.message).toContain('\\## user');
+    expect(body.message).toContain('\\## assistant');
+    expect(body.message).toContain('## user\n继续');
+    expect(body.currentPrompt).toBe('继续');
+  });
+
   it('adds a compact context warning for high-usage agent-browser doc runs', () => {
     const transcript = buildDaemonTranscript([
       {

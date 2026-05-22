@@ -453,12 +453,19 @@ async function writeAssembledApp(
   }
 
   const version = await readPackagedVersion(config);
+
   const packageJson = {
     name: "open-design-packaged",
     version,
     private: true,
     main: "main.cjs",
     dependencies,
+    description: "Local-first design product: detects your installed code-agent CLI, runs design skills + design systems, streams artifacts into a sandboxed preview.",
+    author: "Open Design Team",
+    repository: {
+      type: "git",
+      url: "https://github.com/nexu-io/open-design.git"
+    }
   };
   await writeFile(paths.assembledPackageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`, "utf8");
 

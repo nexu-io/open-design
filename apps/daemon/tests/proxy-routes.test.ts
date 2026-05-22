@@ -849,6 +849,63 @@ describe('API proxy routes', () => {
     expect(toolMsg.content).toMatch(/sensitive_content_blocked/);
   });
 
+  it('feeds speech-specific tool error copy when generate_speech arguments are malformed', async () => {
+    const upstreamChatBodies: any[] = [];
+    let chatCallIndex = 0;
+    const fetchMock = vi.fn(async (input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      if (url === 'https://api.senseaudio.cn/v1/chat/completions') {
+        upstreamChatBodies.push(JSON.parse(String(init?.body || '{}')));
+        chatCallIndex++;
+        if (chatCallIndex === 1) {
+          return sseResponse([
+            'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_speech_bad_args","type":"function","function":{"name":"generate_speech","arguments":"{\\"text\\":"}}]},"finish_reason":null}]}',
+            '',
+            'data: {"choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}',
+            '',
+            'data: [DONE]',
+            '',
+          ].join('\n'));
+        }
+        return sseResponse([
+          'data: {"choices":[{"index":0,"delta":{"content":"I need a valid script before generating speech."}}]}',
+          '',
+          'data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}',
+          '',
+          'data: [DONE]',
+          '',
+        ].join('\n'));
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/proxy/senseaudio/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://api.senseaudio.cn',
+        apiKey: 'sa-test',
+        projectId: 'test-project',
+        model: 'senseaudio-s2',
+        messages: [{ role: 'user', content: 'make a voiceover' }],
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain('I need a valid script before generating speech.');
+
+    expect(upstreamChatBodies).toHaveLength(2);
+    const toolMsg = upstreamChatBodies[1].messages[2];
+    expect(toolMsg.role).toBe('tool');
+    expect(toolMsg.tool_call_id).toBe('call_speech_bad_args');
+    expect(toolMsg.content).toMatch(/Speech generation failed/);
+    expect(toolMsg.content).toMatch(/tool arguments were not valid JSON/);
+    expect(toolMsg.content).not.toMatch(/Image generation failed/);
+  });
+
   it('bounds the BYOK tool loop at MAX_BYOK_TOOL_LOOPS=3', async () => {
     let chatCallIndex = 0;
     const fetchMock = vi.fn(async (input: FetchInput, init?: FetchInit) => {

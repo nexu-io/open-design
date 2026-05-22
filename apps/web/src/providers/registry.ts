@@ -8,6 +8,7 @@ import type {
   ConnectorStatusResponse,
   ImportGitHubDesignSystemRequest,
   ImportGitHubDesignSystemResponse,
+  OpenDesignGithubLatestReleaseResponse,
   ImportLocalDesignSystemRequest,
   ImportLocalDesignSystemResponse,
   ReplaceProjectWorkingDirResponse,
@@ -1042,6 +1043,28 @@ export async function fetchAppVersionInfo(): Promise<AppVersionInfo | null> {
     if (!resp.ok) return null;
     const json = (await resp.json()) as Partial<AppVersionResponse>;
     return isAppVersionInfo(json.version) ? json.version : null;
+  } catch {
+    return null;
+  }
+}
+
+export type LatestGithubReleaseInfo = {
+  tagName: string;
+  htmlUrl: string;
+  stale: boolean;
+};
+
+export async function fetchLatestGithubReleaseInfo(): Promise<LatestGithubReleaseInfo | null> {
+  try {
+    const resp = await fetch('/api/github/open-design/releases/latest');
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as Partial<OpenDesignGithubLatestReleaseResponse>;
+    if (typeof json.tag_name !== 'string' || typeof json.html_url !== 'string') return null;
+    return {
+      tagName: json.tag_name,
+      htmlUrl: json.html_url,
+      stale: json.stale === true,
+    };
   } catch {
     return null;
   }

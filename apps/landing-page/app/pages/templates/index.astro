@@ -2,17 +2,20 @@
 import Layout from '../../_components/sub-page-layout.astro';
 import LazyImg from '../../_components/lazy-img.astro';
 import { getTemplateRecords } from '../../_lib/catalog';
+import { getLandingUiCopy, localeFromPath, localizedHref } from '../../i18n';
 
-const templates = await getTemplateRecords();
+const locale = localeFromPath(Astro.url.pathname);
+const ui = getLandingUiCopy(locale);
+const href = (path: string) => localizedHref(path, locale);
+const templates = await getTemplateRecords(locale);
 
-const title = `Templates — ${templates.length} ready-to-fork artifact templates | Open Design`;
-const description =
-  'Ready-to-fork Open Design templates: decks, prototypes, dashboards, live artifacts, image/video systems, and other renderable starting points from the design-templates catalog.';
+const title = ui.catalog.templates.title(templates.length);
+const description = ui.catalog.templates.description;
 
 const jsonLd = {
   '@context': 'https://schema.org',
   '@type': 'CollectionPage',
-  name: 'Open Design Templates catalog',
+  name: title,
   description,
   url: new URL('/templates/', Astro.site).toString(),
   numberOfItems: templates.length,
@@ -21,22 +24,20 @@ const jsonLd = {
 
 <Layout title={title} description={description} active="templates" jsonLd={jsonLd}>
   <header class="catalog-head">
-    <span class="label">Catalog · Nº 04</span>
+    <span class="label">{ui.catalog.templates.label}</span>
     <h1 class="display">
-      <em>Templates</em> — {templates.length} ready-to-fork artifacts<span class="dot">.</span>
+      {ui.catalog.templates.heading(templates.length)}
     </h1>
     <p class="lead">
-      Pre-wired design-template bundles with a known-good visual language,
-      baked examples, and agent instructions. Fork the folder, adapt the
-      source data or prompt, and ship.
+      {ui.catalog.templates.lead}
     </p>
   </header>
 
-  <section class="template-grid" aria-label="All templates">
+  <section class="template-grid" aria-label={ui.catalog.templates.allAria}>
     <ul>
       {templates.map((t, i) => (
         <li class="template-card">
-          <a href={t.detailHref}>
+          <a href={href(t.detailHref)}>
             {t.previewUrl ? (
               <span class="template-thumb">
                 <LazyImg src={t.previewUrl} alt="" loading={i < 4 ? 'eager' : 'precise'} />
@@ -45,13 +46,13 @@ const jsonLd = {
               <span class="template-thumb template-thumb-empty" aria-hidden="true" />
             )}
             <span class={`meta-tag ${t.origin === 'live-artifact' ? 'coral' : ''}`}>
-              {t.origin === 'live-artifact' ? 'Live Artifact' : (t.mode ?? 'Design template')}
+              {t.origin === 'live-artifact' ? ui.catalog.templates.liveArtifact : (t.modeLabel ?? ui.catalog.templates.skillTemplate)}
             </span>
             <span class="template-name">{t.name}</span>
             <p class="template-summary">{t.summary}</p>
             {(t.platform || t.scenario) && (
               <span class="template-meta-line">
-                {[t.platform, t.scenario].filter(Boolean).join(' · ')}
+                {[t.platformLabel ?? t.platform, t.scenarioLabel ?? t.scenario].filter(Boolean).join(' · ')}
               </span>
             )}
           </a>

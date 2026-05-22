@@ -11,7 +11,7 @@ import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promi
 import path from "node:path";
 import { parseFrontmatter } from "./frontmatter.js";
 import type { SkillCritiquePolicy } from "./critique/rollout.js";
-import { SKILLS_CWD_ALIAS } from "./cwd-aliases.js";
+import { skillCwdAliasSegment, SKILLS_CWD_ALIAS } from "./cwd-aliases.js";
 
 // Persisted skill ids on existing projects can outlive a folder rename.
 // listSkills() derives the id from the SKILL.md frontmatter `name`, so once
@@ -396,7 +396,7 @@ export function splitDerivedSkillId(id: unknown): DerivedSkillIdParts | null {
 // the right form on its own without daemon-side feature detection.
 function withSkillRootPreamble(body: string, dir: string): string {
   const referencedFiles = collectReferencedSideFiles(body);
-  const folder = path.basename(dir);
+  const folder = skillCwdAliasSegment(dir);
   const skillRootRel = `${SKILLS_CWD_ALIAS}/${folder}`;
   const exampleFile = referencedFiles[0];
   const relativeGuidance = exampleFile

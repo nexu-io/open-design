@@ -16,6 +16,15 @@
  */
 
 import { ogDefaultImage } from '../image-assets';
+import {
+  LANDING_LOCALES,
+  alternateLinksForPath,
+  getLocaleDefinition,
+  localeFromPath,
+  stripLocaleFromPath,
+} from '../i18n';
+import FaviconLinks from './favicon-links.astro';
+import ResourceHints from './resource-hints.astro';
 
 export interface SeoHeadProps {
   /** 'website' for landing/list pages, 'article' for blog posts. */
@@ -49,6 +58,14 @@ const props = Astro.props as SeoHeadProps;
 const SITE_NAME = 'Open Design';
 const TAGLINE = 'Design with the agent already on your laptop.';
 const isArticle = props.kind === 'article';
+const locale = localeFromPath(props.pathname);
+const localeDef = getLocaleDefinition(locale);
+const basePath = stripLocaleFromPath(props.pathname).pathname;
+const alternateLinks = alternateLinksForPath(props.pathname).map((entry) => ({
+  ...entry,
+  href: new URL(entry.hrefPath, Astro.site).toString(),
+}));
+const xDefaultHref = new URL(alternateLinks[0]!.hrefPath, Astro.site).toString();
 
 const canonical = new URL(props.pathname, Astro.site).toString();
 const image = props.image ?? new URL(ogDefaultImage, Astro.site).toString();
@@ -72,6 +89,7 @@ const articleJsonLd =
         '@type': 'Article',
         headline: props.title,
         description: props.description,
+        inLanguage: localeDef.htmlLang,
         image: [image],
         datePublished: isoPublished,
         dateModified: isoModified,
@@ -98,24 +116,27 @@ const articleJsonLd =
     : null;
 
 const websiteJsonLd =
-  props.kind === 'website' && props.pathname === '/'
+  props.kind === 'website' && basePath === '/'
     ? {
         '@context': 'https://schema.org',
         '@type': 'WebSite',
         name: SITE_NAME,
         alternateName: TAGLINE,
         url: Astro.site?.toString() ?? 'https://open-design.ai/',
+        inLanguage: localeDef.htmlLang,
+        availableLanguage: LANDING_LOCALES.map((entry) => entry.htmlLang),
       }
     : null;
 
 const blogJsonLd =
-  props.kind === 'website' && props.pathname === '/blog/'
+  props.kind === 'website' && basePath === '/blog/'
     ? {
         '@context': 'https://schema.org',
         '@type': 'Blog',
         name: 'Open Design — Blog',
         description: props.description,
         url: canonical,
+        inLanguage: localeDef.htmlLang,
         publisher: {
           '@type': 'Organization',
           name: SITE_NAME,
@@ -129,7 +150,13 @@ const blogJsonLd =
 <meta name='description' content={props.description} />
 <meta name='theme-color' content='#efe7d2' />
 <link rel='canonical' href={canonical} />
+{alternateLinks.map((entry) => (
+  <link rel='alternate' hreflang={entry.hreflang} href={entry.href} />
+))}
+<link rel='alternate' hreflang='x-default' href={xDefaultHref} />
 <link rel='alternate' type='application/rss+xml' title='Open Design Blog' href={rssUrl} />
+<FaviconLinks />
+<ResourceHints />
 
 {props.googleSiteVerification && (
   <meta name='google-site-verification' content={props.googleSiteVerification} />
@@ -141,7 +168,10 @@ const blogJsonLd =
 <meta property='og:description' content={props.description} />
 <meta property='og:url' content={canonical} />
 <meta property='og:image' content={image} />
-<meta property='og:locale' content='en_US' />
+<meta property='og:locale' content={localeDef.ogLocale} />
+{LANDING_LOCALES.filter((entry) => entry.code !== locale).map((entry) => (
+  <meta property='og:locale:alternate' content={entry.ogLocale} />
+))}
 
 {props.kind === 'article' && (
   <>
@@ -158,11 +188,11 @@ const blogJsonLd =
 <meta name='twitter:image' content={image} />
 
 {articleJsonLd && (
-  <script type='application/ld+json' set:html={JSON.stringify(articleJsonLd)} />
+  <script is:inline type='application/ld+json' set:html={JSON.stringify(articleJsonLd)} />
 )}
 {websiteJsonLd && (
-  <script type='application/ld+json' set:html={JSON.stringify(websiteJsonLd)} />
+  <script is:inline type='application/ld+json' set:html={JSON.stringify(websiteJsonLd)} />
 )}
 {blogJsonLd && (
-  <script type='application/ld+json' set:html={JSON.stringify(blogJsonLd)} />
+  <script is:inline type='application/ld+json' set:html={JSON.stringify(blogJsonLd)} />
 )}

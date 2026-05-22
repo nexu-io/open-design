@@ -14,11 +14,7 @@ import {
   type ConnectorDetail,
   type InstalledPluginRecord,
 } from '@open-design/contracts';
-import {
-  isOpenDesignHostAvailable,
-  pickAndImportHostProject,
-  type OpenDesignHostProjectImportSuccess,
-} from '@open-design/host';
+import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackHomeNavClick,
@@ -53,7 +49,6 @@ import type {
   ProviderModelsResponse,
   SkillSummary,
 } from '../types';
-import { formatPickAndImportFailure } from '../utils/pickAndImportError';
 import { CenteredLoader } from './Loading';
 import { DesignsTab } from './DesignsTab';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
@@ -80,7 +75,6 @@ import type {
   PluginShareProjectOutcome,
 } from '../state/projects';
 import { TasksView } from './TasksView';
-import { Toast } from './Toast';
 import {
   API_KEY_PLACEHOLDERS,
   API_PROTOCOL_TABS,
@@ -239,7 +233,7 @@ interface Props {
   onImportFolderResponse?: (response: OpenDesignHostProjectImportSuccess) => Promise<void> | void;
   onOpenProject: (id: string) => void;
   onOpenLiveArtifact: (projectId: string, artifactId: string) => void;
-  onDeleteProject: (id: string) => void;
+  onDeleteProject: (id: string) => Promise<boolean | void> | boolean | void;
   onRenameProject: (id: string, name: string) => void;
   onChangeDefaultDesignSystem: (id: string) => void;
   onCreateDesignSystem?: () => void;
@@ -355,11 +349,6 @@ export function EntryShell({
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [newProjectInitialTab, setNewProjectInitialTab] =
     useState<CreateTab>('prototype');
-  const [folderImportError, setFolderImportError] = useState<{
-    message: string;
-    details?: string;
-  } | null>(null);
-  const [chipImporting, setChipImporting] = useState(false);
   const [integrationTab, setIntegrationTab] = useState<IntegrationTab>(integrationInitialTab);
   const [homePromptHandoff, setHomePromptHandoff] = useState<HomePromptHandoff | null>(null);
   const analytics = useAnalytics();
@@ -483,38 +472,6 @@ export function EntryShell({
     });
   }
 
-  // Stage B of plugin-driven-flow-plan: the rail's "From folder" chip
-  // dispatcher. Prefers the Electron-native folder picker when
-  // available so a single click lands the user in an imported
-  // project. Browser-only shells fall back to the existing modal
-  // path so the user can paste a baseDir.
-  async function handleChipFolderImport() {
-    if (chipImporting) return;
-    // PR #974 trust boundary: the renderer cannot pick a folder directly
-    // anymore — the host exposes `pickAndImport` instead (atomic pick +
-    // HMAC-gated import). On the web, fall back to opening the New
-    // Project modal so the user can paste a baseDir manually.
-    if (
-      isOpenDesignHostAvailable() &&
-      onImportFolderResponse
-    ) {
-      setChipImporting(true);
-      try {
-        const result = await pickAndImportHostProject();
-        if (!result || ('canceled' in result && result.canceled === true)) return;
-        if (result.ok === true) {
-          await onImportFolderResponse(result);
-          return;
-        }
-        setFolderImportError(formatPickAndImportFailure(result));
-      } finally {
-        setChipImporting(false);
-      }
-      return;
-    }
-    openNewProject('prototype');
-  }
-
   function finishOnboarding() {
     onCompleteOnboarding();
     changeView('home');
@@ -629,7 +586,6 @@ export function EntryShell({
                 onOpenProject={onOpenProject}
                 onViewAllProjects={() => changeView('projects')}
                 onBrowseRegistry={() => changeView('plugins')}
-                onImportFolder={handleChipFolderImport}
                 onOpenNewProject={(tab) => {
                   // Stage B of plugin-driven-flow-plan: the rail's
                   // "From template" chip wires through here so the
@@ -727,26 +683,20 @@ export function EntryShell({
         templates={templates}
         {...(onDeleteTemplate ? { onDeleteTemplate } : {})}
         promptTemplates={promptTemplates}
+        mediaProviders={config.mediaProviders}
         connectors={connectors}
         connectorsLoading={connectorsLoading}
         loading={skillsLoading}
         onCreate={handleCreate}
         onImportClaudeDesign={onImportClaudeDesign}
         {...(onImportFolder ? { onImportFolder } : {})}
+        {...(onImportFolderResponse ? { onImportFolderResponse } : {})}
         onOpenConnectorsTab={() => {
           setNewProjectOpen(false);
           openIntegrationTab('connectors');
         }}
         onClose={() => setNewProjectOpen(false)}
       />
-      {folderImportError ? (
-        <Toast
-          message={folderImportError.message}
-          details={folderImportError.details ?? null}
-          role="alert"
-          onDismiss={() => setFolderImportError(null)}
-        />
-      ) : null}
     </div>
   );
 }

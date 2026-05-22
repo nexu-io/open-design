@@ -20,6 +20,7 @@ import type {
 } from "../types";
 import { Icon } from "./Icon";
 import { LiveArtifactBadges } from "./LiveArtifactBadges";
+import { Toast } from "./Toast";
 
 type SubTab = "recent" | "yours";
 type ViewMode = "grid" | "kanban";
@@ -64,7 +65,7 @@ interface Props {
 	designSystems: DesignSystemSummary[];
 	onOpen: (id: string) => void;
 	onOpenLiveArtifact: (projectId: string, artifactId: string) => void;
-	onDelete: (id: string) => void;
+	onDelete: (id: string) => Promise<boolean | void> | boolean | void;
 	onRename?: (id: string, name: string) => void;
 }
 
@@ -100,6 +101,8 @@ export function DesignsTab({
 	const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 	const [selectMode, setSelectMode] = useState(false);
 	const [selected, setSelected] = useState<Set<string>>(new Set());
+	const deleteToastIdRef = useRef(0);
+	const [deleteToast, setDeleteToast] = useState<{ id: number; message: string } | null>(null);
 	const menuContainerRef = useRef<HTMLDivElement | null>(null);
 	const [renameTarget, setRenameTarget] = useState<{ id: string; original: string } | null>(null);
 	const [renameInput, setRenameInput] = useState("");
@@ -356,9 +359,28 @@ export function DesignsTab({
 			title: t("designs.deleteTitle"),
 			message: t("designs.deleteSelectedConfirm", { n: ids.length }),
 			confirmLabel: t("designs.deleteSelected"),
-			onConfirm: () => {
-				ids.forEach((id) => onDelete(id));
+			onConfirm: async () => {
+				const results = await Promise.all(
+					ids.map(async (id) => {
+						try {
+							const result = await onDelete(id);
+							return result !== false;
+						} catch {
+							return false;
+						}
+					}),
+				);
+				const deleted = results.filter(Boolean).length;
+				const failed = results.length - deleted;
 				exitSelectMode();
+				const message =
+					failed > 0
+						? t("designs.deleteSelectedPartial", { deleted, failed })
+						: t("designs.deleteSelectedSuccess", { n: deleted });
+				setDeleteToast({
+					id: (deleteToastIdRef.current += 1),
+					message,
+				});
 			},
 		});
 	};
@@ -950,6 +972,13 @@ export function DesignsTab({
 						</div>
 					</div>
 				</div>
+			) : null}
+			{deleteToast ? (
+				<Toast
+					key={deleteToast.id}
+					message={deleteToast.message}
+					onDismiss={() => setDeleteToast(null)}
+				/>
 			) : null}
 		</div>
 	);
