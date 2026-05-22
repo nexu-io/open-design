@@ -665,15 +665,17 @@ export const HomeHero = forwardRef<HTMLTextAreaElement, Props>(function HomeHero
                   <span className="home-hero__active-dot" aria-hidden />
                   <span>{activePluginTitle}</span>
                 </button>
-                <button
-                  type="button"
-                  className="home-hero__active-clear"
-                  onClick={onClearActivePlugin}
-                  aria-label={t('homeHero.clearActivePlugin')}
-                  title={t('homeHero.clearActivePlugin')}
-                >
-                  ×
-                </button>
+                {activeCreateChip ? null : (
+                  <button
+                    type="button"
+                    className="home-hero__active-clear"
+                    onClick={onClearActivePlugin}
+                    aria-label={t('homeHero.clearActivePlugin')}
+                    title={t('homeHero.clearActivePlugin')}
+                  >
+                    ×
+                  </button>
+                )}
               </span>
             ) : null}
             {activeSkillTitle ? (
