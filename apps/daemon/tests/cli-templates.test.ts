@@ -330,4 +330,51 @@ describe('od templates CLI', () => {
     expect(result.code).not.toBe(0);
     expect(result.stderr).toMatch(/unknown subcommand/i);
   });
+
+  // Reviewer-correctness fix from #2428: when the daemon isn't
+  // running, every sub-verb must surface the same clean
+  // "failed to reach daemon at <url>: <code>" error that the rest of
+  // the CLI emits via `surfaceFetchError`, not a raw
+  // `TypeError: fetch failed`. We point the CLI at a port nothing is
+  // listening on (the stub server's, +1) so fetch fails connection-
+  // refused on every platform.
+  function unreachableUrl(): string {
+    const u = new URL(stub.baseUrl);
+    return `http://${u.hostname}:${Number(u.port) + 1}`;
+  }
+
+  it('surfaces a clean fetch error from `templates list` when the daemon is unreachable', async () => {
+    const result = await runCli(['templates', 'list', '--daemon-url', unreachableUrl()]);
+    expect(result.code).toBe(3);
+    expect(result.stderr).toMatch(/failed to reach daemon at http:\/\/127\.0\.0\.1:/);
+    expect(result.stderr).not.toMatch(/TypeError: fetch failed/);
+  });
+
+  it('surfaces a clean fetch error from `templates save` when the daemon is unreachable', async () => {
+    const result = await runCli([
+      'templates',
+      'save',
+      'proj-1',
+      '--name',
+      'Cards',
+      '--daemon-url',
+      unreachableUrl(),
+    ]);
+    expect(result.code).toBe(3);
+    expect(result.stderr).toMatch(/failed to reach daemon at http:\/\/127\.0\.0\.1:/);
+    expect(result.stderr).not.toMatch(/TypeError: fetch failed/);
+  });
+
+  it('surfaces a clean fetch error from `templates delete` when the daemon is unreachable', async () => {
+    const result = await runCli([
+      'templates',
+      'delete',
+      't-1',
+      '--daemon-url',
+      unreachableUrl(),
+    ]);
+    expect(result.code).toBe(3);
+    expect(result.stderr).toMatch(/failed to reach daemon at http:\/\/127\.0\.0\.1:/);
+    expect(result.stderr).not.toMatch(/TypeError: fetch failed/);
+  });
 });

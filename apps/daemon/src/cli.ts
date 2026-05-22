@@ -5012,7 +5012,19 @@ Common options:
   const base = (await cliDaemonBaseUrl(flags));
   switch (sub) {
     case 'list': {
-      const resp = await fetch(`${base}/api/templates`);
+      // Wrap every fetch in try/catch so the user sees a clean
+      // "failed to reach daemon at <url>: <code>" error from
+      // surfaceFetchError when the daemon isn't running. Without
+      // this Node throws a raw `TypeError: fetch failed`, which
+      // matches the pattern the rest of the CLI uses
+      // (runAutomation, the project verbs, runResearch).
+      let resp;
+      try {
+        resp = await fetch(`${base}/api/templates`);
+      } catch (err) {
+        surfaceFetchError(err, base);
+        process.exit(3);
+      }
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
       if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
@@ -5044,11 +5056,17 @@ Common options:
       if (typeof flags.description === 'string' && flags.description.length > 0) {
         body.description = flags.description;
       }
-      const resp = await fetch(`${base}/api/templates`, {
-        method:  'POST',
-        headers: { 'content-type': 'application/json' },
-        body:    JSON.stringify(body),
-      });
+      let resp;
+      try {
+        resp = await fetch(`${base}/api/templates`, {
+          method:  'POST',
+          headers: { 'content-type': 'application/json' },
+          body:    JSON.stringify(body),
+        });
+      } catch (err) {
+        surfaceFetchError(err, base);
+        process.exit(3);
+      }
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
       if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
@@ -5063,7 +5081,13 @@ Common options:
         console.error('Usage: od templates delete <id>');
         process.exit(2);
       }
-      const resp = await fetch(`${base}/api/templates/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      let resp;
+      try {
+        resp = await fetch(`${base}/api/templates/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      } catch (err) {
+        surfaceFetchError(err, base);
+        process.exit(3);
+      }
       if (!resp.ok) return structuredHttpFailure(resp);
       if (flags.json) {
         const data = await resp.json().catch(() => ({ ok: true }));
