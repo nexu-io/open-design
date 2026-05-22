@@ -1351,7 +1351,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 mcpServers={filteredMcpServers}
                 connectors={filteredConnectors}
                 query={mention.q}
-                currentSkillId={currentSkillId}
+                stagedSkillIds={stagedSkillIds}
                 onPickFile={insertMention}
                 onPickPlugin={(record) => void insertPluginMention(record)}
                 onPickSkill={(skill) => void insertSkillMention(skill)}
@@ -2372,7 +2372,7 @@ function MentionPopover({
   skills,
   mcpServers,
   query,
-  currentSkillId,
+  stagedSkillIds,
   onPickFile,
   onPickPlugin,
   onPickSkill,
@@ -2385,7 +2385,7 @@ function MentionPopover({
   skills: SkillSummary[];
   mcpServers: McpServerConfig[];
   query: string;
-  currentSkillId: string | null;
+  stagedSkillIds: Set<string>;
   onPickFile: (path: string) => void;
   onPickPlugin: (record: InstalledPluginRecord) => void;
   onPickSkill: (skill: SkillSummary) => void;
@@ -2471,7 +2471,7 @@ function MentionPopover({
           <>
             <div className="mention-section-label">Skills</div>
             {skills.map((skill) => {
-              const active = skill.id === currentSkillId;
+              const active = stagedSkillIds.has(skill.id);
               return (
                 <button
                   key={`skill-${skill.id}`}
