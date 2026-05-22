@@ -75,4 +75,18 @@ describe("tools-dev shared ports", () => {
 
     assert.equal(options.webPort, "4123");
   });
+
+  it("does not force a daemon port when reusing a running daemon", async () => {
+    const options: { daemonPort?: string; webPort?: string } = {};
+
+    await ensureSharedPortsResolved(
+      [APP_KEYS.WEB, APP_KEYS.DAEMON],
+      options,
+      null,
+      "http://127.0.0.1:5123",
+    );
+
+    assert.equal(options.daemonPort, undefined);
+    assert.match(options.webPort ?? "", /^\d+$/);
+  });
 });

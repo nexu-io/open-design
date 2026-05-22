@@ -7,13 +7,14 @@ export async function ensureSharedPortsResolved(
   targets: readonly ToolDevAppName[],
   options: Pick<ToolDevOptions, "daemonPort" | "webPort">,
   runningWebUrl?: string | null,
+  runningDaemonUrl?: string | null,
 ): Promise<void> {
   if (!targets.includes(APP_KEYS.WEB)) return;
   const daemonRequested = targets.includes(APP_KEYS.DAEMON);
   const reserved = new Set<number>();
   const daemonPort = parsePortOption(options.daemonPort, "--daemon-port");
   if (daemonPort != null) reserved.add(daemonPort);
-  if (daemonRequested && daemonPort == null) {
+  if (daemonRequested && daemonPort == null && runningDaemonUrl == null) {
     const allocation = await allocatePort({
       host: "127.0.0.1",
       label: "daemon",
