@@ -618,6 +618,8 @@ export const uk: Dict = {
   'designs.deleteSelected': 'Delete selected',
   'designs.selectedCount': '{n} selected',
   'designs.deleteSelectedConfirm': 'Delete {n} project(s)?',
+  'designs.deleteSelectedSuccess': '{n} project(s) deleted successfully.',
+  'designs.deleteSelectedPartial': 'Deleted {deleted} project(s); {failed} failed.',
   'designs.tagPrototype': 'Prototype',
   'designs.tagLiveArtifact': 'Live Artifact',
   'designs.tagSlide': 'Slide',

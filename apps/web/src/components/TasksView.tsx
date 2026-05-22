@@ -488,8 +488,14 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
     return map;
   }, [projects]);
 
-  const activeCount = routines.filter((routine) => routine.enabled).length;
-  const pausedCount = routines.length - activeCount;
+  // Sort routines by creation time, newest first
+  const sortedRoutines = useMemo(
+    () => [...routines].sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0)),
+    [routines],
+  );
+
+  const activeCount = sortedRoutines.filter((routine) => routine.enabled).length;
+  const pausedCount = sortedRoutines.length - activeCount;
   const sourceIngestionTemplates = useMemo(
     () =>
       automationCatalog.filter((template) =>
@@ -697,7 +703,7 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
           <h2 className="automations-section__label">Your automations</h2>
           {loading ? <span className="automations-section__meta">Loading</span> : null}
         </div>
-        {!loading && routines.length === 0 ? (
+        {!loading && sortedRoutines.length === 0 ? (
           <button
             type="button"
             className="automation-empty"
@@ -712,9 +718,9 @@ export function TasksView({ skills = [], designTemplates = [], connectors = [] }
             </span>
           </button>
         ) : null}
-        {routines.length > 0 ? (
+        {sortedRoutines.length > 0 ? (
           <ul className="automations-saved__list">
-            {routines.map((r) => {
+            {sortedRoutines.map((r) => {
               const isBusy = busyId === r.id;
               const targetLabel =
                 r.target.mode === 'reuse'

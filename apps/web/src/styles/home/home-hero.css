@@ -360,6 +360,28 @@
   min-width: 0;
   max-height: var(--home-hero-prompt-max-height);
   overflow: hidden;
+  --home-hero-prompt-font-size: 15px;
+  --home-hero-prompt-line-height: 1.85;
+  --home-hero-prompt-padding: 6px 6px;
+}
+.home-hero__prompt-highlight,
+.home-hero__input {
+  font: inherit;
+  font-size: var(--home-hero-prompt-font-size);
+  font-weight: inherit;
+  line-height: var(--home-hero-prompt-line-height);
+  letter-spacing: normal;
+  word-spacing: normal;
+  font-kerning: auto;
+  font-feature-settings: normal;
+  font-variant-ligatures: normal;
+  text-rendering: auto;
+  tab-size: 4;
+  padding: var(--home-hero-prompt-padding);
+  box-sizing: border-box;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  text-align: start;
 }
 .home-hero__prompt-highlight {
   position: absolute;
@@ -367,10 +389,7 @@
   z-index: auto;
   overflow: hidden;
   max-height: var(--home-hero-prompt-max-height);
-  padding: 0;
   color: var(--text);
-  font: inherit;
-  font-size: 15px;
   /* Generous line-height so adjacent slot/mention pills do not
      collide vertically when the prompt wraps. Each pill paints a
      2px ring via `box-shadow`; with a tight line-height the rings
@@ -378,15 +397,12 @@
      Bumping the line-height leaves ~8px of clear space between
      pill rows. The textarea below mirrors this value so the
      overlay and the editable text stay pixel-aligned. */
-  line-height: 1.85;
   pointer-events: none;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
 }
 .home-hero__prompt-highlight-inner {
+  position: relative;
+  top: calc(-1 * var(--home-hero-prompt-scroll, 0px));
   min-height: 100%;
-  padding: 6px;
-  transform: translateY(calc(-1 * var(--home-hero-prompt-scroll, 0px)));
 }
 .home-hero__prompt-slot {
   display: inline;
@@ -525,12 +541,6 @@
      HomeHero.tsx, which writes an explicit pixel height after every
      keystroke. Keep the native resize grip disabled while allowing
      the effect to toggle internal scrolling for very long prompts. */
-  font: inherit;
-  font-size: 15px;
-  /* Must match `.home-hero__prompt-highlight` so the editable
-     textarea and the highlight overlay wrap identically. */
-  line-height: 1.85;
-  padding: 6px 6px;
   border: none;
   outline: none;
   background: transparent;

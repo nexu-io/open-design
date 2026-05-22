@@ -68,3 +68,5 @@ docs/superpowers/
 apps/landing-page/public/previews/
 apps/desktop/src-tauri/gen/
 apps/desktop/src-tauri/target/
+
+growth/**

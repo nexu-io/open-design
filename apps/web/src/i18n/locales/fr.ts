@@ -621,6 +621,8 @@ export const fr: Dict = {
   'designs.deleteSelected': 'Supprimer la sélection',
   'designs.selectedCount': '{n} sélectionné(s)',
   'designs.deleteSelectedConfirm': 'Supprimer {n} projet(s) ?',
+  'designs.deleteSelectedSuccess': '{n} project(s) deleted successfully.',
+  'designs.deleteSelectedPartial': 'Deleted {deleted} project(s); {failed} failed.',
   'designs.tagPrototype': 'Prototype',
   'designs.tagLiveArtifact': 'Artefact dynamique',
   'designs.tagSlide': 'Diapositive',

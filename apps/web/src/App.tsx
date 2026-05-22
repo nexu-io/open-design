@@ -1005,11 +1005,12 @@ export function App() {
 
   const handleDeleteProject = useCallback(async (id: string) => {
     const ok = await deleteProjectApi(id);
-    if (!ok) return;
+    if (!ok) return false;
     setProjects((curr) => curr.filter((p) => p.id !== id));
     if (route.kind === 'project' && route.projectId === id) {
       navigate({ kind: 'home', view: 'home' });
     }
+    return true;
   }, [route]);
 
   const handleRenameProject = useCallback(async (id: string, name: string) => {

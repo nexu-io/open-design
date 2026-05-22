@@ -35,7 +35,7 @@ vi.mock('../../src/i18n', () => ({
   useI18n: () => ({
     locale: 'en',
     setLocale: () => undefined,
-    t: (key: string) => key,
+    t: (value: string) => value,
   }),
   useT: () => ((value: string) => value),
 }));

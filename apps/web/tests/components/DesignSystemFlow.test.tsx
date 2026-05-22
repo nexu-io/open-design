@@ -10,8 +10,10 @@ import {
 } from '../../src/runtime/design-system-package-audit';
 import {
   DesignSystemCreationFlow,
+  DesignSystemDetailView,
 } from '../../src/components/DesignSystemFlow';
 import type { AppConfig, DesignSystemDetail, Project } from '../../src/types';
+import { I18nProvider } from '../../src/i18n';
 
 const mocks = vi.hoisted(() => ({
   connectConnector: vi.fn(),
@@ -19,10 +21,46 @@ const mocks = vi.hoisted(() => ({
   disconnectConnector: vi.fn(),
   ensureDesignSystemWorkspace: vi.fn(),
   fetchConnectorStatuses: vi.fn(),
+  fetchDesignSystem: vi.fn(),
+  fetchDesignSystemRevisions: vi.fn(),
+  fetchProjectDesignSystemPackageAudit: vi.fn(),
+  fetchProjectFiles: vi.fn(),
   openFolderDialog: vi.fn(),
   patchProject: vi.fn(),
+  createConversation: vi.fn(),
+  listConversations: vi.fn(),
+  listMessages: vi.fn(),
+  loadTabs: vi.fn(),
+  patchConversation: vi.fn(),
+  saveMessage: vi.fn(),
+  saveTabs: vi.fn(),
+  streamViaDaemon: vi.fn(),
   uploadProjectFile: vi.fn(),
   writeProjectTextFile: vi.fn(),
+}));
+
+vi.mock('../../src/components/ChatPane', () => ({
+  ChatPane: ({
+    onSend,
+  }: {
+    onSend: (prompt: string, attachments: unknown[], commentAttachments: unknown[]) => void;
+  }) => (
+    <button
+      type="button"
+      data-testid="design-system-chat-send"
+      onClick={() => onSend('Update the design tokens', [], [])}
+    >
+      send
+    </button>
+  ),
+}));
+
+vi.mock('../../src/components/FileWorkspace', () => ({
+  FileWorkspace: () => <div data-testid="design-system-files" />,
+}));
+
+vi.mock('../../src/providers/daemon', () => ({
+  streamViaDaemon: (...args: unknown[]) => mocks.streamViaDaemon(...args),
 }));
 
 vi.mock('../../src/providers/registry', async () => {
@@ -35,6 +73,10 @@ vi.mock('../../src/providers/registry', async () => {
     createDesignSystemDraft: mocks.createDesignSystemDraft,
     disconnectConnector: mocks.disconnectConnector,
     ensureDesignSystemWorkspace: mocks.ensureDesignSystemWorkspace,
+    fetchDesignSystem: mocks.fetchDesignSystem,
+    fetchDesignSystemRevisions: mocks.fetchDesignSystemRevisions,
+    fetchProjectDesignSystemPackageAudit: mocks.fetchProjectDesignSystemPackageAudit,
+    fetchProjectFiles: mocks.fetchProjectFiles,
     fetchConnectorStatuses: mocks.fetchConnectorStatuses,
     openFolderDialog: mocks.openFolderDialog,
     uploadProjectFile: mocks.uploadProjectFile,
@@ -48,7 +90,14 @@ vi.mock('../../src/state/projects', async () => {
   );
   return {
     ...actual,
+    createConversation: mocks.createConversation,
+    listConversations: mocks.listConversations,
+    listMessages: mocks.listMessages,
+    loadTabs: mocks.loadTabs,
+    patchConversation: mocks.patchConversation,
     patchProject: mocks.patchProject,
+    saveMessage: mocks.saveMessage,
+    saveTabs: mocks.saveTabs,
   };
 });
 
@@ -61,7 +110,19 @@ afterEach(() => {
 beforeEach(() => {
   mocks.connectConnector.mockResolvedValue({ connector: null });
   mocks.disconnectConnector.mockResolvedValue(null);
+  mocks.fetchDesignSystem.mockResolvedValue(null);
+  mocks.fetchDesignSystemRevisions.mockResolvedValue([]);
+  mocks.fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
+  mocks.fetchProjectFiles.mockResolvedValue([]);
   mocks.fetchConnectorStatuses.mockResolvedValue({});
+  mocks.createConversation.mockResolvedValue(null);
+  mocks.listConversations.mockResolvedValue([]);
+  mocks.listMessages.mockResolvedValue([]);
+  mocks.loadTabs.mockResolvedValue({ tabs: [], active: null });
+  mocks.patchConversation.mockResolvedValue(null);
+  mocks.saveMessage.mockResolvedValue(null);
+  mocks.saveTabs.mockResolvedValue(null);
+  mocks.streamViaDaemon.mockImplementation(async () => {});
   mocks.openFolderDialog.mockResolvedValue(null);
   mocks.uploadProjectFile.mockImplementation(async (_projectId: string, file: File, desiredName?: string) => ({
     name: desiredName ?? file.name,
@@ -1702,5 +1763,79 @@ describe('DesignSystemCreationFlow', () => {
     );
     expect(sourceManifestCall?.[2]).toEqual(expect.stringContaining('Connector status: connected.'));
     expect(sourceManifestCall?.[2]).not.toEqual(expect.stringContaining('ca_6U6mv_8IzMVR'));
+  });
+});
+
+describe('DesignSystemDetailView', () => {
+  it('passes the current UI locale to daemon workspace chat runs', async () => {
+    const system: DesignSystemDetail = {
+      id: 'user:acme-design-system',
+      title: 'Acme Design System',
+      category: 'Custom',
+      summary: 'Acme product workspace.',
+      swatches: [],
+      surface: 'web',
+      body: '# Acme Design System\n',
+      source: 'user',
+      status: 'draft',
+      isEditable: true,
+      projectId: 'ds-acme-design-system',
+    };
+    const project: Project = {
+      id: 'ds-acme-design-system',
+      name: 'Acme Design System',
+      skillId: null,
+      designSystemId: system.id,
+      createdAt: 1,
+      updatedAt: 1,
+      metadata: {
+        kind: 'other',
+        importedFrom: 'design-system',
+        entryFile: 'DESIGN.md',
+        sourceFileName: system.id,
+      },
+    };
+    const config: AppConfig = {
+      mode: 'daemon',
+      apiKey: '',
+      baseUrl: '',
+      model: '',
+      agentId: 'agent-1',
+      agentModels: {},
+      skillId: null,
+      designSystemId: null,
+    };
+
+    mocks.fetchDesignSystem.mockResolvedValue(system);
+    mocks.ensureDesignSystemWorkspace.mockResolvedValue({ project, files: [] });
+    mocks.listConversations.mockResolvedValue([
+      { id: 'conv-design-system', projectId: project.id, title: 'Design system', createdAt: 1, updatedAt: 1 },
+    ]);
+
+    render(
+      <I18nProvider initial="zh-CN">
+        <DesignSystemDetailView
+          id={system.id}
+          selectedId={system.id}
+          config={config}
+          agents={[{ id: 'agent-1', name: 'OpenCode', bin: 'opencode', available: true, models: [] }]}
+          onBack={() => {}}
+          onSetDefault={() => {}}
+        />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId('design-system-chat-send')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('design-system-chat-send'));
+
+    await waitFor(() => expect(mocks.streamViaDaemon).toHaveBeenCalledTimes(1));
+    expect(mocks.streamViaDaemon).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: project.id,
+        conversationId: 'conv-design-system',
+        designSystemId: system.id,
+        locale: 'zh-CN',
+      }),
+    );
   });
 });
