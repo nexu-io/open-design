@@ -105,6 +105,19 @@ export function installHistoryRunFinishedHook(args: InstallHistoryRunFinishedHoo
             `[history] recorded revision ${result.revisionId.slice(0, 8)} for run ${run.id} (${result.filesChanged} files, +${result.bytesAdded}/-${result.bytesRemoved} lines)`,
           );
         }
+      } else if (result.kind === 'marker') {
+        // Provenance preserved despite a sibling concurrent run
+        // absorbing our changes. Logged at info level (not debug)
+        // so concurrent-run absorption is observable in normal logs
+        // — it's rare enough not to be noisy and useful to surface
+        // when troubleshooting "why doesn't my run appear in
+        // history with its own commit?"
+        const absorbedSuffix = result.absorbedIntoRevisionId
+          ? ` (absorbed into ${result.absorbedIntoRevisionId.slice(0, 8)})`
+          : '';
+        console.log(
+          `[history] recorded marker revision ${result.revisionId.slice(0, 8)} for run ${run.id}${absorbedSuffix}`,
+        );
       } else if (result.kind === 'not-initialized') {
         console.warn(
           `[history] run ${run.id} finished against project ${run.projectId} but the substrate isn't initialized; skipping commit.`,

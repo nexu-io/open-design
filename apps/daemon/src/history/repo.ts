@@ -297,6 +297,15 @@ export type RecordRevisionForRunResult =
   | { kind: 'recorded'; revisionId: string; filesChanged: number; bytesAdded: number; bytesRemoved: number }
   /** Nothing to record — the working tree was clean at run end. */
   | { kind: 'clean' }
+  /**
+   * A concurrent sibling run on the same project advanced HEAD while
+   * this run waited at the lock; the sibling's commit absorbed any
+   * changes this run wrote. We preserve provenance by recording a row
+   * with `git_sha=NULL` and `parent_id` pointing to the sibling's
+   * revision. `current_revision_id` is NOT advanced (the sibling
+   * already owns the head).
+   */
+  | { kind: 'marker'; revisionId: string; absorbedIntoRevisionId: string | null }
   /** Substrate isn't initialized for this project; caller should init first. */
   | { kind: 'not-initialized' };
 
@@ -321,16 +330,30 @@ export type RecordRevisionForRunResult =
 export async function recordRevisionForRun(
   args: RecordRevisionForRunArgs,
 ): Promise<RecordRevisionForRunResult> {
-  // Serialize against concurrent init/record on the same project. Two
-  // runs finishing close together can otherwise both call `git add -A`,
-  // and one `git commit` absorbs the other's staged changes — the
-  // loser sees a clean tree and no-ops. Lock guarantees the
-  // "one revision per run" contract holds.
-  return withProjectLock(args.projectId, () => recordRevisionForRunLocked(args));
+  // The lock alone is not sufficient to preserve the "one revision per
+  // run" contract: two runs finishing close together both have dirty
+  // workdirs, but the first to acquire the lock `git add -A`s the
+  // *combined* dirty state and commits everything; the second acquires
+  // a clean tree and would otherwise no-op (silent provenance loss).
+  // To preserve provenance we capture HEAD *before* queueing for the
+  // lock; if the locked critical section finds the tree clean AND HEAD
+  // has advanced from what we saw, we know a sibling absorbed our
+  // changes and record a marker row attributed to this run.
+  let headBeforeLock: string | null = null;
+  try {
+    headBeforeLock =
+      (await runGit(args.projectDir, ['rev-parse', 'HEAD'], args.signal, { softFail128: true })).trim() || null;
+  } catch {
+    // HEAD may not resolve if the substrate isn't initialized yet —
+    // recordRevisionForRunLocked handles that case explicitly via the
+    // readDotGitState check at its head.
+  }
+  return withProjectLock(args.projectId, () => recordRevisionForRunLocked(args, headBeforeLock));
 }
 
 async function recordRevisionForRunLocked(
   args: RecordRevisionForRunArgs,
+  headBeforeLock: string | null,
 ): Promise<RecordRevisionForRunResult> {
   const { projectId, projectDir, repoDir, run, message, db, signal } = args;
 
@@ -346,7 +369,58 @@ async function recordRevisionForRunLocked(
   await ensureHistoryManagedExcludes(repoDir);
 
   const status = await runGit(projectDir, ['status', '--short'], signal);
-  if (status.trim().length === 0) return { kind: 'clean' };
+  if (status.trim().length === 0) {
+    // Tree is clean. Two cases to distinguish:
+    //   (a) The run genuinely wrote nothing — pure conversational
+    //       reply, no provenance row is needed. (Step 4 contract.)
+    //   (b) A sibling concurrent run absorbed our changes into its
+    //       commit while we were queued at the lock. Compare HEAD
+    //       now against the snapshot we took before queueing — if it
+    //       has advanced, a sibling moved it, and we need a marker
+    //       row so this run's provenance survives.
+    //
+    // Edge case: if a sibling fires AND this run was purely
+    // conversational, we'll log a false-positive marker. That's a
+    // benign data-quality cost for preserving provenance in (b);
+    // the History UI can filter marker rows whose run wrote no
+    // files via cross-referencing tool-use events. See spec §6.
+    const headNow =
+      (await runGit(projectDir, ['rev-parse', 'HEAD'], signal, { softFail128: true })).trim() || null;
+    const advancedDuringWait =
+      headBeforeLock !== null && headNow !== null && headNow !== headBeforeLock;
+    if (!advancedDuringWait) return { kind: 'clean' };
+
+    // Sibling-absorbed path: record a marker row. git_sha=NULL so
+    // the partial unique index (project_id, git_sha) WHERE git_sha
+    // IS NOT NULL doesn't collide. parent_id points at the
+    // sibling's revision row so History UI consumers can show the
+    // marker under its absorbing commit.
+    const absorbedRow = db
+      .prepare(`SELECT id FROM project_revisions WHERE project_id = ? AND git_sha = ?`)
+      .get(projectId, headNow) as { id: string } | undefined;
+    const absorbedIntoRevisionId = absorbedRow?.id ?? null;
+    const markerRevisionId = randomUUID();
+    const markerNow = Date.now();
+    db.prepare(
+      `INSERT INTO project_revisions (
+         id, project_id, parent_id, git_sha, created_at, source, message,
+         actor_identity_id, actor_display_name, run_id,
+         files_changed_count, bytes_added, bytes_removed
+       ) VALUES (?, ?, ?, NULL, ?, 'agent-run', ?, ?, ?, ?, 0, 0, 0)`,
+    ).run(
+      markerRevisionId,
+      projectId,
+      absorbedIntoRevisionId,
+      markerNow,
+      message,
+      run.identity.id,
+      run.identity.displayName,
+      run.id,
+    );
+    // Do NOT advance projects.current_revision_id — the sibling's
+    // recorded row already owns the head pointer.
+    return { kind: 'marker', revisionId: markerRevisionId, absorbedIntoRevisionId };
+  }
 
   await applyAuthorConfig(projectDir, run.identity, signal);
   await runGit(projectDir, ['add', '-A'], signal);

@@ -435,13 +435,16 @@ describe('recordRevisionForRun', () => {
     expect(firstRow.parent_id).toMatch(/^[0-9a-f-]{36}$/);
   });
 
-  it('serializes concurrent record calls so each run gets its own revision', async () => {
+  it('preserves provenance for both runs when one absorbs the others changes (marker row)', async () => {
     // Two parallel recordRevisionForRun calls against the same project,
-    // each writing a distinct file. Without the per-project lock the
-    // second call sees the tree cleaned by the first call's commit and
-    // returns 'clean' (data loss). With the lock both produce
-    // 'recorded' results because each call observes only its own
-    // changes against a tree the previous call has already committed.
+    // each contributing a distinct file. The lock serializes the commits
+    // to prevent repo corruption, but in the common timing case the
+    // winning commit absorbs BOTH files into one commit. Without the
+    // marker-row mechanism the loser would observe a clean tree and
+    // return 'clean' with no provenance row — silent loss caught by
+    // the P0 reference-deployment exercise (PR #2619). The fix
+    // captures HEAD before the lock and records a `marker` row when
+    // the locked status check finds a clean tree but HEAD has moved.
     writeFileSync(path.join(sandbox.projectDir, 'a.txt'), 'a\n');
     writeFileSync(path.join(sandbox.projectDir, 'b.txt'), 'b\n');
 
@@ -464,25 +467,66 @@ describe('recordRevisionForRun', () => {
       }),
     ]);
 
-    // Exactly one of the two ends up with a 'recorded' result — the
-    // other observes a clean tree because the first commit captured
-    // its work too. That's the expected behavior under the lock: the
-    // serialization point is which commit "wins"; the change set is
-    // preserved either way (no silent data loss).
+    // Exactly one of the two ends up with 'recorded' (the lock winner);
+    // the other ends up with 'marker' (saw clean tree but HEAD moved).
+    // Order is non-deterministic per lock acquisition.
     const kinds = [resA.kind, resB.kind].sort();
-    expect(kinds).toContain('recorded');
+    expect(kinds).toEqual(['marker', 'recorded']);
 
-    // Total revisions for this project = 1 migration (from beforeEach)
-    // + at least one agent-run commit. The second call may or may not
-    // have produced its own commit depending on lock ordering; what
-    // matters is that no data is silently dropped.
-    const totalRevisions = (sandbox.db.prepare(
-      `SELECT COUNT(*) AS n FROM project_revisions WHERE project_id = ?`,
-    ).get(sandbox.projectId) as { n: number }).n;
-    expect(totalRevisions).toBeGreaterThanOrEqual(2);
+    // Total revisions for this project = 1 migration + 1 agent-run + 1 marker = 3.
+    // Provenance preserved: every run has its own row.
+    const rows = sandbox.db
+      .prepare(
+        `SELECT id, source, run_id, git_sha, parent_id
+           FROM project_revisions
+          WHERE project_id = ?
+          ORDER BY created_at`,
+      )
+      .all(sandbox.projectId) as Array<{
+        id: string;
+        source: string;
+        run_id: string | null;
+        git_sha: string | null;
+        parent_id: string | null;
+      }>;
+    expect(rows).toHaveLength(3);
+    // Narrow indexed access for `noUncheckedIndexedAccess` after the length assertion above.
+    const [migrationRow, firstAgentRow, secondAgentRow] = rows as [
+      (typeof rows)[number],
+      (typeof rows)[number],
+      (typeof rows)[number],
+    ];
 
-    // Every staged file is now committed somewhere — the working
-    // tree is clean after both calls finish.
+    // [migration, recorded(run-a or run-b), marker(the other)]
+    expect(migrationRow.source).toBe('migration');
+    expect(firstAgentRow.source).toBe('agent-run');
+    expect(secondAgentRow.source).toBe('agent-run');
+
+    // The two agent-run rows correspond to the two distinct run_ids — no run loses provenance.
+    const agentRunIds = new Set([firstAgentRow.run_id, secondAgentRow.run_id]);
+    expect(agentRunIds).toEqual(new Set(['run-a', 'run-b']));
+
+    // Exactly one agent-run row has a git_sha (the commit); the other is the marker.
+    const agentRunShas = [firstAgentRow.git_sha, secondAgentRow.git_sha];
+    expect(agentRunShas.filter((s) => s !== null)).toHaveLength(1);
+    expect(agentRunShas.filter((s) => s === null)).toHaveLength(1);
+
+    // The marker's parent_id points to the recorded row's id — links
+    // the marker to the commit that absorbed its run's changes so
+    // History UI consumers can render the relationship.
+    const markerRow = rows.find((r) => r.source === 'agent-run' && r.git_sha === null)!;
+    const recordedRow = rows.find((r) => r.source === 'agent-run' && r.git_sha !== null)!;
+    expect(markerRow.parent_id).toBe(recordedRow.id);
+
+    // projects.current_revision_id advances to the recorded row (the
+    // commit that owns HEAD), NOT the marker row.
+    // (We didn't add a `current_revision_id` UPDATE for markers by design.)
+    // The test sandbox doesn't have current_revision_id wired into the
+    // projects table — it's tested separately in the recorded-path test
+    // — so we just assert the recorded row is the latest with a SHA.
+
+    // Subsequent record call against a now-clean tree returns 'clean'
+    // (no HEAD advance during its lock wait → genuine no-op, no marker).
     const cleanProbe = await recordRevisionForRun({
       projectId: sandbox.projectId,
       projectDir: sandbox.projectDir,
