@@ -142,15 +142,31 @@ describe('installHistoryEnsureHook', () => {
     expect(count.n).toBe(0);                                                    // no migration row inserted
   });
 
-  it('an unrelated hook failure does not break ensureProject', async () => {
-    // Install a deliberately-throwing hook directly (bypassing
-    // installHistoryEnsureHook) to verify ensureProject's hook
-    // try/catch wraps the call correctly.
+  it('propagates hook errors instead of swallowing them', async () => {
+    // When OD_GIT_INTEGRATION_ENABLED is on, init failures (git missing,
+    // EACCES on gitdir, SQLite errors) are contract violations — the
+    // user opted into history and expects it to work. ensureProject
+    // must surface those errors rather than returning a silently
+    // broken directory.
     setProjectEnsuredHook(async () => {
       throw new Error('boom');
     });
 
-    const dir = await ensureProject(sandbox.projectsRoot, 'p1');
-    expect(existsSync(dir)).toBe(true);
+    await expect(ensureProject(sandbox.projectsRoot, 'p1')).rejects.toThrow('boom');
+  });
+
+  it('surfaces a real initProjectHistory failure when the substrate cannot be created', async () => {
+    // Forcing initProjectHistory to fail: point reposRoot at a path
+    // that exists as a regular file, so `fs.mkdir(path.dirname(repoDir))`
+    // fails with ENOTDIR. ensureProject must propagate the error.
+    const blockingFile = path.join(sandbox.dataRoot, 'blocked-repos');
+    writeFileSync(blockingFile, 'this-is-a-file-not-a-dir');
+    installHistoryEnsureHook({
+      db: sandbox.db,
+      reposRoot: blockingFile,
+      env: { OD_GIT_INTEGRATION_ENABLED: '1' },
+    });
+
+    await expect(ensureProject(sandbox.projectsRoot, 'p1')).rejects.toThrow();
   });
 });

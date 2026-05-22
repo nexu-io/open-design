@@ -62,9 +62,10 @@ export function resolveProjectDir(projectsRoot, projectId, metadata?) {
 let projectEnsuredHook = null;
 
 /**
- * Register a callback to run after every ensureProject call. Called once
- * at daemon startup by the history feature. Subsequent calls overwrite
- * the previous hook; pass null to detach (mainly for tests).
+ * Register a callback to run after every ensureProject call. Single
+ * slot — subsequent calls overwrite. Hook errors propagate to
+ * ensureProject's caller; the hook owns its own try/catch for any
+ * non-fatal results it wants to swallow.
  */
 export function setProjectEnsuredHook(hook) {
   projectEnsuredHook = hook;
@@ -77,14 +78,7 @@ export async function ensureProject(projectsRoot, projectId, metadata?) {
     await mkdir(dir, { recursive: true });
   }
   if (projectEnsuredHook) {
-    try {
-      await projectEnsuredHook({ projectsRoot, projectId, projectDir: dir, metadata });
-    } catch (err) {
-      // ensureProject's existing contract is "return the directory"; a
-      // hook failure must not break that. The hook is responsible for
-      // its own logging.
-      console.warn(`[projects] ensureProject hook failed for ${projectId}:`, err);
-    }
+    await projectEnsuredHook({ projectsRoot, projectId, projectDir: dir, metadata });
   }
   return dir;
 }
