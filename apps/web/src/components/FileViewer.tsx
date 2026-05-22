@@ -4001,7 +4001,7 @@ function HtmlViewer({
   const drawClickSelectionMode = drawOverlayOpen && drawOverlayMode === 'click' && !manualEditMode;
   // Dual-path bridge detection (Issue #2143):
   // 1. Source scan: checks for daemon-injected markers in the fetched HTML
-  //    (present because fetchProjectFileText → /raw/* → injectPreviewBridgesIntoHtml).
+  //    (present when the daemon serves HTML without X-OD-Source-View header).
   // 2. Transport-level fallback: any HTML file served through the daemon's
   //    /raw/* route receives bridge injection unconditionally. When the daemon
   //    is running the patched project-routes.ts, this is always true.

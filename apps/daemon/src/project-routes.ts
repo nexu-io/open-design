@@ -994,18 +994,15 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       }
 
       const file = await readProjectFile(PROJECTS_DIR, req.params.id, relPath, project?.metadata);
-      // Issue #2143 — when this file is served as the URL-load preview's
-      // top-level document, splice in a tiny route-persist script so SPA
-      // navigation survives the iframe remount that mode toggles trigger.
-      // Skips inline assets (only top-level HTML carries history state) and
-      // anything that already opted in via the artifact-owned bridge.
-      // Issue #2143 — only inject bridges when the caller explicitly requests
-      // a preview-ready document via od_preview=1. The generic /raw/* route
-      // is also used by fetchProjectFileText() for source-view and manual-edit
-      // reads; injecting bridges into those would write scripts into the user's
-      // artifact source when saved. The iframe src appends this param so the
-      // actual rendered preview gets bridges, while source reads stay raw.
-      if (file.mime.startsWith('text/html') && req.query.od_preview === '1') {
+      // Issue #2143 — inject bridges into ALL HTML responses on /raw/* by default.
+      // The preview iframe may navigate to linked pages within the artifact (e.g.
+      // <a href="page2.html">), and those intra-iframe loads don't carry query params.
+      // Header-based gate: browsers performing iframe navigations can't set custom
+      // headers, so they always receive bridges. Only fetchProjectFileText() in the
+      // web app sends X-OD-Source-View, which skips injection to keep source-view and
+      // manual-edit reads byte-for-byte raw. This prevents bridge scripts from leaking
+      // into artifacts when users save from the source editor.
+      if (file.mime.startsWith('text/html') && req.headers['x-od-source-view'] !== '1') {
         const html = file.buffer.toString('utf8');
         const patched = injectPreviewBridgesIntoHtml(html);
         res.type(file.mime).send(patched);

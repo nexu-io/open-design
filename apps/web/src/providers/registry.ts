@@ -1427,7 +1427,7 @@ export async function fetchProjectFileText(
     cacheBustKey == null
       ? url
       : `${url}${url.includes('?') ? '&' : '?'}cacheBust=${encodeURIComponent(String(cacheBustKey))}`;
-  const init: RequestInit = {};
+  const init: RequestInit = { headers: { 'X-OD-Source-View': '1' } };
   if (options?.cache) init.cache = options.cache;
 
   try {
