@@ -3188,6 +3188,30 @@ export async function startServer({
   }
 
   const app = express();
+  // Configure Express's trust-proxy resolution from OD_TRUST_PROXY.
+  // P0-fix #15: actor_source_ip on messages/revisions is durable audit
+  // data, so it must come from a trusted source. With trust-proxy
+  // unset (the default), req.ip is the raw socket peer and forwarded
+  // headers from direct callers are ignored. With trust-proxy set
+  // (e.g., 'loopback' for a same-host Tailscale Serve / nginx proxy,
+  // or a specific CIDR), Express resolves req.ip from the rightmost
+  // forwarded hop coming from a trusted source. Accepted values:
+  //   - 'true' / 'false' → boolean
+  //   - numeric string → hop count
+  //   - 'loopback' | 'linklocal' | 'uniquelocal' → built-in keyword
+  //   - any other string → passed through (Express handles IP/CIDR)
+  const rawTrustProxy = (process.env.OD_TRUST_PROXY ?? '').trim();
+  if (rawTrustProxy.length > 0) {
+    if (rawTrustProxy === 'true') {
+      app.set('trust proxy', true);
+    } else if (rawTrustProxy === 'false') {
+      app.set('trust proxy', false);
+    } else if (/^\d+$/.test(rawTrustProxy)) {
+      app.set('trust proxy', Number.parseInt(rawTrustProxy, 10));
+    } else {
+      app.set('trust proxy', rawTrustProxy);
+    }
+  }
   app.use(express.json({ limit: '4mb' }));
 
   // Plan §3.K1 — bearer-token middleware.

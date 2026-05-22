@@ -66,7 +66,10 @@ describe('upsertMessage stores actor_* columns from attribution', () => {
 
   it('INSERT path populates the actor columns when attribution is provided', () => {
     const req = {
-      headers: { 'x-forwarded-for': '100.113.57.7' },
+      // req.ip is Express's trust-proxy-resolved client IP — what
+      // attributionFromIdentity reads. Forwarded headers are NEVER
+      // parsed by the helper directly (P0-fix #15).
+      ip: '100.113.57.7',
       socket: { remoteAddress: '::1' },
     };
     upsertMessage(db, 'c1', {
@@ -96,7 +99,7 @@ describe('upsertMessage stores actor_* columns from attribution', () => {
       id: 'm-keep',
       role: 'user',
       content: 'first',
-      ...attributionFromIdentity(IDENTITY, { headers: {}, socket: { remoteAddress: '10.0.0.1' } }),
+      ...attributionFromIdentity(IDENTITY, { socket: { remoteAddress: '10.0.0.1' } }),
     });
 
     // Second upsert (e.g., streaming update from the agent) — no identity passed.
@@ -122,7 +125,7 @@ describe('upsertMessage stores actor_* columns from attribution', () => {
       id: 'm-overwrite',
       role: 'user',
       content: 'updated',
-      ...attributionFromIdentity(newerId, { headers: {}, socket: { remoteAddress: '::1' } }),
+      ...attributionFromIdentity(newerId, { socket: { remoteAddress: '::1' } }),
     });
 
     const row = db.prepare(`SELECT actor_identity_id, actor_display_name, actor_source_ip FROM messages WHERE id='m-overwrite'`).get() as MessageRow;
