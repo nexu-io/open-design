@@ -454,8 +454,13 @@ describe('ProjectView daemon reattach restore', () => {
     await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
     expect(capturedOnDelta).not.toBeNull();
 
+    // Stream a delta. persistSoon would schedule a save in 500ms, but the
+    // page is about to be torn down — anything not yet persisted is lost.
     capturedOnDelta!('last buffered chunk');
 
+    // Page reload fires pagehide synchronously while the document is still
+    // alive; the buffered chunk must reach saveMessage with keepalive=true
+    // BEFORE the debounce timer would otherwise fire.
     saveMessage.mockClear();
     window.dispatchEvent(new Event('pagehide'));
 

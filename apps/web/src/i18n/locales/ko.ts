@@ -895,6 +895,8 @@ export const ko: Dict = {
   'designFiles.kindPresentation': '프레젠테이션',
   'designFiles.kindSpreadsheet': '스프레드시트',
   'designFiles.kindBinary': '바이너리 파일',
+  'designFiles.kindFolder': '폴더',
+  'designFiles.folderCount': '{n}개 파일',
   'designFiles.colName': '이름',
   'designFiles.colKind': '종류',
   'designFiles.colModified': '수정일',

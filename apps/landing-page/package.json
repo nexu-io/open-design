@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "astro dev --host 127.0.0.1 --port 17574",
-    "build": "astro check && astro build",
+    "build": "astro check && astro build && tsx scripts/copy-example-html.ts",
     "preview": "astro preview --host 127.0.0.1 --port 17574",
     "previews": "tsx scripts/generate-previews.ts",
     "typecheck": "astro check"

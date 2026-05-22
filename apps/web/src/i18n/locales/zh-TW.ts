@@ -1087,6 +1087,8 @@ export const zhTW: Dict = {
   'designFiles.kindSpreadsheet': '試算表',
   'designFiles.kindLiveArtifact': '即時成品',
   'designFiles.kindBinary': '二進位',
+  'designFiles.kindFolder': '資料夾',
+  'designFiles.folderCount': '{n} 個檔案',
   'designFiles.colName': '名稱',
   'designFiles.colKind': '類型',
   'designFiles.colModified': '修改時間',

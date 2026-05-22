@@ -1293,3 +1293,275 @@ body.sub-page {
   margin: 0;
   max-width: none;
 }
+
+
+/* =========================================================
+ * Skill / template detail page: live preview + share row
+ * =========================================================
+ *
+ * `details > summary` toggles an iframe that renders the canonical
+ * `example.html` (or `preview.html` for live-artifacts). The frame
+ * is loaded lazily — click the summary, that's when the network
+ * request goes out.
+ */
+/*
+ * Click-to-expand interactive preview. The `<summary>` IS the
+ * thumbnail — when collapsed, users see a normal preview image; on
+ * hover the overlay reveals "Click for live preview ↗"; on click the
+ * details element opens, swapping the summary out for an iframe of
+ * the canonical example.html. The iframe's `loading="lazy"` plus the
+ * fact that `<details>` only renders content on open means the
+ * network request fires only when the user actually wants the live
+ * view.
+ */
+.detail-preview-live {
+  display: block;
+}
+.detail-preview-live > summary {
+  cursor: pointer;
+  list-style: none;
+  display: block;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.detail-preview-live > summary::-webkit-details-marker { display: none; }
+.detail-preview-thumb-trigger {
+  position: relative;
+  overflow: hidden;
+}
+.detail-preview-thumb-trigger img {
+  display: block;
+  width: 100%;
+  height: auto;
+  transition: transform 0.4s ease;
+}
+.detail-preview-thumb-trigger:hover img,
+.detail-preview-thumb-trigger:focus-visible img {
+  transform: scale(1.015);
+}
+.detail-preview-thumb-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(21, 20, 15, 0);
+  transition: background 0.18s ease;
+  pointer-events: none;
+}
+.detail-preview-thumb-trigger:hover .detail-preview-thumb-overlay,
+.detail-preview-thumb-trigger:focus-visible .detail-preview-thumb-overlay {
+  background: rgba(21, 20, 15, 0.42);
+}
+.detail-preview-thumb-cta {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--paper);
+  background: var(--coral);
+  padding: 10px 18px;
+  border-radius: 999px;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.detail-preview-thumb-trigger:hover .detail-preview-thumb-cta,
+.detail-preview-thumb-trigger:focus-visible .detail-preview-thumb-cta {
+  opacity: 1;
+  transform: translateY(0);
+}
+/* Once expanded, hide the summary so the iframe takes its place. */
+.detail-preview-live[open] > summary { display: none; }
+.detail-preview-frame-wrap {
+  position: relative;
+  border: 1px solid var(--line);
+  background: var(--paper-warm);
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+}
+.detail-preview-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: white;
+}
+.detail-preview-popout {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid currentColor;
+  padding: 6px 12px;
+  border-radius: 999px;
+  text-decoration: none;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.detail-preview-popout:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/*
+ * Share dialog — replaces the previous inline 6-button row. The
+ * trigger is a `Share ↗` button inside `.detail-actions` (so it has
+ * visual weight equal to the primary CTAs); clicking opens a
+ * `<dialog>` with the canonical share copy ready to copy + a row of
+ * platform jump buttons that just open the vendor's compose page.
+ *
+ * The copy-then-paste flow works around platform pre-fill limits:
+ * LinkedIn / Facebook ignore `text` params, X truncates Chinese
+ * unpredictably, Reddit's title is title-only. Copy-then-paste is
+ * uniformly reliable.
+ */
+.detail-share-dialog {
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  width: min(540px, calc(100vw - 32px));
+  padding: 0;
+  border-radius: 4px;
+  box-shadow: 0 32px 80px rgba(21, 20, 15, 0.32);
+}
+.detail-share-dialog::backdrop {
+  background: rgba(21, 20, 15, 0.42);
+}
+.detail-share-dialog-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 24px 28px 28px;
+  margin: 0;
+}
+.detail-share-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0;
+}
+.detail-share-dialog-head h2 {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 22px;
+  margin: 0;
+}
+.detail-share-dialog-close {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line);
+  background: transparent;
+  border-radius: 50%;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--ink-mute);
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+.detail-share-dialog-close:hover { color: var(--coral); border-color: var(--coral); }
+.detail-share-dialog-lead {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-mute);
+}
+.detail-share-dialog-text {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: var(--paper-warm);
+  padding: 12px 14px;
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink);
+  border-radius: 2px;
+  resize: vertical;
+}
+.detail-share-dialog-text:focus {
+  outline: none;
+  border-color: var(--coral);
+}
+.detail-share-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.detail-share-dialog-actions .btn {
+  flex: 1 1 auto;
+  text-align: center;
+}
+.detail-share-dialog-copy[data-copied],
+.detail-share-dialog-copy-link[data-copied] {
+  background: var(--coral) !important;
+  color: var(--paper) !important;
+  border-color: var(--coral) !important;
+}
+.detail-share-dialog-platforms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-soft);
+}
+.detail-share-dialog-platforms-label {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  margin-right: 4px;
+}
+.detail-share-platform-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--ink);
+  border-radius: 50%;
+  color: var(--ink);
+  text-decoration: none;
+  background: transparent;
+  transition: background 0.12s ease, color 0.12s ease, transform 0.12s ease;
+}
+.detail-share-platform-btn:hover {
+  background: var(--ink);
+  color: var(--paper);
+  transform: translateY(-1px);
+}
+.detail-share-platform-btn svg {
+  display: block;
+}
+/* Visually-hidden helper for screen-reader-only platform names. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The trigger button itself in `.detail-actions` */
+.detail-share-trigger {
+  /* uses existing `.btn .btn-ghost` styling; this just lets future
+   * code target it for analytics or a11y customizations */
+}
+
+@media (max-width: 720px) {
+  .detail-preview-popout { top: 8px; right: 8px; padding: 4px 10px; font-size: 9.5px; }
+  .detail-share-dialog-form { padding: 20px 22px 24px; }
+  .detail-share-dialog-actions { flex-direction: column; }
+}

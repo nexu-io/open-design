@@ -919,6 +919,8 @@ export const uk: Dict = {
   'designFiles.kindPresentation': 'Презентація',
   'designFiles.kindSpreadsheet': 'Електронна таблиця',
   'designFiles.kindBinary': 'Двійковий',
+  'designFiles.kindFolder': 'Папка',
+  'designFiles.folderCount': '{n} файлів',
   'designFiles.colName': 'Назва',
   'designFiles.colKind': 'Тип',
   'designFiles.colModified': 'Змінено',

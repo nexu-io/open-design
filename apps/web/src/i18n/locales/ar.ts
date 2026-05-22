@@ -895,6 +895,8 @@ export const ar: Dict = {
   'designFiles.kindPresentation': 'عرض تقديمي',
   'designFiles.kindSpreadsheet': 'جدول بيانات',
   'designFiles.kindBinary': 'ثنائي',
+  'designFiles.kindFolder': 'مجلد',
+  'designFiles.folderCount': '{n} ملفات',
   'designFiles.colName': 'الاسم',
   'designFiles.colKind': 'النوع',
   'designFiles.colModified': 'آخر تعديل',

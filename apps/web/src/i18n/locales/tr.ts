@@ -882,6 +882,8 @@ export const tr: Dict = {
   'designFiles.kindPresentation': 'Sunum',
   'designFiles.kindSpreadsheet': 'Elektronik tablo',
   'designFiles.kindBinary': 'Binary',
+  'designFiles.kindFolder': 'Klasör',
+  'designFiles.folderCount': '{n} dosya',
   'designFiles.colName': 'Ad',
   'designFiles.colKind': 'Tür',
   'designFiles.colModified': 'Değiştirilme',

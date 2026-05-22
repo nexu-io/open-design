@@ -836,6 +836,8 @@ export const th: Dict = {
   'designFiles.kindSpreadsheet': 'ตารางตัวเลข',
   'designFiles.kindLiveArtifact': 'ตัวแอป Live artifact',
   'designFiles.kindBinary': 'ไฟล์ไบนารี',
+  'designFiles.kindFolder': 'โฟลเดอร์',
+  'designFiles.folderCount': '{n} ไฟล์',
   'designFiles.colName': 'ชื่อ',
   'designFiles.colKind': 'ชนิด',
   'designFiles.colModified': 'ใช้งานล่าสุด',

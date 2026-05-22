@@ -1798,6 +1798,8 @@ export interface Dict {
   'designFiles.kindSpreadsheet': string;
   'designFiles.kindLiveArtifact': string;
   'designFiles.kindBinary': string;
+  'designFiles.kindFolder': string;
+  'designFiles.folderCount': string;
   'designFiles.colName': string;
   'designFiles.colKind': string;
   'designFiles.colModified': string;

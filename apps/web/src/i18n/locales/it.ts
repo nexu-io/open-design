@@ -811,6 +811,8 @@ export const it: Dict = {
   'designFiles.kindPresentation': 'Presentazione',
   'designFiles.kindSpreadsheet': 'Foglio di calcolo',
   'designFiles.kindBinary': 'Binario',
+  'designFiles.kindFolder': 'Cartella',
+  'designFiles.folderCount': '{n} file',
   'designFiles.colName': 'Nome',
   'designFiles.colKind': 'Tipo',
   'designFiles.colModified': 'Modificato il',

@@ -919,6 +919,8 @@ export const fa: Dict = {
   'designFiles.kindSpreadsheet': 'صفحه گسترده',
   'designFiles.kindLiveArtifact': 'مصنوع زنده',
   'designFiles.kindBinary': 'باینری',
+  'designFiles.kindFolder': 'پوشه',
+  'designFiles.folderCount': '{n} فایل',
   'designFiles.colName': 'نام',
   'designFiles.colKind': 'نوع',
   'designFiles.colModified': 'تغییر یافته',

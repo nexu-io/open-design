@@ -895,6 +895,8 @@ export const pl: Dict = {
   'designFiles.kindPresentation': 'Prezentacja',
   'designFiles.kindSpreadsheet': 'Arkusz kalkulacyjny',
   'designFiles.kindBinary': 'Plik binarny',
+  'designFiles.kindFolder': 'Folder',
+  'designFiles.folderCount': '{n} plików',
   'designFiles.colName': 'Nazwa',
   'designFiles.colKind': 'Rodzaj',
   'designFiles.colModified': 'Zmodyfikowano',

@@ -13,6 +13,8 @@
  * not a primary channel like /skills/ or /tutorials/.
  */
 import Layout from '../../_components/sub-page-layout.astro';
+import LazyImg from '../../_components/lazy-img.astro';
+import { imageAsset, imageAssetSrcset } from '../../image-assets';
 import {
   DEFAULT_LOCALE,
   getCommonCopy,
@@ -65,27 +67,38 @@ const OPEN_SOURCE_OFFICIAL_TITLE: Record<LandingLocaleCode, string> = {
 };
 
 /*
- * Imagery sourced directly from the HA repo via raw.githubusercontent.com.
- * This is a temporary CDN — for production polish a follow-up should mirror
- * these PNGs into the same Cloudflare R2 bucket (`open-design-static`) the
- * rest of the marketing site already uses, then route them through Image
- * Resizing for `format=auto` + width-aware variants.
+ * Imagery is hosted on the same Cloudflare R2 bucket as the rest of the
+ * marketing site (`open-design-static`, served via `static.open-design.ai`).
+ * Each `imageAsset()` call routes through `cdn-cgi/image/` so the browser
+ * gets a `format=auto` AVIF / WebP variant at the requested width — same
+ * pipeline used by the homepage hero. The source PNGs live under
+ * `landing/assets/html-anything/`; upload them with the
+ * `~/Downloads/r2-html-anything-orig/upload.sh` script that ships alongside
+ * this PR.
+ *
+ * Banner uses an explicit srcset (mirroring `heroImageSrcset`) because
+ * it's the LCP element on this page; the screenshots below are
+ * `<LazyImg>`-loaded at a single width since they only ever render at
+ * one viewport-fitted size.
  */
-const HA_RAW = `https://raw.githubusercontent.com/${HA_REPO}/main`;
-const banner = `${HA_RAW}/docs/assets/banner.png`;
+const banner = imageAsset('html-anything/banner.png', { width: 2400, quality: 82 });
+const bannerSrcset = imageAssetSrcset(
+  'html-anything/banner.png',
+  [768, 1280, 1920, 2400],
+);
 const shots = {
-  entry:    `${HA_RAW}/docs/screenshots/01-entry-view.png`,
-  picker:   `${HA_RAW}/docs/screenshots/02-template-picker.png`,
-  stream:   `${HA_RAW}/docs/screenshots/03-streaming.png`,
-  exportUI: `${HA_RAW}/docs/screenshots/04-export.png`,
-  deck:     `${HA_RAW}/docs/screenshots/05-deck-mode.png`,
-  hyper:    `${HA_RAW}/docs/screenshots/06-hyperframes.png`,
+  entry:    imageAsset('html-anything/01-entry-view.png',     { width: 1600, quality: 82 }),
+  picker:   imageAsset('html-anything/02-template-picker.png',{ width: 1600, quality: 82 }),
+  stream:   imageAsset('html-anything/03-streaming.png',      { width: 1600, quality: 82 }),
+  exportUI: imageAsset('html-anything/04-export.png',         { width: 1600, quality: 82 }),
+  deck:     imageAsset('html-anything/05-deck-mode.png',      { width: 1600, quality: 82 }),
+  hyper:    imageAsset('html-anything/06-hyperframes.png',    { width: 1600, quality: 82 }),
 };
 const skillShots = {
-  guizang:   `${HA_RAW}/docs/screenshots/skills/deck-guizang-editorial.png`,
-  swiss:     `${HA_RAW}/docs/screenshots/skills/deck-swiss-international.png`,
-  parchment: `${HA_RAW}/docs/screenshots/skills/doc-kami-parchment.png`,
-  poster:    `${HA_RAW}/docs/screenshots/skills/magazine-poster.png`,
+  guizang:   imageAsset('html-anything/skills/deck-guizang-editorial.png',   { width: 1280, quality: 82 }),
+  swiss:     imageAsset('html-anything/skills/deck-swiss-international.png', { width: 1280, quality: 82 }),
+  parchment: imageAsset('html-anything/skills/doc-kami-parchment.png',       { width: 1280, quality: 82 }),
+  poster:    imageAsset('html-anything/skills/magazine-poster.png',          { width: 1280, quality: 82 }),
 };
 
 // Hardcoded snapshot — last manually verified date. Used as fallback
@@ -830,6 +843,8 @@ const jsonLd: Array<Record<string, unknown>> = [
   <figure class="ha-hero-figure">
     <img
       src={banner}
+      srcset={bannerSrcset}
+      sizes="(max-width: 900px) 100vw, 1280px"
       alt={copy.heroAlt}
       width="2400"
       height="1260"
@@ -873,7 +888,7 @@ const jsonLd: Array<Record<string, unknown>> = [
           <h3>{copy.flow[0].headline}</h3>
           <p>{copy.flow[0].body}</p>
           <figure class="step-shot">
-            <img src={shots.entry} alt={copy.flow[0].alt} loading="lazy" decoding="async" />
+            <LazyImg src={shots.entry} alt={copy.flow[0].alt} />
           </figure>
         </div>
       </li>
@@ -884,11 +899,11 @@ const jsonLd: Array<Record<string, unknown>> = [
           <p>{copy.flow[1].body}</p>
           <div class="step-shot-pair">
             <figure>
-              <img src={shots.picker} alt={copy.flow[1].figures?.[0]?.alt ?? copy.flow[1].alt} loading="lazy" decoding="async" />
+              <LazyImg src={shots.picker} alt={copy.flow[1].figures?.[0]?.alt ?? copy.flow[1].alt} />
               <figcaption>{copy.flow[1].figures?.[0]?.caption}</figcaption>
             </figure>
             <figure>
-              <img src={shots.stream} alt={copy.flow[1].figures?.[1]?.alt ?? copy.flow[1].alt} loading="lazy" decoding="async" />
+              <LazyImg src={shots.stream} alt={copy.flow[1].figures?.[1]?.alt ?? copy.flow[1].alt} />
               <figcaption>{copy.flow[1].figures?.[1]?.caption}</figcaption>
             </figure>
           </div>
@@ -900,7 +915,7 @@ const jsonLd: Array<Record<string, unknown>> = [
           <h3>{copy.flow[2].headline}</h3>
           <p>{copy.flow[2].body}</p>
           <figure class="step-shot">
-            <img src={shots.exportUI} alt={copy.flow[2].alt} loading="lazy" decoding="async" />
+            <LazyImg src={shots.exportUI} alt={copy.flow[2].alt} />
           </figure>
         </div>
       </li>
@@ -915,7 +930,7 @@ const jsonLd: Array<Record<string, unknown>> = [
     <ul class="ha-showcase-grid">
       <li>
         <figure>
-          <img src={skillShots.guizang} alt={copy.showcase[0].alt} loading="lazy" decoding="async" />
+          <LazyImg src={skillShots.guizang} alt={copy.showcase[0].alt} />
           <figcaption>
             <span class="ha-showcase-name">deck-guizang-editorial</span>
             <span class="ha-showcase-tag">{copy.showcase[0].tag}</span>
@@ -924,7 +939,7 @@ const jsonLd: Array<Record<string, unknown>> = [
       </li>
       <li>
         <figure>
-          <img src={skillShots.swiss} alt={copy.showcase[1].alt} loading="lazy" decoding="async" />
+          <LazyImg src={skillShots.swiss} alt={copy.showcase[1].alt} />
           <figcaption>
             <span class="ha-showcase-name">deck-swiss-international</span>
             <span class="ha-showcase-tag">{copy.showcase[1].tag}</span>
@@ -933,7 +948,7 @@ const jsonLd: Array<Record<string, unknown>> = [
       </li>
       <li>
         <figure>
-          <img src={skillShots.parchment} alt={copy.showcase[2].alt} loading="lazy" decoding="async" />
+          <LazyImg src={skillShots.parchment} alt={copy.showcase[2].alt} />
           <figcaption>
             <span class="ha-showcase-name">doc-kami-parchment</span>
             <span class="ha-showcase-tag">{copy.showcase[2].tag}</span>
@@ -942,7 +957,7 @@ const jsonLd: Array<Record<string, unknown>> = [
       </li>
       <li>
         <figure>
-          <img src={skillShots.poster} alt={copy.showcase[3].alt} loading="lazy" decoding="async" />
+          <LazyImg src={skillShots.poster} alt={copy.showcase[3].alt} />
           <figcaption>
             <span class="ha-showcase-name">magazine-poster</span>
             <span class="ha-showcase-tag">{copy.showcase[3].tag}</span>
@@ -959,13 +974,13 @@ const jsonLd: Array<Record<string, unknown>> = [
     </p>
     <div class="ha-modes-grid">
       <figure>
-        <img src={shots.deck} alt={copy.modeFigures[0].alt} loading="lazy" decoding="async" />
+        <LazyImg src={shots.deck} alt={copy.modeFigures[0].alt} />
         <figcaption>
           <strong>{copy.modeFigures[0].label}</strong> — {copy.modeFigures[0].body}
         </figcaption>
       </figure>
       <figure>
-        <img src={shots.hyper} alt={copy.modeFigures[1].alt} loading="lazy" decoding="async" />
+        <LazyImg src={shots.hyper} alt={copy.modeFigures[1].alt} />
         <figcaption>
           <strong>{copy.modeFigures[1].label}</strong> — {copy.modeFigures[1].body}
         </figcaption>

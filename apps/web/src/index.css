@@ -10059,6 +10059,29 @@ button.connector-action.is-loading {
   flex: 1 1 auto;
   min-width: 0;
 }
+.df-breadcrumbs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 0 20px 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.df-breadcrumb-btn {
+  all: unset;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-size: 12px;
+  transition: color 120ms cubic-bezier(0.23, 1, 0.32, 1), background 120ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.df-breadcrumb-btn:hover { color: var(--text); background: var(--bg-subtle); }
+.df-breadcrumb-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.df-breadcrumb-segment { display: inline-flex; align-items: center; }
+.df-breadcrumb-sep { padding: 0 2px; color: var(--text-faint); font-size: 11px; user-select: none; }
+.df-breadcrumb-current { padding: 2px 4px; color: var(--text); font-weight: 500; font-size: 12px; }
+.df-dir-row td { cursor: pointer; }
 .df-controls-row .df-actions {
   margin-left: 0;
   display: inline-flex;
@@ -10945,7 +10968,29 @@ button.connector-action.is-loading {
   align-items: center;
   justify-content: center;
   box-shadow: var(--shadow-xs);
+  transition: opacity 120ms ease, background 120ms ease, border-color 120ms ease, color 120ms ease;
 }
+
+@media (hover: hover) and (pointer: fine) {
+  .df-preview-close {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .df-preview:hover .df-preview-close,
+  .df-preview-close:focus-visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+@media (any-pointer: coarse) {
+  .df-preview-close {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
 .df-preview-close:hover {
   background: var(--bg-subtle);
   border-color: var(--border-strong);

@@ -918,6 +918,8 @@ export const ru: Dict = {
   'designFiles.kindSpreadsheet': 'Таблица',
   'designFiles.kindLiveArtifact': 'Live-артефакт',
   'designFiles.kindBinary': 'Бинарный',
+  'designFiles.kindFolder': 'Папка',
+  'designFiles.folderCount': '{n} файлов',
   'designFiles.colName': 'Имя',
   'designFiles.colKind': 'Тип',
   'designFiles.colModified': 'Изменён',

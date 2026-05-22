@@ -784,6 +784,8 @@ export const esES: Dict = {
   'designFiles.kindPresentation': 'Presentación',
   'designFiles.kindSpreadsheet': 'Hoja de cálculo',
   'designFiles.kindBinary': 'Binario',
+  'designFiles.kindFolder': 'Carpeta',
+  'designFiles.folderCount': '{n} archivos',
   'designFiles.colName': 'Nombre',
   'designFiles.colKind': 'Tipo',
   'designFiles.colModified': 'Modificado',

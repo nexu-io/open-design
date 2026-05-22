@@ -895,6 +895,8 @@ export const hu: Dict = {
   'designFiles.kindPresentation': 'Prezentáció',
   'designFiles.kindSpreadsheet': 'Táblázat',
   'designFiles.kindBinary': 'Bináris',
+  'designFiles.kindFolder': 'Mappa',
+  'designFiles.folderCount': '{n} fájl',
   'designFiles.colName': 'Név',
   'designFiles.colKind': 'Típus',
   'designFiles.colModified': 'Módosítva',

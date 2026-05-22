@@ -266,6 +266,10 @@
   margin-top: 0;
   transition: border-color 120ms ease, box-shadow 120ms ease;
 }
+.home-hero__input-card--compact-authoring {
+  max-width: 640px;
+  padding-block: 12px 10px;
+}
 .home-hero__input-card:focus-within {
   border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
   box-shadow: var(--shadow-md);

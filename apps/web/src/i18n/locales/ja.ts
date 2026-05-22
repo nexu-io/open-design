@@ -782,6 +782,8 @@ export const ja: Dict = {
   'designFiles.kindPresentation': 'プレゼンテーション',
   'designFiles.kindSpreadsheet': 'スプレッドシート',
   'designFiles.kindBinary': 'バイナリ',
+  'designFiles.kindFolder': 'フォルダ',
+  'designFiles.folderCount': '{n} ファイル',
   'designFiles.colName': '名前',
   'designFiles.colKind': '種類',
   'designFiles.colModified': '更新日',

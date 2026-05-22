@@ -1868,6 +1868,9 @@ export function ProjectView({
               void (async () => {
                 const preTurn = message.preTurnFileNames;
                 let nextFiles = await refreshProjectFiles();
+                // Use the turn-start snapshot when available so reload
+                // recovers files produced before the artifact write too;
+                // fall back to the current list for legacy messages.
                 const beforeFileNames = new Set(preTurn ?? nextFiles.map((f) => f.name));
                 let recoveredExistingArtifact: ProjectFile | null = null;
                 if (parsedArtifact?.html) {
@@ -3953,6 +3956,9 @@ export function computeProducedFiles(
   return next.filter((f) => !set.has(f.name));
 }
 
+// Reattach with a recovered (on-disk) artifact must still include any
+// other files the turn produced before the artifact write — replacing
+// the diff with a single file was the regression noted on PR #2383.
 export function mergeRecoveredArtifact(
   diff: readonly ProjectFile[],
   recovered: ProjectFile | null,
@@ -4013,6 +4019,9 @@ function createBufferedTextUpdates({
 }: {
   updateMessage: (updater: (prev: ChatMessage) => ChatMessage) => void;
   persistSoon: () => void;
+  // Synchronous flush + persist with a transport that survives page
+  // unload (PUT with keepalive). Invoked by the pagehide handler so the
+  // last buffered chunk isn't lost when the user reloads mid-stream.
   flushAndPersistNow?: () => void;
   onContentDelta?: (delta: string) => void;
 }) {
@@ -4129,6 +4138,8 @@ function createBufferedTextUpdates({
 
   function onPageHide() {
     flush();
+    // persistSoon's 500ms debounce never fires once the document tears
+    // down, so synchronously PUT with keepalive instead.
     flushAndPersistNow?.();
   }
 
