@@ -34,7 +34,8 @@ import type { Dict } from '../../i18n/types';
 // independently of the default-binding mapping.
 export type ChipScenarioPluginId =
   | DefaultScenarioPluginId
-  | 'example-hyperframes';
+  | 'example-hyperframes'
+  | 'example-live-artifact';
 
 export type ChipAction =
   | {
@@ -64,6 +65,7 @@ export type ChipGroup = 'create' | 'migrate';
 export interface CreateChip {
   id: string;
   labelKey: keyof Dict;
+  hint?: string;
   icon: IconName;
   group: 'create';
   action: ChipAction;
@@ -102,7 +104,7 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   },
   {
     id: 'live-artifact',
-    label: 'Live artifact',
+    labelKey: 'homeHero.chip.liveArtifact',
     icon: 'refresh',
     group: 'create',
     hint: 'Build a refreshable artifact backed by connector or local data.',
@@ -222,13 +224,6 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
         targetStack: 'React 18 + Tailwind',
       },
     },
-  },
-  {
-    id: 'folder',
-    icon: 'folder',
-    group: 'migrate',
-    hint: 'Import an existing local folder and continue editing.',
-    action: { kind: 'import-folder' },
   },
   {
     id: 'template',
