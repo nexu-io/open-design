@@ -138,6 +138,7 @@ export type ServiceRuntimeState = "idle" | "running" | "starting" | "stopped" | 
 export type DaemonStatusSnapshot = {
   pid?: number | null;
   state: ServiceRuntimeState;
+  trustedWebOriginPort?: number | null;
   updatedAt?: string;
   url: string | null;
   /**

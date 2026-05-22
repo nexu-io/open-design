@@ -64,6 +64,7 @@ import {
   waitForWebRuntime,
 } from "./sidecar-client.js";
 import { ensureDaemonGateForDesktop } from "./desktop-auth-gate.js";
+import { ensureSharedPortsResolved } from "./shared-ports.js";
 
 type CliOptions = ToolDevOptions & {
   expr?: string;
@@ -622,12 +623,29 @@ async function spawnDesktopRuntime(config: ToolDevConfig, options: CliOptions): 
 async function startDaemon(
   config: ToolDevConfig,
   options: CliOptions,
-  startOptions: { requireDesktopAuth?: boolean } = {},
+  startOptions: { refreshWebOrigin?: boolean; requireDesktopAuth?: boolean } = {},
 ) {
   const daemonPort = parsePortOption(options.daemonPort, "--daemon-port");
-  const existing = await inspectDaemonRuntime(runtimeLookup(config));
+  const webPort = parsePortOption(options.webPort, "--web-port");
+  let existing = await inspectDaemonRuntime(runtimeLookup(config));
+  const shouldRefreshWebOrigin = startOptions.refreshWebOrigin === true && webPort != null;
+  const existingWeb = shouldRefreshWebOrigin
+    ? await inspectWebRuntime(runtimeLookup(config))
+    : null;
+  if (existingWeb?.url != null && !statusMatchesForcedPort(existingWeb.url, webPort)) {
+    throw new Error(`${APP_KEYS.WEB} is already running in namespace ${config.namespace} at ${existingWeb.url}; stop it or choose another namespace`);
+  }
+  const daemonTrustedWebOriginPort = existing?.trustedWebOriginPort ?? null;
   if (existing?.url != null && statusMatchesForcedPort(existing.url, daemonPort)) {
-    return { app: APP_KEYS.DAEMON, created: false, logPath: config.apps.daemon.latestLogPath, status: existing };
+    if (shouldRefreshWebOrigin && daemonTrustedWebOriginPort !== webPort) {
+      if (existingWeb?.url != null) {
+        await stopApp(config, APP_KEYS.WEB);
+      }
+      await stopApp(config, APP_KEYS.DAEMON);
+      existing = null;
+    } else {
+      return { app: APP_KEYS.DAEMON, created: false, logPath: config.apps.daemon.latestLogPath, status: existing };
+    }
   }
   if (existing?.url != null) {
     throw new Error(`${APP_KEYS.DAEMON} is already running in namespace ${config.namespace} at ${existing.url}; stop it or choose another namespace`);
@@ -727,6 +745,7 @@ async function startApp(
         // auth gate via env var so the daemon refuses tokenless imports
         // before desktop has had a chance to register. The introspection
         // case (desktop already running) is handled inside startDaemon.
+        refreshWebOrigin: context.targets?.includes(APP_KEYS.WEB) === true,
         requireDesktopAuth: context.targets?.includes(APP_KEYS.DESKTOP) === true,
       });
     case APP_KEYS.WEB:
@@ -856,6 +875,10 @@ async function status(config: ToolDevConfig, appName: string | undefined) {
 async function restartTargets(config: ToolDevConfig, appName: string | undefined, options: CliOptions) {
   const stopTargets = resolveStopApps(appName);
   const startTargets = resolveStartApps(appName);
+  const existingWeb = startTargets.includes(APP_KEYS.WEB)
+    ? await inspectWebRuntime(runtimeLookup(config))
+    : null;
+  await ensureSharedPortsResolved(startTargets, options, existingWeb?.url);
   return {
     stop: await runSequential(stopTargets, (target) => stopApp(config, target)),
     start: await runSequential(startTargets, (target) => startApp(config, target, options, { targets: startTargets })),
@@ -1012,6 +1035,10 @@ function stopOrderFor(targets: readonly ToolDevAppName[]): ToolDevAppName[] {
 async function runForeground(config: ToolDevConfig, appName: string | undefined, options: CliOptions) {
   const targets = resolveRunApps(appName);
   const foregroundOptions = { ...options, parentPid: process.pid };
+  const existingWeb = targets.includes(APP_KEYS.WEB)
+    ? await inspectWebRuntime(runtimeLookup(config))
+    : null;
+  await ensureSharedPortsResolved(targets, foregroundOptions, existingWeb?.url);
   const started = await runSequential(targets, (target) => startApp(config, target, foregroundOptions, { targets }));
   printRunForegroundResult(started, options);
 
@@ -1058,6 +1085,10 @@ addPortOptions(addSharedOptions(cli.command("start [app]", "Start daemon, web, d
     assertSupportedNodeRuntimeForStart();
     const config = resolveToolDevConfig(options);
     const targets = resolveStartApps(appName);
+    const existingWeb = targets.includes(APP_KEYS.WEB)
+      ? await inspectWebRuntime(runtimeLookup(config))
+      : null;
+    await ensureSharedPortsResolved(targets, options, existingWeb?.url);
     const result = await runSequential(targets, (target) => startApp(config, target, options, { targets }));
     printStartResult(result, options);
   },
