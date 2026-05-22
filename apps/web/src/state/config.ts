@@ -304,6 +304,33 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
       'MiniMax-M2.7',
     ],
   },
+  {
+    // Venice is an OpenAI-compatible gateway that fronts 230+ chat, image,
+    // video, and audio models behind one API key (docs.venice.ai). Using the
+    // Venice protocol (not openai) routes through /api/proxy/venice/stream
+    // so the daemon can inject generate_image / generate_video /
+    // generate_speech tools backed by Venice's own media endpoints.
+    label: 'Venice',
+    protocol: 'venice',
+    baseUrl: 'https://api.venice.ai/api/v1',
+    model: 'gpt-5',
+    models: [
+      'venice-uncensored',
+      'gpt-5',
+      'gpt-5-mini',
+      'gpt-4o',
+      'claude-opus-4-5',
+      'claude-sonnet-4-5',
+      'qwen3-coder-480b',
+      'qwen3-235b',
+      'llama-3.1-405b',
+      'deepseek-v4-pro',
+      'deepseek-r1',
+      'grok-4',
+      'mistral-31-24b',
+      'zai-org-glm-5',
+    ],
+  },
 ];
 
 function normalizePet(input: Partial<PetConfig> | undefined): PetConfig {
@@ -349,6 +376,12 @@ function inferApiProtocol(model: string, baseUrl: string): ApiProtocol {
     // and the BYOK tab UI stay consistent with the protocol the user
     // picked — even though the on-wire shape is OpenAI-compatible.
     if (normalized.includes('senseaudio.cn')) return 'senseaudio';
+    // Same treatment for Venice — wire-compatible with OpenAI, but routing
+    // through /api/proxy/venice/stream lets the daemon inject the
+    // generate_image / generate_video / generate_speech tools that
+    // dispatch against Venice's own /image/generate, /video/queue, and
+    // /audio/speech endpoints.
+    if (normalized.includes('api.venice.ai')) return 'venice';
     return isOpenAICompatible(model, baseUrl) ? 'openai' : 'anthropic';
   } catch {
     // Preserve the rest of the user's settings even if an old saved base URL is

@@ -180,7 +180,7 @@ describe('venice image generation', () => {
       surface: 'image',
       model: 'venice/qwen-edit',
       prompt: 'Make the sky teal.',
-      imageRef: 'ref.png',
+      image: 'ref.png',
       output: 'venice-edit.png',
     });
 
@@ -449,7 +449,7 @@ describe('venice video generation', () => {
       model: 'venice/seedance-2-0-image-to-video',
       aspect: '16:9',
       length: 5,
-      imageRef: 'ref.png',
+      image: 'ref.png',
       prompt: 'Animate the still frame.',
       output: 'venice-i2v.mp4',
     });
