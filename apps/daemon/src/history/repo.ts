@@ -293,25 +293,31 @@ async function initProjectHistoryLocked(
     // in case (b)).
     const revisionId = randomUUID();
     const now = Date.now();
-    db.prepare(
-      `INSERT INTO project_revisions (
-         id, project_id, parent_id, git_sha, created_at, source, message,
-         actor_identity_id, actor_display_name, run_id,
-         files_changed_count, bytes_added, bytes_removed
-       ) VALUES (?, ?, NULL, ?, ?, 'migration', ?, ?, ?, NULL, 0, 0, 0)`,
-    ).run(
-      revisionId,
-      projectId,
-      sha,
-      now,
-      MIGRATION_COMMIT_MESSAGE,
-      identity.id,
-      identity.displayName,
-    );
-    db.prepare(`UPDATE projects SET current_revision_id = ? WHERE id = ?`).run(
-      revisionId,
-      projectId,
-    );
+    // Atomic INSERT + pointer-advance — a crash between these would
+    // leave the row written but `current_revision_id` stale, which is
+    // its own partial-write defect. db.transaction makes them a single
+    // commit; either both land or neither does.
+    db.transaction(() => {
+      db.prepare(
+        `INSERT INTO project_revisions (
+           id, project_id, parent_id, git_sha, created_at, source, message,
+           actor_identity_id, actor_display_name, run_id,
+           files_changed_count, bytes_added, bytes_removed
+         ) VALUES (?, ?, NULL, ?, ?, 'migration', ?, ?, ?, NULL, 0, 0, 0)`,
+      ).run(
+        revisionId,
+        projectId,
+        sha,
+        now,
+        MIGRATION_COMMIT_MESSAGE,
+        identity.id,
+        identity.displayName,
+      );
+      db.prepare(`UPDATE projects SET current_revision_id = ? WHERE id = ?`).run(
+        revisionId,
+        projectId,
+      );
+    })();
     return { kind: 'repaired', revisionId };
   }
   if (state.kind === 'foreign-dir') return { kind: 'foreign-git-collision' };
@@ -357,15 +363,18 @@ async function initProjectHistoryLocked(
   const sha = (await runGit(projectDir, ['rev-parse', 'HEAD'], signal)).trim();
   const revisionId = randomUUID();
   const now = Date.now();
-  db.prepare(
-    `INSERT INTO project_revisions (
-       id, project_id, parent_id, git_sha, created_at, source, message,
-       actor_identity_id, actor_display_name, run_id,
-       files_changed_count, bytes_added, bytes_removed
-     ) VALUES (?, ?, NULL, ?, ?, 'migration', ?, ?, ?, NULL, 0, 0, 0)`,
-  ).run(revisionId, projectId, sha, now, MIGRATION_COMMIT_MESSAGE, identity.id, identity.displayName);
-
-  db.prepare(`UPDATE projects SET current_revision_id = ? WHERE id = ?`).run(revisionId, projectId);
+  // Atomic INSERT + pointer-advance so a crash between can't leave a
+  // half-written substrate (row but stale pointer is its own bug).
+  db.transaction(() => {
+    db.prepare(
+      `INSERT INTO project_revisions (
+         id, project_id, parent_id, git_sha, created_at, source, message,
+         actor_identity_id, actor_display_name, run_id,
+         files_changed_count, bytes_added, bytes_removed
+       ) VALUES (?, ?, NULL, ?, ?, 'migration', ?, ?, ?, NULL, 0, 0, 0)`,
+    ).run(revisionId, projectId, sha, now, MIGRATION_COMMIT_MESSAGE, identity.id, identity.displayName);
+    db.prepare(`UPDATE projects SET current_revision_id = ? WHERE id = ?`).run(revisionId, projectId);
+  })();
 
   return { kind: 'initialized', revisionId };
 }
@@ -457,6 +466,68 @@ async function recordRevisionForRunLocked(
   // be reported dirty and the next commit would absorb runtime scratch.
   await ensureHistoryManagedExcludes(repoDir);
 
+  // Repair-on-retry — analogous to initProjectHistoryLocked's repair
+  // path. Invariant: at the end of the locked critical section, HEAD's
+  // SHA should always have a corresponding `project_revisions` row for
+  // this project (the migration row from init, plus one row per
+  // recorded run). If a prior recordRevisionForRun crashed between its
+  // `git commit` and the SQLite INSERT, HEAD is one commit ahead of
+  // the table — an orphan. The next call would see status='' clean and
+  // (without this check) return 'clean' without ever back-filling the
+  // missing row, leaving history permanently broken.
+  //
+  // Detect the orphan by comparing HEAD's SHA against `project_revisions`.
+  // If absent, back-fill a row pointing at the latest known revision as
+  // its parent and advance `current_revision_id`. The lost run_id from
+  // the crashed prior call cannot be recovered, so the back-fill row
+  // sets run_id=NULL and uses a marker commit message.
+  const headForRepair =
+    (await runGit(projectDir, ['rev-parse', 'HEAD'], signal, { softFail128: true })).trim() || null;
+  if (headForRepair) {
+    const existingForHead = db
+      .prepare(
+        `SELECT id FROM project_revisions
+          WHERE project_id = ? AND git_sha = ?
+          LIMIT 1`,
+      )
+      .get(projectId, headForRepair) as { id: string } | undefined;
+    if (!existingForHead) {
+      const latestRow = db
+        .prepare(
+          `SELECT id FROM project_revisions
+            WHERE project_id = ? AND git_sha IS NOT NULL
+            ORDER BY created_at DESC LIMIT 1`,
+        )
+        .get(projectId) as { id: string } | undefined;
+      const orphanRevisionId = randomUUID();
+      const orphanNow = Date.now();
+      // Atomic INSERT + pointer-advance — a crash mid-pair would re-
+      // create the same partial-write defect we're here to repair.
+      db.transaction(() => {
+        db.prepare(
+          `INSERT INTO project_revisions (
+             id, project_id, parent_id, git_sha, created_at, source, message,
+             actor_identity_id, actor_display_name, run_id,
+             files_changed_count, bytes_added, bytes_removed
+           ) VALUES (?, ?, ?, ?, ?, 'agent-run', ?, ?, ?, NULL, 0, 0, 0)`,
+        ).run(
+          orphanRevisionId,
+          projectId,
+          latestRow?.id ?? null,
+          headForRepair,
+          orphanNow,
+          '(recovered: orphan commit from prior crashed agent run)',
+          run.identity.id,
+          run.identity.displayName,
+        );
+        db.prepare(`UPDATE projects SET current_revision_id = ? WHERE id = ?`).run(
+          orphanRevisionId,
+          projectId,
+        );
+      })();
+    }
+  }
+
   const status = await runGit(projectDir, ['status', '--short'], signal);
   if (status.trim().length === 0) {
     // Tree is clean. Two cases to distinguish:
@@ -535,28 +606,36 @@ async function recordRevisionForRunLocked(
 
   const revisionId = randomUUID();
   const now = Date.now();
-  db.prepare(
-    `INSERT INTO project_revisions (
-       id, project_id, parent_id, git_sha, created_at, source, message,
-       actor_identity_id, actor_display_name, run_id,
-       files_changed_count, bytes_added, bytes_removed
-     ) VALUES (?, ?, ?, ?, ?, 'agent-run', ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    revisionId,
-    projectId,
-    parentId,
-    sha,
-    now,
-    message,
-    run.identity.id,
-    run.identity.displayName,
-    run.id,
-    stats.filesChanged,
-    stats.bytesAdded,
-    stats.bytesRemoved,
-  );
-
-  db.prepare(`UPDATE projects SET current_revision_id = ? WHERE id = ?`).run(revisionId, projectId);
+  // Atomic INSERT + pointer-advance — without the transaction, a crash
+  // between the two statements would leave a row in `project_revisions`
+  // with `projects.current_revision_id` still pointing at the previous
+  // revision (stale pointer / un-pointed row). db.transaction makes
+  // them a single commit; either both land or neither does. This is
+  // the same partial-multi-write defect class as the orphan-HEAD case
+  // we back-fill at function entry, applied to the SQL-write boundary.
+  db.transaction(() => {
+    db.prepare(
+      `INSERT INTO project_revisions (
+         id, project_id, parent_id, git_sha, created_at, source, message,
+         actor_identity_id, actor_display_name, run_id,
+         files_changed_count, bytes_added, bytes_removed
+       ) VALUES (?, ?, ?, ?, ?, 'agent-run', ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      revisionId,
+      projectId,
+      parentId,
+      sha,
+      now,
+      message,
+      run.identity.id,
+      run.identity.displayName,
+      run.id,
+      stats.filesChanged,
+      stats.bytesAdded,
+      stats.bytesRemoved,
+    );
+    db.prepare(`UPDATE projects SET current_revision_id = ? WHERE id = ?`).run(revisionId, projectId);
+  })();
 
   return {
     kind: 'recorded',

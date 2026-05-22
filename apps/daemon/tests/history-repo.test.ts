@@ -440,6 +440,116 @@ describe('recordRevisionForRun', () => {
     expect(count.n).toBe(1);
   });
 
+  it('backfills an orphan HEAD revision when a prior call crashed between git commit and the DB INSERT', async () => {
+    // P0-fix #14 — invariant: at the end of recordRevisionForRunLocked,
+    // HEAD's SHA always has a corresponding project_revisions row. If
+    // a prior call's git commit landed but its SQLite INSERT failed
+    // (transient error or process crash), HEAD is one commit ahead of
+    // the table. Without the orphan-backfill check the next call sees
+    // status='' clean, headBeforeLock === headNow, and returns 'clean'
+    // — the orphan stays orphan forever and provenance is permanently
+    // broken for that commit.
+    //
+    // This test simulates the boundary-4 crash directly: create the
+    // orphan commit via git (no row in the table for it), then call
+    // recordRevisionForRun and assert the back-fill row was inserted
+    // with the right linkage.
+
+    // Discover the migration row that was inserted by beforeEach's init
+    const migrationRow = sandbox.db.prepare(
+      `SELECT id, git_sha FROM project_revisions WHERE project_id = ? AND source = 'migration'`,
+    ).get(sandbox.projectId) as { id: string; git_sha: string };
+    expect(migrationRow).toBeDefined();
+
+    // Simulate the boundary-4 state: make an extra commit at HEAD
+    // (the "orphan") that NO project_revisions row references.
+    writeFileSync(path.join(sandbox.projectDir, 'orphan-from-crashed-run.txt'), 'a\n');
+    execFileSync(
+      'git',
+      [`--git-dir=${sandbox.repoDir}`, `--work-tree=${sandbox.projectDir}`, 'add', '-A'],
+      { stdio: 'ignore' },
+    );
+    execFileSync(
+      'git',
+      [`--git-dir=${sandbox.repoDir}`, `--work-tree=${sandbox.projectDir}`,
+       '-c', 'user.email=crashed@test.local', '-c', 'user.name=crashed',
+       'commit', '-m', 'this commit lost its DB write'],
+      { stdio: 'ignore' },
+    );
+    const orphanSha = execFileSync('git', [`--git-dir=${sandbox.repoDir}`, 'rev-parse', 'HEAD']).toString().trim();
+    expect(orphanSha).not.toBe(migrationRow.git_sha);
+    // Confirm the orphan really has no row before we call recordRevisionForRun
+    const preExisting = sandbox.db.prepare(
+      `SELECT id FROM project_revisions WHERE project_id = ? AND git_sha = ?`,
+    ).get(sandbox.projectId, orphanSha) as { id: string } | undefined;
+    expect(preExisting).toBeUndefined();
+
+    // Now call recordRevisionForRun with a CLEAN tree (no new file
+    // changes). The orphan-backfill check should fire before the
+    // status check and insert the missing row.
+    const result = await recordRevisionForRun({
+      projectId: sandbox.projectId,
+      projectDir: sandbox.projectDir,
+      repoDir: sandbox.repoDir,
+      run: { id: 'run-after-crash', identity: TEST_IDENTITY },
+      message: 'this run had no file changes',
+      db: sandbox.db,
+    });
+
+    // The tree truly is clean for this call (we already committed the
+    // orphan file above; nothing new to commit now), so the return is
+    // 'clean'. The back-fill happened as a side-effect.
+    expect(result.kind).toBe('clean');
+
+    // The orphan SHA now has a row
+    const backfilled = sandbox.db.prepare(
+      `SELECT id, source, parent_id, git_sha, actor_identity_id, actor_display_name, run_id, files_changed_count, message
+         FROM project_revisions WHERE project_id = ? AND git_sha = ?`,
+    ).get(sandbox.projectId, orphanSha) as {
+      id: string;
+      source: string;
+      parent_id: string | null;
+      git_sha: string;
+      actor_identity_id: string;
+      actor_display_name: string;
+      run_id: string | null;
+      files_changed_count: number;
+      message: string;
+    };
+    expect(backfilled).toBeDefined();
+    expect(backfilled.source).toBe('agent-run');
+    // parent_id points at the previous latest row (the migration row)
+    expect(backfilled.parent_id).toBe(migrationRow.id);
+    expect(backfilled.actor_identity_id).toBe('local:default');
+    // The original run_id from the crashed call is unrecoverable
+    expect(backfilled.run_id).toBeNull();
+    // Marker message indicates recovery
+    expect(backfilled.message).toContain('recovered');
+    expect(backfilled.files_changed_count).toBe(0);
+
+    // projects.current_revision_id now points at the back-filled row
+    const proj = sandbox.db.prepare(`SELECT current_revision_id FROM projects WHERE id = 'p1'`).get() as { current_revision_id: string };
+    expect(proj.current_revision_id).toBe(backfilled.id);
+
+    // Total rows: migration + orphan-backfill
+    const count = sandbox.db.prepare(`SELECT COUNT(*) AS n FROM project_revisions WHERE project_id = 'p1'`).get() as { n: number };
+    expect(count.n).toBe(2);
+
+    // A subsequent recordRevisionForRun on a still-clean tree is a
+    // pure no-op — HEAD now has its row, no orphan to repair.
+    const secondCall = await recordRevisionForRun({
+      projectId: sandbox.projectId,
+      projectDir: sandbox.projectDir,
+      repoDir: sandbox.repoDir,
+      run: { id: 'run-after-backfill', identity: TEST_IDENTITY },
+      message: 'still clean',
+      db: sandbox.db,
+    });
+    expect(secondCall.kind).toBe('clean');
+    const finalCount = sandbox.db.prepare(`SELECT COUNT(*) AS n FROM project_revisions WHERE project_id = 'p1'`).get() as { n: number };
+    expect(finalCount.n).toBe(2);
+  });
+
   it('treats a tree where only .od-skills/ changed as clean (runtime scratch is excluded)', async () => {
     // The daemon stages active skills into <cwd>/.od-skills/ before
     // each agent run — that's pure runtime scratch and should never
