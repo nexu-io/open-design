@@ -32,6 +32,14 @@ export interface ChatRequest {
   attachments?: string[];
   commentAttachments?: ChatCommentAttachment[];
   model?: string | null;
+  // Per-turn default media models picked in the chat composer. When set, the
+  // daemon injects them as OD_DEFAULT_IMAGE_MODEL / OD_DEFAULT_VIDEO_MODEL /
+  // OD_DEFAULT_AUDIO_MODEL into the spawned agent's env so `od media generate`
+  // uses them when the agent omits --model. These are defaults only: an
+  // explicit --model (i.e. the user named a model in chat) still wins.
+  imageModel?: string | null;
+  videoModel?: string | null;
+  audioModel?: string | null;
   reasoning?: string | null;
   /** UI locale selected by the client, used by prompt composition for user-visible generated UI. */
   locale?: string;

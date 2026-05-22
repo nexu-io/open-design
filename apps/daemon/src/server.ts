@@ -9030,6 +9030,7 @@ export async function startServer({
     locale,
     connectedExternalMcp,
     appliedPluginSnapshotId,
+    defaultMediaModels,
   }) => {
     const project =
       typeof projectId === 'string' && projectId
@@ -9486,13 +9487,28 @@ export async function startServer({
       userInstructions,
       projectInstructions,
     });
+    // Composer-selected default media models for this turn. The daemon also
+    // injects these as OD_DEFAULT_*_MODEL env so `od media generate` uses them
+    // when --model is omitted; this block tells the agent to actually omit
+    // --model (rather than picking its own) unless the user named a model.
+    const mediaDefaultLines = [];
+    if (defaultMediaModels?.image)
+      mediaDefaultLines.push(`- image: \`${defaultMediaModels.image}\``);
+    if (defaultMediaModels?.video)
+      mediaDefaultLines.push(`- video: \`${defaultMediaModels.video}\``);
+    if (defaultMediaModels?.audio)
+      mediaDefaultLines.push(`- audio: \`${defaultMediaModels.audio}\``);
+    const finalPrompt =
+      mediaDefaultLines.length > 0
+        ? `${prompt}\n\n## Default media models (composer-selected)\n\nThe user picked default media models for this turn:\n${mediaDefaultLines.join('\n')}\n\nWhen you generate media and the user has NOT named a specific model in their message, run \`"$OD_NODE_BIN" "$OD_BIN" media generate --surface <image|video|audio>\` WITHOUT a \`--model\` flag — the daemon will apply the matching default above. Only pass \`--model <id>\` when the user explicitly asked for a particular model.`
+        : prompt;
     // The chat handler also needs to know where the active skill lives
     // on disk so it can stage a per-project copy of its side files
     // before spawning the agent. Returning that here avoids a second
     // `listSkills()` scan in `startChatRun`. critiqueShouldRun threads
     // the same panel-eligibility decision down to the spawn-path
     // orchestrator gate so prompt and orchestrator stay in lockstep.
-    return { prompt, activeSkillDir, activeSkillDirs, critiqueShouldRun };
+    return { prompt: finalPrompt, activeSkillDir, activeSkillDirs, critiqueShouldRun };
   };
 
   // Plan §3.I1 / §3.D / spec §10.1: fire the pipeline schedule on a
@@ -9587,6 +9603,9 @@ export async function startServer({
       attachments = [],
       commentAttachments = [],
       model,
+      imageModel,
+      videoModel,
+      audioModel,
       reasoning,
       locale,
       research,
@@ -9836,6 +9855,11 @@ export async function startServer({
         // prompt composer can splice in `## Active stage` blocks.
         // Default ON; set OD_BUNDLED_ATOM_PROMPTS=0 to opt out.
         appliedPluginSnapshotId: run?.appliedPluginSnapshotId ?? null,
+        defaultMediaModels: {
+          image: typeof imageModel === 'string' ? imageModel.trim() : '',
+          video: typeof videoModel === 'string' ? videoModel.trim() : '',
+          audio: typeof audioModel === 'string' ? audioModel.trim() : '',
+        },
       });
 
     // Make skill side files reachable through three layers, in order of
@@ -10332,6 +10356,18 @@ export async function startServer({
       OD_BIN,
       OD_NODE_BIN,
       OD_DAEMON_URL: daemonUrl,
+      // Composer-selected default media models for this turn. `od media
+      // generate` falls back to these when the agent omits --model, so a
+      // normal agent chat can set a default without the agent knowing the id.
+      ...(typeof imageModel === 'string' && imageModel.trim()
+        ? { OD_DEFAULT_IMAGE_MODEL: imageModel.trim() }
+        : {}),
+      ...(typeof videoModel === 'string' && videoModel.trim()
+        ? { OD_DEFAULT_VIDEO_MODEL: videoModel.trim() }
+        : {}),
+      ...(typeof audioModel === 'string' && audioModel.trim()
+        ? { OD_DEFAULT_AUDIO_MODEL: audioModel.trim() }
+        : {}),
       ...(typeof projectId === 'string' && projectId && cwd
         ? {
             OD_PROJECT_ID: projectId,

@@ -302,6 +302,15 @@ interface Props {
   onChangeByokVideoModel?: (model: string) => void;
   byokAudioModel?: string;
   onChangeByokAudioModel?: (model: string) => void;
+  // Normal agent chats (Claude Code / Codex) get the same media-model picker,
+  // wired to per-turn defaults the daemon injects as OD_DEFAULT_*_MODEL env.
+  agentMediaPickerEnabled?: boolean;
+  imageModel?: string;
+  onChangeImageModel?: (model: string) => void;
+  videoModel?: string;
+  onChangeVideoModel?: (model: string) => void;
+  audioModel?: string;
+  onChangeAudioModel?: (model: string) => void;
   composerFooterAccessory?: ReactNode;
 }
 
@@ -362,6 +371,13 @@ export function ChatPane({
   onChangeByokVideoModel,
   byokAudioModel,
   onChangeByokAudioModel,
+  agentMediaPickerEnabled,
+  imageModel,
+  onChangeImageModel,
+  videoModel,
+  onChangeVideoModel,
+  audioModel,
+  onChangeAudioModel,
   composerFooterAccessory,
 }: Props) {
   const t = useT();
@@ -971,6 +987,13 @@ export function ChatPane({
             onChangeByokVideoModel={onChangeByokVideoModel}
             byokAudioModel={byokAudioModel}
             onChangeByokAudioModel={onChangeByokAudioModel}
+            agentMediaPickerEnabled={agentMediaPickerEnabled}
+            imageModel={imageModel}
+            onChangeImageModel={onChangeImageModel}
+            videoModel={videoModel}
+            onChangeVideoModel={onChangeVideoModel}
+            audioModel={audioModel}
+            onChangeAudioModel={onChangeAudioModel}
             currentSkillId={currentSkillId}
             onProjectSkillChange={onProjectSkillChange}
             pinnedPluginId={activePluginSnapshot?.pluginId ?? null}

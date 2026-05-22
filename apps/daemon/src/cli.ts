@@ -483,14 +483,26 @@ async function runMediaGenerate(rawArgs) {
     console.error('--surface must be one of: image | video | audio');
     process.exit(2);
   }
-  if (!flags.model) {
-    console.error('--model required (see http://<daemon>/api/media/models)');
+  // Model resolution: an explicit --model wins (the user named a model). When
+  // omitted, fall back to the composer-selected default the daemon injected
+  // as OD_DEFAULT_<SURFACE>_MODEL on spawn. This lets a normal agent chat set
+  // a default media model without the agent having to know the id.
+  const ENV_DEFAULT_BY_SURFACE = {
+    image: 'OD_DEFAULT_IMAGE_MODEL',
+    video: 'OD_DEFAULT_VIDEO_MODEL',
+    audio: 'OD_DEFAULT_AUDIO_MODEL',
+  };
+  const model = flags.model || process.env[ENV_DEFAULT_BY_SURFACE[surface]];
+  if (!model) {
+    console.error(
+      `--model required (or set ${ENV_DEFAULT_BY_SURFACE[surface]}; see http://<daemon>/api/media/models)`,
+    );
     process.exit(2);
   }
 
   const body = {
     surface,
-    model: flags.model,
+    model,
     prompt: flags.prompt,
     output: flags.output,
     aspect: flags.aspect,
@@ -757,6 +769,9 @@ function printMediaHelp() {
 Required:
   --surface  image | video | audio
   --model    Model id from /api/media/models (e.g. gpt-image-2, seedance-2, suno-v5).
+             Optional when the daemon injected a composer-selected default via
+             OD_DEFAULT_IMAGE_MODEL / OD_DEFAULT_VIDEO_MODEL / OD_DEFAULT_AUDIO_MODEL;
+             an explicit --model still overrides that default.
   --project  Project id. Auto-resolved from OD_PROJECT_ID when invoked by the daemon.
 
 Common options:

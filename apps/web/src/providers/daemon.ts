@@ -178,6 +178,12 @@ export interface DaemonStreamOptions {
   // optional; the daemon validates them against the agent's declared
   // options and falls back to the CLI default when missing.
   model?: string | null;
+  // Composer-selected default media models for this turn. Forwarded to the
+  // daemon, which injects them as OD_DEFAULT_*_MODEL env so `od media
+  // generate` uses them when the agent omits --model.
+  imageModel?: string | null;
+  videoModel?: string | null;
+  audioModel?: string | null;
   reasoning?: string | null;
   research?: ResearchOptions;
   context?: RunContextSelection;
@@ -234,6 +240,9 @@ export async function streamViaDaemon({
   attachments,
   commentAttachments,
   model,
+  imageModel,
+  videoModel,
+  audioModel,
   reasoning,
   research,
   context,
@@ -265,6 +274,9 @@ export async function streamViaDaemon({
     attachments: attachments ?? [],
     commentAttachments: commentAttachments ?? [],
     model: model ?? null,
+    ...(imageModel ? { imageModel } : {}),
+    ...(videoModel ? { videoModel } : {}),
+    ...(audioModel ? { audioModel } : {}),
     reasoning: reasoning ?? null,
     locale,
     ...(context ? { context } : {}),

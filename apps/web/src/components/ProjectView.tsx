@@ -524,6 +524,13 @@ export function ProjectView({
   // override; empty means "use the catalogue default for that surface".
   const [byokVideoModelOverride, setByokVideoModelOverride] = useState<string>('');
   const [byokAudioModelOverride, setByokAudioModelOverride] = useState<string>('');
+  // Per-session default media models for NORMAL agent chats (Claude Code /
+  // Codex). Forwarded to the daemon, which injects them as OD_DEFAULT_*_MODEL
+  // env so `od media generate` uses them when the agent omits --model. Empty
+  // means "no default — the agent picks / explores a model itself".
+  const [imageModelOverride, setImageModelOverride] = useState<string>('');
+  const [videoModelOverride, setVideoModelOverride] = useState<string>('');
+  const [audioModelOverride, setAudioModelOverride] = useState<string>('');
   // `closed` → no surface; `review` → read-only saved-state panel with a
   // preview + reopen-to-edit action (#1822); `edit` → the textarea editor.
   const [instructionsMode, setInstructionsMode] = useState<'closed' | 'review' | 'edit'>('closed');
@@ -2480,6 +2487,9 @@ export function ProjectView({
           commentAttachments,
           research: meta?.research,
           model: choice?.model ?? null,
+          imageModel: imageModelOverride || null,
+          videoModel: videoModelOverride || null,
+          audioModel: audioModelOverride || null,
           reasoning: choice?.reasoning ?? null,
           locale,
           onRunCreated,
@@ -2639,6 +2649,9 @@ export function ProjectView({
       byokImageModelOverride,
       byokVideoModelOverride,
       byokAudioModelOverride,
+      imageModelOverride,
+      videoModelOverride,
+      audioModelOverride,
     ],
   );
 
@@ -3802,6 +3815,13 @@ export function ProjectView({
               onChangeByokVideoModel={setByokVideoModelOverride}
               byokAudioModel={byokAudioModelOverride}
               onChangeByokAudioModel={setByokAudioModelOverride}
+              agentMediaPickerEnabled={config.mode === 'daemon'}
+              imageModel={imageModelOverride}
+              onChangeImageModel={setImageModelOverride}
+              videoModel={videoModelOverride}
+              onChangeVideoModel={setVideoModelOverride}
+              audioModel={audioModelOverride}
+              onChangeAudioModel={setAudioModelOverride}
               projectMetadata={project.metadata}
               onProjectMetadataChange={(metadata) => {
                 onProjectChange({ ...project, metadata });

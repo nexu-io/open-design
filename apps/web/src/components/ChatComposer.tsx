@@ -147,6 +147,18 @@ interface Props {
   onChangeByokVideoModel?: (model: string) => void;
   byokAudioModel?: string;
   onChangeByokAudioModel?: (model: string) => void;
+  // Normal agent chats (Claude Code / Codex) reuse the same picker. The
+  // selection becomes a per-turn default the daemon injects as
+  // OD_DEFAULT_*_MODEL env so `od media generate` uses it when the agent
+  // omits --model. Gated on agentMediaPickerEnabled so it only shows for
+  // real local-agent chats, not BYOK tabs or other modes.
+  agentMediaPickerEnabled?: boolean;
+  imageModel?: string;
+  onChangeImageModel?: (model: string) => void;
+  videoModel?: string;
+  onChangeVideoModel?: (model: string) => void;
+  audioModel?: string;
+  onChangeAudioModel?: (model: string) => void;
   currentSkillId?: string | null;
   onProjectSkillChange?: (skillId: string | null) => void;
   // Set when the project was created with a plugin already pinned
@@ -202,6 +214,7 @@ function ByokMediaModelSelect({
   value,
   onChange,
   models,
+  preferProvider,
 }: {
   testid: string;
   iconName: IconName;
@@ -209,6 +222,10 @@ function ByokMediaModelSelect({
   value: string;
   onChange: (model: string) => void;
   models: MediaModel[];
+  /** When set, the empty-state "(default)" label names this provider's model
+   *  (used by the SenseAudio BYOK chat, whose empty default routes to its own
+   *  model). When omitted (normal agent chats) the registry default is named. */
+  preferProvider?: string;
 }) {
   // A custom button-list dropdown rather than a native <select>. A native
   // select nested in an absolutely-positioned popover misbehaves in Electron:
@@ -224,7 +241,9 @@ function ByokMediaModelSelect({
   // Showing gpt-image-2 here misled users into thinking it was selected when
   // the empty default actually routed to senseaudio-image-2.0.
   const defaultModel =
-    models.find((m) => m.provider === 'senseaudio')
+    (preferProvider
+      ? models.find((m) => m.provider === preferProvider)
+      : undefined)
     ?? models.find((m) => m.default)
     ?? models[0];
   const selected = models.find((m) => m.id === value);
@@ -365,6 +384,7 @@ function ByokMediaModelsPopover({
   onChangeVideo,
   audioModel,
   onChangeAudio,
+  preferProvider,
 }: {
   label: string;
   imageLabel: string;
@@ -376,6 +396,7 @@ function ByokMediaModelsPopover({
   onChangeVideo?: (model: string) => void;
   audioModel: string;
   onChangeAudio?: (model: string) => void;
+  preferProvider?: string;
 }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -456,6 +477,7 @@ function ByokMediaModelsPopover({
             value={imageModel}
             onChange={onChangeImage}
             models={IMAGE_MODELS}
+            preferProvider={preferProvider}
           />
           {onChangeVideo ? (
             <ByokMediaModelSelect
@@ -465,6 +487,7 @@ function ByokMediaModelsPopover({
               value={videoModel}
               onChange={onChangeVideo}
               models={VIDEO_MODELS}
+              preferProvider={preferProvider}
             />
           ) : null}
           {onChangeAudio ? (
@@ -479,6 +502,7 @@ function ByokMediaModelsPopover({
                 ...AUDIO_MODELS_BY_KIND.music,
                 ...AUDIO_MODELS_BY_KIND.sfx,
               ]}
+              preferProvider={preferProvider}
             />
           ) : null}
         </div>
@@ -516,6 +540,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       onChangeByokVideoModel,
       byokAudioModel,
       onChangeByokAudioModel,
+      agentMediaPickerEnabled = false,
+      imageModel,
+      onChangeImageModel,
+      videoModel,
+      onChangeVideoModel,
+      audioModel,
+      onChangeAudioModel,
       currentSkillId = null,
       onProjectSkillChange,
       pinnedPluginId = null,
@@ -1564,6 +1595,29 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               onChangeVideo={onChangeByokVideoModel}
               audioModel={byokAudioModel ?? ''}
               onChangeAudio={onChangeByokAudioModel}
+              preferProvider="senseaudio"
+            />
+          ) : null}
+          {/* Normal agent chats (Claude Code / Codex): same registry-wide
+              picker, but the selection is a per-turn default the daemon
+              injects as OD_DEFAULT_*_MODEL env. Hidden when the SenseAudio
+              BYOK picker above is active so there is only one picker. */}
+          {agentMediaPickerEnabled &&
+          byokApiProtocol !== 'senseaudio' &&
+          onChangeImageModel &&
+          onChangeVideoModel &&
+          onChangeAudioModel ? (
+            <ByokMediaModelsPopover
+              label={t('settings.byokMediaModels')}
+              imageLabel={t('settings.byokImageModel')}
+              videoLabel={t('settings.byokVideoModel')}
+              audioLabel={t('settings.byokAudioModel')}
+              imageModel={imageModel ?? ''}
+              onChangeImage={onChangeImageModel}
+              videoModel={videoModel ?? ''}
+              onChangeVideo={onChangeVideoModel}
+              audioModel={audioModel ?? ''}
+              onChangeAudio={onChangeAudioModel}
             />
           ) : null}
           {/*
