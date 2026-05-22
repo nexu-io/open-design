@@ -4332,7 +4332,7 @@ export async function persistConfigAndRunOrbit(
       daemonProviders: options?.daemonProviders,
     });
   }
-  await syncConfigToDaemon(config, { throwOnError: true });
+  await syncConfigToDaemon(config, { throwOnError: true, propagateWriteErrors: true });
   const response = await fetch('/api/orbit/run', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

@@ -800,7 +800,7 @@ export class DaemonConfigWriteError extends Error {
 
 export async function syncConfigToDaemon(
   config: AppConfig,
-  options?: { throwOnError?: boolean },
+  options?: { throwOnError?: boolean; propagateWriteErrors?: boolean },
 ): Promise<void> {
   const prefs: AppConfigPrefs = {
     onboardingCompleted: config.onboardingCompleted,
@@ -824,16 +824,18 @@ export async function syncConfigToDaemon(
       body: JSON.stringify(prefs),
     });
     if (!response.ok) {
-      // Any non-OK response from the daemon must propagate so the UI
-      // does not show "Saved" while the write actually failed.
+      // Daemon rejected the write; only propagate when the caller explicitly
+      // opts in via propagateWriteErrors.  Fire-and-forget callers (void)
+      // must not get unhandled rejections — they already tolerate the daemon
+      // being unreachable, so a rejected write is the same resilience class.
       const body = await response.json().catch(() => ({}) as () => Record<string, unknown>);
-      throw new DaemonConfigWriteError(
+      const writeError = new DaemonConfigWriteError(
         (body as Record<string, unknown>).error as string ?? `Failed to sync app config (${response.status})`,
         response.status,
       );
+      if (options?.propagateWriteErrors) throw writeError;
     }
   } catch (error) {
-    // Daemon write errors must always propagate, even without throwOnError.
     if (error instanceof DaemonConfigWriteError) throw error;
     if (options?.throwOnError) throw error;
     // Network error (daemon unreachable); localStorage keeps the user's copy
