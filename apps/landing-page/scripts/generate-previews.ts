@@ -66,6 +66,8 @@ interface PreviewManifest {
   entries: Record<string, PreviewManifestEntry>;
 }
 
+const RELATIVE_ASSET_PATTERN = /(?:src|href|poster)\s*=\s*["']([^"']+)["']|url\((['"]?)([^'"\)]+)\2\)/g;
+
 function jobKey(job: Pick<Job, 'bucket' | 'slug'>): string {
   return `${job.bucket}/${job.slug}`;
 }
@@ -115,6 +117,78 @@ async function hashDirectory(rootDir: string): Promise<string> {
   }
 
   await walk(rootDir);
+  return hash.digest('hex');
+}
+
+function isWithinRoot(rootDir: string, targetPath: string): boolean {
+  const relativePath = path.relative(rootDir, targetPath);
+  return relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath));
+}
+
+function relativeAssetPaths(source: string): string[] {
+  const matches = new Set<string>();
+  for (const match of source.matchAll(RELATIVE_ASSET_PATTERN)) {
+    const raw = match[1] ?? match[3];
+    if (!raw) {
+      continue;
+    }
+
+    const specifier = raw.split('#', 1)[0]?.split('?', 1)[0]?.trim();
+    if (!specifier || (!specifier.startsWith('./') && !specifier.startsWith('../'))) {
+      continue;
+    }
+
+    matches.add(specifier);
+  }
+
+  return [...matches].sort((left, right) => left.localeCompare(right));
+}
+
+async function hashExtraDependencyRoots(
+  job: Job,
+  directoryHashes: Map<string, string>,
+): Promise<string> {
+  const extraRoots = new Set<string>();
+  const source = await readFile(job.htmlPath, 'utf8');
+  const baseDir = path.dirname(job.htmlPath);
+
+  for (const specifier of relativeAssetPaths(source)) {
+    const resolvedPath = path.resolve(baseDir, specifier);
+    if (isWithinRoot(job.sourceRoot, resolvedPath) || !existsSync(resolvedPath)) {
+      continue;
+    }
+
+    const stats = await stat(resolvedPath);
+    extraRoots.add(stats.isDirectory() ? resolvedPath : path.dirname(resolvedPath));
+  }
+
+  if (job.reuseFrom && !isWithinRoot(job.sourceRoot, job.reuseFrom) && existsSync(job.reuseFrom)) {
+    const stats = await stat(job.reuseFrom);
+    extraRoots.add(stats.isDirectory() ? job.reuseFrom : path.dirname(job.reuseFrom));
+  }
+
+  const hash = createHash('sha256');
+  for (const root of [...extraRoots].sort((left, right) => left.localeCompare(right))) {
+    let dependencyHash = directoryHashes.get(root);
+    if (!dependencyHash) {
+      dependencyHash = await hashDirectory(root);
+      directoryHashes.set(root, dependencyHash);
+    }
+    hash.update(`${normalizeForHash(path.relative(REPO_ROOT, root))}:${dependencyHash}\n`);
+  }
+  return hash.digest('hex');
+}
+
+async function sourceHashForJob(job: Job, directoryHashes: Map<string, string>): Promise<string> {
+  let baseHash = directoryHashes.get(job.sourceRoot);
+  if (!baseHash) {
+    baseHash = await hashDirectory(job.sourceRoot);
+    directoryHashes.set(job.sourceRoot, baseHash);
+  }
+
+  const hash = createHash('sha256');
+  hash.update(baseHash);
+  hash.update(await hashExtraDependencyRoots(job, directoryHashes));
   return hash.digest('hex');
 }
 
@@ -347,9 +421,10 @@ async function main(): Promise<number> {
     }
   }
 
+  const directoryHashes = new Map<string, string>();
   const sourceHashes = new Map<string, string>();
   for (const job of filtered) {
-    sourceHashes.set(jobKey(job), await hashDirectory(job.sourceRoot));
+    sourceHashes.set(jobKey(job), await sourceHashForJob(job, directoryHashes));
   }
 
   const skipped: string[] = [];
