@@ -9,7 +9,18 @@ export async function ensureSharedPortsResolved(
   runningWebUrl?: string | null,
 ): Promise<void> {
   if (!targets.includes(APP_KEYS.WEB)) return;
+  const daemonRequested = targets.includes(APP_KEYS.DAEMON);
+  const reserved = new Set<number>();
   const daemonPort = parsePortOption(options.daemonPort, "--daemon-port");
+  if (daemonPort != null) reserved.add(daemonPort);
+  if (daemonRequested && daemonPort == null) {
+    const allocation = await allocatePort({
+      host: "127.0.0.1",
+      label: "daemon",
+      reserved,
+    });
+    options.daemonPort = String(allocation.port);
+  }
   if (parsePortOption(options.webPort, "--web-port") != null) return;
   if (runningWebUrl != null) {
     const url = new URL(runningWebUrl);
@@ -20,7 +31,7 @@ export async function ensureSharedPortsResolved(
   const { port } = await allocatePort({
     host: "127.0.0.1",
     label: "web",
-    reserved: daemonPort == null ? new Set<number>() : new Set([daemonPort]),
+    reserved,
   });
   options.webPort = String(port);
 }

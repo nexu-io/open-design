@@ -21,7 +21,8 @@ describe("tools-dev shared ports", () => {
     await ensureSharedPortsResolved([APP_KEYS.WEB, APP_KEYS.DAEMON], options);
 
     assert.equal(options.webPort, "3000");
-    assert.equal(options.daemonPort, undefined);
+    assert.match(options.daemonPort ?? "", /^\d+$/);
+    assert.notEqual(options.daemonPort, options.webPort);
   });
 
   it("allocates a web port when web starts without one", async () => {
@@ -30,9 +31,10 @@ describe("tools-dev shared ports", () => {
     await ensureSharedPortsResolved([APP_KEYS.WEB, APP_KEYS.DAEMON], options);
 
     assert.match(options.webPort ?? "", /^\d+$/);
-    assert.equal(options.daemonPort, undefined);
+    assert.match(options.daemonPort ?? "", /^\d+$/);
     const port = Number(options.webPort);
     assert.ok(Number.isInteger(port) && port > 0);
+    assert.notEqual(options.webPort, options.daemonPort);
 
     const server = createServer();
     await new Promise<void>((resolve, reject) => {
@@ -51,6 +53,15 @@ describe("tools-dev shared ports", () => {
 
     assert.notEqual(options.webPort, "3100");
     assert.equal(options.daemonPort, "3100");
+  });
+
+  it("does not allocate a daemon port when daemon is not starting", async () => {
+    const options: { daemonPort?: string; webPort?: string } = {};
+
+    await ensureSharedPortsResolved([APP_KEYS.WEB], options);
+
+    assert.equal(options.daemonPort, undefined);
+    assert.match(options.webPort ?? "", /^\d+$/);
   });
 
   it("reuses an already-running web port", async () => {

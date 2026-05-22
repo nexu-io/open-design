@@ -765,10 +765,14 @@ async function startApp(
         // across the hardening restart. Without this, a stack started
         // with `--daemon-port`/`--web-port` would silently drift to
         // random ports during the restart, breaking pinned browsers.
-        startDaemonGated: async ({ port }) => {
+        startDaemonGated: async ({ port, webPort }) => {
           const portedOptions: CliOptions =
-            port != null ? { ...options, daemonPort: port } : options;
-          await startDaemon(config, portedOptions, { requireDesktopAuth: true });
+            port != null ? { ...options, daemonPort: port } : { ...options };
+          if (webPort != null) portedOptions.webPort = webPort;
+          await startDaemon(config, portedOptions, {
+            refreshWebOrigin: webPort != null,
+            requireDesktopAuth: true,
+          });
         },
         startWeb: async ({ port }) => {
           const portedOptions: CliOptions =
