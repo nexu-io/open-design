@@ -162,16 +162,16 @@ importers:
         specifier: 3.7.2
         version: 3.7.2
       '@fontsource-variable/inter':
-        specifier: ^5.2.8
+        specifier: 5.2.8
         version: 5.2.8
       '@fontsource-variable/inter-tight':
-        specifier: ^5.2.7
+        specifier: 5.2.7
         version: 5.2.7
       '@fontsource-variable/jetbrains-mono':
-        specifier: ^5.2.8
+        specifier: 5.2.8
         version: 5.2.8
       '@fontsource-variable/playfair-display':
-        specifier: ^5.2.8
+        specifier: 5.2.8
         version: 5.2.8
       astro:
         specifier: 6.3.5
