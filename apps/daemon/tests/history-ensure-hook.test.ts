@@ -22,6 +22,13 @@ function freshSandbox(): { dataRoot: string; projectsRoot: string; reposRoot: st
     CREATE TABLE projects (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
+      skill_id TEXT,
+      design_system_id TEXT,
+      pending_prompt TEXT,
+      metadata_json TEXT,
+      applied_plugin_snapshot_id TEXT,
+      custom_instructions TEXT,
+      current_revision_id TEXT,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );
@@ -168,5 +175,29 @@ describe('installHistoryEnsureHook', () => {
     });
 
     await expect(ensureProject(sandbox.projectsRoot, 'p1')).rejects.toThrow();
+  });
+
+  it('skips a linked-folder project even when the caller omits metadata (DB lookup)', async () => {
+    // Set the project's metadata.baseDir in the DB to mark it linked,
+    // then call ensureProject WITHOUT passing metadata (mirrors the
+    // 8+ call sites that pass only (root, projectId)). The hook must
+    // detect the linked state via getProject() and short-circuit
+    // before initializing substrate at the wrong path.
+    sandbox.db.prepare(
+      `UPDATE projects SET metadata_json = ? WHERE id = 'p1'`,
+    ).run(JSON.stringify({ baseDir: '/tmp/elsewhere' }));
+
+    installHistoryEnsureHook({
+      db: sandbox.db,
+      reposRoot: sandbox.reposRoot,
+      env: { OD_GIT_INTEGRATION_ENABLED: '1' },
+    });
+
+    const dir = await ensureProject(sandbox.projectsRoot, 'p1');
+    expect(existsSync(dir)).toBe(true);
+    // Substrate was NOT initialized — no gitdir, no migration row
+    expect(existsSync(path.join(sandbox.reposRoot, 'p1.gitdir'))).toBe(false);
+    const count = sandbox.db.prepare(`SELECT COUNT(*) AS n FROM project_revisions`).get() as { n: number };
+    expect(count.n).toBe(0);
   });
 });

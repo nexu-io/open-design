@@ -10,6 +10,7 @@ import type Database from 'better-sqlite3';
 
 import { setProjectEnsuredHook } from '../projects.js';
 import { resolveIdentity } from '../identity/types.js';
+import { getProject } from '../db.js';
 import { isHistoryEnabled } from './feature-flag.js';
 import { initProjectHistory, projectRepoPath } from './repo.js';
 
@@ -64,12 +65,14 @@ export function installHistoryEnsureHook(args: InstallHistoryEnsureHookArgs): vo
   setProjectEnsuredHook(async ({ projectId, projectDir, metadata }: ProjectEnsuredHookArgs) => {
     if (!isHistoryEnabled(env)) return;
     // Linked-folder projects (metadata.baseDir set) point at the user's
-    // own tree, which may already be a git repo. initProjectHistory's
-    // foreign-git-collision branch handles that case — but the user's
-    // expectation for those is "OD does not touch my git repo," so we
-    // skip linked projects entirely rather than relying on collision
-    // detection.
-    if (typeof metadata?.baseDir === 'string') return;
+    // own tree; we must not init substrate over them. Several
+    // ensureProject callers omit `metadata` from the args, so trust the
+    // caller's value only when present; otherwise look it up so the
+    // skip guarantee doesn't depend on every call site remembering.
+    const effectiveMetadata = (metadata && typeof metadata === 'object')
+      ? metadata
+      : (getProject(db, projectId)?.metadata ?? null) as { baseDir?: string } | null;
+    if (typeof effectiveMetadata?.baseDir === 'string') return;
 
     const repoDir = projectRepoPath(reposRoot, projectId);
     // Route through the identity seam, not LocalFallbackProvider directly:

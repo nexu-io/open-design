@@ -25,6 +25,7 @@ const DEFAULT_GITIGNORE = `# Open Design auto-generated; commit or edit as neede
 `;
 
 const MIGRATION_COMMIT_MESSAGE = 'chore(init): import existing project tree';
+const DEFAULT_COMMIT_MESSAGE = 'Agent run';
 
 // Patterns the history substrate manages on the daemon's behalf — kept
 // in `<repoDir>/info/exclude` rather than the project's `.gitignore`
@@ -170,6 +171,73 @@ async function applyAuthorConfig(
   await runGit(projectDir, ['config', 'user.name', identity.displayName], signal);
 }
 
+/**
+ * Repair `projects.current_revision_id` when it doesn't match HEAD's row.
+ * Covers legacy state from pre-transaction-wrap days where INSERT
+ * landed but UPDATE didn't, plus any external interference. Skips
+ * when HEAD is unborn (nothing to point to) or HEAD has no row
+ * (caller's orphan-backfill handles that case).
+ */
+function ensureHeadPointerInvariant(
+  db: Database.Database,
+  projectId: string,
+  headSha: string | null,
+): void {
+  if (!headSha) return;
+  const headRow = db.prepare(
+    `SELECT id FROM project_revisions WHERE project_id = ? AND git_sha = ? LIMIT 1`,
+  ).get(projectId, headSha) as { id: string } | undefined;
+  if (!headRow) return;
+  const projectRow = db.prepare(
+    `SELECT current_revision_id FROM projects WHERE id = ?`,
+  ).get(projectId) as { current_revision_id: string | null } | undefined;
+  if (projectRow?.current_revision_id !== headRow.id) {
+    db.prepare(`UPDATE projects SET current_revision_id = ? WHERE id = ?`).run(headRow.id, projectId);
+  }
+}
+
+interface CommitMetadata {
+  sha: string;
+  authorName: string;
+  authorDateMs: number;
+  message: string;
+}
+
+/**
+ * Read author name, author date, and message for a commit ref from
+ * the existing git history. Used by the repair paths so reconstructed
+ * `project_revisions` rows reflect the actual commit, not the
+ * currently retrying call's identity / clock.
+ */
+async function readCommitMetadata(
+  projectDir: string,
+  ref: string,
+  signal?: AbortSignal,
+): Promise<CommitMetadata | null> {
+  try {
+    // %H, %an, %aI are single-line by spec. %B (raw body) goes last
+    // so its trailing newlines join cleanly via Array.join.
+    const out = await runGit(
+      projectDir,
+      ['log', '-1', '--format=%H%n%an%n%aI%n%B', ref],
+      signal,
+    );
+    const lines = out.split('\n');
+    if (lines.length < 4) return null;
+    const [sha, authorName, authorIso, ...messageLines] = lines;
+    const authorDateMs = Date.parse(authorIso ?? '');
+    if (!sha || Number.isNaN(authorDateMs)) return null;
+    return {
+      sha,
+      authorName: (authorName ?? '').trim(),
+      authorDateMs,
+      message: messageLines.join('\n').trim(),
+    };
+  } catch {
+    return null;
+  }
+}
+
 export interface InitProjectHistoryArgs {
   projectId: string;
   projectDir: string;
@@ -249,54 +317,62 @@ async function initProjectHistoryLocked(
           LIMIT 1`,
       )
       .get(projectId) as { id: string } | undefined;
-    if (existing) return { kind: 'already-initialized' };
-
-    // Half-init detected. Two sub-cases — probe HEAD with softFail128
-    // to distinguish:
-    //
-    //   (a) HEAD exists — the prior init got as far as `git commit
-    //       --allow-empty` but its post-commit DB write failed. We
-    //       just need to reconstruct the missing migration row from
-    //       the existing HEAD.
-    //   (b) HEAD is unborn (git rev-parse exits 128) — the prior
-    //       init crashed BEFORE the initial commit, after `git init`
-    //       created the gitdir and gitlink. We need to resume the
-    //       remaining init steps (excludes, author config, add,
-    //       initial commit) and only THEN write the DB row.
-    //
-    // Without the (b) branch, retries on the unborn-HEAD state would
-    // throw on rev-parse forever and the project would stay
-    // permanently broken.
-    let sha = (await runGit(projectDir, ['rev-parse', 'HEAD'], signal, { softFail128: true })).trim();
-
-    if (!sha) {
-      // (b) Unborn HEAD — resume the remaining init steps. Each is
-      // idempotent / safe to re-run against partial state from the
-      // crashed prior attempt:
-      //   - ensureHistoryManagedExcludes is marker-guarded
-      //   - applyAuthorConfig writes per-repo config, overwriting any prior
-      //   - git add -A is unconditional
-      //   - the commit creates the missing initial commit
-      await ensureHistoryManagedExcludes(repoDir);
-      await applyAuthorConfig(projectDir, identity, signal);
-      await runGit(projectDir, ['add', '-A'], signal);
-      await runGit(
-        projectDir,
-        ['commit', '--allow-empty', '-m', MIGRATION_COMMIT_MESSAGE],
-        signal,
-      );
-      sha = (await runGit(projectDir, ['rev-parse', 'HEAD'], signal)).trim();
+    if (existing) {
+      // Substrate fully set up. Defensively re-assert that
+      // current_revision_id matches HEAD's row — a legacy partial
+      // write or external DB edit could have left it stale.
+      const headSha = (await runGit(projectDir, ['rev-parse', 'HEAD'], signal, { softFail128: true })).trim() || null;
+      ensureHeadPointerInvariant(db, projectId, headSha);
+      return { kind: 'already-initialized' };
     }
 
-    // Reconstruct the missing migration row from HEAD's SHA (either
-    // the pre-existing one in case (a), or the one we just created
-    // in case (b)).
+    // Half-init detected. Two sub-cases differ on what's recoverable:
+    //
+    //   (a) HEAD exists — prior init committed but its DB write
+    //       failed. The commit is durable history we did not author;
+    //       reconstruct the row's actor / created_at / message from
+    //       the commit itself, NOT from this retrying call.
+    //   (b) HEAD unborn — prior init crashed before the initial
+    //       commit. Resume the remaining init steps (excludes,
+    //       author config, add, commit) so this call DOES author
+    //       the commit, then attribute the row to this identity.
+    const headProbe = (await runGit(projectDir, ['rev-parse', 'HEAD'], signal, { softFail128: true })).trim();
+
     const revisionId = randomUUID();
+    if (headProbe) {
+      // (a) Attribute from the existing commit, not this call.
+      const meta = await readCommitMetadata(projectDir, 'HEAD', signal);
+      const sha = meta?.sha ?? headProbe;
+      db.transaction(() => {
+        db.prepare(
+          `INSERT INTO project_revisions (
+             id, project_id, parent_id, git_sha, created_at, source, message,
+             actor_identity_id, actor_display_name, run_id,
+             files_changed_count, bytes_added, bytes_removed
+           ) VALUES (?, ?, NULL, ?, ?, 'migration', ?, NULL, ?, NULL, 0, 0, 0)`,
+        ).run(
+          revisionId,
+          projectId,
+          sha,
+          meta?.authorDateMs ?? Date.now(),
+          meta?.message || MIGRATION_COMMIT_MESSAGE,
+          meta?.authorName || null,
+        );
+        db.prepare(`UPDATE projects SET current_revision_id = ? WHERE id = ?`).run(
+          revisionId,
+          projectId,
+        );
+      })();
+      return { kind: 'repaired', revisionId };
+    }
+
+    // (b) Resume the remaining init steps; we author the new commit.
+    await ensureHistoryManagedExcludes(repoDir);
+    await applyAuthorConfig(projectDir, identity, signal);
+    await runGit(projectDir, ['add', '-A'], signal);
+    await runGit(projectDir, ['commit', '--allow-empty', '-m', MIGRATION_COMMIT_MESSAGE], signal);
+    const sha = (await runGit(projectDir, ['rev-parse', 'HEAD'], signal)).trim();
     const now = Date.now();
-    // Atomic INSERT + pointer-advance — a crash between these would
-    // leave the row written but `current_revision_id` stale, which is
-    // its own partial-write defect. db.transaction makes them a single
-    // commit; either both land or neither does.
     db.transaction(() => {
       db.prepare(
         `INSERT INTO project_revisions (
@@ -475,59 +551,51 @@ async function recordRevisionForRunLocked(
   // be reported dirty and the next commit would absorb runtime scratch.
   await ensureHistoryManagedExcludes(repoDir);
 
-  // Repair-on-retry — analogous to initProjectHistoryLocked's repair
-  // path. Invariant: at the end of the locked critical section, HEAD's
-  // SHA should always have a corresponding `project_revisions` row for
-  // this project (the migration row from init, plus one row per
-  // recorded run). If a prior recordRevisionForRun crashed between its
+  // Repair-on-retry: invariant — at the end of this locked critical
+  // section, HEAD's SHA must have a corresponding `project_revisions`
+  // row for this project. If a prior call crashed between its
   // `git commit` and the SQLite INSERT, HEAD is one commit ahead of
-  // the table — an orphan. The next call would see status='' clean and
-  // (without this check) return 'clean' without ever back-filling the
-  // missing row, leaving history permanently broken.
-  //
-  // Detect the orphan by comparing HEAD's SHA against `project_revisions`.
-  // If absent, back-fill a row pointing at the latest known revision as
-  // its parent and advance `current_revision_id`. The lost run_id from
-  // the crashed prior call cannot be recovered, so the back-fill row
-  // sets run_id=NULL and uses a marker commit message.
+  // the table. Reconstruct the missing row from the commit itself
+  // (parent from HEAD^, actor / created_at / message from `git log`);
+  // attributing to this retrying run would be durable false
+  // provenance. Single-orphan repair only — multi-orphan chains
+  // require either an external `git log` walker or successive call
+  // through this same path, which is the natural recovery on the
+  // next chat run.
   const headForRepair =
     (await runGit(projectDir, ['rev-parse', 'HEAD'], signal, { softFail128: true })).trim() || null;
   if (headForRepair) {
     const existingForHead = db
-      .prepare(
-        `SELECT id FROM project_revisions
-          WHERE project_id = ? AND git_sha = ?
-          LIMIT 1`,
-      )
+      .prepare(`SELECT id FROM project_revisions WHERE project_id = ? AND git_sha = ? LIMIT 1`)
       .get(projectId, headForRepair) as { id: string } | undefined;
-    if (!existingForHead) {
-      const latestRow = db
-        .prepare(
-          `SELECT id FROM project_revisions
-            WHERE project_id = ? AND git_sha IS NOT NULL
-            ORDER BY created_at DESC LIMIT 1`,
-        )
-        .get(projectId) as { id: string } | undefined;
+    if (existingForHead) {
+      // Row for HEAD exists; the only thing that might be wrong is a
+      // stale pointer from a legacy partial-write.
+      ensureHeadPointerInvariant(db, projectId, headForRepair);
+    } else {
+      const meta = await readCommitMetadata(projectDir, 'HEAD', signal);
+      const parentSha = (await runGit(projectDir, ['rev-parse', 'HEAD^'], signal, { softFail128: true })).trim() || null;
+      const parentId = parentSha
+        ? (db.prepare(
+            `SELECT id FROM project_revisions WHERE project_id = ? AND git_sha = ?`,
+          ).get(projectId, parentSha) as { id: string } | undefined)?.id ?? null
+        : null;
       const orphanRevisionId = randomUUID();
-      const orphanNow = Date.now();
-      // Atomic INSERT + pointer-advance — a crash mid-pair would re-
-      // create the same partial-write defect we're here to repair.
       db.transaction(() => {
         db.prepare(
           `INSERT INTO project_revisions (
              id, project_id, parent_id, git_sha, created_at, source, message,
              actor_identity_id, actor_display_name, run_id,
              files_changed_count, bytes_added, bytes_removed
-           ) VALUES (?, ?, ?, ?, ?, 'agent-run', ?, ?, ?, NULL, 0, 0, 0)`,
+           ) VALUES (?, ?, ?, ?, ?, 'agent-run', ?, NULL, ?, NULL, 0, 0, 0)`,
         ).run(
           orphanRevisionId,
           projectId,
-          latestRow?.id ?? null,
+          parentId,
           headForRepair,
-          orphanNow,
-          '(recovered: orphan commit from prior crashed agent run)',
-          run.identity.id,
-          run.identity.displayName,
+          meta?.authorDateMs ?? Date.now(),
+          meta?.message || DEFAULT_COMMIT_MESSAGE,
+          meta?.authorName || null,
         );
         db.prepare(`UPDATE projects SET current_revision_id = ? WHERE id = ?`).run(
           orphanRevisionId,

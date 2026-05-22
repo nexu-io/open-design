@@ -3,13 +3,23 @@ import { randomUUID } from 'node:crypto';
 
 export const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
 
-// Agent tool_use names that mutate the worktree. Sets run.touchedFiles
-// so the history hook can distinguish runs that dirtied files from
-// purely conversational runs when deciding whether to record a marker
-// for a sibling-absorbed concurrent run. Bash is excluded — it's
-// commonly used for read-only operations and would produce false
-// positives.
-const FILE_WRITE_TOOL_NAMES = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
+// Tool names (case-insensitive) that MAY mutate the worktree. Bash is
+// included because a Bash run that writes via shell (mv/cp/redirect)
+// losing marker provenance is worse than a Bash-reads-only run getting
+// a false-positive marker. Lowercase here because adapters disagree:
+// claude-stream emits "Bash", pi-rpc emits "bash".
+const FILE_WRITE_TOOL_NAMES = new Set(['write', 'edit', 'multiedit', 'notebookedit', 'bash']);
+
+function toolUseNameFromEvent(event: string, data: any): string | null {
+  if (!data) return null;
+  // Direct emit (some test paths and internal call sites):
+  //   emit(run, 'tool_use', { id, name, input })
+  if (event === 'tool_use' && typeof data.name === 'string') return data.name;
+  // Production agent-event wrapper (server.ts send('agent', ev), where
+  // ev is the typed adapter event including { type: 'tool_use', name }):
+  if (event === 'agent' && data.type === 'tool_use' && typeof data.name === 'string') return data.name;
+  return null;
+}
 
 function readString(value) {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
@@ -125,7 +135,8 @@ export function createChatRunService({
       if (details.error) run.error = details.error;
       if (details.errorCode) run.errorCode = details.errorCode;
     }
-    if (event === 'tool_use' && data && typeof data.name === 'string' && FILE_WRITE_TOOL_NAMES.has(data.name)) {
+    const toolName = toolUseNameFromEvent(event, data);
+    if (toolName && FILE_WRITE_TOOL_NAMES.has(toolName.toLowerCase())) {
       run.touchedFiles = true;
     }
     const id = run.nextEventId++;

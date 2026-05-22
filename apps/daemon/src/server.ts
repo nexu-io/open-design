@@ -9716,18 +9716,19 @@ export async function startServer({
     let cwd = null;
     let existingProjectFiles = [];
     if (typeof projectId === 'string' && projectId) {
-      try {
-        const chatProject = getProject(db, projectId);
-        const chatMeta = chatProject?.metadata;
-        if (chatMeta?.baseDir) {
-          cwd = path.normalize(chatMeta.baseDir);
-          existingProjectFiles = await listFiles(PROJECTS_DIR, projectId, { metadata: chatMeta });
-        } else {
-          cwd = await ensureProject(PROJECTS_DIR, projectId);
-          existingProjectFiles = await listFiles(PROJECTS_DIR, projectId);
-        }
-      } catch {
-        cwd = null;
+      // Errors from ensureProject (incl. history init failures when
+      // OD_GIT_INTEGRATION_ENABLED is on) propagate up — `runs.start`
+      // catches and marks the run failed, surfacing a clear cause.
+      // Pre-#16 a bare catch silently set cwd=null, leaving the run
+      // running in an inherited dir and hiding init breakage.
+      const chatProject = getProject(db, projectId);
+      const chatMeta = chatProject?.metadata;
+      if (chatMeta?.baseDir) {
+        cwd = path.normalize(chatMeta.baseDir);
+        existingProjectFiles = await listFiles(PROJECTS_DIR, projectId, { metadata: chatMeta });
+      } else {
+        cwd = await ensureProject(PROJECTS_DIR, projectId, chatMeta);
+        existingProjectFiles = await listFiles(PROJECTS_DIR, projectId, { metadata: chatMeta });
       }
     }
     if (run.cancelRequested || design.runs.isTerminal(run.status)) return;

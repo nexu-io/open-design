@@ -101,8 +101,8 @@ describe('chat run service touchedFiles tracking', () => {
     expect((run as any).touchedFiles).toBe(false);
   });
 
-  it.each(['Write', 'Edit', 'MultiEdit', 'NotebookEdit'])(
-    'flips to true when a %s tool_use event is emitted',
+  it.each(['Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'Bash', 'bash', 'WRITE'])(
+    'flips to true for direct tool_use event with name %s (case-insensitive)',
     (toolName) => {
       const runs = createRuns();
       const run = runs.create();
@@ -111,28 +111,46 @@ describe('chat run service touchedFiles tracking', () => {
     },
   );
 
-  it.each(['Bash', 'Read', 'Grep', 'Glob', 'WebFetch'])(
-    'stays false for non-write tool_use names (%s — read-only or ambiguous)',
+  it.each(['Write', 'Edit', 'bash'])(
+    'flips to true for production-shape agent-wrapped tool_use with name %s',
     (toolName) => {
+      // Real path: server.ts calls send('agent', ev) where ev wraps the
+      // adapter's typed event { type: 'tool_use', name, ... }. The
+      // direct-shape check used by older tests bypassed this wrapper.
       const runs = createRuns();
       const run = runs.create();
-      runs.emit(run, 'tool_use', { id: 't1', name: toolName, input: {} });
-      expect((run as any).touchedFiles).toBe(false);
+      runs.emit(run, 'agent', { type: 'tool_use', id: 't1', name: toolName, input: {} });
+      expect((run as any).touchedFiles).toBe(true);
     },
   );
 
-  it('stays false for non-tool_use events even with a matching name field', () => {
+  it.each(['Read', 'Grep', 'Glob', 'WebFetch'])(
+    'stays false for read-only tool name %s (both event shapes)',
+    (toolName) => {
+      const runs = createRuns();
+      const direct = runs.create();
+      runs.emit(direct, 'tool_use', { id: 't1', name: toolName, input: {} });
+      expect((direct as any).touchedFiles).toBe(false);
+
+      const wrapped = runs.create();
+      runs.emit(wrapped, 'agent', { type: 'tool_use', id: 't1', name: toolName, input: {} });
+      expect((wrapped as any).touchedFiles).toBe(false);
+    },
+  );
+
+  it('stays false for non-tool_use agent events even with a matching name field', () => {
     const runs = createRuns();
     const run = runs.create();
-    runs.emit(run, 'stdout', { name: 'Write', text: 'red herring' });
+    runs.emit(run, 'agent', { type: 'text_delta', name: 'Write', delta: 'red herring' });
+    runs.emit(run, 'stdout', { name: 'Write', text: 'another red herring' });
     expect((run as any).touchedFiles).toBe(false);
   });
 
   it('stays true once set — does not reset on subsequent non-write events', () => {
     const runs = createRuns();
     const run = runs.create();
-    runs.emit(run, 'tool_use', { id: 't1', name: 'Write', input: {} });
-    runs.emit(run, 'tool_use', { id: 't2', name: 'Read', input: {} });
+    runs.emit(run, 'agent', { type: 'tool_use', id: 't1', name: 'Write', input: {} });
+    runs.emit(run, 'agent', { type: 'tool_use', id: 't2', name: 'Read', input: {} });
     runs.emit(run, 'stdout', { text: 'after' });
     expect((run as any).touchedFiles).toBe(true);
   });

@@ -94,10 +94,10 @@ export function migrateProjectRevisions(db: Database.Database): void {
 
   // Chat-run attribution columns on messages. Denormalized
   // actor_display_name + actor_identity_id keep historical attribution
-  // intact even if the identity provider's mapping changes later
-  // (e.g., a user is renamed by their auth provider). actor_source_ip
-  // records the X-Forwarded-For value when behind a proxy, useful for
-  // audit ("which device" separate from "which person").
+  // intact even if the identity provider's mapping changes later.
+  // actor_source_ip captures the Express trust-proxy-resolved client IP
+  // (set via OD_TRUST_PROXY); useful for audit "which device" separate
+  // from "which person".
   const messageCols = db.prepare(`PRAGMA table_info(messages)`).all() as DbRow[];
   if (!messageCols.some((c) => c.name === 'actor_identity_id')) {
     db.exec(`ALTER TABLE messages ADD COLUMN actor_identity_id TEXT`);

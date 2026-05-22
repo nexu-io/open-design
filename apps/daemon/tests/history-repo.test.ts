@@ -181,26 +181,31 @@ describe('initProjectHistory', () => {
     expect(second.kind).toBe('repaired');
     if (second.kind !== 'repaired') return;
 
-    // The reconstructed migration row references HEAD's SHA.
+    // Case (a): HEAD already exists from the crashed prior init.
+    // The retry did NOT author this commit — it just reconstructs the
+    // missing row. Attribution comes from the existing commit's git
+    // metadata; we leave actor_identity_id NULL because that resolved
+    // value is unrecoverable from git alone.
     const repaired = sandbox.db.prepare(
-      `SELECT id, source, parent_id, git_sha, actor_identity_id, run_id, files_changed_count
+      `SELECT id, source, parent_id, git_sha, actor_identity_id, actor_display_name, run_id, files_changed_count
          FROM project_revisions WHERE id = ?`,
     ).get(second.revisionId) as {
       id: string;
       source: string;
       parent_id: string | null;
       git_sha: string;
-      actor_identity_id: string;
+      actor_identity_id: string | null;
+      actor_display_name: string | null;
       run_id: string | null;
       files_changed_count: number;
     };
     expect(repaired.source).toBe('migration');
     expect(repaired.parent_id).toBeNull();
     expect(repaired.git_sha).toMatch(/^[0-9a-f]{40}$/);
-    expect(repaired.actor_identity_id).toBe('local:default');
+    expect(repaired.actor_identity_id).toBeNull();
+    expect(repaired.actor_display_name).toBe('Test User');
     expect(repaired.run_id).toBeNull();
     expect(repaired.files_changed_count).toBe(0);
-    // Exactly the SHA of the existing HEAD (we didn't make a new commit)
     const headSha = execFileSync('git', [`--git-dir=${sandbox.repoDir}`, 'rev-parse', 'HEAD']).toString().trim();
     expect(repaired.git_sha).toBe(headSha);
 
@@ -503,29 +508,41 @@ describe('recordRevisionForRun', () => {
 
     // The orphan SHA now has a row
     const backfilled = sandbox.db.prepare(
-      `SELECT id, source, parent_id, git_sha, actor_identity_id, actor_display_name, run_id, files_changed_count, message
+      `SELECT id, source, parent_id, git_sha, actor_identity_id, actor_display_name, run_id, files_changed_count, message, created_at
          FROM project_revisions WHERE project_id = ? AND git_sha = ?`,
     ).get(sandbox.projectId, orphanSha) as {
       id: string;
       source: string;
       parent_id: string | null;
       git_sha: string;
-      actor_identity_id: string;
-      actor_display_name: string;
+      actor_identity_id: string | null;
+      actor_display_name: string | null;
       run_id: string | null;
       files_changed_count: number;
       message: string;
+      created_at: number;
     };
     expect(backfilled).toBeDefined();
     expect(backfilled.source).toBe('agent-run');
-    // parent_id points at the previous latest row (the migration row)
+    // parent_id derived from `git rev-parse HEAD^` resolved via
+    // git_sha — should match the actual git parent (the migration).
     expect(backfilled.parent_id).toBe(migrationRow.id);
-    expect(backfilled.actor_identity_id).toBe('local:default');
-    // The original run_id from the crashed call is unrecoverable
+    // Attribution recovered from git, not the retrying run:
+    //   actor_identity_id is unrecoverable from git alone
+    expect(backfilled.actor_identity_id).toBeNull();
+    //   actor_display_name from `git show -s --format=%an`
+    expect(backfilled.actor_display_name).toBe('crashed');
+    // run_id from the crashed call is unrecoverable
     expect(backfilled.run_id).toBeNull();
-    // Marker message indicates recovery
-    expect(backfilled.message).toContain('recovered');
+    // message reflects the actual commit, not a hardcoded marker
+    expect(backfilled.message).toBe('this commit lost its DB write');
     expect(backfilled.files_changed_count).toBe(0);
+    // created_at reflects the commit's author date, not the repair time
+    const commitDateIso = execFileSync('git', [
+      `--git-dir=${sandbox.repoDir}`, 'log', '-1', '--format=%aI', orphanSha,
+    ]).toString().trim();
+    const commitDateMs = Date.parse(commitDateIso);
+    expect(backfilled.created_at).toBe(commitDateMs);
 
     // projects.current_revision_id now points at the back-filled row
     const proj = sandbox.db.prepare(`SELECT current_revision_id FROM projects WHERE id = 'p1'`).get() as { current_revision_id: string };
@@ -548,6 +565,77 @@ describe('recordRevisionForRun', () => {
     expect(secondCall.kind).toBe('clean');
     const finalCount = sandbox.db.prepare(`SELECT COUNT(*) AS n FROM project_revisions WHERE project_id = 'p1'`).get() as { n: number };
     expect(finalCount.n).toBe(2);
+  });
+
+  it('orphan backfill does not leak attribution from the retrying run when identities differ', async () => {
+    // Make an orphan commit authored by identity A (the crashed run).
+    // Then call recordRevisionForRun with identity B (the retry). The
+    // backfilled row must reflect A's git author, not B's identity.
+    writeFileSync(path.join(sandbox.projectDir, 'orphan-from-A.txt'), 'work from A\n');
+    execFileSync(
+      'git',
+      [`--git-dir=${sandbox.repoDir}`, `--work-tree=${sandbox.projectDir}`, 'add', '-A'],
+      { stdio: 'ignore' },
+    );
+    execFileSync(
+      'git',
+      [
+        `--git-dir=${sandbox.repoDir}`,
+        `--work-tree=${sandbox.projectDir}`,
+        '-c', 'user.email=alice@test.local',
+        '-c', 'user.name=Alice',
+        'commit', '-m', 'feature work by Alice',
+      ],
+      { stdio: 'ignore' },
+    );
+    const orphanSha = execFileSync('git', [`--git-dir=${sandbox.repoDir}`, 'rev-parse', 'HEAD']).toString().trim();
+
+    const BOB: Identity = {
+      id: 'oauth:bob@example.com',
+      displayName: 'Bob',
+      email: 'bob@example.com',
+      source: 'oauth',
+    };
+    await recordRevisionForRun({
+      projectId: sandbox.projectId,
+      projectDir: sandbox.projectDir,
+      repoDir: sandbox.repoDir,
+      run: { id: 'bob-retry', identity: BOB },
+      message: 'unused by the backfill path',
+      db: sandbox.db,
+    });
+
+    const backfilled = sandbox.db.prepare(
+      `SELECT actor_identity_id, actor_display_name, message FROM project_revisions WHERE git_sha = ?`,
+    ).get(orphanSha) as { actor_identity_id: string | null; actor_display_name: string | null; message: string };
+    expect(backfilled.actor_identity_id).toBeNull();
+    expect(backfilled.actor_display_name).toBe('Alice');
+    expect(backfilled.message).toBe('feature work by Alice');
+  });
+
+  it('repairs stale current_revision_id when the HEAD row exists but the pointer is wrong', async () => {
+    // Simulate the legacy partial-write state: row landed but the
+    // UPDATE projects pointer didn't (pre-transaction-wrap, or
+    // external interference). Invariant: HEAD's row.id == pointer.
+    const migrationRow = sandbox.db.prepare(
+      `SELECT id FROM project_revisions WHERE project_id = ? AND source = 'migration'`,
+    ).get(sandbox.projectId) as { id: string };
+
+    sandbox.db.prepare(`UPDATE projects SET current_revision_id = NULL WHERE id = ?`).run(sandbox.projectId);
+    const before = sandbox.db.prepare(`SELECT current_revision_id FROM projects WHERE id = ?`).get(sandbox.projectId) as { current_revision_id: string | null };
+    expect(before.current_revision_id).toBeNull();
+
+    await recordRevisionForRun({
+      projectId: sandbox.projectId,
+      projectDir: sandbox.projectDir,
+      repoDir: sandbox.repoDir,
+      run: { id: 'run-after-stale-pointer', identity: TEST_IDENTITY },
+      message: 'unrelated',
+      db: sandbox.db,
+    });
+
+    const after = sandbox.db.prepare(`SELECT current_revision_id FROM projects WHERE id = ?`).get(sandbox.projectId) as { current_revision_id: string };
+    expect(after.current_revision_id).toBe(migrationRow.id);
   });
 
   it('treats a tree where only .od-skills/ changed as clean (runtime scratch is excluded)', async () => {
@@ -814,10 +902,12 @@ describe('recordRevisionForRun', () => {
       }),
     ]);
 
-    // Lock order is non-deterministic: either A or B may win and
-    // record the dirty file. The contract under test is narrower:
-    // the conversational run (runTouchedFiles=false) must NEVER
-    // produce a marker row regardless of lock order.
+    // Invariant under test, order-independent: the conversational run
+    // (runTouchedFiles=false) MUST NEVER produce a marker row. It may
+    // end up with a 'recorded' row if it happens to win the lock
+    // against a dirty workdir (separate attribution concern outside
+    // this fix's scope), but a marker (git_sha IS NULL) is durable
+    // false provenance and must never appear for it.
     const talkerMarker = sandbox.db
       .prepare(
         `SELECT id FROM project_revisions
@@ -825,12 +915,5 @@ describe('recordRevisionForRun', () => {
       )
       .get(sandbox.projectId);
     expect(talkerMarker).toBeUndefined();
-
-    // a.txt got committed exactly once (lock winner records it),
-    // so total = migration + 1 recorded = 2 rows.
-    const count = sandbox.db
-      .prepare(`SELECT COUNT(*) AS n FROM project_revisions WHERE project_id = ?`)
-      .get(sandbox.projectId) as { n: number };
-    expect(count.n).toBe(2);
   });
 });

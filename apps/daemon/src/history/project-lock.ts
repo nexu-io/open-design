@@ -60,8 +60,9 @@ export async function withProjectLock<T>(
 }
 
 /**
- * For tests: drain all pending project locks and clear the map.
- * Production code should never call this.
+ * For tests: clear the per-project tail map. In-flight operations
+ * continue to run but become untracked by future callers (which see
+ * an empty queue). Use only between tests that don't share lock state.
  */
 export function __resetProjectLocksForTests(): void {
   tails.clear();
