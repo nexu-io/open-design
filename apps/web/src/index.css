@@ -10960,6 +10960,13 @@ button.connector-action.is-loading {
   }
 }
 
+@media (any-pointer: coarse) {
+  .df-preview-close {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
 .df-preview-close:hover {
   background: var(--bg-subtle);
   border-color: var(--border-strong);
