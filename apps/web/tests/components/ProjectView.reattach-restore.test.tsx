@@ -30,6 +30,13 @@ const patchProject = vi.fn();
 const saveTabs = vi.fn();
 
 vi.mock('../../src/i18n', () => ({
+  // ProjectView calls useI18n() (for locale/t); mock it like the other
+  // ProjectView suites so the render does not throw on a missing export.
+  useI18n: () => ({
+    locale: 'en',
+    setLocale: () => undefined,
+    t: (value: string) => value,
+  }),
   useT: () => ((value: string) => value),
 }));
 
