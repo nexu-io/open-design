@@ -904,12 +904,12 @@ export const BYOK_VENICE_TOOLS = [
           voice: {
             type: 'string',
             description:
-              'Voice id. Defaults to "alloy" (the OpenAI-compatible default). For Venice voice-cloning models (e.g. tts-chatterbox-hd) pass a `vv_…` handle minted via /audio/voices.',
+              'Voice id. Defaults to the selected model\'s built-in voice (af_sky for tts-kokoro). For Venice voice-cloning models pass a `vv_...` handle minted via /audio/voices.',
           },
           model: {
             type: 'string',
-            enum: ['gpt-4o-mini-tts', 'tts-chatterbox-hd'],
-            description: 'Optional TTS model. Defaults to gpt-4o-mini-tts.',
+            enum: ['tts-kokoro', 'tts-qwen3-0-6b', 'tts-xai-v1', 'tts-minimax-speech-02-hd', 'tts-chatterbox-hd'],
+            description: 'Optional TTS model. Defaults to tts-kokoro.',
           },
         },
         required: ['text'],
@@ -931,6 +931,14 @@ function veniceImageModelArg(raw: unknown): string {
 function veniceVideoModelArg(raw: unknown): string {
   if (typeof raw !== 'string' || !raw.trim()) return BYOK_VENICE_DEFAULT_VIDEO_MODEL;
   return raw.trim();
+}
+
+function veniceDefaultTtsVoice(model: string): string {
+  if (model === 'tts-kokoro') return 'af_sky';
+  if (model.startsWith('tts-qwen3-')) return 'Dylan';
+  if (model === 'tts-xai-v1') return 'eve';
+  if (model === 'tts-minimax-speech-02-hd') return 'WiseWoman';
+  return 'af_sky';
 }
 
 function veniceResolutionArg(raw: unknown, fallback: string, allow: readonly string[]): string {
@@ -1264,8 +1272,10 @@ export async function executeVeniceGenerateSpeech(
 
   const model = typeof args.model === 'string' && args.model.trim()
     ? args.model.trim()
-    : 'gpt-4o-mini-tts';
-  const voice = typeof args.voice === 'string' && args.voice.trim() ? args.voice.trim() : 'alloy';
+    : 'tts-kokoro';
+  const voice = typeof args.voice === 'string' && args.voice.trim()
+    ? args.voice.trim()
+    : veniceDefaultTtsVoice(model);
   const trimmedBase = baseUrl.replace(/\/+$/, '');
 
   let bytes: Buffer;

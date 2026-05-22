@@ -3346,12 +3346,18 @@ async function renderVeniceVideo(
 }
 
 // ---------------------------------------------------------------------------
-// Venice TTS — POST /audio/speech is wire-compatible with OpenAI's
-// /v1/audio/speech and returns raw audio bytes (mp3 by default).
-// Voice-cloning models (e.g. `tts-chatterbox-hd`) accept a `vv_…` handle
-// in `voice`; minting handles via POST /audio/voices is left to a future
-// Settings affordance — for now ctx.voice is passed through verbatim.
+// Venice TTS — POST /audio/speech returns raw audio bytes (mp3 by default).
+// Voices are model-specific; voice-cloning models can also accept a `vv_`
+// handle minted via POST /audio/voices.
 // ---------------------------------------------------------------------------
+
+function veniceDefaultTtsVoice(model: string): string {
+  if (model === 'tts-kokoro') return 'af_sky';
+  if (model.startsWith('tts-qwen3-')) return 'Dylan';
+  if (model === 'tts-xai-v1') return 'eve';
+  if (model === 'tts-minimax-speech-02-hd') return 'WiseWoman';
+  return 'af_sky';
+}
 
 async function renderVeniceSpeech(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
@@ -3362,7 +3368,7 @@ async function renderVeniceSpeech(ctx: MediaContext, credentials: ProviderConfig
   const baseUrl = (credentials.baseUrl || VENICE_DEFAULT_BASE_URL).replace(/\/$/, '');
   const wireSlug = stripVeniceWirePrefix(ctx.wireModel);
   const input = (ctx.prompt && ctx.prompt.trim()) || 'This is a test.';
-  const voice = (ctx.voice && ctx.voice.trim()) || 'alloy';
+  const voice = (ctx.voice && ctx.voice.trim()) || veniceDefaultTtsVoice(wireSlug);
 
   const body: Record<string, unknown> = {
     model: wireSlug,

@@ -1811,7 +1811,7 @@ describe('API proxy routes', () => {
         // extractor turns it into ProviderModelOption[].
         if (url.endsWith('/v1/models')) {
           return Promise.resolve(
-            new Response(JSON.stringify({ data: [{ id: 'gpt-5' }, { id: 'qwen3-coder-480b' }] }), {
+            new Response(JSON.stringify({ data: [{ id: 'gpt-5' }, { id: 'qwen3-coder-480b-a35b-instruct-turbo' }] }), {
               status: 200,
               headers: { 'content-type': 'application/json' },
             }),

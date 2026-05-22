@@ -658,9 +658,11 @@ export const AUDIO_MODELS_BY_KIND: Record<AudioKind, MediaModel[]> = {
     { id: 'senseaudio-tts', label: 'senseaudio-tts', hint: 'SenseAudio', provider: 'senseaudio', caps: ['tts', 'voice-clone'] },
     { id: 'doubao-tts', label: 'doubao-tts', hint: 'Volcengine', provider: 'volcengine', caps: ['tts'] },
     { id: 'gpt-4o-mini-tts', label: 'gpt-4o-mini-tts', hint: 'OpenAI', provider: 'openai', caps: ['tts'] },
-    // Venice TTS — POST /audio/speech is OpenAI-compatible. tts-chatterbox-hd
-    // advertises `voice_cloning` (handles minted via /audio/voices).
-    { id: 'venice/gpt-4o-mini-tts', label: 'gpt-4o-mini-tts (Venice)', hint: 'Venice · OpenAI-compatible speech', provider: 'venice', caps: ['tts'] },
+    // Venice TTS — POST /audio/speech returns mp3 bytes; voices are model-specific.
+    { id: 'venice/tts-kokoro', label: 'tts-kokoro (Venice)', hint: 'Venice · speech', provider: 'venice', caps: ['tts'] },
+    { id: 'venice/tts-qwen3-0-6b', label: 'tts-qwen3-0-6b (Venice)', hint: 'Venice · promptable speech', provider: 'venice', caps: ['tts'] },
+    { id: 'venice/tts-xai-v1', label: 'tts-xai-v1 (Venice)', hint: 'Venice · xAI speech', provider: 'venice', caps: ['tts'] },
+    { id: 'venice/tts-minimax-speech-02-hd', label: 'tts-minimax-speech-02-hd (Venice)', hint: 'Venice · high fidelity speech', provider: 'venice', caps: ['tts'] },
     { id: 'venice/tts-chatterbox-hd', label: 'tts-chatterbox-hd (Venice)', hint: 'Venice · voice cloning', provider: 'venice', caps: ['tts', 'voice-clone'] },
   ],
   sfx: [

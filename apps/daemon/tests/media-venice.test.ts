@@ -535,9 +535,9 @@ describe('venice TTS', () => {
       });
       const body = JSON.parse(String(init?.body));
       expect(body).toMatchObject({
-        model: 'gpt-4o-mini-tts',
+        model: 'tts-kokoro',
         input: 'Hello, world.',
-        voice: 'alloy',
+        voice: 'af_sky',
         response_format: 'mp3',
       });
       return new Response(MP3, {
@@ -553,13 +553,13 @@ describe('venice TTS', () => {
       projectId: 'project-1',
       surface: 'audio',
       audioKind: 'speech',
-      model: 'venice/gpt-4o-mini-tts',
+      model: 'venice/tts-kokoro',
       prompt: 'Hello, world.',
       output: 'venice.mp3',
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(result.providerNote).toContain('venice/gpt-4o-mini-tts');
+    expect(result.providerNote).toContain('venice/tts-kokoro');
 
     const bytes = await readFile(path.join(projectsRoot, 'project-1', 'venice.mp3'));
     expect(bytes.equals(MP3)).toBe(true);
