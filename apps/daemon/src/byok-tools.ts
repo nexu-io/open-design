@@ -1156,8 +1156,21 @@ export async function executeVeniceGenerateVideo(
   // Step 2 — poll. mp4 may come inline (video/mp4) or as JSON
   // {status:"COMPLETED"} pointing at the queue-time download_url (Grok
   // Imagine Private variants).
+  //
+  // Poll ceiling honors OD_VENICE_VIDEO_MAX_POLL_MS so both video entry
+  // points (CLI `od media generate` via renderVeniceVideo in media.ts
+  // AND chat-tool `generate_video` via this executor) share the same
+  // operator-tunable behaviour. Default is 600 s (120 polls × 5 s) —
+  // matches renderVeniceVideo. Floor of 60 s prevents accidental
+  // misconfiguration from making the loop give up before the first
+  // real Wan/Seedance response.
   const pollIntervalMs = ctx.videoPollIntervalMs ?? 5000;
-  const maxPolls = 120;
+  const configuredMaxMs = Number(process.env.OD_VENICE_VIDEO_MAX_POLL_MS);
+  const maxMs =
+    Number.isFinite(configuredMaxMs) && configuredMaxMs >= 60_000
+      ? configuredMaxMs
+      : 10 * 60 * 1000;
+  const maxPolls = Math.max(1, Math.ceil(maxMs / pollIntervalMs));
   let bytes: Buffer | null = null;
   let lastStatus = '';
   for (let attempt = 0; attempt < maxPolls; attempt++) {
@@ -1216,6 +1229,17 @@ export async function executeVeniceGenerateVideo(
             typeof (pd as any)?.error === 'string' ? (pd as any).error :
               (pd.message || lastStatus);
         return { ok: false, error: `venice video ${lastStatus.toLowerCase()}: ${reason}` };
+      }
+      // Terminal COMPLETED with no download URL — the job finished
+      // server-side but we have no way to fetch the asset (queue
+      // returned no download_url, AND no inline mp4 in the poll body).
+      // Without this branch the loop polls a finished job until
+      // maxPolls is exhausted, then misreports "timed out".
+      if (lastStatus === 'COMPLETED' && !privateDownloadUrl) {
+        return {
+          ok: false,
+          error: `venice video completed but no download_url was provided at queue time (model ${wireModel})`,
+        };
       }
       if ((attempt + 1) % 6 === 0) {
         console.log(

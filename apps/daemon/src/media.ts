@@ -3317,6 +3317,20 @@ async function renderVeniceVideo(
         throw new Error(`venice video ${status.toLowerCase()}: ${reason}`);
       }
 
+      // Terminal COMPLETED with no download URL — the job finished
+      // server-side but the daemon has no way to fetch the asset
+      // (queue never returned a download_url, AND the poll body has
+      // no inline mp4). Without this branch the loop polls a finished
+      // job until the maxMs ceiling and misreports the failure as
+      // "timed out". Spotted by @PerishCode in nexu-io/open-design#2759.
+      if (status === 'COMPLETED' && !privateDownloadUrl) {
+        throw new Error(
+          'venice video completed but no download_url was provided at queue time '
+            + `(model ${wireSlug}). This is a Venice-side contract surprise — `
+            + 'try a different model or re-queue.',
+        );
+      }
+
       if (typeof onProgress === 'function' && attempts % 6 === 0) {
         const elapsedSec = Math.round((Date.now() - startedAt) / 1000);
         const avgMs = Number(pollData?.average_execution_time) || 0;

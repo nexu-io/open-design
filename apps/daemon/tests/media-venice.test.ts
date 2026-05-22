@@ -490,6 +490,52 @@ describe('venice video generation', () => {
       }),
     ).rejects.toThrow(/venice video failed: sensitive_content_blocked/);
   });
+
+  // Regression test for round-3 PR review by @PerishCode on
+  // nexu-io/open-design#2759: when the queue response carries no
+  // download_url AND the poll body returns a terminal COMPLETED status,
+  // the loop used to fall past both the COMPLETED-with-URL branch and
+  // the FAILED/EXPIRED branch, polling until the maxMs ceiling and
+  // throwing a misleading "timed out" error. The fix is an explicit
+  // COMPLETED-without-URL branch that throws a clear, fast error.
+  it('throws a clear error on terminal COMPLETED with no download_url', async () => {
+    await writeConfig({
+      providers: { venice: { apiKey: 'k', baseUrl: TEST_BASE_URL } },
+    });
+    const fetchMock = vi.fn(async (input: unknown) => {
+      const url = String(input);
+      if (url === `${TEST_BASE_URL}/video/queue`) {
+        // Queue response intentionally omits download_url (the failure
+        // mode this test exercises). Most public models return one;
+        // this simulates a Venice-side contract surprise.
+        return new Response(JSON.stringify({ model: 'wan-2.5-preview-text-to-video', queue_id: 'qid-x' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      // Terminal COMPLETED status with no inline mp4 and no
+      // download_url to fall back to.
+      return new Response(JSON.stringify({ status: 'COMPLETED' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      generateMedia({
+        projectRoot,
+        projectsRoot,
+        projectId: 'project-1',
+        surface: 'video',
+        model: 'venice/wan-2.5-preview-text-to-video',
+        aspect: '16:9',
+        length: 5,
+        prompt: 'will complete without a download_url.',
+        output: 'venice-no-url.mp4',
+      }),
+    ).rejects.toThrow(/venice video completed but no download_url/);
+  });
 });
 
 describe('venice TTS', () => {
