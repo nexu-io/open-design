@@ -147,6 +147,78 @@ describe('initProjectHistory', () => {
     expect(count.n).toBe(1);
   });
 
+  it('repairs a half-initialized substrate (gitdir present, migration row missing)', async () => {
+    // Setup: do a normal init, then simulate the "post-commit DB write
+    // failed" outcome by deleting the migration row and clearing the
+    // current_revision_id pointer. This is the state the daemon would
+    // be in after a crash (or transient SQLite error) between the git
+    // commit and the INSERT/UPDATE in initProjectHistoryLocked.
+    writeFileSync(path.join(sandbox.projectDir, 'README.md'), '# project\n');
+    const first = await initProjectHistory({
+      projectId: sandbox.projectId,
+      projectDir: sandbox.projectDir,
+      repoDir: sandbox.repoDir,
+      identity: TEST_IDENTITY,
+      db: sandbox.db,
+    });
+    expect(first.kind).toBe('initialized');
+
+    // Force the half-init state — gitdir on disk stays, DB state lost.
+    sandbox.db.prepare(`DELETE FROM project_revisions WHERE project_id = ?`).run(sandbox.projectId);
+    sandbox.db.prepare(`UPDATE projects SET current_revision_id = NULL WHERE id = ?`).run(sandbox.projectId);
+    const pre = sandbox.db.prepare(`SELECT COUNT(*) AS n FROM project_revisions WHERE project_id = ?`).get(sandbox.projectId) as { n: number };
+    expect(pre.n).toBe(0);
+
+    // Retry init — should detect the half-init state and repair from HEAD,
+    // NOT short-circuit at the readDotGitState() === 'ours' check.
+    const second = await initProjectHistory({
+      projectId: sandbox.projectId,
+      projectDir: sandbox.projectDir,
+      repoDir: sandbox.repoDir,
+      identity: TEST_IDENTITY,
+      db: sandbox.db,
+    });
+    expect(second.kind).toBe('repaired');
+    if (second.kind !== 'repaired') return;
+
+    // The reconstructed migration row references HEAD's SHA.
+    const repaired = sandbox.db.prepare(
+      `SELECT id, source, parent_id, git_sha, actor_identity_id, run_id, files_changed_count
+         FROM project_revisions WHERE id = ?`,
+    ).get(second.revisionId) as {
+      id: string;
+      source: string;
+      parent_id: string | null;
+      git_sha: string;
+      actor_identity_id: string;
+      run_id: string | null;
+      files_changed_count: number;
+    };
+    expect(repaired.source).toBe('migration');
+    expect(repaired.parent_id).toBeNull();
+    expect(repaired.git_sha).toMatch(/^[0-9a-f]{40}$/);
+    expect(repaired.actor_identity_id).toBe('local:default');
+    expect(repaired.run_id).toBeNull();
+    expect(repaired.files_changed_count).toBe(0);
+    // Exactly the SHA of the existing HEAD (we didn't make a new commit)
+    const headSha = execFileSync('git', [`--git-dir=${sandbox.repoDir}`, 'rev-parse', 'HEAD']).toString().trim();
+    expect(repaired.git_sha).toBe(headSha);
+
+    // projects.current_revision_id was re-advanced to the repaired revision
+    const proj = sandbox.db.prepare(`SELECT current_revision_id FROM projects WHERE id = 'p1'`).get() as { current_revision_id: string };
+    expect(proj.current_revision_id).toBe(second.revisionId);
+
+    // A third call after repair returns the no-op fast path
+    const third = await initProjectHistory({
+      projectId: sandbox.projectId,
+      projectDir: sandbox.projectDir,
+      repoDir: sandbox.repoDir,
+      identity: TEST_IDENTITY,
+      db: sandbox.db,
+    });
+    expect(third.kind).toBe('already-initialized');
+  });
+
   it('refuses to take ownership of a foreign .git directory', async () => {
     // Simulate a cloned repo: put a regular .git/ directory in the tree
     mkdirSync(path.join(sandbox.projectDir, '.git'), { recursive: true });

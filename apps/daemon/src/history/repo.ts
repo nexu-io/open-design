@@ -185,6 +185,16 @@ export type InitProjectHistoryResult =
   /** Substrate was already initialized for this project; no-op. */
   | { kind: 'already-initialized' }
   /**
+   * Substrate was initialized on disk by a prior call that crashed or
+   * had its post-commit DB write fail, leaving the gitdir and gitlink
+   * in place but no `project_revisions` migration row. This call
+   * detected the half-init state, read HEAD's SHA from the existing
+   * gitdir, inserted the missing migration row, and advanced
+   * `current_revision_id`. From the caller's perspective the project
+   * is now fully initialized — same end-state as `'initialized'`.
+   */
+  | { kind: 'repaired'; revisionId: string }
+  /**
    * Project tree already contains a `.git` we don't manage. Refuse to
    * take ownership; the caller surfaces a project-level error. The
    * `target` field is set when the foreign entry is a gitlink (the
@@ -224,7 +234,50 @@ async function initProjectHistoryLocked(
   const { projectId, projectDir, repoDir, identity, db, signal } = args;
 
   const state = await readDotGitState(projectDir, repoDir);
-  if (state.kind === 'ours') return { kind: 'already-initialized' };
+  if (state.kind === 'ours') {
+    // Substrate exists on disk. Normally this is the no-op fast path,
+    // but if a prior init crashed (or the post-commit DB write failed)
+    // between the migration commit and the `project_revisions` INSERT,
+    // the gitdir is in place but no migration row exists for this
+    // project. Detect that half-init state and repair it from HEAD's
+    // SHA — without this branch, `readDotGitState() === 'ours'` would
+    // short-circuit forever and the project would stay broken.
+    const existing = db
+      .prepare(
+        `SELECT id FROM project_revisions
+          WHERE project_id = ? AND source = 'migration'
+          LIMIT 1`,
+      )
+      .get(projectId) as { id: string } | undefined;
+    if (existing) return { kind: 'already-initialized' };
+
+    // Half-init detected; reconstruct the missing migration row from
+    // the actual git HEAD so the schema and on-disk substrate are
+    // re-synchronized.
+    const sha = (await runGit(projectDir, ['rev-parse', 'HEAD'], signal)).trim();
+    const revisionId = randomUUID();
+    const now = Date.now();
+    db.prepare(
+      `INSERT INTO project_revisions (
+         id, project_id, parent_id, git_sha, created_at, source, message,
+         actor_identity_id, actor_display_name, run_id,
+         files_changed_count, bytes_added, bytes_removed
+       ) VALUES (?, ?, NULL, ?, ?, 'migration', ?, ?, ?, NULL, 0, 0, 0)`,
+    ).run(
+      revisionId,
+      projectId,
+      sha,
+      now,
+      MIGRATION_COMMIT_MESSAGE,
+      identity.id,
+      identity.displayName,
+    );
+    db.prepare(`UPDATE projects SET current_revision_id = ? WHERE id = ?`).run(
+      revisionId,
+      projectId,
+    );
+    return { kind: 'repaired', revisionId };
+  }
   if (state.kind === 'foreign-dir') return { kind: 'foreign-git-collision' };
   if (state.kind === 'foreign-link') {
     return { kind: 'foreign-git-collision', target: state.target };

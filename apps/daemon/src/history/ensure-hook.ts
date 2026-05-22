@@ -96,6 +96,16 @@ export function installHistoryEnsureHook(args: InstallHistoryEnsureHookArgs): vo
           result.target ? ` (gitlink → ${result.target})` : ' directory'
         }; history disabled for this project.`,
       );
+    } else if (result.kind === 'repaired') {
+      // The substrate was half-initialized (gitdir present on disk,
+      // no migration row in the DB) from a prior init that crashed
+      // between the migration commit and the SQLite INSERT. We
+      // reconstructed the missing row from HEAD. Logged at info-level
+      // so the recovery is observable in normal logs — it indicates
+      // a prior crash/abort during init that's now self-healed.
+      console.log(
+        `[history] project ${projectId} substrate was half-initialized; repaired migration revision ${result.revisionId.slice(0, 8)} from HEAD.`,
+      );
     }
   });
 }
