@@ -8,6 +8,7 @@
 // official trademarked logos — so we keep visual identification without
 // shipping brand assets we don't have a license for.
 
+import type { JSX } from 'react';
 import type { HostEditorId } from '@open-design/contracts';
 
 interface Props {

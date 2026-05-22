@@ -2516,7 +2516,7 @@ interface ShortcutsMenuProps {
   pendingPluginId: string | null;
   pluginsLoading: boolean;
   open: boolean;
-  refNode: RefObject<HTMLDivElement>;
+  refNode: RefObject<HTMLDivElement | null>;
   onOpenChange: (open: boolean) => void;
   onPickChip: (chip: HomeHeroChip) => void;
 }
