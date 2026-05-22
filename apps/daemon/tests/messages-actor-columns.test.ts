@@ -37,6 +37,7 @@ function freshDb(): Database.Database {
       comment_attachments_json TEXT,
       produced_files_json TEXT,
       feedback_json TEXT,
+      pre_turn_file_names_json TEXT,
       started_at INTEGER,
       ended_at INTEGER,
       position INTEGER NOT NULL,
