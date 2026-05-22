@@ -141,6 +141,150 @@ describe('API proxy routes', () => {
     expect(replay).toContain('event: end');
   });
 
+  // OpenAI BYOK chats now share the SenseAudio media tool loop, but only when
+  // the request carries a projectId (the tools write into the project folder).
+  // Without one the handler must degrade to a plain LLM passthrough so a
+  // project-less OpenAI chat keeps working exactly as before.
+  it('injects media tools for OpenAI BYOK only when a projectId is present', async () => {
+    const bodies: any[] = [];
+    const reply = [
+      'data: {"choices":[{"index":0,"delta":{"content":"hi"}}]}',
+      '',
+      'data: {"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}',
+      '',
+      'data: [DONE]',
+      '',
+    ].join('\n');
+    const fetchMock = vi.fn(async (input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      if (url === 'https://api.example.com/v1/chat/completions') {
+        bodies.push(JSON.parse(String(init?.body || '{}')));
+        return sseResponse(reply);
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await collectRun('/api/proxy/openai/stream', {
+      baseUrl: 'https://api.example.com/v1',
+      apiKey: 'sk-test',
+      model: 'gpt-4o',
+      projectId: 'test-project',
+      messages: [{ role: 'user', content: 'hi' }],
+    });
+    expect(bodies[0].tools).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'function',
+          function: expect.objectContaining({ name: 'generate_image' }),
+        }),
+      ]),
+    );
+
+    bodies.length = 0;
+    await collectRun('/api/proxy/openai/stream', {
+      baseUrl: 'https://api.example.com/v1',
+      apiKey: 'sk-test',
+      model: 'gpt-4o',
+      // no projectId → plain passthrough, no tools
+      messages: [{ role: 'user', content: 'hi' }],
+    });
+    expect(bodies[0].tools).toBeUndefined();
+  });
+
+  // The Anthropic adapter speaks Claude's native tool protocol: tools declared
+  // as { name, input_schema }, tool calls returned as `tool_use` content
+  // blocks, results fed back as `tool_result` blocks in a user turn. This
+  // proves the full loop runs (tool_use → execute → tool_result → text turn),
+  // independent of whether the media generation itself succeeds.
+  it('runs the Anthropic media tool loop and feeds tool_result back', async () => {
+    const bodies: any[] = [];
+    let call = 0;
+    const fetchMock = vi.fn(async (input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      if (url === 'https://api.anthropic.com/v1/messages') {
+        bodies.push(JSON.parse(String(init?.body || '{}')));
+        call++;
+        if (call === 1) {
+          return sseResponse([
+            'event: content_block_start',
+            'data: {"index":0,"content_block":{"type":"tool_use","id":"toolu_1","name":"generate_image"}}',
+            '',
+            'event: content_block_delta',
+            'data: {"index":0,"delta":{"type":"input_json_delta","partial_json":"{\\"prompt\\":\\"a cat\\"}"}}',
+            '',
+            'event: content_block_stop',
+            'data: {"index":0}',
+            '',
+            'event: message_delta',
+            'data: {"delta":{"stop_reason":"tool_use"}}',
+            '',
+            'event: message_stop',
+            'data: {}',
+            '',
+          ].join('\n'));
+        }
+        return sseResponse([
+          'event: content_block_start',
+          'data: {"index":0,"content_block":{"type":"text","text":""}}',
+          '',
+          'event: content_block_delta',
+          'data: {"index":0,"delta":{"type":"text_delta","text":"Done."}}',
+          '',
+          'event: message_delta',
+          'data: {"delta":{"stop_reason":"end_turn"}}',
+          '',
+          'event: message_stop',
+          'data: {}',
+          '',
+        ].join('\n'));
+      }
+      // generate_image with no configured provider fails fast (no creds); the
+      // adapter still feeds the failure back as a tool_result and loops.
+      return new Response('{"error":"no creds"}', { status: 401 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { status, sse } = await collectRun('/api/proxy/anthropic/stream', {
+      baseUrl: 'https://api.anthropic.com',
+      apiKey: 'sk-ant-test',
+      projectId: 'test-project',
+      model: 'claude-3-5-sonnet',
+      messages: [{ role: 'user', content: 'draw a cat' }],
+    });
+
+    expect(status).toBe(202);
+    // Looped exactly once: tool_use turn, then the text turn.
+    expect(bodies).toHaveLength(2);
+    // First request advertised the media tools in Anthropic shape.
+    expect(bodies[0].tools).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'generate_image',
+          input_schema: expect.any(Object),
+        }),
+      ]),
+    );
+    // Second request echoes the assistant tool_use turn + a user tool_result.
+    const msgs = bodies[1].messages;
+    expect(msgs[1]).toMatchObject({
+      role: 'assistant',
+      content: expect.arrayContaining([
+        expect.objectContaining({ type: 'tool_use', id: 'toolu_1', name: 'generate_image' }),
+      ]),
+    });
+    expect(msgs[2]).toMatchObject({
+      role: 'user',
+      content: [expect.objectContaining({ type: 'tool_result', tool_use_id: 'toolu_1' })],
+    });
+    // The final assistant text streamed to the client.
+    expect(sse).toContain('event: stdout');
+    expect(sse).toContain('Done.');
+    expect(sse).toContain('event: end');
+  });
+
   // Regression: appendVersionedApiPath needs to thread three shapes:
   //   * bare host                  → inject /v1 (api.openai.com)
   //   * sub-path containing /vN    → no inject (api.deepinfra.com/v1/openai)

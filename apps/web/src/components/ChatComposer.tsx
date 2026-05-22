@@ -1583,7 +1583,19 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               t={t}
             />
           ) : null}
-          {byokApiProtocol === 'senseaudio' && onChangeByokImageModel ? (
+          {/* BYOK chats with in-chat media generation. SenseAudio, OpenAI,
+              Azure, and Anthropic all inject the media tools daemon-side;
+              their composer pick is the per-surface default. preferProvider
+              names the empty-state "(default)" model: SenseAudio/OpenAI seed
+              their own key so they default to their own model, while Azure /
+              Anthropic have no media of their own (media routes to whatever is
+              configured in Settings → Media) so they show the registry default. */}
+          {!agentMediaPickerEnabled
+          && (byokApiProtocol === 'senseaudio'
+            || byokApiProtocol === 'openai'
+            || byokApiProtocol === 'azure'
+            || byokApiProtocol === 'anthropic')
+          && onChangeByokImageModel ? (
             <ByokMediaModelsPopover
               label={t('settings.byokMediaModels')}
               imageLabel={t('settings.byokImageModel')}
@@ -1595,15 +1607,21 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               onChangeVideo={onChangeByokVideoModel}
               audioModel={byokAudioModel ?? ''}
               onChangeAudio={onChangeByokAudioModel}
-              preferProvider="senseaudio"
+              preferProvider={
+                byokApiProtocol === 'senseaudio'
+                  ? 'senseaudio'
+                  : byokApiProtocol === 'openai'
+                    ? 'openai'
+                    : undefined
+              }
             />
           ) : null}
           {/* Normal agent chats (Claude Code / Codex): same registry-wide
               picker, but the selection is a per-turn default the daemon
-              injects as OD_DEFAULT_*_MODEL env. Hidden when the SenseAudio
-              BYOK picker above is active so there is only one picker. */}
+              injects as OD_DEFAULT_*_MODEL env. agentMediaPickerEnabled is
+              true only for local-agent chats (config.mode === 'daemon'), so
+              this and the BYOK picker above are mutually exclusive. */}
           {agentMediaPickerEnabled &&
-          byokApiProtocol !== 'senseaudio' &&
           onChangeImageModel &&
           onChangeVideoModel &&
           onChangeAudioModel ? (

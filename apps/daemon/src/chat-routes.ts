@@ -650,76 +650,29 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     }
 
     const url = appendVersionedApiPath(baseUrl, '/messages');
+    const { projectId, byokImageModel, byokVideoModel, byokAudioModel } =
+      proxyBody;
     console.log(
-      `[proxy:anthropic] ${req.method} ${validated.parsed!.hostname} model=${model}`,
+      `[proxy:anthropic] ${req.method} ${validated.parsed!.hostname} model=${model} project=${projectId ?? '-'}`,
     );
 
-    const payload: any = {
+    // Anthropic's Messages API uses a different tool protocol than OpenAI, so
+    // it runs through a dedicated adapter. Claude has no media API of its own,
+    // so in-chat media routes to whatever the user configured in Settings →
+    // Media; the adapter degrades to a plain passthrough without a projectId.
+    await runAnthropicMediaChat({
+      res,
+      proxyBody,
+      url,
+      apiKey,
       model,
-      max_tokens:
-        typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
-      messages: Array.isArray(messages) ? messages : [],
-      stream: true,
-    };
-    if (typeof systemPrompt === 'string' && systemPrompt) {
-      payload.system = systemPrompt;
-    }
-
-    runByokProxy(res, proxyBody, async ({ sse, signal }) => {
-      sse.send('start', { model });
-      try {
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01',
-          },
-          body: JSON.stringify(payload),
-          redirect: 'error',
-          signal,
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(
-            `[proxy:anthropic] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
-          );
-          sendProxyError(sse, `Upstream error: ${response.status}`, {
-            code: proxyErrorCode(response.status),
-            details: errorText,
-            retryable: response.status === 429 || response.status >= 500,
-          });
-          return sse.end();
-        }
-
-        let ended = false;
-        await streamUpstreamSse(response, ({ event, data }: any) => {
-          if (!data) return false;
-          if (event === 'error' || data.type === 'error') {
-            const message = data.error?.message || data.message || 'Anthropic upstream error';
-            sendProxyError(sse, message, { details: data });
-            ended = true;
-            return true;
-          }
-          if (event === 'content_block_delta' && typeof data.delta?.text === 'string') {
-            sse.send('delta', { delta: data.delta.text });
-          }
-          if (event === 'message_stop') {
-            sse.send('end', {});
-            ended = true;
-            return true;
-          }
-          return false;
-        });
-        if (!ended) sse.send('end', {});
-        sse.end();
-      } catch (err: any) {
-        if (err?.name === 'AbortError') return sse.end();
-        console.error(`[proxy:anthropic] internal error: ${err.message}`);
-        sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
-        sse.end();
-      }
+      systemPrompt,
+      messages,
+      maxTokens,
+      projectId,
+      byokImageModel,
+      byokVideoModel,
+      byokAudioModel,
     });
   });
 
@@ -1358,6 +1311,245 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       } catch (err: any) {
         if (err?.name === 'AbortError') return sse.end();
         console.error(`[proxy:${providerTag}] internal error: ${err.message}`);
+        sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
+        sse.end();
+      }
+    });
+  };
+
+  // Anthropic media chat: same idea as runByokMediaChat but for Anthropic's
+  // native Messages API, whose tool protocol differs from OpenAI's. Tools are
+  // declared as { name, description, input_schema }; the model returns
+  // `tool_use` content blocks (id/name + a streamed `input_json_delta`); and
+  // tool results are fed back as `tool_result` content blocks in a user turn.
+  // Anthropic (Claude) has no media generation API of its own, so this never
+  // self-seeds media-config — generate_image/video/audio route through
+  // generateMedia to whatever provider the user configured in Settings → Media.
+  const runAnthropicMediaChat = async (opts: {
+    res: any;
+    proxyBody: any;
+    url: string;
+    apiKey: string;
+    model: string;
+    systemPrompt?: unknown;
+    messages?: unknown;
+    maxTokens?: unknown;
+    projectId: string;
+    byokImageModel?: unknown;
+    byokVideoModel?: unknown;
+    byokAudioModel?: unknown;
+  }): Promise<void> => {
+    const {
+      res,
+      proxyBody,
+      url,
+      apiKey,
+      model,
+      systemPrompt,
+      messages,
+      maxTokens,
+      projectId,
+      byokImageModel,
+      byokVideoModel,
+      byokAudioModel,
+    } = opts;
+
+    const workingMessages: any[] = Array.isArray(messages) ? [...messages] : [];
+    const mediaEnabled =
+      typeof projectId === 'string' && isSafeProjectId(projectId);
+
+    const toolCtx: BYOKToolContext = {
+      projectRoot: ctx.paths.PROJECT_ROOT,
+      projectsRoot: ctx.paths.PROJECTS_DIR,
+      projectId,
+      ...(isImageModel(byokImageModel) ? { composerImageModel: byokImageModel } : {}),
+      ...(isVideoModel(byokVideoModel) ? { composerVideoModel: byokVideoModel } : {}),
+      ...(isAudioModel(byokAudioModel) ? { composerAudioModel: byokAudioModel } : {}),
+    };
+
+    // OpenAI-shaped tool defs → Anthropic shape. The parameters object is a
+    // JSON Schema in both, so it maps straight onto input_schema.
+    const anthropicTools = BYOK_MEDIA_TOOLS.map((t) => ({
+      name: t.function.name,
+      description: t.function.description,
+      input_schema: t.function.parameters,
+    }));
+
+    const dispatchTool = async (name: string, input: any) => {
+      if (name === 'generate_image') return executeGenerateImage(input || {}, toolCtx);
+      if (name === 'generate_video') return executeGenerateVideo(input || {}, toolCtx);
+      if (name === 'generate_audio') return executeGenerateAudio(input || {}, toolCtx);
+      return { ok: false as const, error: `unknown tool: ${name || 'unnamed'}` };
+    };
+
+    type Block = { type: string; text: string; id: string; name: string; inputJson: string };
+    type AnthropicTurn =
+      | { kind: 'text_end' }
+      | { kind: 'error' }
+      | {
+          kind: 'tool_calls';
+          assistantMessage: any;
+          toolCalls: Array<{ id: string; name: string; input: any }>;
+        };
+
+    const runTurn = async (
+      sse: any,
+      messagesForTurn: any[],
+      signal: AbortSignal,
+    ): Promise<AnthropicTurn> => {
+      const payload: any = {
+        model,
+        max_tokens:
+          typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
+        messages: messagesForTurn,
+        stream: true,
+        ...(typeof systemPrompt === 'string' && systemPrompt
+          ? { system: systemPrompt }
+          : {}),
+        ...(mediaEnabled ? { tools: anthropicTools } : {}),
+      };
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify(payload),
+        redirect: 'error',
+        signal,
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(
+          `[proxy:anthropic] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
+        );
+        sendProxyError(sse, `Upstream error: ${response.status}`, {
+          code: proxyErrorCode(response.status),
+          details: errorText,
+          retryable: response.status === 429 || response.status >= 500,
+        });
+        return { kind: 'error' };
+      }
+
+      const blocks: Record<number, Block> = {};
+      let stopReason = '';
+      let providerError = '';
+
+      await streamUpstreamSse(response, ({ event, data }: any) => {
+        if (!data) return false;
+        if (event === 'error' || data.type === 'error') {
+          providerError = data.error?.message || data.message || 'Anthropic upstream error';
+          return true;
+        }
+        if (event === 'content_block_start') {
+          const idx = typeof data.index === 'number' ? data.index : 0;
+          const cb = data.content_block || {};
+          blocks[idx] = {
+            type: cb.type || 'text',
+            text: cb.type === 'text' && typeof cb.text === 'string' ? cb.text : '',
+            id: typeof cb.id === 'string' ? cb.id : '',
+            name: typeof cb.name === 'string' ? cb.name : '',
+            inputJson: '',
+          };
+        } else if (event === 'content_block_delta') {
+          const idx = typeof data.index === 'number' ? data.index : 0;
+          const d = data.delta || {};
+          if (d.type === 'text_delta' && typeof d.text === 'string') {
+            if (blocks[idx]) blocks[idx].text += d.text;
+            if (d.text) sse.send('delta', { delta: d.text });
+          } else if (d.type === 'input_json_delta' && typeof d.partial_json === 'string') {
+            if (blocks[idx]) blocks[idx].inputJson += d.partial_json;
+          }
+        } else if (event === 'message_delta') {
+          if (typeof data.delta?.stop_reason === 'string') stopReason = data.delta.stop_reason;
+        } else if (event === 'message_stop') {
+          return true;
+        }
+        return false;
+      });
+
+      if (providerError) {
+        sendProxyError(sse, `Provider error: ${providerError}`, { details: providerError });
+        return { kind: 'error' };
+      }
+
+      const indices = Object.keys(blocks).map(Number).sort((a, b) => a - b);
+      const toolUseBlocks = indices.map((i) => blocks[i]!).filter((b) => b.type === 'tool_use');
+      if (stopReason === 'tool_use' && toolUseBlocks.length > 0) {
+        const parseInput = (raw: string) => {
+          try {
+            return JSON.parse(raw || '{}');
+          } catch {
+            return {};
+          }
+        };
+        // Echo the assistant turn (text + tool_use blocks) before the
+        // tool_result user turn — Anthropic requires the full prior content.
+        const assistantContent = indices
+          .map((i) => {
+            const b = blocks[i]!;
+            if (b.type === 'tool_use') {
+              return { type: 'tool_use', id: b.id, name: b.name, input: parseInput(b.inputJson) };
+            }
+            return { type: 'text', text: b.text };
+          })
+          .filter((b) => b.type === 'tool_use' || (typeof (b as any).text === 'string' && (b as any).text.length > 0));
+        return {
+          kind: 'tool_calls',
+          assistantMessage: { role: 'assistant', content: assistantContent },
+          toolCalls: toolUseBlocks.map((b) => ({ id: b.id, name: b.name, input: parseInput(b.inputJson) })),
+        };
+      }
+
+      return { kind: 'text_end' };
+    };
+
+    runByokProxy(res, proxyBody, async ({ sse, signal, run }) => {
+      sse.send('start', { model });
+      try {
+        for (let loop = 0; loop < MAX_BYOK_TOOL_LOOPS; loop++) {
+          if (run.cancelRequested) return sse.end();
+          const turn = await runTurn(sse, workingMessages, signal);
+          if (turn.kind === 'error') return sse.end();
+          if (turn.kind === 'text_end') {
+            sse.send('end', {});
+            return sse.end();
+          }
+          workingMessages.push(turn.assistantMessage);
+          const toolResults: any[] = [];
+          for (const call of turn.toolCalls) {
+            if (run.cancelRequested) return sse.end();
+            const result = await dispatchTool(call.name, call.input);
+            const toolName = call.name || 'unknown';
+            if (result.ok) {
+              console.log(`[proxy:anthropic] ${toolName} OK: ${call.id} → ${result.url}`);
+            } else {
+              console.warn(`[proxy:anthropic] ${toolName} FAILED: ${call.id} — ${result.error}`);
+            }
+            const content = result.ok
+              ? result.kind === 'video'
+                ? `Video generated successfully. URL: ${result.url}. Reply to the user with a clickable markdown link, e.g. [▶ Play video](${result.url}). Do NOT use markdown image syntax — the chat renderer does not embed <video> tags.`
+                : result.kind === 'audio'
+                  ? `Audio generated successfully. URL: ${result.url}. Reply to the user with a clickable markdown link, e.g. [▶ Play audio](${result.url}). Do NOT use markdown image syntax — the chat renderer does not embed an <audio> player.`
+                  : `Image generated successfully. URL: ${result.url}. Reply to the user with: ![generated image](${result.url})`
+              : result.kind === 'video'
+                ? `Video generation failed: ${result.error}. Apologize briefly and suggest a retry with a more specific prompt or a shorter duration.`
+                : result.kind === 'audio'
+                  ? `Audio generation failed: ${result.error}. Apologize briefly and suggest a retry, or check that the audio provider is configured in Settings → Media.`
+                  : `Image generation failed: ${result.error}. Apologize briefly and suggest a retry, or check that an image provider is configured in Settings → Media.`;
+            toolResults.push({ type: 'tool_result', tool_use_id: call.id, content });
+          }
+          workingMessages.push({ role: 'user', content: toolResults });
+        }
+        console.warn(
+          `[proxy:anthropic] tool loop bounded at MAX_BYOK_TOOL_LOOPS=${MAX_BYOK_TOOL_LOOPS}`,
+        );
+        sse.send('end', {});
+        return sse.end();
+      } catch (err: any) {
+        if (err?.name === 'AbortError') return sse.end();
+        console.error(`[proxy:anthropic] internal error: ${err.message}`);
         sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
         sse.end();
       }
