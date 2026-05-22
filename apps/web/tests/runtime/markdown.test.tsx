@@ -59,7 +59,7 @@ describe('renderMarkdown', () => {
       name: 'wrapped in fullwidth parens',
       input: '（https://example.com/a）',
       href: 'https://example.com/a',
-      rendered: '（<a class="md-link" href="https://example.com/a"',
+      rendered: '（<a class="md-link md-link-bare" href="https://example.com/a"',
       trailing: '>https://example.com/a</a>）',
       excludedHref: 'https://example.com/a）',
     },
