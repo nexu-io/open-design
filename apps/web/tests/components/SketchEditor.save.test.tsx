@@ -180,4 +180,83 @@ describe('SketchEditor save', () => {
     expect(saveButton().textContent).toBe('common.save');
     expect(saveButton().querySelector('svg')).toBeNull();
   });
+
+  it('has an aria-label matching the default save state', () => {
+    renderEditor();
+    expect(saveButton().getAttribute('aria-label')).toBe('common.save');
+  });
+
+  it('has an aria-label when dirty is true', () => {
+    renderEditor({ dirty: true });
+    expect(saveButton().getAttribute('aria-label')).toBe('common.save');
+  });
+
+  it('has an aria-label showing saving state while saving', () => {
+    renderEditor({ saving: true, dirty: true });
+    expect(saveButton().getAttribute('aria-label')).toBe('sketch.saving');
+  });
+
+  it('has an aria-label showing saved state after successful save', async () => {
+    const onSave = vi.fn().mockResolvedValue(true);
+    renderEditor({ dirty: true, onSave });
+    await act(async () => {
+      fireEvent.click(saveButton());
+    });
+    const btn = saveButton();
+    expect(btn.getAttribute('aria-label')).toBe('sketch.saved');
+    expect(btn.querySelector('svg')).not.toBeNull();
+  });
+
+  it('reverts the aria-label to default after saved indicator expires', async () => {
+    vi.useFakeTimers();
+    const onSave = vi.fn().mockResolvedValue(true);
+    renderEditor({ dirty: true, onSave });
+    await act(async () => {
+      fireEvent.click(saveButton());
+    });
+    expect(saveButton().getAttribute('aria-label')).toBe('sketch.saved');
+    act(() => {
+      vi.advanceTimersByTime(2000);
+    });
+    expect(saveButton().getAttribute('aria-label')).toBe('common.save');
+  });
+
+  it('keeps the aria-label as default when save fails', async () => {
+    const onSave = vi.fn().mockResolvedValue(false);
+    renderEditor({ dirty: true, onSave });
+    await act(async () => {
+      fireEvent.click(saveButton());
+    });
+    expect(saveButton().getAttribute('aria-label')).toBe('common.save');
+  });
+
+  it('shows the default aria-label when dirty becomes true after a successful save', async () => {
+    vi.useFakeTimers();
+    const onSave = vi.fn().mockResolvedValue(true);
+    const { rerender } = renderEditor({ dirty: true, onSave });
+    await act(async () => {
+      fireEvent.click(saveButton());
+    });
+    expect(saveButton().getAttribute('aria-label')).toBe('sketch.saved');
+    rerender(
+      <SketchEditor
+        items={[]}
+        onItemsChange={noop}
+        onSave={onSave}
+        fileName="test.sketch.json"
+        dirty={false}
+      />,
+    );
+    rerender(
+      <SketchEditor
+        items={[]}
+        onItemsChange={noop}
+        onSave={onSave}
+        fileName="test.sketch.json"
+        dirty={true}
+      />,
+    );
+    expect(saveButton().getAttribute('aria-label')).toBe('common.save');
+    expect(saveButton().querySelector('svg')).toBeNull();
+  });
 });
