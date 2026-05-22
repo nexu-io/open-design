@@ -2412,6 +2412,7 @@ describe('DesignSystemDetailView', () => {
       </I18nProvider>,
     );
 
+    await waitFor(() => expect(mocks.ensureDesignSystemWorkspace).toHaveBeenCalled());
     await waitFor(() => expect(screen.getByTestId('design-system-chat-send')).toBeTruthy());
     fireEvent.click(screen.getByTestId('design-system-chat-send'));
 
