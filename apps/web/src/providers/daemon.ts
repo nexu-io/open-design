@@ -11,6 +11,7 @@
  */
 import type { AgentEvent, ChatCommentAttachment, ChatMessage } from '../types';
 import type {
+  ChatAnalyticsHints,
   ChatRunCreateResponse,
   ChatRunListResponse,
   ChatRunStatus,
@@ -186,6 +187,11 @@ export interface DaemonStreamOptions {
   onRunCreated?: (runId: string) => void;
   onRunStatus?: (status: ChatRunStatus) => void;
   onRunEventId?: (eventId: string) => void;
+  // v2 analytics context propagated to run_created / run_finished.
+  // Optional; the daemon only consumes these to shape PostHog props
+  // (page_name / area / entry_from / DS context). Behavior never
+  // depends on them.
+  analyticsHints?: ChatAnalyticsHints;
 }
 
 export interface DaemonReattachOptions {
@@ -241,6 +247,7 @@ export async function streamViaDaemon({
   onRunCreated,
   onRunStatus,
   onRunEventId,
+  analyticsHints,
 }: DaemonStreamOptions): Promise<void> {
   const emitRunStatus = (status: ChatRunStatus) => {
     onRunStatus?.(status);
@@ -267,6 +274,7 @@ export async function streamViaDaemon({
     reasoning: reasoning ?? null,
     ...(context ? { context } : {}),
     ...(research ? { research } : {}),
+    ...(analyticsHints ? { analyticsHints } : {}),
   };
   const body = JSON.stringify(request);
 

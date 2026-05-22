@@ -86,6 +86,11 @@ import type {
   OnboardingClickProps,
   OnboardingRuntimeScanResultProps,
   OnboardingCompleteResultProps,
+  DesignSystemSourceIngestResultProps,
+  DesignSystemCreateResultProps,
+  DesignSystemReviewResultProps,
+  DesignSystemStatusResultProps,
+  DesignSystemApplyResultProps,
   UpdateIndicatorSurfaceViewProps,
   UpdatePromptSurfaceViewProps,
   UpdateInstallResultProps,
@@ -709,6 +714,53 @@ export function trackOnboardingCompleteResult(
   props: OnboardingCompleteResultProps,
 ): void {
   send(track, 'onboarding_complete_result', props);
+}
+
+// ---- Design-system lifecycle ---------------------------------------------
+//
+// `trackDesignSystem*Result` cover the five lifecycle moments in the
+// DS funnel: source intake, create, review, status changes, picker
+// apply. Page_views / clicks inside DS surfaces continue to reuse the
+// generic `page_view` / `ui_click` helpers with the DS page enum.
+
+export function trackDesignSystemSourceIngestResult(
+  track: Track,
+  props: DesignSystemSourceIngestResultProps,
+  options?: { requestId?: string },
+): void {
+  send(track, 'design_system_source_ingest_result', props, options);
+}
+
+export function trackDesignSystemCreateResult(
+  track: Track,
+  props: DesignSystemCreateResultProps,
+  options?: { requestId?: string },
+): void {
+  send(track, 'design_system_create_result', props, options);
+}
+
+export function trackDesignSystemReviewResult(
+  track: Track,
+  props: DesignSystemReviewResultProps,
+  options?: { requestId?: string },
+): void {
+  send(track, 'design_system_review_result', props, options);
+}
+
+export function trackDesignSystemStatusResult(
+  track: Track,
+  props: DesignSystemStatusResultProps,
+  options?: { requestId?: string },
+): void {
+  send(track, 'design_system_status_result', props, options);
+}
+
+export function trackDesignSystemApplyResult(
+  track: Track,
+  props: DesignSystemApplyResultProps,
+  options?: { requestId?: string },
+): void {
+  send(track, 'design_system_apply_result', props, options);
 }
 
 // ---- Update indicator / prompt ------------------------------------------

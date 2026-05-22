@@ -2466,6 +2466,35 @@ export function ProjectView({
           return;
         }
         const choice = selectedAgentChoice;
+        // v2 analytics: when the active project is a DS workspace
+        // (created by `prepareCreatedDesignSystemProject`, identifiable
+        // by `metadata.importedFrom === 'design-system'`), every run
+        // started from this composer is a DS-variant run. Pass
+        // analyticsHints so the daemon emits run_created /
+        // run_finished under `page_name=design_system_project`,
+        // `area=design_system_generation`, `project_kind=design_system`.
+        // The first-ever message into a DS workspace is the auto-sent
+        // generation kickoff (entry_from=`onboarding_design_system` is
+        // the doc's name for "DS create flow handed off to the agent");
+        // subsequent messages are review-driven regenerations
+        // (`regenerate_from_review`). Use `messages.length === 0` —
+        // truer than autoSendFirstMessageRef which races StrictMode
+        // remounts + sessionStorage clears.
+        const isDesignSystemWorkspaceProject =
+          project.metadata?.importedFrom === 'design-system';
+        const dsEntryFrom: 'onboarding_design_system' | 'regenerate_from_review' =
+          messages.length === 0
+            ? 'onboarding_design_system'
+            : 'regenerate_from_review';
+        const dsAnalyticsHints = isDesignSystemWorkspaceProject
+          ? {
+              entryFrom: dsEntryFrom,
+              projectKind: 'design_system' as const,
+              designSystemRunContext: {
+                origin: 'manual_create' as const,
+              },
+            }
+          : undefined;
         void streamViaDaemon({
           agentId: config.agentId,
           history: nextHistory,
@@ -2485,6 +2514,7 @@ export function ProjectView({
           research: meta?.research,
           model: choice?.model ?? null,
           reasoning: choice?.reasoning ?? null,
+          ...(dsAnalyticsHints ? { analyticsHints: dsAnalyticsHints } : {}),
           onRunCreated: (runId) => {
             const pinnedAssistant = {
               ...latestAssistantMsg,

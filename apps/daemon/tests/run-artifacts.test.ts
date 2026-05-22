@@ -16,7 +16,11 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { countNewHtmlArtifacts } from '../src/run-artifacts.js';
+import {
+  countDesignSystemPreviewModules,
+  countNewHtmlArtifacts,
+  didRunCreateDesignSystemFile,
+} from '../src/run-artifacts.js';
 
 let nextId = 0;
 function freshId(prefix = 'tool'): string {
@@ -200,5 +204,87 @@ describe('countNewHtmlArtifacts', () => {
         ...pair('Bash', '/proj/index.html'),
       ]),
     ).toBe(0);
+  });
+});
+
+describe('didRunCreateDesignSystemFile', () => {
+  it('is true when the run wrote a DESIGN.md', () => {
+    expect(
+      didRunCreateDesignSystemFile([
+        ...pair('Write', '/proj/DESIGN.md'),
+      ]),
+    ).toBe(true);
+  });
+
+  it('matches DESIGN.md case-insensitively', () => {
+    expect(
+      didRunCreateDesignSystemFile([
+        ...pair('Edit', '/proj/design.md'),
+      ]),
+    ).toBe(true);
+  });
+
+  it('is false when the matching tool_result reported isError', () => {
+    expect(
+      didRunCreateDesignSystemFile([
+        ...pair('Write', '/proj/DESIGN.md', true),
+      ]),
+    ).toBe(false);
+  });
+
+  it('is false when no DESIGN.md was touched', () => {
+    expect(
+      didRunCreateDesignSystemFile([
+        ...pair('Write', '/proj/index.html'),
+        ...pair('Read', '/proj/DESIGN.md'),
+      ]),
+    ).toBe(false);
+  });
+});
+
+describe('countDesignSystemPreviewModules', () => {
+  it('counts distinct preview/*.html paths the run wrote', () => {
+    expect(
+      countDesignSystemPreviewModules([
+        ...pair('Write', '/proj/preview/colors.html'),
+        ...pair('Write', '/proj/preview/typography.html'),
+        ...pair('Write', '/proj/preview/components.html'),
+      ]),
+    ).toBe(3);
+  });
+
+  it('dedupes Write-then-Edit on the same preview path', () => {
+    expect(
+      countDesignSystemPreviewModules([
+        ...pair('Write', '/proj/preview/colors.html'),
+        ...pair('Edit', '/proj/preview/colors.html'),
+      ]),
+    ).toBe(1);
+  });
+
+  it('counts preview/index.html as a module', () => {
+    expect(
+      countDesignSystemPreviewModules([
+        ...pair('Write', '/proj/preview/index.html'),
+      ]),
+    ).toBe(1);
+  });
+
+  it('ignores non-preview html paths', () => {
+    expect(
+      countDesignSystemPreviewModules([
+        ...pair('Write', '/proj/index.html'),
+        ...pair('Write', '/proj/docs/intro.html'),
+      ]),
+    ).toBe(0);
+  });
+
+  it('skips preview writes whose tool_result reported isError', () => {
+    expect(
+      countDesignSystemPreviewModules([
+        ...pair('Write', '/proj/preview/colors.html', true),
+        ...pair('Write', '/proj/preview/typography.html'),
+      ]),
+    ).toBe(1);
   });
 });

@@ -48,6 +48,19 @@ function isHtmlPath(path: string): boolean {
   return path.toLowerCase().endsWith('.html');
 }
 
+function isDesignSystemFile(path: string): boolean {
+  const lower = path.toLowerCase();
+  return lower.endsWith('/design.md') || lower === 'design.md';
+}
+
+function isPreviewModulePath(path: string): boolean {
+  const lower = path.toLowerCase();
+  // Preview modules live under `preview/*.html` in DS workspaces.
+  // `preview/index.html` is the shell, others are per-module previews
+  // (colors, typography, components, brand-assets, ...).
+  return /(^|\/)preview\/[^/]+\.html$/i.test(lower);
+}
+
 export interface RunEventLike {
   event?: string;
   data?: unknown;
@@ -75,6 +88,65 @@ function readToolResultId(data: unknown): string | null {
 function readToolResultIsError(data: unknown): boolean {
   if (!data || typeof data !== 'object') return false;
   return (data as { isError?: unknown }).isError === true;
+}
+
+// Generic write counter shared by all three predicates. Returns the
+// set of distinct paths the run successfully wrote / edited that
+// match `predicate`. Failure-pairing semantics match
+// `countNewHtmlArtifacts` so the three counters stay aligned.
+function collectWrittenPathsMatching(
+  events: readonly RunEventLike[],
+  predicate: (path: string) => boolean,
+): Set<string> {
+  if (!events || events.length === 0) return new Set();
+  const resultByToolUseId = new Map<string, { isError: boolean }>();
+  for (const rec of events) {
+    if (rec?.event !== 'agent') continue;
+    const data = rec.data as { type?: string } | null | undefined;
+    if (data?.type !== 'tool_result') continue;
+    const id = readToolResultId(rec.data);
+    if (!id) continue;
+    resultByToolUseId.set(id, { isError: readToolResultIsError(rec.data) });
+  }
+  const writtenPaths = new Set<string>();
+  for (const rec of events) {
+    if (rec?.event !== 'agent') continue;
+    const data = rec.data as
+      | { type?: string; name?: unknown; input?: unknown }
+      | null
+      | undefined;
+    if (data?.type !== 'tool_use') continue;
+    if (typeof data.name !== 'string') continue;
+    if (!WRITE_OR_EDIT_TOOL_NAMES.has(data.name)) continue;
+    const path = extractToolFilePath(data.input);
+    if (!path) continue;
+    if (!predicate(path)) continue;
+    const toolUseId = readToolUseId(rec.data);
+    if (!toolUseId) continue;
+    const outcome = resultByToolUseId.get(toolUseId);
+    if (!outcome) continue;
+    if (outcome.isError) continue;
+    writtenPaths.add(path);
+  }
+  return writtenPaths;
+}
+
+// True iff the run successfully wrote or edited a `DESIGN.md` file.
+// Fed into `run_finished.design_system_created` for the DS variant.
+export function didRunCreateDesignSystemFile(
+  events: readonly RunEventLike[],
+): boolean {
+  return collectWrittenPathsMatching(events, isDesignSystemFile).size > 0;
+}
+
+// Count of distinct preview modules the run wrote under `preview/`.
+// Fed into `run_finished.preview_module_count`. A run that wrote
+// `preview/index.html` only counts as 1 module preview (the
+// path-distinct semantics match countNewHtmlArtifacts).
+export function countDesignSystemPreviewModules(
+  events: readonly RunEventLike[],
+): number {
+  return collectWrittenPathsMatching(events, isPreviewModulePath).size;
 }
 
 export function countNewHtmlArtifacts(events: readonly RunEventLike[]): number {

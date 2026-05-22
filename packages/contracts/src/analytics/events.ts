@@ -48,7 +48,15 @@ export type AnalyticsEventName =
   // with `page_name=onboarding`; the three `onboarding_*` names below
   // capture lifecycle moments that don't fit a click or a view.
   | 'onboarding_runtime_scan_result'
-  | 'onboarding_complete_result';
+  | 'onboarding_complete_result'
+  // Design-system lifecycle. Clicks + page_views inside DS surfaces
+  // reuse `ui_click` / `page_view`; the five names below capture
+  // ingest / create / review / status / picker-apply moments.
+  | 'design_system_source_ingest_result'
+  | 'design_system_create_result'
+  | 'design_system_review_result'
+  | 'design_system_status_result'
+  | 'design_system_apply_result';
 
 // ---- Pages ---------------------------------------------------------------
 
@@ -87,6 +95,10 @@ export type TrackingProjectKind =
   | 'image'
   | 'video'
   | 'audio'
+  // `design_system` covers DS-as-project runs (creation + regeneration).
+  // The dashboard reads it on run_created / run_finished to split the
+  // DS generation funnel from regular artifact runs.
+  | 'design_system'
   | 'other';
 
 // Where a project originated. Matches CSV row 9 / row 17 enum.
@@ -493,6 +505,263 @@ export interface DesignSystemsPageViewProps {
   design_system_status?: TrackingDesignSystemStatus;
   project_id?: string;
   available_design_system_count?: number;
+}
+
+// ---- Design-system lifecycle enums ---------------------------------------
+//
+// Shared between source_ingest / create / review / status / apply result
+// events. Buckets are deliberately string literals so the dashboard can
+// group on them without bucket-vs-raw drift.
+export type TrackingDesignSystemLengthBucket =
+  | '0'
+  | '1_50'
+  | '51_200'
+  | '201_500'
+  | '500_plus';
+
+export type TrackingDesignSystemFolderCountBucket =
+  | '0'
+  | '1_10'
+  | '11_50'
+  | '51_200'
+  | '200_plus'
+  | 'unknown';
+
+export type TrackingDesignSystemTotalSizeBucket =
+  | '0_1mb'
+  | '1_10mb'
+  | '10_50mb'
+  | '50mb_plus'
+  | 'unknown';
+
+// `partial_success` reserved for ingests that captured some files but
+// dropped others (e.g. a GitHub fetch that hit a per-file size cap on a
+// subset). Daemon currently emits success/failed only; partial kept
+// in the contract for the connector follow-up.
+export type TrackingDesignSystemSourceIngestResult =
+  | 'success'
+  | 'partial_success'
+  | 'failed'
+  | 'cancelled'
+  | 'timeout';
+
+export type TrackingDesignSystemIngestSourceType =
+  | 'github_repo'
+  | 'local_code'
+  | 'fig'
+  | 'assets'
+  | 'mixed';
+
+// `manual_text` covers the brand-description textarea fallback when
+// no concrete file/repo ingest happened. `unknown` is the terminal
+// failure path where the ingest never reached a method branch.
+export type TrackingDesignSystemIngestMethod =
+  | 'github_api'
+  | 'git_clone'
+  | 'local_snapshot'
+  | 'fig_parse'
+  | 'asset_upload'
+  | 'manual_text'
+  | 'unknown';
+
+export type TrackingDesignSystemFallbackType =
+  | 'none'
+  | 'native_github_auth'
+  | 'local_git_clone'
+  | 'manual_upload'
+  | 'unknown';
+
+export type TrackingDesignSystemRepoHost =
+  | 'github'
+  | 'gitlab'
+  | 'other'
+  | 'unknown';
+
+export type TrackingDesignSystemCreateEntryFrom =
+  | 'onboarding'
+  | 'design_systems_page'
+  | 'home_card'
+  | 'project_settings'
+  | 'unknown';
+
+export type TrackingDesignSystemSourceIngestEntryFrom =
+  | 'onboarding'
+  | 'design_systems_page'
+  | 'project_settings'
+  | 'unknown';
+
+export type TrackingDesignSystemCreateResult = 'success' | 'failed' | 'cancelled';
+
+export type TrackingDesignSystemReviewAction =
+  | 'looks_good'
+  | 'needs_work'
+  | 'submit_revision'
+  | 'regenerate';
+
+export type TrackingDesignSystemReviewResult =
+  | 'submitted'
+  | 'generated'
+  | 'failed'
+  | 'cancelled';
+
+export type TrackingDesignSystemModuleType =
+  | 'typography'
+  | 'colors'
+  | 'spacing'
+  | 'components'
+  | 'brand_assets'
+  | 'other';
+
+export type TrackingDesignSystemStatusAction =
+  | 'publish'
+  | 'unpublish'
+  | 'set_default'
+  | 'unset_default'
+  | 'archive'
+  | 'delete';
+
+export type TrackingDesignSystemStatusResult = 'success' | 'failed' | 'cancelled';
+
+// Like `TrackingDesignSystemStatus` but adds `deleted` for the
+// status_after side of a delete action.
+export type TrackingDesignSystemStatusValue =
+  | 'draft'
+  | 'ready'
+  | 'published'
+  | 'default'
+  | 'failed'
+  | 'archived'
+  | 'deleted'
+  | 'unknown';
+
+export type TrackingDesignSystemApplyAction =
+  | 'select_design_system'
+  | 'auto_select'
+  | 'clear_selection'
+  | 'apply_to_run';
+
+export type TrackingDesignSystemApplyResult = 'success' | 'failed' | 'cancelled';
+
+export type TrackingDesignSystemSelectionMode =
+  | 'auto'
+  | 'manual'
+  | 'default'
+  | 'none';
+
+// Project kind values for the picker's target project. Wider than
+// `TrackingProjectKind`'s prototype-side enum because the picker
+// shows up in slide / image / video / audio / live-artifact composers
+// too. `unknown` covers picker views with no project locked in.
+export type TrackingDesignSystemApplyTargetKind =
+  | 'prototype'
+  | 'slide_deck'
+  | 'image'
+  | 'video'
+  | 'audio'
+  | 'live_artifact'
+  | 'unknown';
+
+// Entry from for the run_created / run_finished DS variant. Distinct
+// from the chat-panel entry_from enum because DS runs don't originate
+// from new_project / chat_composer at all.
+export type TrackingDesignSystemRunEntryFrom =
+  | 'design_system_create'
+  | 'onboarding_design_system'
+  | 'regenerate_from_review'
+  | 'unknown';
+
+// ---- Design-system lifecycle result props --------------------------------
+
+export interface DesignSystemSourceIngestResultProps {
+  page_name: 'design_systems' | 'design_system_project';
+  area: 'design_system_create';
+  entry_from: TrackingDesignSystemSourceIngestEntryFrom;
+  source_type: TrackingDesignSystemIngestSourceType;
+  ingest_method: TrackingDesignSystemIngestMethod;
+  result: TrackingDesignSystemSourceIngestResult;
+  has_fallback: boolean;
+  fallback_type: TrackingDesignSystemFallbackType;
+  repo_host: TrackingDesignSystemRepoHost;
+  file_count: number;
+  folder_file_count_bucket: TrackingDesignSystemFolderCountBucket;
+  total_size_bucket: TrackingDesignSystemTotalSizeBucket;
+  error_code?: string;
+  duration_ms: number;
+  project_id?: string;
+  design_system_id?: string;
+}
+
+export interface DesignSystemCreateResultProps {
+  page_name: 'design_systems';
+  area: 'design_system_create';
+  entry_from: TrackingDesignSystemCreateEntryFrom;
+  result: TrackingDesignSystemCreateResult;
+  project_id?: string;
+  design_system_id?: string;
+  design_system_source: TrackingDesignSystemOrigin;
+  source_count: number;
+  created_as_project: boolean;
+  has_brand_description: boolean;
+  brand_description_length_bucket: TrackingDesignSystemLengthBucket;
+  notes_length_bucket: TrackingDesignSystemLengthBucket;
+  error_code?: string;
+  duration_ms: number;
+}
+
+export interface DesignSystemReviewResultProps {
+  page_name: 'design_system_project';
+  area: 'design_system_preview';
+  review_action: TrackingDesignSystemReviewAction;
+  result: TrackingDesignSystemReviewResult;
+  design_system_id: string;
+  project_id: string;
+  // Stable identifier for the reviewed module. Derived from the
+  // markdown section header slug (e.g. `typography`, `brand-assets`)
+  // since DS sections don't have DB ids today. `module_index` makes
+  // it unique when a DS has multiple sections sharing a header type.
+  module_id: string;
+  module_type: TrackingDesignSystemModuleType;
+  module_index: number;
+  feedback_length_bucket: TrackingDesignSystemLengthBucket;
+  has_custom_feedback: boolean;
+  run_id?: string;
+  revision_run_id?: string;
+  error_code?: string;
+  duration_ms: number;
+}
+
+export interface DesignSystemStatusResultProps {
+  page_name: 'design_systems' | 'design_system_project';
+  area: 'design_system_status';
+  action: TrackingDesignSystemStatusAction;
+  result: TrackingDesignSystemStatusResult;
+  design_system_id: string;
+  project_id?: string;
+  status_before: TrackingDesignSystemStatusValue;
+  status_after: TrackingDesignSystemStatusValue;
+  is_default_before: boolean;
+  is_default_after: boolean;
+  error_code?: string;
+  duration_ms: number;
+}
+
+export interface DesignSystemApplyResultProps {
+  page_name: 'home' | 'studio';
+  area: 'design_system_picker' | 'composer';
+  action: TrackingDesignSystemApplyAction;
+  result: TrackingDesignSystemApplyResult;
+  target_project_kind: TrackingDesignSystemApplyTargetKind;
+  design_system_id?: string;
+  design_system_source?: TrackingDesignSystemOrigin;
+  design_system_status?: TrackingDesignSystemStatusValue;
+  design_system_applied: boolean;
+  design_system_selection_mode: TrackingDesignSystemSelectionMode;
+  is_default: boolean;
+  is_auto_selected: boolean;
+  available_design_system_count: number;
+  run_id?: string;
+  error_code?: string;
+  duration_ms: number;
 }
 
 // --- Generic page_view (existing surfaces) ---
@@ -1326,10 +1595,17 @@ export interface UpdateInstallResultProps {
 // duration data; entry surfaces propagate the optional context (entry_from,
 // fidelity, etc.) via the create-run payload.
 export interface RunCreatedProps {
-  page_name: 'chat_panel';
-  area: 'chat_composer';
-  // Where the run was initiated from.
-  entry_from?: 'new_project' | 'chat_composer';
+  // `chat_panel` is the regular artifact-run surface; `design_system_project`
+  // is the DS-as-project variant (DS creation + regeneration runs).
+  page_name: 'chat_panel' | 'design_system_project';
+  area: 'chat_composer' | 'design_system_generation';
+  // Where the run was initiated from. The DS variant uses the
+  // `TrackingDesignSystemRunEntryFrom` set; both unions stay
+  // distinct so the dashboard can split funnels cleanly.
+  entry_from?:
+    | 'new_project'
+    | 'chat_composer'
+    | TrackingDesignSystemRunEntryFrom;
   project_source?: TrackingProjectSource;
   project_id: string;
   conversation_id: string | null;
@@ -1338,6 +1614,20 @@ export interface RunCreatedProps {
   design_system_id?: string;
   design_system_source: TrackingDesignSystemSource;
   design_system_version?: string;
+  // DS-variant context. `ds_source_origin` mirrors the
+  // `TrackingDesignSystemOrigin` set used on DS page_views (where
+  // the DS came from), separate from the runtime-selection
+  // `design_system_source` field above. Optional on the chat_panel
+  // shape; required-shaped data on the DS shape (callers populate
+  // them when emitting the DS variant).
+  ds_source_origin?: TrackingDesignSystemOrigin;
+  source_count?: number;
+  has_brand_description?: boolean;
+  brand_description_length_bucket?: TrackingDesignSystemLengthBucket;
+  github_repo_count?: number;
+  local_folder_count?: number;
+  fig_file_count?: number;
+  asset_file_count?: number;
   // Optional context inherited from the originating surface.
   target_platforms?: string;
   companion_surfaces?: string;
@@ -1357,7 +1647,7 @@ export interface RunCreatedProps {
 }
 
 export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
-  area: 'chat_panel';
+  area: 'chat_panel' | 'design_system_generation';
   result: TrackingRunResult;
   error_code?: string;
   artifact_count: number;
@@ -1367,6 +1657,13 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   time_to_first_token_ms?: number;
   generation_duration_ms?: number;
   total_duration_ms: number;
+  // DS-variant outcome fields. `design_system_created` is true when
+  // the run produced a stored DESIGN.md; `preview_module_count` and
+  // `missing_font_count` give the dashboard a coarse quality read
+  // without inspecting the artifact contents.
+  design_system_created?: boolean;
+  preview_module_count?: number;
+  missing_font_count?: number;
 }
 
 export type TrackingUpdateApplyResult = 'success' | 'not_applied' | 'unknown';
@@ -1419,6 +1716,17 @@ export type TrackingFileUploadSurface =
       // Onboarding uploads happen BEFORE a project exists, so
       // `project_id` is optional and present only when the upload was
       // re-issued after a project landed (rare in the onboarding flow).
+      project_id?: string;
+    }
+  | {
+      // DS create page upload (Design systems → New design system →
+      // source dropzones). Distinct from the onboarding shape because
+      // the funnel splits by entry surface; both share `source_type`
+      // so the dashboard can union on it when needed.
+      page_name: 'design_systems';
+      area: 'design_system_source';
+      source_type: 'local_code' | 'fig' | 'assets';
+      design_system_id?: string;
       project_id?: string;
     };
 
@@ -1589,7 +1897,15 @@ export type AnalyticsEventPayload =
   | { event: 'settings_byok_test_result'; props: SettingsByokTestResultProps }
   | { event: 'settings_connector_auth_result'; props: SettingsConnectorAuthResultProps }
   | { event: 'onboarding_runtime_scan_result'; props: OnboardingRuntimeScanResultProps }
-  | { event: 'onboarding_complete_result'; props: OnboardingCompleteResultProps };
+  | { event: 'onboarding_complete_result'; props: OnboardingCompleteResultProps }
+  | {
+      event: 'design_system_source_ingest_result';
+      props: DesignSystemSourceIngestResultProps;
+    }
+  | { event: 'design_system_create_result'; props: DesignSystemCreateResultProps }
+  | { event: 'design_system_review_result'; props: DesignSystemReviewResultProps }
+  | { event: 'design_system_status_result'; props: DesignSystemStatusResultProps }
+  | { event: 'design_system_apply_result'; props: DesignSystemApplyResultProps };
 
 // ---- Enum mapping helpers (code ↔ CSV wire format) -----------------------
 
@@ -1898,4 +2214,98 @@ export function normalizeCustomReason(
   text: string | null | undefined,
 ): string {
   return (text ?? '').trim();
+}
+
+// ---- Design-system tracking helpers --------------------------------------
+
+// `length` is a character count (after trimming). Buckets match the
+// v2 doc literally so brand description / notes / feedback all share
+// the same shape.
+export function designSystemLengthBucket(
+  text: string | null | undefined,
+): TrackingDesignSystemLengthBucket {
+  const length = (text ?? '').trim().length;
+  if (length === 0) return '0';
+  if (length <= 50) return '1_50';
+  if (length <= 200) return '51_200';
+  if (length <= 500) return '201_500';
+  return '500_plus';
+}
+
+export function designSystemFolderCountBucket(
+  count: number | null | undefined,
+): TrackingDesignSystemFolderCountBucket {
+  if (count === null || count === undefined || !Number.isFinite(count)) {
+    return 'unknown';
+  }
+  if (count <= 0) return '0';
+  if (count <= 10) return '1_10';
+  if (count <= 50) return '11_50';
+  if (count <= 200) return '51_200';
+  return '200_plus';
+}
+
+export function designSystemTotalSizeBucket(
+  bytes: number | null | undefined,
+): TrackingDesignSystemTotalSizeBucket {
+  if (bytes === null || bytes === undefined || !Number.isFinite(bytes)) {
+    return 'unknown';
+  }
+  const mb = bytes / (1024 * 1024);
+  if (mb < 1) return '0_1mb';
+  if (mb < 10) return '1_10mb';
+  if (mb < 50) return '10_50mb';
+  return '50mb_plus';
+}
+
+// Slugifies a DESIGN.md section header (`## Typography & Type Scale`)
+// into a stable module id (`typography-type-scale`). Lowercases, strips
+// punctuation, collapses whitespace to `-`. Empty input → 'unknown'.
+export function designSystemModuleSlug(
+  header: string | null | undefined,
+): string {
+  const trimmed = (header ?? '').trim().replace(/^#+\s*/, '');
+  if (!trimmed) return 'unknown';
+  return (
+    trimmed
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]+/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '') || 'unknown'
+  );
+}
+
+// Maps a DESIGN.md section slug to one of the six review module
+// types. Heuristic keyword match; defaults to `'other'`.
+export function designSystemModuleType(
+  slug: string | null | undefined,
+): TrackingDesignSystemModuleType {
+  const s = (slug ?? '').toLowerCase();
+  if (!s) return 'other';
+  if (/(typography|type|font)/.test(s)) return 'typography';
+  if (/(color|palette)/.test(s)) return 'colors';
+  if (/(spacing|layout|grid|radius|shadow|elevation)/.test(s)) {
+    return 'spacing';
+  }
+  if (/(component|button|input|form|icon|widget)/.test(s)) return 'components';
+  if (/(brand|asset|logo|image|illustration)/.test(s)) return 'brand_assets';
+  return 'other';
+}
+
+// Maps a repository URL host to the tracking enum. Unparseable URLs
+// → `'unknown'`. Non-github/gitlab hosts → `'other'`.
+export function designSystemRepoHostFromUrl(
+  url: string | null | undefined,
+): TrackingDesignSystemRepoHost {
+  const raw = (url ?? '').trim();
+  if (!raw) return 'unknown';
+  try {
+    const host = new URL(raw).hostname.toLowerCase();
+    if (host === 'github.com' || host.endsWith('.github.com')) return 'github';
+    if (host === 'gitlab.com' || host.endsWith('.gitlab.com')) return 'gitlab';
+    return 'other';
+  } catch {
+    return 'unknown';
+  }
 }

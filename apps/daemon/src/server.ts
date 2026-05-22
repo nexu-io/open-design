@@ -184,7 +184,11 @@ import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
 import { createChatRunService } from './runs.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
-import { countNewHtmlArtifacts } from './run-artifacts.js';
+import {
+  countDesignSystemPreviewModules,
+  countNewHtmlArtifacts,
+  didRunCreateDesignSystemFile,
+} from './run-artifacts.js';
 import {
   reportRunCompletedFromDaemon,
   reportRunFeedbackFromDaemon,
@@ -11288,23 +11292,52 @@ export async function startServer({
       const userQueryTokens = promptText.length > 0
         ? Math.ceil(promptText.length / 4)
         : 0;
+      // Optional analytics context the client may attach to a run.
+      // Used to thread the DS run variant (`design_system_project` /
+      // `design_system_generation` page+area, `project_kind=design_system`,
+      // entry_from values like `design_system_create`) plus per-source
+      // counts onto run_created / run_finished. Behavior never depends on
+      // these; only PostHog props do.
+      const analyticsHints =
+        (reqBody as { analyticsHints?: Record<string, unknown> | null }).analyticsHints
+          && typeof (reqBody as { analyticsHints?: unknown }).analyticsHints === 'object'
+          ? ((reqBody as { analyticsHints?: Record<string, unknown> }).analyticsHints ?? {})
+          : {};
+      const hintEntryFrom = typeof analyticsHints.entryFrom === 'string'
+        ? analyticsHints.entryFrom
+        : undefined;
+      const hintProjectKind = typeof analyticsHints.projectKind === 'string'
+        ? analyticsHints.projectKind
+        : null;
+      const dsRunContext =
+        analyticsHints.designSystemRunContext
+          && typeof analyticsHints.designSystemRunContext === 'object'
+          ? (analyticsHints.designSystemRunContext as Record<string, unknown>)
+          : {};
+      const isDesignSystemRun =
+        hintProjectKind === 'design_system'
+        || hintEntryFrom === 'design_system_create'
+        || hintEntryFrom === 'onboarding_design_system'
+        || hintEntryFrom === 'regenerate_from_review';
       // Only fields the current `/api/runs` create payload actually
       // sends. The v2 schema documents extended context props
       // (entry_from / project_kind / target_platforms / fidelity /
       // companion_surfaces / connectors / use_speaker_notes /
       // include_animations / reference_template / aspect /
-      // project_source) but `packages/contracts/src/api/chat.ts` and
-      // `apps/web/src/providers/daemon.ts` do not yet thread them onto
-      // the wire, so reading them here would always produce null/undef
-      // — better to omit until a follow-up extends the create payload.
+      // project_source) — most aren't on the wire yet, but
+      // entry_from / projectKind / DS run context land here when the
+      // client populates `analyticsHints`. Other dimensions stay
+      // omitted until follow-up PRs thread them through.
       const baseProps: Record<string, unknown> = {
-        page_name: 'chat_panel',
-        area: 'chat_composer',
+        page_name: isDesignSystemRun ? 'design_system_project' : 'chat_panel',
+        area: isDesignSystemRun ? 'design_system_generation' : 'chat_composer',
         ...configureGlobals,
         project_id: typeof reqBody.projectId === 'string' ? reqBody.projectId : null,
         conversation_id:
           typeof reqBody.conversationId === 'string' ? reqBody.conversationId : null,
         run_id: run.id,
+        project_kind: hintProjectKind,
+        ...(hintEntryFrom ? { entry_from: hintEntryFrom } : {}),
         design_system_id:
           typeof reqBody.designSystemId === 'string'
             ? reqBody.designSystemId
@@ -11323,6 +11356,33 @@ export async function startServer({
           typeof reqBody.designSystemId === 'string' && reqBody.designSystemId
             ? 'unknown'
             : 'not_applicable',
+        ...(isDesignSystemRun ? {
+          ds_source_origin: typeof dsRunContext.origin === 'string'
+            ? dsRunContext.origin
+            : undefined,
+          source_count: typeof dsRunContext.sourceCount === 'number'
+            ? dsRunContext.sourceCount
+            : undefined,
+          has_brand_description: typeof dsRunContext.hasBrandDescription === 'boolean'
+            ? dsRunContext.hasBrandDescription
+            : undefined,
+          brand_description_length_bucket:
+            typeof dsRunContext.brandDescriptionLengthBucket === 'string'
+              ? dsRunContext.brandDescriptionLengthBucket
+              : undefined,
+          github_repo_count: typeof dsRunContext.githubRepoCount === 'number'
+            ? dsRunContext.githubRepoCount
+            : undefined,
+          local_folder_count: typeof dsRunContext.localFolderCount === 'number'
+            ? dsRunContext.localFolderCount
+            : undefined,
+          fig_file_count: typeof dsRunContext.figFileCount === 'number'
+            ? dsRunContext.figFileCount
+            : undefined,
+          asset_file_count: typeof dsRunContext.assetFileCount === 'number'
+            ? dsRunContext.assetFileCount
+            : undefined,
+        } : {}),
         has_attachment: Array.isArray(reqBody.attachments)
           ? (reqBody.attachments as unknown[]).length > 0
           : false,
@@ -11383,7 +11443,10 @@ export async function startServer({
           appVersion: design.getAppVersion(),
           properties: {
             ...baseProps,
-            area: 'chat_panel',
+            // `area` flips on run_finished: chat_panel runs publish
+            // under `chat_panel`, DS runs stay on
+            // `design_system_generation` to match the run_created shape.
+            area: isDesignSystemRun ? 'design_system_generation' : 'chat_panel',
             result,
             // Incremental count of `.html` paths the run produced or
             // modified, deduped per file. Replaces the hard-coded `0`
@@ -11392,6 +11455,19 @@ export async function startServer({
             // for the dedup semantics; tested in
             // `tests/run-artifacts.test.ts`.
             artifact_count: countNewHtmlArtifacts(run.events),
+            ...(isDesignSystemRun ? {
+              // DS runs land a `DESIGN.md` write when generation
+              // succeeded; the run-artifacts inspector reuses the
+              // same Write/Edit pairing it already does for HTML
+              // artifact counts, just keyed on `DESIGN.md`.
+              design_system_created: didRunCreateDesignSystemFile(run.events),
+              preview_module_count: countDesignSystemPreviewModules(run.events),
+              // `missing_font_count` defaults to 0 — the agent flow
+              // doesn't emit a structured "missing fonts" signal yet.
+              // Kept on the wire so the dashboard has the column from
+              // day one; can be sourced later from a font-audit hook.
+              missing_font_count: 0,
+            } : {}),
             total_duration_ms: Date.now() - runStartedAt,
             ...(errorCode ? { error_code: errorCode } : {}),
             ...(inputTokens !== undefined ? { input_tokens: inputTokens } : {}),

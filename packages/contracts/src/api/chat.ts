@@ -35,6 +35,68 @@ export interface ChatRequest {
   reasoning?: string | null;
   research?: ResearchOptions;
   context?: RunContextSelection;
+  /**
+   * Optional analytics context for the v2 run_created / run_finished
+   * events. The daemon never trusts these for behavior — they only
+   * shape PostHog props. `entryFrom` is one of the documented
+   * `entry_from` enums; `designSystemRunContext` carries the
+   * DS-variant context (source counts, brand description length
+   * bucket, DS origin) used by the design_system_project run shape.
+   */
+  analyticsHints?: ChatAnalyticsHints;
+}
+
+export type ChatAnalyticsEntryFrom =
+  | 'new_project'
+  | 'chat_composer'
+  | 'design_system_create'
+  | 'onboarding_design_system'
+  | 'regenerate_from_review';
+
+export type ChatAnalyticsLengthBucket =
+  | '0'
+  | '1_50'
+  | '51_200'
+  | '201_500'
+  | '500_plus';
+
+export type ChatAnalyticsDesignSystemOrigin =
+  | 'onboarding'
+  | 'manual_create'
+  | 'github_repo'
+  | 'local_code'
+  | 'fig'
+  | 'assets'
+  | 'official_preset'
+  | 'enterprise'
+  | 'template'
+  | 'mixed'
+  | 'unknown';
+
+export interface ChatAnalyticsDesignSystemRunContext {
+  origin?: ChatAnalyticsDesignSystemOrigin;
+  sourceCount?: number;
+  hasBrandDescription?: boolean;
+  brandDescriptionLengthBucket?: ChatAnalyticsLengthBucket;
+  githubRepoCount?: number;
+  localFolderCount?: number;
+  figFileCount?: number;
+  assetFileCount?: number;
+}
+
+export interface ChatAnalyticsHints {
+  entryFrom?: ChatAnalyticsEntryFrom;
+  projectKind?:
+    | 'prototype'
+    | 'live_artifact'
+    | 'slide_deck'
+    | 'template'
+    | 'image'
+    | 'video'
+    | 'audio'
+    | 'design_system'
+    | 'other';
+  designSystemRunContext?: ChatAnalyticsDesignSystemRunContext;
 }
 
 export interface ChatRunCreateRequest extends ChatRequest {
