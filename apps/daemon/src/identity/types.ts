@@ -1,25 +1,22 @@
 // Identity seam — minimal types and resolver for attributing chat runs
-// and revision history to "who initiated this." This module deliberately
-// stays small: it defines the contract (Identity, IdentityProvider,
-// resolveIdentity) and ships one default implementation
-// (LocalFallbackProvider) so the history feature gated by
-// OD_GIT_INTEGRATION_ENABLED can land without a separate identity layer.
+// and revision history to "who initiated this." Ships one default
+// implementation (LocalFallbackProvider) so the history feature can
+// land without a separate identity layer.
 //
-// A future multi-user-support feature will register richer providers
-// (OAuth, reverse-proxy header trust, etc.) ahead of the fallback by
-// extending REGISTERED_PROVIDERS or wiring a registerProvider helper.
-// Existing call sites continue to read through resolveIdentity(req)
-// unchanged when that happens.
+// A future multi-user feature will register richer providers (OAuth,
+// reverse-proxy header trust) ahead of the fallback. Existing call
+// sites continue to read through resolveIdentity(req) unchanged.
 
 /**
- * Resolved identity for an incoming request. Consumed by features that
- * need to attribute changes to a user — primarily the history feature
- * (commit author lines, `actor_*` columns on `messages`).
+ * Resolved identity for an incoming request. Consumed by features
+ * that need to attribute changes to a user — primarily the history
+ * feature (commit author lines, `actor_*` columns on `messages`).
  */
 export interface Identity {
   /**
-   * Stable, provider-prefixed (e.g., 'local:default', 'oauth:google:weston@...').
-   * Used as the durable key on `messages.actor_identity_id`.
+   * Stable, provider-prefixed (e.g., 'local:default',
+   * 'oauth:google:weston@…'). Used as the durable key on
+   * `messages.actor_identity_id`.
    */
   id: string;
   /** Human-readable name for UI chips and commit author lines. */
@@ -27,7 +24,7 @@ export interface Identity {
   /**
    * Optional; used for the git author email when present. Single-user
    * deployments often leave this unset and accept the synthetic
-   * `<id>@open-design.local` author email the history feature falls back to.
+   * `<id>@open-design.local` email the history feature falls back to.
    */
   email?: string;
   /**
@@ -38,9 +35,8 @@ export interface Identity {
 }
 
 /**
- * Structural subset of an Express Request we need to resolve identity —
- * kept minimal so providers can be tested without instantiating full
- * Request objects.
+ * Structural subset of an Express Request used by providers. Kept
+ * minimal so providers can be tested without full Request objects.
  */
 export interface RequestWithIdentityHeaders {
   headers?: {
@@ -55,9 +51,9 @@ export interface RequestWithIdentityHeaders {
 }
 
 /**
- * A provider attempts to resolve identity from a request. Returns null
- * if it can't (e.g., a header-trust provider sees no relevant headers),
- * letting the next provider in the registration order try.
+ * A provider attempts to resolve identity from a request. Returns
+ * null when it can't (e.g., header-trust provider sees no relevant
+ * headers), letting the next provider try.
  */
 export interface IdentityProvider {
   resolve(req: RequestWithIdentityHeaders, env?: NodeJS.ProcessEnv): Identity | null;
@@ -65,10 +61,9 @@ export interface IdentityProvider {
 
 /**
  * Last-resort provider — always returns a usable placeholder identity.
- * Single-user deployments (desktop, single-user self-hosted) end up here
- * by default; the OD_LOCAL_IDENTITY and OD_LOCAL_IDENTITY_EMAIL env vars
- * let an operator customize what's recorded for chat-run attribution and
- * commit author lines without needing a multi-user identity layer.
+ * Single-user deployments end up here by default; OD_LOCAL_IDENTITY
+ * and OD_LOCAL_IDENTITY_EMAIL customize what's recorded without
+ * needing a multi-user identity layer.
  */
 export const LocalFallbackProvider: IdentityProvider = {
   resolve(_req, env = process.env) {
@@ -86,9 +81,9 @@ export const LocalFallbackProvider: IdentityProvider = {
 };
 
 /**
- * Provider registration order. First match wins. LocalFallbackProvider
- * must remain the last entry so resolveIdentity always returns a valid
- * Identity. Multi-user features prepend richer providers here.
+ * Provider registration order. First match wins.
+ * LocalFallbackProvider MUST remain the last entry so resolveIdentity
+ * always returns a valid Identity.
  */
 const REGISTERED_PROVIDERS: IdentityProvider[] = [
   LocalFallbackProvider,
@@ -96,10 +91,8 @@ const REGISTERED_PROVIDERS: IdentityProvider[] = [
 
 /**
  * Resolve identity for a request. Tries each registered provider in
- * order; returns the first non-null result. Because LocalFallbackProvider
- * always returns non-null, this function always returns a valid Identity.
- *
- * Pass an explicit env for testing; defaults to process.env in production.
+ * order; returns the first non-null result. Always returns a valid
+ * Identity while LocalFallbackProvider is registered.
  */
 export function resolveIdentity(
   req: RequestWithIdentityHeaders,
@@ -109,7 +102,6 @@ export function resolveIdentity(
     const result = provider.resolve(req, env);
     if (result) return result;
   }
-  // Unreachable while LocalFallbackProvider is registered; the throw is a
-  // belt-and-suspenders guard against future re-orderings of the array.
+  // Belt-and-suspenders guard against future re-orderings.
   throw new Error('resolveIdentity: no provider matched (LocalFallbackProvider missing from registration)');
 }

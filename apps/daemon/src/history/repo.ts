@@ -4,11 +4,9 @@
 // per-run "commit if dirty" path that records a revision when a chat
 // run leaves changes on disk.
 //
-// The substrate is git. The API surface (the names of the functions
-// this module exports and the shape of their arguments / results) is
-// substrate-agnostic by design so a future OD-owned implementation
-// could replace `repo-git.ts` without changing call sites in
-// `ensureProject` / `startChatRun` / route handlers.
+// The substrate is git. The API surface is substrate-agnostic so a
+// future OD-owned implementation could replace it without changing
+// call sites in ensureProject / startChatRun / route handlers.
 
 import { promises as fs } from 'node:fs';
 import { randomUUID } from 'node:crypto';
@@ -27,21 +25,11 @@ const DEFAULT_GITIGNORE = `# Open Design auto-generated; commit or edit as neede
 const MIGRATION_COMMIT_MESSAGE = 'chore(init): import existing project tree';
 const DEFAULT_COMMIT_MESSAGE = 'Agent run';
 
-// Patterns the history substrate manages on the daemon's behalf — kept
-// in `<repoDir>/info/exclude` rather than the project's `.gitignore`
-// because they're runtime-scratch implementation details the user
-// shouldn't have to know about or maintain. `info/exclude` is git's
-// canonical place for "this clone wants to ignore these paths" without
-// affecting the project's tracked state.
-//
-//   .od-skills/  — apps/daemon/src/server.ts stages active skills into
-//                  `<cwd>/.od-skills/<folder>/` before every agent run
-//                  so any CLI can reach the staged files via a path
-//                  inside its working directory. The directory is pure
-//                  runtime scratch; without this exclude, runs that
-//                  wrote no user files would still produce a revision
-//                  capturing the staged skill copies, violating the
-//                  "clean tree = no-op" contract.
+// Patterns kept in `<repoDir>/info/exclude` rather than the project's
+// `.gitignore` because they're runtime scratch (e.g., `.od-skills/` is
+// staged into the cwd per run by server.ts). info/exclude is local to
+// the gitdir, doesn't pollute the user's .gitignore, and survives clones
+// without affecting the clone target.
 const HISTORY_EXCLUDE_HEADER = `# Open Design: runtime scratch the history feature ignores.`;
 const HISTORY_EXCLUDE_PATTERNS = [
   '.od-skills/',
@@ -58,23 +46,12 @@ export function projectRepoPath(repoRoot: string, projectId: string): string {
   return path.join(repoRoot, `${projectId}.gitdir`);
 }
 
-/** State of the project tree's `.git` entry — used for substrate init + collision detection. */
 type DotGitState =
   | { kind: 'absent' }
   | { kind: 'ours' }
   | { kind: 'foreign-dir' }
   | { kind: 'foreign-link'; target: string };
 
-/**
- * Inspect the project tree's `.git` entry. Returns:
- * - `absent`     — no .git, ready for first init
- * - `ours`       — .git is a gitlink file pointing at our `repoDir`
- * - `foreign-dir`  — .git is a regular directory (someone else's repo, possibly cloned)
- * - `foreign-link` — .git is a gitlink pointing somewhere else
- *
- * The caller decides what to do: continue (absent), no-op (ours), or
- * refuse with a clear user-facing error (foreign-*).
- */
 async function readDotGitState(projectDir: string, repoDir: string): Promise<DotGitState> {
   const dotGit = path.join(projectDir, '.git');
   let stat;
@@ -85,7 +62,6 @@ async function readDotGitState(projectDir: string, repoDir: string): Promise<Dot
   }
   if (stat.isDirectory()) return { kind: 'foreign-dir' };
   if (!stat.isFile()) return { kind: 'foreign-dir' };
-  // Gitlink file: contents `gitdir: <absolute path>`
   const content = await fs.readFile(dotGit, 'utf8');
   const match = /^gitdir:\s*(.+)\s*$/m.exec(content);
   const linkRaw = match?.[1];
@@ -93,13 +69,10 @@ async function readDotGitState(projectDir: string, repoDir: string): Promise<Dot
   const linkedAbsolute = path.isAbsolute(linkRaw)
     ? linkRaw
     : path.resolve(projectDir, linkRaw);
-  // `git init --separate-git-dir` canonicalizes its path via the OS
-  // (resolving symlinks), so on platforms where the storage root is
-  // under a symlink (macOS's /tmp → /private/tmp, common deployment
-  // setups where /var or /home is a symlink) a naive string compare
-  // against our unresolved `repoDir` fails. Resolve both sides where
-  // possible — fall back to lexical compare when realpath errors
-  // (e.g., the linked target no longer exists).
+  // `git init --separate-git-dir` canonicalizes via realpath, so a
+  // naive string compare fails when the storage root is under a
+  // symlink (macOS /tmp -> /private/tmp). Resolve both sides; fall
+  // back to lexical compare if realpath fails.
   if (await sameDirectoryPath(linkedAbsolute, repoDir)) {
     return { kind: 'ours' };
   }
@@ -115,17 +88,8 @@ async function sameDirectoryPath(a: string, b: string): Promise<boolean> {
 }
 
 /**
- * Append the daemon-managed exclude patterns (`.od-skills/`, etc.) to
- * `<repoDir>/info/exclude`. Idempotent: looks for a marker line and
- * only appends if not already present. Preserves any existing content
- * (`git init` writes a default header to this file, which we keep).
- *
- * `info/exclude` is the right home for these because:
- *   - It's local to the gitdir, not tracked in the working tree
- *   - It doesn't show up in the user's `.gitignore` (which is part of
- *     project source-of-truth and may be reviewed / customized)
- *   - It survives `git clone` of the project without polluting the
- *     clone target's exclusion set
+ * Append daemon-managed exclude patterns to `<repoDir>/info/exclude`.
+ * Idempotent via the marker line; preserves any existing content.
  */
 async function ensureHistoryManagedExcludes(repoDir: string): Promise<void> {
   const excludePath = path.join(repoDir, 'info', 'exclude');
@@ -145,10 +109,9 @@ async function ensureHistoryManagedExcludes(repoDir: string): Promise<void> {
 }
 
 /**
- * Construct a git author email when the resolved Identity didn't carry
- * one. Single-user / LocalFallbackProvider deployments commonly leave
- * email unset; this synthesizes a stable, ASCII-safe email derived from
- * the identity's id so git commit doesn't refuse the author line.
+ * Synthesize an ASCII-safe author email when the resolved Identity has
+ * none. Single-user / LocalFallbackProvider deployments commonly leave
+ * email unset; without this, `git commit` refuses the author line.
  */
 function syntheticAuthorEmail(identity: Identity): string {
   if (identity.email && identity.email.trim().length > 0) return identity.email.trim();
@@ -157,10 +120,8 @@ function syntheticAuthorEmail(identity: Identity): string {
 }
 
 /**
- * Apply the resolved Identity to git's per-repo `user.name` / `user.email`
- * config. Per-repo (not --global) so we don't perturb the operator's
- * own git config, and the commit gets the right author line even when
- * multiple identities operate against the same daemon.
+ * Apply Identity to per-repo (not --global) git config so the commit
+ * author line is right without perturbing the operator's git config.
  */
 async function applyAuthorConfig(
   projectDir: string,
@@ -172,10 +133,32 @@ async function applyAuthorConfig(
 }
 
 /**
+ * Read HEAD's SHA, returning null when HEAD is unborn. Always passes
+ * softFail128 because callers handle the "no HEAD" case explicitly.
+ */
+async function readHeadSha(
+  projectDir: string,
+  signal?: AbortSignal,
+): Promise<string | null> {
+  const out = await runGit(projectDir, ['rev-parse', 'HEAD'], signal, { softFail128: true });
+  return out.trim() || null;
+}
+
+/**
+ * Read HEAD's parent SHA, returning null on initial commit (no parent).
+ */
+async function readHeadParentSha(
+  projectDir: string,
+  signal?: AbortSignal,
+): Promise<string | null> {
+  const out = await runGit(projectDir, ['rev-parse', 'HEAD^'], signal, { softFail128: true });
+  return out.trim() || null;
+}
+
+/**
  * Repair `projects.current_revision_id` when it doesn't match HEAD's row.
  * Covers legacy state from pre-transaction-wrap days where INSERT
- * landed but UPDATE didn't, plus any external interference. Skips
- * when HEAD is unborn (nothing to point to) or HEAD has no row
+ * landed but UPDATE didn't. No-op when HEAD is unborn or has no row
  * (caller's orphan-backfill handles that case).
  */
 function ensureHeadPointerInvariant(
@@ -192,8 +175,83 @@ function ensureHeadPointerInvariant(
     `SELECT current_revision_id FROM projects WHERE id = ?`,
   ).get(projectId) as { current_revision_id: string | null } | undefined;
   if (projectRow?.current_revision_id !== headRow.id) {
-    db.prepare(`UPDATE projects SET current_revision_id = ? WHERE id = ?`).run(headRow.id, projectId);
+    setCurrentRevision(db, projectId, headRow.id);
   }
+}
+
+/** Look up an existing revision row's id by (project_id, git_sha). */
+function revisionIdForSha(
+  db: Database.Database,
+  projectId: string,
+  sha: string | null,
+): string | null {
+  if (!sha) return null;
+  const row = db.prepare(
+    `SELECT id FROM project_revisions WHERE project_id = ? AND git_sha = ?`,
+  ).get(projectId, sha) as { id: string } | undefined;
+  return row?.id ?? null;
+}
+
+function setCurrentRevision(
+  db: Database.Database,
+  projectId: string,
+  revisionId: string,
+): void {
+  db.prepare(`UPDATE projects SET current_revision_id = ? WHERE id = ?`).run(revisionId, projectId);
+}
+
+interface RevisionRow {
+  id: string;
+  projectId: string;
+  parentId: string | null;
+  gitSha: string | null;
+  createdAt: number;
+  source: 'agent-run' | 'manual-snapshot' | 'restore' | 'migration';
+  message: string;
+  actorIdentityId: string | null;
+  actorDisplayName: string | null;
+  runId: string | null;
+  filesChanged: number;
+  bytesAdded: number;
+  bytesRemoved: number;
+}
+
+const INSERT_PROJECT_REVISION_SQL = `INSERT INTO project_revisions (
+  id, project_id, parent_id, git_sha, created_at, source, message,
+  actor_identity_id, actor_display_name, run_id,
+  files_changed_count, bytes_added, bytes_removed
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
+function insertRevision(db: Database.Database, row: RevisionRow): void {
+  db.prepare(INSERT_PROJECT_REVISION_SQL).run(
+    row.id,
+    row.projectId,
+    row.parentId,
+    row.gitSha,
+    row.createdAt,
+    row.source,
+    row.message,
+    row.actorIdentityId,
+    row.actorDisplayName,
+    row.runId,
+    row.filesChanged,
+    row.bytesAdded,
+    row.bytesRemoved,
+  );
+}
+
+/**
+ * Atomic INSERT + pointer-advance. Without the transaction, a crash
+ * between the two statements leaves a row in project_revisions with
+ * `projects.current_revision_id` pointing at the previous revision —
+ * the same partial-multi-write defect the orphan-HEAD backfill catches
+ * on retry, applied to the SQL-write boundary.
+ */
+function insertRevisionAndAdvancePointer(db: Database.Database, row: RevisionRow): void {
+  db.transaction(() => {
+    insertRevision(db, row);
+    setCurrentRevision(db, row.projectId, row.id);
+  })();
 }
 
 interface CommitMetadata {
@@ -204,9 +262,8 @@ interface CommitMetadata {
 }
 
 /**
- * Read author name, author date, and message for a commit ref from
- * the existing git history. Used by the repair paths so reconstructed
- * `project_revisions` rows reflect the actual commit, not the
+ * Read author name, date, and message for a commit ref. Used by repair
+ * paths so reconstructed rows reflect the actual commit, not the
  * currently retrying call's identity / clock.
  */
 async function readCommitMetadata(
@@ -284,16 +341,73 @@ export type InitProjectHistoryResult =
  *
  * And the DB state is:
  *  - one row inserted in project_revisions with source='migration'
- *  - projects.current_revision_id advanced to that revision's id (the commit SHA)
+ *  - projects.current_revision_id advanced to that revision's id (a UUID)
  */
 export async function initProjectHistory(
   args: InitProjectHistoryArgs,
 ): Promise<InitProjectHistoryResult> {
-  // Serialize against any concurrent init/record on the same project.
-  // Two callers racing initProjectHistory could otherwise both pass
-  // the readDotGitState() check and both run `git init`, producing
-  // duplicate migration revisions or corrupt state.
+  // Serialize against any concurrent init/record on the same project,
+  // otherwise two callers can both pass readDotGitState and both
+  // `git init`, producing duplicate migration revisions.
   return withProjectLock(args.projectId, () => initProjectHistoryLocked(args));
+}
+
+/**
+ * Substrate exists on disk but no migration row in the DB — repair by
+ * either attributing from the existing commit (case-a: HEAD exists,
+ * commit is durable history we did not author) or completing the init
+ * (case-b: HEAD unborn, we author the migration commit ourselves).
+ */
+async function repairHalfInitializedSubstrate(
+  args: InitProjectHistoryArgs,
+): Promise<{ kind: 'repaired'; revisionId: string }> {
+  const { projectId, projectDir, repoDir, identity, db, signal } = args;
+  const headSha = await readHeadSha(projectDir, signal);
+  const revisionId = randomUUID();
+
+  if (headSha) {
+    // (a) Attribute from the existing commit, not this retrying call.
+    const meta = await readCommitMetadata(projectDir, 'HEAD', signal);
+    insertRevisionAndAdvancePointer(db, {
+      id: revisionId,
+      projectId,
+      parentId: null,
+      gitSha: meta?.sha ?? headSha,
+      createdAt: meta?.authorDateMs ?? Date.now(),
+      source: 'migration',
+      message: meta?.message || MIGRATION_COMMIT_MESSAGE,
+      actorIdentityId: null,
+      actorDisplayName: meta?.authorName || null,
+      runId: null,
+      filesChanged: 0,
+      bytesAdded: 0,
+      bytesRemoved: 0,
+    });
+    return { kind: 'repaired', revisionId };
+  }
+
+  // (b) Resume the remaining init steps; we author the new commit.
+  await ensureHistoryManagedExcludes(repoDir);
+  await applyAuthorConfig(projectDir, identity, signal);
+  await runGit(projectDir, ['add', '-A'], signal);
+  await runGit(projectDir, ['commit', '--allow-empty', '-m', MIGRATION_COMMIT_MESSAGE], signal);
+  const sha = (await runGit(projectDir, ['rev-parse', 'HEAD'], signal)).trim();
+  insertRevisionAndAdvancePointer(db, {
+    id: revisionId,
+    projectId,
+    parentId: null,
+    gitSha: sha,
+    createdAt: Date.now(),
+    source: 'migration',
+    message: MIGRATION_COMMIT_MESSAGE,
+    actorIdentityId: identity.id,
+    actorDisplayName: identity.displayName,
+    runId: null,
+    filesChanged: 0,
+    bytesAdded: 0,
+    bytesRemoved: 0,
+  });
+  return { kind: 'repaired', revisionId };
 }
 
 async function initProjectHistoryLocked(
@@ -303,13 +417,10 @@ async function initProjectHistoryLocked(
 
   const state = await readDotGitState(projectDir, repoDir);
   if (state.kind === 'ours') {
-    // Substrate exists on disk. Normally this is the no-op fast path,
-    // but if a prior init crashed (or the post-commit DB write failed)
-    // between the migration commit and the `project_revisions` INSERT,
-    // the gitdir is in place but no migration row exists for this
-    // project. Detect that half-init state and repair it from HEAD's
-    // SHA — without this branch, `readDotGitState() === 'ours'` would
-    // short-circuit forever and the project would stay broken.
+    // Substrate exists on disk. Fast path is no-op when the migration
+    // row also exists; otherwise repair from HEAD — without this,
+    // `readDotGitState() === 'ours'` short-circuits forever and the
+    // project stays broken.
     const existing = db
       .prepare(
         `SELECT id FROM project_revisions
@@ -318,83 +429,12 @@ async function initProjectHistoryLocked(
       )
       .get(projectId) as { id: string } | undefined;
     if (existing) {
-      // Substrate fully set up. Defensively re-assert that
-      // current_revision_id matches HEAD's row — a legacy partial
-      // write or external DB edit could have left it stale.
-      const headSha = (await runGit(projectDir, ['rev-parse', 'HEAD'], signal, { softFail128: true })).trim() || null;
-      ensureHeadPointerInvariant(db, projectId, headSha);
+      // Defensively re-assert pointer: a legacy partial write or
+      // external DB edit could have left it stale.
+      ensureHeadPointerInvariant(db, projectId, await readHeadSha(projectDir, signal));
       return { kind: 'already-initialized' };
     }
-
-    // Half-init detected. Two sub-cases differ on what's recoverable:
-    //
-    //   (a) HEAD exists — prior init committed but its DB write
-    //       failed. The commit is durable history we did not author;
-    //       reconstruct the row's actor / created_at / message from
-    //       the commit itself, NOT from this retrying call.
-    //   (b) HEAD unborn — prior init crashed before the initial
-    //       commit. Resume the remaining init steps (excludes,
-    //       author config, add, commit) so this call DOES author
-    //       the commit, then attribute the row to this identity.
-    const headProbe = (await runGit(projectDir, ['rev-parse', 'HEAD'], signal, { softFail128: true })).trim();
-
-    const revisionId = randomUUID();
-    if (headProbe) {
-      // (a) Attribute from the existing commit, not this call.
-      const meta = await readCommitMetadata(projectDir, 'HEAD', signal);
-      const sha = meta?.sha ?? headProbe;
-      db.transaction(() => {
-        db.prepare(
-          `INSERT INTO project_revisions (
-             id, project_id, parent_id, git_sha, created_at, source, message,
-             actor_identity_id, actor_display_name, run_id,
-             files_changed_count, bytes_added, bytes_removed
-           ) VALUES (?, ?, NULL, ?, ?, 'migration', ?, NULL, ?, NULL, 0, 0, 0)`,
-        ).run(
-          revisionId,
-          projectId,
-          sha,
-          meta?.authorDateMs ?? Date.now(),
-          meta?.message || MIGRATION_COMMIT_MESSAGE,
-          meta?.authorName || null,
-        );
-        db.prepare(`UPDATE projects SET current_revision_id = ? WHERE id = ?`).run(
-          revisionId,
-          projectId,
-        );
-      })();
-      return { kind: 'repaired', revisionId };
-    }
-
-    // (b) Resume the remaining init steps; we author the new commit.
-    await ensureHistoryManagedExcludes(repoDir);
-    await applyAuthorConfig(projectDir, identity, signal);
-    await runGit(projectDir, ['add', '-A'], signal);
-    await runGit(projectDir, ['commit', '--allow-empty', '-m', MIGRATION_COMMIT_MESSAGE], signal);
-    const sha = (await runGit(projectDir, ['rev-parse', 'HEAD'], signal)).trim();
-    const now = Date.now();
-    db.transaction(() => {
-      db.prepare(
-        `INSERT INTO project_revisions (
-           id, project_id, parent_id, git_sha, created_at, source, message,
-           actor_identity_id, actor_display_name, run_id,
-           files_changed_count, bytes_added, bytes_removed
-         ) VALUES (?, ?, NULL, ?, ?, 'migration', ?, ?, ?, NULL, 0, 0, 0)`,
-      ).run(
-        revisionId,
-        projectId,
-        sha,
-        now,
-        MIGRATION_COMMIT_MESSAGE,
-        identity.id,
-        identity.displayName,
-      );
-      db.prepare(`UPDATE projects SET current_revision_id = ? WHERE id = ?`).run(
-        revisionId,
-        projectId,
-      );
-    })();
-    return { kind: 'repaired', revisionId };
+    return repairHalfInitializedSubstrate(args);
   }
   if (state.kind === 'foreign-dir') return { kind: 'foreign-git-collision' };
   if (state.kind === 'foreign-link') {
@@ -404,8 +444,7 @@ async function initProjectHistoryLocked(
   await fs.mkdir(path.dirname(repoDir), { recursive: true });
 
   // `git init --separate-git-dir=<repoDir>` puts the object database
-  // at repoDir and writes a `.git` gitlink file in projectDir. Main
-  // is the canonical branch.
+  // at repoDir and writes a `.git` gitlink file in projectDir.
   await runGit(
     projectDir,
     ['init', '--separate-git-dir', repoDir, '--initial-branch', 'main'],
@@ -419,17 +458,16 @@ async function initProjectHistoryLocked(
     await fs.writeFile(gitignorePath, DEFAULT_GITIGNORE, 'utf8');
   }
 
-  // Daemon-managed exclusions live in info/exclude so they stay out of
-  // the user-visible .gitignore. `git init` may have written its own
-  // sample content to info/exclude; we append ours idempotently rather
-  // than overwriting.
+  // Daemon-managed exclusions go in info/exclude (out of the
+  // user-visible .gitignore). git init may have written its own
+  // sample content; we append idempotently rather than overwriting.
   await ensureHistoryManagedExcludes(repoDir);
 
   await applyAuthorConfig(projectDir, identity, signal);
   await runGit(projectDir, ['add', '-A'], signal);
 
-  // Allow an empty initial commit so brand-new projects (no files yet)
-  // still have a starting SHA we can record on the migration row.
+  // --allow-empty so brand-new projects (no files yet) still get a
+  // starting SHA for the migration row.
   await runGit(
     projectDir,
     ['commit', '--allow-empty', '-m', MIGRATION_COMMIT_MESSAGE],
@@ -438,19 +476,21 @@ async function initProjectHistoryLocked(
 
   const sha = (await runGit(projectDir, ['rev-parse', 'HEAD'], signal)).trim();
   const revisionId = randomUUID();
-  const now = Date.now();
-  // Atomic INSERT + pointer-advance so a crash between can't leave a
-  // half-written substrate (row but stale pointer is its own bug).
-  db.transaction(() => {
-    db.prepare(
-      `INSERT INTO project_revisions (
-         id, project_id, parent_id, git_sha, created_at, source, message,
-         actor_identity_id, actor_display_name, run_id,
-         files_changed_count, bytes_added, bytes_removed
-       ) VALUES (?, ?, NULL, ?, ?, 'migration', ?, ?, ?, NULL, 0, 0, 0)`,
-    ).run(revisionId, projectId, sha, now, MIGRATION_COMMIT_MESSAGE, identity.id, identity.displayName);
-    db.prepare(`UPDATE projects SET current_revision_id = ? WHERE id = ?`).run(revisionId, projectId);
-  })();
+  insertRevisionAndAdvancePointer(db, {
+    id: revisionId,
+    projectId,
+    parentId: null,
+    gitSha: sha,
+    createdAt: Date.now(),
+    source: 'migration',
+    message: MIGRATION_COMMIT_MESSAGE,
+    actorIdentityId: identity.id,
+    actorDisplayName: identity.displayName,
+    runId: null,
+    filesChanged: 0,
+    bytesAdded: 0,
+    bytesRemoved: 0,
+  });
 
   return { kind: 'initialized', revisionId };
 }
@@ -468,9 +508,9 @@ export interface RecordRevisionForRunArgs {
    * Whether this run is known to have invoked a file-write tool. Gates
    * marker creation in the sibling-absorbed branch: a purely
    * conversational run must not produce a marker row even if a sibling
-   * advanced HEAD during its lock wait. Default false (no marker) — safer
-   * to lose provenance for an edge case than to write a false marker
-   * that pollutes durable history data.
+   * advanced HEAD during its lock wait. Default false (no marker) —
+   * safer to lose provenance for an edge case than to write a false
+   * marker that pollutes durable history data.
    */
   runTouchedFiles?: boolean;
 }
@@ -493,45 +533,105 @@ export type RecordRevisionForRunResult =
   | { kind: 'not-initialized' };
 
 /**
- * At chat-run end, if the project's working tree has uncommitted changes,
- * stage and commit them as a revision authored by the run's resolved
- * identity. Inserts a `project_revisions` row and advances the project's
- * `current_revision_id` pointer.
+ * At chat-run end, if the project's working tree has uncommitted
+ * changes, stage and commit them as a revision authored by the run's
+ * identity. Returns `clean` when nothing to do (expected case) and
+ * `not-initialized` when the caller should init first.
  *
- * Returns `clean` (no-op) when the tree is clean — the daemon's chat-run
- * lifecycle calls this unconditionally at run end; it's expected to
- * sometimes have nothing to do.
- *
- * Returns `not-initialized` if the substrate isn't in place for this
- * project — the caller (P0.7 lifecycle hook) decides whether to call
- * `initProjectHistory` first or skip silently.
- *
- * Errors from git (timeout, unexpected exit) propagate as thrown
- * exceptions; the caller wraps in try/catch and logs without failing
- * the run (auto-commit is best-effort, not part of the run's contract).
+ * Errors from git propagate; the caller wraps in try/catch and logs
+ * (auto-commit is best-effort, not part of the run's contract).
  */
 export async function recordRevisionForRun(
   args: RecordRevisionForRunArgs,
 ): Promise<RecordRevisionForRunResult> {
-  // The lock alone is not sufficient to preserve the "one revision per
-  // run" contract: two runs finishing close together both have dirty
-  // workdirs, but the first to acquire the lock `git add -A`s the
-  // *combined* dirty state and commits everything; the second acquires
-  // a clean tree and would otherwise no-op (silent provenance loss).
-  // To preserve provenance we capture HEAD *before* queueing for the
-  // lock; if the locked critical section finds the tree clean AND HEAD
-  // has advanced from what we saw, we know a sibling absorbed our
-  // changes and record a marker row attributed to this run.
+  // The lock alone is not sufficient for "one revision per run". When
+  // two runs finish close together both with dirty workdirs, the first
+  // to acquire the lock `git add -A`s the *combined* dirty state; the
+  // second acquires a clean tree and would silently lose provenance.
+  // To preserve it, capture HEAD *before* queueing for the lock; if
+  // the locked critical section finds the tree clean AND HEAD has
+  // advanced, we know a sibling absorbed our changes and record a
+  // marker row attributed to this run.
   let headBeforeLock: string | null = null;
   try {
-    headBeforeLock =
-      (await runGit(args.projectDir, ['rev-parse', 'HEAD'], args.signal, { softFail128: true })).trim() || null;
+    headBeforeLock = await readHeadSha(args.projectDir, args.signal);
   } catch {
     // HEAD may not resolve if the substrate isn't initialized yet —
     // recordRevisionForRunLocked handles that case explicitly via the
     // readDotGitState check at its head.
   }
   return withProjectLock(args.projectId, () => recordRevisionForRunLocked(args, headBeforeLock));
+}
+
+/**
+ * Invariant: at the end of the locked critical section, HEAD's SHA
+ * must have a corresponding `project_revisions` row. If a prior call
+ * crashed between `git commit` and the SQLite INSERT, HEAD is one
+ * commit ahead of the table. Reconstruct the missing row from the
+ * commit itself (attributing to this retrying run would be durable
+ * false provenance). Single-orphan repair only — multi-orphan chains
+ * recover naturally on successive calls.
+ */
+async function repairOrphanHead(
+  args: RecordRevisionForRunArgs,
+  headSha: string,
+): Promise<void> {
+  const { projectId, projectDir, db, signal } = args;
+  if (revisionIdForSha(db, projectId, headSha)) {
+    // Row for HEAD exists; only thing that could be wrong is a stale
+    // pointer from a legacy partial-write.
+    ensureHeadPointerInvariant(db, projectId, headSha);
+    return;
+  }
+  const meta = await readCommitMetadata(projectDir, 'HEAD', signal);
+  const parentSha = await readHeadParentSha(projectDir, signal);
+  insertRevisionAndAdvancePointer(db, {
+    id: randomUUID(),
+    projectId,
+    parentId: revisionIdForSha(db, projectId, parentSha),
+    gitSha: headSha,
+    createdAt: meta?.authorDateMs ?? Date.now(),
+    source: 'agent-run',
+    message: meta?.message || DEFAULT_COMMIT_MESSAGE,
+    actorIdentityId: null,
+    actorDisplayName: meta?.authorName || null,
+    runId: null,
+    filesChanged: 0,
+    bytesAdded: 0,
+    bytesRemoved: 0,
+  });
+}
+
+/**
+ * Sibling-absorbed marker: tree was clean at lock acquisition but HEAD
+ * advanced during the wait and this run did invoke a file-write tool.
+ * Record git_sha=NULL (partial unique index on (project_id, git_sha)
+ * is WHERE git_sha IS NOT NULL) with parent_id pointing at the sibling's
+ * revision. Do NOT advance current_revision_id; the sibling owns head.
+ */
+function recordSiblingAbsorbedMarker(
+  args: RecordRevisionForRunArgs,
+  headNow: string,
+): { kind: 'marker'; revisionId: string; absorbedIntoRevisionId: string | null } {
+  const { projectId, run, message, db } = args;
+  const absorbedIntoRevisionId = revisionIdForSha(db, projectId, headNow);
+  const revisionId = randomUUID();
+  insertRevision(db, {
+    id: revisionId,
+    projectId,
+    parentId: absorbedIntoRevisionId,
+    gitSha: null,
+    createdAt: Date.now(),
+    source: 'agent-run',
+    message,
+    actorIdentityId: run.identity.id,
+    actorDisplayName: run.identity.displayName,
+    runId: run.id,
+    filesChanged: 0,
+    bytesAdded: 0,
+    bytesRemoved: 0,
+  });
+  return { kind: 'marker', revisionId, absorbedIntoRevisionId };
 }
 
 async function recordRevisionForRunLocked(
@@ -543,112 +643,30 @@ async function recordRevisionForRunLocked(
   const state = await readDotGitState(projectDir, repoDir);
   if (state.kind !== 'ours') return { kind: 'not-initialized' };
 
-  // Belt-and-suspenders: re-assert the daemon-managed excludes before
-  // every status check. Idempotent, near-zero cost (single fs read
-  // looking for a marker). Catches the legacy case where the substrate
-  // was initialized before this fix landed — those repos don't have
-  // info/exclude populated, so without this call .od-skills/ would
+  // Belt-and-suspenders: re-assert daemon-managed excludes before
+  // every status check. Idempotent and cheap. Catches the legacy case
+  // where substrates initialized before this fix landed don't have
+  // info/exclude populated, so without this call `.od-skills/` would
   // be reported dirty and the next commit would absorb runtime scratch.
   await ensureHistoryManagedExcludes(repoDir);
 
-  // Repair-on-retry: invariant — at the end of this locked critical
-  // section, HEAD's SHA must have a corresponding `project_revisions`
-  // row for this project. If a prior call crashed between its
-  // `git commit` and the SQLite INSERT, HEAD is one commit ahead of
-  // the table. Reconstruct the missing row from the commit itself
-  // (parent from HEAD^, actor / created_at / message from `git log`);
-  // attributing to this retrying run would be durable false
-  // provenance. Single-orphan repair only — multi-orphan chains
-  // require either an external `git log` walker or successive call
-  // through this same path, which is the natural recovery on the
-  // next chat run.
-  const headForRepair =
-    (await runGit(projectDir, ['rev-parse', 'HEAD'], signal, { softFail128: true })).trim() || null;
+  const headForRepair = await readHeadSha(projectDir, signal);
   if (headForRepair) {
-    const existingForHead = db
-      .prepare(`SELECT id FROM project_revisions WHERE project_id = ? AND git_sha = ? LIMIT 1`)
-      .get(projectId, headForRepair) as { id: string } | undefined;
-    if (existingForHead) {
-      // Row for HEAD exists; the only thing that might be wrong is a
-      // stale pointer from a legacy partial-write.
-      ensureHeadPointerInvariant(db, projectId, headForRepair);
-    } else {
-      const meta = await readCommitMetadata(projectDir, 'HEAD', signal);
-      const parentSha = (await runGit(projectDir, ['rev-parse', 'HEAD^'], signal, { softFail128: true })).trim() || null;
-      const parentId = parentSha
-        ? (db.prepare(
-            `SELECT id FROM project_revisions WHERE project_id = ? AND git_sha = ?`,
-          ).get(projectId, parentSha) as { id: string } | undefined)?.id ?? null
-        : null;
-      const orphanRevisionId = randomUUID();
-      db.transaction(() => {
-        db.prepare(
-          `INSERT INTO project_revisions (
-             id, project_id, parent_id, git_sha, created_at, source, message,
-             actor_identity_id, actor_display_name, run_id,
-             files_changed_count, bytes_added, bytes_removed
-           ) VALUES (?, ?, ?, ?, ?, 'agent-run', ?, NULL, ?, NULL, 0, 0, 0)`,
-        ).run(
-          orphanRevisionId,
-          projectId,
-          parentId,
-          headForRepair,
-          meta?.authorDateMs ?? Date.now(),
-          meta?.message || DEFAULT_COMMIT_MESSAGE,
-          meta?.authorName || null,
-        );
-        db.prepare(`UPDATE projects SET current_revision_id = ? WHERE id = ?`).run(
-          orphanRevisionId,
-          projectId,
-        );
-      })();
-    }
+    await repairOrphanHead(args, headForRepair);
   }
 
   const status = await runGit(projectDir, ['status', '--short'], signal);
   if (status.trim().length === 0) {
-    // Marker row only when (a) this run actually invoked a file-write
+    // Marker only when (a) this run actually invoked a file-write
     // tool AND (b) HEAD advanced during our lock wait. Without (a) a
-    // purely conversational run running in parallel with a real
-    // file-writing sibling would get a false marker that pollutes
-    // durable provenance data; the sibling owns history alone.
+    // purely conversational run running parallel with a file-writing
+    // sibling would get a false marker that pollutes provenance data.
     if (!args.runTouchedFiles) return { kind: 'clean' };
-    const headNow =
-      (await runGit(projectDir, ['rev-parse', 'HEAD'], signal, { softFail128: true })).trim() || null;
+    const headNow = await readHeadSha(projectDir, signal);
     const advancedDuringWait =
       headBeforeLock !== null && headNow !== null && headNow !== headBeforeLock;
-    if (!advancedDuringWait) return { kind: 'clean' };
-
-    // Sibling-absorbed path: record a marker row. git_sha=NULL so
-    // the partial unique index (project_id, git_sha) WHERE git_sha
-    // IS NOT NULL doesn't collide. parent_id points at the
-    // sibling's revision row so History UI consumers can show the
-    // marker under its absorbing commit.
-    const absorbedRow = db
-      .prepare(`SELECT id FROM project_revisions WHERE project_id = ? AND git_sha = ?`)
-      .get(projectId, headNow) as { id: string } | undefined;
-    const absorbedIntoRevisionId = absorbedRow?.id ?? null;
-    const markerRevisionId = randomUUID();
-    const markerNow = Date.now();
-    db.prepare(
-      `INSERT INTO project_revisions (
-         id, project_id, parent_id, git_sha, created_at, source, message,
-         actor_identity_id, actor_display_name, run_id,
-         files_changed_count, bytes_added, bytes_removed
-       ) VALUES (?, ?, ?, NULL, ?, 'agent-run', ?, ?, ?, ?, 0, 0, 0)`,
-    ).run(
-      markerRevisionId,
-      projectId,
-      absorbedIntoRevisionId,
-      markerNow,
-      message,
-      run.identity.id,
-      run.identity.displayName,
-      run.id,
-    );
-    // Do NOT advance projects.current_revision_id — the sibling's
-    // recorded row already owns the head pointer.
-    return { kind: 'marker', revisionId: markerRevisionId, absorbedIntoRevisionId };
+    if (!advancedDuringWait || !headNow) return { kind: 'clean' };
+    return recordSiblingAbsorbedMarker(args, headNow);
   }
 
   await applyAuthorConfig(projectDir, run.identity, signal);
@@ -656,55 +674,27 @@ async function recordRevisionForRunLocked(
   await runGit(projectDir, ['commit', '-m', message], signal);
 
   const sha = (await runGit(projectDir, ['rev-parse', 'HEAD'], signal)).trim();
-  // Probe for the parent SHA — exit 128 means HEAD has no parent
-  // (initial commit). Under recordRevisionForRun's normal flow this
-  // can't happen because initProjectHistory's migration commit is
-  // always present, but defending against an orphaned HEAD
-  // (corrupted gitdir, manual history rewrite) keeps the contract clean.
-  const parentSha = (await runGit(projectDir, ['rev-parse', 'HEAD^'], signal, { softFail128: true })).trim() || null;
+  // parent_id is a UUID, not a SHA; resolve via (project_id, git_sha)
+  // unique index. Initial commit -> null.
+  const parentSha = await readHeadParentSha(projectDir, signal);
   const stats = await parseLastCommitStats(projectDir, signal);
 
-  // project_revisions.parent_id refers to the parent's id (UUID),
-  // not its git SHA. Resolve via the (project_id, git_sha) unique
-  // index. A null parentSha (initial commit) maps to null parent_id.
-  const parentId = parentSha
-    ? (db.prepare(
-        `SELECT id FROM project_revisions WHERE project_id = ? AND git_sha = ?`,
-      ).get(projectId, parentSha) as { id: string } | undefined)?.id ?? null
-    : null;
-
   const revisionId = randomUUID();
-  const now = Date.now();
-  // Atomic INSERT + pointer-advance — without the transaction, a crash
-  // between the two statements would leave a row in `project_revisions`
-  // with `projects.current_revision_id` still pointing at the previous
-  // revision (stale pointer / un-pointed row). db.transaction makes
-  // them a single commit; either both land or neither does. This is
-  // the same partial-multi-write defect class as the orphan-HEAD case
-  // we back-fill at function entry, applied to the SQL-write boundary.
-  db.transaction(() => {
-    db.prepare(
-      `INSERT INTO project_revisions (
-         id, project_id, parent_id, git_sha, created_at, source, message,
-         actor_identity_id, actor_display_name, run_id,
-         files_changed_count, bytes_added, bytes_removed
-       ) VALUES (?, ?, ?, ?, ?, 'agent-run', ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      revisionId,
-      projectId,
-      parentId,
-      sha,
-      now,
-      message,
-      run.identity.id,
-      run.identity.displayName,
-      run.id,
-      stats.filesChanged,
-      stats.bytesAdded,
-      stats.bytesRemoved,
-    );
-    db.prepare(`UPDATE projects SET current_revision_id = ? WHERE id = ?`).run(revisionId, projectId);
-  })();
+  insertRevisionAndAdvancePointer(db, {
+    id: revisionId,
+    projectId,
+    parentId: revisionIdForSha(db, projectId, parentSha),
+    gitSha: sha,
+    createdAt: Date.now(),
+    source: 'agent-run',
+    message,
+    actorIdentityId: run.identity.id,
+    actorDisplayName: run.identity.displayName,
+    runId: run.id,
+    filesChanged: stats.filesChanged,
+    bytesAdded: stats.bytesAdded,
+    bytesRemoved: stats.bytesRemoved,
+  });
 
   return {
     kind: 'recorded',
@@ -722,17 +712,13 @@ interface CommitStats {
 }
 
 /**
- * Parse `git show --shortstat --format= HEAD` output to extract counts
- * for the most recent commit. Format example:
+ * Parse `git show --shortstat --format= HEAD` output. Format example:
  *   ` 3 files changed, 7 insertions(+), 2 deletions(-)`
- * Missing components default to 0 — `git show` may omit insertions or
- * deletions if zero, or omit the line entirely for an empty commit.
+ * Missing components default to 0.
  *
- * Note: insertions/deletions are line counts in git's output, not byte
- * counts. The column is named `bytes_*` in the schema for forward
- * compatibility with a future OD-owned substrate that may track actual
- * bytes; under the git substrate we populate the line-count value
- * which is a useful proxy for "size of change."
+ * Note: bytes_added/bytes_removed columns hold line counts under the
+ * git substrate (named for forward-compat with a future OD-owned
+ * substrate that may track actual bytes).
  */
 async function parseLastCommitStats(
   projectDir: string,

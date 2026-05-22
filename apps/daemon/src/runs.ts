@@ -3,20 +3,18 @@ import { randomUUID } from 'node:crypto';
 
 export const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
 
-// Tool names (case-insensitive) that MAY mutate the worktree. Bash is
-// included because a Bash run that writes via shell (mv/cp/redirect)
-// losing marker provenance is worse than a Bash-reads-only run getting
-// a false-positive marker. Lowercase here because adapters disagree:
-// claude-stream emits "Bash", pi-rpc emits "bash".
+// Tool names (lowercase) that MAY mutate the worktree. Bash is
+// included: losing marker provenance for a Bash run that wrote via
+// shell (mv/cp/redirect) is worse than a Bash-reads-only run getting
+// a false marker. Adapters disagree on casing (claude-stream emits
+// "Bash", pi-rpc emits "bash") — caller lowercases before lookup.
 const FILE_WRITE_TOOL_NAMES = new Set(['write', 'edit', 'multiedit', 'notebookedit', 'bash']);
 
 function toolUseNameFromEvent(event: string, data: any): string | null {
   if (!data) return null;
-  // Direct emit (some test paths and internal call sites):
-  //   emit(run, 'tool_use', { id, name, input })
+  // Direct emit shape: emit(run, 'tool_use', { id, name, input }).
   if (event === 'tool_use' && typeof data.name === 'string') return data.name;
-  // Production agent-event wrapper (server.ts send('agent', ev), where
-  // ev is the typed adapter event including { type: 'tool_use', name }):
+  // Production agent-event wrapper: send('agent', { type: 'tool_use', name, ... }).
   if (event === 'agent' && data.type === 'tool_use' && typeof data.name === 'string') return data.name;
   return null;
 }
@@ -44,27 +42,15 @@ export function createChatRunService({
   const runs = new Map();
 
   // Optional fire-and-forget hook fired when a run reaches a terminal
-  // state via finish(). Used by the history feature (#1241) to record
-  // a revision when the working tree is dirty at run end. The hook's
-  // Promise is intentionally not awaited from finish() — finish()'s
-  // contract is synchronous (closes SSE clients, schedules cleanup)
-  // and a slow or failing hook must not block that path. BUT the
-  // promise is tracked in `pendingFinishHooks` so shutdownActive() can
-  // await pending hooks before the daemon exits — otherwise a SIGTERM
-  // during a run can race the auto-commit and drop the revision row.
+  // state. The hook's promise is not awaited from finish() — finish()'s
+  // contract is synchronous (closes SSE clients, schedules cleanup) —
+  // but is tracked in `pendingFinishHooks` so shutdownActive() can wait
+  // for them before exit. Without that wait, a SIGTERM during a run
+  // can race the auto-commit and drop the revision row.
   let runFinishedHook = null;
-
-  /**
-   * Pending finish-hook promises. Each finish() call that fires a
-   * hook adds the promise here and removes it on settle. shutdownActive()
-   * awaits all of them so the process doesn't exit mid-write.
-   */
   const pendingFinishHooks = new Set();
 
-  /**
-   * Register a callback to run after every run.finish(). Pass null to
-   * detach. Single-slot — subsequent calls overwrite.
-   */
+  /** Register a callback to run after every run.finish(). Single-slot. */
   const setRunFinishedHook = (hook) => {
     runFinishedHook = hook;
   };
@@ -89,16 +75,13 @@ export function createChatRunService({
           : null,
       pluginId:
         typeof meta.pluginId === 'string' && meta.pluginId ? meta.pluginId : null,
-      // Resolved Identity for the user/context that initiated this run.
-      // Populated by callers from `req.identity` (set by the identity
-      // middleware). Stored on the run so it remains available across
-      // the async run lifecycle (message upsert, post-run history
-      // commit), which outlives the HTTP request.
+      // Resolved Identity (from req.identity at create time). Stored
+      // on the run so it survives the async lifecycle (message upsert,
+      // post-run history commit) past the HTTP request.
       identity: meta.identity && typeof meta.identity === 'object' ? meta.identity : null,
-      // User prompt that initiated this run. Captured at create time
-      // so the post-run history commit hook can derive a commit
-      // message from it without re-querying the messages table at
-      // commit-time (which would race with concurrent runs on the
+      // User prompt captured at create time so the post-run history
+      // commit hook can derive a commit message without re-querying
+      // the messages table (which would race concurrent runs on the
       // same conversation).
       message: typeof meta.message === 'string' ? meta.message : null,
       status: 'queued',
@@ -177,13 +160,9 @@ export function createChatRunService({
     for (const waiter of run.waiters) waiter(statusBody(run));
     run.waiters.clear();
     scheduleCleanup(run);
-    // Fire-but-track — the history feature uses this to commit any
-    // dirty working-tree changes the run produced. Errors are logged
-    // by the hook itself; finish()'s contract stays synchronous so
-    // late callers (cleanup, status polling) aren't blocked on git.
-    // The promise is added to pendingFinishHooks so shutdownActive()
-    // can wait for in-flight hooks before the daemon exits — without
-    // this tracking, a SIGTERM mid-hook drops the revision row.
+    // Fire-but-track: history auto-commit runs asynchronously without
+    // blocking finish(), but the promise is tracked so shutdownActive
+    // can wait for it before the daemon exits.
     if (runFinishedHook) {
       const hookPromise = Promise.resolve(runFinishedHook(run, status)).catch((err) => {
         console.warn(`[runs] finished hook failed for run ${run.id}:`, err);
@@ -306,16 +285,10 @@ export function createChatRunService({
         }
       }
       killChild(run, 'SIGTERM');
-      // Wait for the child to fully exit BEFORE calling finish() —
-      // finish() fires the runFinishedHook, which (in the history
-      // feature) does `git status / add / commit` against the
-      // worktree. If finish() ran before the child exit completed,
-      // a child handling SIGTERM gracefully (flushing files to
-      // disk) could write its last changes AFTER the hook's
-      // git-status snapshot, leaving those files uncommitted and
-      // dropping the final auto-commit. Reordering ensures the
-      // worktree is in its final, post-child-exit state when the
-      // hook reads it.
+      // Wait for the child to fully exit BEFORE calling finish(). A
+      // child handling SIGTERM gracefully (flushing files to disk)
+      // can write its final changes after the runFinishedHook's
+      // git-status snapshot otherwise, leaving them uncommitted.
       if (run.child && !(await waitForChildExit(run.child, graceMs))) {
         killChild(run, 'SIGKILL');
         await waitForChildExit(run.child, 500);
@@ -323,18 +296,9 @@ export function createChatRunService({
       finish(run, 'canceled', null, 'SIGTERM');
     }));
 
-    // Wait for any in-flight finish-hooks before returning, so the
-    // daemon doesn't `process.exit()` mid-write. The hooks run
-    // independently of the run's child-process lifecycle (they were
-    // fired synchronously by `finish()` above but execute async — the
-    // history auto-commit does multiple git invocations + a SQLite
-    // write), and without this await the SIGTERM path is racy with
-    // the revision-row insert.
-    //
-    // We cap the wait at 2× graceMs so a stuck hook doesn't hang
-    // shutdown indefinitely. The cap is generous: graceMs is sized
-    // for the slowest child to exit, and the hook is typically
-    // faster (no LLM round-trip, just local fs + sqlite).
+    // Wait for in-flight finish-hooks (history auto-commit does git +
+    // sqlite writes) so the daemon doesn't process.exit() mid-write.
+    // Cap at 2× graceMs so a stuck hook doesn't hang shutdown.
     if (pendingFinishHooks.size > 0) {
       const inflight = Array.from(pendingFinishHooks);
       const hookGraceMs = Math.max(graceMs * 2, 1000);

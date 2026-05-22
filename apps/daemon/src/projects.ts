@@ -52,20 +52,15 @@ export function resolveProjectDir(projectsRoot, projectId, metadata?) {
 }
 
 // Optional post-ensure hook registered once at daemon startup. The
-// history feature (#1241) uses this to run `initProjectHistory` after
-// every ensureProject call without requiring callers (13+ across the
-// codebase) to thread DB / identity / repo paths through their args.
-// The hook is invoked after the directory exists; it must be idempotent
-// (ensureProject is called repeatedly throughout a project's lifetime)
-// and never throw — errors are best-effort logged by the hook itself,
-// not surfaced to the ensureProject caller. Null when no hook is wired.
+// history feature (#1241) uses this to run initProjectHistory after
+// every ensureProject call without threading DB / identity / repo
+// paths through the 13+ ensureProject call sites. Must be idempotent.
 let projectEnsuredHook = null;
 
 /**
  * Register a callback to run after every ensureProject call. Single
  * slot — subsequent calls overwrite. Hook errors propagate to
- * ensureProject's caller; the hook owns its own try/catch for any
- * non-fatal results it wants to swallow.
+ * ensureProject's caller; the hook owns its own try/catch.
  */
 export function setProjectEnsuredHook(hook) {
   projectEnsuredHook = hook;

@@ -1,11 +1,7 @@
-// Glue between the chat-run service's finish() hook and the history
-// substrate's recordRevisionForRun.
-//
-// Fires at the end of every chat run. Records a `project_revisions`
-// row when the working tree is dirty, attributing the commit to the
-// run's resolved Identity. Errors propagate as logged warnings — the
-// auto-commit is best-effort and must not affect the run's reported
-// terminal status.
+// Glue between the chat-run service's finish() hook and
+// recordRevisionForRun. Records a `project_revisions` row when the
+// working tree is dirty at run end. Errors are logged warnings —
+// auto-commit is best-effort and must not affect the run's status.
 
 import path from 'node:path';
 import type Database from 'better-sqlite3';
@@ -32,10 +28,6 @@ export interface RunFinishedRun {
 
 type RunFinishedStatus = 'succeeded' | 'failed' | 'canceled';
 
-/**
- * Service surface the hook needs to register itself. Subset of the
- * full createChatRunService return shape — typed here for clarity.
- */
 export interface RunServiceForHook {
   setRunFinishedHook(hook: ((run: RunFinishedRun, status: RunFinishedStatus) => unknown) | null): void;
 }
@@ -53,28 +45,22 @@ export interface InstallHistoryRunFinishedHookArgs {
 }
 
 /**
- * Build a sensible commit message from the user prompt that triggered
- * the run. Takes the first non-empty line of the prompt and clamps it
- * to a single-line subject. Falls back to `DEFAULT_COMMIT_MESSAGE` when
- * there's no prompt (e.g., orbit runs that came through without a
- * `message` field).
+ * First non-empty line of the prompt, clamped to a single-line subject
+ * readable in `git log --oneline` (~72 chars). Falls back to a default
+ * when there's no prompt (e.g., orbit runs without a `message` field).
  */
 function buildCommitMessage(rawPrompt: string | null | undefined): string {
   if (!rawPrompt) return DEFAULT_COMMIT_MESSAGE;
   const firstLine = rawPrompt.split('\n').map((l) => l.trim()).find((l) => l.length > 0);
   if (!firstLine) return DEFAULT_COMMIT_MESSAGE;
-  // Conventional subject-line clamp; readable in `git log --oneline`
-  // and any History pane that truncates beyond ~72 chars.
   return firstLine.length > 72 ? `${firstLine.slice(0, 71)}…` : firstLine;
 }
 
 /**
- * Install the post-finish hook that records a revision when the
- * working tree has uncommitted changes at run end. No-op when the
- * feature flag is off. No-op when the run has no projectId (some
- * runs aren't project-scoped). No-op when the run has no resolved
- * Identity (defensive — shouldn't happen after P0.2 wired it, but
- * skipping is safer than committing with a null author).
+ * Install the post-finish hook. No-op when: the feature flag is off,
+ * the run has no projectId, or the run has no resolved Identity
+ * (defensive — shouldn't happen after P0.2 wired it, but skipping is
+ * safer than committing with a null author).
  */
 export function installHistoryRunFinishedHook(args: InstallHistoryRunFinishedHookArgs): void {
   const { db, projectsRoot, reposRoot, runs, env = process.env } = args;
@@ -100,20 +86,15 @@ export function installHistoryRunFinishedHook(args: InstallHistoryRunFinishedHoo
       });
 
       if (result.kind === 'recorded') {
-        // Quiet success path — visible enough in DEBUG logs without
-        // adding noise to normal operation.
         if (process.env.DEBUG?.includes('history')) {
           console.log(
             `[history] recorded revision ${result.revisionId.slice(0, 8)} for run ${run.id} (${result.filesChanged} files, +${result.bytesAdded}/-${result.bytesRemoved} lines)`,
           );
         }
       } else if (result.kind === 'marker') {
-        // Provenance preserved despite a sibling concurrent run
-        // absorbing our changes. Logged at info level (not debug)
-        // so concurrent-run absorption is observable in normal logs
-        // — it's rare enough not to be noisy and useful to surface
-        // when troubleshooting "why doesn't my run appear in
-        // history with its own commit?"
+        // Info-level (not debug): concurrent-run absorption is rare
+        // and useful to surface when troubleshooting "why doesn't my
+        // run appear in history with its own commit?"
         const absorbedSuffix = result.absorbedIntoRevisionId
           ? ` (absorbed into ${result.absorbedIntoRevisionId.slice(0, 8)})`
           : '';

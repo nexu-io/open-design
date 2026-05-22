@@ -1227,9 +1227,9 @@ const ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'artifacts');
 // read path so project-membership, size, and CSP guards cannot be bypassed.
 const CRITIQUE_ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'critique-artifacts');
 const PROJECTS_DIR = path.join(RUNTIME_DATA_DIR, 'projects');
-// Per-project gitdirs for the history feature (#1241). Sibling to
-// PROJECTS_DIR so backup stories that already cover OD_DATA_DIR pick
-// it up transparently. Only used when OD_GIT_INTEGRATION_ENABLED is on.
+// Per-project gitdirs for the history feature (#1241), sibling to
+// PROJECTS_DIR so existing OD_DATA_DIR backups pick them up. Only
+// used when OD_GIT_INTEGRATION_ENABLED is on.
 const REPOS_DIR = path.join(RUNTIME_DATA_DIR, 'repos');
 const USER_SKILLS_DIR = path.join(RUNTIME_DATA_DIR, 'skills');
 const USER_DESIGN_SYSTEMS_DIR = path.join(RUNTIME_DATA_DIR, 'design-systems');
@@ -2053,8 +2053,8 @@ function pinAssistantMessageOnRunCreate(db, run) {
     ).run(run.id, run.status, run.createdAt, run.assistantMessageId);
     return;
   }
-  // run.identity (populated at runs.create time per P0.2) is the
-  // resolved actor for this run; no req in scope here so source IP is null.
+  // No req in scope here → source IP is null. run.identity was
+  // resolved at create time.
   upsertMessage(db, run.conversationId, {
     id: run.assistantMessageId,
     role: 'assistant',
@@ -3189,17 +3189,14 @@ export async function startServer({
 
   const app = express();
   // Configure Express's trust-proxy resolution from OD_TRUST_PROXY.
-  // P0-fix #15: actor_source_ip on messages/revisions is durable audit
-  // data, so it must come from a trusted source. With trust-proxy
-  // unset (the default), req.ip is the raw socket peer and forwarded
-  // headers from direct callers are ignored. With trust-proxy set
-  // (e.g., 'loopback' for a same-host Tailscale Serve / nginx proxy,
-  // or a specific CIDR), Express resolves req.ip from the rightmost
-  // forwarded hop coming from a trusted source. Accepted values:
-  //   - 'true' / 'false' → boolean
-  //   - numeric string → hop count
-  //   - 'loopback' | 'linklocal' | 'uniquelocal' → built-in keyword
-  //   - any other string → passed through (Express handles IP/CIDR)
+  // actor_source_ip is durable audit data; req.ip MUST come from a
+  // trusted source. Unset (default) → req.ip is the raw socket peer.
+  // Set → Express resolves req.ip from the rightmost forwarded hop
+  // coming from a trusted source. Accepted values:
+  //   'true' / 'false' → boolean
+  //   numeric string → hop count
+  //   'loopback' | 'linklocal' | 'uniquelocal' → built-in keyword
+  //   any other string → passed through (Express handles IP/CIDR)
   const rawTrustProxy = (process.env.OD_TRUST_PROXY ?? '').trim();
   if (rawTrustProxy.length > 0) {
     if (rawTrustProxy === 'true') {
@@ -3242,12 +3239,9 @@ export async function startServer({
   }
 
   // Identity middleware — resolves req.identity once per request via
-  // the identity seam in apps/daemon/src/identity/types.ts. Today's
-  // LocalFallbackProvider returns a configurable placeholder; future
-  // multi-user-support work registers richer providers ahead of it.
-  // Consumers (chat-run lifecycle, message attribution) read identity
-  // from req.identity rather than resolving from scratch — see the spec
-  // for #1241 for the durable-on-run propagation rationale.
+  // the identity seam. Consumers read req.identity rather than
+  // resolving from scratch; see spec #1241 for the durable-on-run
+  // propagation rationale.
   app.use(createIdentityMiddleware());
 
   // Multi-directory scanning shared by every skill / template surface. The
@@ -3543,10 +3537,9 @@ export async function startServer({
   projectMetadataLookup = (id) => {
     try { return getProject(db, id)?.metadata ?? null; } catch { return null; }
   };
-  // Register the history feature's post-ensure hook. No-op when
+  // History feature's post-ensure hook. No-op when
   // OD_GIT_INTEGRATION_ENABLED is unset; otherwise auto-initializes
-  // the substrate (git init + initial migration commit) on first
-  // ensure for each project. Idempotent across subsequent ensures.
+  // the substrate on first ensure per project. Idempotent.
   installHistoryEnsureHook({ db, reposRoot: REPOS_DIR });
   configureConnectorCredentialStore(new FileConnectorCredentialStore(RUNTIME_DATA_DIR));
   configureComposioConfigStore(RUNTIME_DATA_DIR);
@@ -4552,10 +4545,9 @@ export async function startServer({
     getAppVersion: () => cachedAppVersion?.version ?? '0.0.0',
     readAnalyticsContext,
   };
-  // Register the history feature's chat-run-finished hook against the
-  // runs service. No-op when OD_GIT_INTEGRATION_ENABLED is unset;
-  // otherwise commits any dirty working-tree state at the end of each
-  // run with the run's resolved identity as author.
+  // History feature's chat-run-finished hook. No-op when
+  // OD_GIT_INTEGRATION_ENABLED is unset; otherwise commits dirty
+  // working-tree state at run end with the run's identity as author.
   installHistoryRunFinishedHook({
     db,
     projectsRoot: PROJECTS_DIR,
@@ -9716,11 +9708,10 @@ export async function startServer({
     let cwd = null;
     let existingProjectFiles = [];
     if (typeof projectId === 'string' && projectId) {
-      // Errors from ensureProject (incl. history init failures when
-      // OD_GIT_INTEGRATION_ENABLED is on) propagate up — `runs.start`
-      // catches and marks the run failed, surfacing a clear cause.
-      // Pre-#16 a bare catch silently set cwd=null, leaving the run
-      // running in an inherited dir and hiding init breakage.
+      // Errors from ensureProject (incl. history init failures)
+      // propagate up; runs.start catches and marks the run failed.
+      // A bare catch here would silently leave the run in an inherited
+      // dir and hide init breakage.
       const chatProject = getProject(db, projectId);
       const chatMeta = chatProject?.metadata;
       if (chatMeta?.baseDir) {
@@ -11173,16 +11164,13 @@ export async function startServer({
       assistantMessageId,
       clientRequestId: `orbit-${trigger}-${randomUUID()}`,
       agentId,
-      // Orbit runs are dispatched by orbitService.setRunHandler, which is
-      // invoked from the scheduler/HTTP-trigger plumbing without `req` in
-      // scope. Use the env-driven identity fallback so the run still has
-      // an attributable Identity (LocalFallbackProvider on a single-user
-      // install). Mirrors the routine handler pattern below.
+      // Orbit runs fire from scheduler/HTTP-trigger plumbing without
+      // `req` in scope. Use the env-driven identity fallback so the run
+      // still has an attributable Identity. Mirrors the routine handler.
       identity: resolveIdentity({}),
       message: prompt,
     });
-    // No req here (see comment above); attribute from the resolved
-    // run.identity without a source IP. Matches the routine pattern.
+    // No req in scope → no source IP. Same shape as the routine path.
     const orbitAttribution = attributionFromIdentity(run.identity);
     upsertMessage(db, conversationId, {
       id: `orbit-user-${run.id}`,
@@ -11800,12 +11788,9 @@ export async function startServer({
       assistantMessageId,
       clientRequestId: `routine-${trigger}-${randomUUID()}`,
       agentId,
-      // Routines fire from the scheduler, not from an HTTP request, so
-      // there's no req.identity to forward. Use the env-driven identity
-      // fallback so the run still has an attributable Identity (the
-      // local user under LocalFallbackProvider). When a future
-      // multi-user feature captures the routine creator's identity at
-      // creation time, this site reads from the routine record instead.
+      // Routines fire from the scheduler without `req` in scope. Use
+      // the env-driven identity fallback for now; a future multi-user
+      // feature reads the routine creator's identity off the routine row.
       identity: resolveIdentity({}),
       message: routine.prompt,
       ...(resolvedRoutineSnapshot?.ok
@@ -11823,9 +11808,7 @@ export async function startServer({
         // Snapshot linking is best-effort; the in-memory run still carries it.
       }
     }
-    // Routines fire from the scheduler with no req in scope, so no
-    // source IP. The identity is the routine creator's fallback
-    // identity already resolved into run.identity at create time.
+    // No req in scope → no source IP. Same shape as the orbit path.
     const routineAttribution = attributionFromIdentity(run.identity);
     upsertMessage(db, conversationId, {
       id: `routine-user-${run.id}`,

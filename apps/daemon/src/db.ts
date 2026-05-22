@@ -896,12 +896,10 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
     .prepare(`SELECT position FROM messages WHERE id = ?`)
     .get(m.id) as DbRow | undefined;
   const now = Date.now();
-  // actor_* columns from the history feature (#1241). Optional in the
-  // input shape — callers without access to a resolved identity (e.g.,
-  // background message inserts, replay flows) leave them null. UPDATE
-  // path only overwrites when explicitly provided so an attribution
-  // populated by an earlier call isn't blanked by a later one that
-  // happens not to carry identity.
+  // actor_* columns from the history feature (#1241). Optional: callers
+  // without a resolved identity (background inserts, replay flows) leave
+  // them null. UPDATE path COALESCEs so a later call without identity
+  // doesn't blank an attribution set by an earlier one.
   const actorIdentityId = m.actorIdentityId ?? null;
   const actorDisplayName = m.actorDisplayName ?? null;
   const actorSourceIp = m.actorSourceIp ?? null;
