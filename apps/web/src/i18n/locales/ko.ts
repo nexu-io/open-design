@@ -919,6 +919,7 @@ export const ko: Dict = {
   'sketch.save': '스케치 저장',
   'sketch.cancel': '취소',
   'sketch.saving': '저장 중…',
+  'sketch.saved': '저장됨',
   'sketch.tooltipDirty': '저장되지 않은 변경 사항',
   'sketch.tooltipClean': '저장됨',
   'fileViewer.empty': '보려는 파일을 선택하세요.',

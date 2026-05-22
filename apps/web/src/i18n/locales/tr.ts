@@ -906,6 +906,7 @@ export const tr: Dict = {
   'sketch.save': 'Taslağı kaydet',
   'sketch.cancel': 'İptal et',
   'sketch.saving': 'Kaydediliyor…',
+  'sketch.saved': 'Kaydedildi',
   'sketch.tooltipDirty': 'Kaydedilmemiş değişiklikler',
   'sketch.tooltipClean': 'Kaydedildi',
   'fileViewer.empty': 'Görüntülemek için bir dosya seçin.',

@@ -942,6 +942,7 @@ export const ru: Dict = {
   'sketch.save': 'Сохранить эскиз',
   'sketch.cancel': 'Отмена',
   'sketch.saving': 'Сохранение…',
+  'sketch.saved': 'Сохранено',
   'sketch.tooltipDirty': 'Несохраненные изменения',
   'sketch.tooltipClean': 'Сохранено',
   'fileViewer.empty': 'Выберите файл для просмотра.',

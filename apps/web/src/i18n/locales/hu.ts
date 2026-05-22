@@ -919,6 +919,7 @@ export const hu: Dict = {
   'sketch.save': 'Vázlat mentése',
   'sketch.cancel': 'Mégse',
   'sketch.saving': 'Mentés…',
+  'sketch.saved': 'Mentve',
   'sketch.tooltipDirty': 'Mentetlen változtatások',
   'sketch.tooltipClean': 'Mentve',
   'fileViewer.empty': 'Válassz fájlt a megtekintéshez.',

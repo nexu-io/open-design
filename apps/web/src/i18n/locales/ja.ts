@@ -806,6 +806,7 @@ export const ja: Dict = {
   'sketch.save': 'スケッチを保存',
   'sketch.cancel': 'キャンセル',
   'sketch.saving': '保存中…',
+  'sketch.saved': '保存済み',
   'sketch.tooltipDirty': '未保存の変更があります',
   'sketch.tooltipClean': '保存済み',
   'fileViewer.empty': 'ファイルを選択して表示します。',

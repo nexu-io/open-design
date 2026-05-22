@@ -919,6 +919,7 @@ export const ar: Dict = {
   'sketch.save': 'حفظ الرسم',
   'sketch.cancel': 'إلغاء',
   'sketch.saving': 'جاري الحفظ...',
+  'sketch.saved': 'تم الحفظ',
   'sketch.tooltipDirty': 'تغييرات غير محفوظة',
   'sketch.tooltipClean': 'تم الحفظ',
   'fileViewer.empty': 'اختر ملفاً لعرضه.',

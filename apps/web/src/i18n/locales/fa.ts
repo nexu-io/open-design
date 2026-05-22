@@ -943,6 +943,7 @@ export const fa: Dict = {
   'sketch.save': 'ذخیره طرح',
   'sketch.cancel': 'لغو',
   'sketch.saving': 'در حال ذخیره…',
+  'sketch.saved': 'ذخیره شد',
   'sketch.tooltipDirty': 'تغییرات ذخیره نشده',
   'sketch.tooltipClean': 'ذخیره شد',
   'fileViewer.empty': 'یک فایل را برای مشاهده انتخاب کنید.',

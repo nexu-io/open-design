@@ -860,6 +860,7 @@ export const th: Dict = {
   'sketch.save': 'บันทึกรูป',
   'sketch.cancel': 'ยกเลิก',
   'sketch.saving': 'กำลังบันทึกรูปภาพ…',
+  'sketch.saved': 'บันทึกแล้ว',
   'sketch.tooltipDirty': 'มีการเปลี่ยนผ่าน',
   'sketch.tooltipClean': 'บันทึกสมบูรณ์',
   'fileViewer.empty': 'คลิกที่ไฟล์เพื่อแสดงดู',

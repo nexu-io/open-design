@@ -1731,6 +1731,7 @@ export interface Dict {
   'sketch.save': string;
   'sketch.cancel': string;
   'sketch.saving': string;
+  'sketch.saved': string;
   'sketch.tooltipDirty': string;
   'sketch.tooltipClean': string;
   'fileViewer.empty': string;

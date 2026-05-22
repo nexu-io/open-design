@@ -807,6 +807,7 @@ export const de: Dict = {
   'sketch.save': 'Sketch speichern',
   'sketch.cancel': 'Abbrechen',
   'sketch.saving': 'Speichern…',
+  'sketch.saved': 'Gespeichert',
   'sketch.tooltipDirty': 'Ungespeicherte Änderungen',
   'sketch.tooltipClean': 'Gespeichert',
   'fileViewer.empty': 'Wählen Sie eine Datei zur Ansicht aus.',

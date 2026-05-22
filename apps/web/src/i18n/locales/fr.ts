@@ -935,6 +935,7 @@ export const fr: Dict = {
   'sketch.save': 'Enregistrer le croquis',
   'sketch.cancel': 'Annuler',
   'sketch.saving': 'Enregistrement…',
+  'sketch.saved': 'Enregistré',
   'sketch.tooltipDirty': 'Modifications non enregistrées',
   'sketch.tooltipClean': 'Enregistré',
   'fileViewer.empty': 'Sélectionnez un fichier à afficher.',

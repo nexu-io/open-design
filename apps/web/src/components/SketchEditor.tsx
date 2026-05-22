@@ -265,6 +265,7 @@ export function SketchEditor({
           className="primary"
           onClick={handleSave}
           disabled={saving || !canSave}
+          aria-label={saving ? t('sketch.saving') : showSaved ? t('sketch.saved') : t('common.save')}
         >
           {saving ? t('sketch.saving') : showSaved ? <Icon name="check" size={14} /> : t('common.save')}
         </button>

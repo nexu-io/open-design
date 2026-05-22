@@ -942,6 +942,7 @@ export const ptBR: Dict = {
   'sketch.save': 'Salvar esboço',
   'sketch.cancel': 'Cancelar',
   'sketch.saving': 'Salvando…',
+  'sketch.saved': 'Salvo',
   'sketch.tooltipDirty': 'Alterações não salvas',
   'sketch.tooltipClean': 'Salvo',
   'fileViewer.empty': 'Selecione um arquivo para visualizar.',

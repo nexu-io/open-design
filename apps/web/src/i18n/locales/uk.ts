@@ -961,6 +961,7 @@ export const uk: Dict = {
   'sketch.save': 'Зберегти ескіз',
   'sketch.cancel': 'Скасувати',
   'sketch.saving': 'Збереження…',
+  'sketch.saved': 'Збережено',
   'sketch.tooltipDirty': 'Незбережені зміни',
   'sketch.tooltipClean': 'Збережено',
   'fileViewer.empty': 'Виберіть файл для перегляду.',

@@ -1035,6 +1035,7 @@ export const zhTW: Dict = {
   'sketch.save': '儲存草圖',
   'sketch.cancel': '取消',
   'sketch.saving': '儲存中…',
+  'sketch.saved': '已儲存',
   'sketch.tooltipDirty': '尚未儲存',
   'sketch.tooltipClean': '已儲存',
   'fileViewer.empty': '請選擇一個檔案檢視。',

@@ -808,6 +808,7 @@ export const esES: Dict = {
   'sketch.save': 'Guardar boceto',
   'sketch.cancel': 'Cancelar',
   'sketch.saving': 'Guardando…',
+  'sketch.saved': 'Guardado',
   'sketch.tooltipDirty': 'Cambios sin guardar',
   'sketch.tooltipClean': 'Guardado',
   'fileViewer.empty': 'Selecciona un archivo para verlo.',

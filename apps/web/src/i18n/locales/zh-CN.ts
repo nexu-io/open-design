@@ -1410,6 +1410,7 @@ export const zhCN: Dict = {
   'sketch.save': '保存草图',
   'sketch.cancel': '取消',
   'sketch.saving': '保存中…',
+  'sketch.saved': '已保存',
   'sketch.tooltipDirty': '尚未保存',
   'sketch.tooltipClean': '已保存',
   'fileViewer.empty': '请选择一个文件查看。',

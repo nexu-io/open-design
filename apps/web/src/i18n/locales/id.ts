@@ -1035,6 +1035,7 @@ export const id: Dict = {
   'sketch.save': 'Simpan',
   'sketch.cancel': 'Batal',
   'sketch.saving': 'Menyimpan...',
+  'sketch.saved': 'Tersimpan',
   'sketch.tooltipDirty': 'Ada perubahan belum disimpan',
   'sketch.tooltipClean': 'Tersimpan',
 

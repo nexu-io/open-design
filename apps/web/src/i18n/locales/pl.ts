@@ -919,6 +919,7 @@ export const pl: Dict = {
   'sketch.save': 'Zapisz szkic',
   'sketch.cancel': 'Anuluj',
   'sketch.saving': 'Zapisywanie…',
+  'sketch.saved': 'Zapisano',
   'sketch.tooltipDirty': 'Niezapisane zmiany',
   'sketch.tooltipClean': 'Zapisano',
   'fileViewer.empty': 'Wybierz plik, aby go wyświetlić.',
