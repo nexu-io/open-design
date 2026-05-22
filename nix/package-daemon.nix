@@ -39,7 +39,7 @@ let
   pname = "open-design-daemon";
   version = (lib.importJSON ../package.json).version;
 
-  pnpmDepsHash = (import ./pnpm-deps.nix).hash;
+  pnpmDepsHash = (import ./pnpm-deps.nix).daemonHash;
 in
   stdenv.mkDerivation (finalAttrs: {
     inherit pname version src;

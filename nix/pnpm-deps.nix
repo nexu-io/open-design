@@ -1,9 +1,13 @@
 {
-  # Vendored pnpm store for the workspace packages built by the flake.
+  # Vendored pnpm store hashes for the workspace packages built by the flake.
   #
-  # Refresh this hash whenever pnpm-lock.yaml changes:
+  # The daemon and web derivations now build from different filtered source
+  # trees, so each fetchPnpmDeps invocation needs its own fixed-output hash.
+  # Refresh a hash whenever pnpm-lock.yaml or that derivation's source filter
+  # changes:
   # 1. Temporarily set the consuming `hash = lib.fakeHash;`
   # 2. Run the relevant nix build/flake check
-  # 3. Copy the expected hash printed by Nix into `hash` below
-  hash = "sha256-l87ATTkJYpX7OHHxmA/CxvJHdaaN/9RPi6AYI4DRn/I=";
+  # 3. Copy the expected hash printed by Nix into the matching field below
+  daemonHash = "sha256-X64KXAuSKE9ARcKHkgilAj7Nlej/MyAF/tiKsX4AEgg=";
+  webHash = "sha256-74loUCL+WcaZO4AAMnSpNeBhDz1Y9TMgFRPbyaOfPAk=";
 }
