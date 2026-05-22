@@ -626,14 +626,17 @@ const loadBundledOfficialEntries = (
     .map((manifestPath) => officialEntryFromManifest(manifestPath, locale))
     .filter((entry): entry is PublicPluginEntry => Boolean(entry));
 
+const SHOULD_CACHE_PUBLIC_PLUGINS = import.meta.env.PROD;
 const publicPluginsCache = new Map<LandingLocaleCode, ReadonlyArray<PublicPluginEntry>>();
 
 export const getPublicPlugins = (
   locale: LandingLocaleCode = DEFAULT_LOCALE,
 ): PublicPluginEntry[] => {
-  const cached = publicPluginsCache.get(locale);
-  if (cached) {
-    return [...cached];
+  if (SHOULD_CACHE_PUBLIC_PLUGINS) {
+    const cached = publicPluginsCache.get(locale);
+    if (cached) {
+      return [...cached];
+    }
   }
 
   const byId = new Map<string, PublicPluginEntry>();
@@ -685,6 +688,10 @@ export const getPublicPlugins = (
     }
     return left.title.localeCompare(right.title, locale);
   });
+
+  if (!SHOULD_CACHE_PUBLIC_PLUGINS) {
+    return plugins;
+  }
 
   publicPluginsCache.set(locale, plugins);
   return [...plugins];
