@@ -76,6 +76,32 @@ describe("tools-dev shared ports", () => {
     assert.deepEqual(calls, [{ label: "daemon", reserved: [webPort] }]);
   });
 
+  it("reserves an allocated daemon port before allocating the web port", async () => {
+    const calls: Array<{ label: string; reserved: number[] }> = [];
+    const daemonPort = 45678;
+    const webPort = 45679;
+    const stubAllocate = async ({ label, reserved }: PortRequest = {}): Promise<PortAllocation> => {
+      calls.push({ label, reserved: [...reserved].sort((left, right) => left - right) });
+      if (label === "daemon") {
+        return { port: daemonPort, source: "dynamic" };
+      }
+      assert.equal(label, "web");
+      assert.ok(reserved.has(daemonPort));
+      return { port: reserved.has(daemonPort) ? webPort : daemonPort, source: "dynamic" };
+    };
+
+    const options: { daemonPort?: string; webPort?: string } = {};
+
+    await ensureSharedPortsResolved([APP_KEYS.WEB, APP_KEYS.DAEMON], options, null, null, stubAllocate);
+
+    assert.equal(options.daemonPort, String(daemonPort));
+    assert.equal(options.webPort, String(webPort));
+    assert.deepEqual(calls, [
+      { label: "daemon", reserved: [] },
+      { label: "web", reserved: [daemonPort] },
+    ]);
+  });
+
   it("does not allocate a daemon port when daemon is not starting", async () => {
     const options: { daemonPort?: string; webPort?: string } = {};
 

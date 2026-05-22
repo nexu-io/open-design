@@ -39,7 +39,9 @@ export async function ensureSharedPortsResolved(
       label: "daemon",
       reserved,
     });
-    options.daemonPort = String(allocation.port);
+    daemonPort = allocation.port;
+    reserved.add(daemonPort);
+    options.daemonPort = String(daemonPort);
   }
   if (webPort != null) return;
   if (runningWebUrl != null) {
