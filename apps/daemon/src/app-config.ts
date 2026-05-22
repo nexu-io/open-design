@@ -150,6 +150,7 @@ const AGENT_CLI_ENV_KEYS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ['pi', new Set(['PI_BIN'])],
   ['qoder', new Set(['QODER_BIN'])],
   ['qwen', new Set(['QWEN_BIN'])],
+  ['trae-cli', new Set(['TRAE_CLI_BIN'])],
   ['vibe', new Set(['VIBE_BIN'])],
 ]);
 
