@@ -223,7 +223,11 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('accept-ranges')).toBeNull();
     const text = await res.text();
-    expect(text).toBe('<html/>');
+    // The raw route injects the url-load scroll-position relay into served
+    // text/html, so the body is the full file plus the relay script (not a
+    // byte range). Assert the original document is delivered intact.
+    expect(text.startsWith('<html/>')).toBe(true);
+    expect(text).toContain('data-od-scroll-relay');
   });
 
   it('returns 404 for a missing file', async () => {
