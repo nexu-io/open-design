@@ -1,9 +1,9 @@
-import type { CSSProperties } from 'react';
+import { useRef, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Button, Textarea } from '@open-design/components';
-import { useRef } from 'react';
 
 import type { PreviewCommentSnapshot } from '../comments';
 import type { Dict } from '../i18n/types';
+import { useEnterToSend } from '../state/useEnterToSend';
 import type { PreviewComment, PreviewCommentMember } from '../types';
 import { isImeComposing } from '../utils/imeComposing';
 
@@ -269,6 +269,7 @@ export function BoardComposerPopover({
   const pendingCount = notes.length + (draft.trim() ? 1 : 0);
   const hasCommentChange = !existing || draft.trim() !== existing.note.trim();
   const podMembers = target.podMembers ?? [];
+  const enterToSend = useEnterToSend();
   const composingRef = useRef(false);
   const submitDisabled = pendingCount === 0 || sending || sendDisabled;
   const primaryLabel = sending
@@ -276,6 +277,21 @@ export function BoardComposerPopover({
     : queueOnSend
       ? t('chat.annotationQueue')
       : t('chat.comments.sendToChat');
+  // Send the comment (current draft + any queued notes) on the configured
+  // key: bare Enter when "Enter to send" is on, ⌘/Ctrl + Enter when off.
+  // Shift / Alt always insert a newline, and an in-progress IME composition
+  // (e.g. a Korean syllable) is never treated as a send.
+  const handleInputKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== 'Enter') return;
+    if (isImeComposing(event, composingRef.current)) return;
+    const sends = enterToSend
+      ? !event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey
+      : (event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey;
+    if (!sends) return;
+    event.preventDefault();
+    if (submitDisabled) return;
+    void onSendBatch();
+  };
   return (
     <div
       className={`comment-popover${docked ? ' comment-popover-docked' : ''}`}
@@ -355,19 +371,7 @@ export function BoardComposerPopover({
             onCompositionEnd={() => {
               composingRef.current = false;
             }}
-            onKeyDown={(event) => {
-              if (isImeComposing(event, composingRef.current)) return;
-              if (
-                event.key === 'Enter' &&
-                !event.shiftKey &&
-                !event.altKey &&
-                (event.metaKey || event.ctrlKey)
-              ) {
-                event.preventDefault();
-                if (submitDisabled) return;
-                void onSendBatch();
-              }
-            }}
+            onKeyDown={handleInputKeyDown}
           />
           <div className="comment-popover-actions">
             <div className="comment-popover-actions-start">
