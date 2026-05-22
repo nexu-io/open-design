@@ -2,6 +2,7 @@ name: ci
 
 on:
   pull_request:
+  merge_group:
   # Release validation is owned by the release workflows rather than this CI
   # workflow: `release-stable` has a verify job before publishing, and
   # `release-beta` builds from its selected release commit. Keep this trigger
