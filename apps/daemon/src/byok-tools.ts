@@ -739,3 +739,561 @@ export async function executeGenerateVideo(
     url: `/api/projects/${encodeURIComponent(ctx.projectId)}/files/${filename}`,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Venice BYOK tools — exposed to /api/proxy/venice/stream so an LLM running
+// on Venice's chat completions (gpt-5, qwen3-coder, claude-opus, …) can call
+// `generate_image` / `generate_video` / `generate_speech` directly against
+// Venice's media endpoints with the same API key it's already authenticated
+// with. The chat surface doesn't change: tool calls are intercepted inside
+// the proxy, dispatched to the executors below, and the rendered file URL
+// is fed back as a `role:'tool'` message so the model can embed it in
+// markdown for the user.
+// ---------------------------------------------------------------------------
+
+const VENICE_DEFAULT_BASE_URL = 'https://api.venice.ai/api/v1';
+
+export const BYOK_VENICE_IMAGE_MODELS = [
+  'gpt-image-2',
+  'nano-banana-pro',
+  'nano-banana-2',
+  'qwen-image-2-pro',
+  'qwen-image-2',
+  'qwen-image',
+  'venice-sd35',
+  'flux-2-pro',
+  'flux-2-max',
+  'recraft-v4-pro',
+  'seedream-v5-lite',
+  'seedream-v4',
+  'grok-imagine',
+] as const;
+export const BYOK_VENICE_DEFAULT_IMAGE_MODEL = 'gpt-image-2';
+
+export const BYOK_VENICE_VIDEO_MODELS = [
+  'wan-2.6-text-to-video',
+  'wan-2.6-image-to-video',
+  'wan-2.5-preview-text-to-video',
+  'wan-2.5-preview-image-to-video',
+  'seedance-2-0-text-to-video',
+  'seedance-2-0-image-to-video',
+  'seedance-2-0-reference-to-video',
+  'seedance-2-0-fast-text-to-video',
+  'seedance-2-0-fast-image-to-video',
+  'grok-imagine-text-to-video',
+  'grok-imagine-image-to-video',
+] as const;
+export const BYOK_VENICE_DEFAULT_VIDEO_MODEL = 'seedance-2-0-text-to-video';
+
+const VENICE_AUDIO_VIDEO_MODELS = new Set<string>([
+  'wan-2.6-text-to-video',
+  'wan-2.6-image-to-video',
+  'seedance-2-0-text-to-video',
+  'seedance-2-0-image-to-video',
+  'seedance-2-0-reference-to-video',
+  'grok-imagine-text-to-video',
+  'grok-imagine-image-to-video',
+]);
+
+// Image-to-video Seedance variants reject aspect_ratio (output derives from
+// input image dims). Same set the daemon uses.
+const VENICE_I2V_NO_ASPECT = new Set<string>([
+  'seedance-2-0-image-to-video',
+  'seedance-2-0-fast-image-to-video',
+]);
+
+export const BYOK_VENICE_TOOLS = [
+  {
+    type: 'function' as const,
+    function: {
+      name: 'generate_image',
+      description:
+        'Generate an image from a text prompt using Venice\'s image-generation API. Returns a URL pointing to the rendered PNG. After this tool succeeds, embed the URL in your reply with markdown image syntax — ![alt](url) — so the user sees the image inline. Use this whenever the user asks to draw, create, generate, design, or illustrate something visual.',
+      parameters: {
+        type: 'object',
+        properties: {
+          prompt: {
+            type: 'string',
+            description:
+              'Detailed visual description (subject, style, lighting, composition). Max 2000 characters.',
+          },
+          aspect_ratio: {
+            type: 'string',
+            enum: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9'],
+            description:
+              'Output aspect ratio. Defaults to 1:1 when omitted. 16:9 is best for hero banners, 9:16 for vertical phone posters.',
+          },
+          resolution: {
+            type: 'string',
+            enum: ['1K', '2K', '4K'],
+            description:
+              'Output resolution tier. Only applies to resolution-tier models (gpt-image-2, nano-banana-pro, nano-banana-2). Other models ignore this field. Defaults to 2K.',
+          },
+          model: {
+            type: 'string',
+            enum: [...BYOK_VENICE_IMAGE_MODELS],
+            description:
+              'Optional model override. Defaults to gpt-image-2. Pick venice-sd35 / flux-2-* for photorealism, qwen-image-2-pro for clean illustrations, recraft-v4-pro for typography, nano-banana-pro for the highest fidelity at 4K.',
+          },
+        },
+        required: ['prompt'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'generate_video',
+      description:
+        'Generate a short video (5–15 seconds) from a text prompt using Venice\'s video API. This is an asynchronous call that can take 30 s to several minutes — the daemon polls the job for you. After this tool succeeds, embed the returned URL in your reply as `[▶ Play video](url)` since the chat markdown renderer does not render <video> tags inline.',
+      parameters: {
+        type: 'object',
+        properties: {
+          prompt: {
+            type: 'string',
+            description:
+              'Detailed motion description (subject, action, camera move, style, lighting). Max 2500 characters.',
+          },
+          aspect_ratio: {
+            type: 'string',
+            enum: ['1:1', '16:9', '9:16', '4:3', '3:4'],
+            description:
+              'Output aspect ratio. Defaults to 16:9. Note: seedance-2-0-*image-to-video models ignore this field — output aspect derives from the input image.',
+          },
+          duration: {
+            type: 'integer',
+            minimum: 5,
+            maximum: 15,
+            description:
+              'Video length in seconds. Allowed 5–15. Defaults to 5. Shorter is faster.',
+          },
+          resolution: {
+            type: 'string',
+            enum: ['480p', '720p', '1080p'],
+            description: 'Output resolution. Defaults to 720p.',
+          },
+          generate_audio: {
+            type: 'boolean',
+            description:
+              'Whether the model also synthesises a native audio track. Only honoured on audio-capable models (Wan 2.6, Seedance 2.0, Grok Imagine); other models ignore this field.',
+          },
+          model: {
+            type: 'string',
+            enum: [...BYOK_VENICE_VIDEO_MODELS],
+            description:
+              'Optional model override. Defaults to seedance-2-0-text-to-video. Pick wan-2.6-* for cinematic + audio, grok-imagine-* for 720p + native audio, seedance-2-0-image-to-video when an input image is supplied.',
+          },
+        },
+        required: ['prompt'],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'generate_speech',
+      description:
+        'Generate a text-to-speech voiceover via Venice\'s OpenAI-compatible /audio/speech endpoint. Returns a URL pointing to the rendered MP3. Use this when the user asks for narration, voiceover, or spoken audio. After this tool succeeds, reply with `[▶ Play audio](url)`.',
+      parameters: {
+        type: 'object',
+        properties: {
+          text: {
+            type: 'string',
+            description: 'Exact script to speak. Include only the words to be spoken.',
+          },
+          voice: {
+            type: 'string',
+            description:
+              'Voice id. Defaults to "alloy" (the OpenAI-compatible default). For Venice voice-cloning models (e.g. tts-chatterbox-hd) pass a `vv_…` handle minted via /audio/voices.',
+          },
+          model: {
+            type: 'string',
+            enum: ['gpt-4o-mini-tts', 'tts-chatterbox-hd'],
+            description: 'Optional TTS model. Defaults to gpt-4o-mini-tts.',
+          },
+        },
+        required: ['text'],
+      },
+    },
+  },
+];
+
+function veniceSafeAspect(raw: unknown, allow: readonly string[]): string {
+  if (typeof raw !== 'string') return allow[0] || '1:1';
+  return allow.includes(raw) ? raw : (allow[0] || '1:1');
+}
+
+function veniceImageModelArg(raw: unknown): string {
+  if (typeof raw !== 'string' || !raw.trim()) return BYOK_VENICE_DEFAULT_IMAGE_MODEL;
+  return raw.trim();
+}
+
+function veniceVideoModelArg(raw: unknown): string {
+  if (typeof raw !== 'string' || !raw.trim()) return BYOK_VENICE_DEFAULT_VIDEO_MODEL;
+  return raw.trim();
+}
+
+function veniceResolutionArg(raw: unknown, fallback: string, allow: readonly string[]): string {
+  if (typeof raw !== 'string' || !raw.trim()) return fallback;
+  return allow.includes(raw.trim()) ? raw.trim() : fallback;
+}
+
+/**
+ * Execute the Venice `generate_image` tool. POST /image/generate,
+ * persist rendered PNG into the project folder, return daemon-served URL.
+ */
+export async function executeVeniceGenerateImage(
+  args: { prompt?: unknown; aspect_ratio?: unknown; resolution?: unknown; model?: unknown },
+  ctx: BYOKToolContext,
+): Promise<ImageToolResult> {
+  const promptRaw = typeof args.prompt === 'string' ? args.prompt.trim() : '';
+  if (!promptRaw) return { ok: false, error: 'prompt is required' };
+  const prompt = promptRaw.length > 2000 ? promptRaw.slice(0, 2000) : promptRaw;
+
+  let dir: string;
+  try {
+    dir = await ensureProject(ctx.projectsRoot, ctx.projectId);
+  } catch (err) {
+    return {
+      ok: false,
+      error: `invalid projectId for image storage: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
+  let apiKey = ctx.upstreamApiKey;
+  let baseUrl = ctx.upstreamBaseUrl || VENICE_DEFAULT_BASE_URL;
+  if (!apiKey) {
+    const resolved = await resolveProviderConfig(ctx.projectRoot, 'venice');
+    apiKey = resolved.apiKey || '';
+    if (resolved.baseUrl) baseUrl = resolved.baseUrl;
+  }
+  if (!apiKey) return { ok: false, error: 'no Venice API key available' };
+
+  const wireModel = veniceImageModelArg(args.model ?? ctx.defaultImageModel);
+  const aspect = veniceSafeAspect(args.aspect_ratio, [
+    '1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9',
+  ]);
+  const resolution = veniceResolutionArg(args.resolution, '2K', ['1K', '2K', '4K']);
+
+  // Per-model sizing dispatch. Duplicates renderVeniceImage's logic so the
+  // chat tool finishes in one HTTP round trip without dragging in the full
+  // media pipeline. Drift between this set and renderVeniceImage's set
+  // would mean a Venice model accepts in one path and 400s in the other —
+  // the verify:media-models script should be extended to catch that.
+  const resolutionTier = new Set(['gpt-image-2', 'nano-banana-pro', 'nano-banana-2']);
+  const pixelOnly = new Set(['venice-sd35', 'qwen-image', 'lustify-sdxl', 'lustify-v7', 'wai-Illustrious']);
+  const body: Record<string, unknown> = {
+    model: wireModel,
+    prompt,
+    format: 'png',
+    safe_mode: false,
+  };
+  if (resolutionTier.has(wireModel)) {
+    body.aspect_ratio = aspect;
+    body.resolution = resolution;
+  } else if (pixelOnly.has(wireModel)) {
+    const dims: Record<string, [number, number]> = {
+      '1:1': [1024, 1024],
+      '16:9': [1280, 720],
+      '9:16': [720, 1280],
+      '4:3': [1152, 864],
+      '3:4': [864, 1152],
+      '3:2': [1248, 832],
+      '2:3': [832, 1248],
+      '21:9': [1536, 640],
+    };
+    const [w, h] = dims[aspect] || [1024, 1024];
+    body.width = w;
+    body.height = h;
+  } else {
+    body.aspect_ratio = aspect;
+  }
+
+  const trimmedBase = baseUrl.replace(/\/+$/, '');
+  let data: { id?: string; images?: unknown };
+  try {
+    const resp = await fetch(`${trimmedBase}/image/generate`, {
+      method: 'POST',
+      redirect: 'error',
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+    const respText = await resp.text();
+    if (!resp.ok) {
+      return { ok: false, error: `venice image ${resp.status}: ${respText.slice(0, 240)}` };
+    }
+    try {
+      data = JSON.parse(respText) as typeof data;
+    } catch {
+      return { ok: false, error: `venice image non-JSON: ${respText.slice(0, 200)}` };
+    }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+  const b64 = Array.isArray(data?.images) && typeof data.images[0] === 'string'
+    ? data.images[0]
+    : '';
+  if (!b64) return { ok: false, error: 'venice image response missing images[0]' };
+
+  const bytes = Buffer.from(b64, 'base64');
+  if (bytes.length === 0) return { ok: false, error: 'venice image decoded zero bytes' };
+
+  const id = `${Date.now().toString(36)}-${randomBytes(4).toString('hex')}`;
+  const filename = `byok-venice-${id}.png`;
+  await writeFile(path.join(dir, filename), bytes);
+  return {
+    ok: true,
+    url: `/api/projects/${encodeURIComponent(ctx.projectId)}/files/${filename}`,
+  };
+}
+
+/**
+ * Execute the Venice `generate_video` tool. Queues POST /video/queue,
+ * polls /video/retrieve until the mp4 lands, persists into project folder.
+ */
+export async function executeVeniceGenerateVideo(
+  args: {
+    prompt?: unknown;
+    aspect_ratio?: unknown;
+    duration?: unknown;
+    resolution?: unknown;
+    generate_audio?: unknown;
+    model?: unknown;
+  },
+  ctx: BYOKToolContext,
+): Promise<ImageToolResult> {
+  const promptRaw = typeof args.prompt === 'string' ? args.prompt.trim() : '';
+  if (!promptRaw) return { ok: false, error: 'prompt is required' };
+  const prompt = promptRaw.length > 2500 ? promptRaw.slice(0, 2500) : promptRaw;
+
+  let dir: string;
+  try {
+    dir = await ensureProject(ctx.projectsRoot, ctx.projectId);
+  } catch (err) {
+    return {
+      ok: false,
+      error: `invalid projectId for video storage: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
+  let apiKey = ctx.upstreamApiKey;
+  let baseUrl = ctx.upstreamBaseUrl || VENICE_DEFAULT_BASE_URL;
+  if (!apiKey) {
+    const resolved = await resolveProviderConfig(ctx.projectRoot, 'venice');
+    apiKey = resolved.apiKey || '';
+    if (resolved.baseUrl) baseUrl = resolved.baseUrl;
+  }
+  if (!apiKey) return { ok: false, error: 'no Venice API key available' };
+
+  const wireModel = veniceVideoModelArg(args.model);
+  const aspect = veniceSafeAspect(args.aspect_ratio, ['1:1', '16:9', '9:16', '4:3', '3:4']);
+  const resolution = veniceResolutionArg(args.resolution, '720p', ['480p', '720p', '1080p']);
+  const requestedDuration =
+    typeof args.duration === 'number' && Number.isFinite(args.duration)
+      ? Math.round(args.duration)
+      : 5;
+  const duration = Math.min(Math.max(requestedDuration, 5), 15);
+
+  const body: Record<string, unknown> = {
+    model: wireModel,
+    prompt,
+    duration: `${duration}s`,
+    resolution,
+  };
+  if (!VENICE_I2V_NO_ASPECT.has(wireModel)) body.aspect_ratio = aspect;
+  if (VENICE_AUDIO_VIDEO_MODELS.has(wireModel) && args.generate_audio === true) {
+    body.audio = true;
+  }
+
+  const trimmedBase = baseUrl.replace(/\/+$/, '');
+
+  // Step 1 — queue.
+  let queueId = '';
+  let privateDownloadUrl = '';
+  try {
+    const resp = await fetch(`${trimmedBase}/video/queue`, {
+      method: 'POST',
+      redirect: 'error',
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+    const text = await resp.text();
+    if (!resp.ok) {
+      return { ok: false, error: `venice video queue ${resp.status}: ${text.slice(0, 240)}` };
+    }
+    let qd: { queue_id?: string; download_url?: string };
+    try {
+      qd = JSON.parse(text);
+    } catch {
+      return { ok: false, error: `venice video queue non-JSON: ${text.slice(0, 200)}` };
+    }
+    if (typeof qd?.queue_id !== 'string' || !qd.queue_id) {
+      return { ok: false, error: 'venice video queue response missing queue_id' };
+    }
+    queueId = qd.queue_id;
+    if (typeof qd.download_url === 'string') privateDownloadUrl = qd.download_url;
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+
+  // Step 2 — poll. mp4 may come inline (video/mp4) or as JSON
+  // {status:"COMPLETED"} pointing at the queue-time download_url (Grok
+  // Imagine Private variants).
+  const pollIntervalMs = ctx.videoPollIntervalMs ?? 5000;
+  const maxPolls = 120;
+  let bytes: Buffer | null = null;
+  let lastStatus = '';
+  for (let attempt = 0; attempt < maxPolls; attempt++) {
+    await sleep(pollIntervalMs);
+    let pollResp: Response;
+    try {
+      pollResp = await fetch(`${trimmedBase}/video/retrieve`, {
+        method: 'POST',
+        redirect: 'error',
+        headers: {
+          authorization: `Bearer ${apiKey}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ model: wireModel, queue_id: queueId }),
+      });
+    } catch (err) {
+      return {
+        ok: false,
+        error: `venice video poll failed: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+    if (!pollResp.ok) {
+      const text = await pollResp.text().catch(() => '');
+      return { ok: false, error: `venice video retrieve ${pollResp.status}: ${text.slice(0, 240)}` };
+    }
+    const contentType = (pollResp.headers.get('content-type') || '').toLowerCase();
+    if (contentType.includes('video/mp4')) {
+      const arr = await pollResp.arrayBuffer();
+      bytes = Buffer.from(arr);
+      break;
+    }
+    if (contentType.includes('application/json')) {
+      const text = await pollResp.text();
+      let pd: { status?: string; error?: unknown; message?: string };
+      try {
+        pd = JSON.parse(text);
+      } catch {
+        return { ok: false, error: `venice video retrieve non-JSON: ${text.slice(0, 200)}` };
+      }
+      lastStatus = String(pd?.status || '').toUpperCase();
+      if (lastStatus === 'COMPLETED' && privateDownloadUrl) {
+        const urlCheck = await assertExternalAssetUrl(privateDownloadUrl);
+        if (!urlCheck.ok) return { ok: false, error: urlCheck.error };
+        try {
+          const dl = await fetch(privateDownloadUrl, { redirect: 'error' });
+          if (!dl.ok) return { ok: false, error: `venice video private download ${dl.status}` };
+          bytes = Buffer.from(await dl.arrayBuffer());
+        } catch (err) {
+          return { ok: false, error: err instanceof Error ? err.message : String(err) };
+        }
+        break;
+      }
+      if (lastStatus === 'FAILED' || lastStatus === 'EXPIRED') {
+        const reason =
+          typeof (pd as any)?.error?.message === 'string' ? (pd as any).error.message :
+            typeof (pd as any)?.error === 'string' ? (pd as any).error :
+              (pd.message || lastStatus);
+        return { ok: false, error: `venice video ${lastStatus.toLowerCase()}: ${reason}` };
+      }
+      if ((attempt + 1) % 6 === 0) {
+        console.log(
+          `[proxy:venice] generate_video poll ${attempt + 1}/${maxPolls} task=${queueId} status=${lastStatus || 'PROCESSING'}`,
+        );
+      }
+      continue;
+    }
+    return {
+      ok: false,
+      error: `venice video retrieve unexpected content-type "${contentType}"`,
+    };
+  }
+  if (!bytes) {
+    return { ok: false, error: `venice video timed out after ${maxPolls} polls (last status: ${lastStatus || 'PROCESSING'})` };
+  }
+  if (bytes.length === 0) return { ok: false, error: 'venice video returned zero bytes' };
+
+  const id = `${Date.now().toString(36)}-${randomBytes(4).toString('hex')}`;
+  const filename = `byok-venice-video-${id}.mp4`;
+  await writeFile(path.join(dir, filename), bytes);
+  return {
+    ok: true,
+    url: `/api/projects/${encodeURIComponent(ctx.projectId)}/files/${filename}`,
+  };
+}
+
+/**
+ * Execute the Venice `generate_speech` tool. POST /audio/speech
+ * (OpenAI-compatible), persist mp3 in the project folder.
+ */
+export async function executeVeniceGenerateSpeech(
+  args: { text?: unknown; voice?: unknown; model?: unknown },
+  ctx: BYOKToolContext,
+): Promise<ImageToolResult> {
+  const text = typeof args.text === 'string' ? args.text.trim() : '';
+  if (!text) return { ok: false, error: 'text is required' };
+
+  let dir: string;
+  try {
+    dir = await ensureProject(ctx.projectsRoot, ctx.projectId);
+  } catch (err) {
+    return {
+      ok: false,
+      error: `invalid projectId for speech storage: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
+  let apiKey = ctx.upstreamApiKey;
+  let baseUrl = ctx.upstreamBaseUrl || VENICE_DEFAULT_BASE_URL;
+  if (!apiKey) {
+    const resolved = await resolveProviderConfig(ctx.projectRoot, 'venice');
+    apiKey = resolved.apiKey || '';
+    if (resolved.baseUrl) baseUrl = resolved.baseUrl;
+  }
+  if (!apiKey) return { ok: false, error: 'no Venice API key available' };
+
+  const model = typeof args.model === 'string' && args.model.trim()
+    ? args.model.trim()
+    : 'gpt-4o-mini-tts';
+  const voice = typeof args.voice === 'string' && args.voice.trim() ? args.voice.trim() : 'alloy';
+  const trimmedBase = baseUrl.replace(/\/+$/, '');
+
+  let bytes: Buffer;
+  try {
+    const resp = await fetch(`${trimmedBase}/audio/speech`, {
+      method: 'POST',
+      redirect: 'error',
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ model, input: text, voice, response_format: 'mp3' }),
+    });
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => '');
+      return { ok: false, error: `venice tts ${resp.status}: ${errText.slice(0, 240)}` };
+    }
+    bytes = Buffer.from(await resp.arrayBuffer());
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+  if (bytes.length === 0) return { ok: false, error: 'venice tts returned zero bytes' };
+
+  const id = `${Date.now().toString(36)}-${randomBytes(4).toString('hex')}`;
+  const filename = `byok-venice-speech-${id}.mp3`;
+  await writeFile(path.join(dir, filename), bytes);
+  return {
+    ok: true,
+    url: `/api/projects/${encodeURIComponent(ctx.projectId)}/files/${filename}`,
+  };
+}

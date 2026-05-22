@@ -104,6 +104,12 @@ const ENV_KEYS: Record<string, string[]> = {
   senseaudio: ['OD_SENSEAUDIO_API_KEY', 'SENSEAUDIO_API_KEY'],
   tavily: ['OD_TAVILY_API_KEY', 'TAVILY_API_KEY'],
   leonardo: ['OD_LEONARDO_API_KEY', 'LEONARDO_API_KEY'],
+  // Venice — the canonical env Venice's own SDK examples export is
+  // VENICE_API_KEY (see docs.venice.ai/overview/getting-started), so we
+  // pick that up automatically. OD_VENICE_API_KEY is the project-reserved
+  // override that wins over both Settings-stored config and the upstream
+  // canonical env.
+  venice: ['OD_VENICE_API_KEY', 'VENICE_API_KEY'],
 };
 
 // Resolve an `OD_*_DIR` env override using the same semantics as

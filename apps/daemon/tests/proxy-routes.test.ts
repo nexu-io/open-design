@@ -1573,6 +1573,7 @@ describe('API proxy routes', () => {
       '/api/proxy/azure/stream',
       '/api/proxy/google/stream',
       '/api/proxy/senseaudio/stream',
+      '/api/proxy/venice/stream',
     ];
 
     for (const path of proxies) {
@@ -1610,6 +1611,189 @@ describe('API proxy routes', () => {
         expect(body?.error?.code).toBe('PLUGIN_REQUIRES_DAEMON');
       });
     }
+  });
+
+  // ---------------------------------------------------------------------
+  // /api/proxy/venice/stream — Venice chat proxy. Mirror of the senseaudio
+  // tests but pointed at api.venice.ai/api/v1. The full tool-execution
+  // surface (generate_image / generate_video / generate_speech round-trips)
+  // is covered in media-venice.test.ts where mocking the upstream is
+  // simpler than threading a second mock through the proxy server.
+  // ---------------------------------------------------------------------
+  describe('Venice proxy', () => {
+    it('streams delta + end and forwards to api.venice.ai/api/v1/chat/completions', async () => {
+      const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+        const url = String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        return Promise.resolve(sseResponse([
+          'data: {"choices":[{"delta":{"content":"hi from venice"}}]}',
+          '',
+          'data: [DONE]',
+          '',
+        ].join('\n')));
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await realFetch(`${baseUrl}/api/proxy/venice/stream`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          baseUrl: 'https://api.venice.ai/api/v1',
+          apiKey: 'venice-test',
+          projectId: 'test-project',
+          model: 'venice-uncensored',
+          messages: [{ role: 'user', content: 'hello' }],
+        }),
+      });
+
+      await expect(res.text()).resolves.toContain(
+        'event: delta\ndata: {"delta":"hi from venice"}',
+      );
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://api.venice.ai/api/v1/chat/completions',
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: 'Bearer venice-test' }),
+          redirect: 'error',
+        }),
+      );
+    });
+
+    it('defaults Venice base URL to api.venice.ai/api/v1 when caller omits it', async () => {
+      const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+        const url = String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        return Promise.resolve(sseResponse('data: [DONE]\n\n'));
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      await realFetch(`${baseUrl}/api/proxy/venice/stream`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          apiKey: 'venice-test',
+          projectId: 'test-project',
+          model: 'gpt-5',
+          messages: [{ role: 'user', content: 'hi' }],
+        }),
+      });
+
+      // The base URL already carries /api/v1 — the appendVersionedApiPath
+      // helper detects it and does not double-inject.
+      expect(String(fetchMock.mock.calls[0]![0])).toBe(
+        'https://api.venice.ai/api/v1/chat/completions',
+      );
+    });
+
+    it('rejects venice requests that omit apiKey or model', async () => {
+      const fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+
+      const missingKey = await realFetch(`${baseUrl}/api/proxy/venice/stream`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          model: 'gpt-5',
+          projectId: 'test-project',
+          messages: [{ role: 'user', content: 'hi' }],
+        }),
+      });
+      expect(missingKey.status).toBe(400);
+
+      const missingModel = await realFetch(`${baseUrl}/api/proxy/venice/stream`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          apiKey: 'venice-test',
+          projectId: 'test-project',
+          messages: [{ role: 'user', content: 'hi' }],
+        }),
+      });
+      expect(missingModel.status).toBe(400);
+
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('rejects venice chat requests without a projectId', async () => {
+      const fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await realFetch(`${baseUrl}/api/proxy/venice/stream`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          apiKey: 'venice-test',
+          model: 'gpt-5',
+          messages: [{ role: 'user', content: 'hi' }],
+        }),
+      });
+      expect(res.status).toBe(400);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('injects the Venice tools array on every request', async () => {
+      const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+        const url = String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        // Inspect the upstream payload — the proxy should attach the
+        // generate_image / generate_video / generate_speech tools so an
+        // LLM running on Venice can call them without any per-prompt
+        // instruction from the user.
+        const body = JSON.parse(String((init as any)?.body)) as {
+          tools?: Array<{ function?: { name?: string } }>;
+          tool_choice?: string;
+        };
+        expect(Array.isArray(body.tools)).toBe(true);
+        const names = (body.tools || [])
+          .map((t) => t?.function?.name)
+          .filter((n): n is string => typeof n === 'string')
+          .sort();
+        expect(names).toEqual([
+          'generate_image',
+          'generate_speech',
+          'generate_video',
+        ]);
+        expect(body.tool_choice).toBe('auto');
+        return Promise.resolve(sseResponse('data: [DONE]\n\n'));
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      await realFetch(`${baseUrl}/api/proxy/venice/stream`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          apiKey: 'venice-test',
+          projectId: 'test-project',
+          model: 'gpt-5',
+          messages: [{ role: 'user', content: 'hi' }],
+        }),
+      });
+
+      expect(fetchMock).toHaveBeenCalled();
+    });
+
+    it('disables upstream redirects for venice proxy requests', async () => {
+      const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+        const url = String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        return Promise.resolve(sseResponse('data: [DONE]\n\n'));
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      await realFetch(`${baseUrl}/api/proxy/venice/stream`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          apiKey: 'venice-test',
+          projectId: 'test-project',
+          model: 'gpt-5',
+          messages: [{ role: 'user', content: 'hi' }],
+        }),
+      });
+
+      const upstream = fetchMock.mock.calls.find(([input]) => !String(input).startsWith(baseUrl));
+      expect(upstream).toBeDefined();
+      expect((upstream![1] as FetchInit)?.redirect).toBe('error');
+    });
   });
 });
 

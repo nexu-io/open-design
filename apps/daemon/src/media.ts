@@ -631,6 +631,25 @@ export async function generateMedia(args: {
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'venice' && surface === 'image') {
+      const result = await renderVeniceImage(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'venice' && surface === 'video') {
+      const result = await renderVeniceVideo(ctx, credentials, args.onProgress);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (
+      def.provider === 'venice'
+      && surface === 'audio'
+      && ctx.audioKind === 'speech'
+    ) {
+      const result = await renderVeniceSpeech(ctx, credentials);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
     } else {
       // No real renderer wired up for this (provider, surface). Gate the
       // stub fallback behind OD_MEDIA_ALLOW_STUBS so release builds don't
@@ -2850,6 +2869,530 @@ async function renderSenseAudioImage(ctx: MediaContext, credentials: ProviderCon
     bytes,
     providerNote: `senseaudio/${ctx.wireModel} · ${size}${reference ? ' · i2i' : ''} · ${bytes.length} bytes`,
     suggestedExt: '.png',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Provider: Venice — OpenAI-compatible inference gateway for text, image,
+// video, audio, and embeddings (https://docs.venice.ai/api-reference/api-spec).
+//
+// Venice fronts gpt-image-2 / nano-banana / qwen-image-* / venice-sd35 /
+// flux-2-* / seedream-* (image), Wan 2.5/2.6 / Seedance 2.0 / Grok Imagine /
+// Topaz upscale (video), and OpenAI-compatible /audio/speech (TTS) under a
+// single API key. The dispatcher's wire-model id is the bare model slug
+// (e.g. `gpt-image-2`); the canonical `venice/<id>` form is the catalogue
+// id that distinguishes Venice's gpt-image-2 from the direct-OpenAI one.
+//
+// Image is synchronous (POST /image/generate → JSON with base64 `images[0]`).
+// Video is async: POST /video/queue → poll POST /video/retrieve until the
+// response is `video/mp4` (or JSON `status:"COMPLETED"` for private models,
+// in which case the finished file lives at the `download_url` returned at
+// queue time).
+//
+// Sizing is model-specific (docs.venice.ai/guides/media/image-generation):
+//   * pixel models accept `width` + `height`              → venice-sd35, qwen-image
+//   * aspect-ratio models accept `aspect_ratio`           → qwen-image-2, flux-2-*
+//   * resolution-tier models accept `aspect_ratio` + `resolution` (1K/2K/4K)
+//                                                         → gpt-image-2, nano-banana-*
+// We use the wire-model slug to decide which sizing shape to send.
+// ---------------------------------------------------------------------------
+
+const VENICE_DEFAULT_BASE_URL = 'https://api.venice.ai/api/v1';
+// Venice image prompts hard-cap at ~2000 chars on most models. Trim
+// defensively so a verbose agent plan doesn't dead-end the call; the
+// truncated tail still surfaces in providerNote for forensics.
+const VENICE_IMAGE_PROMPT_LIMIT = 2000;
+
+// Resolution-tier models advertise `1K`, `2K`, `4K` on POST /image/generate.
+// Anything off this list falls back to aspect-ratio sizing.
+const VENICE_RESOLUTION_TIER_MODELS = new Set<string>([
+  'gpt-image-2',
+  'nano-banana-pro',
+  'nano-banana-2',
+]);
+
+// Aspect-ratio-only models — sizing is `aspect_ratio` (no `resolution`).
+const VENICE_ASPECT_RATIO_MODELS = new Set<string>([
+  'qwen-image-2',
+  'qwen-image-2-pro',
+  'flux-2-pro',
+  'flux-2-max',
+  'flux-2-max-edit',
+  'seedream-v4',
+  'seedream-v5-lite',
+  'seedream-v5-lite-edit',
+  'recraft-v4-pro',
+  'grok-imagine',
+]);
+
+// Pixel-dimension models accept `width` + `height`.
+const VENICE_PIXEL_MODELS = new Set<string>([
+  'venice-sd35',
+  'qwen-image',
+  'lustify-sdxl',
+  'lustify-v7',
+  'wai-Illustrious',
+]);
+
+// Map our shared MEDIA_ASPECTS subset onto the slugs Venice accepts on the
+// resolution-tier / aspect-ratio surface. Pass-through when the value is
+// already in their accepted set.
+const VENICE_ASPECT_PASSTHROUGH = new Set([
+  '1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9',
+]);
+
+function veniceAspect(aspect?: string): string {
+  if (!aspect) return '1:1';
+  return VENICE_ASPECT_PASSTHROUGH.has(aspect) ? aspect : '16:9';
+}
+
+// Pixel dimensions for the pixel-sizing path. The output is conservative —
+// 1024-step boxes for each aspect — to stay inside the lowest-cost tier
+// across pixel models. The agent can paste an alias to a different wire
+// model via OD_MEDIA_MODEL_ALIASES when more aggressive sizing is needed.
+function venicePixelSize(aspect?: string): { width: number; height: number } {
+  switch (aspect) {
+    case '16:9': return { width: 1280, height: 720 };
+    case '9:16': return { width: 720, height: 1280 };
+    case '4:3': return { width: 1152, height: 864 };
+    case '3:4': return { width: 864, height: 1152 };
+    case '21:9': return { width: 1536, height: 640 };
+    case '1:1':
+    default: return { width: 1024, height: 1024 };
+  }
+}
+
+async function renderVeniceImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no Venice API key — configure it in Settings or set VENICE_API_KEY / OD_VENICE_API_KEY',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || VENICE_DEFAULT_BASE_URL).replace(/\/$/, '');
+  const promptRaw = (ctx.prompt && ctx.prompt.trim()) || 'A high-quality reference image.';
+  const prompt =
+    promptRaw.length > VENICE_IMAGE_PROMPT_LIMIT
+      ? promptRaw.slice(0, VENICE_IMAGE_PROMPT_LIMIT)
+      : promptRaw;
+
+  // Pass the bare model slug on the wire (`gpt-image-2`, not `venice/gpt-image-2`).
+  // Aliases (issue #1277) win at ctx.wireModel resolution time, so a user who
+  // wants to ride this provider with a non-listed model just sets
+  // OD_MEDIA_MODEL_ALIASES='{"venice/gpt-image-2":"my-fork"}'.
+  const wireSlug = stripVeniceWirePrefix(ctx.wireModel);
+
+  const body: Record<string, unknown> = {
+    model: wireSlug,
+    prompt,
+    format: 'png',
+    safe_mode: false,
+  };
+
+  // Sizing dispatch — order matters: resolution-tier models also expose
+  // aspect_ratio, so we check the tier set first and only fall through to
+  // pixel sizing when nothing else matches.
+  let sizingDesc = '';
+  if (VENICE_RESOLUTION_TIER_MODELS.has(wireSlug)) {
+    body.aspect_ratio = veniceAspect(ctx.aspect);
+    body.resolution = '2K';
+    sizingDesc = `${body.aspect_ratio} @ 2K`;
+  } else if (VENICE_ASPECT_RATIO_MODELS.has(wireSlug)) {
+    body.aspect_ratio = veniceAspect(ctx.aspect);
+    sizingDesc = `${body.aspect_ratio}`;
+  } else if (VENICE_PIXEL_MODELS.has(wireSlug)) {
+    const dims = venicePixelSize(ctx.aspect);
+    body.width = dims.width;
+    body.height = dims.height;
+    sizingDesc = `${dims.width}×${dims.height}`;
+  } else {
+    // Unknown wire model (user pasted a custom slug). Default to aspect-
+    // ratio sizing — every Venice image model accepts it, and overshooting
+    // with `resolution` may produce a 400 on models without resolution-tier
+    // support.
+    body.aspect_ratio = veniceAspect(ctx.aspect);
+    sizingDesc = `${body.aspect_ratio} (auto)`;
+  }
+
+  const isEdit = wireSlug.endsWith('-edit') || wireSlug === 'qwen-edit';
+  const usingReference = Boolean(ctx.imageRef && ctx.imageRef.dataUrl);
+
+  // The edit endpoint takes a different shape: `image` (base64 / URL) is
+  // required and `prompt` describes the change. The Venice docs split
+  // /image/generate (no input image) from /image/edit (input image
+  // required), so route through /image/edit whenever we have an *-edit
+  // model or a reference image. The same body fields (model, prompt,
+  // aspect_ratio, output_format) apply.
+  const path = (isEdit || (usingReference && !VENICE_RESOLUTION_TIER_MODELS.has(wireSlug)))
+    ? '/image/edit'
+    : '/image/generate';
+  if (path === '/image/edit') {
+    if (!usingReference) {
+      throw new Error(
+        `venice ${wireSlug}: /image/edit requires a reference image — pass --image-ref pointing at a file in the project`,
+      );
+    }
+    body.image = ctx.imageRef!.dataUrl;
+    body.output_format = 'png';
+    delete body.format;
+  } else if (usingReference) {
+    // Resolution-tier models accept a reference via /image/generate's
+    // `image` field for "edit-by-rewrite" behaviour. Pass it through and
+    // log so the providerNote reflects what was sent.
+    body.image = ctx.imageRef!.dataUrl;
+  }
+
+  const resp = await fetch(`${baseUrl}${path}`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+    redirect: 'error',
+  });
+  const respText = await resp.text();
+  if (!resp.ok) {
+    throw new Error(`venice image ${resp.status}: ${truncate(respText, 240)}`);
+  }
+  let data: any;
+  try {
+    data = JSON.parse(respText);
+  } catch {
+    throw new Error(`venice image non-JSON: ${truncate(respText, 200)}`);
+  }
+  // Venice returns { id, images: [b64], timing: {...} }. A logical-error
+  // path on a 200 isn't documented, but Venice mirrors OpenAI's surface
+  // closely so we treat a missing `images[0]` as a hard error rather than
+  // emitting empty bytes.
+  const b64 = Array.isArray(data?.images) && typeof data.images[0] === 'string'
+    ? data.images[0]
+    : '';
+  if (!b64) {
+    throw new Error(`venice image response missing images[0]: ${truncate(respText, 200)}`);
+  }
+  const bytes = Buffer.from(b64, 'base64');
+  if (bytes.length === 0) {
+    throw new Error('venice image base64 decoded to zero bytes');
+  }
+
+  const editTag = path === '/image/edit' ? ' · edit' : (usingReference ? ' · i2i' : '');
+  return {
+    bytes,
+    providerNote: `venice/${wireSlug} · ${sizingDesc}${editTag} · ${bytes.length} bytes`,
+    suggestedExt: '.png',
+  };
+}
+
+// Strip our catalogue-id namespace (`venice/<slug>`) so the wire body
+// carries the bare slug Venice expects. Pass-through for un-prefixed
+// values so user-supplied aliases keep working.
+function stripVeniceWirePrefix(wireModel: string): string {
+  return wireModel.startsWith('venice/') ? wireModel.slice('venice/'.length) : wireModel;
+}
+
+// Models that advertise `supportsAudioConfig: true` per docs.venice.ai
+// /guides/media/video-generation#queue-request. We only send `audio: true`
+// when the model accepts it, otherwise the gateway 400s with
+// "This model does not support audio".
+const VENICE_AUDIO_CAPABLE_VIDEO_MODELS = new Set<string>([
+  'wan-2.6-text-to-video',
+  'wan-2.6-image-to-video',
+  'seedance-2-0-text-to-video',
+  'seedance-2-0-image-to-video',
+  'seedance-2-0-reference-to-video',
+  'grok-imagine-text-to-video',
+  'grok-imagine-image-to-video',
+  'grok-imagine-text-to-video-private',
+  'grok-imagine-image-to-video-private',
+]);
+
+// Image-to-video models in Venice's Seedance line that DO NOT accept
+// aspect_ratio (the output aspect is auto-derived from the input image).
+// Sending it returns a 400 "This model does not support aspect_ratio".
+const VENICE_I2V_NO_ASPECT_MODELS = new Set<string>([
+  'seedance-2-0-image-to-video',
+  'seedance-2-0-fast-image-to-video',
+]);
+
+function veniceDuration(length: number | undefined): string {
+  // Venice's `duration` is a string ("5s" / "10s") for queue/quote. Most
+  // models cap at 10s, Wan 2.6 + Seedance 2.0 cap at 15s. We clamp to 5–15
+  // here; the upstream returns a clear 400 if the model rejects a longer
+  // value, which we surface verbatim.
+  const requested = typeof length === 'number' && length > 0 ? length : 5;
+  const clamped = Math.min(Math.max(Math.round(requested), 1), 15);
+  return `${clamped}s`;
+}
+
+function veniceResolutionForVideo(): string {
+  // Default to 720p. Higher tiers (1080p) cost more and aren't supported
+  // on every model; a future ctx flag can override this when the agent
+  // explicitly opts in.
+  return '720p';
+}
+
+async function renderVeniceVideo(
+  ctx: MediaContext,
+  credentials: ProviderConfig,
+  onProgress?: ProgressFn,
+): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no Venice API key — configure it in Settings or set VENICE_API_KEY / OD_VENICE_API_KEY',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || VENICE_DEFAULT_BASE_URL).replace(/\/$/, '');
+  const wireSlug = stripVeniceWirePrefix(ctx.wireModel);
+  const promptRaw = (ctx.prompt && ctx.prompt.trim()) || 'A short cinematic clip.';
+  // Venice video docs hard-cap prompt at 2500 chars (POST /video/queue).
+  const prompt = promptRaw.length > 2500 ? promptRaw.slice(0, 2500) : promptRaw;
+  const duration = veniceDuration(ctx.length);
+  const resolution = veniceResolutionForVideo();
+  const aspectRatio = veniceAspect(ctx.aspect);
+  const usingReference = Boolean(ctx.imageRef && ctx.imageRef.dataUrl);
+
+  // Topaz upscale lane takes a different surface: `upscale_factor` + `video_url`.
+  // We re-use --image-ref as the source video URL slot since the dispatcher
+  // already resolves --image-ref to a data URL or file path; for upscale the
+  // user should pass a public mp4 URL.
+  const isUpscale = wireSlug === 'topaz-video-upscale';
+
+  const body: Record<string, unknown> = {
+    model: wireSlug,
+    prompt,
+    duration,
+    resolution,
+  };
+
+  if (isUpscale) {
+    if (!ctx.imageRef?.dataUrl) {
+      throw new Error(
+        'venice topaz-video-upscale requires --image-ref pointing at the source video URL',
+      );
+    }
+    body.upscale_factor = 2;
+    body.video_url = ctx.imageRef.dataUrl;
+    // Upscale rejects prompt + aspect — clean them off.
+    delete body.prompt;
+    delete body.duration;
+    delete body.resolution;
+  } else {
+    if (!VENICE_I2V_NO_ASPECT_MODELS.has(wireSlug)) {
+      body.aspect_ratio = aspectRatio;
+    }
+    if (VENICE_AUDIO_CAPABLE_VIDEO_MODELS.has(wireSlug)) {
+      body.audio = true;
+    }
+    if (usingReference) {
+      // Both `image-to-video` and `reference-to-video` variants take the
+      // source via `image_url`. Reference-to-video can also take
+      // `reference_image_urls` (array, up to 9) — see Seedance 2.0 guide
+      // — but a single image is the common case and is what our --image-ref
+      // contract supplies today.
+      body.image_url = ctx.imageRef!.dataUrl;
+    } else if (wireSlug.includes('image-to-video') || wireSlug.includes('reference-to-video')) {
+      throw new Error(
+        `venice ${wireSlug} requires --image-ref pointing at a reference image; use a text-to-video model for pure prompt input`,
+      );
+    }
+  }
+
+  // Step 1 — POST /video/queue. The 200 carries { model, queue_id } and,
+  // for grok-imagine-*-private variants, an extra `download_url` (the
+  // pre-signed retrieval link).
+  const queueResp = await fetch(`${baseUrl}/video/queue`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+    redirect: 'error',
+  });
+  const queueText = await queueResp.text();
+  if (!queueResp.ok) {
+    throw new Error(`venice video queue ${queueResp.status}: ${truncate(queueText, 240)}`);
+  }
+  let queueData: any;
+  try {
+    queueData = JSON.parse(queueText);
+  } catch {
+    throw new Error(`venice video queue non-JSON: ${truncate(queueText, 200)}`);
+  }
+  const queueId = typeof queueData?.queue_id === 'string' ? queueData.queue_id : '';
+  if (!queueId) {
+    throw new Error(`venice video queue response missing queue_id: ${truncate(queueText, 200)}`);
+  }
+  const privateDownloadUrl = typeof queueData?.download_url === 'string'
+    ? queueData.download_url
+    : '';
+  if (typeof onProgress === 'function') {
+    const mode = usingReference ? 'i2v' : (isUpscale ? 'upscale' : 't2v');
+    onProgress(`venice ${mode} task ${queueId} queued; polling /video/retrieve…`);
+  }
+
+  // Step 2 — poll. Venice returns one of three shapes:
+  //   * 200 application/json + {status:"PROCESSING"|"PENDING", ...} → keep polling
+  //   * 200 video/mp4                                                → response.body is the file
+  //   * 200 application/json + {status:"COMPLETED"} (private models) → GET download_url
+  const startedAt = Date.now();
+  const configuredMaxMs = Number(process.env.OD_VENICE_VIDEO_MAX_POLL_MS);
+  const maxMs =
+    Number.isFinite(configuredMaxMs) && configuredMaxMs >= 60_000
+      ? configuredMaxMs
+      : 10 * 60 * 1000;
+  // Venice docs recommend 5s polls; 5s × 120 = 10 minutes hard ceiling.
+  const pollIntervalMs = 5000;
+  let attempts = 0;
+  while (Date.now() - startedAt < maxMs) {
+    attempts += 1;
+    await sleep(pollIntervalMs);
+    const pollResp = await fetch(`${baseUrl}/video/retrieve`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${credentials.apiKey}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ model: wireSlug, queue_id: queueId }),
+      redirect: 'error',
+    });
+    if (!pollResp.ok) {
+      const pollText = await pollResp.text();
+      throw new Error(`venice video retrieve ${pollResp.status}: ${truncate(pollText, 240)}`);
+    }
+    const contentType = (pollResp.headers.get('content-type') || '').toLowerCase();
+
+    if (contentType.includes('video/mp4')) {
+      // Hot path — inline MP4 body. Stream into a Buffer.
+      const arr = await pollResp.arrayBuffer();
+      const bytes = Buffer.from(arr);
+      if (bytes.length === 0) {
+        throw new Error('venice video retrieve returned zero bytes');
+      }
+      return {
+        bytes,
+        providerNote: `venice/${wireSlug} · ${aspectRatio} · ${duration} · ${resolution} · ${bytes.length} bytes`,
+        suggestedExt: '.mp4',
+      };
+    }
+
+    if (contentType.includes('application/json')) {
+      const pollText = await pollResp.text();
+      let pollData: any;
+      try {
+        pollData = JSON.parse(pollText);
+      } catch {
+        throw new Error(`venice video retrieve non-JSON: ${truncate(pollText, 200)}`);
+      }
+      const status = String(pollData?.status || '').toUpperCase();
+
+      if (status === 'COMPLETED' && privateDownloadUrl) {
+        // Private-download path. The mp4 is at the short-lived URL
+        // returned at queue time; fetch it without an auth header
+        // (the URL is pre-signed). Wrap with the same SSRF check
+        // other media renderers use so a tampered URL can't redirect
+        // into RFC1918 space.
+        const urlCheck = await assertExternalAssetUrl(privateDownloadUrl);
+        if (!urlCheck.ok) {
+          throw new Error(`venice video ${urlCheck.error}`);
+        }
+        const dl = await fetch(privateDownloadUrl, { redirect: 'error' });
+        if (!dl.ok) {
+          throw new Error(`venice video private download ${dl.status}`);
+        }
+        const arr = await dl.arrayBuffer();
+        const bytes = Buffer.from(arr);
+        if (bytes.length === 0) {
+          throw new Error('venice video private download returned zero bytes');
+        }
+        return {
+          bytes,
+          providerNote: `venice/${wireSlug} · ${aspectRatio} · ${duration} · ${resolution} · ${bytes.length} bytes · private`,
+          suggestedExt: '.mp4',
+        };
+      }
+
+      if (status === 'FAILED' || status === 'EXPIRED') {
+        const reasonRaw = pollData?.error?.message || pollData?.error || pollData?.message || status;
+        const reason = typeof reasonRaw === 'string' ? reasonRaw : JSON.stringify(reasonRaw);
+        throw new Error(`venice video ${status.toLowerCase()}: ${reason}`);
+      }
+
+      if (typeof onProgress === 'function' && attempts % 6 === 0) {
+        const elapsedSec = Math.round((Date.now() - startedAt) / 1000);
+        const avgMs = Number(pollData?.average_execution_time) || 0;
+        const remaining = avgMs > 0 ? Math.max(0, Math.round((avgMs - (Date.now() - startedAt)) / 1000)) : null;
+        onProgress(
+          `venice task ${queueId} status=${status || 'PROCESSING'} (elapsed ${elapsedSec}s${
+            remaining !== null ? `, est remaining ${remaining}s` : ''
+          })`,
+        );
+      }
+      // Otherwise keep polling.
+      continue;
+    }
+
+    // Unexpected content-type — bail rather than burn the polling budget.
+    throw new Error(
+      `venice video retrieve returned unexpected content-type "${contentType}" — expected application/json or video/mp4`,
+    );
+  }
+  const elapsedSec = Math.round((Date.now() - startedAt) / 1000);
+  const ceilingSec = Math.round(maxMs / 1000);
+  throw new Error(
+    `venice video timed out after ${elapsedSec}s (ceiling ${ceilingSec}s). `
+      + `Set OD_VENICE_VIDEO_MAX_POLL_MS to raise the ceiling for longer jobs.`,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Venice TTS — POST /audio/speech is wire-compatible with OpenAI's
+// /v1/audio/speech and returns raw audio bytes (mp3 by default).
+// Voice-cloning models (e.g. `tts-chatterbox-hd`) accept a `vv_…` handle
+// in `voice`; minting handles via POST /audio/voices is left to a future
+// Settings affordance — for now ctx.voice is passed through verbatim.
+// ---------------------------------------------------------------------------
+
+async function renderVeniceSpeech(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no Venice API key — configure it in Settings or set VENICE_API_KEY / OD_VENICE_API_KEY',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || VENICE_DEFAULT_BASE_URL).replace(/\/$/, '');
+  const wireSlug = stripVeniceWirePrefix(ctx.wireModel);
+  const input = (ctx.prompt && ctx.prompt.trim()) || 'This is a test.';
+  const voice = (ctx.voice && ctx.voice.trim()) || 'alloy';
+
+  const body: Record<string, unknown> = {
+    model: wireSlug,
+    input,
+    voice,
+    response_format: 'mp3',
+  };
+
+  const resp = await fetch(`${baseUrl}/audio/speech`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+    redirect: 'error',
+  });
+  if (!resp.ok) {
+    const errText = await resp.text();
+    throw new Error(`venice tts ${resp.status}: ${truncate(errText, 240)}`);
+  }
+  const arr = await resp.arrayBuffer();
+  const bytes = Buffer.from(arr);
+  if (bytes.length === 0) {
+    throw new Error('venice tts returned zero bytes');
+  }
+  return {
+    bytes,
+    providerNote: `venice/${wireSlug} · voice=${voice} · ${bytes.length} bytes`,
+    suggestedExt: '.mp3',
   };
 }
 

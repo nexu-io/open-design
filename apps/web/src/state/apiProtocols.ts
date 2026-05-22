@@ -81,6 +81,27 @@ export const SUGGESTED_MODELS_BY_PROTOCOL: Record<ApiProtocol, readonly string[]
     'MiniMax-M2.7-highspeed',
     'MiniMax-M2.7',
   ],
+  venice: [
+    // Venice is an OpenAI-compatible inference gateway that exposes text,
+    // image, video, audio, and embedding models under a single API key
+    // (docs.venice.ai). Headline picks first — uncensored Venice-native
+    // model, then the strongest hosted GPT, then Anthropic / Google /
+    // Qwen / DeepSeek / xAI routes that ride the same key.
+    'venice-uncensored',
+    'gpt-5',
+    'gpt-5-mini',
+    'gpt-4o',
+    'claude-opus-4-5',
+    'claude-sonnet-4-5',
+    'qwen3-coder-480b',
+    'qwen3-235b',
+    'llama-3.1-405b',
+    'deepseek-v4-pro',
+    'deepseek-r1',
+    'grok-4',
+    'mistral-31-24b',
+    'zai-org-glm-5',
+  ],
   ollama: [
     'cogito-2.1:671b',
     'deepseek-v3.1:671b',
@@ -140,6 +161,11 @@ export const FAST_MODEL_BY_PROTOCOL: Record<ApiProtocol, string> = {
   // through the Memory model picker.
   ollama: 'gemma3:4b',
   senseaudio: 'senseaudio-s2-flash',
+  // Venice's small/fast tier. `gpt-5-mini` is the cheapest OpenAI-flavoured
+  // pick; `venice-uncensored` is the Venice-native one. Memory extraction
+  // doesn't need bleeding-edge reasoning, so the cheap GPT mini variant
+  // covers it nicely without exhausting credits on a long chat history.
+  venice: 'gpt-5-mini',
 };
 
 export const API_PROTOCOL_TABS: ReadonlyArray<{
@@ -152,6 +178,7 @@ export const API_PROTOCOL_TABS: ReadonlyArray<{
   { id: 'google', title: 'Google Gemini' },
   { id: 'ollama', title: 'Ollama Cloud' },
   { id: 'senseaudio', title: 'SenseAudio' },
+  { id: 'venice', title: 'Venice' },
 ];
 
 export const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
@@ -161,6 +188,7 @@ export const API_PROTOCOL_LABELS: Record<ApiProtocol, string> = {
   google: 'Google Gemini',
   ollama: 'Ollama Cloud API',
   senseaudio: 'SenseAudio API',
+  venice: 'Venice API',
 };
 
 export const API_KEY_PLACEHOLDERS: Record<ApiProtocol, string> = {
@@ -170,6 +198,7 @@ export const API_KEY_PLACEHOLDERS: Record<ApiProtocol, string> = {
   google: 'AIza...',
   ollama: 'Ollama API key',
   senseaudio: 'SenseAudio API key',
+  venice: 'Venice API key',
 };
 
 // Default base URL the daemon assumes when the user leaves the field
@@ -182,4 +211,5 @@ export const DEFAULT_BASE_URL_BY_PROTOCOL: Record<ApiProtocol, string> = {
   google: 'https://generativelanguage.googleapis.com',
   ollama: 'https://ollama.com',
   senseaudio: 'https://api.senseaudio.cn',
+  venice: 'https://api.venice.ai/api/v1',
 };

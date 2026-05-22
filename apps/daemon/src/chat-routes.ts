@@ -9,9 +9,13 @@ import {
 } from './openai-chat-token-params.js';
 import {
   BYOK_SENSEAUDIO_TOOLS,
+  BYOK_VENICE_TOOLS,
   executeGenerateImage,
   executeGenerateSpeech,
   executeGenerateVideo,
+  executeVeniceGenerateImage,
+  executeVeniceGenerateSpeech,
+  executeVeniceGenerateVideo,
   isSenseAudioImageModel,
   type BYOKToolContext,
 } from './byok-tools.js';
@@ -1608,6 +1612,291 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       sse.end();
     } finally {
       await proxyDispatcher?.close();
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // POST /api/proxy/venice/stream — Venice chat proxy with media tools.
+  //
+  // Venice is fully OpenAI-compatible at https://api.venice.ai/api/v1, but
+  // unlike the plain /api/proxy/openai/stream route we ALSO inject the
+  // `generate_image` / `generate_video` / `generate_speech` tool definitions
+  // and execute them daemon-side via Venice's own /image/generate,
+  // /video/queue, and /audio/speech endpoints. The end result: a user pastes
+  // ONE Venice API key into Settings and the LLM (gpt-5, claude-opus,
+  // qwen3-coder, whatever they pick) can render images and videos directly
+  // inside the chat without any provider switching.
+  //
+  // Mirror of the senseaudio route's structure, with the executors swapped
+  // for the Venice-specific ones in byok-tools.ts and the upstream URL
+  // pointing at Venice. The proxy seeds media-config.venice with the BYOK
+  // key so the CLI-agent path (`od media generate`) picks up the same key.
+  // -------------------------------------------------------------------------
+  app.post('/api/proxy/venice/stream', async (req, res) => {
+    const proxyBody = req.body || {};
+    if (rejectProxyPluginContext(proxyBody, res)) return;
+    const {
+      baseUrl,
+      apiKey,
+      model,
+      systemPrompt,
+      messages,
+      maxTokens,
+      projectId,
+    } = proxyBody;
+    if (!apiKey || !model) {
+      return sendApiError(
+        res,
+        400,
+        'BAD_REQUEST',
+        'apiKey and model are required',
+      );
+    }
+    if (typeof projectId !== 'string' || !isSafeProjectId(projectId)) {
+      return sendApiError(
+        res,
+        400,
+        'BAD_REQUEST',
+        'projectId is required and must be a safe identifier',
+      );
+    }
+
+    const effectiveBaseUrl = baseUrl || 'https://api.venice.ai/api/v1';
+    const validated = await validateExternalApiBaseUrl(effectiveBaseUrl);
+    if (validated.error) {
+      return sendApiError(
+        res,
+        validated.forbidden ? 403 : 400,
+        validated.forbidden ? 'FORBIDDEN' : 'BAD_REQUEST',
+        validated.error,
+      );
+    }
+
+    const url = appendVersionedApiPath(effectiveBaseUrl, '/chat/completions');
+    console.log(
+      `[proxy:venice] ${req.method} ${validated.parsed?.hostname ?? '?'} model=${model} project=${projectId}`,
+    );
+
+    const workingMessages: any[] = Array.isArray(messages) ? [...messages] : [];
+    if (typeof systemPrompt === 'string' && systemPrompt) {
+      workingMessages.unshift({ role: 'system', content: systemPrompt });
+    }
+
+    const toolCtx: BYOKToolContext = {
+      projectRoot: ctx.paths.PROJECT_ROOT,
+      projectsRoot: ctx.paths.PROJECTS_DIR,
+      projectId,
+      upstreamApiKey: apiKey,
+      upstreamBaseUrl: effectiveBaseUrl,
+    };
+
+    const runVeniceTurn = async (
+      sseChan: any,
+      messagesForTurn: any[],
+    ): Promise<TurnResult> => {
+      const payload: any = {
+        model,
+        messages: messagesForTurn,
+        max_tokens:
+          typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
+        stream: true,
+        tools: BYOK_VENICE_TOOLS,
+        tool_choice: 'auto',
+      };
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(payload),
+        redirect: 'error',
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(
+          `[proxy:venice] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
+        );
+        sendProxyError(sseChan, `Upstream error: ${response.status}`, {
+          code: proxyErrorCode(response.status),
+          details: errorText,
+          retryable: response.status === 429 || response.status >= 500,
+        });
+        return { kind: 'error' };
+      }
+
+      const accum: Record<number, AccumulatedToolCall> = {};
+      let finishReason = '';
+      let providerError = '';
+
+      await streamUpstreamSse(response, ({ payload, data }: any) => {
+        if (payload === '[DONE]') return true;
+        if (!data) return false;
+
+        const streamErr = extractStreamErrorMessage(data);
+        if (streamErr) {
+          providerError = streamErr;
+          return true;
+        }
+
+        const choices = (data as any).choices;
+        if (!Array.isArray(choices) || choices.length === 0) return false;
+        const choice = choices[0] || {};
+        const delta = choice.delta || {};
+
+        if (typeof delta.content === 'string' && delta.content) {
+          sseChan.send('delta', { delta: delta.content });
+        }
+
+        if (Array.isArray(delta.tool_calls)) {
+          for (const tc of delta.tool_calls) {
+            const idx = typeof tc?.index === 'number' ? tc.index : 0;
+            if (!accum[idx]) {
+              accum[idx] = { id: '', name: '', arguments: '' };
+            }
+            const slot = accum[idx];
+            if (typeof tc.id === 'string' && tc.id) slot.id = tc.id;
+            if (typeof tc.function?.name === 'string' && tc.function.name) {
+              slot.name = tc.function.name;
+            }
+            if (typeof tc.function?.arguments === 'string') {
+              slot.arguments += tc.function.arguments;
+            }
+          }
+        }
+
+        if (typeof choice.finish_reason === 'string' && choice.finish_reason) {
+          finishReason = choice.finish_reason;
+        }
+        return false;
+      });
+
+      if (providerError) {
+        sendProxyError(sseChan, `Provider error: ${providerError}`, {
+          details: providerError,
+        });
+        return { kind: 'error' };
+      }
+
+      if (finishReason === 'tool_calls' && Object.keys(accum).length > 0) {
+        const indices = Object.keys(accum)
+          .map(Number)
+          .sort((a, b) => a - b);
+        const toolCalls = indices.map((i) => ({
+          id: accum[i]!.id || `call_${i}`,
+          type: 'function' as const,
+          function: {
+            name: accum[i]!.name,
+            arguments: accum[i]!.arguments,
+          },
+        }));
+        return {
+          kind: 'tool_calls',
+          assistantMessage: {
+            role: 'assistant',
+            content: null,
+            tool_calls: toolCalls,
+          },
+          toolCalls,
+        };
+      }
+
+      return { kind: 'text_end' };
+    };
+
+    const executeOneVeniceTool = async (call: {
+      id: string;
+      function: { name: string; arguments: string };
+    }): Promise<{ ok: boolean; url?: string; error?: string; kind?: 'image' | 'video' | 'speech' }> => {
+      const fnName = call?.function?.name ?? '';
+      if (fnName !== 'generate_image' && fnName !== 'generate_video' && fnName !== 'generate_speech') {
+        return { ok: false, error: `unknown tool: ${fnName || 'unnamed'}` };
+      }
+      const toolKind = fnName === 'generate_image' ? 'image' : fnName === 'generate_video' ? 'video' : 'speech';
+      let args: any = {};
+      try {
+        args = JSON.parse(call.function.arguments || '{}');
+      } catch {
+        return { ok: false, error: 'tool arguments were not valid JSON', kind: toolKind };
+      }
+      if (fnName === 'generate_image') {
+        const result = await executeVeniceGenerateImage(args, toolCtx);
+        return { ...result, kind: 'image' };
+      }
+      if (fnName === 'generate_speech') {
+        const result = await executeVeniceGenerateSpeech(args, toolCtx);
+        return { ...result, kind: 'speech' };
+      }
+      const result = await executeVeniceGenerateVideo(args, toolCtx);
+      return { ...result, kind: 'video' };
+    };
+
+    const sse = createSseResponse(res);
+    sse.send('start', { model });
+
+    // Mirror the BYOK key into media-config.venice so a future `od media
+    // generate --model venice/gpt-image-2 …` call from the CLI agent picks
+    // up the same credentials. Fire-and-forget; idempotent.
+    seedProviderIfMissing(ctx.paths.PROJECT_ROOT, 'venice', {
+      apiKey,
+      baseUrl: effectiveBaseUrl,
+    })
+      .then((seeded) => {
+        if (seeded) {
+          console.log('[proxy:venice] seeded media-config.venice from BYOK key');
+        }
+      })
+      .catch((err: unknown) => {
+        console.warn(
+          `[proxy:venice] seed media-config failed: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      });
+
+    try {
+      for (let loop = 0; loop < MAX_BYOK_TOOL_LOOPS; loop++) {
+        const turn = await runVeniceTurn(sse, workingMessages);
+        if (turn.kind === 'error') return sse.end();
+        if (turn.kind === 'text_end') {
+          sse.send('end', {});
+          return sse.end();
+        }
+        workingMessages.push(turn.assistantMessage);
+        for (const call of turn.toolCalls) {
+          const result = await executeOneVeniceTool(call);
+          const toolName = call?.function?.name ?? 'unknown';
+          if (result.ok) {
+            console.log(`[proxy:venice] ${toolName} OK: ${call.id} → ${result.url}`);
+          } else {
+            console.warn(`[proxy:venice] ${toolName} FAILED: ${call.id} — ${result.error}`);
+          }
+          const content = result.ok
+            ? result.kind === 'video'
+              ? `Video generated successfully. URL: ${result.url}. Reply to the user with a clickable markdown link, e.g. [▶ Play video](${result.url}). Do NOT use markdown image syntax — the chat renderer does not embed <video> tags.`
+              : result.kind === 'speech'
+                ? `Speech generated successfully. URL: ${result.url}. Reply to the user with a clickable markdown link to the MP3, e.g. [▶ Play voiceover](${result.url}).`
+              : `Image generated successfully. URL: ${result.url}. Reply to the user with: ![generated image](${result.url})`
+            : result.kind === 'video'
+              ? `Video generation failed: ${result.error}. Apologize briefly and suggest a retry with a more specific prompt or a shorter duration.`
+              : result.kind === 'speech'
+                ? `Speech generation failed: ${result.error}. Apologize briefly and suggest a retry with a shorter script or a valid voice id.`
+              : `Image generation failed: ${result.error}. Apologize briefly and suggest a retry with a more specific prompt.`;
+          workingMessages.push({
+            role: 'tool',
+            tool_call_id: call.id,
+            content,
+          });
+        }
+      }
+      console.warn('[proxy:venice] tool loop bounded at MAX_BYOK_TOOL_LOOPS=3');
+      sse.send('end', {});
+      return sse.end();
+    } catch (err: any) {
+      console.error(`[proxy:venice] internal error: ${err.message}`);
+      sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
+      sse.end();
     }
   });
 

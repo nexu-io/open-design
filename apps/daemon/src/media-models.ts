@@ -68,6 +68,23 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
     docsUrl: 'https://docs.senseaudio.cn',
   },
   { id: 'tavily', label: 'Tavily Search', hint: 'Agent-callable web research', integrated: true, defaultBaseUrl: 'https://api.tavily.com' },
+  // Venice fronts a single OpenAI-compatible API key for text, image, video,
+  // audio and embeddings — so a user who pastes one Venice key into Settings
+  // unlocks gpt-image-2, nano-banana-pro, Seedance 2.0, Wan 2.5/2.6, Grok
+  // Imagine, FLUX, TTS, etc., all behind the same provider slot. The image
+  // path is synchronous (POST /image/generate), the video path is async
+  // (queue + retrieve), and TTS is OpenAI-compatible (POST /audio/speech).
+  // Docs: https://docs.venice.ai/api-reference/api-spec
+  {
+    id: 'venice',
+    label: 'Venice',
+    hint: 'OpenAI-compatible · image + video + audio',
+    integrated: true,
+    defaultBaseUrl: 'https://api.venice.ai/api/v1',
+    docsUrl: 'https://docs.venice.ai/overview/getting-started',
+    supportsCustomModel: true,
+    customModelPlaceholder: 'gpt-image-2 / seedance-2-0-text-to-video / …',
+  },
   { id: 'stub', label: 'Stub (placeholder)', hint: 'Deterministic local placeholder bytes', integrated: true },
 ];
 
@@ -127,6 +144,32 @@ export const IMAGE_MODELS: MediaModel[] = [
   { id: 'leonardo-anime-pastel', label: 'Anime Pastel Dream', hint: 'Leonardo · anime', provider: 'leonardo', caps: ['t2i'] },
 
   { id: 'midjourney-v7', label: 'midjourney-v7', hint: 'Midjourney · via proxy', provider: 'midjourney', caps: ['t2i'] },
+
+  // Venice — POST /image/generate. Sizing is model-specific. Resolution-tier
+  // models (gpt-image-2, nano-banana-pro, nano-banana-2) accept
+  // `aspect_ratio` + `resolution`; aspect-ratio models (qwen-image-2,
+  // flux-2-*) accept `aspect_ratio` only; pixel models (venice-sd35,
+  // qwen-image) accept explicit `width` / `height`.
+  { id: 'venice/gpt-image-2', label: 'gpt-image-2 (Venice)', hint: 'Venice · resolution-tier, up to 4K', provider: 'venice', caps: ['t2i'] },
+  { id: 'venice/nano-banana-pro', label: 'nano-banana-pro (Venice)', hint: 'Venice · Gemini 3 Pro image · up to 4K', provider: 'venice', caps: ['t2i', 'i2i'] },
+  { id: 'venice/nano-banana-2', label: 'nano-banana-2 (Venice)', hint: 'Venice · Gemini 3.1 Flash image · up to 2K', provider: 'venice', caps: ['t2i'] },
+  { id: 'venice/qwen-image-2-pro', label: 'qwen-image-2-pro (Venice)', hint: 'Venice · aspect-ratio sizing', provider: 'venice', caps: ['t2i'] },
+  { id: 'venice/qwen-image-2', label: 'qwen-image-2 (Venice)', hint: 'Venice · aspect-ratio sizing', provider: 'venice', caps: ['t2i'] },
+  { id: 'venice/qwen-image', label: 'qwen-image (Venice)', hint: 'Venice · pixel sizing', provider: 'venice', caps: ['t2i'] },
+  { id: 'venice/venice-sd35', label: 'venice-sd35 (Venice)', hint: 'Venice · uncensored SD3.5', provider: 'venice', caps: ['t2i'] },
+  { id: 'venice/flux-2-max', label: 'flux-2-max (Venice)', hint: 'Venice · Black Forest Labs FLUX 2 Max', provider: 'venice', caps: ['t2i'] },
+  { id: 'venice/flux-2-pro', label: 'flux-2-pro (Venice)', hint: 'Venice · FLUX 2 Pro', provider: 'venice', caps: ['t2i'] },
+  { id: 'venice/seedream-v5-lite', label: 'seedream-v5-lite (Venice)', hint: 'Venice · ByteDance Seedream', provider: 'venice', caps: ['t2i'] },
+  { id: 'venice/seedream-v4', label: 'seedream-v4 (Venice)', hint: 'Venice · ByteDance Seedream v4', provider: 'venice', caps: ['t2i'] },
+  { id: 'venice/recraft-v4-pro', label: 'recraft-v4-pro (Venice)', hint: 'Venice · typography + iconography', provider: 'venice', caps: ['t2i'] },
+  { id: 'venice/grok-imagine', label: 'grok-imagine (Venice)', hint: 'Venice · xAI image', provider: 'venice', caps: ['t2i'] },
+  // Inpaint / multi-edit lands on POST /image/edit + POST /image/multi-edit.
+  // Caps include 'inpaint' so the daemon dispatcher and any future i2i UI
+  // gate accept them.
+  { id: 'venice/qwen-edit', label: 'qwen-edit (Venice)', hint: 'Venice · default edit/inpaint', provider: 'venice', caps: ['i2i', 'inpaint'] },
+  { id: 'venice/flux-2-max-edit', label: 'flux-2-max-edit (Venice)', hint: 'Venice · FLUX 2 Max edit', provider: 'venice', caps: ['i2i', 'inpaint'] },
+  { id: 'venice/nano-banana-pro-edit', label: 'nano-banana-pro-edit (Venice)', hint: 'Venice · Gemini 3 Pro edit', provider: 'venice', caps: ['i2i', 'inpaint'] },
+  { id: 'venice/gpt-image-2-edit', label: 'gpt-image-2-edit (Venice)', hint: 'Venice · gpt-image-2 edit', provider: 'venice', caps: ['i2i', 'inpaint'] },
 ];
 
 export const VIDEO_MODELS: MediaModel[] = [
@@ -168,6 +211,33 @@ export const VIDEO_MODELS: MediaModel[] = [
 
   { id: 'minimax-video-01', label: 'video-01', hint: 'MiniMax · Hailuo', provider: 'minimax', caps: ['t2v', 'i2v'] },
   { id: 'hyperframes-html', label: 'hyperframes-html', hint: 'HyperFrames · local HTML renderer', provider: 'hyperframes', caps: ['t2v'] },
+
+  // Venice video — async POST /video/queue → POST /video/retrieve. Audio is
+  // model-dependent (Seedance 2.0 + Wan 2.6 advertise `supportsAudioConfig`);
+  // the dispatcher only sends `audio: true` for those.
+  { id: 'venice/wan-2.6-text-to-video', label: 'wan-2.6-text-to-video (Venice)', hint: 'Venice · Alibaba Wan 2.6 t2v + audio', provider: 'venice', caps: ['t2v', 'audio'] },
+  { id: 'venice/wan-2.6-image-to-video', label: 'wan-2.6-image-to-video (Venice)', hint: 'Venice · Wan 2.6 i2v + audio', provider: 'venice', caps: ['i2v', 'audio'] },
+  { id: 'venice/wan-2.5-preview-text-to-video', label: 'wan-2.5-text-to-video (Venice)', hint: 'Venice · Wan 2.5 preview t2v', provider: 'venice', caps: ['t2v'] },
+  { id: 'venice/wan-2.5-preview-image-to-video', label: 'wan-2.5-image-to-video (Venice)', hint: 'Venice · Wan 2.5 preview i2v', provider: 'venice', caps: ['i2v'] },
+
+  { id: 'venice/seedance-2-0-text-to-video', label: 'seedance-2.0-t2v (Venice)', hint: 'Venice · ByteDance Seedance 2.0 t2v + audio', provider: 'venice', caps: ['t2v', 'audio'] },
+  { id: 'venice/seedance-2-0-image-to-video', label: 'seedance-2.0-i2v (Venice)', hint: 'Venice · Seedance 2.0 i2v + audio', provider: 'venice', caps: ['i2v', 'audio'] },
+  { id: 'venice/seedance-2-0-reference-to-video', label: 'seedance-2.0-r2v (Venice)', hint: 'Venice · Seedance 2.0 reference-to-video', provider: 'venice', caps: ['t2v', 'i2v', 'audio'] },
+  { id: 'venice/seedance-2-0-fast-text-to-video', label: 'seedance-2.0-fast-t2v (Venice)', hint: 'Venice · Seedance fast tier', provider: 'venice', caps: ['t2v'] },
+  { id: 'venice/seedance-2-0-fast-image-to-video', label: 'seedance-2.0-fast-i2v (Venice)', hint: 'Venice · Seedance fast tier', provider: 'venice', caps: ['i2v'] },
+
+  // Grok Imagine on Venice — public + private variants. The dispatcher
+  // routes `*-private` through the queue.download_url short-lived URL path
+  // (see Venice docs guides/media/video-generation#private-download-links).
+  { id: 'venice/grok-imagine-text-to-video', label: 'grok-imagine-t2v (Venice)', hint: 'Venice · xAI 720p + native audio', provider: 'venice', caps: ['t2v', 'audio'] },
+  { id: 'venice/grok-imagine-image-to-video', label: 'grok-imagine-i2v (Venice)', hint: 'Venice · xAI i2v + audio', provider: 'venice', caps: ['i2v', 'audio'] },
+  { id: 'venice/grok-imagine-text-to-video-private', label: 'grok-imagine-t2v-private (Venice)', hint: 'Venice · private download URL', provider: 'venice', caps: ['t2v', 'audio'] },
+  { id: 'venice/grok-imagine-image-to-video-private', label: 'grok-imagine-i2v-private (Venice)', hint: 'Venice · private download URL', provider: 'venice', caps: ['i2v', 'audio'] },
+
+  // Upscale lane — POST /video/queue with `upscale_factor` + `video_url`.
+  // The dispatcher requires --image-ref (re-used as the source video URL)
+  // for this model.
+  { id: 'venice/topaz-video-upscale', label: 'topaz-video-upscale (Venice)', hint: 'Venice · 1×/2×/4× upscale', provider: 'venice', caps: ['v2v'] },
 ];
 
 export const AUDIO_MODELS_BY_KIND: Record<AudioKind, MediaModel[]> = {
@@ -186,6 +256,11 @@ export const AUDIO_MODELS_BY_KIND: Record<AudioKind, MediaModel[]> = {
     { id: 'gpt-4o-mini-tts', label: 'gpt-4o-mini-tts', hint: 'OpenAI', provider: 'openai', caps: ['tts'] },
     // xAI TTS — multilingual; uses the same SuperGrok OAuth as image / video.
     { id: 'grok-tts', label: 'grok-tts', hint: 'xAI · multilingual · uses Grok subscription', provider: 'grok', caps: ['tts'] },
+    // Venice TTS — POST /audio/speech is OpenAI-compatible. `tts-chatterbox-hd`
+    // additionally advertises `voice_cloning` so a future Settings affordance
+    // can route ctx.voice to a minted `vv_…` handle via /v1/audio/voices.
+    { id: 'venice/gpt-4o-mini-tts', label: 'gpt-4o-mini-tts (Venice)', hint: 'Venice · OpenAI-compatible speech', provider: 'venice', caps: ['tts'] },
+    { id: 'venice/tts-chatterbox-hd', label: 'tts-chatterbox-hd (Venice)', hint: 'Venice · voice cloning', provider: 'venice', caps: ['tts', 'voice-clone'] },
   ],
   sfx: [
     { id: 'elevenlabs-sfx', label: 'elevenlabs-sfx', hint: 'ElevenLabs SFX', provider: 'elevenlabs', caps: ['sfx'], default: true },
