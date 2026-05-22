@@ -15,6 +15,11 @@ overrides:
   qs: 6.15.2
   yaml: 2.9.0
 
+patchedDependencies:
+  '@anthropic-ai/sdk@0.97.1':
+    hash: 38db19c6dd767619dd44b4b21e6784dd66e67c9c1f6c9b21ec7d0e5433bb7440
+    path: patches/@anthropic-ai__sdk@0.97.1.patch
+
 importers:
 
   .:
@@ -259,7 +264,7 @@ importers:
     dependencies:
       '@anthropic-ai/sdk':
         specifier: 0.97.1
-        version: 0.97.1(zod@4.4.2)
+        version: 0.97.1(patch_hash=38db19c6dd767619dd44b4b21e6784dd66e67c9c1f6c9b21ec7d0e5433bb7440)(zod@4.4.2)
       '@open-design/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -5047,7 +5052,7 @@ snapshots:
 
   '@alloc/quick-lru@5.2.0': {}
 
-  '@anthropic-ai/sdk@0.97.1(zod@4.4.2)':
+  '@anthropic-ai/sdk@0.97.1(patch_hash=38db19c6dd767619dd44b4b21e6784dd66e67c9c1f6c9b21ec7d0e5433bb7440)(zod@4.4.2)':
     dependencies:
       json-schema-to-ts: 3.1.1
       standardwebhooks: 1.0.0
