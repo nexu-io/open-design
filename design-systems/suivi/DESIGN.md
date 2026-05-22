@@ -1,6 +1,6 @@
-# Design System — Suivi
+# Design System Inspired by Suivi
 
-> Category: Productivity & Project Management
+> Category: Productivity & SaaS
 > SaaS platform for activity tracking, piloting, and collaboration. Colorful, structured, professional aesthetic with a lavender-teal identity.
 
 ## 1. Visual Theme & Atmosphere
