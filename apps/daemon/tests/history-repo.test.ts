@@ -300,6 +300,84 @@ describe('recordRevisionForRun', () => {
     expect(count.n).toBe(1);
   });
 
+  it('treats a tree where only .od-skills/ changed as clean (runtime scratch is excluded)', async () => {
+    // The daemon stages active skills into <cwd>/.od-skills/ before
+    // each agent run — that's pure runtime scratch and should never
+    // produce a revision. Substrate init writes the exclude to
+    // <repoDir>/info/exclude; this regression test makes sure the
+    // exclude is in effect.
+    const skillsDir = path.join(sandbox.projectDir, '.od-skills', 'staged-skill');
+    mkdirSync(skillsDir, { recursive: true });
+    writeFileSync(path.join(skillsDir, 'SKILL.md'), '# staged skill\n');
+
+    const result = await recordRevisionForRun({
+      projectId: sandbox.projectId,
+      projectDir: sandbox.projectDir,
+      repoDir: sandbox.repoDir,
+      run: { id: 'run-skill-only', identity: TEST_IDENTITY },
+      message: 'should not commit anything',
+      db: sandbox.db,
+    });
+
+    expect(result.kind).toBe('clean');
+    // Still only the migration row exists
+    const count = sandbox.db.prepare(`SELECT COUNT(*) AS n FROM project_revisions WHERE project_id = ?`).get(sandbox.projectId) as { n: number };
+    expect(count.n).toBe(1);
+  });
+
+  it('records a user-file change even when .od-skills/ is also dirty (skills do not block real work)', async () => {
+    // Write both a real file AND staged-skill scratch; the commit
+    // should capture only the real file (the scratch stays untracked).
+    const skillsDir = path.join(sandbox.projectDir, '.od-skills', 'staged-skill');
+    mkdirSync(skillsDir, { recursive: true });
+    writeFileSync(path.join(skillsDir, 'SKILL.md'), '# staged skill\n');
+    writeFileSync(path.join(sandbox.projectDir, 'hero.html'), '<h1>Hero</h1>\n');
+
+    const result = await recordRevisionForRun({
+      projectId: sandbox.projectId,
+      projectDir: sandbox.projectDir,
+      repoDir: sandbox.repoDir,
+      run: { id: 'run-mixed', identity: TEST_IDENTITY },
+      message: 'add hero',
+      db: sandbox.db,
+    });
+    if (result.kind !== 'recorded') throw new Error('expected recorded');
+
+    // Only hero.html should be in the commit; .od-skills/ stays untracked.
+    expect(result.filesChanged).toBe(1);
+    expect(result.bytesAdded).toBe(1);
+  });
+
+  it('backfills info/exclude on a legacy substrate that pre-dates the fix', async () => {
+    // Simulate a substrate initialized before info/exclude was being
+    // written — clobber the file to nothing and verify recordRevisionForRun
+    // re-asserts our patterns before staging.
+    const excludePath = path.join(sandbox.repoDir, 'info', 'exclude');
+    writeFileSync(excludePath, '# pre-fix content with no daemon-managed marker\n');
+
+    // .od-skills/ scratch only — should be excluded after the backfill.
+    const skillsDir = path.join(sandbox.projectDir, '.od-skills', 'staged-skill');
+    mkdirSync(skillsDir, { recursive: true });
+    writeFileSync(path.join(skillsDir, 'SKILL.md'), '# staged skill\n');
+
+    const result = await recordRevisionForRun({
+      projectId: sandbox.projectId,
+      projectDir: sandbox.projectDir,
+      repoDir: sandbox.repoDir,
+      run: { id: 'run-legacy-substrate', identity: TEST_IDENTITY },
+      message: 'should be clean post-backfill',
+      db: sandbox.db,
+    });
+
+    expect(result.kind).toBe('clean');
+    // info/exclude now carries the daemon-managed marker and patterns.
+    const updated = readFileSync(excludePath, 'utf8');
+    expect(updated).toContain('open-design:history-managed');
+    expect(updated).toContain('.od-skills/');
+    // The pre-existing content is preserved (we append, not overwrite).
+    expect(updated).toContain('# pre-fix content with no daemon-managed marker');
+  });
+
   it('returns "not-initialized" if substrate is missing for the project', async () => {
     // Create a fresh sandbox without init
     sandbox.db.close();

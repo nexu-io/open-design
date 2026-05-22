@@ -26,6 +26,27 @@ const DEFAULT_GITIGNORE = `# Open Design auto-generated; commit or edit as neede
 
 const MIGRATION_COMMIT_MESSAGE = 'chore(init): import existing project tree';
 
+// Patterns the history substrate manages on the daemon's behalf — kept
+// in `<repoDir>/info/exclude` rather than the project's `.gitignore`
+// because they're runtime-scratch implementation details the user
+// shouldn't have to know about or maintain. `info/exclude` is git's
+// canonical place for "this clone wants to ignore these paths" without
+// affecting the project's tracked state.
+//
+//   .od-skills/  — apps/daemon/src/server.ts stages active skills into
+//                  `<cwd>/.od-skills/<folder>/` before every agent run
+//                  so any CLI can reach the staged files via a path
+//                  inside its working directory. The directory is pure
+//                  runtime scratch; without this exclude, runs that
+//                  wrote no user files would still produce a revision
+//                  capturing the staged skill copies, violating the
+//                  "clean tree = no-op" contract.
+const HISTORY_EXCLUDE_HEADER = `# Open Design: runtime scratch the history feature ignores.`;
+const HISTORY_EXCLUDE_PATTERNS = [
+  '.od-skills/',
+];
+const HISTORY_EXCLUDE_MARKER = '# open-design:history-managed';
+
 /**
  * Resolve the on-disk path of the substrate's gitdir for a project.
  * Lives next to projects/ under OD_DATA_DIR so backups already cover
@@ -90,6 +111,36 @@ async function sameDirectoryPath(a: string, b: string): Promise<boolean> {
   try { aResolved = await fs.realpath(aResolved); } catch { /* fall back to lexical */ }
   try { bResolved = await fs.realpath(bResolved); } catch { /* fall back to lexical */ }
   return aResolved === bResolved;
+}
+
+/**
+ * Append the daemon-managed exclude patterns (`.od-skills/`, etc.) to
+ * `<repoDir>/info/exclude`. Idempotent: looks for a marker line and
+ * only appends if not already present. Preserves any existing content
+ * (`git init` writes a default header to this file, which we keep).
+ *
+ * `info/exclude` is the right home for these because:
+ *   - It's local to the gitdir, not tracked in the working tree
+ *   - It doesn't show up in the user's `.gitignore` (which is part of
+ *     project source-of-truth and may be reviewed / customized)
+ *   - It survives `git clone` of the project without polluting the
+ *     clone target's exclusion set
+ */
+async function ensureHistoryManagedExcludes(repoDir: string): Promise<void> {
+  const excludePath = path.join(repoDir, 'info', 'exclude');
+  await fs.mkdir(path.dirname(excludePath), { recursive: true });
+  let existing = '';
+  try { existing = await fs.readFile(excludePath, 'utf8'); } catch { /* no prior content */ }
+  if (existing.includes(HISTORY_EXCLUDE_MARKER)) return;
+  const separator = existing.length === 0 || existing.endsWith('\n') ? '' : '\n';
+  const block = [
+    '',
+    HISTORY_EXCLUDE_MARKER,
+    HISTORY_EXCLUDE_HEADER,
+    ...HISTORY_EXCLUDE_PATTERNS,
+    '',
+  ].join('\n');
+  await fs.writeFile(excludePath, existing + separator + block, 'utf8');
 }
 
 /**
@@ -197,6 +248,12 @@ async function initProjectHistoryLocked(
     await fs.writeFile(gitignorePath, DEFAULT_GITIGNORE, 'utf8');
   }
 
+  // Daemon-managed exclusions live in info/exclude so they stay out of
+  // the user-visible .gitignore. `git init` may have written its own
+  // sample content to info/exclude; we append ours idempotently rather
+  // than overwriting.
+  await ensureHistoryManagedExcludes(repoDir);
+
   await applyAuthorConfig(projectDir, identity, signal);
   await runGit(projectDir, ['add', '-A'], signal);
 
@@ -279,6 +336,14 @@ async function recordRevisionForRunLocked(
 
   const state = await readDotGitState(projectDir, repoDir);
   if (state.kind !== 'ours') return { kind: 'not-initialized' };
+
+  // Belt-and-suspenders: re-assert the daemon-managed excludes before
+  // every status check. Idempotent, near-zero cost (single fs read
+  // looking for a marker). Catches the legacy case where the substrate
+  // was initialized before this fix landed — those repos don't have
+  // info/exclude populated, so without this call .od-skills/ would
+  // be reported dirty and the next commit would absorb runtime scratch.
+  await ensureHistoryManagedExcludes(repoDir);
 
   const status = await runGit(projectDir, ['status', '--short'], signal);
   if (status.trim().length === 0) return { kind: 'clean' };
