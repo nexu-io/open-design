@@ -30,6 +30,11 @@ const patchProject = vi.fn();
 const saveTabs = vi.fn();
 
 vi.mock('../../src/i18n', () => ({
+  useI18n: () => ({
+    locale: 'en',
+    setLocale: vi.fn(),
+    t: (key: string) => key,
+  }),
   useT: () => ((value: string) => value),
 }));
 
