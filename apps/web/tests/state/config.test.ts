@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildMediaProvidersForDaemonSave,
+  DaemonConfigWriteError,
   DEFAULT_CONFIG,
   fetchMediaProvidersFromDaemon,
   isStoredMediaProviderEntryEmpty,
@@ -160,6 +161,38 @@ describe('syncMediaProvidersToDaemon', () => {
     await expect(
       syncMediaProvidersToDaemon({}, { force: true, throwOnError: true }),
     ).rejects.toThrow('Media config save failed');
+  });
+
+  it('swallows a 400 response when neither throwOnError nor propagateWriteErrors is set', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ error: 'invalid env' }), { status: 400 })),
+    );
+
+    // Fire-and-forget callers pass no options — must not reject.
+    await expect(syncConfigToDaemon(DEFAULT_CONFIG)).resolves.toBeUndefined();
+  });
+
+  it('throws DaemonConfigWriteError on 400 when throwOnError is true', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ error: 'invalid env' }), { status: 400 })),
+    );
+
+    await expect(
+      syncConfigToDaemon(DEFAULT_CONFIG, { throwOnError: true }),
+    ).rejects.toThrow(DaemonConfigWriteError);
+  });
+
+  it('throws DaemonConfigWriteError on 400 when propagateWriteErrors is true', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ error: 'invalid env' }), { status: 400 })),
+    );
+
+    await expect(
+      syncConfigToDaemon(DEFAULT_CONFIG, { propagateWriteErrors: true }),
+    ).rejects.toThrow(DaemonConfigWriteError);
   });
 });
 

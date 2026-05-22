@@ -824,16 +824,17 @@ export async function syncConfigToDaemon(
       body: JSON.stringify(prefs),
     });
     if (!response.ok) {
-      // Daemon rejected the write; only propagate when the caller explicitly
-      // opts in via propagateWriteErrors.  Fire-and-forget callers (void)
-      // must not get unhandled rejections — they already tolerate the daemon
-      // being unreachable, so a rejected write is the same resilience class.
+      // Daemon rejected the write — propagate when the caller explicitly
+      // opts in (propagateWriteErrors) or already expects rejections
+      // (throwOnError).  Fire-and-forget callers pass neither, so they
+      // silently tolerate the failure just like they tolerate the daemon
+      // being unreachable.
       const body = await response.json().catch(() => ({}) as () => Record<string, unknown>);
       const writeError = new DaemonConfigWriteError(
         (body as Record<string, unknown>).error as string ?? `Failed to sync app config (${response.status})`,
         response.status,
       );
-      if (options?.propagateWriteErrors) throw writeError;
+      if (options?.propagateWriteErrors || options?.throwOnError) throw writeError;
     }
   } catch (error) {
     if (error instanceof DaemonConfigWriteError) throw error;
