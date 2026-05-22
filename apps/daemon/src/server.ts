@@ -1725,9 +1725,16 @@ function execFileBuffered(command, args, opts = {}) {
   });
 }
 
-async function readProjectPluginManifest(folder) {
+export async function readProjectPluginManifest(folder: string) {
   const raw = await fs.promises.readFile(path.join(folder, 'open-design.json'), 'utf8');
-  const manifest = JSON.parse(raw);
+  let manifest: Record<string, unknown>;
+  try {
+    manifest = JSON.parse(raw);
+  } catch (err) {
+    throw new Error(
+      `open-design.json in ${folder} contains invalid JSON: ${(err as Error).message}`,
+    );
+  }
   const name = typeof manifest.name === 'string' && manifest.name.trim()
     ? manifest.name.trim()
     : path.basename(folder);
