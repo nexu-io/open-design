@@ -146,6 +146,23 @@ describe('HomeHero intent rail', () => {
     expect(screen.queryByLabelText('Clear active plugin')).toBeNull();
   });
 
+  it('keeps the active plugin clear control when no creation chip is active', () => {
+    const activePlugin = makePlugin('example-image-a', 'image', 'Product image');
+    const onClearActivePlugin = vi.fn();
+    renderHero({
+      activeChipId: null,
+      activePluginTitle: 'Product image',
+      activePluginRecord: activePlugin,
+      onClearActivePlugin,
+      showActivePluginChip: true,
+    });
+
+    const clear = screen.getByLabelText('Clear active plugin');
+    fireEvent.click(clear);
+
+    expect(onClearActivePlugin).toHaveBeenCalledTimes(1);
+  });
+
   it('shows prompt examples below the composer for the selected tab', () => {
     const onPromptChange = vi.fn();
     renderHero({ activeChipId: 'deck', onPromptChange });
