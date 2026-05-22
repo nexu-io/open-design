@@ -87,7 +87,9 @@ export function latestTodoWriteInputForPinnedCard<
       if (!hasTerminalRunEnded(message.runStatus, message.endedAt)) {
         return event.input;
       }
-      return stoppedTodoWriteInput(event.input);
+      const todos = parseTodoWriteInput(event.input);
+      if (todos.some((todo) => todo.status !== 'completed')) return null;
+      return event.input;
     }
   }
   return null;
@@ -107,22 +109,4 @@ function hasTerminalRunEnded(
     runStatus === 'canceled' ||
     (runStatus === undefined && endedAt !== undefined)
   );
-}
-
-function stoppedTodoWriteInput(input: unknown): unknown {
-  if (!input || typeof input !== 'object') return input;
-  const obj = input as { todos?: unknown };
-  if (!Array.isArray(obj.todos)) return input;
-  return {
-    ...(input as Record<string, unknown>),
-    todos: obj.todos.map((todo) => {
-      if (!todo || typeof todo !== 'object') return todo;
-      const record = todo as Record<string, unknown>;
-      if (record.status !== 'in_progress') return todo;
-      return {
-        ...record,
-        status: 'stopped',
-      };
-    }),
-  };
 }

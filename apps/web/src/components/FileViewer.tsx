@@ -5592,18 +5592,6 @@ function HtmlViewer({
     <div className="viewer html-viewer">
       <div className="viewer-toolbar">
         <div className="viewer-toolbar-left">
-          <button
-            type="button"
-            className="icon-only"
-            onClick={() => {
-              fireArtifactToolbarClick('reload');
-              setReloadKey((n) => n + 1);
-            }}
-            title={t('fileViewer.reload')}
-            aria-label={t('fileViewer.reloadAria')}
-          >
-            <Icon name="reload" size={14} />
-          </button>
           <div className="viewer-mode-segmented" role="group" aria-label="View mode">
             {([
               ['preview', t('fileViewer.preview')],

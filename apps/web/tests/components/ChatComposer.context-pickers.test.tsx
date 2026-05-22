@@ -289,6 +289,7 @@ describe('ChatComposer context pickers', () => {
     fireEvent.click(screen.getByLabelText('Add resources to the chat'));
 
     await waitFor(() => expect(screen.getByText('Community Deck')).toBeTruthy());
+    await waitFor(() => expect(screen.getByLabelText('Search plugins')).toBe(document.activeElement));
     expect(screen.queryByText('My Export')).toBeNull();
 
     fireEvent.change(screen.getByLabelText('Plugin source'), {
@@ -301,5 +302,73 @@ describe('ChatComposer context pickers', () => {
       target: { value: 'private' },
     });
     expect(screen.getByText('Private export workflow')).toBeTruthy();
+  });
+
+  it('supports keyboard tab switching inside the tools panel', async () => {
+    renderComposer();
+    fireEvent.click(screen.getByLabelText('Add resources to the chat'));
+
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Plugins' })).toBeTruthy());
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Plugins' }), { key: 'ArrowRight' });
+
+    await waitFor(() =>
+      expect(screen.getByRole('tab', { name: 'Skills' }).getAttribute('aria-selected')).toBe('true'),
+    );
+    await waitFor(() => expect(screen.getByLabelText('Search skills')).toBe(document.activeElement));
+
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Skills' }), { key: 'ArrowLeft' });
+    await waitFor(() =>
+      expect(screen.getByRole('tab', { name: 'Plugins' }).getAttribute('aria-selected')).toBe('true'),
+    );
+  });
+
+  it('hides the Import tab unless onLinkFolder is wired', async () => {
+    renderComposer();
+    fireEvent.click(screen.getByLabelText('Add resources to the chat'));
+
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Plugins' })).toBeTruthy());
+    expect(screen.queryByRole('tab', { name: /import/i })).toBeNull();
+  });
+
+  it('renders the Import tab with Folder live and the other four as Soon', async () => {
+    const onLinkFolder = vi.fn(async () => {});
+    renderComposer({ onLinkFolder, linkedDirs: [] });
+
+    fireEvent.click(screen.getByLabelText('Add resources to the chat'));
+    await waitFor(() => expect(screen.getByRole('tab', { name: /import/i })).toBeTruthy());
+    fireEvent.click(screen.getByRole('tab', { name: /import/i }));
+
+    const folderBtn = await screen.findByTestId('composer-import-folder');
+    expect((folderBtn as HTMLButtonElement).disabled).toBe(false);
+    for (const id of ['fig', 'github', 'web', 'project'] as const) {
+      const row = screen.getByTestId(`composer-import-${id}`) as HTMLButtonElement;
+      expect(row.disabled).toBe(true);
+      expect(row.className).toMatch(/composer-tools-row--soon/);
+    }
+
+    fireEvent.click(folderBtn);
+    await waitFor(() => expect(onLinkFolder).toHaveBeenCalledTimes(1));
+  });
+
+  it('lists already-linked dirs and supports unlinking from the Import panel', async () => {
+    const onLinkFolder = vi.fn(async () => {});
+    const onUnlinkFolder = vi.fn();
+    renderComposer({
+      onLinkFolder,
+      onUnlinkFolder,
+      linkedDirs: ['/Users/me/code/site', '/Users/me/code/marketing'],
+    });
+
+    fireEvent.click(screen.getByLabelText('Add resources to the chat'));
+    fireEvent.click(await screen.findByRole('tab', { name: /import/i }));
+
+    const linked = await screen.findByTestId('composer-import-linked-dirs');
+    expect(linked.textContent).toContain('site');
+    expect(linked.textContent).toContain('marketing');
+
+    const [firstRemove] = Array.from(linked.querySelectorAll('button'));
+    expect(firstRemove).toBeTruthy();
+    fireEvent.click(firstRemove!);
+    expect(onUnlinkFolder).toHaveBeenCalledWith('/Users/me/code/site');
   });
 });

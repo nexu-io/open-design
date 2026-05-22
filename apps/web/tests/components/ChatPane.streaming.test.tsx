@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { forwardRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -132,7 +132,7 @@ Expected output:
     expect(screen.getByTestId('assistant-streaming-assistant-1').textContent).toBe('streaming');
   });
 
-  it('renders a stopped pinned todo after a terminal run without a final TodoWrite', () => {
+  it('hides pinned todo after a terminal run with unfinished work', () => {
     const messages: ChatMessage[] = [
       {
         id: 'assistant-1',
@@ -180,10 +180,63 @@ Expected output:
       />,
     );
 
-    expect(screen.getByText('0/2')).toBeTruthy();
-    expect(container.querySelector('.todo-stopped')?.textContent).toContain('Build prototype');
-    expect(container.querySelector('.todo-in_progress')).toBeNull();
+    expect(container.querySelector('.chat-pinned-todo')).toBeNull();
+    expect(screen.queryByText('0/2')).toBeNull();
     expect(container.querySelector('.op-todo-current')).toBeNull();
+  });
+
+  it('defaults large pinned todo lists to collapsed while keeping them expandable', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '',
+        createdAt: 1,
+        runStatus: 'running',
+        events: [
+          {
+            kind: 'tool_use',
+            id: 'todo-1',
+            name: 'TodoWrite',
+            input: {
+              todos: Array.from({ length: 7 }, (_, index) => ({
+                content: `Task ${index + 1}`,
+                status: index === 0 ? 'in_progress' : 'pending',
+                activeForm: index === 0 ? 'Doing task 1' : undefined,
+              })),
+            },
+          },
+        ],
+      },
+    ];
+
+    const { container } = render(
+      <ChatPane
+        messages={messages}
+        streaming
+        error={null}
+        projectId="project-1"
+        projectFiles={[]}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+        conversations={conversations}
+        activeConversationId="conv-1"
+        onSelectConversation={vi.fn()}
+        onDeleteConversation={vi.fn()}
+        projectMetadata={projectMetadata}
+      />,
+    );
+
+    const toggle = screen.getByRole('button', { name: /tool.todos/ });
+    expect(container.querySelector('.op-todo-collapsed')).not.toBeNull();
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelector('.op-todo-current')?.textContent).toBe('Doing task 1');
+
+    fireEvent.click(toggle);
+
+    expect(container.querySelector('.op-todo-collapsed')).toBeNull();
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
   });
 });
 

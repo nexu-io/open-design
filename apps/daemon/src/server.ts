@@ -340,6 +340,7 @@ import {
   upsertDeployment,
   upsertMessage,
   upsertPreviewComment,
+  truncateConversationMessages,
 } from './db.js';
 import {
   createLiveArtifact,
@@ -4253,6 +4254,7 @@ export async function startServer({
     deleteConversation,
     listMessages,
     upsertMessage,
+    truncateConversationMessages,
     listPreviewComments,
     upsertPreviewComment,
     updatePreviewCommentStatus,

@@ -1511,6 +1511,9 @@ export interface Dict {
   'chat.openFile': string;
   'chat.copyPrompt': string;
   'chat.copyDone': string;
+  'chat.editAndResend': string;
+  'chat.saveAndResend': string;
+  'chat.regenerate': string;
   'chat.composerPlaceholder': string;
   'chat.composerHint': string;
   'chat.cliSettingsTitle': string;
@@ -1958,6 +1961,7 @@ export interface Dict {
   'tool.askQuestionSubmit': string;
   'tool.askQuestionPending': string;
   'tool.askQuestionAnswered': string;
+  'tool.askQuestionCustomPlaceholder': string;
   'tool.todosExpand': string;
   'tool.todosCollapse': string;
   'tool.todosDone': string;
@@ -2004,6 +2008,7 @@ export interface Dict {
   'assistant.unfinishedLabel': string;
   'assistant.unfinishedSummary': string;
   'assistant.unfinishedMore': string;
+  'assistant.unfinishedLess': string;
   'assistant.continueRemaining': string;
   'assistant.outTokens': string;
   'assistant.producedFiles': string;

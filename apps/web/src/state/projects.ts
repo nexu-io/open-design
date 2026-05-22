@@ -377,6 +377,29 @@ export async function saveMessage(
   }
 }
 
+export async function truncateConversationMessages(
+  projectId: string,
+  conversationId: string,
+  messageId: string,
+  options: { includeTarget?: boolean } = {},
+): Promise<ChatMessage[] | null> {
+  try {
+    const resp = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/truncate`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(options),
+      },
+    );
+    if (!resp.ok) return null;
+    const json = (await resp.json()) as { messages: ChatMessage[] };
+    return json.messages ?? [];
+  } catch {
+    return null;
+  }
+}
+
 // ---------- tabs ----------
 
 export async function loadTabs(projectId: string): Promise<OpenTabsState> {

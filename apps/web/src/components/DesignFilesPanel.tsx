@@ -804,7 +804,6 @@ export function DesignFilesPanel({
         role="group"
         aria-label={t('designFiles.groupBy')}
       >
-        <span>{t('designFiles.groupBy')}</span>
         <button
           type="button"
           className={groupMode === 'kind' ? 'active' : ''}

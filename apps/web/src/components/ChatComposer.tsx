@@ -2,6 +2,7 @@ import {
   forwardRef,
   useEffect,
   useImperativeHandle,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -42,7 +43,14 @@ import { ANNOTATION_EVENT, type AnnotationEventDetail } from "./PreviewDrawOverl
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
-type ToolsTab = 'plugins' | 'skills' | 'mcp';
+type ToolsTab = 'plugins' | 'skills' | 'mcp' | 'import';
+
+type ImportSourceId =
+  | 'folder'
+  | 'fig'
+  | 'github'
+  | 'web'
+  | 'project';
 
 type MentionTab = 'all' | 'plugins' | 'skills' | 'mcp' | 'connectors' | 'files';
 
@@ -143,6 +151,18 @@ interface Props {
   // ActivePluginChip on each user message (see UserMessage in
   // ChatPane). Pass `null` (or omit) to render the full rail.
   pinnedPluginId?: string | null;
+  // Import-sources wiring — when `onLinkFolder` is provided the
+  // tools `+` popover gains an "Import" tab listing five source
+  // kinds (folder / .fig / GitHub / Web / project). Today only
+  // Folder is live (delegated to ProjectView's openFolderDialog
+  // flow); the other four render as "Soon" rows so the i18n keys
+  // (`chat.importFig`, `importGitHub`, `importWeb`, `importProject`)
+  // stop being dead. The same Folder action is still surfaced by
+  // the chip in the project header — both paths converge on the
+  // same handler so the linked-folder list stays consistent.
+  onLinkFolder?: () => Promise<void> | void;
+  linkedDirs?: string[];
+  onUnlinkFolder?: (dir: string) => Promise<void> | void;
 }
 
 // Imperative handle so ancestors (e.g. example chips in ChatPane) can
@@ -198,6 +218,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       currentSkillId = null,
       onProjectSkillChange,
       pinnedPluginId = null,
+      onLinkFolder,
+      linkedDirs = [],
+      onUnlinkFolder,
     },
     ref
   ) {
@@ -244,10 +267,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // the @-mention picker. Both surfaces share the same list so applying
     // a plugin from either path lands on the same project context.
     const [installedPlugins, setInstalledPlugins] = useState<InstalledPluginRecord[]>([]);
-    // Detail modal — opened from a context chip click (kind === 'plugin')
-    // or from the tools-menu "Details" affordance.
+    // Detail modal — opened from a context chip click (kind === 'plugin').
+    // The tools-menu Plugins tab no longer exposes a details button; both
+    // its main and side affordances apply the plugin directly so the prompt
+    // lands in the chat draft without an extra confirmation step.
     const [detailsRecord, setDetailsRecord] = useState<InstalledPluginRecord | null>(null);
     const pluginsSectionRef = useRef<PluginsSectionHandle | null>(null);
+    const toolsPopoverId = useId();
+    const toolsPanelId = `${toolsPopoverId}-panel`;
     // Consolidated "tools" popover — a single dropdown anchored to the
     // leading sliders icon that hosts project context tools and a shortcut
     // to open the full Settings dialog. Replaces the previous row of
@@ -287,7 +314,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         setToolsOpen(false);
       }
       function onKey(e: KeyboardEvent) {
-        if (e.key === 'Escape') setToolsOpen(false);
+        if (e.key === 'Escape') {
+          setToolsOpen(false);
+          toolsTriggerRef.current?.focus();
+        }
       }
       document.addEventListener('mousedown', onPointer);
       document.addEventListener('keydown', onKey);
@@ -296,6 +326,15 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         document.removeEventListener('keydown', onKey);
       };
     }, [toolsOpen]);
+
+    useEffect(() => {
+      if (!toolsOpen) return;
+      const frame = requestAnimationFrame(() => {
+        const input = toolsMenuRef.current?.querySelector<HTMLInputElement>('.composer-tools-search');
+        input?.focus();
+      });
+      return () => cancelAnimationFrame(frame);
+    }, [toolsOpen, toolsTab]);
 
     // Lazy-fetch the user's external MCP servers list once on mount so the
     // `/mcp …` slash palette and the composer's MCP button popover have
@@ -419,8 +458,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         tabs.push('skills');
       }
       if (onOpenMcpSettings) tabs.push('mcp');
+      // Import is rendered whenever the parent wired a link-folder
+      // handler. The four "Soon" rows are static so they show even
+      // when no project is active yet — picking Folder still works
+      // because `onLinkFolder` ensures the project before opening
+      // the OS dialog.
+      if (onLinkFolder) tabs.push('import');
       return tabs;
-    }, [projectId, onOpenMcpSettings]);
+    }, [projectId, onOpenMcpSettings, onLinkFolder]);
 
     // When the popover opens, snap the active tab to the first available one
     // so the user never lands on an empty / hidden tab if their config
@@ -432,6 +477,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         if (first) setToolsTab(first);
       }
     }, [toolsOpen, availableTabs, toolsTab]);
+
+    function moveToolsTab(direction: 1 | -1) {
+      if (availableTabs.length === 0) return;
+      const current = availableTabs.indexOf(toolsTab);
+      const currentIndex = current === -1 ? 0 : current;
+      const nextIndex = (currentIndex + direction + availableTabs.length) % availableTabs.length;
+      setToolsTab(availableTabs[nextIndex]!);
+    }
 
     // Catalog of supported slash commands. Each entry shows up in the
     // popover when the user types `/` in the composer. The `insert`
@@ -1355,8 +1408,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                   });
                 }}
                 title={t('chat.addResourcesTitle')}
-                aria-haspopup="menu"
+                aria-haspopup="dialog"
                 aria-expanded={toolsOpen}
+                aria-controls={toolsOpen ? toolsPopoverId : undefined}
                 aria-label={t('chat.addResourcesAria')}
               >
                 <span className="composer-tools-add" aria-hidden>
@@ -1366,8 +1420,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               {toolsOpen ? (
                 <div
                   ref={toolsMenuRef}
+                  id={toolsPopoverId}
                   className="composer-tools-menu"
-                  role="menu"
+                  role="dialog"
+                  aria-label={t('chat.addResourcesTitle')}
                 >
                   <div className="composer-tools-tabs" role="tablist">
                     {availableTabs.map((tab) => (
@@ -1376,8 +1432,18 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                         type="button"
                         role="tab"
                         aria-selected={toolsTab === tab}
+                        aria-controls={toolsPanelId}
                         className={`composer-tools-tab${toolsTab === tab ? ' active' : ''}`}
                         onClick={() => setToolsTab(tab)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'ArrowRight') {
+                            event.preventDefault();
+                            moveToolsTab(1);
+                          } else if (event.key === 'ArrowLeft') {
+                            event.preventDefault();
+                            moveToolsTab(-1);
+                          }
+                        }}
                       >
                         {tab === 'plugins' ? (
                           <>
@@ -1397,66 +1463,86 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                             <span>MCP</span>
                           </>
                         ) : null}
+                        {tab === 'import' ? (
+                          <>
+                            <Icon name="import" size={12} />
+                            <span>{t('chat.importLabel')}</span>
+                          </>
+                        ) : null}
                       </button>
                     ))}
                   </div>
 
                   <div className="composer-tools-content">
-                    {toolsTab === 'plugins' ? (
-                      <ToolsPluginsPanel
-                        plugins={pluginsForComposer}
-                        activePluginId={pinnedPluginId}
-                        onApply={async (record) => {
-                          const result = await pluginsSectionRef.current?.applyById(
-                            record.id,
-                            record,
-                          );
-                          if (result) setToolsOpen(false);
-                        }}
-                        onShowDetails={(record) => {
-                          setDetailsRecord(record);
-                          setToolsOpen(false);
-                        }}
-                      />
-                    ) : null}
-                    {toolsTab === 'skills' ? (
-                      <ToolsSkillsPanel
-                        skills={skills}
-                        currentSkillId={currentSkillId}
-                        onPick={async (skill) => {
-                          const applied = await applyProjectSkill(skill);
-                          if (applied) setToolsOpen(false);
-                        }}
-                      />
-                    ) : null}
-                    {toolsTab === 'mcp' && onOpenMcpSettings ? (
-                      <ToolsMcpPanel
-                        servers={enabledMcpServers}
-                        templates={mcpTemplates}
-                        onInsert={(serverId) => {
-                          const ta = textareaRef.current;
-                          const server = enabledMcpServers.find((item) => item.id === serverId);
-                          const insert = `${inlineMentionToken(server?.label || serverId)} `;
-                          const cursor = ta?.selectionStart ?? draft.length;
-                          const before = draft.slice(0, cursor);
-                          const after = draft.slice(cursor);
-                          const next = before + insert + after;
-                          setDraft(next);
-                          setToolsOpen(false);
-                          requestAnimationFrame(() => {
-                            const el = textareaRef.current;
-                            if (!el) return;
-                            el.focus();
-                            const pos = before.length + insert.length;
-                            el.setSelectionRange(pos, pos);
-                          });
-                        }}
-                        onManage={() => {
-                          setToolsOpen(false);
-                          onOpenMcpSettings?.();
-                        }}
-                      />
-                    ) : null}
+                    <div
+                      id={toolsPanelId}
+                      role="tabpanel"
+                      aria-live="polite"
+                      className="composer-tools-panel"
+                    >
+                      {toolsTab === 'plugins' ? (
+                        <ToolsPluginsPanel
+                          plugins={pluginsForComposer}
+                          activePluginId={pinnedPluginId}
+                          onApply={async (record) => {
+                            const result = await pluginsSectionRef.current?.applyById(
+                              record.id,
+                              record,
+                            );
+                            if (result) setToolsOpen(false);
+                          }}
+                        />
+                      ) : null}
+                      {toolsTab === 'skills' ? (
+                        <ToolsSkillsPanel
+                          skills={skills}
+                          currentSkillId={currentSkillId}
+                          onPick={async (skill) => {
+                            const applied = await applyProjectSkill(skill);
+                            if (applied) setToolsOpen(false);
+                          }}
+                        />
+                      ) : null}
+                      {toolsTab === 'mcp' && onOpenMcpSettings ? (
+                        <ToolsMcpPanel
+                          servers={enabledMcpServers}
+                          templates={mcpTemplates}
+                          onInsert={(serverId) => {
+                            const ta = textareaRef.current;
+                            const server = enabledMcpServers.find((item) => item.id === serverId);
+                            const insert = `${inlineMentionToken(server?.label || serverId)} `;
+                            const cursor = ta?.selectionStart ?? draft.length;
+                            const before = draft.slice(0, cursor);
+                            const after = draft.slice(cursor);
+                            const next = before + insert + after;
+                            setDraft(next);
+                            setToolsOpen(false);
+                            requestAnimationFrame(() => {
+                              const el = textareaRef.current;
+                              if (!el) return;
+                              el.focus();
+                              const pos = before.length + insert.length;
+                              el.setSelectionRange(pos, pos);
+                            });
+                          }}
+                          onManage={() => {
+                            setToolsOpen(false);
+                            onOpenMcpSettings?.();
+                          }}
+                        />
+                      ) : null}
+                      {toolsTab === 'import' && onLinkFolder ? (
+                        <ToolsImportPanel
+                          linkedDirs={linkedDirs}
+                          onLinkFolder={async () => {
+                            await onLinkFolder();
+                            setToolsOpen(false);
+                          }}
+                          onUnlinkFolder={onUnlinkFolder}
+                          t={t}
+                        />
+                      ) : null}
+                    </div>
                   </div>
 
                 </div>
@@ -1489,9 +1575,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 type="button"
                 className="composer-send stop"
                 onClick={onStop}
+                aria-label={t('chat.stop')}
+                title={t('chat.stop')}
               >
                 <Icon name="stop" size={13} />
-                <span>{t('chat.stop')}</span>
               </button>
             ) : (
               <button
@@ -1510,9 +1597,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                   sendDisabled ||
                   (!draft.trim() && staged.length === 0 && currentCommentAttachments().length === 0)
                 }
+                aria-label={t('chat.send')}
+                title={t('chat.send')}
               >
-                <Icon name="send" size={13} />
-                <span>{t('chat.send')}</span>
+                <Icon name="arrow-up" size={15} />
               </button>
             )}
           </div>
@@ -1813,12 +1901,10 @@ function ToolsPluginsPanel({
   plugins,
   activePluginId,
   onApply,
-  onShowDetails,
 }: {
   plugins: InstalledPluginRecord[];
   activePluginId: string | null;
   onApply: (record: InstalledPluginRecord) => void | Promise<void>;
-  onShowDetails: (record: InstalledPluginRecord) => void;
 }) {
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [source, setSource] = useState<'community' | 'mine'>('community');
@@ -1921,9 +2007,18 @@ function ToolsPluginsPanel({
               <button
                 type="button"
                 className="composer-tools-row-side"
-                onClick={() => onShowDetails(p)}
-                title={`Plugin details: ${p.title}`}
-                aria-label={`Plugin details for ${p.title}`}
+                onClick={async () => {
+                  setPendingId(p.id);
+                  try {
+                    await onApply(p);
+                  } finally {
+                    setPendingId(null);
+                  }
+                }}
+                disabled={pendingId !== null}
+                aria-busy={pendingId === p.id ? 'true' : undefined}
+                title={`Add ${p.title} prompt to chat`}
+                aria-label={`Add ${p.title} prompt to chat`}
               >
                 <Icon name="arrow-up-right" size={13} />
               </button>
@@ -1980,7 +2075,6 @@ function ToolsMcpPanel({
             <button
               key={s.id}
               type="button"
-              role="menuitem"
               className="composer-tools-row"
               onClick={() => onInsert(s.id)}
               title={`Insert a hint that nudges the model to use ${s.label || s.id}`}
@@ -2001,7 +2095,6 @@ function ToolsMcpPanel({
             <button
               key={tpl.id}
               type="button"
-              role="menuitem"
               className="composer-tools-row"
               onClick={onManage}
               title={`Add ${tpl.label} from Settings`}
@@ -2020,7 +2113,6 @@ function ToolsMcpPanel({
       ) : null}
       <button
         type="button"
-        role="menuitem"
         className="composer-tools-row composer-tools-row-action"
         onClick={onManage}
       >
@@ -2069,7 +2161,6 @@ function ToolsSkillsPanel({
               <button
                 key={skill.id}
                 type="button"
-                role="menuitem"
                 className={`composer-tools-row${active ? ' active' : ''}`}
                 onClick={async () => {
                   setPendingId(skill.id);
@@ -2098,6 +2189,108 @@ function ToolsSkillsPanel({
           })}
         </div>
       )}
+    </>
+  );
+}
+
+// Static catalog of "import a source into the chat context" rows. Today
+// only Folder is wired all the way through to a working OS dialog; the
+// other four sit behind a "Soon" pill but still occupy a visible slot
+// so the matching i18n keys (chat.importFig / importGitHub /
+// importWeb / importProject) keep ownership over their copy. When one
+// of those lands, flip `live: true` and add a click handler — no extra
+// surface needed.
+const IMPORT_SOURCES: ReadonlyArray<{
+  id: ImportSourceId;
+  icon: Parameters<typeof Icon>[0]['name'];
+  labelKey: 'chat.importFolder' | 'chat.importFig' | 'chat.importGitHub' | 'chat.importWeb' | 'chat.importProject';
+  live: boolean;
+}> = [
+  { id: 'folder', icon: 'folder', labelKey: 'chat.importFolder', live: true },
+  { id: 'fig', icon: 'image', labelKey: 'chat.importFig', live: false },
+  { id: 'github', icon: 'github', labelKey: 'chat.importGitHub', live: false },
+  { id: 'web', icon: 'external-link', labelKey: 'chat.importWeb', live: false },
+  { id: 'project', icon: 'file-code', labelKey: 'chat.importProject', live: false },
+];
+
+function ToolsImportPanel({
+  linkedDirs,
+  onLinkFolder,
+  onUnlinkFolder,
+  t,
+}: {
+  linkedDirs: string[];
+  onLinkFolder: () => Promise<void> | void;
+  onUnlinkFolder?: (dir: string) => Promise<void> | void;
+  t: TranslateFn;
+}) {
+  const [pending, setPending] = useState<ImportSourceId | null>(null);
+  return (
+    <>
+      {linkedDirs.length > 0 ? (
+        <div
+          className="composer-tools-import-linked"
+          data-testid="composer-import-linked-dirs"
+        >
+          {linkedDirs.map((dir) => (
+            <span key={dir} className="staged-chip">
+              <Icon name="folder" size={12} />
+              <span className="staged-name" title={dir}>
+                {dir.split('/').pop() || dir}
+              </span>
+              {onUnlinkFolder ? (
+                <button
+                  type="button"
+                  className="staged-remove"
+                  onClick={() => void onUnlinkFolder(dir)}
+                  title={t('chat.linkedFolderRemoveAria', { path: dir })}
+                  aria-label={t('chat.linkedFolderRemoveAria', { path: dir })}
+                >
+                  <Icon name="close" size={11} />
+                </button>
+              ) : null}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      <div className="composer-tools-list">
+        {IMPORT_SOURCES.map((source) => {
+          const label = t(source.labelKey);
+          const isPending = pending === source.id;
+          return (
+            <button
+              key={source.id}
+              type="button"
+              className={`composer-tools-row${source.live ? '' : ' composer-tools-row--soon'}`}
+              data-testid={`composer-import-${source.id}`}
+              onClick={async () => {
+                if (!source.live || pending) return;
+                setPending(source.id);
+                try {
+                  await onLinkFolder();
+                } finally {
+                  setPending(null);
+                }
+              }}
+              disabled={!source.live || pending !== null}
+              aria-busy={isPending ? 'true' : undefined}
+              title={source.live ? label : t('chat.importComingSoon')}
+            >
+              <Icon name={source.icon} size={12} />
+              <span className="composer-tools-row-body">
+                <strong>{label}</strong>
+              </span>
+              {!source.live ? (
+                <span className="composer-tools-row-pending">
+                  {t('chat.importSoon')}
+                </span>
+              ) : isPending ? (
+                <span className="composer-tools-row-pending">…</span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
     </>
   );
 }

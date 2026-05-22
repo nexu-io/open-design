@@ -54,6 +54,21 @@ describe('parseArtifactManifest', () => {
     const out = parseArtifactManifest(raw);
     expect(out?.status).toBe('streaming');
   });
+
+  it('preserves primary output hints', () => {
+    const raw = JSON.stringify({
+      version: 1,
+      kind: 'html',
+      title: 'x',
+      entry: 'index.html',
+      renderer: 'html',
+      exports: ['html'],
+      primary: 'index.html',
+    });
+
+    const out = parseArtifactManifest(raw);
+    expect(out?.primary).toBe('index.html');
+  });
 });
 
 describe('inferLegacyManifest', () => {

@@ -149,7 +149,7 @@ const PROJECT_STRING_FLAGS = new Set([
   'pending-prompt', 'project', 'conversation', 'message', 'path', 'as',
   'agent', 'model', 'snapshot-id', 'inputs', 'grant-caps',
 ]);
-const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow']);
+const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow', 'include-target']);
 // `od automation …` mirrors the Automations tab. Same surface, same
 // /api/routines store. The CLI form is the embeddability contract:
 // external agents (hermes-agent, openclaw, etc.) can drive Open Design
@@ -4094,6 +4094,10 @@ async function runConversation(args) {
     console.log(`Usage:
   od conversation list <projectId>           List conversations in a project.
   od conversation info <conversationId>      Print one conversation.
+  od conversation truncate <projectId> <conversationId> <messageId>
+                                             Delete messages after a message.
+  od conversation regenerate <projectId> <conversationId> <assistantMessageId>
+                                             Re-run the previous user message.
 
 Common options:
   --daemon-url <url>   Open Design daemon HTTP base.
@@ -4127,6 +4131,90 @@ Common options:
       if (!resp.ok) return structuredHttpFailure(resp);
       const data = await resp.json();
       process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      return;
+    }
+    case 'truncate': {
+      const positional = rest.filter((a) => !a.startsWith('-'));
+      const [projectId, conversationId, messageId] = positional;
+      if (!projectId || !conversationId || !messageId) {
+        console.error('Usage: od conversation truncate <projectId> <conversationId> <messageId> [--include-target]');
+        process.exit(2);
+      }
+      const resp = await fetch(
+        `${base}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/truncate`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ includeTarget: flags['include-target'] === true }),
+        },
+      );
+      if (!resp.ok) return structuredHttpFailure(resp);
+      const data = await resp.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      console.log(`[conversation] deleted ${data.deletedCount ?? 0} message(s)`);
+      return;
+    }
+    case 'regenerate': {
+      const positional = rest.filter((a) => !a.startsWith('-'));
+      const [projectId, conversationId, assistantMessageId] = positional;
+      if (!projectId || !conversationId || !assistantMessageId) {
+        console.error('Usage: od conversation regenerate <projectId> <conversationId> <assistantMessageId> [--agent <id>] [--model <id>] [--follow] [--json]');
+        process.exit(2);
+      }
+      const messagesResp = await fetch(
+        `${base}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages`,
+      );
+      if (!messagesResp.ok) return structuredHttpFailure(messagesResp);
+      const messagesData = await messagesResp.json();
+      const messages = Array.isArray(messagesData?.messages) ? messagesData.messages : [];
+      const assistantIndex = messages.findIndex((message) => message?.id === assistantMessageId);
+      if (assistantIndex < 0 || messages[assistantIndex]?.role !== 'assistant') {
+        return exitWithStructuredError({
+          code: 'message-not-found',
+          message: 'assistant message not found',
+        });
+      }
+      const previousUser = messages
+        .slice(0, assistantIndex)
+        .reverse()
+        .find((message) => message?.role === 'user' && typeof message?.content === 'string');
+      if (!previousUser) {
+        return exitWithStructuredError({
+          code: 'missing-input',
+          message: 'no previous user message found',
+        });
+      }
+      const truncateResp = await fetch(
+        `${base}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(previousUser.id)}/truncate`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ includeTarget: true }),
+        },
+      );
+      if (!truncateResp.ok) return structuredHttpFailure(truncateResp);
+      const body = {
+        projectId,
+        conversationId,
+        message: previousUser.content,
+      };
+      if (flags.agent) body.agentId = flags.agent;
+      if (flags.model) body.model = flags.model;
+      const runResp = await fetch(`${base}/api/runs`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const runData = await runResp.json().catch(() => ({}));
+      if (!runResp.ok) {
+        console.error(`POST /api/runs failed: ${runResp.status} ${JSON.stringify(runData)}`);
+        process.exit(1);
+      }
+      if (flags.json && !flags.follow) {
+        return process.stdout.write(JSON.stringify(runData, null, 2) + '\n');
+      }
+      console.log(`[conversation] regenerated ${assistantMessageId} with run ${runData.runId}`);
+      if (flags.follow) await streamRunEvents(base, runData.runId);
       return;
     }
     default:

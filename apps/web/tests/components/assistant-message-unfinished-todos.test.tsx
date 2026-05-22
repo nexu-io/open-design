@@ -117,7 +117,7 @@ describe('AssistantMessage unfinished todo state', () => {
 
     expect(screen.getByText('Done')).toBeTruthy();
     expect(screen.queryByText('Stopped with unfinished work')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Continue remaining tasks' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Continue tasks' })).toBeNull();
   });
 
   it('uses persisted usage duration for completed messages that do not have endedAt', () => {
@@ -197,8 +197,12 @@ describe('AssistantMessage unfinished todo state', () => {
     expect(remainingList).not.toBeNull();
     expect(within(remainingList as HTMLElement).getByText('Building components')).toBeTruthy();
     expect(within(remainingList as HTMLElement).getByText('Run QA')).toBeTruthy();
+    const footer = screen.getByText('Stopped with unfinished work').closest('.assistant-completion-row');
+    expect(footer).not.toBeNull();
+    const footerPosition = (footer as HTMLElement).compareDocumentPosition(remainingList as HTMLElement);
+    expect(footerPosition & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Continue remaining tasks' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Continue tasks' }));
 
     expect(onContinue).toHaveBeenCalledWith([
       {
@@ -208,6 +212,72 @@ describe('AssistantMessage unfinished todo state', () => {
       },
       { content: 'Run QA', status: 'pending', activeForm: undefined },
     ]);
+  });
+
+  it('shows failed status details with user-facing labels and a regenerate action', () => {
+    const onRegenerate = vi.fn();
+    render(
+      <AssistantMessage
+        message={{
+          ...messageWithEvents([
+            {
+              kind: 'status',
+              label: 'agent_error',
+              detail: 'The agent stopped before finishing remaining tasks.',
+            },
+          ]),
+          runStatus: 'failed',
+        }}
+        streaming={false}
+        projectId="project-1"
+        isLast
+        onRegenerate={onRegenerate}
+      />,
+    );
+
+    expect(screen.getByText('Task failed')).toBeTruthy();
+    expect(screen.queryByText('agent_error')).toBeNull();
+    expect(screen.getByText('The agent stopped before finishing remaining tasks.')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Regenerate' }));
+
+    expect(onRegenerate).toHaveBeenCalled();
+  });
+
+  it('expands hidden unfinished todos from the more affordance', () => {
+    render(
+      <AssistantMessage
+        message={messageWithEvents([
+          {
+            kind: 'tool_use',
+            id: 'todo-1',
+            name: 'TodoWrite',
+            input: {
+              todos: [
+                { content: 'Done', status: 'completed' },
+                { content: 'Task 1', status: 'pending' },
+                { content: 'Task 2', status: 'pending' },
+                { content: 'Task 3', status: 'pending' },
+                { content: 'Task 4', status: 'pending' },
+              ],
+            },
+          },
+        ])}
+        streaming={false}
+        projectId="project-1"
+        isLast
+      />,
+    );
+
+    const more = screen.getByRole('button', { name: '+1 more' });
+    expect(more.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByText('Task 4')).toBeNull();
+
+    fireEvent.click(more);
+
+    expect(more.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText('Task 4')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Show less' })).toBeTruthy();
   });
 
   it('hides the continue button on older assistant turns', () => {
@@ -230,7 +300,7 @@ describe('AssistantMessage unfinished todo state', () => {
 
     expect(screen.getByText('Stopped with unfinished work')).toBeTruthy();
     expect(screen.getByText('1 task(s) remain')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Continue remaining tasks' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Continue tasks' })).toBeNull();
   });
 
   it('surfaces generated plugin next actions in the latest assistant turn', async () => {

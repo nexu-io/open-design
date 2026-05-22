@@ -6,7 +6,11 @@ import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { FileWorkspace, scrollWorkspaceTabsWithWheel } from '../../src/components/FileWorkspace';
+import {
+  FileWorkspace,
+  scrollWorkspaceTabsWithWheel,
+  selectPrimaryProjectFile,
+} from '../../src/components/FileWorkspace';
 import { DesignFilesPanel } from '../../src/components/DesignFilesPanel';
 import { projectSplitClassName } from '../../src/components/ProjectView';
 import { uploadProjectFiles } from '../../src/providers/registry';
@@ -344,6 +348,73 @@ describe('FileWorkspace tab chrome', () => {
     );
 
     expect(screen.queryByRole('tab', { name: /index\.html/i })).toBeNull();
+  });
+});
+
+describe('selectPrimaryProjectFile', () => {
+  it('prefers an explicitly declared manifest primary over heuristic HTML', () => {
+    const primary = baseFile({
+      name: 'final/spritesheet.png',
+      kind: 'image',
+      mime: 'image/png',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Sprite sheet',
+        entry: 'final/spritesheet.png',
+        renderer: 'html',
+        exports: ['html'],
+        metadata: { primary: 'final/spritesheet.png' },
+      },
+    });
+    const html = baseFile({
+      name: 'index.html',
+      kind: 'html',
+      mime: 'text/html',
+      mtime: primary.mtime + 10,
+    });
+
+    expect(selectPrimaryProjectFile([html, primary])?.name).toBe('final/spritesheet.png');
+  });
+
+  it('uses renderable heuristics and ignores process artifacts', () => {
+    const critique = baseFile({
+      name: 'critique.json',
+      kind: 'code',
+      mime: 'application/json',
+      mtime: 300,
+    });
+    const newerImage = baseFile({
+      name: 'preview.png',
+      kind: 'image',
+      mime: 'image/png',
+      mtime: 200,
+    });
+    const html = baseFile({
+      name: 'index.html',
+      kind: 'html',
+      mime: 'text/html',
+      mtime: 100,
+    });
+
+    expect(selectPrimaryProjectFile([critique, newerImage, html])?.name).toBe('index.html');
+  });
+
+  it('chooses the newest file within the same renderable kind', () => {
+    const oldHtml = baseFile({
+      name: 'old.html',
+      kind: 'html',
+      mime: 'text/html',
+      mtime: 100,
+    });
+    const newHtml = baseFile({
+      name: 'new.html',
+      kind: 'html',
+      mime: 'text/html',
+      mtime: 200,
+    });
+
+    expect(selectPrimaryProjectFile([oldHtml, newHtml])?.name).toBe('new.html');
   });
 });
 

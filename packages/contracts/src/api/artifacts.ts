@@ -103,6 +103,11 @@ export interface ArtifactManifest {
    */
   status?: ArtifactStatus;
   exports: ArtifactExportKind[];
+  /**
+   * Optional primary entry hint for multi-file outputs. When omitted, clients
+   * may fall back to renderable-file heuristics.
+   */
+  primary?: string | boolean;
   supportingFiles?: string[];
   createdAt?: string;
   updatedAt?: string;

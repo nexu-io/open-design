@@ -1,9 +1,8 @@
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useAnalytics } from '../analytics/provider';
 import { trackChatPanelClick } from '../analytics/events';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
-import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { projectRawUrl } from '../providers/registry';
 import type { TodoItem } from '../runtime/todos';
 import type { AppliedPluginSnapshot } from '@open-design/contracts';
@@ -246,6 +245,8 @@ interface Props {
     relativePath: string,
     action: PluginFolderAgentAction,
   ) => Promise<void> | void;
+  onEditUserMessage?: (message: ChatMessage, nextPrompt: string) => Promise<void> | void;
+  onRegenerateAssistantMessage?: (message: ChatMessage) => Promise<void> | void;
   initialDraft?: string;
   // Question-form submissions become a normal user message; the parent
   // routes that text through onSend (no attachments).
@@ -255,8 +256,8 @@ interface Props {
   // Header "+" button — kicks off ProjectView's create-conversation flow.
   onNewConversation?: () => void;
   newConversationDisabled?: boolean;
-  // Header "resume" button — synthesizes a handoff prompt from the
-  // current transcript and opens a fresh conversation seeded with it.
+  // Resume flow remains parent-owned; ChatPane does not expose it in the
+  // header because the reload icon reads as a broken refresh control.
   onResumeConversation?: () => void;
   resumeConversationDisabled?: boolean;
   // Conversation list that used to live in the topbar. The chat tab now
@@ -296,6 +297,13 @@ interface Props {
   byokApiProtocol?: AppConfig['apiProtocol'];
   byokImageModel?: string;
   onChangeByokImageModel?: (model: string) => void;
+  // Import-sources wiring forwarded to ChatComposer's "+" popover →
+  // Import tab. ProjectView owns the link/unlink logic so the project
+  // header chip and the composer panel stay on the same source of
+  // truth (`project.metadata.linkedDirs`).
+  onLinkFolder?: () => Promise<void> | void;
+  linkedDirs?: string[];
+  onUnlinkFolder?: (dir: string) => Promise<void> | void;
 }
 
 type Tab = 'chat' | 'comments';
@@ -320,14 +328,14 @@ export function ChatPane({
   onStop,
   onRequestOpenFile,
   onRequestPluginFolderAgentAction,
+  onEditUserMessage,
+  onRegenerateAssistantMessage,
   initialDraft,
   onSubmitForm,
   onContinueRemainingTasks,
   onAssistantFeedback,
   onNewConversation,
   newConversationDisabled = false,
-  onResumeConversation,
-  resumeConversationDisabled = false,
   conversations,
   activeConversationId,
   onSelectConversation,
@@ -349,6 +357,9 @@ export function ChatPane({
   byokApiProtocol,
   byokImageModel,
   onChangeByokImageModel,
+  onLinkFolder,
+  linkedDirs,
+  onUnlinkFolder,
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
@@ -379,7 +390,6 @@ export function ChatPane({
   // Only the first user message gets the active-plugin chip — the
   // plugin is project-scoped so re-stamping it on every reply would be
   // noise. Subsequent messages still run under the same snapshot.
-  const firstUserMessageId = messages.find((m) => m.role === 'user')?.id;
   // Map each assistant message id to the user message that follows it
   // (if any) so QuestionFormView can render its locked "answered" state
   // with the user's picks.
@@ -756,19 +766,6 @@ export function ChatPane({
           >
             <Icon name="plus" size={16} />
           </button>
-          {onResumeConversation ? (
-            <button
-              type="button"
-              className="icon-only"
-              data-testid="resume-conversation"
-              title={t('chat.resumeConversation')}
-              aria-label={t('chat.resumeConversation')}
-              onClick={onResumeConversation}
-              disabled={resumeConversationDisabled}
-            >
-              <Icon name="reload" size={16} />
-            </button>
-          ) : null}
           {onCollapse ? (
             <button
               type="button"
@@ -785,7 +782,7 @@ export function ChatPane({
                 onCollapse();
               }}
             >
-              <span className="chat-collapse-glyph" aria-hidden>
+              <span className="panel-toggle-glyph" aria-hidden>
                 <Icon name="chevron-left" size={13} />
                 <Icon name="chevron-left" size={13} />
               </span>
@@ -856,12 +853,8 @@ export function ChatPane({
                         projectId={projectId}
                         projectFileNames={projectFileNames}
                         onRequestOpenFile={onRequestOpenFile}
+                        onEditUserMessage={onEditUserMessage}
                         t={t}
-                        activePluginSnapshot={
-                          m.id === firstUserMessageId
-                            ? activePluginSnapshot ?? null
-                            : null
-                        }
                       />
                     ) : (
                       <AssistantMessage
@@ -885,6 +878,11 @@ export function ChatPane({
                         onContinueRemainingTasks={
                           m.id === lastAssistantId && onContinueRemainingTasks
                             ? (todos) => onContinueRemainingTasks(m, todos)
+                            : undefined
+                        }
+                        onRegenerate={
+                          m.id === lastAssistantId && onRegenerateAssistantMessage
+                            ? () => onRegenerateAssistantMessage(m)
                             : undefined
                         }
                         onFeedback={
@@ -951,6 +949,9 @@ export function ChatPane({
             currentSkillId={currentSkillId}
             onProjectSkillChange={onProjectSkillChange}
             pinnedPluginId={activePluginSnapshot?.pluginId ?? null}
+            onLinkFolder={onLinkFolder}
+            linkedDirs={linkedDirs}
+            onUnlinkFolder={onUnlinkFolder}
           />
         </>
       ) : null}
@@ -994,6 +995,7 @@ function PinnedTodoSlot({
         input={input}
         runStreaming={streaming}
         runSucceeded={!streaming}
+        compactWhenLarge
         onDismiss={() => {
           if (exiting) return;
           setExiting(true);
@@ -1228,37 +1230,47 @@ function UserMessage({
   projectId,
   projectFileNames,
   onRequestOpenFile,
+  onEditUserMessage,
   t,
-  activePluginSnapshot,
 }: {
   message: ChatMessage;
   projectId: string | null;
   projectFileNames?: Set<string>;
   onRequestOpenFile?: (name: string) => void;
+  onEditUserMessage?: (message: ChatMessage, nextPrompt: string) => Promise<void> | void;
   t: TranslateFn;
-  activePluginSnapshot?: AppliedPluginSnapshot | null;
 }) {
   const attachments = message.attachments ?? [];
   const commentAttachments = message.commentAttachments ?? [];
-  const [copied, setCopied] = useState(false);
-  const copyTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(message.content);
+  const editInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
-    return () => {
-      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
-    };
-  }, []);
+    if (!editing) setDraft(message.content);
+  }, [editing, message.content]);
 
-  async function handleCopy() {
-    if (!message.content) return;
-    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
-    const ok = await copyToClipboard(message.content);
-    if (!ok) return;
-    setCopied(true);
-    copyTimerRef.current = setTimeout(() => {
-      setCopied(false);
-      copyTimerRef.current = undefined;
-    }, 2000);
+  useLayoutEffect(() => {
+    if (!editing) return;
+    const input = editInputRef.current;
+    if (!input) return;
+    input.style.height = 'auto';
+    input.style.height = `${input.scrollHeight}px`;
+  }, [draft, editing]);
+
+  function cancelEdit() {
+    setDraft(message.content);
+    setEditing(false);
+  }
+
+  function submitEdit() {
+    const next = draft.trim();
+    if (!next || next === message.content.trim()) {
+      cancelEdit();
+      return;
+    }
+    void onEditUserMessage?.(message, next);
+    setEditing(false);
   }
 
   const isDesignSystemWorkspaceRequest = isDesignSystemWorkspacePrompt(message.content);
@@ -1269,9 +1281,6 @@ function UserMessage({
         <span>{t('chat.you')}</span>
         <MessageTimestamp message={message} t={t} />
       </div>
-      {activePluginSnapshot ? (
-        <ActivePluginChip snapshot={activePluginSnapshot} t={t} />
-      ) : null}
       {attachments.length > 0 ? (
         <div className="user-attachments">
           {attachments.map((a) => {
@@ -1314,7 +1323,48 @@ function UserMessage({
           ))}
         </div>
       ) : null}
-      {message.content && isDesignSystemWorkspaceRequest ? (
+      {editing ? (
+        <div className="user-edit-wrap">
+          <textarea
+            ref={editInputRef}
+            className="user-edit-input"
+            value={draft}
+            autoFocus
+            rows={1}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                event.preventDefault();
+                submitEdit();
+              } else if (event.key === 'Escape') {
+                event.preventDefault();
+                cancelEdit();
+              }
+            }}
+          />
+          <div className="user-edit-actions">
+            <button
+              type="button"
+              className="user-edit-cancel"
+              onClick={cancelEdit}
+              aria-label={t('common.cancel')}
+              title={t('common.cancel')}
+            >
+              <Icon name="close" size={13} />
+            </button>
+            <button
+              type="button"
+              className="user-edit-submit"
+              disabled={!draft.trim()}
+              onClick={submitEdit}
+              aria-label={t('chat.saveAndResend')}
+              title={t('chat.saveAndResend')}
+            >
+              <Icon name="arrow-up" size={15} />
+            </button>
+          </div>
+        </div>
+      ) : message.content && isDesignSystemWorkspaceRequest ? (
         <div className="user-text-wrap user-status-wrap">
           <div className="user-status-card design-system-generation-status">
             <span className="user-status-card__icon">
@@ -1328,47 +1378,20 @@ function UserMessage({
         </div>
       ) : message.content ? (
         <div className="user-text-wrap">
-          <div className="user-text user-bubble">{message.content}</div>
-          <button
-            type="button"
-            className="ghost user-copy-btn"
-            onClick={handleCopy}
-            aria-label={copied ? t('chat.copyDone') : t('chat.copyPrompt')}
-            title={copied ? t('chat.copyDone') : t('chat.copyPrompt')}
-          >
-            <Icon name={copied ? 'check' : 'copy'} size={12} />
-          </button>
+          {onEditUserMessage ? (
+            <button
+              type="button"
+              className="user-text user-bubble user-edit-trigger"
+              onClick={() => setEditing(true)}
+              aria-label={t('chat.editAndResend')}
+              title={t('chat.editAndResend')}
+            >
+              {message.content}
+            </button>
+          ) : (
+            <div className="user-text user-bubble">{message.content}</div>
+          )}
         </div>
-      ) : null}
-    </div>
-  );
-}
-
-// Context chip rendered above a user message when the project pinned a
-// plugin at create time (PluginLoopHome on Home). Replaces the noisy
-// in-composer plugin rail so the user is not re-prompted to pick
-// something they already chose; instead the active plugin lives inside
-// the run message it kicked off.
-function ActivePluginChip({
-  snapshot,
-  t: _t,
-}: {
-  snapshot: AppliedPluginSnapshot;
-  t: TranslateFn;
-}) {
-  const title = snapshot.pluginTitle ?? snapshot.pluginId;
-  const version = snapshot.pluginVersion;
-  const taskKind = snapshot.taskKind;
-  return (
-    <div className="msg-plugin-chip" data-testid="msg-plugin-chip">
-      <span className="msg-plugin-chip__dot" aria-hidden />
-      <span className="msg-plugin-chip__label">
-        <span className="msg-plugin-chip__kind">Plugin</span>
-        <span className="msg-plugin-chip__title">{title}</span>
-        <span className="msg-plugin-chip__version">@{version}</span>
-      </span>
-      {taskKind ? (
-        <span className="msg-plugin-chip__task">{taskKind}</span>
       ) : null}
     </div>
   );

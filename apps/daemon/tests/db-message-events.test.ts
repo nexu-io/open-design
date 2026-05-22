@@ -10,6 +10,7 @@ import {
   insertProject,
   listMessages,
   openDatabase,
+  truncateConversationMessages,
   upsertMessage,
 } from '../src/db.js';
 
@@ -67,6 +68,42 @@ describe('message event persistence', () => {
         label: 'error',
         detail: 'Agent stalled without emitting any new output for 1s.',
       },
+    ]);
+  });
+
+  it('truncates a conversation from an edited user message', () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const now = Date.now();
+    insertProject(db, {
+      id: 'proj-1',
+      name: 'Routine project',
+      createdAt: now,
+      updatedAt: now,
+    });
+    insertConversation(db, {
+      id: 'conv-1',
+      projectId: 'proj-1',
+      title: 'Routine run',
+      createdAt: now,
+      updatedAt: now,
+    });
+    for (const message of [
+      { id: 'user-1', role: 'user', content: 'First' },
+      { id: 'assistant-1', role: 'assistant', content: 'First answer' },
+      { id: 'user-2', role: 'user', content: 'Typo prompt' },
+      { id: 'assistant-2', role: 'assistant', content: 'Typo answer' },
+    ]) {
+      upsertMessage(db, 'conv-1', message);
+    }
+
+    const result = truncateConversationMessages(db, 'conv-1', 'user-2', {
+      includeTarget: true,
+    });
+
+    expect(result?.deletedCount).toBe(2);
+    expect(result?.messages.map((message) => message.id)).toEqual([
+      'user-1',
+      'assistant-1',
     ]);
   });
 });

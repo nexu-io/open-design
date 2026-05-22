@@ -1003,6 +1003,35 @@ export function deleteMessage(db: SqliteDb, id: string) {
   db.prepare(`DELETE FROM messages WHERE id = ?`).run(id);
 }
 
+export function truncateConversationMessages(
+  db: SqliteDb,
+  conversationId: string,
+  messageId: string,
+  options: { includeTarget?: boolean } = {},
+) {
+  const target = db
+    .prepare(`SELECT position FROM messages WHERE id = ? AND conversation_id = ?`)
+    .get(messageId, conversationId) as DbRow | undefined;
+  if (!target) return null;
+  const operator = options.includeTarget ? '>=' : '>';
+  const info = db
+    .prepare(
+      `DELETE FROM messages
+        WHERE conversation_id = ?
+          AND position ${operator} ?`,
+    )
+    .run(conversationId, target.position);
+  const now = Date.now();
+  db.prepare(`UPDATE conversations SET updated_at = ? WHERE id = ?`).run(
+    now,
+    conversationId,
+  );
+  return {
+    deletedCount: info.changes,
+    messages: listMessages(db, conversationId),
+  };
+}
+
 // ---------- preview comments ----------
 
 const PREVIEW_COMMENT_STATUSES = new Set([

@@ -25,7 +25,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
   const { DESIGN_SYSTEMS_DIR, PROJECTS_DIR, SKILLS_DIR } = ctx.paths;
   const { insertProject, validateLinkedDirs, getProject, updateProject, dbDeleteProject, removeProjectDir } = ctx.projectStore;
   const { writeProjectFile, readProjectFile, ensureProject, listFiles, listTabs, setTabs, resolveProjectDir } = ctx.projectFiles;
-  const { insertConversation, getConversation, listConversations, updateConversation, deleteConversation, listMessages, upsertMessage, listPreviewComments, upsertPreviewComment, updatePreviewCommentStatus, deletePreviewComment } = ctx.conversations;
+  const { insertConversation, getConversation, listConversations, updateConversation, deleteConversation, listMessages, upsertMessage, truncateConversationMessages, listPreviewComments, upsertPreviewComment, updatePreviewCommentStatus, deletePreviewComment } = ctx.conversations;
   const { getTemplate, listTemplates, deleteTemplate, insertTemplate, findTemplateByNameAndProject, updateTemplate } = ctx.templates;
   const { listLatestProjectRunStatuses, listProjectsAwaitingInput, normalizeProjectDisplayStatus, composeProjectDisplayStatus, listProjects } = ctx.status;
   const { subscribeFileEvents, activeProjectEventSinks } = ctx.events;
@@ -541,6 +541,20 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     updateProject(db, req.params.id, {});
     ctx.telemetry?.reportFinalizedMessage(saved, m);
     res.json({ message: saved });
+  });
+
+  app.post('/api/projects/:id/conversations/:cid/messages/:mid/truncate', (req, res) => {
+    const conv = getConversation(db, req.params.cid);
+    if (!conv || conv.projectId !== req.params.id) {
+      return res.status(404).json({ error: 'conversation not found' });
+    }
+    const includeTarget = (req.body || {}).includeTarget === true;
+    const result = truncateConversationMessages?.(db, req.params.cid, req.params.mid, {
+      includeTarget,
+    });
+    if (!result) return res.status(404).json({ error: 'message not found' });
+    updateProject(db, req.params.id, {});
+    res.json(result);
   });
 
   // ---- Preview comments ----------------------------------------------------

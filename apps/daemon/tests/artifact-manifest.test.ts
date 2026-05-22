@@ -46,6 +46,25 @@ describe('validateArtifactManifestInput', () => {
     expect(res.ok).toBe(false);
   });
 
+  it('preserves a safe primary output hint', () => {
+    const res = validateArtifactManifestInput(
+      { ...validBase(), primary: 'preview/index.html' },
+      'index.html',
+    );
+
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.value?.primary).toBe('preview/index.html');
+  });
+
+  it('rejects traversal in primary output hints', () => {
+    const res = validateArtifactManifestInput(
+      { ...validBase(), primary: '../secret.txt' },
+      'index.html',
+    );
+
+    expect(res.ok).toBe(false);
+  });
+
   it('defaults status to complete when missing', () => {
     const res = validateArtifactManifestInput(validBase(), 'index.html');
     expect(res.ok).toBe(true);

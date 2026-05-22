@@ -38,8 +38,8 @@ export function AppChromeHeader({
       ) : null}
       {children ? <div className="app-chrome-content">{children}</div> : null}
       <div className="app-chrome-drag" aria-hidden />
-      <div id={APP_CHROME_FILE_ACTIONS_ID} className="app-chrome-file-actions" />
       {actions ? <div className="app-chrome-actions">{actions}</div> : null}
+      <div id={APP_CHROME_FILE_ACTIONS_ID} className="app-chrome-file-actions" />
     </header>
   );
 }

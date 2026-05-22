@@ -148,6 +148,21 @@ describe('ToolCard dispatch', () => {
     expect(markup).toContain('ls');
   });
 
+  it('renders completed Bash status as static and output as a disclosure', () => {
+    const markup = renderToStaticMarkup(
+      <ToolCard
+        use={use({ command: 'echo hi' }, 'Bash')}
+        result={ok('hi')}
+        runStreaming={false}
+      />,
+    );
+    expect(markup).toContain('op-status op-status-ok');
+    expect(markup).toContain('✓');
+    expect(markup).toContain('aria-expanded="false"');
+    expect(markup).toContain('op-toggle-chevron');
+    expect(markup).toContain('▾');
+  });
+
   it('lets a registered renderer override a built-in family card', () => {
     registerToolRenderer('Bash', ({ args }) => (
       <pre data-testid="custom-bash">{(args as { command?: string }).command}</pre>

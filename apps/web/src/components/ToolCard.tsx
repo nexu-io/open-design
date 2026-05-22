@@ -208,6 +208,7 @@ function AskUserQuestionCard({
     for (const q of questions) seed[q.question] = q.multiSelect ? [] : '';
     return seed;
   });
+  const [customAnswers, setCustomAnswers] = useState<Record<string, string>>({});
   // Track local submission so the card locks immediately on Submit. We
   // cannot rely on `result` alone because `claude-code -p` ships an auto
   // error tool_result that does not represent a real answer.
@@ -243,12 +244,36 @@ function AskUserQuestionCard({
     }
     return out;
   })();
+  const answeredCustomAnswers = (() => {
+    if (!result || result.isError || !result.content) return null;
+    const out: Record<string, string> = {};
+    const pairs = result.content.split('\n\n');
+    for (const pair of pairs) {
+      const newlineIdx = pair.indexOf('\n');
+      if (newlineIdx === -1) continue;
+      const q = pair.slice(0, newlineIdx).trim();
+      const a = pair.slice(newlineIdx + 1).trim();
+      if (!q || !a) continue;
+      const question = questions.find((qq) => qq.question === q);
+      if (!question) continue;
+      const known = question.multiSelect
+        ? a.split('\n').map((s) => s.replace(/^- /, '').trim()).filter(Boolean)
+        : [a];
+      if (known.some((answer) => !question.options.some((opt) => opt.label === answer))) {
+        out[q] = a;
+      }
+    }
+    return out;
+  })();
   // While the user is actively picking (card not yet locked), the local
   // `selections` is authoritative. Once locked, prefer the persisted
   // answer if available so reloads / cached messages still highlight.
   const effectiveSelections = hasRealAnswer && answeredSelections
     ? answeredSelections
     : selections;
+  const effectiveCustomAnswers = hasRealAnswer && answeredCustomAnswers
+    ? answeredCustomAnswers
+    : customAnswers;
   // We need at least one viable submit channel to be interactive: the live
   // `onAnswerToolUse` (preferred — feeds the tool_result back into the
   // open stream-json child) or the legacy `onSubmitForm` (fallback that
@@ -256,6 +281,8 @@ function AskUserQuestionCard({
   const canSubmit = !!onAnswerToolUse || !!onSubmitForm;
   const locked = hasRealAnswer || !isLast || !canSubmit;
   const ready = questions.every((q) => {
+    const custom = customAnswers[q.question]?.trim();
+    if (custom) return true;
     const v = selections[q.question];
     return Array.isArray(v) ? v.length > 0 : typeof v === 'string' && v.trim().length > 0;
   });
@@ -273,11 +300,20 @@ function AskUserQuestionCard({
       return { ...prev, [question]: next };
     });
   }
+  function setCustomAnswer(question: AuqQuestion['question'], value: string) {
+    if (locked) return;
+    setCustomAnswers((prev) => ({ ...prev, [question]: value }));
+    if (value.trim()) {
+      const q = questions.find((item) => item.question === question);
+      setSelections((prev) => ({ ...prev, [question]: q?.multiSelect ? [] : '' }));
+    }
+  }
   async function handleSubmit() {
     if (locked || !ready) return;
     const lines = questions.map((q) => {
+      const custom = customAnswers[q.question]?.trim();
       const v = selections[q.question];
-      const answer = Array.isArray(v) ? v.map((s) => `- ${s}`).join('\n') : (v ?? '');
+      const answer = custom || (Array.isArray(v) ? v.map((s) => `- ${s}`).join('\n') : (v ?? ''));
       return `${q.question}\n${answer}`;
     });
     const formatted = lines.join('\n\n');
@@ -332,6 +368,7 @@ function AskUserQuestionCard({
       <div className="op-ask-question-body">
         {questions.map((q) => {
           const selected = effectiveSelections[q.question];
+          const customAnswer = effectiveCustomAnswers[q.question] ?? '';
           return (
             <div key={q.question} className="op-ask-question-field">
               {q.header ? (
@@ -342,7 +379,7 @@ function AskUserQuestionCard({
                 {q.options.map((opt) => {
                   const isOn = Array.isArray(selected)
                     ? selected.includes(opt.label)
-                    : selected === opt.label;
+                    : selected === opt.label && !customAnswer.trim();
                   return (
                     <button
                       key={opt.label}
@@ -360,6 +397,14 @@ function AskUserQuestionCard({
                   );
                 })}
               </div>
+              <input
+                className="op-ask-question-custom"
+                type="text"
+                value={customAnswer}
+                disabled={locked}
+                placeholder={t('tool.askQuestionCustomPlaceholder')}
+                onChange={(event) => setCustomAnswer(q.question, event.currentTarget.value)}
+              />
             </div>
           );
         })}
@@ -380,7 +425,19 @@ function AskUserQuestionCard({
   );
 }
 
-export function TodoCard({ input, runStreaming, runSucceeded, onDismiss }: { input: unknown; runStreaming: boolean; runSucceeded: boolean; onDismiss?: () => void }) {
+export function TodoCard({
+  input,
+  runStreaming,
+  runSucceeded,
+  onDismiss,
+  compactWhenLarge = false,
+}: {
+  input: unknown;
+  runStreaming: boolean;
+  runSucceeded: boolean;
+  onDismiss?: () => void;
+  compactWhenLarge?: boolean;
+}) {
   const t = useT();
   const todos = parseTodoWriteInput(input);
   // Mirror the pattern other agent UIs (Cursor, Codex) use: default the
@@ -390,7 +447,9 @@ export function TodoCard({ input, runStreaming, runSucceeded, onDismiss }: { inp
   // override sticks for the lifetime of this card.
   const hasInProgress = todos.some((todo) => todo.status === 'in_progress');
   const hasPending = todos.some((todo) => todo.status === 'pending' || todo.status === 'in_progress');
-  const defaultExpanded = todos.length > 0 && (hasInProgress || hasPending || runStreaming);
+  const defaultExpanded = todos.length > 0
+    && (hasInProgress || hasPending || runStreaming)
+    && !(compactWhenLarge && todos.length > 6);
   const [overrideExpanded, setOverrideExpanded] = useState<boolean | null>(null);
   const expanded = overrideExpanded ?? defaultExpanded;
   if (todos.length === 0) return <GenericCard name="TodoWrite" input={input} runStreaming={runStreaming} runSucceeded={runSucceeded} />;
@@ -585,8 +644,9 @@ function BashCard({ input, result, runStreaming, runSucceeded }: { input: unknow
         {desc ? <span className="op-meta op-desc">{desc}</span> : null}
         <ResultBadge result={result} runStreaming={runStreaming} runSucceeded={runSucceeded} />
         {result && result.content ? (
-          <button className="op-toggle" onClick={() => setOpen((o) => !o)}>
-            {open ? t('tool.hide') : t('tool.output')}
+          <button className="op-toggle" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+            <span>{open ? t('tool.hide') : t('tool.output')}</span>
+            <span className="op-toggle-chevron" aria-hidden>{open ? '▴' : '▾'}</span>
           </button>
         ) : null}
       </div>
@@ -697,7 +757,12 @@ function ResultBadge({ result, runStreaming, runSucceeded }: { result?: Props['r
   if (!result && runStreaming) return <span className="op-status op-status-running">{t('tool.running')}</span>;
   if (!result && !runSucceeded) return <span className="op-status op-status-error">{t('tool.error')}</span>;
   if (result?.isError) return <span className="op-status op-status-error">{t('tool.error')}</span>;
-  return <span className="op-status op-status-ok">{t('tool.done')}</span>;
+  return (
+    <span className="op-status op-status-ok">
+      <span aria-hidden>✓</span>
+      <span>{t('tool.done')}</span>
+    </span>
+  );
 }
 
 function describeInput(input: unknown): string {

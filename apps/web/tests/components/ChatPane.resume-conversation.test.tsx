@@ -5,7 +5,7 @@ import { forwardRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatPane } from '../../src/components/ChatPane';
-import type { Conversation, ProjectMetadata } from '../../src/types';
+import type { ChatMessage, Conversation, ProjectMetadata } from '../../src/types';
 
 vi.mock('../../src/i18n', () => ({
   useT: () => (key: string) => key,
@@ -25,6 +25,9 @@ const conversations: Conversation[] = [
   { id: 'conv-1', projectId: 'project-1', title: 'C1', createdAt: 1, updatedAt: 1 },
 ];
 const projectMetadata: ProjectMetadata = { kind: 'prototype' };
+const transcriptMessages: ChatMessage[] = [
+  { id: 'msg-1', role: 'user', content: 'Make a poster' },
+];
 
 function renderChatPane(
   props: Partial<Parameters<typeof ChatPane>[0]> = {},
@@ -51,43 +54,39 @@ function renderChatPane(
 }
 
 describe('ChatPane resume-conversation control', () => {
-  it('renders the resume button inside the header actions, next to new-conversation', () => {
-    // The control must sit in the same action cluster as "New conversation"
-    // so users discover it where they already manage conversations.
-    renderChatPane({ onResumeConversation: vi.fn() });
+  it('does not render the resume control in the chat header', () => {
+    // The old header control reused the reload icon, which reads as a broken
+    // chat refresh button. Keep the header action cluster free of that affordance.
+    renderChatPane({ messages: transcriptMessages, onResumeConversation: vi.fn() });
 
-    const resume = screen.getByTestId('resume-conversation');
     const newConv = screen.getByTestId('new-conversation');
-    expect(resume.closest('.chat-header-actions')).not.toBeNull();
-    expect(newConv.closest('.chat-header-actions')).toBe(
-      resume.closest('.chat-header-actions'),
-    );
+    expect(newConv.closest('.chat-header-actions')).not.toBeNull();
+    expect(screen.queryByTestId('resume-conversation')).toBeNull();
   });
 
   it('omits the resume button when no handler is wired', () => {
     // Without an onResumeConversation handler the feature is unavailable;
     // a dead button would read as broken.
-    renderChatPane({ onResumeConversation: undefined });
+    renderChatPane({ messages: transcriptMessages, onResumeConversation: undefined });
     expect(screen.queryByTestId('resume-conversation')).toBeNull();
   });
 
-  it('invokes onResumeConversation when clicked', () => {
-    const onResumeConversation = vi.fn();
-    renderChatPane({ onResumeConversation });
-
-    screen.getByTestId('resume-conversation').click();
-    expect(onResumeConversation).toHaveBeenCalledTimes(1);
+  it('omits the resume button when the current conversation has no transcript', () => {
+    // Empty conversations cannot be handed off; hiding the action avoids a
+    // permanently disabled refresh-looking control in the header.
+    renderChatPane({ messages: [], onResumeConversation: vi.fn() });
+    expect(screen.queryByTestId('resume-conversation')).toBeNull();
   });
 
-  it('disables the button — and ignores clicks — while resumeConversationDisabled is set', () => {
-    // Disabled covers mid-stream / empty-transcript: a click then must be
-    // a no-op, not a stray handoff request.
+  it('keeps the header clean while resumeConversationDisabled is set', () => {
     const onResumeConversation = vi.fn();
-    renderChatPane({ onResumeConversation, resumeConversationDisabled: true });
+    renderChatPane({
+      messages: transcriptMessages,
+      onResumeConversation,
+      resumeConversationDisabled: true,
+    });
 
-    const resume = screen.getByTestId('resume-conversation') as HTMLButtonElement;
-    expect(resume.disabled).toBe(true);
-    resume.click();
+    expect(screen.queryByTestId('resume-conversation')).toBeNull();
     expect(onResumeConversation).not.toHaveBeenCalled();
   });
 });

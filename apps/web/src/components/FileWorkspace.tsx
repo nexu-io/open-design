@@ -250,6 +250,7 @@ export function FileWorkspace({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const tabsBarRef = useRef<HTMLDivElement | null>(null);
   const draggedTabNameRef = useRef<string | null>(null);
+  const autoOpenedPrimaryRef = useRef<string | null>(null);
 
   const visibleFiles = useMemo(
     () => files.filter((file) => !isLiveArtifactImplementationPath(file.name)),
@@ -259,6 +260,10 @@ export function FileWorkspace({
   const liveArtifactEntries = useMemo(
     () => liveArtifacts.map(liveArtifactSummaryToWorkspaceEntry),
     [liveArtifacts],
+  );
+  const primaryFile = useMemo(
+    () => selectPrimaryProjectFile(visibleFiles),
+    [visibleFiles],
   );
 
   // Pull the persisted active tab in when the parent's hydration completes
@@ -305,6 +310,30 @@ export function FileWorkspace({
     setActiveTab(name);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openRequest]);
+
+  // Fresh generated design projects should land on the result, not on the
+  // project folder. Keep the Design Files tab as the drawer/management layer,
+  // but auto-open the best primary artifact the first time it appears.
+  useEffect(() => {
+    if (designSystemProject) return;
+    if (!primaryFile) return;
+    if (tabsState.active) return;
+    if (persistedTabs.length > 0) return;
+    if (activeTab !== DESIGN_FILES_TAB) return;
+    const marker = `${projectId}:${primaryFile.name}:${Math.round(primaryFile.mtime)}`;
+    if (autoOpenedPrimaryRef.current === marker) return;
+    autoOpenedPrimaryRef.current = marker;
+    onTabsStateChange({ tabs: [primaryFile.name], active: primaryFile.name });
+    setActiveTab(primaryFile.name);
+  }, [
+    activeTab,
+    designSystemProject,
+    onTabsStateChange,
+    persistedTabs.length,
+    primaryFile,
+    projectId,
+    tabsState.active,
+  ]);
 
   function openFile(name: string) {
     setUploadError(null);
@@ -829,7 +858,10 @@ export function FileWorkspace({
             aria-label={t('workspace.showChat')}
             onClick={() => onFocusModeChange(false)}
           >
-            <Icon name="chevron-right" size={15} />
+            <span className="panel-toggle-glyph" aria-hidden>
+              <Icon name="chevron-right" size={13} />
+              <Icon name="chevron-right" size={13} />
+            </span>
           </button>
         ) : null}
         <div
@@ -876,7 +908,12 @@ export function FileWorkspace({
             <span className="tab-icon" aria-hidden>
               <Icon name="grid" size={13} />
             </span>
-            <span className="ws-tab-label">{t('workspace.designFiles')}</span>
+            <span className="ws-tab-label">
+              {t('workspace.designFiles')}
+              {visibleFiles.length > 0 || liveArtifactEntries.length > 0
+                ? ` (${visibleFiles.length + liveArtifactEntries.length})`
+                : ''}
+            </span>
           </button>
           {tabNames.map((name) => {
             if (hideSingleFileTab) return null;
@@ -1640,6 +1677,71 @@ function designSystemGithubEvidenceState(
 
 function slugForTestId(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+export function selectPrimaryProjectFile(files: ProjectFile[]): ProjectFile | null {
+  const candidates = files
+    .filter((file) => !isProcessArtifactFile(file.name))
+    .map((file) => ({
+      file,
+      rank: primaryProjectFileRank(file),
+    }))
+    .filter((candidate) => Number.isFinite(candidate.rank));
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => a.rank - b.rank || b.file.mtime - a.file.mtime);
+  return candidates[0]?.file ?? null;
+}
+
+function isProcessArtifactFile(name: string): boolean {
+  const base = name.split('/').pop()?.toLowerCase() ?? name.toLowerCase();
+  return (
+    base === 'critique.json'
+    || base.endsWith('.log')
+    || base.endsWith('.meta.json')
+    || base.endsWith('.artifact.json')
+    || base.endsWith('.map')
+  );
+}
+
+function primaryProjectFileRank(file: ProjectFile): number {
+  if (manifestDeclaresPrimary(file)) return 0;
+  if (file.artifactManifest && file.artifactManifest.metadata?.inferred !== true) return 1;
+  if (file.kind === 'html') return 2;
+  if (file.kind === 'image') return 3;
+  if (file.kind === 'video') return 4;
+  if (file.kind === 'sketch') return 5;
+  if (file.kind === 'pdf') return 6;
+  if (file.kind === 'presentation') return 7;
+  if (file.kind === 'document') return 8;
+  if (file.kind === 'spreadsheet') return 9;
+  return Number.POSITIVE_INFINITY;
+}
+
+function manifestDeclaresPrimary(file: ProjectFile): boolean {
+  const manifest = file.artifactManifest;
+  if (!manifest) return false;
+  if (primaryValueTargetsFile(manifest.primary, file.name)) return true;
+  const metadata = manifest.metadata;
+  if (!metadata || typeof metadata !== 'object') return false;
+  if (primaryValueTargetsFile(metadata.primary, file.name)) return true;
+  const outputs = metadata.outputs;
+  if (outputs && typeof outputs === 'object' && !Array.isArray(outputs)) {
+    return primaryValueTargetsFile(
+      (outputs as { primary?: unknown }).primary,
+      file.name,
+    );
+  }
+  return false;
+}
+
+function primaryValueTargetsFile(value: unknown, fileName: string): boolean {
+  if (value === true) return true;
+  if (typeof value !== 'string') return false;
+  return normalizeProjectFileName(value) === normalizeProjectFileName(fileName);
+}
+
+function normalizeProjectFileName(value: string): string {
+  return value.replace(/\\/g, '/').replace(/^\.?\//, '').toLowerCase();
 }
 
 function designSystemSectionPreviewFile(

@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest';
+// @vitest-environment jsdom
+
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { renderMarkdown } from '../../src/runtime/markdown';
 
@@ -7,6 +10,30 @@ function html(input: string): string {
 }
 
 describe('renderMarkdown', () => {
+  let writeTextMock: ReturnType<typeof vi.fn>;
+  let originalClipboard: PropertyDescriptor | undefined;
+
+  beforeEach(() => {
+    originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    writeTextMock = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText: writeTextMock,
+      },
+    });
+  });
+
+  afterEach(() => {
+    if (originalClipboard) {
+      Object.defineProperty(navigator, 'clipboard', originalClipboard);
+    } else {
+      delete (navigator as { clipboard?: Clipboard }).clipboard;
+    }
+    cleanup();
+    vi.clearAllMocks();
+  });
+
   it('autolinks bare https URLs without breaking on underscores in query params', () => {
     // OAuth-style URL with underscores in `response_type`, `client_id`,
     // `code_challenge`, `code_challenge_method`. The previous renderer
@@ -44,6 +71,28 @@ describe('renderMarkdown', () => {
     const out = html('Use `https://example.com/x` literally.');
     // The URL should appear inside a <code> tag, not turned into an anchor.
     expect(out).toContain('<code class="md-inline-code">https://example.com/x</code>');
+  });
+
+  it('adds copy controls to fenced code blocks', () => {
+    const out = html('```tsx\nexport const ok = true;\n```');
+    expect(out).toContain('class="md-code-block"');
+    expect(out).toContain('class="md-code-actions"');
+    expect(out).toContain('class="md-code-action"');
+    expect(out).toContain('>Copy</button>');
+    expect(out).toContain('export const ok = true;');
+  });
+
+  it('copies fenced code block contents', async () => {
+    render(<>{renderMarkdown('```css\n.card { color: red; }\n```')}</>);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
+
+    await waitFor(() => {
+      expect(writeTextMock).toHaveBeenCalledWith('.card { color: red; }');
+    });
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Copied!' })).toBeTruthy();
+    });
   });
 
   it('renders a GFM pipe table with header, body, and alignment', () => {

@@ -119,7 +119,7 @@ describe('todo event helpers', () => {
     ]);
   });
 
-  it('marks the active todo as stopped when a failed run ended without a final TodoWrite', () => {
+  it('omits pinned todo input when a terminal failed run still has unfinished work', () => {
     const input = latestTodoWriteInputForPinnedCard([
       {
         id: 'assistant-1',
@@ -143,14 +143,10 @@ describe('todo event helpers', () => {
       },
     ]);
 
-    expect(parseTodoWriteInput(input)).toEqual([
-      { content: 'Draft layout', status: 'completed', activeForm: undefined },
-      { content: 'Build components', status: 'stopped', activeForm: 'Building components' },
-      { content: 'Run QA', status: 'pending', activeForm: undefined },
-    ]);
+    expect(input).toBeNull();
   });
 
-  it('marks the active todo as stopped when a nominally successful run ended with stale progress', () => {
+  it('omits pinned todo input when a nominally successful run ended with stale progress', () => {
     const input = latestTodoWriteInputForPinnedCard([
       {
         runStatus: 'succeeded',
@@ -171,9 +167,33 @@ describe('todo event helpers', () => {
       },
     ]);
 
+    expect(input).toBeNull();
+  });
+
+  it('keeps completed terminal todo input available for dismissal', () => {
+    const input = latestTodoWriteInputForPinnedCard([
+      {
+        runStatus: 'succeeded',
+        endedAt: 3_000,
+        events: [
+          {
+            kind: 'tool_use',
+            id: 'todo-1',
+            name: 'TodoWrite',
+            input: {
+              todos: [
+                { content: 'Generate HTML', status: 'completed' },
+                { content: 'Self-check', status: 'completed' },
+              ],
+            },
+          },
+        ],
+      },
+    ]);
+
     expect(parseTodoWriteInput(input)).toEqual([
-      { content: 'Generate HTML', status: 'stopped', activeForm: undefined },
-      { content: 'Self-check', status: 'pending', activeForm: undefined },
+      { content: 'Generate HTML', status: 'completed', activeForm: undefined },
+      { content: 'Self-check', status: 'completed', activeForm: undefined },
     ]);
   });
 });

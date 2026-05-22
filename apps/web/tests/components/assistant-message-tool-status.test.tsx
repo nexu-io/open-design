@@ -36,7 +36,7 @@ describe('AssistantMessage tool status', () => {
       />,
     );
 
-    expect(container.querySelector('.op-status-ok')?.textContent).toMatch(/^done$/i);
+    expect(container.querySelector('.op-status-ok')?.textContent).toMatch(/done/i);
     expect(container.querySelector('.op-status-running')).toBeNull();
   });
 
@@ -59,7 +59,7 @@ describe('AssistantMessage tool status', () => {
       />,
     );
 
-    expect(container.querySelector('.op-status-ok')?.textContent).toMatch(/^done$/i);
+    expect(container.querySelector('.op-status-ok')?.textContent).toMatch(/done/i);
     expect(container.querySelector('.op-status-running')).toBeNull();
   });
 

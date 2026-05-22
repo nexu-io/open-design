@@ -124,6 +124,10 @@ export function parseArtifactManifest(raw: string): ArtifactManifest | null {
         ? (parsed.status as ArtifactStatus)
         : 'complete',
       exports: parsed.exports as ArtifactExportKind[],
+      primary:
+        typeof parsed.primary === 'string' || typeof parsed.primary === 'boolean'
+          ? parsed.primary
+          : undefined,
       supportingFiles: Array.isArray(parsed.supportingFiles)
         ? parsed.supportingFiles.filter((x): x is string => typeof x === 'string')
         : undefined,

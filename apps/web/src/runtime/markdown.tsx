@@ -11,7 +11,9 @@
  * Output is a React fragment of typed elements — no dangerouslySetInnerHTML,
  * so untrusted text can't smuggle markup through.
  */
-import { Fragment, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useT } from '../i18n';
+import { copyToClipboard } from '../lib/copy-to-clipboard';
 
 export function renderMarkdown(input: string): ReactNode {
   const blocks = parseBlocks(input);
@@ -222,9 +224,11 @@ function renderBlock(block: Block, key: number): ReactNode {
   }
   if (block.kind === 'code') {
     return (
-      <pre key={key} className="md-code">
-        <code data-lang={block.lang ?? undefined}>{block.body}</code>
-      </pre>
+      <MarkdownCodeBlock
+        key={key}
+        body={block.body}
+        lang={block.lang}
+      />
     );
   }
   if (block.kind === 'table') {
@@ -260,6 +264,47 @@ function renderBlock(block: Block, key: number): ReactNode {
     return <hr key={key} className="md-hr" />;
   }
   return null;
+}
+
+function MarkdownCodeBlock({ body, lang }: { body: string; lang: string | null }) {
+  const t = useT();
+  const [copied, setCopied] = useState(false);
+  const resetTimerRef = useRef<number | null>(null);
+  const copyLabel = copied ? t('fileViewer.copied') : t('fileViewer.copy');
+
+  useEffect(() => () => {
+    if (resetTimerRef.current != null) window.clearTimeout(resetTimerRef.current);
+  }, []);
+
+  async function handleCopy() {
+    const ok = await copyToClipboard(body);
+    if (!ok) return;
+    setCopied(true);
+    if (resetTimerRef.current != null) window.clearTimeout(resetTimerRef.current);
+    resetTimerRef.current = window.setTimeout(() => {
+      setCopied(false);
+      resetTimerRef.current = null;
+    }, 1600);
+  }
+
+  return (
+    <div className="md-code-block">
+      <div className="md-code-actions">
+        <button
+          type="button"
+          className="md-code-action"
+          onClick={() => { void handleCopy(); }}
+          aria-label={copyLabel}
+          title={copyLabel}
+        >
+          {copyLabel}
+        </button>
+      </div>
+      <pre className="md-code">
+        <code data-lang={lang ?? undefined}>{body}</code>
+      </pre>
+    </div>
+  );
 }
 
 // Allowed schemes / forms for image `src` attributes. The BYOK chat

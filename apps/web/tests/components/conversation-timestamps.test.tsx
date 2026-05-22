@@ -13,12 +13,15 @@ if (typeof HTMLElement.prototype.scrollTo !== 'function') {
   };
 }
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ChatPane, conversationMetaLabel, isAssistantMessageStreaming } from '../../src/components/ChatPane';
 import type { ChatMessage, Conversation } from '../../src/types';
 
-function renderChatPane(messages: ChatMessage[]) {
+function renderChatPane(
+  messages: ChatMessage[],
+  props: Partial<Parameters<typeof ChatPane>[0]> = {},
+) {
   return render(
     <ChatPane
       messages={messages}
@@ -33,6 +36,7 @@ function renderChatPane(messages: ChatMessage[]) {
       activeConversationId={null}
       onSelectConversation={() => {}}
       onDeleteConversation={() => {}}
+      {...props}
     />,
   );
 }
@@ -88,6 +92,55 @@ describe('conversation timestamps', () => {
     ]);
 
     expect(screen.getAllByRole('separator')).toHaveLength(2);
+  });
+
+  it('lets a user message enter edit and resend mode', () => {
+    const onEditUserMessage = vi.fn();
+    const message: ChatMessage = {
+      id: 'user-1',
+      role: 'user',
+      content: 'Make a poster',
+      createdAt: Date.parse('2025-01-15T12:00:00Z'),
+    };
+    renderChatPane([message], { onEditUserMessage });
+
+    expect(screen.queryByRole('button', { name: 'Copy prompt' })).toBeNull();
+
+    fireEvent.click(screen.getByText('Make a poster'));
+    const input = screen.getByDisplayValue('Make a poster');
+    fireEvent.change(input, { target: { value: 'Make a launch poster' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save and resend' }));
+
+    expect(onEditUserMessage).toHaveBeenCalledWith(message, 'Make a launch poster');
+  });
+
+  it('lets the latest assistant message regenerate', () => {
+    const onRegenerateAssistantMessage = vi.fn();
+    const assistant: ChatMessage = {
+      id: 'assistant-1',
+      role: 'assistant',
+      content: 'Try another answer',
+      createdAt: Date.parse('2025-01-15T12:01:00Z'),
+      startedAt: Date.parse('2025-01-15T12:01:00Z'),
+      endedAt: Date.parse('2025-01-15T12:01:05Z'),
+      runStatus: 'failed',
+    };
+    renderChatPane(
+      [
+        {
+          id: 'user-1',
+          role: 'user',
+          content: 'Make a poster',
+          createdAt: Date.parse('2025-01-15T12:00:00Z'),
+        },
+        assistant,
+      ],
+      { onRegenerateAssistantMessage },
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Regenerate' }));
+
+    expect(onRegenerateAssistantMessage).toHaveBeenCalledWith(assistant);
   });
 
   it('does not treat a completed last assistant message as streaming just because another conversation is running', () => {

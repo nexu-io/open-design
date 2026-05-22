@@ -78,6 +78,7 @@ interface Props {
   // to AssistantMessage; ProjectView wires it into onSend.
   onSubmitForm?: (text: string) => void;
   onContinueRemainingTasks?: (todos: TodoItem[]) => void;
+  onRegenerate?: () => void;
   onFeedback?: (change: ChatMessageFeedbackChange) => void;
   suppressDirectionForms?: boolean;
 }
@@ -105,6 +106,7 @@ export function AssistantMessage({
   nextUserContent,
   onSubmitForm,
   onContinueRemainingTasks,
+  onRegenerate,
   onFeedback,
   suppressDirectionForms = false,
 }: Props) {
@@ -146,6 +148,21 @@ export function AssistantMessage({
     !!isLast &&
     unfinishedTodos.length > 0 &&
     !!onContinueRemainingTasks;
+  const canRegenerate =
+    !streaming &&
+    !!isLast &&
+    !!onRegenerate;
+  const regenerateControl = canRegenerate ? (
+    <button
+      type="button"
+      className="assistant-footer-action"
+      onClick={onRegenerate}
+      aria-label={t("chat.regenerate")}
+      title={t("chat.regenerate")}
+    >
+      <Icon name="reload" size={13} />
+    </button>
+  ) : null;
   const showFeedback =
     !!onFeedback &&
     isFeedbackEligible({
@@ -162,7 +179,8 @@ export function AssistantMessage({
     !!message.endedAt ||
     !!usage ||
     unfinishedTodos.length > 0 ||
-    hasEmptyResponse;
+    hasEmptyResponse ||
+    canRegenerate;
   // Track which forms the user submitted in this session so we lock them
   // immediately on click (without waiting for the parent to re-render).
   const [locallySubmitted, setLocallySubmitted] = useState<Set<string>>(
@@ -262,13 +280,6 @@ export function AssistantMessage({
             onRequestPluginFolderAgentAction={onRequestPluginFolderAgentAction}
           />
         ) : null}
-        {!streaming && unfinishedTodos.length > 0 ? (
-          <UnfinishedTodosPanel
-            todos={unfinishedTodos}
-            canContinue={canContinueTodos}
-            onContinue={() => onContinueRemainingTasks?.(unfinishedTodos)}
-          />
-        ) : null}
         {showCompletionRow ? (
           <div className="assistant-completion-row">
             {showFeedback ? (
@@ -289,6 +300,7 @@ export function AssistantMessage({
                   usage,
                   hasUnfinishedTodos: unfinishedTodos.length > 0,
                   hasEmptyResponse,
+                  actionControls: regenerateControl,
                   forceVisible: true,
                 }}
               />
@@ -301,9 +313,17 @@ export function AssistantMessage({
                 usage={usage}
                 hasUnfinishedTodos={unfinishedTodos.length > 0}
                 hasEmptyResponse={hasEmptyResponse}
+                actionControls={regenerateControl}
               />
             )}
           </div>
+        ) : null}
+        {!streaming && unfinishedTodos.length > 0 ? (
+          <UnfinishedTodosPanel
+            todos={unfinishedTodos}
+            canContinue={canContinueTodos}
+            onContinue={() => onContinueRemainingTasks?.(unfinishedTodos)}
+          />
         ) : null}
       </div>
     </div>
@@ -429,6 +449,7 @@ interface AssistantFooterProps {
   hasUnfinishedTodos: boolean;
   hasEmptyResponse: boolean;
   feedbackControls?: ReactNode;
+  actionControls?: ReactNode;
   forceVisible?: boolean;
 }
 
@@ -441,6 +462,7 @@ function AssistantFooter({
   hasUnfinishedTodos,
   hasEmptyResponse,
   feedbackControls,
+  actionControls,
   forceVisible = false,
 }: AssistantFooterProps) {
   const t = useT();
@@ -460,7 +482,8 @@ function AssistantFooter({
     !elapsed &&
     !usage &&
     !hasUnfinishedTodos &&
-    !hasEmptyResponse
+    !hasEmptyResponse &&
+    !actionControls
   )
     return null;
   return (
@@ -493,6 +516,9 @@ function AssistantFooter({
           : ""}
       </span>
       {feedbackControls}
+      {actionControls ? (
+        <span className="assistant-footer-actions">{actionControls}</span>
+      ) : null}
     </div>
   );
 }
@@ -854,7 +880,8 @@ function UnfinishedTodosPanel({
   onContinue: () => void;
 }) {
   const t = useT();
-  const visible = todos.slice(0, 3);
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? todos : todos.slice(0, 3);
   const hiddenCount = todos.length - visible.length;
   return (
     <div className="unfinished-todos">
@@ -881,10 +908,17 @@ function UnfinishedTodosPanel({
           </li>
         ))}
       </ul>
-      {hiddenCount > 0 ? (
-        <div className="unfinished-todos-more">
-          {t("assistant.unfinishedMore", { n: hiddenCount })}
-        </div>
+      {todos.length > 3 ? (
+        <button
+          type="button"
+          className="unfinished-todos-more"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          {expanded
+            ? t("assistant.unfinishedLess")
+            : t("assistant.unfinishedMore", { n: hiddenCount })}
+        </button>
       ) : null}
     </div>
   );
@@ -1407,12 +1441,28 @@ function StatusPill({
   label: string;
   detail?: string | undefined;
 }) {
+  const t = useT();
+  const status = displayStatusPill(label, t);
   return (
-    <div className="status-pill">
-      <span className="status-label">{label}</span>
+    <div className="status-pill" data-tone={status.tone}>
+      <span className="status-label">{status.label}</span>
       {detail ? <span className="status-detail">{detail}</span> : null}
     </div>
   );
+}
+
+function displayStatusPill(label: string, t: TranslateFn): { label: string; tone: "default" | "error" } {
+  if (label === "agent_error" || label === "error" || label === "failed") {
+    return { label: t("notify.failureTitle"), tone: "error" };
+  }
+  return { label: humanizeStatusLabel(label), tone: "default" };
+}
+
+function humanizeStatusLabel(label: string): string {
+  return label
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 interface ToolItem {
