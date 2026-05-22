@@ -53,7 +53,7 @@ Key Characteristics:
 |------|-----|-----|------|
 | Black | `#000000` | 0, 0, 0 | Primary text |
 | Ship Cove | `#6E6E8E` | 110, 110, 142 | Secondary/muted text |
-| Mauve | `#D0AEFE` | 208, 174, 254 | Accent text, links |
+| Mauve | `#D0AEFE` | 208, 174, 254 | Accent text on dark surfaces |
 | White | `#FFFFFF` | 255, 255, 255 | Text on dark surfaces |
 
 ### Tag Color Themes
@@ -93,7 +93,7 @@ Each tag uses a light background paired with an accent color for text/badge:
 | H3 | Medium (500) | 18px | 100% | 0 |
 | H4 | Medium (500) | 16px | 100% | -0.22px |
 | H5 | Regular (400) | 14px | 100% | 0 |
-| H6 | Medium (500) | 10px | 100% | 0 |
+| H6 | Medium (500) | 10px | 100% | 0.05em |
 | P1 (Body) | Regular (400) | 16px | 100% | 0 |
 | P2 (Body Small) | Medium (500) | 14px | 110% | 0 |
 | P3 (Caption) | Regular (400) | 12px | 100% | 0 |
@@ -103,6 +103,7 @@ Each tag uses a light background paired with an accent color for text/badge:
 ### Typography Notes
 - H2 uses negative letter-spacing (-1px) for tighter display headings
 - H4 uses slight negative letter-spacing (-0.22px)
+- H6 is set in uppercase with positive tracking (0.05em) as a micro-label style
 - P2 is the only style with expanded line height (110%)
 - All other styles maintain 100% line height for compact UI density
 - Font weights limited to Regular (400) and Medium (500) — no Bold usage
