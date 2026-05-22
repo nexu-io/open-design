@@ -2605,9 +2605,17 @@ export const en: Dict = {
   'updater.readyVersion': 'Open Design {version} is ready. Open Design will close and open the installer.',
   'updater.upToDate': "You're already on the latest version.",
   'settings.memoryModelInlineLabel': 'Memory model',
-  'settings.memoryModelInlineSameAsChat': 'Same as chat',
-  'settings.memoryModelInlineSameAsChatWithModel': 'Same as chat ({model})',
-  'settings.memoryModelInlineSameAsChatWithProvider': 'Same as chat ({provider})',
+  // "Auto" here is the no-override sentinel — the daemon auto-picks a
+  // cheap fast model for the chat protocol (e.g. openai-gpt-54-mini for
+  // venice, claude-haiku-4-5 for anthropic). The previous wording "Same
+  // as chat" was misleading because the chat model itself is NOT what
+  // gets used — memory always falls back to the cheaper per-protocol
+  // default. The translation-key names still carry the old "SameAsChat"
+  // slug for now to keep the diff against upstream small; only the
+  // user-facing values changed in this commit.
+  'settings.memoryModelInlineSameAsChat': 'Auto',
+  'settings.memoryModelInlineSameAsChatWithModel': 'Auto \u00b7 {model}',
+  'settings.memoryModelInlineSameAsChatWithProvider': 'Auto \u00b7 {provider}',
   'settings.memoryModelInlineHintCli': 'Optional. Uses the selected Local CLI when supported; choose a model only to override the default.',
   'settings.memoryModelInlineHintCliConstrained': 'Optional. Uses the selected Local CLI when supported; {provider} is only the fallback provider family.',
   'settings.memoryModelInlineHintByok': 'Optional. Reuses your chat API key — pick a cheaper model to save cost.',
