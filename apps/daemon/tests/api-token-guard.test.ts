@@ -13,8 +13,9 @@
 // negative case that constructs the start call directly).
 
 import type http from 'node:http';
+import os from 'node:os';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { startServer } from '../src/server.js';
+import { isOpenApiProbePath, startServer } from '../src/server.js';
 
 const PREVIOUS_TOKEN = process.env.OD_API_TOKEN;
 const PREVIOUS_HOST  = process.env.OD_BIND_HOST;
@@ -82,5 +83,59 @@ describe('bearer middleware', () => {
       const resp = await fetch(`${baseUrl}${path}`);
       expect(resp.status).toBe(200);
     }
+  });
+
+});
+
+// Deterministic unit tests for the probe-path helper — always run regardless
+// of what network interfaces the machine has.
+describe('isOpenApiProbePath', () => {
+  it('accepts the three stripped probe paths', () => {
+    expect(isOpenApiProbePath('/health')).toBe(true);
+    expect(isOpenApiProbePath('/version')).toBe(true);
+    expect(isOpenApiProbePath('/daemon/status')).toBe(true);
+  });
+
+  it('rejects /api/-prefixed paths (regression: set used /api/health before fix)', () => {
+    expect(isOpenApiProbePath('/api/health')).toBe(false);
+    expect(isOpenApiProbePath('/api/version')).toBe(false);
+    expect(isOpenApiProbePath('/api/daemon/status')).toBe(false);
+  });
+
+  it('rejects other api paths', () => {
+    expect(isOpenApiProbePath('/agents')).toBe(false);
+    expect(isOpenApiProbePath('/plugins')).toBe(false);
+    expect(isOpenApiProbePath('')).toBe(false);
+  });
+});
+
+// Integration test: connect via a real non-loopback IP so the loopback
+// short-circuit is skipped and isOpenApiProbePath is the only bypass.
+// Skipped explicitly when the machine has no external IPv4 interface.
+const nonLoopbackIp = (Object.values(os.networkInterfaces()) as os.NetworkInterfaceInfo[][])
+  .flat()
+  .find((a) => a && !a.internal && a.family === 'IPv4')?.address ?? null;
+
+describe.skipIf(!nonLoopbackIp)('bearer middleware — non-loopback probe path bypass', () => {
+  beforeEach(async () => {
+    process.env.OD_API_TOKEN = 'secret-test-token';
+    const started = (await startServer({ port: 0, host: '0.0.0.0', returnServer: true })) as {
+      url: string; server: http.Server; shutdown?: () => Promise<void> | void;
+    };
+    server = started.server;
+    shutdown = started.shutdown;
+    baseUrl = `http://${nonLoopbackIp}:${(server.address() as { port: number }).port}`;
+  });
+
+  it('probe paths return 200 without a bearer (non-loopback connection)', async () => {
+    for (const path of ['/api/health', '/api/version', '/api/daemon/status']) {
+      const resp = await fetch(`${baseUrl}${path}`);
+      expect(resp.status).toBe(200);
+    }
+  });
+
+  it('non-probe paths return 401 without a bearer (non-loopback connection)', async () => {
+    const resp = await fetch(`${baseUrl}/api/agents`);
+    expect(resp.status).toBe(401);
   });
 });
