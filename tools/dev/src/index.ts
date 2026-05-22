@@ -64,7 +64,7 @@ import {
   waitForWebRuntime,
 } from "./sidecar-client.js";
 import { ensureDaemonGateForDesktop } from "./desktop-auth-gate.js";
-import { ensureSharedPortsResolved } from "./shared-ports.js";
+import { resolveSharedPortsFromRunningState } from "./shared-ports.js";
 
 type CliOptions = ToolDevOptions & {
   expr?: string;
@@ -879,13 +879,10 @@ async function status(config: ToolDevConfig, appName: string | undefined) {
 async function restartTargets(config: ToolDevConfig, appName: string | undefined, options: CliOptions) {
   const stopTargets = resolveStopApps(appName);
   const startTargets = resolveStartApps(appName);
-  const existingDaemon = startTargets.includes(APP_KEYS.DAEMON)
-    ? await inspectDaemonRuntime(runtimeLookup(config))
-    : null;
-  const existingWeb = startTargets.includes(APP_KEYS.WEB)
-    ? await inspectWebRuntime(runtimeLookup(config))
-    : null;
-  await ensureSharedPortsResolved(startTargets, options, existingWeb?.url, existingDaemon?.url);
+  await resolveSharedPortsFromRunningState(startTargets, options, {
+    daemonUrl: async () => (await inspectDaemonRuntime(runtimeLookup(config)))?.url,
+    webUrl: async () => (await inspectWebRuntime(runtimeLookup(config)))?.url,
+  });
   return {
     stop: await runSequential(stopTargets, (target) => stopApp(config, target)),
     start: await runSequential(startTargets, (target) => startApp(config, target, options, { targets: startTargets })),
@@ -1042,13 +1039,10 @@ function stopOrderFor(targets: readonly ToolDevAppName[]): ToolDevAppName[] {
 async function runForeground(config: ToolDevConfig, appName: string | undefined, options: CliOptions) {
   const targets = resolveRunApps(appName);
   const foregroundOptions = { ...options, parentPid: process.pid };
-  const existingDaemon = targets.includes(APP_KEYS.DAEMON)
-    ? await inspectDaemonRuntime(runtimeLookup(config))
-    : null;
-  const existingWeb = targets.includes(APP_KEYS.WEB)
-    ? await inspectWebRuntime(runtimeLookup(config))
-    : null;
-  await ensureSharedPortsResolved(targets, foregroundOptions, existingWeb?.url, existingDaemon?.url);
+  await resolveSharedPortsFromRunningState(targets, foregroundOptions, {
+    daemonUrl: async () => (await inspectDaemonRuntime(runtimeLookup(config)))?.url,
+    webUrl: async () => (await inspectWebRuntime(runtimeLookup(config)))?.url,
+  });
   const started = await runSequential(targets, (target) => startApp(config, target, foregroundOptions, { targets }));
   printRunForegroundResult(started, options);
 
@@ -1095,13 +1089,10 @@ addPortOptions(addSharedOptions(cli.command("start [app]", "Start daemon, web, d
     assertSupportedNodeRuntimeForStart();
     const config = resolveToolDevConfig(options);
     const targets = resolveStartApps(appName);
-    const existingDaemon = targets.includes(APP_KEYS.DAEMON)
-      ? await inspectDaemonRuntime(runtimeLookup(config))
-      : null;
-    const existingWeb = targets.includes(APP_KEYS.WEB)
-      ? await inspectWebRuntime(runtimeLookup(config))
-      : null;
-    await ensureSharedPortsResolved(targets, options, existingWeb?.url, existingDaemon?.url);
+    await resolveSharedPortsFromRunningState(targets, options, {
+      daemonUrl: async () => (await inspectDaemonRuntime(runtimeLookup(config)))?.url,
+      webUrl: async () => (await inspectWebRuntime(runtimeLookup(config)))?.url,
+    });
     const result = await runSequential(targets, (target) => startApp(config, target, options, { targets }));
     printStartResult(result, options);
   },

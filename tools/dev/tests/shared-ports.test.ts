@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 
 import { APP_KEYS } from "@open-design/sidecar-proto";
 
-import { ensureSharedPortsResolved } from "../src/shared-ports.js";
+import { ensureSharedPortsResolved, resolveSharedPortsFromRunningState } from "../src/shared-ports.js";
 
 describe("tools-dev shared ports", () => {
   it("does nothing when web is not starting", async () => {
@@ -76,7 +76,7 @@ describe("tools-dev shared ports", () => {
     assert.equal(options.webPort, "4123");
   });
 
-  it("does not force a daemon port when reusing a running daemon", async () => {
+  it("preserves a running daemon port when reusing a running daemon", async () => {
     const options: { daemonPort?: string; webPort?: string } = {};
 
     await ensureSharedPortsResolved(
@@ -86,7 +86,29 @@ describe("tools-dev shared ports", () => {
       "http://127.0.0.1:5123",
     );
 
-    assert.equal(options.daemonPort, undefined);
+    assert.equal(options.daemonPort, "5123");
     assert.match(options.webPort ?? "", /^\d+$/);
+    assert.notEqual(options.webPort, options.daemonPort);
+  });
+
+  it("looks up the running daemon before resolving split start web ports", async () => {
+    const options: { daemonPort?: string; webPort?: string } = {};
+    const calls: string[] = [];
+
+    await resolveSharedPortsFromRunningState([APP_KEYS.WEB, APP_KEYS.DAEMON], options, {
+      daemonUrl: async () => {
+        calls.push("daemon");
+        return "http://127.0.0.1:6123";
+      },
+      webUrl: async () => {
+        calls.push("web");
+        return null;
+      },
+    });
+
+    assert.deepEqual(calls, ["daemon", "web"]);
+    assert.equal(options.daemonPort, "6123");
+    assert.match(options.webPort ?? "", /^\d+$/);
+    assert.notEqual(options.webPort, options.daemonPort);
   });
 });
