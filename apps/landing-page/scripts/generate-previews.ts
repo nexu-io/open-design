@@ -149,17 +149,19 @@ async function hashExtraDependencyRoots(
   directoryHashes: Map<string, string>,
 ): Promise<string> {
   const extraRoots = new Set<string>();
-  const source = await readFile(job.htmlPath, 'utf8');
-  const baseDir = path.dirname(job.htmlPath);
+  if (existsSync(job.htmlPath)) {
+    const source = await readFile(job.htmlPath, 'utf8');
+    const baseDir = path.dirname(job.htmlPath);
 
-  for (const specifier of relativeAssetPaths(source)) {
-    const resolvedPath = path.resolve(baseDir, specifier);
-    if (isWithinRoot(job.sourceRoot, resolvedPath) || !existsSync(resolvedPath)) {
-      continue;
+    for (const specifier of relativeAssetPaths(source)) {
+      const resolvedPath = path.resolve(baseDir, specifier);
+      if (isWithinRoot(job.sourceRoot, resolvedPath) || !existsSync(resolvedPath)) {
+        continue;
+      }
+
+      const stats = await stat(resolvedPath);
+      extraRoots.add(stats.isDirectory() ? resolvedPath : path.dirname(resolvedPath));
     }
-
-    const stats = await stat(resolvedPath);
-    extraRoots.add(stats.isDirectory() ? resolvedPath : path.dirname(resolvedPath));
   }
 
   if (job.reuseFrom && !isWithinRoot(job.sourceRoot, job.reuseFrom) && existsSync(job.reuseFrom)) {
