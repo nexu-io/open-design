@@ -1794,6 +1794,75 @@ describe('API proxy routes', () => {
       expect(upstream).toBeDefined();
       expect((upstream![1] as FetchInit)?.redirect).toBe('error');
     });
+
+    // Regression test for an early version of the PR that updated the
+    // BYOK proxy routes but missed the protocol enum in /api/provider/models
+    // and /api/test/connection. Without this guard a Settings → BYOK →
+    // Venice tab fired the connection-test smoke and would 400 with
+    // "protocol must be one of anthropic|openai|azure|google|ollama|senseaudio",
+    // leaving the model dropdown empty and the test result red even though
+    // the chat proxy itself worked.
+    it('accepts protocol=venice in /api/provider/models and /api/test/connection', async () => {
+      const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+        const url = String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        // For /v1/models the daemon hits the upstream once; respond
+        // with the documented OpenAI-compatible envelope so the
+        // extractor turns it into ProviderModelOption[].
+        if (url.endsWith('/v1/models')) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ data: [{ id: 'gpt-5' }, { id: 'qwen3-coder-480b' }] }), {
+              status: 200,
+              headers: { 'content-type': 'application/json' },
+            }),
+          );
+        }
+        // For /v1/chat/completions the connection test posts one short
+        // completion and reads the response; return the minimal OpenAI
+        // success body the validator accepts.
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              id: 'cmpl-test',
+              model: 'gpt-5',
+              choices: [{ finish_reason: 'stop', message: { content: 'ok' } }],
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          ),
+        );
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const models = await realFetch(`${baseUrl}/api/provider/models`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          protocol: 'venice',
+          baseUrl: 'https://api.venice.ai/api/v1',
+          apiKey: 'venice-test',
+        }),
+      });
+      expect(models.status).toBe(200);
+      const modelsBody = (await models.json()) as { ok: boolean; models: Array<{ id: string }> };
+      expect(modelsBody.ok).toBe(true);
+      expect(modelsBody.models.map((m) => m.id)).toContain('gpt-5');
+
+      const test = await realFetch(`${baseUrl}/api/test/connection`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'provider',
+          protocol: 'venice',
+          baseUrl: 'https://api.venice.ai/api/v1',
+          apiKey: 'venice-test',
+          model: 'gpt-5',
+        }),
+      });
+      expect(test.status).toBe(200);
+      const testBody = (await test.json()) as { ok: boolean; kind: string };
+      expect(testBody.ok).toBe(true);
+      expect(testBody.kind).toBe('success');
+    });
   });
 });
 
