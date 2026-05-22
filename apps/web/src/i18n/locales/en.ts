@@ -2611,7 +2611,7 @@ export const en: Dict = {
   'settings.memoryModelInlineHintCli': 'Optional. Uses the selected Local CLI when supported; choose a model only to override the default.',
   'settings.memoryModelInlineHintCliConstrained': 'Optional. Uses the selected Local CLI when supported; {provider} is only the fallback provider family.',
   'settings.memoryModelInlineHintByok': 'Optional. Reuses your chat API key — pick a cheaper model to save cost.',
-  'settings.memoryModelInlineHintByokNeutral': 'Memory uses a separate model from chat. Defaults to your chat model.',
+  'settings.memoryModelInlineHintByokNeutral': 'Memory uses a separate, cheaper model than chat — auto-picks a fast model for the chat protocol so a per-turn extraction call doesn\u2019t cost what your chat model costs. Pick a model to override.',
   'settings.memoryModelInlineFlashSaved': 'Saved',
   'settings.memoryModelInlineFlashCleared': 'Cleared',
   // Diagnostics export

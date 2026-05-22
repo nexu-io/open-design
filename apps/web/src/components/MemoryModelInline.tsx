@@ -42,6 +42,7 @@ import type {
 } from '@open-design/contracts';
 import type { ApiProtocol, ExecMode } from '../types';
 import {
+  FAST_MODEL_BY_PROTOCOL,
   SUGGESTED_MODELS_BY_PROTOCOL,
 } from '../state/apiProtocols';
 import { CUSTOM_MODEL_SENTINEL } from './modelOptions';
@@ -431,14 +432,21 @@ export function MemoryModelInline({
                 model: sameAsChatCliLabel,
               })
             : effectiveChatProtocol
-            ? t('settings.memoryModelInlineSameAsChatWithProvider', {
-                provider: effectiveChatProtocol,
-              })
-            : chatModel
+              // Show the actual fast-model the daemon will use (e.g.
+              // "Same as chat (openai-gpt-54-mini)" for venice protocol,
+              // "Same as chat (claude-haiku-4-5)" for anthropic). The
+              // bare-protocol fallback ("Same as chat (venice)") was
+              // misleading — users reasonably assumed it meant the same
+              // *model* as chat, when actually the daemon auto-picks a
+              // cheap fast model for the protocol.
               ? t('settings.memoryModelInlineSameAsChatWithModel', {
-                  model: chatModel,
+                  model: FAST_MODEL_BY_PROTOCOL[effectiveChatProtocol] ?? effectiveChatProtocol,
                 })
-              : t('settings.memoryModelInlineSameAsChat')}
+              : chatModel
+                ? t('settings.memoryModelInlineSameAsChatWithModel', {
+                    model: chatModel,
+                  })
+                : t('settings.memoryModelInlineSameAsChat')}
         </option>
         {showSuggestedOptions
           ? modelOptions.map((m) => (
