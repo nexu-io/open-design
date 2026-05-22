@@ -200,6 +200,25 @@ This was tuned to feel reasonable in simulation but has not been calibrated agai
 
 **Discussion thread.** The contract above is a synthesis of the conversation between @Ilya0527 and @lefarcen on issue #1637, surfaced here per @lefarcen's request that it move from loose issue discussion into PR #1746's open-questions doc.
 
+### Refinement: content-addressed derivations
+
+@Ilya0527 followed up on the cache-invalidation contract above with a stronger framing: rather than treating derived features as durable rows with explicit staleness bookkeeping, treat them as **content-addressed views** over the raw event log.
+
+The cache key for a derived feature becomes a hash of `(raw_event_set, derivation_fn_version)`. When either side changes — new raw events arrive, the derivation function changes, the version tag bumps — the key itself changes, and the old derived value is unreachable. Re-derivation happens on demand against whatever set of raw events the new key resolves over.
+
+This replaces the explicit invalidation rules in the contract above (event-count + time fallback, `last_derived_event_seq`, `source_event_count`, manual re-derivation triggers) with a single property: **a derived feature can never be stale, because if it were stale its key would have changed and the lookup would miss.**
+
+Implications worth noting:
+
+- **Storage shape.** Derived features become a content-addressed cache, not a mutable per-record table. Lookup is by hash; eviction is by capacity, not by age.
+- **No staleness bookkeeping.** `last_derived_event_seq` and `source_event_count` go away. The hash subsumes both — if the event set is unchanged, the hash is unchanged, the cached value is still valid.
+- **Version-tagged derivations stay.** They are now part of the cache key rather than a separate metadata field, but they still serve the audit-trail role (a feature derived under v1 has a different key than one derived under v2 over the same events).
+- **Cost trade.** Lookups become O(1) hash probes, but every distinct event-set requires its own derivation pass. The original event-count threshold acted as a coarse batching mechanism; with content-addressing you either re-derive on every new event or batch by hashing over an event-set window (e.g. "events older than the last N seconds, sealed off") — both are valid strategies, just different than the threshold-based approach above.
+
+This refinement is consistent with the original contract's spirit — raw events canonical, derived features cacheable, derivation auditable — but it makes the cache invariant **declarative rather than procedural**. Tracked here as a refinement to evaluate during the next-iteration design rather than something to retrofit into the current write-time-derivation engine.
+
+**Source.** PR #1746 issue thread, follow-on by @Ilya0527 to the original Section 11 contract; carried into this doc per @lefarcen's request that it stay part of the integration-boundary discussion.
+
 ---
 
 ## What is *not* an open question
