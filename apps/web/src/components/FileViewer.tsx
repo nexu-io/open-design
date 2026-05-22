@@ -6323,6 +6323,11 @@ function HtmlViewer({
                       onLoad={() => {
                         const frame = srcDocPreviewIframeRef.current;
                         if (!useUrlLoadPreview) iframeRef.current = frame;
+                        // Any srcDoc iframe load means we are talking to a
+                        // fresh document shell. Clear the activation dedupe so
+                        // switching preview -> source -> preview cannot strand
+                        // the new shell on the blank transport page.
+                        activatedSrcDocTransportHtmlRef.current = null;
                         // Belt-and-suspenders for the ready handshake: if the
                         // postMessage racing the parent's listener registration
                         // ever loses, the load event still tells us the shell

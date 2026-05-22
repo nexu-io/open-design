@@ -30,6 +30,8 @@ const patchProject = vi.fn();
 const saveTabs = vi.fn();
 
 vi.mock('../../src/i18n', () => ({
+  // ProjectView calls useI18n() (for locale/t); mock it like the other
+  // ProjectView suites so the render does not throw on a missing export.
   useI18n: () => ({
     locale: 'en',
     setLocale: () => undefined,
@@ -164,10 +166,7 @@ describe('mergeRecoveredArtifact', () => {
   });
 
   it('does not duplicate the artifact if the diff already contains it', () => {
-    const merged = mergeRecoveredArtifact(
-      [fileA, artifact] as never,
-      artifact as never,
-    );
+    const merged = mergeRecoveredArtifact([fileA, artifact] as never, artifact as never);
     expect(merged.map((f) => f.name)).toEqual(['helper.txt', 'deck.html']);
   });
 
@@ -201,9 +200,7 @@ describe('ProjectView daemon reattach restore', () => {
     ]);
     fetchPreviewComments.mockResolvedValue([]);
     loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
-    const beforeFiles = [
-      { name: 'existing.html', path: '/p/existing.html', size: 1, updatedAt: 0 },
-    ];
+    const beforeFiles = [{ name: 'existing.html', path: '/p/existing.html', size: 1, updatedAt: 0 }];
     const afterFiles = [
       ...beforeFiles,
       { name: 'new.pptx', path: '/p/new.pptx', size: 2, updatedAt: 0 },

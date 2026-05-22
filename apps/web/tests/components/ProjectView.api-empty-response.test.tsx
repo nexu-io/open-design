@@ -128,6 +128,7 @@ vi.mock('../../src/components/ChatPane', () => ({
   ChatPane: ({
     messages,
     onSend,
+    onRetry,
     error,
   }: {
     messages: ChatMessage[];
@@ -136,10 +137,21 @@ vi.mock('../../src/components/ChatPane', () => ({
       attachments: ChatAttachment[],
       commentAttachments: ChatCommentAttachment[],
     ) => void;
+    onRetry?: (assistantMessage: ChatMessage) => void;
     error?: string | null;
-  }) => (
-    <div>
-      {error ? <div>{error}</div> : null}
+  }) => {
+    const lastMessage = messages[messages.length - 1];
+    const retryMessage = lastMessage?.role === 'assistant' && lastMessage.runStatus === 'failed'
+      ? lastMessage
+      : null;
+    return (
+      <div>
+        {error ? <div>{error}</div> : null}
+        {error && retryMessage && onRetry ? (
+          <button type="button" onClick={() => onRetry(retryMessage)}>
+            retry
+          </button>
+        ) : null}
       <button
         type="button"
         onClick={() => onSend('Create a login page', chatPaneMockState.attachments, chatPaneMockState.commentAttachments)}
@@ -158,8 +170,9 @@ vi.mock('../../src/components/ChatPane', () => ({
           ))}
         </article>
       ))}
-    </div>
-  ),
+      </div>
+    );
+  },
 }));
 
 const mockedStreamByokViaDaemon = vi.mocked(streamByokViaDaemon);
@@ -311,6 +324,39 @@ describe('ProjectView API empty response handling', () => {
       ).toBe(true);
     });
     expect(mockedPlaySound).toHaveBeenCalledWith('failure-sound');
+  });
+
+  it('retries a failed API turn without appending a duplicate user message', async () => {
+    // API-mode (BYOK) chats flow through streamByokViaDaemon, so drive the
+    // retry through it: the first turn errors, the retry must re-send with the
+    // same single user-message history (no duplicate) — the #2491 invariant.
+    let callCount = 0;
+    mockedStreamByokViaDaemon.mockImplementation(async (opts: any) => {
+      callCount += 1;
+      opts.onRunCreated?.('run-test');
+      opts.onRunStatus?.('running');
+      if (callCount === 1) {
+        opts.handlers.onError(new Error('model crashed'));
+      }
+    });
+    renderProjectView();
+
+    await sendTestPrompt();
+
+    await waitFor(() => expect(screen.getByText('model crashed')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'retry' }));
+
+    await waitFor(() => expect(mockedStreamByokViaDaemon).toHaveBeenCalledTimes(2));
+    const retryHistory = mockedStreamByokViaDaemon.mock.calls[1]![0].history as ChatMessage[];
+    expect(retryHistory.map((message) => `${message.role}:${message.content}`)).toEqual([
+      'user:Create a login page',
+    ]);
+    expect(
+      mockedSaveMessage.mock.calls.filter((call) => {
+        const message = call[2] as ChatMessage;
+        return message.role === 'user' && message.content === 'Create a login page';
+      }),
+    ).toHaveLength(1);
   });
 
   it('renders the workspace without the removed project action toolbar', async () => {
