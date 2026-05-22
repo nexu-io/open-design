@@ -165,7 +165,11 @@ export const FAST_MODEL_BY_PROTOCOL: Record<ApiProtocol, string> = {
   // pick; `venice-uncensored` is the Venice-native one. Memory extraction
   // doesn't need bleeding-edge reasoning, so the cheap GPT mini variant
   // covers it nicely without exhausting credits on a long chat history.
-  venice: 'gpt-5-mini',
+  // Must match PROVIDER_DEFAULTS.venice.model in apps/daemon/src/memory-llm.ts
+  // — that's what the daemon's memory-extraction auto-pick actually dials.
+  // MemoryModelInline.tsx renders "Auto · {model}" straight from this
+  // constant, so a mismatch lies to the user about which model is running.
+  venice: 'openai-gpt-54-mini',
 };
 
 export const API_PROTOCOL_TABS: ReadonlyArray<{
