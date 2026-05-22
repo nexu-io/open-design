@@ -283,11 +283,21 @@ export function createChatRunService({
         }
       }
       killChild(run, 'SIGTERM');
-      finish(run, 'canceled', null, 'SIGTERM');
+      // Wait for the child to fully exit BEFORE calling finish() —
+      // finish() fires the runFinishedHook, which (in the history
+      // feature) does `git status / add / commit` against the
+      // worktree. If finish() ran before the child exit completed,
+      // a child handling SIGTERM gracefully (flushing files to
+      // disk) could write its last changes AFTER the hook's
+      // git-status snapshot, leaving those files uncommitted and
+      // dropping the final auto-commit. Reordering ensures the
+      // worktree is in its final, post-child-exit state when the
+      // hook reads it.
       if (run.child && !(await waitForChildExit(run.child, graceMs))) {
         killChild(run, 'SIGKILL');
         await waitForChildExit(run.child, 500);
       }
+      finish(run, 'canceled', null, 'SIGTERM');
     }));
 
     // Wait for any in-flight finish-hooks before returning, so the

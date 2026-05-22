@@ -201,6 +201,54 @@ describe('chat run service stream replay', () => {
     expect(shutdownReturnedAt - shutdownStartedAt).toBeGreaterThanOrEqual(90);
   });
 
+  it('fires runFinishedHook AFTER the child fully exits (no race against graceful SIGTERM writes)', async () => {
+    // Second review pass on PR #2619 (P0-fix.13): the previous fix
+    // tracked pending hook promises but still fired finish() (and
+    // therefore the hook) BEFORE waitForChildExit. A child that
+    // handles SIGTERM gracefully — flushing files to disk before
+    // exiting — could write its final changes AFTER the hook's
+    // `git status` snapshot already ran. Those last writes never
+    // make it into the auto-commit, dropping the final revision.
+    //
+    // This test simulates that pattern: a child that delays its
+    // 'exit' emission by 50ms after SIGTERM, with an onBeforeExit
+    // callback timestamping the latest "child write." The hook
+    // records when IT fires. Assertion: hook fires AFTER child
+    // exit, i.e. after any graceful-flush writes.
+    const runs = createRuns();
+    let childLastWroteAt: number | null = null;
+    let hookFiredAt: number | null = null;
+    let hookSawChildAlive: boolean | null = null;
+    const child = new FakeChildProcess({ closeOn: 'SIGTERM', delayMs: 50 });
+    // Simulate the child writing files right before exit (the
+    // pattern this fix is protecting against).
+    child.onBeforeExit = () => {
+      childLastWroteAt = Date.now();
+    };
+    runs.setRunFinishedHook(async () => {
+      hookFiredAt = Date.now();
+      // The hook can observe the child's exit state — pre-fix this
+      // would be 'alive' (child still running); post-fix it should
+      // be 'exited' because we wait for child exit first.
+      hookSawChildAlive = child.exitEmittedAt === null;
+    });
+
+    const run = runs.create({ projectId: 'project-1', conversationId: 'conv-1' });
+    run.status = 'running';
+    (run as any).child = child;
+
+    await runs.shutdownActive({ graceMs: 500 });
+
+    // Both events happened
+    expect(childLastWroteAt).not.toBeNull();
+    expect(hookFiredAt).not.toBeNull();
+    // The child's final write completed BEFORE the hook fired —
+    // proving the hook reads a post-child-exit worktree
+    expect(hookFiredAt!).toBeGreaterThanOrEqual(childLastWroteAt!);
+    // And the hook saw the child as exited when it fired
+    expect(hookSawChildAlive).toBe(false);
+  });
+
   it('does not hang shutdownActive forever on a stuck runFinishedHook', async () => {
     // Belt-and-suspenders: if a hook gets stuck (e.g. fs lock,
     // hung subprocess), shutdownActive must time out and still
@@ -248,8 +296,23 @@ class FakeChildProcess extends EventEmitter {
   signalCode: string | null = null;
   killed = false;
   signals: string[] = [];
+  /** Set the moment this child actually emits 'exit'. Used by ordering tests. */
+  exitEmittedAt: number | null = null;
+  /** Optional callback fired just before the 'exit' emit — simulates last writes. */
+  onBeforeExit: (() => void) | undefined = undefined;
 
-  constructor(private readonly options: { closeOn: 'SIGTERM' | 'SIGKILL' }) {
+  constructor(
+    private readonly options: {
+      closeOn: 'SIGTERM' | 'SIGKILL';
+      /**
+       * Delay (ms) between receiving the matching signal and emitting
+       * 'exit'/'close'. Simulates a child handling SIGTERM gracefully
+       * (e.g., flushing files to disk) before exiting. Default 0
+       * (queueMicrotask immediate emit).
+       */
+      delayMs?: number;
+    },
+  ) {
     super();
   }
 
@@ -257,11 +320,23 @@ class FakeChildProcess extends EventEmitter {
     this.killed = true;
     this.signals.push(signal);
     if (signal === this.options.closeOn) {
-      this.signalCode = signal;
-      queueMicrotask(() => {
+      const fire = () => {
+        try { this.onBeforeExit?.(); } catch { /* ignore */ }
+        // Mirror real ChildProcess: signalCode is set when the process
+        // actually exits, NOT when kill() is called. Setting it eagerly
+        // would let `waitForChildExit` short-circuit before the delayed
+        // 'exit' emission fires — which is exactly the race this
+        // FakeChildProcess is here to simulate.
+        this.signalCode = signal;
+        this.exitEmittedAt = Date.now();
         this.emit('exit', null, signal);
         this.emit('close', null, signal);
-      });
+      };
+      if (this.options.delayMs && this.options.delayMs > 0) {
+        setTimeout(fire, this.options.delayMs).unref?.();
+      } else {
+        queueMicrotask(fire);
+      }
     }
     return true;
   }
