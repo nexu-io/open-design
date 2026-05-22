@@ -12,6 +12,7 @@ import {
 import { isSafeId as isSafeProjectId } from './projects.js';
 import { projectKindToTracking } from '@open-design/contracts/analytics';
 import { validateBaseUrlResolved } from './connectionTest.js';
+import { googleStreamGenerateContentUrl } from './google-models.js';
 
 export interface RegisterChatRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'chat' | 'agents' | 'critique' | 'validation' | 'lifecycle' | 'paths'> {}
 
@@ -866,8 +867,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       );
     }
 
-    const clean = effectiveBaseUrl.replace(/\/+$/, '');
-    const url = `${clean}/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`;
+    const url = googleStreamGenerateContentUrl(effectiveBaseUrl, model);
     console.log(
       `[proxy:google] ${req.method} ${validated.parsed!.hostname} model=${model}`,
     );
