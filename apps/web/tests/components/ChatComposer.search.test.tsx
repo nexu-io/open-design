@@ -488,6 +488,28 @@ describe('ChatComposer /search command', () => {
     expect(meta).toBeUndefined();
   });
 
+  it('submits the draft on plain Enter (same as Home hero)', async () => {
+    const onSend = vi.fn();
+
+    render(
+      <ChatComposer
+        projectId="project-1"
+        projectFiles={[]}
+        streaming={false}
+        onEnsureProject={async () => 'project-1'}
+        onSend={onSend}
+        onStop={vi.fn()}
+      />,
+    );
+
+    const input = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: 'hello world' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+    expect(onSend).toHaveBeenCalledWith('hello world', [], [], undefined);
+  });
+
   it('keeps keyboard submits blocked when sending is disabled', () => {
     const onSend = vi.fn();
 
@@ -507,6 +529,7 @@ describe('ChatComposer /search command', () => {
     const input = screen.getByTestId('chat-composer-input');
     fireEvent.change(input, { target: { value: 'keep this draft' } });
     fireEvent.keyDown(input, { key: 'Enter', metaKey: true });
+    fireEvent.keyDown(input, { key: 'Enter' });
 
     expect(onSend).not.toHaveBeenCalled();
     expect((input as HTMLTextAreaElement).value).toBe('keep this draft');

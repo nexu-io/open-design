@@ -13,6 +13,7 @@
  * device collage on the right). Self-contained — does not import
  * globals.css so the marketing page styles never leak in.
  */
+import GoogleAnalytics from '../_components/google-analytics.astro';
 import { heroImage } from '../image-assets';
 
 const title = 'Open Design — Design with the agent already on your laptop.';
@@ -25,6 +26,7 @@ const title = 'Open Design — Design with the agent already on your laptop.';
     <title>{title}</title>
     <meta name="viewport" content="width=1200, initial-scale=1" />
     <meta name="robots" content="noindex" />
+    <GoogleAnalytics />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

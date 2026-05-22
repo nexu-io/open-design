@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useT } from '../i18n';
+import { readDefaultSketchToolColor } from './sketch-colors';
 import type { SketchItem } from './sketch-model';
 
 export type Tool = 'select' | 'pen' | 'text' | 'rect' | 'arrow' | 'eraser';
@@ -34,7 +35,7 @@ export function SketchEditor({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [tool, setTool] = useState<Tool>('pen');
-  const [color, setColor] = useState('#1c1b1a');
+  const [color, setColor] = useState(() => readDefaultSketchToolColor());
   const [size, setSize] = useState(2);
   const drawingRef = useRef<SketchItem | null>(null);
   const [, force] = useState(0);

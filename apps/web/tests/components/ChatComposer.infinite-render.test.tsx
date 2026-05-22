@@ -1,0 +1,92 @@
+// @vitest-environment jsdom
+
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import type { ComponentProps } from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { ChatComposer } from '../../src/components/ChatComposer';
+
+let fetchMock: ReturnType<typeof vi.fn>;
+
+function renderComposer(overrides: Partial<ComponentProps<typeof ChatComposer>> = {}) {
+  return render(
+    <ChatComposer
+      projectId="project-1"
+      projectFiles={[]}
+      streaming={false}
+      onEnsureProject={async () => 'project-1'}
+      onSend={vi.fn()}
+      onStop={vi.fn()}
+      skills={[]}
+      {...overrides}
+    />,
+  );
+}
+
+beforeEach(() => {
+  fetchMock = vi.fn(async (url: string) => {
+    if (url === '/api/mcp/servers') {
+      return new Response(JSON.stringify({ servers: [], templates: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    if (url === '/api/plugins') {
+      return new Response(JSON.stringify({ plugins: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    if (url === '/api/skills') {
+      return new Response(JSON.stringify({ skills: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+  });
+  vi.stubGlobal('fetch', fetchMock);
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  cleanup();
+});
+
+describe('ChatComposer infinite re-render regression (#2097)', () => {
+  it('does not re-sync the composer scroll offset on every plain-text keystroke', () => {
+    const scrollTopGetter = vi.fn(() => 0);
+    const original = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'scrollTop');
+    Object.defineProperty(HTMLTextAreaElement.prototype, 'scrollTop', {
+      configurable: true,
+      get: scrollTopGetter,
+      set() {},
+    });
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      renderComposer();
+      const textarea = screen.getByTestId('chat-composer-input') as HTMLTextAreaElement;
+      const baseline = scrollTopGetter.mock.calls.length;
+
+      for (const value of ['h', 'he', 'hel', 'hell', 'hello']) {
+        fireEvent.change(textarea, { target: { value, selectionStart: value.length } });
+      }
+
+      const maxDepth = consoleError.mock.calls.find((args) =>
+        args.some((a) => typeof a === 'string' && a.includes('Maximum update depth exceeded')),
+      );
+      expect(maxDepth).toBeUndefined();
+
+      const perKeystroke = scrollTopGetter.mock.calls.length - baseline;
+      expect(perKeystroke).toBe(0);
+    } finally {
+      consoleError.mockRestore();
+      if (original) {
+        Object.defineProperty(HTMLTextAreaElement.prototype, 'scrollTop', original);
+      } else {
+        delete (HTMLTextAreaElement.prototype as { scrollTop?: number }).scrollTop;
+      }
+    }
+  });
+});

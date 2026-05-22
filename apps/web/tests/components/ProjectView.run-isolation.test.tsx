@@ -18,6 +18,7 @@ const fetchDesignSystem = vi.fn();
 const getTemplate = vi.fn();
 const fetchChatRunStatus = vi.fn();
 const listActiveChatRuns = vi.fn();
+const listProjectRuns = vi.fn();
 const reattachDaemonRun = vi.fn();
 const streamViaDaemon = vi.fn();
 const streamMessage = vi.fn();
@@ -30,6 +31,11 @@ const playSound = vi.fn();
 const showCompletionNotification = vi.fn();
 
 vi.mock('../../src/i18n', () => ({
+  useI18n: () => ({
+    locale: 'zh-CN',
+    setLocale: () => undefined,
+    t: (key: string) => key,
+  }),
   useT: () => (key: string) => key,
 }));
 
@@ -40,6 +46,7 @@ vi.mock('../../src/providers/anthropic', () => ({
 vi.mock('../../src/providers/daemon', () => ({
   fetchChatRunStatus: (...args: unknown[]) => fetchChatRunStatus(...args),
   listActiveChatRuns: (...args: unknown[]) => listActiveChatRuns(...args),
+  listProjectRuns: (...args: unknown[]) => listProjectRuns(...args),
   reattachDaemonRun: (...args: unknown[]) => reattachDaemonRun(...args),
   streamViaDaemon: (...args: unknown[]) => streamViaDaemon(...args),
 }));
@@ -246,6 +253,7 @@ describe('ProjectView conversation run isolation', () => {
     fetchDesignSystem.mockResolvedValue(null);
     getTemplate.mockResolvedValue(null);
     listActiveChatRuns.mockResolvedValue([]);
+    listProjectRuns.mockResolvedValue([]);
     fetchChatRunStatus.mockResolvedValue({
       id: 'run-a',
       status: 'running',
@@ -292,6 +300,7 @@ describe('ProjectView conversation run isolation', () => {
       expect.objectContaining({
         projectId: 'project-1',
         conversationId: 'conv-b',
+        locale: 'zh-CN',
       }),
     );
   });

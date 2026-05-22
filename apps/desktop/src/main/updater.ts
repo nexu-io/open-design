@@ -278,8 +278,15 @@ export function resolveDesktopUpdaterConfig(input: DesktopUpdaterConfigInput): D
   };
 }
 
+function isSupportedPackageLauncherPlatform(platform: string): boolean {
+  return platform === "darwin" || platform === "win32";
+}
+
 function capabilitiesFor(status: { mode: DesktopUpdateMode; platform: string; supported: boolean }) {
-  const packageLauncher = status.mode === DESKTOP_UPDATE_MODES.PACKAGE_LAUNCHER && status.platform === "darwin" && status.supported;
+  const packageLauncher =
+    status.mode === DESKTOP_UPDATE_MODES.PACKAGE_LAUNCHER &&
+    isSupportedPackageLauncherPlatform(status.platform) &&
+    status.supported;
   return {
     canApplyInPlace: false,
     canDownload: packageLauncher,
@@ -654,8 +661,40 @@ function releaseVersionForChannel(metadata: Record<string, unknown>, channel: De
   return stringField(metadata, "releaseVersion") ?? stringField(metadata, "stableVersion");
 }
 
-function selectedMacPlatformKey(platforms: Record<string, unknown>, arch: string): string {
+function selectedMacPlatformKey(arch: string): string {
   return arch === "x64" ? "macIntel" : "mac";
+}
+
+function selectedWinPlatformKey(arch: string): string {
+  if (arch === "x64") return "win";
+  if (arch === "arm64") return "winArm64";
+  if (arch === "ia32") return "winIa32";
+  return `win-${sanitizePathSegment(arch)}`;
+}
+
+function selectedPackageLauncherArtifact(config: DesktopUpdaterConfig): {
+  artifactKey: "dmg" | "installer";
+  artifactType: "dmg" | "installer";
+  description: string;
+  platformKey: string;
+} | null {
+  if (config.platform === "darwin") {
+    return {
+      artifactKey: "dmg",
+      artifactType: "dmg",
+      description: "mac DMG",
+      platformKey: selectedMacPlatformKey(config.arch),
+    };
+  }
+  if (config.platform === "win32") {
+    return {
+      artifactKey: "installer",
+      artifactType: "installer",
+      description: "Windows installer",
+      platformKey: selectedWinPlatformKey(config.arch),
+    };
+  }
+  return null;
 }
 
 function selectUpdateCandidate(
@@ -676,11 +715,12 @@ function selectUpdateCandidate(
       error: createError("update-mode-unsupported", `unsupported update mode: ${config.mode}`),
     };
   }
-  if (config.platform !== "darwin") {
+  const artifactSelection = selectedPackageLauncherArtifact(config);
+  if (artifactSelection == null) {
     return {
       ok: false,
       state: DESKTOP_UPDATE_STATES.UNSUPPORTED,
-      error: createError("unsupported-platform", "package-launcher updates are currently mac-only"),
+      error: createError("unsupported-platform", "package-launcher updates are currently supported on macOS and Windows only"),
     };
   }
 
@@ -711,7 +751,7 @@ function selectUpdateCandidate(
       error: createError("metadata-missing-platforms", "release metadata does not include platform artifacts"),
     };
   }
-  const platformKey = selectedMacPlatformKey(platforms, config.arch);
+  const platformKey = artifactSelection.platformKey;
   const platform = objectField(platforms, platformKey);
   if (platform == null || platform.enabled !== true) {
     return {
@@ -729,32 +769,35 @@ function selectUpdateCandidate(
     };
   }
   const artifacts = objectField(platform, "artifacts");
-  const dmg = artifacts == null ? null : objectField(artifacts, "dmg");
-  const url = dmg == null ? null : stringField(dmg, "url");
-  if (dmg == null || url == null) {
+  const artifactRecord = artifacts == null ? null : objectField(artifacts, artifactSelection.artifactKey);
+  const url = artifactRecord == null ? null : stringField(artifactRecord, "url");
+  if (artifactRecord == null || url == null) {
     return {
       ok: false,
       state: DESKTOP_UPDATE_STATES.ERROR,
-      error: createError("no-compatible-artifact", `release metadata does not include a mac DMG artifact for ${platformKey}`),
+      error: createError(
+        "no-compatible-artifact",
+        `release metadata does not include a ${artifactSelection.description} artifact for ${platformKey}`,
+      ),
     };
   }
 
   const artifact: DesktopUpdateArtifactSnapshot = {
-    ...(stringField(dmg, "name") == null ? {} : { name: stringField(dmg, "name") as string }),
+    ...(stringField(artifactRecord, "name") == null ? {} : { name: stringField(artifactRecord, "name") as string }),
     platformKey,
-    ...(numberField(dmg, "size") == null ? {} : { size: numberField(dmg, "size") }),
-    type: "dmg",
+    ...(numberField(artifactRecord, "size") == null ? {} : { size: numberField(artifactRecord, "size") }),
+    type: artifactSelection.artifactType,
     url,
   };
-  const sha256 = stringField(dmg, "sha256") ?? stringField(dmg, "sha256Digest");
-  const sha512 = stringField(dmg, "sha512") ?? stringField(dmg, "sha512Digest");
+  const sha256 = stringField(artifactRecord, "sha256") ?? stringField(artifactRecord, "sha256Digest");
+  const sha512 = stringField(artifactRecord, "sha512") ?? stringField(artifactRecord, "sha512Digest");
   const checksum: DesktopUpdateChecksumSnapshot =
     sha512 != null
       ? { algorithm: "sha512", value: sha512 }
       : {
           algorithm: "sha256",
           ...(sha256 == null ? {} : { value: sha256 }),
-          ...(stringField(dmg, "sha256Url") == null ? {} : { url: stringField(dmg, "sha256Url") as string }),
+          ...(stringField(artifactRecord, "sha256Url") == null ? {} : { url: stringField(artifactRecord, "sha256Url") as string }),
         };
 
   return {
@@ -998,7 +1041,7 @@ export function createDesktopUpdater(
   let operation: Promise<unknown> = Promise.resolve();
 
   function supported(): boolean {
-    return config.enabled && config.mode === DESKTOP_UPDATE_MODES.PACKAGE_LAUNCHER && config.platform === "darwin";
+    return config.enabled && config.mode === DESKTOP_UPDATE_MODES.PACKAGE_LAUNCHER && isSupportedPackageLauncherPlatform(config.platform);
   }
 
   function emit(): void {
@@ -1057,10 +1100,10 @@ export function createDesktopUpdater(
         createError("update-mode-not-implemented", "js-incremental updates are not implemented yet"),
       );
     }
-    if (config.platform !== "darwin") {
+    if (!isSupportedPackageLauncherPlatform(config.platform)) {
       return setState(
         DESKTOP_UPDATE_STATES.UNSUPPORTED,
-        createError("unsupported-platform", "package-launcher updates are currently mac-only"),
+        createError("unsupported-platform", "package-launcher updates are currently supported on macOS and Windows only"),
       );
     }
     return null;

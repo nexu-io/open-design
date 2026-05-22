@@ -34,6 +34,14 @@ describe("desktop updater host boundary", () => {
     expect(scheduleBody).not.toContain("showUpdateResultDialog");
   });
 
+  it("keeps updater actions out of native desktop menus", () => {
+    const main = source("src/main/index.ts");
+    expect(main).not.toContain("Check for Updates");
+    expect(main).not.toContain("Install Update");
+    expect(main).not.toContain("buildUpdateMenuItems");
+    expect(main).not.toContain("showUpdateResultDialog");
+  });
+
   it("keeps installer launch separate from desktop process shutdown", () => {
     const runtime = source("src/main/runtime.ts");
     const installStart = runtime.indexOf('ipcMain.handle("od:update:install"');

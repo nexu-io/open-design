@@ -31,13 +31,27 @@ export type OpenDesignHostProjectImportInit = {
 
 export type OpenDesignHostProjectImportSuccess = {
   conversationId: string;
-  entryFile: string;
+  entryFile: string | null;
   ok: true;
   projectId: string;
 };
 
 export type OpenDesignHostProjectImportResult =
   | OpenDesignHostProjectImportSuccess
+  | {
+      canceled: true;
+      ok: false;
+    }
+  | OpenDesignHostFailure;
+
+export type OpenDesignHostProjectReplaceWorkingDirSuccess = {
+  baseDir: string;
+  entryFile: string | null;
+  ok: true;
+};
+
+export type OpenDesignHostProjectReplaceWorkingDirResult =
+  | OpenDesignHostProjectReplaceWorkingDirSuccess
   | {
       canceled: true;
       ok: false;
@@ -193,6 +207,7 @@ export type OpenDesignHostBridge = {
   };
   project: {
     pickAndImport(init?: OpenDesignHostProjectImportInit): Promise<OpenDesignHostProjectImportResult>;
+    pickAndReplaceWorkingDir(projectId: string): Promise<OpenDesignHostProjectReplaceWorkingDirResult>;
   };
   shell: {
     openExternal(url: string): Promise<OpenDesignHostActionResult>;
@@ -240,7 +255,13 @@ export function isOpenDesignHostBridge(value: unknown): value is OpenDesignHostB
   if (!isRecord(shell) || !hasFunction(shell, "openExternal") || !hasFunction(shell, "openPath")) return false;
 
   const project = value.project;
-  if (!isRecord(project) || !hasFunction(project, "pickAndImport")) return false;
+  if (
+    !isRecord(project) ||
+    !hasFunction(project, "pickAndImport") ||
+    !hasFunction(project, "pickAndReplaceWorkingDir")
+  ) {
+    return false;
+  }
 
   const pdf = value.pdf;
   if (!isRecord(pdf) || !hasFunction(pdf, "print")) return false;
@@ -289,8 +310,11 @@ export function normalizeOpenDesignHostProjectImportResult(input: unknown): Open
   const rawProjectId = isRecord(project) ? project.id : null;
   const projectId = typeof rawProjectId === "string" ? rawProjectId : null;
   const conversationId = typeof response.conversationId === "string" ? response.conversationId : null;
-  const entryFile = typeof response.entryFile === "string" ? response.entryFile : null;
-  if (projectId == null || conversationId == null || entryFile == null) {
+  const entryFile =
+    typeof response.entryFile === "string" || response.entryFile === null
+      ? response.entryFile
+      : undefined;
+  if (projectId == null || conversationId == null || entryFile === undefined) {
     return failure("daemon import response did not include host project identifiers", response);
   }
 
@@ -300,6 +324,33 @@ export function normalizeOpenDesignHostProjectImportResult(input: unknown): Open
     ok: true,
     projectId,
   };
+}
+
+export function normalizeOpenDesignHostProjectReplaceWorkingDirResult(
+  input: unknown,
+): OpenDesignHostProjectReplaceWorkingDirResult {
+  if (!isRecord(input)) {
+    return failure("desktop working-dir replace returned an invalid response", input);
+  }
+  if (input.ok !== true) {
+    if (input.canceled === true) return { canceled: true, ok: false };
+    const reason = typeof input.reason === "string" && input.reason.length > 0
+      ? input.reason
+      : "unknown failure";
+    return failure(reason, input.details);
+  }
+
+  const response = input.response;
+  if (!isRecord(response)) {
+    return failure("daemon working-dir response was not an object", response);
+  }
+  const baseDir = typeof response.baseDir === "string" ? response.baseDir : null;
+  const entryFile = typeof response.entryFile === "string" ? response.entryFile : null;
+  if (baseDir == null) {
+    return failure("daemon working-dir response did not include baseDir", response);
+  }
+
+  return { baseDir, entryFile, ok: true };
 }
 
 function candidateFromScope(scope: OpenDesignHostGlobalScope): unknown {
@@ -356,6 +407,19 @@ export async function pickAndImportHostProject(
   if (host == null) return unavailable("Open Design host is not available");
   try {
     return await host.project.pickAndImport(init);
+  } catch (error) {
+    return unavailable(error instanceof Error ? error.message : String(error));
+  }
+}
+
+export async function pickAndReplaceHostProjectWorkingDir(
+  projectId: string,
+  scope: OpenDesignHostGlobalScope = globalThis,
+): Promise<OpenDesignHostProjectReplaceWorkingDirResult> {
+  const host = getOpenDesignHost(scope);
+  if (host == null) return unavailable("Open Design host is not available");
+  try {
+    return await host.project.pickAndReplaceWorkingDir(projectId);
   } catch (error) {
     return unavailable(error instanceof Error ? error.message : String(error));
   }

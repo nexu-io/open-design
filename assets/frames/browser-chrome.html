@@ -119,10 +119,15 @@
   <script>
     (function () {
       var qs = new URLSearchParams(location.search);
-      var src = qs.get('screen');
+      var raw = qs.get('screen');
       var url = qs.get('url');
       var iframe = document.getElementById('screen');
-      if (src) iframe.src = src;
+      if (raw) {
+        var isAbsolute = /^[a-zA-Z][a-zA-Z\d+.\-]*:/.test(raw) || raw.charAt(0) === '/';
+        iframe.src = isAbsolute
+          ? raw
+          : new URL(raw, document.referrer || location.href).toString();
+      }
       if (url) document.getElementById('url-text').textContent = url;
     })();
   </script>

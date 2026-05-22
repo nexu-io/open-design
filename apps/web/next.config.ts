@@ -92,12 +92,18 @@ function configuredAllowedDevHosts(): string[] {
     .map(parseAllowedDevHost)
     .filter((host): host is string => host != null);
 
+  const allowedOrigins = (process.env.OD_ALLOWED_ORIGINS ?? '')
+    .split(',')
+    .map(parseAllowedDevHost)
+    .filter((host): host is string => host != null);
+
   const bindHost = parseAllowedDevHost(process.env.OD_HOST ?? '');
   return Array.from(new Set([
     '127.0.0.1',
     ...localPrivateLanHosts(),
     ...(bindHost != null && bindHost !== '0.0.0.0' && bindHost !== '::' ? [bindHost] : []),
     ...configured,
+    ...allowedOrigins,
   ]));
 }
 

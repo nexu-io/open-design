@@ -1,15 +1,15 @@
-# Open Design
+# Open Design — the open-source Claude Design alternative
+
+> **Open Design is the open-source, local-first alternative to [Claude Design][cd].** Web-deployable, BYOK at every layer — **16 coding-agent CLIs** auto-detected on your `PATH` (Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI) become the design engine, driven by **31 composable Skills** and **72 brand-grade Design Systems**. No CLI? An OpenAI-compatible BYOK proxy is the same loop minus the spawn.
 
 > [!IMPORTANT]
 > ### 🔥 `0.8.0-preview` is here. Design's old world ends here.
 >
-> An open, agent-native alternative to Claude Design / Figma — 40k stars in two weeks got us this far. **We need you to push the rest of the way.**
+> The open-source alternative to Claude Design / Figma — 40k stars in two weeks got us this far. **We need you to push the rest of the way.**
 >
 > **Iterating fast on `main`** — 0.8.0 is the next phase of Open Design. Ship a PR, drop a wild idea, file a bug — what you bring is what this movement becomes.
 >
 > → [**Read the announcement, grab the installer, join the movement**](https://github.com/nexu-io/open-design/discussions/1727) · runs side-by-side with your current 0.7.
-
-> **The open-source alternative to [Claude Design][cd].** Local-first, web-deployable, BYOK at every layer — **16 coding-agent CLIs** auto-detected on your `PATH` (Claude Code, Codex, Devin for Terminal, Cursor Agent, Gemini CLI, OpenCode, Qwen, Qoder CLI, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro, Kilo, Mistral Vibe, DeepSeek TUI) become the design engine, driven by **31 composable Skills** and **72 brand-grade Design Systems**. No CLI? An OpenAI-compatible BYOK proxy is the same loop minus the spawn.
 
 <p align="center">
   <img src="docs/assets/banner.png" alt="Open Design — editorial cover: design with the agent on your laptop" width="100%" />
@@ -1018,7 +1018,7 @@ Full walkthrough, bar-for-merging, code style, and what we don't accept → [`CO
 Thanks to everyone who has helped move Open Design forward — through code, docs, feedback, new skills, new design systems, or even a sharp issue. Every real contribution counts, and the wall below is the easiest way to say so out loud.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-18" alt="Open Design contributors" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&cache_bust=2026-05-22" alt="Open Design contributors" />
 </a>
 
 If you've shipped your first PR — welcome. The [`good-first-issue`/`help-wanted`](https://github.com/nexu-io/open-design/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22%2C%22help+wanted%22) label is the entry point.
@@ -1035,9 +1035,9 @@ The SVG above is regenerated daily by [`.github/workflows/metrics.yml`](.github/
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-18" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-18" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-18" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-05-22" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-22" />
+    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-05-22" />
   </picture>
 </a>
 

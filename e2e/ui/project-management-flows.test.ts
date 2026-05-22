@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import type { Locator, Page } from '@playwright/test';
+import type { Locator, Page, Request } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
 
@@ -158,13 +158,18 @@ test('design system multi-select stores primary and inspiration metadata', async
   await expect(page.getByTestId('design-system-trigger')).toContainText('+2');
   await page.getByTestId('design-system-trigger').click();
   await expect(page.locator('.ds-picker-popover')).toHaveCount(0);
+  const createProjectRequest = page.waitForRequest(isCreateProjectRequest);
   await expect(page.getByTestId('create-project')).toBeEnabled();
-  await page.getByTestId('create-project').click();
-  await expectWorkspaceReady(page);
-
-  const project = await fetchCurrentProject(page);
-  expect(project.designSystemId).toBe('nexu-soft-tech');
-  expect(project.metadata?.inspirationDesignSystemIds).toEqual([
+  await page.getByTestId('create-project').click({ force: true });
+  const request = await createProjectRequest;
+  const body = request.postDataJSON() as {
+    designSystemId?: string | null;
+    metadata?: {
+      inspirationDesignSystemIds?: string[];
+    };
+  };
+  expect(body.designSystemId).toBe('nexu-soft-tech');
+  expect(body.metadata?.inspirationDesignSystemIds).toEqual([
     'editorial-noir',
     'data-mist',
   ]);
@@ -189,12 +194,18 @@ test('design system picker searches and switches the single selected system', as
 
   await expect(page.getByTestId('design-system-trigger')).toContainText('Data Mist');
   await expect(page.getByTestId('design-system-trigger')).toContainText('Analytics');
-  await page.getByTestId('create-project').click();
-  await expectWorkspaceReady(page);
-
-  const project = await fetchCurrentProject(page);
-  expect(project.designSystemId).toBe('data-mist');
-  expect(project.metadata?.inspirationDesignSystemIds).toBeUndefined();
+  const createProjectRequest = page.waitForRequest(isCreateProjectRequest);
+  await expect(page.getByTestId('create-project')).toBeEnabled();
+  await page.getByTestId('create-project').click({ force: true });
+  const request = await createProjectRequest;
+  const body = request.postDataJSON() as {
+    designSystemId?: string | null;
+    metadata?: {
+      inspirationDesignSystemIds?: string[];
+    };
+  };
+  expect(body.designSystemId).toBe('data-mist');
+  expect(body.metadata?.inspirationDesignSystemIds).toBeUndefined();
 });
 
 test('project title rename persists after reload and ignores blank titles', async ({ page }) => {
@@ -288,6 +299,7 @@ test('home designs view toggle switches between grid and kanban and persists', a
   await page.goto('/');
   await createProject(page, projectName);
   await expectWorkspaceReady(page);
+  const { projectId } = getProjectContextFromUrl(page);
 
   await page.getByRole('button', { name: /back to projects/i }).click();
   await expectDesignsView(page);
@@ -306,6 +318,8 @@ test('home designs view toggle switches between grid and kanban and persists', a
   await expectDesignsView(page);
   await expect(page.locator('.design-kanban-board')).toBeVisible();
   await expect(page.getByTestId('designs-view-kanban')).toHaveAttribute('aria-pressed', 'true');
+  const projectsAfterReload = await listProjectsFromApi(page);
+  expect(projectsAfterReload.some((project) => project.id === projectId && project.name === projectName)).toBe(true);
 
   await page.getByTestId('designs-view-grid').click();
   await expect(page.locator('.design-grid')).toBeVisible();
@@ -321,11 +335,13 @@ test('home designs search filters projects and recovers from no results', async 
 
   await createProject(page, alphaName);
   await expectWorkspaceReady(page);
+  const alphaProjectId = getProjectContextFromUrl(page).projectId;
   await page.getByRole('button', { name: /back to projects/i }).click();
   await expectDesignsView(page);
 
   await createProject(page, betaName);
   await expectWorkspaceReady(page);
+  const betaProjectId = getProjectContextFromUrl(page).projectId;
   await page.getByRole('button', { name: /back to projects/i }).click();
   await expectDesignsView(page);
   await expect(homeDesignCard(page, alphaName)).toBeVisible();
@@ -344,6 +360,13 @@ test('home designs search filters projects and recovers from no results', async 
   await search.fill('');
   await expect(homeDesignCard(page, alphaName)).toBeVisible();
   await expect(homeDesignCard(page, betaName)).toBeVisible();
+  const projects = await listProjectsFromApi(page);
+  expect(projects).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ id: alphaProjectId, name: alphaName }),
+      expect.objectContaining({ id: betaProjectId, name: betaName }),
+    ]),
+  );
 });
 
 test('projects sub tabs switch between Recent and Your designs ordering', async ({ page }) => {
@@ -411,6 +434,7 @@ test('projects grid card rename updates the card title and persists after reload
   await page.goto('/');
   await createProject(page, originalName);
   await expectWorkspaceReady(page);
+  const { projectId } = getProjectContextFromUrl(page);
 
   await page.getByRole('button', { name: /back to projects/i }).click();
   await expectDesignsView(page);
@@ -433,6 +457,8 @@ test('projects grid card rename updates the card title and persists after reload
   await page.reload();
   await expectDesignsView(page);
   await expect(homeDesignCard(page, renamedName)).toBeVisible();
+  const project = await fetchProjectById(page, projectId);
+  expect(project.name).toBe(renamedName);
 });
 
 test('projects select mode supports multi-select delete with cancel and confirm', async ({ page }) => {
@@ -497,8 +523,10 @@ test('projects kanban cards open projects and support delete cancel and confirm'
   await expect(kanbanCard).toBeVisible();
 
   await kanbanCard.click();
-  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}$`));
+  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}(/conversations/[^/]+)?$`));
   await expect(page.getByTestId('project-title')).toContainText(projectName);
+  const openedProject = await fetchCurrentProject(page);
+  expect(openedProject.name).toBe(projectName);
 
   await page.getByRole('button', { name: /back to projects/i }).click();
   await expectDesignsView(page);
@@ -827,11 +855,13 @@ async function expectDesignsView(page: Page) {
 async function openEntrySettingsDialog(page: Page, sectionName?: RegExp | string): Promise<Locator> {
   const settingsButton = page.getByRole('button', { name: /open settings/i });
   await settingsButton.click();
-  const settingsMenu = page.locator('.avatar-popover[role="menu"]');
-  await expect(settingsMenu).toBeVisible();
-  await settingsMenu.getByRole('button', { name: /^Settings$/i }).click();
-
-  const settingsDialog = page.getByRole('dialog');
+  let settingsDialog = page.getByRole('dialog');
+  if (!(await settingsDialog.isVisible().catch(() => false))) {
+    const settingsMenu = page.locator('.avatar-popover[role="menu"]');
+    await expect(settingsMenu).toBeVisible();
+    await settingsMenu.getByRole('button', { name: /^Settings$/i }).click();
+    settingsDialog = page.getByRole('dialog');
+  }
   await expect(settingsDialog).toBeVisible();
   if (sectionName) {
     await settingsDialog.getByRole('button', { name: sectionName }).click();
@@ -934,10 +964,15 @@ async function seedAdoptedPet(page: Page) {
 
 async function fetchCurrentProject(page: Page) {
   const { projectId } = getProjectContextFromUrl(page);
+  return fetchProjectById(page, projectId);
+}
+
+async function fetchProjectById(page: Page, projectId: string) {
   const response = await page.request.get(`/api/projects/${projectId}`);
   expect(response.ok()).toBeTruthy();
   const body = (await response.json()) as {
     project: {
+      id?: string;
       name: string;
       designSystemId: string | null;
       metadata?: {
@@ -948,11 +983,25 @@ async function fetchCurrentProject(page: Page) {
   return body.project;
 }
 
+async function listProjectsFromApi(page: Page) {
+  const response = await page.request.get('/api/projects');
+  expect(response.ok()).toBeTruthy();
+  const body = (await response.json()) as {
+    projects: Array<{ id: string; name: string }>;
+  };
+  return body.projects;
+}
+
 async function listProjectFiles(page: Page, projectId: string) {
   const response = await page.request.get(`/api/projects/${projectId}/files`);
   expect(response.ok()).toBeTruthy();
   const body = (await response.json()) as { files: Array<{ name: string }> };
   return body.files;
+}
+
+function isCreateProjectRequest(request: Request): boolean {
+  const url = new URL(request.url());
+  return url.pathname === '/api/projects' && request.method() === 'POST';
 }
 
 function getProjectContextFromUrl(page: Page) {

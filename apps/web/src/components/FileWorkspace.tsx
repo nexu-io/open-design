@@ -6,6 +6,16 @@ import {
   type DragEvent as ReactDragEvent,
 } from 'react';
 import type { TrackingProjectKind } from '@open-design/contracts/analytics';
+import { useAnalytics } from '../analytics/provider';
+import {
+  trackFileManagerClick,
+  trackFileUploadResult,
+  trackPageView,
+} from '../analytics/events';
+import {
+  fileSizeBucketToTracking,
+  fileTypeToTracking,
+} from '@open-design/contracts/analytics';
 import { useT } from '../i18n';
 import { isMacPlatform } from '../utils/platform';
 import {
@@ -207,6 +217,17 @@ export function FileWorkspace({
   onUseDesignSystem,
 }: Props) {
   const t = useT();
+  const analytics = useAnalytics();
+  // P1 page_view page_name=file_manager — once per project the user lands
+  // inside the workspace. Re-fire when the projectId changes so a
+  // project-switch session shows up as a fresh view rather than reusing
+  // the previous one.
+  const fileManagerViewedProjectRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (fileManagerViewedProjectRef.current === projectId) return;
+    fileManagerViewedProjectRef.current = projectId;
+    trackPageView(analytics.track, { page_name: 'file_manager' });
+  }, [projectId, analytics.track]);
   const defaultRootTab = designSystemProject ? DESIGN_SYSTEM_TAB : DESIGN_FILES_TAB;
   // Persisted tabs come from the parent. Active tab can transiently point
   // at a pending sketch — pending sketches are not in tabsState.tabs.
@@ -356,12 +377,44 @@ export function FileWorkspace({
     if (picked.length === 0) return;
 
     setUploadError(null);
+    // Compute the cohort's representative file_type / file_size_bucket
+    // up front so the result event reports the same shape whether the
+    // upload itself succeeded, failed, or threw. The cohort is summed
+    // (size) and bucketed by the primary mime; mixed batches collapse
+    // to `other` so the bucket stays interpretable.
+    const totalBytes = picked.reduce((sum, file) => sum + (file.size || 0), 0);
+    const perFileTrackingTypes = picked.map((file) => {
+      const mime = file.type ?? '';
+      const name = file.name ?? '';
+      const isZip =
+        mime === 'application/zip' || name.toLowerCase().endsWith('.zip');
+      return fileTypeToTracking({ mime, isFolder: false, isZip });
+    });
+    // Heterogeneous batch (more than one distinct tracking type) → 'other'
+    // so the breakdowns dashboards build off `file_type` do not get skewed
+    // by whichever file happened to land first.
+    const uniqueTrackingTypes = new Set(perFileTrackingTypes);
+    const trackingFileType =
+      uniqueTrackingTypes.size <= 1
+        ? perFileTrackingTypes[0] ?? 'other'
+        : 'other';
+    const trackingFileSizeBucket = fileSizeBucketToTracking(totalBytes);
     let result: UploadProjectFilesResult;
     try {
       result = await uploadProjectFiles(projectId, picked);
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       setUploadError(`Upload failed for ${picked.length} file(s) (${detail}).`);
+      trackFileUploadResult(analytics.track, {
+        page_name: 'file_manager',
+        area: 'file_manager',
+        project_id: projectId,
+        file_count: picked.length,
+        file_type: trackingFileType,
+        file_size_bucket: trackingFileSizeBucket,
+        result: 'failed',
+        error_code: detail,
+      });
       return;
     }
     if (result.uploaded.length > 0) {
@@ -380,6 +433,26 @@ export function FileWorkspace({
           : `Upload failed for ${failedCount} file(s)${detail}.`,
       );
       console.warn('Project upload had failures', result.failed);
+      trackFileUploadResult(analytics.track, {
+        page_name: 'file_manager',
+        area: 'file_manager',
+        project_id: projectId,
+        file_count: picked.length,
+        file_type: trackingFileType,
+        file_size_bucket: trackingFileSizeBucket,
+        result: 'failed',
+        ...(result.error ? { error_code: result.error } : {}),
+      });
+    } else if (result.uploaded.length > 0) {
+      trackFileUploadResult(analytics.track, {
+        page_name: 'file_manager',
+        area: 'file_manager',
+        project_id: projectId,
+        file_count: picked.length,
+        file_type: trackingFileType,
+        file_size_bucket: trackingFileSizeBucket,
+        result: 'success',
+      });
     }
   }
 
@@ -770,7 +843,7 @@ export function FileWorkspace({
               title="Design System"
             >
               <span className="tab-icon" aria-hidden>
-                <Icon name="palette" size={13} />
+                <Icon name="blocks" size={13} />
               </span>
               <span className="ws-tab-label">Design System</span>
             </button>
@@ -899,12 +972,47 @@ export function FileWorkspace({
             onOpenFile={openFile}
             onOpenLiveArtifact={(tabId) => openFile(tabId)}
             onRenameFile={handleRename}
-            onDeleteFile={(name) => void handleDelete(name)}
-            onDeleteFiles={handleDeleteMany}
-            onUpload={() => fileInputRef.current?.click()}
+            onDeleteFile={(name) => {
+              trackFileManagerClick(analytics.track, {
+                page_name: 'file_manager',
+                area: 'file_manager',
+                element: 'delete',
+              });
+              void handleDelete(name);
+            }}
+            onDeleteFiles={(names) => {
+              trackFileManagerClick(analytics.track, {
+                page_name: 'file_manager',
+                area: 'file_manager',
+                element: 'delete',
+              });
+              return handleDeleteMany(names);
+            }}
+            onUpload={() => {
+              trackFileManagerClick(analytics.track, {
+                page_name: 'file_manager',
+                area: 'file_manager',
+                element: 'upload',
+              });
+              fileInputRef.current?.click();
+            }}
             onUploadFiles={(picked) => void uploadFiles(picked)}
-            onPaste={() => setShowPasteDialog(true)}
-            onNewSketch={startNewSketch}
+            onPaste={() => {
+              trackFileManagerClick(analytics.track, {
+                page_name: 'file_manager',
+                area: 'file_manager',
+                element: 'paste',
+              });
+              setShowPasteDialog(true);
+            }}
+            onNewSketch={() => {
+              trackFileManagerClick(analytics.track, {
+                page_name: 'file_manager',
+                area: 'file_manager',
+                element: 'new_sketch',
+              });
+              startNewSketch();
+            }}
             uploadError={uploadError}
             onClearUploadError={() => setUploadError(null)}
             onPluginFolderAgentAction={onPluginFolderAgentAction}
@@ -1223,6 +1331,46 @@ function DesignSystemProjectPanel({
                 <Icon name="comment" size={13} />
                 Needs work...
               </button>
+              {feedbackSection === section.title ? (
+                <form
+                  className="ds-project-feedback-popover"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    submitNeedsWorkFeedback(section.title, section.files);
+                  }}
+                >
+                  <label htmlFor={`ds-feedback-${slugForTestId(section.title)}`}>
+                    Tell the agent what to change
+                  </label>
+                  <textarea
+                    id={`ds-feedback-${slugForTestId(section.title)}`}
+                    value={feedbackText}
+                    rows={3}
+                    placeholder={`e.g. tighten spacing in ${section.title}, regenerate this preview...`}
+                    onChange={(event) => setFeedbackText(event.target.value)}
+                    autoFocus
+                  />
+                  <div>
+                    <button
+                      type="button"
+                      className="ghost compact"
+                      onClick={() => {
+                        setFeedbackSection(null);
+                        setFeedbackText('');
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="primary compact"
+                      disabled={!feedbackText.trim()}
+                    >
+                      Send
+                    </button>
+                  </div>
+                </form>
+              ) : null}
             </div>
           ) : (
             <span
@@ -1281,45 +1429,6 @@ function DesignSystemProjectPanel({
                 <span>Generating preview...</span>
               </div>
             )}
-            {feedbackSection === section.title ? (
-              <form
-                className="ds-project-feedback-box"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  submitNeedsWorkFeedback(section.title, section.files);
-                }}
-              >
-                <label htmlFor={`ds-feedback-${slugForTestId(section.title)}`}>
-                  Tell the agent what to change in {section.title}
-                </label>
-                <textarea
-                  id={`ds-feedback-${slugForTestId(section.title)}`}
-                  value={feedbackText}
-                  rows={3}
-                  placeholder="e.g. make the color tokens closer to our product, tighten spacing, regenerate the preview..."
-                  onChange={(event) => setFeedbackText(event.target.value)}
-                />
-                <div>
-                  <button
-                    type="button"
-                    className="ghost compact"
-                    onClick={() => {
-                      setFeedbackSection(null);
-                      setFeedbackText('');
-                    }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="primary compact"
-                    disabled={!feedbackText.trim()}
-                  >
-                    Send feedback
-                  </button>
-                </div>
-              </form>
-            ) : null}
           </div>
         ) : null}
       </section>
@@ -1331,7 +1440,7 @@ function DesignSystemProjectPanel({
       <div className="ds-project-panel ds-project-panel--generating">
         <div className="ds-project-generation-stage">
           <span className="ds-project-generation-mark">
-            <Icon name="palette" size={24} />
+            <Icon name="blocks" size={24} />
           </span>
           <h1>Creating your design system...</h1>
           <p>Keep this tab open. You can come back in a few minutes.</p>

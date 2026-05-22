@@ -37,7 +37,7 @@ apps/web/playwright/
 
 tsconfig.tsbuildinfo
 
-.claude-sessions/*
+**/.claude-sessions/*
 
 .cursor/
 .agents/
@@ -66,3 +66,5 @@ docs/superpowers/
 # `skills/<slug>/example.html` and `templates/live-artifacts/<slug>/`
 # on every deploy. Should not be committed (~70MB of PNGs).
 apps/landing-page/public/previews/
+
+growth/**

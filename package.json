@@ -15,6 +15,7 @@
     "tools-pack": "pnpm exec tools-pack",
     "tools-pr": "pnpm exec tools-pr",
     "tools-serve": "pnpm exec tools-serve",
+    "nix:update-hash": "tsx ./scripts/update-nix-pnpm-deps-hash.ts",
     "guard": "tsx ./scripts/guard.ts && node --import tsx --test scripts/style-policy.test.ts",
     "i18n:check": "tsx ./scripts/i18n-check.ts",
     "i18n:coverage": "tsx ./scripts/i18n-coverage-report.ts",
@@ -30,7 +31,7 @@
     "@open-design/tools-pr": "workspace:*",
     "@open-design/tools-serve": "workspace:*",
     "@types/node": "20.19.39",
-    "tsx": "4.22.2",
+    "tsx": "4.22.3",
     "typescript": "5.9.3"
   },
   "engines": {
@@ -44,13 +45,18 @@
       "fast-uri": "3.1.2",
       "hono": "4.12.19",
       "ip-address": "10.2.0",
-      "postcss": "8.5.14",
+      "postcss": "8.5.15",
+      "protobufjs": "8.4.0",
       "yaml": "2.9.0"
     },
     "onlyBuiltDependencies": [
       "better-sqlite3",
+      "core-js",
       "electron",
-      "esbuild"
+      "electron-winstaller",
+      "esbuild",
+      "protobufjs",
+      "sharp"
     ]
   }
 }

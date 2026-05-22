@@ -106,6 +106,18 @@ interface Props {
   // affordance reads consistently across HTML / design-system / media
   // variants.
   headerExtras?: ReactNode;
+  // Optional analytics callbacks. Fires when the user clicks the
+  // chrome-level affordances (fullscreen, share trigger, sidebar
+  // toggle). Callers wire these to their surface's tracking helper.
+  onFullscreenClick?: () => void;
+  onShareClick?: () => void;
+  onSidebarToggleClick?: (open: boolean) => void;
+  // Fires when the user picks a share-menu item ("pdf" / "zip" / "html"
+  // / "open_in_new_tab"). Used by callers that want to track popover-
+  // level clicks separately from the share trigger.
+  onSharePopoverItemClick?: (
+    item: 'pdf' | 'zip' | 'html' | 'open_in_new_tab',
+  ) => void;
 }
 
 // A full-screen overlay that renders an iframe of arbitrary HTML, with an
@@ -124,6 +136,10 @@ export function PreviewModal({
   designWidth = 1280,
   primaryAction,
   headerExtras,
+  onFullscreenClick,
+  onShareClick,
+  onSidebarToggleClick,
+  onSharePopoverItemClick,
 }: Props) {
   const t = useT();
   const initial = initialViewId && views.some((v) => v.id === initialViewId)
@@ -362,7 +378,13 @@ export function PreviewModal({
               {sidebar ? (
                 <button
                   className={`ghost ${sidebarOpen ? 'is-active' : ''}`}
-                  onClick={() => setSidebarOpen((v) => !v)}
+                  onClick={() => {
+                    setSidebarOpen((v) => {
+                      const next = !v;
+                      onSidebarToggleClick?.(next);
+                      return next;
+                    });
+                  }}
                   aria-pressed={sidebarOpen}
                   title={sidebar.label}
                 >
@@ -371,7 +393,11 @@ export function PreviewModal({
               ) : null}
               <button
                 className="ghost"
-                onClick={fullscreen ? exitFullscreen : enterFullscreen}
+                onClick={() => {
+                  onFullscreenClick?.();
+                  if (fullscreen) exitFullscreen();
+                  else enterFullscreen();
+                }}
                 title={
                   fullscreen
                     ? t('common.exitFullscreen')
@@ -386,7 +412,10 @@ export function PreviewModal({
                     className="ghost"
                     aria-haspopup="menu"
                     aria-expanded={shareOpen}
-                    onClick={() => setShareOpen((v) => !v)}
+                    onClick={() => {
+                      onShareClick?.();
+                      setShareOpen((v) => !v);
+                    }}
                     disabled={!activeHtml}
                   >
                     {t('preview.shareMenu')}
@@ -398,6 +427,7 @@ export function PreviewModal({
                         className="share-menu-item"
                         role="menuitem"
                         onClick={() => {
+                          onSharePopoverItemClick?.('pdf');
                           setShareOpen(false);
                           if (activeHtml)
                             exportAsPdf(activeHtml, exportTitle, { deck: activeDeck });
@@ -412,6 +442,7 @@ export function PreviewModal({
                         className="share-menu-item"
                         role="menuitem"
                         onClick={() => {
+                          onSharePopoverItemClick?.('zip');
                           setShareOpen(false);
                           if (activeHtml) exportAsZip(activeHtml, exportTitle);
                         }}
@@ -424,6 +455,7 @@ export function PreviewModal({
                         className="share-menu-item"
                         role="menuitem"
                         onClick={() => {
+                          onSharePopoverItemClick?.('html');
                           setShareOpen(false);
                           if (activeHtml) exportAsHtml(activeHtml, exportTitle);
                         }}
@@ -437,6 +469,7 @@ export function PreviewModal({
                         className="share-menu-item"
                         role="menuitem"
                         onClick={() => {
+                          onSharePopoverItemClick?.('open_in_new_tab');
                           setShareOpen(false);
                           openInNewTab();
                         }}
@@ -527,7 +560,10 @@ export function PreviewModal({
               <button
                 type="button"
                 className="ds-modal-stage-handle is-expand"
-                onClick={() => setSidebarOpen(true)}
+                onClick={() => {
+                  onSidebarToggleClick?.(true);
+                  setSidebarOpen(true);
+                }}
                 title={t('preview.showSidebar', { label: sidebar.label })}
                 aria-label={t('preview.showSidebar', { label: sidebar.label })}
               >
@@ -540,7 +576,10 @@ export function PreviewModal({
               <button
                 type="button"
                 className="ds-modal-stage-handle is-collapse"
-                onClick={() => setSidebarOpen(false)}
+                onClick={() => {
+                  onSidebarToggleClick?.(false);
+                  setSidebarOpen(false);
+                }}
                 title={t('preview.hideSidebar', { label: sidebar.label })}
                 aria-label={t('preview.hideSidebar', { label: sidebar.label })}
               >

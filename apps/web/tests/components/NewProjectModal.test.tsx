@@ -1,10 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { NewProjectModal } from '../../src/components/NewProjectModal';
-import type { DesignSystemSummary, ProjectTemplate, SkillSummary } from '../../src/types';
 
 const skills: SkillSummary[] = [
   {
@@ -87,8 +83,7 @@ describe('NewProjectModal layout', () => {
     expect(screen.getByTestId('create-project')).toBeTruthy();
   });
 
-  it('Escape dismisses template delete confirm without closing the modal', () => {
-    const onClose = vi.fn();
+
     render(
       <NewProjectModal
         open
@@ -96,20 +91,11 @@ describe('NewProjectModal layout', () => {
         designSystems={designSystems}
         defaultDesignSystemId="clay"
         templates={templates}
-        onDeleteTemplate={vi.fn()}
-        promptTemplates={[]}
-        onCreate={() => {}}
-        onClose={onClose}
+main
       />,
     );
 
     fireEvent.click(screen.getByRole('tab', { name: 'From template' }));
-    fireEvent.click(screen.getByLabelText(/delete template landing page/i));
-    expect(screen.getByTestId('template-delete-confirm-dialog')).toBeTruthy();
 
-    fireEvent.keyDown(document, { key: 'Escape' });
-    expect(screen.queryByTestId('template-delete-confirm-dialog')).toBeNull();
-    expect(screen.getByTestId('new-project-modal')).toBeTruthy();
-    expect(onClose).not.toHaveBeenCalled();
   });
 });

@@ -13,6 +13,10 @@
   "dependencies": {
     "@astrojs/rss": "4.0.18",
     "@astrojs/sitemap": "3.7.2",
+    "@fontsource-variable/inter": "5.2.8",
+    "@fontsource-variable/inter-tight": "5.2.7",
+    "@fontsource-variable/jetbrains-mono": "5.2.8",
+    "@fontsource-variable/playfair-display": "5.2.8",
     "astro": "6.3.5",
     "react": "18.3.1",
     "react-dom": "18.3.1"
@@ -23,7 +27,7 @@
     "@types/react": "18.3.28",
     "@types/react-dom": "18.3.7",
     "playwright": "1.60.0",
-    "tsx": "4.22.2",
+    "tsx": "4.22.3",
     "typescript": "5.9.3"
   },
   "engines": {

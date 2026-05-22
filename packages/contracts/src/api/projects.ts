@@ -126,6 +126,10 @@ export interface ProjectMetadata {
   // it set `baseDir` outside the trusted flow. Privileged: rejected
   // by `POST /api/projects` and `PATCH /api/projects/:id`.
   fromTrustedPicker?: true;
+  // Hint stamped by the Home composer working-directory chip. It records
+  // where the user wanted the project to live without granting write access
+  // to that path; actual filesystem roots still use baseDir/import flows.
+  userWorkingDir?: string;
   imageModel?: string;
   imageAspect?: MediaAspect;
   imageStyle?: string;
@@ -259,6 +263,16 @@ export interface ImportFolderRequest {
 export interface ImportFolderResponse {
   project: Project;
   conversationId: string;
+  entryFile: string | null;
+}
+
+export interface ReplaceProjectWorkingDirRequest {
+  baseDir: string;
+}
+
+export interface ReplaceProjectWorkingDirResponse {
+  project: Project;
+  baseDir: string;
   entryFile: string | null;
 }
 

@@ -1,3 +1,5 @@
+import { useAnalytics } from '../analytics/provider';
+import { trackPrivacyModalClick } from '../analytics/events';
 import { useT } from '../i18n';
 import { Icon } from './Icon';
 
@@ -41,6 +43,11 @@ interface Props {
  */
 export function PrivacyConsentModal({ onAccept }: Props): JSX.Element {
   const t = useT();
+  const analytics = useAnalytics();
+  // P0 — the first-launch privacy banner ships with a single "I get it"
+  // action that implicitly accepts; we map that to `yes` on the contract's
+  // `privacy_modal` ui_click. The contract enum has `yes|no` but no
+  // surface_view counterpart, so this is the only event the surface emits.
   return (
     <div className="privacy-consent-banner" role="region" aria-labelledby="privacy-consent-title">
       <div className="privacy-consent-banner-head">
@@ -78,7 +85,18 @@ export function PrivacyConsentModal({ onAccept }: Props): JSX.Element {
         role="group"
         aria-label={t('settings.privacyConsentKicker')}
       >
-        <button type="button" className="privacy-consent-action" onClick={onAccept}>
+        <button
+          type="button"
+          className="privacy-consent-action"
+          onClick={() => {
+            trackPrivacyModalClick(analytics.track, {
+              page_name: 'home',
+              area: 'privacy_modal',
+              element: 'yes',
+            });
+            onAccept();
+          }}
+        >
           {t('settings.privacyConsentAccept')}
         </button>
       </div>
