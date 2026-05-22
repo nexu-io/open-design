@@ -345,8 +345,15 @@ describe('ManualEditPanel', () => {
     if (!lineInput) throw new Error('Line input not found');
 
     // Fire the onChange path first (typed input) and assert it commits the value.
+    // Use the native HTMLInputElement value setter so React 19 recognises the
+    // change and fires the synthetic onChange handler (direct `.value =` assignment
+    // bypasses React's internal event tracking in jsdom).
     act(() => {
-      lineInput.value = '49px';
+      const nativeSetter = Object.getOwnPropertyDescriptor(
+        dom.window.HTMLInputElement.prototype,
+        'value',
+      )?.set;
+      nativeSetter?.call(lineInput, '49px');
       lineInput.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
     });
     // onChange calls onStyleChange immediately — proves the typed-input path ran.
