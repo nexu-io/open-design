@@ -9,6 +9,7 @@
  * unfiltered index.
  */
 import type { SkillRecord } from '../_lib/catalog';
+import { localeFromPath, localizedHref } from '../i18n';
 import LazyImg from './lazy-img.astro';
 
 export interface Props {
@@ -17,6 +18,8 @@ export interface Props {
 }
 
 const { skill, index } = Astro.props;
+const locale = localeFromPath(Astro.url.pathname);
+const href = (path: string) => localizedHref(path, locale);
 
 // The first ~4 rows are visible above the fold on a typical laptop and
 // always render at the top of the first catalog list a visitor sees.
@@ -26,7 +29,7 @@ const aboveFold = index < 4;
 ---
 
 <li class="catalog-row catalog-row-skill">
-  <a href={`/skills/${skill.slug}/`}>
+  <a href={href(`/skills/${skill.slug}/`)}>
     <span class="row-index">{String(index + 1).padStart(3, '0')}</span>
     <span class="row-thumb">
       {skill.previewUrl ? (
@@ -44,9 +47,9 @@ const aboveFold = index < 4;
       <span class="row-desc">{skill.description}</span>
     </span>
     <span class="row-meta">
-      {skill.mode && <span class="meta-tag">{skill.mode}</span>}
-      {skill.scenario && <span class="meta-tag muted">{skill.scenario}</span>}
-      {skill.platform && <span class="meta-tag muted">{skill.platform}</span>}
+      {skill.modeLabel && <span class="meta-tag">{skill.modeLabel}</span>}
+      {skill.scenarioLabel && <span class="meta-tag muted">{skill.scenarioLabel}</span>}
+      {skill.platformLabel && <span class="meta-tag muted">{skill.platformLabel}</span>}
     </span>
     <span class="row-arrow" aria-hidden="true">→</span>
   </a>

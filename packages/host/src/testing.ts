@@ -54,6 +54,11 @@ function defaultHost(): OpenDesignHostBridge {
         conversationId: "conversation-test",
         entryFile: "index.html",
       }),
+      pickAndReplaceWorkingDir: async () => ({
+        ok: true,
+        baseDir: "/tmp/open-design-test",
+        entryFile: null,
+      }),
     },
     pdf: {
       print: async () => ({ ok: true }),

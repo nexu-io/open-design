@@ -93,6 +93,8 @@ export interface KnownProvider {
   model: string;
   /** Optional provider-specific model choices shown in Settings. */
   models?: string[];
+  /** Some local/self-hosted endpoints do not require bearer credentials. */
+  requiresApiKey?: boolean;
 }
 
 // Some providers appear more than once because they expose both
@@ -196,7 +198,7 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     models: ['mimo-v2.5-pro'],
   },
   {
-    label: 'Ollama Cloud',
+    label: 'Ollama Cloud (managed)',
     protocol: 'ollama',
     baseUrl: 'https://ollama.com',
     model: 'gpt-oss:120b',
@@ -241,6 +243,14 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
       'qwen3.5:397b',
       'rnj-1:8b',
     ],
+  },
+  {
+    label: 'Ollama Self-hosted (local)',
+    protocol: 'ollama',
+    baseUrl: 'http://localhost:11434',
+    model: 'gemma3:4b',
+    models: ['gemma3:4b', 'gemma3:12b', 'gemma3:27b', 'gpt-oss:20b'],
+    requiresApiKey: false,
   },
   {
     label: 'MiMo (Xiaomi) — Anthropic',
@@ -664,6 +674,9 @@ export function mergeDaemonConfig(
 export function mergeDaemonMediaProviders(
   localConfig: AppConfig,
   daemonProviders: AppConfig['mediaProviders'] | null,
+  options?: {
+    preserveLocalProviderIds?: ReadonlySet<string>;
+  },
 ): AppConfig {
   if (daemonProviders == null) {
     return { ...localConfig };
@@ -681,7 +694,14 @@ export function mergeDaemonMediaProviders(
   const mediaProviders = { ...(localConfig.mediaProviders ?? {}) };
   for (const [providerId, daemonEntry] of Object.entries(daemonProviders ?? {})) {
     if (!isStoredMediaProviderEntryPresent(daemonEntry)) continue;
-    mediaProviders[providerId] = { ...daemonEntry };
+    const localEntry = mediaProviders[providerId];
+    const preserveLocalPendingEdit = Boolean(
+      options?.preserveLocalProviderIds?.has(providerId)
+      && hasRecoverableLocalMediaProviderFields(localEntry),
+    );
+    mediaProviders[providerId] = preserveLocalPendingEdit
+      ? { ...daemonEntry, ...localEntry }
+      : { ...daemonEntry };
   }
 
   return {

@@ -33,6 +33,8 @@ export interface ChatRequest {
   commentAttachments?: ChatCommentAttachment[];
   model?: string | null;
   reasoning?: string | null;
+  /** UI locale selected by the client, used by prompt composition for user-visible generated UI. */
+  locale?: string;
   research?: ResearchOptions;
   context?: RunContextSelection;
 }
@@ -53,10 +55,12 @@ export type ChatMessageFeedbackReasonCode =
   | 'strong_visual'
   | 'useful_structure'
   | 'easy_to_continue'
+  | 'followed_design_system'
   | 'missed_request'
   | 'weak_visual'
   | 'incomplete_output'
   | 'hard_to_use'
+  | 'missed_design_system'
   | 'other';
 
 export interface ChatMessageFeedback {

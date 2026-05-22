@@ -6,6 +6,7 @@ type CliOptions = {
   channel?: "stable" | "beta";
   host?: string;
   json?: boolean;
+  platform?: "mac" | "win";
   port?: string;
   version?: string;
 };
@@ -23,11 +24,18 @@ function printJson(value: unknown): void {
   process.stdout.write(`${JSON.stringify(value)}\n`);
 }
 
+function parsePlatform(value: string | undefined): "mac" | "win" {
+  if (value == null || value.length === 0 || value === "mac") return "mac";
+  if (value === "win") return "win";
+  throw new Error("--platform must be mac or win");
+}
+
 async function start(service: string, options: CliOptions): Promise<void> {
   if (service !== "updater") throw new Error(`unsupported tools-serve service: ${service}`);
   const server = await startUpdaterFixtureServer({
     channel: options.channel,
     host: options.host,
+    platform: parsePlatform(options.platform),
     port: parsePort(options.port),
     version: options.version,
   });
@@ -60,6 +68,7 @@ cli
   .option("--channel <channel>", "Updater channel: stable|beta", { default: "stable" })
   .option("--host <host>", "Host to bind", { default: "127.0.0.1" })
   .option("--json", "Print JSON")
+  .option("--platform <platform>", "Updater platform: mac|win", { default: "mac" })
   .option("--port <port>", "Port to bind, 0 for dynamic", { default: "0" })
   .option("--version <version>", "Fixture update version", { default: "99.0.0" })
   .action((service: string, options: CliOptions) => {

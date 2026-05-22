@@ -21,6 +21,10 @@ import {
   evaluateArtifactStubGuard,
   readArtifactStubGuardConfigFromEnv,
 } from './artifact-stub-guard.js';
+import {
+  assertArtifactPublicationAllowed,
+  isPublicationGuardedArtifactKind,
+} from './artifact-publication-guard.js';
 
 const FORBIDDEN_SEGMENT = /^$|^\.\.?$/;
 const RESERVED_PROJECT_FILE_SEGMENTS = new Set(['.live-artifacts']);
@@ -640,6 +644,15 @@ export async function writeProjectFile(
     const validated = validateArtifactManifestInput(artifactManifest, safeName);
     if (validated.ok && validated.value) {
       validatedManifest = validated.value;
+      // Publication guard: HTML/deck artifacts that still contain template
+      // placeholders (e.g. pitch-deck `Name to confirm`, `$X.XM`) must not
+      // land as published files. Runs at the write boundary so it covers
+      // every artifact that flows through writeProjectFile, regardless of
+      // which agent/atom produced the body. Throws
+      // ArtifactPublicationBlockedError which the route layer maps to 422.
+      if (isPublicationGuardedArtifactKind(validatedManifest.kind)) {
+        assertArtifactPublicationAllowed(body);
+      }
       const identifier = typeof validatedManifest.metadata?.identifier === 'string'
         ? validatedManifest.metadata.identifier
         : '';

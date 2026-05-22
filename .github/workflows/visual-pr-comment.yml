@@ -1,0 +1,229 @@
+name: visual-pr-comment
+
+on:
+  workflow_run:
+    workflows: [visual-pr-capture]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      capture_run_id:
+        description: GitHub Actions run id for the Visual PR capture workflow to comment on.
+        required: true
+        type: string
+      pr_number:
+        description: Pull request number to upsert the visual comment on.
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: visual-pr-comment-${{ github.event.workflow_run.head_repository.full_name || github.repository }}-${{ github.event.workflow_run.head_branch || inputs.pr_number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  comment:
+    name: Publish PR visual diff comment
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6.0.8
+        with:
+          version: 10.33.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6.4.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Resolve pnpm store path
+        id: pnpm-store
+        shell: bash
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore pnpm store cache
+        uses: actions/cache/restore@v5.0.5
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download PR visual artifact
+        uses: actions/download-artifact@v8
+        with:
+          run-id: ${{ github.event.workflow_run.id || inputs.capture_run_id }}
+          path: visual-artifact
+          merge-multiple: true
+          github-token: ${{ github.token }}
+
+      - name: Read capture manifest
+        id: manifest
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number || inputs.pr_number }}
+          WORKFLOW_HEAD_SHA: ${{ github.event.workflow_run.head_sha || '' }}
+          WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id || inputs.capture_run_id }}
+        run: |
+          set -euo pipefail
+          manifest="visual-artifact/visual-report/manifest.json"
+          if [ ! -f "$manifest" ]; then
+            manifest="visual-artifact/manifest.json"
+          fi
+          if [ ! -f "$manifest" ]; then
+            echo "Capture manifest not found" >&2
+            find visual-artifact -maxdepth 4 -type f >&2
+            exit 1
+          fi
+          manifest_pr_number="$(jq -r '.pr_number' "$manifest")"
+          base_sha="$(jq -r '.base_sha' "$manifest")"
+          run_id="$(jq -r '.run_id' "$manifest")"
+          capture_outcome="$(jq -r '.capture_outcome // "success"' "$manifest")"
+          if ! [[ "$manifest_pr_number" =~ ^[0-9]+$ ]]; then
+            echo "Invalid manifest pr_number: $manifest_pr_number" >&2
+            exit 1
+          fi
+          derived_pr_number="$WORKFLOW_PR_NUMBER"
+          if [ -z "$derived_pr_number" ] && [ -n "$WORKFLOW_HEAD_SHA" ]; then
+            derived_pr_number="$(gh api "repos/$GITHUB_REPOSITORY/commits/$WORKFLOW_HEAD_SHA/pulls" --jq '.[0].number // empty')"
+          fi
+          pr_number="$derived_pr_number"
+          if [ -z "$pr_number" ]; then
+            pr_number="$manifest_pr_number"
+          fi
+          if ! [[ "$pr_number" =~ ^[0-9]+$ ]]; then
+            echo "Unable to derive PR number from workflow event, capture manifest, or GitHub API for workflow head $WORKFLOW_HEAD_SHA." >&2
+            exit 1
+          fi
+          if [ -n "$derived_pr_number" ] && [ "$manifest_pr_number" != "$derived_pr_number" ]; then
+            echo "Manifest pr_number ($manifest_pr_number) does not match GitHub-derived PR number ($derived_pr_number)." >&2
+            exit 1
+          fi
+          if ! [[ "$base_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid manifest base_sha: $base_sha" >&2
+            exit 1
+          fi
+          if [ "$run_id" != "$WORKFLOW_RUN_ID" ]; then
+            echo "Artifact run_id ($run_id) does not match workflow_run id ($WORKFLOW_RUN_ID)." >&2
+            exit 1
+          fi
+          if ! [[ "$capture_outcome" =~ ^(success|failure|cancelled|skipped)$ ]]; then
+            echo "Invalid manifest capture_outcome: $capture_outcome" >&2
+            exit 1
+          fi
+          manifest_head="$(jq -r '.head_sha' "$manifest")"
+          if ! [[ "$manifest_head" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid manifest head_sha: $manifest_head" >&2
+            exit 1
+          fi
+          if [ -n "$WORKFLOW_HEAD_SHA" ] && [ "$manifest_head" != "$WORKFLOW_HEAD_SHA" ]; then
+            echo "Artifact manifest head_sha ($manifest_head) does not match workflow_run head_sha ($WORKFLOW_HEAD_SHA)." >&2
+            exit 1
+          fi
+          echo "path=$manifest" >> "$GITHUB_OUTPUT"
+          echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$manifest_head" >> "$GITHUB_OUTPUT"
+          echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "capture_outcome=$capture_outcome" >> "$GITHUB_OUTPUT"
+
+      - name: Stop stale visual runs
+        id: stale
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.manifest.outputs.pr_number }}
+          ARTIFACT_HEAD_SHA: ${{ steps.manifest.outputs.head_sha }}
+          ARTIFACT_BASE_SHA: ${{ steps.manifest.outputs.base_sha }}
+        run: |
+          set -euo pipefail
+          pr_json="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json headRefOid,baseRefOid)"
+          current_head="$(jq -r '.headRefOid' <<< "$pr_json")"
+          current_base="$(jq -r '.baseRefOid' <<< "$pr_json")"
+          if [ "$current_head" != "$ARTIFACT_HEAD_SHA" ]; then
+            echo "Skipping stale visual artifact for $ARTIFACT_HEAD_SHA; current PR head is $current_head."
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "$current_base" != "$ARTIFACT_BASE_SHA" ]; then
+            echo "Skipping stale visual artifact for base $ARTIFACT_BASE_SHA; current PR base is $current_base."
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "stale=false" >> "$GITHUB_OUTPUT"
+
+      - name: Build visual diff report
+        if: ${{ steps.stale.outputs.stale != 'true' }}
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_PUBLIC_ORIGIN: ${{ vars.R2_PUBLIC_ORIGIN }}
+          CLOUDFLARE_R2_RELEASES_AK: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          CLOUDFLARE_R2_RELEASES_SK: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          CLOUDFLARE_R2_RELEASES_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          CLOUDFLARE_R2_RELEASES_URL: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+        run: |
+          pnpm -C e2e exec tsx scripts/visual-report.ts compare-pr \
+            --pr-number "${{ steps.manifest.outputs.pr_number }}" \
+            --run-id "${{ steps.manifest.outputs.run_id }}" \
+            --head-sha "${{ steps.manifest.outputs.head_sha }}" \
+            --base-sha "${{ steps.manifest.outputs.base_sha }}" \
+            --capture-outcome "${{ steps.manifest.outputs.capture_outcome }}" \
+            --screenshots ../visual-artifact/visual-screenshots \
+            --comment-out ui/reports/visual-report/comment.md \
+            --manifest-out ui/reports/visual-report/report-manifest.json
+
+      - name: Upsert PR comment
+        if: ${{ steps.stale.outputs.stale != 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.manifest.outputs.pr_number }}
+          ARTIFACT_HEAD_SHA: ${{ steps.manifest.outputs.head_sha }}
+          ARTIFACT_BASE_SHA: ${{ steps.manifest.outputs.base_sha }}
+        run: |
+          set -euo pipefail
+          pr_json="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json headRefOid,baseRefOid)"
+          current_head="$(jq -r '.headRefOid' <<< "$pr_json")"
+          current_base="$(jq -r '.baseRefOid' <<< "$pr_json")"
+          if [ "$current_head" != "$ARTIFACT_HEAD_SHA" ]; then
+            echo "Skipping stale visual comment for $ARTIFACT_HEAD_SHA; current PR head is $current_head."
+            exit 0
+          fi
+          if [ "$current_base" != "$ARTIFACT_BASE_SHA" ]; then
+            echo "Skipping stale visual comment for base $ARTIFACT_BASE_SHA; current PR base is $current_base."
+            exit 0
+          fi
+          body_path="e2e/ui/reports/visual-report/comment.md"
+          comments_json="$RUNNER_TEMP/comments.json"
+          gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" > "$comments_json"
+          comment_id="$(jq -r '.[] | select(.body | contains("<!-- visual-regression-bot -->")) | .id' "$comments_json" | tail -n 1)"
+          if [ -n "$comment_id" ]; then
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$comment_id" --field "body=$(cat "$body_path")"
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" --field "body=$(cat "$body_path")"
+          fi
+
+      - name: Upload visual report artifact
+        if: ${{ always() && steps.stale.outputs.stale != 'true' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: visual-pr-report-${{ steps.manifest.outputs.pr_number }}-${{ steps.manifest.outputs.run_id }}
+          path: e2e/ui/reports/visual-report
+          if-no-files-found: ignore
+          retention-days: 7

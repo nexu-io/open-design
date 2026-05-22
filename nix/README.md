@@ -220,18 +220,27 @@ Never inline a secret with `pkgs.writeText` or `home.file`.
 
 ## First-build hash pinning
 
-Both `nix/package-daemon.nix` and `nix/package-web.nix` vendor the pnpm
-store via a fixed-output derivation (`pnpmDeps`). The `outputHash`
-defaults to `lib.fakeSha256` so `nix build` will fail with the expected
-hash printed. Copy that value into the matching `pnpmDepsHash` constant
-at the top of each file and re-run. Bump the hash whenever
-`pnpm-lock.yaml` changes.
+`nix/pnpm-deps.nix` is the single source of truth for the vendored pnpm
+store hash used by both `nix/package-daemon.nix` and
+`nix/package-web.nix`. If `pnpm-lock.yaml` changes, run:
+
+```bash
+pnpm nix:update-hash
+```
+
+The script temporarily swaps one consumer to `lib.fakeHash`, runs
+`nix build .#web --print-build-logs`, extracts the expected hash from the
+failure output, writes it back into `nix/pnpm-deps.nix`, and restores the
+consumer file.
 
 ## CI
 
 `.github/workflows/nix-check.yml` runs `nix flake check` on pushes to
-`main` and can also be started manually with `workflow_dispatch`. It is
-not a default pull request gate: the flake is a community installation
-and deployment surface, while regular PR validation stays focused on the
-primary product delivery checks. The flake check already builds the
-`daemon` and `web` checks declared in `flake.nix`.
+`main` and can also be started manually with `workflow_dispatch`.
+
+Pull requests that touch Nix or dependency inputs are validated earlier in
+`.github/workflows/ci.yml` via the required `Validate workspace` gate.
+That PR path runs `nix flake check` when `pnpm-lock.yaml`, package
+manifests, `flake.*`, `nix/**`, or the Nix workflows change, so fixed-
+output hash drift is caught before merge while keeping unrelated PRs off
+the slower Nix path.

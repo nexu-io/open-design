@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { BrowserWindow, Menu, app, dialog, shell, type MenuItemConstructorOptions } from "electron";
+import { BrowserWindow, Menu, app, shell, type MenuItemConstructorOptions } from "electron";
 
 import {
   APP_KEYS,
@@ -35,7 +35,7 @@ import { readProcessStamp } from "@open-design/platform";
 
 import { createDesktopRuntime, type DesktopRuntime } from "./runtime.js";
 import { attachDesktopProcessErrorFilter } from "./uncaught-exception.js";
-import { createDesktopUpdater, createDesktopUpdaterScheduler, type DesktopUpdater, type DesktopUpdaterScheduler } from "./updater.js";
+import { createDesktopUpdater, createDesktopUpdaterScheduler, type DesktopUpdaterScheduler } from "./updater.js";
 import {
   exportDiagnosticsToFile,
   registerDesktopDiagnosticsIpc,
@@ -133,68 +133,7 @@ function createWebDiscovery(runtime: SidecarRuntimeContext<SidecarStamp>): () =>
   };
 }
 
-function buildUpdateMenuItems(updater: DesktopUpdater): MenuItemConstructorOptions[] {
-  const status = updater.snapshot();
-  const busy = status.state === "checking" || status.state === "downloading" || status.state === "installing";
-  return [
-    {
-      enabled: status.enabled && !busy,
-      label: status.state === "downloading" ? "Downloading Update..." : "Check for Updates...",
-      async click() {
-        const next = await updater.checkForUpdates();
-        await showUpdateResultDialog(updater, next);
-      },
-    },
-    {
-      enabled: status.enabled && status.state === "downloaded",
-      label: "Install Update...",
-      async click() {
-        const next = await updater.installUpdate();
-        if (next.state === "error") {
-          dialog.showErrorBox("Open Design update failed", next.error?.message ?? "Could not open the downloaded installer.");
-        }
-      },
-    },
-  ];
-}
-
-async function showUpdateResultDialog(updater: DesktopUpdater, status = updater.snapshot()): Promise<void> {
-  if (!status.enabled) return;
-  if (status.state === "downloaded") {
-    const result = await dialog.showMessageBox({
-      buttons: ["Install Update", "Later"],
-      defaultId: 0,
-      message: "A new Open Design version has been downloaded.",
-      detail: "Open the installer to update Open Design. You may need to quit the app and replace the existing copy.",
-      type: "info",
-    });
-    if (result.response === 0) await updater.installUpdate();
-    return;
-  }
-  if (status.state === "not-available") {
-    await dialog.showMessageBox({
-      buttons: ["OK"],
-      message: "Open Design is up to date.",
-      type: "info",
-    });
-    return;
-  }
-  if (status.state === "unsupported") {
-    await dialog.showMessageBox({
-      buttons: ["OK"],
-      detail: status.error?.message,
-      message: "Updates are not available for this Open Design build.",
-      type: "info",
-    });
-    return;
-  }
-  if (status.state === "error") {
-    dialog.showErrorBox("Open Design update failed", status.error?.message ?? "Could not check for updates.");
-  }
-}
-
 function installDesktopMenu(
-  updater: DesktopUpdater,
   runtime: SidecarRuntimeContext<SidecarStamp>,
 ): () => void {
   const exportDiagnostics = () => {
@@ -204,7 +143,6 @@ function installDesktopMenu(
     });
   };
   const rebuild = () => {
-    const updateItems = buildUpdateMenuItems(updater);
     const template: MenuItemConstructorOptions[] = [
       ...(process.platform === "darwin"
         ? [
@@ -212,8 +150,6 @@ function installDesktopMenu(
               label: app.name,
               submenu: [
                 { role: "about" as const },
-                { type: "separator" as const },
-                ...updateItems,
                 { type: "separator" as const },
                 { role: "services" as const },
                 { type: "separator" as const },
@@ -229,8 +165,6 @@ function installDesktopMenu(
             {
               label: "File",
               submenu: [
-                ...updateItems,
-                { type: "separator" as const },
                 { role: "quit" as const },
               ],
             },
@@ -289,7 +223,7 @@ function installDesktopMenu(
   };
 
   rebuild();
-  return updater.subscribe(rebuild);
+  return () => undefined;
 }
 
 const REGISTER_DESKTOP_AUTH_RETRY_DELAYS_MS = [120, 240, 480, 960, 1500];
@@ -444,7 +378,7 @@ export async function runDesktopMain(
     requestQuit: shutdownAndExit,
     updater,
   });
-  disposeMenu = installDesktopMenu(updater, runtime);
+  disposeMenu = installDesktopMenu(runtime);
   removeDiagnosticsIpc = registerDesktopDiagnosticsIpc(runtime);
   updateScheduler = createDesktopUpdaterScheduler(updater, {
     backoffInitialMs: updater.config.checkBackoffInitialMs,

@@ -3,6 +3,7 @@
 import { runDaemonCliStartup } from './daemon-startup.js';
 import { runLiveArtifactsMcpServer } from './mcp-live-artifacts-server.js';
 import { runArtifactsCli } from './artifacts-cli.js';
+import { runProjectHandoff } from './handoff-cli.js';
 import { runConnectorsToolCli } from './tools-connectors-cli.js';
 import { runDesignSystemsToolCli } from './tools-design-systems-cli.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
@@ -146,7 +147,7 @@ const LIBRARY_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 const PROJECT_STRING_FLAGS = new Set([
   'daemon-url', 'name', 'skill', 'design-system', 'plugin', 'metadata-json',
   'pending-prompt', 'project', 'conversation', 'message', 'path', 'as',
-  'agent', 'model', 'snapshot-id', 'inputs', 'grant-caps',
+  'agent', 'model', 'snapshot-id', 'inputs', 'grant-caps', 'editor',
 ]);
 const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow']);
 // `od automation …` mirrors the Automations tab. Same surface, same
@@ -3684,6 +3685,14 @@ async function runProject(args) {
   od project list                         List projects.
   od project info <id>                    Print one project.
   od project delete <id>                  Delete a project.
+  od project editors                      List locally-installed editors that
+                                          can open a project (hand-off targets).
+  od project open-in <id> --editor <slug> Open the project's working directory
+                                          in the chosen editor (cursor, zed,
+                                          vscode, finder, terminal, …).
+  od project handoff <id> --conversation <id> --api-key <key> --model <model>
+                    [--base-url <url>] [--max-tokens <n>]
+                    Synthesize a resume-conversation handoff prompt.
 
 Common options:
   --daemon-url <url>   Open Design daemon HTTP base.
@@ -3692,6 +3701,16 @@ Common options:
   }
   const sub = args[0];
   const rest = args.slice(1);
+  // Handoff owns its own flag parsing, daemon-URL resolution, and
+  // structured fail() output. Dispatch it before the generic project
+  // parser below so a malformed `od project handoff` invocation
+  // (`--unknown`, `--max-tokens` with no value) hits handoff-cli's
+  // machine-readable fail() path instead of throwing out of parseFlags.
+  if (sub === 'handoff') {
+    const { exitCode } = await runProjectHandoff(rest);
+    if (exitCode !== 0) process.exit(exitCode);
+    return;
+  }
   const flags = parseFlags(rest, { string: PROJECT_STRING_FLAGS, boolean: PROJECT_BOOLEAN_FLAGS });
   const base = (await projectDaemonUrl(flags)).replace(/\/$/, '');
   switch (sub) {
@@ -3778,6 +3797,44 @@ Common options:
       const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}`, { method: 'DELETE' });
       if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
       console.log(`[project] deleted ${id}`);
+      return;
+    }
+    case 'editors': {
+      const resp = await fetch(`${base}/api/editors`);
+      if (!resp.ok) return structuredHttpFailure(resp);
+      const data = await resp.json();
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      const editors = data?.editors ?? [];
+      for (const ed of editors) {
+        const status = ed.available ? 'available' : 'missing';
+        console.log(`${ed.id}\t${ed.label}\t${status}`);
+      }
+      return;
+    }
+    case 'open-in': {
+      const id = rest.find((a) => !a.startsWith('-'));
+      if (!id) {
+        console.error('Usage: od project open-in <id> --editor <slug>');
+        process.exit(2);
+      }
+      const editor = typeof flags.editor === 'string' ? flags.editor : '';
+      if (!editor) {
+        console.error('--editor <slug> is required. Run `od project editors` to list options.');
+        process.exit(2);
+      }
+      const resp = await fetch(`${base}/api/projects/${encodeURIComponent(id)}/open-in`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ editorId: editor }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        if (flags.json) process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+        else console.error(`POST /api/projects/${id}/open-in failed: ${resp.status} ${JSON.stringify(data)}`);
+        process.exit(1);
+      }
+      if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
+      console.log(`[project] opened ${id} in ${editor} (${data.path ?? ''})`);
       return;
     }
     default:

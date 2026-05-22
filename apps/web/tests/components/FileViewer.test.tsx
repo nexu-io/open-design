@@ -367,6 +367,10 @@ describe('FileViewer SVG artifacts', () => {
       <FileViewer projectId="project-1" projectKind="prototype" file={file} liveHtml="<html><body>hi</body></html>" />,
     );
 
+    // Both iframes are always mounted (the lazy srcDoc transport avoids
+    // booting the artifact in the inactive frame). `data-od-active` and
+    // the testid pair identify which iframe is currently the user-facing
+    // one without unmounting either side.
     expect(markup).toContain('data-testid="artifact-preview-frame"');
     expect(markup).toContain('data-od-render-mode="url-load"');
     expect(markup).toContain('data-od-render-mode="url-load" data-od-active="true"');
@@ -696,6 +700,102 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.queryByText(/generates a Pages project name automatically/i)).toBeNull();
     expect(screen.queryByText(/project name is selected automatically/i)).toBeNull();
     expect(screen.queryByLabelText('Pages project name')).toBeNull();
+  });
+
+  it('nudges the share button once when an artifact becomes exportable', async () => {
+    const file = baseFile({
+      name: 'nudge.html',
+      path: 'nudge.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Nudge',
+        entry: 'nudge.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+
+    render(
+      <FileViewer
+        projectId="project-nudge"
+        projectKind="prototype"
+        file={file}
+        liveHtml="<html><body><h1>Ready</h1></body></html>"
+      />,
+    );
+
+    const exportButton = screen.getByRole('button', { name: /share/i });
+    await waitFor(() => {
+      expect(exportButton.classList.contains('export-ready-nudge')).toBe(true);
+    });
+
+    fireEvent.click(exportButton);
+
+    expect(exportButton.classList.contains('export-ready-nudge')).toBe(false);
+  });
+
+  it('nudges each exportable artifact once when the mounted viewer switches files', async () => {
+    const firstFile = baseFile({
+      name: 'nudge-first.html',
+      path: 'nudge-first.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'First',
+        entry: 'nudge-first.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const secondFile = baseFile({
+      name: 'nudge-second.html',
+      path: 'nudge-second.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Second',
+        entry: 'nudge-second.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+
+    const { rerender } = render(
+      <FileViewer
+        projectId="project-nudge-switch"
+        projectKind="prototype"
+        file={firstFile}
+        liveHtml="<html><body><h1>First</h1></body></html>"
+      />,
+    );
+
+    const firstExportButton = screen.getByRole('button', { name: /share/i });
+    await waitFor(() => {
+      expect(firstExportButton.classList.contains('export-ready-nudge')).toBe(true);
+    });
+    fireEvent.click(firstExportButton);
+    expect(firstExportButton.classList.contains('export-ready-nudge')).toBe(false);
+
+    rerender(
+      <FileViewer
+        projectId="project-nudge-switch"
+        projectKind="prototype"
+        file={secondFile}
+        liveHtml="<html><body><h1>Second</h1></body></html>"
+      />,
+    );
+
+    const secondExportButton = screen.getByRole('button', { name: /share/i });
+    await waitFor(() => {
+      expect(secondExportButton.classList.contains('export-ready-nudge')).toBe(true);
+    });
   });
 
   it('keeps the explicitly selected deploy provider when another provider already has a deployment', async () => {
@@ -1588,6 +1688,141 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.queryByTestId('comment-side-selectbar')).toBeNull();
     expect(screen.queryByTestId('comment-side-collapsed-rail')).toBeNull();
   });
+
+  // PR #1643 regression: the once-per-file guard that mirrors a `.twk-panel`
+  // artifact's default-open state into the toolbar `tweaksMode` lives in a
+  // message-event listener that previously had an empty deps array. The
+  // handler therefore closed over the first-render `file.name`, so switching
+  // to a second `.twk-panel` file left the guard comparing against the
+  // stale captured name and never re-mirrored the new artifact's open state
+  // back to ON. Surfaced by Siri-Ray in
+  // https://github.com/nexu-io/open-design/pull/1643#discussion_r3266838151.
+  it('mirrors __edit_mode_available default-open state for each switched-to .twk-panel file', async () => {
+    function twkFile(name: string): ProjectFile {
+      return baseFile({
+        name,
+        path: name,
+        mime: 'text/html',
+        kind: 'html',
+        artifactManifest: {
+          version: 1,
+          kind: 'html',
+          title: name,
+          entry: name,
+          renderer: 'html',
+          exports: ['html'],
+        },
+      });
+    }
+
+    function Switcher() {
+      const [file, setFile] = useState<ProjectFile>(twkFile('first.html'));
+      return (
+        <div>
+          <button type="button" onClick={() => setFile(twkFile('second.html'))}>
+            Switch file
+          </button>
+          <FileViewer
+            projectId="project-1"
+            projectKind="prototype"
+            file={file}
+            liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+          />
+        </div>
+      );
+    }
+
+    render(<Switcher />);
+
+    const firstFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const tweaksButton = () =>
+      Array.from(document.querySelectorAll('button')).find(
+        (b) => b.getAttribute('title') === 'Tweaks' || b.getAttribute('aria-label') === 'Tweaks',
+      ) as HTMLButtonElement | undefined;
+
+    // First file: artifact posts __edit_mode_available → toolbar starts ON.
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: firstFrame.contentWindow,
+        data: { type: '__edit_mode_available' },
+      }),
+    );
+    await waitFor(() => expect(tweaksButton()?.getAttribute('aria-pressed')).toBe('true'));
+
+    // User toggles OFF on first file.
+    fireEvent.click(tweaksButton()!);
+    await waitFor(() => expect(tweaksButton()?.getAttribute('aria-pressed')).toBe('false'));
+
+    // Switch to second file. The second artifact also mounts panel-visible
+    // and emits __edit_mode_available. The toolbar must mirror that into ON
+    // again — the bug was that the handler kept comparing against the first
+    // file's name in a stale closure, so the second emission was treated as
+    // a "second emission for the same file" and the OFF state stuck.
+    fireEvent.click(screen.getByRole('button', { name: 'Switch file' }));
+    const secondFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: secondFrame.contentWindow,
+        data: { type: '__edit_mode_available' },
+      }),
+    );
+    await waitFor(() => expect(tweaksButton()?.getAttribute('aria-pressed')).toBe('true'));
+  });
+
+  // PR #1643 regression: Protocol A in `design-templates/tweaks/SKILL.md`
+  // says the artifact MAY declare a default-closed panel via
+  // `{ type: '__edit_mode_available', visible: false }`. The handler used
+  // to unconditionally mirror availability into `tweaksMode = true`, so a
+  // default-closed dynamic artifact would be force-opened by the next
+  // `syncBridgeModes` posting `__activate_edit_mode`. The host must now
+  // read `visible` and only flip to ON when the panel reports itself open
+  // (or omits `visible` — back-compat shim for the common open-by-default
+  // case). Surfaced by Siri-Ray in
+  // https://github.com/nexu-io/open-design/pull/1643#discussion_r3269955351.
+  it('respects __edit_mode_available { visible: false } for default-closed dynamic artifacts', async () => {
+    const file = baseFile({
+      name: 'closed.html',
+      path: 'closed.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'closed',
+        entry: 'closed.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+
+    render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        liveHtml='<html><body><main data-od-id="hero">Hero</main></body></html>'
+      />,
+    );
+
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const tweaksButton = () =>
+      Array.from(document.querySelectorAll('button')).find(
+        (b) => b.getAttribute('title') === 'Tweaks' || b.getAttribute('aria-label') === 'Tweaks',
+      ) as HTMLButtonElement | undefined;
+
+    // Artifact announces availability AND declares the panel is currently
+    // closed. The toolbar must enable (panel exists) but stay OFF — opening
+    // it without intent would override the artifact-declared default.
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: '__edit_mode_available', visible: false },
+      }),
+    );
+
+    await waitFor(() => expect(tweaksButton()?.disabled).toBe(false));
+    expect(tweaksButton()?.getAttribute('aria-pressed')).toBe('false');
+  });
 });
 
 describe('applyInspectOverridesToSource', () => {
@@ -2139,6 +2374,13 @@ function baseLiveArtifactWorkspaceEntry(
 }
 
 describe('LiveArtifactViewer', () => {
+  it('hides inactive live previews even when a device viewport sets display', () => {
+    const css = readFileSync(join(process.cwd(), 'src/index.css'), 'utf8');
+    const rule = css.match(/\.live-artifact-preview-layer\.preview-viewport\[data-active='false'\]\s*\{[^}]+\}/)?.[0] ?? '';
+
+    expect(rule).toContain('display: none;');
+  });
+
   it('keeps the presentation exit button aligned with preview chrome spacing', () => {
     const css = readFileSync(join(process.cwd(), 'src/index.css'), 'utf8');
     const rule = css.match(/\.present-exit\s*\{[^}]+\}/)?.[0] ?? '';
@@ -2399,6 +2641,52 @@ describe('LiveArtifactViewer', () => {
     await waitFor(() => {
       expect(screen.getByRole('link', { name: /^open$/i }).getAttribute('tabindex')).not.toBe('-1');
     });
+  });
+
+  it('keeps the live preview iframe mounted across viewport and tab changes', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/live-artifacts/la_1?projectId=proj_1') {
+        return new Response(JSON.stringify({ artifact: baseLiveArtifact() }), { status: 200 });
+      }
+      if (url === '/api/live-artifacts/la_1/refreshes?projectId=proj_1') {
+        return new Response(JSON.stringify({ refreshes: [] }), { status: 200 });
+      }
+      if (url === '/api/live-artifacts/la_1/code?projectId=proj_1&variant=template') {
+        return new Response('<main>Preview</main>', { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <LiveArtifactViewer
+        projectId="proj_1"
+        liveArtifact={baseLiveArtifactWorkspaceEntry()}
+      />,
+    );
+
+    const frame = await screen.findByTestId('live-artifact-preview-frame');
+    fireEvent.click(screen.getByRole('button', { name: /preview viewport/i }));
+    fireEvent.click(screen.getByRole('option', { name: /mobile/i }));
+
+    const previewLayer = frame.closest('.live-artifact-preview-layer');
+    expect(previewLayer?.classList.contains('preview-viewport-mobile')).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: /code/i }));
+
+    await waitFor(() => {
+      expect(previewLayer?.getAttribute('data-active')).toBe('false');
+    });
+    expect(screen.getByTestId('live-artifact-preview-frame')).toBe(frame);
+
+    fireEvent.click(screen.getByRole('button', { name: /preview/i }));
+
+    await waitFor(() => {
+      expect(previewLayer?.getAttribute('data-active')).toBe('true');
+    });
+    expect(screen.getByTestId('live-artifact-preview-frame')).toBe(frame);
+    expect(frame.getAttribute('src')).toBe('/api/live-artifacts/la_1/preview?projectId=proj_1&v=0');
   });
 
   it('closes the present menu on Escape without tearing down the viewer', async () => {

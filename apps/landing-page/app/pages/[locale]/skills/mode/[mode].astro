@@ -1,0 +1,19 @@
+---
+import SkillModePage, {
+  getStaticPaths as getSkillModeStaticPaths,
+} from '../../../skills/mode/[mode].astro';
+import { DEFAULT_LOCALE, LANDING_LOCALES } from '../../../../i18n';
+
+export async function getStaticPaths() {
+  const basePaths = await getSkillModeStaticPaths();
+  return LANDING_LOCALES.filter((locale) => locale.code !== DEFAULT_LOCALE).flatMap(
+    (locale) =>
+      basePaths.map((path) => ({
+        params: { ...path.params, locale: locale.code },
+        props: path.props,
+      })),
+  );
+}
+---
+
+<SkillModePage {...Astro.props} />

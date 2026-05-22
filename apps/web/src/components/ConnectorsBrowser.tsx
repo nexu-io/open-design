@@ -251,6 +251,25 @@ function applyConnectorStatuses(
 interface ConnectorsBrowserProps {
   composioConfigured: boolean;
   catalogRefreshKey?: string | number;
+  /** Optional analytics hook for the integrations surface. The parent
+   *  (IntegrationsView → ConnectorSection) wires this so provider-tab
+   *  / search clicks emit on `page_name: 'integrations'`; when omitted
+   *  (SettingsDialog uses the settings page family instead), no event
+   *  is fired. */
+  onConnectorsTabClick?: (
+    element: 'provider_chip' | 'search_connectors',
+  ) => void;
+  /** Analytics hook for the per-connector authorization result. The
+   *  daemon emits its own server-side telemetry but the click→outcome
+   *  loop happens in the browser; this lets the parent emit
+   *  `settings_connector_auth_result` for the completed connect /
+   *  disconnect attempts the user kicked off here. */
+  onConnectorAuthResult?: (params: {
+    connectorId: string;
+    action: 'connect' | 'disconnect' | 'refresh';
+    result: 'success' | 'failed' | 'cancelled';
+    errorCode?: string;
+  }) => void;
 }
 
 /**
@@ -407,6 +426,8 @@ const CONNECTOR_CATEGORY_KEYS = {
 export function ConnectorsBrowser({
   composioConfigured,
   catalogRefreshKey = 0,
+  onConnectorsTabClick,
+  onConnectorAuthResult,
 }: ConnectorsBrowserProps) {
   const t = useT();
   const [connectors, setConnectors] = useState<ConnectorDetail[]>([]);
@@ -427,6 +448,7 @@ export function ConnectorsBrowser({
   const [filter, setFilter] = useState('');
   const [selectedProvider, setSelectedProvider] = useState<string>(DEFAULT_PROVIDER_TAB_ID);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const searchTrackedRef = useRef(false);
   const logoTheme = useResolvedTheme();
   const toolPreviewRetryToken = `${composioConfigured ? 'configured' : 'unconfigured'}:${String(catalogRefreshKey)}`;
 
@@ -642,18 +664,39 @@ export function ConnectorsBrowser({
           delete next[connectorId];
           return next;
         });
-        const result = await connectConnector(connectorId);
-        updateConnector(result.connector);
-        if (result.connector && !result.error) {
-          setConnectorAuthorizationPending((curr) => updateConnectorAuthorizationPendingFromConnectResponse(curr, {
-            connector: result.connector!,
-            ...(result.auth === undefined ? {} : { auth: result.auth }),
-          }));
-        } else {
-          setConnectorAuthorizationPending((curr) => clearConnectorAuthorizationPending(curr, connectorId));
-          if (result.error) {
-            setConnectorAuthorizationError((curr) => ({ ...curr, [connectorId]: result.error! }));
+        try {
+          const result = await connectConnector(connectorId);
+          updateConnector(result.connector);
+          if (result.connector && !result.error) {
+            setConnectorAuthorizationPending((curr) => updateConnectorAuthorizationPendingFromConnectResponse(curr, {
+              connector: result.connector!,
+              ...(result.auth === undefined ? {} : { auth: result.auth }),
+            }));
+            onConnectorAuthResult?.({
+              connectorId,
+              action: 'connect',
+              result: 'success',
+            });
+          } else {
+            setConnectorAuthorizationPending((curr) => clearConnectorAuthorizationPending(curr, connectorId));
+            if (result.error) {
+              setConnectorAuthorizationError((curr) => ({ ...curr, [connectorId]: result.error! }));
+            }
+            onConnectorAuthResult?.({
+              connectorId,
+              action: 'connect',
+              result: 'failed',
+              ...(result.error ? { errorCode: result.error } : {}),
+            });
           }
+        } catch (err) {
+          onConnectorAuthResult?.({
+            connectorId,
+            action: 'connect',
+            result: 'failed',
+            errorCode: err instanceof Error ? err.message : String(err),
+          });
+          throw err;
         }
       } else {
         setConnectorAuthorizationPending((curr) => clearConnectorAuthorizationPending(curr, connectorId));
@@ -663,7 +706,22 @@ export function ConnectorsBrowser({
           delete next[connectorId];
           return next;
         });
-        updateConnector(await disconnectConnector(connectorId));
+        try {
+          updateConnector(await disconnectConnector(connectorId));
+          onConnectorAuthResult?.({
+            connectorId,
+            action: 'disconnect',
+            result: 'success',
+          });
+        } catch (err) {
+          onConnectorAuthResult?.({
+            connectorId,
+            action: 'disconnect',
+            result: 'failed',
+            errorCode: err instanceof Error ? err.message : String(err),
+          });
+          throw err;
+        }
       }
     } finally {
       setPendingConnectorAction(null);
@@ -778,7 +836,10 @@ export function ConnectorsBrowser({
                   role="tab"
                   aria-selected={active}
                   className={`connectors-provider-tab${active ? ' is-active' : ''}`}
-                  onClick={() => setSelectedProvider(provider.id)}
+                  onClick={() => {
+                    onConnectorsTabClick?.('provider_chip');
+                    setSelectedProvider(provider.id);
+                  }}
                   data-testid={`connectors-provider-tab-${provider.id}`}
                 >
                   {provider.label}
@@ -794,6 +855,11 @@ export function ConnectorsBrowser({
               ref={searchInputRef}
               type="search"
               value={filter}
+              onFocus={() => {
+                if (searchTrackedRef.current) return;
+                searchTrackedRef.current = true;
+                onConnectorsTabClick?.('search_connectors');
+              }}
               onChange={(event) => setFilter(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === 'Escape' && filter) {
@@ -1236,6 +1302,7 @@ function ConnectorDetailDrawer({
   const showToolsBadge = connector.toolCount !== undefined || actualToolCount > 0 || toolsLoaded;
   const closeBtnRef = useRef<HTMLButtonElement | null>(null);
   const categoryLabel = connectorCategoryLabel(connector.category, t);
+  const toolsBadgeLabel = formatToolsBadge(toolCount, t);
 
   function continueAuthorization(event: SyntheticEvent) {
     event.stopPropagation();
@@ -1293,9 +1360,8 @@ function ConnectorDetailDrawer({
                 {isAuthorizationPending ? t('connectors.authorizationPending') : statusLabel(connector.status, t)}
               </span>
               {showToolsBadge ? (
-                <span className="connector-tools-badge is-ready" title={formatToolsBadge(toolCount, t)}>
-                  <Icon name="settings" size={10} />
-                  <span>{formatToolsBadge(toolCount, t)}</span>
+                <span className="connector-drawer-tool-count-chip" title={toolsBadgeLabel}>
+                  <span>{toolsBadgeLabel}</span>
                 </span>
               ) : null}
             </div>
@@ -1347,7 +1413,21 @@ function ConnectorDetailDrawer({
           ) : null}
 
           <section className="connector-drawer-section">
-            <h3 className="connector-drawer-section-title">{t('connectors.detailsLabel')}</h3>
+            <div className="connector-drawer-section-head">
+              <h3 className="connector-drawer-section-title">{t('connectors.detailsLabel')}</h3>
+              {isConnected ? (
+                <button
+                  type="button"
+                  className={`ghost connector-drawer-inline-action connector-action is-disconnect${isDisconnecting ? ' is-loading' : ''}`}
+                  disabled={!canDisconnect}
+                  aria-busy={isDisconnecting || undefined}
+                  onClick={() => onDisconnect(connector.id)}
+                >
+                  {isDisconnecting ? <Icon name="spinner" size={12} /> : null}
+                  <span>{t('connectors.disconnect')}</span>
+                </button>
+              ) : null}
+            </div>
             <dl className="connector-drawer-details">
               <div>
                 <dt>{t('connectors.statusLabel')}</dt>
@@ -1423,19 +1503,8 @@ function ConnectorDetailDrawer({
           </section>
         </div>
 
-        <footer className="connector-drawer-foot">
-          {isConnected ? (
-            <button
-              type="button"
-              className={`ghost connector-action is-disconnect${isDisconnecting ? ' is-loading' : ''}`}
-              disabled={!canDisconnect}
-              aria-busy={isDisconnecting || undefined}
-              onClick={() => onDisconnect(connector.id)}
-            >
-              {isDisconnecting ? <Icon name="spinner" size={12} /> : null}
-              <span>{t('connectors.disconnect')}</span>
-            </button>
-          ) : (
+        {!isConnected ? (
+          <footer className="connector-drawer-foot">
             <button
               type="button"
               className={`primary connector-action is-connect${isConnecting || isAuthorizationPending ? ' is-loading' : ''}`}
@@ -1446,17 +1515,17 @@ function ConnectorDetailDrawer({
               {isConnecting || isAuthorizationPending ? <Icon name="spinner" size={12} /> : null}
               <span>{isAuthorizationPending ? t('connectors.authorizationPending') : t('connectors.connect')}</span>
             </button>
-          )}
-          {isAuthorizationPending ? (
-            <button
-              type="button"
-              className="ghost connector-action is-cancel-authorization"
-              onClick={() => onCancelAuthorization(connector.id)}
-            >
-              <span>{t('connectors.cancelAuthorization')}</span>
-            </button>
-          ) : null}
-        </footer>
+            {isAuthorizationPending ? (
+              <button
+                type="button"
+                className="ghost connector-action is-cancel-authorization"
+                onClick={() => onCancelAuthorization(connector.id)}
+              >
+                <span>{t('connectors.cancelAuthorization')}</span>
+              </button>
+            ) : null}
+          </footer>
+        ) : null}
       </aside>
     </div>
   );

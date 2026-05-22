@@ -4,6 +4,14 @@ import { FileOpsSummary } from "./FileOpsSummary";
 import { renderMarkdown } from "../runtime/markdown";
 import { projectFileUrl } from "../providers/registry";
 import { submitChatRunToolResult } from "../providers/daemon";
+import { useAnalytics } from "../analytics/provider";
+import {
+  trackAssistantFeedbackButtonClick,
+  trackAssistantFeedbackReasonPanelSurfaceView,
+  trackAssistantFeedbackReasonSubmitClick,
+  trackFeedbackSubmitResult,
+} from "../analytics/events";
+import type { TrackingProjectKind } from "@open-design/contracts/analytics";
 import {
   splitOnQuestionForms,
   type QuestionForm,
@@ -40,10 +48,17 @@ type TranslateFn = (
   vars?: Record<string, string | number>
 ) => string;
 
+const DISCORD_INVITE_URL = "https://discord.gg/mHAjSMV6gz";
+
 interface Props {
   message: ChatMessage;
   streaming: boolean;
   projectId: string | null;
+  // Analytics context for the assistant_feedback_* events. Defaults
+  // applied at the call site keep AssistantMessage usable in tests
+  // that don't care about telemetry.
+  projectKind?: TrackingProjectKind | null;
+  conversationId?: string | null;
   projectFiles?: ProjectFile[];
   projectFileNames?: Set<string>;
   onRequestOpenFile?: (name: string) => void;
@@ -65,6 +80,7 @@ interface Props {
   onContinueRemainingTasks?: (todos: TodoItem[]) => void;
   onFeedback?: (change: ChatMessageFeedbackChange) => void;
   suppressDirectionForms?: boolean;
+  hasDesignSystemContext?: boolean;
 }
 
 /**
@@ -80,6 +96,8 @@ export function AssistantMessage({
   message,
   streaming,
   projectId,
+  projectKind = null,
+  conversationId = null,
   projectFiles = [],
   projectFileNames,
   onRequestOpenFile,
@@ -90,6 +108,7 @@ export function AssistantMessage({
   onContinueRemainingTasks,
   onFeedback,
   suppressDirectionForms = false,
+  hasDesignSystemContext = false,
 }: Props) {
   const t = useT();
   const events = message.events ?? [];
@@ -106,12 +125,25 @@ export function AssistantMessage({
   );
   const fileOps = useMemo(() => deriveFileOps(events), [events]);
   const produced = message.producedFiles ?? [];
+  const displayedProduced = useMemo(
+    () =>
+      produced.length > 0
+        ? produced
+        : inferProducedFilesFromTurn({
+            message,
+            projectFiles,
+            blocks,
+            fileOps,
+            streaming,
+          }),
+    [blocks, fileOps, message, produced, projectFiles, streaming],
+  );
   const pluginActionFolders = useMemo(
     () =>
       !streaming && isLast && projectId
-        ? pluginFoldersTouchedThisTurn(projectFiles, fileOps, produced, message.content)
+        ? pluginFoldersTouchedThisTurn(projectFiles, fileOps, displayedProduced, message.content)
         : [],
-    [fileOps, isLast, message.content, produced, projectFiles, projectId, streaming],
+    [displayedProduced, fileOps, isLast, message.content, projectFiles, projectId, streaming],
   );
   const usage = events.find((e) => e.kind === "usage") as
     | Extract<AgentEvent, { kind: "usage" }>
@@ -136,7 +168,6 @@ export function AssistantMessage({
       message,
       hasEmptyResponse,
       hasUnfinishedTodos: unfinishedTodos.length > 0,
-      hasArtifactWork: hasArtifactWorkSignal(message, produced.length),
     });
   const showCompletionRow =
     showFeedback ||
@@ -231,9 +262,9 @@ export function AssistantMessage({
             return <StatusPill key={i} label={b.label} detail={b.detail} />;
           return null;
         })}
-        {!streaming && produced.length > 0 && projectId ? (
+        {!streaming && displayedProduced.length > 0 && projectId ? (
           <ProducedFiles
-            files={produced}
+            files={displayedProduced}
             projectId={projectId}
             onRequestOpenFile={onRequestOpenFile}
           />
@@ -258,6 +289,13 @@ export function AssistantMessage({
               <AssistantFeedback
                 feedback={message.feedback}
                 onFeedback={onFeedback}
+                projectId={projectId}
+                projectKind={projectKind}
+                conversationId={conversationId}
+                runId={message.runId ?? null}
+                assistantMessageId={message.id}
+                producedFileCount={displayedProduced.length}
+                hasDesignSystemContext={hasDesignSystemContext}
                 footerProps={{
                   streaming,
                   startedAt: message.startedAt,
@@ -285,61 +323,50 @@ export function AssistantMessage({
   );
 }
 
+function inferProducedFilesFromTurn({
+  message,
+  projectFiles,
+  blocks,
+  fileOps,
+  streaming,
+}: {
+  message: ChatMessage;
+  projectFiles: ProjectFile[];
+  blocks: Block[];
+  fileOps: FileOpEntry[];
+  streaming: boolean;
+}): ProjectFile[] {
+  if (streaming || message.role !== "assistant") return [];
+  if (message.runStatus !== "succeeded") return [];
+  if (!message.startedAt || !message.endedAt) return [];
+  if (blocks.some((block) => block.kind === "text" || block.kind === "tool-group")) return [];
+  if (fileOps.length > 0) return [];
+  const start = message.startedAt - 1_000;
+  const end = message.endedAt + 60_000;
+  return projectFiles
+    .filter((file) => {
+      if (file.type === "dir") return false;
+      if (!file.name || file.name.startsWith(".")) return false;
+      if (file.name.includes("/.")) return false;
+      return file.mtime >= start && file.mtime <= end;
+    })
+    .sort((a, b) => b.mtime - a.mtime);
+}
+
 function isFeedbackEligible({
   streaming,
   message,
   hasEmptyResponse,
   hasUnfinishedTodos,
-  hasArtifactWork,
 }: {
   streaming: boolean;
   message: ChatMessage;
   hasEmptyResponse: boolean;
   hasUnfinishedTodos: boolean;
-  hasArtifactWork: boolean;
 }): boolean {
   if (streaming || hasEmptyResponse || hasUnfinishedTodos) return false;
-  if (!hasArtifactWork) return false;
   if (message.runStatus) return message.runStatus === "succeeded";
   return !!message.endedAt;
-}
-
-function hasArtifactWorkSignal(message: ChatMessage, producedFileCount: number): boolean {
-  if (producedFileCount > 0) return true;
-  if (message.content.includes("<artifact")) return true;
-  if (hasLiveArtifactMutation(message.events ?? [])) return true;
-  return hasSuccessfulFileMutation(message.events ?? []);
-}
-
-function hasLiveArtifactMutation(events: AgentEvent[]): boolean {
-  return events.some((event) => {
-    if (event.kind !== "live_artifact") return false;
-    return event.action === "created" || event.action === "updated";
-  });
-}
-
-function hasSuccessfulFileMutation(events: AgentEvent[]): boolean {
-  const errorByToolId = new Map<string, boolean>();
-  for (const event of events) {
-    if (event.kind === "tool_result") {
-      errorByToolId.set(event.toolUseId, event.isError);
-    }
-  }
-  return events.some((event) => {
-    if (event.kind !== "tool_use") return false;
-    if (!isFileMutationToolName(event.name)) return false;
-    return errorByToolId.get(event.id) !== true;
-  });
-}
-
-function isFileMutationToolName(name: string): boolean {
-  return (
-    name === "Write" ||
-    name === "write" ||
-    name === "create_file" ||
-    name === "Edit" ||
-    name === "str_replace_edit"
-  );
 }
 
 function MessageTimestamp({
@@ -459,13 +486,32 @@ function AssistantFooter({
 function AssistantFeedback({
   feedback,
   onFeedback,
+  hasDesignSystemContext,
   footerProps,
+  projectId,
+  projectKind,
+  conversationId,
+  runId,
+  assistantMessageId,
+  producedFileCount,
 }: {
   feedback: ChatMessage["feedback"];
   onFeedback: (change: ChatMessageFeedbackChange) => void;
+  hasDesignSystemContext: boolean;
   footerProps: AssistantFooterProps;
+  projectId: string | null;
+  projectKind: TrackingProjectKind | null;
+  conversationId: string | null;
+  runId: string | null;
+  assistantMessageId: string;
+  producedFileCount: number;
 }) {
   const t = useT();
+  const analytics = useAnalytics();
+  // P0 — analytics context the feedback events need. The four ids are
+  // either user-anchored (projectId / assistantMessageId) or run-anchored
+  // (runId), so we pass them down with a stable identity. `producedFileCount`
+  // feeds `has_produced_files` on assistant_feedback_button click.
   const [burstKey, setBurstKey] = useState(0);
   const [reasonRating, setReasonRating] =
     useState<ChatMessageFeedbackRating | null>(null);
@@ -482,13 +528,56 @@ function AssistantFeedback({
   useEffect(() => {
     if (!reasonRating) return;
     reasonsRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
-  }, [reasonRating]);
+    // P0 surface_view assistant_feedback_reason_panel — fires when the
+    // reason panel actually appears (reasonRating flips from null to
+    // truthy), not when the buttons render.
+    trackAssistantFeedbackReasonPanelSurfaceView(analytics.track, {
+      page_name: "chat_panel",
+      area: "chat_panel",
+      element: "assistant_feedback_reason_panel",
+      view_type: "panel",
+      project_id: projectId ?? "",
+      project_kind: projectKind,
+      conversation_id: conversationId,
+      assistant_message_id: assistantMessageId,
+      run_id: runId ?? "",
+      rating: reasonRating,
+    });
+  }, [
+    reasonRating,
+    analytics.track,
+    projectId,
+    projectKind,
+    conversationId,
+    assistantMessageId,
+    runId,
+  ]);
   const toggleFeedback = (rating: ChatMessageFeedbackRating) => {
     const nextRating = selected === rating ? null : rating;
     if (nextRating === "positive") setBurstKey((key) => key + 1);
     setDraftReasonCodes(new Set());
     setCustomReason("");
     setReasonRating(nextRating);
+    // P0 ui_click assistant_feedback_button. v1 emitted `rating: null` on
+    // the clear path, which lost the signal "user un-thumbed positive vs
+    // un-thumbed negative". v2 fixes this: when clearing, `rating` carries
+    // the rating that was cleared (the user's most recent gesture target),
+    // and `rating_before` records the previous selection state.
+    const ratingBefore: "positive" | "negative" | "none" = selected ?? "none";
+    trackAssistantFeedbackButtonClick(analytics.track, {
+      page_name: "chat_panel",
+      area: "chat_panel",
+      element: "assistant_feedback_button",
+      action: nextRating ? "submit_feedback_rating" : "clear_feedback_rating",
+      project_id: projectId ?? "",
+      project_kind: projectKind,
+      conversation_id: conversationId,
+      assistant_message_id: assistantMessageId,
+      run_id: runId ?? "",
+      rating,
+      rating_before: ratingBefore,
+      has_produced_files: producedFileCount > 0,
+    });
     onFeedback(nextRating ? { rating: nextRating } : null);
   };
   const toggleReasonCode = (code: ChatMessageFeedbackReasonCode) => {
@@ -504,9 +593,61 @@ function AssistantFeedback({
   const submitReasons = () => {
     if (!reasonRating) return;
     const trimmedCustomReason = customReason.trim();
+    const reasonCodes = [...draftReasonCodes];
+    const reasonJoined = reasonCodes.length > 0 ? reasonCodes.join(",") : undefined;
+    const hasCustomReason = draftReasonCodes.has("other") && trimmedCustomReason.length > 0;
+    const requestId = analytics.newRequestId();
+    // P0 ui_click element=assistant_feedback_reason_submit_button — fires
+    // synchronously on the user gesture so the click count never depends on
+    // the host's onFeedback persistence resolving.
+    trackAssistantFeedbackReasonSubmitClick(
+      analytics.track,
+      {
+        page_name: "chat_panel",
+        area: "chat_panel",
+        element: "assistant_feedback_reason_submit_button",
+        action: "click_submit_feedback_reason",
+        project_id: projectId ?? "",
+        project_kind: projectKind,
+        conversation_id: conversationId,
+        assistant_message_id: assistantMessageId,
+        run_id: runId ?? "",
+        rating: reasonRating,
+        ...(reasonJoined ? { reason: reasonJoined } : {}),
+        reason_count: reasonCodes.length,
+        has_custom_reason: hasCustomReason,
+        ...(hasCustomReason ? { custom_reason: trimmedCustomReason } : {}),
+      },
+      { requestId },
+    );
+    // P0 feedback_submit_result — paired with the click via requestId so
+    // PostHog dashboards can correlate intent → persistence. onFeedback in
+    // our app currently completes synchronously, so we emit `success`
+    // optimistically; a future error-aware host can flip this to `failed`.
+    trackFeedbackSubmitResult(
+      analytics.track,
+      {
+        page_name: "chat_panel",
+        area: "chat_panel",
+        element: "assistant_feedback_reason_submit",
+        action: "submit_feedback_reason",
+        project_id: projectId ?? "",
+        project_kind: projectKind,
+        conversation_id: conversationId,
+        assistant_message_id: assistantMessageId,
+        run_id: runId ?? "",
+        rating: reasonRating,
+        ...(reasonJoined ? { reason: reasonJoined } : {}),
+        reason_count: reasonCodes.length,
+        has_custom_reason: hasCustomReason,
+        ...(hasCustomReason ? { custom_reason: trimmedCustomReason } : {}),
+        result: "success",
+      },
+      { requestId },
+    );
     onFeedback({
       rating: reasonRating,
-      reasonCodes: [...draftReasonCodes],
+      reasonCodes,
       customReason:
         draftReasonCodes.has("other") && trimmedCustomReason
           ? trimmedCustomReason
@@ -516,7 +657,7 @@ function AssistantFeedback({
     setReasonRating(null);
   };
   const reasonOptions = reasonRating
-    ? feedbackReasonOptions(reasonRating, t)
+    ? feedbackReasonOptions(reasonRating, t, hasDesignSystemContext)
     : [];
   const reasonEmoji = reasonRating === "positive" ? "😊" : "😔";
   const showOtherInput = draftReasonCodes.has("other");
@@ -602,14 +743,39 @@ function AssistantFeedback({
               onChange={(event) => setCustomReason(event.target.value)}
             />
           ) : null}
-          <button
-            type="button"
-            className="assistant-feedback-submit"
-            disabled={!canSubmit}
-            onClick={submitReasons}
-          >
-            {t("assistant.feedbackReasonSubmit")}
-          </button>
+          {reasonRating === "positive" ? (
+            <p className="assistant-feedback-discord-note">
+              Share what you made with the{" "}
+              <a
+                href={DISCORD_INVITE_URL}
+                data-testid="assistant-feedback-discord-positive"
+              >
+                Discord
+              </a>{" "}
+              community, or drop a screenshot and tell us what worked well.
+            </p>
+          ) : (
+            <p className="assistant-feedback-discord-note">
+              Share more context in{" "}
+              <a
+                href={DISCORD_INVITE_URL}
+                data-testid="assistant-feedback-discord-negative"
+              >
+                Discord
+              </a>{" "}
+              so the team can understand what went wrong and follow up directly.
+            </p>
+          )}
+          <div className="assistant-feedback-actions">
+            <button
+              type="button"
+              className="assistant-feedback-submit"
+              disabled={!canSubmit}
+              onClick={submitReasons}
+            >
+              {t("assistant.feedbackReasonSubmit")}
+            </button>
+          </div>
         </div>
       ) : null}
     </div>
@@ -619,6 +785,7 @@ function AssistantFeedback({
 function feedbackReasonOptions(
   rating: ChatMessageFeedbackRating,
   t: TranslateFn,
+  hasDesignSystemContext: boolean,
 ): Array<{ code: ChatMessageFeedbackReasonCode; label: string }> {
   const codes: ChatMessageFeedbackReasonCode[] =
     rating === "positive"
@@ -627,6 +794,7 @@ function feedbackReasonOptions(
           "strong_visual",
           "useful_structure",
           "easy_to_continue",
+          ...(hasDesignSystemContext ? (["followed_design_system"] as const) : []),
           "other",
         ]
       : [
@@ -634,6 +802,7 @@ function feedbackReasonOptions(
           "weak_visual",
           "incomplete_output",
           "hard_to_use",
+          ...(hasDesignSystemContext ? (["missed_design_system"] as const) : []),
           "other",
         ];
   return codes.map((code) => ({ code, label: feedbackReasonLabel(code, t) }));
@@ -652,6 +821,8 @@ function feedbackReasonLabel(
       return t("assistant.feedbackReasonPositiveUseful");
     case "easy_to_continue":
       return t("assistant.feedbackReasonPositiveEasy");
+    case "followed_design_system":
+      return t("assistant.feedbackReasonPositiveDesignSystem");
     case "missed_request":
       return t("assistant.feedbackReasonNegativeMissed");
     case "weak_visual":
@@ -660,6 +831,8 @@ function feedbackReasonLabel(
       return t("assistant.feedbackReasonNegativeIncomplete");
     case "hard_to_use":
       return t("assistant.feedbackReasonNegativeHard");
+    case "missed_design_system":
+      return t("assistant.feedbackReasonNegativeDesignSystem");
     case "other":
       return t("assistant.feedbackReasonOther");
   }

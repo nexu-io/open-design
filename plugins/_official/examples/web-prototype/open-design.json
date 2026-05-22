@@ -44,8 +44,8 @@
     },
     "useCase": {
       "query": {
-        "en": "Build a {{fidelity}} {{artifactKind}} for {{audience}}. Use {{designSystem}} as the design-system direction and start from {{template}}. Single self-contained HTML file built by copying the seed `assets/template.html` and pasting section layouts from `references/layouts.md`.",
-        "zh-CN": "使用这个插件完成以下任务：为 {{audience}} 构建一个 {{fidelity}} 的 {{artifactKind}}。设计系统方向使用 {{designSystem}}，从 {{template}} 开始。使用 `assets/template.html` 种子并从 `references/layouts.md` 粘贴版面，输出单文件 HTML。"
+        "en": "Create a premium product-studio {{fidelity}} {{artifactKind}} for {{audience}}: sharp information architecture, elegant visual hierarchy, polished interaction states, and a refined design-system-driven interface that feels shipped by a top-tier product team. Use {{designSystem}} as the design-system direction and start from {{template}}. Build one self-contained HTML file by copying the seed `assets/template.html` and pasting layouts from `references/layouts.md`.",
+        "zh-CN": "用高端产品工作室的完成度，为 {{audience}} 打磨一个 {{fidelity}} 的 {{artifactKind}}：信息架构清晰、视觉层级优雅、交互状态完整，整体像顶级产品团队交付的可演示原型。设计系统方向使用 {{designSystem}}，从 {{template}} 开始。使用 `assets/template.html` 种子并从 `references/layouts.md` 粘贴版面，输出单文件 HTML。"
       },
       "exampleOutputs": [
         {

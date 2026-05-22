@@ -5,6 +5,7 @@ export type IconName =
   | 'arrow-up'
   | 'attach'
   | 'bell'
+  | 'blocks'
   | 'check'
   | 'chevron-down'
   | 'chevron-left'
@@ -38,6 +39,7 @@ export type IconName =
   | 'minus'
   | 'more-horizontal'
   | 'orbit'
+  | 'paint-bucket'
   | 'palette'
   | 'pencil'
   | 'plus'
@@ -116,6 +118,13 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
         <svg {...common}>
           <path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
           <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+        </svg>
+      );
+    case 'blocks':
+      return (
+        <svg {...common}>
+          <path d="M10 22V7a1 1 0 0 0-1-1H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5a1 1 0 0 0-1-1H2" />
+          <rect x="14" y="2" width="8" height="8" rx="1" />
         </svg>
       );
     case 'check':
@@ -381,6 +390,12 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
           />
           <circle cx="12" cy="12" r="2.25" fill="currentColor" stroke="none" />
           <circle cx="16" cy="6.8" r="1.5" fill="currentColor" stroke="none" />
+        </svg>
+      );
+    case 'paint-bucket':
+      return (
+        <svg {...common}>
+          <path d="M11 7 6 2m12.992 10H2.041m19.104 6.38A3.34 3.34 0 0 1 20 16.5a3.3 3.3 0 0 1-1.145 1.88c-.575.46-.855 1.02-.855 1.595A2 2 0 0 0 20 22a2 2 0 0 0 2-2.025c0-.58-.285-1.13-.855-1.595M8.5 4.5l2.148-2.148a1.205 1.205 0 0 1 1.704 0l7.296 7.296a1.205 1.205 0 0 1 0 1.704l-7.592 7.592a3.615 3.615 0 0 1-5.112 0l-3.888-3.888a3.615 3.615 0 0 1 0-5.112L5.67 7.33" />
         </svg>
       );
     case 'palette':

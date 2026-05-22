@@ -1,0 +1,1382 @@
+---
+/*
+ * /html-anything/ — sister-project landing page for nexu-io/html-anything.
+ *
+ * One-off marketing surface (not a catalog channel). HA is a separate
+ * repo, so content is hardcoded from its README rather than driven by
+ * a content collection. Stats (stars, license) are fetched live from
+ * the GitHub API at build time, falling back to a hardcoded snapshot
+ * dated in the page itself when the API is unreachable.
+ *
+ * Active nav slot is `home` because we deliberately do not promote
+ * this into the top nav — it's a destination for SEO + direct links,
+ * not a primary channel like /skills/ or /tutorials/.
+ */
+import Layout from '../../_components/sub-page-layout.astro';
+import {
+  DEFAULT_LOCALE,
+  getCommonCopy,
+  getHeaderProductMenuCopy,
+  getLandingUiCopy,
+  localeFromPath,
+  localizedHref,
+  type LandingLocaleCode,
+} from '../../i18n';
+
+const HA_REPO = 'nexu-io/html-anything';
+const HA_URL = `https://github.com/${HA_REPO}`;
+const HA_REPO_API = `https://api.github.com/repos/${HA_REPO}`;
+
+/*
+ * SEO-targeted page titles per locale. Pattern: noun-stack with no
+ * separators — `{open-source} HTML Anything {official}`. The English
+ * tokens "Open Source" and "Official" capture brand-defense queries:
+ *   - "open source html anything"  (researching alternatives)
+ *   - "html anything official"     (verifying the canonical source)
+ *   - "open source html anything official"  (precise long tail)
+ *
+ * Each non-English locale translates the surrounding tokens so a
+ * user searching in their own language still lands on a title that
+ * matches their query, while "HTML Anything" stays untranslated as
+ * a brand. Word order follows whatever feels natural in each locale
+ * (German: Offiziell at end; French: adjectives after noun; CJK:
+ * adjectives before noun) rather than a slavish copy of the English
+ * stack — Google tokenizes regardless of order.
+ */
+const OPEN_SOURCE_OFFICIAL_TITLE: Record<LandingLocaleCode, string> = {
+  en:      'Open Source HTML Anything Official',
+  zh:      '开源 HTML Anything 官方',
+  'zh-tw': '開源 HTML Anything 官方',
+  ja:      'オープンソース HTML Anything 公式',
+  ko:      '오픈 소스 HTML Anything 공식',
+  de:      'Open Source HTML Anything Offiziell',
+  fr:      'HTML Anything Open Source Officiel',
+  ru:      'HTML Anything Open Source Официальный',
+  es:      'HTML Anything Open Source Oficial',
+  'pt-br': 'HTML Anything Open Source Oficial',
+  it:      'HTML Anything Open Source Ufficiale',
+  vi:      'HTML Anything Open Source Chính thức',
+  pl:      'HTML Anything Open Source Oficjalny',
+  id:      'HTML Anything Open Source Resmi',
+  nl:      'HTML Anything Open Source Officieel',
+  ar:      'HTML Anything مفتوح المصدر الرسمي',
+  tr:      'HTML Anything Açık Kaynak Resmi',
+  uk:      'HTML Anything Open Source Офіційний',
+};
+
+/*
+ * Imagery sourced directly from the HA repo via raw.githubusercontent.com.
+ * This is a temporary CDN — for production polish a follow-up should mirror
+ * these PNGs into the same Cloudflare R2 bucket (`open-design-static`) the
+ * rest of the marketing site already uses, then route them through Image
+ * Resizing for `format=auto` + width-aware variants.
+ */
+const HA_RAW = `https://raw.githubusercontent.com/${HA_REPO}/main`;
+const banner = `${HA_RAW}/docs/assets/banner.png`;
+const shots = {
+  entry:    `${HA_RAW}/docs/screenshots/01-entry-view.png`,
+  picker:   `${HA_RAW}/docs/screenshots/02-template-picker.png`,
+  stream:   `${HA_RAW}/docs/screenshots/03-streaming.png`,
+  exportUI: `${HA_RAW}/docs/screenshots/04-export.png`,
+  deck:     `${HA_RAW}/docs/screenshots/05-deck-mode.png`,
+  hyper:    `${HA_RAW}/docs/screenshots/06-hyperframes.png`,
+};
+const skillShots = {
+  guizang:   `${HA_RAW}/docs/screenshots/skills/deck-guizang-editorial.png`,
+  swiss:     `${HA_RAW}/docs/screenshots/skills/deck-swiss-international.png`,
+  parchment: `${HA_RAW}/docs/screenshots/skills/doc-kami-parchment.png`,
+  poster:    `${HA_RAW}/docs/screenshots/skills/magazine-poster.png`,
+};
+
+// Hardcoded snapshot — last manually verified date. Used as fallback
+// and as the dateline shown in the footer of the at-a-glance card.
+const SNAPSHOT_DATE = '2026-05-19';
+const FALLBACK_STARS = '4.1K';
+const FALLBACK_FORKS = '435';
+const FALLBACK_LICENSE = 'Apache-2.0';
+
+type CopyPair = {
+  headline: string;
+  body: string;
+};
+
+type SurfaceCopy = {
+  name: string;
+  blurb: string;
+};
+
+type ExportTargetCopy = {
+  channel: string;
+  how: string;
+};
+
+type RoadmapCopy = {
+  tag: string;
+  items: string[];
+};
+
+type HtmlAnythingCopy = {
+  title: string;
+  description: string;
+  label: string;
+  heading: string;
+  lead: string;
+  githubCta: string;
+  quickstartCta: string;
+  heroAlt: string;
+  glanceAria: string;
+  glance: {
+    stars: string;
+    agents: string;
+    templates: string;
+    modes: string;
+    license: string;
+    foot: (date: string) => string;
+  };
+  whyTitle: string;
+  ideas: CopyPair[];
+  flowTitle: string;
+  flow: [
+    CopyPair & {
+      alt: string;
+      figures?: Array<{ alt: string; caption: string }>;
+    },
+    CopyPair & {
+      alt: string;
+      figures?: Array<{ alt: string; caption: string }>;
+    },
+    CopyPair & {
+      alt: string;
+      figures?: Array<{ alt: string; caption: string }>;
+    },
+  ];
+  showcaseTitle: string;
+  showcaseLead: string;
+  showcase: [
+    { alt: string; tag: string },
+    { alt: string; tag: string },
+    { alt: string; tag: string },
+    { alt: string; tag: string },
+  ];
+  modesTitle: string;
+  modesLead: string;
+  modeFigures: [
+    { alt: string; label: string; body: string },
+    { alt: string; label: string; body: string },
+  ];
+  surfacesTitle: string;
+  surfacesLead: string;
+  surfaces: SurfaceCopy[];
+  agentsTitle: string;
+  agentsLead: string;
+  exportTitle: string;
+  exportTargets: ExportTargetCopy[];
+  quickstartTitle: string;
+  quickstartLead: string;
+  roadmapTitle: string;
+  roadmap: RoadmapCopy[];
+  tiebackTitle: string;
+  tiebackBody: string;
+  visitOpenDesign: string;
+  browseSkills: string;
+  githubLink: string;
+  schemaAlternateName: string;
+  schemaAgentQuestion: string;
+  schemaAgentAnswer: string;
+  schemaExportQuestion: string;
+  schemaExportAnswer: string;
+  schemaRelationQuestion: string;
+  schemaRelationAnswer: string;
+};
+
+const HTML_ANYTHING_COPY_EN: HtmlAnythingCopy = {
+  title: OPEN_SOURCE_OFFICIAL_TITLE.en,
+  description:
+    'HTML Anything is the agentic HTML editor from the Open Design family. Reuse the coding-agent CLI you already authenticated — Claude Code, Codex, Cursor, Gemini, Copilot, OpenCode, Qwen, Aider — to turn Markdown, CSV, or JSON into ship-ready HTML for WeChat, X, Zhihu, and Xiaohongshu. Open-source, Apache-2.0.',
+  label: 'Sister project',
+  heading: 'your local AI agent writes the HTML, you ship it',
+  lead:
+    "The agentic HTML editor from the Open Design family. Reuse the coding-agent CLI you've already authenticated to turn Markdown, CSV, or JSON into ship-ready HTML for WeChat, X, Zhihu, and Xiaohongshu — no new keys, no copy-paste tax.",
+  githubCta: 'View on GitHub →',
+  quickstartCta: 'Quickstart',
+  heroAlt: 'HTML Anything — six surface modes preview banner',
+  glanceAria: 'At a glance',
+  glance: {
+    stars: 'GitHub stars',
+    agents: 'Coding-agent CLIs',
+    templates: 'Skill templates',
+    modes: 'Surface modes',
+    license: 'License',
+    foot: (date) => `Stats verified ${date} · live where the API is reachable.`,
+  },
+  whyTitle: 'Why this exists',
+  ideas: [
+    {
+      headline: 'Markdown is the draft. HTML is what humans read.',
+      body: 'You ship the rendered surface, not the source. HTML Anything closes the gap between your raw notes and the polished page a reader actually sees.',
+    },
+    {
+      headline: 'Your agent already knows you.',
+      body: 'No new account, no API key, no extra subscription. The CLI in your terminal is the rendering engine — HTML Anything just runs your skill.',
+    },
+    {
+      headline: 'Skills are folders, not magic.',
+      body: '75 templates, each a SKILL.md folder you can fork, edit, and reuse. The picker is a directory listing in disguise.',
+    },
+  ],
+  flowTitle: 'How it works',
+  flow: [
+    {
+      headline: 'Drop in your input',
+      body: 'Markdown, CSV, TSV, JSON, SQL, Excel, or plain text. Tabular data is parsed in-browser via papaparse and xlsx — nothing leaves your laptop.',
+      alt: 'HTML Anything entry view — paste or drop an input',
+    },
+    {
+      headline: 'Pick a skill, agent renders it',
+      body: 'Choose from 75 SKILL.md templates. The local CLI you already authenticated streams its stdout straight into a sandboxed iframe via SSE — you watch the layout assemble in real time.',
+      alt: 'Template picker and streaming preview',
+      figures: [
+        {
+          alt: 'Template picker showing 75 skills',
+          caption: 'Template picker — 75 skills, organized by surface mode.',
+        },
+        {
+          alt: 'Live SSE streaming of HTML output',
+          caption: 'SSE streaming render — agent stdout becomes the layout.',
+        },
+      ],
+    },
+    {
+      headline: 'Export to your channel',
+      body: 'One click for WeChat MP, X / Weibo / Xiaohongshu, Zhihu, standalone .html, or 2× PNG. Output is presentation-ready, not a starter kit.',
+      alt: 'Export menu with WeChat / X / Xiaohongshu / Zhihu / HTML / PNG targets',
+    },
+  ],
+  showcaseTitle: 'Showcase',
+  showcaseLead:
+    'A glimpse of what HTML Anything ships out of the box. Each tile is a real skill in the registry — fork the folder, swap the content, hit export.',
+  showcase: [
+    { alt: 'Guizang editorial deck — magazine spread sample', tag: 'Magazine deck · 16:9' },
+    { alt: 'Swiss international deck — grid-based layout', tag: 'Swiss grid deck' },
+    { alt: 'Kami parchment document — warm cream long-form layout', tag: 'Long-form document' },
+    { alt: 'Magazine poster — newsprint layout', tag: 'Newsprint poster' },
+  ],
+  modesTitle: 'Two surfaces beyond the page',
+  modesLead:
+    'HTML Anything also covers presentation-style decks and storyboard frames you can hand off to a video pipeline.',
+  modeFigures: [
+    {
+      alt: 'Deck mode — slide-by-slide presentation view',
+      label: 'Keynote deck mode',
+      body: 'full-bleed slide layouts with Atelier Zero typography and Swiss-grid variants.',
+    },
+    {
+      alt: 'Hyperframes — storyboard frames for video',
+      label: 'Hyperframes',
+      body: 'storyboard frames sized and labelled so the next stop can be a Remotion render.',
+    },
+  ],
+  surfacesTitle: 'Nine surface modes',
+  surfacesLead:
+    'Each surface is a curated layout family — pick the one that matches where the output is going to live.',
+  surfaces: [
+    { name: 'Magazine article', blurb: 'Long-form editorial layout with drop caps and pull quotes.' },
+    { name: 'Keynote deck', blurb: 'Slide deck with editorial covers and Swiss-grid variants.' },
+    { name: 'Résumé', blurb: 'One-page CV in print-ready typographic hierarchy.' },
+    { name: 'Poster', blurb: 'Newsprint poster — single big idea, eye-catching grid.' },
+    { name: 'Xiaohongshu card', blurb: 'Vertical 3:4 card sized for the Little Red Book feed.' },
+    { name: 'Tweet card', blurb: '2× PNG export for X / Weibo with native ratios.' },
+    { name: 'Web prototype', blurb: 'Functional landing-page or product-page sketch.' },
+    { name: 'Data report', blurb: 'Tabular data → annotated dashboard in one shot.' },
+    { name: 'Hyperframes video', blurb: 'Storyboard frames you can hand off to Remotion.' },
+  ],
+  agentsTitle: 'Eight coding agents auto-detected',
+  agentsLead:
+    'HTML Anything inherits whichever CLI sessions you already have on your machine. No extra account, no extra API key.',
+  exportTitle: 'Export targets',
+  exportTargets: [
+    { channel: 'WeChat MP', how: 'CSS inlined via juice — paste straight into the editor.' },
+    { channel: 'X / Weibo', how: '2× PNG via modern-screenshot, copied through ClipboardItem.' },
+    { channel: 'Xiaohongshu', how: 'Vertical card export sized for the feed.' },
+    { channel: 'Zhihu', how: 'LaTeX equations rendered as image placeholders.' },
+    { channel: 'Standalone HTML', how: 'Single-file download. Self-contained, no asset paths.' },
+    { channel: 'High-DPI PNG', how: '2× rendering for crisp screenshots on any platform.' },
+  ],
+  quickstartTitle: 'Quickstart',
+  quickstartLead:
+    'The agent runs locally on your laptop. You can also deploy the Next.js shell to Vercel — only the rendering loop stays local.',
+  roadmapTitle: 'Roadmap',
+  roadmap: [
+    { tag: 'Stable', items: ['Agent detection', 'Skill registry & picker', 'SSE streaming render', 'Sandboxed iframe preview', 'Format auto-detect (Markdown · CSV · TSV · JSON · SQL · Excel)'] },
+    { tag: 'In progress', items: ['Multi-template compare view', 'Hyperframes → .mp4 Remotion handoff'] },
+    { tag: 'Planned', items: ['Browser extension', 'History + version diff', 'Skill marketplace'] },
+  ],
+  tiebackTitle: 'From the Open Design family',
+  tiebackBody:
+    'Open Design is the broader agentic design surface — skills, systems, templates, the whole studio. HTML Anything is the narrow tool: Markdown or data in, ship-ready HTML out.',
+  visitOpenDesign: 'Visit Open Design →',
+  browseSkills: 'Browse Skills',
+  githubLink: 'HTML Anything on GitHub',
+  schemaAlternateName: 'The agentic HTML editor',
+  schemaAgentQuestion: 'Which coding agents does HTML Anything support?',
+  schemaAgentAnswer:
+    'Eight CLIs are auto-detected: Claude Code, Cursor Agent, OpenAI Codex, Gemini CLI, GitHub Copilot CLI, OpenCode, Qwen Coder, and Aider. HTML Anything reuses whichever sessions you have already authenticated — no extra API key required.',
+  schemaExportQuestion: 'Where can I export from HTML Anything?',
+  schemaExportAnswer:
+    'Built-in export targets include WeChat MP, X, Weibo, Xiaohongshu, Zhihu, standalone HTML, and high-DPI PNG.',
+  schemaRelationQuestion: 'Is HTML Anything related to Open Design?',
+  schemaRelationAnswer:
+    'Yes. HTML Anything is a sister project from the same team behind Open Design.',
+};
+
+const HTML_ANYTHING_COPY_ZH: HtmlAnythingCopy = {
+  ...HTML_ANYTHING_COPY_EN,
+  title: OPEN_SOURCE_OFFICIAL_TITLE.zh,
+  description:
+    'HTML Anything 是 Open Design 家族里的 Agent 原生 HTML 编辑器。复用你已经登录的 Claude Code、Codex、Cursor、Gemini、Copilot、OpenCode、Qwen、Aider，把 Markdown、CSV 或 JSON 变成可交付 HTML。',
+  label: '姊妹项目',
+  heading: '你的本地 AI Agent 写 HTML，你负责发布',
+  lead:
+    'Open Design 家族里的 Agent 原生 HTML 编辑器。复用你已经登录的 coding-agent CLI，把 Markdown、CSV 或 JSON 变成可交付 HTML，适配微信、X、知乎、小红书等渠道，不需要新 key，也不用来回复制粘贴。',
+  githubCta: '在 GitHub 查看 →',
+  quickstartCta: '快速开始',
+  heroAlt: 'HTML Anything 六种内容形态预览横幅',
+  glanceAria: '概览',
+  glance: {
+    stars: 'GitHub Star',
+    agents: 'Coding-agent CLI',
+    templates: 'Skill 模板',
+    modes: '内容形态',
+    license: '许可证',
+    foot: (date) => `数据已在 ${date} 校验；API 可用时使用实时数据。`,
+  },
+  whyTitle: '为什么需要它',
+  ideas: [
+    { headline: 'Markdown 是草稿，HTML 才是读者看到的页面。', body: '你最终发布的是渲染后的内容表面，不是源文件。HTML Anything 补齐从原始笔记到精致页面之间的最后一步。' },
+    { headline: '你的 Agent 已经认识你。', body: '不用新账号、不用新 API key、不用额外订阅。终端里的 CLI 就是渲染引擎，HTML Anything 只负责运行你的 skill。' },
+    { headline: 'Skill 是文件夹，不是黑盒。', body: '75 个模板都是可 fork、可编辑、可复用的 SKILL.md 文件夹。选择器本质上就是一个可浏览的目录。' },
+  ],
+  flowTitle: '工作流程',
+  flow: [
+    { headline: '放入输入内容', body: '支持 Markdown、CSV、TSV、JSON、SQL、Excel 或纯文本。表格数据在浏览器内通过 papaparse 和 xlsx 解析，内容不会离开你的电脑。', alt: 'HTML Anything 输入视图：粘贴或拖入内容' },
+    {
+      headline: '选择 Skill，由 Agent 渲染',
+      body: '从 75 个 SKILL.md 模板中选择一个。你已经登录的本地 CLI 会通过 SSE 把 stdout 直接流进沙盒 iframe，可以实时看到布局生成。',
+      alt: '模板选择器与流式预览',
+      figures: [
+        { alt: '显示 75 个 Skill 的模板选择器', caption: '模板选择器：75 个 Skill，按内容形态组织。' },
+        { alt: 'HTML 输出的 SSE 实时流式渲染', caption: 'SSE 流式渲染：Agent stdout 变成页面布局。' },
+      ],
+    },
+    { headline: '导出到目标渠道', body: '一键导出到微信 MP、X / 微博 / 小红书、知乎、独立 HTML 或 2× PNG。输出是可发布成品，不是起手架。', alt: '包含微信、X、小红书、知乎、HTML、PNG 的导出菜单' },
+  ],
+  showcaseTitle: '示例',
+  showcaseLead: 'HTML Anything 开箱即用的输出示例。每个卡片都对应 registry 里的真实 Skill，可以 fork 文件夹、替换内容、直接导出。',
+  showcase: [
+    { alt: '归藏编辑式 deck：杂志跨页示例', tag: '杂志 deck · 16:9' },
+    { alt: 'Swiss international deck：网格布局', tag: 'Swiss 网格 deck' },
+    { alt: 'Kami 羊皮纸文档：暖色长文布局', tag: '长文档' },
+    { alt: '杂志海报：新闻纸版式', tag: '新闻纸海报' },
+  ],
+  modesTitle: '页面之外的两种形态',
+  modesLead: 'HTML Anything 也覆盖演示文稿式 deck 和可交给视频流水线的 storyboard frames。',
+  modeFigures: [
+    { alt: 'Deck 模式：逐页演示视图', label: 'Keynote deck 模式', body: '全出血 slide、Atelier Zero 字体系统与 Swiss-grid 变体。' },
+    { alt: 'Hyperframes：用于视频的 storyboard frames', label: 'Hyperframes', body: '按视频流程标注尺寸和信息，下一步可以进入 Remotion 渲染。' },
+  ],
+  surfacesTitle: '九种内容形态',
+  surfacesLead: '每种形态都是一组策划过的布局家族，按最终发布渠道选择即可。',
+  surfaces: [
+    { name: '杂志文章', blurb: '带首字下沉和引文的长篇编辑式版面。' },
+    { name: 'Keynote deck', blurb: '带编辑式封面和 Swiss-grid 变体的演示文稿。' },
+    { name: '简历', blurb: '一页式 CV，强调可打印的字体层级。' },
+    { name: '海报', blurb: '新闻纸风格海报，用网格突出一个核心观点。' },
+    { name: '小红书卡片', blurb: '适合信息流的竖版 3:4 卡片。' },
+    { name: 'Tweet 卡片', blurb: '按 X / 微博比例导出 2× PNG。' },
+    { name: '网页原型', blurb: '可运行的 landing page 或产品页草图。' },
+    { name: '数据报告', blurb: '表格数据一键变成带注释的 dashboard。' },
+    { name: 'Hyperframes 视频', blurb: '可交给 Remotion 的 storyboard frames。' },
+  ],
+  agentsTitle: '自动识别八种 coding agent',
+  agentsLead: 'HTML Anything 复用你机器上已有的 CLI 登录态。不需要额外账号，也不需要额外 API key。',
+  exportTitle: '导出目标',
+  exportTargets: [
+    { channel: '微信 MP', how: '通过 juice 内联 CSS，可直接粘贴到编辑器。' },
+    { channel: 'X / 微博', how: '通过 modern-screenshot 生成 2× PNG，并可复制到剪贴板。' },
+    { channel: '小红书', how: '按信息流尺寸导出竖版卡片。' },
+    { channel: '知乎', how: 'LaTeX 公式会渲染为图片占位。' },
+    { channel: '独立 HTML', how: '单文件下载，自包含，无外部资源路径。' },
+    { channel: '高 DPI PNG', how: '2× 渲染，适合高清截图。' },
+  ],
+  quickstartTitle: '快速开始',
+  quickstartLead: 'Agent 在你的电脑本地运行。Next.js 外壳也可以部署到 Vercel，但渲染循环仍留在本地。',
+  roadmapTitle: '路线图',
+  roadmap: [
+    { tag: '稳定', items: ['Agent 识别', 'Skill registry 与选择器', 'SSE 流式渲染', '沙盒 iframe 预览', '格式自动识别（Markdown · CSV · TSV · JSON · SQL · Excel）'] },
+    { tag: '进行中', items: ['多模板对比视图', 'Hyperframes → .mp4 Remotion 交接'] },
+    { tag: '计划中', items: ['浏览器扩展', '历史记录与版本 diff', 'Skill marketplace'] },
+  ],
+  tiebackTitle: '来自 Open Design 家族',
+  tiebackBody: 'Open Design 是更完整的 Agent 原生设计工作台：Skill、设计系统、模板和整个 studio。HTML Anything 是更窄的工具：输入 Markdown 或数据，输出可交付 HTML。',
+  visitOpenDesign: '访问 Open Design →',
+  browseSkills: '浏览 Skill',
+  githubLink: 'HTML Anything on GitHub',
+  schemaAlternateName: 'Agent 原生 HTML 编辑器',
+  schemaAgentQuestion: 'HTML Anything 支持哪些 coding agent？',
+  schemaAgentAnswer: '可自动识别 Claude Code、Cursor Agent、OpenAI Codex、Gemini CLI、GitHub Copilot CLI、OpenCode、Qwen Coder 和 Aider。',
+  schemaExportQuestion: 'HTML Anything 可以导出到哪里？',
+  schemaExportAnswer: '内置微信 MP、X、微博、小红书、知乎、独立 HTML 和高 DPI PNG 导出。',
+  schemaRelationQuestion: 'HTML Anything 和 Open Design 有关系吗？',
+  schemaRelationAnswer: '有。HTML Anything 是 Open Design 团队的姊妹项目，专注 Markdown / 数据到可交付 HTML。',
+};
+
+const HTML_ANYTHING_COPY_ZH_TW: HtmlAnythingCopy = {
+  ...HTML_ANYTHING_COPY_ZH,
+  title: OPEN_SOURCE_OFFICIAL_TITLE['zh-tw'],
+  description:
+    'HTML Anything 是 Open Design 家族裡的 Agent 原生 HTML 編輯器。複用你已經登入的 Claude Code、Codex、Cursor、Gemini、Copilot、OpenCode、Qwen、Aider，把 Markdown、CSV 或 JSON 變成可交付 HTML。',
+  label: '姊妹專案',
+  heading: '你的本地 AI Agent 寫 HTML，你負責發布',
+  lead:
+    'Open Design 家族裡的 Agent 原生 HTML 編輯器。複用你已經登入的 coding-agent CLI，把 Markdown、CSV 或 JSON 變成可交付 HTML，適配微信、X、知乎、小紅書等渠道，不需要新 key，也不用來回複製貼上。',
+  githubCta: '在 GitHub 查看 →',
+  quickstartCta: '快速開始',
+  heroAlt: 'HTML Anything 六種內容形態預覽橫幅',
+  glanceAria: '概覽',
+  glance: {
+    stars: 'GitHub Star',
+    agents: 'Coding-agent CLI',
+    templates: 'Skill 模板',
+    modes: '內容形態',
+    license: '授權',
+    foot: (date) => `資料已在 ${date} 校驗；API 可用時使用即時資料。`,
+  },
+  whyTitle: '為什麼需要它',
+  ideas: [
+    { headline: 'Markdown 是草稿，HTML 才是讀者看到的頁面。', body: '你最終發布的是渲染後的內容表面，不是原始檔。HTML Anything 補齊從原始筆記到精緻頁面之間的最後一步。' },
+    { headline: '你的 Agent 已經認識你。', body: '不用新帳號、不用新 API key、不用額外訂閱。終端裡的 CLI 就是渲染引擎，HTML Anything 只負責執行你的 skill。' },
+    { headline: 'Skill 是資料夾，不是黑盒。', body: '75 個模板都是可 fork、可編輯、可複用的 SKILL.md 資料夾。選擇器本質上就是一個可瀏覽的目錄。' },
+  ],
+  flowTitle: '工作流程',
+  flow: [
+    { headline: '放入輸入內容', body: '支援 Markdown、CSV、TSV、JSON、SQL、Excel 或純文字。表格資料在瀏覽器內透過 papaparse 和 xlsx 解析，內容不會離開你的電腦。', alt: 'HTML Anything 輸入視圖：貼上或拖入內容' },
+    {
+      headline: '選擇 Skill，由 Agent 渲染',
+      body: '從 75 個 SKILL.md 模板中選擇一個。你已經登入的本地 CLI 會透過 SSE 把 stdout 直接流進沙盒 iframe，可以即時看到版面生成。',
+      alt: '模板選擇器與串流預覽',
+      figures: [
+        { alt: '顯示 75 個 Skill 的模板選擇器', caption: '模板選擇器：75 個 Skill，按內容形態組織。' },
+        { alt: 'HTML 輸出的 SSE 即時串流渲染', caption: 'SSE 串流渲染：Agent stdout 變成頁面版面。' },
+      ],
+    },
+    { headline: '匯出到目標渠道', body: '一鍵匯出到微信 MP、X / 微博 / 小紅書、知乎、獨立 HTML 或 2× PNG。輸出是可發布成品，不是起手架。', alt: '包含微信、X、小紅書、知乎、HTML、PNG 的匯出選單' },
+  ],
+  showcaseTitle: '示例',
+  showcaseLead: 'HTML Anything 開箱即用的輸出示例。每個卡片都對應 registry 裡的真實 Skill，可以 fork 資料夾、替換內容、直接匯出。',
+  showcase: [
+    { alt: '歸藏編輯式 deck：雜誌跨頁示例', tag: '雜誌 deck · 16:9' },
+    { alt: 'Swiss international deck：網格版面', tag: 'Swiss 網格 deck' },
+    { alt: 'Kami 羊皮紙文件：暖色長文版面', tag: '長文件' },
+    { alt: '雜誌海報：新聞紙版式', tag: '新聞紙海報' },
+  ],
+  modesTitle: '頁面之外的兩種形態',
+  modesLead: 'HTML Anything 也覆蓋簡報式 deck 和可交給影片流水線的 storyboard frames。',
+  modeFigures: [
+    { alt: 'Deck 模式：逐頁簡報視圖', label: 'Keynote deck 模式', body: '全出血 slide、Atelier Zero 字體系統與 Swiss-grid 變體。' },
+    { alt: 'Hyperframes：用於影片的 storyboard frames', label: 'Hyperframes', body: '按影片流程標註尺寸和資訊，下一步可以進入 Remotion 渲染。' },
+  ],
+  surfacesTitle: '九種內容形態',
+  surfacesLead: '每種形態都是一組策劃過的版面家族，按最終發布渠道選擇即可。',
+  surfaces: [
+    { name: '雜誌文章', blurb: '帶首字下沉和引文的長篇編輯式版面。' },
+    { name: 'Keynote deck', blurb: '帶編輯式封面和 Swiss-grid 變體的簡報。' },
+    { name: '履歷', blurb: '一頁式 CV，強調可列印的字體層級。' },
+    { name: '海報', blurb: '新聞紙風格海報，用網格突出一個核心觀點。' },
+    { name: '小紅書卡片', blurb: '適合資訊流的直式 3:4 卡片。' },
+    { name: 'Tweet 卡片', blurb: '按 X / 微博比例匯出 2× PNG。' },
+    { name: '網頁原型', blurb: '可執行的 landing page 或產品頁草圖。' },
+    { name: '資料報告', blurb: '表格資料一鍵變成帶註釋的 dashboard。' },
+    { name: 'Hyperframes 影片', blurb: '可交給 Remotion 的 storyboard frames。' },
+  ],
+  agentsTitle: '自動識別八種 coding agent',
+  agentsLead: 'HTML Anything 複用你機器上已有的 CLI 登入態。不需要額外帳號，也不需要額外 API key。',
+  exportTitle: '匯出目標',
+  exportTargets: [
+    { channel: '微信 MP', how: '透過 juice 內聯 CSS，可直接貼到編輯器。' },
+    { channel: 'X / 微博', how: '透過 modern-screenshot 生成 2× PNG，並可複製到剪貼簿。' },
+    { channel: '小紅書', how: '按資訊流尺寸匯出直式卡片。' },
+    { channel: '知乎', how: 'LaTeX 公式會渲染為圖片佔位。' },
+    { channel: '獨立 HTML', how: '單檔下載，自包含，無外部資源路徑。' },
+    { channel: '高 DPI PNG', how: '2× 渲染，適合高清截圖。' },
+  ],
+  quickstartTitle: '快速開始',
+  quickstartLead: 'Agent 在你的電腦本地執行。Next.js 外殼也可以部署到 Vercel，但渲染循環仍留在本地。',
+  roadmapTitle: '路線圖',
+  roadmap: [
+    { tag: '穩定', items: ['Agent 識別', 'Skill registry 與選擇器', 'SSE 串流渲染', '沙盒 iframe 預覽', '格式自動識別（Markdown · CSV · TSV · JSON · SQL · Excel）'] },
+    { tag: '進行中', items: ['多模板對比視圖', 'Hyperframes → .mp4 Remotion 交接'] },
+    { tag: '計畫中', items: ['瀏覽器擴充功能', '歷史記錄與版本 diff', 'Skill marketplace'] },
+  ],
+  tiebackTitle: '來自 Open Design 家族',
+  tiebackBody: 'Open Design 是更完整的 Agent 原生設計工作台：Skill、設計系統、模板和整個 studio。HTML Anything 是更窄的工具：輸入 Markdown 或資料，輸出可交付 HTML。',
+  visitOpenDesign: '造訪 Open Design →',
+  browseSkills: '瀏覽 Skill',
+  schemaAlternateName: 'Agent 原生 HTML 編輯器',
+  schemaAgentQuestion: 'HTML Anything 支援哪些 coding agent？',
+  schemaAgentAnswer: '可自動識別 Claude Code、Cursor Agent、OpenAI Codex、Gemini CLI、GitHub Copilot CLI、OpenCode、Qwen Coder 和 Aider。',
+  schemaExportQuestion: 'HTML Anything 可以匯出到哪裡？',
+  schemaExportAnswer: '內建微信 MP、X、微博、小紅書、知乎、獨立 HTML 和高 DPI PNG 匯出。',
+  schemaRelationQuestion: 'HTML Anything 和 Open Design 有關係嗎？',
+  schemaRelationAnswer: '有。HTML Anything 是 Open Design 團隊的姊妹專案，專注 Markdown / 資料到可交付 HTML。',
+};
+
+function derivedHtmlAnythingCopy(locale: LandingLocaleCode): HtmlAnythingCopy {
+  if (locale === DEFAULT_LOCALE) return HTML_ANYTHING_COPY_EN;
+  if (locale === 'zh') return HTML_ANYTHING_COPY_ZH;
+  if (locale === 'zh-tw') return HTML_ANYTHING_COPY_ZH_TW;
+
+  const ui = getLandingUiCopy(locale);
+  const common = getCommonCopy(locale);
+  const product = getHeaderProductMenuCopy(locale);
+  const quickstart = ui.footer.quickstart;
+  const skills = common.header.nav.skills;
+  const templates = common.header.nav.templates;
+  const summary = ui.footer.summary;
+  const preview = ui.plugins.interactivePreview;
+
+  return {
+    ...HTML_ANYTHING_COPY_EN,
+    title: OPEN_SOURCE_OFFICIAL_TITLE[locale] ?? OPEN_SOURCE_OFFICIAL_TITLE.en,
+    description: `${product.htmlAnythingBlurb} ${summary}`,
+    label: product.product,
+    heading: product.htmlAnythingBlurb,
+    lead: `${product.htmlAnythingBlurb} Markdown / CSV / JSON / HTML. ${summary}`,
+    githubCta: ui.plugins.sourceRepository,
+    quickstartCta: quickstart,
+    heroAlt: `${product.htmlAnythingName} · ${preview}`,
+    glanceAria: ui.plugins.previewAndFacts,
+    glance: {
+      stars: 'GitHub',
+      agents: `${ui.footer.agents} CLI`,
+      templates,
+      modes: ui.plugins.surfaces,
+      license: ui.plugins.facts.license,
+      foot: (date) => `${date} · GitHub / API`,
+    },
+    whyTitle: ui.blog.nextStep,
+    ideas: [
+      { headline: `${product.htmlAnythingName} / Markdown / HTML`, body: product.htmlAnythingBlurb },
+      { headline: `${ui.footer.agents} / CLI`, body: `${summary} Claude Code / Codex / Cursor / Gemini / OpenCode / Qwen / Aider.` },
+      { headline: `${skills} / SKILL.md`, body: `${templates} / SKILL.md / HTML / PNG.` },
+    ],
+    flowTitle: quickstart,
+    flow: [
+      { headline: 'Markdown / CSV / JSON', body: `${product.htmlAnythingBlurb} papaparse / xlsx.`, alt: `${product.htmlAnythingName} · input` },
+      {
+        headline: `${skills} / Agent`,
+        body: `${product.htmlAnythingBlurb} SSE / iframe / CLI.`,
+        alt: `${product.htmlAnythingName} · ${preview}`,
+        figures: [
+          { alt: `${product.htmlAnythingName} · ${templates}`, caption: `${templates} / SKILL.md` },
+          { alt: `${product.htmlAnythingName} · SSE`, caption: `SSE / iframe / HTML` },
+        ],
+      },
+      { headline: 'HTML / PNG', body: `WeChat MP / X / Weibo / Xiaohongshu / Zhihu / HTML / PNG.`, alt: `${product.htmlAnythingName} · export` },
+    ],
+    showcaseTitle: ui.plugins.previewAndFacts,
+    showcaseLead: `${product.htmlAnythingBlurb} ${templates} / SKILL.md.`,
+    showcase: [
+      {
+        alt: `${preview}: deck-guizang-editorial`,
+        tag: ui.plugins.imagePreview,
+      },
+      {
+        alt: `${preview}: deck-swiss-international`,
+        tag: ui.plugins.liveHtmlPreview,
+      },
+      {
+        alt: `${preview}: doc-kami-parchment`,
+        tag: ui.plugins.interactivePreview,
+      },
+      {
+        alt: `${preview}: magazine-poster`,
+        tag: ui.plugins.videoPoster,
+      },
+    ],
+    modesTitle: ui.catalog.skills.mode,
+    modesLead: `Deck / Hyperframes / HTML / PNG.`,
+    modeFigures: [
+      {
+        alt: `${product.htmlAnythingName} · Deck`,
+        label: `${templates} · Deck`,
+        body: `${product.htmlAnythingBlurb} ${templates}.`,
+      },
+      {
+        alt: `${product.htmlAnythingName} · Hyperframes`,
+        label: 'Hyperframes',
+        body: `${product.htmlAnythingBlurb} Remotion / video.`,
+      },
+    ],
+    surfacesTitle: ui.catalog.skills.scenario,
+    surfacesLead: `${templates} / Markdown / CSV / JSON / HTML.`,
+    surfaces: [
+      { name: `${templates} · 01`, blurb: `${product.htmlAnythingBlurb} Markdown / HTML.` },
+      { name: `${templates} · 02`, blurb: `${product.htmlAnythingBlurb} Deck / PNG.` },
+      { name: `${templates} · 03`, blurb: `${summary} HTML / PNG.` },
+      { name: `${templates} · 04`, blurb: `${summary} Markdown / data.` },
+      { name: `${templates} · 05`, blurb: `${product.htmlAnythingBlurb} WeChat MP.` },
+      { name: `${templates} · 06`, blurb: `${product.htmlAnythingBlurb} X / Weibo.` },
+      { name: `${templates} · 07`, blurb: `${summary} prototype / HTML.` },
+      { name: `${templates} · 08`, blurb: `${summary} CSV / JSON.` },
+      { name: `${templates} · 09`, blurb: `${product.htmlAnythingBlurb} video / Remotion.` },
+    ],
+    agentsTitle: `${ui.footer.agents} CLI`,
+    agentsLead: `${summary} Claude Code / Codex / Cursor / Gemini / OpenCode / Qwen / Aider.`,
+    exportTitle: ui.plugins.surfaces,
+    exportTargets: [
+      { channel: 'WeChat MP', how: `${product.htmlAnythingBlurb} CSS / HTML.` },
+      { channel: 'X / Weibo', how: `${product.htmlAnythingBlurb} PNG.` },
+      { channel: 'Xiaohongshu', how: `${product.htmlAnythingBlurb} PNG.` },
+      { channel: 'Zhihu', how: `${product.htmlAnythingBlurb} HTML.` },
+      { channel: 'Standalone HTML', how: `${product.htmlAnythingBlurb} HTML.` },
+      { channel: 'High-DPI PNG', how: `${product.htmlAnythingBlurb} PNG.` },
+    ],
+    quickstartTitle: quickstart,
+    quickstartLead: `${product.htmlAnythingName} / pnpm / localhost:3000.`,
+    roadmapTitle: ui.blog.nextStep,
+    roadmap: [
+      { tag: quickstart, items: [`${ui.footer.agents} CLI`, `${templates} / registry`, 'SSE / iframe', 'Markdown / CSV / JSON'] },
+      { tag: ui.plugins.details, items: [`${templates} compare`, 'Hyperframes / Remotion'] },
+      { tag: ui.blog.nextStep, items: ['Browser extension', `${ui.plugins.marketplaceJson}`, `${ui.plugins.details} history`] },
+    ],
+    tiebackTitle: 'Open Design',
+    tiebackBody: `${summary} ${product.htmlAnythingName}: Markdown / data -> HTML.`,
+    visitOpenDesign: 'Open Design →',
+    browseSkills: skills,
+    githubLink: `${product.htmlAnythingName} · GitHub`,
+    schemaAlternateName: product.htmlAnythingBlurb,
+    schemaAgentQuestion: `${product.htmlAnythingName} / Agent CLI`,
+    schemaAgentAnswer: `${product.htmlAnythingName}: Claude Code, Cursor Agent, OpenAI Codex, Gemini CLI, GitHub Copilot CLI, OpenCode, Qwen Coder, Aider.`,
+    schemaExportQuestion: `${product.htmlAnythingName} / export`,
+    schemaExportAnswer: 'WeChat MP, X, Weibo, Xiaohongshu, Zhihu, HTML, PNG.',
+    schemaRelationQuestion: `${product.htmlAnythingName} / Open Design`,
+    schemaRelationAnswer: `${product.htmlAnythingName} / Open Design.`,
+  };
+}
+
+function formatCount(count: unknown): string | null {
+  if (typeof count !== 'number' || !Number.isFinite(count) || count <= 0) return null;
+  if (count < 1000) return String(count);
+  return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}K`;
+}
+
+let starsLabel = FALLBACK_STARS;
+let forksLabel = FALLBACK_FORKS;
+let licenseLabel = FALLBACK_LICENSE;
+
+try {
+  const response = await fetch(HA_REPO_API, {
+    headers: { Accept: 'application/vnd.github+json' },
+  });
+  if (response.ok) {
+    const repo = (await response.json()) as {
+      stargazers_count?: number;
+      forks_count?: number;
+      license?: { spdx_id?: string };
+    };
+    starsLabel = formatCount(repo.stargazers_count) ?? starsLabel;
+    forksLabel = formatCount(repo.forks_count) ?? forksLabel;
+    licenseLabel = repo.license?.spdx_id ?? licenseLabel;
+  }
+} catch {
+  // Network unavailable at build time — keep fallbacks.
+}
+
+const locale = localeFromPath(Astro.url.pathname);
+const href = (path: string) => localizedHref(path, locale);
+const copy = derivedHtmlAnythingCopy(locale);
+const title = copy.title;
+const description = copy.description;
+const surfaces = copy.surfaces;
+
+const agents = [
+  'Claude Code',
+  'Cursor Agent',
+  'OpenAI Codex',
+  'Gemini CLI',
+  'GitHub Copilot CLI',
+  'OpenCode',
+  'Qwen Coder',
+  'Aider',
+];
+
+const exportTargets = copy.exportTargets;
+const ideas = copy.ideas;
+const roadmap = copy.roadmap;
+
+const jsonLd: Array<Record<string, unknown>> = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: 'HTML Anything',
+    /*
+     * alternateName fed as an explicit array so Google understands the
+     * project is searched as: hyphenated, spaced, joined, capitalized
+     * variants, plus the tagline. Each entry is a real query users
+     * type — keeping them in this list signals canonical-name
+     * equivalence rather than leaving the matching to Google's
+     * tokenizer alone. Restored from PR #2566; do not route this
+     * through the generic locale schema field — it should stay as
+     * a literal array regardless of UI locale because these are
+     * proper-noun query variants.
+     */
+    alternateName: [
+      'html anything',
+      'html-anything',
+      'htmlanything',
+      'HTML Anything Editor',
+      'The agentic HTML editor',
+      // Brand-defense + canonical-source queries: keep these stacked
+      // alongside the descriptive variants above so the structured
+      // entity matches whichever shape the user typed.
+      'open source html anything',
+      'html anything official',
+      'open source html anything official',
+    ],
+    applicationCategory: 'DeveloperApplication',
+    operatingSystem: 'macOS, Linux, Windows',
+    description,
+    /*
+     * `url` is the canonical surface for this entity. JSON-LD lives on
+     * the landing page, so the landing page IS the canonical URL —
+     * Google attributes the SoftwareApplication entity to the page
+     * named by `url`. Pointing it at the GitHub repo would credit
+     * github.com/... as canonical, which is the opposite of what
+     * this SEO surface is supposed to do. The BreadcrumbList block
+     * below also uses the LP URL — keep both blocks aligned.
+     * Restored from PR #2586. The GitHub repo lives in `sameAs`
+     * below as a peer reference surface.
+     */
+    url: 'https://open-design.ai/html-anything/',
+    sameAs: [HA_URL],
+    license: 'https://www.apache.org/licenses/LICENSE-2.0',
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+    author: {
+      '@type': 'Organization',
+      name: 'Open Design',
+      url: 'https://open-design.ai/',
+    },
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Open Design', item: 'https://open-design.ai/' },
+      { '@type': 'ListItem', position: 2, name: 'HTML Anything', item: 'https://open-design.ai/html-anything/' },
+    ],
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: [
+      {
+        '@type': 'Question',
+        name: copy.schemaAgentQuestion,
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: copy.schemaAgentAnswer,
+        },
+      },
+      {
+        '@type': 'Question',
+        name: copy.schemaExportQuestion,
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: copy.schemaExportAnswer,
+        },
+      },
+      {
+        '@type': 'Question',
+        name: copy.schemaRelationQuestion,
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: copy.schemaRelationAnswer,
+        },
+      },
+    ],
+  },
+];
+---
+
+<Layout title={title} description={description} active="product" ogImage={banner} jsonLd={jsonLd}>
+  <header class="catalog-head">
+    <span class="label">{copy.label}</span>
+    <h1 class="display">
+      <em>HTML Anything</em> — {copy.heading}<span class="dot">.</span>
+    </h1>
+    <p class="lead">
+      {copy.lead}
+    </p>
+    <p class="ha-cta">
+      <a class="ha-btn ha-btn-primary" href={HA_URL} rel="noopener">
+        {copy.githubCta}
+      </a>
+      <a class="ha-btn" href={`${HA_URL}#quickstart`} rel="noopener">
+        {copy.quickstartCta}
+      </a>
+    </p>
+  </header>
+
+  <figure class="ha-hero-figure">
+    <img
+      src={banner}
+      alt={copy.heroAlt}
+      width="2400"
+      height="1260"
+      loading="eager"
+      fetchpriority="high"
+      decoding="async"
+    />
+  </figure>
+
+  <section class="ha-glance" aria-label={copy.glanceAria}>
+    <ul>
+      <li><span class="num">{starsLabel}</span><span class="lbl">{copy.glance.stars}</span></li>
+      <li><span class="num">8</span><span class="lbl">{copy.glance.agents}</span></li>
+      <li><span class="num">75</span><span class="lbl">{copy.glance.templates}</span></li>
+      <li><span class="num">9</span><span class="lbl">{copy.glance.modes}</span></li>
+      <li><span class="num">{licenseLabel}</span><span class="lbl">{copy.glance.license}</span></li>
+    </ul>
+    <p class="ha-glance-foot">
+      {copy.glance.foot(SNAPSHOT_DATE)}
+    </p>
+  </section>
+
+  <section class="ha-section" aria-labelledby="ha-why">
+    <h2 id="ha-why" class="ha-h2">{copy.whyTitle}</h2>
+    <div class="ha-ideas">
+      {ideas.map((idea) => (
+        <article class="ha-idea">
+          <h3>{idea.headline}</h3>
+          <p>{idea.body}</p>
+        </article>
+      ))}
+    </div>
+  </section>
+
+  <section class="ha-section" aria-labelledby="ha-flow">
+    <h2 id="ha-flow" class="ha-h2">{copy.flowTitle}</h2>
+    <ol class="ha-flow">
+      <li>
+        <span class="step-num">01</span>
+        <div class="step-body">
+          <h3>{copy.flow[0].headline}</h3>
+          <p>{copy.flow[0].body}</p>
+          <figure class="step-shot">
+            <img src={shots.entry} alt={copy.flow[0].alt} loading="lazy" decoding="async" />
+          </figure>
+        </div>
+      </li>
+      <li>
+        <span class="step-num">02</span>
+        <div class="step-body">
+          <h3>{copy.flow[1].headline}</h3>
+          <p>{copy.flow[1].body}</p>
+          <div class="step-shot-pair">
+            <figure>
+              <img src={shots.picker} alt={copy.flow[1].figures?.[0]?.alt ?? copy.flow[1].alt} loading="lazy" decoding="async" />
+              <figcaption>{copy.flow[1].figures?.[0]?.caption}</figcaption>
+            </figure>
+            <figure>
+              <img src={shots.stream} alt={copy.flow[1].figures?.[1]?.alt ?? copy.flow[1].alt} loading="lazy" decoding="async" />
+              <figcaption>{copy.flow[1].figures?.[1]?.caption}</figcaption>
+            </figure>
+          </div>
+        </div>
+      </li>
+      <li>
+        <span class="step-num">03</span>
+        <div class="step-body">
+          <h3>{copy.flow[2].headline}</h3>
+          <p>{copy.flow[2].body}</p>
+          <figure class="step-shot">
+            <img src={shots.exportUI} alt={copy.flow[2].alt} loading="lazy" decoding="async" />
+          </figure>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <section class="ha-section" aria-labelledby="ha-showcase">
+    <h2 id="ha-showcase" class="ha-h2">{copy.showcaseTitle}</h2>
+    <p class="ha-section-lead">
+      {copy.showcaseLead}
+    </p>
+    <ul class="ha-showcase-grid">
+      <li>
+        <figure>
+          <img src={skillShots.guizang} alt={copy.showcase[0].alt} loading="lazy" decoding="async" />
+          <figcaption>
+            <span class="ha-showcase-name">deck-guizang-editorial</span>
+            <span class="ha-showcase-tag">{copy.showcase[0].tag}</span>
+          </figcaption>
+        </figure>
+      </li>
+      <li>
+        <figure>
+          <img src={skillShots.swiss} alt={copy.showcase[1].alt} loading="lazy" decoding="async" />
+          <figcaption>
+            <span class="ha-showcase-name">deck-swiss-international</span>
+            <span class="ha-showcase-tag">{copy.showcase[1].tag}</span>
+          </figcaption>
+        </figure>
+      </li>
+      <li>
+        <figure>
+          <img src={skillShots.parchment} alt={copy.showcase[2].alt} loading="lazy" decoding="async" />
+          <figcaption>
+            <span class="ha-showcase-name">doc-kami-parchment</span>
+            <span class="ha-showcase-tag">{copy.showcase[2].tag}</span>
+          </figcaption>
+        </figure>
+      </li>
+      <li>
+        <figure>
+          <img src={skillShots.poster} alt={copy.showcase[3].alt} loading="lazy" decoding="async" />
+          <figcaption>
+            <span class="ha-showcase-name">magazine-poster</span>
+            <span class="ha-showcase-tag">{copy.showcase[3].tag}</span>
+          </figcaption>
+        </figure>
+      </li>
+    </ul>
+  </section>
+
+  <section class="ha-section" aria-labelledby="ha-modes">
+    <h2 id="ha-modes" class="ha-h2">{copy.modesTitle}</h2>
+    <p class="ha-section-lead">
+      {copy.modesLead}
+    </p>
+    <div class="ha-modes-grid">
+      <figure>
+        <img src={shots.deck} alt={copy.modeFigures[0].alt} loading="lazy" decoding="async" />
+        <figcaption>
+          <strong>{copy.modeFigures[0].label}</strong> — {copy.modeFigures[0].body}
+        </figcaption>
+      </figure>
+      <figure>
+        <img src={shots.hyper} alt={copy.modeFigures[1].alt} loading="lazy" decoding="async" />
+        <figcaption>
+          <strong>{copy.modeFigures[1].label}</strong> — {copy.modeFigures[1].body}
+        </figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="ha-section" aria-labelledby="ha-surfaces">
+    <h2 id="ha-surfaces" class="ha-h2">{copy.surfacesTitle}</h2>
+    <p class="ha-section-lead">
+      {copy.surfacesLead}
+    </p>
+    <ul class="ha-surface-grid">
+      {surfaces.map((s) => (
+        <li class="ha-surface">
+          <span class="ha-surface-name">{s.name}</span>
+          <span class="ha-surface-blurb">{s.blurb}</span>
+        </li>
+      ))}
+    </ul>
+  </section>
+
+  <section class="ha-section" aria-labelledby="ha-agents">
+    <h2 id="ha-agents" class="ha-h2">{copy.agentsTitle}</h2>
+    <p class="ha-section-lead">
+      {copy.agentsLead}
+    </p>
+    <ul class="ha-agents">
+      {agents.map((a) => (
+        <li>{a}</li>
+      ))}
+    </ul>
+  </section>
+
+  <section class="ha-section" aria-labelledby="ha-export">
+    <h2 id="ha-export" class="ha-h2">{copy.exportTitle}</h2>
+    <dl class="ha-export">
+      {exportTargets.map((t) => (
+        <div class="ha-export-row">
+          <dt>{t.channel}</dt>
+          <dd>{t.how}</dd>
+        </div>
+      ))}
+    </dl>
+  </section>
+
+  <section class="ha-section" aria-labelledby="ha-quickstart">
+    <h2 id="ha-quickstart" class="ha-h2">{copy.quickstartTitle}</h2>
+    <pre class="ha-code"><code>{`git clone https://github.com/nexu-io/html-anything
+cd html-anything
+pnpm install
+pnpm -F @html-anything/next dev
+# → http://localhost:3000`}</code></pre>
+    <p class="ha-section-lead">
+      {copy.quickstartLead}
+    </p>
+  </section>
+
+  <section class="ha-section" aria-labelledby="ha-roadmap">
+    <h2 id="ha-roadmap" class="ha-h2">{copy.roadmapTitle}</h2>
+    <div class="ha-roadmap">
+      {roadmap.map((bucket) => (
+        <article>
+          <h3 class="ha-roadmap-tag">{bucket.tag}</h3>
+          <ul>{bucket.items.map((it) => <li>{it}</li>)}</ul>
+        </article>
+      ))}
+    </div>
+  </section>
+
+  <section class="ha-tieback" aria-labelledby="ha-tieback">
+    <h2 id="ha-tieback" class="ha-h2">{copy.tiebackTitle}</h2>
+    <p>
+      {copy.tiebackBody}
+    </p>
+    <p>
+      <a class="ha-btn" href={href('/')}>{copy.visitOpenDesign}</a>
+      <a class="ha-btn" href={href('/skills/')} rel="noopener">{copy.browseSkills}</a>
+      <a class="ha-btn" href={HA_URL} rel="noopener">{copy.githubLink}</a>
+    </p>
+  </section>
+</Layout>
+
+<style>
+  /* Page-local styles. Tokens come from globals.css; layout/typography
+   * follows the Atelier Zero conventions used in sub-pages.css. */
+
+  .ha-cta {
+    margin-top: 1.25rem;
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+  .ha-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.55rem 1rem;
+    border: 1px solid var(--ink, #1a1a1a);
+    border-radius: 999px;
+    font-size: 0.95rem;
+    text-decoration: none;
+    color: inherit;
+    transition: background 120ms ease, color 120ms ease;
+  }
+  .ha-btn:hover { background: var(--ink, #1a1a1a); color: var(--paper, #efe7d2); }
+  .ha-btn-primary { background: var(--ink, #1a1a1a); color: var(--paper, #efe7d2); }
+  .ha-btn-primary:hover { background: transparent; color: inherit; }
+
+  .ha-hero-figure {
+    margin: 2rem 0 0 0;
+    padding: 0;
+  }
+  .ha-hero-figure img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.06);
+  }
+
+  .ha-glance {
+    margin: 3rem 0;
+    border-top: 1px solid currentColor;
+    border-bottom: 1px solid currentColor;
+    padding: 1.25rem 0;
+  }
+  .ha-glance ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1.5rem 2rem;
+  }
+  .ha-glance li {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  .ha-glance .num {
+    font-family: var(--font-display, 'GT Sectra', Georgia, serif);
+    font-size: 2.25rem;
+    line-height: 1;
+    letter-spacing: -0.01em;
+  }
+  .ha-glance .lbl {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    opacity: 0.7;
+  }
+  .ha-glance-foot {
+    margin-top: 1rem;
+    font-size: 0.8rem;
+    opacity: 0.6;
+  }
+
+  .ha-section { margin: 4rem 0; }
+  .ha-h2 {
+    font-family: var(--font-display, 'GT Sectra', Georgia, serif);
+    font-size: 2rem;
+    line-height: 1.15;
+    margin: 0 0 1rem 0;
+  }
+  .ha-section-lead {
+    max-width: 60ch;
+    font-size: 1.05rem;
+    line-height: 1.55;
+    opacity: 0.85;
+    margin: 0 0 2rem 0;
+  }
+
+  .ha-ideas {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 2rem;
+  }
+  .ha-idea h3 {
+    font-family: var(--font-display, 'GT Sectra', Georgia, serif);
+    font-size: 1.25rem;
+    margin: 0 0 0.5rem 0;
+  }
+  .ha-idea p { margin: 0; line-height: 1.55; opacity: 0.85; }
+
+  .ha-flow {
+    list-style: none;
+    counter-reset: ha-step;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 1.5rem;
+  }
+  .ha-flow li {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.5rem 1.5rem;
+    padding: 1.5rem 0;
+    border-top: 1px solid currentColor;
+  }
+  .ha-flow li:last-child { border-bottom: 1px solid currentColor; }
+  .step-num {
+    font-family: var(--font-display, 'GT Sectra', Georgia, serif);
+    font-size: 1.5rem;
+    opacity: 0.5;
+  }
+  .step-body { display: grid; gap: 1rem; }
+  .ha-flow h3 {
+    font-family: var(--font-display, 'GT Sectra', Georgia, serif);
+    margin: 0;
+    font-size: 1.2rem;
+  }
+  .ha-flow p { margin: 0; line-height: 1.55; opacity: 0.85; max-width: 64ch; }
+  .step-shot, .step-shot-pair figure {
+    margin: 0.5rem 0 0 0;
+  }
+  .step-shot img, .step-shot-pair img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 6px;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
+  }
+  .step-shot-pair {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1rem;
+  }
+  .step-shot-pair figcaption {
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+    opacity: 0.7;
+    line-height: 1.4;
+  }
+
+  .ha-showcase-grid {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1.5rem;
+  }
+  .ha-showcase-grid figure {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+  .ha-showcase-grid img {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    border-radius: 6px;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    background: rgba(0, 0, 0, 0.03);
+  }
+  .ha-showcase-name {
+    display: block;
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: 0.85rem;
+  }
+  .ha-showcase-tag {
+    display: block;
+    font-size: 0.8rem;
+    opacity: 0.65;
+    margin-top: 0.15rem;
+  }
+
+  .ha-modes-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 2rem;
+  }
+  .ha-modes-grid figure {
+    margin: 0;
+    display: grid;
+    gap: 0.75rem;
+  }
+  .ha-modes-grid img {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: 6px;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
+  }
+  .ha-modes-grid figcaption {
+    line-height: 1.5;
+    opacity: 0.85;
+  }
+  .ha-modes-grid figcaption strong {
+    font-family: var(--font-display, 'GT Sectra', Georgia, serif);
+    font-weight: 600;
+  }
+
+  .ha-surface-grid {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+  }
+  .ha-surface {
+    border: 1px solid currentColor;
+    padding: 1rem 1.1rem;
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+  .ha-surface-name {
+    font-family: var(--font-display, 'GT Sectra', Georgia, serif);
+    font-size: 1.05rem;
+  }
+  .ha-surface-blurb {
+    font-size: 0.9rem;
+    line-height: 1.45;
+    opacity: 0.75;
+  }
+
+  .ha-agents {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .ha-agents li {
+    border: 1px solid currentColor;
+    padding: 0.4rem 0.85rem;
+    border-radius: 999px;
+    font-size: 0.9rem;
+  }
+
+  .ha-export {
+    margin: 0;
+    display: grid;
+    gap: 0.75rem;
+  }
+  .ha-export-row {
+    display: grid;
+    grid-template-columns: minmax(180px, 1fr) 3fr;
+    gap: 1rem 2rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px dashed currentColor;
+  }
+  .ha-export-row dt {
+    font-family: var(--font-display, 'GT Sectra', Georgia, serif);
+    font-size: 1.05rem;
+    margin: 0;
+  }
+  .ha-export-row dd { margin: 0; opacity: 0.85; line-height: 1.5; }
+
+  .ha-code {
+    background: rgba(0,0,0,0.04);
+    border: 1px solid currentColor;
+    padding: 1rem 1.25rem;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    margin: 0 0 1rem 0;
+  }
+  .ha-code code {
+    font-family: ui-monospace, 'SF Mono', Menlo, Monaco, Consolas, monospace;
+  }
+
+  .ha-roadmap {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 2rem;
+  }
+  .ha-roadmap-tag {
+    font-family: var(--font-display, 'GT Sectra', Georgia, serif);
+    font-size: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin: 0 0 0.75rem 0;
+    opacity: 0.7;
+  }
+  .ha-roadmap ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 0.4rem;
+    font-size: 0.95rem;
+    line-height: 1.5;
+  }
+
+  .ha-tieback {
+    margin: 5rem 0 3rem 0;
+    padding: 2rem 0;
+    border-top: 1px solid currentColor;
+    border-bottom: 1px solid currentColor;
+  }
+  .ha-tieback p {
+    max-width: 60ch;
+    line-height: 1.6;
+    margin: 0 0 1rem 0;
+  }
+  .ha-tieback p:last-child {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 0;
+  }
+</style>
