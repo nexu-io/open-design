@@ -163,6 +163,71 @@ describe('chat run service stream replay', () => {
       run.events.filter((e: { id: number }) => e.id > cursor).map((e: { id: number }) => e.id),
     );
   });
+
+  it('awaits in-flight runFinishedHook promises during shutdownActive', async () => {
+    // Caught in code review on PR #2619: without tracking pending
+    // hook promises and awaiting them in shutdownActive, a SIGTERM
+    // mid-hook can let process.exit() race the auto-commit write,
+    // dropping the run's project_revisions row. This test exercises
+    // the contract: shutdownActive must not return until in-flight
+    // hooks have settled.
+    const runs = createRuns();
+    let hookCompletedAt: number | null = null;
+    let hookStartedAt: number | null = null;
+    runs.setRunFinishedHook(async () => {
+      hookStartedAt = Date.now();
+      // Simulate the multi-step history auto-commit (HEAD probe,
+      // lock acquisition, git status/add/commit, sqlite INSERT).
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      hookCompletedAt = Date.now();
+    });
+
+    const child = new FakeChildProcess({ closeOn: 'SIGTERM' });
+    const run = runs.create({ projectId: 'project-1', conversationId: 'conv-1' });
+    run.status = 'running';
+    (run as any).child = child;
+
+    const shutdownStartedAt = Date.now();
+    await runs.shutdownActive({ graceMs: 500 });
+    const shutdownReturnedAt = Date.now();
+
+    // The hook ran (started + completed both set)
+    expect(hookStartedAt).not.toBeNull();
+    expect(hookCompletedAt).not.toBeNull();
+    // And it completed BEFORE shutdownActive returned — the
+    // contract we just installed.
+    expect(hookCompletedAt!).toBeLessThanOrEqual(shutdownReturnedAt);
+    // Sanity: shutdownActive waited at least the hook's ~100ms
+    expect(shutdownReturnedAt - shutdownStartedAt).toBeGreaterThanOrEqual(90);
+  });
+
+  it('does not hang shutdownActive forever on a stuck runFinishedHook', async () => {
+    // Belt-and-suspenders: if a hook gets stuck (e.g. fs lock,
+    // hung subprocess), shutdownActive must time out and still
+    // return so the daemon can exit. The bound is 2× graceMs.
+    const runs = createRuns();
+    let hookSettled = false;
+    runs.setRunFinishedHook(() => new Promise(() => {
+      // Intentionally never resolves; would-be data loss is logged
+      // by shutdownActive but doesn't hang the process.
+    }));
+
+    const child = new FakeChildProcess({ closeOn: 'SIGTERM' });
+    const run = runs.create({ projectId: 'project-1', conversationId: 'conv-1' });
+    run.status = 'running';
+    (run as any).child = child;
+
+    const start = Date.now();
+    await runs.shutdownActive({ graceMs: 100 });
+    const elapsed = Date.now() - start;
+
+    // Min wait is 1000ms (the floor in runs.ts: max(graceMs*2, 1000))
+    expect(elapsed).toBeGreaterThanOrEqual(900);
+    // Upper bound — generous margin for test scheduling jitter
+    expect(elapsed).toBeLessThanOrEqual(2500);
+    // The hook itself never resolved
+    expect(hookSettled).toBe(false);
+  });
 });
 
 function createRuns() {

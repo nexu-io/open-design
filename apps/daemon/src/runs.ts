@@ -28,10 +28,20 @@ export function createChatRunService({
   // Optional fire-and-forget hook fired when a run reaches a terminal
   // state via finish(). Used by the history feature (#1241) to record
   // a revision when the working tree is dirty at run end. The hook's
-  // Promise is intentionally not awaited — finish()'s contract is
-  // synchronous (closes SSE clients, schedules cleanup) and a slow or
-  // failing hook must not block that path.
+  // Promise is intentionally not awaited from finish() — finish()'s
+  // contract is synchronous (closes SSE clients, schedules cleanup)
+  // and a slow or failing hook must not block that path. BUT the
+  // promise is tracked in `pendingFinishHooks` so shutdownActive() can
+  // await pending hooks before the daemon exits — otherwise a SIGTERM
+  // during a run can race the auto-commit and drop the revision row.
   let runFinishedHook = null;
+
+  /**
+   * Pending finish-hook promises. Each finish() call that fires a
+   * hook adds the promise here and removes it on settle. shutdownActive()
+   * awaits all of them so the process doesn't exit mid-write.
+   */
+  const pendingFinishHooks = new Set();
 
   /**
    * Register a callback to run after every run.finish(). Pass null to
@@ -144,14 +154,19 @@ export function createChatRunService({
     for (const waiter of run.waiters) waiter(statusBody(run));
     run.waiters.clear();
     scheduleCleanup(run);
-    // Fire-and-forget — the history feature uses this to commit any
+    // Fire-but-track — the history feature uses this to commit any
     // dirty working-tree changes the run produced. Errors are logged
     // by the hook itself; finish()'s contract stays synchronous so
     // late callers (cleanup, status polling) aren't blocked on git.
+    // The promise is added to pendingFinishHooks so shutdownActive()
+    // can wait for in-flight hooks before the daemon exits — without
+    // this tracking, a SIGTERM mid-hook drops the revision row.
     if (runFinishedHook) {
-      Promise.resolve(runFinishedHook(run, status)).catch((err) => {
+      const hookPromise = Promise.resolve(runFinishedHook(run, status)).catch((err) => {
         console.warn(`[runs] finished hook failed for run ${run.id}:`, err);
       });
+      pendingFinishHooks.add(hookPromise);
+      hookPromise.finally(() => pendingFinishHooks.delete(hookPromise));
     }
   };
 
@@ -274,6 +289,34 @@ export function createChatRunService({
         await waitForChildExit(run.child, 500);
       }
     }));
+
+    // Wait for any in-flight finish-hooks before returning, so the
+    // daemon doesn't `process.exit()` mid-write. The hooks run
+    // independently of the run's child-process lifecycle (they were
+    // fired synchronously by `finish()` above but execute async — the
+    // history auto-commit does multiple git invocations + a SQLite
+    // write), and without this await the SIGTERM path is racy with
+    // the revision-row insert.
+    //
+    // We cap the wait at 2× graceMs so a stuck hook doesn't hang
+    // shutdown indefinitely. The cap is generous: graceMs is sized
+    // for the slowest child to exit, and the hook is typically
+    // faster (no LLM round-trip, just local fs + sqlite).
+    if (pendingFinishHooks.size > 0) {
+      const inflight = Array.from(pendingFinishHooks);
+      const hookGraceMs = Math.max(graceMs * 2, 1000);
+      let timeoutHandle;
+      const timeoutPromise = new Promise((resolve) => {
+        timeoutHandle = setTimeout(resolve, hookGraceMs);
+      });
+      await Promise.race([Promise.allSettled(inflight), timeoutPromise]);
+      if (timeoutHandle) clearTimeout(timeoutHandle);
+      if (pendingFinishHooks.size > 0) {
+        console.warn(
+          `[runs] shutdownActive returning with ${pendingFinishHooks.size} finish-hook(s) still in flight after ${hookGraceMs}ms grace; their writes may be lost.`,
+        );
+      }
+    }
   };
 
   const wait = (run) => {
