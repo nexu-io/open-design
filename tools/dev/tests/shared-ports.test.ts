@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:net";
 import { describe, it } from "node:test";
 
+import type { PortAllocation, PortRequest } from "@open-design/sidecar";
 import { APP_KEYS } from "@open-design/sidecar-proto";
 
 import { ensureSharedPortsResolved, resolveSharedPortsFromRunningState } from "../src/shared-ports.js";
@@ -53,6 +54,26 @@ describe("tools-dev shared ports", () => {
 
     assert.notEqual(options.webPort, "3100");
     assert.equal(options.daemonPort, "3100");
+  });
+
+  it("reserves an explicit web port before allocating a daemon port", async () => {
+    const calls: Array<{ label: string; reserved: number[] }> = [];
+    const webPort = 45678;
+    const daemonPort = 45679;
+    const stubAllocate = async ({ label, reserved }: PortRequest = {}): Promise<PortAllocation> => {
+      calls.push({ label, reserved: [...reserved].sort((left, right) => left - right) });
+      assert.equal(label, "daemon");
+      assert.ok(reserved.has(webPort));
+      return { port: daemonPort, source: "dynamic" };
+    };
+
+    const options: { daemonPort?: string; webPort?: string } = { webPort: String(webPort) };
+
+    await ensureSharedPortsResolved([APP_KEYS.WEB, APP_KEYS.DAEMON], options, null, null, stubAllocate);
+
+    assert.equal(options.webPort, String(webPort));
+    assert.equal(options.daemonPort, String(daemonPort));
+    assert.deepEqual(calls, [{ label: "daemon", reserved: [webPort] }]);
   });
 
   it("does not allocate a daemon port when daemon is not starting", async () => {
