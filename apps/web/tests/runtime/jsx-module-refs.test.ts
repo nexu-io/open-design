@@ -61,6 +61,14 @@ describe('extractBabelScriptSrcs', () => {
       '<script type="text/babel" src="chrome.jsx#frag"></script>';
     expect(extractBabelScriptSrcs(html)).toEqual(['icons.jsx', 'chrome.jsx']);
   });
+
+  it('ignores babel scripts commented out in HTML', () => {
+    const html =
+      '<!-- <script type="text/babel" src="legacy.jsx"></script> -->' +
+      '<script type="text/babel" src="app.jsx"></script>';
+    expect(extractBabelScriptSrcs(html)).toEqual(['app.jsx']);
+    expect(extractBabelScriptSrcs(html)).not.toContain('legacy.jsx');
+  });
 });
 
 describe('htmlLoadsJsxModule', () => {

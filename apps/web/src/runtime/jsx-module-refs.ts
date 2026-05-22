@@ -31,14 +31,17 @@ function normalizeScriptRef(src: string): string {
  * order is not assumed (`type` may precede or follow `src`); only `<script>`
  * tags that carry BOTH a `text/babel` type and a `src` are returned. Inline
  * `<script type="text/babel">…</script>` blocks (no `src`) are ignored
- * because they are not separate files. Returns `[]` for empty input.
+ * because they are not separate files. HTML comments are stripped first so a
+ * commented-out `<!-- <script ... src="legacy.jsx"> -->` is NOT treated as a
+ * live reference. Returns `[]` for empty input.
  */
 export function extractBabelScriptSrcs(html: string | null | undefined): string[] {
   if (!html) return [];
+  const scannable = html.replace(/<!--[\s\S]*?-->/g, '');
   const srcs: string[] = [];
   const scriptOpenTag = /<script\b([^>]*)>/gi;
   let match: RegExpExecArray | null;
-  while ((match = scriptOpenTag.exec(html)) !== null) {
+  while ((match = scriptOpenTag.exec(scannable)) !== null) {
     const attrs = match[1] ?? '';
     if (!/\btype\s*=\s*["']?text\/babel\b/i.test(attrs)) continue;
     const srcMatch = attrs.match(/\bsrc\s*=\s*["']([^"']+)["']/i);

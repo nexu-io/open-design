@@ -991,23 +991,26 @@ export function ProjectView({
     projectFilesRef.current = projectFiles;
   }, [projectFiles]);
 
-  // Cache HTML file contents (keyed by name@mtime) so the auto-open module
-  // check (issue #2744) does not re-fetch unchanged entries on every Write.
-  // Bounded by the project's HTML file count; a changed mtime busts the entry.
-  const htmlContentCacheRef = useRef<Map<string, string | null>>(new Map());
+  // Cache HTML file contents so the auto-open module check (issue #2744) does
+  // not re-fetch unchanged entries on every Write. Keyed by file name with the
+  // mtime stored alongside, so a rewrite REPLACES the file's single entry
+  // rather than accreting a new key. Bounded by the project's HTML file count.
+  const htmlContentCacheRef = useRef<Map<string, { mtime: number; text: string | null }>>(
+    new Map(),
+  );
   const readProjectHtml = useCallback(
     async (name: string): Promise<string | null> => {
       const file = projectFilesRef.current.find((entry) => entry.name === name);
-      const cacheKey = `${name}@${file?.mtime ?? 0}`;
-      const cached = htmlContentCacheRef.current.get(cacheKey);
-      if (cached !== undefined) return cached;
+      const mtime = file?.mtime ?? 0;
+      const cached = htmlContentCacheRef.current.get(name);
+      if (cached && cached.mtime === mtime) return cached.text;
       try {
         const response = await fetch(projectRawUrl(project.id, name));
         const text = response.ok ? await response.text() : null;
-        htmlContentCacheRef.current.set(cacheKey, text);
+        htmlContentCacheRef.current.set(name, { mtime, text });
         return text;
       } catch {
-        htmlContentCacheRef.current.set(cacheKey, null);
+        htmlContentCacheRef.current.set(name, { mtime, text: null });
         return null;
       }
     },
