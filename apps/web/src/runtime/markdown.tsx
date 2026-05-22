@@ -350,17 +350,19 @@ function renderInline(text: string): ReactNode {
     } else if (m[6]) {
       // Bare URL — autolink with the URL as both href and visible text,
       // matching the Markdown `<https://…>` autolink convention.
+      const [href, suffix] = splitTrailingAutolinkPunctuation(m[6]);
       out.push(
         <a
           key={key++}
           className="md-link md-link-bare"
-          href={m[6]}
+          href={href}
           target="_blank"
           rel="noreferrer noopener"
         >
-          {m[6]}
+          {href}
         </a>,
       );
+      if (suffix) pushText(out, suffix, key++);
     } else if (m[7]) {
       out.push(<strong key={key++}>{m[7].slice(2, -2)}</strong>);
     } else if (m[8]) {
@@ -393,23 +395,34 @@ function pushText(out: ReactNode[], text: string, baseKey: number): void {
     if (m.index > lastIndex) {
       segments.push(...withBreaks(text.slice(lastIndex, m.index), `${baseKey}-${k++}`));
     }
+    const [href, suffix] = splitTrailingAutolinkPunctuation(m[1]!);
     segments.push(
       <a
         key={`${baseKey}-${k++}`}
         className="md-link"
-        href={m[1]}
+        href={href}
         target="_blank"
         rel="noreferrer noopener"
       >
-        {m[1]}
+        {href}
       </a>,
     );
+    if (suffix) {
+      segments.push(...withBreaks(suffix, `${baseKey}-${k++}`));
+    }
     lastIndex = urlRe.lastIndex;
   }
   if (lastIndex < text.length) {
     segments.push(...withBreaks(text.slice(lastIndex), `${baseKey}-${k++}`));
   }
   out.push(<Fragment key={baseKey}>{segments}</Fragment>);
+}
+
+function splitTrailingAutolinkPunctuation(url: string): [string, string] {
+  const match = /([.,!?;:，。！？；：、'"」』】》〉）]+)$/.exec(url);
+  if (!match || !match[1]) return [url, ''];
+  const trimmed = url.slice(0, -match[1].length);
+  return trimmed ? [trimmed, match[1]] : [url, ''];
 }
 
 function withBreaks(text: string, baseKey: string): ReactNode[] {

@@ -40,6 +40,16 @@ describe('renderMarkdown', () => {
     expect(out).toContain('md-link-bare');
   });
 
+  it('keeps trailing sentence punctuation outside bare autolinks', () => {
+    const out = html('Open https://example.com/demo, then visit https://example.com/final。');
+    expect(out).toContain('href="https://example.com/demo"');
+    expect(out).toContain('>https://example.com/demo</a>,');
+    expect(out).toContain('href="https://example.com/final"');
+    expect(out).toContain('>https://example.com/final</a>。');
+    expect(out).not.toContain('href="https://example.com/demo,"');
+    expect(out).not.toContain('href="https://example.com/final。"');
+  });
+
   it('does not autolink inside inline code spans', () => {
     const out = html('Use `https://example.com/x` literally.');
     // The URL should appear inside a <code> tag, not turned into an anchor.
