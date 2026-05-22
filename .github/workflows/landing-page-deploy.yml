@@ -83,14 +83,12 @@ jobs:
             landing-page-previews-${{ runner.os }}-
 
       - name: Cache Playwright browsers
-        if: steps.previews-cache.outputs.cache-hit != 'true'
         uses: actions/cache@v5.0.5
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
 
       - name: Install Playwright Chromium
-        if: steps.previews-cache.outputs.cache-hit != 'true'
         run: pnpm --filter @open-design/landing-page exec playwright install --with-deps chromium
 
       - name: Typecheck landing page
@@ -103,7 +101,6 @@ jobs:
       # exits non-zero so we don't silently ship a deploy with zero
       # thumbnails to production.
       - name: Generate skill + template previews
-        if: steps.previews-cache.outputs.cache-hit != 'true'
         run: pnpm --filter @open-design/landing-page previews
 
       - name: Build landing page
