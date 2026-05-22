@@ -22,7 +22,6 @@
 import type { ProjectKind, ProjectMetadata } from '@open-design/contracts';
 import type { DefaultScenarioPluginId } from '@open-design/contracts';
 import type { IconName } from '../Icon';
-import type { Dict } from '../../i18n/types';
 
 // Plugin ids the chip rail can dispatch to. Most chips route to a
 // `DefaultScenarioPluginId` so the same fallback table the daemon
@@ -64,7 +63,6 @@ export type ChipGroup = 'create' | 'migrate';
 
 export interface CreateChip {
   id: string;
-  labelKey: keyof Dict;
   hint?: string;
   icon: IconName;
   group: 'create';
@@ -84,7 +82,6 @@ export type HomeHeroChip = CreateChip | MigrateChip;
 export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   {
     id: 'prototype',
-    labelKey: 'homeHero.chip.prototype',
     icon: 'palette',
     group: 'create',
     // Prototype now binds to the bundled `example-web-prototype` plugin,
@@ -104,7 +101,6 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   },
   {
     id: 'live-artifact',
-    labelKey: 'homeHero.chip.liveArtifact',
     icon: 'refresh',
     group: 'create',
     hint: 'Build a refreshable artifact backed by connector or local data.',
@@ -121,7 +117,6 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   },
   {
     id: 'deck',
-    labelKey: 'homeHero.chip.deck',
     icon: 'present',
     group: 'create',
     // Slide deck binds to `example-simple-deck`, which ships a 353-line
@@ -142,7 +137,6 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   },
   {
     id: 'image',
-    labelKey: 'homeHero.chip.image',
     icon: 'image',
     group: 'create',
     action: {
@@ -159,7 +153,6 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   },
   {
     id: 'video',
-    labelKey: 'homeHero.chip.video',
     icon: 'play',
     group: 'create',
     action: {
@@ -176,7 +169,6 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   },
   {
     id: 'hyperframes',
-    labelKey: 'homeHero.chip.hyperframes',
     icon: 'orbit',
     group: 'create',
     hint: 'Author HTML-based motion: captions, audio-reactive visuals, scene transitions.',
@@ -188,7 +180,6 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
   },
   {
     id: 'audio',
-    labelKey: 'homeHero.chip.audio',
     icon: 'mic',
     group: 'create',
     action: {
