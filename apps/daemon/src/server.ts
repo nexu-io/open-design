@@ -13,6 +13,8 @@ import os from 'node:os';
 import net from 'node:net';
 import {
   defaultScenarioPluginIdForProjectMetadata,
+  type OpenDesignGithubLatestReleaseResponse,
+  type OpenDesignGithubRepoResponse,
   PLUGIN_SHARE_ACTION_PLUGIN_IDS,
 } from '@open-design/contracts';
 import {
@@ -2487,6 +2489,122 @@ function setLiveArtifactCodeHeaders(res) {
   res.setHeader('Referrer-Policy', 'no-referrer');
 }
 
+const OPEN_DESIGN_GITHUB_REPO_API = 'https://api.github.com/repos/nexu-io/open-design';
+const OPEN_DESIGN_GITHUB_RELEASE_LATEST_API = 'https://api.github.com/repos/nexu-io/open-design/releases/latest';
+const OPEN_DESIGN_GITHUB_CACHE_TTL_MS = 60 * 60 * 1000;
+const OPEN_DESIGN_GITHUB_TIMEOUT_MS = 4_000;
+
+let openDesignGithubRepoCache = null;
+let openDesignGithubRepoInflight = null;
+let openDesignGithubLatestReleaseCache = null;
+let openDesignGithubLatestReleaseInflight = null;
+
+async function readOpenDesignGithubRepoStats() {
+  const now = Date.now();
+  if (
+    openDesignGithubRepoCache &&
+    now - openDesignGithubRepoCache.fetchedAt < OPEN_DESIGN_GITHUB_CACHE_TTL_MS
+  ) {
+    return { ...openDesignGithubRepoCache, stale: false };
+  }
+
+  if (openDesignGithubRepoInflight) {
+    return openDesignGithubRepoInflight;
+  }
+
+  openDesignGithubRepoInflight = (async () => {
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), OPEN_DESIGN_GITHUB_TIMEOUT_MS);
+    try {
+      const response = await fetch(OPEN_DESIGN_GITHUB_REPO_API, {
+        headers: {
+          accept: 'application/vnd.github+json',
+          'user-agent': 'open-design-daemon',
+        },
+        signal: ctrl.signal,
+      });
+      if (!response.ok) {
+        throw new Error(`GitHub repo metadata request failed with HTTP ${response.status}`);
+      }
+      const payload = await response.json();
+      const count = payload && typeof payload.stargazers_count === 'number'
+        ? payload.stargazers_count
+        : null;
+      if (!Number.isFinite(count) || count == null || count < 0) {
+        throw new Error('GitHub repo metadata did not include a numeric stargazers_count');
+      }
+      openDesignGithubRepoCache = {
+        stargazersCount: count,
+        fetchedAt: Date.now(),
+      };
+      return { ...openDesignGithubRepoCache, stale: false };
+    } catch (error) {
+      if (openDesignGithubRepoCache) {
+        return { ...openDesignGithubRepoCache, stale: true };
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+      openDesignGithubRepoInflight = null;
+    }
+  })();
+
+  return openDesignGithubRepoInflight;
+}
+
+async function readOpenDesignLatestReleaseInfo() {
+  const now = Date.now();
+  if (
+    openDesignGithubLatestReleaseCache &&
+    now - openDesignGithubLatestReleaseCache.fetchedAt < OPEN_DESIGN_GITHUB_CACHE_TTL_MS
+  ) {
+    return { ...openDesignGithubLatestReleaseCache, stale: false };
+  }
+
+  if (openDesignGithubLatestReleaseInflight) {
+    return openDesignGithubLatestReleaseInflight;
+  }
+
+  openDesignGithubLatestReleaseInflight = (async () => {
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), OPEN_DESIGN_GITHUB_TIMEOUT_MS);
+    try {
+      const response = await fetch(OPEN_DESIGN_GITHUB_RELEASE_LATEST_API, {
+        headers: {
+          accept: 'application/vnd.github+json',
+          'user-agent': 'open-design-daemon',
+        },
+        signal: ctrl.signal,
+      });
+      if (!response.ok) {
+        throw new Error(`GitHub latest release request failed with HTTP ${response.status}`);
+      }
+      const payload = await response.json();
+      const tagName = payload && typeof payload.tag_name === 'string' ? payload.tag_name : null;
+      const htmlUrl = payload && typeof payload.html_url === 'string' ? payload.html_url : null;
+      if (!tagName || !htmlUrl) {
+        throw new Error('GitHub latest release metadata did not include tag_name/html_url');
+      }
+      openDesignGithubLatestReleaseCache = {
+        tagName,
+        htmlUrl,
+        fetchedAt: Date.now(),
+      };
+      return { ...openDesignGithubLatestReleaseCache, stale: false };
+    } catch (error) {
+      if (openDesignGithubLatestReleaseCache) {
+        return { ...openDesignGithubLatestReleaseCache, stale: true };
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+      openDesignGithubLatestReleaseInflight = null;
+    }
+  })();
+
+  return openDesignGithubLatestReleaseInflight;
+}
+
 function bearerTokenFromRequest(req) {
   const header = req.get('authorization');
   if (typeof header !== 'string') return undefined;
@@ -3452,6 +3570,41 @@ export async function startServer({
   app.get('/api/version', async (_req, res) => {
     const version = await readCurrentAppVersionInfo();
     res.json({ version });
+  });
+
+  app.get('/api/github/open-design', async (_req, res) => {
+    try {
+      const stats = await readOpenDesignGithubRepoStats();
+      const payload = /** @type {OpenDesignGithubRepoResponse} */ ({
+        repo: 'nexu-io/open-design',
+        stargazers_count: stats.stargazersCount,
+        fetchedAt: stats.fetchedAt,
+        stale: stats.stale,
+      });
+      res.json(payload);
+    } catch (error) {
+      res.status(502).json({
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+  app.get('/api/github/open-design/releases/latest', async (_req, res) => {
+    try {
+      const release = await readOpenDesignLatestReleaseInfo();
+      const payload = /** @type {OpenDesignGithubLatestReleaseResponse} */ ({
+        repo: 'nexu-io/open-design',
+        tag_name: release.tagName,
+        html_url: release.htmlUrl,
+        fetchedAt: release.fetchedAt,
+        stale: release.stale,
+      });
+      res.json(payload);
+    } catch (error) {
+      res.status(502).json({
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   });
 
   // Plan §3.F2 / spec §11.7 — daemon lifecycle status. Returns the

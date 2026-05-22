@@ -75,7 +75,11 @@ import type {
 } from '../types';
 import { testAgent, testApiProvider } from '../providers/connection-test';
 import { fetchProviderModels } from '../providers/provider-models';
-import { fetchConnectors, fetchDesignTemplates } from '../providers/registry';
+import {
+  fetchConnectors,
+  fetchDesignTemplates,
+  fetchLatestGithubReleaseInfo,
+} from '../providers/registry';
 import { IMAGE_MODELS, MEDIA_PROVIDERS } from '../media/models';
 import { XaiOAuthControl } from './XaiOAuthControl';
 import type { MediaProvider } from '../media/models';
@@ -801,6 +805,9 @@ export function SettingsDialog({
   const { t, locale, setLocale } = useI18n();
   const analytics = useAnalytics();
   const [cfg, setCfg] = useState<AppConfig>(initial);
+  const [pendingMediaProviderEditIds, setPendingMediaProviderEditIds] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
   const lastSavedAppearanceRef = useRef({
     theme: initial.theme ?? 'system',
     accentColor: resolveAccentColor(initial.accentColor),
@@ -897,16 +904,11 @@ export function SettingsDialog({
     if (versionChecking || !appVersionInfo) return;
     setVersionChecking(true);
     try {
-      const res = await fetch('https://api.github.com/repos/nexu-io/open-design/releases/latest', {
-        headers: { Accept: 'application/vnd.github+json' },
-      });
-      if (res.ok) {
-        const data = await res.json() as { tag_name?: string; html_url?: string };
-        const latestTag = (data.tag_name ?? '').replace(/^v/, '');
-        if (latestTag && latestTag === appVersionInfo.version) {
-          setAboutToast(t('settings.alreadyLatest'));
-          return;
-        }
+      const release = await fetchLatestGithubReleaseInfo();
+      const latestTag = (release?.tagName ?? '').replace(/^v/, '');
+      if (release?.stale !== true && latestTag && latestTag === appVersionInfo.version) {
+        setAboutToast(t('settings.alreadyLatest'));
+        return;
       }
     } catch {
       // network error — fall through to open releases page
@@ -1616,15 +1618,16 @@ export function SettingsDialog({
             theme: snapshot.theme ?? 'system',
             accentColor: resolveAccentColor(snapshot.accentColor),
           };
-          if (persistOptions.forceMediaProviderSync) {
-            lastSyncedMediaProvidersVersionRef.current = mediaProvidersVersion;
-          }
           // If a newer edit landed while the request was in flight,
           // leave the status as 'pending' so the next debounce tick
           // owns the indicator instead of flashing "Saved".
           if (autosaveLatestRef.current !== snapshot) {
             setAutosaveStatus('pending');
             return;
+          }
+          if (persistOptions.forceMediaProviderSync) {
+            lastSyncedMediaProvidersVersionRef.current = mediaProvidersVersion;
+            setPendingMediaProviderEditIds(new Set());
           }
           setAutosaveStatus('saved');
           autosaveSavedTimerRef.current = window.setTimeout(() => {
@@ -1912,8 +1915,8 @@ export function SettingsDialog({
     composio: { title: t('connectors.title'), subtitle: t('connectors.subtitle') },
     orbit: { title: t('settings.orbit.title'), subtitle: t('settings.orbit.lede') },
     routines: {
-      title: 'Automations',
-      subtitle: 'Scheduled automations that run unattended.',
+      title: t('routines.title'),
+      subtitle: t('routines.subtitle'),
     },
     integrations: { title: t('settings.mcpServerTitle'), subtitle: t('settings.mcpServerHint') },
     mcpClient: { title: t('settings.externalMcpTitle'), subtitle: t('settings.externalMcpHint') },
@@ -3230,8 +3233,15 @@ export function SettingsDialog({
               setCfg={setCfg}
               mediaProvidersNotice={mediaProvidersNotice}
               onReloadMediaProviders={onReloadMediaProviders}
-              onChange={() => {
+              pendingLocalProviderIds={pendingMediaProviderEditIds}
+              onChange={(providerId) => {
                 mediaProvidersChangeVersionRef.current += 1;
+                setPendingMediaProviderEditIds((current) => {
+                  if (current.has(providerId)) return current;
+                  const next = new Set(current);
+                  next.add(providerId);
+                  return next;
+                });
               }}
             />
           ) : null}
@@ -4800,13 +4810,15 @@ function MediaProvidersSection({
   setCfg,
   mediaProvidersNotice,
   onReloadMediaProviders,
+  pendingLocalProviderIds,
   onChange,
 }: {
   cfg: AppConfig;
   setCfg: Dispatch<SetStateAction<AppConfig>>;
   mediaProvidersNotice?: string | null;
   onReloadMediaProviders?: () => Promise<AppConfig['mediaProviders'] | null>;
-  onChange: () => void;
+  pendingLocalProviderIds: ReadonlySet<string>;
+  onChange: (providerId: string) => void;
 }) {
   const { t } = useI18n();
   const analytics = useAnalytics();
@@ -4861,7 +4873,7 @@ function MediaProvidersSection({
       apiKeyTail?: string;
     },
   ) => {
-    onChange();
+    onChange(provider.id);
     setCfg((curr) => {
       const prev = curr.mediaProviders?.[provider.id] ?? { apiKey: '', baseUrl: '', model: '' };
       const next = { ...prev, ...patch };
@@ -4884,7 +4896,9 @@ function MediaProvidersSection({
         setReloadNotice({ kind: 'error', message: t('settings.mediaProviderReloadError') });
         return;
       }
-      setCfg((curr) => mergeDaemonMediaProviders(curr, next));
+      setCfg((curr) => mergeDaemonMediaProviders(curr, next, {
+        preserveLocalProviderIds: pendingLocalProviderIds,
+      }));
       setReloadNotice({ kind: 'success', message: t('settings.mediaProviderReloadSuccess') });
     } finally {
       setReloadRunning(false);

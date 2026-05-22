@@ -6535,6 +6535,40 @@
       "taskKind": "new-generation"
     },
     {
+      "name": "open-design/example-codex-interactive-capability-map",
+      "title": "Codex Interactive Capability Map",
+      "version": "0.1.0",
+      "source": "github:nexu-io/open-design@main/plugins/_official/examples/codex-interactive-capability-map",
+      "publisher": {
+        "id": "open-design",
+        "url": "https://open-design.ai"
+      },
+      "capabilitiesSummary": [
+        "prompt:inject",
+        "fs:write"
+      ],
+      "description": "Turn a long-form article, thread, memo, or product narrative into a Codex-style clickable capability map with a workflow loop, use-case matrix, and responsive detail panel.",
+      "tags": [
+        "example",
+        "first-party",
+        "prototype",
+        "knowledge",
+        "web",
+        "desktop",
+        "codex",
+        "article",
+        "thread",
+        "knowledge-map",
+        "interactive",
+        "capability-map",
+        "explainer"
+      ],
+      "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/codex-interactive-capability-map",
+      "license": "MIT",
+      "mode": "prototype",
+      "taskKind": "new-generation"
+    },
+    {
       "name": "open-design/example-invoice",
       "title": "Invoice",
       "version": "0.1.0",

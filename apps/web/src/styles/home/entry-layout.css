@@ -1629,16 +1629,34 @@
   left: 0;
   right: 0;
   display: grid;
-  gap: 2px;
-  max-height: 240px;
+  gap: 1px;
+  max-height: min(224px, 36vh);
   overflow-y: auto;
+  overflow-x: hidden;
   overscroll-behavior: contain;
-  padding: 6px;
-  border: 1px solid color-mix(in srgb, var(--border) 82%, var(--accent) 18%);
+  padding: 4px;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, var(--accent) 12%);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-panel) 96%, var(--bg-subtle) 4%);
-  box-shadow: 0 14px 34px color-mix(in srgb, var(--shadow-color, #000) 12%, transparent);
+  background: color-mix(in srgb, var(--bg-panel) 98%, var(--bg-subtle) 2%);
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--shadow-color, #000) 10%, transparent);
   scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text-muted) 34%, transparent) transparent;
+}
+
+.onboarding-view__select-menu::-webkit-scrollbar {
+  width: 8px;
+}
+
+.onboarding-view__select-menu::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.onboarding-view__select-menu::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-muted) 28%, transparent);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
 }
 
 .onboarding-view__select-field[data-placement='top'] .onboarding-view__select-menu {
@@ -1650,28 +1668,36 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  min-height: 32px;
+  gap: 10px;
+  min-height: 30px;
   width: 100%;
   border: 0;
   border-radius: 6px;
-  padding: 0 10px;
+  padding: 6px 8px 6px 10px;
   color: var(--text);
   background: transparent;
   font: inherit;
-  font-size: 13px;
+  font-size: 12.5px;
+  line-height: 1.25;
   text-align: left;
   cursor: pointer;
 }
 
+.onboarding-view__select-option span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .onboarding-view__select-option:hover {
   color: var(--text-strong);
-  background: color-mix(in srgb, var(--accent) 7%, var(--bg-panel));
+  background: color-mix(in srgb, var(--accent) 5%, var(--bg-panel));
 }
 
 .onboarding-view__select-option.is-selected {
   color: var(--accent-strong);
-  background: color-mix(in srgb, var(--accent) 10%, var(--bg-panel));
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-panel));
   font-weight: 650;
 }
 

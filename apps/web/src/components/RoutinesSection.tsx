@@ -11,6 +11,12 @@ import type {
 
 import { Icon } from './Icon';
 import { navigate } from '../router';
+import { useT } from '../i18n';
+import type { Dict } from '../i18n/types';
+
+// Shared translator signature: every sub-component in this file is module-scoped,
+// so `t` from `useT()` is threaded down as a prop rather than re-hooked.
+type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
 type ProjectSummary = { id: string; name: string };
 
@@ -20,22 +26,11 @@ type RoutinesSectionProps = {
 
 type ScheduleKind = RoutineSchedule['kind'];
 
-const SCHEDULE_KINDS: { kind: ScheduleKind; label: string }[] = [
-  { kind: 'hourly', label: 'Hourly' },
-  { kind: 'daily', label: 'Daily' },
-  { kind: 'weekdays', label: 'Weekdays' },
-  { kind: 'weekly', label: 'Weekly' },
-];
+const SCHEDULE_KINDS: ScheduleKind[] = ['hourly', 'daily', 'weekdays', 'weekly'];
 
-const WEEKDAY_LABELS: { value: Weekday; short: string; long: string }[] = [
-  { value: 0, short: 'Sun', long: 'Sunday' },
-  { value: 1, short: 'Mon', long: 'Monday' },
-  { value: 2, short: 'Tue', long: 'Tuesday' },
-  { value: 3, short: 'Wed', long: 'Wednesday' },
-  { value: 4, short: 'Thu', long: 'Thursday' },
-  { value: 5, short: 'Fri', long: 'Friday' },
-  { value: 6, short: 'Sat', long: 'Saturday' },
-];
+// IANA `Date.getDay()` order: 0 = Sunday … 6 = Saturday. Display labels come
+// from the `routines.weekday.*` i18n keys, keyed by this same index.
+const WEEKDAYS: Weekday[] = [0, 1, 2, 3, 4, 5, 6];
 
 // Fallback list used only when the runtime doesn't expose
 // `Intl.supportedValuesOf('timeZone')`. The backend validator accepts any
@@ -117,23 +112,24 @@ function tzOptionLabel(timezone: string): string {
   return tzCityLabel(timezone);
 }
 
-function formatTime12h(time: string): string {
+function formatTime12h(time: string, t: TranslateFn): string {
   const m = /^(\d{2}):(\d{2})$/.exec(time);
   if (!m) return time;
   const h = Number(m[1]);
   const mm = m[2];
-  const suffix = h >= 12 ? 'PM' : 'AM';
+  const suffix = h >= 12 ? t('routines.timePm') : t('routines.timeAm');
   const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
   return `${h12}:${mm} ${suffix}`;
 }
 
 function describeSchedule(
   schedule: RoutineSchedule,
+  t: TranslateFn,
   nextRunAt?: number | null,
 ): string {
   if (schedule.kind === 'hourly') {
     const mm = String(schedule.minute).padStart(2, '0');
-    return `Runs every hour at :${mm}`;
+    return t('routines.describe.hourly', { minute: mm });
   }
   // Anchor the GMT offset to the next actual fire time so DST-observing
   // zones don't drift seasonally — a New York routine created in winter
@@ -144,14 +140,23 @@ function describeSchedule(
     ? gmtLabel(schedule.timezone, new Date(nextRunAt))
     : tzCityLabel(schedule.timezone);
   if (schedule.kind === 'daily') {
-    return `Runs daily at ${formatTime12h(schedule.time)} ${tz}`;
+    return t('routines.describe.daily', {
+      time: formatTime12h(schedule.time, t),
+      tz,
+    });
   }
   if (schedule.kind === 'weekdays') {
-    return `Runs Mon–Fri at ${formatTime12h(schedule.time)} ${tz}`;
+    return t('routines.describe.weekdays', {
+      time: formatTime12h(schedule.time, t),
+      tz,
+    });
   }
-  const day =
-    WEEKDAY_LABELS.find((w) => w.value === schedule.weekday)?.long ?? 'Sunday';
-  return `Runs every ${day} at ${formatTime12h(schedule.time)} ${tz}`;
+  const day = t(`routines.weekday.long.${schedule.weekday}`);
+  return t('routines.describe.weekly', {
+    day,
+    time: formatTime12h(schedule.time, t),
+    tz,
+  });
 }
 
 function formatRelative(ts: number | null | undefined): string {
@@ -250,33 +255,45 @@ function buildSchedule(form: FormState): RoutineSchedule {
   };
 }
 
-function StatusPill({ status }: { status: RoutineRun['status'] }) {
-  return <span className={`routines-status routines-status-${status}`}>{status}</span>;
+function StatusPill({
+  status,
+  t,
+}: {
+  status: RoutineRun['status'];
+  t: TranslateFn;
+}) {
+  return (
+    <span className={`routines-status routines-status-${status}`}>
+      {t(`routines.status.${status}`)}
+    </span>
+  );
 }
 
 function ScheduleEditor({
   form,
   setForm,
   timezones,
+  t,
 }: {
   form: FormState;
   setForm: (next: FormState) => void;
   timezones: string[];
+  t: TranslateFn;
 }) {
   return (
     <div className="routines-schedule-editor">
-      <div className="routines-field-label">Schedule</div>
+      <div className="routines-field-label">{t('routines.fieldSchedule')}</div>
       <div className="subtab-pill routines-kind-pills" role="tablist">
-        {SCHEDULE_KINDS.map((k) => (
+        {SCHEDULE_KINDS.map((kind) => (
           <button
             type="button"
-            key={k.kind}
+            key={kind}
             role="tab"
-            aria-selected={form.kind === k.kind}
-            className={form.kind === k.kind ? 'active' : ''}
-            onClick={() => setForm({ ...form, kind: k.kind })}
+            aria-selected={form.kind === kind}
+            className={form.kind === kind ? 'active' : ''}
+            onClick={() => setForm({ ...form, kind })}
           >
-            {k.label}
+            {t(`routines.kind.${kind}`)}
           </button>
         ))}
       </div>
@@ -284,7 +301,7 @@ function ScheduleEditor({
       {form.kind === 'hourly' ? (
         <div className="routines-fieldrow">
           <label className="routines-field">
-            <span>Minute of every hour</span>
+            <span>{t('routines.fieldMinute')}</span>
             <input
               type="number"
               min={0}
@@ -304,15 +321,15 @@ function ScheduleEditor({
 
       {form.kind === 'weekly' ? (
         <div className="routines-weekday-row">
-          {WEEKDAY_LABELS.map((d) => (
+          {WEEKDAYS.map((value) => (
             <button
               type="button"
-              key={d.value}
-              className={`routines-weekday${form.weekday === d.value ? ' active' : ''}`}
-              onClick={() => setForm({ ...form, weekday: d.value })}
-              aria-pressed={form.weekday === d.value}
+              key={value}
+              className={`routines-weekday${form.weekday === value ? ' active' : ''}`}
+              onClick={() => setForm({ ...form, weekday: value })}
+              aria-pressed={form.weekday === value}
             >
-              {d.short}
+              {t(`routines.weekday.short.${value}`)}
             </button>
           ))}
         </div>
@@ -321,7 +338,7 @@ function ScheduleEditor({
       {form.kind !== 'hourly' ? (
         <div className="routines-fieldrow routines-fieldrow-2col">
           <label className="routines-field">
-            <span>Time</span>
+            <span>{t('routines.fieldTime')}</span>
             <input
               type="time"
               value={form.time}
@@ -329,7 +346,7 @@ function ScheduleEditor({
             />
           </label>
           <label className="routines-field">
-            <span>Timezone</span>
+            <span>{t('routines.fieldTimezone')}</span>
             <select
               value={form.timezone}
               onChange={(e) => setForm({ ...form, timezone: e.target.value })}
@@ -345,13 +362,23 @@ function ScheduleEditor({
       ) : null}
 
       <p className="routines-schedule-hint">
-        {describeSchedule(buildSchedule(form))}
+        {describeSchedule(buildSchedule(form), t)}
       </p>
     </div>
   );
 }
 
-function RunHistory({ routineId, refreshKey, onClose }: { routineId: string; refreshKey: number; onClose?: () => void }) {
+function RunHistory({
+  routineId,
+  refreshKey,
+  onClose,
+  t,
+}: {
+  routineId: string;
+  refreshKey: number;
+  onClose?: () => void;
+  t: TranslateFn;
+}) {
   const [runs, setRuns] = useState<RoutineRun[] | null>(null);
 
   useEffect(() => {
@@ -371,9 +398,16 @@ function RunHistory({ routineId, refreshKey, onClose }: { routineId: string; ref
     };
   }, [routineId, refreshKey]);
 
-  if (runs === null) return <div className="routines-history-empty">Loading runs…</div>;
+  if (runs === null)
+    return (
+      <div className="routines-history-empty">
+        {t('routines.runHistoryLoading')}
+      </div>
+    );
   if (runs.length === 0)
-    return <div className="routines-history-empty">No runs yet.</div>;
+    return (
+      <div className="routines-history-empty">{t('routines.runHistoryEmpty')}</div>
+    );
 
   return (
     <ul className="routines-history">
@@ -381,10 +415,12 @@ function RunHistory({ routineId, refreshKey, onClose }: { routineId: string; ref
         const failureReason = runFailureReason(r);
         return (
           <li key={r.id} className="routines-history-row">
-            <StatusPill status={r.status} />
+            <StatusPill status={r.status} t={t} />
             <span className="routines-history-time">{formatRunTimestamp(r.startedAt)}</span>
             <span className="routines-history-trigger">
-              {r.trigger === 'manual' ? 'manual' : 'scheduled'}
+              {r.trigger === 'manual'
+                ? t('routines.triggerManual')
+                : t('routines.triggerScheduled')}
             </span>
             <button
               type="button"
@@ -404,9 +440,9 @@ function RunHistory({ routineId, refreshKey, onClose }: { routineId: string; ref
                 });
                 onClose?.();
               }}
-              title="Open the project this run wrote to"
+              title={t('routines.openProjectTitle')}
             >
-              Open project
+              {t('routines.openProject')}
               <Icon name="chevron-right" size={12} />
             </button>
             {failureReason ? (
@@ -420,6 +456,7 @@ function RunHistory({ routineId, refreshKey, onClose }: { routineId: string; ref
 }
 
 export function RoutinesSection({ onClose }: RoutinesSectionProps) {
+  const t = useT();
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -482,7 +519,7 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
     setError(null);
     try {
       if (form.mode === 'reuse' && !form.projectId) {
-        throw new Error('Pick a project to reuse, or switch to "Create new each run"');
+        throw new Error(t('routines.errorPickProject'));
       }
       const target: RoutineProjectTarget =
         form.mode === 'reuse' && form.projectId
@@ -560,8 +597,7 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
   };
 
   const remove = async (id: string) => {
-    if (!window.confirm('Delete this automation? Past runs and their projects are kept.'))
-      return;
+    if (!window.confirm(t('routines.confirmDelete'))) return;
     setBusyId(id);
     try {
       const res = await fetch(`/api/routines/${id}`, { method: 'DELETE' });
@@ -582,7 +618,7 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
     <section className="settings-section routines-section">
       <div className="section-head">
         <div>
-          <h3>Automations</h3>
+          <h3>{t('routines.title')}</h3>
         </div>
         {!showForm ? (
           <button
@@ -594,7 +630,7 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
             }}
           >
             <Icon name="plus" size={14} />
-            <span>New automation</span>
+            <span>{t('routines.newAutomation')}</span>
           </button>
         ) : null}
       </div>
@@ -608,30 +644,30 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
       {showForm ? (
         <form onSubmit={submit} className="routines-card routines-form">
           <label className="routines-field">
-            <span>Name</span>
+            <span>{t('routines.fieldName')}</span>
             <input
               required
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="Morning briefing"
+              placeholder={t('routines.fieldNamePlaceholder')}
               autoFocus
             />
           </label>
           <label className="routines-field">
-            <span>Prompt</span>
+            <span>{t('routines.fieldPrompt')}</span>
             <textarea
               required
               rows={4}
               value={form.prompt}
               onChange={(e) => setForm({ ...form, prompt: e.target.value })}
-              placeholder="Pull yesterday's GitHub + Linear activity and summarize what changed."
+              placeholder={t('routines.fieldPromptPlaceholder')}
             />
           </label>
 
-          <ScheduleEditor form={form} setForm={setForm} timezones={timezones} />
+          <ScheduleEditor form={form} setForm={setForm} timezones={timezones} t={t} />
 
           <fieldset className="routines-fieldset">
-            <legend>Project</legend>
+            <legend>{t('routines.fieldsetProject')}</legend>
 
             <label className="routines-radio">
               <input
@@ -640,8 +676,8 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
                 onChange={() => setForm({ ...form, mode: 'create_each_run' })}
               />
               <span>
-                <strong>Create a new project each run</strong>
-                <small>A fresh, isolated workspace per fire.</small>
+                <strong>{t('routines.modeCreate')}</strong>
+                <small>{t('routines.modeCreateHint')}</small>
               </span>
             </label>
 
@@ -652,8 +688,8 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
                 onChange={() => setForm({ ...form, mode: 'reuse' })}
               />
               <span>
-                <strong>Reuse an existing project</strong>
-                <small>Each run lives as a new conversation inside the project.</small>
+                <strong>{t('routines.modeReuse')}</strong>
+                <small>{t('routines.modeReuseHint')}</small>
               </span>
             </label>
 
@@ -664,7 +700,7 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
                 onChange={(e) => setForm({ ...form, projectId: e.target.value })}
                 required
               >
-                <option value="">— Pick a project —</option>
+                <option value="">{t('routines.pickProject')}</option>
                 {projects.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
@@ -684,31 +720,38 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
                 setForm(emptyForm());
               }}
             >
-              Cancel
+              {t('routines.cancel')}
             </button>
             <button type="submit" className="btn btn-primary" disabled={submitting}>
               {editingId
-                ? submitting ? 'Saving…' : 'Save'
-                : submitting ? 'Creating…' : 'Create'}
+                ? submitting
+                  ? t('routines.saving')
+                  : t('routines.save')
+                : submitting
+                  ? t('routines.creating')
+                  : t('routines.create')}
             </button>
           </div>
         </form>
       ) : null}
 
       {loading ? (
-        <div className="routines-empty">Loading…</div>
+        <div className="routines-empty">{t('routines.loading')}</div>
       ) : routines.length === 0 ? (
         <div className="routines-empty">
-          <strong>No automations yet.</strong>
-          <p>Click <em>New automation</em> to schedule an unattended agent run.</p>
+          <strong>{t('routines.empty')}</strong>
+          <p>{t('routines.emptyHint')}</p>
         </div>
       ) : (
         <ul className="routines-list">
           {routines.map((r) => {
             const targetLabel =
               r.target.mode === 'reuse'
-                ? `→ ${projectsById.get(r.target.projectId) ?? r.target.projectId}`
-                : '→ new project each run';
+                ? t('routines.targetReuse', {
+                    project:
+                      projectsById.get(r.target.projectId) ?? r.target.projectId,
+                  })
+                : t('routines.targetCreate');
             const isBusy = busyId === r.id;
             const isExpanded = expandedId === r.id;
             const failureReason = runFailureReason(r.lastRun);
@@ -719,19 +762,20 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
                     <div className="routines-item-title">
                       <strong>{r.name}</strong>
                       {!r.enabled ? (
-                        <span className="routines-tag">paused</span>
+                        <span className="routines-tag">{t('routines.tagPaused')}</span>
                       ) : null}
                     </div>
-                    <div className="routines-item-line">{describeSchedule(r.schedule, r.nextRunAt)}</div>
+                    <div className="routines-item-line">{describeSchedule(r.schedule, t, r.nextRunAt)}</div>
                     <div className="routines-item-meta">
                       <span>{targetLabel}</span>
                       <span aria-hidden>·</span>
-                      <span>next: {formatRelative(r.nextRunAt)}</span>
+                      <span>{t('routines.metaNext', { when: formatRelative(r.nextRunAt) })}</span>
                       {r.lastRun ? (
                         <>
                           <span aria-hidden>·</span>
                           <span>
-                            last: <StatusPill status={r.lastRun.status} />{' '}
+                            {t('routines.metaLast')}{' '}
+                            <StatusPill status={r.lastRun.status} t={t} />{' '}
                             {formatRelative(r.lastRun.startedAt)}
                           </span>
                         </>
@@ -748,7 +792,7 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
                       onClick={() => runNow(r.id)}
                       disabled={isBusy}
                     >
-                      Run now
+                      {t('routines.runNow')}
                     </button>
                     <button
                       type="button"
@@ -760,7 +804,7 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
                       }}
                       disabled={isBusy}
                     >
-                      Edit
+                      {t('routines.edit')}
                     </button>
                     <button
                       type="button"
@@ -768,7 +812,7 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
                       onClick={() => toggleEnabled(r)}
                       disabled={isBusy}
                     >
-                      {r.enabled ? 'Pause' : 'Resume'}
+                      {r.enabled ? t('routines.pause') : t('routines.resume')}
                     </button>
                     <button
                       type="button"
@@ -776,22 +820,22 @@ export function RoutinesSection({ onClose }: RoutinesSectionProps) {
                       onClick={() => setExpandedId(isExpanded ? null : r.id)}
                       aria-expanded={isExpanded}
                     >
-                      {isExpanded ? 'Hide history' : 'History'}
+                      {isExpanded ? t('routines.hideHistory') : t('routines.history')}
                     </button>
                     <button
                       type="button"
                       className="btn btn-ghost btn-danger"
                       onClick={() => remove(r.id)}
                       disabled={isBusy}
-                      title="Delete this automation"
+                      title={t('routines.deleteTitle')}
                     >
-                      Delete
+                      {t('routines.delete')}
                     </button>
                   </div>
                 </div>
                 {isExpanded ? (
                   <div className="routines-item-history">
-                    <RunHistory routineId={r.id} refreshKey={historyTick} onClose={onClose} />
+                    <RunHistory routineId={r.id} refreshKey={historyTick} onClose={onClose} t={t} />
                   </div>
                 ) : null}
               </li>

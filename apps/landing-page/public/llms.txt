@@ -31,9 +31,7 @@ https://open-design.ai/ and developed at github.com/nexu-io/open-design.
 - Templates catalog: https://open-design.ai/templates/
 - Craft principles: https://open-design.ai/craft/
 - Plugins catalog: https://open-design.ai/plugins/
-- Tutorials: https://open-design.ai/tutorials/
 - Blog: https://open-design.ai/blog/
-- HTML Anything (sister project): https://open-design.ai/html-anything/
 - RSS: https://open-design.ai/blog/rss.xml
 - Sitemap: https://open-design.ai/sitemap-index.xml
 
@@ -43,18 +41,6 @@ https://open-design.ai/ and developed at github.com/nexu-io/open-design.
 - GitHub releases: https://github.com/nexu-io/open-design/releases
 - GitHub issues: https://github.com/nexu-io/open-design/issues
 - Discord: https://discord.gg/9ptkbbqRu
-
-## Sister Projects
-
-HTML Anything (alternately written as "html-anything" or "htmlanything")
-is the agentic HTML editor from the same team. It reuses whichever
-coding-agent CLI you already authenticated — Claude Code, Cursor Agent,
-Codex, Gemini CLI, GitHub Copilot CLI, OpenCode, Qwen Coder, or Aider —
-to turn Markdown, CSV, JSON, or Excel into ship-ready HTML for WeChat,
-X, Zhihu, and Xiaohongshu. Apache-2.0 open source.
-
-- Landing page: https://open-design.ai/html-anything/
-- Source: https://github.com/nexu-io/html-anything
 
 ## Key Blog Posts
 

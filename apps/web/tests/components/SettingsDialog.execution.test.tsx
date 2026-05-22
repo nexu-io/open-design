@@ -18,6 +18,7 @@ const {
   importLocalDesignSystemMock,
   importGitHubDesignSystemMock,
   fetchProviderModelsMock,
+  fetchLatestGithubReleaseInfoMock,
 } = vi.hoisted(() => ({
   playSoundMock: vi.fn(),
   requestNotificationPermissionMock: vi.fn(),
@@ -32,6 +33,7 @@ const {
   importLocalDesignSystemMock: vi.fn(),
   importGitHubDesignSystemMock: vi.fn(),
   fetchProviderModelsMock: vi.fn(),
+  fetchLatestGithubReleaseInfoMock: vi.fn(),
 }));
 
 vi.mock('../../src/utils/notifications', async () => {
@@ -61,6 +63,7 @@ vi.mock('../../src/providers/registry', async () => {
     fetchDesignSystem: fetchDesignSystemMock,
     importLocalDesignSystem: importLocalDesignSystemMock,
     importGitHubDesignSystem: importGitHubDesignSystemMock,
+    fetchLatestGithubReleaseInfo: fetchLatestGithubReleaseInfoMock,
     codexPetSpritesheetUrl: (pet: { spritesheetUrl: string }) => pet.spritesheetUrl,
   };
 });
@@ -308,6 +311,8 @@ beforeEach(() => {
     id,
     body: `design system body for ${id}`,
   }));
+  fetchLatestGithubReleaseInfoMock.mockReset();
+  fetchLatestGithubReleaseInfoMock.mockResolvedValue(null);
   importLocalDesignSystemMock.mockResolvedValue({
     designSystem: {
       id: 'imported-system',
@@ -2650,5 +2655,39 @@ describe('SettingsDialog about interactions', () => {
 
     fireEvent.click(document.querySelector('.modal-backdrop') as HTMLElement);
     expect(second.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens the releases page when the latest release info is stale', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    fetchLatestGithubReleaseInfoMock.mockResolvedValue({
+      tagName: 'v0.4.1',
+      htmlUrl: 'https://github.com/nexu-io/open-design/releases/tag/v0.4.1',
+      stale: true,
+    });
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      {
+        initialSection: 'about',
+        appVersionInfo: {
+          version: '0.4.1',
+          channel: 'beta',
+          packaged: true,
+          platform: 'darwin',
+          arch: 'arm64',
+        },
+      },
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Install latest' }));
+
+    await waitFor(() => {
+      expect(openSpy).toHaveBeenCalledWith(
+        'https://github.com/nexu-io/open-design/releases',
+        '_blank',
+        'noopener,noreferrer',
+      );
+    });
+    expect(screen.queryByText(en['settings.alreadyLatest'])).toBeNull();
   });
 });

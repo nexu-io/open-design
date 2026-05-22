@@ -1,6 +1,7 @@
 ---
 import Layout from '../../_components/sub-page-layout.astro';
 import { getSystemRecords, type SystemRecord } from '../../_lib/catalog';
+import { getLandingUiCopy, localeFromPath, localizedHref } from '../../i18n';
 
 export async function getStaticPaths() {
   const systems = await getSystemRecords();
@@ -15,12 +16,17 @@ interface Props {
   all: ReadonlyArray<SystemRecord>;
 }
 
-const { system, all } = Astro.props as Props;
+const { system: routeSystem, all: routeAll } = Astro.props as Props;
+const locale = localeFromPath(Astro.url.pathname);
+const ui = getLandingUiCopy(locale);
+const href = (path: string) => localizedHref(path, locale);
+const all = locale === 'en' ? routeAll : await getSystemRecords(locale);
+const system = all.find((item) => item.slug === routeSystem.slug) ?? routeSystem;
 
-const title = `${system.name} — Open Design design system`;
+const title = ui.catalog.systems.detailTitle(system.name);
 const description = system.tagline
-  ? `${system.name} (${system.category}) — ${system.tagline}`
-  : `Open Design system bundle: ${system.name}, ${system.category}.`;
+  ? `${system.name} (${system.categoryLabel}) — ${system.tagline}`
+  : ui.catalog.systems.detailFallbackDescription(system.name, system.categoryLabel);
 
 const related = all
   .filter((s) => s.slug !== system.slug && s.category === system.category)
@@ -32,7 +38,7 @@ const jsonLd = [
     '@type': 'BreadcrumbList',
     itemListElement: [
       { '@type': 'ListItem', position: 1, name: 'Open Design', item: Astro.site?.toString() },
-      { '@type': 'ListItem', position: 2, name: 'Design Systems', item: new URL('/systems/', Astro.site).toString() },
+      { '@type': 'ListItem', position: 2, name: ui.catalog.systems.detailLabel, item: new URL('/systems/', Astro.site).toString() },
       { '@type': 'ListItem', position: 3, name: system.name, item: new URL(`/systems/${system.slug}/`, Astro.site).toString() },
     ],
   },
@@ -43,16 +49,16 @@ const jsonLd = [
     description,
     url: new URL(`/systems/${system.slug}/`, Astro.site).toString(),
     license: 'https://www.apache.org/licenses/LICENSE-2.0',
-    genre: system.category,
+    genre: system.categoryLabel,
   },
 ];
 ---
 
 <Layout title={title} description={description} active="systems" jsonLd={jsonLd}>
-  <nav class="breadcrumb" aria-label="Breadcrumb">
-    <a href="/">Open Design</a>
+  <nav class="breadcrumb" aria-label={ui.catalog.breadcrumbLabel}>
+    <a href={href('/')}>Open Design</a>
     <span>/</span>
-    <a href="/systems/">Design Systems</a>
+    <a href={href('/systems/')}>{ui.catalog.systems.detailLabel}</a>
     <span>/</span>
     <span aria-current="page">{system.name}</span>
   </nav>
@@ -60,24 +66,23 @@ const jsonLd = [
   <article class="detail">
     <header class="detail-head">
       <span class="label">
-        Design system
-        <span class="ix">· {system.category}</span>
+        {ui.catalog.systems.detailLabel}
+        <span class="ix">· {system.categoryLabel}</span>
       </span>
       <h1 class="display">{system.name}<span class="dot">.</span></h1>
       {system.tagline && <p class="lead">{system.tagline}</p>}
       <div class="detail-actions">
         <a class="btn btn-primary" href={system.source} target="_blank" rel="noopener">
-          View DESIGN.md on GitHub
+          {ui.catalog.systems.viewOnGithub}
         </a>
       </div>
     </header>
 
     {system.palette.length > 0 && (
       <section class="detail-block">
-        <h2>Palette sample</h2>
+        <h2>{ui.catalog.systems.paletteSample}</h2>
         <p class="block-lead">
-          First {system.palette.length} hex codes lifted from the DESIGN.md
-          color sections. The full palette and roles live in the source spec.
+          {ui.catalog.systems.paletteLead(system.palette.length)}
         </p>
         <div class="palette-row">
           {system.palette.map((hex) => (
@@ -92,18 +97,18 @@ const jsonLd = [
 
     {system.atmosphere && (
       <section class="detail-block">
-        <h2>Visual theme</h2>
+        <h2>{ui.catalog.systems.visualTheme}</h2>
         <p class="atmosphere">{system.atmosphere}</p>
       </section>
     )}
 
     {related.length > 0 && (
       <section class="detail-block">
-        <h2>Related systems in {system.category}</h2>
+        <h2>{ui.catalog.systems.related(system.categoryLabel)}</h2>
         <ul class="related-grid">
           {related.map((r) => (
             <li>
-              <a href={`/systems/${r.slug}/`}>
+              <a href={href(`/systems/${r.slug}/`)}>
                 <span class="related-name">{r.name}</span>
                 <span class="related-desc">{r.tagline}</span>
                 <div class="system-swatches" aria-hidden="true">

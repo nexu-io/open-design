@@ -18,12 +18,20 @@ body.sub-page {
 }
 
 .sub-main {
-  padding: 140px 0 96px;
+  /* Only set vertical padding here. The element also has the `.container`
+   * class which provides the responsive horizontal gutter; using the
+   * `padding` shorthand instead would zero out left/right and let
+   * content touch the screen edge on mobile (issue #review-fix-8). */
+  padding-top: 140px;
+  padding-bottom: 96px;
   min-height: 60vh;
 }
 
 @media (max-width: 720px) {
-  .sub-main { padding: 120px 0 72px; }
+  .sub-main {
+    padding-top: 120px;
+    padding-bottom: 72px;
+  }
 }
 
 /* ---------- nav active state ---------- */
@@ -242,8 +250,8 @@ body.sub-page {
   color: var(--ink);
 }
 .featured-card a > * + * {
-  margin-left: 22px;
-  margin-right: 22px;
+  margin-left: 24px;
+  margin-right: 24px;
 }
 .featured-card .featured-num { margin-top: 18px; }
 .featured-card p { margin-bottom: 12px; }
@@ -298,7 +306,12 @@ body.sub-page {
   color: var(--ink-soft);
   font-size: 13px;
   line-height: 1.5;
-  margin: 0 0 12px;
+  /* Only set bottom margin here. Horizontal margin is owned by the
+   * `.featured-card a > * + *` rule above (24px both sides); using
+   * the `margin: ...` shorthand instead would clobber that to 0 and
+   * the description text would bleed against the card edge. Same
+   * fragility template-summary fixed in #2600. */
+  margin-bottom: 12px;
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
@@ -332,17 +345,21 @@ body.sub-page {
   grid-template-columns: 60px 1fr auto auto;
   gap: 24px;
   align-items: center;
-  padding: 22px 0;
+  /*
+   * Horizontal 24px lockstep with the rest of the catalog tile
+   * families (featured-card / template-card / system-card / source-card).
+   * Hover used to push from 0 → 12px which produced a visible
+   * jolt; staying at 24 base + only changing background on hover
+   * keeps the row composition steady.
+   */
+  padding: 22px 24px;
   text-decoration: none;
   color: var(--ink);
-  transition: padding 0.16s ease;
 }
 .catalog-row-skill a {
   grid-template-columns: 60px 130px 1fr auto auto;
 }
 .catalog-row a:hover {
-  padding-left: 12px;
-  padding-right: 12px;
   background: var(--paper-warm);
 }
 .catalog-row a:hover .row-arrow { color: var(--coral); transform: translateX(4px); }
@@ -443,9 +460,11 @@ body.sub-page {
   .catalog-row-skill a {
     grid-template-columns: 36px 1fr auto;
     gap: 14px;
-    padding: 18px 0;
+    /* Keep a real horizontal gutter at narrow widths so the row body
+     * doesn't bleed against the card edge. The previous `0` was a
+     * holdover from when hover padding was the only horizontal inset. */
+    padding: 18px 20px;
   }
-  .catalog-row a:hover { padding-left: 8px; padding-right: 8px; }
   .row-meta { display: none; }
   .row-thumb { display: none; }
   .row-arrow { font-size: 14px; }
@@ -478,9 +497,10 @@ body.sub-page {
 }
 .template-card a > .meta-tag,
 .template-card a > .template-name,
-.template-card a > .template-summary {
-  margin-left: 20px;
-  margin-right: 20px;
+.template-card a > .template-summary,
+.template-card a > .template-meta-line {
+  margin-left: 24px;
+  margin-right: 24px;
 }
 .template-card a > .meta-tag {
   display: inline-block;
@@ -523,7 +543,11 @@ body.sub-page {
   color: var(--ink);
 }
 .template-summary {
-  margin: 8px 20px 20px;
+  /* Horizontal padding (24px) is owned by the group rule on
+   * `.template-card a > .template-summary` above; this rule only sets
+   * top/bottom rhythm so siblings stay in lockstep. */
+  margin-top: 8px;
+  margin-bottom: 20px;
   font-size: 14px;
   line-height: 1.5;
   color: var(--ink-soft);
@@ -534,7 +558,10 @@ body.sub-page {
 }
 .template-meta-line {
   display: block;
-  margin: -10px 20px 20px;
+  /* Negative top tugs this row up against the summary; horizontal owned
+   * by the group rule above. */
+  margin-top: -10px;
+  margin-bottom: 20px;
   font-family: var(--mono);
   font-size: 10px;
   letter-spacing: 0.12em;
@@ -568,7 +595,7 @@ body.sub-page {
 }
 .system-card a {
   display: block;
-  padding: 18px 18px 22px;
+  padding: 18px 24px 22px;
   text-decoration: none;
   color: var(--ink);
 }
@@ -876,7 +903,7 @@ body.sub-page {
 }
 .sub-footer-grid {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr;
+  grid-template-columns: 1.6fr 1fr 1fr 1fr;
   gap: 48px;
   margin-bottom: 36px;
 }
@@ -940,15 +967,15 @@ body.sub-page {
   .sub-footer { padding: 40px 0 24px; }
 }
 
-
 /* =========================================================
  * SEO landing pages — /official/, /quickstart/, /compare/,
  * /alternatives/claude-design/, /agents/
  * =========================================================
  *
  * Shared layout primitives for the high-intent, mostly-textual
- * pages. These reuse Atelier Zero tokens; they avoid the editorial
- * side rails and full hero, since these pages are query-legible first.
+ * pages added in growth/seo-opendesigner-analysis.md. These reuse
+ * Atelier Zero tokens; they avoid the editorial side rails and
+ * full hero, since these pages are query-legible first.
  */
 .info-page {
   max-width: 920px;
@@ -1017,7 +1044,7 @@ body.sub-page {
 .source-card {
   border: 1px solid var(--ink);
   background: var(--paper-warm);
-  padding: 24px 28px;
+  padding: 24px;
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 14px 28px;

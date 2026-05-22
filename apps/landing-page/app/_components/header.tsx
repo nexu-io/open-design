@@ -12,12 +12,12 @@
 
 import {
   DEFAULT_LOCALE,
-  LOCALES,
-  LOCALE_LABEL,
-  getCopy,
-  localePath,
-  type Locale,
-} from '../_lib/i18n';
+  getCommonCopy,
+  getHeaderProductMenuCopy,
+  localizedHref,
+  type HeaderCopy,
+  type LandingLocaleCode,
+} from '../i18n';
 
 const REPO = 'https://github.com/nexu-io/open-design';
 const REPO_RELEASES = `${REPO}/releases`;
@@ -33,12 +33,13 @@ export interface HeaderProps {
     | 'home'
     | 'product'
     | 'html-anything'
+    | 'library'
     | 'skills'
     | 'systems'
     | 'templates'
     | 'craft'
-    | 'tutorials'
-    | 'blog';
+    | 'blog'
+    | 'tutorials';
   /**
    * Live counts from the Markdown catalogs. Required so we can never
    * silently render stale fallback numbers when a caller forgets to
@@ -55,93 +56,33 @@ export interface HeaderProps {
   github?: {
     starsLabel: string;
   };
+  /** UI locale for nav labels and accessibility text. */
+  locale?: LandingLocaleCode;
+  /** Optional override for callers that already resolved localized chrome. */
+  copy?: HeaderCopy;
   /** Brand link target — `#top` on the homepage, `/` on sub-pages. */
   brandHref?: string;
-  /** Active page locale. Default routes remain unprefixed English. */
-  locale?: Locale;
-  /** Keep `/en/...` links when rendering the explicit English locale route. */
-  prefixDefaultLocale?: boolean;
-  /**
-   * Active pathname (e.g. `/skills/`, `/zh-CN/blog/`). Used by the locale
-   * switcher to compute the equivalent URL in each language so a click on
-   * "日本語" from `/zh-CN/blog/` goes straight to `/ja/blog/`, not `/ja/`.
-   */
-  pathname?: string;
 }
 
 export function Header({
   active = 'home',
   counts,
   github,
-  brandHref = '#top',
   locale = DEFAULT_LOCALE,
-  prefixDefaultLocale = false,
-  pathname = '/',
+  copy,
+  brandHref = '#top',
 }: HeaderProps) {
   const linkClass = (key: NonNullable<HeaderProps['active']>) =>
     active === key ? 'is-active' : undefined;
-  const copy = getCopy(locale);
-  const href = (path: string) =>
-    localePath(path, locale, { prefixDefault: prefixDefaultLocale });
-  const localizedBrandHref =
-    brandHref === '#top' ? brandHref : href(brandHref);
-  const contactHref = brandHref === '#top' ? '#contact' : `${href('/')}#contact`;
-
-  /**
-   * Minimal line-art globe icon, sized to sit next to the locale label
-   * without dominating the pill. `currentColor` so it inherits the ghost
-   * CTA color treatment (ink at rest, coral on hover).
-   */
-  const globeIcon = (
-    <svg
-      className='nav-locale-glyph'
-      viewBox='0 0 24 24'
-      width='14'
-      height='14'
-      fill='none'
-      stroke='currentColor'
-      strokeWidth='1.5'
-      aria-hidden='true'
-    >
-      <circle cx='12' cy='12' r='9' />
-      <path d='M3 12h18' />
-      <path d='M12 3a14 14 0 0 1 0 18' />
-      <path d='M12 3a14 14 0 0 0 0 18' />
-    </svg>
-  );
-  const chevronIcon = (
-    <svg
-      className='nav-locale-chevron'
-      viewBox='0 0 24 24'
-      width='10'
-      height='10'
-      fill='none'
-      stroke='currentColor'
-      strokeWidth='2'
-      aria-hidden='true'
-    >
-      <path d='M6 9l6 6 6-6' />
-    </svg>
-  );
-  const checkIcon = (
-    <svg
-      className='nav-locale-check'
-      viewBox='0 0 24 24'
-      width='12'
-      height='12'
-      fill='none'
-      stroke='currentColor'
-      strokeWidth='2'
-      aria-hidden='true'
-    >
-      <path d='M5 12l5 5L20 7' />
-    </svg>
-  );
+  const headerCopy = copy ?? getCommonCopy(locale).header;
+  const href = (path: string) => localizedHref(path, locale);
+  const homeBrandHref = brandHref === '/' ? href('/') : brandHref;
+  const productMenuCopy = getHeaderProductMenuCopy(locale);
 
   return (
-    <header className='nav' data-od-id='nav' data-nav-headroom>
+    <header className='nav' data-od-id='nav'>
       <div className='container nav-inner'>
-        <a href={localizedBrandHref} className='brand'>
+        <a href={homeBrandHref} className='brand'>
           <span className='brand-mark'>
             <img src='/logo.webp' alt='' width={44} height={44} />
           </span>
@@ -157,7 +98,7 @@ export function Header({
         <button
           type='button'
           className='nav-toggle'
-          aria-label='Toggle navigation menu'
+          aria-label={productMenuCopy.toggleNavigationMenu}
           aria-controls='primary-nav'
           aria-expanded='false'
           data-nav-toggle
@@ -176,7 +117,7 @@ export function Header({
                 aria-haspopup signaling the submenu to assistive tech.
               */}
               <a
-                href='/'
+                href={href('/')}
                 className={
                   active === 'product' ||
                   active === 'home' ||
@@ -187,56 +128,58 @@ export function Header({
                 aria-haspopup='true'
                 aria-expanded='false'
               >
-                Product
+                {productMenuCopy.product}
                 <span className='dropdown-caret' aria-hidden='true'>▾</span>
               </a>
               <ul className='nav-dropdown' role='menu'>
                 <li role='none'>
                   <a
                     role='menuitem'
-                    href='/'
+                    href={href('/')}
                     className={
                       active === 'home' || active === 'product'
                         ? 'is-active'
                         : undefined
                     }
                   >
-                    <span className='dropdown-name'>Open Design</span>
+                    <span className='dropdown-name'>{productMenuCopy.openDesignName}</span>
                     <span className='dropdown-blurb'>
-                      The agentic design surface — skills, systems, templates.
+                      {productMenuCopy.openDesignBlurb}
                     </span>
                   </a>
                 </li>
                 <li role='none'>
                   <a
                     role='menuitem'
-                    href='/html-anything/'
+                    href={href('/html-anything/')}
                     className={linkClass('html-anything')}
                   >
-                    <span className='dropdown-name'>HTML Anything</span>
+                    <span className='dropdown-name'>{productMenuCopy.htmlAnythingName}</span>
                     <span className='dropdown-blurb'>
-                      Markdown / data → ship-ready HTML, by your local agent.
+                      {productMenuCopy.htmlAnythingBlurb}
                     </span>
                   </a>
                 </li>
+                {/* Tutorials is a top-level nav item (see Library section
+                  below). Don't list it here too — duplicating it once at
+                  Product/Tutorials and again at top-level confuses users
+                  about whether the two link to the same page. */}
               </ul>
             </li>
             {/*
-              Library — catalog facets (Skills / Systems / Templates / Craft).
-              Each is a top-level entry-point in its own right and keeps its
-              own count badge inside the panel, but they share the same
-              shape (catalog list → detail page), so the surface treats them
-              as facets of one library group instead of competing for nav
-              real estate one row at a time.
-
-              The trigger highlights when any one of the four facet pages
-              is active. The same CSS-only :hover / :focus-within mechanic
-              from Product applies — no JS, no React runtime in the browser.
+              Library — catalog facets (Skills / Systems / Templates / Craft)
+              collapsed under one parent. Each row keeps its count badge
+              inside the panel and the trigger highlights when any of the
+              four facet pages is active. Same CSS-only :hover /
+              :focus-within mechanic from Product. Hardcoded "Library" /
+              "Learn" labels until per-locale translations land — the
+              brand-name pattern.
             */}
             <li className='has-dropdown'>
               <a
                 href={href('/skills/')}
                 className={
+                  active === 'library' ||
                   active === 'skills' ||
                   active === 'systems' ||
                   active === 'templates' ||
@@ -247,7 +190,7 @@ export function Header({
                 aria-haspopup='true'
                 aria-expanded='false'
               >
-                Library
+                {headerCopy.nav.library}
                 <span className='dropdown-caret' aria-hidden='true'>▾</span>
               </a>
               <ul className='nav-dropdown' role='menu'>
@@ -258,11 +201,7 @@ export function Header({
                     className={linkClass('skills')}
                   >
                     <span className='dropdown-name'>
-                      {copy.navSkills}
-                      <span className='dropdown-num'>{counts.skills}</span>
-                    </span>
-                    <span className='dropdown-blurb'>
-                      Composable skill templates the agent invokes mid-task.
+                      {headerCopy.nav.skills}
                     </span>
                   </a>
                 </li>
@@ -273,11 +212,7 @@ export function Header({
                     className={linkClass('systems')}
                   >
                     <span className='dropdown-name'>
-                      {copy.navSystems}
-                      <span className='dropdown-num'>{counts.systems}</span>
-                    </span>
-                    <span className='dropdown-blurb'>
-                      Brand-grade design systems — tokens, type, voice.
+                      {headerCopy.nav.systems}
                     </span>
                   </a>
                 </li>
@@ -288,11 +223,7 @@ export function Header({
                     className={linkClass('templates')}
                   >
                     <span className='dropdown-name'>
-                      {copy.navTemplates}
-                      <span className='dropdown-num'>{counts.templates}</span>
-                    </span>
-                    <span className='dropdown-blurb'>
-                      Ready-to-fork artifact bundles with sample data.
+                      {headerCopy.nav.templates}
                     </span>
                   </a>
                 </li>
@@ -303,33 +234,20 @@ export function Header({
                     className={linkClass('craft')}
                   >
                     <span className='dropdown-name'>
-                      {copy.navCraft}
-                      <span className='dropdown-num'>{counts.craft}</span>
-                    </span>
-                    <span className='dropdown-blurb'>
-                      Universal craft principles a skill can opt into.
+                      {headerCopy.nav.craft}
                     </span>
                   </a>
                 </li>
               </ul>
             </li>
-            {/*
-              Tutorials and Blog stay as standalone top-row links rather
-              than nesting under a Learn group: they're the only two
-              editorial reading surfaces, and rolling two items into a
-              dropdown adds a click without earning back any horizontal
-              space. The Library grouping above is what reclaimed the
-              row — Tutorials/Blog can live side by side at the cost of
-              one extra slot.
-            */}
             <li>
               <a href={href('/tutorials/')} className={linkClass('tutorials')}>
-                Tutorials
+                {headerCopy.nav.tutorials}
               </a>
             </li>
             <li>
               <a href={href('/blog/')} className={linkClass('blog')}>
-                {copy.navBlog}
+                {headerCopy.nav.blog}
               </a>
             </li>
             {/*
@@ -341,67 +259,24 @@ export function Header({
           </ul>
         </nav>
         <div className='nav-side'>
-          {/*
-           * Site-level locale switcher.
-           *
-           * Lives in nav-side (not the metadata topbar) so it carries the
-           * same visual weight as Download/Star CTAs. Uses `<details>` so
-           * the dropdown works without JavaScript — and is recognised as
-           * a disclosure widget by screen readers. The trigger always
-           * shows the active locale in its native script, matching
-           * opendesigner.io's pattern.
-           */}
-          <details className='nav-locale' data-od-id='nav-locale'>
-            <summary
-              className='nav-locale-trigger'
-              aria-label='Switch language'
-              title='Switch language'
-            >
-              {globeIcon}
-              <span className='nav-locale-current' lang={locale}>
-                {LOCALE_LABEL[locale]}
-              </span>
-              {chevronIcon}
-            </summary>
-            <div className='nav-locale-panel' role='menu'>
-              {LOCALES.map((item) => {
-                const isCurrent = item === locale;
-                return (
-                  <a
-                    key={item}
-                    className={`nav-locale-item${isCurrent ? ' is-current' : ''}`}
-                    href={localePath(pathname, item)}
-                    hrefLang={item}
-                    lang={item}
-                    role='menuitem'
-                    aria-current={isCurrent ? 'true' : undefined}
-                  >
-                    <span className='nav-locale-name'>
-                      {LOCALE_LABEL[item]}
-                    </span>
-                    {isCurrent ? checkIcon : null}
-                  </a>
-                );
-              })}
-            </div>
-          </details>
           <a
             className='nav-cta ghost'
             href={REPO_RELEASES}
-            aria-label='Download Open Design desktop'
-            title='Download the desktop app'
+            aria-label={headerCopy.downloadAria}
+            title={headerCopy.downloadTitle}
             {...ext}
           >
-            {copy.download}
+            {headerCopy.download}
           </a>
           <a
             className='nav-cta'
             href={REPO}
-            aria-label='Star Open Design on GitHub'
-            title='Click to star us on GitHub'
+            aria-label={headerCopy.starAria}
+            title={headerCopy.starTitle}
             {...ext}
           >
-            {copy.star} · <span data-github-stars>{github?.starsLabel ?? '40K+'}</span>
+            {headerCopy.starPrefix} ·{' '}
+            <span data-github-stars>{github?.starsLabel ?? '40K+'}</span>
           </a>
           <span className='status-dot' aria-hidden='true' />
         </div>

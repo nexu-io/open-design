@@ -1,11 +1,11 @@
 ---
-/* Locale-prefixed wrapper for `/compare/`. See `[locale]/agents/index.astro`
- * for the rationale. */
-import { PREFIXED_LOCALES } from '../../../_lib/i18n';
 import ComparePage from '../../compare/index.astro';
+import { DEFAULT_LOCALE, LANDING_LOCALES } from '../../../i18n';
 
 export function getStaticPaths() {
-  return PREFIXED_LOCALES.map((locale) => ({ params: { locale } }));
+  return LANDING_LOCALES.filter((locale) => locale.code !== DEFAULT_LOCALE).map(
+    (locale) => ({ params: { locale: locale.code } }),
+  );
 }
 ---
 
