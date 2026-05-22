@@ -11148,10 +11148,17 @@ export async function startServer({
       assistantMessageId,
       clientRequestId: `orbit-${trigger}-${randomUUID()}`,
       agentId,
-      identity: req.identity,
+      // Orbit runs are dispatched by orbitService.setRunHandler, which is
+      // invoked from the scheduler/HTTP-trigger plumbing without `req` in
+      // scope. Use the env-driven identity fallback so the run still has
+      // an attributable Identity (LocalFallbackProvider on a single-user
+      // install). Mirrors the routine handler pattern below.
+      identity: resolveIdentity({}),
       message: prompt,
     });
-    const orbitAttribution = attributionFromIdentity(req.identity, req);
+    // No req here (see comment above); attribute from the resolved
+    // run.identity without a source IP. Matches the routine pattern.
+    const orbitAttribution = attributionFromIdentity(run.identity);
     upsertMessage(db, conversationId, {
       id: `orbit-user-${run.id}`,
       role: 'user',
