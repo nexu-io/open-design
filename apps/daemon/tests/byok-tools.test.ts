@@ -458,6 +458,35 @@ describe('executeGenerateSpeech', () => {
     expect(onDisk.equals(audioBytes)).toBe(true);
   });
 
+  it('does not duplicate /v1 when the BYOK gateway base URL is already versioned', async () => {
+    const audioBytes = Buffer.from([0x49, 0x44, 0x33, 0x04]);
+    const fetchMock = vi.fn(async (input: unknown) => {
+      expect(String(input)).toBe('https://gateway.example.com/api/v1/openai/t2a_v2');
+      return new Response(
+        JSON.stringify({
+          data: { audio: audioBytes.toString('hex') },
+          base_resp: { status_code: 0, status_msg: 'success' },
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await executeGenerateSpeech(
+      { text: 'hello' },
+      {
+        projectRoot: root,
+        projectsRoot,
+        projectId: PROJECT_ID,
+        upstreamApiKey: 'sa-byok-key',
+        upstreamBaseUrl: 'https://gateway.example.com/api/v1/openai',
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('returns { ok: false } when SenseAudio returns malformed JSON', async () => {
     vi.stubGlobal(
       'fetch',

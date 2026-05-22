@@ -45,6 +45,15 @@ const SENSEAUDIO_TTS_MODEL = 'senseaudio-tts-1.5-260319';
 const SENSEAUDIO_DEFAULT_VOICE_ID = 'female_0033_b';
 const HEX_AUDIO_PATTERN = /^[0-9a-fA-F]+$/;
 
+function appendSenseAudioApiPath(baseUrl: string, path: string): string {
+  const url = new URL(baseUrl);
+  const trimmed = url.pathname.replace(/\/+$/, '');
+  url.pathname = /\/v\d+(\/|$)/.test(trimmed)
+    ? `${trimmed}${path}`
+    : `${trimmed}/v1${path}`;
+  return url.toString();
+}
+
 // SenseAudio video — the API only documents one model today, so the
 // wire id is a const. The chat tool's `generate_video` param surface
 // (prompt, aspect_ratio, duration, resolution, generate_audio) covers
@@ -266,13 +275,13 @@ export async function executeGenerateSpeech(
     typeof args.voice_id === 'string' && args.voice_id.trim()
       ? args.voice_id.trim()
       : SENSEAUDIO_DEFAULT_VOICE_ID;
-  const trimmedBase = (ctx.upstreamBaseUrl || SENSEAUDIO_DEFAULT_BASE_URL).replace(/\/+$/, '');
+  const baseUrl = ctx.upstreamBaseUrl || SENSEAUDIO_DEFAULT_BASE_URL;
   let data: {
     data?: { audio?: string };
     base_resp?: { status_code?: number; status_msg?: string };
   };
   try {
-    const resp = await fetch(`${trimmedBase}/v1/t2a_v2`, {
+    const resp = await fetch(appendSenseAudioApiPath(baseUrl, '/t2a_v2'), {
       method: 'POST',
       redirect: 'error',
       headers: {
