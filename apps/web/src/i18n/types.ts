@@ -1770,6 +1770,9 @@ export interface Dict {
   'fileViewer.source': string;
   'fileViewer.tweaks': string;
   'fileViewer.tweaksUnavailable': string;
+  'fileViewer.jsxModuleTitle': string;
+  'fileViewer.jsxModuleBody': string;
+  'fileViewer.jsxModuleCta': string;
   'fileViewer.comment': string;
   'fileViewer.edit': string;
   'fileViewer.draw': string;
