@@ -711,6 +711,13 @@ function injectSandboxShim(doc: string): string {
       safe && window.open(href, '_blank', 'noopener,noreferrer');
     }
   });
+  // Cmd/Ctrl + wheel forwards to the host to zoom the preview; the sandboxed
+  // iframe otherwise swallows the gesture so the host never sees it.
+  document.addEventListener('wheel', function(e){
+    if (!(e.metaKey || e.ctrlKey)) return;
+    e.preventDefault();
+    try { (window.parent || window).postMessage({ type: 'od:zoom-wheel', deltaY: e.deltaY }, '*'); } catch (_) {}
+  }, { passive: false });
 })();</script>`;
   if (/<head[^>]*>/i.test(doc))
     return doc.replace(/<head[^>]*>/i, (m) => `${m}${shim}`);
