@@ -999,7 +999,13 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       // navigation survives the iframe remount that mode toggles trigger.
       // Skips inline assets (only top-level HTML carries history state) and
       // anything that already opted in via the artifact-owned bridge.
-      if (file.mime.startsWith('text/html')) {
+      // Issue #2143 — only inject bridges when the caller explicitly requests
+      // a preview-ready document via od_preview=1. The generic /raw/* route
+      // is also used by fetchProjectFileText() for source-view and manual-edit
+      // reads; injecting bridges into those would write scripts into the user's
+      // artifact source when saved. The iframe src appends this param so the
+      // actual rendered preview gets bridges, while source reads stay raw.
+      if (file.mime.startsWith('text/html') && req.query.od_preview === '1') {
         const html = file.buffer.toString('utf8');
         const patched = injectPreviewBridgesIntoHtml(html);
         res.type(file.mime).send(patched);

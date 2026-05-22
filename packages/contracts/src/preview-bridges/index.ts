@@ -623,6 +623,64 @@ export const ROUTE_PERSIST_SCRIPT = `<script data-od-route-persist>(function(){
   history.replaceState=function(){var r=or.apply(this,arguments);save();return r};
   window.addEventListener('popstate',save);
   window.addEventListener('hashchange',save);
+  // Parent relay — survive transport flips between URL-load and srcDoc iframes.
+  // The sessionStorage used above is scoped to the iframe's origin, so when a
+  // mode toggle (edit/tweaks/draw/palette) forces a transport switch and the
+  // old iframe is torn down, the saved route would be lost. Posting snapshots
+  // to the parent lets it relay the route back into the new iframe's bridge.
+  var relayTimer = null;
+  function relaySnapshot() {
+    if (window.parent === window) return;
+    if (relayTimer) clearTimeout(relayTimer);
+    relayTimer = setTimeout(function() {
+      relayTimer = null;
+      try {
+        window.parent.postMessage({
+          type: 'od:route-snapshot',
+          path: snap(),
+          generation: readGen() || ''
+        }, '*');
+      } catch (_) {}
+    }, 100);
+  }
+  // Hook every save point to also relay to parent
+  var _origReplace = history.replaceState;
+  var _origPush = history.pushState;
+  history.replaceState = function() {
+    var r = _origReplace.apply(this, arguments);
+    save();
+    relaySnapshot();
+    return r;
+  };
+  history.pushState = function() {
+    var r = _origPush.apply(this, arguments);
+    save();
+    relaySnapshot();
+    return r;
+  };
+  var _origPop = window.onpopstate;
+  window.addEventListener('popstate', function() {
+    save();
+    relaySnapshot();
+  });
+  window.addEventListener('hashchange', function() {
+    save();
+    relaySnapshot();
+  });
+  relaySnapshot();
+  // Accept route-restore from parent (sent when a new iframe boots)
+  window.addEventListener('message', function(ev) {
+    if (!ev.data || ev.data.type !== 'od:route-restore') return;
+    var data = ev.data;
+    if (data.generation && readGen() !== data.generation) {
+      clearSaved();
+      writeGen(data.generation);
+    }
+    if (data.path) {
+      write(data.path);
+      try { history.replaceState(history.state, '', data.path); } catch (_) {}
+    }
+  });
 })();</script>`;
 
 /**

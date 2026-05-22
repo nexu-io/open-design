@@ -3629,6 +3629,11 @@ function HtmlViewer({
     canvasTop: number;
     expiresAt: number;
   } | null>(null);
+  // Issue #2143 — route persistence across transport flips (URL-load ↔ srcDoc).
+  // The route-persist bridge posts snapshots to the parent on every navigation;
+  // we store the latest here so it survives iframe teardown during mode toggles
+  // that force a transport switch (edit/tweaks/draw/palette).
+  const previewRouteRef = useRef<{ path: string; generation: string } | null>(null);
   const previewScrollPositionRef = useRef({
     frameLeft: 0,
     frameTop: 0,
@@ -4033,7 +4038,7 @@ function HtmlViewer({
     forceInline: forceInline || needsSandboxShim,
   });
   const basePreviewSrcUrl = useMemo(
-    () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}`,
+    () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}&od_preview=1`,
     [projectId, file.name, file.mtime, reloadKey],
   );
   const [previewSrcUrl, setPreviewSrcUrl] = useState(basePreviewSrcUrl);
@@ -4255,6 +4260,20 @@ function HtmlViewer({
       window.removeEventListener('message', onDcViewportMessage);
     };
   }, [isActivePreviewIframeSource, isOurPreviewIframeSource]);
+
+  // Issue #2143 — collect route snapshots from the preview iframe bridge so
+  // navigation state survives transport flips (URL-load → srcDoc when
+  // edit/tweaks/draw/palette modes activate).
+  useEffect(() => {
+    function onRouteSnapshot(ev: MessageEvent) {
+      if (!isOurPreviewIframeSource(ev.source)) return;
+      const data = ev.data as { type?: string; path?: string; generation?: string } | null;
+      if (!data || data.type !== 'od:route-snapshot' || !data.path) return;
+      previewRouteRef.current = { path: data.path, generation: data.generation || '' };
+    }
+    window.addEventListener('message', onRouteSnapshot);
+    return () => window.removeEventListener('message', onRouteSnapshot);
+  }, [isOurPreviewIframeSource]);
 
   useEffect(() => {
     if (!effectiveDeck) {
@@ -6309,6 +6328,15 @@ function HtmlViewer({
                         }, '*');
                         syncBridgeModes(frame);
                         if (useUrlLoadPreview) restorePreviewScrollPosition();
+                        // Issue #2143 — relay saved route to new iframe after transport switch
+                        const route = previewRouteRef.current;
+                        if (route && frame?.contentWindow) {
+                          frame.contentWindow.postMessage({
+                            type: 'od:route-restore',
+                            path: route.path,
+                            generation: route.generation,
+                          }, '*');
+                        }
                       }}
                     />
                     <iframe
@@ -6339,6 +6367,15 @@ function HtmlViewer({
                         replayInspectOverridesToIframe(frame);
                         syncBridgeModes(frame);
                         if (!useUrlLoadPreview) restorePreviewScrollPosition();
+                        // Issue #2143 — relay saved route to new srcDoc iframe
+                        const route = previewRouteRef.current;
+                        if (route && frame?.contentWindow) {
+                          frame.contentWindow.postMessage({
+                            type: 'od:route-restore',
+                            path: route.path,
+                            generation: route.generation,
+                          }, '*');
+                        }
                       }}
                     />
                   </div>
