@@ -1009,6 +1009,7 @@ export function SettingsDialog({
   >(() => new Set());
   const [versionChecking, setVersionChecking] = useState(false);
   const [aboutToast, setAboutToast] = useState<string | null>(null);
+  const [configErrorAgentId, setConfigErrorAgentId] = useState<string | null>(null);
 
   const handleInstallLatest = useCallback(async () => {
     if (versionChecking || !appVersionInfo) return;
@@ -3033,32 +3034,38 @@ export function SettingsDialog({
                                   </div>
                                 ) : null}
                               </div>
-                              {hasLinks ? (
-                                <div className="agent-card-actions agent-card-actions--inline">
-                                  {docsUrl ? (
-                                    <a
-                                      href={docsUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="agent-card-link agent-card-link--muted"
-                                      onClick={markAgentInstallIntent}
-                                    >
-                                      {t('settings.agentInstall.docs')}
-                                    </a>
-                                  ) : null}
-                                  {installUrl ? (
-                                    <a
-                                      href={installUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="agent-card-link agent-card-link--ghost"
-                                      onClick={markAgentInstallIntent}
-                                    >
-                                      {t('settings.agentInstall.install')}
-                                    </a>
-                                  ) : null}
-                                </div>
-                              ) : null}
+                              <div className="agent-card-actions agent-card-actions--inline">
+                                {docsUrl ? (
+                                  <a
+                                    href={docsUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="agent-card-link agent-card-link--muted"
+                                    onClick={markAgentInstallIntent}
+                                  >
+                                    {t('settings.agentInstall.docs')}
+                                  </a>
+                                ) : null}
+                                {isConfigError ? (
+                                  <button
+                                    type="button"
+                                    className="agent-card-link agent-card-link--ghost"
+                                    onClick={() => setConfigErrorAgentId(a.id)}
+                                  >
+                                    {t('settings.agentConfigError.configure')}
+                                  </button>
+                                ) : installUrl ? (
+                                  <a
+                                    href={installUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="agent-card-link agent-card-link--ghost"
+                                    onClick={markAgentInstallIntent}
+                                  >
+                                    {t('settings.agentInstall.install')}
+                                  </a>
+                                ) : null}
+                              </div>
                             </div>
                           );
                         })}
@@ -3155,7 +3162,7 @@ export function SettingsDialog({
                   fill in?".
                 */
                 const cliEnvFields = AGENT_CLI_ENV_FIELDS.filter(
-                  (field) => field.agentId === cfg.agentId,
+                  (field) => field.agentId === cfg.agentId || field.agentId === configErrorAgentId,
                 );
                 if (cliEnvFields.length === 0) return null;
                 return (
@@ -4330,9 +4337,10 @@ export async function persistConfigAndRunOrbit(
   if (options?.syncMediaProviders !== false) {
     await syncMediaProvidersToDaemon(config.mediaProviders, {
       daemonProviders: options?.daemonProviders,
+      throwOnError: true,
     });
   }
-  await syncConfigToDaemon(config, { throwOnError: true, propagateWriteErrors: true });
+  await syncConfigToDaemon(config, { throwOnError: true });
   const response = await fetch('/api/orbit/run', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

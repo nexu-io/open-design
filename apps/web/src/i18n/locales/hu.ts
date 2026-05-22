@@ -245,6 +245,7 @@ export const hu: Dict = {
   'settings.agentInstall.stepRescan': 'Kattints az Újraellenőrzés gombra ebben a szakaszban.',
   'settings.agentInstall.stepSelect': 'Válaszd ki az ügynök kártyáját, amint telepítettként jelenik meg.',
   'settings.agentConfigError': 'Configuration error',
+  'settings.agentConfigError.configure': 'Configure',
   'settings.noAgentsDetected':
     'Még nincs észlelt ügynök. Telepítsd a Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen vagy GitHub Copilot CLI valamelyikét, majd kattints az Újraellenőrzésre.',
   'settings.agentInstalledGroup': 'Saját CLI-k ({count})',

@@ -245,6 +245,7 @@ export const esES: Dict = {
   'settings.agentInstall.stepRescan': 'Haz clic en Reescanear en esta sección.',
   'settings.agentInstall.stepSelect': 'Selecciona la tarjeta del agente cuando aparezca como instalado.',
   'settings.agentConfigError': 'Configuration error',
+  'settings.agentConfigError.configure': 'Configure',
   'settings.noAgentsDetected':
     'Aún no se ha detectado ningún agente. Instala Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen o GitHub Copilot CLI y pulsa Reescanear.',
   'settings.agentInstalledGroup': 'Tus CLI ({count})',

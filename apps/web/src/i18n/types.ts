@@ -250,6 +250,7 @@ export interface Dict {
   'settings.agentInstall.stepRescan': string;
   'settings.agentInstall.stepSelect': string;
   'settings.agentConfigError': string;
+  'settings.agentConfigError.configure': string;
   'settings.noAgentsDetected': string;
   'settings.agentInstalledGroup': string;
   'settings.agentInstallGroup': string;

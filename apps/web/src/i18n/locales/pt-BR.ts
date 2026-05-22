@@ -245,6 +245,7 @@ export const ptBR: Dict = {
   'settings.agentInstall.stepRescan': 'Clique em Reescanear nesta seção.',
   'settings.agentInstall.stepSelect': 'Selecione o cartão do agente quando ele aparecer como instalado.',
   'settings.agentConfigError': 'Configuration error',
+  'settings.agentConfigError.configure': 'Configure',
   'settings.noAgentsDetected':
     'Nenhum agente detectado ainda. Instale Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen ou GitHub Copilot CLI e clique em Reescanear.',
   'settings.agentInstalledGroup': 'Suas CLIs ({count})',

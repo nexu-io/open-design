@@ -245,6 +245,7 @@ export const ja: Dict = {
   'settings.agentInstall.stepRescan': 'このセクションで「再スキャン」をクリックします。',
   'settings.agentInstall.stepSelect': 'インストール済みとして表示されたらエージェントカードを選択します。',
   'settings.agentConfigError': 'Configuration error',
+  'settings.agentConfigError.configure': 'Configure',
   'settings.noAgentsDetected':
     'エージェントが検出されませんでした。Claude Code、Codex、Gemini CLI、OpenCode、Cursor Agent、Qwen、または GitHub Copilot CLI のいずれかをインストールして、再スキャンをクリックしてください。',
   'settings.agentInstalledGroup': 'あなたの CLI（{count}）',

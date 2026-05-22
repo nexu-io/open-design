@@ -245,6 +245,7 @@ export const ru: Dict = {
   'settings.agentInstall.stepRescan': 'Нажмите «Пересканировать» в этом разделе.',
   'settings.agentInstall.stepSelect': 'Выберите карточку агента, когда он появится как установленный.',
   'settings.agentConfigError': 'Configuration error',
+  'settings.agentConfigError.configure': 'Configure',
   'settings.noAgentsDetected':
     'Агенты ещё не обнаружены. Установите один из следующих инструментов: Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen или GitHub Copilot CLI, затем нажмите «Пересканировать».',
   'settings.agentInstalledGroup': 'Ваши CLI ({count})',

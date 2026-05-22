@@ -245,6 +245,7 @@ export const ko: Dict = {
   'settings.agentInstall.stepRescan': '이 섹션에서 다시 스캔을 클릭하세요.',
   'settings.agentInstall.stepSelect': '설치됨으로 표시되면 해당 에이전트 카드를 선택하세요.',
   'settings.agentConfigError': 'Configuration error',
+  'settings.agentConfigError.configure': 'Configure',
   'settings.noAgentsDetected':
     '에이전트가 감지되지 않았습니다. Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen 또는 GitHub Copilot CLI 중 하나를 설치한 후 다시 스캔을 클릭하세요.',
   'settings.agentInstalledGroup': '내 CLI ({count})',

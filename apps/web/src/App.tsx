@@ -491,6 +491,7 @@ function AppInner() {
             ? t('settings.mediaProviderLoadError')
             : null,
         );
+<<<<<<< HEAD
         // Compute the next config outside the setConfig updater so we can
         // both (a) call navigate() after setConfig returns — calling it
         // inside the updater would trigger a Router setState during React's
@@ -524,7 +525,7 @@ function AppInner() {
         // Migrate localStorage prefs to daemon on first boot with the new
         // endpoint. If daemon already had values the merge above used them;
         // writing back is idempotent and keeps both sides in sync.
-        void syncConfigToDaemon(next);
+        void syncConfigToDaemon(next, { swallowWriteErrors: true });
         void syncComposioConfigToDaemon(next.composio);
         latestPersistedConfigRef.current = next;
         setConfig(next);
@@ -566,7 +567,7 @@ function AppInner() {
       if (prev.agentId) return prev;
       const next: AppConfig = { ...prev, agentId: firstAvailable.id };
       saveConfig(next);
-      void syncConfigToDaemon(next);
+      void syncConfigToDaemon(next, { swallowWriteErrors: true });
       return next;
     });
   }, [daemonConfigLoaded, agentsLoading, agents, config.agentId]);
@@ -583,7 +584,7 @@ function AppInner() {
       if (prev.designSystemId) return prev;
       const next: AppConfig = { ...prev, designSystemId: id };
       saveConfig(next);
-      void syncConfigToDaemon(next);
+      void syncConfigToDaemon(next, { swallowWriteErrors: true });
       return next;
     });
   }, [daemonConfigLoaded, dsLoading, designSystems, config.designSystemId]);
@@ -696,7 +697,7 @@ function AppInner() {
             throwOnError: options?.forceMediaProviderSync,
           })
         : Promise.resolve(),
-      syncConfigToDaemon(persisted),
+      syncConfigToDaemon(persisted, { swallowWriteErrors: true }),
     ]);
   }, [daemonMediaProviders, daemonMediaProvidersFetchState]);
 
@@ -738,7 +739,7 @@ function AppInner() {
     (theme: AppConfig['theme']) => {
       const next = { ...config, theme };
       saveConfig(next);
-      void syncConfigToDaemon(next);
+      void syncConfigToDaemon(next, { swallowWriteErrors: true });
       setConfig(next);
     },
     [config],
@@ -748,7 +749,7 @@ function AppInner() {
     (agentId: string) => {
       const next = { ...config, agentId };
       saveConfig(next);
-      void syncConfigToDaemon(next);
+      void syncConfigToDaemon(next, { swallowWriteErrors: true });
       setConfig(next);
     },
     [config],
@@ -764,7 +765,7 @@ function AppInner() {
       };
       const next = { ...config, agentModels: nextAgentModels };
       saveConfig(next);
-      void syncConfigToDaemon(next);
+      void syncConfigToDaemon(next, { swallowWriteErrors: true });
       setConfig(next);
     },
     [config],
@@ -778,7 +779,7 @@ function AppInner() {
     (protocol: ApiProtocol) => {
       const next = switchApiProtocolConfig(config, protocol);
       saveConfig(next);
-      void syncConfigToDaemon(next);
+      void syncConfigToDaemon(next, { swallowWriteErrors: true });
       setConfig(next);
     },
     [config],
@@ -791,7 +792,7 @@ function AppInner() {
     (model: string) => {
       const next = updateCurrentApiProtocolConfig(config, { model });
       saveConfig(next);
-      void syncConfigToDaemon(next);
+      void syncConfigToDaemon(next, { swallowWriteErrors: true });
       setConfig(next);
     },
     [config],
@@ -801,7 +802,7 @@ function AppInner() {
     (designSystemId: string | null) => {
       const next = { ...config, designSystemId };
       saveConfig(next);
-      void syncConfigToDaemon(next);
+      void syncConfigToDaemon(next, { swallowWriteErrors: true });
       setConfig(next);
     },
     [config],
@@ -1287,7 +1288,7 @@ function AppInner() {
     const next: AppConfig = { ...current, onboardingCompleted: true };
     latestPersistedConfigRef.current = next;
     saveConfig(next);
-    void syncConfigToDaemon(next);
+    void syncConfigToDaemon(next, { swallowWriteErrors: true });
     setConfig(next);
   }, []);
 
@@ -1610,7 +1611,7 @@ function AppInner() {
             if (!next.onboardingCompleted || !config.onboardingCompleted) {
               latestPersistedConfigRef.current = next;
               saveConfig(next);
-              void syncConfigToDaemon(next);
+              void syncConfigToDaemon(next, { swallowWriteErrors: true });
               setConfig(next);
             }
             setSettingsOpen(false);

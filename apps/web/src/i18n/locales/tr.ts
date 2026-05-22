@@ -245,6 +245,7 @@ export const tr: Dict = {
   'settings.agentInstall.stepRescan': 'Bu bölümde Yeniden tara\'ya tıkla.',
   'settings.agentInstall.stepSelect': 'Ajan yüklü olarak göründüğünde kartını seç.',
   'settings.agentConfigError': 'Configuration error',
+  'settings.agentConfigError.configure': 'Configure',
   'settings.noAgentsDetected':
     'Hiçbir ajan tespit edilemedi. Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen, veya GitHub Copilot CLI’lardan birini kurun ve yeniden tarayın.',
   'settings.agentInstalledGroup': 'CLI\'larınız ({count})',

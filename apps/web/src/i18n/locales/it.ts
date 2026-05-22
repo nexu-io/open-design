@@ -244,6 +244,7 @@ export const it: Dict = {
   'settings.agentInstall.stepRescan': 'Clicca su Rianalizza in questa sezione.',
   'settings.agentInstall.stepSelect': 'Seleziona la scheda dell\'agente una volta che appare come installato.',
   'settings.agentConfigError': 'Configuration error',
+  'settings.agentConfigError.configure': 'Configure',
   'settings.noAgentsDetected':
     'Nessun agente rilevato per ora. Installa Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen o GitHub Copilot CLI, poi clicca su Rianalizza.',
   'settings.agentInstalledGroup': 'Le tue CLI ({count})',

@@ -800,7 +800,7 @@ export class DaemonConfigWriteError extends Error {
 
 export async function syncConfigToDaemon(
   config: AppConfig,
-  options?: { throwOnError?: boolean; propagateWriteErrors?: boolean },
+  options?: { throwOnError?: boolean; swallowWriteErrors?: boolean },
 ): Promise<void> {
   const prefs: AppConfigPrefs = {
     onboardingCompleted: config.onboardingCompleted,
@@ -824,17 +824,16 @@ export async function syncConfigToDaemon(
       body: JSON.stringify(prefs),
     });
     if (!response.ok) {
-      // Daemon rejected the write — propagate when the caller explicitly
-      // opts in (propagateWriteErrors) or already expects rejections
-      // (throwOnError).  Fire-and-forget callers pass neither, so they
-      // silently tolerate the failure just like they tolerate the daemon
-      // being unreachable.
+      // Daemon rejected the write — surface by default so callers know
+      // the write failed.  Only network/offline errors are swallowed
+      // below.  Fire-and-forget callers that explicitly tolerate daemon
+      // write rejections pass swallowWriteErrors.
       const body = await response.json().catch(() => ({}) as () => Record<string, unknown>);
       const writeError = new DaemonConfigWriteError(
         (body as Record<string, unknown>).error as string ?? `Failed to sync app config (${response.status})`,
         response.status,
       );
-      if (options?.propagateWriteErrors || options?.throwOnError) throw writeError;
+      if (!options?.swallowWriteErrors) throw writeError;
     }
   } catch (error) {
     if (error instanceof DaemonConfigWriteError) throw error;

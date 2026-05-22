@@ -245,6 +245,7 @@ export const id: Dict = {
   'settings.agentInstall.stepRescan': 'Klik Pindai ulang di bagian ini.',
   'settings.agentInstall.stepSelect': 'Pilih kartu agen setelah statusnya terpasang.',
   'settings.agentConfigError': 'Configuration error',
+  'settings.agentConfigError.configure': 'Configure',
   'settings.noAgentsDetected':
     'Belum ada agent terdeteksi. Pasang salah satu dari Claude Code, Codex, Devin for Terminal, Gemini CLI, OpenCode, Cursor Agent, Qwen, atau GitHub Copilot CLI, lalu klik pindai ulang.',
   'settings.agentInstalledGroup': 'CLI Anda ({count})',
