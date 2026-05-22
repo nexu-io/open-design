@@ -62,15 +62,17 @@ interface Props {
 // API_PROTOCOL_TABS exported by ../state/apiProtocols.ts. Ollama Cloud and
 // SenseAudio are intentionally omitted from this header surface because
 // they're more niche; the full Settings → BYOK dialog still exposes them.
-// Venice is included as a headline provider because a single Venice key
-// covers chat + image + video + audio in one slot — strictly broader
-// surface area than any of the other entries here.
+// Venice is included because a single Venice key covers chat + image +
+// video + audio in one slot — strictly broader surface area than any
+// other entry here. It sits last in the list so the existing four
+// providers keep their original click positions (we're additive, not
+// promotional, on the upstream chrome).
 const API_PROTOCOL_TABS: Array<{ id: ApiProtocol; title: string }> = [
-  { id: 'venice', title: 'Venice' },
   { id: 'anthropic', title: 'Anthropic' },
   { id: 'openai', title: 'OpenAI' },
   { id: 'azure', title: 'Azure' },
   { id: 'google', title: 'Google' },
+  { id: 'venice', title: 'Venice' },
 ];
 
 const AMR_REMINDER_SEEN_KEY = 'open-design:inline-amr-cli-reminder-seen:v2';
