@@ -50,6 +50,15 @@ const SCROLL_RELAY_SCRIPT = `<script ${SCROLL_RELAY_MARKER}>(function(){
   function reportLoc(){ try { (window.parent || window).postMessage({ type: 'od:url-load-loc', pathname: location.pathname, search: location.search, hash: location.hash }, '*'); } catch (e) {} }
   reportLoc();
   window.addEventListener('hashchange', reportLoc);
+  // In-page SPAs (e.g. an admin console) switch view with
+  // history.replaceState('#panel') instead of assigning location.hash, which
+  // does NOT fire hashchange — wrap the history API so those view changes are
+  // still reported, otherwise a stale hash gets restored on srcDoc rebuild.
+  ['pushState', 'replaceState'].forEach(function (m) {
+    var orig = history[m];
+    if (typeof orig !== 'function') return;
+    history[m] = function () { var r = orig.apply(this, arguments); reportLoc(); return r; };
+  });
   // Cmd/Ctrl + wheel forwards to the host to zoom the preview; the sandboxed
   // iframe otherwise swallows the gesture so the host never sees it.
   document.addEventListener('wheel', function(e){
