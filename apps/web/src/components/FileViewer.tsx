@@ -4816,8 +4816,13 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
       }
     }
     function onUrlLoadLoc(ev: MessageEvent) {
-      if (!isOurPreviewIframeSource(ev.source)) return;
-      if (!isActivePreviewIframeSource(ev.source)) return;
+      // Accept location reports from the url-load iframe even when it is no
+      // longer the active preview. A large/slow sub-page (e.g. a 100KB admin
+      // console) may only report its location AFTER Comment/Inspect has already
+      // switched the active iframe to srcDoc; gating on the active iframe would
+      // drop that report and the srcDoc would snap back to the entry/list page.
+      // Only the url-load relay emits od:url-load-loc, so this stays unambiguous.
+      if (!ev.source || ev.source !== urlPreviewIframeRef.current?.contentWindow) return;
       const data = ev.data as { type?: string; pathname?: string; hash?: string } | null;
       if (!data || data.type !== 'od:url-load-loc') return;
       // Always track the current hash — a hash-routed SPA changes view within
