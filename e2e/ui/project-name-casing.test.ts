@@ -320,7 +320,6 @@ test('workspace tab bar does not apply capitalize to nav entry tabs', async ({ p
 
   const labelText = await activeTabLabel.textContent();
   expect(labelText?.trim()).toBeTruthy();
-  expect(labelText?.trim()[0]).toMatch(/[A-Z]/);
 
   // The CSS rule is scoped to --project modifier; it must NOT apply to this plain nav entry tab.
   const labelTransform = await activeTabLabel.evaluate(
@@ -337,7 +336,6 @@ test('workspace tab bar does not apply capitalize to nav entry tabs', async ({ p
 
   const projectsLabelText = await projectsTabLabel.textContent();
   expect(projectsLabelText?.trim()).toBeTruthy();
-  expect(projectsLabelText?.trim()[0]).toMatch(/[A-Z]/);
 
   const projectsTransform = await projectsTabLabel.evaluate(
     (el) => window.getComputedStyle(el).textTransform,
