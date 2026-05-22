@@ -10,6 +10,15 @@
  * root and are kept in sync with `getCatalogCounts()` at build time.
  */
 
+import {
+  DEFAULT_LOCALE,
+  getCommonCopy,
+  getHeaderProductMenuCopy,
+  localizedHref,
+  type HeaderCopy,
+  type LandingLocaleCode,
+} from '../i18n';
+
 const REPO = 'https://github.com/nexu-io/open-design';
 const REPO_RELEASES = `${REPO}/releases`;
 
@@ -24,12 +33,13 @@ export interface HeaderProps {
     | 'home'
     | 'product'
     | 'html-anything'
+    | 'library'
     | 'skills'
     | 'systems'
     | 'templates'
     | 'craft'
-    | 'tutorials'
-    | 'blog';
+    | 'blog'
+    | 'tutorials';
   /**
    * Live counts from the Markdown catalogs. Required so we can never
    * silently render stale fallback numbers when a caller forgets to
@@ -46,6 +56,10 @@ export interface HeaderProps {
   github?: {
     starsLabel: string;
   };
+  /** UI locale for nav labels and accessibility text. */
+  locale?: LandingLocaleCode;
+  /** Optional override for callers that already resolved localized chrome. */
+  copy?: HeaderCopy;
   /** Brand link target — `#top` on the homepage, `/` on sub-pages. */
   brandHref?: string;
 }
@@ -54,22 +68,25 @@ export function Header({
   active = 'home',
   counts,
   github,
+  locale = DEFAULT_LOCALE,
+  copy,
   brandHref = '#top',
 }: HeaderProps) {
   const linkClass = (key: NonNullable<HeaderProps['active']>) =>
     active === key ? 'is-active' : undefined;
+  const headerCopy = copy ?? getCommonCopy(locale).header;
+  const href = (path: string) => localizedHref(path, locale);
+  const homeBrandHref = brandHref === '/' ? href('/') : brandHref;
+  const productMenuCopy = getHeaderProductMenuCopy(locale);
 
   return (
-    <header className='nav' data-od-id='nav' data-nav-headroom>
+    <header className='nav' data-od-id='nav'>
       <div className='container nav-inner'>
-        <a href={brandHref} className='brand'>
+        <a href={homeBrandHref} className='brand'>
           <span className='brand-mark'>
-            <img src='/logo.webp' alt='' width={36} height={36} />
+            <img src='/logo.webp' alt='' width={44} height={44} />
           </span>
-          <span>Open Design</span>
-          <span className='brand-meta'>
-            <b>Studio Nº 01</b>Berlin / Open / Earth
-          </span>
+          <span className='brand-name'>Open Design</span>
         </a>
         {/*
           Mobile / tablet hamburger. Hidden by CSS at ≥1100px (the desktop
@@ -81,7 +98,7 @@ export function Header({
         <button
           type='button'
           className='nav-toggle'
-          aria-label='Toggle navigation menu'
+          aria-label={productMenuCopy.toggleNavigationMenu}
           aria-controls='primary-nav'
           aria-expanded='false'
           data-nav-toggle
@@ -100,7 +117,7 @@ export function Header({
                 aria-haspopup signaling the submenu to assistive tech.
               */}
               <a
-                href='/'
+                href={href('/')}
                 className={
                   active === 'product' ||
                   active === 'home' ||
@@ -111,90 +128,155 @@ export function Header({
                 aria-haspopup='true'
                 aria-expanded='false'
               >
-                Product
+                {productMenuCopy.product}
                 <span className='dropdown-caret' aria-hidden='true'>▾</span>
               </a>
               <ul className='nav-dropdown' role='menu'>
                 <li role='none'>
                   <a
                     role='menuitem'
-                    href='/'
+                    href={href('/')}
                     className={
                       active === 'home' || active === 'product'
                         ? 'is-active'
                         : undefined
                     }
                   >
-                    <span className='dropdown-name'>Open Design</span>
+                    <span className='dropdown-name'>{productMenuCopy.openDesignName}</span>
                     <span className='dropdown-blurb'>
-                      The agentic design surface — skills, systems, templates.
+                      {productMenuCopy.openDesignBlurb}
                     </span>
                   </a>
                 </li>
                 <li role='none'>
                   <a
                     role='menuitem'
-                    href='/html-anything/'
+                    href={href('/html-anything/')}
                     className={linkClass('html-anything')}
                   >
-                    <span className='dropdown-name'>HTML Anything</span>
+                    <span className='dropdown-name'>{productMenuCopy.htmlAnythingName}</span>
                     <span className='dropdown-blurb'>
-                      Markdown / data → ship-ready HTML, by your local agent.
+                      {productMenuCopy.htmlAnythingBlurb}
+                    </span>
+                  </a>
+                </li>
+                {/* Tutorials is a top-level nav item (see Library section
+                  below). Don't list it here too — duplicating it once at
+                  Product/Tutorials and again at top-level confuses users
+                  about whether the two link to the same page. */}
+              </ul>
+            </li>
+            {/*
+              Library — catalog facets (Skills / Systems / Templates / Craft)
+              collapsed under one parent. Each row keeps its count badge
+              inside the panel and the trigger highlights when any of the
+              four facet pages is active. Same CSS-only :hover /
+              :focus-within mechanic from Product. Hardcoded "Library" /
+              "Learn" labels until per-locale translations land — the
+              brand-name pattern.
+            */}
+            <li className='has-dropdown'>
+              <a
+                href={href('/skills/')}
+                className={
+                  active === 'library' ||
+                  active === 'skills' ||
+                  active === 'systems' ||
+                  active === 'templates' ||
+                  active === 'craft'
+                    ? 'is-active'
+                    : undefined
+                }
+                aria-haspopup='true'
+                aria-expanded='false'
+              >
+                {headerCopy.nav.library}
+                <span className='dropdown-caret' aria-hidden='true'>▾</span>
+              </a>
+              <ul className='nav-dropdown' role='menu'>
+                <li role='none'>
+                  <a
+                    role='menuitem'
+                    href={href('/skills/')}
+                    className={linkClass('skills')}
+                  >
+                    <span className='dropdown-name'>
+                      {headerCopy.nav.skills}
+                    </span>
+                  </a>
+                </li>
+                <li role='none'>
+                  <a
+                    role='menuitem'
+                    href={href('/systems/')}
+                    className={linkClass('systems')}
+                  >
+                    <span className='dropdown-name'>
+                      {headerCopy.nav.systems}
+                    </span>
+                  </a>
+                </li>
+                <li role='none'>
+                  <a
+                    role='menuitem'
+                    href={href('/templates/')}
+                    className={linkClass('templates')}
+                  >
+                    <span className='dropdown-name'>
+                      {headerCopy.nav.templates}
+                    </span>
+                  </a>
+                </li>
+                <li role='none'>
+                  <a
+                    role='menuitem'
+                    href={href('/craft/')}
+                    className={linkClass('craft')}
+                  >
+                    <span className='dropdown-name'>
+                      {headerCopy.nav.craft}
                     </span>
                   </a>
                 </li>
               </ul>
             </li>
             <li>
-              <a href='/skills/' className={linkClass('skills')}>
-                Skills<span className='num'>{counts.skills}</span>
+              <a href={href('/tutorials/')} className={linkClass('tutorials')}>
+                {headerCopy.nav.tutorials}
               </a>
             </li>
             <li>
-              <a href='/systems/' className={linkClass('systems')}>
-                Systems<span className='num'>{counts.systems}</span>
+              <a href={href('/blog/')} className={linkClass('blog')}>
+                {headerCopy.nav.blog}
               </a>
             </li>
-            <li>
-              <a href='/templates/' className={linkClass('templates')}>
-                Templates<span className='num'>{counts.templates}</span>
-              </a>
-            </li>
-            <li>
-              <a href='/craft/' className={linkClass('craft')}>
-                Craft<span className='num'>{counts.craft}</span>
-              </a>
-            </li>
-            <li>
-              <a href='/blog/' className={linkClass('blog')}>
-                Blog
-              </a>
-            </li>
-            <li>
-              <a href={brandHref === '#top' ? '#contact' : '/#contact'}>
-                Contact
-              </a>
-            </li>
+            {/*
+              Contact intentionally NOT exposed in the top nav: it's a
+              page-internal anchor (`#contact` on the homepage CTA section)
+              that the footer already surfaces. Keeping it out of the bar
+              frees a slot at narrow widths where the row was overflowing.
+            */}
           </ul>
         </nav>
         <div className='nav-side'>
           <a
             className='nav-cta ghost'
             href={REPO_RELEASES}
-            aria-label='Download Open Design desktop'
-            title='Download the desktop app'
+            aria-label={headerCopy.downloadAria}
+            title={headerCopy.downloadTitle}
             {...ext}
           >
-            Download
+            {headerCopy.download}
           </a>
           <a
             className='nav-cta'
             href={REPO}
-            aria-label='Star Open Design on GitHub'
-            title='Click to star us on GitHub'
+            aria-label={headerCopy.starAria}
+            title={headerCopy.starTitle}
             {...ext}
           >
-            Star · <span data-github-stars>{github?.starsLabel ?? '40K+'}</span>
+            {headerCopy.starPrefix} ·{' '}
+            <span data-github-stars>{github?.starsLabel ?? '40K+'}</span>
           </a>
           <span className='status-dot' aria-hidden='true' />
         </div>

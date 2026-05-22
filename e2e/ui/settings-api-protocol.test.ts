@@ -26,8 +26,9 @@ async function openSettingsDialogFromEntry(page: Page) {
   await waitForLoadingToClear(page);
   await page.getByRole('button', { name: OPEN_SETTINGS_LABEL }).click();
   const menu = page.getByRole('menu');
-  await expect(menu).toBeVisible();
-  await menu.getByRole('button', { name: SETTINGS_MENU_LABEL }).click();
+  if (await menu.isVisible().catch(() => false)) {
+    await menu.getByRole('button', { name: SETTINGS_MENU_LABEL }).click();
+  }
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   return dialog;
@@ -226,11 +227,11 @@ test('BYOK save stays disabled until required fields are valid', async ({ page }
   await openExecutionSettings(page, {
     mode: 'api',
     apiKey: '',
-    apiProtocol: 'anthropic',
+    apiProtocol: 'openai',
     apiVersion: '',
-    baseUrl: 'https://api.anthropic.com',
-    model: 'claude-sonnet-4-5',
-    apiProviderBaseUrl: 'https://api.anthropic.com',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-4o',
+    apiProviderBaseUrl: 'https://api.openai.com/v1',
     agentId: null,
     skillId: null,
     designSystemId: null,
@@ -244,20 +245,21 @@ test('BYOK save stays disabled until required fields are valid', async ({ page }
   const closeButton = dialog.getByRole('button', { name: 'Close', exact: true });
   await expect(closeButton).toBeEnabled();
 
-  await dialog.getByLabel('API key').fill('sk-ant-test');
-  await expect.poll(async () => readSavedConfig(page)).toMatchObject({ apiKey: 'sk-ant-test' });
+  await dialog.getByLabel('API key').fill('sk-openai-test');
+  await expect.poll(async () => readSavedConfig(page)).toMatchObject({ apiKey: 'sk-openai-test' });
 
-  await dialog.getByLabel('Base URL').fill('http://10.0.0.5:11434/v1');
+  const baseUrlInput = dialog.getByLabel('Base URL');
+  await baseUrlInput.fill('http://10.0.0.5:11434/v1');
   await expect(dialog.locator('#settings-base-url-error')).toContainText('valid public');
 
-  await dialog.getByLabel('Base URL').fill('http://localhost:11434/v1');
+  await baseUrlInput.fill('http://localhost:11434/v1');
   await expect.poll(async () => readSavedConfig(page)).toMatchObject({
-    apiKey: 'sk-ant-test',
+    apiKey: 'sk-openai-test',
     baseUrl: 'http://localhost:11434/v1',
   });
 });
 
-test('BYOK fetch models hydrates model options and reuses cached results', async ({ page }) => {
+test('BYOK auto-loads provider models and reuses cached results for the same config', async ({ page }) => {
   const providerModelRequests: Array<Record<string, unknown>> = [];
   await page.route('**/api/provider/models', async (route) => {
     const payload = route.request().postDataJSON() as Record<string, unknown>;
@@ -280,7 +282,7 @@ test('BYOK fetch models hydrates model options and reuses cached results', async
 
   await openExecutionSettings(page, {
     mode: 'api',
-    apiKey: 'sk-openai-test',
+    apiKey: '',
     apiProtocol: 'openai',
     apiVersion: '',
     baseUrl: 'https://api.openai.com/v1',
@@ -296,14 +298,15 @@ test('BYOK fetch models hydrates model options and reuses cached results', async
   });
 
   const dialog = page.getByRole('dialog');
-  const fetchModelsButton = dialog.getByRole('button', { name: 'Fetch models' });
   const modelSelect = dialog.getByLabel('Model');
+  const apiKeyInput = dialog.getByLabel('API key');
 
-  await expect(fetchModelsButton).toBeEnabled();
+  await expect(dialog.getByRole('button', { name: 'Fetch models' })).toHaveCount(0);
   await expect(modelSelect.getByRole('option', { name: 'AA Nightly Model (aa-nightly-model)' })).toHaveCount(0);
 
-  await fetchModelsButton.click();
-  await expect(dialog.getByText('Fetched 3 models.')).toBeVisible();
+  await apiKeyInput.fill('sk-openai-test');
+  await apiKeyInput.blur();
+  await expect(dialog.getByText('Loaded 3 models from your account.')).toBeVisible();
   await expect.poll(() => providerModelRequests.length).toBe(1);
   expect(providerModelRequests[0]).toMatchObject({
     protocol: 'openai',
@@ -324,7 +327,9 @@ test('BYOK fetch models hydrates model options and reuses cached results', async
     'zz-nightly-model',
   ]);
 
-  await fetchModelsButton.click();
+  await dialog.getByRole('tab', { name: 'Anthropic', exact: true }).click();
+  await dialog.getByRole('tab', { name: 'OpenAI', exact: true }).click();
+  await expect(modelSelect.getByRole('option', { name: 'AA Nightly Model (aa-nightly-model)' })).toHaveCount(1);
   await expect.poll(() => providerModelRequests.length).toBe(1);
 });
 

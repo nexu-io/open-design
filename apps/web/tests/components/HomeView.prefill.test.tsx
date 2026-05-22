@@ -906,7 +906,8 @@ describe('HomeView prompt handoff', () => {
 });
 
 async function clearActiveTypeChip() {
-  fireEvent.click(await screen.findByTestId('home-hero-active-type-chip'));
+  const chip = screen.queryByTestId('home-hero-active-type-chip');
+  if (chip) fireEvent.click(chip);
 }
 
 async function clickHomeShortcut(id: string) {

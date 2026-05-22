@@ -1,0 +1,19 @@
+---
+import SkillScenarioPage, {
+  getStaticPaths as getSkillScenarioStaticPaths,
+} from '../../../skills/scenario/[scenario].astro';
+import { DEFAULT_LOCALE, LANDING_LOCALES } from '../../../../i18n';
+
+export async function getStaticPaths() {
+  const basePaths = await getSkillScenarioStaticPaths();
+  return LANDING_LOCALES.filter((locale) => locale.code !== DEFAULT_LOCALE).flatMap(
+    (locale) =>
+      basePaths.map((path) => ({
+        params: { ...path.params, locale: locale.code },
+        props: path.props,
+      })),
+  );
+}
+---
+
+<SkillScenarioPage {...Astro.props} />

@@ -22,8 +22,8 @@
       return fromName(release?.name) ?? fromTag(release?.tag_name) ?? null;
     };
 
-    const nav = document.querySelector('[data-nav-headroom]');
-    if (nav) {
+    const chrome = document.querySelector('[data-chrome-headroom]');
+    if (chrome) {
       let lastY = window.scrollY;
       const showTopThreshold = 100;
       const scrollDelta = 6;
@@ -32,9 +32,9 @@
         () => {
           const y = window.scrollY;
           const delta = y - lastY;
-          if (y <= showTopThreshold) nav.classList.remove('is-hidden');
-          else if (delta > scrollDelta) nav.classList.add('is-hidden');
-          else if (delta < -scrollDelta) nav.classList.remove('is-hidden');
+          if (y <= showTopThreshold) chrome.classList.remove('is-hidden');
+          else if (delta > scrollDelta) chrome.classList.add('is-hidden');
+          else if (delta < -scrollDelta) chrome.classList.remove('is-hidden');
           lastY = y;
         },
         { passive: true },
@@ -47,14 +47,15 @@
     // menu close it again. Keeps `aria-expanded` in sync.
     const toggle = document.querySelector('[data-nav-toggle]');
     const primaryNav = document.querySelector('[data-nav-primary]');
-    if (toggle && primaryNav && nav) {
+    const navEl = toggle ? toggle.closest('header.nav') : null;
+    if (toggle && primaryNav && navEl) {
       const setOpen = (open) => {
-        nav.classList.toggle('is-open', open);
+        navEl.classList.toggle('is-open', open);
         toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
       };
       toggle.addEventListener('click', (ev) => {
         ev.stopPropagation();
-        setOpen(!nav.classList.contains('is-open'));
+        setOpen(!navEl.classList.contains('is-open'));
       });
       // Close when clicking any actual nav link (but not the Product
       // parent trigger — its href='/' is a real page link, so we let it
@@ -63,7 +64,7 @@
         link.addEventListener('click', () => setOpen(false));
       });
       document.addEventListener('click', (ev) => {
-        if (!nav.contains(ev.target)) setOpen(false);
+        if (!navEl.contains(ev.target)) setOpen(false);
       });
       document.addEventListener('keydown', (ev) => {
         if (ev.key === 'Escape') setOpen(false);

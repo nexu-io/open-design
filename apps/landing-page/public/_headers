@@ -53,7 +53,19 @@
 # a moderate browser TTL and rely on edge purge from CF Pages on deploy.
 /favicon.png
   Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+/favicon.ico
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+/favicon-16x16.png
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+/favicon-32x32.png
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
 /apple-touch-icon.png
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+/android-chrome-192x192.png
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+/android-chrome-512x512.png
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+/site.webmanifest
   Cache-Control: public, max-age=86400, stale-while-revalidate=604800
 /logo.webp
   Cache-Control: public, max-age=86400, stale-while-revalidate=604800

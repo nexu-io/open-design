@@ -28,6 +28,7 @@
 // source root so an environment that puts `skills/` itself behind a
 // symlink (e.g. a content-addressable mount) is followed correctly.
 
+import { createHash } from 'node:crypto';
 import { cp, lstat, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -42,6 +43,13 @@ export interface SkillStagingResult {
   stagedPath?: string;
   /** Populated when staging was skipped or failed; never thrown. */
   reason?: string;
+}
+
+export function skillCwdAliasSegment(dir: string): string {
+  const folder = path.basename(dir) || 'skill';
+  const normalizedDir = path.resolve(dir).replaceAll('\\', '/');
+  const digest = createHash('sha256').update(normalizedDir).digest('hex').slice(0, 10);
+  return `${folder}-${digest}`;
 }
 
 /**

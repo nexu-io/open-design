@@ -168,7 +168,6 @@ export function AssistantMessage({
       message,
       hasEmptyResponse,
       hasUnfinishedTodos: unfinishedTodos.length > 0,
-      hasArtifactWork: hasArtifactWorkSignal(message, produced.length),
     });
   const showCompletionRow =
     showFeedback ||
@@ -359,56 +358,15 @@ function isFeedbackEligible({
   message,
   hasEmptyResponse,
   hasUnfinishedTodos,
-  hasArtifactWork,
 }: {
   streaming: boolean;
   message: ChatMessage;
   hasEmptyResponse: boolean;
   hasUnfinishedTodos: boolean;
-  hasArtifactWork: boolean;
 }): boolean {
   if (streaming || hasEmptyResponse || hasUnfinishedTodos) return false;
-  if (!hasArtifactWork) return false;
   if (message.runStatus) return message.runStatus === "succeeded";
   return !!message.endedAt;
-}
-
-function hasArtifactWorkSignal(message: ChatMessage, producedFileCount: number): boolean {
-  if (producedFileCount > 0) return true;
-  if (message.content.includes("<artifact")) return true;
-  if (hasLiveArtifactMutation(message.events ?? [])) return true;
-  return hasSuccessfulFileMutation(message.events ?? []);
-}
-
-function hasLiveArtifactMutation(events: AgentEvent[]): boolean {
-  return events.some((event) => {
-    if (event.kind !== "live_artifact") return false;
-    return event.action === "created" || event.action === "updated";
-  });
-}
-
-function hasSuccessfulFileMutation(events: AgentEvent[]): boolean {
-  const errorByToolId = new Map<string, boolean>();
-  for (const event of events) {
-    if (event.kind === "tool_result") {
-      errorByToolId.set(event.toolUseId, event.isError);
-    }
-  }
-  return events.some((event) => {
-    if (event.kind !== "tool_use") return false;
-    if (!isFileMutationToolName(event.name)) return false;
-    return errorByToolId.get(event.id) !== true;
-  });
-}
-
-function isFileMutationToolName(name: string): boolean {
-  return (
-    name === "Write" ||
-    name === "write" ||
-    name === "create_file" ||
-    name === "Edit" ||
-    name === "str_replace_edit"
-  );
 }
 
 function MessageTimestamp({

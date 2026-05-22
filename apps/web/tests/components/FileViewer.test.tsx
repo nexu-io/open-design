@@ -682,7 +682,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /export/i }));
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
 
     expect(screen.getByRole('menuitem', { name: /Deploy to Vercel/i })).toBeTruthy();
     fireEvent.click(screen.getByRole('menuitem', { name: /Deploy to Cloudflare Pages/i }));
@@ -702,7 +702,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.queryByLabelText('Pages project name')).toBeNull();
   });
 
-  it('nudges the export button once when an artifact becomes exportable', async () => {
+  it('nudges the share button once when an artifact becomes exportable', async () => {
     const file = baseFile({
       name: 'nudge.html',
       path: 'nudge.html',
@@ -727,7 +727,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    const exportButton = screen.getByRole('button', { name: /export/i });
+    const exportButton = screen.getByRole('button', { name: /share/i });
     await waitFor(() => {
       expect(exportButton.classList.contains('export-ready-nudge')).toBe(true);
     });
@@ -776,7 +776,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    const firstExportButton = screen.getByRole('button', { name: /export/i });
+    const firstExportButton = screen.getByRole('button', { name: /share/i });
     await waitFor(() => {
       expect(firstExportButton.classList.contains('export-ready-nudge')).toBe(true);
     });
@@ -792,7 +792,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    const secondExportButton = screen.getByRole('button', { name: /export/i });
+    const secondExportButton = screen.getByRole('button', { name: /share/i });
     await waitFor(() => {
       expect(secondExportButton.classList.contains('export-ready-nudge')).toBe(true);
     });
@@ -858,7 +858,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /export/i }));
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
     fireEvent.click(await screen.findByRole('menuitem', { name: /Deploy to Cloudflare Pages/i }));
 
     const providerSelect = await screen.findByRole('combobox', { name: /Provider/i });
@@ -920,7 +920,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /export/i }));
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
     fireEvent.click(await screen.findByRole('menuitem', { name: /Deploy to Cloudflare Pages/i }));
 
     const providerSelect = await screen.findByRole('combobox', { name: /Provider/i });
@@ -1046,7 +1046,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /export/i }));
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
     fireEvent.click(await screen.findByRole('menuitem', { name: /Deploy to Cloudflare Pages/i }));
 
     const zoneSelect = await screen.findByRole('combobox', { name: /Domain/i });
@@ -1137,7 +1137,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /export/i }));
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
 
     expect(await screen.findByRole('menuitem', { name: /Copy link · Vercel/i })).toBeTruthy();
     const cloudflareCopy = await screen.findByRole('menuitem', { name: /Copy link · Cloudflare Pages/i });
@@ -1184,7 +1184,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /export/i }));
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
 
     expect(await screen.findByRole('menuitem', { name: /Copy link · Cloudflare Pages/i })).toBeTruthy();
     expect(screen.queryByRole('menuitem', { name: /Copy link · Vercel/i })).toBeNull();
@@ -1246,7 +1246,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /export/i }));
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
     fireEvent.click(screen.getByRole('menuitem', { name: /save as template/i }));
 
     expect(screen.getByRole('dialog')).toBeTruthy();
@@ -2374,6 +2374,13 @@ function baseLiveArtifactWorkspaceEntry(
 }
 
 describe('LiveArtifactViewer', () => {
+  it('hides inactive live previews even when a device viewport sets display', () => {
+    const css = readFileSync(join(process.cwd(), 'src/index.css'), 'utf8');
+    const rule = css.match(/\.live-artifact-preview-layer\.preview-viewport\[data-active='false'\]\s*\{[^}]+\}/)?.[0] ?? '';
+
+    expect(rule).toContain('display: none;');
+  });
+
   it('keeps the presentation exit button aligned with preview chrome spacing', () => {
     const css = readFileSync(join(process.cwd(), 'src/index.css'), 'utf8');
     const rule = css.match(/\.present-exit\s*\{[^}]+\}/)?.[0] ?? '';
@@ -2634,6 +2641,52 @@ describe('LiveArtifactViewer', () => {
     await waitFor(() => {
       expect(screen.getByRole('link', { name: /^open$/i }).getAttribute('tabindex')).not.toBe('-1');
     });
+  });
+
+  it('keeps the live preview iframe mounted across viewport and tab changes', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url === '/api/live-artifacts/la_1?projectId=proj_1') {
+        return new Response(JSON.stringify({ artifact: baseLiveArtifact() }), { status: 200 });
+      }
+      if (url === '/api/live-artifacts/la_1/refreshes?projectId=proj_1') {
+        return new Response(JSON.stringify({ refreshes: [] }), { status: 200 });
+      }
+      if (url === '/api/live-artifacts/la_1/code?projectId=proj_1&variant=template') {
+        return new Response('<main>Preview</main>', { status: 200 });
+      }
+      return new Response(JSON.stringify({}), { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <LiveArtifactViewer
+        projectId="proj_1"
+        liveArtifact={baseLiveArtifactWorkspaceEntry()}
+      />,
+    );
+
+    const frame = await screen.findByTestId('live-artifact-preview-frame');
+    fireEvent.click(screen.getByRole('button', { name: /preview viewport/i }));
+    fireEvent.click(screen.getByRole('option', { name: /mobile/i }));
+
+    const previewLayer = frame.closest('.live-artifact-preview-layer');
+    expect(previewLayer?.classList.contains('preview-viewport-mobile')).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: /code/i }));
+
+    await waitFor(() => {
+      expect(previewLayer?.getAttribute('data-active')).toBe('false');
+    });
+    expect(screen.getByTestId('live-artifact-preview-frame')).toBe(frame);
+
+    fireEvent.click(screen.getByRole('button', { name: /preview/i }));
+
+    await waitFor(() => {
+      expect(previewLayer?.getAttribute('data-active')).toBe('true');
+    });
+    expect(screen.getByTestId('live-artifact-preview-frame')).toBe(frame);
+    expect(frame.getAttribute('src')).toBe('/api/live-artifacts/la_1/preview?projectId=proj_1&v=0');
   });
 
   it('closes the present menu on Escape without tearing down the viewer', async () => {

@@ -24,6 +24,7 @@ import {
   startServer,
   validateCodexGeneratedImagesDir,
 } from '../src/server.js';
+import { skillCwdAliasSegment } from '../src/cwd-aliases.js';
 import { getAgentDef } from '../src/agents.js';
 import { readMemoryConfig, writeMemoryConfig } from '../src/memory.js';
 import { renderCodexImagegenOverride } from '../src/prompts/system.js';
@@ -67,6 +68,39 @@ describe('/api/chat', () => {
   const originalPath = process.env.PATH;
   const originalAgentHome = process.env.OD_AGENT_HOME;
   const tempDirs: string[] = [];
+
+  async function createPluginFixture(args: {
+    pluginId: string;
+    dirName: string;
+    localSkillPath?: string;
+  }): Promise<string> {
+    const root = await fsp.mkdtemp(join(tmpdir(), 'od-plugin-fixture-'));
+    tempDirs.push(root);
+    const fixtureDir = resolve(root, args.dirName);
+    const baseFixtureDir = resolve(
+      process.cwd(),
+      'tests',
+      'fixtures',
+      'plugin-fixtures',
+      'sample-plugin',
+    );
+    await fsp.cp(baseFixtureDir, fixtureDir, { recursive: true });
+    const manifestPath = resolve(fixtureDir, 'open-design.json');
+    const manifest = JSON.parse(await fsp.readFile(manifestPath, 'utf8')) as {
+      name: string;
+      title: string;
+      od?: { context?: { skills?: Array<{ ref?: string; path?: string }> } };
+    };
+    manifest.name = args.pluginId;
+    manifest.title = args.pluginId;
+    if (args.localSkillPath) {
+      manifest.od ??= {};
+      manifest.od.context ??= {};
+      manifest.od.context.skills = [{ path: args.localSkillPath }];
+    }
+    await fsp.writeFile(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+    return fixtureDir;
+  }
 
   beforeAll(async () => {
     if (process.env.OD_DATA_DIR) {
@@ -176,6 +210,582 @@ process.exit(0);
           status: 'failed',
           exitCode: 0,
         });
+      },
+    );
+  });
+
+  it('injects @-mention skillIds into the composed system prompt', async () => {
+    await withFakeAgent(
+      'opencode',
+      `
+let prompt = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  prompt += chunk;
+});
+process.stdin.on('end', () => {
+  const checks = [
+    prompt.includes('## Composed skill — faq-page') ? 'has-composed-skill-header' : 'missing-composed-skill-header',
+    prompt.includes('# FAQ Page Skill') ? 'has-faq-skill-body' : 'missing-faq-skill-body',
+    prompt.includes('category filtering') ? 'has-faq-skill-content' : 'missing-faq-skill-content',
+  ];
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: checks.join('\\n') } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            message: 'build an faq page',
+            skillIds: ['faq-page'],
+          }),
+        });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('has-composed-skill-header');
+        expect(body).toContain('has-faq-skill-body');
+        expect(body).toContain('has-faq-skill-content');
+        expect(body).not.toContain('missing-composed-skill-header');
+        expect(body).not.toContain('missing-faq-skill-body');
+        expect(body).not.toContain('missing-faq-skill-content');
+      },
+    );
+  });
+
+  it('stages ad-hoc skill side files into the project cwd', async () => {
+    const projectId = `project-${randomUUID()}`;
+    const stagedRelativePath = `.od-skills/${skillCwdAliasSegment(resolve(process.cwd(), '..', '..', 'skills', 'release-notes-one-pager'))}/references/checklist.md`;
+    const expectedChecklist = await fsp.readFile(
+      resolve(process.cwd(), '..', '..', 'skills', 'release-notes-one-pager', 'references', 'checklist.md'),
+      'utf8',
+    );
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Ad hoc staged skill project',
+      }),
+    });
+
+    expect(createProjectResponse.ok).toBe(true);
+
+    const fakeAgentScript = `
+const fs = require('node:fs');
+const stagedChecklist = fs.readFileSync(${JSON.stringify(stagedRelativePath)}, 'utf8');
+if (stagedChecklist !== ${JSON.stringify(expectedChecklist)}) {
+  console.error('staged-skill-side-files-mismatch');
+  process.exit(1);
+}
+process.stdin.resume();
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'staged-skill-side-files-before-spawn' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`;
+
+    await withFakeAgent(
+      'opencode',
+      fakeAgentScript,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            message: 'draft the release notes',
+            skillIds: ['release-notes-one-pager'],
+          }),
+        });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('staged-skill-side-files-before-spawn');
+      },
+    );
+
+    const stagedFileResponse = await fetch(
+      `${baseUrl}/api/projects/${projectId}/raw/${stagedRelativePath}`,
+    );
+    const stagedFileBody = await stagedFileResponse.text();
+
+    expect(stagedFileResponse.ok).toBe(true);
+    expect(stagedFileBody).toBe(expectedChecklist);
+  });
+
+  it('stages side files for every composed skill into the project cwd', async () => {
+    const projectId = `project-${randomUUID()}`;
+    const stagedPaths = [
+      `.od-skills/${skillCwdAliasSegment(resolve(process.cwd(), '..', '..', 'skills', 'release-notes-one-pager'))}/references/checklist.md`,
+      `.od-skills/${skillCwdAliasSegment(resolve(process.cwd(), '..', '..', 'skills', 'swiss-creative-mode-template'))}/references/checklist.md`,
+    ] as const;
+    const expectedBodies = await Promise.all(
+      [
+        resolve(process.cwd(), '..', '..', 'skills', 'release-notes-one-pager', 'references', 'checklist.md'),
+        resolve(process.cwd(), '..', '..', 'skills', 'swiss-creative-mode-template', 'references', 'checklist.md'),
+      ].map((file) => fsp.readFile(file, 'utf8')),
+    );
+
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Multi staged skill project',
+      }),
+    });
+
+    expect(createProjectResponse.ok).toBe(true);
+
+    const fakeAgentScript = `
+const fs = require('node:fs');
+const stagedBodies = [
+  fs.readFileSync(${JSON.stringify(stagedPaths[0])}, 'utf8'),
+  fs.readFileSync(${JSON.stringify(stagedPaths[1])}, 'utf8'),
+];
+const expectedBodies = ${JSON.stringify(expectedBodies)};
+if (JSON.stringify(stagedBodies) !== JSON.stringify(expectedBodies)) {
+  console.error('multi-staged-skill-side-files-mismatch');
+  process.exit(1);
+}
+process.stdin.resume();
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'multi-staged-skill-side-files-before-spawn' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`;
+
+    await withFakeAgent(
+      'opencode',
+      fakeAgentScript,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            message: 'compose multiple skills',
+            skillIds: ['release-notes-one-pager', 'swiss-creative-mode-template'],
+          }),
+        });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('multi-staged-skill-side-files-before-spawn');
+      },
+    );
+  });
+
+  it('propagates the composed skill mode for ad-hoc-only deck skills', async () => {
+    await withFakeAgent(
+      'opencode',
+      `
+let prompt = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  prompt += chunk;
+});
+process.stdin.on('end', () => {
+  const checks = [
+    prompt.includes('## Composed skill — open-design-landing-deck') ? 'has-deck-skill-header' : 'missing-deck-skill-header',
+    prompt.includes('# Slide deck — fixed framework (this is non-negotiable for deck mode)') ? 'has-deck-framework' : 'missing-deck-framework',
+  ];
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: checks.join('\\n') } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            message: 'build an editorial brand deck',
+            skillIds: ['open-design-landing-deck'],
+          }),
+        });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('has-deck-skill-header');
+        expect(body).toContain('has-deck-framework');
+        expect(body).not.toContain('missing-deck-skill-header');
+        expect(body).not.toContain('missing-deck-framework');
+      },
+    );
+  });
+
+  it('preserves a persisted media skill as the primary surface over a composed deck mention', async () => {
+    await withFakeAgent(
+      'opencode',
+      `
+let prompt = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  prompt += chunk;
+});
+process.stdin.on('end', () => {
+  const checks = [
+    prompt.includes('# imagegen') ? 'has-base-image-skill-body' : 'missing-base-image-skill-body',
+    prompt.includes('## Composed skill — open-design-landing-deck') ? 'has-composed-deck-skill-header' : 'missing-composed-deck-skill-header',
+    prompt.includes('## Media generation contract (load-bearing — overrides softer wording above)') ? 'has-image-contract' : 'missing-image-contract',
+    prompt.includes('# Slide deck — fixed framework (this is non-negotiable for deck mode)') ? 'unexpected-deck-framework' : 'kept-deck-framework-out',
+  ];
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: checks.join('\\n') } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            message: 'generate an image while also referencing a deck template',
+            skillId: 'imagegen',
+            skillIds: ['open-design-landing-deck'],
+          }),
+        });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('has-base-image-skill-body');
+        expect(body).toContain('has-composed-deck-skill-header');
+        expect(body).toContain('has-image-contract');
+        expect(body).toContain('kept-deck-framework-out');
+        expect(body).not.toContain('missing-base-image-skill-body');
+        expect(body).not.toContain('missing-composed-deck-skill-header');
+        expect(body).not.toContain('missing-image-contract');
+        expect(body).not.toContain('unexpected-deck-framework');
+      },
+    );
+  });
+
+  it('propagates ad-hoc skill critique policy into the chat resolver', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for user skill critique-policy tests');
+    }
+
+    const skillId = `critique-opt-out-${randomUUID()}`;
+    const skillDir = resolve(process.env.OD_DATA_DIR, 'skills', skillId);
+    const originalCritiqueEnabled = process.env.OD_CRITIQUE_ENABLED;
+
+    await fsp.mkdir(skillDir, { recursive: true });
+    await fsp.writeFile(
+      resolve(skillDir, 'SKILL.md'),
+      `---
+name: ${skillId}
+description: Ad-hoc critique opt-out regression fixture.
+od:
+  critique:
+    policy: opt-out
+---
+
+# Critique opt-out fixture
+
+This skill should suppress critique when selected through skillIds.
+`,
+      'utf8',
+    );
+
+    process.env.OD_CRITIQUE_ENABLED = 'true';
+
+    try {
+      await withFakeAgent(
+        'opencode',
+        `
+let prompt = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  prompt += chunk;
+});
+process.stdin.on('end', () => {
+  const checks = [
+    prompt.includes('## Composed skill — ${skillId}') ? 'has-opt-out-skill-header' : 'missing-opt-out-skill-header',
+    prompt.includes('<CRITIQUE_RUN') ? 'unexpected-critique-panel' : 'critique-panel-disabled-by-skill-policy',
+  ];
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: checks.join('\\n') } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+        async () => {
+          const response = await fetch(`${baseUrl}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'opencode',
+              designSystemId: 'default',
+              message: 'draft an opt-out skill artifact',
+              skillIds: [skillId],
+            }),
+          });
+          const body = await response.text();
+
+          expect(response.ok).toBe(true);
+          expect(body).toContain('has-opt-out-skill-header');
+          expect(body).toContain('critique-panel-disabled-by-skill-policy');
+          expect(body).not.toContain('missing-opt-out-skill-header');
+          expect(body).not.toContain('unexpected-critique-panel');
+        },
+      );
+    } finally {
+      if (originalCritiqueEnabled == null) {
+        delete process.env.OD_CRITIQUE_ENABLED;
+      } else {
+        process.env.OD_CRITIQUE_ENABLED = originalCritiqueEnabled;
+      }
+      await fsp.rm(skillDir, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves plugin-local and composed @-mention skills in plugin-bound runs', async () => {
+    const pluginId = `plugin-local-${randomUUID()}`;
+    const pluginFixtureDir = await createPluginFixture({
+      pluginId,
+      dirName: `plugin-local-${randomUUID()}`,
+      localSkillPath: './SKILL.md',
+    });
+    const installResponse = await fetch(`${baseUrl}/api/plugins/install`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', accept: 'text/event-stream' },
+      body: JSON.stringify({ source: pluginFixtureDir }),
+    });
+    const installBody = await installResponse.text();
+
+    expect(installResponse.status).toBe(200);
+    expect(installBody).toContain(`"id":"${pluginId}"`);
+
+    const projectId = `project-${randomUUID()}`;
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Plugin-bound skill composition project',
+        pluginId,
+        pluginInputs: { topic: 'agentic design' },
+      }),
+    });
+    const createProjectBody = await createProjectResponse.json() as {
+      appliedPluginSnapshotId?: string;
+    };
+
+    expect(createProjectResponse.ok).toBe(true);
+    expect(createProjectBody.appliedPluginSnapshotId).toBeTruthy();
+
+    await withFakeAgent(
+      'opencode',
+      `
+let prompt = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  prompt += chunk;
+});
+process.stdin.on('end', () => {
+  const checks = [
+    prompt.includes('# Sample Plugin') ? 'has-plugin-skill-body' : 'missing-plugin-skill-body',
+    prompt.includes('## Composed skill — faq-page') ? 'has-composed-skill-header' : 'missing-composed-skill-header',
+    prompt.includes('# FAQ Page Skill') ? 'has-composed-skill-body' : 'missing-composed-skill-body',
+  ];
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: checks.join('\\n') } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const createRunResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            projectId,
+            message: 'build a plugin-backed faq page',
+            appliedPluginSnapshotId: createProjectBody.appliedPluginSnapshotId,
+            skillIds: ['faq-page'],
+          }),
+        });
+        const createRunBody = await createRunResponse.json() as { runId: string };
+
+        expect(createRunResponse.status).toBe(202);
+
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${createRunBody.runId}/events`);
+        const body = await readSseUntil(eventsResponse, 'event: final');
+
+        expect(body).toContain('has-plugin-skill-body');
+        expect(body).toContain('has-composed-skill-header');
+        expect(body).toContain('has-composed-skill-body');
+        expect(body).not.toContain('missing-plugin-skill-body');
+        expect(body).not.toContain('missing-composed-skill-header');
+        expect(body).not.toContain('missing-composed-skill-body');
+      },
+    );
+  });
+
+  it('stages colliding plugin and composed skill dirs under distinct aliases', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for colliding skill-dir staging tests');
+    }
+
+    const pluginId = `plugin-collision-${randomUUID()}`;
+    const pluginFixtureDir = await createPluginFixture({
+      pluginId,
+      dirName: 'sample-plugin',
+      localSkillPath: './SKILL.md',
+    });
+    const installResponse = await fetch(`${baseUrl}/api/plugins/install`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', accept: 'text/event-stream' },
+      body: JSON.stringify({ source: pluginFixtureDir }),
+    });
+    const installBody = await installResponse.text();
+
+    expect(installResponse.status).toBe(200);
+    expect(installBody).toContain(`"id":"${pluginId}"`);
+
+    const projectId = `project-${randomUUID()}`;
+    const userSkillDir = resolve(process.env.OD_DATA_DIR, 'skills', 'sample-plugin');
+    const userChecklist = 'user-skill-checklist';
+    const userAlias = skillCwdAliasSegment(userSkillDir);
+
+    await fsp.mkdir(resolve(userSkillDir, 'references'), { recursive: true });
+    await fsp.writeFile(
+      resolve(userSkillDir, 'SKILL.md'),
+      '# Sample-plugin side-file fixture\n\nRead references/checklist.md before drafting.',
+      'utf8',
+    );
+    await fsp.writeFile(resolve(userSkillDir, 'references', 'checklist.md'), userChecklist, 'utf8');
+
+    try {
+      const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: projectId,
+          name: 'Colliding skill-dir project',
+          pluginId,
+          pluginInputs: { topic: 'agentic design' },
+        }),
+      });
+      const createProjectBody = await createProjectResponse.json() as {
+        appliedPluginSnapshotId?: string;
+      };
+      const installedPluginResponse = await fetch(`${baseUrl}/api/plugins/${pluginId}`);
+      const installedPluginBody = await installedPluginResponse.json() as { fsPath: string };
+      const pluginAlias = skillCwdAliasSegment(installedPluginBody.fsPath);
+
+      expect(createProjectResponse.ok).toBe(true);
+      expect(installedPluginResponse.ok).toBe(true);
+      expect(createProjectBody.appliedPluginSnapshotId).toBeTruthy();
+      expect(pluginAlias).not.toBe(userAlias);
+
+      await withFakeAgent(
+        'opencode',
+        `
+const fs = require('node:fs');
+const pluginSkill = fs.readFileSync(${JSON.stringify(`.od-skills/${pluginAlias}/SKILL.md`)}, 'utf8');
+const userChecklist = fs.readFileSync(${JSON.stringify(`.od-skills/${userAlias}/references/checklist.md`)}, 'utf8');
+if (!pluginSkill.includes('# Sample Plugin')) {
+  console.error('plugin-skill-stage-missing');
+  process.exit(1);
+}
+if (userChecklist !== ${JSON.stringify(userChecklist)}) {
+  console.error('colliding-skill-stage-mismatch');
+  process.exit(1);
+}
+process.stdin.resume();
+process.stdin.on('end', () => {
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: 'colliding-skill-dirs-staged' } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+        async () => {
+          const createRunResponse = await fetch(`${baseUrl}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'opencode',
+              projectId,
+              message: 'use both plugin and user skill side files',
+              appliedPluginSnapshotId: createProjectBody.appliedPluginSnapshotId,
+              skillIds: ['sample-plugin'],
+            }),
+          });
+          const createRunBody = await createRunResponse.json() as { runId: string };
+
+          expect(createRunResponse.status).toBe(202);
+
+          const eventsResponse = await fetch(`${baseUrl}/api/runs/${createRunBody.runId}/events`);
+          const body = await readSseUntil(eventsResponse, 'event: final');
+
+          expect(body).toContain('colliding-skill-dirs-staged');
+        },
+      );
+    } finally {
+      await fsp.rm(userSkillDir, { recursive: true, force: true });
+    }
+  });
+
+  it('canonicalizes aliased skill ids before deduping composed skills', async () => {
+    await withFakeAgent(
+      'opencode',
+      `
+let prompt = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  prompt += chunk;
+});
+process.stdin.on('end', () => {
+  const hasDuplicateComposedAlias = prompt.includes('## Composed skill — open-design-landing');
+  const checks = [
+    hasDuplicateComposedAlias ? 'duplicate-alias-composed-skill' : 'deduped-alias-composed-skill',
+    prompt.includes('# open-design-landing') ? 'has-base-alias-skill-body' : 'missing-base-alias-skill-body',
+  ];
+  console.log(JSON.stringify({ type: 'step_start' }));
+  console.log(JSON.stringify({ type: 'text', part: { text: checks.join('\\n') } }));
+  console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+  process.exit(0);
+});
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            message: 'build the Open Design landing page',
+            skillId: 'editorial-collage',
+            skillIds: ['open-design-landing'],
+          }),
+        });
+        const body = await response.text();
+
+        expect(response.ok).toBe(true);
+        expect(body).toContain('deduped-alias-composed-skill');
+        expect(body).toContain('has-base-alias-skill-body');
+        expect(body).not.toContain('duplicate-alias-composed-skill');
+        expect(body).not.toContain('missing-base-alias-skill-body');
       },
     );
   });

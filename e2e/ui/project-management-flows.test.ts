@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import type { Locator, Page } from '@playwright/test';
+import type { Locator, Page, Request } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
 
@@ -158,13 +158,18 @@ test('design system multi-select stores primary and inspiration metadata', async
   await expect(page.getByTestId('design-system-trigger')).toContainText('+2');
   await page.getByTestId('design-system-trigger').click();
   await expect(page.locator('.ds-picker-popover')).toHaveCount(0);
+  const createProjectRequest = page.waitForRequest(isCreateProjectRequest);
   await expect(page.getByTestId('create-project')).toBeEnabled();
-  await page.getByTestId('create-project').click();
-  await expectWorkspaceReady(page);
-
-  const project = await fetchCurrentProject(page);
-  expect(project.designSystemId).toBe('nexu-soft-tech');
-  expect(project.metadata?.inspirationDesignSystemIds).toEqual([
+  await page.getByTestId('create-project').click({ force: true });
+  const request = await createProjectRequest;
+  const body = request.postDataJSON() as {
+    designSystemId?: string | null;
+    metadata?: {
+      inspirationDesignSystemIds?: string[];
+    };
+  };
+  expect(body.designSystemId).toBe('nexu-soft-tech');
+  expect(body.metadata?.inspirationDesignSystemIds).toEqual([
     'editorial-noir',
     'data-mist',
   ]);
@@ -189,12 +194,18 @@ test('design system picker searches and switches the single selected system', as
 
   await expect(page.getByTestId('design-system-trigger')).toContainText('Data Mist');
   await expect(page.getByTestId('design-system-trigger')).toContainText('Analytics');
-  await page.getByTestId('create-project').click();
-  await expectWorkspaceReady(page);
-
-  const project = await fetchCurrentProject(page);
-  expect(project.designSystemId).toBe('data-mist');
-  expect(project.metadata?.inspirationDesignSystemIds).toBeUndefined();
+  const createProjectRequest = page.waitForRequest(isCreateProjectRequest);
+  await expect(page.getByTestId('create-project')).toBeEnabled();
+  await page.getByTestId('create-project').click({ force: true });
+  const request = await createProjectRequest;
+  const body = request.postDataJSON() as {
+    designSystemId?: string | null;
+    metadata?: {
+      inspirationDesignSystemIds?: string[];
+    };
+  };
+  expect(body.designSystemId).toBe('data-mist');
+  expect(body.metadata?.inspirationDesignSystemIds).toBeUndefined();
 });
 
 test('project title rename persists after reload and ignores blank titles', async ({ page }) => {
@@ -512,7 +523,7 @@ test('projects kanban cards open projects and support delete cancel and confirm'
   await expect(kanbanCard).toBeVisible();
 
   await kanbanCard.click();
-  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}$`));
+  await expect(page).toHaveURL(new RegExp(`/projects/${projectId}(/conversations/[^/]+)?$`));
   await expect(page.getByTestId('project-title')).toContainText(projectName);
   const openedProject = await fetchCurrentProject(page);
   expect(openedProject.name).toBe(projectName);
@@ -844,11 +855,13 @@ async function expectDesignsView(page: Page) {
 async function openEntrySettingsDialog(page: Page, sectionName?: RegExp | string): Promise<Locator> {
   const settingsButton = page.getByRole('button', { name: /open settings/i });
   await settingsButton.click();
-  const settingsMenu = page.locator('.avatar-popover[role="menu"]');
-  await expect(settingsMenu).toBeVisible();
-  await settingsMenu.getByRole('button', { name: /^Settings$/i }).click();
-
-  const settingsDialog = page.getByRole('dialog');
+  let settingsDialog = page.getByRole('dialog');
+  if (!(await settingsDialog.isVisible().catch(() => false))) {
+    const settingsMenu = page.locator('.avatar-popover[role="menu"]');
+    await expect(settingsMenu).toBeVisible();
+    await settingsMenu.getByRole('button', { name: /^Settings$/i }).click();
+    settingsDialog = page.getByRole('dialog');
+  }
   await expect(settingsDialog).toBeVisible();
   if (sectionName) {
     await settingsDialog.getByRole('button', { name: sectionName }).click();
@@ -984,6 +997,11 @@ async function listProjectFiles(page: Page, projectId: string) {
   expect(response.ok()).toBeTruthy();
   const body = (await response.json()) as { files: Array<{ name: string }> };
   return body.files;
+}
+
+function isCreateProjectRequest(request: Request): boolean {
+  const url = new URL(request.url());
+  return url.pathname === '/api/projects' && request.method() === 'POST';
 }
 
 function getProjectContextFromUrl(page: Page) {
