@@ -1,0 +1,45 @@
+/* Settings toggle card — a bordered row with an icon, title + description and
+ * a trailing switch. Mirrors the skills-row card look for standalone
+ * preference toggles (first used by Settings → General). */
+.settings-toggle-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-panel);
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+.settings-toggle-card:hover {
+  border-color: var(--border-strong, var(--border));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+.settings-toggle-card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+}
+.settings-toggle-card-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.settings-toggle-card-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+.settings-toggle-card-desc {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}

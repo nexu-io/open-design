@@ -145,6 +145,7 @@ import {
 
 export type SettingsSection =
   | 'execution'
+  | 'general'
   | 'instructions'
   | 'media'
   | 'composio'
@@ -2150,6 +2151,7 @@ export function SettingsDialog({
     },
     integrations: { title: t('settings.mcpServerTitle'), subtitle: t('settings.mcpServerHint') },
     mcpClient: { title: t('settings.externalMcpTitle'), subtitle: t('settings.externalMcpHint') },
+    general: { title: t('settings.general'), subtitle: t('settings.generalHint') },
     language: { title: t('settings.language'), subtitle: t('settings.languageHint') },
     appearance: { title: t('settings.appearance'), subtitle: t('settings.appearanceHint') },
     critiqueTheater: {
@@ -2531,6 +2533,17 @@ export function SettingsDialog({
               <span>
                 <strong>{t('settings.mcpServerTitle')}</strong>
                 <small>{t('settings.mcpServerHint')}</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'general' ? ' active' : ''}`}
+              onClick={() => setActiveSection('general')}
+            >
+              <Icon name="sliders" size={18} />
+              <span>
+                <strong>{t('settings.general')}</strong>
+                <small>{t('settings.generalHint')}</small>
               </span>
             </button>
             <button
@@ -3687,6 +3700,10 @@ export function SettingsDialog({
               })}
             </div>
           </section>
+          ) : null}
+
+          {activeSection === 'general' ? (
+            <GeneralSection cfg={cfg} setCfg={setCfg} />
           ) : null}
 
           {activeSection === 'appearance' ? (
@@ -6222,6 +6239,41 @@ const THEMES: Array<{ value: AppTheme; labelKey: 'settings.themeSystem' | 'setti
   { value: 'light', labelKey: 'settings.themeLight', icon: 'sun' },
   { value: 'dark', labelKey: 'settings.themeDark', icon: 'moon' },
 ];
+
+function GeneralSection({
+  cfg,
+  setCfg,
+}: {
+  cfg: AppConfig;
+  setCfg: Dispatch<SetStateAction<AppConfig>>;
+}) {
+  const { t } = useI18n();
+  const enterToSend = cfg.enterToSend ?? true;
+  return (
+    <section className="settings-section">
+      <div className="settings-toggle-card">
+        <span className="settings-toggle-card-icon" aria-hidden>
+          <Icon name="send" size={14} />
+        </span>
+        <span className="settings-toggle-card-body">
+          <span className="settings-toggle-card-title">{t('settings.enterToSend')}</span>
+          <span className="settings-toggle-card-desc">{t('settings.enterToSendHint')}</span>
+        </span>
+        <label className="toggle-switch toggle-switch-sm" title={t('settings.enterToSend')}>
+          <input
+            type="checkbox"
+            checked={enterToSend}
+            onChange={(e) =>
+              setCfg((c) => ({ ...c, enterToSend: e.target.checked }))
+            }
+            aria-label={t('settings.enterToSend')}
+          />
+          <span className="toggle-slider" />
+        </label>
+      </div>
+    </section>
+  );
+}
 
 function AppearanceSection({
   cfg,

@@ -1470,6 +1470,7 @@ export type TrackingSettingsArea =
   | 'configure_execution_mode'
   | 'configure_execution_mode_local_cli'
   | 'configure_execution_mode_byok'
+  | 'general'
   | 'instructions'
   | 'memory'
   | 'media_providers'
@@ -2349,6 +2350,8 @@ export function settingsSectionToTracking(
   section: string,
 ): TrackingSettingsArea {
   switch (section) {
+    case 'general':
+      return 'general';
     case 'execution':
       return 'configure_execution_mode';
     case 'instructions':

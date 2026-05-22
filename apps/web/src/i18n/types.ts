@@ -326,6 +326,10 @@ export interface Dict {
   'settings.languageHint': string;
   'settings.appearance': string;
   'settings.appearanceHint': string;
+  'settings.general': string;
+  'settings.generalHint': string;
+  'settings.enterToSend': string;
+  'settings.enterToSendHint': string;
   'settings.themeSystem': string;
   'settings.themeLight': string;
   'settings.themeDark': string;

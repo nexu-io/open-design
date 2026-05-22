@@ -4518,6 +4518,7 @@ export function ProjectView({
               githubConnected={githubConnected}
               onConnectRepo={handleConnectRepo}
               composerDraftSignal={composerDraftSignal}
+              enterToSend={config.enterToSend ?? true}
               petConfig={config.pet}
               onAdoptPet={onAdoptPetInline}
               onTogglePet={onTogglePet}

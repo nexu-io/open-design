@@ -373,6 +373,11 @@ export interface AppConfig {
   customInstructions?: string;
   projectLocations?: ProjectLocationPrefs[];
   defaultProjectLocationId?: string | null;
+  // Composer send-key preference. When true (default), a bare Enter sends the
+  // message and ⌘/Ctrl + Enter inserts a newline; when false, the legacy
+  // ⌘/Ctrl + Enter sends / Enter newlines behavior applies. Unset is treated
+  // as true so the default matches the composer's Enter-to-send default.
+  enterToSend?: boolean;
 }
 
 export interface TelemetryConfig {

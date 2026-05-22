@@ -304,6 +304,9 @@ interface Props {
   // Bumped by the parent to push a draft into the composer (used by the
   // "Import repo" CTA). The nonce lets the same text fire more than once.
   composerDraftSignal?: { text: string; nonce: number };
+  // Composer send-key preference (Settings → General), forwarded to
+  // ChatComposer. Omitted → defaults to the ⌘/Ctrl+Enter-sends behavior.
+  enterToSend?: boolean;
   // Optional pet wiring forwarded straight through to ChatComposer's
   // /pet button. When omitted the composer hides the button entirely.
   petConfig?: AppConfig['pet'];
@@ -395,6 +398,7 @@ export function ChatPane({
   githubConnected,
   onConnectRepo,
   composerDraftSignal,
+  enterToSend,
   petConfig,
   onAdoptPet,
   onTogglePet,
@@ -1318,6 +1322,7 @@ export function ChatPane({
             onStop={onStop}
             onOpenSettings={onOpenSettings}
             onOpenMcpSettings={onOpenMcpSettings}
+            enterToSend={enterToSend}
             petConfig={petConfig}
             onAdoptPet={onAdoptPet}
             onTogglePet={onTogglePet}
