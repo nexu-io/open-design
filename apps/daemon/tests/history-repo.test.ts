@@ -638,6 +638,97 @@ describe('recordRevisionForRun', () => {
     expect(after.current_revision_id).toBe(migrationRow.id);
   });
 
+  it('backfills every orphan in a multi-commit chain (oldest → newest), not just HEAD', async () => {
+    const migrationRow = sandbox.db.prepare(
+      `SELECT id, git_sha FROM project_revisions WHERE project_id = ? AND source = 'migration'`,
+    ).get(sandbox.projectId) as { id: string; git_sha: string };
+
+    // Two consecutive crashed runs: each landed a commit but never the
+    // SQLite row. Construct via direct git so the DB has only the
+    // migration row.
+    const gitArgs = (...args: string[]) => execFileSync(
+      'git',
+      [`--git-dir=${sandbox.repoDir}`, `--work-tree=${sandbox.projectDir}`,
+       '-c', 'user.email=ghost@test.local', '-c', 'user.name=Ghost', ...args],
+      { stdio: 'ignore' },
+    );
+    writeFileSync(path.join(sandbox.projectDir, 'orphan-A.txt'), 'A\n');
+    gitArgs('add', '-A');
+    gitArgs('commit', '-m', 'first orphan (A)');
+    const orphanA = execFileSync('git', [`--git-dir=${sandbox.repoDir}`, 'rev-parse', 'HEAD']).toString().trim();
+    writeFileSync(path.join(sandbox.projectDir, 'orphan-B.txt'), 'B\n');
+    gitArgs('add', '-A');
+    gitArgs('commit', '-m', 'second orphan (B)');
+    const orphanB = execFileSync('git', [`--git-dir=${sandbox.repoDir}`, 'rev-parse', 'HEAD']).toString().trim();
+
+    await recordRevisionForRun({
+      projectId: sandbox.projectId,
+      projectDir: sandbox.projectDir,
+      repoDir: sandbox.repoDir,
+      run: { id: 'retry-after-two-crashes', identity: TEST_IDENTITY },
+      message: 'unused',
+      db: sandbox.db,
+    });
+
+    const rows = sandbox.db.prepare(
+      `SELECT id, git_sha, parent_id, message FROM project_revisions WHERE project_id = ?`,
+    ).all(sandbox.projectId) as Array<{ id: string; git_sha: string; parent_id: string | null; message: string }>;
+    expect(rows).toHaveLength(3);
+    const bySha = new Map(rows.map((r) => [r.git_sha, r]));
+    const migRow = bySha.get(migrationRow.git_sha)!;
+    const aRow = bySha.get(orphanA)!;
+    const bRow = bySha.get(orphanB)!;
+    expect(migRow).toBeDefined();
+    expect(aRow).toBeDefined();
+    expect(bRow).toBeDefined();
+    expect(migRow.parent_id).toBeNull();
+    expect(aRow.parent_id).toBe(migRow.id);
+    expect(bRow.parent_id).toBe(aRow.id);
+    expect(aRow.message).toBe('first orphan (A)');
+    expect(bRow.message).toBe('second orphan (B)');
+
+    const proj = sandbox.db.prepare(`SELECT current_revision_id FROM projects WHERE id = 'p1'`).get() as { current_revision_id: string };
+    expect(proj.current_revision_id).toBe(bRow.id);
+  });
+
+  it('fails loudly when commit metadata cannot be read during repair (no fabrication)', async () => {
+    writeFileSync(path.join(sandbox.projectDir, 'orphan.txt'), 'x\n');
+    execFileSync(
+      'git',
+      [`--git-dir=${sandbox.repoDir}`, `--work-tree=${sandbox.projectDir}`,
+       '-c', 'user.email=ghost@test.local', '-c', 'user.name=Ghost',
+       'add', '-A'],
+      { stdio: 'ignore' },
+    );
+    execFileSync(
+      'git',
+      [`--git-dir=${sandbox.repoDir}`, `--work-tree=${sandbox.projectDir}`,
+       '-c', 'user.email=ghost@test.local', '-c', 'user.name=Ghost',
+       'commit', '-m', 'about to break'],
+      { stdio: 'ignore' },
+    );
+
+    // Corrupt the gitdir so git log fails. Removing HEAD is enough.
+    rmSync(path.join(sandbox.repoDir, 'HEAD'), { force: true });
+
+    await expect(
+      recordRevisionForRun({
+        projectId: sandbox.projectId,
+        projectDir: sandbox.projectDir,
+        repoDir: sandbox.repoDir,
+        run: { id: 'retry-after-corruption', identity: TEST_IDENTITY },
+        message: 'unused',
+        db: sandbox.db,
+      }),
+    ).rejects.toThrow();
+
+    // No orphan row was written. Only the original migration row remains.
+    const count = sandbox.db.prepare(
+      `SELECT COUNT(*) AS n FROM project_revisions WHERE project_id = ?`,
+    ).get(sandbox.projectId) as { n: number };
+    expect(count.n).toBe(1);
+  });
+
   it('treats a tree where only .od-skills/ changed as clean (runtime scratch is excluded)', async () => {
     // The daemon stages active skills into <cwd>/.od-skills/ before
     // each agent run — that's pure runtime scratch and should never

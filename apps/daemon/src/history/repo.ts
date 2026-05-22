@@ -261,38 +261,32 @@ interface CommitMetadata {
   message: string;
 }
 
-/**
- * Read author name, date, and message for a commit ref. Used by repair
- * paths so reconstructed rows reflect the actual commit, not the
- * currently retrying call's identity / clock.
- */
 async function readCommitMetadata(
   projectDir: string,
   ref: string,
   signal?: AbortSignal,
-): Promise<CommitMetadata | null> {
-  try {
-    // %H, %an, %aI are single-line by spec. %B (raw body) goes last
-    // so its trailing newlines join cleanly via Array.join.
-    const out = await runGit(
-      projectDir,
-      ['log', '-1', '--format=%H%n%an%n%aI%n%B', ref],
-      signal,
-    );
-    const lines = out.split('\n');
-    if (lines.length < 4) return null;
-    const [sha, authorName, authorIso, ...messageLines] = lines;
-    const authorDateMs = Date.parse(authorIso ?? '');
-    if (!sha || Number.isNaN(authorDateMs)) return null;
-    return {
-      sha,
-      authorName: (authorName ?? '').trim(),
-      authorDateMs,
-      message: messageLines.join('\n').trim(),
-    };
-  } catch {
-    return null;
+): Promise<CommitMetadata> {
+  const out = await runGit(
+    projectDir,
+    ['log', '-1', '--format=%H%n%an%n%aI%n%B', ref],
+    signal,
+  );
+  const lines = out.split('\n');
+  if (lines.length < 4) {
+    throw new Error(`readCommitMetadata(${ref}): malformed git log output`);
   }
+  const [sha, authorName, authorIso, ...messageLines] = lines;
+  const authorDateMs = Date.parse(authorIso ?? '');
+  if (!sha) throw new Error(`readCommitMetadata(${ref}): empty SHA`);
+  if (Number.isNaN(authorDateMs)) {
+    throw new Error(`readCommitMetadata(${ref}): unparseable author date "${authorIso}"`);
+  }
+  return {
+    sha,
+    authorName: (authorName ?? '').trim(),
+    authorDateMs,
+    message: messageLines.join('\n').trim(),
+  };
 }
 
 export interface InitProjectHistoryArgs {
@@ -372,12 +366,12 @@ async function repairHalfInitializedSubstrate(
       id: revisionId,
       projectId,
       parentId: null,
-      gitSha: meta?.sha ?? headSha,
-      createdAt: meta?.authorDateMs ?? Date.now(),
+      gitSha: meta.sha,
+      createdAt: meta.authorDateMs,
       source: 'migration',
-      message: meta?.message || MIGRATION_COMMIT_MESSAGE,
+      message: meta.message || MIGRATION_COMMIT_MESSAGE,
       actorIdentityId: null,
-      actorDisplayName: meta?.authorName || null,
+      actorDisplayName: meta.authorName || null,
       runId: null,
       filesChanged: 0,
       bytesAdded: 0,
@@ -564,13 +558,41 @@ export async function recordRevisionForRun(
 }
 
 /**
- * Invariant: at the end of the locked critical section, HEAD's SHA
- * must have a corresponding `project_revisions` row. If a prior call
- * crashed between `git commit` and the SQLite INSERT, HEAD is one
- * commit ahead of the table. Reconstruct the missing row from the
- * commit itself (attributing to this retrying run would be durable
- * false provenance). Single-orphan repair only — multi-orphan chains
- * recover naturally on successive calls.
+ * Walk back from HEAD collecting commits that have no project_revisions
+ * row. Stops at the first commit that does, or at the repo root.
+ * Returns oldest-first so caller can insert in parent → child order.
+ */
+async function collectOrphanCommits(
+  projectDir: string,
+  db: Database.Database,
+  projectId: string,
+  headSha: string,
+  signal?: AbortSignal,
+): Promise<CommitMetadata[]> {
+  const orphans: CommitMetadata[] = [];
+  let cursor: string | null = headSha;
+  while (cursor && !revisionIdForSha(db, projectId, cursor)) {
+    const meta = await readCommitMetadata(projectDir, cursor, signal);
+    orphans.push(meta);
+    cursor = await readParentSha(projectDir, cursor, signal);
+  }
+  return orphans.reverse();
+}
+
+async function readParentSha(
+  projectDir: string,
+  ref: string,
+  signal?: AbortSignal,
+): Promise<string | null> {
+  const out = await runGit(projectDir, ['rev-parse', `${ref}^`], signal, { softFail128: true });
+  return out.trim() || null;
+}
+
+/**
+ * Restore the "every HEAD-reachable commit has a row" invariant by
+ * walking back from HEAD and inserting each missing commit oldest →
+ * newest in one transaction, attributing to the actual git author
+ * (NOT this retrying run).
  */
 async function repairOrphanHead(
   args: RecordRevisionForRunArgs,
@@ -578,28 +600,36 @@ async function repairOrphanHead(
 ): Promise<void> {
   const { projectId, projectDir, db, signal } = args;
   if (revisionIdForSha(db, projectId, headSha)) {
-    // Row for HEAD exists; only thing that could be wrong is a stale
-    // pointer from a legacy partial-write.
     ensureHeadPointerInvariant(db, projectId, headSha);
     return;
   }
-  const meta = await readCommitMetadata(projectDir, 'HEAD', signal);
-  const parentSha = await readHeadParentSha(projectDir, signal);
-  insertRevisionAndAdvancePointer(db, {
-    id: randomUUID(),
-    projectId,
-    parentId: revisionIdForSha(db, projectId, parentSha),
-    gitSha: headSha,
-    createdAt: meta?.authorDateMs ?? Date.now(),
-    source: 'agent-run',
-    message: meta?.message || DEFAULT_COMMIT_MESSAGE,
-    actorIdentityId: null,
-    actorDisplayName: meta?.authorName || null,
-    runId: null,
-    filesChanged: 0,
-    bytesAdded: 0,
-    bytesRemoved: 0,
-  });
+  const orphans = await collectOrphanCommits(projectDir, db, projectId, headSha, signal);
+  if (orphans.length === 0) return;
+
+  const oldestParentSha = await readParentSha(projectDir, orphans[0]!.sha, signal);
+  const oldestParentId = revisionIdForSha(db, projectId, oldestParentSha);
+  const ids = orphans.map(() => randomUUID());
+
+  db.transaction(() => {
+    orphans.forEach((meta, i) => {
+      insertRevision(db, {
+        id: ids[i]!,
+        projectId,
+        parentId: i === 0 ? oldestParentId : ids[i - 1]!,
+        gitSha: meta.sha,
+        createdAt: meta.authorDateMs,
+        source: 'agent-run',
+        message: meta.message || DEFAULT_COMMIT_MESSAGE,
+        actorIdentityId: null,
+        actorDisplayName: meta.authorName || null,
+        runId: null,
+        filesChanged: 0,
+        bytesAdded: 0,
+        bytesRemoved: 0,
+      });
+    });
+    setCurrentRevision(db, projectId, ids[ids.length - 1]!);
+  })();
 }
 
 /**
