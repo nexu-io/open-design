@@ -21,6 +21,11 @@ import type {
 } from '../../src/types';
 
 vi.mock('../../src/i18n', () => ({
+  useI18n: () => ({
+    locale: 'en',
+    setLocale: () => undefined,
+    t: (value: string) => value,
+  }),
   useT: () => (key: string) => key,
 }));
 
