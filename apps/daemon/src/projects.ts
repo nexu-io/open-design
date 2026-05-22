@@ -1178,6 +1178,8 @@ export function parseByteRange(header, fileSize) {
     if (!Number.isFinite(suffix) || !Number.isInteger(suffix) || suffix <= 0) {
       return 'unsatisfiable';
     }
+    // Empty file has no last-N bytes — suffix ranges are always unsatisfiable.
+    if (fileSize === 0) return 'unsatisfiable';
     start = Math.max(0, fileSize - suffix);
     end = fileSize - 1;
   } else {
