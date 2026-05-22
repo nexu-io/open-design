@@ -96,7 +96,7 @@ describe('installHistoryRunFinishedHook', () => {
     writeFileSync(path.join(sandbox.projectDir, 'hero.html'), '<h1>Hello</h1>\n');
 
     await runs.fire(
-      { id: 'run-1', projectId: 'p1', conversationId: 'c1', identity: TEST_IDENTITY, message: 'Add hero section' },
+      { id: 'run-1', projectId: 'p1', conversationId: 'c1', identity: TEST_IDENTITY, message: 'Add hero section', touchedFiles: true },
       'succeeded',
     );
 
@@ -124,7 +124,7 @@ describe('installHistoryRunFinishedHook', () => {
     writeFileSync(path.join(sandbox.projectDir, 'hero.html'), '<h1>Hello</h1>\n');
 
     await runs.fire(
-      { id: 'run-1', projectId: 'p1', conversationId: 'c1', identity: TEST_IDENTITY, message: 'Add hero section' },
+      { id: 'run-1', projectId: 'p1', conversationId: 'c1', identity: TEST_IDENTITY, message: 'Add hero section', touchedFiles: true },
       'succeeded',
     );
 
@@ -143,7 +143,7 @@ describe('installHistoryRunFinishedHook', () => {
     });
 
     await runs.fire(
-      { id: 'run-2', projectId: null, conversationId: null, identity: TEST_IDENTITY, message: 'doesnt matter' },
+      { id: 'run-2', projectId: null, conversationId: null, identity: TEST_IDENTITY, message: 'doesnt matter', touchedFiles: true },
       'succeeded',
     );
 
@@ -165,7 +165,7 @@ describe('installHistoryRunFinishedHook', () => {
     writeFileSync(path.join(sandbox.projectDir, 'hero.html'), '<h1>Hello</h1>\n');
 
     await runs.fire(
-      { id: 'run-3', projectId: 'p1', conversationId: 'c1', identity: null, message: 'no identity' },
+      { id: 'run-3', projectId: 'p1', conversationId: 'c1', identity: null, message: 'no identity', touchedFiles: true },
       'succeeded',
     );
 
@@ -187,7 +187,7 @@ describe('installHistoryRunFinishedHook', () => {
 
     // No file changes — run ends with clean tree
     await runs.fire(
-      { id: 'run-clean', projectId: 'p1', conversationId: 'c1', identity: TEST_IDENTITY, message: 'no changes' },
+      { id: 'run-clean', projectId: 'p1', conversationId: 'c1', identity: TEST_IDENTITY, message: 'no changes', touchedFiles: true },
       'succeeded',
     );
 
@@ -209,7 +209,7 @@ describe('installHistoryRunFinishedHook', () => {
     writeFileSync(path.join(sandbox.projectDir, 'partial.html'), '<h1>WIP</h1>\n');
 
     await runs.fire(
-      { id: 'run-failed', projectId: 'p1', conversationId: 'c1', identity: TEST_IDENTITY, message: 'Try something' },
+      { id: 'run-failed', projectId: 'p1', conversationId: 'c1', identity: TEST_IDENTITY, message: 'Try something', touchedFiles: true },
       'failed',
     );
 
@@ -235,7 +235,7 @@ describe('installHistoryRunFinishedHook', () => {
     writeFileSync(path.join(sandbox.projectDir, 'a.txt'), 'content\n');
 
     await runs.fire(
-      { id: 'run-multi', projectId: 'p1', conversationId: 'c1', identity: TEST_IDENTITY, message: 'Refactor the hero\n\nMake it darker and more minimal\nMatch the brand palette' },
+      { id: 'run-multi', projectId: 'p1', conversationId: 'c1', identity: TEST_IDENTITY, message: 'Refactor the hero\n\nMake it darker and more minimal\nMatch the brand palette', touchedFiles: true },
       'succeeded',
     );
 
@@ -259,7 +259,7 @@ describe('installHistoryRunFinishedHook', () => {
     writeFileSync(path.join(sandbox.projectDir, 'a.txt'), 'content\n');
 
     await runs.fire(
-      { id: 'run-noprompt', projectId: 'p1', conversationId: 'c1', identity: TEST_IDENTITY, message: null },
+      { id: 'run-noprompt', projectId: 'p1', conversationId: 'c1', identity: TEST_IDENTITY, message: null, touchedFiles: true },
       'succeeded',
     );
 

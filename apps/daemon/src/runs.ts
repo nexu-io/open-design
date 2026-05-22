@@ -3,6 +3,14 @@ import { randomUUID } from 'node:crypto';
 
 export const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
 
+// Agent tool_use names that mutate the worktree. Sets run.touchedFiles
+// so the history hook can distinguish runs that dirtied files from
+// purely conversational runs when deciding whether to record a marker
+// for a sibling-absorbed concurrent run. Bash is excluded — it's
+// commonly used for read-only operations and would produce false
+// positives.
+const FILE_WRITE_TOOL_NAMES = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
+
 function readString(value) {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
@@ -97,6 +105,7 @@ export function createChatRunService({
       error: null,
       errorCode: null,
       cancelRequested: false,
+      touchedFiles: false,
     };
     runs.set(run.id, run);
     return run;
@@ -115,6 +124,9 @@ export function createChatRunService({
       const details = extractErrorDetails(data);
       if (details.error) run.error = details.error;
       if (details.errorCode) run.errorCode = details.errorCode;
+    }
+    if (event === 'tool_use' && data && typeof data.name === 'string' && FILE_WRITE_TOOL_NAMES.has(data.name)) {
+      run.touchedFiles = true;
     }
     const id = run.nextEventId++;
     const record = { id, event, data, timestamp: Date.now() };

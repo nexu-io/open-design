@@ -27,6 +27,7 @@ export interface RunFinishedRun {
   conversationId: string | null;
   identity: Identity | null;
   message: string | null;
+  touchedFiles: boolean;
 }
 
 type RunFinishedStatus = 'succeeded' | 'failed' | 'canceled';
@@ -95,6 +96,7 @@ export function installHistoryRunFinishedHook(args: InstallHistoryRunFinishedHoo
         run: { id: run.id, identity: run.identity },
         message,
         db,
+        runTouchedFiles: run.touchedFiles,
       });
 
       if (result.kind === 'recorded') {

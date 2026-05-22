@@ -388,6 +388,15 @@ export interface RecordRevisionForRunArgs {
   message: string;
   db: Database.Database;
   signal?: AbortSignal;
+  /**
+   * Whether this run is known to have invoked a file-write tool. Gates
+   * marker creation in the sibling-absorbed branch: a purely
+   * conversational run must not produce a marker row even if a sibling
+   * advanced HEAD during its lock wait. Default false (no marker) — safer
+   * to lose provenance for an edge case than to write a false marker
+   * that pollutes durable history data.
+   */
+  runTouchedFiles?: boolean;
 }
 
 export type RecordRevisionForRunResult =
@@ -530,20 +539,12 @@ async function recordRevisionForRunLocked(
 
   const status = await runGit(projectDir, ['status', '--short'], signal);
   if (status.trim().length === 0) {
-    // Tree is clean. Two cases to distinguish:
-    //   (a) The run genuinely wrote nothing — pure conversational
-    //       reply, no provenance row is needed. (Step 4 contract.)
-    //   (b) A sibling concurrent run absorbed our changes into its
-    //       commit while we were queued at the lock. Compare HEAD
-    //       now against the snapshot we took before queueing — if it
-    //       has advanced, a sibling moved it, and we need a marker
-    //       row so this run's provenance survives.
-    //
-    // Edge case: if a sibling fires AND this run was purely
-    // conversational, we'll log a false-positive marker. That's a
-    // benign data-quality cost for preserving provenance in (b);
-    // the History UI can filter marker rows whose run wrote no
-    // files via cross-referencing tool-use events. See spec §6.
+    // Marker row only when (a) this run actually invoked a file-write
+    // tool AND (b) HEAD advanced during our lock wait. Without (a) a
+    // purely conversational run running in parallel with a real
+    // file-writing sibling would get a false marker that pollutes
+    // durable provenance data; the sibling owns history alone.
+    if (!args.runTouchedFiles) return { kind: 'clean' };
     const headNow =
       (await runGit(projectDir, ['rev-parse', 'HEAD'], signal, { softFail128: true })).trim() || null;
     const advancedDuringWait =

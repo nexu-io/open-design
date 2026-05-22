@@ -706,6 +706,7 @@ describe('recordRevisionForRun', () => {
         run: { id: 'run-a', identity: TEST_IDENTITY },
         message: 'first parallel',
         db: sandbox.db,
+        runTouchedFiles: true,
       }),
       recordRevisionForRun({
         projectId: sandbox.projectId,
@@ -714,6 +715,7 @@ describe('recordRevisionForRun', () => {
         run: { id: 'run-b', identity: TEST_IDENTITY },
         message: 'second parallel',
         db: sandbox.db,
+        runTouchedFiles: true,
       }),
     ]);
 
@@ -786,5 +788,49 @@ describe('recordRevisionForRun', () => {
       db: sandbox.db,
     });
     expect(cleanProbe.kind).toBe('clean');
+  });
+
+  it('does not create a marker for a purely conversational run when a sibling commits in parallel', async () => {
+    writeFileSync(path.join(sandbox.projectDir, 'a.txt'), 'a\n');
+
+    await Promise.all([
+      recordRevisionForRun({
+        projectId: sandbox.projectId,
+        projectDir: sandbox.projectDir,
+        repoDir: sandbox.repoDir,
+        run: { id: 'writer-a', identity: TEST_IDENTITY },
+        message: 'wrote a.txt',
+        db: sandbox.db,
+        runTouchedFiles: true,
+      }),
+      recordRevisionForRun({
+        projectId: sandbox.projectId,
+        projectDir: sandbox.projectDir,
+        repoDir: sandbox.repoDir,
+        run: { id: 'talker-b', identity: TEST_IDENTITY },
+        message: 'just chatted',
+        db: sandbox.db,
+        runTouchedFiles: false,
+      }),
+    ]);
+
+    // Lock order is non-deterministic: either A or B may win and
+    // record the dirty file. The contract under test is narrower:
+    // the conversational run (runTouchedFiles=false) must NEVER
+    // produce a marker row regardless of lock order.
+    const talkerMarker = sandbox.db
+      .prepare(
+        `SELECT id FROM project_revisions
+          WHERE project_id = ? AND run_id = 'talker-b' AND git_sha IS NULL`,
+      )
+      .get(sandbox.projectId);
+    expect(talkerMarker).toBeUndefined();
+
+    // a.txt got committed exactly once (lock winner records it),
+    // so total = migration + 1 recorded = 2 rows.
+    const count = sandbox.db
+      .prepare(`SELECT COUNT(*) AS n FROM project_revisions WHERE project_id = ?`)
+      .get(sandbox.projectId) as { n: number };
+    expect(count.n).toBe(2);
   });
 });

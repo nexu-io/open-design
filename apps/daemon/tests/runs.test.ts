@@ -94,6 +94,50 @@ describe('chat run service shutdown', () => {
   });
 });
 
+describe('chat run service touchedFiles tracking', () => {
+  it('starts false on a new run', () => {
+    const runs = createRuns();
+    const run = runs.create();
+    expect((run as any).touchedFiles).toBe(false);
+  });
+
+  it.each(['Write', 'Edit', 'MultiEdit', 'NotebookEdit'])(
+    'flips to true when a %s tool_use event is emitted',
+    (toolName) => {
+      const runs = createRuns();
+      const run = runs.create();
+      runs.emit(run, 'tool_use', { id: 't1', name: toolName, input: {} });
+      expect((run as any).touchedFiles).toBe(true);
+    },
+  );
+
+  it.each(['Bash', 'Read', 'Grep', 'Glob', 'WebFetch'])(
+    'stays false for non-write tool_use names (%s — read-only or ambiguous)',
+    (toolName) => {
+      const runs = createRuns();
+      const run = runs.create();
+      runs.emit(run, 'tool_use', { id: 't1', name: toolName, input: {} });
+      expect((run as any).touchedFiles).toBe(false);
+    },
+  );
+
+  it('stays false for non-tool_use events even with a matching name field', () => {
+    const runs = createRuns();
+    const run = runs.create();
+    runs.emit(run, 'stdout', { name: 'Write', text: 'red herring' });
+    expect((run as any).touchedFiles).toBe(false);
+  });
+
+  it('stays true once set — does not reset on subsequent non-write events', () => {
+    const runs = createRuns();
+    const run = runs.create();
+    runs.emit(run, 'tool_use', { id: 't1', name: 'Write', input: {} });
+    runs.emit(run, 'tool_use', { id: 't2', name: 'Read', input: {} });
+    runs.emit(run, 'stdout', { text: 'after' });
+    expect((run as any).touchedFiles).toBe(true);
+  });
+});
+
 describe('chat run service stream replay', () => {
   it('always replays the final event when a reattaching client cursor is at the end of a terminal run', () => {
     const sendCalls: Array<{ event: string; data: unknown; id: number }> = [];
