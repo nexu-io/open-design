@@ -134,12 +134,14 @@ jobs:
             echo "Artifact manifest head_sha ($manifest_head) does not match workflow_run head_sha ($WORKFLOW_HEAD_SHA)." >&2
             exit 1
           fi
-          echo "path=$manifest" >> "$GITHUB_OUTPUT"
-          echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
-          echo "head_sha=$manifest_head" >> "$GITHUB_OUTPUT"
-          echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
-          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
-          echo "capture_outcome=$capture_outcome" >> "$GITHUB_OUTPUT"
+          {
+            echo "path=$manifest"
+            echo "pr_number=$pr_number"
+            echo "head_sha=$manifest_head"
+            echo "base_sha=$base_sha"
+            echo "run_id=$run_id"
+            echo "capture_outcome=$capture_outcome"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Stop stale visual runs
         id: stale

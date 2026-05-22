@@ -149,11 +149,13 @@ jobs:
             jq . "$manifest" >&2
             exit 1
           fi
-          echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
-          echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
-          echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
-          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
-          echo "capture_outcome=$capture_outcome" >> "$GITHUB_OUTPUT"
+          {
+            echo "pr_number=$pr_number"
+            echo "head_sha=$head_sha"
+            echo "base_sha=$base_sha"
+            echo "run_id=$run_id"
+            echo "capture_outcome=$capture_outcome"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Build visual diff report
         env:
