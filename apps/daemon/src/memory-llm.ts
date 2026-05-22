@@ -14,9 +14,10 @@
 // Provider selection (in order):
 //   0. memory `.config.json` extraction override → user-supplied
 //      provider/model/baseUrl/apiKey/apiVersion from the Memory model
-//      picker. The override may pick any of four providers — anthropic,
-//      openai, azure (openai-compatible at a per-resource URL), or
-//      google gemini. This is the only path that lets a Local-CLI user
+//      picker. The override may pick any of seven providers — anthropic,
+//      openai, azure (openai-compatible at a per-resource URL), google
+//      gemini, ollama, senseaudio, or venice. This is the only path that
+//      lets a Local-CLI user
 //      (no env-var key in the daemon's environment) point memory
 //      extraction at, say, their personal Anthropic key with a
 //      specific Haiku build instead of falling all the way through to
@@ -148,6 +149,22 @@ const PROVIDER_DEFAULTS = {
     model: 'senseaudio-s2-flash',
     baseUrl: 'https://api.senseaudio.cn',
   },
+  // Venice is OpenAI-compatible (POST /v1/chat/completions, Bearer auth)
+  // so the extractor falls through to callOpenAI with this base URL and
+  // the user's Venice API key. `openai-gpt-54-mini` is the cheapest
+  // OpenAI-flavoured model Venice exposes that's well-trained for the
+  // structured-JSON extraction task. Memory extraction runs after every
+  // turn, so picking a cheap model here matters more than picking the
+  // best one — users can override per-protocol via Settings → Memory.
+  //
+  // Cheaper-still alternatives Venice exposes (open-source, ~10× lower
+  // per-token cost): `qwen3-235b`, `mistral-31-24b`. Both work but emit
+  // malformed JSON more often than GPT-flavoured models, which costs
+  // more in retries than the cheaper-token savings.
+  venice: {
+    model: 'openai-gpt-54-mini',
+    baseUrl: 'https://api.venice.ai/api/v1',
+  },
 };
 
 // Map an explicit override provider to the env var the daemon should
@@ -179,6 +196,13 @@ function envKeyFor(provider) {
     return (
       process.env.OD_SENSEAUDIO_API_KEY?.trim()
       || process.env.SENSEAUDIO_API_KEY?.trim()
+      || ''
+    );
+  }
+  if (provider === 'venice') {
+    return (
+      process.env.OD_VENICE_API_KEY?.trim()
+      || process.env.VENICE_API_KEY?.trim()
       || ''
     );
   }
@@ -419,6 +443,35 @@ async function pickProvider(projectRoot, dataDir, chatAgentId, chatProvider, cha
       } catch (err) {
         console.warn(
           '[memory-llm] media-config lookup failed (chat-constrained)',
+          err?.message ?? err,
+        );
+      }
+    }
+    // Same pattern for Venice — the chat proxy seeds media-config.venice
+    // with the BYOK key automatically (see seedProviderIfMissing in
+    // chat-routes.ts), so a user who has chatted on Venice but doesn't
+    // have VENICE_API_KEY exported in the daemon's environment still
+    // has a usable key sitting one indirection away. Without this
+    // fallback the LLM extraction stage stays dark for the most common
+    // setup on this fork.
+    if (chatProtocol === 'venice' && projectRoot) {
+      try {
+        const cred = await resolveProviderConfig(projectRoot, 'venice');
+        if (cred && typeof cred.apiKey === 'string' && cred.apiKey.trim()) {
+          return {
+            kind: 'venice',
+            apiKey: cred.apiKey.trim(),
+            model:
+              envOverrideModel || cred.model || PROVIDER_DEFAULTS.venice.model,
+            baseUrl: (cred.baseUrl && String(cred.baseUrl).trim())
+              || PROVIDER_DEFAULTS.venice.baseUrl,
+            apiVersion: '',
+            credentialSource: 'media-config',
+          };
+        }
+      } catch (err) {
+        console.warn(
+          '[memory-llm] media-config lookup failed (venice)',
           err?.message ?? err,
         );
       }
@@ -1083,9 +1136,9 @@ async function collectProposedEntries(dataDir, input, options) {
     } else if (provider.kind === 'google') {
       raw = await callGoogle(provider, systemPrompt, userPayload);
     } else {
-      // openai or ollama — both speak the OpenAI chat-completions
-      // wire shape, so callOpenAI handles them with just a different
-      // base URL.
+      // openai, ollama, senseaudio, and venice — all speak the OpenAI
+      // chat-completions wire shape, so callOpenAI handles them with
+      // just a different base URL.
       raw = await callOpenAI(provider, systemPrompt, userPayload);
     }
   } catch (err) {
