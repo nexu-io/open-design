@@ -697,7 +697,7 @@ function AppInner() {
             throwOnError: options?.forceMediaProviderSync,
           })
         : Promise.resolve(),
-      syncConfigToDaemon(persisted, { swallowWriteErrors: true }),
+      syncConfigToDaemon(persisted),
     ]);
   }, [daemonMediaProviders, daemonMediaProvidersFetchState]);
 

@@ -185,6 +185,22 @@ describe('syncMediaProvidersToDaemon', () => {
       syncConfigToDaemon(DEFAULT_CONFIG, { swallowWriteErrors: true }),
     ).resolves.toBeUndefined();
   });
+
+  it('includes status code in DaemonConfigWriteError for autosave error handling', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ error: 'bad config' }), { status: 400 })),
+    );
+
+    try {
+      await syncConfigToDaemon(DEFAULT_CONFIG);
+      expect.unreachable('should have thrown');
+    } catch (error) {
+      expect(error).toBeInstanceOf(DaemonConfigWriteError);
+      expect((error as DaemonConfigWriteError).status).toBe(400);
+      expect((error as DaemonConfigWriteError).message).toContain('bad config');
+    }
+  });
 });
 
 describe('mergeDaemonConfig', () => {
