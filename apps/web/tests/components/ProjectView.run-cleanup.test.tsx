@@ -7,6 +7,7 @@ import {
   clearStreamingConversationMarker,
   finalizeActiveAssistantMessagesOnStop,
   findExistingArtifactProjectFile,
+  resolveRetryTarget,
   resolveSucceededRunStatus,
   shouldClearActiveRunRefs,
 } from '../../src/components/ProjectView';
@@ -164,6 +165,46 @@ describe('terminal replay artifact recovery', () => {
       .toBeNull();
     expect(findExistingArtifactProjectFile(replayArtifact, [stale, current], { minMtime: runCreatedAt }))
       .toBe(current);
+  });
+});
+
+describe('retry target resolution', () => {
+  const userMessage: ChatMessage = {
+    id: 'user-1',
+    role: 'user',
+    content: 'Create a login page',
+    createdAt: 1,
+  };
+  const failedAssistant: ChatMessage = {
+    id: 'assistant-1',
+    role: 'assistant',
+    content: 'Generation failed',
+    createdAt: 2,
+    runStatus: 'failed',
+  };
+
+  it('returns the prior transcript and original user turn for the last failed assistant', () => {
+    const systemContext: ChatMessage = {
+      id: 'assistant-0',
+      role: 'assistant',
+      content: 'Earlier result',
+      createdAt: 0,
+      runStatus: 'succeeded',
+    };
+
+    expect(resolveRetryTarget([systemContext, userMessage, failedAssistant], failedAssistant.id)).toEqual({
+      failedAssistant,
+      userMsg: userMessage,
+      priorMessages: [systemContext],
+    });
+  });
+
+  it('rejects non-terminal, non-last, or non-user-preceded retry targets', () => {
+    expect(resolveRetryTarget([userMessage, { ...failedAssistant, runStatus: 'running' }], failedAssistant.id))
+      .toBeNull();
+    expect(resolveRetryTarget([userMessage, failedAssistant, { ...userMessage, id: 'user-2' }], failedAssistant.id))
+      .toBeNull();
+    expect(resolveRetryTarget([failedAssistant], failedAssistant.id)).toBeNull();
   });
 });
 

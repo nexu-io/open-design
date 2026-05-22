@@ -1,6 +1,7 @@
 import type { NextConfig } from 'next';
+import { existsSync, realpathSync } from 'node:fs';
 import { networkInterfaces } from 'node:os';
-import { dirname, isAbsolute, relative } from 'node:path';
+import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // Daemon port the local Express server binds to (see apps/daemon/src/cli.ts). The
@@ -23,7 +24,52 @@ const isServerOutput = webOutputMode === 'server' || webOutputMode === 'standalo
 const shouldStaticExport = isProd && !isServerOutput;
 
 const WEB_ROOT = dirname(fileURLToPath(import.meta.url));
-const WORKSPACE_ROOT = dirname(dirname(WEB_ROOT));
+
+function resolveWorkspaceRoot(): string {
+  const computed = dirname(dirname(WEB_ROOT));
+  const override = process.env.OD_WORKSPACE_ROOT;
+  if (override && override.trim()) {
+    const resolved = isAbsolute(override.trim()) ? override.trim() : resolve(WEB_ROOT, override.trim());
+    if (!existsSync(resolved)) {
+      throw new Error(
+        `OD_WORKSPACE_ROOT="${override}" resolved to "${resolved}" which does not exist. ` +
+        `Fix the path or unset the variable to use the computed default.`,
+      );
+    }
+    // Canonicalize via realpathSync so that symlinked paths (e.g. macOS
+    // /tmp → /private/tmp) compare correctly against WEB_ROOT.
+    const canonicalResolved = realpathSync(resolved);
+    const canonicalWebRoot = realpathSync(WEB_ROOT);
+    const rel = relative(canonicalResolved, canonicalWebRoot);
+    // rel.startsWith('..') catches the non-ancestor case on POSIX.
+    // isAbsolute(rel) catches the Windows cross-drive case where relative()
+    // returns an absolute path (e.g. C:\repo\apps\web) instead of a ..-path.
+    if (rel.startsWith('..') || isAbsolute(rel)) {
+      throw new Error(
+        `OD_WORKSPACE_ROOT="${override}" resolved to "${canonicalResolved}" but WEB_ROOT "${canonicalWebRoot}" ` +
+        `is not inside it (relative path "${rel}"). ` +
+        `The override must be an ancestor of apps/web.`,
+      );
+    }
+    // Require the resolved path to be a real pnpm workspace root. Without this,
+    // an ancestor like `<repo>/apps` would pass the relative-path check but
+    // miss the sibling `packages/*` directory that `apps/web` imports from
+    // (for example `@open-design/contracts`), and Next would later fail deep
+    // inside file tracing / Turbopack with a much harder-to-diagnose error.
+    if (!existsSync(resolve(canonicalResolved, 'pnpm-workspace.yaml'))) {
+      throw new Error(
+        `OD_WORKSPACE_ROOT="${override}" resolved to "${canonicalResolved}" but no ` +
+        `pnpm-workspace.yaml was found there. The override must point at the ` +
+        `pnpm workspace root so outputFileTracingRoot and turbopack.root can ` +
+        `resolve sibling packages.`,
+      );
+    }
+    return canonicalResolved;
+  }
+  return computed;
+}
+
+const WORKSPACE_ROOT = resolveWorkspaceRoot();
 const toPosixPath = (value: string) => value.replaceAll('\\', '/');
 
 function resolveDistDir(defaultValue: string) {

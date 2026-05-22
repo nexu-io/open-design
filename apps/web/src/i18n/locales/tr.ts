@@ -752,6 +752,7 @@ export const tr: Dict = {
   'chat.new': 'Yeni',
   'chat.emptyConversations': 'Henüz konuşma yok.',
   'chat.deleteConversation': 'Konuşmayı sil',
+  'chat.renameConversationLabel': '"{title}" adını değiştir',
   'chat.deleteConversationConfirm':
     '"{title}"’ı sil? Bu mesajları silecektir.',
   'chat.untitledConversation': 'Başlıksız konuşma',

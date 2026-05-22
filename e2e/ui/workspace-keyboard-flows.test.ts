@@ -1,65 +1,11 @@
 import { expect, test } from '@playwright/test';
 import type { Locator, Page, Response } from '@playwright/test';
+import { applyStandardMocks } from '@/playwright/mock-factory';
 
-const STORAGE_KEY = 'open-design:config';
 const CHAT_PANEL_WIDTH_STORAGE_KEY = 'open-design.project.chatPanelWidth';
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript((key) => {
-    window.localStorage.setItem(
-      key,
-      JSON.stringify({
-        mode: 'daemon',
-        apiKey: '',
-        baseUrl: 'https://api.anthropic.com',
-        model: 'claude-sonnet-4-5',
-        agentId: 'mock',
-        skillId: null,
-        designSystemId: null,
-        onboardingCompleted: true,
-        agentModels: {},
-        privacyDecisionAt: 1,
-        telemetry: { metrics: false, content: false, artifactManifest: false },
-      }),
-    );
-  }, STORAGE_KEY);
-
-  await page.route('**/api/agents', async (route) => {
-    await route.fulfill({
-      json: {
-        agents: [
-          {
-            id: 'mock',
-            name: 'Mock Agent',
-            bin: 'mock-agent',
-            available: true,
-            version: 'test',
-            models: [{ id: 'default', label: 'Default' }],
-          },
-        ],
-      },
-    });
-  });
-
-  await page.route('**/api/app-config', async (route) => {
-    if (route.request().method() !== 'GET') {
-      await route.continue();
-      return;
-    }
-    await route.fulfill({
-      json: {
-        config: {
-          onboardingCompleted: true,
-          agentId: 'mock',
-          skillId: null,
-          designSystemId: null,
-          agentModels: {},
-          privacyDecisionAt: 1,
-          telemetry: { metrics: false, content: false, artifactManifest: false },
-        },
-      },
-    });
-  });
+  await applyStandardMocks(page);
 });
 
 test('quick switcher opens from keyboard and activates the selected file', async ({ page }) => {
@@ -454,7 +400,7 @@ async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await page.getByText('Loading Open Design…').waitFor({ state: 'detached', timeout: 10_000 }).catch(() => {});
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
-  if (await privacyDialog.isVisible().catch(() => false)) {
+  if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /not now/i }).click();
     await expect(privacyDialog).toHaveCount(0);
   }
@@ -534,39 +480,16 @@ async function openQuickSwitcher(page: Page) {
   await expect(quickSwitcher).toBeVisible();
 }
 
-async function sendPrompt(
-  page: Page,
-  prompt: string,
-) {
+async function sendPrompt(page: Page, prompt: string) {
   const input = page.getByTestId('chat-composer-input');
   const sendButton = page.getByTestId('chat-send');
-  for (let attempt = 0; attempt < 3; attempt++) {
-    await input.click();
-    await input.fill(prompt);
-    try {
-      await expect(input).toHaveValue(prompt, { timeout: 1500 });
-      await expect(sendButton).toBeEnabled({ timeout: 1500 });
-      const chatResponse = page.waitForResponse(isCreateRunResponse, { timeout: 2000 });
-      await sendButton.evaluate((button: HTMLButtonElement) => button.click());
-      await chatResponse;
-      return;
-    } catch (error) {
-      await input.click();
-      await input.press(`${process.platform === 'darwin' ? 'Meta' : 'Control'}+A`);
-      await input.press('Backspace');
-      await input.pressSequentially(prompt);
-      try {
-        await expect(input).toHaveValue(prompt, { timeout: 1500 });
-        await expect(sendButton).toBeEnabled({ timeout: 1500 });
-        const chatResponse = page.waitForResponse(isCreateRunResponse, { timeout: 2000 });
-        await sendButton.evaluate((button: HTMLButtonElement) => button.click());
-        await chatResponse;
-        return;
-      } catch (retryError) {
-        if (attempt === 2) throw retryError;
-      }
-    }
-  }
+  await input.click();
+  await input.fill(prompt);
+  await expect(input).toHaveValue(prompt, { timeout: 1500 });
+  await expect(sendButton).toBeEnabled({ timeout: 1500 });
+  const chatResponse = page.waitForResponse(isCreateRunResponse, { timeout: 2000 });
+  await sendButton.evaluate((button: HTMLButtonElement) => button.click());
+  await chatResponse;
 }
 
 function tabBySuffix(page: Page, name: string): Locator {

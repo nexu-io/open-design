@@ -955,6 +955,7 @@ export const zhTW: Dict = {
   'chat.new': '新建',
   'chat.emptyConversations': '還沒有對話。',
   'chat.deleteConversation': '刪除對話',
+  'chat.renameConversationLabel': '重新命名「{title}」',
   'chat.deleteConversationConfirm': '確定刪除「{title}」？該操作會刪除其訊息。',
   'chat.untitledConversation': '未命名對話',
   'chat.startTitle': '開始一個對話',

@@ -53,6 +53,10 @@ test.beforeEach(async ({ page }) => {
   }, STORAGE_KEY);
 
   await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
     await route.fulfill({
       json: {
         config: {
@@ -838,7 +842,7 @@ async function createProject(
 }
 
 async function openNewProjectPanel(page: Page) {
-  if (await page.getByTestId('new-project-panel').isVisible().catch(() => false)) return;
+  if (await page.getByTestId('new-project-panel').isVisible()) return;
   await page.getByTestId('entry-nav-new-project').click();
   await expect(page.getByTestId('new-project-modal')).toBeVisible();
   await expect(page.getByTestId('new-project-panel')).toBeVisible();

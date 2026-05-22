@@ -86,6 +86,7 @@ function previewUrlFor(
 
 const REPO_TREE = 'https://github.com/nexu-io/open-design/tree/main';
 const REPO_BLOB = 'https://github.com/nexu-io/open-design/blob/main';
+const SHOULD_CACHE_CATALOG = import.meta.env.PROD;
 
 // ---------------------------------------------------------------------------
 // Skills
@@ -114,6 +115,8 @@ export interface SkillRecord {
   /** `/previews/skills/<slug>.png` if a generated preview exists, else null. */
   previewUrl: string | null;
 }
+
+const skillRecordsCache = new Map<LandingLocaleCode, Promise<ReadonlyArray<SkillRecord>>>();
 
 function deriveSkillSlug(id: string): string {
   // `id` is `[folder]/SKILL` (no extension). We want the folder name.
@@ -195,16 +198,39 @@ export function shapeSkill(
 export async function getSkillRecords(
   locale: LandingLocaleCode = DEFAULT_LOCALE,
 ): Promise<ReadonlyArray<SkillRecord>> {
-  const previews = listPreviews('skills');
-  const entries = await getCollection('skills');
-  const shaped = entries.map((entry) => shapeSkill(entry, previews, locale));
-  return shaped.sort((a, b) => {
-    // Featured (lower number = higher priority) first, then alphabetical.
-    const af = a.featured ?? Number.POSITIVE_INFINITY;
-    const bf = b.featured ?? Number.POSITIVE_INFINITY;
-    if (af !== bf) return af - bf;
-    return a.name.localeCompare(b.name);
-  });
+  if (!SHOULD_CACHE_CATALOG) {
+    const previews = listPreviews('skills');
+    const entries = await getCollection('skills');
+    const shaped = entries.map((entry) => shapeSkill(entry, previews, locale));
+    return shaped.sort((a, b) => {
+      // Featured (lower number = higher priority) first, then alphabetical.
+      const af = a.featured ?? Number.POSITIVE_INFINITY;
+      const bf = b.featured ?? Number.POSITIVE_INFINITY;
+      if (af !== bf) return af - bf;
+      return a.name.localeCompare(b.name);
+    });
+  }
+
+  const cached = skillRecordsCache.get(locale);
+  if (cached) {
+    return cached;
+  }
+
+  const promise = (async () => {
+    const previews = listPreviews('skills');
+    const entries = await getCollection('skills');
+    const shaped = entries.map((entry) => shapeSkill(entry, previews, locale));
+    return shaped.sort((a, b) => {
+      // Featured (lower number = higher priority) first, then alphabetical.
+      const af = a.featured ?? Number.POSITIVE_INFINITY;
+      const bf = b.featured ?? Number.POSITIVE_INFINITY;
+      if (af !== bf) return af - bf;
+      return a.name.localeCompare(b.name);
+    });
+  })();
+
+  skillRecordsCache.set(locale, promise);
+  return promise;
 }
 
 // ---------------------------------------------------------------------------
@@ -224,6 +250,8 @@ export interface SystemRecord {
   source: string;
   body: string;
 }
+
+const systemRecordsCache = new Map<LandingLocaleCode, Promise<ReadonlyArray<SystemRecord>>>();
 
 function extractH1(body: string): string | undefined {
   for (const line of body.split('\n')) {
@@ -344,10 +372,27 @@ export function shapeSystem(
 export async function getSystemRecords(
   locale: LandingLocaleCode = DEFAULT_LOCALE,
 ): Promise<ReadonlyArray<SystemRecord>> {
-  const entries = await getCollection('systems');
-  return entries
-    .map((entry) => shapeSystem(entry, locale))
-    .sort((a, b) => a.name.localeCompare(b.name));
+  if (!SHOULD_CACHE_CATALOG) {
+    const entries = await getCollection('systems');
+    return entries
+      .map((entry) => shapeSystem(entry, locale))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  const cached = systemRecordsCache.get(locale);
+  if (cached) {
+    return cached;
+  }
+
+  const promise = (async () => {
+    const entries = await getCollection('systems');
+    return entries
+      .map((entry) => shapeSystem(entry, locale))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  })();
+
+  systemRecordsCache.set(locale, promise);
+  return promise;
 }
 
 // ---------------------------------------------------------------------------
@@ -363,6 +408,8 @@ export interface CraftRecord {
   source: string;
   body: string;
 }
+
+const craftRecordsCache = new Map<LandingLocaleCode, Promise<ReadonlyArray<CraftRecord>>>();
 
 const CRAFT_NAME_OVERRIDES: Record<string, string> = {
   'rtl-and-bidi': 'RTL & Bidi',
@@ -488,17 +535,41 @@ export function shapeCraft(
 export async function getCraftRecords(
   locale: LandingLocaleCode = DEFAULT_LOCALE,
 ): Promise<ReadonlyArray<CraftRecord>> {
-  const entries = await getCollection('craft');
-  // Astro normalizes the entry id from `craft/README.md` to `readme`
-  // (lowercase, extension stripped). Comparing the raw `'README'` string
-  // misses it on disk and used to ship `/craft/readme/` as a public
-  // craft principle and inflate the nav count by one. Compare
-  // case-insensitively so future README casings (`Readme.md`, etc.) are
-  // also filtered out.
-  return entries
-    .filter((e) => e.id.toLowerCase() !== 'readme')
-    .map((entry) => shapeCraft(entry, locale))
-    .sort((a, b) => a.name.localeCompare(b.name));
+  if (!SHOULD_CACHE_CATALOG) {
+    const entries = await getCollection('craft');
+    // Astro normalizes the entry id from `craft/README.md` to `readme`
+    // (lowercase, extension stripped). Comparing the raw `'README'` string
+    // misses it on disk and used to ship `/craft/readme/` as a public
+    // craft principle and inflate the nav count by one. Compare
+    // case-insensitively so future README casings (`Readme.md`, etc.) are
+    // also filtered out.
+    return entries
+      .filter((e) => e.id.toLowerCase() !== 'readme')
+      .map((entry) => shapeCraft(entry, locale))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  const cached = craftRecordsCache.get(locale);
+  if (cached) {
+    return cached;
+  }
+
+  const promise = (async () => {
+    const entries = await getCollection('craft');
+    // Astro normalizes the entry id from `craft/README.md` to `readme`
+    // (lowercase, extension stripped). Comparing the raw `'README'` string
+    // misses it on disk and used to ship `/craft/readme/` as a public
+    // craft principle and inflate the nav count by one. Compare
+    // case-insensitively so future README casings (`Readme.md`, etc.) are
+    // also filtered out.
+    return entries
+      .filter((e) => e.id.toLowerCase() !== 'readme')
+      .map((entry) => shapeCraft(entry, locale))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  })();
+
+  craftRecordsCache.set(locale, promise);
+  return promise;
 }
 
 // ---------------------------------------------------------------------------
@@ -523,6 +594,8 @@ export interface TemplateRecord {
   body: string;
   previewUrl: string | null;
 }
+
+const templateRecordsCache = new Map<LandingLocaleCode, Promise<ReadonlyArray<TemplateRecord>>>();
 
 export type TemplateEntry = CollectionEntry<'templates'>;
 export type DesignTemplateEntry = CollectionEntry<'designTemplates'>;
@@ -633,26 +706,59 @@ export function shapeLiveArtifactTemplate(
 export async function getTemplateRecords(
   locale: LandingLocaleCode = DEFAULT_LOCALE,
 ): Promise<ReadonlyArray<TemplateRecord>> {
-  const previews = listPreviews('templates');
-  const designEntries = await getCollection('designTemplates');
-  const designRecords = designEntries.map((entry) =>
-    shapeDesignTemplate(entry, previews, locale),
-  );
+  if (!SHOULD_CACHE_CATALOG) {
+    const previews = listPreviews('templates');
+    const designEntries = await getCollection('designTemplates');
+    const designRecords = designEntries.map((entry) =>
+      shapeDesignTemplate(entry, previews, locale),
+    );
 
-  const liveEntries = await getCollection('templates');
-  const liveRecords = liveEntries.map((entry) =>
-    shapeLiveArtifactTemplate(entry, previews, locale),
-  );
+    const liveEntries = await getCollection('templates');
+    const liveRecords = liveEntries.map((entry) =>
+      shapeLiveArtifactTemplate(entry, previews, locale),
+    );
 
-  return [...designRecords, ...liveRecords].sort((a, b) => {
-    // Keep explicitly featured templates first, then group the canonical
-    // design-template catalogue ahead of legacy live-artifact shims.
-    const af = a.featured ?? Number.POSITIVE_INFINITY;
-    const bf = b.featured ?? Number.POSITIVE_INFINITY;
-    if (af !== bf) return af - bf;
-    if (a.origin !== b.origin) return a.origin === 'design-template' ? -1 : 1;
-    return a.name.localeCompare(b.name);
-  });
+    return [...designRecords, ...liveRecords].sort((a, b) => {
+      // Keep explicitly featured templates first, then group the canonical
+      // design-template catalogue ahead of legacy live-artifact shims.
+      const af = a.featured ?? Number.POSITIVE_INFINITY;
+      const bf = b.featured ?? Number.POSITIVE_INFINITY;
+      if (af !== bf) return af - bf;
+      if (a.origin !== b.origin) return a.origin === 'design-template' ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+  }
+
+  const cached = templateRecordsCache.get(locale);
+  if (cached) {
+    return cached;
+  }
+
+  const promise = (async () => {
+    const previews = listPreviews('templates');
+    const designEntries = await getCollection('designTemplates');
+    const designRecords = designEntries.map((entry) =>
+      shapeDesignTemplate(entry, previews, locale),
+    );
+
+    const liveEntries = await getCollection('templates');
+    const liveRecords = liveEntries.map((entry) =>
+      shapeLiveArtifactTemplate(entry, previews, locale),
+    );
+
+    return [...designRecords, ...liveRecords].sort((a, b) => {
+      // Keep explicitly featured templates first, then group the canonical
+      // design-template catalogue ahead of legacy live-artifact shims.
+      const af = a.featured ?? Number.POSITIVE_INFINITY;
+      const bf = b.featured ?? Number.POSITIVE_INFINITY;
+      if (af !== bf) return af - bf;
+      if (a.origin !== b.origin) return a.origin === 'design-template' ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+  })();
+
+  templateRecordsCache.set(locale, promise);
+  return promise;
 }
 
 // ---------------------------------------------------------------------------
@@ -677,6 +783,8 @@ export interface CatalogCounts {
   byPlatform: Readonly<Record<string, number>>;
 }
 
+const catalogCountsCache = new Map<LandingLocaleCode, Promise<CatalogCounts>>();
+
 function tallyKey(values: Iterable<string | undefined>): Record<string, number> {
   const out: Record<string, number> = {};
   for (const v of values) {
@@ -687,21 +795,50 @@ function tallyKey(values: Iterable<string | undefined>): Record<string, number> 
   return out;
 }
 
-export async function getCatalogCounts(): Promise<CatalogCounts> {
-  const [skills, systems, templates, craft] = await Promise.all([
-    getSkillRecords(),
-    getSystemRecords(),
-    getTemplateRecords(),
-    getCraftRecords(),
-  ]);
-  return {
-    skills: skills.length,
-    systems: systems.length,
-    templates: templates.length,
-    craft: craft.length,
-    byMode: tallyKey(skills.map((s) => s.mode)),
-    byPlatform: tallyKey(skills.map((s) => s.platform)),
-  };
+export async function getCatalogCounts(
+  locale: LandingLocaleCode = DEFAULT_LOCALE,
+): Promise<CatalogCounts> {
+  if (!SHOULD_CACHE_CATALOG) {
+    const [skills, systems, templates, craft] = await Promise.all([
+      getSkillRecords(locale),
+      getSystemRecords(locale),
+      getTemplateRecords(locale),
+      getCraftRecords(locale),
+    ]);
+    return {
+      skills: skills.length,
+      systems: systems.length,
+      templates: templates.length,
+      craft: craft.length,
+      byMode: tallyKey(skills.map((s) => s.mode)),
+      byPlatform: tallyKey(skills.map((s) => s.platform)),
+    };
+  }
+
+  const cached = catalogCountsCache.get(locale);
+  if (cached) {
+    return cached;
+  }
+
+  const promise = (async () => {
+    const [skills, systems, templates, craft] = await Promise.all([
+      getSkillRecords(locale),
+      getSystemRecords(locale),
+      getTemplateRecords(locale),
+      getCraftRecords(locale),
+    ]);
+    return {
+      skills: skills.length,
+      systems: systems.length,
+      templates: templates.length,
+      craft: craft.length,
+      byMode: tallyKey(skills.map((s) => s.mode)),
+      byPlatform: tallyKey(skills.map((s) => s.platform)),
+    };
+  })();
+
+  catalogCountsCache.set(locale, promise);
+  return promise;
 }
 
 // ---------------------------------------------------------------------------

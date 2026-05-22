@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import type { Dialog, Locator, Page, Request, Response } from '@playwright/test';
 import { automatedUiScenarios } from '@/playwright/resources';
 import type { UiScenario } from '@/playwright/resources';
+import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
 
@@ -2123,43 +2124,18 @@ async function expectWorkspaceReady(page: Page) {
   await expect(page.getByTestId('file-workspace')).toBeVisible();
 }
 
-async function sendPrompt(
-  page: Page,
-  prompt: string,
-) {
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const input = page.getByTestId('chat-composer-input');
-    const sendButton = page.getByTestId('chat-send');
-    await expect(input).toBeVisible({ timeout: 3_000 });
-    await input.fill(prompt);
-    try {
-      await expect(input).toHaveValue(prompt, { timeout: 1500 });
-      await expect(sendButton).toBeEnabled({ timeout: 1500 });
-      await Promise.all([
-        page.waitForResponse(isCreateRunResponse, { timeout: 5_000 }),
-        sendButton.evaluate((button: HTMLButtonElement) => button.click()),
-      ]);
-      return;
-    } catch (error) {
-      const retryInput = page.getByTestId('chat-composer-input');
-      const retrySendButton = page.getByTestId('chat-send');
-      await expect(retryInput).toBeVisible({ timeout: 3_000 });
-      await retryInput.press(`${process.platform === 'darwin' ? 'Meta' : 'Control'}+A`);
-      await retryInput.press('Backspace');
-      await retryInput.pressSequentially(prompt);
-      try {
-        await expect(retryInput).toHaveValue(prompt, { timeout: 1500 });
-        await expect(retrySendButton).toBeEnabled({ timeout: 1500 });
-        await Promise.all([
-          page.waitForResponse(isCreateRunResponse, { timeout: 5_000 }),
-          retrySendButton.evaluate((button: HTMLButtonElement) => button.click()),
-        ]);
-        return;
-      } catch (retryError) {
-        if (attempt === 2) throw retryError;
-      }
-    }
-  }
+async function sendPrompt(page: Page, prompt: string) {
+  const input = page.getByTestId('chat-composer-input');
+  const sendButton = page.getByTestId('chat-send');
+  await expect(input).toBeVisible({ timeout: 3_000 });
+  await input.click();
+  await input.fill(prompt);
+  await expect(input).toHaveValue(prompt, { timeout: 1500 });
+  await expect(sendButton).toBeEnabled({ timeout: 1500 });
+  await Promise.all([
+    page.waitForResponse(isCreateRunResponse, { timeout: 5_000 }),
+    sendButton.evaluate((button: HTMLButtonElement) => button.click()),
+  ]);
 }
 
 function tabBySuffix(page: Page, name: string): Locator {
@@ -2521,7 +2497,7 @@ async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
-  if (await privacyDialog.isVisible().catch(() => false)) {
+  if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /not now/i }).click();
     await expect(privacyDialog).toHaveCount(0);
   }
@@ -2555,8 +2531,7 @@ async function expectProjectsView(page: Page) {
 }
 
 async function waitForLoadingToClear(page: Page) {
-  const loading = page.getByText('Loading Open Design…');
-  await loading.waitFor({ state: 'detached', timeout: 10_000 }).catch(() => {});
+  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.medium });
 }
 
 async function getCurrentProjectContext(

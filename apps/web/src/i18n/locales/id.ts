@@ -877,6 +877,7 @@ export const id: Dict = {
   'chat.new': 'Baru',
   'chat.emptyConversations': 'Belum ada percakapan.',
   'chat.deleteConversation': 'Hapus percakapan',
+  'chat.renameConversationLabel': 'Ganti nama "{title}"',
   'chat.deleteConversationConfirm': 'Hapus "{title}"? Semua pesannya ikut dihapus.',
   'chat.untitledConversation': 'Percakapan tanpa judul',
   'chat.startTitle': 'Mulai percakapan',

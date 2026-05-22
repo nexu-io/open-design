@@ -719,6 +719,7 @@ export const th: Dict = {
   'chat.new': 'ใหม่',
   'chat.emptyConversations': 'ยังไม่มีบทสนทนา',
   'chat.deleteConversation': 'ลบบทสนทนา',
+  'chat.renameConversationLabel': 'เปลี่ยนชื่อ "{title}"',
   'chat.deleteConversationConfirm': 'ลบ "{title}" หรือไม่?',
   'chat.untitledConversation': 'บทสนทนาที่ไม่มีชื่อ',
   'chat.startTitle': 'เริ่มแชทได้เลย',

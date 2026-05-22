@@ -785,6 +785,7 @@ export const fa: Dict = {
   'chat.new': 'جدید',
   'chat.emptyConversations': 'هنوز هیچ مکالمه‌ای وجود ندارد.',
   'chat.deleteConversation': 'حذف مکالمه',
+  'chat.renameConversationLabel': 'تغییر نام «{title}»',
   'chat.deleteConversationConfirm':
     'آیا «{title}» حذف شود؟ این کار پیام‌های آن را حذف می‌کند.',
   'chat.untitledConversation': 'مکالمه بدون عنوان',

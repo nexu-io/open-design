@@ -763,6 +763,7 @@ export const hu: Dict = {
   'chat.new': 'Új',
   'chat.emptyConversations': 'Még nincs beszélgetés.',
   'chat.deleteConversation': 'Beszélgetés törlése',
+  'chat.renameConversationLabel': '„{title}” átnevezése',
   'chat.deleteConversationConfirm':
     'Törlöd a(z) „{title}" beszélgetést? Ez eltávolítja az üzeneteit.',
   'chat.untitledConversation': 'Cím nélküli beszélgetés',
