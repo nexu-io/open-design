@@ -1489,6 +1489,8 @@ export const en: Dict = {
   'designFiles.kindSpreadsheet': 'Spreadsheet',
   'designFiles.kindLiveArtifact': 'Live artifact',
   'designFiles.kindBinary': 'Binary',
+  'designFiles.kindFolder': 'Folder',
+  'designFiles.folderCount': '{n} files',
   'designFiles.colName': 'Name',
   'designFiles.colKind': 'Kind',
   'designFiles.colModified': 'Modified',

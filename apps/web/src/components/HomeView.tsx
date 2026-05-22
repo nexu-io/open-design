@@ -417,6 +417,7 @@ export function HomeView({
     setPendingAuthoringPrompt(promptHandoff.prompt);
     setPendingAuthoringInputs(promptHandoff.inputs);
     setPendingAuthoringChipId('create-plugin');
+    setPendingChipId('create-plugin');
   }, [promptHandoff]);
 
   const activeContextItemCount = useMemo(
@@ -1032,6 +1033,7 @@ export function HomeView({
       setPendingAuthoringPrompt(nextPrompt);
       setPendingAuthoringInputs(nextInputs);
       setPendingAuthoringChipId(chipId ?? 'create-plugin');
+      setPendingChipId(chipId ?? 'create-plugin');
       focusPromptAtEnd();
     }, {
       before: active?.record.id ?? null,
@@ -1045,6 +1047,7 @@ export function HomeView({
     const record = authoringRecord ?? plugins.find((plugin) => plugin.id === 'od-new-generation');
     setPendingAuthoringChipId(null);
     if (!record) {
+      setPendingChipId(null);
       // The authoring scenario can be absent in a long-running dev
       // daemon that started before the bundled plugin was added. If
       // even the default scenario is missing, do not block the user:

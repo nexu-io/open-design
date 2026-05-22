@@ -173,6 +173,8 @@ export interface ChatMessage {
   attachments?: ChatAttachment[];
   commentAttachments?: ChatCommentAttachment[];
   producedFiles?: ProjectFile[];
+  // Diff baseline so reattach can rebuild producedFiles after reload.
+  preTurnFileNames?: string[];
   feedback?: ChatMessageFeedback;
   /**
    * Request-only marker for the final assistant-message persistence pass.

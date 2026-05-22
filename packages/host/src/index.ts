@@ -31,7 +31,7 @@ export type OpenDesignHostProjectImportInit = {
 
 export type OpenDesignHostProjectImportSuccess = {
   conversationId: string;
-  entryFile: string;
+  entryFile: string | null;
   ok: true;
   projectId: string;
 };
@@ -310,8 +310,11 @@ export function normalizeOpenDesignHostProjectImportResult(input: unknown): Open
   const rawProjectId = isRecord(project) ? project.id : null;
   const projectId = typeof rawProjectId === "string" ? rawProjectId : null;
   const conversationId = typeof response.conversationId === "string" ? response.conversationId : null;
-  const entryFile = typeof response.entryFile === "string" ? response.entryFile : null;
-  if (projectId == null || conversationId == null || entryFile == null) {
+  const entryFile =
+    typeof response.entryFile === "string" || response.entryFile === null
+      ? response.entryFile
+      : undefined;
+  if (projectId == null || conversationId == null || entryFile === undefined) {
     return failure("daemon import response did not include host project identifiers", response);
   }
 

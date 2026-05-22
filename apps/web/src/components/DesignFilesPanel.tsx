@@ -118,12 +118,36 @@ export function DesignFilesPanel({
   const [kindFilter, setKindFilter] = useState<Set<ProjectFileKind>>(() => new Set());
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const filterMenuRef = useRef<HTMLDivElement | null>(null);
+  const [currentDir, setCurrentDir] = useState<string>('');
+
+  // Derive immediate subdirectories and files at the current directory level
+  // from the flat files list. Files with names like "a/b/c.html" contribute
+  // "a" as a directory when currentDir is '' and "b" when currentDir is "a".
+  const { dirsAtCurrentDir, filesAtCurrentDir } = useMemo(() => {
+    const prefix = currentDir === '' ? '' : `${currentDir}/`;
+    const dirs = new Set<string>();
+    const localFiles: ProjectFile[] = [];
+    for (const f of files) {
+      if (!f.name.startsWith(prefix)) continue;
+      const remainder = f.name.slice(prefix.length);
+      const slashIdx = remainder.indexOf('/');
+      if (slashIdx === -1) {
+        localFiles.push(f);
+      } else {
+        dirs.add(remainder.slice(0, slashIdx));
+      }
+    }
+    return {
+      dirsAtCurrentDir: [...dirs].sort((a, b) => a.localeCompare(b)),
+      filesAtCurrentDir: localFiles,
+    };
+  }, [files, currentDir]);
 
   const kindCounts = useMemo(() => {
     const counts = new Map<ProjectFileKind, number>();
-    for (const f of files) counts.set(f.kind, (counts.get(f.kind) ?? 0) + 1);
+    for (const f of filesAtCurrentDir) counts.set(f.kind, (counts.get(f.kind) ?? 0) + 1);
     return counts;
-  }, [files]);
+  }, [filesAtCurrentDir]);
 
   const availableKinds = useMemo(
     () =>
@@ -151,9 +175,9 @@ export function DesignFilesPanel({
   }, [availableKinds]);
 
   const filteredFiles = useMemo(() => {
-    if (kindFilter.size === 0) return files;
-    return files.filter((f) => kindFilter.has(f.kind));
-  }, [files, kindFilter]);
+    if (kindFilter.size === 0) return filesAtCurrentDir;
+    return filesAtCurrentDir.filter((f) => kindFilter.has(f.kind));
+  }, [filesAtCurrentDir, kindFilter]);
 
   const sortedFiles = useMemo(() => {
     return [...filteredFiles].sort((a, b) => {
@@ -198,7 +222,7 @@ export function DesignFilesPanel({
   );
   const rangeStart = safePage * effectivePageSize + 1;
   const rangeEnd = Math.min((safePage + 1) * effectivePageSize, sortedFiles.length);
-  const allPageSelected = pageFiles.every((f) => selected.has(f.name));
+  const allPageSelected = pageFiles.length > 0 && pageFiles.every((f) => selected.has(f.name));
   const somePageSelected = !allPageSelected && pageFiles.some((f) => selected.has(f.name));
   const hasMultiplePages = totalPages > 1;
   const showListControls = sortedFiles.length > 15 || selected.size > 0;
@@ -232,6 +256,31 @@ export function DesignFilesPanel({
       return changed ? next : prev;
     });
   }, [filteredFiles, kindFilter]);
+
+  // Reset page, selection, and renaming state when the user navigates
+  // into or out of a directory.
+  useEffect(() => {
+    setPage(0);
+    setSelected(new Set());
+    setRenaming(null);
+  }, [currentDir]);
+
+  // Navigate up to the nearest ancestor that still exists when files under
+  // currentDir disappear (e.g. after deleting the last file in a subfolder).
+  useEffect(() => {
+    if (currentDir === '') return;
+    const prefix = `${currentDir}/`;
+    if (files.some((f) => f.name.startsWith(prefix))) return;
+    const parts = currentDir.split('/');
+    for (let i = parts.length - 1; i > 0; i--) {
+      const ancestor = parts.slice(0, i).join('/');
+      if (files.some((f) => f.name.startsWith(`${ancestor}/`))) {
+        setCurrentDir(ancestor);
+        return;
+      }
+    }
+    setCurrentDir('');
+  }, [files, currentDir]);
 
   // Outside-click + escape to close the filter popover. Stops short of a
   // full focus trap because the popover hosts only checkboxes plus a
@@ -400,12 +449,18 @@ export function DesignFilesPanel({
   function startRename(name: string) {
     setMenuPos(null);
     setPreview(name);
-    setRenaming({ name, draft: name, saving: false });
+    const draft = currentDir === '' ? name : name.slice(currentDir.length + 1);
+    setRenaming({ name, draft, saving: false });
   }
 
   async function commitRename(name: string, draft: string) {
-    const nextName = draft.trim();
-    if (!nextName || nextName === name) {
+    const nextBasename = draft.trim();
+    if (!nextBasename) {
+      setRenaming(null);
+      return;
+    }
+    const nextName = currentDir === '' ? nextBasename : `${currentDir}/${nextBasename}`;
+    if (nextName === name) {
       setRenaming(null);
       return;
     }
@@ -553,7 +608,7 @@ export function DesignFilesPanel({
               }}
             >
               <span className="df-row-name-wrap">
-                <span className="df-row-name">{f.name}</span>
+                <span className="df-row-name">{currentDir === '' ? f.name : f.name.slice(currentDir.length + 1)}</span>
                 <span className="df-row-sub">{humanBytes(f.size)}</span>
               </span>
             </button>
@@ -600,8 +655,38 @@ export function DesignFilesPanel({
     );
   }
 
+  function renderDirRow(dirName: string) {
+    const fullPath = currentDir === '' ? dirName : `${currentDir}/${dirName}`;
+    const prefix = `${fullPath}/`;
+    const count = files.filter((f) => f.name.startsWith(prefix)).length;
+    return (
+      <tr key={`dir:${fullPath}`} className="df-file-row df-dir-row">
+        <td className="df-cell-check" />
+        <td className="df-cell-icon df-cell-openable" onClick={() => setCurrentDir(fullPath)}>
+          <span className="df-row-icon" data-kind="folder" aria-hidden>
+            <Icon name="folder" size={14} />
+          </span>
+        </td>
+        <td className="df-cell-name df-cell-openable" onClick={() => setCurrentDir(fullPath)}>
+          <button type="button" className="df-row-name-btn" onClick={() => setCurrentDir(fullPath)}>
+            <span className="df-row-name-wrap">
+              <span className="df-row-name">{dirName}</span>
+              <span className="df-row-sub">{t('designFiles.folderCount', { n: count })}</span>
+            </span>
+          </button>
+        </td>
+        <td className="df-cell-kind df-cell-openable" onClick={() => setCurrentDir(fullPath)}>
+          <span className="df-kind-label">{t('designFiles.kindFolder')}</span>
+        </td>
+        <td className="df-cell-time df-cell-openable" onClick={() => setCurrentDir(fullPath)} />
+        <td className="df-cell-menu" />
+      </tr>
+    );
+  }
+
   function renderModifiedSections() {
-    return visibleModifiedSections.flatMap((section) => {
+    const dirRows = dirsAtCurrentDir.map((d) => renderDirRow(d));
+    const sectionRows = visibleModifiedSections.flatMap((section) => {
       const sectionFiles = modifiedGroups[section];
       const collapsed = collapsedModifiedSections.has(section);
       const label = t(MODIFIED_SECTION_LABEL_KEY[section]);
@@ -624,9 +709,11 @@ export function DesignFilesPanel({
         ...(collapsed ? [] : sectionFiles.map(renderFileRow)),
       ];
     });
+    return [...dirRows, ...sectionRows];
   }
 
   function renderKindSections() {
+    const dirRows = dirsAtCurrentDir.map((d) => renderDirRow(d));
     const grouped = new Map<ProjectFileKind, ProjectFile[]>();
     for (const file of pageFiles) {
       const next = grouped.get(file.kind) ?? [];
@@ -634,7 +721,7 @@ export function DesignFilesPanel({
       grouped.set(file.kind, next);
     }
 
-    return [...grouped.entries()]
+    const kindRows = [...grouped.entries()]
       .sort(([a], [b]) => kindSortPriority(a) - kindSortPriority(b))
       .flatMap(([kind, kindFiles]) => [
         <tr className="df-section-row" key={`${kind}-label`}>
@@ -647,6 +734,7 @@ export function DesignFilesPanel({
         </tr>,
         ...kindFiles.map(renderFileRow),
       ]);
+    return [...dirRows, ...kindRows];
   }
 
   async function handleBatchDownload() {
@@ -908,6 +996,37 @@ export function DesignFilesPanel({
             {kindFilterControl}
             {fileActions}
           </div>
+          {currentDir !== '' ? (
+            <nav className="df-breadcrumbs" aria-label={t('designFiles.crumbs')}>
+              <button
+                type="button"
+                className="df-breadcrumb-btn"
+                onClick={() => setCurrentDir('')}
+              >
+                {t('designFiles.crumbs')}
+              </button>
+              {currentDir.split('/').map((segment, idx, parts) => {
+                const path = parts.slice(0, idx + 1).join('/');
+                const isLast = idx === parts.length - 1;
+                return (
+                  <span key={path} className="df-breadcrumb-segment">
+                    <span className="df-breadcrumb-sep" aria-hidden>/</span>
+                    {isLast ? (
+                      <span className="df-breadcrumb-current">{segment}</span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="df-breadcrumb-btn"
+                        onClick={() => setCurrentDir(path)}
+                      >
+                        {segment}
+                      </button>
+                    )}
+                  </span>
+                );
+              })}
+            </nav>
+          ) : null}
           {files.length === 0 && liveArtifacts.length === 0 ? (
             <div className="df-empty" data-testid="design-files-empty">
               <div className="df-empty-pill">
@@ -1033,7 +1152,7 @@ export function DesignFilesPanel({
                   ))}
                 </div>
               ) : null}
-              {sortedFiles.length > 0 ? (
+              {(sortedFiles.length > 0 || dirsAtCurrentDir.length > 0) ? (
                 <>
                   {showListControls ? (
                     <div className="df-pagination df-pagination-start">
@@ -1131,7 +1250,7 @@ export function DesignFilesPanel({
                         ? renderModifiedSections()
                         : groupMode === 'kind'
                           ? renderKindSections()
-                          : pageFiles.map(renderFileRow)}
+                          : [...dirsAtCurrentDir.map(renderDirRow), ...pageFiles.map(renderFileRow)]}
                     </tbody>
                   </table>
                   {hasMultiplePages ? (
