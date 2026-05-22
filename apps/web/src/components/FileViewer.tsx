@@ -3994,7 +3994,14 @@ function HtmlViewer({
     : livePreviewSource;
   const manualEditPageStylesEnabled = typeof source === 'string' && isManualEditFullHtmlDocument(source);
   const drawClickSelectionMode = drawOverlayOpen && drawOverlayMode === 'click' && !manualEditMode;
-  const urlModeBridge = hasUrlModeBridge(source);
+  // Dual-path bridge detection (Issue #2143):
+  // 1. Source scan: checks for daemon-injected markers in the fetched HTML
+  //    (present because fetchProjectFileText → /raw/* → injectPreviewBridgesIntoHtml).
+  // 2. Transport-level fallback: any HTML file served through the daemon's
+  //    /raw/* route receives bridge injection unconditionally. When the daemon
+  //    is running the patched project-routes.ts, this is always true.
+  const isRawHtmlFile = file.kind === 'html' || /\\.html?$/i.test(file.name);
+  const urlModeBridge = hasUrlModeBridge(source) || isRawHtmlFile;
   // When we URL-load the iframe directly, skip every in-host inlining /
   // srcDoc-rebuilding step. The browser does the asset resolution itself,
   // which is the whole point of the URL-load path.
