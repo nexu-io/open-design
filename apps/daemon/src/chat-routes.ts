@@ -3,6 +3,7 @@ import type { RouteDeps } from './server-context.js';
 import { seedProviderIfMissing } from './media-config.js';
 import {
   BYOK_MEDIA_TOOLS,
+  defaultMediaModelsForProvider,
   executeGenerateImage,
   executeGenerateVideo,
   executeGenerateAudio,
@@ -748,76 +749,32 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     }
 
     const url = appendVersionedApiPath(baseUrl, '/chat/completions');
+    const { projectId, byokImageModel, byokVideoModel, byokAudioModel } =
+      proxyBody;
     console.log(
-      `[proxy:openai] ${req.method} ${validated.parsed!.hostname} model=${model}`,
+      `[proxy:openai] ${req.method} ${validated.parsed!.hostname} model=${model} project=${projectId ?? '-'}`,
     );
 
-    const payloadMessages = Array.isArray(messages) ? [...messages] : [];
-    if (typeof systemPrompt === 'string' && systemPrompt) {
-      payloadMessages.unshift({ role: 'system', content: systemPrompt });
-    }
-
-    const payload: any = {
+    // OpenAI's key unlocks image (gpt-image) + speech (TTS) media too — seed it
+    // so those work in-chat, and default each surface to OpenAI's model. The
+    // shared loop degrades to a plain LLM passthrough when no projectId is
+    // present, so non-project OpenAI chats keep working unchanged.
+    await runByokMediaChat({
+      res,
+      proxyBody,
+      providerTag: 'openai',
+      url,
+      authHeaders: { Authorization: `Bearer ${apiKey}` },
       model,
-      messages: payloadMessages,
-      max_tokens:
-        typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
-      stream: true,
-    };
-
-    runByokProxy(res, proxyBody, async ({ sse, signal }) => {
-      sse.send('start', { model });
-      try {
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify(payload),
-          redirect: 'error',
-          signal,
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(
-            `[proxy:openai] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
-          );
-          sendProxyError(sse, `Upstream error: ${response.status}`, {
-            code: proxyErrorCode(response.status),
-            details: errorText,
-            retryable: response.status === 429 || response.status >= 500,
-          });
-          return sse.end();
-        }
-
-        let ended = false;
-        await streamUpstreamSse(response, ({ payload, data }: any) => {
-          if (payload === '[DONE]') {
-            sse.send('end', {});
-            ended = true;
-            return true;
-          }
-          if (!data) return false;
-          const streamError = extractStreamErrorMessage(data);
-          if (streamError) {
-            sendProxyError(sse, `Provider error: ${streamError}`, { details: data });
-            ended = true;
-            return true;
-          }
-          const delta = extractOpenAIText(data);
-          if (delta) sse.send('delta', { delta });
-          return false;
-        });
-        if (!ended) sse.send('end', {});
-        sse.end();
-      } catch (err: any) {
-        if (err?.name === 'AbortError') return sse.end();
-        console.error(`[proxy:openai] internal error: ${err.message}`);
-        sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
-        sse.end();
-      }
+      systemPrompt,
+      messages,
+      maxTokens,
+      projectId,
+      seed: { provider: 'openai', apiKey, baseUrl },
+      surfaceDefaults: defaultMediaModelsForProvider('openai'),
+      byokImageModel,
+      byokVideoModel,
+      byokAudioModel,
     });
   });
 
@@ -864,76 +821,32 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     if (version) {
       url.searchParams.set('api-version', version);
     }
+    const { projectId, byokImageModel, byokVideoModel, byokAudioModel } =
+      proxyBody;
     console.log(
-      `[proxy:azure] ${req.method} ${validated.parsed!.hostname} deployment=${model} api-version=${version || 'omitted'}`,
+      `[proxy:azure] ${req.method} ${validated.parsed!.hostname} deployment=${model} api-version=${version || 'omitted'} project=${projectId ?? '-'}`,
     );
 
-    const payloadMessages = Array.isArray(messages) ? [...messages] : [];
-    if (typeof systemPrompt === 'string' && systemPrompt) {
-      payloadMessages.unshift({ role: 'system', content: systemPrompt });
-    }
-
-    const payload = {
-      ...(usesVersionedOpenAIPath ? { model } : {}),
-      messages: payloadMessages,
-      max_tokens:
-        typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
-      stream: true,
-    };
-
-    runByokProxy(res, proxyBody, async ({ sse, signal }) => {
-      sse.send('start', { model });
-      try {
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'api-key': apiKey,
-          },
-          body: JSON.stringify(payload),
-          redirect: 'error',
-          signal,
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(
-            `[proxy:azure] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
-          );
-          sendProxyError(sse, `Upstream error: ${response.status}`, {
-            code: proxyErrorCode(response.status),
-            details: errorText,
-            retryable: response.status === 429 || response.status >= 500,
-          });
-          return sse.end();
-        }
-
-        let ended = false;
-        await streamUpstreamSse(response, ({ payload: ssePayload, data }: any) => {
-          if (ssePayload === '[DONE]') {
-            sse.send('end', {});
-            ended = true;
-            return true;
-          }
-          if (!data) return false;
-          const streamError = extractStreamErrorMessage(data);
-          if (streamError) {
-            sendProxyError(sse, `Azure error: ${streamError}`, { details: data });
-            ended = true;
-            return true;
-          }
-          const delta = extractOpenAIText(data);
-          if (delta) sse.send('delta', { delta });
-          return false;
-        });
-        if (!ended) sse.send('end', {});
-        sse.end();
-      } catch (err: any) {
-        if (err?.name === 'AbortError') return sse.end();
-        console.error(`[proxy:azure] internal error: ${err.message}`);
-        sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
-        sse.end();
-      }
+    // Azure Open AI is OpenAI-compatible for chat, but the deployment path
+    // carries the model in the URL (so omit it from the body there). Azure has
+    // no dedicated media provider in the registry, so we don't self-seed —
+    // in-chat media routes to whatever the user configured in Settings → Media.
+    await runByokMediaChat({
+      res,
+      proxyBody,
+      providerTag: 'azure',
+      url: url.toString(),
+      authHeaders: { 'api-key': apiKey },
+      model,
+      includeModel: usesVersionedOpenAIPath,
+      systemPrompt,
+      messages,
+      maxTokens,
+      projectId,
+      seed: null,
+      byokImageModel,
+      byokVideoModel,
+      byokAudioModel,
     });
   });
 
@@ -1140,119 +1053,104 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         toolCalls: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }>;
       };
 
-  app.post('/api/proxy/senseaudio/stream', async (req, res) => {
-    const proxyBody = req.body || {};
-    if (rejectProxyPluginContext(proxyBody, res)) return;
+  // Shared media-chat tool loop for OpenAI-compatible BYOK proxies. SenseAudio,
+  // OpenAI, Azure, DeepSeek, and Ollama all speak the same /chat/completions +
+  // `tools` / `tool_calls` streaming protocol, so one loop drives them all:
+  // inject BYOK_MEDIA_TOOLS, stream text deltas to the client, accumulate any
+  // tool_calls, run generate_image/video/audio through generateMedia (which
+  // routes each model to its provider and reads media-config), feed the result
+  // back as a `tool` message, and loop until the model stops calling tools.
+  // Per-vendor differences are just the upstream url, auth headers, which
+  // provider's BYOK key to seed into media-config, and the surface fallback
+  // models used when the user neither named a model nor picked one.
+  const runByokMediaChat = async (opts: {
+    res: any;
+    proxyBody: any;
+    providerTag: string;
+    url: string;
+    authHeaders: Record<string, string>;
+    model: string;
+    /** Azure's deployment path carries the model in the URL and rejects it in
+     *  the body; pass false there. Defaults to true (standard OpenAI shape). */
+    includeModel?: boolean;
+    systemPrompt?: unknown;
+    messages?: unknown;
+    maxTokens?: unknown;
+    projectId: string;
+    seed?: { provider: string; apiKey: string; baseUrl?: string } | null;
+    surfaceDefaults?: { image?: string; video?: string; audio?: string };
+    byokImageModel?: unknown;
+    byokVideoModel?: unknown;
+    byokAudioModel?: unknown;
+  }): Promise<void> => {
     const {
-      baseUrl,
-      apiKey,
+      res,
+      proxyBody,
+      providerTag,
+      url,
+      authHeaders,
       model,
+      includeModel = true,
       systemPrompt,
       messages,
       maxTokens,
       projectId,
+      seed,
+      surfaceDefaults = {},
       byokImageModel,
       byokVideoModel,
       byokAudioModel,
-    } = proxyBody;
-    if (!apiKey || !model) {
-      return sendApiError(
-        res,
-        400,
-        'BAD_REQUEST',
-        'apiKey and model are required',
-      );
-    }
-    // projectId is required because the BYOK generate_image tool writes
-    // into the active project's folder; without one we'd have to fall
-    // back to a daemon-global cache that orphans the file. The web
-    // client always passes project.id from ProjectView, so a missing
-    // value means the request did not come through the chat surface.
-    if (typeof projectId !== 'string' || !isSafeProjectId(projectId)) {
-      return sendApiError(
-        res,
-        400,
-        'BAD_REQUEST',
-        'projectId is required and must be a safe identifier',
-      );
-    }
-
-    const effectiveBaseUrl = baseUrl || 'https://api.senseaudio.cn';
-    const validated = await validateExternalApiBaseUrl(effectiveBaseUrl);
-    if (validated.error) {
-      return sendApiError(
-        res,
-        validated.forbidden ? 403 : 400,
-        validated.forbidden ? 'FORBIDDEN' : 'BAD_REQUEST',
-        validated.error,
-      );
-    }
-
-    const url = appendVersionedApiPath(effectiveBaseUrl, '/chat/completions');
-    console.log(
-      `[proxy:senseaudio] ${req.method} ${validated.parsed?.hostname ?? '?'} model=${model} project=${projectId} pin[img=${byokImageModel ?? '-'} vid=${byokVideoModel ?? '-'} aud=${byokAudioModel ?? '-'}]`,
-    );
+    } = opts;
 
     const workingMessages: any[] = Array.isArray(messages) ? [...messages] : [];
     if (typeof systemPrompt === 'string' && systemPrompt) {
       workingMessages.unshift({ role: 'system', content: systemPrompt });
     }
 
-    // Tool execution context — built once per request. The media tools
-    // write into `<projectsRoot>/<projectId>/` and return relative URLs via
-    // `/api/projects/:id/files/:filename`. The web's Next.js rewrites
-    // `/api/:path*` to the daemon, so the chat UI loads files same-origin
-    // through the standard project file route — no CSP / CORS exceptions.
-    //
-    // Composer-selected default models per surface. Drop silently if the
-    // client sent an id outside the registry — the tool falls back to the
-    // catalogue default and the LLM can still override per-call via `model`.
-    // Spread-conditional because tsconfig's exactOptionalPropertyTypes forbids
-    // `field: undefined` on an optional slot.
+    // Media tools write into the active project's folder, so they only work
+    // when the request carries a valid projectId. When it doesn't (e.g. a BYOK
+    // chat outside a project), degrade to a plain LLM passthrough: no tools are
+    // injected, so the model never tries to generate media it can't persist.
+    const mediaEnabled =
+      typeof projectId === 'string' && isSafeProjectId(projectId);
+
+    // Tool execution context — built once per request. Media tools write into
+    // `<projectsRoot>/<projectId>/` and return `/api/projects/:id/files/:name`
+    // URLs that the web loads same-origin. `surfaceDefaults` are the fallback
+    // when nothing is pinned and the LLM omits a model; the composer pick is
+    // the per-surface default, and an explicit `model` arg from the LLM (the
+    // user named one in chat) overrides both. Spread-conditional because
+    // exactOptionalPropertyTypes forbids `field: undefined` on optional slots.
     const toolCtx: BYOKToolContext = {
       projectRoot: ctx.paths.PROJECT_ROOT,
       projectsRoot: ctx.paths.PROJECTS_DIR,
       projectId,
-      // Surface fallback when nothing is pinned and the LLM omits a model:
-      // the SenseAudio model for that surface (this chat only has the
-      // SenseAudio key seeded, so the catalogue default — gpt-image-2 etc. —
-      // would fail without keys).
-      defaultImageModel: SENSEAUDIO_DEFAULT_IMAGE_MODEL,
-      defaultVideoModel: SENSEAUDIO_DEFAULT_VIDEO_MODEL,
-      defaultAudioModel: SENSEAUDIO_DEFAULT_AUDIO_MODEL,
-      // The composer pick is the DEFAULT for each surface — used when the user
-      // didn't name a model in chat. An explicit model in the user's message
-      // (which the LLM forwards as the tool's `model` arg) takes precedence.
+      ...(surfaceDefaults.image ? { defaultImageModel: surfaceDefaults.image } : {}),
+      ...(surfaceDefaults.video ? { defaultVideoModel: surfaceDefaults.video } : {}),
+      ...(surfaceDefaults.audio ? { defaultAudioModel: surfaceDefaults.audio } : {}),
       ...(isImageModel(byokImageModel) ? { composerImageModel: byokImageModel } : {}),
       ...(isVideoModel(byokVideoModel) ? { composerVideoModel: byokVideoModel } : {}),
       ...(isAudioModel(byokAudioModel) ? { composerAudioModel: byokAudioModel } : {}),
     };
 
-    // Run one round-trip: POST to upstream, stream text deltas to the
-    // client as they arrive, accumulate any tool_call deltas. Returns
-    // a typed result describing what to do next (loop on tool calls,
-    // close the stream, or bail on error). Closures capture all the
-    // SSE helpers from registerChatRoutes.
-    const runSenseAudioTurn = async (
+    // One upstream round-trip: POST with tools, stream text deltas as they
+    // arrive, accumulate tool_call fragments. Returns what to do next.
+    const runTurn = async (
       sse: any,
       messagesForTurn: any[],
       signal: AbortSignal,
     ): Promise<TurnResult> => {
       const payload: any = {
-        model,
+        ...(includeModel ? { model } : {}),
         messages: messagesForTurn,
         max_tokens:
           typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
         stream: true,
-        tools: BYOK_MEDIA_TOOLS,
-        tool_choice: 'auto',
+        ...(mediaEnabled ? { tools: BYOK_MEDIA_TOOLS, tool_choice: 'auto' } : {}),
       };
       const response = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
         body: JSON.stringify(payload),
         redirect: 'error',
         signal,
@@ -1261,7 +1159,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       if (!response.ok) {
         const errorText = await response.text();
         console.error(
-          `[proxy:senseaudio] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
+          `[proxy:${providerTag}] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
         );
         sendProxyError(sse, `Upstream error: ${response.status}`, {
           code: proxyErrorCode(response.status),
@@ -1290,20 +1188,10 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         const choice = choices[0] || {};
         const delta = choice.delta || {};
 
-        // Text content streams to the client unchanged. Tool turns and
-        // text turns can both share this path — the OpenAI protocol
-        // never emits text+tool_calls in the same chunk, but it can
-        // emit text before / after a tool_call in the same turn, and
-        // we want the user to see whatever the model decided to say.
         if (typeof delta.content === 'string' && delta.content) {
           sse.send('delta', { delta: delta.content });
         }
 
-        // Tool call deltas stream as fragments — `id` arrives once at
-        // the start, `function.name` once at the start, and
-        // `function.arguments` accumulates a chunked JSON string we
-        // have to concatenate. Parallel calls use the `index` field to
-        // distinguish slots. Default to 0 when omitted (older models).
         if (Array.isArray(delta.tool_calls)) {
           for (const tc of delta.tool_calls) {
             const idx = typeof tc?.index === 'number' ? tc.index : 0;
@@ -1386,26 +1274,28 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       return executeGenerateAudio(args, toolCtx);
     };
 
-    // SenseAudio's gateway issues one API key that works for /v1/chat/completions
-    // and the media surfaces alike. Mirror the BYOK key into media-config so the
-    // media tools (which now route through generateMedia and read media-config)
-    // and the CLI agent path (`od media generate`) both pick it up. Awaited so
-    // the SenseAudio credential is on disk before the first tool fires;
-    // seedProviderIfMissing is idempotent and preserves env-var-resolved keys.
-    try {
-      const seeded = await seedProviderIfMissing(ctx.paths.PROJECT_ROOT, 'senseaudio', {
-        apiKey,
-        baseUrl: effectiveBaseUrl,
-      });
-      if (seeded) {
-        console.log('[proxy:senseaudio] seeded media-config.senseaudio from BYOK key');
+    // Mirror the BYOK key into media-config so the media tools (which route
+    // through generateMedia and read media-config) and the CLI agent path
+    // (`od media generate`) both pick it up. Only seeds vendors whose key
+    // actually unlocks a media API (e.g. SenseAudio, OpenAI); seedProviderIfMissing
+    // is idempotent and preserves env-var-resolved keys. Awaited so the
+    // credential is on disk before the first tool fires.
+    if (seed && mediaEnabled) {
+      try {
+        const seeded = await seedProviderIfMissing(ctx.paths.PROJECT_ROOT, seed.provider, {
+          apiKey: seed.apiKey,
+          ...(seed.baseUrl ? { baseUrl: seed.baseUrl } : {}),
+        });
+        if (seeded) {
+          console.log(`[proxy:${providerTag}] seeded media-config.${seed.provider} from BYOK key`);
+        }
+      } catch (err: unknown) {
+        console.warn(
+          `[proxy:${providerTag}] seed media-config failed: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
       }
-    } catch (err: unknown) {
-      console.warn(
-        `[proxy:senseaudio] seed media-config failed: ${
-          err instanceof Error ? err.message : String(err)
-        }`,
-      );
     }
 
     runByokProxy(res, proxyBody, async ({ sse, signal, run }) => {
@@ -1413,7 +1303,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       try {
         for (let loop = 0; loop < MAX_BYOK_TOOL_LOOPS; loop++) {
           if (run.cancelRequested) return sse.end();
-          const turn = await runSenseAudioTurn(sse, workingMessages, signal);
+          const turn = await runTurn(sse, workingMessages, signal);
           if (turn.kind === 'error') return sse.end();
           if (turn.kind === 'text_end') {
             sse.send('end', {});
@@ -1425,20 +1315,18 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
             if (run.cancelRequested) return sse.end();
             const result = await executeOneTool(call);
             // The tool result is delivered to the model as a `tool` role
-            // message — a structured payload the model can interpret. We
-            // also surface a daemon-side log line so a user reporting "no
-            // image showed up" can grep for the call id. The kind field
-            // picks the right embedding hint: markdown image for PNG,
-            // markdown link for video / audio (the chat renderer doesn't
-            // embed <video> / <audio> tags).
+            // message — a structured payload it can interpret. We also log a
+            // daemon-side line so a user reporting "no image showed up" can
+            // grep for the call id. The kind field picks the embedding hint:
+            // markdown image for PNG, markdown link for video / audio.
             const toolName = call?.function?.name ?? 'unknown';
             if (result.ok) {
               console.log(
-                `[proxy:senseaudio] ${toolName} OK: ${call.id} → ${result.url}`,
+                `[proxy:${providerTag}] ${toolName} OK: ${call.id} → ${result.url}`,
               );
             } else {
               console.warn(
-                `[proxy:senseaudio] ${toolName} FAILED: ${call.id} — ${result.error}`,
+                `[proxy:${providerTag}] ${toolName} FAILED: ${call.id} — ${result.error}`,
               );
             }
             const content = result.ok
@@ -1459,20 +1347,92 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
             });
           }
         }
-        // Tool loop exhausted — the model still wants to call tools but we
-        // refuse a 4th round. Close the stream gracefully; the last text
-        // delta the model emitted (if any) is already on the wire.
+        // Tool loop exhausted — refuse a further round so a misbehaving model
+        // can't pin the daemon. Close gracefully; any trailing text is already
+        // on the wire.
         console.warn(
-          '[proxy:senseaudio] tool loop bounded at MAX_BYOK_TOOL_LOOPS=3',
+          `[proxy:${providerTag}] tool loop bounded at MAX_BYOK_TOOL_LOOPS=${MAX_BYOK_TOOL_LOOPS}`,
         );
         sse.send('end', {});
         return sse.end();
       } catch (err: any) {
         if (err?.name === 'AbortError') return sse.end();
-        console.error(`[proxy:senseaudio] internal error: ${err.message}`);
+        console.error(`[proxy:${providerTag}] internal error: ${err.message}`);
         sendProxyError(sse, err.message, { code: 'INTERNAL_ERROR' });
         sse.end();
       }
+    });
+  };
+
+  app.post('/api/proxy/senseaudio/stream', async (req, res) => {
+    const proxyBody = req.body || {};
+    if (rejectProxyPluginContext(proxyBody, res)) return;
+    const {
+      baseUrl,
+      apiKey,
+      model,
+      systemPrompt,
+      messages,
+      maxTokens,
+      projectId,
+      byokImageModel,
+      byokVideoModel,
+      byokAudioModel,
+    } = proxyBody;
+    if (!apiKey || !model) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'apiKey and model are required');
+    }
+    // projectId is required because the media tools write into the active
+    // project's folder; a missing value means the request didn't come through
+    // the chat surface.
+    if (typeof projectId !== 'string' || !isSafeProjectId(projectId)) {
+      return sendApiError(
+        res,
+        400,
+        'BAD_REQUEST',
+        'projectId is required and must be a safe identifier',
+      );
+    }
+
+    const effectiveBaseUrl = baseUrl || 'https://api.senseaudio.cn';
+    const validated = await validateExternalApiBaseUrl(effectiveBaseUrl);
+    if (validated.error) {
+      return sendApiError(
+        res,
+        validated.forbidden ? 403 : 400,
+        validated.forbidden ? 'FORBIDDEN' : 'BAD_REQUEST',
+        validated.error,
+      );
+    }
+
+    const url = appendVersionedApiPath(effectiveBaseUrl, '/chat/completions');
+    console.log(
+      `[proxy:senseaudio] ${req.method} ${validated.parsed?.hostname ?? '?'} model=${model} project=${projectId} pin[img=${byokImageModel ?? '-'} vid=${byokVideoModel ?? '-'} aud=${byokAudioModel ?? '-'}]`,
+    );
+
+    // SenseAudio's gateway issues one key that works for /v1/chat/completions
+    // and every media surface, so seed it and default each surface to the
+    // SenseAudio model (this chat only has the SenseAudio key configured).
+    await runByokMediaChat({
+      res,
+      proxyBody,
+      providerTag: 'senseaudio',
+      url,
+      authHeaders: { Authorization: `Bearer ${apiKey}` },
+      model,
+      systemPrompt,
+      messages,
+      maxTokens,
+      projectId,
+      seed: { provider: 'senseaudio', apiKey, baseUrl: effectiveBaseUrl },
+      surfaceDefaults: {
+        image: SENSEAUDIO_DEFAULT_IMAGE_MODEL,
+        video: SENSEAUDIO_DEFAULT_VIDEO_MODEL,
+        audio: SENSEAUDIO_DEFAULT_AUDIO_MODEL,
+      },
+      byokImageModel,
+      byokVideoModel,
+      byokAudioModel,
     });
   });
 

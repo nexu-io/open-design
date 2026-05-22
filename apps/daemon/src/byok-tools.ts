@@ -64,6 +64,32 @@ export const SENSEAUDIO_DEFAULT_AUDIO_MODEL =
   AUDIO_MODELS_BY_KIND.speech.find((m) => m.provider === 'senseaudio')?.id
   ?? DEFAULT_SPEECH_MODEL;
 
+/**
+ * Per-surface default media models for a given provider, derived from the
+ * registry. A BYOK media chat seeds its own provider's key into media-config,
+ * so when the user hasn't picked a model the tools should default to THAT
+ * provider's model for each surface (which has credentials) rather than the
+ * global catalogue default (e.g. gpt-image-2), which would fail without keys.
+ * Surfaces the provider doesn't serve come back undefined → the caller leaves
+ * the surface fallback to the catalogue default or the composer pick.
+ */
+export function defaultMediaModelsForProvider(provider: string): {
+  image?: string;
+  video?: string;
+  audio?: string;
+} {
+  const image = IMAGE_MODELS.find((m) => m.provider === provider)?.id;
+  const video = VIDEO_MODELS.find((m) => m.provider === provider)?.id;
+  const audio =
+    AUDIO_MODELS_BY_KIND.speech.find((m) => m.provider === provider)?.id
+    ?? BYOK_AUDIO_MODELS.find((m) => m.provider === provider)?.id;
+  return {
+    ...(image ? { image } : {}),
+    ...(video ? { video } : {}),
+    ...(audio ? { audio } : {}),
+  };
+}
+
 const VIDEO_DURATION_MIN = 3;
 const VIDEO_DURATION_MAX = 30;
 const VIDEO_DURATION_DEFAULT = 5;
