@@ -73,6 +73,7 @@ describe('SettingsDialog media providers', () => {
   });
 
   it('shows loading while reloading, then clears the success flash after a short delay', async () => {
+    vi.useFakeTimers();
     const reloadMock = vi.fn(
       () =>
         new Promise<AppConfig['mediaProviders']>((resolve) => {
@@ -104,20 +105,21 @@ describe('SettingsDialog media providers', () => {
     fireEvent.click(reloadButton);
 
     expect(reloadMock).toHaveBeenCalledTimes(1);
-    await waitFor(() => {
-      expect((screen.getByRole('button', { name: 'Loading…' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Loading…' }) as HTMLButtonElement).disabled).toBe(true);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(50);
     });
 
-    await waitFor(() => {
-      expect(screen.getByText('Reloaded media provider settings from the local daemon.')).toBeTruthy();
-      expect(screen.getByRole('button', { name: 'Reloaded' })).toBeTruthy();
+    expect(screen.getByText('Reloaded media provider settings from the local daemon.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Reloaded' })).toBeTruthy();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 2100));
-    await waitFor(() => {
-      expect(screen.queryByText('Reloaded media provider settings from the local daemon.')).toBeNull();
-      expect(screen.getByRole('button', { name: 'Reload from daemon' })).toBeTruthy();
-    });
+    expect(screen.queryByText('Reloaded media provider settings from the local daemon.')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Reload from daemon' })).toBeTruthy();
   });
 
   it('shows a sticky error when reloading media providers from daemon fails', async () => {
