@@ -696,7 +696,9 @@ export async function writeProjectFile(
   if (validatedManifest) {
     const manifestFileName = artifactManifestNameFor(safeName);
     const manifestTarget = await resolveSafeReal(dir, manifestFileName);
-    await writeFile(manifestTarget, JSON.stringify(validatedManifest, null, 2));
+    const tmpManifest = `${manifestTarget}.tmp`;
+    await writeFile(tmpManifest, JSON.stringify(validatedManifest, null, 2));
+    await rename(tmpManifest, manifestTarget);
   }
   const st = await stat(target);
   const persistedManifest = await readManifestForPath(dir, safeName);
