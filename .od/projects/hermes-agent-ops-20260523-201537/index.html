@@ -874,6 +874,31 @@
           ]
         }
       },
+      hotflow: {
+        name: "AI 热点归档流",
+        icon: "档",
+        group: "common",
+        category: "内容工作流",
+        purpose: "把热点收集、企微草稿、来源清单和归档设计成可复用流程。",
+        inputSpec: "时间范围、目标读者、关键词、交付渠道",
+        attachmentSpec: "可选：热点链接、公众号文章、来源清单",
+        outputSpec: "企微草稿 + 来源清单 + 归档方案 + 质检标准",
+        previewTitle: "AI 热点企微归档工作流.md",
+        previewType: "Markdown",
+        previewUse: "周期简报、企微草稿、知识库沉淀",
+        confirmRule: "外发前必须确认",
+        prompt: "按 ai-hotspot-wecom-archive-workflow 跑一次本周 AI 热点，生成企微草稿、来源清单和归档方案，不自动发送。",
+        intro: "这个 Skill 不是单次日报，而是把收集、筛选、草稿、归档和质检做成可复用 Agent 工作流。",
+        doc: {
+          kind: "article",
+          title: "AI 热点企微归档工作流",
+          sections: [
+            { heading: "运行变量", items: ["时间范围：过去 7 天或本周", "目标读者：企微私域客户/内部团队", "输出：企微草稿 + Markdown 归档"] },
+            { heading: "交付内容", items: ["候选热点来源清单", "5-10 条入选热点和业务影响", "可复制企微草稿", "归档路径或在线文档建议"] },
+            { heading: "质检规则", items: ["每条热点必须有来源", "区分事实、判断和建议", "外发前必须确认目标渠道和正文"] }
+          ]
+        }
+      },
       heavy: {
         name: "附件识别与重任务",
         icon: "识",
@@ -970,7 +995,7 @@
           title: "长跑开发任务",
           sections: [
             { heading: "目标", body: "重构工作台为左 Skill、中对话、右预览的三栏布局。" },
-            { heading: "范围", items: ["保留 15 个 VPS Hermes domain Skill", "支持语音、附件、下载", "每个 Skill 有自己的输入输出设计"] },
+            { heading: "范围", items: ["保留 16 个 VPS Hermes domain Skill", "支持语音、附件、下载", "每个 Skill 有自己的输入输出设计"] },
             { heading: "验证", items: ["页面可打开", "Skill 切换更新输入和预览", "下载文件内容与预览一致"] }
           ]
         }
@@ -1233,6 +1258,35 @@
           { label: "精选数量", path: "parsed.count" },
           { label: "企微状态", path: "outbox.status" },
           { label: "今日标题", path: "parsed.top_titles" }
+        ]
+      },
+      "ai-hotspot-wecom-archive-workflow": {
+        id: "ai-hotspot-wecom-archive-workflow",
+        action: "run-skill",
+        endpoint: "/api/run-skill",
+        fields: [
+          { id: "timeRange", type: "text", label: "时间范围", default: "过去 7 天", placeholder: "例如：过去 7 天、本周一到今天" },
+          { id: "audience", type: "text", label: "目标读者", default: "企微私域客户", placeholder: "例如：内部团队、客户、社群用户" },
+          { id: "keywords", type: "text", label: "关键词", default: "Agent、AI 编程、企业 AI、AI 视频", placeholder: "用顿号或逗号分隔", optional: true },
+          { id: "outputChannels", type: "select", label: "交付渠道", default: "wecom_markdown_archive", options: [
+            { value: "wecom_markdown_archive", label: "企微草稿 + Markdown 归档" },
+            { value: "online_doc", label: "在线文档" },
+            { value: "obsidian", label: "Obsidian 入库" },
+            { value: "source_list", label: "只要来源清单" }
+          ] },
+          { id: "archiveLocation", type: "text", label: "归档位置", default: "/root/.hermes/knowledge/ai-hotspots/", optional: true },
+          { id: "externalSend", type: "select", label: "外发策略", default: "draft_only", options: [
+            { value: "draft_only", label: "只生成草稿，不发送" },
+            { value: "confirm_required", label: "生成待确认发送记录" }
+          ] },
+          { id: "attachments", type: "file", label: "来源/链接附件", accept: ".txt,.md,.csv,.json,.html,.pdf,.png,.jpg,.jpeg", multiple: true, optional: true }
+        ],
+        outputs: [
+          { label: "企微草稿", path: "stdout" },
+          { label: "来源清单", path: "stdout" },
+          { label: "归档方案", path: "stdout" },
+          { label: "质检结果", path: "stdout" },
+          { label: "产物文件", path: "artifact_uri" }
         ]
       },
       "heavy-ai-dispatch-router": {
@@ -1544,6 +1598,7 @@
 
     const skillHermesIds = {
       aihot: "aihot",
+      hotflow: "ai-hotspot-wecom-archive-workflow",
       heavy: "heavy-ai-dispatch-router",
       wechat: "wechat-obsidian-intake-system",
       wecom: "wecom-community-ops-workflows",
@@ -1565,7 +1620,7 @@
       profile.hermes = hermesSchemas[hermesId];
     });
 
-    const commonIds = ["aihot", "heavy", "wechat", "wecom", "vibe"];
+    const commonIds = ["aihot", "hotflow", "heavy", "wechat", "wecom", "vibe"];
     const moreIds = ["image2", "marketing", "stable", "companyos", "xhs", "efficiency", "roles", "crm", "sqlops", "vpsops"];
     const state = { active: "aihot", attachments: [], previewUrl: null };
 
@@ -1706,6 +1761,7 @@
       const text = taskInput.value.trim();
       if (text) {
         if (skill.hermes.id === "aihot" && !fields.topic) fields.topic = text;
+        if (skill.hermes.id === "ai-hotspot-wecom-archive-workflow" && !fields.keywords) fields.keywords = text;
         if (skill.hermes.id === "wechat-obsidian-intake-system" && !fields.content) fields.content = text;
         if (skill.hermes.id === "wecom-community-ops-workflows" && !fields.todayFacts) fields.todayFacts = text;
         if (skill.hermes.id === "long-horizon-vibe-coding" && !fields.goal) fields.goal = text;
