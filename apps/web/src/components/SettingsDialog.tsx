@@ -3088,6 +3088,17 @@ export function SettingsDialog({
                 <small>{t('settings.appearanceHint')}</small>
               </span>
             </button>
+            <button
+              type="button"
+              className={`settings-nav-item${activeSection === 'critiqueTheater' ? ' active' : ''}`}
+              onClick={() => setActiveSection('critiqueTheater')}
+            >
+              <Icon name="comment" size={18} />
+              <span>
+                <strong>{t('critiqueTheater.settingsNav')}</strong>
+                <small>{t('critiqueTheater.settingsNavHint')}</small>
+              </span>
+            </button>
             {isPackagedDesktop() && (
               <button
                 type="button"
@@ -3114,17 +3125,6 @@ export function SettingsDialog({
                 </span>
               </button>
             )}
-            <button
-              type="button"
-              className={`settings-nav-item${activeSection === 'critiqueTheater' ? ' active' : ''}`}
-              onClick={() => setActiveSection('critiqueTheater')}
-            >
-              <Icon name="comment" size={18} />
-              <span>
-                <strong>{t('critiqueTheater.settingsNav')}</strong>
-                <small>{t('critiqueTheater.settingsNavHint')}</small>
-              </span>
-            </button>
             <button
               type="button"
               className={`settings-nav-item${activeSection === 'notifications' ? ' active' : ''}`}
@@ -7201,25 +7201,6 @@ function IntegrationsSection() {
           </button>
         </div>
 
-        {/* "Build the daemon first" lives here — next to the code
-            block it explains — rather than at the top of the section
-            before the user has seen anything. A dev-mode pre-condition
-            warning at the very top reads as "something is broken"
-            before the user has even picked their client. */}
-        {info && (!info.cliExists || !info.nodeExists) ? (
-          <div
-            className="empty-card"
-            style={{ borderLeft: '3px solid var(--warning-fg, #fbbf24)' }}
-          >
-            <strong>
-              {!info.cliExists
-                ? t('settings.mcpBuildDaemon')
-                : t('settings.mcpNodeMissing')}
-            </strong>{' '}
-            {info.buildHint ?? t('settings.mcpBuildHint')}
-          </div>
-        ) : null}
-
         {/* Restart note is a "next step" after running the command,
             not an error — keep it right after the code block. */}
         <div
@@ -7243,6 +7224,7 @@ function IntegrationsSection() {
             {t('settings.mcpRunningNote')}
           </p>
         </div>
+        </div>{/* end settings-about-list */}
 
         <McpKeysSection info={info} onKeyChanged={() => setInfo(null)} />
 
@@ -7550,7 +7532,7 @@ function DesktopSection() {
                 ? enabled
                   ? t('common.on')
                   : t('common.off')
-                : '…'}
+                : '...'}
             </span>
           </button>
         </div>

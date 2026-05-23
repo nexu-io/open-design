@@ -37,7 +37,7 @@ import { setShellEnvVar } from './shell-env.js';
 import { createIpAllowlistMiddleware } from './ip-allowlist.js';
 import { renderLoginPage } from './login-page.js';
 import { isNetworkExposed, parseAllowedHosts } from './network-config.js';
-import { effectivePeerFromReq } from './proxy-trust.js';
+import { effectivePeerFromReq, isLoopbackAddress, isProxyTrusted } from './proxy-trust.js';
 import { checkRateLimit, startCleanupInterval as startRateLimitCleanup } from './login-rate-limit.js';
 import { clearAllSessions, createSession, extractSessionCookie, isValidSession, revokeSession, startCleanupInterval } from './session-store.js';
 import { createCommandInvocation } from '@open-design/platform';
@@ -1408,6 +1408,7 @@ const OFFICIAL_PLUGIN_SOURCE_REPO = 'github:nexu-io/open-design@main';
 export function isStaticSpaFallbackRequest(req) {
   if (req.method !== 'GET' && req.method !== 'HEAD') return false;
   if (req.path === '/api' || req.path.startsWith('/api/')) return false;
+  if (req.path === '/mcp' || req.path.startsWith('/mcp/')) return false;
   if (req.path === '/artifacts' || req.path.startsWith('/artifacts/')) return false;
   if (req.path === '/frames' || req.path.startsWith('/frames/')) return false;
   if (req.path === '/_next' || req.path.startsWith('/_next/')) return false;
@@ -3269,6 +3270,13 @@ function normalizeLocalAuthority(value) {
   }
 }
 
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  const bufA = Buffer.from(a, 'utf8');
+  const bufB = Buffer.from(b, 'utf8');
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
 function isLoopbackHostname(hostname) {
   const normalized = String(hostname || '').toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
   if (normalized === 'localhost') return true;
@@ -3277,15 +3285,7 @@ function isLoopbackHostname(hostname) {
   return false;
 }
 
-function isLoopbackPeerAddress(address) {
-  if (typeof address !== 'string') return false;
-  const normalized = address.trim().toLowerCase().replace(/^\[|\]$/g, '');
-  if (!normalized) return false;
-  if (normalized.startsWith('::ffff:')) return isLoopbackPeerAddress(normalized.slice('::ffff:'.length));
-  if (normalized === '::1' || normalized === '0:0:0:0:0:0:0:1') return true;
-  if (net.isIP(normalized) === 4) return normalized === '127.0.0.1' || normalized.startsWith('127.');
-  return false;
-}
+
 
 const PROJECT_PREVIEW_SCOPE_TTL_MS = 60 * 60 * 1000;
 const PROJECT_PREVIEW_ASSET_PATH_RE = /^\/projects\/([^/]+)\/preview\/([^/]+)\/.+$/u;
@@ -3352,7 +3352,7 @@ function localOriginFromHeader(value) {
 }
 
 function validateLocalDaemonRequest(req) {
-  if (!isLoopbackPeerAddress(effectivePeerFromReq(req))) {
+  if (!isLoopbackAddress(effectivePeerFromReq(req))) {
     return {
       ok: false,
       message: 'request peer must be a loopback address',
@@ -4623,7 +4623,7 @@ export async function startServer({
     app.use(createAuthMiddleware({
       enabledRef: authEnabledRef,
       networkExposed,
-      isLocalPeer: (ip: string) => isLoopbackPeerAddress(ip),
+      isLocalPeer: (ip: string) => isLoopbackAddress(ip),
       resolveHashes: async () => {
         const hashes = [
           ...await allValidHashes(RUNTIME_DATA_DIR),
@@ -4671,10 +4671,10 @@ export async function startServer({
     const openProbePaths = new Set(['/api/health', '/api/version', '/api/daemon/status']);
     app.use('/api', (req, res, next) => {
       if (openProbePaths.has(req.path)) return next();
-      if (isLoopbackPeerAddress(effectivePeerFromReq(req))) return next();
+      if (isLoopbackAddress(effectivePeerFromReq(req))) return next();
       const auth = req.get('authorization') ?? '';
       const match = /^Bearer\s+(\S+)\s*$/i.exec(auth);
-      if (!match || match[1] !== apiToken) {
+      if (!match || !timingSafeEqual(match[1], apiToken)) {
         return res.status(401).json({
           error: { code: 'API_TOKEN_REQUIRED', message: 'Authorization: Bearer <OD_API_TOKEN> required' },
         });
@@ -4689,7 +4689,7 @@ export async function startServer({
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store');
     const next = typeof req.query.next === 'string' ? req.query.next : '';
-    const isLocal = isLoopbackPeerAddress(effectivePeerFromReq(req));
+    const isLocal = isLoopbackAddress(effectivePeerFromReq(req));
     res.send(renderLoginPage(undefined, next, isLocal));
   });
 
@@ -4699,13 +4699,13 @@ export async function startServer({
     if (!allowed) {
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader('Retry-After', String(Math.ceil(retryAfterMs / 1000)));
-      res.status(429).send(renderLoginPage('Too many attempts. Try again in a minute.', undefined, isLoopbackPeerAddress(ip)));
+      res.status(429).send(renderLoginPage('Too many attempts. Try again in a minute.', undefined, isLoopbackAddress(ip)));
       return;
     }
     const key = req.body?.key;
     if (typeof key !== 'string' || !key.trim()) {
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.status(401).send(renderLoginPage('API key is required.', undefined, isLoopbackPeerAddress(ip)));
+      res.status(401).send(renderLoginPage('API key is required.', undefined, isLoopbackAddress(ip)));
       return;
     }
     const validHashes = [
@@ -4715,17 +4715,19 @@ export async function startServer({
     const valid = verifyKey(key.trim(), validHashes);
     if (!valid) {
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.status(401).send(renderLoginPage('Invalid API key.', undefined, isLoopbackPeerAddress(ip)));
+      res.status(401).send(renderLoginPage('Invalid API key.', undefined, isLoopbackAddress(ip)));
       return;
     }
     const { token, cookieName } = createSession();
-    res.setHeader('Set-Cookie', [
+    const sessionCookie = [
       `${cookieName}=${token}`,
       'HttpOnly',
       'SameSite=Strict',
       'Path=/',
       `Max-Age=${24 * 60 * 60}`,
-    ].join('; '));
+    ];
+    if (isProxyTrusted()) sessionCookie.push('Secure');
+    res.setHeader('Set-Cookie', sessionCookie.join('; '));
     const next = typeof req.body?.next === 'string' ? req.body.next : '';
     const safeNext = next.startsWith('/') && !next.startsWith('//') ? next : '/';
     res.redirect(302, safeNext);
@@ -4742,13 +4744,15 @@ export async function startServer({
     }
     const token = extractSessionCookie(req.headers.cookie);
     if (token) revokeSession(token);
-    res.setHeader('Set-Cookie', [
+    const clearCookie = [
       'od_session=',
       'HttpOnly',
       'SameSite=Strict',
       'Path=/',
       'Max-Age=0',
-    ].join('; '));
+    ];
+    if (isProxyTrusted()) clearCookie.push('Secure');
+    res.setHeader('Set-Cookie', clearCookie.join('; '));
     res.redirect(302, '/login');
   });
 
@@ -4758,8 +4762,8 @@ export async function startServer({
   // "Reset all keys". This deletes every API key and MCP key so the
   // daemon returns to an unauthenticated state.
   app.post('/api/auth/reset-keys', express.urlencoded({ extended: false }), async (req, res) => {
-    const clientIp = effectivePeerFromReq(req);
-    if (!isLoopbackPeerAddress(clientIp)) {
+    const clientIp = req.socket?.remoteAddress;
+    if (!isLoopbackAddress(clientIp)) {
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.status(403).send(renderLoginPage('Key reset is only available from localhost.', undefined, true));
       return;
@@ -5294,7 +5298,7 @@ export async function startServer({
 
   // ── Network config & API key management ────────────────────
   app.get('/api/network-config', async (req, res) => {
-    if (!isLoopbackPeerAddress(effectivePeerFromReq(req))) {
+    if (!isLoopbackAddress(req.socket?.remoteAddress)) {
       res.status(403).json({ error: 'FORBIDDEN', reason: 'network config is only available from localhost' });
       return;
     }
@@ -5310,7 +5314,7 @@ export async function startServer({
   });
 
   app.put('/api/network-config', async (req, res) => {
-    if (!isLoopbackPeerAddress(effectivePeerFromReq(req))) {
+    if (!isLoopbackAddress(req.socket?.remoteAddress)) {
       res.status(403).json({ error: 'FORBIDDEN', reason: 'network config changes are only available from localhost' });
       return;
     }
@@ -5343,7 +5347,7 @@ export async function startServer({
   });
 
   app.post('/api/restart', async (req, res) => {
-    if (!isLoopbackPeerAddress(effectivePeerFromReq(req))) {
+    if (!isLoopbackAddress(req.socket?.remoteAddress)) {
       res.status(403).json({ error: 'FORBIDDEN', reason: 'restart is only available from localhost' });
       return;
     }
@@ -5357,7 +5361,7 @@ export async function startServer({
   });
 
   app.get('/api/auth/keys', async (req, res) => {
-    if (!isLoopbackPeerAddress(effectivePeerFromReq(req))) {
+    if (!isLoopbackAddress(req.socket?.remoteAddress)) {
       res.status(403).json({ error: 'FORBIDDEN', reason: 'API key management is only available from localhost' });
       return;
     }
@@ -5366,7 +5370,7 @@ export async function startServer({
   });
 
   app.post('/api/auth/keys', async (req, res) => {
-    if (!isLoopbackPeerAddress(effectivePeerFromReq(req))) {
+    if (!isLoopbackAddress(req.socket?.remoteAddress)) {
       res.status(403).json({ error: 'FORBIDDEN', reason: 'API key management is only available from localhost' });
       return;
     }
@@ -5378,7 +5382,7 @@ export async function startServer({
   });
 
   app.delete('/api/auth/keys/:id', async (req, res) => {
-    if (!isLoopbackPeerAddress(effectivePeerFromReq(req))) {
+    if (!isLoopbackAddress(req.socket?.remoteAddress)) {
       res.status(403).json({ error: 'FORBIDDEN', reason: 'API key management is only available from localhost' });
       return;
     }
@@ -5396,7 +5400,7 @@ export async function startServer({
   // ── MCP key management (AES-256-GCM encrypted, UI-retrievable) ──
 
   app.get('/api/mcp-keys', async (req, res) => {
-    if (!isLoopbackPeerAddress(effectivePeerFromReq(req))) {
+    if (!isLoopbackAddress(req.socket?.remoteAddress)) {
       res.status(403).json({ error: 'FORBIDDEN', reason: 'MCP key management is only available from localhost' });
       return;
     }
@@ -5405,7 +5409,7 @@ export async function startServer({
   });
 
   app.post('/api/mcp-keys', async (req, res) => {
-    if (!isLoopbackPeerAddress(effectivePeerFromReq(req))) {
+    if (!isLoopbackAddress(req.socket?.remoteAddress)) {
       res.status(403).json({ error: 'FORBIDDEN', reason: 'MCP key management is only available from localhost' });
       return;
     }
@@ -5425,7 +5429,7 @@ export async function startServer({
   });
 
   app.get('/api/mcp-keys/:id', async (req, res) => {
-    if (!isLoopbackPeerAddress(effectivePeerFromReq(req))) {
+    if (!isLoopbackAddress(req.socket?.remoteAddress)) {
       res.status(403).json({ error: 'FORBIDDEN', reason: 'MCP key management is only available from localhost' });
       return;
     }
@@ -5438,7 +5442,7 @@ export async function startServer({
   });
 
   app.delete('/api/mcp-keys/:id', async (req, res) => {
-    if (!isLoopbackPeerAddress(effectivePeerFromReq(req))) {
+    if (!isLoopbackAddress(req.socket?.remoteAddress)) {
       res.status(403).json({ error: 'FORBIDDEN', reason: 'MCP key management is only available from localhost' });
       return;
     }
@@ -10632,7 +10636,7 @@ export async function startServer({
   });
 
   app.get('/api/app-config', async (req, res) => {
-    if (!isLoopbackPeerAddress(effectivePeerFromReq(req))) {
+    if (!isLoopbackAddress(req.socket?.remoteAddress)) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
@@ -10646,7 +10650,7 @@ export async function startServer({
   });
 
   app.put('/api/app-config', async (req, res) => {
-    if (!isLoopbackPeerAddress(effectivePeerFromReq(req))) {
+    if (!isLoopbackAddress(req.socket?.remoteAddress)) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
@@ -10661,7 +10665,7 @@ export async function startServer({
   });
 
   app.get('/api/orbit/status', async (req, res) => {
-    if (!isLoopbackPeerAddress(effectivePeerFromReq(req))) {
+    if (!isLoopbackAddress(req.socket?.remoteAddress)) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
@@ -10674,7 +10678,7 @@ export async function startServer({
   });
 
   app.post('/api/orbit/run', async (req, res) => {
-    if (!isLoopbackPeerAddress(effectivePeerFromReq(req))) {
+    if (!isLoopbackAddress(req.socket?.remoteAddress)) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
@@ -10713,7 +10717,7 @@ export async function startServer({
 
   // Native OS folder picker dialog. Returns { path: string | null }.
   app.post('/api/dialog/open-folder', async (req, res) => {
-    if (!isLoopbackPeerAddress(effectivePeerFromReq(req))) {
+    if (!isLoopbackAddress(req.socket?.remoteAddress)) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     try {
@@ -10727,7 +10731,7 @@ export async function startServer({
   });
 
   app.post('/api/projects/:id/media/generate', async (req, res) => {
-    if (!isLoopbackPeerAddress(effectivePeerFromReq(req))) {
+    if (!isLoopbackAddress(req.socket?.remoteAddress)) {
       return res.status(403).json({
         error:
           'cross-origin request rejected: media generation is restricted to the local UI / CLI',
@@ -10816,7 +10820,7 @@ export async function startServer({
     }
   });
   app.post('/api/research/search', async (req, res) => {
-    if (!isLoopbackPeerAddress(effectivePeerFromReq(req))) {
+    if (!isLoopbackAddress(req.socket?.remoteAddress)) {
       return res.status(403).json({
         error:
           'cross-origin request rejected: research search is restricted to the local UI / CLI',
@@ -10852,7 +10856,7 @@ export async function startServer({
   });
 
   app.post('/api/media/tasks/:id/wait', async (req, res) => {
-    if (!isLoopbackPeerAddress(effectivePeerFromReq(req))) {
+    if (!isLoopbackAddress(req.socket?.remoteAddress)) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     const taskId = req.params.id;
@@ -10891,7 +10895,7 @@ export async function startServer({
   });
 
   app.get('/api/projects/:id/media/tasks', (req, res) => {
-    if (!isLoopbackPeerAddress(effectivePeerFromReq(req))) {
+    if (!isLoopbackAddress(req.socket?.remoteAddress)) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     const projectId = req.params.id;

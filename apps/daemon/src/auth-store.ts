@@ -13,6 +13,12 @@ export interface AuthKey {
 const FILE_NAME = "daemon-api-keys.json";
 const KEY_PREFIX = "od_";
 
+let cachedHashes: string[] | null = null;
+
+function invalidateHashCache(): void {
+  cachedHashes = null;
+}
+
 function configFile(dataDir: string): string {
   return path.join(dataDir, FILE_NAME);
 }
@@ -79,6 +85,7 @@ async function lockedWrite(
     const keys = await readKeys(dataDir);
     const result = await fn(keys);
     await doWrite(dataDir, result);
+    invalidateHashCache();
   });
   writeLocks.set(dataDir, task);
   try {
@@ -144,8 +151,10 @@ export async function clearAllKeys(dataDir: string): Promise<void> {
 export async function allValidHashes(
   dataDir: string,
 ): Promise<string[]> {
+  if (cachedHashes !== null) return cachedHashes;
   const keys = await readKeys(dataDir);
-  return keys.map((k) => k.keyHash);
+  cachedHashes = keys.map((k) => k.keyHash);
+  return cachedHashes;
 }
 
 export function verifyKey(

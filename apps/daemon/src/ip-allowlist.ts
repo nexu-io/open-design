@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
-import { effectivePeerFromReq } from "./proxy-trust.js";
+import { effectivePeerFromReq, isLoopbackAddress } from "./proxy-trust.js";
 
 /**
  * Creates an IP allowlist middleware. When `allowedHosts` is non-empty and
@@ -26,7 +26,7 @@ export function createIpAllowlistMiddleware(allowedHosts: string[]) {
   return (req: Request, res: Response, next: NextFunction) => {
     const clientIp = effectivePeerFromReq(req);
 
-    if (isLoopback(clientIp)) return next();
+    if (isLoopbackAddress(clientIp)) return next();
 
     const allowed = entries.some((entry) => entry.matches(clientIp));
     if (!allowed) {
@@ -37,10 +37,6 @@ export function createIpAllowlistMiddleware(allowedHosts: string[]) {
     }
     next();
   };
-}
-
-function isLoopback(ip: string): boolean {
-  return ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");
 }
 
 interface IpMatcher {

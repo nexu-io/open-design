@@ -18,6 +18,12 @@ const ENC_KEY_FILE = '.enc-key';
 const KEY_PREFIX = 'od_mcp_';
 const ALGO = 'aes-256-gcm';
 
+let cachedHashes: string[] | null = null;
+
+function invalidateHashCache(): void {
+  cachedHashes = null;
+}
+
 function storeFile(dataDir: string): string {
   return path.join(dataDir, FILE_NAME);
 }
@@ -120,6 +126,7 @@ async function lockedWrite(
     const keys = await readStore(dataDir);
     const result = await fn(keys);
     await doWrite(dataDir, result);
+    invalidateHashCache();
   });
   writeLocks.set(dataDir, task);
   try {
@@ -204,8 +211,10 @@ export async function clearAllMcpKeys(dataDir: string): Promise<void> {
 export async function allMcpKeyHashes(
   dataDir: string,
 ): Promise<string[]> {
+  if (cachedHashes !== null) return cachedHashes;
   const keys = await readStore(dataDir);
-  return keys.map((k) => k.keyHash);
+  cachedHashes = keys.map((k) => k.keyHash);
+  return cachedHashes;
 }
 
 export function verifyMcpKey(
