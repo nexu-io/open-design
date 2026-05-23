@@ -1,3 +1,4 @@
+import { chooseExecutableByMinVersion } from './executables.js';
 import { execAgentFile } from './invocation.js';
 import { AGENT_DEFS } from './registry.js';
 import { DEFAULT_MODEL_OPTION, rememberLiveModels } from './models.js';
@@ -172,6 +173,15 @@ async function probe(
   def: RuntimeAgentDef,
   configuredEnv: Record<string, string> = {},
 ): Promise<DetectedAgent> {
+  // For agents that declare a minimum CLI version, run the
+  // version-aware resolver first so the version-checked binary is
+  // cached before `resolveAgentLaunch` reads it (#978). Without this
+  // pre-step, `inspectAgentExecutableResolution` would still return
+  // first-found and we would probe a stale binary even though a
+  // modern one sits later on the PATH/toolchain.
+  if (def.minVersion) {
+    await chooseExecutableByMinVersion(def, configuredEnv);
+  }
   // Detection must probe the exact path the runtime will spawn, not just the
   // PATH-visible shim. This is load-bearing for Codex under nvm/fnm/mise:
   // the discovered `codex` entry is often a `#!/usr/bin/env node` wrapper
@@ -242,8 +252,9 @@ function stripFns(
   // (reasoningOptions, streamFormat, name, bin, etc.). `models` is
   // populated separately by `fetchModels`, so we strip the static
   // `fallbackModels` slot here too. `helpArgs` / `capabilityFlags` /
-  // `fallbackBins` / `maxPromptArgBytes` / `env` are probe-or-spawn-only
-  // metadata and shouldn't bleed into the API response either.
+  // `fallbackBins` / `maxPromptArgBytes` / `env` / `minVersion` are
+  // probe-or-spawn-only metadata and shouldn't bleed into the API
+  // response either.
   const {
     buildArgs,
     listModels,
@@ -255,6 +266,7 @@ function stripFns(
     versionProbeTimeoutMs,
     maxPromptArgBytes,
     env,
+    minVersion,
     authProbe,
     ...rest
   } = def;

@@ -174,6 +174,7 @@ export type RuntimeAgentDef = {
   // present in the daemon's `process.env`; Settings-UI per-agent env
   // values only reach the spawned child and are NOT consulted here.
   defaultModelEnvVar?: string;
+  minVersion?: string;
   // Declarative authentication probe. When set, detection spawns
   // `<bin> <args>` after the version check and classifies the combined
   // stdout/stderr to derive `authStatus`. This replaces the previous
@@ -200,6 +201,7 @@ export type DetectedAgent = Omit<
   | 'versionProbeTimeoutMs'
   | 'maxPromptArgBytes'
   | 'env'
+  | 'minVersion'
   | 'authProbe'
 > & {
   models: RuntimeModelOption[];

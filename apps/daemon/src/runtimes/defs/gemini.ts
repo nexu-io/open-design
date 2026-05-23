@@ -35,4 +35,14 @@ export const geminiAgentDef = {
     promptViaStdin: true,
     streamFormat: 'json-event-stream',
     eventParser: 'gemini',
+    // The `--output-format stream-json` flag did not exist in early
+    // Gemini CLI builds; an old `npm i -g @google/gemini-cli` left in
+    // `/usr/local/bin` shadows the modern Homebrew/nvm install on
+    // macOS GUI launches and the spawn fails with yargs
+    // `Unknown arguments: output-format, outputFormat` (#978). Pin a
+    // version floor so the resolver picks the first candidate on
+    // PATH+toolchain that actually supports the flag we send.
+    // 0.30.0 is the cited baseline from #978 where the flag shipped
+    // in stable form.
+    minVersion: '0.30.0',
 } satisfies RuntimeAgentDef;

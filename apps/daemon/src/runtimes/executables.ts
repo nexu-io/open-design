@@ -5,6 +5,7 @@ import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { wellKnownUserToolchainBins } from '@open-design/platform';
 import { resolveSandboxRuntimeConfigFromEnv } from '../sandbox-mode.js';
+import { execAgentFile } from './invocation.js';
 import { expandHomePath } from './paths.js';
 import type { RuntimeAgentDef } from './types.js';
 
@@ -129,6 +130,31 @@ export function resolveOnPath(bin: string): string | null {
     }
   }
   return null;
+}
+
+// Same search shape as `resolveOnPath`, but returns *every* directory
+// the bin resolves in (PATH order, then toolchain dirs). Used by the
+// version-aware chooser to evaluate every candidate rather than stop
+// at the first match (#978).
+export function enumerateOnPath(bin: string): string[] {
+  const exts =
+    process.platform === 'win32'
+      ? (process.env.PATHEXT || '.EXE;.CMD;.BAT').split(';')
+      : [''];
+  const dirs = resolvePathDirs();
+  const found: string[] = [];
+  const seen = new Set<string>();
+  for (const dir of dirs) {
+    for (const ext of exts) {
+      const full = path.join(dir, bin + ext);
+      if (!full || seen.has(full)) continue;
+      if (existsSync(full)) {
+        seen.add(full);
+        found.push(full);
+      }
+    }
+  }
+  return found;
 }
 
 function looksExecutableOnWindows(filePath: string): boolean {
@@ -279,16 +305,29 @@ export function inspectAgentExecutableResolution(
     };
   }
   const configuredOverridePath = configuredExecutableOverride(def, configuredEnv);
-  const candidates = [
-    def.bin,
-    ...(Array.isArray(def.fallbackBins) ? def.fallbackBins : []),
-  ];
+  // Version-aware cache lookup runs only when there is no explicit
+  // override and the def opts in via `minVersion`. The cache is
+  // populated by `chooseExecutableByMinVersion` during detection so
+  // chat-time spawn sees the same binary detection picked instead of
+  // falling back to first-match (#978).
   let pathResolvedPath: string | null = null;
-  for (const bin of candidates) {
-    const resolved = resolveOnPath(bin);
-    if (resolved) {
-      pathResolvedPath = resolved;
-      break;
+  if (!configuredOverridePath && def.minVersion) {
+    const cached = versionAwareCache.get(def.id);
+    if (cached && existsSync(cached)) {
+      pathResolvedPath = cached;
+    }
+  }
+  if (!pathResolvedPath) {
+    const candidates = [
+      def.bin,
+      ...(Array.isArray(def.fallbackBins) ? def.fallbackBins : []),
+    ];
+    for (const bin of candidates) {
+      const resolved = resolveOnPath(bin);
+      if (resolved) {
+        pathResolvedPath = resolved;
+        break;
+      }
     }
   }
   const builtInPath = packagedBuiltInExecutable(def, configuredEnv);
@@ -297,4 +336,156 @@ export function inspectAgentExecutableResolution(
     pathResolvedPath,
     selectedPath: configuredOverridePath || builtInPath || pathResolvedPath,
   };
+}
+
+// ---- Version-aware resolution (#978) -------------------------------------
+//
+// Gemini-style "stale binary shadows the modern one" problem: macOS GUI
+// launches inherit `/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin`, and an
+// ancient `/usr/local/bin/gemini=0.1.12` left by an old `npm i -g
+// @google/gemini-cli` shadows the modern Homebrew/nvm install. The old
+// binary lacks `--output-format`, so the daemon spawn lands on yargs
+// `Unknown arguments`. The fix runs `--version` against every candidate
+// and picks the first that meets the floor pinned on the def.
+
+const VERSION_PROBE_TIMEOUT_MS = 1_500;
+
+// agent.id → resolved path that passed the version gate. Populated by
+// `chooseExecutableByMinVersion`; consulted by
+// `inspectAgentExecutableResolution` so the sync chat-spawn path sees
+// the same pick detection landed on. Only writes for the auto-pick path
+// — an explicit `<AGENT>_BIN` override is intentionally NOT cached so
+// clearing the env reliably falls back to auto-pick (#1007 round-2 P2).
+const versionAwareCache = new Map<string, string>();
+
+export function clearVersionAwareResolutionCache(agentId?: string): void {
+  if (agentId === undefined) {
+    versionAwareCache.clear();
+  } else {
+    versionAwareCache.delete(agentId);
+  }
+}
+
+// Strict, anchored semver parse. Accepts a leading `v` and tolerates
+// trailing pre-release (`-rc.1`) / build metadata (`+build.5`) but
+// only major.minor.patch participates in comparison. Returns `null`
+// for unparseable input so the chooser explicitly rejects the
+// candidate instead of letting it pass the gate (#1007 round-1 P1).
+const SEMVER_RE = /^v?(\d+)\.(\d+)\.(\d+)(?:[-+][0-9A-Za-z.-]+)?$/;
+
+export function compareSemver(a: string, b: string): number | null {
+  const left = parseSemver(a);
+  const right = parseSemver(b);
+  if (!left || !right) return null;
+  const [la, lb, lc] = left;
+  const [ra, rb, rc] = right;
+  if (la !== ra) return la - ra;
+  if (lb !== rb) return lb - rb;
+  if (lc !== rc) return lc - rc;
+  return 0;
+}
+
+function parseSemver(value: string): [number, number, number] | null {
+  if (typeof value !== 'string') return null;
+  const m = SEMVER_RE.exec(value.trim());
+  if (!m) return null;
+  return [Number(m[1]), Number(m[2]), Number(m[3])];
+}
+
+export interface ChooseExecutableByMinVersionOptions {
+  // Test seam: inject a fake `runVersion(path)` so unit tests do not
+  // need real binaries that print versions. Production passes the
+  // default that spawns `<path> <def.versionArgs>` with a timeout.
+  runVersion?: (resolvedPath: string) => Promise<string>;
+}
+
+export async function chooseExecutableByMinVersion(
+  def: RuntimeAgentDef,
+  configuredEnv: Record<string, string> = {},
+  options: ChooseExecutableByMinVersionOptions = {},
+): Promise<string | null> {
+  if (!def?.bin || !def.minVersion) return resolveAgentExecutable(def, configuredEnv);
+
+  // Explicit user override always wins; do not probe and do not pollute
+  // the cache (a later run with the override cleared must rediscover
+  // a fresh auto-pick).
+  const override = configuredExecutableOverride(def, configuredEnv);
+  if (override) return override;
+
+  // Enumerate every match for def.bin and (if declared) any fallback
+  // bins, in the same order resolveOnPath would walk.
+  const candidates: string[] = [];
+  const seen = new Set<string>();
+  const bins = [def.bin, ...(Array.isArray(def.fallbackBins) ? def.fallbackBins : [])];
+  for (const bin of bins) {
+    for (const hit of enumerateOnPath(bin)) {
+      if (seen.has(hit)) continue;
+      seen.add(hit);
+      candidates.push(hit);
+    }
+  }
+  if (candidates.length === 0) {
+    versionAwareCache.delete(def.id);
+    return null;
+  }
+
+  const runVersion = options.runVersion ?? ((p) => probeVersionWithTimeout(p, def));
+  const probes = await Promise.all(
+    candidates.map(async (p) => {
+      try {
+        const out = await runVersion(p);
+        return { path: p, version: typeof out === 'string' ? out.trim().split('\n')[0] ?? '' : '' };
+      } catch {
+        return { path: p, version: '' };
+      }
+    }),
+  );
+
+  for (const probe of probes) {
+    const cmp = compareSemver(probe.version, def.minVersion);
+    if (cmp !== null && cmp >= 0) {
+      versionAwareCache.set(def.id, probe.path);
+      return probe.path;
+    }
+  }
+
+  // Regression-safe fallback: keep the previous behavior (first-found)
+  // so the existing "agent exited with code 1" surface still fires
+  // when nothing meets the floor, instead of the agent silently
+  // disappearing from the picker. Drop any stale cache entry so a
+  // later install of a modern binary is not occluded.
+  versionAwareCache.delete(def.id);
+  return candidates[0] ?? null;
+}
+
+async function probeVersionWithTimeout(
+  resolvedPath: string,
+  def: RuntimeAgentDef,
+): Promise<string> {
+  // Mirror the core of `applyAgentLaunchEnv`: prepend the daemon's
+  // own Node binary directory and the candidate's directory to PATH so
+  // Node-wrapper CLIs (`#!/usr/bin/env node`, npm `.cmd` shims on
+  // Windows) can resolve `node` even when the daemon was GUI-launched
+  // with a stripped PATH. We do NOT import `applyAgentLaunchEnv`
+  // directly: launch.ts depends on executables.ts and the import
+  // cycle would break.
+  const env: NodeJS.ProcessEnv = { ...process.env, ...(def.env || {}) };
+  const pathKey = Object.keys(env).find((k) => k.toLowerCase() === 'path') ?? 'PATH';
+  const existing = typeof env[pathKey] === 'string' ? (env[pathKey] as string) : '';
+  const prepend = [path.dirname(process.execPath), path.dirname(resolvedPath)].filter(Boolean);
+  const merged = [...prepend, ...existing.split(delimiter).filter(Boolean)];
+  const seen = new Set<string>();
+  const deduped: string[] = [];
+  for (const dir of merged) {
+    if (!seen.has(dir)) {
+      seen.add(dir);
+      deduped.push(dir);
+    }
+  }
+  env[pathKey] = deduped.join(delimiter);
+  const { stdout } = await execAgentFile(resolvedPath, def.versionArgs, {
+    env,
+    timeout: VERSION_PROBE_TIMEOUT_MS,
+  });
+  return String(stdout);
 }
