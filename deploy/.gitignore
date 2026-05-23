@@ -1,2 +1,3 @@
 *.bak
 .env
+.codebuddy/scheduled_tasks.lock

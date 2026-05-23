@@ -227,6 +227,9 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     if (!isLocalSameOrigin(req, getResolvedPort())) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
+    if (typeof req.body !== 'object' || req.body === null || Array.isArray(req.body)) {
+      return res.status(400).json({ error: 'request body must be a JSON object' });
+    }
     try {
       const config = await writeAppConfig(RUNTIME_DATA_DIR, req.body);
       orbitService.configure(config.orbit);
