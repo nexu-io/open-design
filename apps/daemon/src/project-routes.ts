@@ -16,7 +16,7 @@ import {
 } from './plugins/index.js';
 import { connectorService } from './connectors/service.js';
 import type { RouteDeps } from './server-context.js';
-import { listSkills } from './skills.js';
+import { findSkillById, listSkills } from './skills.js';
 import { auditDesignSystemPackage } from './tools-connectors-cli.js';
 
 export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'projectStore' | 'projectFiles' | 'conversations' | 'templates' | 'status' | 'events' | 'ids' | 'telemetry' | 'validation'> {}
@@ -181,6 +181,22 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         );
       }
       const normalizedDesignSystemId = designSystemValidation.id;
+      // Validate skillId the same way designSystemId is validated, so a
+      // typo from the web UI / CLI / MCP create_project tool fails fast
+      // here instead of silently persisting and then getting skipped by
+      // findSkillById() at run-startup time — which would leave the
+      // project with no pinned skill at all and no error to the caller.
+      // Unknown skill ids are rejected; `null` / `undefined` / empty
+      // string keep the existing "no skill pinned" semantics.
+      if (skillId !== undefined && skillId !== null && skillId !== '') {
+        if (typeof skillId !== 'string') {
+          return sendApiError(res, 400, 'BAD_REQUEST', 'skillId must be a string or null');
+        }
+        const skills = await listSkills(SKILLS_DIR);
+        if (!findSkillById(skills, skillId)) {
+          return sendApiError(res, 400, 'SKILL_NOT_FOUND', 'skill not found');
+        }
+      }
       const projectMetadata =
         metadata && typeof metadata === 'object'
           ? {
