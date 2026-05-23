@@ -13,7 +13,6 @@
 import { getCollection } from 'astro:content';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import FontStylesheet from '../../_components/font-stylesheet.astro';
 import GoogleAnalytics from '../../_components/google-analytics.astro';
 import HeaderEnhancer from '../../_components/header-enhancer.astro';
 import { Header, type HeaderProps } from '../../_components/header';
@@ -79,6 +78,10 @@ const fmtDate = (d: Date) =>
   });
 const categoryValue = (category: string) => category.toLowerCase().replace(/\s+/g, '-');
 const postImages: Record<string, { src: string; alt: string }> = {
+  'open-design-0-8-0-everything-is-a-plugin': {
+    src: '/blog/plate-15-plugin-engine-modular.png',
+    alt: 'A central black cube engine core ringed by paper-tile plugins, an olive branch, and a bold red circle on a warm editorial study plate',
+  },
   'layout-layer-canvas-used-to-hide': {
     src: '/blog/plate-13-layout-layer.png',
     alt: 'An abstract layout map emerging from a hidden canvas on a warm paper study plate',
@@ -142,7 +145,6 @@ const localizedPostField = (
       description={seoDescription}
       pathname={Astro.url.pathname}
     />
-    <FontStylesheet />
     <GoogleAnalytics />
   </head>
   <body>

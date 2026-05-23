@@ -11,6 +11,7 @@
  */
 import type { AgentEvent, ChatCommentAttachment, ChatMessage } from '../types';
 import type {
+  ChatAnalyticsHints,
   ChatRunCreateResponse,
   ChatRunListResponse,
   ChatRunStatus,
@@ -42,6 +43,7 @@ function detectClientType(): 'desktop' | 'web' | 'unknown' {
   return 'unknown';
 }
 import { parseSseFrame } from './sse';
+import { trackRunProgress, trackRunStart, trackRunTerminal } from '../observability/stuck-run';
 
 const MAX_TRANSCRIPT_MESSAGE_CHARS = 12_000;
 const LARGE_TOOL_RESULT_CHARS = 8_000;
@@ -186,6 +188,11 @@ export interface DaemonStreamOptions {
   onRunCreated?: (runId: string) => void;
   onRunStatus?: (status: ChatRunStatus) => void;
   onRunEventId?: (eventId: string) => void;
+  // v2 analytics context propagated to run_created / run_finished.
+  // Optional; the daemon only consumes these to shape PostHog props
+  // (page_name / area / entry_from / DS context). Behavior never
+  // depends on them.
+  analyticsHints?: ChatAnalyticsHints;
 }
 
 export interface DaemonReattachOptions {
@@ -242,6 +249,7 @@ export async function streamViaDaemon({
   onRunCreated,
   onRunStatus,
   onRunEventId,
+  analyticsHints,
 }: DaemonStreamOptions): Promise<void> {
   const emitRunStatus = (status: ChatRunStatus) => {
     onRunStatus?.(status);
@@ -269,6 +277,7 @@ export async function streamViaDaemon({
     locale,
     ...(context ? { context } : {}),
     ...(research ? { research } : {}),
+    ...(analyticsHints ? { analyticsHints } : {}),
   };
   const body = JSON.stringify(request);
 
@@ -296,6 +305,15 @@ export async function streamViaDaemon({
     const created = (await createResp.json()) as ChatRunCreateResponse;
     const runId = created.runId;
     onRunCreated?.(runId);
+    // Start the stuck-run watchdog. trackRunProgress is called inside the
+    // SSE consumer below on every event; trackRunTerminal fires when the
+    // stream resolves to a terminal state (or errors out).
+    trackRunStart(runId, {
+      agent_id: agentId,
+      project_id: projectId ?? undefined,
+      conversation_id: conversationId ?? undefined,
+      client_type: detectClientType(),
+    });
     notifyRunsChanged();
     emitRunStatus('queued');
     await consumeDaemonRun({
@@ -355,6 +373,31 @@ export async function submitChatRunToolResult(
     return { ok: resp.ok, status: resp.status };
   } catch {
     return { ok: false };
+  }
+}
+
+// Forwards the user's assistant-turn rating to the daemon so it can emit
+// a Langfuse `score-create`. Fire-and-forget — failures are not surfaced
+// to the UI (the rating is already persisted on the message itself via
+// the PUT /messages/:id round-trip).
+export async function reportChatRunFeedback(req: {
+  runId: string;
+  projectId: string;
+  conversationId: string;
+  assistantMessageId: string;
+  rating: 'positive' | 'negative';
+  reasonCodes: string[];
+  hasCustomReason: boolean;
+  customReason: string;
+}): Promise<void> {
+  try {
+    await fetch(`/api/runs/${encodeURIComponent(req.runId)}/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req),
+    });
+  } catch {
+    // Best-effort.
   }
 }
 
@@ -459,10 +502,12 @@ async function consumeDaemonRun({
           if (!parsed) continue;
           if (parsed.kind === 'comment') {
             sawStreamProgress = true;
+            trackRunProgress(runId);
             continue;
           }
           if (parsed.kind !== 'event') continue;
           sawStreamProgress = true;
+          trackRunProgress(runId);
           if (parsed.id) {
             lastEventId = parsed.id;
             onRunEventId?.(parsed.id);
@@ -576,6 +621,11 @@ async function consumeDaemonRun({
     handlers.onDone(acc);
   } finally {
     cancelSignal?.removeEventListener('abort', cancelRun);
+    // Settle the stuck-run watchdog with whatever terminal state we
+    // resolved. If the watchdog was never armed (reattach paths that
+    // hit the daemon for an already-finished run), trackRunTerminal
+    // is a no-op for unknown runIds.
+    trackRunTerminal(runId, endStatus ?? (canceled ? 'canceled' : 'unknown'));
   }
 }
 

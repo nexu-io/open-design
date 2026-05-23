@@ -1180,6 +1180,7 @@ setImmediate(() => process.exit(0));
 const fs = require('node:fs');
 fs.writeFileSync(${JSON.stringify(envFile)}, JSON.stringify({
   CODEX_HOME: process.env.CODEX_HOME || null,
+  OPENAI_BASE_URL: process.env.OPENAI_BASE_URL || null,
   CODEX_API_KEY: process.env.CODEX_API_KEY || null,
   SHOULD_NOT_PASS: process.env.OD_CONNECTION_TEST_SHOULD_NOT_PASS || null,
 }));
@@ -1187,6 +1188,11 @@ console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_messag
 setImmediate(() => process.exit(0));
 `,
         async () => {
+          // CODEX_API_KEY only flows through when the user has also
+          // configured a custom OPENAI_BASE_URL — i.e. they intend to
+          // authenticate Codex CLI against a third-party gateway. Without
+          // the base URL, spawnEnvForAgent strips the credential so Codex
+          // CLI's own `codex login` wins (issue #2420).
           const res = await realFetch(`${baseUrl}/api/test/connection`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
@@ -1196,6 +1202,7 @@ setImmediate(() => process.exit(0));
               agentCliEnv: {
                 codex: {
                   CODEX_HOME: codexHome,
+                  OPENAI_BASE_URL: 'https://proxy.example.com/v1',
                   CODEX_API_KEY: 'codex-key',
                   OD_CONNECTION_TEST_SHOULD_NOT_PASS: 'leaked',
                 },
@@ -1214,8 +1221,67 @@ setImmediate(() => process.exit(0));
           await expect(fsp.readFile(envFile, 'utf8')).resolves.toBe(
             JSON.stringify({
               CODEX_HOME: codexHome,
+              OPENAI_BASE_URL: 'https://proxy.example.com/v1',
               CODEX_API_KEY: 'codex-key',
               SHOULD_NOT_PASS: null,
+            }),
+          );
+        },
+      );
+    } finally {
+      await fsp.rm(markerDir, { recursive: true, force: true });
+    }
+  });
+
+  it('strips stale Codex API keys when no custom OPENAI_BASE_URL is configured', async () => {
+    const markerDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'od-conn-test-codex-strip-'));
+    const envFile = path.join(markerDir, 'env.json');
+    const codexHome = path.join(markerDir, 'codex-home');
+    try {
+      await withFakeCodex(
+        `
+const fs = require('node:fs');
+fs.writeFileSync(${JSON.stringify(envFile)}, JSON.stringify({
+  CODEX_HOME: process.env.CODEX_HOME || null,
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY || null,
+  CODEX_API_KEY: process.env.CODEX_API_KEY || null,
+}));
+console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'ok' } }));
+setImmediate(() => process.exit(0));
+`,
+        async () => {
+          // Simulates the user flow that triggered issue #2420: a stale
+          // BYOK OPENAI_API_KEY sat in agentCliEnv.codex from a previous
+          // session, the user cleared the BYOK dialog (which doesn't
+          // touch agentCliEnv) and switched back to Local CLI. Without
+          // an OPENAI_BASE_URL the daemon must keep the secret out of
+          // the spawn so Codex CLI's own `codex login` wins.
+          const res = await realFetch(`${baseUrl}/api/test/connection`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              mode: 'agent',
+              agentId: 'codex',
+              agentCliEnv: {
+                codex: {
+                  CODEX_HOME: codexHome,
+                  OPENAI_API_KEY: 'sk-stale-byok',
+                  CODEX_API_KEY: 'sk-stale-byok',
+                },
+              },
+            }),
+          });
+          expect(res.status).toBe(200);
+          await expect(res.json()).resolves.toMatchObject({
+            ok: true,
+            kind: 'success',
+            agentName: 'Codex CLI',
+          });
+          await expect(fsp.readFile(envFile, 'utf8')).resolves.toBe(
+            JSON.stringify({
+              CODEX_HOME: codexHome,
+              OPENAI_API_KEY: null,
+              CODEX_API_KEY: null,
             }),
           );
         },

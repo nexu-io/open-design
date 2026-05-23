@@ -2,9 +2,9 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-frame-data-chart-nyt",
-  "title": "NYT 风数据图表帧",
+  "title": "NYT-Style Data Chart Frame",
   "version": "0.1.0",
-  "description": "NYT-newsroom 排版 + 错峰揭示动画 + 编辑级图表 (折线/柱/范围带)",
+  "description": "NYT-newsroom typography, staggered reveal animation, and editorial-grade charts (line, bar, or range band).",
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -39,11 +39,18 @@
       "entry": "./example.html"
     },
     "useCase": {
-      "query": "用「NYT 风数据图表帧」模板把我的内容做成一段「NYT-newsroom 排版 + 错峰揭示动画 + 编辑级图表 (折线/柱/范围带)」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
+      "query": {
+        "en": "Use the NYT-Style Data Chart Frame template to turn my content into a frame with NYT-newsroom typography, staggered reveal animation, and editorial-grade charts. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「NYT 风数据图表帧」模板把我的内容做成一段「NYT-newsroom 排版 + 错峰揭示动画 + 编辑级图表 (折线/柱/范围带)」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "NYT 风数据图表帧"
+          "title": "NYT-Style Data Chart Frame",
+          "title_i18n": {
+            "en": "NYT-Style Data Chart Frame",
+            "zh-CN": "NYT 风数据图表帧"
+          }
         }
       ]
     },
@@ -72,5 +79,13 @@
       "prompt:inject",
       "fs:write"
     ]
+  },
+  "title_i18n": {
+    "en": "NYT-Style Data Chart Frame",
+    "zh-CN": "NYT 风数据图表帧"
+  },
+  "description_i18n": {
+    "en": "NYT-newsroom typography, staggered reveal animation, and editorial-grade charts (line, bar, or range band).",
+    "zh-CN": "NYT-newsroom 排版 + 错峰揭示动画 + 编辑级图表 (折线/柱/范围带)"
   }
 }

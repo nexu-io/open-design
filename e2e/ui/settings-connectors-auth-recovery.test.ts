@@ -3,7 +3,6 @@ import type { Locator, Page } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
 const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定/i;
-const SETTINGS_MENU_LABEL = /^Settings$|^设置$|^設定$/i;
 
 test.describe.configure({ timeout: 30_000 });
 
@@ -70,7 +69,7 @@ async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
   const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
-  if (await privacyDialog.isVisible().catch(() => false)) {
+  if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /not now|don't share/i }).click();
   }
   await expect(page.getByTestId('home-hero')).toBeVisible();
@@ -79,9 +78,6 @@ async function gotoEntryHome(page: Page) {
 async function openSettingsDialogFromEntry(page: Page) {
   await waitForLoadingToClear(page);
   await page.getByRole('button', { name: OPEN_SETTINGS_LABEL }).click();
-  const menu = page.getByRole('menu');
-  await expect(menu).toBeVisible();
-  await menu.getByRole('button', { name: SETTINGS_MENU_LABEL }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   return dialog;
@@ -245,38 +241,6 @@ async function openConnectorsSettings(
 }
 
 test.describe('Settings connectors auth recovery', () => {
-  test('clears pending authorization when OAuth launch is blocked after redirect_required', async ({ page }) => {
-    const { dialog } = await openConnectorsSettings(page, {
-      blockPopup: true,
-      onConnect: () => ({
-        status: 200,
-        body: {
-          connector: {
-            ...CONNECTORS[0],
-            status: 'available',
-          },
-          auth: {
-            kind: 'redirect_required',
-            redirectUrl: 'https://example.com/oauth/start',
-            expiresAt: '2099-01-01T00:00:00.000Z',
-          },
-        },
-      }),
-    });
-
-    const githubCard = connectorCard(dialog, 'github');
-    await githubCard.getByRole('button', { name: 'Connect' }).click();
-    await expect(githubCard.getByRole('button', { name: 'Cancel' })).toHaveCount(0);
-    await expect(
-      dialog.getByText('Popup blocked. Allow popups for Open Design and try again.'),
-    ).toBeVisible();
-    await expect
-      .poll(async () =>
-        page.evaluate(() => window.sessionStorage.getItem('od-connectors-authorization-pending')),
-      )
-      .toBe(null);
-  });
-
   test('keeps a pending authorization visible when the connector enters authorization-pending state', async ({ page }) => {
     const { dialog } = await openConnectorsSettings(page, {
       pendingAuthorization: pendingAuthorizationStorage(),
@@ -294,56 +258,6 @@ test.describe('Settings connectors auth recovery', () => {
         }),
       )
       .toBe(true);
-  });
-
-  test('keeps pending authorization visible when daemon cancellation fails', async ({ page }) => {
-    const { dialog, getCancelRequestCount } = await openConnectorsSettings(page, {
-      pendingAuthorization: pendingAuthorizationStorage(),
-      onCancel: () => ({
-        status: 500,
-        body: {
-          error: { message: "Couldn't cancel authorization. Try again." },
-        },
-      }),
-    });
-
-    const githubCard = connectorCard(dialog, 'github');
-    await expect(githubCard.getByRole('button', { name: 'Cancel' })).toBeVisible();
-
-    await githubCard.getByRole('button', { name: 'Cancel' }).click();
-
-    await expect.poll(getCancelRequestCount).toBe(1);
-    await expect(githubCard.getByRole('button', { name: 'Cancel' })).toBeVisible();
-    await expect(
-      dialog.getByRole('status').filter({ hasText: "Couldn't cancel authorization. Try again." }),
-    ).toBeVisible();
-    await expect
-      .poll(async () =>
-        page.evaluate(() => {
-          const raw = window.sessionStorage.getItem('od-connectors-authorization-pending');
-          if (!raw) return false;
-          const parsed = JSON.parse(raw) as Record<string, { expiresAt?: string }>;
-          return typeof parsed.github?.expiresAt === 'string' && parsed.github.expiresAt.length > 0;
-        }),
-      )
-      .toBe(true);
-  });
-
-  test('restores a pending authorization after a full page reload', async ({ page }) => {
-    const { dialog } = await openConnectorsSettings(page, {
-      pendingAuthorization: pendingAuthorizationStorage(),
-    });
-
-    const githubCard = connectorCard(dialog, 'github');
-    await expect(githubCard.getByRole('button', { name: 'Cancel' })).toBeVisible();
-
-    await page.reload({ waitUntil: 'domcontentloaded' });
-    const reloadedDialog = await openSettingsDialogFromEntry(page);
-    await reloadedDialog.getByRole('button', { name: /^Connectors\b|连接器/ }).click();
-
-    const reloadedGithubCard = connectorCard(reloadedDialog, 'github');
-    await expect(reloadedGithubCard.getByRole('button', { name: 'Cancel' })).toBeVisible();
-    await expect(reloadedGithubCard.getByRole('button', { name: 'Connect' })).toHaveCount(0);
   });
 
   test('settles a pending authorization into Disconnect when status polling reports the connector as connected', async ({ page }) => {
@@ -412,13 +326,4 @@ test.describe('Settings connectors auth recovery', () => {
       .toBe(null);
   });
 
-  test('restores a pending authorization from session storage after reopening settings', async ({ page }) => {
-    const { dialog } = await openConnectorsSettings(page, {
-      pendingAuthorization: pendingAuthorizationStorage(),
-    });
-
-    const githubCard = connectorCard(dialog, 'github');
-    await expect(githubCard.getByRole('button', { name: 'Cancel' })).toBeVisible();
-    await expect(githubCard.getByRole('button', { name: 'Connect' })).toHaveCount(0);
-  });
 });

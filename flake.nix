@@ -21,9 +21,53 @@
     dream2nix,
     home-manager,
   }: let
+    filterProjectSource = includePaths:
+      nixpkgs.lib.cleanSourceWith {
+        src = self;
+        filter = path: type: let
+          root = toString self;
+          pathStr = toString path;
+          rel = nixpkgs.lib.removePrefix (root + "/") pathStr;
+          matches = includePath:
+            rel == includePath
+            || nixpkgs.lib.hasPrefix (includePath + "/") rel
+            || (type == "directory" && nixpkgs.lib.hasPrefix (rel + "/") includePath);
+        in
+          rel == ""
+          || builtins.any matches includePaths;
+      };
+
     perSystem = flake-utils.lib.eachDefaultSystem (system: let
       pkgs = import nixpkgs {inherit system;};
       nodejs = pkgs.nodejs_24;
+      daemonSrc = filterProjectSource [
+        "package.json"
+        "pnpm-lock.yaml"
+        "pnpm-workspace.yaml"
+        "tsconfig.json"
+        "scripts"
+        "assets"
+        "plugins"
+        "skills"
+        "design-systems"
+        "design-templates"
+        "craft"
+        "prompt-templates"
+        "apps/daemon"
+        "packages"
+      ];
+      webSrc = filterProjectSource [
+        "package.json"
+        "pnpm-lock.yaml"
+        "pnpm-workspace.yaml"
+        "tsconfig.json"
+        "apps/web"
+        "packages/contracts"
+        "packages/host"
+        "packages/platform"
+        "packages/sidecar"
+        "packages/sidecar-proto"
+      ];
 
       # nixpkgs ships pnpm 10.33.0; the repo's package.json declares
       # `engines.pnpm: ">=10.33.2 <11"` and pnpm refuses to install
@@ -47,11 +91,11 @@
 
       daemon = pkgs.callPackage ./nix/package-daemon.nix {
         inherit dream2nix nixpkgs system nodejs pnpm_10;
-        src = self;
+        src = daemonSrc;
       };
       web = pkgs.callPackage ./nix/package-web.nix {
         inherit dream2nix nixpkgs system nodejs pnpm_10;
-        src = self;
+        src = webSrc;
       };
     in {
       packages = {

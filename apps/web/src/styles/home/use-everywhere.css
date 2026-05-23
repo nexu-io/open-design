@@ -340,7 +340,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--accent);
+  color: var(--text-strong);
   flex: 0 0 auto;
 }
 .use-everywhere-chip__label {

@@ -13,6 +13,8 @@ import os from 'node:os';
 import net from 'node:net';
 import {
   defaultScenarioPluginIdForProjectMetadata,
+  type OpenDesignGithubLatestReleaseResponse,
+  type OpenDesignGithubRepoResponse,
   PLUGIN_SHARE_ACTION_PLUGIN_IDS,
 } from '@open-design/contracts';
 import {
@@ -190,16 +192,26 @@ import { renderDesignSystemPreview } from './design-system-preview.js';
 import { renderDesignSystemShowcase } from './design-system-showcase.js';
 import { createChatRunService } from './runs.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
-import { reportRunCompletedFromDaemon } from './langfuse-bridge.js';
+import {
+  countDesignSystemPreviewModules,
+  countNewHtmlArtifacts,
+  didRunCreateDesignSystemFile,
+} from './run-artifacts.js';
+import {
+  reportRunCompletedFromDaemon,
+  reportRunFeedbackFromDaemon,
+} from './langfuse-bridge.js';
 import {
   createAnalyticsService,
   newInsertId,
   readAnalyticsContext,
   readPublicConfigResponse,
 } from './analytics.js';
+import { observePendingInstallerApplyAttempts } from './update-apply-observations.js';
 import {
   agentIdToTracking,
   deriveConfigureGlobals,
+  type ObservabilityEventRequest,
 } from '@open-design/contracts/analytics';
 import {
   redactSecrets,
@@ -1332,11 +1344,32 @@ async function refreshAndPersistToken(dataDir, serverId, current) {
 
 const activeChatAgentEventSinks = new Map();
 const activeProjectEventSinks = new Map();
+// Per-chat-run handles, keyed by runId. Lets non-stream side effects
+// (live-artifact create, project events) reach back into the chat
+// run's local state — currently used by the artifact quiet-period
+// shortcut (#1451) so a successful artifact registration can shorten
+// the inactivity watchdog without the chat path having to poll a
+// store.
+const activeChatRunHandles = new Map();
 
 function emitChatAgentEvent(runId, payload) {
   const sink = activeChatAgentEventSinks.get(runId);
   if (!sink) return false;
   return sink(payload);
+}
+
+// Exported for tests covering the artifact quiet-period plumbing
+// (#1451). The chat run path is a deep closure inside startServer, so
+// pin the hook contract at the emit/handle boundary instead of
+// driving a full fake-agent e2e for every invariant.
+export const __forTestChatRunHandles = activeChatRunHandles;
+
+export function __forTestEmitLiveArtifactEvent(
+  grant: { runId?: string; projectId?: string },
+  action: 'created' | 'updated' | 'deleted',
+  artifact: { id: string; projectId?: string; title?: string; refreshStatus?: string },
+) {
+  return emitLiveArtifactEvent(grant, action, artifact);
 }
 
 function emitLiveArtifactEvent(grant, action, artifact) {
@@ -1351,6 +1384,18 @@ function emitLiveArtifactEvent(grant, action, artifact) {
   };
   let emitted = emitProjectEvent(payload.projectId, payload);
   if (grant?.runId) emitted = emitChatAgentEvent(grant.runId, payload) || emitted;
+  // After the deliverable exists, switch the chat run into a shorter
+  // "quiet period" watchdog: agents sometimes keep their child process
+  // alive after a successful artifact write (post-write reasoning, log
+  // flushes, claude-code stream-json's idle stdin) and the 10-minute
+  // default leaves the UI parked on Working until the watchdog fires
+  // an unrelated "stalled" error. See #1451.
+  if (action === 'created' && grant?.runId) {
+    const handle = activeChatRunHandles.get(grant.runId);
+    if (handle?.noteArtifactRegistered) {
+      try { handle.noteArtifactRegistered(); } catch {}
+    }
+  }
   return emitted;
 }
 
@@ -1690,12 +1735,54 @@ function execFileBuffered(command, args, opts = {}) {
   });
 }
 
+function quotePosixShellArg(value) {
+  const text = String(value ?? '');
+  return `'${text.replace(/'/g, `'\\''`)}'`;
+}
+
+function buildGhShellCommand(args) {
+  return ['gh', ...args].map(quotePosixShellArg).join(' ');
+}
+
+function buildCommandShellCommand(command, args) {
+  return [command, ...args].map(quotePosixShellArg).join(' ');
+}
+
+function buildLoginShellCommand(innerCommand) {
+  // Use a non-login shell and re-export PATH so test fakes and agent wrappers
+  // remain visible; login shells often reset PATH from profile scripts.
+  return `export PATH=${quotePosixShellArg(process.env.PATH ?? '')}; ${innerCommand}`;
+}
+
+function execGhBuffered(args, opts = {}) {
+  if (process.platform === 'win32') return execFileBuffered('gh', args, opts);
+  const shell = process.env.SHELL && process.env.SHELL.trim() ? process.env.SHELL.trim() : '/bin/zsh';
+  return execFileBuffered(shell, ['-c', buildLoginShellCommand(buildGhShellCommand(args))], {
+    env: process.env,
+    ...opts,
+  });
+}
+
+function execCommandViaLoginShell(command, args, opts = {}) {
+  if (process.platform === 'win32') return execFileBuffered(command, args, opts);
+  const shell = process.env.SHELL && process.env.SHELL.trim() ? process.env.SHELL.trim() : '/bin/zsh';
+  return execFileBuffered(shell, ['-c', buildLoginShellCommand(buildCommandShellCommand(command, args))], {
+    env: process.env,
+    ...opts,
+  });
+}
+
 async function readProjectPluginManifest(folder) {
   const raw = await fs.promises.readFile(path.join(folder, 'open-design.json'), 'utf8');
   const manifest = JSON.parse(raw);
   const name = typeof manifest.name === 'string' && manifest.name.trim()
     ? manifest.name.trim()
     : path.basename(folder);
+  if (/[/\\]/.test(name) || /^\.+$/.test(name)) {
+    throw new Error(
+      `open-design.json in ${folder}: name "${name}" must not contain path separators or consist only of dots`,
+    );
+  }
   return {
     name,
     title: typeof manifest.title === 'string' ? manifest.title : name,
@@ -1703,6 +1790,8 @@ async function readProjectPluginManifest(folder) {
     manifest,
   };
 }
+
+export const __forTestReadProjectPluginManifest = readProjectPluginManifest;
 
 function githubRepoNameFromPluginName(name) {
   const slug = String(name)
@@ -1834,7 +1923,7 @@ function shouldSkipPluginContextEntry(name) {
 }
 
 async function ensureGhReady() {
-  const version = await execFileBuffered('gh', ['--version'], { timeout: 10_000 });
+  const version = await execGhBuffered(['--version'], { timeout: 10_000 });
   if (!version.ok) {
     return {
       ok: false,
@@ -1844,7 +1933,7 @@ async function ensureGhReady() {
       log: [version.stderr || version.stdout || 'gh --version failed'],
     };
   }
-  const auth = await execFileBuffered('gh', ['auth', 'status', '--hostname', 'github.com'], { timeout: 10_000 });
+  const auth = await execGhBuffered(['auth', 'status', '--hostname', 'github.com'], { timeout: 10_000 });
   if (!auth.ok) {
     return {
       ok: false,
@@ -2487,6 +2576,122 @@ function setLiveArtifactCodeHeaders(res) {
   res.setHeader('Referrer-Policy', 'no-referrer');
 }
 
+const OPEN_DESIGN_GITHUB_REPO_API = 'https://api.github.com/repos/nexu-io/open-design';
+const OPEN_DESIGN_GITHUB_RELEASE_LATEST_API = 'https://api.github.com/repos/nexu-io/open-design/releases/latest';
+const OPEN_DESIGN_GITHUB_CACHE_TTL_MS = 60 * 60 * 1000;
+const OPEN_DESIGN_GITHUB_TIMEOUT_MS = 4_000;
+
+let openDesignGithubRepoCache = null;
+let openDesignGithubRepoInflight = null;
+let openDesignGithubLatestReleaseCache = null;
+let openDesignGithubLatestReleaseInflight = null;
+
+async function readOpenDesignGithubRepoStats() {
+  const now = Date.now();
+  if (
+    openDesignGithubRepoCache &&
+    now - openDesignGithubRepoCache.fetchedAt < OPEN_DESIGN_GITHUB_CACHE_TTL_MS
+  ) {
+    return { ...openDesignGithubRepoCache, stale: false };
+  }
+
+  if (openDesignGithubRepoInflight) {
+    return openDesignGithubRepoInflight;
+  }
+
+  openDesignGithubRepoInflight = (async () => {
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), OPEN_DESIGN_GITHUB_TIMEOUT_MS);
+    try {
+      const response = await fetch(OPEN_DESIGN_GITHUB_REPO_API, {
+        headers: {
+          accept: 'application/vnd.github+json',
+          'user-agent': 'open-design-daemon',
+        },
+        signal: ctrl.signal,
+      });
+      if (!response.ok) {
+        throw new Error(`GitHub repo metadata request failed with HTTP ${response.status}`);
+      }
+      const payload = await response.json();
+      const count = payload && typeof payload.stargazers_count === 'number'
+        ? payload.stargazers_count
+        : null;
+      if (!Number.isFinite(count) || count == null || count < 0) {
+        throw new Error('GitHub repo metadata did not include a numeric stargazers_count');
+      }
+      openDesignGithubRepoCache = {
+        stargazersCount: count,
+        fetchedAt: Date.now(),
+      };
+      return { ...openDesignGithubRepoCache, stale: false };
+    } catch (error) {
+      if (openDesignGithubRepoCache) {
+        return { ...openDesignGithubRepoCache, stale: true };
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+      openDesignGithubRepoInflight = null;
+    }
+  })();
+
+  return openDesignGithubRepoInflight;
+}
+
+async function readOpenDesignLatestReleaseInfo() {
+  const now = Date.now();
+  if (
+    openDesignGithubLatestReleaseCache &&
+    now - openDesignGithubLatestReleaseCache.fetchedAt < OPEN_DESIGN_GITHUB_CACHE_TTL_MS
+  ) {
+    return { ...openDesignGithubLatestReleaseCache, stale: false };
+  }
+
+  if (openDesignGithubLatestReleaseInflight) {
+    return openDesignGithubLatestReleaseInflight;
+  }
+
+  openDesignGithubLatestReleaseInflight = (async () => {
+    const ctrl = new AbortController();
+    const timeout = setTimeout(() => ctrl.abort(), OPEN_DESIGN_GITHUB_TIMEOUT_MS);
+    try {
+      const response = await fetch(OPEN_DESIGN_GITHUB_RELEASE_LATEST_API, {
+        headers: {
+          accept: 'application/vnd.github+json',
+          'user-agent': 'open-design-daemon',
+        },
+        signal: ctrl.signal,
+      });
+      if (!response.ok) {
+        throw new Error(`GitHub latest release request failed with HTTP ${response.status}`);
+      }
+      const payload = await response.json();
+      const tagName = payload && typeof payload.tag_name === 'string' ? payload.tag_name : null;
+      const htmlUrl = payload && typeof payload.html_url === 'string' ? payload.html_url : null;
+      if (!tagName || !htmlUrl) {
+        throw new Error('GitHub latest release metadata did not include tag_name/html_url');
+      }
+      openDesignGithubLatestReleaseCache = {
+        tagName,
+        htmlUrl,
+        fetchedAt: Date.now(),
+      };
+      return { ...openDesignGithubLatestReleaseCache, stale: false };
+    } catch (error) {
+      if (openDesignGithubLatestReleaseCache) {
+        return { ...openDesignGithubLatestReleaseCache, stale: true };
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+      openDesignGithubLatestReleaseInflight = null;
+    }
+  })();
+
+  return openDesignGithubLatestReleaseInflight;
+}
+
 function bearerTokenFromRequest(req) {
   const header = req.get('authorization');
   if (typeof header !== 'string') return undefined;
@@ -2697,8 +2902,10 @@ function sendMulterError(res, err) {
 }
 
 const mediaTasks = new Map();
+const pluginShareTasks = new Map();
 const TASK_TTL_AFTER_DONE_MS = 10 * 60 * 1000;
 const MEDIA_TERMINAL_STATUSES = new Set(['done', 'failed', 'interrupted']);
+const PLUGIN_SHARE_TERMINAL_STATUSES = new Set(['done', 'failed']);
 
 function hydrateMediaTask(row) {
   const task = {
@@ -2813,6 +3020,154 @@ function mediaTaskSnapshot(task, since = 0) {
   return snapshot;
 }
 
+function createPluginShareTask(taskId, projectId, info = {}) {
+  const task = {
+    id: taskId,
+    projectId,
+    status: 'queued',
+    action: info.action,
+    path: info.path,
+    progress: [],
+    result: null,
+    error: null,
+    startedAt: Date.now(),
+    endedAt: null,
+    waiters: new Set(),
+  };
+  pluginShareTasks.set(taskId, task);
+  return task;
+}
+
+function getLivePluginShareTask(taskId) {
+  return pluginShareTasks.get(taskId) ?? null;
+}
+
+function appendPluginShareTaskProgress(task, line) {
+  task.progress.push(String(line ?? ''));
+  notifyPluginShareTaskWaiters(task);
+}
+
+function notifyPluginShareTaskWaiters(task) {
+  const wakers = Array.from(task.waiters);
+  for (const w of wakers) {
+    try {
+      w();
+    } catch {
+      // Never let one bad waiter block the rest.
+    }
+  }
+  if (PLUGIN_SHARE_TERMINAL_STATUSES.has(task.status) && !task._gcScheduled) {
+    task._gcScheduled = true;
+    setTimeout(() => {
+      if (task.waiters.size === 0) {
+        pluginShareTasks.delete(task.id);
+      }
+    }, TASK_TTL_AFTER_DONE_MS).unref?.();
+  }
+}
+
+function pluginShareTaskSnapshot(task, since = 0) {
+  const snapshot = {
+    taskId: task.id,
+    action: task.action,
+    path: task.path,
+    status: task.status,
+    startedAt: task.startedAt,
+    endedAt: task.endedAt,
+    progress: task.progress.slice(since),
+    nextSince: task.progress.length,
+  };
+  if (task.status === 'done') snapshot.result = task.result;
+  if (task.status === 'failed') snapshot.error = task.error;
+  return snapshot;
+}
+
+function pluginShareActionToCli(action) {
+  if (action === 'publish-github') {
+    return {
+      argv: ['plugin', 'publish-repo'],
+      title: 'Publish repo',
+      command: 'od plugin publish-repo',
+      successMessage: 'Published plugin to GitHub.',
+      failureCode: 'publish-repo-failed',
+    };
+  }
+  return {
+    argv: ['plugin', 'open-design-pr'],
+    title: 'Open Design PR',
+    command: 'od plugin open-design-pr',
+    successMessage: 'Opened Open Design PR flow.',
+    failureCode: 'open-design-pr-failed',
+  };
+}
+
+function pluginShareProgressPlan(action) {
+  if (action === 'publish-github') {
+    return [
+      'Resolve GitHub owner and validate plugin metadata',
+      'Create or update the GitHub repository',
+      'Push plugin files',
+      'Return the repository URL',
+    ];
+  }
+  return [
+    'Ensure the Open Design fork exists',
+    'Clone the fork and prepare a branch',
+    'Copy the plugin into plugins/community',
+    'Push the branch and open the PR form',
+  ];
+}
+
+async function runPluginShareTask(task, folder) {
+  const share = pluginShareActionToCli(task.action);
+  appendPluginShareTaskProgress(task, `${share.title} started for ${task.path}`);
+  appendPluginShareTaskProgress(task, `$ ${share.command} ${task.path}`);
+  for (const step of pluginShareProgressPlan(task.action)) {
+    appendPluginShareTaskProgress(task, `- ${step}`);
+  }
+  const result = await execCommandViaLoginShell(OD_NODE_BIN, [
+    OD_BIN,
+    ...share.argv,
+    folder,
+    '--json',
+  ], { timeout: task.action === 'publish-github' ? 240_000 : 300_000 });
+  let payload = null;
+  try {
+    payload = result.stdout ? JSON.parse(result.stdout) : null;
+  } catch (error) {
+    payload = null;
+    appendPluginShareTaskProgress(task, `Failed to parse CLI JSON output: ${String(error?.message || error)}`);
+  }
+  const stepLog = payload?.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [];
+  for (const line of stepLog) {
+    appendPluginShareTaskProgress(task, String(line).trim());
+  }
+  if (!result.ok || !payload?.ok) {
+    task.status = 'failed';
+    task.error = {
+      code: payload?.error?.label || share.failureCode,
+      message: payload?.error?.stderr || payload?.error?.stdout || result.stderr || result.stdout || `${share.title} failed.`,
+      log: stepLog.length > 0 ? stepLog : [result.stderr || result.stdout || `${share.command} failed`],
+    };
+    task.endedAt = Date.now();
+    notifyPluginShareTaskWaiters(task);
+    return;
+  }
+  const url = payload.repoUrl || payload.prUrl || undefined;
+  task.status = 'done';
+  task.result = {
+    message: url
+      ? (task.action === 'publish-github'
+          ? `Published plugin to ${url}.`
+          : `Opened Open Design PR flow at ${url}.`)
+      : share.successMessage,
+    ...(url ? { url } : {}),
+    log: stepLog,
+  };
+  task.endedAt = Date.now();
+  notifyPluginShareTaskWaiters(task);
+}
+
 export function createSseResponse(
   res,
   { keepAliveIntervalMs = SSE_KEEPALIVE_INTERVAL_MS } = {},
@@ -2895,6 +3250,12 @@ export interface StartServerOptions {
 
 const DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000;
 const MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+// After a successful live-artifact registration the daemon switches the
+// chat-run inactivity watchdog from the long pre-artifact ceiling
+// (DEFAULT_CHAT_RUN_INACTIVITY_TIMEOUT_MS) down to a much shorter
+// "quiet period" — the deliverable exists, so further silence almost
+// always means the agent is winding down or hanging. See #1451.
+const DEFAULT_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS = 60 * 1000;
 
 function resolveChatRunInactivityTimeoutMs() {
   const raw = Number(process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS);
@@ -2906,6 +3267,67 @@ function resolveChatRunInactivityTimeoutMs() {
   // makes an oversized override fail almost immediately while reporting a huge
   // timeout. Keep explicit overrides bounded to a practical, timer-safe value.
   return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(raw)));
+}
+
+// Resolve the post-artifact quiet-period window. Same clamp as the outer
+// inactivity watchdog so an oversized override doesn't get Node-downgraded
+// to a 1ms timer. Exported so tests can pin the env behavior without
+// reaching into chat-run internals.
+export function resolveChatRunArtifactQuietPeriodMs() {
+  const raw = Number(process.env.OD_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS);
+  if (!Number.isFinite(raw)) return DEFAULT_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS;
+  return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(raw)));
+}
+
+// Pure resolver for the chat run's *currently active* inactivity
+// ceiling. Used by both `noteAgentActivity` and `noteArtifactRegistered`
+// to pick between the pre-artifact watchdog and the shortened quiet
+// period. Extracted so the `OD_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS=0`
+// "disable the quiet period" semantics can be pinned with focused unit
+// tests (#1451 review: a 0-value override must not strand the pre-artifact
+// timer or stop further reschedules — it has to fall back to the
+// pre-artifact ceiling so subsequent activity keeps refreshing the timer).
+export function resolveActiveInactivityTimeoutMs(params: {
+  inactivityTimeoutMs: number;
+  artifactQuietPeriodMs: number;
+  artifactRegistered: boolean;
+}): number {
+  if (params.artifactRegistered && params.artifactQuietPeriodMs > 0) {
+    return params.artifactQuietPeriodMs;
+  }
+  return params.inactivityTimeoutMs;
+}
+
+// Pure final-status classifier for the chat run's child-close handler.
+// Extracted so the per-branch invariants can be unit-tested without
+// driving a full child process — in particular:
+//   - cancel always wins over success/failure classification.
+//   - the ACP forced-shutdown override is scoped to SIGTERM + clean
+//     completion only (signed-32-bit-overflow SIGKILL or non-clean ACP
+//     state still report `failed`).
+//   - the artifact quiet-period override is gated on a daemon-initiated
+//     flag, NOT on `artifactRegistered` alone — see #1451 review:
+//     an external `kill -9` after the artifact write must still report
+//     `failed`, only the watchdog-initiated SIGTERM/SIGKILL escalation
+//     is allowed to flip the status to `succeeded`.
+export function classifyChatRunCloseStatus(params: {
+  cancelRequested: boolean;
+  code: number | null;
+  signal: NodeJS.Signals | string | null;
+  acpCleanCompletion: boolean;
+  artifactQuietShutdownRequested: boolean;
+}): 'canceled' | 'succeeded' | 'failed' {
+  if (params.cancelRequested) return 'canceled';
+  if (params.code === 0) return 'succeeded';
+  const acpForcedShutdown =
+    params.code === null && params.signal === 'SIGTERM' && params.acpCleanCompletion;
+  if (acpForcedShutdown) return 'succeeded';
+  const artifactQuietShutdown =
+    params.artifactQuietShutdownRequested &&
+    params.code === null &&
+    (params.signal === 'SIGTERM' || params.signal === 'SIGKILL');
+  if (artifactQuietShutdown) return 'succeeded';
+  return 'failed';
 }
 
 function resolveChatRunShutdownGraceMs() {
@@ -3360,13 +3782,15 @@ export async function startServer({
     bundledMarketplaceEntries = result.registered.map((plugin) => ({
       name:        `open-design/${plugin.id}`,
       title:       plugin.title,
-      description: plugin.description,
+      title_i18n:  plugin.manifest.title_i18n,
+      description: plugin.manifest.description,
+      description_i18n: plugin.manifest.description_i18n,
       version:     plugin.version,
       source:      bundledPluginRegistrySource(plugin.source),
       publisher:   { id: 'open-design', url: 'https://open-design.ai' },
       homepage:    plugin.manifest.homepage,
       license:     plugin.manifest.license,
-      tags:        plugin.tags,
+      tags:        plugin.manifest.tags,
       capabilitiesSummary: Array.isArray(plugin.manifest.od?.capabilities)
         ? plugin.manifest.od.capabilities
         : undefined,
@@ -3452,6 +3876,41 @@ export async function startServer({
   app.get('/api/version', async (_req, res) => {
     const version = await readCurrentAppVersionInfo();
     res.json({ version });
+  });
+
+  app.get('/api/github/open-design', async (_req, res) => {
+    try {
+      const stats = await readOpenDesignGithubRepoStats();
+      const payload = /** @type {OpenDesignGithubRepoResponse} */ ({
+        repo: 'nexu-io/open-design',
+        stargazers_count: stats.stargazersCount,
+        fetchedAt: stats.fetchedAt,
+        stale: stats.stale,
+      });
+      res.json(payload);
+    } catch (error) {
+      res.status(502).json({
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+  app.get('/api/github/open-design/releases/latest', async (_req, res) => {
+    try {
+      const release = await readOpenDesignLatestReleaseInfo();
+      const payload = /** @type {OpenDesignGithubLatestReleaseResponse} */ ({
+        repo: 'nexu-io/open-design',
+        tag_name: release.tagName,
+        html_url: release.htmlUrl,
+        fetchedAt: release.fetchedAt,
+        stale: release.stale,
+      });
+      res.json(payload);
+    } catch (error) {
+      res.status(502).json({
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   });
 
   // Plan §3.F2 / spec §11.7 — daemon lifecycle status. Returns the
@@ -4250,34 +4709,159 @@ export async function startServer({
     readAnalyticsContext,
   };
 
-  // PostHog runtime config — gated on BOTH a server-side key (POSTHOG_KEY)
-  // and the user's opt-in metrics consent (Privacy → "Share usage data").
-  // The web bundle short-circuits when enabled=false so opt-out behaviour
-  // is instant after the user toggles metrics off and reloads.
+  // PostHog runtime config.
+  //
+  // - `enabled` reflects ONLY the user's consent toggle (Privacy → "Share
+  //   usage data"). When false, posthog-js's full autocapture/$pageview/
+  //   $autocapture pipeline must stay off — that's the privacy contract.
+  //
+  // - `key` and `host` are populated whenever the server has a build-time
+  //   POSTHOG_KEY, regardless of consent. The error-tracking module
+  //   (apps/web/src/analytics/error-tracking.ts) reads them to ship
+  //   `$exception` events directly to the ingest endpoint, bypassing the
+  //   consent gate. Product decision: error reports always flow so we
+  //   don't lose ground truth on stability — see the privacy section of
+  //   Settings → Privacy for the user-facing copy.
+  //
+  // - When the build itself has no POSTHOG_KEY (forks, PR builds, OSS
+  //   contributors), `key` and `host` are null and even the error
+  //   pipeline becomes a no-op.
   app.get('/api/analytics/config', async (_req, res) => {
     const baseline = readPublicConfigResponse();
     if (!baseline.enabled) {
+      // No build-time key → nothing to report on, consent or not.
       res.json(baseline);
       return;
     }
     try {
       const appCfg = await readAppConfig(RUNTIME_DATA_DIR);
       const consentGranted = appCfg.telemetry?.metrics === true;
-      if (!consentGranted) {
-        res.json({ enabled: false, key: null, host: null });
-        return;
-      }
       // Echo the installationId so the web client uses the same anonymous
       // id PostHog already saw on prior runs (and that Langfuse uses too).
       const installationId =
         typeof appCfg.installationId === 'string' && appCfg.installationId
           ? appCfg.installationId
           : null;
-      res.json({ ...baseline, installationId });
+      res.json({
+        enabled: consentGranted,
+        key: baseline.key,
+        host: baseline.host,
+        installationId,
+      });
     } catch {
-      // If the config file is unreadable, fail closed — no events.
-      res.json({ enabled: false, key: null, host: null });
+      // If the config file is unreadable, fail closed for analytics but
+      // still let the error tracker run — exception reports are the most
+      // valuable signal in a degraded-state scenario.
+      res.json({
+        enabled: false,
+        key: baseline.key,
+        host: baseline.host,
+        installationId: null,
+      });
     }
+  });
+
+  // Cross-process safety-event bridge. Used by:
+  //   - Electron main process (renderer crash via render-process-gone)
+  //   - Any future helper / sidecar that needs to report a safety event
+  //     without owning its own posthog-node client
+  //
+  // The route DOES NOT check the user's analytics consent: this is the
+  // same "safety telemetry always flows" contract the web error-tracking
+  // module relies on. If POSTHOG_KEY is not set on the daemon (fork
+  // builds), captureSafety is a no-op on NOOP_SERVICE.
+  app.post('/api/observability/event', express.json({ limit: '64kb' }), (req, res) => {
+    const body = (req.body ?? {}) as Partial<ObservabilityEventRequest>;
+    const eventName = typeof body.event === 'string' ? body.event.trim() : '';
+    if (!eventName) {
+      res.status(400).json({ error: 'missing or invalid `event` field' });
+      return;
+    }
+    const properties =
+      body.properties != null && typeof body.properties === 'object' && !Array.isArray(body.properties)
+        ? (body.properties as Record<string, unknown>)
+        : {};
+    analyticsService.captureSafety({
+      eventName,
+      appVersion: cachedAppVersion?.version ?? '0.0.0',
+      properties,
+    });
+    res.json({ ok: true });
+  });
+
+  // Daemon-side uncaught errors. Without these, a crash in any daemon
+  // request handler or background task leaves no PostHog signal — the
+  // user sees a 500 (or worse, a connection drop) and we see nothing.
+  // Both listeners install AFTER the analyticsService is created so the
+  // captureSafety dispatch path is guaranteed to be ready.
+  //
+  // IMPORTANT — these handlers MUST keep Node's fatal-exit semantics.
+  // Installing an `uncaughtException` listener silences Node's default
+  // crash/exit path, and Node 15+ does the same for `unhandledRejection`
+  // when a listener is present (the `--unhandled-rejections=throw` mode
+  // only fires when nothing has subscribed). We bounded-flush posthog-
+  // node and then call `process.exit(1)` explicitly so the supervisor
+  // (pm2, packaged updater, dev `tools-dev`) gets a fresh process and
+  // we don't leave a half-broken daemon answering requests with state
+  // corruption. See codex review on PR #2527 (Siri-Ray).
+  const FATAL_FLUSH_TIMEOUT_MS = 1000;
+  let fatalShuttingDown = false;
+  const triggerFatalShutdown = (
+    eventName: string,
+    properties: Record<string, unknown>,
+  ): void => {
+    if (fatalShuttingDown) return;
+    fatalShuttingDown = true;
+    // CRITICAL — wait for captureSafety to ENQUEUE the event in
+    // posthog-node's local buffer before starting shutdown(). The
+    // captureSafety implementation does an `await readInstallationIdSafe()`
+    // before calling `client.capture()`; a sync fire-and-forget here would
+    // race shutdown() ahead of that await, drain an empty queue, and lose
+    // the crash event itself. See codex review on PR #2527 (Siri-Ray).
+    const flushSequence = (async () => {
+      try {
+        await analyticsService.captureSafety({
+          eventName,
+          appVersion: cachedAppVersion?.version ?? '0.0.0',
+          properties,
+        });
+      } catch {
+        // capture must never block the exit path
+      }
+      await analyticsService.shutdown();
+    })();
+    // Race the enqueue+shutdown sequence against a bounded timeout. If
+    // posthog-node hangs on a slow flush (or the installationId read
+    // hangs on the filesystem) we still die in bounded time — the
+    // supervisor will restart us, which is the whole point.
+    void Promise.race([
+      flushSequence,
+      new Promise<void>((resolve) => {
+        const handle = setTimeout(resolve, FATAL_FLUSH_TIMEOUT_MS);
+        handle.unref?.();
+      }),
+    ]).finally(() => {
+      process.exitCode = 1;
+      process.exit(1);
+    });
+  };
+  process.on('uncaughtException', (error) => {
+    triggerFatalShutdown('daemon_uncaught_exception', {
+      error_message: error?.message ?? String(error),
+      error_name: error?.name ?? 'Error',
+      // Stack truncation: 8 KB ceiling to keep the ingest payload bounded
+      // even when the stack contains huge native frames. Most actionable
+      // stacks fit in well under 2 KB.
+      error_stack: typeof error?.stack === 'string' ? error.stack.slice(0, 8192) : undefined,
+    });
+  });
+  process.on('unhandledRejection', (reason) => {
+    const asError = reason instanceof Error ? reason : null;
+    triggerFatalShutdown('daemon_unhandled_rejection', {
+      error_message: asError?.message ?? (typeof reason === 'string' ? reason : String(reason)),
+      error_name: asError?.name ?? 'NonErrorRejection',
+      error_stack: typeof asError?.stack === 'string' ? asError.stack.slice(0, 8192) : undefined,
+    });
   });
 
   // Tracks runs whose completion has already been forwarded to Langfuse so
@@ -4289,6 +4873,15 @@ export async function startServer({
   void (async () => {
     try {
       cachedAppVersion = await readCurrentAppVersionInfo();
+      await observePendingInstallerApplyAttempts({
+        analytics: analyticsService,
+        appVersion: cachedAppVersion.version,
+        currentChannel: cachedAppVersion.channel,
+        currentVersion: cachedAppVersion.version,
+        dataRoot: RUNTIME_DATA_DIR,
+        logger: console,
+        namespace: process.env[SIDECAR_ENV.NAMESPACE] ?? SIDECAR_DEFAULTS.namespace,
+      });
     } catch {
       // Telemetry is best-effort; appVersion is omitted when unavailable.
     }
@@ -4301,6 +4894,19 @@ export async function startServer({
     reportedRuns,
     getAppVersion: () => cachedAppVersion,
   });
+
+  const reportFeedback = (req: {
+    runId: string;
+    rating: 'positive' | 'negative';
+    reasonCodes: string[];
+    hasCustomReason: boolean;
+    customReason: string;
+    scoreMetadata?: Record<string, unknown>;
+  }) =>
+    reportRunFeedbackFromDaemon({
+      dataDir: RUNTIME_DATA_DIR,
+      ...req,
+    });
 
   // DNS-aware wrapper. The sync `validateBaseUrl` only inspects the literal
   // hostname string, so a public DNS name pointing at an internal address
@@ -7897,53 +8503,28 @@ export async function startServer({
       const relativePath = normalizeProjectPluginFolderPath(body.path);
       const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata);
       const folder = await resolveProjectChildDirectory(projectRoot, relativePath);
-      const gh = await ensureGhReady();
-      if (!gh.ok) {
-        res.status(409).json(gh);
+      const result = await execCommandViaLoginShell(OD_NODE_BIN, [
+        OD_BIN,
+        'plugin',
+        'publish-repo',
+        folder,
+        '--json',
+      ], { timeout: 240_000 });
+      const payload = result.stdout ? JSON.parse(result.stdout) : null;
+      if (!result.ok || !payload?.ok) {
+        res.status(500).json({
+          ok: false,
+          code: payload?.error?.label || 'publish-repo-failed',
+          message: payload?.error?.stderr || payload?.error?.stdout || 'GitHub repo publish failed.',
+          log: payload?.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [result.stderr || result.stdout || 'publish-repo failed'],
+        });
         return;
       }
-      const meta = await readProjectPluginManifest(folder);
-      const repoName = githubRepoNameFromPluginName(meta.name);
-      const tmp = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'od-plugin-publish-'));
-      const work = path.join(tmp, repoName);
-      await fs.promises.cp(folder, work, { recursive: true });
-      const log = [...(gh.log ?? [])];
-      for (const [cmd, args] of [
-        ['git', ['init']],
-        ['git', ['add', '.']],
-        ['git', ['-c', 'user.name=Open Design', '-c', 'user.email=open-design@example.invalid', 'commit', '-m', `Publish ${meta.title}`]],
-      ]) {
-        const result = await execFileBuffered(cmd, args, { cwd: work });
-        log.push(result.stdout || result.stderr);
-        if (!result.ok) {
-          await fs.promises.rm(tmp, { recursive: true, force: true }).catch(() => undefined);
-          res.status(500).json({ ok: false, code: `${cmd}-failed`, message: `${cmd} failed while preparing the plugin repository.`, log });
-          return;
-        }
-      }
-      const create = await execFileBuffered('gh', [
-        'repo',
-        'create',
-        repoName,
-        '--public',
-        '--source',
-        work,
-        '--push',
-      ], { cwd: work });
-      log.push(create.stdout || create.stderr);
-      if (!create.ok) {
-        await fs.promises.rm(tmp, { recursive: true, force: true }).catch(() => undefined);
-        res.status(500).json({ ok: false, code: 'gh-repo-create-failed', message: 'GitHub repo creation failed.', log });
-        return;
-      }
-      const view = await execFileBuffered('gh', ['repo', 'view', '--json', 'url', '--jq', '.url'], { cwd: work });
-      const url = view.ok && view.stdout ? view.stdout : undefined;
-      await fs.promises.rm(tmp, { recursive: true, force: true }).catch(() => undefined);
       res.json({
         ok: true,
-        message: url ? `Published ${meta.title} to ${url}.` : `Published ${meta.title} to GitHub.`,
-        ...(url ? { url } : {}),
-        log,
+        message: payload.repoUrl ? `Published plugin to ${payload.repoUrl}.` : 'Published plugin to GitHub.',
+        ...(payload.repoUrl ? { url: payload.repoUrl } : {}),
+        log: payload.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [],
       });
     } catch (err) {
       res.status(400).json({ ok: false, message: String(err?.message || err), log: [] });
@@ -7961,107 +8542,124 @@ export async function startServer({
       const relativePath = normalizeProjectPluginFolderPath(body.path);
       const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata);
       const folder = await resolveProjectChildDirectory(projectRoot, relativePath);
-      const gh = await ensureGhReady();
-      if (!gh.ok) {
-        res.status(409).json(gh);
-        return;
-      }
-      const meta = await readProjectPluginManifest(folder);
-      const repoName = githubRepoNameFromPluginName(meta.name);
-      const user = await execFileBuffered('gh', ['api', 'user', '--jq', '.login'], { timeout: 20_000 });
-      if (!user.ok || !user.stdout) {
-        res.status(409).json({
+      const result = await execCommandViaLoginShell(OD_NODE_BIN, [
+        OD_BIN,
+        'plugin',
+        'open-design-pr',
+        folder,
+        '--json',
+      ], { timeout: 300_000 });
+      const payload = result.stdout ? JSON.parse(result.stdout) : null;
+      if (!result.ok || !payload?.ok) {
+        res.status(500).json({
           ok: false,
-          code: 'gh-user-unavailable',
-          message: 'Could not read the authenticated GitHub user from gh.',
-          log: [...(gh.log ?? []), user.stderr || user.stdout],
+          code: payload?.error?.label || 'open-design-pr-failed',
+          message: payload?.error?.stderr || payload?.error?.stdout || 'Open Design PR creation failed.',
+          log: payload?.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [result.stderr || result.stdout || 'open-design-pr failed'],
         });
-        return;
-      }
-      const login = user.stdout.trim();
-      const tmp = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'od-plugin-pr-'));
-      const work = path.join(tmp, 'open-design');
-      const branch = `plugin/${repoName}-${Date.now()}`;
-      const dest = path.join(work, 'plugins', 'community', repoName);
-      const bodyText = [
-        `Adds ${meta.title} as a community Open Design plugin.`,
-        '',
-        '## Source',
-        '',
-        `- Generated from project: ${project.id}`,
-        `- Manifest name: \`${meta.name}\``,
-        `- Version: \`${meta.version}\``,
-        '',
-        '## Checklist',
-        '',
-        '- [ ] Maintainer reviewed manifest metadata',
-        '- [ ] Maintainer verified plugin skill instructions',
-      ].join('\n');
-      const log = [...(gh.log ?? [])];
-      for (const [cmd, args, opts] of [
-        ['gh', ['repo', 'fork', 'nexu-io/open-design', '--remote=false'], { cwd: tmp }],
-        ['gh', ['repo', 'clone', 'nexu-io/open-design', work], { cwd: tmp }],
-        ['git', ['checkout', '-b', branch], { cwd: work }],
-        ['git', ['remote', 'add', 'fork', `https://github.com/${login}/open-design.git`], { cwd: work }],
-      ]) {
-        const result = await execFileBuffered(cmd, args, opts);
-        log.push(result.stdout || result.stderr);
-        const toleratedExistingFork =
-          cmd === 'gh' && args[0] === 'repo' && args[1] === 'fork' &&
-          /already exists|existing fork/i.test(String(result.stderr || result.stdout));
-        const toleratedExistingRemote =
-          cmd === 'git' && args[0] === 'remote' &&
-          /already exists/i.test(String(result.stderr || result.stdout));
-        if (!result.ok && !toleratedExistingFork && !toleratedExistingRemote) {
-          await fs.promises.rm(tmp, { recursive: true, force: true }).catch(() => undefined);
-          res.status(500).json({ ok: false, code: `${cmd}-failed`, message: `${cmd} failed while preparing the Open Design PR.`, log });
-          return;
-        }
-      }
-      await fs.promises.mkdir(path.dirname(dest), { recursive: true });
-      await fs.promises.cp(folder, dest, { recursive: true });
-      for (const [cmd, args] of [
-        ['git', ['add', `plugins/community/${repoName}`]],
-        ['git', ['-c', 'user.name=Open Design', '-c', 'user.email=open-design@example.invalid', 'commit', '-m', `Add ${meta.title} plugin`]],
-        ['git', ['push', '-u', 'fork', branch]],
-      ]) {
-        const result = await execFileBuffered(cmd, args, { cwd: work });
-        log.push(result.stdout || result.stderr);
-        if (!result.ok) {
-          await fs.promises.rm(tmp, { recursive: true, force: true }).catch(() => undefined);
-          res.status(500).json({ ok: false, code: `${cmd}-failed`, message: `${cmd} failed while preparing the Open Design PR.`, log });
-          return;
-        }
-      }
-      const pr = await execFileBuffered('gh', [
-        'pr',
-        'create',
-        '--repo',
-        'nexu-io/open-design',
-        '--head',
-        `${login}:${branch}`,
-        '--base',
-        'main',
-        '--title',
-        `Add ${meta.title} plugin`,
-        '--body',
-        bodyText,
-      ], { cwd: work });
-      log.push(pr.stdout || pr.stderr);
-      await fs.promises.rm(tmp, { recursive: true, force: true }).catch(() => undefined);
-      if (!pr.ok) {
-        res.status(500).json({ ok: false, code: 'gh-pr-create-failed', message: 'Open Design PR creation failed.', log });
         return;
       }
       res.json({
         ok: true,
-        message: `Created Open Design PR for ${meta.title}.`,
-        url: pr.stdout || undefined,
-        log,
+        message: payload.prUrl ? `Opened Open Design PR flow at ${payload.prUrl}.` : 'Opened Open Design PR flow.',
+        ...(payload.prUrl ? { url: payload.prUrl } : {}),
+        log: payload.steps?.map((step) => step.stderr || step.stdout || step.command).filter(Boolean) ?? [],
       });
     } catch (err) {
       res.status(400).json({ ok: false, message: String(err?.message || err), log: [] });
     }
+  });
+
+  app.post('/api/projects/:id/plugins/share-tasks', async (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    try {
+      const project = getProject(db, req.params.id);
+      if (!project) {
+        sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+        return;
+      }
+      const body = req.body && typeof req.body === 'object' ? req.body : {};
+      const action = body.action === 'publish-github' || body.action === 'contribute-open-design'
+        ? body.action
+        : null;
+      if (!action) {
+        sendApiError(res, 400, 'BAD_REQUEST', 'plugin share action is required');
+        return;
+      }
+      const relativePath = normalizeProjectPluginFolderPath(body.path);
+      const projectRoot = resolveProjectDir(PROJECTS_DIR, req.params.id, project.metadata);
+      const folder = await resolveProjectChildDirectory(projectRoot, relativePath);
+      const taskId = randomUUID();
+      const task = createPluginShareTask(taskId, req.params.id, {
+        action,
+        path: relativePath,
+      });
+      task.status = 'running';
+      notifyPluginShareTaskWaiters(task);
+      void runPluginShareTask(task, folder).catch((err) => {
+        task.status = 'failed';
+        task.error = {
+          code: 'plugin-share-task-failed',
+          message: String(err?.message || err),
+          log: [String(err?.stack || err?.message || err)],
+        };
+        task.endedAt = Date.now();
+        notifyPluginShareTaskWaiters(task);
+      });
+      res.status(202).json({
+        taskId,
+        action,
+        path: relativePath,
+        status: task.status,
+        startedAt: task.startedAt,
+      });
+    } catch (err) {
+      const code = err && err.code;
+      const status = code === 'ENOENT' || code === 'ENOTDIR' ? 404 : 400;
+      sendApiError(
+        res,
+        status,
+        status === 404 ? 'PLUGIN_FOLDER_NOT_FOUND' : 'BAD_REQUEST',
+        String(err?.message || err),
+      );
+    }
+  });
+
+  app.post('/api/plugins/share-tasks/:id/wait', (req, res) => {
+    if (!isLocalSameOrigin(req, resolvedPort)) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    const task = getLivePluginShareTask(req.params.id);
+    if (!task) return res.status(404).json({ error: 'task not found' });
+
+    const since = Number.isFinite(req.body?.since) ? Number(req.body.since) : 0;
+    const requestedTimeout = Number.isFinite(req.body?.timeoutMs)
+      ? Number(req.body.timeoutMs)
+      : 25_000;
+    const timeoutMs = Math.min(Math.max(requestedTimeout, 0), 25_000);
+
+    const respond = () => {
+      if (res.writableEnded) return;
+      res.json(pluginShareTaskSnapshot(task, since));
+    };
+
+    if (PLUGIN_SHARE_TERMINAL_STATUSES.has(task.status) || task.progress.length > since) {
+      return respond();
+    }
+
+    let resolved = false;
+    const wake = () => {
+      if (resolved) return;
+      resolved = true;
+      task.waiters.delete(wake);
+      clearTimeout(timer);
+      respond();
+    };
+    task.waiters.add(wake);
+    const timer = setTimeout(wake, timeoutMs);
+    res.on('close', wake);
   });
 
   app.get('/api/projects/:id/search', async (req, res) => {
@@ -9925,11 +10523,26 @@ export async function startServer({
       design.runs.emit(run, event, data);
     };
     const inactivityTimeoutMs = resolveChatRunInactivityTimeoutMs();
+    const artifactQuietPeriodMs = resolveChatRunArtifactQuietPeriodMs();
     const inactivityKillGraceMs = 3_000;
     let inactivityTimer = null;
     let childStdoutSeen = false;
     let lastAgentEventPhase = 'spawn pending';
     let lastToolResultChars = 0;
+    // Becomes true once any live-artifact create has been registered for
+    // this run. Subsequent watchdog scheduling uses the shorter quiet
+    // period, and a watchdog trip after this point is treated as
+    // "agent finished the deliverable and went idle" rather than
+    // "agent stalled with nothing to show" (issue #1451).
+    let artifactRegistered = false;
+    // Only daemon-initiated quiet-period termination should be treated
+    // as `succeeded` in the close handler. A later unrelated SIGTERM /
+    // SIGKILL (external `kill`, OOM, container shutdown) must keep its
+    // existing `failed` classification even when `artifactRegistered`
+    // is true — those signals don't mean the agent finished cleanly,
+    // they just terminated the process. Set strictly inside
+    // `failForInactivity`'s quiet-period branch.
+    let artifactQuietShutdownRequested = false;
     const summarizeAgentEventForInactivity = (payload) => {
       const type = payload?.type ? String(payload.type) : 'unknown';
       if (type === 'tool_result') {
@@ -9964,13 +10577,35 @@ export async function startServer({
     };
     const failForInactivity = () => {
       if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
+      clearInactivityWatchdog();
+      if (artifactRegistered) {
+        // The deliverable already exists. The agent process is either
+        // genuinely idle (claude-code's stream-json child sitting on an
+        // open stdin) or wedged in post-write reasoning that never
+        // emits stdout. Either way, finishing the run via the normal
+        // child-exit path (status decision in child.on('close') below)
+        // is safer than tearing it down with a failure banner — the
+        // tool token, cancel state, and exit-code classification stay
+        // owned by the existing lifecycle. SIGTERM the child and let
+        // the close handler classify the run as succeeded (via the
+        // artifactQuietShutdown branch). Mark this termination as
+        // daemon-initiated so an unrelated later signal (external
+        // kill, OOM) is NOT silently reclassified to `succeeded` —
+        // only signals from this watchdog branch should be.
+        artifactQuietShutdownRequested = true;
+        if (acpSession?.abort) {
+          acpSession.abort();
+        }
+        if (child && !child.killed) child.kill('SIGTERM');
+        scheduleForcedChildShutdown();
+        return;
+      }
       const message =
         `Agent stalled without emitting any new output for ${Math.round(inactivityTimeoutMs / 1000)}s. ` +
         'The model or CLI likely hung while generating. ' +
         `Phase details: spawned agent binary ${resolvedBin}; stdout arrived: ${childStdoutSeen ? 'yes' : 'no'}; ` +
         `last agent event: ${lastAgentEventPhase}; largest tool result observed: ${lastToolResultChars} chars. ` +
         'Retry the turn, pick a different model, or start a new conversation if the prior context is very large.';
-      clearInactivityWatchdog();
       send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', message, { retryable: true }));
       design.runs.finish(run, 'failed', 1, null);
       if (acpSession?.abort) {
@@ -9979,14 +10614,41 @@ export async function startServer({
       if (child && !child.killed) child.kill('SIGTERM');
       scheduleForcedChildShutdown();
     };
+    const activeInactivityTimeoutMs = () =>
+      resolveActiveInactivityTimeoutMs({
+        inactivityTimeoutMs,
+        artifactQuietPeriodMs,
+        artifactRegistered,
+      });
     const noteAgentActivity = () => {
-      if (inactivityTimeoutMs <= 0) return;
+      const delay = activeInactivityTimeoutMs();
+      if (delay <= 0) return;
       clearInactivityWatchdog();
-      inactivityTimer = setTimeout(failForInactivity, inactivityTimeoutMs);
+      inactivityTimer = setTimeout(failForInactivity, delay);
       inactivityTimer.unref?.();
     };
+    const noteArtifactRegistered = () => {
+      if (artifactRegistered) return;
+      artifactRegistered = true;
+      // Switch the watchdog to the shorter quiet-period window
+      // immediately so we don't have to wait for the next agent event
+      // before the new ceiling takes effect. Call unconditionally:
+      // an earlier `if (inactivityTimer)` gate left the run in limbo
+      // when `OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS=0` but
+      // `OD_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS>0` — noteAgentActivity()
+      // had returned early at run start (pre-artifact delay = 0,
+      // no timer set), so the guard then skipped the re-arm and the
+      // newly-positive quiet-period delay never armed a timer at all.
+      // `noteAgentActivity` itself is the one that decides whether to
+      // schedule (it bails when the active delay is 0), so leaving the
+      // decision there keeps the behavior coherent across all four
+      // combinations of pre / quiet timeouts.
+      noteAgentActivity();
+    };
     const unregisterChatAgentEventSink = () => {
-      activeChatAgentEventSinks.delete(toolTokenGrant?.runId ?? runId);
+      const sinkRunId = toolTokenGrant?.runId ?? runId;
+      activeChatAgentEventSinks.delete(sinkRunId);
+      activeChatRunHandles.delete(sinkRunId);
     };
     if (toolTokenGrant?.runId) {
       activeChatAgentEventSinks.set(toolTokenGrant.runId, (payload) => {
@@ -9994,6 +10656,7 @@ export async function startServer({
         noteAgentActivity();
         send('agent', payload);
       });
+      activeChatRunHandles.set(toolTokenGrant.runId, { noteArtifactRegistered });
     }
     // If detection can't find the binary, surface a friendly SSE error
     // pointing at /api/agents instead of silently falling back to
@@ -10625,13 +11288,13 @@ export async function startServer({
       const acpCleanCompletion =
         typeof acpSession?.completedSuccessfully === 'function' &&
         acpSession.completedSuccessfully();
-      const acpForcedShutdown =
-        code === null && signal === 'SIGTERM' && acpCleanCompletion;
-      const status = run.cancelRequested
-        ? 'canceled'
-        : code === 0 || acpForcedShutdown
-          ? 'succeeded'
-          : 'failed';
+      const status = classifyChatRunCloseStatus({
+        cancelRequested: !!run.cancelRequested,
+        code,
+        signal,
+        acpCleanCompletion,
+        artifactQuietShutdownRequested,
+      });
       if (status === 'failed') {
         const diagnostic = diagnoseClaudeCliFailure({
           agentId: def.id,
@@ -11076,23 +11739,52 @@ export async function startServer({
       const userQueryTokens = promptText.length > 0
         ? Math.ceil(promptText.length / 4)
         : 0;
+      // Optional analytics context the client may attach to a run.
+      // Used to thread the DS run variant (`design_system_project` /
+      // `design_system_generation` page+area, `project_kind=design_system`,
+      // entry_from values like `design_system_create`) plus per-source
+      // counts onto run_created / run_finished. Behavior never depends on
+      // these; only PostHog props do.
+      const analyticsHints =
+        (reqBody as { analyticsHints?: Record<string, unknown> | null }).analyticsHints
+          && typeof (reqBody as { analyticsHints?: unknown }).analyticsHints === 'object'
+          ? ((reqBody as { analyticsHints?: Record<string, unknown> }).analyticsHints ?? {})
+          : {};
+      const hintEntryFrom = typeof analyticsHints.entryFrom === 'string'
+        ? analyticsHints.entryFrom
+        : undefined;
+      const hintProjectKind = typeof analyticsHints.projectKind === 'string'
+        ? analyticsHints.projectKind
+        : null;
+      const dsRunContext =
+        analyticsHints.designSystemRunContext
+          && typeof analyticsHints.designSystemRunContext === 'object'
+          ? (analyticsHints.designSystemRunContext as Record<string, unknown>)
+          : {};
+      const isDesignSystemRun =
+        hintProjectKind === 'design_system'
+        || hintEntryFrom === 'design_system_create'
+        || hintEntryFrom === 'onboarding_design_system'
+        || hintEntryFrom === 'regenerate_from_review';
       // Only fields the current `/api/runs` create payload actually
       // sends. The v2 schema documents extended context props
       // (entry_from / project_kind / target_platforms / fidelity /
       // companion_surfaces / connectors / use_speaker_notes /
       // include_animations / reference_template / aspect /
-      // project_source) but `packages/contracts/src/api/chat.ts` and
-      // `apps/web/src/providers/daemon.ts` do not yet thread them onto
-      // the wire, so reading them here would always produce null/undef
-      // — better to omit until a follow-up extends the create payload.
+      // project_source) — most aren't on the wire yet, but
+      // entry_from / projectKind / DS run context land here when the
+      // client populates `analyticsHints`. Other dimensions stay
+      // omitted until follow-up PRs thread them through.
       const baseProps: Record<string, unknown> = {
-        page_name: 'chat_panel',
-        area: 'chat_composer',
+        page_name: isDesignSystemRun ? 'design_system_project' : 'chat_panel',
+        area: isDesignSystemRun ? 'design_system_generation' : 'chat_composer',
         ...configureGlobals,
         project_id: typeof reqBody.projectId === 'string' ? reqBody.projectId : null,
         conversation_id:
           typeof reqBody.conversationId === 'string' ? reqBody.conversationId : null,
         run_id: run.id,
+        project_kind: hintProjectKind,
+        ...(hintEntryFrom ? { entry_from: hintEntryFrom } : {}),
         design_system_id:
           typeof reqBody.designSystemId === 'string'
             ? reqBody.designSystemId
@@ -11111,6 +11803,33 @@ export async function startServer({
           typeof reqBody.designSystemId === 'string' && reqBody.designSystemId
             ? 'unknown'
             : 'not_applicable',
+        ...(isDesignSystemRun ? {
+          ds_source_origin: typeof dsRunContext.origin === 'string'
+            ? dsRunContext.origin
+            : undefined,
+          source_count: typeof dsRunContext.sourceCount === 'number'
+            ? dsRunContext.sourceCount
+            : undefined,
+          has_brand_description: typeof dsRunContext.hasBrandDescription === 'boolean'
+            ? dsRunContext.hasBrandDescription
+            : undefined,
+          brand_description_length_bucket:
+            typeof dsRunContext.brandDescriptionLengthBucket === 'string'
+              ? dsRunContext.brandDescriptionLengthBucket
+              : undefined,
+          github_repo_count: typeof dsRunContext.githubRepoCount === 'number'
+            ? dsRunContext.githubRepoCount
+            : undefined,
+          local_folder_count: typeof dsRunContext.localFolderCount === 'number'
+            ? dsRunContext.localFolderCount
+            : undefined,
+          fig_file_count: typeof dsRunContext.figFileCount === 'number'
+            ? dsRunContext.figFileCount
+            : undefined,
+          asset_file_count: typeof dsRunContext.assetFileCount === 'number'
+            ? dsRunContext.assetFileCount
+            : undefined,
+        } : {}),
         has_attachment: Array.isArray(reqBody.attachments)
           ? (reqBody.attachments as unknown[]).length > 0
           : false,
@@ -11171,9 +11890,31 @@ export async function startServer({
           appVersion: design.getAppVersion(),
           properties: {
             ...baseProps,
-            area: 'chat_panel',
+            // `area` flips on run_finished: chat_panel runs publish
+            // under `chat_panel`, DS runs stay on
+            // `design_system_generation` to match the run_created shape.
+            area: isDesignSystemRun ? 'design_system_generation' : 'chat_panel',
             result,
-            artifact_count: 0,
+            // Incremental count of `.html` paths the run produced or
+            // modified, deduped per file. Replaces the hard-coded `0`
+            // that masked the "did this run actually generate an
+            // artifact?" funnel on PostHog. See `run-artifacts.ts`
+            // for the dedup semantics; tested in
+            // `tests/run-artifacts.test.ts`.
+            artifact_count: countNewHtmlArtifacts(run.events),
+            ...(isDesignSystemRun ? {
+              // DS runs land a `DESIGN.md` write when generation
+              // succeeded; the run-artifacts inspector reuses the
+              // same Write/Edit pairing it already does for HTML
+              // artifact counts, just keyed on `DESIGN.md`.
+              design_system_created: didRunCreateDesignSystemFile(run.events),
+              preview_module_count: countDesignSystemPreviewModules(run.events),
+              // `missing_font_count` defaults to 0 — the agent flow
+              // doesn't emit a structured "missing fonts" signal yet.
+              // Kept on the wire so the dashboard has the column from
+              // day one; can be sourced later from a font-audit hook.
+              missing_font_count: 0,
+            } : {}),
             total_duration_ms: Date.now() - runStartedAt,
             ...(errorCode ? { error_code: errorCode } : {}),
             ...(inputTokens !== undefined ? { input_tokens: inputTokens } : {}),
@@ -11575,7 +12316,7 @@ export async function startServer({
     critique: critiqueDeps,
     validation: validationDeps,
     lifecycle: { isDaemonShuttingDown: () => daemonShuttingDown },
-
+    telemetry: { reportFinalizedMessage, reportFeedback },
   });
 
   registerStaticSpaFallback(app, STATIC_DIR);

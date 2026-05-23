@@ -141,8 +141,10 @@ export const PluginManifestSchema = z.object({
   specVersion: OpenDesignSpecVersionSchema.optional(),
   name:        z.string().min(1).regex(/^[a-z0-9][a-z0-9._-]*$/),
   title:       z.string().optional(),
+  title_i18n:  LocalizedTextSchema.optional(),
   version:     z.string().min(1),
   description: z.string().optional(),
+  description_i18n: LocalizedTextSchema.optional(),
   author:   z.object({
     name: z.string().optional(),
     url:  z.string().optional(),

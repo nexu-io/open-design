@@ -71,6 +71,16 @@ function extractErrorMessage(value: unknown, fallback: string): string {
   return fallback;
 }
 
+function isRecoverableCodexReconnect(message: string): boolean {
+  return (
+    message.startsWith('Reconnecting...') &&
+    (
+      message.includes('timeout waiting for child process to exit') ||
+      message.includes('stream disconnected before completion')
+    )
+  );
+}
+
 function formatOpenCodeUsage(tokens: unknown): Usage | null {
   if (!isRecord(tokens)) return null;
   const usage: Usage = {};
@@ -272,11 +282,7 @@ function handleCodexEvent(obj: unknown, onEvent: StreamEventHandler, state: Pars
 if (obj.type === 'error') {
   const message = extractErrorMessage(obj.message ?? obj.error, 'Codex error');
   // Reconnecting events are recoverable — treat as status warning, not fatal
-  if (
-    typeof message === 'string' &&
-    message.includes('Reconnecting...') &&
-    message.includes('timeout waiting for child process to exit')
-  ) {
+  if (isRecoverableCodexReconnect(message)) {
     onEvent({ type: 'status', label: message });
     return true;
   }

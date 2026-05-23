@@ -34,6 +34,7 @@ export function withCurrentDesktopAuthGate(snapshot: DaemonStatusSnapshot): Daem
 }
 
 const DAEMON_PORT_ENV = SIDECAR_ENV.DAEMON_PORT;
+const WEB_PORT_ENV = SIDECAR_ENV.WEB_PORT;
 const TOOLS_DEV_PARENT_PID_ENV = SIDECAR_ENV.TOOLS_DEV_PARENT_PID;
 
 export type DaemonSidecarHandle = {
@@ -49,6 +50,11 @@ function parsePort(value: string | undefined): number {
     throw new Error(`${DAEMON_PORT_ENV} must be an integer between 0 and 65535`);
   }
   return port;
+}
+
+function parseOptionalTrustedWebPort(value: string | undefined): number | null {
+  const port = parsePort(value);
+  return port > 0 ? port : null;
 }
 
 function isProcessAlive(pid: number): boolean {
@@ -100,6 +106,7 @@ export async function startDaemonSidecar(runtime: SidecarRuntimeContext<SidecarS
     desktopAuthGateActive: isDesktopAuthGateActive(),
     pid: process.pid,
     state: "running",
+    trustedWebOriginPort: parseOptionalTrustedWebPort(process.env[WEB_PORT_ENV]),
     updatedAt: new Date().toISOString(),
     url: serverHandle.url,
   };

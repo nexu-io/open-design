@@ -1,7 +1,7 @@
 ---
 import SkillPage, {
   getStaticPaths as getSkillStaticPaths,
-} from '../../skills/[slug].astro';
+} from '../../skills/[slug]/index.astro';
 import { DEFAULT_LOCALE, LANDING_LOCALES } from '../../../i18n';
 
 export async function getStaticPaths() {

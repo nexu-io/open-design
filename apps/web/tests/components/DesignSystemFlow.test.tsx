@@ -12,7 +12,7 @@ import {
   DesignSystemCreationFlow,
   DesignSystemDetailView,
 } from '../../src/components/DesignSystemFlow';
-import type { AppConfig, DesignSystemDetail, Project } from '../../src/types';
+import type { AppConfig, Conversation, DesignSystemDetail, Project, ProjectFile } from '../../src/types';
 import { I18nProvider } from '../../src/i18n';
 
 const mocks = vi.hoisted(() => ({
@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   fetchDesignSystemRevisions: vi.fn(),
   fetchProjectDesignSystemPackageAudit: vi.fn(),
   fetchProjectFiles: vi.fn(),
+  getProject: vi.fn(),
   openFolderDialog: vi.fn(),
   patchProject: vi.fn(),
   createConversation: vi.fn(),
@@ -41,17 +42,31 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../src/components/ChatPane', () => ({
   ChatPane: ({
+    error,
+    onNewConversation,
     onSend,
   }: {
+    error?: string | null;
+    onNewConversation?: () => void;
     onSend: (prompt: string, attachments: unknown[], commentAttachments: unknown[]) => void;
   }) => (
-    <button
-      type="button"
-      data-testid="design-system-chat-send"
-      onClick={() => onSend('Update the design tokens', [], [])}
-    >
-      send
-    </button>
+    <>
+      {error ? <div role="alert">{error}</div> : null}
+      <button
+        type="button"
+        data-testid="new-conversation"
+        onClick={() => onNewConversation?.()}
+      >
+        New
+      </button>
+      <button
+        type="button"
+        data-testid="design-system-chat-send"
+        onClick={() => onSend('Update the design tokens', [], [])}
+      >
+        send
+      </button>
+    </>
   ),
 }));
 
@@ -91,6 +106,7 @@ vi.mock('../../src/state/projects', async () => {
   return {
     ...actual,
     createConversation: mocks.createConversation,
+    getProject: mocks.getProject,
     listConversations: mocks.listConversations,
     listMessages: mocks.listMessages,
     loadTabs: mocks.loadTabs,
@@ -114,6 +130,7 @@ beforeEach(() => {
   mocks.fetchDesignSystemRevisions.mockResolvedValue([]);
   mocks.fetchProjectDesignSystemPackageAudit.mockResolvedValue(null);
   mocks.fetchProjectFiles.mockResolvedValue([]);
+  mocks.getProject.mockResolvedValue(null);
   mocks.fetchConnectorStatuses.mockResolvedValue({});
   mocks.createConversation.mockResolvedValue(null);
   mocks.listConversations.mockResolvedValue([]);
@@ -1767,6 +1784,411 @@ describe('DesignSystemCreationFlow', () => {
 });
 
 describe('DesignSystemDetailView', () => {
+  it('opens the Design Files workspace when the detail payload omits the optional source field', async () => {
+    const system = {
+      id: 'user:acme-design-system',
+      title: 'Acme Design System',
+      category: 'Custom',
+      summary: 'Acme product workspace.',
+      swatches: [],
+      surface: 'web',
+      body: '# Acme Design System\n',
+      status: 'draft',
+      isEditable: true,
+      projectId: 'ds-acme-design-system',
+    } satisfies Omit<DesignSystemDetail, 'source'>;
+    const project: Project = {
+      id: 'ds-acme-design-system',
+      name: 'Acme Design System',
+      skillId: null,
+      designSystemId: system.id,
+      createdAt: 1,
+      updatedAt: 1,
+      metadata: {
+        kind: 'other',
+        importedFrom: 'design-system',
+        entryFile: 'DESIGN.md',
+        sourceFileName: system.id,
+      },
+    };
+    const config: AppConfig = {
+      mode: 'daemon',
+      apiKey: '',
+      baseUrl: '',
+      model: '',
+      agentId: 'agent-1',
+      agentModels: {},
+      skillId: null,
+      designSystemId: null,
+    };
+
+    mocks.fetchDesignSystem.mockResolvedValue(system);
+    mocks.ensureDesignSystemWorkspace.mockResolvedValue({ project, files: [] });
+    mocks.listConversations.mockResolvedValue([
+      { id: 'conv-design-system', projectId: project.id, title: 'Design system', createdAt: 1, updatedAt: 1 },
+    ]);
+
+    render(
+      <DesignSystemDetailView
+        id={system.id}
+        selectedId={system.id}
+        config={config}
+        agents={[{ id: 'agent-1', name: 'OpenCode', bin: 'opencode', available: true, models: [] }]}
+        onBack={() => {}}
+        onSetDefault={() => {}}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Design Files' }));
+
+    await waitFor(() => expect(mocks.ensureDesignSystemWorkspace).toHaveBeenCalledWith(system.id));
+    await waitFor(() => expect(screen.getByTestId('design-system-files')).toBeTruthy());
+    expect(screen.queryByText('Opening the design system workspace...')).toBeNull();
+  });
+
+  it('opens the existing project fallback when workspace creation returns null', async () => {
+    const system: DesignSystemDetail = {
+      id: 'user:acme-design-system',
+      title: 'Acme Design System',
+      category: 'Custom',
+      summary: 'Acme product workspace.',
+      swatches: [],
+      surface: 'web',
+      body: '# Acme Design System\n',
+      source: 'user',
+      status: 'draft',
+      isEditable: true,
+      projectId: 'ds-acme-design-system',
+    };
+    const project: Project = {
+      id: 'ds-acme-design-system',
+      name: 'Acme Design System',
+      skillId: null,
+      designSystemId: system.id,
+      createdAt: 1,
+      updatedAt: 1,
+      metadata: {
+        kind: 'other',
+        importedFrom: 'design-system',
+        entryFile: 'DESIGN.md',
+        sourceFileName: system.id,
+      },
+    };
+    const files: ProjectFile[] = [
+      { name: 'DESIGN.md', size: 42, mtime: 1, kind: 'text', mime: 'text/markdown' },
+    ];
+    const config: AppConfig = {
+      mode: 'daemon',
+      apiKey: '',
+      baseUrl: '',
+      model: '',
+      agentId: 'agent-1',
+      agentModels: {},
+      skillId: null,
+      designSystemId: null,
+    };
+    const onOpenProject = vi.fn();
+    const onProjectsRefresh = vi.fn();
+
+    mocks.fetchDesignSystem.mockResolvedValue(system);
+    mocks.ensureDesignSystemWorkspace.mockResolvedValue(null);
+    mocks.getProject.mockResolvedValue(project);
+    mocks.fetchProjectFiles.mockResolvedValue(files);
+    mocks.listConversations.mockResolvedValue([
+      { id: 'conv-design-system', projectId: project.id, title: 'Design system', createdAt: 1, updatedAt: 1 },
+    ]);
+
+    render(
+      <DesignSystemDetailView
+        id={system.id}
+        selectedId={system.id}
+        config={config}
+        agents={[{ id: 'agent-1', name: 'OpenCode', bin: 'opencode', available: true, models: [] }]}
+        onBack={() => {}}
+        onSetDefault={() => {}}
+        onOpenProject={onOpenProject}
+        onProjectsRefresh={onProjectsRefresh}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Design Files' }));
+
+    await waitFor(() => expect(mocks.ensureDesignSystemWorkspace).toHaveBeenCalledWith(system.id));
+    await waitFor(() => expect(mocks.getProject).toHaveBeenCalledWith(project.id));
+    expect(mocks.fetchProjectFiles).toHaveBeenCalledWith(project.id);
+    await waitFor(() => expect(screen.getByTestId('design-system-files')).toBeTruthy());
+    expect(onProjectsRefresh).toHaveBeenCalledTimes(1);
+    expect(onOpenProject).toHaveBeenCalledWith(project.id);
+    expect(screen.queryByText('Could not open the design system workspace.')).toBeNull();
+  });
+
+  it('shows a terminal error when workspace creation and project fallback both fail', async () => {
+    const system: DesignSystemDetail = {
+      id: 'user:acme-design-system',
+      title: 'Acme Design System',
+      category: 'Custom',
+      summary: 'Acme product workspace.',
+      swatches: [],
+      surface: 'web',
+      body: '# Acme Design System\n',
+      source: 'user',
+      status: 'draft',
+      isEditable: true,
+      projectId: 'ds-acme-design-system',
+    };
+    const config: AppConfig = {
+      mode: 'daemon',
+      apiKey: '',
+      baseUrl: '',
+      model: '',
+      agentId: 'agent-1',
+      agentModels: {},
+      skillId: null,
+      designSystemId: null,
+    };
+    const onOpenProject = vi.fn();
+
+    mocks.fetchDesignSystem.mockResolvedValue(system);
+    mocks.ensureDesignSystemWorkspace.mockResolvedValue(null);
+    mocks.getProject.mockResolvedValue(null);
+
+    render(
+      <DesignSystemDetailView
+        id={system.id}
+        selectedId={system.id}
+        config={config}
+        agents={[{ id: 'agent-1', name: 'OpenCode', bin: 'opencode', available: true, models: [] }]}
+        onBack={() => {}}
+        onSetDefault={() => {}}
+        onOpenProject={onOpenProject}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Design Files' }));
+
+    await waitFor(() => expect(mocks.ensureDesignSystemWorkspace).toHaveBeenCalledWith(system.id));
+    await waitFor(() => expect(mocks.getProject).toHaveBeenCalledWith(system.projectId));
+    expect(mocks.fetchProjectFiles).not.toHaveBeenCalled();
+    expect(onOpenProject).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByText('Could not open the design system workspace.')).toBeTruthy());
+    expect(screen.queryByText('Opening the design system workspace...')).toBeNull();
+    expect(screen.queryByTestId('design-system-files')).toBeNull();
+  });
+
+  it('sends chat through an existing project fallback when workspace creation returns null', async () => {
+    const system: DesignSystemDetail = {
+      id: 'user:acme-design-system',
+      title: 'Acme Design System',
+      category: 'Custom',
+      summary: 'Acme product workspace.',
+      swatches: [],
+      surface: 'web',
+      body: '# Acme Design System\n',
+      source: 'user',
+      status: 'draft',
+      isEditable: true,
+      projectId: 'ds-acme-design-system',
+    };
+    const project: Project = {
+      id: 'ds-acme-design-system',
+      name: 'Acme Design System',
+      skillId: null,
+      designSystemId: system.id,
+      createdAt: 1,
+      updatedAt: 1,
+      metadata: {
+        kind: 'other',
+        importedFrom: 'design-system',
+        entryFile: 'DESIGN.md',
+        sourceFileName: system.id,
+      },
+    };
+    const files: ProjectFile[] = [
+      { name: 'DESIGN.md', size: 42, mtime: 1, kind: 'text', mime: 'text/markdown' },
+    ];
+    const config: AppConfig = {
+      mode: 'daemon',
+      apiKey: '',
+      baseUrl: '',
+      model: '',
+      agentId: 'agent-1',
+      agentModels: {},
+      skillId: null,
+      designSystemId: null,
+    };
+    const conversation = {
+      id: 'conv-design-system',
+      projectId: project.id,
+      title: 'Design system',
+      createdAt: 1,
+      updatedAt: 1,
+    };
+
+    mocks.fetchDesignSystem.mockResolvedValue(system);
+    mocks.ensureDesignSystemWorkspace
+      .mockImplementationOnce(() => new Promise(() => {}))
+      .mockResolvedValue(null);
+    mocks.getProject.mockResolvedValue(project);
+    mocks.fetchProjectFiles.mockResolvedValue(files);
+    mocks.createConversation.mockResolvedValue(conversation);
+
+    render(
+      <DesignSystemDetailView
+        id={system.id}
+        selectedId={system.id}
+        config={config}
+        agents={[{ id: 'agent-1', name: 'OpenCode', bin: 'opencode', available: true, models: [] }]}
+        onBack={() => {}}
+        onSetDefault={() => {}}
+      />,
+    );
+
+    await waitFor(() => expect(mocks.ensureDesignSystemWorkspace).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByTestId('design-system-chat-send'));
+
+    await waitFor(() => expect(mocks.ensureDesignSystemWorkspace).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocks.streamViaDaemon).toHaveBeenCalledTimes(1));
+    expect(mocks.getProject).toHaveBeenCalledWith(project.id);
+    expect(mocks.fetchProjectFiles).toHaveBeenCalledWith(project.id);
+    expect(mocks.createConversation).toHaveBeenCalledWith(project.id, 'Design system');
+    expect(mocks.streamViaDaemon).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: project.id,
+        conversationId: conversation.id,
+        designSystemId: system.id,
+      }),
+    );
+    expect(screen.queryByText('Could not open the design system workspace.')).toBeNull();
+  });
+
+  it('starts a new design-system conversation by opening the workspace first', async () => {
+    const system: DesignSystemDetail = {
+      id: 'installed:acme-design-system',
+      title: 'Acme Design System',
+      category: 'Custom',
+      summary: 'Acme product workspace.',
+      swatches: [],
+      surface: 'web',
+      body: '# Acme Design System\n',
+      source: 'installed',
+      status: 'published',
+      isEditable: true,
+    };
+    const project: Project = {
+      id: 'ds-acme-design-system',
+      name: 'Acme Design System',
+      skillId: null,
+      designSystemId: system.id,
+      createdAt: 1,
+      updatedAt: 1,
+      metadata: {
+        kind: 'other',
+        importedFrom: 'design-system',
+        entryFile: 'DESIGN.md',
+        sourceFileName: system.id,
+      },
+    };
+    const fresh: Conversation = {
+      id: 'conv-new',
+      projectId: project.id,
+      title: 'Design system',
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    mocks.fetchDesignSystem.mockResolvedValue(system);
+    mocks.ensureDesignSystemWorkspace
+      .mockImplementationOnce(() => new Promise(() => {}))
+      .mockResolvedValue({ project, files: [] });
+    mocks.createConversation.mockResolvedValue(fresh);
+
+    render(
+      <DesignSystemDetailView
+        id={system.id}
+        selectedId={null}
+        config={{ mode: 'daemon', agentId: 'codex' } as AppConfig}
+        agents={[]}
+        onBack={() => {}}
+        onSetDefault={() => {}}
+      />,
+    );
+
+    const button = await screen.findByTestId('new-conversation');
+    fireEvent.click(button);
+
+    await waitFor(() => expect(mocks.ensureDesignSystemWorkspace).toHaveBeenCalledWith(system.id));
+    await waitFor(() => expect(mocks.createConversation).toHaveBeenCalledWith(project.id, 'Design system'));
+    expect(mocks.createConversation).toHaveBeenCalledTimes(1);
+    expect(mocks.listConversations).not.toHaveBeenCalled();
+    await waitFor(() => expect(mocks.listMessages).toHaveBeenCalledWith(project.id, fresh.id));
+  });
+
+  it('clears a stale creation error after a successful new conversation retry', async () => {
+    const system: DesignSystemDetail = {
+      id: 'installed:acme-design-system',
+      title: 'Acme Design System',
+      category: 'Custom',
+      summary: 'Acme product workspace.',
+      swatches: [],
+      surface: 'web',
+      body: '# Acme Design System\n',
+      source: 'installed',
+      status: 'published',
+      isEditable: true,
+    };
+    const project: Project = {
+      id: 'ds-acme-design-system',
+      name: 'Acme Design System',
+      skillId: null,
+      designSystemId: system.id,
+      createdAt: 1,
+      updatedAt: 1,
+      metadata: {
+        kind: 'other',
+        importedFrom: 'design-system',
+        entryFile: 'DESIGN.md',
+        sourceFileName: system.id,
+      },
+    };
+    const fresh: Conversation = {
+      id: 'conv-new',
+      projectId: project.id,
+      title: 'Design system',
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    mocks.fetchDesignSystem.mockResolvedValue(system);
+    mocks.ensureDesignSystemWorkspace
+      .mockImplementationOnce(() => new Promise(() => {}))
+      .mockResolvedValue({ project, files: [] });
+    mocks.createConversation
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(fresh);
+
+    render(
+      <DesignSystemDetailView
+        id={system.id}
+        selectedId={null}
+        config={{ mode: 'daemon', agentId: 'codex' } as AppConfig}
+        agents={[]}
+        onBack={() => {}}
+        onSetDefault={() => {}}
+      />,
+    );
+
+    const button = await screen.findByTestId('new-conversation');
+    fireEvent.click(button);
+
+    await screen.findByText('Could not create a design system conversation.');
+
+    fireEvent.click(button);
+
+    await waitFor(() => expect(mocks.createConversation).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      expect(screen.queryByText('Could not create a design system conversation.')).toBeNull();
+    });
+    await waitFor(() => expect(mocks.listMessages).toHaveBeenCalledWith(project.id, fresh.id));
+  });
+
   it('passes the current UI locale to daemon workspace chat runs', async () => {
     const system: DesignSystemDetail = {
       id: 'user:acme-design-system',

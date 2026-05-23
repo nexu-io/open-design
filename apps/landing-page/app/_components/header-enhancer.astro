@@ -24,18 +24,28 @@
 
     const chrome = document.querySelector('[data-chrome-headroom]');
     if (chrome) {
+      // Wrap the scroll listener in requestAnimationFrame so a burst of
+      // scroll events (trackpads fire >60Hz) collapses to one DOM
+      // mutation per frame. PSI attributed ~700ms of "forced reflow" to
+      // the un-throttled version.
       let lastY = window.scrollY;
+      let ticking = false;
       const showTopThreshold = 100;
       const scrollDelta = 6;
       window.addEventListener(
         'scroll',
         () => {
-          const y = window.scrollY;
-          const delta = y - lastY;
-          if (y <= showTopThreshold) chrome.classList.remove('is-hidden');
-          else if (delta > scrollDelta) chrome.classList.add('is-hidden');
-          else if (delta < -scrollDelta) chrome.classList.remove('is-hidden');
-          lastY = y;
+          if (ticking) return;
+          ticking = true;
+          requestAnimationFrame(() => {
+            const y = window.scrollY;
+            const delta = y - lastY;
+            if (y <= showTopThreshold) chrome.classList.remove('is-hidden');
+            else if (delta > scrollDelta) chrome.classList.add('is-hidden');
+            else if (delta < -scrollDelta) chrome.classList.remove('is-hidden');
+            lastY = y;
+            ticking = false;
+          });
         },
         { passive: true },
       );
@@ -98,5 +108,67 @@
         })
         .catch(() => {});
     }
+
+    // Helper used by every clipboard-write button (link copy, share
+    // text copy). Tries the Clipboard API; falls back to a `prompt()`
+    // window the user can manually copy from on browsers that block
+    // clipboard writes (older Safari, embedded webviews).
+    const writeClipboard = async (text, btn) => {
+      const flash = () => {
+        if (!btn) return;
+        btn.setAttribute('data-copied', 'true');
+        setTimeout(() => btn.removeAttribute('data-copied'), 1400);
+      };
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+          flash();
+          return;
+        }
+      } catch {
+        // fall through
+      }
+      window.prompt('Copy', text);
+    };
+
+    // Copy-link buttons on detail pages and inside the share dialog.
+    document.querySelectorAll('[data-copy-link]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        writeClipboard(btn.getAttribute('data-copy-link') || '', btn);
+      });
+    });
+
+    // Share dialog: trigger button opens the matching `<dialog
+    // data-share-dialog="...">` and the `Copy text` button inside
+    // copies the textarea contents. Modal closes via the form's
+    // method="dialog" submit (the × button) or Escape key.
+    document.querySelectorAll('[data-share-open]').forEach((trigger) => {
+      trigger.addEventListener('click', () => {
+        const key = trigger.getAttribute('data-share-open');
+        const dialog = document.querySelector(`[data-share-dialog="${key}"]`);
+        if (dialog && typeof dialog.showModal === 'function') {
+          dialog.showModal();
+        } else if (dialog) {
+          // Older browsers without <dialog> support — just toggle
+          // a class. CSS already shows `.detail-share-dialog` open
+          // by default; we set `open` attr to mimic.
+          dialog.setAttribute('open', '');
+        }
+      });
+    });
+    document.querySelectorAll('[data-share-copy]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const dialog = btn.closest('dialog, [data-share-dialog]');
+        const ta = dialog ? dialog.querySelector('[data-share-text]') : null;
+        if (!ta) return;
+        const text = ta.value || ta.textContent || '';
+        writeClipboard(text, btn);
+        // Auto-select the textarea contents so the user can manually
+        // copy too if they prefer that affordance.
+        if (ta.select) {
+          try { ta.select(); } catch {}
+        }
+      });
+    });
   })();
 </script>

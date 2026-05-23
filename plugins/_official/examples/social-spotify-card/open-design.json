@@ -2,9 +2,9 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-social-spotify-card",
-  "title": "Spotify 正在播放卡",
+  "title": "Spotify Now-Playing Card",
   "version": "0.1.0",
-  "description": "Spotify Now Playing 风格卡: 专辑封面 + 进度条 + 播放控制, 适配视频叠加 / 个人主页",
+  "description": "Spotify Now Playing-style card with album art, progress bar, and playback controls, suited to video overlays or personal homepages.",
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -43,11 +43,18 @@
       "entry": "./example.html"
     },
     "useCase": {
-      "query": "用「Spotify 正在播放卡」模板把我的内容做成一份「Spotify Now Playing 风格卡: 专辑封面 + 进度条 + 播放控制, 适配视频叠加 / 个人主页」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
+      "query": {
+        "en": "Use the Spotify Now-Playing Card template to turn my content into a Spotify Now Playing-style card with album art, progress bar, and playback controls for a video overlay or personal homepage. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「Spotify 正在播放卡」模板把我的内容做成一份「Spotify Now Playing 风格卡: 专辑封面 + 进度条 + 播放控制, 适配视频叠加 / 个人主页」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Spotify 正在播放卡"
+          "title": "Spotify Now-Playing Card",
+          "title_i18n": {
+            "en": "Spotify Now-Playing Card",
+            "zh-CN": "Spotify 正在播放卡"
+          }
         }
       ]
     },
@@ -76,5 +83,13 @@
       "prompt:inject",
       "fs:write"
     ]
+  },
+  "title_i18n": {
+    "en": "Spotify Now-Playing Card",
+    "zh-CN": "Spotify 正在播放卡"
+  },
+  "description_i18n": {
+    "en": "Spotify Now Playing-style card with album art, progress bar, and playback controls, suited to video overlays or personal homepages.",
+    "zh-CN": "Spotify Now Playing 风格卡: 专辑封面 + 进度条 + 播放控制, 适配视频叠加 / 个人主页"
   }
 }

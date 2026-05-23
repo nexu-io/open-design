@@ -1,15 +1,18 @@
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  atomicCopyFile,
   createCommandInvocation,
   createPackageManagerInvocation,
   createProcessStampArgs,
   matchesStampedProcess,
+  pathContains,
   readProcessStampFromCommand,
+  removePathBestEffort,
   wellKnownUserToolchainBins,
   type ProcessStampContract,
 } from "../src/index.js";
@@ -85,6 +88,64 @@ describe("generic process stamp primitives", () => {
     expect(matchesStampedProcess({ command }, { app: "ui", namespace: stamp.namespace, source: "tool" }, fakeContract)).toBe(true);
     expect(matchesStampedProcess({ command }, { namespace: "stamp-boundary-b" }, fakeContract)).toBe(false);
     expect(matchesStampedProcess({ command }, { source: "pack" }, fakeContract)).toBe(false);
+  });
+});
+
+describe("generic filesystem primitives", () => {
+  it("recognizes paths contained by a resolved root", () => {
+    const root = join(tmpdir(), "platform-path-root");
+
+    expect(pathContains(root, join(root, "child", "file.txt"))).toBe(true);
+    expect(pathContains(root, root)).toBe(true);
+    expect(pathContains(root, join(root, "..", "outside.txt"))).toBe(false);
+  });
+
+  it("copies through a destination-local temporary file", async () => {
+    const root = mkdtempSync(join(tmpdir(), "platform-atomic-copy-"));
+    try {
+      const source = join(root, "source.bin");
+      const destination = join(root, "nested", "destination.bin");
+      writeFileSync(source, "atomic copy payload");
+
+      const result = await atomicCopyFile(source, destination);
+
+      expect(result).toEqual({ bytesCopied: "atomic copy payload".length, replaced: false });
+      expect(readFileSync(destination, "utf8")).toBe("atomic copy payload");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses to replace an existing destination unless overwrite is explicit", async () => {
+    const root = mkdtempSync(join(tmpdir(), "platform-atomic-copy-exists-"));
+    try {
+      const source = join(root, "source.bin");
+      const destination = join(root, "destination.bin");
+      writeFileSync(source, "new payload");
+      writeFileSync(destination, "old payload");
+
+      await expect(atomicCopyFile(source, destination)).rejects.toMatchObject({ code: "EEXIST" });
+      expect(readFileSync(destination, "utf8")).toBe("old payload");
+
+      const overwritten = await atomicCopyFile(source, destination, { overwrite: true });
+      expect(overwritten.replaced).toBe(true);
+      expect(readFileSync(destination, "utf8")).toBe("new payload");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("removes paths best-effort without throwing on missing paths", async () => {
+    const root = mkdtempSync(join(tmpdir(), "platform-best-effort-rm-"));
+    const target = join(root, "target");
+    mkdirSync(target);
+    try {
+      expect((await removePathBestEffort(target)).removed).toBe(true);
+      expect(existsSync(target)).toBe(false);
+      expect((await removePathBestEffort(target)).removed).toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 

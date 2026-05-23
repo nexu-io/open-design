@@ -1,6 +1,6 @@
 {
   "name": "@open-design/daemon",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
   "main": "./dist/cli.js",
@@ -44,6 +44,7 @@
     "@opentelemetry/api": "1.9.1",
     "better-sqlite3": "12.10.0",
     "blake3-wasm": "2.1.5",
+    "cheerio": "1.2.0",
     "chokidar": "5.0.0",
     "express": "4.22.1",
     "jszip": "3.10.1",

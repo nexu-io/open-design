@@ -17,6 +17,12 @@ export class PackagedPathAccessError extends Error {
   }
 }
 
+export type PackagedSingleInstanceApp = {
+  on: (event: "second-instance", listener: () => void) => unknown;
+  quit: () => void;
+  requestSingleInstanceLock: () => boolean;
+};
+
 type PathDiagnostic = {
   exists: boolean;
   mode?: number;
@@ -116,4 +122,18 @@ export function applyPackagedElectronPathOverrides(
   app.setPath("userData", paths.electronUserDataRoot);
   app.setPath("sessionData", paths.electronSessionDataRoot);
   app.setPath("logs", paths.desktopLogsRoot);
+}
+
+export function claimPackagedSingleInstanceLock(
+  electronApp: PackagedSingleInstanceApp,
+  onSecondInstance: () => void,
+): boolean {
+  if (!electronApp.requestSingleInstanceLock()) {
+    electronApp.quit();
+    return false;
+  }
+  electronApp.on("second-instance", () => {
+    onSecondInstance();
+  });
+  return true;
 }

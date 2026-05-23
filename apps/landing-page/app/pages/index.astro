@@ -4,7 +4,8 @@ import '../globals.css';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import FaviconLinks from '../_components/favicon-links.astro';
-import FontStylesheet from '../_components/font-stylesheet.astro';
+import GoogleAnalytics from '../_components/google-analytics.astro';
+import ResourceHints from '../_components/resource-hints.astro';
 import LocaleSwitcherScript from '../_components/locale-switcher-script.astro';
 import PreciseLazyload from '../_components/precise-lazyload.astro';
 import { heroImage, heroImageSrcset } from '../image-assets';
@@ -144,8 +145,9 @@ const pageHtml = renderToStaticMarkup(
     <link rel="alternate" hreflang="x-default" href={xDefaultHref} />
 
     <FaviconLinks />
+    <ResourceHints />
 
-    <FontStylesheet />
+    <GoogleAnalytics />
 
     {/*
      * Hero LCP preload. Cloudflare Pages turns this <link rel="preload"> into
@@ -227,18 +229,31 @@ const pageHtml = renderToStaticMarkup(
         const enhanceHeader = () => {
           const chrome = document.querySelector('[data-chrome-headroom]');
           if (chrome) {
+            // Wrap the scroll listener's read + classList write in
+            // requestAnimationFrame. Trackpads and high-rate wheels fire
+            // scroll faster than the display refresh, and every callback
+            // that hits classList triggers a layout recalc. rAF collapses
+            // each burst to one DOM mutation per frame — PSI was
+            // attributing ~700ms of "forced reflow" to the un-throttled
+            // version on the previous build.
             let lastY = window.scrollY;
+            let ticking = false;
             const showTopThreshold = 100;
             const scrollDelta = 6;
             window.addEventListener(
               'scroll',
               () => {
-                const y = window.scrollY;
-                const delta = y - lastY;
-                if (y <= showTopThreshold) chrome.classList.remove('is-hidden');
-                else if (delta > scrollDelta) chrome.classList.add('is-hidden');
-                else if (delta < -scrollDelta) chrome.classList.remove('is-hidden');
-                lastY = y;
+                if (ticking) return;
+                ticking = true;
+                requestAnimationFrame(() => {
+                  const y = window.scrollY;
+                  const delta = y - lastY;
+                  if (y <= showTopThreshold) chrome.classList.remove('is-hidden');
+                  else if (delta > scrollDelta) chrome.classList.add('is-hidden');
+                  else if (delta < -scrollDelta) chrome.classList.remove('is-hidden');
+                  lastY = y;
+                  ticking = false;
+                });
               },
               { passive: true },
             );

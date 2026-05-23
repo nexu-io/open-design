@@ -62,18 +62,28 @@
     const enhanceHeader = () => {
       const nav = document.querySelector('[data-nav-headroom]');
       if (nav) {
+        // Wrap the scroll listener in requestAnimationFrame so a burst of
+        // scroll events (trackpads fire >60Hz) collapses to one DOM
+        // mutation per frame. PSI attributed ~700ms of "forced reflow" to
+        // the un-throttled version on the previous build.
         let lastY = window.scrollY;
+        let ticking = false;
         const showTopThreshold = 100;
         const scrollDelta = 6;
         window.addEventListener(
           'scroll',
           () => {
-            const y = window.scrollY;
-            const delta = y - lastY;
-            if (y <= showTopThreshold) nav.classList.remove('is-hidden');
-            else if (delta > scrollDelta) nav.classList.add('is-hidden');
-            else if (delta < -scrollDelta) nav.classList.remove('is-hidden');
-            lastY = y;
+            if (ticking) return;
+            ticking = true;
+            requestAnimationFrame(() => {
+              const y = window.scrollY;
+              const delta = y - lastY;
+              if (y <= showTopThreshold) nav.classList.remove('is-hidden');
+              else if (delta > scrollDelta) nav.classList.add('is-hidden');
+              else if (delta < -scrollDelta) nav.classList.remove('is-hidden');
+              lastY = y;
+              ticking = false;
+            });
           },
           { passive: true },
         );

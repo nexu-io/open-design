@@ -238,10 +238,12 @@ describe('composeSystemPrompt', () => {
       metadata: {
         kind: 'deck',
         speakerNotes: true,
+        slideCount: '10-15 pages',
       } as any,
     });
 
     expect(prompt).toContain('- **kind**: deck');
+    expect(prompt).toContain('- **slideCount**: 10-15 pages');
     expect(prompt).not.toContain('**responsive web contract**');
     expect(prompt).not.toContain('**platformTargets**');
   });

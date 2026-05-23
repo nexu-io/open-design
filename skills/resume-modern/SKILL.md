@@ -3,7 +3,9 @@ name: resume-modern
 zh_name: "极简简历"
 en_name: "Modern Resume"
 emoji: "📄"
-description: "现代极简简历, A4 单页, 适合打印或导出 PDF"
+description: "Modern minimal resume, single A4 page, ready for print or PDF export."
+zh_description: "现代极简简历, A4 单页, 适合打印或导出 PDF"
+en_description: "Modern minimal resume, single A4 page, ready for print or PDF export."
 category: resume
 scenario: personal
 aspect_hint: "A4 (210×297mm)"
@@ -26,7 +28,9 @@ od:
     reload: debounce-100
   design_system:
     requires: false
-  example_prompt: "用「极简简历」模板把我的内容做成一份「现代极简简历, A4 单页, 适合打印或导出 PDF」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+  example_prompt: "Use the Modern Resume template to turn my content into a modern minimal single-page A4 resume ready for print or PDF export. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
+  example_prompt_i18n:
+    zh-CN: "用「极简简历」模板把我的内容做成一份「现代极简简历, A4 单页, 适合打印或导出 PDF」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
 ---
 
 【模板: 现代极简简历】

@@ -75,6 +75,53 @@ function writeSkill(
 }
 
 describe('listSkills', () => {
+  it('surfaces optional localized display metadata from SKILL.md frontmatter', async () => {
+    const root = fresh();
+    try {
+      const dir = path.join(root, 'localized');
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(
+        path.join(dir, 'SKILL.md'),
+        [
+          '---',
+          'name: localized',
+          'zh_name: "本地化技能"',
+          'en_name: "Localized Skill"',
+          'description: "English fallback description."',
+          'zh_description: "中文描述。"',
+          'en_description: "English localized description."',
+          'od:',
+          '  example_prompt: "English fallback prompt."',
+          '  example_prompt_i18n:',
+          '    zh-CN: "中文 prompt。"',
+          '---',
+          '',
+          '# Localized skill body',
+          '',
+        ].join('\n'),
+      );
+
+      const skills = await listSkills(root);
+      expect(skills[0]).toMatchObject({
+        id: 'localized',
+        displayName: {
+          en: 'Localized Skill',
+          'zh-CN': '本地化技能',
+        },
+        descriptionI18n: {
+          en: 'English localized description.',
+          'zh-CN': '中文描述。',
+        },
+        examplePrompt: 'English fallback prompt.',
+        examplePromptI18n: {
+          'zh-CN': '中文 prompt。',
+        },
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('includes the built-in live-artifact skill catalog entry', async () => {
     const skills = await listSkills(designTemplatesRoot);
     const skill = skills.find((entry: { id: string }) => entry.id === 'live-artifact');

@@ -18,8 +18,9 @@ import '../globals.css';
 import '../sub-pages.css';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import FontStylesheet from './font-stylesheet.astro';
 import FaviconLinks from './favicon-links.astro';
+import GoogleAnalytics from './google-analytics.astro';
+import ResourceHints from './resource-hints.astro';
 import HeaderEnhancer from './header-enhancer.astro';
 import { Header, type HeaderProps } from './header';
 import LocaleSwitcherScript from './locale-switcher-script.astro';
@@ -77,8 +78,9 @@ const ldArray = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : [];
     <link rel="alternate" hreflang="x-default" href={xDefaultHref} />
 
     <FaviconLinks />
+    <ResourceHints />
 
-    <FontStylesheet />
+    <GoogleAnalytics />
 
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Open Design" />
