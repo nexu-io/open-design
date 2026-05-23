@@ -43,6 +43,7 @@ import {
   openDesignAmrTraceEnv,
   applyAgentLaunchEnv,
   resolveAgentLaunch,
+  resolveAgentLaunchWithMinVersion,
   sanitizeCustomModel,
   spawnEnvForAgent,
 } from './agents.js';
@@ -11878,7 +11879,12 @@ export async function startServer({
       ).catch(() => null);
     }
 
-    const agentLaunch = resolveAgentLaunch(def, configuredAgentEnv);
+    // Use the async variant so any def with `minVersion` set
+    // (currently Gemini, #978) warms the version-aware resolver cache
+    // before this spawn picks a binary. Without this the chat-run
+    // launch could land on the stale first-PATH match even when
+    // detection had not run yet.
+    const agentLaunch = await resolveAgentLaunchWithMinVersion(def, configuredAgentEnv);
     const resolvedBin = agentLaunch.selectedPath;
 
     // Hoisted above the AMR catalog preflight: the empty-catalog branch

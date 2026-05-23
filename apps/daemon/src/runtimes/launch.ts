@@ -1,6 +1,10 @@
 import { accessSync, constants, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import path, { delimiter } from 'node:path';
-import { inspectAgentExecutableResolution, userToolchainBinDirs } from './executables.js';
+import {
+  chooseExecutableByMinVersion,
+  inspectAgentExecutableResolution,
+  userToolchainBinDirs,
+} from './executables.js';
 import type { RuntimeAgentDef } from './types.js';
 
 export type AgentLaunchKind = 'selected' | 'codex-native';
@@ -11,6 +15,26 @@ export type AgentLaunchResolution = ReturnType<typeof inspectAgentExecutableReso
   childPathPrepend: string[];
   diagnostic: string | null;
 };
+
+// Async wrapper around `resolveAgentLaunch` that first warms the
+// version-aware resolver cache for any def that opts in via
+// `minVersion` (#978). Spawn paths must use this — `resolveAgentLaunch`
+// itself stays sync to keep its existing callers, but on its own it
+// reads the cache the chooser populates, which means a chat-spawn or
+// connection-test launched before detection ran would still land on
+// the stale first-PATH match. Calling this helper guarantees the
+// cache is populated before the launch decision happens, regardless
+// of whether `/api/agents` has been hit first (#978 round-2 review
+// on PR #2797).
+export async function resolveAgentLaunchWithMinVersion(
+  def: RuntimeAgentDef,
+  configuredEnv: Record<string, string> = {},
+): Promise<AgentLaunchResolution> {
+  if (def.minVersion) {
+    await chooseExecutableByMinVersion(def, configuredEnv);
+  }
+  return resolveAgentLaunch(def, configuredEnv);
+}
 
 export function resolveAgentLaunch(
   def: RuntimeAgentDef,

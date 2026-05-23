@@ -67,6 +67,7 @@ import {
   applyAgentLaunchEnv,
   getAgentDef,
   resolveAgentLaunch,
+  resolveAgentLaunchWithMinVersion,
   spawnEnvForAgent,
 } from './agents.js';
 import { agentCliEnvForAgent, readAppConfig } from './app-config.js';
@@ -831,7 +832,13 @@ async function callLocalCli(provider, system, user, options) {
     configuredAgentEnv = {};
   }
 
-  const launch = resolveAgentLaunch(def, configuredAgentEnv);
+  // Async variant so any def with `minVersion` (currently Gemini,
+  // #978) warms the version-aware resolver cache before the
+  // memory-llm spawn picks a binary. Without this an auto-memory
+  // extract on a fresh daemon (no /api/agents call yet) could pick
+  // up a stale `/usr/local/bin/gemini` even when a modern Homebrew
+  // install sits later on PATH.
+  const launch = await resolveAgentLaunchWithMinVersion(def, configuredAgentEnv);
   if (!launch?.launchPath) {
     throw new Error(`${def.name} CLI is not installed or not on PATH`);
   }

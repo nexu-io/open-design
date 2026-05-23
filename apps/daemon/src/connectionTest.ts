@@ -27,6 +27,7 @@ import {
   applyAgentLaunchEnv,
   getAgentDef,
   resolveAgentLaunch,
+  resolveAgentLaunchWithMinVersion,
   spawnEnvForAgent,
 } from './agents.js';
 import {
@@ -1711,7 +1712,13 @@ async function testAgentConnectionInternal(
     validateAgentCliEnv(input.agentCliEnv),
     input.agentId,
   );
-  const executableResolution = resolveAgentLaunch(def, configuredAgentEnv);
+  // Async variant so any def with `minVersion` (currently Gemini,
+  // #978) warms the version-aware resolver cache before the
+  // connection test spawn picks a binary — otherwise the test could
+  // succeed against the version-checked pick while the actual chat
+  // run still launches the stale first-PATH match (or vice versa),
+  // making the test result misleading.
+  const executableResolution = await resolveAgentLaunchWithMinVersion(def, configuredAgentEnv);
   const resolvedBin = executableResolution.selectedPath;
   if (!resolvedBin || !executableResolution.launchPath) {
     return {
@@ -2252,6 +2259,11 @@ export async function testAgentConnection(
   const configuredCodexBin = validatedPrefs?.codex?.CODEX_BIN?.trim() || '';
   const configuredAgentEnv = agentCliEnvForAgent(validatedPrefs, input.agentId);
   const def = getAgentDef(input.agentId);
+  // testAgentConnectionInternal above already warmed the chooser
+  // cache for this agent via resolveAgentLaunchWithMinVersion, so
+  // this synchronous resolveAgentLaunch reads the same
+  // version-checked pick that the spawn just used (the diagnostics
+  // summary must match what actually ran).
   const executableResolution = def
     ? resolveAgentLaunch(def, configuredAgentEnv)
     : {

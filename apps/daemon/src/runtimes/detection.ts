@@ -173,12 +173,17 @@ async function probe(
   def: RuntimeAgentDef,
   configuredEnv: Record<string, string> = {},
 ): Promise<DetectedAgent> {
-  // For agents that declare a minimum CLI version, run the
-  // version-aware resolver first so the version-checked binary is
-  // cached before `resolveAgentLaunch` reads it (#978). Without this
-  // pre-step, `inspectAgentExecutableResolution` would still return
-  // first-found and we would probe a stale binary even though a
-  // modern one sits later on the PATH/toolchain.
+  // For agents that declare a minimum CLI version, warm the
+  // version-aware resolver cache first so the version-checked binary
+  // is cached before `resolveAgentLaunch` reads it (#978). Without
+  // this pre-step, `inspectAgentExecutableResolution` would still
+  // return first-found and we would probe a stale binary even though
+  // a modern one sits later on the PATH/toolchain. The two-step
+  // shape (await chooser, then sync resolveAgentLaunch) — instead of
+  // the `resolveAgentLaunchWithMinVersion` helper that the spawn
+  // paths use — keeps the existing `detection-resilience` mock
+  // intact, which exercises module-level `resolveAgentLaunch` to
+  // simulate a single-agent throw.
   if (def.minVersion) {
     await chooseExecutableByMinVersion(def, configuredEnv);
   }

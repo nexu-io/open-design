@@ -33,6 +33,7 @@ import {
   inspectAgentExecutableResolution,
   resolveAgentExecutable,
 } from '../../src/runtimes/executables.js';
+import { resolveAgentLaunchWithMinVersion } from '../../src/runtimes/launch.js';
 import { gemini, minimalAgentDef } from './helpers/test-helpers.js';
 
 const fsTest = process.platform === 'win32' ? it.skip : it;
@@ -402,6 +403,95 @@ describe('inspectAgentExecutableResolution + minVersion cache wiring (#978)', ()
       rmSync(usrLocal, { recursive: true, force: true });
       rmSync(homebrew, { recursive: true, force: true });
       rmSync(override, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('resolveAgentLaunchWithMinVersion (#978 round-2 review on PR #2797: every spawn path must warm the cache, not just /api/agents)', () => {
+  // The fix in PR #2797 round 1 only warmed the cache inside
+  // `probe()` (the detection path that feeds /api/agents). Actual
+  // spawn paths in server.ts, connectionTest.ts, and memory-llm.ts
+  // called the sync `resolveAgentLaunch` directly, so a chat-run /
+  // connection-test / memory-extract on a fresh daemon (no
+  // /api/agents call yet) still landed on the stale first-PATH
+  // match. The async wrapper guarantees the cache is populated
+  // before the launch decision happens, no matter which path
+  // triggered the spawn.
+
+  fsTest('on a cold cache, returns the version-checked binary instead of the stale first-found one', async () => {
+    // Use real fixture binaries so the helper's default `runVersion`
+    // actually spawns them. Two shell scripts print fixed semvers;
+    // we trust the daemon's own Node binary is on PATH to resolve
+    // `#!/bin/sh` (which is always the case on macOS/Linux).
+    const usrLocal = mkdtempSync(join(tmpdir(), 'od-launch-usr-'));
+    const homebrew = mkdtempSync(join(tmpdir(), 'od-launch-brew-'));
+    try {
+      writeFileSync(join(usrLocal, 'gemini'), '#!/bin/sh\necho 0.1.12\n');
+      writeFileSync(join(homebrew, 'gemini'), '#!/bin/sh\necho 0.40.1\n');
+      chmodSync(join(usrLocal, 'gemini'), 0o755);
+      chmodSync(join(homebrew, 'gemini'), 0o755);
+      process.env.OD_AGENT_HOME = usrLocal;
+      process.env.PATH = `${usrLocal}${delimiter}${homebrew}`;
+
+      const def = minimalAgentDef({ id: 'gemini', bin: 'gemini', minVersion: '0.30.0' });
+      const launch = await resolveAgentLaunchWithMinVersion(def);
+
+      expect(launch.selectedPath).toBe(join(homebrew, 'gemini'));
+    } finally {
+      rmSync(usrLocal, { recursive: true, force: true });
+      rmSync(homebrew, { recursive: true, force: true });
+    }
+  });
+
+  fsTest('skips the chooser when def.minVersion is undefined (no behavior change for other agents)', async () => {
+    // Pin the no-op shape: agents without `minVersion` (claude, codex,
+    // opencode, ...) must keep first-match resolution. The wrapper
+    // never calls the chooser for them, so even a stale binary on PATH
+    // wins (mirroring the pre-#978 status quo for those agents).
+    const a = mkdtempSync(join(tmpdir(), 'od-launch-noop-a-'));
+    const b = mkdtempSync(join(tmpdir(), 'od-launch-noop-b-'));
+    try {
+      writeFileSync(join(a, 'opencode'), '');
+      writeFileSync(join(b, 'opencode'), '');
+      chmodSync(join(a, 'opencode'), 0o755);
+      chmodSync(join(b, 'opencode'), 0o755);
+      process.env.OD_AGENT_HOME = a;
+      process.env.PATH = `${a}${delimiter}${b}`;
+
+      // No minVersion on this def.
+      const def = minimalAgentDef({ id: 'opencode-test', bin: 'opencode' });
+      const launch = await resolveAgentLaunchWithMinVersion(def);
+
+      expect(launch.selectedPath).toBe(join(a, 'opencode'));
+    } finally {
+      rmSync(a, { recursive: true, force: true });
+      rmSync(b, { recursive: true, force: true });
+    }
+  });
+
+  fsTest('honors a configured `<AGENT>_BIN` override without probing', async () => {
+    // Reuses the override-skips-probes invariant the chooser already
+    // owns; assert it at the wrapper level so spawn callers can rely
+    // on it without knowing the internal layering.
+    const override = mkdtempSync(join(tmpdir(), 'od-launch-override-'));
+    const onPath = mkdtempSync(join(tmpdir(), 'od-launch-onpath-'));
+    try {
+      writeFileSync(join(override, 'gemini'), '');
+      writeFileSync(join(onPath, 'gemini'), '#!/bin/sh\necho 0.40.1\n');
+      chmodSync(join(override, 'gemini'), 0o755);
+      chmodSync(join(onPath, 'gemini'), 0o755);
+      process.env.OD_AGENT_HOME = onPath;
+      process.env.PATH = onPath;
+
+      const def = minimalAgentDef({ id: 'gemini', bin: 'gemini', minVersion: '0.30.0' });
+      const launch = await resolveAgentLaunchWithMinVersion(def, {
+        GEMINI_BIN: join(override, 'gemini'),
+      });
+
+      expect(launch.selectedPath).toBe(join(override, 'gemini'));
+    } finally {
+      rmSync(override, { recursive: true, force: true });
+      rmSync(onPath, { recursive: true, force: true });
     }
   });
 });
