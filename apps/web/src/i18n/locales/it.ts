@@ -1082,6 +1082,7 @@ export const it: Dict = {
   'assistant.downloadFile': 'Scarica',
   'assistant.thinking': 'Riflessione',
   'assistant.systemReminder': 'Promemoria di sistema',
+  'assistant.possiblePromptInjection': 'Possible prompt injection',
   'assistant.waitingFirstOutput': 'In attesa del primo output',
   'assistant.statusBootingAgent': 'Avvio dell\'agente',
   'assistant.statusStarting': 'Avvio',

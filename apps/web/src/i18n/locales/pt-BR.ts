@@ -1242,6 +1242,7 @@ export const ptBR: Dict = {
   'assistant.downloadFile': 'Baixar',
   'assistant.thinking': 'Pensando',
   'assistant.systemReminder': 'Lembrete do sistema',
+  'assistant.possiblePromptInjection': 'Possible prompt injection',
   'assistant.waitingFirstOutput': 'Aguardando primeira saída',
   'assistant.statusBootingAgent': 'Iniciando agente',
   'assistant.statusStarting': 'Iniciando',

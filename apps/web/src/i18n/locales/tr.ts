@@ -1188,6 +1188,7 @@ export const tr: Dict = {
   'assistant.downloadFile': 'İndir',
   'assistant.thinking': 'Düşünüyor',
   'assistant.systemReminder': 'Sistem hatırlatıcısı',
+  'assistant.possiblePromptInjection': 'Possible prompt injection',
   'assistant.waitingFirstOutput': 'İlk girdi için bekleniyor',
   'assistant.statusBootingAgent': 'Ajan başlatılıyor',
   'assistant.statusStarting': 'Başlıyor',

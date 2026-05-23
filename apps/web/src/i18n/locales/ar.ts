@@ -1201,6 +1201,7 @@ export const ar: Dict = {
   'assistant.downloadFile': 'تحميل',
   'assistant.thinking': 'تفكير',
   'assistant.systemReminder': 'تذكير النظام',
+  'assistant.possiblePromptInjection': 'Possible prompt injection',
   'assistant.waitingFirstOutput': 'في انتظار أول مخرج',
   'assistant.statusBootingAgent': 'تشغيل الوكيل',
   'assistant.statusStarting': 'بدء',

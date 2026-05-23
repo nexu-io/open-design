@@ -1165,6 +1165,7 @@ export const th: Dict = {
   'assistant.downloadFile': 'สูบลงตัวเครื่อง',
   'assistant.thinking': 'ไตร่ตรอง…',
   'assistant.systemReminder': 'จดบอกเล่าจากสิ่งที่สำคัญในระบบ',
+  'assistant.possiblePromptInjection': 'Possible prompt injection',
   'assistant.waitingFirstOutput': 'รอบอกการประมวลครั้งเปิดฉาก',
   'assistant.statusBootingAgent': 'เริ่มปลุกเอเจนต์ก่อน',
   'assistant.statusStarting': 'ขึ้นเดินหน้าสู่ระบบแล้ว',

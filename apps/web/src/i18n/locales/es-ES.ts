@@ -1090,6 +1090,7 @@ export const esES: Dict = {
   'assistant.downloadFile': 'Descargar',
   'assistant.thinking': 'Pensando',
   'assistant.systemReminder': 'Recordatorio del sistema',
+  'assistant.possiblePromptInjection': 'Possible prompt injection',
   'assistant.waitingFirstOutput': 'Esperando la primera salida',
   'assistant.statusBootingAgent': 'Iniciando agente',
   'assistant.statusStarting': 'Iniciando',

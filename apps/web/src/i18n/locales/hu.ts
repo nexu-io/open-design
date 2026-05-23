@@ -1201,6 +1201,7 @@ export const hu: Dict = {
   'assistant.downloadFile': 'Letöltés',
   'assistant.thinking': 'Gondolkodik',
   'assistant.systemReminder': 'Rendszer-emlékeztető',
+  'assistant.possiblePromptInjection': 'Possible prompt injection',
   'assistant.waitingFirstOutput': 'Az első kimenetre vár',
   'assistant.statusBootingAgent': 'Ügynök indítása',
   'assistant.statusStarting': 'Indítás',

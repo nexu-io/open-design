@@ -1089,6 +1089,7 @@ export const de: Dict = {
   'assistant.downloadFile': 'Herunterladen',
   'assistant.thinking': 'Denkt',
   'assistant.systemReminder': 'Systemhinweis',
+  'assistant.possiblePromptInjection': 'Possible prompt injection',
   'assistant.waitingFirstOutput': 'Warte auf erste Ausgabe',
   'assistant.statusBootingAgent': 'Agent wird gestartet',
   'assistant.statusStarting': 'Startet',

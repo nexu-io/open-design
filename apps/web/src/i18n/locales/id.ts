@@ -1351,6 +1351,7 @@ export const id: Dict = {
   'assistant.downloadFile': 'Unduh file',
   'assistant.thinking': 'Berpikir...',
   'assistant.systemReminder': 'Pengingat sistem',
+  'assistant.possiblePromptInjection': 'Possible prompt injection',
   'assistant.waitingFirstOutput': 'Menunggu output pertama...',
   'assistant.statusBootingAgent': 'Menyalakan agent...',
   'assistant.statusStarting': 'Memulai...',

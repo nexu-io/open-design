@@ -1184,6 +1184,7 @@ export const fa: Dict = {
   'assistant.downloadFile': 'دانلود',
   'assistant.thinking': 'در حال فکر کردن',
   'assistant.systemReminder': 'یادآور سیستم',
+  'assistant.possiblePromptInjection': 'Possible prompt injection',
   'assistant.waitingFirstOutput': 'در انتظار اولین خروجی',
   'assistant.statusBootingAgent': 'راه‌اندازی عامل',
   'assistant.statusStarting': 'در حال شروع',

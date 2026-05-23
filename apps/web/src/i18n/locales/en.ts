@@ -1875,6 +1875,7 @@ export const en: Dict = {
   'assistant.downloadFile': 'Download',
   'assistant.thinking': 'Thinking',
   'assistant.systemReminder': 'System reminder',
+  'assistant.possiblePromptInjection': 'Possible prompt injection',
   'assistant.waitingFirstOutput': 'Waiting for first output',
   'assistant.statusBootingAgent': 'Booting agent',
   'assistant.statusStarting': 'Starting',
