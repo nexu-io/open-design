@@ -37,7 +37,7 @@ describe('extractEffectivePeer', () => {
     expect(extractEffectivePeer('127.0.0.1', '10.0.0.1')).toBe('127.0.0.1');
   });
 
-  it('uses X-Forwarded-For when proxy is trusted', () => {
+  it('uses X-Forwarded-For when proxy is trusted and peer is loopback', () => {
     process.env.OD_TRUST_PROXY = '1';
     expect(extractEffectivePeer('127.0.0.1', '10.0.0.1')).toBe('10.0.0.1');
   });
@@ -59,6 +59,36 @@ describe('extractEffectivePeer', () => {
   });
 });
 
+describe('extractEffectivePeer — spoofing prevention', () => {
+  it('ignores X-Forwarded-For from a non-loopback direct peer (LAN attacker)', () => {
+    process.env.OD_TRUST_PROXY = '1';
+    // A direct LAN client spoofs X-Forwarded-For: 127.0.0.1 to bypass auth.
+    // The TCP peer is 192.168.1.50 (not loopback), so the header must be ignored.
+    expect(extractEffectivePeer('192.168.1.50', '127.0.0.1')).toBe('192.168.1.50');
+  });
+
+  it('ignores X-Forwarded-For from a non-loopback IPv6 peer', () => {
+    process.env.OD_TRUST_PROXY = 'cloudflare';
+    expect(extractEffectivePeer('2001:db8::1', '127.0.0.1')).toBe('2001:db8::1');
+  });
+
+  it('honors X-Forwarded-For from ::1 (IPv6 loopback)', () => {
+    process.env.OD_TRUST_PROXY = '1';
+    expect(extractEffectivePeer('::1', '10.0.0.1')).toBe('10.0.0.1');
+  });
+
+  it('honors X-Forwarded-For from IPv4-mapped IPv6 loopback', () => {
+    process.env.OD_TRUST_PROXY = '1';
+    expect(extractEffectivePeer('::ffff:127.0.0.1', '10.0.0.1')).toBe('10.0.0.1');
+  });
+
+  it('honors X-Forwarded-For from 127.x.x.x (loopback range)', () => {
+    process.env.OD_TRUST_PROXY = 'nginx';
+    expect(extractEffectivePeer('127.0.0.1', '203.0.113.5')).toBe('203.0.113.5');
+    expect(extractEffectivePeer('127.1.2.3', '203.0.113.5')).toBe('203.0.113.5');
+  });
+});
+
 describe('effectivePeerFromReq', () => {
   it('returns remoteAddress when no proxy trust', () => {
     delete process.env.OD_TRUST_PROXY;
@@ -69,13 +99,22 @@ describe('effectivePeerFromReq', () => {
     expect(effectivePeerFromReq(req)).toBe('127.0.0.1');
   });
 
-  it('returns forwarded IP when proxy is trusted', () => {
+  it('returns forwarded IP when proxy is trusted and peer is loopback', () => {
     process.env.OD_TRUST_PROXY = 'cloudflare';
     const req = {
       socket: { remoteAddress: '127.0.0.1' },
       headers: { 'x-forwarded-for': '203.0.113.5' },
     };
     expect(effectivePeerFromReq(req)).toBe('203.0.113.5');
+  });
+
+  it('ignores forwarded IP when peer is not loopback', () => {
+    process.env.OD_TRUST_PROXY = 'cloudflare';
+    const req = {
+      socket: { remoteAddress: '192.168.1.100' },
+      headers: { 'x-forwarded-for': '127.0.0.1' },
+    };
+    expect(effectivePeerFromReq(req)).toBe('192.168.1.100');
   });
 
   it('handles missing x-forwarded-for gracefully', () => {
