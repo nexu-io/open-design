@@ -948,10 +948,13 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       }
 
       const file = await readProjectFile(PROJECTS_DIR, projectId, relPath, project?.metadata);
-      // url-load HTML is served raw; inject the scroll-position relay so
-      // multi-page prototypes keep their place on back-navigation without any
-      // per-project code. Non-HTML files are sent byte-for-byte.
-      if (file.mime.startsWith('text/html')) {
+      // url-load HTML preview opts into the scroll-position relay via `?preview=1`
+      // so multi-page prototypes keep their place on back-navigation. The default
+      // raw response stays byte-accurate so non-preview consumers (HtmlViewer's
+      // fetchProjectFileText path for manual-edit / Inspect save, deploy/export
+      // staging, MCP file reads) never see injected markup baked into saved files.
+      const wantsPreview = req.query?.preview === '1';
+      if (wantsPreview && file.mime.startsWith('text/html')) {
         res.type(file.mime).send(injectScrollRelay(file.buffer.toString('utf8')));
         return;
       }

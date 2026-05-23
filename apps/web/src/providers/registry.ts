@@ -1740,6 +1740,15 @@ export function projectRawUrl(projectId: string, filePath: string): string {
   return `/api/projects/${encodeURIComponent(projectId)}/raw/${safePath}`;
 }
 
+// Preview-mode variant of projectRawUrl: same path, but opts into the
+// daemon's HTML preview shim (scroll-position relay, sub-page reporting,
+// Cmd/Ctrl+wheel zoom forwarder). Only the live url-load preview iframe
+// should use this; manual-edit/Inspect-save fetches and deploy/export
+// staging must keep calling projectRawUrl so saved files stay byte-accurate.
+export function projectPreviewUrl(projectId: string, filePath: string): string {
+  return `${projectRawUrl(projectId, filePath)}?preview=1`;
+}
+
 function looksLikeImage(name: string): boolean {
   return /\.(png|jpe?g|gif|webp|svg|avif|bmp)$/i.test(name);
 }

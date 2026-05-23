@@ -38,6 +38,7 @@ import {
   uploadProjectFiles,
   liveArtifactPreviewUrl,
   projectFileUrl,
+  projectPreviewUrl,
   projectRawUrl,
   LiveArtifactRefreshError,
   refreshLiveArtifact,
@@ -4002,8 +4003,13 @@ function HtmlViewer({
   // Cmd/Ctrl + wheel zoom: the preview is a sandboxed iframe that swallows
   // wheel events, so the injected preview bridge forwards the gesture to the
   // host as an `od:zoom-wheel` message; this clamps it to the % control range.
-  const applyZoomWheel = useCallback((deltaY: number) => {
-    setZoom((z) => Math.max(25, Math.min(200, Math.round(z - deltaY * 0.25))));
+  // WheelEvent.deltaY is only in pixels when deltaMode === DOM_DELTA_PIXEL (0).
+  // Classic mouse wheels on Firefox / some Windows setups report DOM_DELTA_LINE
+  // (1, ~16px per line) — without that conversion the ±3 per notch only shifts
+  // zoom by 0–1% and the gesture feels inert.
+  const applyZoomWheel = useCallback((deltaY: number, deltaMode: number = 0) => {
+    const px = deltaMode === 1 ? deltaY * 16 : deltaMode === 2 ? deltaY * 100 : deltaY;
+    setZoom((z) => Math.max(25, Math.min(200, Math.round(z - px * 0.25))));
   }, []);
   const fileViewportKey = previewViewportStateKey(projectId, file);
   const [previewViewport, setPreviewViewportState] = useState<PreviewViewportId>(
@@ -4533,8 +4539,13 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     forceInline: forceInline || needsSandboxShim,
     needsFocusGuard,
   });
+  // The url-load preview iframe opts into the daemon's HTML shim (scroll
+  // relay, sub-page reporting, zoom forwarder) via projectPreviewUrl. Other
+  // raw-route consumers (fetchProjectFileText for manual-edit / Inspect save,
+  // deploy/export, MCP file reads) continue to use projectRawUrl so saved
+  // files never have the injected script baked into them.
   const basePreviewSrcUrl = useMemo(
-    () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}`,
+    () => `${projectPreviewUrl(projectId, file.name)}&v=${Math.round(file.mtime)}&r=${reloadKey}`,
     [projectId, file.name, file.mtime, reloadKey],
   );
   const [previewSrcUrl, setPreviewSrcUrl] = useState(basePreviewSrcUrl);
@@ -4857,9 +4868,9 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     }
     function onZoomWheel(ev: MessageEvent) {
       if (!isActivePreviewIframeSource(ev.source)) return;
-      const data = ev.data as { type?: string; deltaY?: number } | null;
+      const data = ev.data as { type?: string; deltaY?: number; deltaMode?: number } | null;
       if (!data || data.type !== 'od:zoom-wheel' || typeof data.deltaY !== 'number') return;
-      applyZoomWheel(data.deltaY);
+      applyZoomWheel(data.deltaY, typeof data.deltaMode === 'number' ? data.deltaMode : 0);
     }
     window.addEventListener('message', onMessage);
     window.addEventListener('message', onRestoreRequest);

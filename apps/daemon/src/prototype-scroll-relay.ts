@@ -61,10 +61,13 @@ const SCROLL_RELAY_SCRIPT = `<script ${SCROLL_RELAY_MARKER}>(function(){
   });
   // Cmd/Ctrl + wheel forwards to the host to zoom the preview; the sandboxed
   // iframe otherwise swallows the gesture so the host never sees it.
+  // Forward deltaMode too — classic mouse wheels on Firefox / some Windows
+  // setups report DOM_DELTA_LINE (=1, ±3 per notch) instead of pixels, so the
+  // host needs the mode to compensate or zoom feels inert.
   document.addEventListener('wheel', function(e){
     if (!(e.metaKey || e.ctrlKey)) return;
     e.preventDefault();
-    try { (window.parent || window).postMessage({ type: 'od:zoom-wheel', deltaY: e.deltaY }, '*'); } catch (_) {}
+    try { (window.parent || window).postMessage({ type: 'od:zoom-wheel', deltaY: e.deltaY, deltaMode: e.deltaMode }, '*'); } catch (_) {}
   }, { passive: false });
 })();</script>`;
 

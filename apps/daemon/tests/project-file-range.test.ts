@@ -223,9 +223,20 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('accept-ranges')).toBeNull();
     const text = await res.text();
-    // The raw route injects the url-load scroll-position relay into served
-    // text/html, so the body is the full file plus the relay script (not a
-    // byte range). Assert the original document is delivered intact.
+    // The default raw response is byte-accurate: non-preview consumers
+    // (HtmlViewer's fetchProjectFileText path for manual-edit / Inspect
+    // save, deploy/export staging, MCP file reads) must not see the
+    // injected preview shim baked into the file body.
+    expect(text).toBe('<html/>');
+    expect(text).not.toContain('data-od-scroll-relay');
+  });
+
+  it('injects the preview shim only when ?preview=1 opts in', async () => {
+    const res = await fetch(`${rawUrl('page.html')}?preview=1`);
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    // The url-load preview iframe opts in via ?preview=1, so the body is
+    // the full file plus the relay script.
     expect(text.startsWith('<html/>')).toBe(true);
     expect(text).toContain('data-od-scroll-relay');
   });
