@@ -1,4 +1,6 @@
 import type { Express } from 'express';
+import { mkdir } from 'node:fs/promises';
+import path from 'node:path';
 import {
   defaultScenarioPluginIdForProjectMetadata,
   type PluginManifest,
@@ -271,7 +273,10 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       ) {
         const tpl = getTemplate(db, metadata.templateId);
         if (tpl && Array.isArray(tpl.files) && tpl.files.length > 0) {
-          await ensureProject(PROJECTS_DIR, id);
+          // Write seeds BEFORE triggering ensureProject so the
+          // history substrate's migration commit captures them
+          // rather than attributing them to a later agent run.
+          await mkdir(path.join(PROJECTS_DIR, id), { recursive: true });
           for (const f of tpl.files) {
             if (
               !f ||
@@ -286,12 +291,14 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
                 id,
                 f.name,
                 Buffer.from(f.content, 'utf8'),
+                { skipEnsureProject: true },
               );
             } catch {
               // Skip individual file failures — the template snapshot is
               // best-effort; the agent still has the embedded copy.
             }
           }
+          await ensureProject(PROJECTS_DIR, id);
         }
       }
       /** @type {import('@open-design/contracts').CreateProjectResponse} */

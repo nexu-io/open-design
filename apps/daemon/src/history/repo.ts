@@ -609,6 +609,10 @@ async function repairOrphanHead(
   const oldestParentSha = await readParentSha(projectDir, orphans[0]!.sha, signal);
   const oldestParentId = revisionIdForSha(db, projectId, oldestParentSha);
   const ids = orphans.map(() => randomUUID());
+  const stats: CommitStats[] = [];
+  for (const meta of orphans) {
+    stats.push(await parseCommitStats(projectDir, meta.sha, signal));
+  }
 
   db.transaction(() => {
     orphans.forEach((meta, i) => {
@@ -623,9 +627,9 @@ async function repairOrphanHead(
         actorIdentityId: null,
         actorDisplayName: meta.authorName || null,
         runId: null,
-        filesChanged: 0,
-        bytesAdded: 0,
-        bytesRemoved: 0,
+        filesChanged: stats[i]!.filesChanged,
+        bytesAdded: stats[i]!.bytesAdded,
+        bytesRemoved: stats[i]!.bytesRemoved,
       });
     });
     setCurrentRevision(db, projectId, ids[ids.length - 1]!);
@@ -687,10 +691,6 @@ async function recordRevisionForRunLocked(
 
   const status = await runGit(projectDir, ['status', '--short'], signal);
   if (status.trim().length === 0) {
-    // Marker only when (a) this run actually invoked a file-write
-    // tool AND (b) HEAD advanced during our lock wait. Without (a) a
-    // purely conversational run running parallel with a file-writing
-    // sibling would get a false marker that pollutes provenance data.
     if (!args.runTouchedFiles) return { kind: 'clean' };
     const headNow = await readHeadSha(projectDir, signal);
     const advancedDuringWait =
@@ -698,6 +698,13 @@ async function recordRevisionForRunLocked(
     if (!advancedDuringWait || !headNow) return { kind: 'clean' };
     return recordSiblingAbsorbedMarker(args, headNow);
   }
+
+  // Dirty tree, but this run didn't invoke a file-write tool — the
+  // dirt is pre-existing (uploads, sibling, or template seeds). Don't
+  // commit it as this run's work; let a future file-writing run pick
+  // it up. Avoids attributing other actors' content to a conversational
+  // run that happened to win the lock.
+  if (!args.runTouchedFiles) return { kind: 'clean' };
 
   await applyAuthorConfig(projectDir, run.identity, signal);
   await runGit(projectDir, ['add', '-A'], signal);
@@ -707,7 +714,7 @@ async function recordRevisionForRunLocked(
   // parent_id is a UUID, not a SHA; resolve via (project_id, git_sha)
   // unique index. Initial commit -> null.
   const parentSha = await readHeadParentSha(projectDir, signal);
-  const stats = await parseLastCommitStats(projectDir, signal);
+  const stats = await parseCommitStats(projectDir, 'HEAD', signal);
 
   const revisionId = randomUUID();
   insertRevisionAndAdvancePointer(db, {
@@ -750,15 +757,12 @@ interface CommitStats {
  * git substrate (named for forward-compat with a future OD-owned
  * substrate that may track actual bytes).
  */
-async function parseLastCommitStats(
+async function parseCommitStats(
   projectDir: string,
+  ref: string,
   signal?: AbortSignal,
 ): Promise<CommitStats> {
-  const out = await runGit(
-    projectDir,
-    ['show', '--shortstat', '--format=', 'HEAD'],
-    signal,
-  );
+  const out = await runGit(projectDir, ['show', '--shortstat', '--format=', ref], signal);
   const line = out.split('\n').find((l) => l.includes('changed')) ?? '';
   const files = /(\d+)\s+files? changed/.exec(line)?.[1];
   const added = /(\d+)\s+insertions?\(\+\)/.exec(line)?.[1];

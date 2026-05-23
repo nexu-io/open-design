@@ -402,6 +402,7 @@ describe('recordRevisionForRun', () => {
       run: { id: 'run-1', identity: TEST_IDENTITY },
       message: 'Add hero section',
       db: sandbox.db,
+      runTouchedFiles: true,
     });
 
     expect(result.kind).toBe('recorded');
@@ -536,7 +537,8 @@ describe('recordRevisionForRun', () => {
     expect(backfilled.run_id).toBeNull();
     // message reflects the actual commit, not a hardcoded marker
     expect(backfilled.message).toBe('this commit lost its DB write');
-    expect(backfilled.files_changed_count).toBe(0);
+    // Stats come from `git show --shortstat <sha>` per orphan, not 0.
+    expect(backfilled.files_changed_count).toBe(1);
     // created_at reflects the commit's author date, not the repair time
     const commitDateIso = execFileSync('git', [
       `--git-dir=${sandbox.repoDir}`, 'log', '-1', '--format=%aI', orphanSha,
@@ -769,6 +771,7 @@ describe('recordRevisionForRun', () => {
       run: { id: 'run-mixed', identity: TEST_IDENTITY },
       message: 'add hero',
       db: sandbox.db,
+      runTouchedFiles: true,
     });
     if (result.kind !== 'recorded') throw new Error('expected recorded');
 
@@ -837,6 +840,7 @@ describe('recordRevisionForRun', () => {
       run: { id: 'run-chain-1', identity: TEST_IDENTITY },
       message: 'first',
       db: sandbox.db,
+      runTouchedFiles: true,
     });
     if (first.kind !== 'recorded') throw new Error('expected first to record');
 
@@ -849,6 +853,7 @@ describe('recordRevisionForRun', () => {
       run: { id: 'run-chain-2', identity: TEST_IDENTITY },
       message: 'second',
       db: sandbox.db,
+      runTouchedFiles: true,
     });
     if (second.kind !== 'recorded') throw new Error('expected second to record');
 
@@ -993,18 +998,20 @@ describe('recordRevisionForRun', () => {
       }),
     ]);
 
-    // Invariant under test, order-independent: the conversational run
-    // (runTouchedFiles=false) MUST NEVER produce a marker row. It may
-    // end up with a 'recorded' row if it happens to win the lock
-    // against a dirty workdir (separate attribution concern outside
-    // this fix's scope), but a marker (git_sha IS NULL) is durable
-    // false provenance and must never appear for it.
-    const talkerMarker = sandbox.db
-      .prepare(
-        `SELECT id FROM project_revisions
-          WHERE project_id = ? AND run_id = 'talker-b' AND git_sha IS NULL`,
-      )
+    // The conversational run (runTouchedFiles=false) must never produce
+    // ANY row — neither a marker (git_sha IS NULL) nor a recorded row
+    // attributing the sibling's work to it. Both shapes are false
+    // provenance; the dirt belongs to the writer, not the talker.
+    const talkerRow = sandbox.db
+      .prepare(`SELECT id FROM project_revisions WHERE project_id = ? AND run_id = 'talker-b'`)
       .get(sandbox.projectId);
-    expect(talkerMarker).toBeUndefined();
+    expect(talkerRow).toBeUndefined();
+
+    // a.txt did land in history exactly once (the writer's row).
+    const writerRow = sandbox.db
+      .prepare(`SELECT id, git_sha FROM project_revisions WHERE project_id = ? AND run_id = 'writer-a'`)
+      .get(sandbox.projectId) as { id: string; git_sha: string };
+    expect(writerRow).toBeDefined();
+    expect(writerRow.git_sha).toMatch(/^[0-9a-f]{40}$/);
   });
 });

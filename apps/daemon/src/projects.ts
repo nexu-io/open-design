@@ -639,10 +639,17 @@ export async function writeProjectFile(
   projectId,
   name,
   body,
-  { overwrite = true, artifactManifest = null } = {},
+  { overwrite = true, artifactManifest = null, skipEnsureProject = false } = {},
   metadata?,
 ) {
-  const dir = await ensureProject(projectsRoot, projectId, metadata);
+  // skipEnsureProject lets seed-writing callers (template projects,
+  // plugin-share) write files BEFORE triggering the substrate-init
+  // hook, so the migration commit captures the seeds rather than
+  // attributing them to a later agent run. Caller takes responsibility
+  // for the project directory existing.
+  const dir = skipEnsureProject
+    ? resolveProjectDir(projectsRoot, projectId, metadata)
+    : await ensureProject(projectsRoot, projectId, metadata);
   const safeName = sanitizePath(name);
   const target = await resolveSafeReal(dir, safeName);
   if (!overwrite) {

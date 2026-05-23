@@ -6067,11 +6067,16 @@ export async function startServer({
       const stagedPath = `plugin-source/${sourceSlug}`;
       const prompt = renderPluginSharePrompt({ action, sourcePlugin, stagedPath });
       const metadata = { kind: 'prototype' };
-      const projectRoot = await ensureProject(PROJECTS_DIR, id, metadata);
+      // Copy plugin source BEFORE ensureProject so the history
+      // migration commit captures the seed files rather than
+      // attributing them to a later agent run.
+      const projectRoot = path.join(PROJECTS_DIR, id);
+      await fs.promises.mkdir(projectRoot, { recursive: true });
       await copyPluginFolderForProjectContext(
         sourcePlugin.fsPath,
         path.join(projectRoot, 'plugin-source', sourceSlug),
       );
+      await ensureProject(PROJECTS_DIR, id, metadata);
 
       insertProject(db, {
         id,
