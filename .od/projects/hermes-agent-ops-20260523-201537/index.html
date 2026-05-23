@@ -264,6 +264,18 @@
     .message strong { display: block; margin-bottom: 4px; color: inherit; }
     .message ul { margin: 8px 0 0 18px; padding: 0; }
     .message li + li { margin-top: 4px; }
+    .message pre {
+      max-width: min(100%, 560px);
+      max-height: 150px;
+      overflow: auto;
+      margin: 6px 0 0;
+      border-radius: 10px;
+      background: #0f172a;
+      color: #e5e7eb;
+      padding: 10px;
+      font-size: 11px;
+      line-height: 1.45;
+    }
     .status-line {
       display: flex;
       align-items: center;
@@ -306,6 +318,101 @@
       font-weight: 800;
     }
     .schema-card strong { font-size: 13px; line-height: 1.35; }
+    .hermes-map {
+      min-height: 36px;
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius-md);
+      background: #fbfdff;
+      padding: 7px 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      overflow: hidden;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .endpoint-pill {
+      min-width: 0;
+      border-radius: var(--radius-pill);
+      background: var(--surface-3);
+      color: var(--accent);
+      padding: 5px 9px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .field-grid {
+      max-height: 156px;
+      overflow: auto;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      padding-right: 2px;
+    }
+    .schema-field {
+      min-width: 0;
+      border: 1px solid var(--border-soft);
+      border-radius: var(--radius-md);
+      background: var(--surface-2);
+      padding: 8px;
+      display: grid;
+      gap: 6px;
+    }
+    .field-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      color: var(--fg-2);
+      font-size: 12px;
+      font-weight: 900;
+    }
+    .field-head code {
+      color: var(--muted);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .field-meta {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .schema-field input:not([type="checkbox"]),
+    .schema-field select,
+    .schema-field textarea {
+      width: 100%;
+      min-height: 32px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+      color: var(--fg);
+      padding: 7px 9px;
+      outline: 0;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    .schema-field textarea { min-height: 48px; resize: vertical; }
+    .checkbox-control {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--fg-2);
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .file-field-note {
+      min-height: 32px;
+      border: 1px dashed var(--border);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      padding: 0 9px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
     .input-box {
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
@@ -416,6 +523,7 @@
       font-size: 12px;
     }
     .spec-item span:first-child { color: var(--muted); font-weight: 800; }
+    .spec-item strong { min-width: 0; overflow-wrap: anywhere; }
     .document {
       min-height: 0;
       overflow: auto;
@@ -633,6 +741,8 @@
             <strong id="outputSpec">日报文档 + 待确认草稿</strong>
           </div>
         </div>
+        <div class="hermes-map" id="hermesMap" aria-label="Hermes 调用映射"></div>
+        <div class="field-grid" id="fieldGrid" aria-label="Hermes Skill 字段"></div>
 
         <div class="input-box">
           <textarea id="taskInput" aria-label="任务输入"></textarea>
@@ -673,6 +783,7 @@
         <div class="spec-item"><span>适合用途</span><strong id="previewUse">企微发送、知识库归档</strong></div>
         <div class="spec-item"><span>确认动作</span><strong id="confirmRule">外发前必须确认</strong></div>
         <div class="spec-item"><span>附件状态</span><strong id="previewFiles">尚未上传附件</strong></div>
+        <div class="spec-item"><span>输出字段</span><strong id="outputPaths">parsed.paths.markdown</strong></div>
       </section>
 
       <section class="document">
@@ -1040,6 +1151,297 @@
       }
     };
 
+    const hermesSchemas = {
+      aihot: {
+        id: "aihot",
+        action: "aihot-digest",
+        endpoint: "/api/aihot-digest",
+        fields: [
+          { id: "topic", type: "text", label: "关注主题", placeholder: "例如：Agent、企业微信、AI 编程", optional: true },
+          { id: "take", type: "number", label: "精选条数", default: 12, min: 3, max: 30 },
+          { id: "tone", type: "select", label: "输出风格", default: "shareable", options: [
+            { value: "shareable", label: "适合转发" },
+            { value: "brief", label: "简短摘要" },
+            { value: "research", label: "研究沉淀" }
+          ] },
+          { id: "sendWecom", type: "checkbox", label: "生成企微待发送记录", default: false },
+          { id: "confirmExternalPush", type: "checkbox", label: "确认直接发送到企微", default: false }
+        ],
+        outputs: [
+          { label: "日报文档", path: "parsed.paths.markdown" },
+          { label: "精选数量", path: "parsed.count" },
+          { label: "企微状态", path: "outbox.status" },
+          { label: "今日标题", path: "parsed.top_titles" }
+        ]
+      },
+      "heavy-ai-dispatch-router": {
+        id: "heavy-ai-dispatch-router",
+        action: "heavy-ticket",
+        endpoint: "/api/heavy-ticket",
+        fields: [
+          { id: "type", type: "select", label: "任务类型", default: "ocr", options: [
+            { value: "ocr", label: "OCR 图片/扫描件识别" },
+            { value: "whisper", label: "Whisper 音视频转写" },
+            { value: "lightrag", label: "LightRAG 知识图谱" },
+            { value: "video_gpu", label: "视频/GPU 生成" }
+          ] },
+          { id: "inputUri", type: "text", label: "文件或链接", placeholder: "例如 mock://file.pdf 或上传附件", optional: true },
+          { id: "attachments", type: "file", label: "上传附件", accept: ".pdf,.png,.jpg,.jpeg,.mp3,.mp4,.wav,.m4a,.txt,.md", multiple: false, optional: true },
+          { id: "notifyTarget", type: "text", label: "通知目标", default: "dashboard" }
+        ],
+        outputs: [
+          { label: "任务状态", path: "parsed.status" },
+          { label: "任务类型", path: "parsed.type" },
+          { label: "输入文件", path: "parsed.input_uri" },
+          { label: "下一步", path: "parsed.next_action" }
+        ]
+      },
+      "long-horizon-vibe-coding": {
+        id: "long-horizon-vibe-coding",
+        action: "run-skill",
+        endpoint: "/api/run-skill",
+        fields: [
+          { id: "goal", type: "textarea", label: "目标 / PRD", placeholder: "说明要实现什么" },
+          { id: "nonGoals", type: "textarea", label: "非目标", placeholder: "说明不要做什么", optional: true },
+          { id: "scope", type: "text", label: "允许改动范围", placeholder: "例如 app/public/*" },
+          { id: "verify", type: "text", label: "验证命令", placeholder: "例如 npm run check" },
+          { id: "doneWhen", type: "textarea", label: "完成标准", placeholder: "怎样才算完成" },
+          { id: "attachments", type: "file", label: "PRD/截图附件", accept: ".md,.txt,.pdf,.png,.jpg,.jpeg", multiple: true, optional: true }
+        ],
+        outputs: [
+          { label: "任务三件套", path: "stdout" },
+          { label: "产物文件", path: "artifact_uri" },
+          { label: "执行状态", path: "ok" }
+        ]
+      },
+      "wecom-community-ops-workflows": {
+        id: "wecom-community-ops-workflows",
+        action: "run-skill",
+        endpoint: "/api/run-skill",
+        fields: [
+          { id: "groupName", type: "text", label: "群/项目名", placeholder: "例如 AI 共创群" },
+          { id: "todayFacts", type: "textarea", label: "今日情况", placeholder: "群内问题、活动、用户反馈、待办" },
+          { id: "outputType", type: "select", label: "要生成什么", default: "daily_ops", options: [
+            { value: "daily_ops", label: "运营日报" },
+            { value: "followup", label: "跟进清单" },
+            { value: "group_message", label: "群发话术" }
+          ] },
+          { id: "attachments", type: "file", label: "收集表/截图", accept: ".csv,.xlsx,.pdf,.png,.jpg,.jpeg,.txt,.md", multiple: true, optional: true }
+        ],
+        outputs: [
+          { label: "运营摘要", path: "stdout" },
+          { label: "产物文件", path: "artifact_uri" }
+        ]
+      },
+      "wechat-obsidian-intake-system": {
+        id: "wechat-obsidian-intake-system",
+        action: "run-skill",
+        endpoint: "/api/run-skill",
+        fields: [
+          { id: "sourceType", type: "select", label: "来源类型", default: "chat", options: [
+            { value: "chat", label: "聊天记录" },
+            { value: "article", label: "公众号文章" },
+            { value: "customer", label: "客户事实" }
+          ] },
+          { id: "content", type: "textarea", label: "微信内容", placeholder: "粘贴微信文本、链接或摘要" },
+          { id: "tags", type: "text", label: "标签", placeholder: "用逗号分隔", optional: true },
+          { id: "attachments", type: "file", label: "截图/文档附件", accept: ".png,.jpg,.jpeg,.pdf,.txt,.md", multiple: true, optional: true }
+        ],
+        outputs: [
+          { label: "入库卡片", path: "stdout" },
+          { label: "产物文件", path: "artifact_uri" }
+        ]
+      },
+      "image2-personal-brand-prompt-library": {
+        id: "image2-personal-brand-prompt-library",
+        action: "run-skill",
+        endpoint: "/api/run-skill",
+        fields: [
+          { id: "scene", type: "textarea", label: "想生成什么图", placeholder: "人物、场景、用途、比例、风格" },
+          { id: "brandTone", type: "select", label: "品牌气质", default: "professional", options: [
+            { value: "professional", label: "专业可信" },
+            { value: "warm", label: "温暖亲和" },
+            { value: "sharp", label: "锐利高级" }
+          ] },
+          { id: "ratio", type: "select", label: "图片比例", default: "1:1", options: [
+            { value: "1:1", label: "头像 1:1" },
+            { value: "16:9", label: "横图 16:9" },
+            { value: "9:16", label: "竖图 9:16" },
+            { value: "21:9", label: "封面 21:9" }
+          ] },
+          { id: "attachments", type: "file", label: "参考图", accept: ".png,.jpg,.jpeg,.webp", multiple: true, optional: true }
+        ],
+        outputs: [
+          { label: "提示词", path: "stdout" },
+          { label: "产物文件", path: "artifact_uri" }
+        ]
+      },
+      "marketing-team-ai-workflows": {
+        id: "marketing-team-ai-workflows",
+        action: "run-skill",
+        endpoint: "/api/run-skill",
+        fields: [
+          { id: "product", type: "text", label: "产品/服务", placeholder: "例如 Hermes AI 工作台" },
+          { id: "audience", type: "text", label: "目标客户", placeholder: "例如企业主、运营团队、AI 创业者" },
+          { id: "channel", type: "select", label: "主要渠道", default: "wecom", options: [
+            { value: "wecom", label: "企微社群" },
+            { value: "wechat_official", label: "公众号" },
+            { value: "xhs", label: "小红书" },
+            { value: "seo", label: "SEO/出海站" }
+          ] },
+          { id: "goal", type: "textarea", label: "营销目标", placeholder: "获客、转化、内容发布、活动运营等" },
+          { id: "attachments", type: "file", label: "竞品/素材附件", accept: ".txt,.md,.pdf,.csv,.png,.jpg,.jpeg", multiple: true, optional: true }
+        ],
+        outputs: [
+          { label: "工作流", path: "stdout" },
+          { label: "产物文件", path: "artifact_uri" }
+        ]
+      },
+      "stable-agent-system-architecture": {
+        id: "stable-agent-system-architecture",
+        action: "run-skill",
+        endpoint: "/api/run-skill",
+        fields: [
+          { id: "systemName", type: "text", label: "系统名称", default: "Hermes" },
+          { id: "currentState", type: "textarea", label: "当前能力/问题", placeholder: "现有 skills、工具、记忆、失败点" },
+          { id: "designFocus", type: "select", label: "优化重点", default: "stability", options: [
+            { value: "stability", label: "稳定性" },
+            { value: "memory", label: "记忆/知识库" },
+            { value: "evaluation", label: "评测/验收" },
+            { value: "tools", label: "工具编排" }
+          ] },
+          { id: "attachments", type: "file", label: "架构/日志附件", accept: ".md,.txt,.pdf,.json,.png,.jpg,.jpeg", multiple: true, optional: true }
+        ],
+        outputs: [
+          { label: "架构建议", path: "stdout" },
+          { label: "产物文件", path: "artifact_uri" }
+        ]
+      },
+      "ai-native-company-os": {
+        id: "ai-native-company-os",
+        action: "run-skill",
+        endpoint: "/api/run-skill",
+        fields: [
+          { id: "operator", type: "text", label: "主体", placeholder: "个人、团队或公司" },
+          { id: "workflows", type: "textarea", label: "现有工作流", placeholder: "内容、营销、研发、客户、财务等" },
+          { id: "bottleneck", type: "textarea", label: "当前瓶颈", placeholder: "哪里最耗时/最不稳定", optional: true },
+          { id: "cadence", type: "select", label: "运行节奏", default: "daily", options: [
+            { value: "daily", label: "每日运行" },
+            { value: "weekly", label: "每周复盘" },
+            { value: "project", label: "按项目推进" }
+          ] }
+        ],
+        outputs: [
+          { label: "OS 蓝图", path: "stdout" },
+          { label: "产物文件", path: "artifact_uri" }
+        ]
+      },
+      "xhs-obsidian-content-factory": {
+        id: "xhs-obsidian-content-factory",
+        action: "run-skill",
+        endpoint: "/api/run-skill",
+        fields: [
+          { id: "topic", type: "text", label: "主题", placeholder: "例如 AI 工作台、企微运营" },
+          { id: "contentType", type: "select", label: "内容类型", default: "topics", options: [
+            { value: "topics", label: "选题列表" },
+            { value: "outline", label: "笔记大纲" },
+            { value: "rewrite", label: "改写优化" },
+            { value: "export", label: "发布包" }
+          ] },
+          { id: "source", type: "textarea", label: "素材/原文", placeholder: "粘贴素材、竞品笔记或你的草稿", optional: true },
+          { id: "attachments", type: "file", label: "参考图/素材", accept: ".txt,.md,.pdf,.png,.jpg,.jpeg,.csv", multiple: true, optional: true }
+        ],
+        outputs: [
+          { label: "内容产物", path: "stdout" },
+          { label: "产物文件", path: "artifact_uri" }
+        ]
+      },
+      "agent-efficiency-workflows": {
+        id: "agent-efficiency-workflows",
+        action: "run-skill",
+        endpoint: "/api/run-skill",
+        fields: [
+          { id: "task", type: "textarea", label: "原始任务", placeholder: "描述一个反复出现、想交给 Agent 的任务" },
+          { id: "frequency", type: "select", label: "发生频率", default: "weekly", options: [
+            { value: "daily", label: "每天" },
+            { value: "weekly", label: "每周" },
+            { value: "project", label: "按项目" },
+            { value: "ad_hoc", label: "不定期" }
+          ] },
+          { id: "tools", type: "text", label: "可用工具", placeholder: "例如 Hermes、Obsidian、企微、imgen-2", optional: true },
+          { id: "attachments", type: "file", label: "样例附件", accept: ".txt,.md,.pdf,.png,.jpg,.jpeg,.csv", multiple: true, optional: true }
+        ],
+        outputs: [
+          { label: "可复用流程", path: "stdout" },
+          { label: "产物文件", path: "artifact_uri" }
+        ]
+      },
+      "agency-role-orchestrator": {
+        id: "agency-role-orchestrator",
+        action: "run-skill",
+        endpoint: "/api/run-skill",
+        fields: [
+          { id: "problem", type: "textarea", label: "复杂任务/问题", placeholder: "描述要解决的问题" },
+          { id: "domain", type: "select", label: "领域", default: "business", options: [
+            { value: "business", label: "业务/增长" },
+            { value: "engineering", label: "技术/产品" },
+            { value: "content", label: "内容/营销" },
+            { value: "ops", label: "运营/管理" }
+          ] },
+          { id: "needReview", type: "checkbox", label: "需要 reviewer 角色", default: true }
+        ],
+        outputs: [
+          { label: "角色组合", path: "stdout" },
+          { label: "产物文件", path: "artifact_uri" }
+        ]
+      },
+      "ai-crm-business-logic": {
+        id: "ai-crm-business-logic",
+        action: "run-skill",
+        endpoint: "/api/run-skill",
+        fields: [
+          { id: "businessScene", type: "textarea", label: "业务场景", placeholder: "客户来源、跟进动作、成交路径、社群行为" },
+          { id: "entity", type: "select", label: "重点对象", default: "customer", options: [
+            { value: "customer", label: "客户/用户" },
+            { value: "opportunity", label: "机会阶段" },
+            { value: "community", label: "社群行为" },
+            { value: "reminder", label: "提醒/风险" }
+          ] },
+          { id: "outputFormat", type: "select", label: "输出形式", default: "logic_table", options: [
+            { value: "logic_table", label: "业务逻辑表" },
+            { value: "workflow", label: "跟进流程" },
+            { value: "fields", label: "字段设计" }
+          ] },
+          { id: "attachments", type: "file", label: "客户/表格附件", accept: ".csv,.xlsx,.txt,.md,.pdf", multiple: true, optional: true }
+        ],
+        outputs: [
+          { label: "CRM 逻辑", path: "stdout" },
+          { label: "产物文件", path: "artifact_uri" }
+        ]
+      }
+    };
+
+    const skillHermesIds = {
+      aihot: "aihot",
+      heavy: "heavy-ai-dispatch-router",
+      wechat: "wechat-obsidian-intake-system",
+      wecom: "wecom-community-ops-workflows",
+      vibe: "long-horizon-vibe-coding",
+      image2: "image2-personal-brand-prompt-library",
+      marketing: "marketing-team-ai-workflows",
+      stable: "stable-agent-system-architecture",
+      companyos: "ai-native-company-os",
+      xhs: "xhs-obsidian-content-factory",
+      efficiency: "agent-efficiency-workflows",
+      roles: "agency-role-orchestrator",
+      crm: "ai-crm-business-logic"
+    };
+
+    Object.entries(skillProfiles).forEach(([localId, profile]) => {
+      const hermesId = skillHermesIds[localId];
+      profile.hermes = hermesSchemas[hermesId];
+    });
+
     const commonIds = ["aihot", "heavy", "wechat", "wecom", "vibe"];
     const moreIds = ["image2", "marketing", "stable", "companyos", "xhs", "efficiency", "roles", "crm"];
     const state = { active: "aihot", attachments: [], previewUrl: null };
@@ -1053,6 +1455,8 @@
     const inputSpec = document.querySelector("#inputSpec");
     const attachmentSpec = document.querySelector("#attachmentSpec");
     const outputSpec = document.querySelector("#outputSpec");
+    const hermesMap = document.querySelector("#hermesMap");
+    const fieldGrid = document.querySelector("#fieldGrid");
     const taskInput = document.querySelector("#taskInput");
     const messages = document.querySelector("#messages");
     const flowStatus = document.querySelector("#flowStatus");
@@ -1064,6 +1468,7 @@
     const previewUse = document.querySelector("#previewUse");
     const confirmRule = document.querySelector("#confirmRule");
     const previewFiles = document.querySelector("#previewFiles");
+    const outputPaths = document.querySelector("#outputPaths");
     const documentPreview = document.querySelector("#documentPreview");
     const toast = document.querySelector("#toast");
     const runTask = document.querySelector("#runTask");
@@ -1093,13 +1498,158 @@
         .replace(/'/g, "&#39;");
     }
 
+    function summarizeFields(fields) {
+      return fields.map((field) => `${field.label}(${field.id})`).join(" / ");
+    }
+
+    function summarizeOutputs(outputs) {
+      return outputs.map((output) => `${output.label}(${output.path})`).join(" / ");
+    }
+
+    function renderHermesMap(skill) {
+      const { id, action, endpoint } = skill.hermes;
+      hermesMap.innerHTML = `
+        <span>Hermes</span>
+        <span class="endpoint-pill">skillId: ${escapeHtml(id)}</span>
+        <span class="endpoint-pill">action: ${escapeHtml(action)}</span>
+        <span class="endpoint-pill">POST ${escapeHtml(endpoint)}</span>
+      `;
+    }
+
+    function renderFieldControl(field) {
+      const controlId = `field-${field.id}`;
+      const commonAttrs = `id="${controlId}" data-field-id="${field.id}" data-field-type="${field.type}"`;
+      const defaultValue = field.default === undefined ? "" : field.default;
+      if (field.type === "select") {
+        const options = (field.options || []).map((option) => {
+          const selected = option.value === defaultValue ? " selected" : "";
+          return `<option value="${escapeHtml(option.value)}"${selected}>${escapeHtml(option.label)}</option>`;
+        }).join("");
+        return `<select ${commonAttrs}>${options}</select>`;
+      }
+      if (field.type === "checkbox") {
+        const checked = field.default ? " checked" : "";
+        return `<label class="checkbox-control"><input type="checkbox" ${commonAttrs}${checked} />${escapeHtml(field.label)}</label>`;
+      }
+      if (field.type === "textarea") {
+        return `<textarea ${commonAttrs} placeholder="${escapeHtml(field.placeholder || "")}">${escapeHtml(defaultValue)}</textarea>`;
+      }
+      if (field.type === "number") {
+        const min = field.min === undefined ? "" : ` min="${field.min}"`;
+        const max = field.max === undefined ? "" : ` max="${field.max}"`;
+        return `<input type="number" ${commonAttrs}${min}${max} value="${escapeHtml(defaultValue)}" placeholder="${escapeHtml(field.placeholder || "")}" />`;
+      }
+      if (field.type === "file") {
+        return `<div class="file-field-note" data-file-field="${field.id}">使用上方“上传附件”挂载文件</div>`;
+      }
+      return `<input type="text" ${commonAttrs} value="${escapeHtml(defaultValue)}" placeholder="${escapeHtml(field.placeholder || "")}" />`;
+    }
+
+    function renderFieldGrid(skill) {
+      fieldGrid.innerHTML = skill.hermes.fields.map((field) => {
+        const required = field.optional ? "可选" : "必填";
+        const detail = field.type === "file" && field.accept ? `${required} · ${field.type} · ${field.accept}` : `${required} · ${field.type}`;
+        return `
+          <div class="schema-field">
+            <div class="field-head"><span>${escapeHtml(field.label)}</span><code>${escapeHtml(field.id)}</code></div>
+            <div class="field-meta">${escapeHtml(detail)}</div>
+            ${renderFieldControl(field)}
+          </div>
+        `;
+      }).join("");
+      refreshFileFieldNotes();
+    }
+
+    function refreshFileFieldNotes() {
+      document.querySelectorAll("[data-file-field]").forEach((item) => {
+        item.textContent = state.attachments.length
+          ? `已挂载 ${state.attachments.length} 个附件`
+          : "使用上方“上传附件”挂载文件";
+      });
+    }
+
+    function readFieldValue(field) {
+      if (field.type === "file") return state.attachments.map((file) => file.name);
+      const control = fieldGrid.querySelector(`[data-field-id="${field.id}"]`);
+      if (!control) return field.default ?? "";
+      if (field.type === "checkbox") return Boolean(control.checked);
+      if (field.type === "number") return Number(control.value || field.default || 0);
+      return control.value.trim();
+    }
+
+    function buildFieldsPayload(skill) {
+      const fields = {};
+      for (const field of skill.hermes.fields) fields[field.id] = readFieldValue(field);
+      const text = taskInput.value.trim();
+      if (text) {
+        if (skill.hermes.id === "aihot" && !fields.topic) fields.topic = text;
+        if (skill.hermes.id === "wechat-obsidian-intake-system" && !fields.content) fields.content = text;
+        if (skill.hermes.id === "wecom-community-ops-workflows" && !fields.todayFacts) fields.todayFacts = text;
+        if (skill.hermes.id === "long-horizon-vibe-coding" && !fields.goal) fields.goal = text;
+        if (skill.hermes.id === "image2-personal-brand-prompt-library" && !fields.scene) fields.scene = text;
+        if (skill.hermes.id === "marketing-team-ai-workflows" && !fields.goal) fields.goal = text;
+        if (skill.hermes.id === "stable-agent-system-architecture" && !fields.currentState) fields.currentState = text;
+        if (skill.hermes.id === "ai-native-company-os" && !fields.workflows) fields.workflows = text;
+        if (skill.hermes.id === "xhs-obsidian-content-factory" && !fields.topic) fields.topic = text;
+        if (skill.hermes.id === "agent-efficiency-workflows" && !fields.task) fields.task = text;
+        if (skill.hermes.id === "agency-role-orchestrator" && !fields.problem) fields.problem = text;
+        if (skill.hermes.id === "ai-crm-business-logic" && !fields.businessScene) fields.businessScene = text;
+      }
+      return fields;
+    }
+
+    function buildAttachmentPayload() {
+      return state.attachments.map((file) => ({
+        name: file.name,
+        size: file.size,
+        mime: file.type || "",
+        upload: "需要先调用 POST /api/upload 获取 uri"
+      }));
+    }
+
+    function buildHermesRequest(skill) {
+      const fields = buildFieldsPayload(skill);
+      const attachments = buildAttachmentPayload();
+      const base = {
+        skillId: skill.hermes.id,
+        action: skill.hermes.action,
+        endpoint: skill.hermes.endpoint,
+        method: "POST"
+      };
+      if (skill.hermes.action === "aihot-digest") {
+        return { ...base, body: { fields, attachments } };
+      }
+      if (skill.hermes.action === "heavy-ticket") {
+        const type = fields.type || "ocr";
+        const firstAttachment = attachments[0];
+        return {
+          ...base,
+          body: {
+            type,
+            inputUri: fields.inputUri || firstAttachment?.name || `mock://dashboard/${type}`,
+            notifyTarget: fields.notifyTarget || "dashboard"
+          }
+        };
+      }
+      return {
+        ...base,
+        body: {
+          skill: skill.hermes.id,
+          fields,
+          attachments,
+          prompt: taskInput.value.trim()
+        }
+      };
+    }
+
     function skillButton(id) {
       const skill = skillProfiles[id];
       const button = document.createElement("button");
       button.className = "skill-button";
       button.type = "button";
       button.dataset.skill = id;
-      button.innerHTML = `<span class="skill-icon">${skill.icon}</span><span><span class="skill-name">${skill.name}</span><span class="skill-meta">${skill.category}</span></span>`;
+      button.dataset.skillId = skill.hermes.id;
+      button.innerHTML = `<span class="skill-icon">${skill.icon}</span><span><span class="skill-name">${skill.name}</span><span class="skill-meta">${skill.category} · ${skill.hermes.action}</span></span>`;
       button.addEventListener("click", () => setSkill(id));
       return button;
     }
@@ -1134,11 +1684,13 @@
         attachmentList.classList.remove("show");
         attachmentList.innerHTML = "";
         previewFiles.textContent = "尚未上传附件";
+        refreshFileFieldNotes();
         return;
       }
       attachmentList.classList.add("show");
       attachmentList.innerHTML = state.attachments.map((file) => `<span class="file-chip">📎 ${file.name}</span>`).join("");
       previewFiles.textContent = `${state.attachments.length} 个附件：${state.attachments.map((file) => file.name).join("、")}`;
+      refreshFileFieldNotes();
     }
 
     function setSkill(id) {
@@ -1150,18 +1702,21 @@
       skillCategory.textContent = skill.category;
       skillTitle.textContent = skill.name;
       skillPurpose.textContent = skill.purpose;
-      assistantIntro.innerHTML = `<strong>${skill.name}</strong>${skill.intro}`;
-      inputSpec.textContent = skill.inputSpec;
+      assistantIntro.innerHTML = `<strong>${skill.name}</strong>${skill.intro} 当前已按 VPS Hermes 的 <code>${escapeHtml(skill.hermes.id)}</code> schema 渲染输入和输出。`;
+      inputSpec.textContent = summarizeFields(skill.hermes.fields);
       attachmentSpec.textContent = skill.attachmentSpec;
-      outputSpec.textContent = skill.outputSpec;
+      outputSpec.textContent = summarizeOutputs(skill.hermes.outputs);
       taskInput.value = skill.prompt;
       previewTitle.textContent = skill.previewTitle;
       previewType.textContent = skill.previewType;
       previewUse.textContent = skill.previewUse;
       confirmRule.textContent = skill.confirmRule;
+      outputPaths.textContent = skill.hermes.outputs.map((output) => output.path).join(" / ");
       confirmSend.style.display = skill.confirmRule.includes("发送") || skill.name.includes("企微") || skill.name.includes("日报") ? "block" : "none";
       document.querySelectorAll(".runtime-message").forEach((item) => item.remove());
       flowStatus.textContent = "等待你输入目标";
+      renderHermesMap(skill);
+      renderFieldGrid(skill);
       renderDoc(skill);
       renderAttachments();
       updatePreviewLink();
@@ -1239,12 +1794,13 @@
     function makeDownloadText() {
       const skill = skillProfiles[state.active];
       const text = documentPreview.innerText.trim();
-      return `# ${skill.name}\n\n任务输入：\n${taskInput.value.trim()}\n\n附件：\n${state.attachments.map((file) => `- ${file.name}`).join("\n") || "- 无"}\n\n预览内容：\n${text}\n`;
+      const request = buildHermesRequest(skill);
+      return `# ${skill.name}\n\n## Hermes 调用\n\n\`\`\`json\n${JSON.stringify(request, null, 2)}\n\`\`\`\n\n## 任务输入\n${taskInput.value.trim()}\n\n## 附件\n${state.attachments.map((file) => `- ${file.name}`).join("\n") || "- 无"}\n\n## 预览内容\n${text}\n`;
     }
 
     function makeFeedbackRecord() {
       const skill = skillProfiles[state.active];
-      return `# 使用中问题反馈\n\n- Skill：${skill.name}\n- 问题类型：${feedbackType.value}\n- 页面文件：${skill.previewTitle}\n- 附件数量：${state.attachments.length}\n\n## 问题描述\n${feedbackDetail.value.trim() || "未填写"}\n\n## 期望结果\n${feedbackExpected.value.trim() || "未填写"}\n\n## 当前输入\n${taskInput.value.trim() || "未填写"}\n`;
+      return `# 使用中问题反馈\n\n- Skill：${skill.name}\n- Hermes Skill ID：${skill.hermes.id}\n- Action：${skill.hermes.action}\n- Endpoint：${skill.hermes.endpoint}\n- 问题类型：${feedbackType.value}\n- 页面文件：${skill.previewTitle}\n- 附件数量：${state.attachments.length}\n\n## 问题描述\n${feedbackDetail.value.trim() || "未填写"}\n\n## 期望结果\n${feedbackExpected.value.trim() || "未填写"}\n\n## 当前输入\n${taskInput.value.trim() || "未填写"}\n`;
     }
 
     function updatePreviewLink() {
@@ -1322,6 +1878,9 @@
       showToast(`已上传 ${state.attachments.length} 个附件`);
     });
 
+    fieldGrid.addEventListener("input", updatePreviewLink);
+    fieldGrid.addEventListener("change", updatePreviewLink);
+
     runTask.addEventListener("click", async () => {
       const skill = skillProfiles[state.active];
       const input = taskInput.value.trim();
@@ -1332,16 +1891,20 @@
       }
       runTask.disabled = true;
       document.querySelectorAll(".runtime-message").forEach((item) => item.remove());
+      const request = buildHermesRequest(skill);
       appendMessage("user", `<strong>已接收任务</strong>${escapeHtml(input).replace(/\n/g, "<br />")}`, "runtime-message");
       flowStatus.textContent = "正在读取输入";
       await new Promise((resolve) => window.setTimeout(resolve, 360));
-      appendMessage("assistant", `<strong>读取输入</strong>已识别当前 Skill：${skill.name}。`, "runtime-message");
+      appendMessage("assistant", `<strong>读取输入</strong>已匹配 VPS Hermes Skill：<code>${escapeHtml(skill.hermes.id)}</code>。`, "runtime-message");
       flowStatus.textContent = "正在匹配输入与附件要求";
       await new Promise((resolve) => window.setTimeout(resolve, 420));
-      appendMessage("assistant", `<strong>检查附件</strong>${state.attachments.length ? `已挂载 ${state.attachments.length} 个附件。` : "没有附件，按文字输入继续生成。"}`, "runtime-message");
-      flowStatus.textContent = "正在生成右侧文件预览";
+      appendMessage("assistant", `<strong>调用映射</strong>${escapeHtml(request.method)} ${escapeHtml(request.endpoint)} · action=${escapeHtml(request.action)}。`, "runtime-message");
+      flowStatus.textContent = "正在组装 Hermes 请求";
       await new Promise((resolve) => window.setTimeout(resolve, 480));
-      appendMessage("assistant", `<strong>生成预览</strong>正在按“${skill.outputSpec}”更新右侧文件。`, "runtime-message");
+      appendMessage("assistant", `<strong>结构化字段</strong><pre>${escapeHtml(JSON.stringify(request.body, null, 2))}</pre>`, "runtime-message");
+      flowStatus.textContent = "正在生成右侧文件预览";
+      await new Promise((resolve) => window.setTimeout(resolve, 420));
+      appendMessage("assistant", `<strong>输出契约</strong>${escapeHtml(summarizeOutputs(skill.hermes.outputs))}`, "runtime-message");
       await new Promise((resolve) => window.setTimeout(resolve, 360));
       renderDoc(skill);
       updatePreviewLink();
