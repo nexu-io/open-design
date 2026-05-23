@@ -217,6 +217,12 @@
       padding: 0 12px;
       min-width: 94px;
     }
+    .workbench-link {
+      min-height: 38px;
+      display: inline-flex;
+      align-items: center;
+      text-decoration: none;
+    }
     .text-btn { padding: 0 14px; }
     .primary-btn {
       padding: 0 18px;
@@ -708,7 +714,7 @@
       </details>
 
       <div class="rail-note">
-        左侧只负责选 Skill。中间说需求、传附件、语音输入。右侧始终显示当前 Skill 会生成的文档预览。
+        左侧只负责选 Skill。中间说需求、传附件、语音输入。右侧始终显示当前 Skill 会生成的文档预览；真实执行请进入 VPS 工作台。
       </div>
     </aside>
 
@@ -720,6 +726,7 @@
           <p class="skill-purpose" id="skillPurpose">生成热点摘要、观点和可确认的企微发送草稿。</p>
         </div>
         <div class="header-actions">
+          <a class="text-btn workbench-link" href="https://104.248.208.183:18443/" target="_blank" rel="noopener">真实工作台</a>
           <button class="text-btn feedback-btn" type="button" id="openFeedback">问题反馈</button>
           <button class="icon-btn" type="button" id="globalVoice" title="语音输入" aria-label="语音输入">🎙</button>
           <button class="icon-btn" type="button" id="globalAttach" title="上传附件" aria-label="上传附件">＋</button>
@@ -738,7 +745,7 @@
           </div>
           <div class="schema-card">
             <span>输出</span>
-            <strong id="outputSpec">日报文档 + 待确认草稿</strong>
+            <strong id="outputSpec">日报文档 + HTML/SVG 卡片 + 在线文档 + 企微草稿</strong>
           </div>
         </div>
         <div class="hermes-map" id="hermesMap" aria-label="Hermes 调用映射"></div>
@@ -849,7 +856,7 @@
         purpose: "生成热点摘要、观点和可确认的企微发送草稿。",
         inputSpec: "主题范围、目标群、口吻",
         attachmentSpec: "可选：链接、截图、原文",
-        outputSpec: "日报文档 + 待确认草稿",
+        outputSpec: "日报文档 + HTML/SVG 卡片 + 在线文档 + 企微草稿",
         previewTitle: "AI 热点日报.md",
         previewType: "Markdown",
         previewUse: "企微发送、知识库归档",
@@ -862,6 +869,7 @@
           sections: [
             { heading: "今日重点", items: ["模型与 Agent 工具继续向工作流整合", "内容生成从单点工具转向可复用流程", "企业侧更关注权限、审计和外发确认"] },
             { heading: "可转发观点", items: ["不要把 AI 工作台做成工具堆叠，用户只需要输入目标并确认结果。", "所有外发动作都应该先生成草稿，再由人确认。"] },
+            { heading: "生成文件", items: ["Markdown 日报文档", "HTML 可读卡片", "SVG 企微图片卡片", "飞书/在线文档链接"] },
             { heading: "企微草稿", body: "今日 AI 热点已整理为 3 条重点和 2 条观点，建议发送给内部学习群；请确认标题、目标群和正文后再发送。" }
           ]
         }
@@ -1219,6 +1227,9 @@
         ],
         outputs: [
           { label: "日报文档", path: "parsed.paths.markdown" },
+          { label: "HTML 卡片", path: "parsed.paths.html" },
+          { label: "图片卡片", path: "parsed.paths.svg" },
+          { label: "在线文档", path: "parsed.online_doc.url" },
           { label: "精选数量", path: "parsed.count" },
           { label: "企微状态", path: "outbox.status" },
           { label: "今日标题", path: "parsed.top_titles" }
@@ -1816,7 +1827,7 @@
       skillCategory.textContent = skill.category;
       skillTitle.textContent = skill.name;
       skillPurpose.textContent = skill.purpose;
-      assistantIntro.innerHTML = `<strong>${skill.name}</strong>${skill.intro} 当前已按 VPS Hermes 的 <code>${escapeHtml(skill.hermes.id)}</code> schema 渲染输入和输出。`;
+      assistantIntro.innerHTML = `<strong>${skill.name}</strong>${skill.intro} 当前设计稿已按 VPS Hermes 的 <code>${escapeHtml(skill.hermes.id)}</code> schema 渲染输入和输出；真实调用请打开右上角“真实工作台”。`;
       inputSpec.textContent = summarizeFields(skill.hermes.fields);
       attachmentSpec.textContent = skill.attachmentSpec;
       outputSpec.textContent = summarizeOutputs(skill.hermes.outputs);
@@ -2022,7 +2033,7 @@
       await new Promise((resolve) => window.setTimeout(resolve, 360));
       renderDoc(skill);
       updatePreviewLink();
-      appendMessage("assistant", `<strong>${skill.outputSpec} 已生成</strong>右侧文件预览已更新，可以下载；如涉及外发，会先等待你确认。`, "runtime-message");
+      appendMessage("assistant", `<strong>${skill.outputSpec} 已生成</strong>右侧文件预览已更新，可以下载；这是 Open Design 原型预览，真实执行和企微外发请进入右上角“真实工作台”。`, "runtime-message");
       flowStatus.textContent = "结果已生成，等待确认或下载";
       runTask.disabled = false;
     });
