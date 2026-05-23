@@ -249,6 +249,18 @@ describe('htmlNeedsFocusGuard', () => {
     expect(htmlNeedsFocusGuard('<textarea autofocus></textarea>')).toBe(true);
   });
 
+  it('detects external script references that may call focus at load', () => {
+    expect(htmlNeedsFocusGuard('<script src="./boot.js"></script>')).toBe(true);
+    expect(htmlNeedsFocusGuard('<script src="app.js"></script>')).toBe(true);
+    expect(htmlNeedsFocusGuard('<script defer src="./assets/init.js"></script>')).toBe(true);
+    expect(htmlNeedsFocusGuard('<SCRIPT SRC="main.js"></SCRIPT>')).toBe(true);
+  });
+
+  it('does not match inline scripts without focus calls', () => {
+    expect(htmlNeedsFocusGuard('<script>console.log("hello")</script>')).toBe(false);
+    expect(htmlNeedsFocusGuard('<script type="application/json">{}</script>')).toBe(false);
+  });
+
   it('does not match unrelated focus mentions', () => {
     expect(htmlNeedsFocusGuard('<div class="focus-ring">')).toBe(false);
     expect(htmlNeedsFocusGuard('// focus the element')).toBe(false);

@@ -153,20 +153,25 @@ export function parseForceInline(search: string | URLSearchParams | null | undef
  * negatives are the same blank-preview the user already hits.
  */
 /**
- * Return true when the HTML source contains patterns that call `.focus()` at
- * load time, which would steal focus from the host page in a URL-loaded
- * iframe. The srcDoc path injects `injectPreviewFocusGuard` to suppress this;
- * URL-load has no such guard, so we force the srcDoc path instead.
+ * Return true when the HTML source may call `.focus()` at load time, which
+ * would steal focus from the host page in a URL-loaded iframe. The srcDoc
+ * path injects `injectPreviewFocusGuard` to suppress this; URL-load has no
+ * such guard, so we force the srcDoc path instead.
  *
- * Matches any `.focus(` call — this covers `window.focus()`,
- * `document.body.focus()`, `element.focus()`, chained calls like
- * `querySelector("input").focus()`, and `autofocus` attributes.
- * False positives (e.g. a comment mentioning `.focus(`) just route the
- * artifact through the slightly slower srcDoc path, which is safe.
+ * Detection covers two cases:
+ *
+ *   1. Inline `.focus(` calls and `autofocus` attributes — directly visible
+ *      in the document source.
+ *   2. External `<script src=...>` references — we cannot inspect the linked
+ *      file's content, so we conservatively assume it may call focus.
+ *
+ * False positives just route the artifact through the slightly slower srcDoc
+ * path, which is the safe direction.
  */
 export function htmlNeedsFocusGuard(source: string): boolean {
   if (/\.\s*focus\s*\(/i.test(source)) return true;
   if (/\bautofocus\b/i.test(source)) return true;
+  if (/<script\b[^>]*\bsrc\s*=/i.test(source)) return true;
   return false;
 }
 
