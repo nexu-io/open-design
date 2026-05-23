@@ -65,12 +65,17 @@ export interface IdentityProvider {
  * and OD_LOCAL_IDENTITY_EMAIL customize what's recorded without
  * needing a multi-user identity layer.
  */
+// Strip control characters so env-supplied values can't smuggle newlines
+// or NULs into git author lines or SQLite text columns.
+function sanitizeIdentityField(raw: string): string {
+  // eslint-disable-next-line no-control-regex
+  return raw.replace(/[\x00-\x1f\x7f]/g, '').trim();
+}
+
 export const LocalFallbackProvider: IdentityProvider = {
   resolve(_req, env = process.env) {
-    const displayName = (env.OD_LOCAL_IDENTITY ?? '').trim() || 'Local User';
-    const emailRaw = (env.OD_LOCAL_IDENTITY_EMAIL ?? '').trim();
-    // Conditional spread keeps `email` absent (not just undefined) when
-    // unset, so the type matches Identity under exactOptionalPropertyTypes.
+    const displayName = sanitizeIdentityField(env.OD_LOCAL_IDENTITY ?? '') || 'Local User';
+    const emailRaw = sanitizeIdentityField(env.OD_LOCAL_IDENTITY_EMAIL ?? '');
     return {
       id: 'local:default',
       displayName,

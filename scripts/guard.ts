@@ -49,7 +49,6 @@ const residualSkippedDirectories = new Set([
   ".tmp",
   ".vite",
   "dist",
-  "local",
   "node_modules",
   "out",
 ]);
@@ -113,6 +112,8 @@ const residualAllowedPathPrefixes = [
   "design-templates/html-ppt/assets/",
   "test-results/",
   "vendor/",
+  // Untracked local working tree (gitignored at the repo root).
+  "local/",
 ];
 
 const residualAllowedPathPatterns: RegExp[] = [

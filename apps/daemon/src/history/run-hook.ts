@@ -8,6 +8,7 @@ import type Database from 'better-sqlite3';
 
 import { isHistoryEnabled } from './feature-flag.js';
 import { projectRepoPath, recordRevisionForRun } from './repo.js';
+import { isSafeId } from '../projects.js';
 import type { Identity } from '../identity/types.js';
 
 const DEFAULT_COMMIT_MESSAGE = 'Agent run';
@@ -69,6 +70,10 @@ export function installHistoryRunFinishedHook(args: InstallHistoryRunFinishedHoo
     if (!isHistoryEnabled(env)) return;
     if (!run.projectId) return;
     if (!run.identity) return;
+    if (!isSafeId(run.projectId)) {
+      console.warn(`[history] skipping hook for unsafe projectId ${JSON.stringify(run.projectId)}`);
+      return;
+    }
 
     const projectDir = path.join(projectsRoot, run.projectId);
     const repoDir = projectRepoPath(reposRoot, run.projectId);

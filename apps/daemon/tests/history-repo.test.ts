@@ -693,7 +693,7 @@ describe('recordRevisionForRun', () => {
     expect(proj.current_revision_id).toBe(bRow.id);
   });
 
-  it('fails loudly when commit metadata cannot be read during repair (no fabrication)', async () => {
+  it('fails loudly when the git object DB is corrupt during repair (no fabrication)', async () => {
     writeFileSync(path.join(sandbox.projectDir, 'orphan.txt'), 'x\n');
     execFileSync(
       'git',
@@ -710,8 +710,15 @@ describe('recordRevisionForRun', () => {
       { stdio: 'ignore' },
     );
 
-    // Corrupt the gitdir so git log fails. Removing HEAD is enough.
-    rmSync(path.join(sandbox.repoDir, 'HEAD'), { force: true });
+    const orphanSha = execFileSync(
+      'git',
+      [`--git-dir=${sandbox.repoDir}`, 'rev-parse', 'HEAD'],
+      { encoding: 'utf8' },
+    ).trim();
+    rmSync(
+      path.join(sandbox.repoDir, 'objects', orphanSha.slice(0, 2), orphanSha.slice(2)),
+      { force: true },
+    );
 
     await expect(
       recordRevisionForRun({
@@ -724,7 +731,6 @@ describe('recordRevisionForRun', () => {
       }),
     ).rejects.toThrow();
 
-    // No orphan row was written. Only the original migration row remains.
     const count = sandbox.db.prepare(
       `SELECT COUNT(*) AS n FROM project_revisions WHERE project_id = ?`,
     ).get(sandbox.projectId) as { n: number };

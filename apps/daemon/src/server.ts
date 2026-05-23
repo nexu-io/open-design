@@ -6067,17 +6067,15 @@ export async function startServer({
       const stagedPath = `plugin-source/${sourceSlug}`;
       const prompt = renderPluginSharePrompt({ action, sourcePlugin, stagedPath });
       const metadata = { kind: 'prototype' };
-      // Copy plugin source BEFORE ensureProject so the history
-      // migration commit captures the seed files rather than
-      // attributing them to a later agent run.
+      // Seeds land BEFORE ensureProject so the migration commit captures
+      // them; insertProject lands BEFORE ensureProject so the history
+      // hook's FK target exists when it fires.
       const projectRoot = path.join(PROJECTS_DIR, id);
       await fs.promises.mkdir(projectRoot, { recursive: true });
       await copyPluginFolderForProjectContext(
         sourcePlugin.fsPath,
         path.join(projectRoot, 'plugin-source', sourceSlug),
       );
-      await ensureProject(PROJECTS_DIR, id, metadata);
-
       insertProject(db, {
         id,
         name: `${PLUGIN_SHARE_ACTION_LABELS[action]}: ${sourcePlugin.title || sourcePlugin.id}`,
@@ -6088,6 +6086,7 @@ export async function startServer({
         createdAt: now,
         updatedAt: now,
       });
+      await ensureProject(PROJECTS_DIR, id, metadata);
       insertConversation(db, {
         id: cid,
         projectId: id,

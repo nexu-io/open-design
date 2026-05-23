@@ -616,13 +616,14 @@ async function repairOrphanHead(
 
   db.transaction(() => {
     orphans.forEach((meta, i) => {
+      const isRootBoundary = i === 0 && oldestParentSha === null;
       insertRevision(db, {
         id: ids[i]!,
         projectId,
         parentId: i === 0 ? oldestParentId : ids[i - 1]!,
         gitSha: meta.sha,
         createdAt: meta.authorDateMs,
-        source: 'agent-run',
+        source: isRootBoundary ? 'migration' : 'agent-run',
         message: meta.message || DEFAULT_COMMIT_MESSAGE,
         actorIdentityId: null,
         actorDisplayName: meta.authorName || null,

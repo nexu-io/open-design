@@ -3,20 +3,47 @@ import { randomUUID } from 'node:crypto';
 
 export const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
 
-// Tool names (lowercase) that MAY mutate the worktree. Bash is
-// included: losing marker provenance for a Bash run that wrote via
-// shell (mv/cp/redirect) is worse than a Bash-reads-only run getting
-// a false marker. Adapters disagree on casing (claude-stream emits
-// "Bash", pi-rpc emits "bash") — caller lowercases before lookup.
-const FILE_WRITE_TOOL_NAMES = new Set(['write', 'edit', 'multiedit', 'notebookedit', 'bash']);
+// Denylist of tools known to be read-only. Anything else flips
+// touchedFiles. Bias is toward "may have written" — missing a real
+// commit is harder to recover than recording a marker revision.
+const READ_ONLY_TOOL_NAMES = new Set([
+  'read', 'grep', 'glob', 'ls', 'list',
+  'websearch', 'web_search', 'webfetch', 'web_fetch',
+  'todoread', 'todowrite',
+  'askuserquestion',
+]);
+
+// Codex emits file mutations as item.completed events with these types.
+// json-event-stream.ts only translates command_execution → Bash and
+// agent_message → text_delta; everything else flows through as the
+// 'agent' event with the raw item attached.
+const CODEX_WRITE_ITEM_TYPES = new Set([
+  'patch_apply', 'apply_patch', 'file_change', 'file_write', 'write_file', 'edit',
+]);
 
 function toolUseNameFromEvent(event: string, data: any): string | null {
   if (!data) return null;
-  // Direct emit shape: emit(run, 'tool_use', { id, name, input }).
   if (event === 'tool_use' && typeof data.name === 'string') return data.name;
-  // Production agent-event wrapper: send('agent', { type: 'tool_use', name, ... }).
   if (event === 'agent' && data.type === 'tool_use' && typeof data.name === 'string') return data.name;
   return null;
+}
+
+function isFileWriteEvidence(event: string, data: any): boolean {
+  const toolName = toolUseNameFromEvent(event, data);
+  if (toolName) return !READ_ONLY_TOOL_NAMES.has(toolName.toLowerCase());
+
+  if (event === 'agent' && data && typeof data === 'object') {
+    const phase = data.type;
+    if (phase === 'item.started' || phase === 'item.completed') {
+      const itemType = data?.item?.type;
+      if (typeof itemType === 'string') {
+        const lc = itemType.toLowerCase();
+        if (CODEX_WRITE_ITEM_TYPES.has(lc)) return true;
+        if (/patch|apply|file_change|write_file|file_write/.test(lc)) return true;
+      }
+    }
+  }
+  return false;
 }
 
 function readString(value) {
@@ -118,10 +145,7 @@ export function createChatRunService({
       if (details.error) run.error = details.error;
       if (details.errorCode) run.errorCode = details.errorCode;
     }
-    const toolName = toolUseNameFromEvent(event, data);
-    if (toolName && FILE_WRITE_TOOL_NAMES.has(toolName.toLowerCase())) {
-      run.touchedFiles = true;
-    }
+    if (isFileWriteEvidence(event, data)) run.touchedFiles = true;
     const id = run.nextEventId++;
     const record = { id, event, data, timestamp: Date.now() };
     run.events.push(record);

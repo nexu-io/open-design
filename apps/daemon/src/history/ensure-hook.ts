@@ -36,13 +36,23 @@ export function installHistoryEnsureHook(args: InstallHistoryEnsureHookArgs): vo
 
   setProjectEnsuredHook(async ({ projectId, projectDir, metadata }: ProjectEnsuredHookArgs) => {
     if (!isHistoryEnabled(env)) return;
+    // initProjectHistory inserts a project_revisions row keyed by
+    // projectId; without a projects row the FK fails. Callers must
+    // insertProject first.
+    const projectRow = getProject(db, projectId);
+    if (!projectRow) {
+      console.warn(
+        `[history] ensure-hook fired before projects row exists for ${projectId}; skipping substrate init.`,
+      );
+      return;
+    }
     // Linked-folder projects (metadata.baseDir set) point at the
     // user's own tree; we must not init substrate over them. Several
     // ensureProject callers omit `metadata`, so look it up when absent
     // — the skip guarantee can't depend on every call site remembering.
     const effectiveMetadata = (metadata && typeof metadata === 'object')
       ? metadata
-      : (getProject(db, projectId)?.metadata ?? null) as { baseDir?: string } | null;
+      : (projectRow.metadata ?? null) as { baseDir?: string } | null;
     if (typeof effectiveMetadata?.baseDir === 'string') return;
 
     const repoDir = projectRepoPath(reposRoot, projectId);
