@@ -1013,6 +1013,23 @@ export async function releaseLiveArtifactRefreshLock(lock: LiveArtifactRefreshLo
     });
   }
 
+  // Narrow the TOCTOU window: re-read immediately before unlink so that
+  // a concurrent acquire-and-replace doesn't cause us to delete the new
+  // owner's lock file.
+  try {
+    const finalCheck = JSON.parse(await readFile(lock.lockPath, 'utf8')) as LiveArtifactRefreshLockMetadata;
+    if (finalCheck.lockId !== lock.metadata.lockId) {
+      throw new LiveArtifactRefreshLockError('live artifact refresh lock was replaced before release', {
+        projectId: lock.metadata.projectId,
+        artifactId: lock.metadata.artifactId,
+        lockPath: lock.lockPath,
+      });
+    }
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') return;
+    throw error;
+  }
+
   await rm(lock.lockPath, { force: true });
 }
 
