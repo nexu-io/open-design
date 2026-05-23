@@ -1783,4 +1783,4 @@ function errorMessage(err: unknown): string {
 }
 
 // Exported for mcp-http.ts and unit tests.
-export { TOOL_DEFS, extractRelativeRefs, resolveProjectId, resolveProjectArg, withActiveEcho, fetchProjectFile, getArtifact, getFile, createArtifact, handleMcpToolCall };
+export { TOOL_DEFS, extractRelativeRefs, resolveProjectId, resolveProjectArg, withActiveEcho, fetchProjectFile, getArtifact, getFile, createArtifact };
