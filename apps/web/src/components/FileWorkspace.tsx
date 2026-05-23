@@ -313,6 +313,22 @@ export function FileWorkspace({
     setActiveTab(name);
   }
 
+  // Open `openName` (focusing it) and close `closeName` in a single tab-state
+  // update. Used by the React module pointer (issue #2744): once the user
+  // jumps to the HTML entry that renders a module, the dead-end module tab is
+  // dropped. Done atomically because calling openFile() then closeTab() would
+  // each read the same stale `persistedTabs` prop and the second would clobber
+  // the first.
+  function openFileReplacing(openName: string, closeName: string) {
+    setUploadError(null);
+    const withoutClosed = persistedTabs.filter((tabName) => tabName !== closeName);
+    const nextTabs = withoutClosed.includes(openName)
+      ? withoutClosed
+      : [...withoutClosed, openName];
+    onTabsStateChange({ tabs: nextTabs, active: openName });
+    setActiveTab(openName);
+  }
+
   function closeTab(name: string) {
     const sketchEntry = sketches[name];
     const isPending = sketchEntry && !sketchEntry.persisted;
@@ -1056,6 +1072,7 @@ export function FileWorkspace({
             onRemovePreviewComment={onRemovePreviewComment}
             onSendBoardCommentAttachments={onSendBoardCommentAttachments}
             onFileSaved={onRefreshFiles}
+            onOpenFileReplacing={openFileReplacing}
           />
         ) : (
           <div className="viewer-empty">
