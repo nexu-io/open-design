@@ -97,15 +97,16 @@ function getPrNumber(): number {
   return Number(requireEnv("PR_NUMBER"));
 }
 
-function isAllowedChangedPath(path: string): boolean {
+function isAllowedSourceOrTestPath(path: string): boolean {
+  return /^(apps|packages)\/[^/]+\/(src|tests)\//.test(path);
+}
+
+export function isAllowedChangedPath(path: string): boolean {
   if (isDeniedChangedPath(path)) return false;
   return (
     isDocsPath(path) ||
     path.startsWith("apps/web/") ||
-    path.startsWith("apps/daemon/src/") ||
-    path.startsWith("apps/daemon/tests/") ||
-    path.startsWith("packages/contracts/src/") ||
-    path.startsWith("packages/contracts/tests/")
+    isAllowedSourceOrTestPath(path)
   );
 }
 
@@ -116,7 +117,6 @@ export function isDeniedChangedPath(path: string): boolean {
     path.startsWith("e2e/scripts/") ||
     path.startsWith("nix/") ||
     path.startsWith("tools/pack/") ||
-    path.startsWith("apps/packaged/") ||
     path === "package.json" ||
     path.endsWith("/package.json") ||
     path === "pnpm-lock.yaml" ||
