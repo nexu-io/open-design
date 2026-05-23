@@ -140,6 +140,12 @@ export function createChatRunService({
       cancelRequested: false,
       touchedFiles: false,
       headAtCreate: null,
+      // History capture outcome — surfaces in statusBody so a successful
+      // run with a failed history write is visible (the hook fires
+      // fire-and-forget AFTER terminal broadcast, so a thrown error in
+      // recordRevisionForRun would otherwise be silently swallowed).
+      historyStatus: null,
+      historyError: null,
     };
     runs.set(run.id, run);
     if (runCreatedHook) {
@@ -191,6 +197,8 @@ export function createChatRunService({
     signal: run.signal,
     error: run.error ?? null,
     errorCode: run.errorCode ?? null,
+    historyStatus: run.historyStatus ?? null,
+    historyError: run.historyError ?? null,
   });
 
   const finish = (run, status, code: number | null = null, signal: string | null = null) => {

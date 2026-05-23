@@ -8,7 +8,8 @@ import type Database from 'better-sqlite3';
 
 import { isHistoryEnabled } from './feature-flag.js';
 import { projectRepoPath, readHeadSha, recordRevisionForRun } from './repo.js';
-import { isSafeId } from '../projects.js';
+import { ensureProject, isSafeId } from '../projects.js';
+import { getProject } from '../db.js';
 import type { Identity } from '../identity/types.js';
 
 const DEFAULT_COMMIT_MESSAGE = 'Agent run';
@@ -18,6 +19,14 @@ const DEFAULT_COMMIT_MESSAGE = 'Agent run';
  * here because runs.ts is `@ts-nocheck`; consumers that need the
  * type import from this module.
  */
+export type HistoryStatus =
+  | 'pending'
+  | 'recorded'
+  | 'marker'
+  | 'clean'
+  | 'not-initialized'
+  | 'failed';
+
 export interface RunFinishedRun {
   id: string;
   projectId: string | null;
@@ -33,6 +42,12 @@ export interface RunFinishedRun {
    * baseline for the sibling-absorbed marker check.
    */
   headAtCreate: string | null;
+  // Mutable: the hook sets these as it runs. Surfaced in statusBody so
+  // a successful run with a failed history write is visible — the hook
+  // fires fire-and-forget AFTER terminal broadcast, so console.warn
+  // alone would be silently swallowed for /api/runs and /wait consumers.
+  historyStatus: HistoryStatus | null;
+  historyError: string | null;
 }
 
 /**
@@ -50,6 +65,9 @@ type RunFinishedStatus = 'succeeded' | 'failed' | 'canceled';
 export interface RunServiceForHook {
   setRunFinishedHook(hook: ((run: RunFinishedRun, status: RunFinishedStatus) => unknown) | null): void;
   setRunCreatedHook(hook: ((run: RunCreatedRun) => unknown) | null): void;
+  /** Emit an arbitrary event into the run's SSE buffer. Used by the hook
+   *  to surface `history-completed` after terminal broadcast. */
+  emit(run: { id: string; events: unknown[]; clients: Set<unknown>; nextEventId: number }, event: string, data: unknown): unknown;
 }
 
 export interface InstallHistoryRunFinishedHookArgs {
@@ -100,6 +118,9 @@ export function installHistoryRunFinishedHook(args: InstallHistoryRunFinishedHoo
     const repoDir = projectRepoPath(reposRoot, run.projectId);
     const message = buildCommitMessage(run.message);
 
+    run.historyStatus = 'pending';
+    run.historyError = null;
+
     try {
       const result = await recordRevisionForRun({
         projectId: run.projectId,
@@ -112,6 +133,14 @@ export function installHistoryRunFinishedHook(args: InstallHistoryRunFinishedHoo
         runHeadAtCreate: run.headAtCreate,
       });
 
+      run.historyStatus = result.kind;
+      runs.emit(run as never, 'history-completed', {
+        status: result.kind,
+        revisionId: 'revisionId' in result ? result.revisionId : null,
+        absorbedIntoRevisionId:
+          result.kind === 'marker' ? result.absorbedIntoRevisionId : null,
+      });
+
       if (result.kind === 'recorded') {
         if (process.env.DEBUG?.includes('history')) {
           console.log(
@@ -119,9 +148,6 @@ export function installHistoryRunFinishedHook(args: InstallHistoryRunFinishedHoo
           );
         }
       } else if (result.kind === 'marker') {
-        // Info-level (not debug): concurrent-run absorption is rare
-        // and useful to surface when troubleshooting "why doesn't my
-        // run appear in history with its own commit?"
         const absorbedSuffix = result.absorbedIntoRevisionId
           ? ` (absorbed into ${result.absorbedIntoRevisionId.slice(0, 8)})`
           : '';
@@ -133,8 +159,11 @@ export function installHistoryRunFinishedHook(args: InstallHistoryRunFinishedHoo
           `[history] run ${run.id} finished against project ${run.projectId} but the substrate isn't initialized; skipping commit.`,
         );
       }
-      // 'clean' is the common no-op case — don't log
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      run.historyStatus = 'failed';
+      run.historyError = message;
+      runs.emit(run as never, 'history-completed', { status: 'failed', error: message });
       console.warn(`[history] auto-commit failed for run ${run.id}:`, err);
     }
   });
@@ -149,14 +178,28 @@ export function installHistoryRunFinishedHook(args: InstallHistoryRunFinishedHoo
  * lock-entry baseline that's been there since round 6.
  */
 export function installHistoryRunCreatedHook(args: InstallHistoryRunCreatedHookArgs): void {
-  const { projectsRoot, runs, env = process.env } = args;
+  const { db, projectsRoot, runs, env = process.env } = args;
 
   runs.setRunCreatedHook(async (run) => {
     if (!isHistoryEnabled(env)) return;
     if (!run.projectId) return;
     if (!isSafeId(run.projectId)) return;
-    const projectDir = path.join(projectsRoot, run.projectId);
     try {
+      const projectRow = getProject(db, run.projectId);
+      if (!projectRow) return;
+      const metadata = projectRow.metadata ?? null;
+      // Linked-folder projects: don't init substrate over user's tree.
+      // headAtCreate stays null; marker check falls back to lock-entry
+      // baseline (which is also null in that case — these projects don't
+      // have a daemon-owned gitdir at all).
+      if (metadata && typeof metadata === 'object' && metadata.baseDir) return;
+      // Force substrate init BEFORE reading HEAD so concurrent runs
+      // against a fresh project share the same M0 baseline. Without
+      // this, both runs read null and the marker can't fire for the
+      // sibling-absorbed loser. ensureProject is idempotent — concurrent
+      // calls serialize on withProjectLock inside initProjectHistory.
+      await ensureProject(projectsRoot, run.projectId, metadata);
+      const projectDir = path.join(projectsRoot, run.projectId);
       run.headAtCreate = await readHeadSha(projectDir);
     } catch {
       run.headAtCreate = null;
