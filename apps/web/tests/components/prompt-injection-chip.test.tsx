@@ -65,7 +65,9 @@ describe('prompt injection chip', () => {
     );
     const toggle = container.querySelector('.system-reminder-toggle') as HTMLButtonElement;
     toggle.click();
-    expect(container.querySelector('.system-reminder-body')?.textContent).toContain(INJECTION_TEXT);
+    const body = container.querySelector('.system-reminder-body');
+    expect(body).not.toBeNull();
+    expect(body?.textContent).toContain(INJECTION_TEXT);
   });
 
   it('uses alert-triangle icon, not settings icon', () => {
@@ -80,6 +82,7 @@ describe('prompt injection chip', () => {
       />,
     );
     const iconSpan = container.querySelector('.system-reminder-icon');
+    expect(iconSpan).not.toBeNull();
     expect(iconSpan?.innerHTML).not.toContain('settings');
   });
 });
