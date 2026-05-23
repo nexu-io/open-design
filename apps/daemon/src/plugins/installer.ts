@@ -713,16 +713,21 @@ export async function* installFromLocalFolder(
 
   yield { kind: 'progress', phase: 'copying', message: `Copying to ${destFolder}` };
   await fsp.mkdir(roots.userPluginsRoot, { recursive: true });
+  // Write to a unique temp folder first, then rename atomically.
+  // This prevents two concurrent installs of the same plugin id from
+  // corrupting each other's files by writing to the same destination.
+  const tmpDest = `${destFolder}.${Date.now()}-${Math.random().toString(36).slice(2)}.tmp`;
+  try {
+    await safeCopyTree(sourceFolder, tmpDest, maxBytes);
+  } catch (err) {
+    yield { kind: 'error', message: `Copy failed: ${(err as Error).message}`, warnings };
+    await fsp.rm(tmpDest, { recursive: true, force: true }).catch(() => undefined);
+    return;
+  }
   if (fs.existsSync(destFolder)) {
     await fsp.rm(destFolder, { recursive: true, force: true });
   }
-  try {
-    await safeCopyTree(sourceFolder, destFolder, maxBytes);
-  } catch (err) {
-    yield { kind: 'error', message: `Copy failed: ${(err as Error).message}`, warnings };
-    await fsp.rm(destFolder, { recursive: true, force: true }).catch(() => undefined);
-    return;
-  }
+  await fsp.rename(tmpDest, destFolder);
 
   yield { kind: 'progress', phase: 'parsing', message: 'Re-parsing destination' };
   const parsedOptions = buildResolveOptions({
