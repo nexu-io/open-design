@@ -1507,6 +1507,8 @@ function SystemReminderBlock({
   variant = "trusted",
 }: {
   text: string;
+  // "injection" — model-echoed <system-reminder> tag (prompt injection risk): amber warning chip.
+  // "trusted"   — reserved for harness-sourced reminders; no current call sites use this default.
   variant?: "trusted" | "injection";
 }) {
   const t = useT();
