@@ -14,6 +14,9 @@ vi.mock('../../src/providers/registry', () => ({
     if (projectId === 'project-html') {
       return [{ name: 'index.html', kind: 'html', mtime: 2 }];
     }
+    if (projectId === 'project-deck') {
+      return [{ name: 'index.html', kind: 'html', mtime: 2 }];
+    }
     return [];
   }),
   projectFileUrl: (projectId: string, fileName: string) =>
@@ -22,6 +25,7 @@ vi.mock('../../src/providers/registry', () => ({
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
 });
 
 function project(overrides: Partial<Project>): Project {
@@ -71,6 +75,60 @@ describe('RecentProjectsStrip', () => {
     await waitFor(() => {
       expect(designSystemCard?.querySelector('.recent-projects__card-thumb-logo img')).toBeTruthy();
       expect(container.querySelector('.recent-projects__card-thumb-html iframe')).toBeTruthy();
+    });
+  });
+
+  it('renders deck project covers without deck navigation controls', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        text: async () => `
+          <!doctype html>
+          <html>
+            <head><title>Deck</title></head>
+            <body>
+              <section class="slide active">First slide</section>
+              <section class="slide">Second slide</section>
+              <div class="deck-counter"><button id="deck-prev">‹</button><span>1 / 10</span><button id="deck-next">›</button></div>
+            </body>
+          </html>
+        `,
+      })),
+    );
+
+    const { container } = render(
+      <RecentProjectsStrip
+        projects={[
+          project({
+            id: 'project-deck',
+            name: 'Simple Deck',
+            updatedAt: 4,
+            metadata: { kind: 'deck' },
+          }),
+          project({
+            id: 'project-html',
+            name: 'Web Prototype',
+            updatedAt: 3,
+          }),
+        ]}
+        onOpen={() => {}}
+        onViewAll={() => {}}
+      />,
+    );
+
+    const deckCard = container.querySelector('[data-project-id="project-deck"]');
+    const htmlCard = container.querySelector('[data-project-id="project-html"]');
+
+    await waitFor(() => {
+      const deckIframe = deckCard?.querySelector('iframe') as HTMLIFrameElement | null;
+      expect(deckIframe?.getAttribute('srcdoc')).toContain('First slide');
+      expect(deckIframe?.getAttribute('srcdoc')).toContain('od-recent-deck-real-preview');
+      expect(deckIframe?.getAttribute('srcdoc')).not.toContain('<script');
+      expect(deckIframe?.getAttribute('src')).toBeNull();
+      expect(htmlCard?.querySelector('iframe')?.getAttribute('src')).toBe(
+        '/api/projects/project-html/files/index.html',
+      );
     });
   });
 });

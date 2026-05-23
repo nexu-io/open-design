@@ -2,9 +2,9 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-resume-modern",
-  "title": "极简简历",
+  "title": "Modern Resume",
   "version": "0.1.0",
-  "description": "现代极简简历, A4 单页, 适合打印或导出 PDF",
+  "description": "Modern minimal resume, single A4 page, ready for print or PDF export.",
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -41,11 +41,18 @@
       "entry": "./example.html"
     },
     "useCase": {
-      "query": "用「极简简历」模板把我的内容做成一份「现代极简简历, A4 单页, 适合打印或导出 PDF」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
+      "query": {
+        "en": "Use the Modern Resume template to turn my content into a modern minimal single-page A4 resume ready for print or PDF export. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「极简简历」模板把我的内容做成一份「现代极简简历, A4 单页, 适合打印或导出 PDF」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "极简简历"
+          "title": "Modern Resume",
+          "title_i18n": {
+            "en": "Modern Resume",
+            "zh-CN": "极简简历"
+          }
         }
       ]
     },
@@ -74,5 +81,13 @@
       "prompt:inject",
       "fs:write"
     ]
+  },
+  "title_i18n": {
+    "en": "Modern Resume",
+    "zh-CN": "极简简历"
+  },
+  "description_i18n": {
+    "en": "Modern minimal resume, single A4 page, ready for print or PDF export.",
+    "zh-CN": "现代极简简历, A4 单页, 适合打印或导出 PDF"
   }
 }

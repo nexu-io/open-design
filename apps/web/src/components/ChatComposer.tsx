@@ -8,12 +8,18 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useT } from '../i18n';
+import { useI18n, useT } from '../i18n';
 import type { Dict } from '../i18n/types';
+import {
+  localizeSkillDescription,
+  localizeSkillName,
+} from '../i18n/content';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackChatPanelClick,
+  trackFileUploadResult,
 } from '../analytics/events';
+import { deriveUploadCohort } from '../analytics/upload-tracking';
 import { IMAGE_MODELS } from "../media/models";
 import { projectRawUrl, uploadProjectFiles, openFolderDialog, fetchConnectors } from "../providers/registry";
 import { patchProject } from "../state/projects";
@@ -754,12 +760,18 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       if (!id) return;
       setUploading(true);
       setUploadError(null);
+      // Cohort math is identical to the Design Files Upload button; see
+      // `analytics/upload-tracking.ts`. v2 doc fires one
+      // file_upload_result per surface so this path reports
+      // `page_name='chat_panel'` / `area='chat_composer'`.
+      const cohort = deriveUploadCohort(files);
       try {
         const result = await uploadProjectFiles(id, files);
         if (result.uploaded.length > 0) {
           setStaged((s) => [...s, ...result.uploaded]);
         }
-        if (result.failed.length > 0) {
+        const partial = result.failed.length > 0;
+        if (partial) {
           const failedCount = result.failed.length;
           const uploadedCount = result.uploaded.length;
           const detail = result.error ? ` (${result.error})` : '';
@@ -770,6 +782,25 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           );
           console.warn('Some attachments failed to upload', result.failed);
         }
+        trackFileUploadResult(analytics.track, {
+          page_name: 'chat_panel',
+          area: 'chat_composer',
+          project_id: id,
+          ...cohort,
+          result: partial ? 'failed' : 'success',
+          ...(partial && result.error ? { error_code: result.error } : {}),
+        });
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        setUploadError(`Attachment upload failed (${detail}).`);
+        trackFileUploadResult(analytics.track, {
+          page_name: 'chat_panel',
+          area: 'chat_composer',
+          project_id: id,
+          ...cohort,
+          result: 'failed',
+          error_code: detail,
+        });
       } finally {
         setUploading(false);
       }
@@ -2173,6 +2204,7 @@ function ToolsSkillsPanel({
   currentSkillId: string | null;
   onPick: (skill: SkillSummary) => void | Promise<void>;
 }) {
+  const { locale } = useI18n();
   const [query, setQuery] = useState('');
   const [pendingId, setPendingId] = useState<string | null>(null);
   const visibleSkills = useMemo(
@@ -2213,11 +2245,11 @@ function ToolsSkillsPanel({
                   }
                 }}
                 disabled={pendingId !== null}
-                title={skill.description}
+                title={localizeSkillDescription(locale, skill)}
               >
                 <Icon name={active ? 'check' : 'file'} size={12} />
                 <span className="composer-tools-row-body">
-                  <strong>{skill.name}</strong>
+                  <strong>{localizeSkillName(locale, skill)}</strong>
                   <span className="composer-tools-row-meta">
                     {skill.mode}
                     {skill.surface ? ` · ${skill.surface}` : ''}
@@ -2456,6 +2488,7 @@ function MentionPopover({
   onPickMcp: (server: McpServerConfig) => void;
   onPickConnector: (connector: ConnectorDetail) => void;
 }) {
+  const { locale } = useI18n();
   const ref = useRef<HTMLDivElement | null>(null);
   const [tab, setTab] = useState<MentionTab>('all');
   const tabs: Array<{ id: MentionTab; label: string }> = [
@@ -2543,13 +2576,13 @@ function MentionPopover({
                   type="button"
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={() => onPickSkill(skill)}
-                  title={skill.description}
+                  title={localizeSkillDescription(locale, skill)}
                 >
                   <Icon name={active ? 'check' : 'file'} size={12} />
                   <span className="mention-item-body">
-                    <strong>{skill.name}</strong>
+                    <strong>{localizeSkillName(locale, skill)}</strong>
                     <span className="mention-meta mention-meta--desc">
-                      {skill.description || skill.id}
+                      {localizeSkillDescription(locale, skill) || skill.id}
                     </span>
                   </span>
                   <span className="mention-meta">{active ? 'Active' : skill.mode}</span>

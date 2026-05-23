@@ -27,5 +27,26 @@ describe("resolvePackagedNamespacePaths", () => {
     expect(paths.namespaceRoot).toBe(join(config.namespaceBaseRoot, "release"));
     expect(paths.dataRoot).toBe(join(paths.namespaceRoot, "data"));
     expect(paths.updateRoot).toBe(join(paths.namespaceRoot, "updates"));
+    expect(paths.installerObservationRoot).toBe(join(paths.dataRoot, "observations", "installer"));
+  });
+
+  it("rejects namespace overrides that would escape the namespace base root", () => {
+    const config: PackagedConfig = {
+      appVersion: "1.2.3",
+      daemonCliEntry: null,
+      daemonSidecarEntry: null,
+      namespace: "release",
+      namespaceBaseRoot: "/tmp/open-design-packaged/namespaces",
+      nodeCommand: null,
+      resourceRoot: "/tmp/open-design-packaged/resources",
+      telemetryRelayUrl: null,
+      posthogKey: null,
+      posthogHost: null,
+      webSidecarEntry: null,
+      webStandaloneRoot: null,
+      webOutputMode: "server",
+    };
+
+    expect(() => resolvePackagedNamespacePaths(config, "../release")).toThrow(/namespace/);
   });
 });

@@ -113,11 +113,20 @@
           "yankReason": { "type": "string" },
           "tags":    { "type": "array", "items": { "type": "string" } },
           "title":   { "type": "string" },
+          "title_i18n": { "$ref": "#/$defs/LocalizedText" },
           "description": { "type": "string" },
+          "description_i18n": { "$ref": "#/$defs/LocalizedText" },
           "icon":        { "type": "string" }
         },
         "additionalProperties": true
       }
+    }
+  },
+  "$defs": {
+    "LocalizedText": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "type": "string" }
     }
   }
 }

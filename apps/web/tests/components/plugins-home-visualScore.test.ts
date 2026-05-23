@@ -122,6 +122,26 @@ describe('sortByVisualAppeal', () => {
     expect(sorted[sorted.length - 1]).toBe('plain');
   });
 
+  it('puts curated home picks before generic featured media', () => {
+    const records = [
+      fixture({
+        id: 'featured-video',
+        od: {
+          surface: 'video',
+          mode: 'video',
+          preview: { type: 'video', video: 'r.mp4', poster: 'r.png' },
+          featured: true,
+        },
+      }),
+      fixture({
+        id: 'example-open-design-landing',
+        od: { mode: 'prototype', preview: { type: 'html', entry: './index.html' } },
+      }),
+    ];
+    const sorted = sortByVisualAppeal(records).map((r) => r.id);
+    expect(sorted[0]).toBe('example-open-design-landing');
+  });
+
   it('keeps numeric featured rank ahead of media bonuses', () => {
     const records = [
       fixture({

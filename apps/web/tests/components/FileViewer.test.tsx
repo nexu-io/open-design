@@ -611,6 +611,73 @@ describe('FileViewer SVG artifacts', () => {
     expect(frame.getAttribute('sandbox')).toBe('allow-scripts allow-downloads');
   });
 
+  it('points a .jsx module loaded by a sibling HTML to that entry, not the React error (issue #2744)', async () => {
+    const file = baseFile({
+      name: 'icons.jsx',
+      path: 'icons.jsx',
+      mime: 'text/jsx',
+      kind: 'code',
+      artifactManifest: {
+        version: 1,
+        kind: 'react-component',
+        title: 'icons',
+        entry: 'icons.jsx',
+        renderer: 'react-component',
+        exports: ['jsx'],
+      },
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string | URL | Request) => {
+        const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+        if (url === '/api/projects/project-1/files') {
+          return new Response(
+            JSON.stringify({
+              files: [
+                { name: 'icons.jsx', path: 'icons.jsx' },
+                { name: 'backups.html', path: 'backups.html' },
+              ],
+            }),
+          );
+        }
+        if (url === '/api/projects/project-1/raw/backups.html') {
+          return new Response('<script type="text/babel" src="icons.jsx"></script>');
+        }
+        if (url === '/api/projects/project-1/raw/icons.jsx') {
+          return new Response('window.I = { star: null };');
+        }
+        return new Response('', { status: 404 });
+      }),
+    );
+
+    const onOpenFileReplacing = vi.fn();
+    const { container } = render(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        onOpenFileReplacing={onOpenFileReplacing}
+      />,
+    );
+
+    // The module points at its HTML entry instead of rendering the React
+    // runtime (which would throw "No React component export found").
+    const link = await screen.findByRole('button', { name: /backups\.html/ });
+    expect(screen.queryByTestId('react-component-preview-frame')).toBeNull();
+
+    // The toolbar still offers a way to read the raw code: clicking the Code
+    // tab swaps the pointer for the file's source. Issue #2744 follow-up.
+    fireEvent.click(screen.getByRole('button', { name: /^code$/i }));
+    expect(container.textContent).toContain('window.I');
+    expect(screen.queryByRole('button', { name: /backups\.html/ })).toBeNull();
+
+    // Back on Preview, clicking the entry opens the HTML page and closes the
+    // dead-end module tab (icons.jsx) in one move.
+    fireEvent.click(screen.getByRole('button', { name: /preview/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /backups\.html/ }));
+    expect(onOpenFileReplacing).toHaveBeenCalledWith('backups.html', 'icons.jsx');
+  });
+
   it('keeps decks on the srcDoc path so the deck postMessage bridge can run', () => {
     const file = baseFile({
       name: 'deck.html',

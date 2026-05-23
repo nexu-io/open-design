@@ -7,7 +7,7 @@
 // surfaces (e.g. an in-project quick-switcher pane).
 
 import type { CSSProperties } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import { fetchProjectFiles, projectFileUrl } from '../providers/registry';
 import type { Project, ProjectDisplayStatus, ProjectFile } from '../types';
@@ -23,6 +23,11 @@ interface Props {
   onViewAll: () => void;
   limit?: number;
 }
+
+const DECK_PREVIEW_WIDTH = 1280;
+const DECK_PREVIEW_HEIGHT = 720;
+const deckCoverCache = new Map<string, string>();
+const deckCoverInflight = new Map<string, Promise<string>>();
 
 export function RecentProjectsStrip({
   projects,
@@ -170,13 +175,9 @@ export function RecentProjectsStrip({
                     playsInline
                   />
                 ) : cover.kind === 'html' && cover.src ? (
-                  <iframe
-                    className="recent-projects__thumb-iframe"
+                  <RecentProjectHtmlThumb
                     src={cover.src}
-                    title=""
-                    loading="lazy"
-                    sandbox="allow-scripts"
-                    tabIndex={-1}
+                    deckCoverOnly={project.metadata?.kind === 'deck'}
                   />
                 ) : (
                   <span className="recent-projects__card-glyph">{cover.initial}</span>
@@ -210,6 +211,173 @@ export function RecentProjectsStrip({
       </div>
     </section>
   );
+}
+
+function RecentProjectHtmlThumb({
+  src,
+  deckCoverOnly,
+}: {
+  src: string;
+  deckCoverOnly: boolean;
+}) {
+  if (!deckCoverOnly) {
+    return (
+      <iframe
+        className="recent-projects__thumb-iframe"
+        src={src}
+        title=""
+        loading="lazy"
+        sandbox="allow-scripts"
+        tabIndex={-1}
+      />
+    );
+  }
+
+  return <DeckCoverThumb src={src} />;
+}
+
+function DeckCoverThumb({ src }: { src: string }) {
+  const frameRef = useRef<HTMLDivElement | null>(null);
+  const [srcDoc, setSrcDoc] = useState<string | null>(() => deckCoverCache.get(src) ?? null);
+  const [scale, setScale] = useState(1);
+
+  useEffect(() => {
+    let cancelled = false;
+    const cached = deckCoverCache.get(src);
+    if (cached) {
+      setSrcDoc(cached);
+      return;
+    }
+    setSrcDoc(null);
+    loadDeckCover(src)
+      .then((next) => {
+        if (!cancelled) setSrcDoc(next);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSrcDoc(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [src]);
+
+  useEffect(() => {
+    const node = frameRef.current;
+    if (!node) return;
+    const update = () => {
+      const rect = node.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      setScale(Math.min(rect.width / DECK_PREVIEW_WIDTH, rect.height / DECK_PREVIEW_HEIGHT));
+    };
+    update();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', update);
+      return () => window.removeEventListener('resize', update);
+    }
+    const observer = new ResizeObserver(update);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div
+      ref={frameRef}
+      className="recent-projects__deck-frame"
+      style={{ '--recent-deck-scale': scale } as CSSProperties}
+      aria-hidden
+    >
+      {srcDoc ? (
+        <iframe
+          className="recent-projects__deck-iframe"
+          srcDoc={srcDoc}
+          title=""
+          loading="lazy"
+          sandbox=""
+          tabIndex={-1}
+        />
+      ) : (
+        <span className="recent-projects__deck-cover-loading" aria-hidden />
+      )}
+    </div>
+  );
+}
+
+async function loadDeckCover(src: string): Promise<string> {
+  const cached = deckCoverCache.get(src);
+  if (cached) return cached;
+  const existing = deckCoverInflight.get(src);
+  if (existing) return existing;
+  const run = fetch(src)
+    .then((res) => {
+      if (!res.ok) throw new Error(`Failed to load project cover: ${res.status}`);
+      return res.text();
+    })
+    .then((html) => {
+      const parsed = deckPreviewSrcDoc(html);
+      deckCoverCache.set(src, parsed);
+      deckCoverInflight.delete(src);
+      return parsed;
+    })
+    .catch((error) => {
+      deckCoverInflight.delete(src);
+      throw error;
+    });
+  deckCoverInflight.set(src, run);
+  return run;
+}
+
+function deckPreviewSrcDoc(html: string): string {
+  const withoutScripts = html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/giu, '');
+  const style = `<style id="od-recent-deck-real-preview">
+    html,
+    body {
+      margin: 0 !important;
+      width: ${DECK_PREVIEW_WIDTH}px !important;
+      height: ${DECK_PREVIEW_HEIGHT}px !important;
+      overflow: hidden !important;
+    }
+    body {
+      display: block !important;
+      scroll-snap-type: none !important;
+    }
+    .slide,
+    section[data-slide],
+    section[data-screen-label] {
+      position: absolute !important;
+      inset: 0 !important;
+      width: ${DECK_PREVIEW_WIDTH}px !important;
+      height: ${DECK_PREVIEW_HEIGHT}px !important;
+      flex: none !important;
+      scroll-snap-align: none !important;
+    }
+    .slide:not(:first-of-type),
+    section[data-slide]:not(:first-of-type),
+    section[data-screen-label]:not(:first-of-type),
+    .deck-counter,
+    .deck-hint,
+    .deck-progress,
+    .deck-nav,
+    .deck-navigation,
+    #deck-prev,
+    #deck-next,
+    #deck-cur,
+    #deck-total,
+    [aria-label="Previous slide"],
+    [aria-label="Next slide"],
+    [aria-label="Deck navigation"] {
+      display: none !important;
+      visibility: hidden !important;
+      pointer-events: none !important;
+    }
+  </style>`;
+  return injectBefore(withoutScripts, '</head>', style);
+}
+
+function injectBefore(source: string, marker: string, addition: string): string {
+  const index = source.toLowerCase().lastIndexOf(marker);
+  if (index === -1) return `${addition}${source}`;
+  return `${source.slice(0, index)}${addition}${source.slice(index)}`;
 }
 
 function statusLabel(

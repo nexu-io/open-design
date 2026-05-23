@@ -2,9 +2,9 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-deck-swiss-international",
-  "title": "瑞士国际主义 Deck",
+  "title": "Swiss International Deck",
   "version": "0.1.0",
-  "description": "16 列网格 + 单一饱和 accent + 22 个锁死版面 (Klein Blue / Lemon / Mint / Safety Orange)",
+  "description": "16-column grid, one saturated accent, and 22 locked layouts (Klein Blue, Lemon, Mint, Safety Orange).",
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -43,11 +43,18 @@
       "entry": "./example.html"
     },
     "useCase": {
-      "query": "用「瑞士国际主义 Deck」模板把我的内容做成一套「16 列网格 + 单一饱和 accent + 22 个锁死版面 (Klein Blue / Lemon / Mint / Safety Orange)」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
+      "query": {
+        "en": "Use the Swiss International Deck template to turn my content into a 16-column-grid deck with one saturated accent and 22 locked layouts. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「瑞士国际主义 Deck」模板把我的内容做成一套「16 列网格 + 单一饱和 accent + 22 个锁死版面 (Klein Blue / Lemon / Mint / Safety Orange)」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "瑞士国际主义 Deck"
+          "title": "Swiss International Deck",
+          "title_i18n": {
+            "en": "Swiss International Deck",
+            "zh-CN": "瑞士国际主义 Deck"
+          }
         }
       ]
     },
@@ -76,5 +83,13 @@
       "prompt:inject",
       "fs:write"
     ]
+  },
+  "title_i18n": {
+    "en": "Swiss International Deck",
+    "zh-CN": "瑞士国际主义 Deck"
+  },
+  "description_i18n": {
+    "en": "16-column grid, one saturated accent, and 22 locked layouts (Klein Blue, Lemon, Mint, Safety Orange).",
+    "zh-CN": "16 列网格 + 单一饱和 accent + 22 个锁死版面 (Klein Blue / Lemon / Mint / Safety Orange)"
   }
 }

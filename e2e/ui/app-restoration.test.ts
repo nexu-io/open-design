@@ -107,7 +107,7 @@ test('workspace restores the last manually selected file tab after reload instea
   await expectWorkspaceReady(page);
 
   await sendPrompt(page, 'Create a workspace persistence artifact');
-  await expect(page.getByText('workspace-artifact.html', { exact: true })).toBeVisible();
+  await expect(page.getByText('workspace-artifact.html', { exact: true }).first()).toBeVisible();
   await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
 
   await page.getByTestId('design-files-upload-input').setInputFiles({
@@ -1981,7 +1981,7 @@ test('a successful retry after a failed send restores the workspace to a fresh a
   await expect(page.locator('.status-pill', { hasText: 'connection refused' })).toHaveCount(1);
 
   await sendPrompt(page, 'retry prompt that succeeds');
-  await expect(page.getByText('retry-success-artifact.html', { exact: true })).toBeVisible();
+  await expect(page.getByText('retry-success-artifact.html', { exact: true }).first()).toBeVisible();
   await expect(page.getByRole('tab', { name: /retry-success-artifact\.html/i })).toHaveAttribute(
     'aria-selected',
     'true',

@@ -1,12 +1,8 @@
 // Onboarding session id helper. The v2 doc requires every
 // `page_view / page_name=onboarding` emission to carry the same
-// `onboarding_session_id` so dashboards can stitch the 4-step funnel
-// (connect → about_you → design_system → generation).
-//
-// Because the "generation" step renders in `DesignSystemDetailView`
-// AFTER `OnboardingView` navigates away, the session id must outlive
-// the React tree that owns it. We keep it in `sessionStorage` so a
-// reload of the same tab keeps the same id; closing the tab drops it.
+// `onboarding_session_id` so dashboards can stitch the onboarding
+// funnel. We keep it in `sessionStorage` so a reload of the same tab
+// keeps the same id; closing the tab drops it.
 // `clear()` is called when the user finishes (or skips) onboarding,
 // so a later `/design-systems/:id` visit unrelated to onboarding does
 // NOT inherit the previous session's id.

@@ -383,6 +383,9 @@ valid_existing_location:
 
   IfSilent silent_check no_existing_install
 silent_check:
+  IfFileExists "$INSTDIR\\${exeName}" 0 silent_detect_running_instances
+  StrCpy $RunningInstancesInstallRoot "$INSTDIR"
+silent_detect_running_instances:
   Call DetectRunningInstances
   \${If} $RunningInstancesOutput != ""
     Push "running instances detected before silent install: $RunningInstancesOutput"
@@ -598,7 +601,7 @@ skip_silent_desktop_shortcut:
   !insertmacro LOG_PATH_STATE "start_menu_shortcut_before_create" "$SMPROGRAMS\\${shortcutName}"
   CreateShortCut "$SMPROGRAMS\\${shortcutName}" "$INSTDIR\\${exeName}" "" "$INSTDIR\\${exeName}" 0
   !insertmacro LOG_PATH_STATE "start_menu_shortcut_after_create" "$SMPROGRAMS\\${shortcutName}"
-  WriteRegStr HKCU "${registryKey}" "DisplayName" "${productName} \${APP_VERSION}"
+  WriteRegStr HKCU "${registryKey}" "DisplayName" "${productName}"
   WriteRegStr HKCU "${registryKey}" "DisplayVersion" "\${APP_VERSION}"
   WriteRegStr HKCU "${registryKey}" "InstallLocation" "$INSTDIR"
   WriteRegStr HKCU "${registryKey}" "UninstallString" '"$INSTDIR\\${uninstallerName}" /currentuser'

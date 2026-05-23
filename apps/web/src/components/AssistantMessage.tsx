@@ -1,17 +1,30 @@
 import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ToolCard } from "./ToolCard";
 import { FileOpsSummary } from "./FileOpsSummary";
-import { renderMarkdown } from "../runtime/markdown";
+import {
+  renderMarkdown,
+  type MarkdownLinkClickHandler,
+} from "../runtime/markdown";
+import { asInProjectFilePath } from "../runtime/in-project-link";
 import { projectFileUrl } from "../providers/registry";
 import { submitChatRunToolResult } from "../providers/daemon";
 import { useAnalytics } from "../analytics/provider";
 import {
   trackAssistantFeedbackButtonClick,
+  trackAssistantFeedbackClick,
+  trackAssistantFeedbackReasonClick,
   trackAssistantFeedbackReasonPanelSurfaceView,
+  trackAssistantFeedbackReasonSubmit,
   trackAssistantFeedbackReasonSubmitClick,
+  trackAssistantFeedbackReasonView,
   trackFeedbackSubmitResult,
 } from "../analytics/events";
-import type { TrackingProjectKind } from "@open-design/contracts/analytics";
+import {
+  normalizeCustomReason,
+  type TrackingFeedbackReasonCode,
+  type TrackingFeedbackRatingWithNone,
+  type TrackingProjectKind,
+} from "@open-design/contracts/analytics";
 import {
   splitOnQuestionForms,
   type QuestionForm,
@@ -50,6 +63,43 @@ type TranslateFn = (
 
 const DISCORD_INVITE_URL = "https://discord.gg/mHAjSMV6gz";
 
+interface ActionNotice {
+  message: string;
+  url?: string;
+}
+
+function buildActionNotice(message: string, url?: string): ActionNotice {
+  const trimmedMessage = message.trim();
+  const trimmedUrl = url?.trim();
+  if (!trimmedUrl) return { message: trimmedMessage };
+  const normalizedMessage = trimmedMessage.replace(
+    new RegExp(`\\s*${escapeRegExp(trimmedUrl)}\\s*$`),
+    "",
+  );
+  return { message: normalizedMessage.trim() || trimmedUrl, url: trimmedUrl };
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function ActionNoticeView({ notice }: { notice: ActionNotice | null }) {
+  if (!notice) return null;
+  return (
+    <>
+      <span>{notice.message}</span>
+      {notice.url ? (
+        <>
+          {" "}
+          <a href={notice.url} target="_blank" rel="noreferrer">
+            {notice.url}
+          </a>
+        </>
+      ) : null}
+    </>
+  );
+}
+
 interface Props {
   message: ChatMessage;
   streaming: boolean;
@@ -65,7 +115,9 @@ interface Props {
   onRequestPluginFolderAgentAction?: (
     relativePath: string,
     action: PluginFolderAgentAction,
-  ) => Promise<void> | void;
+  ) => Promise<{ message?: string; url?: string } | void> | { message?: string; url?: string } | void;
+  activePluginActionPaths?: Set<string>;
+  hiddenPluginActionPaths?: Set<string>;
   // True only for the most recent assistant message — gate question-form
   // interactivity on this so older forms render as a locked "answered"
   // capsule instead of being re-submittable.
@@ -102,6 +154,8 @@ export function AssistantMessage({
   projectFileNames,
   onRequestOpenFile,
   onRequestPluginFolderAgentAction,
+  activePluginActionPaths = new Set(),
+  hiddenPluginActionPaths = new Set(),
   isLast,
   nextUserContent,
   onSubmitForm,
@@ -142,8 +196,9 @@ export function AssistantMessage({
     () =>
       !streaming && isLast && projectId
         ? pluginFoldersTouchedThisTurn(projectFiles, fileOps, displayedProduced, message.content)
+            .filter((folder) => !hiddenPluginActionPaths.has(folder.path))
         : [],
-    [displayedProduced, fileOps, isLast, message.content, projectFiles, projectId, streaming],
+    [displayedProduced, fileOps, hiddenPluginActionPaths, isLast, message.content, projectFiles, projectId, streaming],
   );
   const usage = events.find((e) => e.kind === "usage") as
     | Extract<AgentEvent, { kind: "usage" }>
@@ -239,6 +294,7 @@ export function AssistantMessage({
                   });
                   onSubmitForm?.(text);
                 }}
+                onRequestOpenFile={onRequestOpenFile}
               />
             );
           if (b.kind === "thinking")
@@ -508,10 +564,10 @@ function AssistantFeedback({
 }) {
   const t = useT();
   const analytics = useAnalytics();
-  // P0 — analytics context the feedback events need. The four ids are
-  // either user-anchored (projectId / assistantMessageId) or run-anchored
-  // (runId), so we pass them down with a stable identity. `producedFileCount`
-  // feeds `has_produced_files` on assistant_feedback_button click.
+  // Analytics context the feedback events need. The four ids are either
+  // user-anchored (projectId / assistantMessageId) or run-anchored (runId),
+  // so we pass them down with a stable identity. `producedFileCount` feeds
+  // `has_produced_files` on assistant_feedback_button click.
   const [burstKey, setBurstKey] = useState(0);
   const [reasonRating, setReasonRating] =
     useState<ChatMessageFeedbackRating | null>(null);
@@ -543,6 +599,24 @@ function AssistantFeedback({
       run_id: runId ?? "",
       rating: reasonRating,
     });
+    // Dedicated assistant_feedback_reason_view event paired with the
+    // umbrella surface_view above. Requires the full project + conversation
+    // identity (its props type is stricter than the umbrella variant);
+    // skipped on test renders that mount AssistantMessage without those.
+    if (projectId && projectKind && conversationId) {
+      trackAssistantFeedbackReasonView(analytics.track, {
+        page: "studio",
+        area: "chat_panel",
+        element: "assistant_feedback_reason_panel",
+        view_type: "panel",
+        project_id: projectId,
+        project_kind: projectKind,
+        conversation_id: conversationId,
+        assistant_message_id: assistantMessageId,
+        run_id: runId ?? null,
+        rating: reasonRating,
+      });
+    }
   }, [
     reasonRating,
     analytics.track,
@@ -578,6 +652,26 @@ function AssistantFeedback({
       rating_before: ratingBefore,
       has_produced_files: producedFileCount > 0,
     });
+    // Dedicated assistant_feedback_click paired with the umbrella ui_click
+    // above. Carries the post-action rating in the widened union (allows
+    // 'none' for the clear path).
+    if (projectId && projectKind && conversationId) {
+      const ratingAfter: TrackingFeedbackRatingWithNone = nextRating ?? "none";
+      trackAssistantFeedbackClick(analytics.track, {
+        page: "studio",
+        area: "chat_panel",
+        element: "assistant_feedback_button",
+        action: nextRating ? "submit_feedback_rating" : "clear_feedback_rating",
+        project_id: projectId,
+        project_kind: projectKind,
+        conversation_id: conversationId,
+        assistant_message_id: assistantMessageId,
+        run_id: runId ?? null,
+        rating: ratingAfter,
+        rating_before: ratingBefore,
+        has_produced_files: producedFileCount > 0,
+      });
+    }
     onFeedback(nextRating ? { rating: nextRating } : null);
   };
   const toggleReasonCode = (code: ChatMessageFeedbackReasonCode) => {
@@ -645,6 +739,47 @@ function AssistantFeedback({
       },
       { requestId },
     );
+    // Dedicated assistant_feedback_reason_click + reason_submit paired with
+    // the umbrella ui_click + feedback_submit_result above. Both fire under
+    // the same `requestId` so PostHog can stitch click → result per the
+    // tracking spec.
+    if (projectId && projectKind && conversationId) {
+      const reasons = reasonCodes as TrackingFeedbackReasonCode[];
+      const sharedPayload = {
+        page: "studio" as const,
+        area: "chat_panel" as const,
+        project_id: projectId,
+        project_kind: projectKind,
+        conversation_id: conversationId,
+        assistant_message_id: assistantMessageId,
+        run_id: runId ?? null,
+        rating: reasonRating,
+        reason: reasons,
+        reason_count: reasons.length,
+        has_custom_reason: hasCustomReason,
+        custom_reason: hasCustomReason
+          ? normalizeCustomReason(trimmedCustomReason)
+          : "",
+      };
+      trackAssistantFeedbackReasonClick(
+        analytics.track,
+        {
+          ...sharedPayload,
+          element: "assistant_feedback_reason_submit_button",
+          action: "click_submit_feedback_reason",
+        },
+        { requestId },
+      );
+      trackAssistantFeedbackReasonSubmit(
+        analytics.track,
+        {
+          ...sharedPayload,
+          element: "assistant_feedback_reason_submit",
+          action: "submit_feedback_reason",
+        },
+        { requestId },
+      );
+    }
     onFeedback({
       rating: reasonRating,
       reasonCodes,
@@ -937,16 +1072,18 @@ function PluginActionPanel({
   folders,
   onRequestOpenFile,
   onRequestPluginFolderAgentAction,
+  activePluginActionPaths = new Set(),
 }: {
   folders: PluginFolderCandidate[];
   onRequestOpenFile?: (name: string) => void;
   onRequestPluginFolderAgentAction?: (
     relativePath: string,
     action: PluginFolderAgentAction,
-  ) => Promise<void> | void;
+  ) => Promise<{ message?: string; url?: string } | void> | { message?: string; url?: string } | void;
+  activePluginActionPaths?: Set<string>;
 }) {
   const [busyKey, setBusyKey] = useState<string | null>(null);
-  const [noticeByFolder, setNoticeByFolder] = useState<Record<string, string>>(
+  const [noticeByFolder, setNoticeByFolder] = useState<Record<string, ActionNotice>>(
     {},
   );
 
@@ -963,10 +1100,23 @@ function PluginActionPanel({
       return next;
     });
     try {
-      await onRequestPluginFolderAgentAction(folder.path, action);
+      const outcome = await onRequestPluginFolderAgentAction(folder.path, action);
+      const url = outcome && typeof outcome === 'object' && typeof outcome.url === 'string'
+        ? outcome.url
+        : '';
+      const message = outcome && typeof outcome === 'object' && typeof outcome.message === 'string'
+        ? outcome.message
+        : '';
+      if (message || url) {
+        setNoticeByFolder((prev) => ({
+          ...prev,
+          [folder.path]: buildActionNotice(message || url, url),
+        }));
+      }
+    } catch (err) {
       setNoticeByFolder((prev) => ({
         ...prev,
-        [folder.path]: "Sent to the agent. The CLI run will continue in chat.",
+        [folder.path]: { message: err instanceof Error ? err.message : String(err) },
       }));
     } finally {
       setBusyKey(null);
@@ -987,7 +1137,9 @@ function PluginActionPanel({
         </div>
       </div>
       <div className="plugin-action-panel__list">
-        {folders.map((folder) => (
+        {folders.map((folder) => {
+          const actionBusy = activePluginActionPaths.has(folder.path);
+          return (
           <div
             key={folder.path}
             className="plugin-action-card"
@@ -1002,73 +1154,73 @@ function PluginActionPanel({
                 <span>{folder.fileCount} files ready for My plugins</span>
               </div>
             </div>
-            <div className="plugin-action-card__actions">
-              <button
-                type="button"
-                className="plugin-action-button plugin-action-button--primary"
-                data-testid={`assistant-plugin-install-${folder.path}`}
-                disabled={busyKey !== null || !onRequestPluginFolderAgentAction}
-                onClick={() => void runAction(folder, "install")}
-              >
-                <Icon
-                  name={busyKey === `install:${folder.path}` ? "spinner" : "plus"}
-                  size={13}
-                />
-                <span>
-                  {busyKey === `install:${folder.path}` ? "Sending..." : "Add to My plugins"}
-                </span>
-              </button>
-              <button
-                type="button"
-                className="plugin-action-button"
-                data-testid={`assistant-plugin-publish-${folder.path}`}
-                disabled={busyKey !== null || !onRequestPluginFolderAgentAction}
-                onClick={() => void runAction(folder, "publish")}
-              >
-                <Icon
-                  name={busyKey === `publish:${folder.path}` ? "spinner" : "github"}
-                  size={13}
-                />
-                <span>
-                  {busyKey === `publish:${folder.path}` ? "Sending..." : "Publish repo"}
-                </span>
-              </button>
-              <button
-                type="button"
-                className="plugin-action-button"
-                data-testid={`assistant-plugin-contribute-${folder.path}`}
-                disabled={busyKey !== null || !onRequestPluginFolderAgentAction}
-                onClick={() => void runAction(folder, "contribute")}
-              >
-                <Icon
-                  name={busyKey === `contribute:${folder.path}` ? "spinner" : "share"}
-                  size={13}
-                />
-                <span>
-                  {busyKey === `contribute:${folder.path}`
-                    ? "Sending..."
-                    : "Open Design PR"}
-                </span>
-              </button>
-              {onRequestOpenFile ? (
+              <div className="plugin-action-card__actions">
+                <button
+                  type="button"
+                  className="plugin-action-button plugin-action-button--primary"
+                  data-testid={`assistant-plugin-install-${folder.path}`}
+                  disabled={actionBusy || busyKey !== null || !onRequestPluginFolderAgentAction}
+                  onClick={() => void runAction(folder, "install")}
+                >
+                  <Icon
+                    name={actionBusy && busyKey === `install:${folder.path}` ? "spinner" : "plus"}
+                    size={13}
+                  />
+                  <span>
+                    {actionBusy && busyKey === `install:${folder.path}` ? "Sending..." : "Add to My plugins"}
+                  </span>
+                </button>
                 <button
                   type="button"
                   className="plugin-action-button"
-                  data-testid={`assistant-plugin-open-manifest-${folder.path}`}
-                  onClick={() => onRequestOpenFile(folder.manifestPath)}
+                  data-testid={`assistant-plugin-publish-${folder.path}`}
+                  disabled={actionBusy || busyKey !== null || !onRequestPluginFolderAgentAction}
+                  onClick={() => void runAction(folder, "publish")}
                 >
-                  <Icon name="file-code" size={13} />
-                  <span>Open manifest</span>
+                  <Icon
+                    name={actionBusy && busyKey === `publish:${folder.path}` ? "spinner" : "github"}
+                    size={13}
+                  />
+                  <span>
+                    {actionBusy && busyKey === `publish:${folder.path}` ? "Sending..." : "Publish repo"}
+                  </span>
                 </button>
-              ) : null}
-            </div>
+                <button
+                  type="button"
+                  className="plugin-action-button"
+                  data-testid={`assistant-plugin-contribute-${folder.path}`}
+                  disabled={actionBusy || busyKey !== null || !onRequestPluginFolderAgentAction}
+                  onClick={() => void runAction(folder, "contribute")}
+                >
+                  <Icon
+                    name={actionBusy && busyKey === `contribute:${folder.path}` ? "spinner" : "share"}
+                    size={13}
+                  />
+                  <span>
+                    {actionBusy && busyKey === `contribute:${folder.path}`
+                      ? "Sending..."
+                      : "Open Design PR"}
+                  </span>
+                </button>
+                {onRequestOpenFile ? (
+                  <button
+                    type="button"
+                    className="plugin-action-button"
+                    data-testid={`assistant-plugin-open-manifest-${folder.path}`}
+                    onClick={() => onRequestOpenFile(folder.manifestPath)}
+                  >
+                    <Icon name="file-code" size={13} />
+                    <span>Open manifest</span>
+                  </button>
+                ) : null}
+              </div>
             {noticeByFolder[folder.path] ? (
               <div className="plugin-action-card__notice" role="status">
-                {noticeByFolder[folder.path]}
+                <ActionNoticeView notice={noticeByFolder[folder.path] ?? null} />
               </div>
             ) : null}
           </div>
-        ))}
+        )})}
       </div>
     </div>
   );
@@ -1215,6 +1367,7 @@ function ProseBlock({
   locallySubmitted,
   suppressDirectionForms,
   onSubmitForm,
+  onRequestOpenFile,
 }: {
   text: string;
   isLastAssistant: boolean;
@@ -1223,9 +1376,23 @@ function ProseBlock({
   locallySubmitted: Set<string>;
   suppressDirectionForms: boolean;
   onSubmitForm: (formId: string, text: string) => void;
+  onRequestOpenFile?: (name: string) => void;
 }) {
   const cleaned = useMemo(() => stripArtifact(text), [text]);
   const segments = useMemo(() => splitOnQuestionForms(cleaned), [cleaned]);
+  // Route relative file-link clicks (`template.html`, `subdir/hero.html`)
+  // through the workspace tab opener. Without this, Electron's window-open
+  // handler creates a new app window whose relative href can't resolve, and
+  // the user lands on the home screen — the file is never previewed.
+  const onLinkClick = useMemo<MarkdownLinkClickHandler | undefined>(() => {
+    if (!onRequestOpenFile) return undefined;
+    return (href, event) => {
+      const path = asInProjectFilePath(href);
+      if (!path) return;
+      event.preventDefault();
+      onRequestOpenFile(path);
+    };
+  }, [onRequestOpenFile]);
   // Each text segment is further split on `<system-reminder>` blocks so
   // those render as their own collapsible chip instead of raw markup.
   const renderable = segments.flatMap(
@@ -1261,7 +1428,11 @@ function ProseBlock({
           return <SystemReminderBlock key={seg.key} text={seg.text} />;
         }
         if (seg.kind === "text") {
-          return <Fragment key={seg.key}>{renderMarkdown(seg.text)}</Fragment>;
+          return (
+            <Fragment key={seg.key}>
+              {renderMarkdown(seg.text, { onLinkClick })}
+            </Fragment>
+          );
         }
         if (seg.kind === "suppressed-direction") {
           return (

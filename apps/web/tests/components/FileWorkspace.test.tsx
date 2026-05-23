@@ -361,7 +361,7 @@ describe('DesignFilesPanel plugin folders', () => {
       contribute?.click();
     });
     expect(onPluginFolderAgentAction).toHaveBeenCalledWith('generated-plugin', 'contribute');
-    expect(container.textContent).toContain(
+    expect(container.textContent).not.toContain(
       'Sent to the agent. The CLI run will continue in chat.',
     );
   });
