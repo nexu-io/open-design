@@ -2035,7 +2035,7 @@ function normalizePersistedToolInput(input) {
   return input;
 }
 
-function pinAssistantMessageOnRunCreate(db, run) {
+function pinAssistantMessageOnRunCreate(db, run, req) {
   if (!run.conversationId || !run.assistantMessageId) return;
   const existing = db
     .prepare(`SELECT id FROM messages WHERE id = ?`)
@@ -2053,8 +2053,6 @@ function pinAssistantMessageOnRunCreate(db, run) {
     ).run(run.id, run.status, run.createdAt, run.assistantMessageId);
     return;
   }
-  // No req in scope here → source IP is null. run.identity was
-  // resolved at create time.
   upsertMessage(db, run.conversationId, {
     id: run.assistantMessageId,
     role: 'assistant',
@@ -2064,7 +2062,7 @@ function pinAssistantMessageOnRunCreate(db, run) {
     runId: run.id,
     runStatus: run.status,
     startedAt: run.createdAt,
-    ...attributionFromIdentity(run.identity),
+    ...attributionFromIdentity(run.identity, req),
   });
 }
 
@@ -11349,7 +11347,7 @@ export async function startServer({
     }
     const run = design.runs.create(meta);
     try {
-      pinAssistantMessageOnRunCreate(db, run);
+      pinAssistantMessageOnRunCreate(db, run, req);
     } catch (err) {
       console.warn('[runs] message create pin failed', err);
     }

@@ -298,7 +298,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
               // best-effort; the agent still has the embedded copy.
             }
           }
-          await ensureProject(PROJECTS_DIR, id);
+          await ensureProject(PROJECTS_DIR, id, projectMetadata);
         }
       }
       /** @type {import('@open-design/contracts').CreateProjectResponse} */

@@ -574,12 +574,12 @@ async function collectOrphanCommits(
   while (cursor && !revisionIdForSha(db, projectId, cursor)) {
     const meta = await readCommitMetadata(projectDir, cursor, signal);
     orphans.push(meta);
-    cursor = await readParentSha(projectDir, cursor, signal);
+    cursor = await readFirstParentSha(projectDir, cursor, signal);
   }
   return orphans.reverse();
 }
 
-async function readParentSha(
+async function readFirstParentSha(
   projectDir: string,
   ref: string,
   signal?: AbortSignal,
@@ -606,7 +606,7 @@ async function repairOrphanHead(
   const orphans = await collectOrphanCommits(projectDir, db, projectId, headSha, signal);
   if (orphans.length === 0) return;
 
-  const oldestParentSha = await readParentSha(projectDir, orphans[0]!.sha, signal);
+  const oldestParentSha = await readFirstParentSha(projectDir, orphans[0]!.sha, signal);
   const oldestParentId = revisionIdForSha(db, projectId, oldestParentSha);
   const ids = orphans.map(() => randomUUID());
   const stats: CommitStats[] = [];
