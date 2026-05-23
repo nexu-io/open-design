@@ -3723,6 +3723,13 @@ function HtmlViewer({
   const urlPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);
   const srcDocPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);
   const activatedSrcDocTransportHtmlRef = useRef<string | null>(null);
+  // Tracks the iframe DOM node whose dedupe ref was last reset by the
+  // srcDoc onLoad handler. We reset the dedupe exactly once per freshly
+  // mounted iframe (the first load is the shell HTML), and skip every
+  // subsequent load on the same node (those are our own
+  // document.open/write/close inside the shell). See onLoad below for
+  // the infinite-loop story (issue #2361).
+  const srcDocFrameDedupeResetForRef = useRef<HTMLIFrameElement | null>(null);
   const isActivePreviewIframeSource = useCallback((source: MessageEventSource | null) => {
     return !!source && source === iframeRef.current?.contentWindow;
   }, []);
@@ -6437,15 +6444,40 @@ function HtmlViewer({
                       onLoad={() => {
                         const frame = srcDocPreviewIframeRef.current;
                         if (!useUrlLoadPreview) iframeRef.current = frame;
-                        // Any srcDoc iframe load means we are talking to a
-                        // fresh document shell. Clear the activation dedupe so
-                        // switching preview -> source -> preview cannot strand
-                        // the new shell on the blank transport page.
-                        activatedSrcDocTransportHtmlRef.current = null;
-                        // Belt-and-suspenders for the ready handshake: if the
-                        // postMessage racing the parent's listener registration
-                        // ever loses, the load event still tells us the shell
-                        // script ran to completion.
+                        // Reset the activation dedupe exactly ONCE per
+                        // freshly mounted iframe DOM node, never on the
+                        // subsequent load events that the same node
+                        // emits during normal srcDoc rendering.
+                        //
+                        // The iframe's load event fires twice for one
+                        // successful activation: once when the lazy
+                        // transport shell HTML loads, and again when
+                        // our own document.open/write/close inside the
+                        // shell finishes. PR #2699 reset the dedupe on
+                        // every load so that switching
+                        // preview -> source -> preview (which remounts
+                        // this iframe as a fresh DOM node) would
+                        // re-activate the new shell. But resetting on
+                        // every load also re-activated on the SECOND
+                        // load of a non-remounted frame, which
+                        // re-triggered document.open/write/close, which
+                        // re-fired the load event, ad infinitum. The
+                        // dedupe ref oscillated between null and the
+                        // current srcDoc thousands of times per render
+                        // and each iteration restarted every CSS
+                        // animation from its `from` keyframe. Designs
+                        // using `animation-fill-mode: both` with
+                        // `from { opacity: 0 }` stayed at opacity 0
+                        // forever and the preview read as blank.
+                        // That is issue #2361.
+                        //
+                        // Tracking the last frame we reset for lets us
+                        // keep PR #2699's "remount after Source toggle"
+                        // fix while breaking the loop on plain renders.
+                        if (frame && srcDocFrameDedupeResetForRef.current !== frame) {
+                          srcDocFrameDedupeResetForRef.current = frame;
+                          activatedSrcDocTransportHtmlRef.current = null;
+                        }
                         if (useLazySrcDocTransport) setSrcDocShellReady(true);
                         activateSrcDocTransport(frame);
                         dcViewportRestoreAtRef.current = Date.now();
