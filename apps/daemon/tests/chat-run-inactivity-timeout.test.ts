@@ -186,6 +186,24 @@ describe('assertValidRuntimeDefInactivityTimeoutMs (#2579 fast-fail at def-selec
     );
   });
 
+  it('throws specifically `RangeError` for every invalid def value — the chat-run startup wrapper relies on this to narrow its catch and only flag AGENT_RUNTIME_DEF_INVALID for genuine validation failures (#2579 round-5 review)', () => {
+    // The wrapper in server.ts now does:
+    //   try { assertValidRuntimeDefInactivityTimeoutMs(...) }
+    //   catch (err) {
+    //     if (err instanceof RangeError) → AGENT_RUNTIME_DEF_INVALID
+    //     else throw err
+    //   }
+    // If the helper ever starts throwing TypeError / generic Error
+    // (e.g. an unrelated bug inside it, or a refactor that wraps the
+    // RangeError), the wrapper would either misroute the failure
+    // (the old `err instanceof Error` catch did) or skip the
+    // structured fail entirely. Pin the error class so the contract
+    // between helper and wrapper cannot drift silently.
+    for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, -1, 60.5]) {
+      expect(() => assertValidRuntimeDefInactivityTimeoutMs(bad)).toThrow(RangeError);
+    }
+  });
+
   it('runs independently of the env override — an env value cannot mask the typo', () => {
     const originalEnv = process.env[ENV_KEY];
     process.env[ENV_KEY] = '15000';

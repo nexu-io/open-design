@@ -11194,14 +11194,22 @@ export async function startServer({
     // otherwise abort the run only at watchdog-arm time, after that
     // setup has already mutated local state, leaving confusing partial
     // residue behind (issue #2467 review on PR #2579).
+    //
+    // Catch is intentionally narrowed to `RangeError`, the only kind
+    // `assertValidRuntimeDefInactivityTimeoutMs` is allowed to throw
+    // for invalid checked-in values. Anything else (a regression that
+    // makes the helper throw on a valid value, an unrelated bug
+    // introduced while touching this path) should bubble up to the
+    // outer chat-run starter — which surfaces it as
+    // `AGENT_EXECUTION_FAILED` — rather than being misreported as
+    // "the runtime def is bad" and burying the real failure.
     try {
       assertValidRuntimeDefInactivityTimeoutMs(def.inactivityTimeoutMs);
     } catch (err) {
-      return design.runs.fail(
-        run,
-        'AGENT_RUNTIME_DEF_INVALID',
-        err instanceof Error ? err.message : String(err),
-      );
+      if (err instanceof RangeError) {
+        return design.runs.fail(run, 'AGENT_RUNTIME_DEF_INVALID', err.message);
+      }
+      throw err;
     }
     const safeCommentAttachments =
       normalizeCommentAttachments(commentAttachments);
