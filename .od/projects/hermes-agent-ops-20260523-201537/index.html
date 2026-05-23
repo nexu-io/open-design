@@ -962,7 +962,7 @@
           title: "长跑开发任务",
           sections: [
             { heading: "目标", body: "重构工作台为左 Skill、中对话、右预览的三栏布局。" },
-            { heading: "范围", items: ["保留 13 个 Skill", "支持语音、附件、下载", "每个 Skill 有自己的输入输出设计"] },
+            { heading: "范围", items: ["保留 15 个 VPS Hermes domain Skill", "支持语音、附件、下载", "每个 Skill 有自己的输入输出设计"] },
             { heading: "验证", items: ["页面可打开", "Skill 切换更新输入和预览", "下载文件内容与预览一致"] }
           ]
         }
@@ -1147,6 +1147,56 @@
           title: "AI CRM 业务逻辑",
           columns: ["阶段", "触发信号", "下一步动作"],
           rows: [["新线索", "首次咨询/入群", "打标签并发送欢迎信息"], ["有意向", "询问价格或案例", "安排演示或发案例"], ["风险", "长时间未回复", "提醒人工跟进"]]
+        }
+      },
+      sqlops: {
+        name: "SQL 运维登记",
+        icon: "数",
+        group: "more",
+        category: "安全运维",
+        purpose: "登记和审查 SQL 变更，只生成执行手册、风险点和回滚验证，不自动执行数据库操作。",
+        inputSpec: "变更目标、SQL 路径、目标库、备份状态",
+        attachmentSpec: "可选：SQL、说明文档、CSV",
+        outputSpec: "风险审查 + 执行手册",
+        previewTitle: "SQL 运维审查.md",
+        previewType: "Markdown",
+        previewUse: "人工执行前检查、风险复核",
+        confirmRule: "只登记不执行",
+        prompt: "登记这段 SQL 变更，只生成风险审查和执行手册，不要执行数据库操作。",
+        intro: "这个 Skill 只做 SQL 运维接入和审查，右侧会展示执行前检查、风险点、回滚和验证 SQL。",
+        doc: {
+          kind: "article",
+          title: "SQL 运维审查",
+          sections: [
+            { heading: "结论", body: "当前仅进入人工执行准备，不自动连接或执行任何数据库。" },
+            { heading: "执行前检查", items: ["确认目标库", "确认备份状态", "确认执行窗口", "确认回滚方案"] },
+            { heading: "风险点", items: ["破坏性 DDL", "批量 UPDATE/DELETE", "RLS/权限影响", "不可逆变更"] }
+          ]
+        }
+      },
+      vpsops: {
+        name: "VPS AI 栈运维",
+        icon: "服",
+        group: "more",
+        category: "VPS 运维",
+        purpose: "审查 Hermes/VPS 工具链、服务职责、部署位置、重任务边界和成本纪律。",
+        inputSpec: "运维目标、关注层、服务名、日志现象",
+        attachmentSpec: "可选：日志、配置、服务文件",
+        outputSpec: "状态结论 + 运维建议",
+        previewTitle: "VPS AI 栈检查.md",
+        previewType: "Markdown",
+        previewUse: "部署判断、故障复盘、成本控制",
+        confirmRule: "确认边界后执行",
+        prompt: "检查当前 VPS/Hermes AI 栈，给出状态、风险、边界和下一步运维建议。",
+        intro: "这个 Skill 用来判断工具应不应该放在 2C2G VPS 上，并给出服务检查、成本和重任务边界。",
+        doc: {
+          kind: "article",
+          title: "VPS AI 栈检查",
+          sections: [
+            { heading: "当前职责", items: ["轻量任务、消息网关、文档转换、定时任务", "重 OCR、Whisper、LightRAG、GPU 视频应交给远程节点"] },
+            { heading: "检查命令", items: ["systemctl status hermes-skill-dashboard", "hermes-heavy-dispatch status", "journalctl -u hermes-skill-dashboard --since today"] },
+            { heading: "下一步", body: "先判断部署位置和成本，再决定是否新增服务或启用远程节点。" }
+          ]
         }
       }
     };
@@ -1418,6 +1468,66 @@
           { label: "CRM 逻辑", path: "stdout" },
           { label: "产物文件", path: "artifact_uri" }
         ]
+      },
+      "sql-ops-intake": {
+        id: "sql-ops-intake",
+        action: "run-skill",
+        endpoint: "/api/run-skill",
+        fields: [
+          { id: "objective", type: "textarea", label: "变更目标", placeholder: "这段 SQL 要解决什么问题" },
+          { id: "sqlPath", type: "text", label: "SQL 文件路径", placeholder: "/var/lib/hermes-skill-dashboard/ops/sql-inbox/change.sql", optional: true },
+          { id: "targetSystem", type: "text", label: "目标库/系统", placeholder: "例如 Supabase production、Postgres staging、Hermes knowledge" },
+          { id: "handling", type: "select", label: "处理方式", default: "review_playbook", options: [
+            { value: "register", label: "只登记" },
+            { value: "review", label: "审查 SQL" },
+            { value: "review_playbook", label: "审查 + 执行手册" }
+          ] },
+          { id: "backupStatus", type: "select", label: "备份状态", default: "unknown", options: [
+            { value: "unknown", label: "待确认" },
+            { value: "confirmed", label: "已确认备份" },
+            { value: "not_ready", label: "尚未备份" }
+          ] },
+          { id: "rollbackPlan", type: "textarea", label: "回滚方案", placeholder: "可选：已有回滚 SQL 或恢复方式", optional: true },
+          { id: "attachments", type: "file", label: "SQL/说明附件", accept: ".sql,.txt,.md,.csv", multiple: true, optional: true }
+        ],
+        outputs: [
+          { label: "结论", path: "stdout" },
+          { label: "风险点", path: "stdout" },
+          { label: "执行前检查", path: "stdout" },
+          { label: "验证 SQL", path: "stdout" },
+          { label: "产物文件", path: "artifact_uri" }
+        ]
+      },
+      "vps-ai-stack-ops": {
+        id: "vps-ai-stack-ops",
+        action: "run-skill",
+        endpoint: "/api/run-skill",
+        fields: [
+          { id: "objective", type: "textarea", label: "运维目标", placeholder: "要检查、部署、排障或规划什么" },
+          { id: "area", type: "select", label: "关注层", default: "service", options: [
+            { value: "service", label: "服务/进程" },
+            { value: "toolchain", label: "工具链台账" },
+            { value: "infra", label: "VPS/Cloudflare/网络" },
+            { value: "heavy_boundary", label: "重任务边界" },
+            { value: "cost", label: "成本与替代方案" }
+          ] },
+          { id: "serviceName", type: "text", label: "服务名", placeholder: "例如 hermes-skill-dashboard、nginx、hermes-heavy-dispatch", optional: true },
+          { id: "evidence", type: "textarea", label: "现象/日志", placeholder: "粘贴状态、日志摘要或要判断的部署方案", optional: true },
+          { id: "changeIntent", type: "select", label: "输出类型", default: "audit", options: [
+            { value: "audit", label: "健康检查" },
+            { value: "placement", label: "部署位置判断" },
+            { value: "incident", label: "故障复盘" },
+            { value: "tool_admission", label: "新工具准入" }
+          ] },
+          { id: "attachments", type: "file", label: "日志/配置附件", accept: ".txt,.md,.log,.json,.yaml,.yml,.conf,.service", multiple: true, optional: true }
+        ],
+        outputs: [
+          { label: "状态结论", path: "stdout" },
+          { label: "运行边界", path: "stdout" },
+          { label: "检查命令", path: "stdout" },
+          { label: "下一步", path: "stdout" },
+          { label: "产物文件", path: "artifact_uri" }
+        ]
       }
     };
 
@@ -1434,7 +1544,9 @@
       xhs: "xhs-obsidian-content-factory",
       efficiency: "agent-efficiency-workflows",
       roles: "agency-role-orchestrator",
-      crm: "ai-crm-business-logic"
+      crm: "ai-crm-business-logic",
+      sqlops: "sql-ops-intake",
+      vpsops: "vps-ai-stack-ops"
     };
 
     Object.entries(skillProfiles).forEach(([localId, profile]) => {
@@ -1443,7 +1555,7 @@
     });
 
     const commonIds = ["aihot", "heavy", "wechat", "wecom", "vibe"];
-    const moreIds = ["image2", "marketing", "stable", "companyos", "xhs", "efficiency", "roles", "crm"];
+    const moreIds = ["image2", "marketing", "stable", "companyos", "xhs", "efficiency", "roles", "crm", "sqlops", "vpsops"];
     const state = { active: "aihot", attachments: [], previewUrl: null };
 
     const commonSkills = document.querySelector("#commonSkills");
@@ -1594,6 +1706,8 @@
         if (skill.hermes.id === "agent-efficiency-workflows" && !fields.task) fields.task = text;
         if (skill.hermes.id === "agency-role-orchestrator" && !fields.problem) fields.problem = text;
         if (skill.hermes.id === "ai-crm-business-logic" && !fields.businessScene) fields.businessScene = text;
+        if (skill.hermes.id === "sql-ops-intake" && !fields.objective) fields.objective = text;
+        if (skill.hermes.id === "vps-ai-stack-ops" && !fields.objective) fields.objective = text;
       }
       return fields;
     }
