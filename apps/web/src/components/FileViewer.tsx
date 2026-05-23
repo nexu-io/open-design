@@ -4208,6 +4208,7 @@ function HtmlViewer({
       editBridge: manualEditMode,
       paletteBridge: true,
       initialPalette: selectedPalette,
+      previewFocusGuard: true,
     }) : ''),
     [previewSource, effectiveDeck, projectId, file.name, previewStateKey, manualEditMode, selectedPalette],
   );
