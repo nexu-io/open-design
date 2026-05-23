@@ -8,9 +8,18 @@ import { fileURLToPath } from 'node:url';
 const daemonRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const daemonCliDist = path.join(daemonRoot, 'dist', 'cli.js');
 
+function pnpmInvocation(): { args: string[]; command: string } {
+  const npmExecPath = process.env.npm_execpath;
+  if (npmExecPath && /\.(?:cjs|js)$/iu.test(npmExecPath)) {
+    return { command: process.execPath, args: [npmExecPath] };
+  }
+  return { command: process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm', args: [] };
+}
+
 function ensureDaemonCliBuilt() {
   if (existsSync(daemonCliDist)) return;
-  execFileSync('pnpm', ['run', 'build'], {
+  const pnpm = pnpmInvocation();
+  execFileSync(pnpm.command, [...pnpm.args, 'run', 'build'], {
     cwd: daemonRoot,
     stdio: 'inherit',
     env: process.env,

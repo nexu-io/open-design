@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -1091,9 +1092,11 @@ async function runProcessBuffered(
         ...(result.error === undefined ? {} : { error: redactSensitiveProcessOutput(result.error) }),
       });
     };
-    const child = spawn(command, args, {
+    const resolvedCommand = resolveProcessCommand(command);
+    const child = spawn(resolvedCommand, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, ...(options.env ?? {}) },
+      shell: process.platform === 'win32' && /\.(?:bat|cmd)$/iu.test(resolvedCommand),
     });
     timeout = setTimeout(() => {
       timedOut = true;
@@ -1116,6 +1119,18 @@ async function runProcessBuffered(
       settle({ ok: code === 0 && !timedOut, stdout, stderr, code, ...(timedOut ? { timedOut } : {}) });
     });
   });
+}
+
+function resolveProcessCommand(command: string): string {
+  if (process.platform !== 'win32' || path.extname(command)) return command;
+  for (const directory of (process.env.PATH ?? '').split(path.delimiter)) {
+    if (!directory) continue;
+    for (const extension of ['.cmd', '.exe', '.bat', '']) {
+      const candidate = path.join(directory, `${command}${extension}`);
+      if (existsSync(candidate)) return candidate;
+    }
+  }
+  return command;
 }
 
 function appendProcessOutput(current: string, chunk: unknown): string {
