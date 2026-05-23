@@ -3164,7 +3164,7 @@ function snapshotProjectOutputFiles(cwd: string | null | undefined): ProjectFile
           continue;
         }
         const abs = path.join(dir, entry.name);
-        const rel = path.relative(root, abs) || entry.name;
+        const rel = path.relative(root, abs);
         if (entry.isDirectory()) {
           visit(abs);
           continue;
