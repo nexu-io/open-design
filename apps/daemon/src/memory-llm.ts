@@ -795,7 +795,7 @@ async function writeLocalCliPromptAttachment(agentId, prompt) {
   await fsp.writeFile(file, prompt, 'utf8');
   return {
     file,
-    cleanup: () => fsp.rm(dir, { recursive: true, force: true }).catch(() => {}),
+    cleanup: () => fsp.rm(dir, { recursive: true, force: true }).catch((err) => console.warn('[memory-llm] cleanup temp dir failed:', err)),
   };
 }
 

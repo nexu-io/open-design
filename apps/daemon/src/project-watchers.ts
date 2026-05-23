@@ -146,7 +146,7 @@ function makeEntry(dir: string, opts: Required<Pick<ProjectWatcherOptions, 'igno
         usingPollingFallback = true;
         entry.watcher = next;
         attachWatcher(next);
-        void watcher.close().catch(() => {});
+        void watcher.close().catch((err) => console.warn('[project-watchers] close watcher failed:', err));
         switchingToPolling = false;
         return;
       }

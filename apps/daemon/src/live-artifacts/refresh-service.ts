@@ -234,14 +234,14 @@ export async function refreshLiveArtifact(options: RefreshLiveArtifactOptions): 
       };
     } catch (error) {
       const refreshFinishedAt = nowDate();
-      await appendLog({ step: 'refresh:failed', status: 'failed', startedAt: refreshStartedAt, finishedAt: refreshFinishedAt, error }).catch(() => {});
+      await appendLog({ step: 'refresh:failed', status: 'failed', startedAt: refreshStartedAt, finishedAt: refreshFinishedAt, error }).catch((err) => console.warn('[live-artifacts] append log failed:', err));
       await markLiveArtifactRefreshFailed({
         projectsRoot: options.projectsRoot,
         projectId: options.projectId,
         artifactId: options.artifactId,
         refreshId,
         now: refreshFinishedAt,
-      }).catch(() => {});
+      }).catch((err) => console.warn('[live-artifacts] mark refresh failed failed:', err));
       throw error;
     }
   });

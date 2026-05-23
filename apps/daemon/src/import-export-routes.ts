@@ -38,7 +38,7 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
         const originalName =
           req.file.originalname || 'Claude Design export.zip';
         if (!/\.zip$/i.test(originalName)) {
-          fs.promises.unlink(req.file.path).catch(() => {});
+          fs.promises.unlink(req.file.path).catch((err) => console.warn('[import-export] cleanup upload failed:', err));
           return res.status(400).json({ error: 'expected a .zip file' });
         }
         const id = randomId();
@@ -49,7 +49,7 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
           req.file.path,
           projectDir(PROJECTS_DIR, id),
         );
-        fs.promises.unlink(req.file.path).catch(() => {});
+        fs.promises.unlink(req.file.path).catch((err) => console.warn('[import-export] cleanup upload failed:', err));
 
         const project = insertProject(db, {
           id,
@@ -82,7 +82,7 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
           files: imported.files,
         });
       } catch (err: any) {
-        if (req.file?.path) fs.promises.unlink(req.file.path).catch(() => {});
+        if (req.file?.path) fs.promises.unlink(req.file.path).catch((err) => console.warn('[import-export] cleanup upload failed:', err));
         res.status(400).json({ error: String(err) });
       }
     },

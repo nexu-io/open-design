@@ -118,7 +118,7 @@ export async function writeShipArtifact(
   } catch (err) {
     // Best-effort cleanup of the tmp file; never let cleanup mask the
     // original rename error.
-    await fs.unlink(tmpPath).catch(() => {});
+    await fs.unlink(tmpPath).catch((err) => console.warn('[critique] unlink temp failed:', err));
     throw err;
   }
 

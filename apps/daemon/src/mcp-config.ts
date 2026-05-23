@@ -254,7 +254,7 @@ export async function writeMcpConfig(
   body: unknown,
 ): Promise<McpConfig> {
   const prev = writeLocks.get(dataDir) ?? Promise.resolve();
-  const task = prev.catch(() => {}).then(() => doWrite(dataDir, body));
+  const task = prev.catch((err) => console.warn('[mcp-config] previous write failed:', err)).then(() => doWrite(dataDir, body));
   writeLocks.set(dataDir, task);
   try {
     return await task;
