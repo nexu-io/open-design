@@ -16,7 +16,10 @@
  */
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { resolveChatRunInactivityTimeoutMs } from '../src/server.js';
+import {
+  assertValidRuntimeDefInactivityTimeoutMs,
+  resolveChatRunInactivityTimeoutMs,
+} from '../src/server.js';
 import { copilotAgentDef } from '../src/runtimes/defs/copilot.js';
 
 const ENV_KEY = 'OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS';
@@ -138,5 +141,60 @@ describe('resolveChatRunInactivityTimeoutMs', () => {
 describe('copilotAgentDef.inactivityTimeoutMs', () => {
   it('ships a 30-minute inactivity hint so Copilot silent-thinking phases do not trip the default watchdog (#2467)', () => {
     expect(copilotAgentDef.inactivityTimeoutMs).toBe(THIRTY_MINUTES_MS);
+  });
+});
+
+describe('assertValidRuntimeDefInactivityTimeoutMs (#2579 fast-fail at def-select time)', () => {
+  // Reviewer-correctness fix (#2579 non-blocking, round 3): the
+  // strict checked-in-config check must run *immediately* after the
+  // runtime def is selected, before any side-effectful setup
+  // (`.mcp.json` write/unlink, prompt composition, file writes) so
+  // that an invalid checked-in `inactivityTimeoutMs` aborts the run
+  // before leaving partial state behind. The assert helper is the
+  // pure entry point chat-run startup can call without also touching
+  // env-resolution side effects.
+
+  it('returns silently when the def hint is omitted (no-op for adapters without the field)', () => {
+    expect(() => assertValidRuntimeDefInactivityTimeoutMs()).not.toThrow();
+    expect(() => assertValidRuntimeDefInactivityTimeoutMs(undefined)).not.toThrow();
+  });
+
+  it('returns silently for a valid non-negative integer (e.g. Copilot 30 min)', () => {
+    expect(() => assertValidRuntimeDefInactivityTimeoutMs(THIRTY_MINUTES_MS)).not.toThrow();
+    expect(() => assertValidRuntimeDefInactivityTimeoutMs(0)).not.toThrow();
+  });
+
+  it('throws on NaN / Infinity — bad checked-in source must surface, not be silently normalized', () => {
+    expect(() => assertValidRuntimeDefInactivityTimeoutMs(Number.NaN)).toThrow(
+      /must be a non-negative integer/,
+    );
+    expect(() => assertValidRuntimeDefInactivityTimeoutMs(Number.POSITIVE_INFINITY)).toThrow(
+      /must be a non-negative integer/,
+    );
+  });
+
+  it('throws on a negative def value (typo footgun)', () => {
+    expect(() => assertValidRuntimeDefInactivityTimeoutMs(-1)).toThrow(
+      /must be a non-negative integer/,
+    );
+  });
+
+  it('throws on a fractional def value (wrong-units typo, e.g. seconds instead of ms)', () => {
+    expect(() => assertValidRuntimeDefInactivityTimeoutMs(60.5)).toThrow(
+      /must be a non-negative integer/,
+    );
+  });
+
+  it('runs independently of the env override — an env value cannot mask the typo', () => {
+    const originalEnv = process.env[ENV_KEY];
+    process.env[ENV_KEY] = '15000';
+    try {
+      expect(() => assertValidRuntimeDefInactivityTimeoutMs(-1)).toThrow(
+        /must be a non-negative integer/,
+      );
+    } finally {
+      if (originalEnv === undefined) delete process.env[ENV_KEY];
+      else process.env[ENV_KEY] = originalEnv;
+    }
   });
 });

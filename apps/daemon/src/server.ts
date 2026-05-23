@@ -4305,15 +4305,27 @@ const DEFAULT_CHAT_RUN_ARTIFACT_QUIET_PERIOD_MS = 60 * 1000;
 // fast-fail — the typo could sit unnoticed in source until someone
 // removed the override. Validation now runs on every call regardless
 // of which branch ultimately wins.
-export function resolveChatRunInactivityTimeoutMs(agentDefault?: number) {
-  if (agentDefault !== undefined) {
-    if (!Number.isFinite(agentDefault) || agentDefault < 0 || !Number.isInteger(agentDefault)) {
-      throw new RangeError(
-        `RuntimeAgentDef.inactivityTimeoutMs must be a non-negative integer, got ${String(agentDefault)}. ` +
-          'Fix the runtime def — invalid values used to silently disable the watchdog.',
-      );
-    }
+export function assertValidRuntimeDefInactivityTimeoutMs(agentDefault?: number): void {
+  // Strict checked-in-config guard for `RuntimeAgentDef.inactivityTimeoutMs`.
+  // Exported (and called by `resolveChatRunInactivityTimeoutMs` below)
+  // so that chat-run startup can invoke this immediately after the
+  // runtime def is selected — before any filesystem or
+  // prompt-building work happens — and abort with a loud RangeError
+  // when a checked-in def carries an invalid value. That keeps a
+  // typo from leaving partial setup state (e.g. a `.mcp.json` write
+  // / unlink, a freshly-composed system prompt) on disk when the
+  // run then aborts later at watchdog-arm time.
+  if (agentDefault === undefined) return;
+  if (!Number.isFinite(agentDefault) || agentDefault < 0 || !Number.isInteger(agentDefault)) {
+    throw new RangeError(
+      `RuntimeAgentDef.inactivityTimeoutMs must be a non-negative integer, got ${String(agentDefault)}. ` +
+        'Fix the runtime def — invalid values used to silently disable the watchdog.',
+    );
   }
+}
+
+export function resolveChatRunInactivityTimeoutMs(agentDefault?: number) {
+  assertValidRuntimeDefInactivityTimeoutMs(agentDefault);
   const env = Number(process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS);
   if (Number.isFinite(env)) {
     return Math.min(MAX_CHAT_RUN_INACTIVITY_TIMEOUT_MS, Math.max(0, Math.floor(env)));
@@ -11175,6 +11187,22 @@ export async function startServer({
       );
     if (!def.bin)
       return design.runs.fail(run, 'AGENT_UNAVAILABLE', 'agent has no binary');
+    // Validate the checked-in `inactivityTimeoutMs` hint immediately
+    // after the runtime def is selected and before any side-effectful
+    // setup (auto-memory extract, `.mcp.json` write/unlink,
+    // composeSystemPrompt, prompt persistence). A bad def value would
+    // otherwise abort the run only at watchdog-arm time, after that
+    // setup has already mutated local state, leaving confusing partial
+    // residue behind (issue #2467 review on PR #2579).
+    try {
+      assertValidRuntimeDefInactivityTimeoutMs(def.inactivityTimeoutMs);
+    } catch (err) {
+      return design.runs.fail(
+        run,
+        'AGENT_RUNTIME_DEF_INVALID',
+        err instanceof Error ? err.message : String(err),
+      );
+    }
     const safeCommentAttachments =
       normalizeCommentAttachments(commentAttachments);
     if (
