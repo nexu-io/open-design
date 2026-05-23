@@ -1425,7 +1425,7 @@ function ProseBlock({
     <div className="prose-block">
       {renderable.map((seg) => {
         if (seg.kind === "reminder") {
-          return <SystemReminderBlock key={seg.key} text={seg.text} />;
+          return <SystemReminderBlock key={seg.key} text={seg.text} variant="injection" />;
         }
         if (seg.kind === "text") {
           return (
@@ -1502,23 +1502,32 @@ function FormBlock({
   );
 }
 
-function SystemReminderBlock({ text }: { text: string }) {
+function SystemReminderBlock({
+  text,
+  variant = "trusted",
+}: {
+  text: string;
+  variant?: "trusted" | "injection";
+}) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const trimmed = text.trim();
   const preview = trimmed.split("\n")[0]?.slice(0, 120) ?? "";
+  const isInjection = variant === "injection";
   return (
-    <div className="system-reminder-block">
+    <div className={`system-reminder-block${isInjection ? " injection" : ""}`}>
       <button
         className="system-reminder-toggle"
         onClick={() => setOpen((o) => !o)}
         type="button"
       >
         <span className="system-reminder-icon" aria-hidden>
-          <Icon name="settings" size={12} />
+          <Icon name={isInjection ? "alert-triangle" : "settings"} size={12} />
         </span>
         <span className="system-reminder-label">
-          {t("assistant.systemReminder")}
+          {isInjection
+            ? t("assistant.possiblePromptInjection")
+            : t("assistant.systemReminder")}
         </span>
         <span className="system-reminder-preview">
           {open ? "" : preview}

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AssistantMessage } from '../../src/components/AssistantMessage';
 import type { ChatMessage } from '../../src/types';
@@ -15,7 +15,7 @@ function makeMessage(text: string): ChatMessage {
     runStatus: 'succeeded',
     startedAt: 1700000000,
     endedAt: 1700000005,
-    events: [{ kind: 'text', text } as ChatMessage['events'][number]],
+    events: [{ kind: 'text', text } as NonNullable<ChatMessage['events']>[number]],
     producedFiles: [],
   } as ChatMessage;
 }
@@ -64,7 +64,7 @@ describe('prompt injection chip', () => {
       />,
     );
     const toggle = container.querySelector('.system-reminder-toggle') as HTMLButtonElement;
-    toggle.click();
+    await act(async () => { toggle.click(); });
     const body = container.querySelector('.system-reminder-body');
     expect(body).not.toBeNull();
     expect(body?.textContent).toContain(INJECTION_TEXT);
