@@ -220,11 +220,29 @@ function stripFns(
   return rest;
 }
 
+async function safeProbe(
+  def: RuntimeAgentDef,
+  configuredEnv: Record<string, string> = {},
+): Promise<DetectedAgent> {
+  try {
+    return await probe(def, configuredEnv);
+  } catch {
+    // Fault isolation (issue #2297): one adapter's probe blowing up
+    // — e.g. a synchronous filesystem throw during PATH walking on a
+    // packaged Windows daemon, or an async rejection from one of the
+    // post-launch probes — must not collapse the whole agent picker.
+    // Without this guard the bare `Promise.all` rejected and the
+    // `/api/agents` catch arm returned `[]`, so the UI silently lost
+    // every CLI option and fell back to BYOK / Cloud only.
+    return unavailableAgent(def);
+  }
+}
+
 export async function detectAgents(
   configuredEnvByAgent: Record<string, Record<string, string>> = {},
 ) {
   const results = await Promise.all(
-    AGENT_DEFS.map((def) => probe(def, configuredEnvByAgent?.[def.id] ?? {})),
+    AGENT_DEFS.map((def) => safeProbe(def, configuredEnvByAgent?.[def.id] ?? {})),
   );
   // Refresh the validation cache from whatever we just surfaced to the UI
   // so /api/chat can accept any model the user could have just picked,

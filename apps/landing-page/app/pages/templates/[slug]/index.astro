@@ -1,0 +1,356 @@
+---
+/*
+ * /templates/<slug>/ — detail page for renderable design templates and
+ * legacy Live Artifact template bundles.
+ */
+import Layout from '../../../_components/sub-page-layout.astro';
+import LazyImg from '../../../_components/lazy-img.astro';
+import { getTemplateRecords, type TemplateRecord } from '../../../_lib/catalog';
+import {
+  getLandingUiCopy,
+  localeFromPath,
+  localizedHref,
+  type LandingLocaleCode,
+} from '../../../i18n';
+
+/* See pages/skills/[slug]/index.astro for the rationale on why these
+ * tables live inline rather than in the global UI bundle. Same shape,
+ * just keyed for the templates surface. */
+type ShareTemplate = (vars: { name: string; description: string; url: string }) => string;
+const SHARE_COPY: Record<LandingLocaleCode, ShareTemplate> = {
+  en:      ({ name, description, url }) => `🎨 Just forked ${name} from @opendesignai — the open-source Claude Design alternative.
+✨ Templates as files, not vendor docs. Fork → swap → ship.
+
+→ ${url}`,
+  zh:      ({ name, description, url }) => `🎨 fork 了一个：@opendesignai 上的 ${name} —— Claude Design 的开源替代品。
+✨ 模板就是文件，不是 vendor 数据。Fork → 换数据 → 发。
+
+→ ${url}`,
+  'zh-tw': ({ name, description, url }) => `🎨 fork 了一個：@opendesignai 上的 ${name} —— Claude Design 的開源替代品。
+✨ 模板就是檔案，不是 vendor 資料。Fork → 換資料 → 發佈。
+
+→ ${url}`,
+  ja:      ({ name, description, url }) => `🎨 @opendesignai の ${name} を fork —— オープンソースの Claude Design 代替。
+✨ テンプレートはファイル、ベンダー DB じゃない。Fork → 差し替え → 出荷。
+
+→ ${url}`,
+  ko:      ({ name, description, url }) => `🎨 @opendesignai의 ${name} fork —— 오픈 소스 Claude Design 대안.
+✨ 템플릿은 파일, 벤더 DB가 아닙니다. Fork → 교체 → 출시.
+
+→ ${url}`,
+  de:      ({ name, description, url }) => `🎨 Gerade ${name} von @opendesignai geforkt — die Open-Source-Alternative zu Claude Design.
+✨ Vorlagen als Dateien, nicht als Vendor-DB. Fork → swap → ship.
+
+→ ${url}`,
+  fr:      ({ name, description, url }) => `🎨 Je viens de forker ${name} de @opendesignai — l'alternative open-source à Claude Design.
+✨ Modèles = fichiers, pas une base vendeur. Fork → swap → ship.
+
+→ ${url}`,
+  ru:      ({ name, description, url }) => `🎨 Форкнул ${name} с @opendesignai — open-source альтернативу Claude Design.
+✨ Шаблоны — это файлы, не vendor-DB. Fork → swap → ship.
+
+→ ${url}`,
+  es:      ({ name, description, url }) => `🎨 Acabo de hacer fork de ${name} en @opendesignai — la alternativa open-source a Claude Design.
+✨ Plantillas como archivos, no como vendor DB. Fork → swap → ship.
+
+→ ${url}`,
+  'pt-br': ({ name, description, url }) => `🎨 Acabei de dar fork em ${name} do @opendesignai — a alternativa open-source ao Claude Design.
+✨ Templates como arquivos, não como vendor DB. Fork → swap → ship.
+
+→ ${url}`,
+  it:      ({ name, description, url }) => `🎨 Ho appena forkato ${name} da @opendesignai — l'alternativa open-source a Claude Design.
+✨ Template come file, non come DB vendor. Fork → swap → ship.
+
+→ ${url}`,
+  vi:      ({ name, description, url }) => `🎨 Vừa fork ${name} từ @opendesignai — giải pháp mã nguồn mở thay thế Claude Design.
+✨ Template là file, không phải DB của vendor. Fork → đổi data → ship.
+
+→ ${url}`,
+  pl:      ({ name, description, url }) => `🎨 Właśnie sforkowałem ${name} z @opendesignai — open-source'ową alternatywę dla Claude Design.
+✨ Szablony jako pliki, nie vendor DB. Fork → swap → ship.
+
+→ ${url}`,
+  id:      ({ name, description, url }) => `🎨 Baru fork ${name} dari @opendesignai — alternatif open-source untuk Claude Design.
+✨ Template itu file, bukan vendor DB. Fork → tukar data → ship.
+
+→ ${url}`,
+  nl:      ({ name, description, url }) => `🎨 Net ${name} geforkt van @opendesignai — het open-source alternatief voor Claude Design.
+✨ Templates als bestanden, niet als vendor-DB. Fork → swap → ship.
+
+→ ${url}`,
+  ar:      ({ name, description, url }) => `🎨 ‏fork للتو ${name} من @opendesignai — البديل مفتوح المصدر لـ Claude Design.
+✨ القوالب ملفات، ليست قاعدة بيانات للمزوّد. Fork → swap → ship.
+
+→ ${url}`,
+  tr:      ({ name, description, url }) => `🎨 ${name} fork'ladım (@opendesignai) — Claude Design'a açık kaynaklı alternatif.
+✨ Şablonlar dosya, vendor DB değil. Fork → swap → ship.
+
+→ ${url}`,
+  uk:      ({ name, description, url }) => `🎨 Форкнув ${name} з @opendesignai — open-source альтернативу Claude Design.
+✨ Шаблони — це файли, а не vendor-DB. Fork → swap → ship.
+
+→ ${url}`,
+};
+const SHARE_UI: Record<LandingLocaleCode, { title: string; lead: string; copyText: string; copyLink: string; jumpTo: string; openLabel: string }> = {
+  en:      { title: 'Share this template',  lead: 'Copy the message below, then jump to the platform you want to share on and paste.', copyText: 'Copy text',  copyLink: 'Copy link only', jumpTo: 'Then jump to:',  openLabel: 'Share ↗' },
+  zh:      { title: '分享这个模板',           lead: '复制下面的文案，然后跳到你想分享的平台粘贴即可。',          copyText: '复制文案',    copyLink: '只复制链接',     jumpTo: '跳转到：',          openLabel: '分享 ↗' },
+  'zh-tw': { title: '分享這個模板',           lead: '複製下面的文案，然後跳到你想分享的平台貼上即可。',          copyText: '複製文案',    copyLink: '只複製連結',     jumpTo: '跳轉到：',          openLabel: '分享 ↗' },
+  ja:      { title: 'このテンプレートを共有', lead: '下のメッセージをコピーしてから、共有したいプラットフォームに移動して貼り付けてください。',       copyText: 'テキストをコピー', copyLink: 'リンクのみコピー', jumpTo: 'プラットフォームへ：', openLabel: '共有 ↗' },
+  ko:      { title: '이 템플릿 공유',          lead: '아래 메시지를 복사한 다음 공유할 플랫폼으로 이동해 붙여넣으세요.',                  copyText: '텍스트 복사',  copyLink: '링크만 복사',    jumpTo: '플랫폼으로:',         openLabel: '공유 ↗' },
+  de:      { title: 'Diese Vorlage teilen', lead: 'Kopiere die Nachricht unten und füge sie auf der gewünschten Plattform ein.',         copyText: 'Text kopieren', copyLink: 'Nur Link kopieren', jumpTo: 'Zur Plattform:',  openLabel: 'Teilen ↗' },
+  fr:      { title: 'Partager ce modèle',   lead: 'Copiez le message ci-dessous, puis ouvrez la plateforme de votre choix et collez.',     copyText: 'Copier le texte', copyLink: 'Copier le lien', jumpTo: 'Aller sur :',     openLabel: 'Partager ↗' },
+  ru:      { title: 'Поделиться шаблоном',  lead: 'Скопируйте сообщение ниже, затем перейдите на нужную платформу и вставьте.',           copyText: 'Скопировать текст', copyLink: 'Только ссылка', jumpTo: 'Перейти:',       openLabel: 'Поделиться ↗' },
+  es:      { title: 'Compartir plantilla',  lead: 'Copia el mensaje y abre la plataforma donde quieras compartirlo.',                       copyText: 'Copiar texto', copyLink: 'Solo el enlace', jumpTo: 'Ir a:',           openLabel: 'Compartir ↗' },
+  'pt-br': { title: 'Compartilhar template', lead: 'Copie a mensagem e abra a plataforma onde quer compartilhar.',                          copyText: 'Copiar texto', copyLink: 'Só o link',     jumpTo: 'Ir para:',         openLabel: 'Compartilhar ↗' },
+  it:      { title: 'Condividi il modello', lead: 'Copia il messaggio e apri la piattaforma su cui vuoi condividere.',                     copyText: 'Copia testo', copyLink: 'Solo il link',  jumpTo: 'Vai a:',           openLabel: 'Condividi ↗' },
+  vi:      { title: 'Chia sẻ template',      lead: 'Sao chép nội dung dưới đây, rồi mở nền tảng bạn muốn chia sẻ và dán vào.',              copyText: 'Sao chép',     copyLink: 'Chỉ sao chép link', jumpTo: 'Mở:',          openLabel: 'Chia sẻ ↗' },
+  pl:      { title: 'Udostępnij szablon',   lead: 'Skopiuj wiadomość poniżej, otwórz wybraną platformę i wklej.',                          copyText: 'Kopiuj tekst', copyLink: 'Skopiuj link',   jumpTo: 'Przejdź do:',     openLabel: 'Udostępnij ↗' },
+  id:      { title: 'Bagikan template ini', lead: 'Salin pesan di bawah, lalu buka platform yang ingin Anda gunakan dan tempel.',           copyText: 'Salin teks',   copyLink: 'Salin tautan',   jumpTo: 'Buka:',           openLabel: 'Bagikan ↗' },
+  nl:      { title: 'Deel deze template',   lead: 'Kopieer het bericht hieronder en plak het op het platform van jouw keuze.',              copyText: 'Tekst kopiëren', copyLink: 'Alleen de link', jumpTo: 'Ga naar:',       openLabel: 'Delen ↗' },
+  ar:      { title: 'شارك هذا القالب',         lead: 'انسخ الرسالة أدناه، ثم انتقل إلى المنصة التي تريد المشاركة عليها والصقها.',          copyText: 'انسخ النص',   copyLink: 'انسخ الرابط فقط', jumpTo: 'انتقل إلى:',      openLabel: 'مشاركة ↗' },
+  tr:      { title: 'Bu şablonu paylaş',    lead: 'Aşağıdaki mesajı kopyala, dilediğin platformu açıp yapıştır.',                          copyText: 'Metni kopyala', copyLink: 'Sadece linki kopyala', jumpTo: 'Şuraya git:', openLabel: 'Paylaş ↗' },
+  uk:      { title: 'Поділитись шаблоном',  lead: 'Скопіюйте повідомлення нижче, потім перейдіть на платформу й вставте.',                copyText: 'Копіювати текст', copyLink: 'Тільки посилання', jumpTo: 'Перейти:',     openLabel: 'Поділитись ↗' },
+};
+
+export async function getStaticPaths() {
+  const records = await getTemplateRecords();
+  return records.map((template) => ({
+    params: { slug: template.slug },
+    props: { template },
+  }));
+}
+
+interface Props {
+  template: TemplateRecord;
+}
+
+const { template: routeTemplate } = Astro.props as Props;
+const locale = localeFromPath(Astro.url.pathname);
+const ui = getLandingUiCopy(locale);
+const href = (path: string) => localizedHref(path, locale);
+const localizedTemplates = locale === 'en' ? [] : await getTemplateRecords(locale);
+const template =
+  localizedTemplates.find((item) => item.slug === routeTemplate.slug) ?? routeTemplate;
+
+const title = ui.catalog.templates.detailTitle(template.name);
+const description = template.summary;
+
+const templateUrl = `https://open-design.ai/templates/${template.slug}/`;
+const shareCopy = (SHARE_COPY[locale] ?? SHARE_COPY.en)({
+  name: template.name,
+  description: template.summary,
+  url: templateUrl,
+});
+const shareUi = SHARE_UI[locale] ?? SHARE_UI.en;
+const originLabel =
+  template.origin === 'live-artifact'
+    ? ui.catalog.templates.liveArtifact
+    : ui.catalog.templates.skillTemplate;
+const files =
+  template.origin === 'live-artifact'
+    ? [
+        ['template.html', ui.catalog.templates.renderer],
+        ['data.json', ui.catalog.templates.seedData],
+        ['README.md', ui.catalog.templates.readme],
+      ]
+    : [
+        ['SKILL.md', ui.catalog.skills.detailLabel],
+        ['example.html', ui.catalog.templates.previewCaption],
+        ['assets/', ui.catalog.templates.detailLabel],
+        ['references/', ui.catalog.craft.detailLabel],
+      ];
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    { '@type': 'ListItem', position: 1, name: 'Open Design', item: Astro.site?.toString() },
+    { '@type': 'ListItem', position: 2, name: ui.catalog.templates.detailLabel, item: new URL('/templates/', Astro.site).toString() },
+    { '@type': 'ListItem', position: 3, name: template.name, item: new URL(template.detailHref, Astro.site).toString() },
+  ],
+};
+---
+
+<Layout title={title} description={description} active="templates" jsonLd={jsonLd}>
+  <nav class="breadcrumb" aria-label={ui.catalog.breadcrumbLabel}>
+    <a href={href('/')}>Open Design</a>
+    <span>/</span>
+    <a href={href('/templates/')}>{ui.catalog.templates.detailLabel}</a>
+    <span>/</span>
+    <span aria-current="page">{template.name}</span>
+  </nav>
+
+  <article class="detail">
+    <header class="detail-head">
+      <span class="label">
+        {ui.catalog.templates.detailLabel}
+        <span class="ix">· {originLabel}</span>
+      </span>
+      <h1 class="display">{template.name}<span class="dot">.</span></h1>
+      <p class="lead">{template.summary}</p>
+      {(template.mode || template.platform || template.scenario) && (
+        <dl class="detail-meta">
+          {template.mode && (
+            <>
+              <dt>{ui.catalog.skills.mode}</dt>
+              <dd>{template.modeLabel ?? template.mode}</dd>
+            </>
+          )}
+          {template.platform && (
+            <>
+              <dt>{ui.catalog.skills.platform}</dt>
+              <dd>{template.platformLabel ?? template.platform}</dd>
+            </>
+          )}
+          {template.scenario && (
+            <>
+              <dt>{ui.catalog.skills.scenario}</dt>
+              <dd>{template.scenarioLabel ?? template.scenario}</dd>
+            </>
+          )}
+        </dl>
+      )}
+      <div class="detail-actions">
+        {/* Two CTAs matching skills/[slug]: "Use this template" sends
+            users to the OD desktop release page (install first, then
+            use the template); "Find on GitHub" deep-links to the
+            source folder. See skills/[slug].astro for the broader
+            rationale on the release-page pivot. */}
+        <a
+          class="btn btn-primary"
+          href="https://github.com/nexu-io/open-design/releases"
+          target="_blank"
+          rel="noopener"
+        >
+          Use this template →
+        </a>
+        <a class="btn btn-ghost" href={template.source} target="_blank" rel="noopener">
+          Find on GitHub →
+        </a>
+        <button
+          type="button"
+          class="btn btn-ghost detail-share-trigger"
+          data-share-open={`template:${template.slug}`}
+        >
+          {shareUi.openLabel}
+        </button>
+      </div>
+    </header>
+
+    {template.previewUrl && (
+      <figure class="detail-preview">
+        {/* Click-to-expand: thumb is the summary; clicking opens the
+            live iframe rendering the canonical artifact. Skill-template
+            origin → /skills/<slug>/example.html; live-artifact origin
+            → /templates/<slug>/preview.html. */}
+        <details class="detail-preview-live">
+          <summary class="detail-preview-thumb-trigger" aria-label={`Open interactive preview for ${template.name}`}>
+            <LazyImg
+              src={template.previewUrl}
+              alt={`${template.name} preview`}
+              loading="priority"
+            />
+            <span class="detail-preview-thumb-overlay" aria-hidden="true">
+              <span class="detail-preview-thumb-cta">Click for live preview ↗</span>
+            </span>
+          </summary>
+          <div class="detail-preview-frame-wrap">
+            <iframe
+              src={
+                template.origin === 'live-artifact'
+                  ? `/templates/${template.slug}/preview.html`
+                  : `/skills/${template.slug}/example.html`
+              }
+              title={`${template.name} interactive preview`}
+              loading="lazy"
+              sandbox="allow-scripts allow-same-origin"
+              class="detail-preview-frame"
+            />
+            <a
+              class="detail-preview-popout"
+              href={
+                template.origin === 'live-artifact'
+                  ? `/templates/${template.slug}/preview.html`
+                  : `/skills/${template.slug}/example.html`
+              }
+              target="_blank"
+              rel="noopener"
+              aria-label="Open preview in new tab"
+            >
+              Open in new tab ↗
+            </a>
+          </div>
+        </details>
+        <figcaption>{ui.catalog.templates.previewCaption}</figcaption>
+      </figure>
+    )}
+
+    {/* Share modal — same shape as skills/[slug]; see that file for the
+        copy-then-paste rationale and SEO keyword choice. */}
+    <dialog
+      class="detail-share-dialog"
+      data-share-dialog={`template:${template.slug}`}
+    >
+      <form method="dialog" class="detail-share-dialog-form">
+        <header class="detail-share-dialog-head">
+          <h2>{shareUi.title}</h2>
+          <button type="submit" class="detail-share-dialog-close" aria-label="Close" value="cancel">×</button>
+        </header>
+        <p class="detail-share-dialog-lead">{shareUi.lead}</p>
+        <textarea
+          class="detail-share-dialog-text"
+          readonly
+          rows="6"
+          data-share-text
+        >{shareCopy}</textarea>
+        <div class="detail-share-dialog-actions">
+          <button
+            type="button"
+            class="btn btn-primary detail-share-dialog-copy"
+            data-share-copy
+          >
+            {shareUi.copyText}
+          </button>
+          <button
+            type="button"
+            class="btn btn-ghost detail-share-dialog-copy-link"
+            data-copy-link={templateUrl}
+          >
+            {shareUi.copyLink}
+          </button>
+        </div>
+        <div class="detail-share-dialog-platforms">
+          <span class="detail-share-dialog-platforms-label">{shareUi.jumpTo}</span>
+          <a class="detail-share-platform-btn" href="https://x.com/compose/post" target="_blank" rel="noopener" aria-label="X">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.65l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25h6.815l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z"/></svg>
+            <span class="sr-only">X</span>
+          </a>
+          <a class="detail-share-platform-btn" href="https://www.linkedin.com/feed/?shareActive=true" target="_blank" rel="noopener" aria-label="LinkedIn">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.063 2.063 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+            <span class="sr-only">LinkedIn</span>
+          </a>
+          <a class="detail-share-platform-btn" href="https://www.reddit.com/submit" target="_blank" rel="noopener" aria-label="Reddit">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="currentColor"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 01-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 01.042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 014.028 12.3c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 01.14-.197.35.35 0 01.238-.042l2.906.617a1.214 1.214 0 011.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 00-.231.094.33.33 0 000 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 00.029-.463.33.33 0 00-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 00-.232-.095z"/></svg>
+            <span class="sr-only">Reddit</span>
+          </a>
+          <a class="detail-share-platform-btn" href="https://www.facebook.com/" target="_blank" rel="noopener" aria-label="Facebook">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+            <span class="sr-only">Facebook</span>
+          </a>
+        </div>
+      </form>
+    </dialog>
+
+    <section class="detail-block">
+      <h2>{ui.catalog.templates.whatsInside}</h2>
+      <p class="block-lead">
+        {ui.catalog.templates.whatsInsideLead}
+      </p>
+      <ul class="trigger-list">
+        {files.map(([name, copy]) => (
+          <li><code>{name}</code> — {copy}</li>
+        ))}
+      </ul>
+    </section>
+  </article>
+</Layout>

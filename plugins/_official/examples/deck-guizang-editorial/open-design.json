@@ -2,9 +2,9 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-deck-guizang-editorial",
-  "title": "归藏编辑墨水 Deck",
+  "title": "Guizang Editorial E-Ink Deck",
   "version": "0.1.0",
-  "description": "电子杂志 × 电子墨水; 10 个版面 + 5 套调色板 (墨水/靛蓝瓷/森林墨/牛皮纸/沙丘)",
+  "description": "Editorial magazine meets e-ink: 10 layouts and 5 palettes (Ink, Indigo Porcelain, Forest Ink, Kraft Paper, Dune).",
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -42,11 +42,18 @@
       "entry": "./example.html"
     },
     "useCase": {
-      "query": "用「归藏编辑墨水 Deck」模板把我的内容做成一套「电子杂志 × 电子墨水; 10 个版面 + 5 套调色板 (墨水/靛蓝瓷/森林墨/牛皮纸/沙丘)」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
+      "query": {
+        "en": "Use the Guizang Editorial E-Ink Deck template to turn my content into an editorial magazine x e-ink horizontal deck with 10 layouts and 5 palettes. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「归藏编辑墨水 Deck」模板把我的内容做成一套「电子杂志 × 电子墨水; 10 个版面 + 5 套调色板 (墨水/靛蓝瓷/森林墨/牛皮纸/沙丘)」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "归藏编辑墨水 Deck"
+          "title": "Guizang Editorial E-Ink Deck",
+          "title_i18n": {
+            "en": "Guizang Editorial E-Ink Deck",
+            "zh-CN": "归藏编辑墨水 Deck"
+          }
         }
       ]
     },
@@ -75,5 +82,13 @@
       "prompt:inject",
       "fs:write"
     ]
+  },
+  "title_i18n": {
+    "en": "Guizang Editorial E-Ink Deck",
+    "zh-CN": "归藏编辑墨水 Deck"
+  },
+  "description_i18n": {
+    "en": "Editorial magazine meets e-ink: 10 layouts and 5 palettes (Ink, Indigo Porcelain, Forest Ink, Kraft Paper, Dune).",
+    "zh-CN": "电子杂志 × 电子墨水; 10 个版面 + 5 套调色板 (墨水/靛蓝瓷/森林墨/牛皮纸/沙丘)"
   }
 }

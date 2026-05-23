@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { OpenDesignHostUpdaterStatusSnapshot } from '@open-design/host';
 
 import { Icon } from './Icon';
@@ -12,9 +12,17 @@ import {
 } from '../lib/updater';
 import { useT } from '../i18n';
 import type { Dict } from '../i18n/types';
+import { useAnalytics, useAppVersion } from '../analytics/provider';
+import {
+  trackUpdateIndicatorClick,
+  trackUpdateIndicatorSurfaceView,
+  trackUpdateInstallResult,
+  trackUpdatePromptSurfaceView,
+} from '../analytics/events';
 
-type InstallState = 'idle' | 'opening' | 'opened';
-type QuitState = 'idle' | 'quitting';
+const INSTALL_HANDOFF_WATCHDOG_MS = 10_000;
+
+type InstallState = 'idle' | 'opening' | 'handoff' | 'recoverable';
 type Translator = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
 function versionText(t: Translator, model: UpdaterModel): string {
@@ -22,25 +30,62 @@ function versionText(t: Translator, model: UpdaterModel): string {
   return version == null ? t('updater.readyGeneric') : t('updater.readyVersion', { version });
 }
 
-function navLabel(t: Translator, model: UpdaterModel): string {
-  if (model.errorMessage != null) return t('updater.failed');
-  if (model.installerOpened) return t('updater.installerOpened');
-  if (model.downloadProgress != null || model.busy) {
-    const percent = model.downloadProgress?.percent;
-    return percent == null ? t('updater.downloading') : t('updater.downloadingPercent', { percent });
+function channelLabelFor(channel: string | null | undefined): string | null {
+  switch (channel) {
+    case 'beta':
+      return 'Beta channel';
+    case 'nightly':
+      return 'Nightly channel';
+    case 'preview':
+      return 'Preview channel';
+    case 'stable':
+      return 'Stable channel';
+    default:
+      return null;
   }
-  if (model.hasDownloadedInstaller) return t('updater.ready');
-  return t('updater.available');
+}
+
+function updateVersionProps(model: UpdaterModel, appVersionBefore: string | null) {
+  return {
+    ...(appVersionBefore ? { app_version_before: appVersionBefore } : {}),
+    ...(model.availableVersion ? { app_version_after: model.availableVersion } : {}),
+  };
+}
+
+function updaterErrorCode(model: UpdaterModel): string | undefined {
+  return model.status?.error?.code;
 }
 
 export function UpdaterPopup() {
   const t = useT();
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const actionInFlightRef = useRef(false);
+  const handoffWatchdogRef = useRef<number | null>(null);
   const [model, setModel] = useState<UpdaterModel>(() => deriveUpdaterModel(null));
-  const [dismissedPromptKey, setDismissedPromptKey] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [installState, setInstallState] = useState<InstallState>('idle');
-  const [quitState, setQuitState] = useState<QuitState>('idle');
-  const [actionError, setActionError] = useState<string | null>(null);
+
+  const clearHandoffWatchdog = useCallback(() => {
+    if (handoffWatchdogRef.current == null) return;
+    window.clearTimeout(handoffWatchdogRef.current);
+    handoffWatchdogRef.current = null;
+  }, []);
+
+  const recoverFromInstallerHandoff = useCallback(() => {
+    handoffWatchdogRef.current = null;
+    actionInFlightRef.current = false;
+    setInstallState('recoverable');
+    setPanelOpen(true);
+  }, []);
+
+  const startHandoffWatchdog = useCallback(() => {
+    clearHandoffWatchdog();
+    // The quit IPC can resolve before Electron has actually torn down the
+    // renderer. Keep the handoff UI up, but do not leave it stuck forever.
+    handoffWatchdogRef.current = window.setTimeout(recoverFromInstallerHandoff, INSTALL_HANDOFF_WATCHDOG_MS);
+  }, [clearHandoffWatchdog, recoverFromInstallerHandoff]);
+
+  useEffect(() => clearHandoffWatchdog, [clearHandoffWatchdog]);
 
   useEffect(() => {
     let mounted = true;
@@ -49,7 +94,7 @@ export function UpdaterPopup() {
       setModel(deriveUpdaterModel(status, { hostAvailable: true }));
     };
     const unsubscribe = subscribeToUpdaterStatus(applyStatus);
-    void readUpdaterStatus({ payload: { source: 'updater-popup:mount' } }).then((result) => {
+    void readUpdaterStatus({ payload: { source: 'updater-indicator:mount' } }).then((result) => {
       if (!mounted) return;
       if (result.ok) {
         setModel(result.model);
@@ -63,161 +108,213 @@ export function UpdaterPopup() {
     };
   }, []);
 
-  const isPanelOpen = useMemo(() => {
-    if (actionError != null) return true;
-    if (panelOpen) return true;
-    if (!model.shouldPrompt || model.promptKey == null) return false;
-    return model.promptKey !== dismissedPromptKey;
-  }, [actionError, dismissedPromptKey, model.promptKey, model.shouldPrompt, panelOpen]);
+  const ready = model.environment === 'desktop' && model.shouldShowControl;
+  const installBusy = installState === 'opening' || installState === 'handoff';
+  const canStartInstall = ready || installState === 'recoverable';
+  const showControl = ready || installState !== 'idle';
+  const controlLabel = t('updater.openInstaller');
+  const channelLabel = channelLabelFor(model.status?.channel);
+  const analytics = useAnalytics();
+  const appVersionBefore = useAppVersion();
+  const versionProps = useMemo(
+    () => updateVersionProps(model, appVersionBefore),
+    [appVersionBefore, model.availableVersion],
+  );
 
-  if (model.environment !== 'desktop' || !model.shouldShowControl) return null;
+  const indicatorSurfaceKey = `${model.currentVersion ?? 'unknown'}->${model.availableVersion ?? 'unknown'}:${model.status?.downloadPath ?? 'unknown'}`;
+  const lastIndicatorSurfaceKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!ready) {
+      lastIndicatorSurfaceKeyRef.current = null;
+      return;
+    }
+    if (lastIndicatorSurfaceKeyRef.current === indicatorSurfaceKey) return;
+    lastIndicatorSurfaceKeyRef.current = indicatorSurfaceKey;
+    trackUpdateIndicatorSurfaceView(analytics.track, {
+      page_name: 'home',
+      area: 'update_indicator',
+      ...versionProps,
+    });
+  }, [analytics.track, indicatorSurfaceKey, ready, versionProps]);
 
-  const close = () => {
-    if (model.promptKey != null) setDismissedPromptKey(model.promptKey);
+  const promptSurfaceKey = panelOpen ? indicatorSurfaceKey : null;
+  const lastPromptSurfaceKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (promptSurfaceKey == null) {
+      lastPromptSurfaceKeyRef.current = null;
+      return;
+    }
+    if (lastPromptSurfaceKeyRef.current === promptSurfaceKey) return;
+    lastPromptSurfaceKeyRef.current = promptSurfaceKey;
+    trackUpdatePromptSurfaceView(analytics.track, {
+      page_name: 'home',
+      area: 'update_prompt',
+      ...versionProps,
+    });
+  }, [analytics.track, promptSurfaceKey, versionProps]);
+
+  const close = useCallback(() => {
+    if (installBusy) return;
+    trackUpdateIndicatorClick(analytics.track, {
+      page_name: 'home',
+      area: 'update_prompt',
+      element: 'later',
+      action: 'dismiss',
+      ...versionProps,
+    });
     setPanelOpen(false);
-    setInstallState('idle');
-    setQuitState('idle');
-    setActionError(null);
-  };
+  }, [analytics.track, installBusy, versionProps]);
 
-  const openInstaller = async () => {
+  useEffect(() => {
+    if (!panelOpen) return;
+    const onDocClick = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (!wrapRef.current?.contains(target)) close();
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') close();
+    };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [close, panelOpen]);
+
+  const installAndQuit = async () => {
+    if (actionInFlightRef.current || !canStartInstall) return;
+    actionInFlightRef.current = true;
+    clearHandoffWatchdog();
     setInstallState('opening');
-    setActionError(null);
-    const result = await openUpdaterInstaller({ payload: { source: 'updater-popup' } });
-    if (!result.ok) {
-      setActionError(result.reason);
-      setInstallState('idle');
-      return;
-    }
-    setModel(result.model);
-    if (result.model.errorMessage != null) {
-      setActionError(result.model.errorMessage);
-      setInstallState('idle');
-      return;
-    }
-    setInstallState('opened');
     setPanelOpen(true);
-  };
-
-  const quitOpenDesign = async () => {
-    setQuitState('quitting');
-    setActionError(null);
-    const result = await quitAfterUpdaterInstallerOpen({ payload: { source: 'updater-popup' } });
-    if (!result.ok) {
-      setActionError(result.reason);
-      setQuitState('idle');
+    trackUpdateIndicatorClick(analytics.track, {
+      page_name: 'home',
+      area: 'update_prompt',
+      element: 'install_update',
+      action: 'install',
+      ...versionProps,
+    });
+    try {
+      const result = await openUpdaterInstaller({ payload: { source: 'updater-prompt' } });
+      if (!result.ok) {
+        actionInFlightRef.current = false;
+        setInstallState('idle');
+        trackUpdateInstallResult(analytics.track, {
+          page_name: 'home',
+          area: 'update_prompt',
+          result: 'failed',
+          error_code: result.reason,
+          ...versionProps,
+        });
+        return;
+      }
+      if (result.model.errorMessage != null) {
+        actionInFlightRef.current = false;
+        setInstallState('idle');
+        trackUpdateInstallResult(analytics.track, {
+          page_name: 'home',
+          area: 'update_prompt',
+          result: 'failed',
+          ...(updaterErrorCode(result.model) ? { error_code: updaterErrorCode(result.model) } : {}),
+          ...versionProps,
+        });
+        return;
+      }
+      setModel(result.model);
+      setInstallState('handoff');
+      startHandoffWatchdog();
+      trackUpdateInstallResult(analytics.track, {
+        page_name: 'home',
+        area: 'update_prompt',
+        result: 'success',
+        ...versionProps,
+      });
+      const quitResult = await quitAfterUpdaterInstallerOpen({ payload: { source: 'updater-prompt' } });
+      if (!quitResult.ok) {
+        clearHandoffWatchdog();
+        actionInFlightRef.current = false;
+        setInstallState('recoverable');
+        setPanelOpen(true);
+      }
+    } catch (error) {
+      clearHandoffWatchdog();
+      actionInFlightRef.current = false;
+      setInstallState('idle');
+      trackUpdateInstallResult(analytics.track, {
+        page_name: 'home',
+        area: 'update_prompt',
+        result: 'failed',
+        error_code: error instanceof Error ? error.name : 'unknown',
+        ...versionProps,
+      });
     }
   };
 
-  const opened = installState === 'opened' || model.installerOpened;
-  const statusError = model.errorMessage;
-  const failed = actionError != null || statusError != null;
-  const title = failed
-    ? opened
-      ? t('updater.quitFailedTitle')
-      : t('updater.failed')
-    : opened
-      ? t('updater.installerOpened')
-      : t('updater.ready');
-  const body = failed
-    ? opened
-      ? t('updater.quitFailedBody')
-      : statusError ?? t('updater.openFailedFallback')
-    : opened
-      ? t('updater.installerOpenBody')
-      : versionText(t, model);
-  const progress = model.downloadProgress;
-  const progressStyle = {
-    '--updater-progress': `${progress?.percent ?? 0}%`,
-  } as CSSProperties;
-  const controlDisabled = model.busy && !model.hasDownloadedInstaller && !model.installerOpened;
-  const controlLabel = navLabel(t, model);
-  const canOpenInstaller = model.canOpenInstaller && model.hasDownloadedInstaller;
+  if (!showControl) return null;
 
   return (
-    <div className="entry-updater-menu">
+    <div className="entry-updater-menu" ref={wrapRef}>
       <button
-        aria-disabled={controlDisabled ? 'true' : undefined}
-        aria-expanded={isPanelOpen}
+        aria-disabled={installBusy ? 'true' : undefined}
+        aria-expanded={panelOpen}
         aria-label={controlLabel}
-        className={`entry-nav-rail__btn entry-updater-menu__button${isPanelOpen ? ' is-active' : ''}${controlDisabled ? ' is-disabled' : ''}`}
+        className={`entry-nav-rail__btn entry-updater-menu__button is-ready${panelOpen ? ' is-active' : ''}${installBusy ? ' is-disabled' : ''}`}
         data-testid="entry-nav-updater"
         data-tooltip={controlLabel}
+        title={controlLabel}
         type="button"
         onClick={() => {
-          if (controlDisabled) return;
-          setPanelOpen((open) => !open);
+          if (installBusy) return;
+          if (panelOpen) {
+            setPanelOpen(false);
+            return;
+          }
+          trackUpdateIndicatorClick(analytics.track, {
+            page_name: 'home',
+            area: 'update_indicator',
+            element: 'ready_indicator',
+            action: 'open_prompt',
+            ...versionProps,
+          });
+          setPanelOpen(true);
         }}
       >
-        <Icon name={opened ? 'check' : 'download'} size={18} />
-        {progress != null ? (
-          <span
-            aria-label={controlLabel}
-            aria-valuemax={100}
-            aria-valuemin={0}
-            {...(progress.percent == null ? {} : { 'aria-valuenow': progress.percent })}
-            className="entry-updater-menu__progress"
-            data-testid="entry-nav-updater-progress"
-            role="progressbar"
-            style={progressStyle}
-          />
-        ) : null}
+        <span className="entry-updater-menu__glyph">
+          <Icon name="arrow-up" size={18} strokeWidth={2.25} />
+        </span>
       </button>
-      {isPanelOpen ? (
+      {panelOpen ? (
         <section
           aria-labelledby="updater-popup-title"
-          className="updater-popup"
+          className="updater-popup is-ready"
           data-testid="updater-popup"
           role="dialog"
         >
           <div className="updater-popup__icon">
-            <Icon name={opened ? 'check' : 'download'} size={20} />
+            <Icon name="arrow-up" size={20} strokeWidth={2.2} />
           </div>
           <div className="updater-popup__body">
-            <h2 id="updater-popup-title">{title}</h2>
-            <p>{body}</p>
-            {actionError != null && actionError !== body ? <p className="updater-popup__error">{actionError}</p> : null}
+            <h2 id="updater-popup-title">{t('updater.ready')}</h2>
+            <p>{versionText(t, model)}</p>
+            {channelLabel != null ? <span className="updater-popup__badge">{channelLabel}</span> : null}
           </div>
           <div className="updater-popup__actions">
-            {opened ? (
-              <>
-                <button className="updater-popup__button" type="button" onClick={close}>
-                  {t('updater.done')}
-                </button>
-                <button
-                  className="updater-popup__button updater-popup__button--primary"
-                  data-testid="updater-quit-button"
-                  disabled={!model.canQuitAfterInstallerOpen || quitState === 'quitting'}
-                  type="button"
-                  onClick={() => {
-                    void quitOpenDesign();
-                  }}
-                >
-                  {quitState === 'quitting' ? t('updater.quitting') : t('updater.quitButton')}
-                </button>
-              </>
-            ) : failed ? (
-              <button className="updater-popup__button" type="button" onClick={close}>
-                {t('updater.done')}
-              </button>
-            ) : (
-              <>
-                <button className="updater-popup__button" type="button" onClick={close}>
-                  {t('updater.later')}
-                </button>
-                <button
-                  className="updater-popup__button updater-popup__button--primary"
-                  data-testid="updater-install-button"
-                  disabled={installState === 'opening' || !canOpenInstaller}
-                  type="button"
-                  onClick={() => {
-                    void openInstaller();
-                  }}
-                >
-                  {installState === 'opening' ? t('updater.opening') : t('updater.openInstaller')}
-                </button>
-              </>
-            )}
+            <button className="updater-popup__button" disabled={installBusy} type="button" onClick={close}>
+              {t('updater.later')}
+            </button>
+            <button
+              className="updater-popup__button updater-popup__button--primary"
+              data-testid="updater-install-button"
+              disabled={installBusy}
+              type="button"
+              onClick={() => {
+                void installAndQuit();
+              }}
+            >
+              {installBusy ? t('updater.opening') : t('updater.openInstaller')}
+            </button>
           </div>
         </section>
       ) : null}

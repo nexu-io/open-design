@@ -2,9 +2,9 @@
   "$schema": "https://open-design.ai/schemas/plugin.v1.json",
   "specVersion": "1.0.0",
   "name": "example-social-x-post-card",
-  "title": "X (Twitter) 帖子卡",
+  "title": "X / Twitter Post Card",
   "version": "0.1.0",
-  "description": "拟真 X 推文卡片 + 互动数据 (likes/reposts/views), 适配视频叠加或图卡分享",
+  "description": "Realistic X post card with engagement metrics (likes, reposts, views), suited to video overlays or shareable image cards.",
   "license": "MIT",
   "author": {
     "name": "Open Design",
@@ -43,11 +43,18 @@
       "entry": "./example.html"
     },
     "useCase": {
-      "query": "用「X (Twitter) 帖子卡」模板把我的内容做成一份「拟真 X 推文卡片 + 互动数据 (likes/reposts/views), 适配视频叠加或图卡分享」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
+      "query": {
+        "en": "Use the X / Twitter Post Card template to turn my content into a realistic X post card with engagement metrics for a video overlay or shareable image card. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images.",
+        "zh-CN": "用「X (Twitter) 帖子卡」模板把我的内容做成一份「拟真 X 推文卡片 + 互动数据 (likes/reposts/views), 适配视频叠加或图卡分享」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。"
+      },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "X (Twitter) 帖子卡"
+          "title": "X / Twitter Post Card",
+          "title_i18n": {
+            "en": "X / Twitter Post Card",
+            "zh-CN": "X (Twitter) 帖子卡"
+          }
         }
       ]
     },
@@ -76,5 +83,13 @@
       "prompt:inject",
       "fs:write"
     ]
+  },
+  "title_i18n": {
+    "en": "X / Twitter Post Card",
+    "zh-CN": "X (Twitter) 帖子卡"
+  },
+  "description_i18n": {
+    "en": "Realistic X post card with engagement metrics (likes, reposts, views), suited to video overlays or shareable image cards.",
+    "zh-CN": "拟真 X 推文卡片 + 互动数据 (likes/reposts/views), 适配视频叠加或图卡分享"
   }
 }

@@ -5,12 +5,23 @@
  * When the canonical example.html changes, mirror the diff here so the
  * template's known-good rendering stays in lockstep with the deployed site.
  *
- * Font loading lives in `_components/font-stylesheet.astro` — a server
- * component injected into every page's <head>. We used to `@import` it
- * inline here, but that serialized HTML → CSS → fonts CSS → woff2 and
- * cost ~3s on first paint. Moving to <link> + preconnect parallelizes
- * the fetch with HTML parse.
+ * Fonts are self-hosted via `@fontsource-variable/*` packages. The variable
+ * font files (one woff2 per family, ~30-50KB each) cover the entire
+ * weight axis we use, are served same-origin (no Google Fonts CSS or
+ * fonts.gstatic.com TLS handshake), and ship through CF's edge — PageSpeed
+ * was attributing ~2.3s of render-blocking + LCP to the old Google Fonts
+ * round-trip chain.
+ *
+ * Subset CSS files only declare @font-face metadata (~1KB each). The
+ * browser downloads the woff2 that matches the unicode-range of text it's
+ * about to render, so multi-script support stays intact without paying for
+ * unused scripts up front.
  */
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/inter-tight';
+@import '@fontsource-variable/playfair-display';
+@import '@fontsource-variable/playfair-display/wght-italic.css';
+@import '@fontsource-variable/jetbrains-mono';
 
 :root {
   --paper: #efe7d2;
@@ -29,10 +40,10 @@
   --line-soft: rgba(21, 20, 15, 0.08);
   --line-faint: rgba(21, 20, 15, 0.05);
   --shadow: 0 30px 60px -30px rgba(21, 20, 15, 0.18);
-  --serif: 'Playfair Display', 'Times New Roman', serif;
-  --sans: 'Inter Tight', 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  --body: 'Inter', -apple-system, system-ui, sans-serif;
-  --mono: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  --serif: 'Playfair Display Variable', 'Playfair Display', 'Times New Roman', serif;
+  --sans: 'Inter Tight Variable', 'Inter Tight', 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --body: 'Inter Variable', 'Inter', -apple-system, system-ui, sans-serif;
+  --mono: 'JetBrains Mono Variable', 'JetBrains Mono', 'SF Mono', Menlo, monospace;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -133,13 +144,50 @@ body::before {
 .side-rail.right .rail-text { transform: rotate(180deg); }
 .side-rail.left .rail-text { writing-mode: vertical-rl; transform: none; }
 
+/*
+ * Sticky chrome bar — wraps the editorial metadata strip + main nav as a
+ * single Headroom-style unit. Keeping them welded means the language
+ * switcher stays reachable while reading the page (you can flip locales
+ * mid-scroll without scrolling back to the top), and the masthead +
+ * navigation always read as a single nameplate rather than two unrelated
+ * rows.
+ *
+ * Sticky/transform/transition lived on `.nav` historically — they belong
+ * here now so both rows slide together. The `data-chrome-headroom` hook
+ * is what `header-enhancer.astro` (and the homepage inline script)
+ * toggle `is-hidden` on.
+ */
+.site-chrome {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--paper);
+  transform: translateY(0);
+  transition: transform 360ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    box-shadow 220ms ease,
+    border-color 220ms ease;
+  will-change: transform;
+}
+.site-chrome.is-hidden {
+  transform: translateY(-100%);
+  pointer-events: none;
+  box-shadow: none;
+}
+
 /* top metadata strip */
 .topbar {
   border-bottom: 1px solid var(--line);
   padding: 10px 0;
   background: var(--paper);
+  /*
+   * Stays a positioned context so the locale menu has an absolute
+   * anchor. The z-index is small but non-zero so the topbar — and the
+   * menu that drops out of it — paint above the sibling nav inside
+   * `.site-chrome`. Without this the menu would be obscured by the
+   * nav's download/star buttons.
+   */
   position: relative;
-  z-index: 4;
+  z-index: 2;
 }
 .topbar-inner {
   display: flex;
@@ -168,118 +216,154 @@ body::before {
 }
 .topbar-link:hover { color: var(--coral); border-bottom-color: var(--coral); }
 /*
- * Site-level locale switcher in the main nav.
- *
- * Sits in `.nav-side` next to Download/Star so it carries the same visual
- * weight as the primary CTAs (the previous attempt buried it in the small
- * topbar metadata strip where users missed it). Built on `<details>` so
- * the dropdown works without JavaScript — the close-on-outside-click
- * behaviour is a tiny inline script attached by `header-enhancer.astro`.
+ * Editorial language switcher. The trigger reads as part of the
+ * masthead line ("● LIVE · V0.7.0 / LANG · ZH-TW") — uppercase
+ * tracked text, no pill, no border. The dropdown is a small
+ * floating panel that mirrors the topbar's paper/ink palette but
+ * drops the tracking so native scripts (中文 / 한국어 / العربية)
+ * read at their intended rhythm.
  */
-.nav-locale {
+.locale-switch {
+  display: inline-block;
   position: relative;
 }
-.nav-locale > summary {
-  list-style: none;
-  cursor: pointer;
+.locale-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  border-radius: 999px;
-  border: 1px solid rgba(21, 20, 15, 0.18);
-  background: transparent;
-  color: var(--ink);
-  font-family: var(--sans);
-  font-size: 13px;
-  font-weight: 500;
-  white-space: nowrap;
-  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+  gap: 6px;
+  cursor: pointer;
+  color: inherit;
+  list-style: none;
+  border-bottom: 1px solid transparent;
+  transition: color 160ms ease, border-color 160ms ease;
+  user-select: none;
+  outline: none;
+  padding: 0;
 }
-.nav-locale > summary::-webkit-details-marker { display: none; }
-.nav-locale > summary::marker { display: none; content: ''; }
-.nav-locale > summary:hover,
-.nav-locale[open] > summary {
-  background: rgba(21, 20, 15, 0.04);
-  border-color: rgba(21, 20, 15, 0.36);
+.locale-trigger::-webkit-details-marker { display: none; }
+.locale-trigger:hover,
+.locale-switch[open] > .locale-trigger,
+.locale-trigger:focus-visible {
+  color: var(--coral);
+  border-bottom-color: var(--coral);
 }
-.nav-locale-current {
-  /* Cap unusually long native labels (e.g. "Português (Brasil)") so the
-   * pill stays close to the width of Download / Star and the nav row
-   * doesn't reflow when the active locale changes. */
-  max-width: 11ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.locale-trigger-prefix {
+  color: var(--ink-faint);
 }
-.nav-locale-glyph { flex: 0 0 auto; opacity: 0.7; }
-.nav-locale-chevron {
-  flex: 0 0 auto;
+.locale-trigger:hover .locale-trigger-prefix,
+.locale-switch[open] > .locale-trigger .locale-trigger-prefix,
+.locale-trigger:focus-visible .locale-trigger-prefix {
+  color: var(--coral);
+}
+.locale-trigger-sep {
   opacity: 0.55;
-  transition: transform 180ms ease;
 }
-.nav-locale[open] .nav-locale-chevron { transform: rotate(180deg); opacity: 0.9; }
-
-.nav-locale-panel {
+.locale-trigger-code {
+  font: inherit;
+  letter-spacing: inherit;
+  color: var(--ink);
+  font-weight: 600;
+}
+.locale-trigger:hover .locale-trigger-code,
+.locale-switch[open] > .locale-trigger .locale-trigger-code,
+.locale-trigger:focus-visible .locale-trigger-code {
+  color: var(--coral);
+}
+.locale-trigger-caret {
+  width: 8px;
+  height: 5px;
+  flex-shrink: 0;
+  opacity: 0.7;
+  transition: transform 160ms ease, opacity 160ms ease;
+}
+.locale-switch[open] > .locale-trigger .locale-trigger-caret {
+  transform: rotate(180deg);
+  opacity: 1;
+}
+/*
+ * Two-column editorial catalogue. 17 locales × single-column would either
+ * scroll (ugly) or run most of the hero's height (worse). A 2-col grid
+ * keeps the panel under 9 rows so every language is visible at once and
+ * reads like a small index of nameplates rather than a dropdown.
+ *
+ * The 20px top offset gives clear breathing room from the topbar baseline
+ * — without it the active row (which mirrors the trigger label) feels
+ * fused to the chrome above it.
+ */
+.locale-menu {
   position: absolute;
-  top: calc(100% + 10px);
+  top: calc(100% + 20px);
   right: 0;
-  z-index: 30;
-  width: 280px;
-  max-height: min(560px, calc(100vh - 140px));
-  overflow-y: auto;
+  z-index: 60;
   display: grid;
-  gap: 2px;
+  grid-template-columns: repeat(2, minmax(168px, 1fr));
+  gap: 2px 4px;
   padding: 10px;
-  border: 1px solid rgba(21, 20, 15, 0.16);
-  border-radius: 14px;
   background: var(--paper);
+  border: 1px solid rgba(21, 20, 15, 0.22);
   box-shadow:
-    0 1px 0 rgba(21, 20, 15, 0.02),
-    0 20px 50px -12px rgba(21, 20, 15, 0.22);
-  letter-spacing: 0;
+    0 1px 0 rgba(21, 20, 15, 0.04),
+    0 28px 60px -32px rgba(21, 20, 15, 0.42);
+  font-family: var(--sans);
+  letter-spacing: normal;
   text-transform: none;
-  animation: nav-locale-pop 160ms ease;
+  /* Subtle entrance — matches the rest of the site's 200ms ease-out */
+  animation: locale-menu-in 180ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-@keyframes nav-locale-pop {
+@keyframes locale-menu-in {
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }
 }
-.nav-locale-item {
+.locale-menu-item {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 9px 12px;
-  border-radius: 10px;
+  align-items: baseline;
+  gap: 12px;
+  padding: 8px 12px;
   color: var(--ink);
-  font-family: var(--sans);
-  font-size: 14px;
   text-decoration: none;
+  font-size: 12.5px;
+  line-height: 1.2;
   transition: background 140ms ease, color 140ms ease;
 }
-.nav-locale-item:hover {
-  background: rgba(21, 20, 15, 0.06);
-  color: var(--ink);
+.locale-menu-item:hover {
+  background: color-mix(in oklab, var(--paper), var(--ink) 6%);
+  color: var(--coral);
 }
-.nav-locale-item.is-current {
-  background: var(--ink);
-  color: var(--paper);
-  font-weight: 600;
-  cursor: default;
-  pointer-events: none;
+.locale-menu-item:hover .locale-menu-code { color: var(--coral); }
+.locale-menu-item.is-active {
+  background: color-mix(in oklab, var(--paper), var(--coral) 8%);
+  color: var(--coral);
 }
-.nav-locale-item .nav-locale-check { opacity: 0.95; }
-.nav-locale-name { line-height: 1.2; }
-
-/* RTL locales: keep the panel anchored right but flip item alignment so
- * the script reads naturally. The Header runs LTR but each item carries
- * `lang="ar"` etc., so individual rows still render in their own script. */
-[dir='rtl'] .nav-locale-panel { left: 0; right: auto; }
-
-/* On narrow screens the responsive cleanup at the bottom of this file
- * hides `.nav-cta` (Download / Star) but keeps `.nav-locale` visible,
- * so a mobile user always has a one-tap way to change language without
- * scrolling to the footer. */
+.locale-menu-item.is-active .locale-menu-code {
+  color: var(--coral);
+}
+.locale-menu-code {
+  flex-shrink: 0;
+  min-width: 46px;
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  transition: color 140ms ease;
+}
+.locale-menu-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 520px) {
+  .locale-menu {
+    grid-template-columns: minmax(0, 1fr);
+    min-width: min(260px, calc(100vw - 32px));
+  }
+  .locale-menu-item { padding: 9px 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .locale-menu { animation: none; }
+  .locale-trigger-caret { transition: none; }
+}
 .topbar .pulse {
   width: 6px; height: 6px;
   border-radius: 50%;
@@ -295,41 +379,14 @@ body::before {
 
 /* nav */
 /*
- * Headroom-style sticky header.
- *
- * The element is always `position: sticky`, so the browser docks it to the
- * top of the viewport once the topbar has scrolled away. The
- * `<Header />` client island then toggles the `is-hidden` modifier based
- * on scroll direction, which animates the bar in and out via `transform`.
- *
- * When the user is at the very top of the page, the topbar is still
- * visible above the nav and `position: sticky` simply leaves the nav in
- * its natural flow position — exactly the brief.
+ * The sticky + headroom behavior lives on the outer `.site-chrome`
+ * wrapper now (so the topbar + nav slide as one unit). This rule keeps
+ * only the spacing and surface treatment.
  */
 .nav {
   padding: 22px 0;
-  position: sticky;
-  top: 0;
-  z-index: 50;
   background: var(--paper);
-  transform: translateY(0);
-  transition: transform 360ms cubic-bezier(0.22, 0.61, 0.36, 1),
-    box-shadow 220ms ease,
-    border-color 220ms ease;
   border-bottom: 1px solid transparent;
-  will-change: transform;
-}
-/*
- * Subtle visual cue once we leave the top of the page. We can't tell from
- * CSS alone whether the bar is "stuck"; the deadband + class toggle in
- * <Header /> approximates it well enough for our purpose. We rely on the
- * `is-hidden` toggle to flicker the border while moving and a steady
- * border once docked.
- */
-.nav.is-hidden {
-  transform: translateY(-100%);
-  pointer-events: none;
-  box-shadow: none;
 }
 .nav-inner {
   display: flex;
@@ -340,7 +397,7 @@ body::before {
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: 14px;
+  gap: 8px;
   font-family: var(--sans);
   font-weight: 700;
   letter-spacing: -0.01em;
@@ -349,16 +406,30 @@ body::before {
   font-size: 18px;
 }
 .brand-mark {
-  width: 36px; height: 36px;
+  /*
+   * Bumped from 36px → 44px (≈22% larger). The new black brand mark
+   * needs the extra optical weight against the wordmark, especially
+   * given the speech-bubble negative space visually shrinks the glyph.
+   * (PR #2588's brand polish, restored on top of #2469.)
+   */
+  width: 44px; height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex: 0 0 auto;
+}
+.brand-name {
+  white-space: nowrap;
 }
 .brand-mark img {
   width: 100%;
   height: 100%;
   object-fit: contain;
   display: block;
+  /* Round the corners of the brand glyph (~22% of side, app-icon
+   * silhouette convention) so the solid-fill square reads as a
+   * brand mark next to the wordmark rather than a screenshot. */
+  border-radius: 10px;
 }
 .brand-meta {
   font-family: var(--sans);
@@ -1941,6 +2012,203 @@ section.tight { padding: 90px 0; }
   transform: rotate(180deg);
 }
 
+/* ---------- OFFICIAL SOURCE STRIP ----------
+ *
+ * Slim attestation band that sits between the hero/wire and About.
+ * Reinforces the canonical surfaces — official site, GitHub repo,
+ * releases, download, docs, Discord — for both Google entity merge
+ * and human verification. Minimal chrome on purpose.
+ */
+.official-strip {
+  padding: 38px 0 18px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+}
+.official-strip-inner {
+  display: grid;
+  grid-template-columns: minmax(180px, 220px) 1fr;
+  gap: 28px;
+  align-items: center;
+}
+.official-strip-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.official-strip-label .ix {
+  color: var(--coral);
+  margin-left: 6px;
+}
+.official-strip-list {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 18px 24px;
+  padding: 0;
+  margin: 0;
+}
+.official-strip-list li {
+  display: flex;
+  min-width: 0;
+}
+.official-strip-list a {
+  display: grid;
+  gap: 4px;
+  padding: 6px 0;
+  border-bottom: 1px solid transparent;
+  text-decoration: none;
+  color: var(--ink);
+  font-family: var(--sans);
+  min-width: 0;
+  transition: border-color 0.16s ease, color 0.16s ease;
+}
+.official-strip-list a:hover {
+  border-bottom-color: var(--coral);
+  color: var(--coral);
+}
+.official-strip-list .label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.official-strip-list .value {
+  font-size: 13.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 980px) {
+  .official-strip-inner {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+  .official-strip-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 560px) {
+  .official-strip-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 18px;
+  }
+}
+
+/* ---------- FAQ ---------- */
+.faq-head {
+  max-width: 880px;
+  margin: 36px 0 48px;
+}
+.faq-head .label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  display: inline-block;
+  margin-bottom: 18px;
+}
+.faq-head .display {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: clamp(36px, 5.4vw, 64px);
+  line-height: 1.06;
+  letter-spacing: -0.022em;
+  color: var(--ink);
+}
+.faq-head .display em {
+  font-style: italic;
+  font-weight: 600;
+  color: var(--coral);
+}
+.faq-head .display .dot { color: var(--coral); }
+
+.faq-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border-top: 1px solid var(--line);
+}
+.faq-item {
+  border-bottom: 1px solid var(--line);
+}
+.faq-item details {
+  padding: 0;
+}
+.faq-item summary {
+  display: grid;
+  grid-template-columns: 56px 1fr 32px;
+  gap: 24px;
+  align-items: center;
+  padding: 26px 0;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.faq-item summary::-webkit-details-marker { display: none; }
+.faq-index {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--ink-faint);
+}
+.faq-q {
+  font-family: var(--serif);
+  font-size: clamp(20px, 2.2vw, 26px);
+  line-height: 1.25;
+  color: var(--ink);
+}
+.faq-toggle {
+  justify-self: end;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--sans);
+  font-size: 16px;
+  transition: transform 0.22s cubic-bezier(0.23, 1, 0.32, 1),
+              background-color 0.22s cubic-bezier(0.23, 1, 0.32, 1),
+              color 0.22s cubic-bezier(0.23, 1, 0.32, 1);
+}
+.faq-item details[open] .faq-toggle {
+  transform: rotate(45deg);
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+.faq-a {
+  grid-column: 2 / 3;
+  margin: 0 0 26px;
+  padding-left: 80px;
+  max-width: 64ch;
+  font-family: var(--sans);
+  font-size: 15.5px;
+  line-height: 1.7;
+  color: var(--ink-mute);
+}
+
+@media (max-width: 720px) {
+  .faq-item summary {
+    grid-template-columns: 36px 1fr 28px;
+    gap: 14px;
+    padding: 20px 0;
+  }
+  .faq-a {
+    padding-left: 50px;
+    font-size: 14.5px;
+  }
+}
+
 /* ---------- FOOTER ---------- */
 footer {
   border-top: 1px solid var(--line);
@@ -2156,9 +2424,9 @@ footer {
     scale: 1 !important;
     transition: none !important;
   }
-  /* Skip the slide-in on the sticky header for users who prefer no motion;
+  /* Skip the slide-in on the sticky chrome for users who prefer no motion;
    * the show/hide still toggles, just instantly. */
-  .nav { transition: none !important; }
+  .site-chrome { transition: none !important; }
 }
 
 /* ---------- responsive ----------
@@ -2384,6 +2652,10 @@ footer {
   section { padding: 80px 0; }
   .topbar-inner { font-size: 9px; gap: 10px; }
   .topbar-inner .right { gap: 10px; }
+  .locale-trigger { gap: 4px; }
+  .locale-trigger-prefix { display: none; }
+  .locale-trigger-sep { display: none; }
+  .locale-menu { min-width: 208px; }
   .partners { grid-template-columns: repeat(2, 1fr); gap: 14px; }
   .foot-grid { grid-template-columns: 1fr; gap: 24px; }
   .work { margin: 0 8px; padding: 48px 20px; border-radius: 20px; }
@@ -2393,15 +2665,20 @@ footer {
   .cta-actions .btn,
   .cta-actions .email-pill { flex: 1 1 auto; justify-content: center; }
   .nav-inner { gap: 12px; }
-  .brand { font-size: 16px; gap: 10px; }
+  .brand { font-size: 16px; gap: 8px; }
   .brand-mark { width: 32px; height: 32px; font-size: 16px; }
   .read-more { margin-top: 36px; }
   .foot-mega .word { font-size: clamp(48px, 16vw, 88px); }
 }
 @media (max-width: 420px) {
   .container { padding: 0 14px; }
-  /* topbar — drop the locale switcher tail; keep version pill + brand */
-  .topbar-inner .right > a:nth-of-type(n + 3) { display: none; }
+  .topbar-inner { align-items: flex-start; }
+  .topbar-inner .right {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+  }
+  .locale-menu { min-width: 192px; }
   .hero-stats { gap: 10px 16px; }
   .hero-stats .stat { font-size: 11px; }
   .hero-foot { font-size: 9.5px; }

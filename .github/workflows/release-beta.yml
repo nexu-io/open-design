@@ -41,6 +41,13 @@ env:
   # no events leave the user's machine.
   POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
   POSTHOG_HOST: ${{ vars.POSTHOG_HOST }}
+  # PostHog Error tracking sourcemap upload. Personal API key (phx_...) and
+  # project ID let tools-pack's web-sourcemaps step ship browser sourcemaps
+  # to PostHog after `next build` and before the .map files are stripped
+  # from the packaged bundle. Missing in PR/fork builds → upload is skipped
+  # and the helper still strips .map to keep source out of the installer.
+  POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
+  POSTHOG_CLI_PROJECT_ID: ${{ vars.POSTHOG_CLI_PROJECT_ID }}
 
 jobs:
   metadata:
@@ -262,6 +269,8 @@ jobs:
           OD_PACKAGED_E2E_BUILD_LOG_PATH: ${{ runner.temp }}/mac-tools-pack-build.log
           OD_PACKAGED_E2E_MAC: "1"
           OD_PACKAGED_E2E_NAMESPACE: release-beta
+          OD_PACKAGED_E2E_RELEASE_CHANNEL: beta
+          OD_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
           OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/mac
           OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
         run: |
@@ -498,6 +507,8 @@ jobs:
           OD_PACKAGED_E2E_WIN: "1"
           OD_PACKAGED_E2E_WIN_VERIFY_REINSTALL: "0"
           OD_PACKAGED_E2E_NAMESPACE: release-beta-win
+          OD_PACKAGED_E2E_RELEASE_CHANNEL: beta
+          OD_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
           OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/win
           OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
         run: |

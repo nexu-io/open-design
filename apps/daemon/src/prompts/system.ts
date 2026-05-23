@@ -51,6 +51,38 @@ const PROMPT_SAFE_HTTP_STATUS_LABELS: Record<string, string> = {
   '504': 'Gateway Timeout',
 };
 
+function renderUiLocalePrompt(locale: string | undefined): string {
+  const normalized = locale?.trim();
+  if (!normalized || normalized.toLowerCase() === 'en') return '';
+  const languageName = normalized === 'zh-CN'
+    ? 'Simplified Chinese'
+    : normalized === 'zh-TW'
+      ? 'Traditional Chinese'
+      : normalized;
+  const lines = [
+    '# UI locale override',
+    '',
+    `The Open Design UI locale for this run is \`${normalized}\` (${languageName}). All user-visible chat prose and generated UI controls must follow this locale, especially \`<question-form>\` titles, descriptions, labels, placeholders, helper text, and option labels. Keep machine-readable ids and object option \`value\` fields exact and unlocalized.`,
+    'Exception: for the default task-type form, keep the `taskType` option labels as the canonical routing choices: `Prototype`, `Live artifact`, `Slide deck`, `Image`, `Video`, `HyperFrames`, `Audio`, `Other`. Do not translate, reorder, or rewrite those option labels.',
+  ];
+  if (normalized === 'zh-CN') {
+    lines.push(
+      '',
+      'For the default quick brief in Simplified Chinese, use copy like:',
+      '- title: `快速简报 — 30 秒`',
+      '- description: `开始生成前我会先确认这些信息。不适用的可以跳过，我会补上默认值。`',
+      '- output label/options: `我们要做什么？` / `幻灯片 / 路演稿`, `单页网页原型 / 落地页`, `多屏应用原型`, `数据看板 / 工具界面`, `编辑式 / 营销页面`, `其他 — 我来描述`',
+      '- platform label/options: `目标平台` / `响应式网页`, `桌面网页`, `iOS 应用`, `Android 应用`, `平板应用`, `桌面应用`, `固定画布 (1920×1080)`',
+      '- audience label/placeholder: `目标用户` / `例如：早期投资人、开发者工具采购者、内部高管评审`',
+      '- tone label/options: `视觉调性` / `编辑 / 杂志感`, `现代极简`, `活泼 / 插画感`, `科技 / 工具型`, `奢华 / 精致`, `粗野 / 实验性`, `人性化 / 亲切`',
+      '- brand label/options: `品牌背景` / `帮我选一个方向`, `我有品牌规范 — 稍后分享`, `参考网站 / 截图 — 稍后附上`',
+      '- scale label/placeholder: `大概需要多少内容？` / `例如：8 页幻灯片、1 个落地页 + 3 个子页面、4 个移动端界面`',
+      '- constraints label/placeholder: `还有什么需要知道的吗？` / `真实文案、必须使用的字体、需要避免的内容、截止时间…`',
+    );
+  }
+  return lines.join('\n');
+}
+
 function normalizePromptText(value: string): string {
   return value
     .replace(/[\r\n]+/g, ' ')
@@ -86,6 +118,7 @@ type ProjectMetadata = {
   intent?: string | null;
   fidelity?: string | null;
   speakerNotes?: boolean | null;
+  slideCount?: string | null;
   animations?: boolean | null;
   includeLandingPage?: boolean | null;
   includeOsWidgets?: boolean | null;
@@ -151,6 +184,37 @@ type AudioVoiceOption = {
   labels?: Record<string, string> | null;
 };
 
+type ExclusiveSurfaceMode = 'deck' | 'image' | 'video' | 'audio';
+
+const EXCLUSIVE_SURFACE_MODES = new Set<ExclusiveSurfaceMode>(['deck', 'image', 'video', 'audio']);
+
+export function resolveExclusiveSurface(args: {
+  metadata?: ProjectMetadata | undefined;
+  skillMode?: ComposeInput['skillMode'] | undefined;
+  skillModes?: ComposeInput['skillModes'] | undefined;
+}): ExclusiveSurfaceMode | null {
+  const activeSkillModes = new Set(
+    Array.isArray(args.skillModes)
+      ? args.skillModes.filter(Boolean)
+      : args.skillMode
+        ? [args.skillMode]
+        : [],
+  );
+  const metadataSurface = EXCLUSIVE_SURFACE_MODES.has(args.metadata?.kind as ExclusiveSurfaceMode)
+    ? args.metadata?.kind as ExclusiveSurfaceMode
+    : null;
+  const primarySkillSurface = EXCLUSIVE_SURFACE_MODES.has(args.skillMode as ExclusiveSurfaceMode)
+    ? args.skillMode as ExclusiveSurfaceMode
+    : null;
+  const composedSurfaceModes = Array.from(activeSkillModes).filter((mode): mode is ExclusiveSurfaceMode =>
+    EXCLUSIVE_SURFACE_MODES.has(mode as ExclusiveSurfaceMode),
+  );
+
+  return metadataSurface
+    ?? primarySkillSurface
+    ?? (composedSurfaceModes.length === 1 ? composedSurfaceModes[0] ?? null : null);
+}
+
 export const BASE_SYSTEM_PROMPT = OFFICIAL_DESIGNER_PROMPT;
 
 export const SKIP_DISCOVERY_BRIEF_OVERRIDE = `# Automated project mode — skip discovery form
@@ -203,6 +267,7 @@ export interface ComposeInput {
     | 'video'
     | 'audio'
     | undefined;
+  skillModes?: Array<'prototype' | 'deck' | 'template' | 'design-system' | 'image' | 'video' | 'audio'> | undefined;
   designSystemBody?: string | undefined;
   designSystemTitle?: string | undefined;
   // Compiled (machine-readable) form of the active brand's design system,
@@ -303,6 +368,9 @@ export interface ComposeInput {
   // Free-form instructions the user set on this specific project.
   // Injected after user-level instructions and before the design system.
   projectInstructions?: string | undefined;
+  // UI locale selected by the client. User-visible generated form copy
+  // must follow this locale even when the user's initial prompt is brief.
+  locale?: string | undefined;
 }
 
 export function composeSystemPrompt({
@@ -311,6 +379,7 @@ export function composeSystemPrompt({
   skillBody,
   skillName,
   skillMode,
+  skillModes,
   designSystemBody,
   designSystemTitle,
   designSystemUsageMd,
@@ -333,6 +402,7 @@ export function composeSystemPrompt({
   pluginBlock,
   activeStageBlocks,
   streamFormat,
+  locale,
   userInstructions,
   projectInstructions,
 }: ComposeInput): string {
@@ -342,6 +412,14 @@ export function composeSystemPrompt({
   // wording later in the official base prompt.
   const parts: string[] = [];
   const activeDesignSystemBody = designSystemBody?.trim();
+  const activeSkillModes = new Set(
+    Array.isArray(skillModes)
+      ? skillModes.filter(Boolean)
+      : skillMode
+        ? [skillMode]
+        : [],
+  );
+  const resolvedExclusiveSurface = resolveExclusiveSurface({ metadata, skillMode, skillModes });
 
   // API/BYOK mode (streamFormat === 'plain'): mirrors the same fix from
   // `@open-design/contracts`'s composer. The daemon hits this path for
@@ -358,6 +436,12 @@ export function composeSystemPrompt({
 
   if (metadata?.skipDiscoveryBrief === true) {
     parts.push(SKIP_DISCOVERY_BRIEF_OVERRIDE);
+    parts.push('\n\n---\n\n');
+  }
+
+  const localePrompt = renderUiLocalePrompt(locale);
+  if (localePrompt) {
+    parts.push(localePrompt);
     parts.push('\n\n---\n\n');
   }
 
@@ -492,8 +576,8 @@ export function composeSystemPrompt({
   // skeleton would conflict. The skill-seed path takes over via
   // `derivePreflight` above, so we only fire the generic skeleton when no
   // skill seed is on offer.
-  const isDeckProject = skillMode === 'deck' || metadata?.kind === 'deck';
-  const isFreeformProject = !skillMode && (!metadata || metadata.kind === 'other');
+  const isDeckProject = resolvedExclusiveSurface === 'deck';
+  const isFreeformProject = activeSkillModes.size === 0 && (!metadata || metadata.kind === 'other');
   const hasSkillSeed =
     !!skillBody && /assets\/template\.html/.test(skillBody);
   if (isDeckProject && !hasSkillSeed) {
@@ -514,12 +598,9 @@ export function composeSystemPrompt({
   }
 
   const isMediaSurface =
-    skillMode === 'image' ||
-    skillMode === 'video' ||
-    skillMode === 'audio' ||
-    metadata?.kind === 'image' ||
-    metadata?.kind === 'video' ||
-    metadata?.kind === 'audio';
+    resolvedExclusiveSurface === 'image'
+    || resolvedExclusiveSurface === 'video'
+    || resolvedExclusiveSurface === 'audio';
   if (isMediaSurface) {
     parts.push(MEDIA_GENERATION_CONTRACT);
   }
@@ -804,6 +885,9 @@ function renderMetadataBlock(
     );
   }
   if (metadata.kind === 'deck') {
+    lines.push(
+      `- **slideCount**: ${metadata.slideCount ?? '(unknown — ask only if the Active plugin / Plugin inputs block does not already include slideCount)'}`,
+    );
     lines.push(
       `- **speakerNotes**: ${typeof metadata.speakerNotes === 'boolean' ? metadata.speakerNotes : '(unknown — ask: include speaker notes?)'}`,
     );

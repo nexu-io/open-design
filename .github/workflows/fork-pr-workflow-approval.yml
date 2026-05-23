@@ -1,0 +1,56 @@
+name: fork-pr-workflow-approval
+
+# This workflow runs in the trusted base-repository context. It never checks out
+# or executes the fork head; the TypeScript policy script only reads PR metadata
+# through the GitHub API and approves pending pull_request runs when the touched
+# paths are inside the low-risk source allowlist. It only approves low-privilege
+# pull_request workflows (`ci`, visual capture, visual verify); privileged
+# workflow_run / release / deploy workflows stay on manual gates.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to evaluate.
+        required: true
+        type: string
+      dry_run:
+        description: Log decisions without approving workflow runs.
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  actions: write
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: fork-pr-workflow-approval-${{ github.event.pull_request.number || inputs.pr_number }}
+  cancel-in-progress: false
+
+jobs:
+  approve:
+    if: github.repository == 'nexu-io/open-design' && (github.event_name != 'pull_request_target' || github.event.action != 'edited' || github.event.changes.base != null)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout trusted base code
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6.4.0
+        with:
+          node-version: 24
+
+      - name: Evaluate and approve low-risk fork PR workflows
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+          DRY_RUN: ${{ inputs.dry_run || false }}
+        run: node --experimental-strip-types scripts/approve-fork-pr-workflows.ts

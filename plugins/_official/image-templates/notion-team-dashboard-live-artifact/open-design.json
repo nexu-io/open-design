@@ -27,7 +27,7 @@
     "surface": "image",
     "preview": {
       "type": "image",
-      "poster": "https://raw.githubusercontent.com/joeylee12629-star/open-design/feat/prompt-template-live-artifact-dashboard/prompt-templates/image/notion-team-dashboard-live-artifact.preview.png"
+      "poster": "https://raw.githubusercontent.com/nexu-io/open-design/main/prompt-templates/image/notion-team-dashboard-live-artifact.preview.png"
     },
     "useCase": {
       "query": {

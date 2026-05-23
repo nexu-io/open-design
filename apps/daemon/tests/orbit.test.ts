@@ -12,6 +12,7 @@ import {
   type OrbitRunHandler,
   type OrbitTemplateSelection,
 } from '../src/orbit.js';
+import { skillCwdAliasSegment } from '../src/cwd-aliases.js';
 
 function formatExpectedLocalOrbitPromptTimestamp(date: Date): string {
   const yyyy = date.getFullYear();
@@ -50,6 +51,22 @@ describe('buildOrbitPrompt', () => {
     expect(prompt).not.toContain('Selected template example prompt:');
     expect(prompt).not.toContain('Render the editorial bento dashboard.');
   });
+
+  it('localizes the user-visible Orbit prompt when the app language is Chinese', () => {
+    const template: OrbitTemplateSelection = {
+      id: 'orbit-github',
+      name: 'orbit-github',
+      examplePrompt: 'Generate today\'s Open Orbit GitHub briefing.',
+      dir: path.join('/repo', 'skills', 'orbit-github'),
+      body: 'Mirror the shipped `example.html` before writing output.',
+      designSystemRequired: false,
+    };
+
+    const prompt = buildOrbitPrompt(new Date('2026-05-06T15:32:52.361Z'), template, 'zh-CN');
+
+    expect(prompt).toContain('请将今天的 Orbit 每日摘要制作成 Live Artifact。');
+    expect(prompt).toContain('使用已选中的 Orbit 模板：orbit-github。');
+  });
 });
 
 describe('buildOrbitSystemPrompt', () => {
@@ -64,11 +81,12 @@ describe('buildOrbitSystemPrompt', () => {
     };
 
     const prompt = buildOrbitSystemPrompt(new Date('2026-05-06T15:32:52.361Z'), template);
+    const stagedAlias = skillCwdAliasSegment(template.dir);
 
     expect(prompt).toContain('Skill id: orbit-general');
-    expect(prompt).toContain('Staged root: .od-skills/orbit-general/');
-    expect(prompt).toContain('read ".od-skills/orbit-general/SKILL.md"');
-    expect(prompt).toContain('".od-skills/orbit-general/example.html"');
+    expect(prompt).toContain(`Staged root: .od-skills/${stagedAlias}/`);
+    expect(prompt).toContain(`read ".od-skills/${stagedAlias}/SKILL.md"`);
+    expect(prompt).toContain(`".od-skills/${stagedAlias}/example.html"`);
     expect(prompt).toContain('visual/domain guidance');
     expect(prompt).not.toContain('Selected template skill instructions:');
     expect(prompt).toContain('Selected template example prompt:');
@@ -102,6 +120,39 @@ describe('buildOrbitSystemPrompt', () => {
     expect(prompt).toContain('Do not apply the workspace design system');
     expect(prompt).toContain('Open and mirror the shipped `example.html`');
     expect(prompt).toContain('Use exclusively the canvas tokens.');
+  });
+
+  it('pins Chinese as the final output language when the app locale is Chinese', () => {
+    const template: OrbitTemplateSelection = {
+      id: 'orbit-github',
+      name: 'orbit-github',
+      examplePrompt: 'Generate today\'s Open Orbit GitHub briefing.',
+      dir: path.join('/repo', 'skills', 'orbit-github'),
+      body: 'Mirror the shipped `example.html` before writing output.',
+      designSystemRequired: false,
+    };
+
+    const prompt = buildOrbitSystemPrompt(new Date('2026-05-06T15:32:52.361Z'), template, 'zh-CN');
+
+    expect(prompt).toContain('App language: Simplified Chinese (zh-CN).');
+    expect(prompt).toContain('The final Orbit artifact itself must stay in Simplified Chinese.');
+    expect(prompt).toContain('Generate today\'s Open Orbit GitHub briefing.');
+  });
+
+  it('treats script-tagged Traditional Chinese locales as zh-TW', () => {
+    const template: OrbitTemplateSelection = {
+      id: 'orbit-github',
+      name: 'orbit-github',
+      examplePrompt: 'Generate today\'s Open Orbit GitHub briefing.',
+      dir: path.join('/repo', 'skills', 'orbit-github'),
+      body: 'Mirror the shipped `example.html` before writing output.',
+      designSystemRequired: false,
+    };
+
+    const prompt = buildOrbitSystemPrompt(new Date('2026-05-06T15:32:52.361Z'), template, 'zh-Hant-TW');
+
+    expect(prompt).toContain('App language: Traditional Chinese (zh-TW).');
+    expect(prompt).toContain('The final Orbit artifact itself must stay in Traditional Chinese.');
   });
 });
 
@@ -139,6 +190,47 @@ describe('OrbitService', () => {
         await new Promise((resolve) => setTimeout(resolve, 0));
         status = await service.status();
       }
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it('localizes the template example prompt passed to the run handler for Chinese Orbit runs', async () => {
+    const dataDir = await mkdtemp(path.join(os.tmpdir(), 'orbit-test-'));
+    try {
+      const service = new OrbitService(dataDir);
+      const captured: { request?: Parameters<OrbitRunHandler>[0] } = {};
+      service.setTemplateResolver(async () => ({
+        id: 'orbit-github',
+        name: 'orbit-github',
+        examplePrompt: 'Generate today\'s Open Orbit GitHub briefing.',
+        dir: path.join('/repo', 'skills', 'orbit-github'),
+        body: 'Mirror the shipped `example.html` before writing output.',
+        designSystemRequired: false,
+      }));
+      service.configure({ enabled: true, time: '08:00', templateSkillId: 'orbit-github' });
+      service.setRunHandler(async (request) => {
+        captured.request = request;
+        return {
+          projectId: 'project-1',
+          agentRunId: 'agent-1',
+          completion: Promise.resolve({
+            agentRunId: 'agent-1',
+            status: 'succeeded',
+          }),
+        };
+      });
+
+      await service.start('manual', { locale: 'zh-CN' });
+
+      let status = await service.status();
+      for (let attempt = 0; attempt < 10 && !status.lastRun; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        status = await service.status();
+      }
+
+      expect(captured.request?.template?.examplePrompt).toContain('生成今天的 Open Orbit GitHub 简报');
+      expect(captured.request?.systemPrompt).toContain('The final Orbit artifact itself must stay in Simplified Chinese.');
     } finally {
       await rm(dataDir, { recursive: true, force: true });
     }

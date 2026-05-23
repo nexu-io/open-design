@@ -1,6 +1,6 @@
 {
   "name": "open-design",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": true,
   "packageManager": "pnpm@10.33.2",
   "type": "module",
@@ -16,7 +16,7 @@
     "tools-pr": "pnpm exec tools-pr",
     "tools-serve": "pnpm exec tools-serve",
     "nix:update-hash": "tsx ./scripts/update-nix-pnpm-deps-hash.ts",
-    "guard": "tsx ./scripts/guard.ts && node --import tsx --test scripts/style-policy.test.ts",
+    "guard": "tsx ./scripts/guard.ts && node --import tsx --test scripts/style-policy.test.ts scripts/approve-fork-pr-workflows.test.ts",
     "i18n:check": "tsx ./scripts/i18n-check.ts",
     "i18n:coverage": "tsx ./scripts/i18n-coverage-report.ts",
     "sync:community-pets": "node --experimental-strip-types scripts/sync-community-pets.ts",
@@ -51,8 +51,12 @@
     },
     "onlyBuiltDependencies": [
       "better-sqlite3",
+      "core-js",
       "electron",
-      "esbuild"
+      "electron-winstaller",
+      "esbuild",
+      "protobufjs",
+      "sharp"
     ]
   }
 }

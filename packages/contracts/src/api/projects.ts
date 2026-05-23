@@ -92,6 +92,7 @@ export interface ProjectMetadata {
   intent?: 'live-artifact';
   fidelity?: 'wireframe' | 'high-fidelity';
   speakerNotes?: boolean;
+  slideCount?: string;
   animations?: boolean;
   includeLandingPage?: boolean;
   includeOsWidgets?: boolean;

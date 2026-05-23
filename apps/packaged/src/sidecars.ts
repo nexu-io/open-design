@@ -70,6 +70,17 @@ type ManagedSidecarChild = {
 type PackagedDaemonManagedPathEnv = {
   OD_DATA_DIR: string;
   OD_RESOURCE_ROOT: string;
+  /**
+   * Channel-root path. Lives one level above the namespaces directory so
+   * the daemon can persist installationId (and any future fields that
+   * must outlive a namespace-scoped data-dir reset) outside the
+   * `<namespace>/data/` subtree.
+   *
+   * Required so PostHog person identity survives a reinstall of the same
+   * channel even when the baked namespace token changes or per-namespace
+   * data is cleared. See `apps/daemon/src/installation.ts`.
+   */
+  OD_INSTALLATION_DIR: string;
 };
 
 function resolveSidecarEntry(packageName: string, exportName: string): string {
@@ -212,6 +223,7 @@ function createPackagedDaemonManagedPathEnv(
   return {
     OD_DATA_DIR: paths.dataRoot,
     OD_RESOURCE_ROOT: paths.resourceRoot,
+    OD_INSTALLATION_DIR: paths.installationRoot,
   };
 }
 

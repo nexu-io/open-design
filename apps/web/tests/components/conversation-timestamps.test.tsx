@@ -21,6 +21,7 @@ import type { ChatMessage, Conversation } from '../../src/types';
 function renderChatPane(messages: ChatMessage[]) {
   return render(
     <ChatPane
+      projectKindForTracking="prototype"
       messages={messages}
       streaming={false}
       error={null}

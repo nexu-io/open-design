@@ -1,0 +1,85 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "example-codex-interactive-capability-map",
+  "title": "Codex Interactive Capability Map",
+  "version": "0.1.0",
+  "description": "Turn a long-form article, thread, memo, or product narrative into a Codex-style clickable capability map with a workflow loop, use-case matrix, and responsive detail panel.",
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/examples/codex-interactive-capability-map",
+  "tags": [
+    "example",
+    "first-party",
+    "prototype",
+    "knowledge",
+    "web",
+    "desktop",
+    "codex",
+    "article",
+    "thread",
+    "knowledge-map",
+    "interactive",
+    "capability-map",
+    "explainer"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "prototype",
+    "platform": "desktop",
+    "scenario": "knowledge",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./example.html"
+    },
+    "useCase": {
+      "query": {
+        "en": "Turn this long-form article or thread into a Codex-style interactive capability map. Extract the core concepts, organize them into a workflow loop and use-case matrix, then build a polished single-file HTML prototype with clickable cards and a detail panel.",
+        "zh-CN": "把这篇长文、帖子或产品说明转成一个 Codex 风格的交互式能力地图：提炼核心概念，组织成流程环和用例矩阵，并生成一个带点击卡片与详情面板的单文件 HTML 原型。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./example.html",
+          "title": "Codex Interactive Capability Map"
+        }
+      ]
+    },
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ],
+      "assets": [
+        "./example.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}

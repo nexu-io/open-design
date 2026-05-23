@@ -103,11 +103,11 @@ jobs:
           OPP_LOW_CTR: '0.01'
           OPP_MOBILE_DESKTOP_CTR_GAP: '0.30'
         run: |
-          flags=""
+          flags=()
           if [ -n "${{ github.event.inputs.today }}" ]; then
-            flags="$flags --today ${{ github.event.inputs.today }}"
+            flags+=(--today "${{ github.event.inputs.today }}")
           fi
           if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
-            flags="$flags --dry-run"
+            flags+=(--dry-run)
           fi
-          pnpm --filter @open-design/landing-page exec tsx scripts/seo-daily-report.ts $flags
+          pnpm --filter @open-design/landing-page exec tsx scripts/seo-daily-report.ts "${flags[@]}"

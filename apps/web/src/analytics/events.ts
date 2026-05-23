@@ -19,6 +19,7 @@ import type {
   ExecutionSettingsPopoverClickProps,
   SettingsPopoverClickProps,
   HomeChatComposerClickProps,
+  UpdateIndicatorClickProps,
   NewProjectModalTabClickProps,
   NewProjectModalElementClickProps,
   PluginReplacementModalClickProps,
@@ -53,7 +54,11 @@ import type {
   PresentPopoverClickProps,
   ShareOptionPopoverClickProps,
   AssistantFeedbackButtonClickProps,
+  AssistantFeedbackClickProps,
+  AssistantFeedbackReasonClickProps,
   AssistantFeedbackReasonSubmitClickProps,
+  AssistantFeedbackReasonSubmitProps,
+  AssistantFeedbackReasonViewProps,
   SettingsSidebarClickProps,
   SettingsExecutionModeTabClickProps,
   SettingsLocalCliClickProps,
@@ -78,6 +83,17 @@ import type {
   SettingsCliTestResultProps,
   SettingsByokTestResultProps,
   SettingsConnectorAuthResultProps,
+  OnboardingClickProps,
+  OnboardingRuntimeScanResultProps,
+  OnboardingCompleteResultProps,
+  DesignSystemSourceIngestResultProps,
+  DesignSystemCreateResultProps,
+  DesignSystemReviewResultProps,
+  DesignSystemStatusResultProps,
+  DesignSystemApplyResultProps,
+  UpdateIndicatorSurfaceViewProps,
+  UpdatePromptSurfaceViewProps,
+  UpdateInstallResultProps,
 } from '@open-design/contracts/analytics';
 
 type TrackOptions = { requestId?: string; insertId?: string };
@@ -181,6 +197,13 @@ export function trackSettingsPopoverClick(
 export function trackHomeChatComposerClick(
   track: Track,
   props: HomeChatComposerClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackUpdateIndicatorClick(
+  track: Track,
+  props: UpdateIndicatorClickProps,
 ): void {
   send(track, 'ui_click', props);
 }
@@ -615,4 +638,150 @@ export function trackSettingsConnectorAuthResult(
   props: SettingsConnectorAuthResultProps,
 ): void {
   send(track, 'settings_connector_auth_result', props);
+}
+
+export function trackAssistantFeedbackClick(
+  track: Track,
+  props: AssistantFeedbackClickProps,
+) {
+  track(
+    'assistant_feedback_click',
+    props as unknown as Record<string, unknown>,
+  );
+}
+
+export function trackAssistantFeedbackReasonView(
+  track: Track,
+  props: AssistantFeedbackReasonViewProps,
+) {
+  track(
+    'assistant_feedback_reason_view',
+    props as unknown as Record<string, unknown>,
+  );
+}
+
+export function trackAssistantFeedbackReasonClick(
+  track: Track,
+  props: AssistantFeedbackReasonClickProps,
+  options?: { requestId: string },
+) {
+  track(
+    'assistant_feedback_reason_click',
+    props as unknown as Record<string, unknown>,
+    options,
+  );
+}
+
+export function trackAssistantFeedbackReasonSubmit(
+  track: Track,
+  props: AssistantFeedbackReasonSubmitProps,
+  options?: { requestId: string },
+) {
+  track(
+    'assistant_feedback_reason_submit',
+    props as unknown as Record<string, unknown>,
+    options,
+  );
+}
+
+// ---- Onboarding ---------------------------------------------------------
+//
+// `trackOnboardingClick` is the catch-all for the welcome flow's
+// runtime-pick / about-you / continue / skip / back buttons. The same
+// shape still supports historical and future design-system intake
+// clicks; the discriminator combo (area + element + action) narrows
+// the row down inside PostHog so the dashboard can split each step's
+// funnel cleanly without a separate event name per button. Lifecycle
+// events that don't fit a click — CLI scan finishing, onboarding
+// wrapping up — get their own `onboarding_*_result` shape.
+
+export function trackOnboardingClick(
+  track: Track,
+  props: OnboardingClickProps,
+): void {
+  send(track, 'ui_click', props);
+}
+
+export function trackOnboardingRuntimeScanResult(
+  track: Track,
+  props: OnboardingRuntimeScanResultProps,
+): void {
+  send(track, 'onboarding_runtime_scan_result', props);
+}
+
+export function trackOnboardingCompleteResult(
+  track: Track,
+  props: OnboardingCompleteResultProps,
+): void {
+  send(track, 'onboarding_complete_result', props);
+}
+
+// ---- Design-system lifecycle ---------------------------------------------
+//
+// `trackDesignSystem*Result` cover the five lifecycle moments in the
+// DS funnel: source intake, create, review, status changes, picker
+// apply. Page_views / clicks inside DS surfaces continue to reuse the
+// generic `page_view` / `ui_click` helpers with the DS page enum.
+
+export function trackDesignSystemSourceIngestResult(
+  track: Track,
+  props: DesignSystemSourceIngestResultProps,
+  options?: { requestId?: string },
+): void {
+  send(track, 'design_system_source_ingest_result', props, options);
+}
+
+export function trackDesignSystemCreateResult(
+  track: Track,
+  props: DesignSystemCreateResultProps,
+  options?: { requestId?: string },
+): void {
+  send(track, 'design_system_create_result', props, options);
+}
+
+export function trackDesignSystemReviewResult(
+  track: Track,
+  props: DesignSystemReviewResultProps,
+  options?: { requestId?: string },
+): void {
+  send(track, 'design_system_review_result', props, options);
+}
+
+export function trackDesignSystemStatusResult(
+  track: Track,
+  props: DesignSystemStatusResultProps,
+  options?: { requestId?: string },
+): void {
+  send(track, 'design_system_status_result', props, options);
+}
+
+export function trackDesignSystemApplyResult(
+  track: Track,
+  props: DesignSystemApplyResultProps,
+  options?: { requestId?: string },
+): void {
+  send(track, 'design_system_apply_result', props, options);
+}
+
+// ---- Update indicator / prompt ------------------------------------------
+
+export function trackUpdateIndicatorSurfaceView(
+  track: Track,
+  props: UpdateIndicatorSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackUpdatePromptSurfaceView(
+  track: Track,
+  props: UpdatePromptSurfaceViewProps,
+): void {
+  send(track, 'surface_view', props);
+}
+
+export function trackUpdateInstallResult(
+  track: Track,
+  props: UpdateInstallResultProps,
+): void {
+  send(track, 'update_install_result', props);
 }

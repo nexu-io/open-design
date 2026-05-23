@@ -392,6 +392,11 @@
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 14px;
 }
+.plugins-home__load-more-sentinel {
+  height: 1px;
+  min-width: 1px;
+  pointer-events: none;
+}
 @media (min-width: 1100px) {
   .plugins-home__grid {
     grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -414,6 +419,9 @@
   transition: border-color 120ms ease, box-shadow 160ms ease,
     transform 160ms ease;
   isolation: isolate;
+  content-visibility: auto;
+  contain: layout paint style;
+  contain-intrinsic-size: 280px 260px;
 }
 .plugins-home__card:hover {
   border-color: var(--border-strong);
@@ -463,6 +471,8 @@
   background:
     linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, 0.5) 50%, transparent 70%) 0 0 / 200% 100%,
     var(--bg-subtle);
+}
+.plugins-home__media-skeleton.is-active {
   animation: plugins-home-shimmer 1.6s ease-in-out infinite;
 }
 .plugins-home__media-fallback {
@@ -558,6 +568,8 @@
   border-radius: 4px;
   background: linear-gradient(90deg, var(--bg-subtle), var(--border-soft), var(--bg-subtle));
   background-size: 200% 100%;
+}
+.plugins-home__html-skeleton.is-active span {
   animation: plugins-home-shimmer 1.6s ease-in-out infinite;
 }
 .plugins-home__html-skeleton span:nth-child(1) { width: 70%; }
@@ -954,9 +966,10 @@
   font-size: 12px;
   cursor: pointer;
 }
-.plugins-home__use-menu-item:hover,
-.plugins-home__use-menu-item:focus-visible {
-  background: rgba(17, 17, 17, 0.08);
+button.plugins-home__use-menu-item:hover:not(:disabled),
+button.plugins-home__use-menu-item:focus-visible {
+  background: #f3f3f3;
+  color: #111;
   outline: none;
 }
 .plugins-home__action--primary {

@@ -12,10 +12,7 @@ import {
   trackFileUploadResult,
   trackPageView,
 } from '../analytics/events';
-import {
-  fileSizeBucketToTracking,
-  fileTypeToTracking,
-} from '@open-design/contracts/analytics';
+import { deriveUploadCohort } from '../analytics/upload-tracking';
 import { useT } from '../i18n';
 import { isMacPlatform } from '../utils/platform';
 import {
@@ -84,7 +81,9 @@ interface Props {
   onPluginFolderAgentAction?: (
     relativePath: string,
     action: PluginFolderAgentAction,
-  ) => Promise<void> | void;
+  ) => Promise<{ message?: string; url?: string } | void> | { message?: string; url?: string } | void;
+  activePluginActionPaths?: Set<string>;
+  hiddenPluginActionPaths?: Set<string>;
   focusMode?: boolean;
   onFocusModeChange?: (next: boolean) => void;
   designSystemProject?: DesignSystemSummary | null;
@@ -205,6 +204,8 @@ export function FileWorkspace({
   onRemovePreviewComment,
   onSendBoardCommentAttachments,
   onPluginFolderAgentAction,
+  activePluginActionPaths,
+  hiddenPluginActionPaths,
   focusMode = false,
   onFocusModeChange,
   designSystemProject = null,
@@ -313,6 +314,22 @@ export function FileWorkspace({
     setActiveTab(name);
   }
 
+  // Open `openName` (focusing it) and close `closeName` in a single tab-state
+  // update. Used by the React module pointer (issue #2744): once the user
+  // jumps to the HTML entry that renders a module, the dead-end module tab is
+  // dropped. Done atomically because calling openFile() then closeTab() would
+  // each read the same stale `persistedTabs` prop and the second would clobber
+  // the first.
+  function openFileReplacing(openName: string, closeName: string) {
+    setUploadError(null);
+    const withoutClosed = persistedTabs.filter((tabName) => tabName !== closeName);
+    const nextTabs = withoutClosed.includes(openName)
+      ? withoutClosed
+      : [...withoutClosed, openName];
+    onTabsStateChange({ tabs: nextTabs, active: openName });
+    setActiveTab(openName);
+  }
+
   function closeTab(name: string) {
     const sketchEntry = sketches[name];
     const isPending = sketchEntry && !sketchEntry.persisted;
@@ -377,28 +394,9 @@ export function FileWorkspace({
     if (picked.length === 0) return;
 
     setUploadError(null);
-    // Compute the cohort's representative file_type / file_size_bucket
-    // up front so the result event reports the same shape whether the
-    // upload itself succeeded, failed, or threw. The cohort is summed
-    // (size) and bucketed by the primary mime; mixed batches collapse
-    // to `other` so the bucket stays interpretable.
-    const totalBytes = picked.reduce((sum, file) => sum + (file.size || 0), 0);
-    const perFileTrackingTypes = picked.map((file) => {
-      const mime = file.type ?? '';
-      const name = file.name ?? '';
-      const isZip =
-        mime === 'application/zip' || name.toLowerCase().endsWith('.zip');
-      return fileTypeToTracking({ mime, isFolder: false, isZip });
-    });
-    // Heterogeneous batch (more than one distinct tracking type) → 'other'
-    // so the breakdowns dashboards build off `file_type` do not get skewed
-    // by whichever file happened to land first.
-    const uniqueTrackingTypes = new Set(perFileTrackingTypes);
-    const trackingFileType =
-      uniqueTrackingTypes.size <= 1
-        ? perFileTrackingTypes[0] ?? 'other'
-        : 'other';
-    const trackingFileSizeBucket = fileSizeBucketToTracking(totalBytes);
+    // Cohort math is shared across all three upload surfaces; see
+    // `analytics/upload-tracking.ts` for the per-file → batch reduction.
+    const cohort = deriveUploadCohort(picked);
     let result: UploadProjectFilesResult;
     try {
       result = await uploadProjectFiles(projectId, picked);
@@ -409,9 +407,7 @@ export function FileWorkspace({
         page_name: 'file_manager',
         area: 'file_manager',
         project_id: projectId,
-        file_count: picked.length,
-        file_type: trackingFileType,
-        file_size_bucket: trackingFileSizeBucket,
+        ...cohort,
         result: 'failed',
         error_code: detail,
       });
@@ -437,9 +433,7 @@ export function FileWorkspace({
         page_name: 'file_manager',
         area: 'file_manager',
         project_id: projectId,
-        file_count: picked.length,
-        file_type: trackingFileType,
-        file_size_bucket: trackingFileSizeBucket,
+        ...cohort,
         result: 'failed',
         ...(result.error ? { error_code: result.error } : {}),
       });
@@ -448,9 +442,7 @@ export function FileWorkspace({
         page_name: 'file_manager',
         area: 'file_manager',
         project_id: projectId,
-        file_count: picked.length,
-        file_type: trackingFileType,
-        file_size_bucket: trackingFileSizeBucket,
+        ...cohort,
         result: 'success',
       });
     }
@@ -732,7 +724,11 @@ export function FileWorkspace({
       entry.discardRawItemsOnSave ? [] : entry.rawItems,
       entry.items,
     );
+    const startedAt = Date.now();
     const file = await writeProjectTextFile(projectId, name, JSON.stringify(doc, null, 2));
+    const elapsed = Date.now() - startedAt;
+    // Ensures saving UI shows so the button does not flicker
+    if (elapsed < 500) await new Promise((resolve) => setTimeout(resolve, 500 - elapsed));
     if (file) {
       setSketches((curr) => ({
         ...curr,
@@ -753,8 +749,10 @@ export function FileWorkspace({
       });
       setActiveTab(name);
       await onRefreshFiles();
+      return true;
     } else {
       setSketches((curr) => ({ ...curr, [name]: { ...curr[name]!, saving: false } }));
+      return false;
     }
   }
 
@@ -1016,6 +1014,8 @@ export function FileWorkspace({
             uploadError={uploadError}
             onClearUploadError={() => setUploadError(null)}
             onPluginFolderAgentAction={onPluginFolderAgentAction}
+            activePluginActionPaths={activePluginActionPaths}
+            hiddenPluginActionPaths={hiddenPluginActionPaths}
           />
         ) : isActiveSketch && activeSketch && activeFile ? (
           activeSketch.loaded ? (
@@ -1056,6 +1056,7 @@ export function FileWorkspace({
             onRemovePreviewComment={onRemovePreviewComment}
             onSendBoardCommentAttachments={onSendBoardCommentAttachments}
             onFileSaved={onRefreshFiles}
+            onOpenFileReplacing={openFileReplacing}
           />
         ) : (
           <div className="viewer-empty">

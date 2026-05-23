@@ -7,6 +7,7 @@ import {
   type TrackingProjectKind,
 } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
+import { trackIframeLoad } from '../observability/iframe-error';
 import {
   trackArtifactExportResult,
   trackArtifactHeaderClick,
@@ -32,6 +33,7 @@ import {
   fetchDeployConfig,
   fetchProjectDeployments,
   fetchProjectFilePreview,
+  fetchProjectFiles,
   fetchProjectFileText,
   uploadProjectFiles,
   liveArtifactPreviewUrl,
@@ -63,6 +65,7 @@ import {
   requestPreviewSnapshot,
 } from '../runtime/exports';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
+import { findHtmlEntriesReferencing } from '../runtime/jsx-module-refs';
 import { buildLazySrcdocTransport, buildSrcdoc, canActivateSrcDocTransport } from '../runtime/srcdoc';
 import {
   hasTweaksTemplate,
@@ -607,6 +610,10 @@ interface Props {
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
   onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[]) => Promise<void> | void;
   onFileSaved?: () => Promise<void> | void;
+  // Open `openName` as a tab (focusing it) and close `closeName` in one
+  // atomic tab-state update. The React module pointer uses this to jump to the
+  // HTML entry that renders a module and drop the dead-end module tab.
+  onOpenFileReplacing?: (openName: string, closeName: string) => void;
 }
 
 export function FileViewer({
@@ -623,6 +630,7 @@ export function FileViewer({
   onRemovePreviewComment,
   onSendBoardCommentAttachments,
   onFileSaved,
+  onOpenFileReplacing,
 }: Props) {
   const rendererMatch = artifactRendererRegistry.resolve({
     file,
@@ -664,7 +672,13 @@ export function FileViewer({
     );
   }
   if (rendererMatch?.renderer.id === 'react-component') {
-    return <ReactComponentViewer projectId={projectId} file={file} />;
+    return (
+      <ReactComponentViewer
+        projectId={projectId}
+        file={file}
+        onOpenFileReplacing={onOpenFileReplacing}
+      />
+    );
   }
   if (rendererMatch?.renderer.id === 'markdown') {
     return <MarkdownViewer projectId={projectId} file={file} />;
@@ -868,6 +882,23 @@ export function LiveArtifactViewer({
     [projectId, liveArtifact.artifactId, reloadKey],
   );
   const previewScale = zoom / 100;
+  const previewActive = mode === 'preview';
+
+  // Instrument the live-artifact iframe so failed loads — usually a
+  // missing artifact file or a stuck `od://` resolver — surface in
+  // PostHog. iframe load errors don't propagate to window.error, so
+  // observability/install.ts cannot catch them globally.
+  useEffect(() => {
+    if (mode !== 'preview') return undefined;
+    const node = iframeRef.current;
+    if (!node) return undefined;
+    return trackIframeLoad({
+      iframe: node,
+      surface: 'live_artifact_preview',
+      artifactId: liveArtifact.artifactId,
+      projectId,
+    });
+  }, [mode, previewUrl, liveArtifact.artifactId, projectId]);
 
   function bumpZoom(delta: number) {
     setZoom((z) => Math.max(25, Math.min(200, z + delta)));
@@ -1008,15 +1039,15 @@ export function LiveArtifactViewer({
           </div>
           <div
             className="viewer-preview-controls"
-            data-active={mode === 'preview' ? 'true' : 'false'}
-            aria-hidden={mode === 'preview' ? undefined : true}
+            data-active={previewActive ? 'true' : 'false'}
+            aria-hidden={previewActive ? undefined : true}
           >
             <span className="viewer-divider" aria-hidden />
             <PreviewViewportControls
               viewport={previewViewport}
               onViewport={setPreviewViewport}
               t={t}
-              tabIndex={mode === 'preview' ? 0 : -1}
+              tabIndex={previewActive ? 0 : -1}
             />
             <span className="viewer-divider" aria-hidden />
             <button
@@ -1025,7 +1056,7 @@ export function LiveArtifactViewer({
               onClick={() => bumpZoom(-25)}
               title={t('fileViewer.zoomOut')}
               aria-label={t('fileViewer.zoomOut')}
-              tabIndex={mode === 'preview' ? 0 : -1}
+              tabIndex={previewActive ? 0 : -1}
             >
               <Icon name="minus" size={14} />
             </button>
@@ -1034,7 +1065,7 @@ export function LiveArtifactViewer({
               className="viewer-action viewer-zoom-level"
               onClick={() => setZoom(100)}
               title={t('fileViewer.resetZoom')}
-              tabIndex={mode === 'preview' ? 0 : -1}
+              tabIndex={previewActive ? 0 : -1}
             >
               <span style={{ fontVariantNumeric: 'tabular-nums' }}>{zoom}%</span>
             </button>
@@ -1044,7 +1075,7 @@ export function LiveArtifactViewer({
               onClick={() => bumpZoom(25)}
               title={t('fileViewer.zoomIn')}
               aria-label={t('fileViewer.zoomIn')}
-              tabIndex={mode === 'preview' ? 0 : -1}
+              tabIndex={previewActive ? 0 : -1}
             >
               <Icon name="plus" size={14} />
             </button>
@@ -1054,7 +1085,7 @@ export function LiveArtifactViewer({
               href={liveArtifactPreviewUrl(projectId, liveArtifact.artifactId)}
               target="_blank"
               rel="noreferrer noopener"
-              tabIndex={mode === 'preview' ? 0 : -1}
+              tabIndex={previewActive ? 0 : -1}
             >
               {t('fileViewer.open')}
             </a>
@@ -1107,26 +1138,27 @@ export function LiveArtifactViewer({
             action={t('liveArtifact.refresh.failureAction')}
           />
         ) : null}
-        {mode === 'preview' ? (
-          <div
-            className={`live-artifact-preview-layer preview-viewport preview-viewport-${previewViewport}`}
-            style={previewViewportStyle(previewViewport, previewScale, previewBodySize)}
-          >
-            <div className="preview-frame-clip">
-              <div style={previewScaleShellStyle(previewViewport, previewScale)}>
-                <PreviewDrawOverlay>
-                  <iframe
-                    ref={iframeRef}
-                    data-testid="live-artifact-preview-frame"
-                    title={liveArtifact.title}
-                    sandbox="allow-scripts allow-popups allow-downloads"
-                    src={previewUrl}
-                  />
-                </PreviewDrawOverlay>
-              </div>
+        <div
+          className={`live-artifact-preview-layer preview-viewport preview-viewport-${previewViewport}`}
+          data-active={previewActive ? 'true' : 'false'}
+          aria-hidden={previewActive ? undefined : true}
+          style={previewViewportStyle(previewViewport, previewScale, previewBodySize)}
+        >
+          <div className="preview-frame-clip">
+            <div style={previewScaleShellStyle(previewViewport, previewScale)}>
+              <PreviewDrawOverlay>
+                <iframe
+                  ref={iframeRef}
+                  data-testid="live-artifact-preview-frame"
+                  title={liveArtifact.title}
+                  sandbox="allow-scripts allow-popups allow-downloads"
+                  src={previewUrl}
+                />
+              </PreviewDrawOverlay>
             </div>
           </div>
-        ) : loading ? (
+        </div>
+        {previewActive ? null : loading ? (
           <div className="viewer-empty">{t('fileViewer.loading')}</div>
         ) : mode === 'code' ? (
           <LiveArtifactCodePanel
@@ -3124,12 +3156,51 @@ function clampBridgeCoordinate(value: unknown): number {
   return Math.max(-MAX_BRIDGE_COORDINATE, Math.min(MAX_BRIDGE_COORDINATE, Math.round(numeric)));
 }
 
+// Shown instead of the React runtime when a .jsx/.tsx is a module loaded by a
+// sibling HTML entry (issue #2744): such a file has no standalone component to
+// render, so point the user at the page(s) that do. Clicking an entry opens
+// (or focuses) that page and closes the now-useless module tab.
+function ReactModulePointer({
+  entries,
+  onOpenEntry,
+}: {
+  entries: string[];
+  onOpenEntry?: (name: string) => void;
+}) {
+  const t = useT();
+  return (
+    <div className="viewer-module-pointer" role="note">
+      <Icon name="info" size={20} />
+      <h2 className="viewer-module-pointer__title">{t('fileViewer.jsxModuleTitle')}</h2>
+      <p className="viewer-module-pointer__body">{t('fileViewer.jsxModuleBody')}</p>
+      <p className="viewer-module-pointer__cta">{t('fileViewer.jsxModuleCta')}</p>
+      <ul className="viewer-module-pointer__entries">
+        {entries.map((name) => (
+          <li key={name}>
+            <button
+              type="button"
+              className="viewer-module-pointer__link"
+              onClick={() => onOpenEntry?.(name)}
+              disabled={!onOpenEntry}
+            >
+              <Icon name="external-link" size={14} />
+              <span>{name}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function ReactComponentViewer({
   projectId,
   file,
+  onOpenFileReplacing,
 }: {
   projectId: string;
   file: ProjectFile;
+  onOpenFileReplacing?: (openName: string, closeName: string) => void;
 }) {
   const t = useT();
   const [mode, setMode] = useState<'preview' | 'source'>('preview');
@@ -3138,6 +3209,11 @@ function ReactComponentViewer({
   const [reloadKey, setReloadKey] = useState(0);
   const [shareMenuOpen, setShareMenuOpen] = useState(false);
   const shareRef = useRef<HTMLDivElement | null>(null);
+  // HTML entries that load this file as a Babel module. `null` = still
+  // checking; `[]` = standalone artifact; non-empty = a module of a
+  // multi-file React prototype, which has no standalone preview. Issue #2744.
+  const [moduleEntries, setModuleEntries] = useState<string[] | null>(null);
+  const isModule = (moduleEntries?.length ?? 0) > 0;
 
   useEffect(() => {
     setSource(null);
@@ -3145,6 +3221,36 @@ function ReactComponentViewer({
     void fetchProjectFileText(projectId, file.name).then((text) => {
       if (!cancelled) setSource(text ?? '');
     });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, file.name, file.mtime, reloadKey]);
+
+  // Detect whether this .jsx/.tsx is a module loaded by a sibling HTML entry.
+  // Runs before any srcdoc is built so a module never flashes the raw
+  // "No React component export found" error from the React runtime.
+  useEffect(() => {
+    setModuleEntries(null);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const files = await fetchProjectFiles(projectId);
+        const htmlNames = files
+          .filter((entry) => /\.html?$/i.test(entry.name))
+          .map((entry) => entry.name);
+        const htmlSources = new Map<string, string>();
+        await Promise.all(
+          htmlNames.map(async (name) => {
+            const text = await fetchProjectFileText(projectId, name).catch(() => null);
+            if (text != null) htmlSources.set(name, text);
+          }),
+        );
+        if (cancelled) return;
+        setModuleEntries(findHtmlEntriesReferencing(file.name, htmlSources));
+      } catch {
+        if (!cancelled) setModuleEntries([]);
+      }
+    })();
     return () => {
       cancelled = true;
     };
@@ -3171,7 +3277,9 @@ function ReactComponentViewer({
   const sourceExtension = file.name.toLowerCase().endsWith('.tsx') ? '.tsx' : '.jsx';
 
   useEffect(() => {
-    if (source === null) {
+    if (source === null || moduleEntries === null || isModule) {
+      // No source yet, still checking module status, or this file is a module
+      // with no standalone preview — never build the React runtime srcdoc.
       setSrcDoc('');
       return;
     }
@@ -3195,7 +3303,7 @@ function ReactComponentViewer({
     return () => {
       cancelled = true;
     };
-  }, [source, exportTitle]);
+  }, [source, exportTitle, moduleEntries, isModule]);
 
   return (
     <div className="viewer react-component-viewer">
@@ -3293,7 +3401,15 @@ function ReactComponentViewer({
         </div>
       </div>
       <div className="viewer-body">
-        {source === null || (mode === 'preview' && !srcDoc) ? (
+        {isModule && mode === 'preview' ? (
+          // Module of a multi-file prototype: no standalone preview, so the
+          // Preview tab shows a pointer to the HTML entry. The Source tab still
+          // renders the raw code below. Issue #2744.
+          <ReactModulePointer
+            entries={moduleEntries ?? []}
+            onOpenEntry={(htmlName) => onOpenFileReplacing?.(htmlName, file.name)}
+          />
+        ) : source === null || (mode === 'preview' && !srcDoc) ? (
           <div className="viewer-empty">{t('fileViewer.loading')}</div>
         ) : mode === 'preview' ? (
           <PreviewDrawOverlay>
@@ -4857,6 +4973,9 @@ function HtmlViewer({
       setSource(result.source);
       sourceRef.current = result.source;
       setInlinedSource(null);
+      if (patch.kind !== 'set-style') {
+        setManualEditFrozenSource(result.source);
+      }
       setManualEditHistory((current) => [entry, ...current]);
       setManualEditUndone([]);
       setManualEditDraft((current) => ({ ...current, fullSource: result.source }));
@@ -4910,6 +5029,7 @@ function HtmlViewer({
       setSource(latest.beforeSource);
       sourceRef.current = latest.beforeSource;
       setInlinedSource(null);
+      setManualEditFrozenSource(latest.beforeSource);
       setManualEditHistory(rest);
       setManualEditUndone((current) => [latest, ...current]);
       setManualEditDraft((current) => ({ ...current, fullSource: latest.beforeSource }));
@@ -4941,6 +5061,7 @@ function HtmlViewer({
       setSource(latest.afterSource);
       sourceRef.current = latest.afterSource;
       setInlinedSource(null);
+      setManualEditFrozenSource(latest.afterSource);
       setManualEditUndone(rest);
       setManualEditHistory((current) => [latest, ...current]);
       setManualEditDraft((current) => ({ ...current, fullSource: latest.afterSource }));
@@ -6316,6 +6437,11 @@ function HtmlViewer({
                       onLoad={() => {
                         const frame = srcDocPreviewIframeRef.current;
                         if (!useUrlLoadPreview) iframeRef.current = frame;
+                        // Any srcDoc iframe load means we are talking to a
+                        // fresh document shell. Clear the activation dedupe so
+                        // switching preview -> source -> preview cannot strand
+                        // the new shell on the blank transport page.
+                        activatedSrcDocTransportHtmlRef.current = null;
                         // Belt-and-suspenders for the ready handshake: if the
                         // postMessage racing the parent's listener registration
                         // ever loses, the load event still tells us the shell

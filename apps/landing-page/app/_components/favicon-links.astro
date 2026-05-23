@@ -1,0 +1,19 @@
+---
+/*
+ * Shared favicon / app icon links.
+ *
+ * Centralizing the link tags here keeps every page's <head> in sync with
+ * one source of truth — browser tabs, mobile saves, social crawlers, and
+ * Google Search all see the same official mark even after a brand refresh.
+ *
+ * The site.webmanifest reference at the bottom is what advertises the
+ * Android install / "Add to Home Screen" UX. Keep this component small;
+ * if you find yourself adding logic, hoist it to seo-head.astro instead.
+ */
+---
+
+<link rel='icon' type='image/x-icon' href='/favicon.ico' sizes='any' />
+<link rel='icon' type='image/png' sizes='32x32' href='/favicon-32x32.png' />
+<link rel='icon' type='image/png' sizes='16x16' href='/favicon-16x16.png' />
+<link rel='apple-touch-icon' sizes='180x180' href='/apple-touch-icon.png' />
+<link rel='manifest' href='/site.webmanifest' />
