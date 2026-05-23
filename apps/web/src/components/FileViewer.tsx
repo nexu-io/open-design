@@ -70,6 +70,7 @@ import { buildLazySrcdocTransport, buildSrcdoc, canActivateSrcDocTransport } fro
 import {
   hasTweaksTemplate,
   hasUrlModeBridge,
+  htmlNeedsFocusGuard,
   htmlNeedsSandboxShim,
   parseForceInline,
   shouldUrlLoadHtmlPreview,
@@ -4127,6 +4128,10 @@ function HtmlViewer({
     () => source != null && htmlNeedsSandboxShim(source),
     [source],
   );
+  const needsFocusGuard = useMemo(
+    () => source != null && htmlNeedsFocusGuard(source),
+    [source],
+  );
   const useUrlLoadPreview = shouldUrlLoadHtmlPreview({
     mode,
     isDeck: effectiveDeck,
@@ -4138,6 +4143,7 @@ function HtmlViewer({
     drawMode: drawOverlayOpen,
     tweaksBridge: tweaksBridgeRequired,
     forceInline: forceInline || needsSandboxShim,
+    needsFocusGuard,
   });
   const basePreviewSrcUrl = useMemo(
     () => `${projectRawUrl(projectId, file.name)}?v=${Math.round(file.mtime)}&r=${reloadKey}`,

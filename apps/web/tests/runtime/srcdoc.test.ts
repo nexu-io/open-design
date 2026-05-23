@@ -38,6 +38,9 @@ describe('buildSrcdoc', () => {
   });
 
   it('can guard preview iframes against load-time focus stealing', () => {
+    // This test would fail if injectPreviewFocusGuard were removed from
+    // buildSrcdoc — the guard script would be absent, and the assertions
+    // below would not find the data-od-preview-focus-guard marker.
     const srcdoc = buildSrcdoc(
       '<!doctype html><html><head><script>window.focus();document.body.focus();</script></head><body>Hero</body></html>',
       { previewFocusGuard: true },

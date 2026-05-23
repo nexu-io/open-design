@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   hasTweaksTemplate,
   hasUrlModeBridge,
+  htmlNeedsFocusGuard,
   htmlNeedsSandboxShim,
   parseForceInline,
   shouldUrlLoadHtmlPreview,
@@ -52,6 +53,10 @@ describe('shouldUrlLoadHtmlPreview', () => {
 
   it('falls back to srcDoc when the user opts in via forceInline', () => {
     expect(shouldUrlLoadHtmlPreview({ ...base, forceInline: true })).toBe(false);
+  });
+
+  it('falls back to srcDoc when the HTML source needs a focus guard', () => {
+    expect(shouldUrlLoadHtmlPreview({ ...base, needsFocusGuard: true })).toBe(false);
   });
 
   it('does not URL-load while the source-code tab is active', () => {
@@ -213,5 +218,33 @@ describe('htmlNeedsSandboxShim', () => {
     expect(htmlNeedsSandboxShim('Storage')).toBe(false);
     expect(htmlNeedsSandboxShim('mylocalStorageWrapper')).toBe(false);
     expect(htmlNeedsSandboxShim('SuperLocalStorage')).toBe(false);
+  });
+});
+
+describe('htmlNeedsFocusGuard', () => {
+  it('returns false for plain static HTML', () => {
+    expect(htmlNeedsFocusGuard('<!doctype html><h1>hello</h1>')).toBe(false);
+  });
+
+  it('detects window.focus() calls', () => {
+    expect(htmlNeedsFocusGuard('<script>window.focus();</script>')).toBe(true);
+    expect(htmlNeedsFocusGuard('<script>window .focus()</script>')).toBe(true);
+    expect(htmlNeedsFocusGuard('<script>WINDOW.FOCUS()</script>')).toBe(true);
+  });
+
+  it('detects document.focus() calls', () => {
+    expect(htmlNeedsFocusGuard('<script>document.focus();</script>')).toBe(true);
+  });
+
+  it('detects autofocus attributes', () => {
+    expect(htmlNeedsFocusGuard('<input autofocus>')).toBe(true);
+    expect(htmlNeedsFocusGuard('<input AUTOFOCUS>')).toBe(true);
+    expect(htmlNeedsFocusGuard('<textarea autofocus></textarea>')).toBe(true);
+  });
+
+  it('does not match unrelated focus mentions', () => {
+    expect(htmlNeedsFocusGuard('<div class="focus-ring">')).toBe(false);
+    expect(htmlNeedsFocusGuard('// focus the element')).toBe(false);
+    expect(htmlNeedsFocusGuard('element.focus()')).toBe(false);
   });
 });

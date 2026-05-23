@@ -46,6 +46,12 @@ export interface UrlLoadDecision {
   tweaksBridge?: boolean;
   /** User explicitly opted into the inline path via ?forceInline=1. */
   forceInline: boolean;
+  /**
+   * The HTML source contains patterns that steal focus on load (e.g.
+   * `window.focus()`, `element.focus()`). When true, forces the srcDoc path
+   * so `injectPreviewFocusGuard` can suppress the focus grab.
+   */
+  needsFocusGuard?: boolean;
 }
 
 /**
@@ -83,6 +89,7 @@ export function shouldUrlLoadHtmlPreview(d: UrlLoadDecision): boolean {
   // the artifact ships a `.tw-panel`.
   if (d.tweaksBridge) return false;
   if (d.forceInline) return false;
+  if (d.needsFocusGuard) return false;
   return true;
 }
 
@@ -145,6 +152,22 @@ export function parseForceInline(search: string | URLSearchParams | null | undef
  * positives just take the (slightly slower but safer) srcDoc path; false
  * negatives are the same blank-preview the user already hits.
  */
+/**
+ * Return true when the HTML source contains patterns that call `focus()` at
+ * load time, which would steal focus from the host page in a URL-loaded
+ * iframe. The srcDoc path injects `injectPreviewFocusGuard` to suppress this;
+ * URL-load has no such guard, so we force the srcDoc path instead.
+ *
+ * Covers the most common patterns: `window.focus()`, `element.focus()`,
+ * and `autofocus` attributes. False negatives are acceptable — the worst
+ * case is a focus steal that the user can fix by toggling a bridge mode.
+ */
+export function htmlNeedsFocusGuard(source: string): boolean {
+  if (/(?:window|document)\s*\.\s*focus\s*\(/i.test(source)) return true;
+  if (/\bautofocus\b/i.test(source)) return true;
+  return false;
+}
+
 export function htmlNeedsSandboxShim(source: string): boolean {
   // Quote-optional: HTML5 permits unquoted attribute values
   // (`<script type=text/babel src=app.jsx>`). The trailing `\b` rejects
