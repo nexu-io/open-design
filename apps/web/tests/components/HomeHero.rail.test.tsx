@@ -273,6 +273,11 @@ describe('HomeHero intent rail', () => {
   // Prototype chip label should be zh-CN
   const prototypeChip = screen.getByTestId('home-hero-rail-prototype');
   expect(prototypeChip.textContent).toContain('原型');
+  
+  // Live artifact chip label and tooltip should be zh-CN
+  const liveArtifact = screen.getByTestId('home-hero-rail-live-artifact');
+  expect(liveArtifact.textContent).toContain('实时制品');
+  expect(liveArtifact.getAttribute('title')).toBe('构建可实时预览的交互式 HTML/CSS/JS 制品。');
 
   // HyperFrames tooltip should be the zh-CN string
   const hyperframes = screen.getByTestId('home-hero-rail-hyperframes');
