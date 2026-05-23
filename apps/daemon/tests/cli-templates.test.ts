@@ -112,11 +112,42 @@ async function runCli(
   }
 }
 
+// Reserve a port the OS just told us is free, then close it before
+// any test runs so connections to it fail with ECONNREFUSED. The
+// previous `port + 1` heuristic only assumed the stub's ephemeral port
+// was free — `+1` could already be bound by an unrelated process on a
+// shared CI host, which would silently route the "unreachable daemon"
+// tests at a real server and let them pass (or fail) for the wrong
+// reason (#2428 round-4 reviewer-correctness fix).
+async function reserveAndReleasePort(): Promise<{ host: string; port: number }> {
+  return new Promise((resolveListen, rejectListen) => {
+    const probe = http.createServer();
+    probe.unref();
+    probe.once('error', rejectListen);
+    probe.listen(0, '127.0.0.1', () => {
+      const addr = probe.address();
+      if (!addr || typeof addr === 'string') {
+        probe.close();
+        rejectListen(new Error('probe server has no address'));
+        return;
+      }
+      const { port } = addr;
+      probe.close((err) => {
+        if (err) rejectListen(err);
+        else resolveListen({ host: '127.0.0.1', port });
+      });
+    });
+  });
+}
+
 describe('od templates CLI', () => {
   let stub: StubServer;
+  let unreachableDaemonUrl: string;
 
   beforeAll(async () => {
     stub = await startStubServer();
+    const reserved = await reserveAndReleasePort();
+    unreachableDaemonUrl = `http://${reserved.host}:${reserved.port}`;
   });
 
   afterAll(async () => {
@@ -335,16 +366,14 @@ describe('od templates CLI', () => {
   // running, every sub-verb must surface the same clean
   // "failed to reach daemon at <url>: <code>" error that the rest of
   // the CLI emits via `surfaceFetchError`, not a raw
-  // `TypeError: fetch failed`. We point the CLI at a port nothing is
-  // listening on (the stub server's, +1) so fetch fails connection-
-  // refused on every platform.
-  function unreachableUrl(): string {
-    const u = new URL(stub.baseUrl);
-    return `http://${u.hostname}:${Number(u.port) + 1}`;
-  }
+  // `TypeError: fetch failed`. The CLI is pointed at a port the OS
+  // just told us was free and which we immediately released — see
+  // `reserveAndReleasePort` above — so the connection fails with
+  // ECONNREFUSED rather than silently routing to whatever happens to
+  // be bound nearby.
 
   it('surfaces a clean fetch error from `templates list` when the daemon is unreachable', async () => {
-    const result = await runCli(['templates', 'list', '--daemon-url', unreachableUrl()]);
+    const result = await runCli(['templates', 'list', '--daemon-url', unreachableDaemonUrl]);
     expect(result.code).toBe(3);
     expect(result.stderr).toMatch(/failed to reach daemon at http:\/\/127\.0\.0\.1:/);
     expect(result.stderr).not.toMatch(/TypeError: fetch failed/);
@@ -358,7 +387,7 @@ describe('od templates CLI', () => {
       '--name',
       'Cards',
       '--daemon-url',
-      unreachableUrl(),
+      unreachableDaemonUrl,
     ]);
     expect(result.code).toBe(3);
     expect(result.stderr).toMatch(/failed to reach daemon at http:\/\/127\.0\.0\.1:/);
@@ -371,7 +400,7 @@ describe('od templates CLI', () => {
       'delete',
       't-1',
       '--daemon-url',
-      unreachableUrl(),
+      unreachableDaemonUrl,
     ]);
     expect(result.code).toBe(3);
     expect(result.stderr).toMatch(/failed to reach daemon at http:\/\/127\.0\.0\.1:/);
