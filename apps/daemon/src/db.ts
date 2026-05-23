@@ -50,231 +50,235 @@ export function closeDatabase() {
 }
 
 function migrate(db: SqliteDb): void {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS projects (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      skill_id TEXT,
-      design_system_id TEXT,
-      pending_prompt TEXT,
-      metadata_json TEXT,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
+  // Wrap the entire migration in a transaction so that a crash
+  // mid-migration never leaves the database partially upgraded.
+  db.transaction(() => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS projects (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        skill_id TEXT,
+        design_system_id TEXT,
+        pending_prompt TEXT,
+        metadata_json TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
 
-    CREATE TABLE IF NOT EXISTS templates (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      description TEXT,
-      source_project_id TEXT,
-      files_json TEXT NOT NULL,
-      created_at INTEGER NOT NULL
-    );
+      CREATE TABLE IF NOT EXISTS templates (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        source_project_id TEXT,
+        files_json TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
 
-    CREATE TABLE IF NOT EXISTS conversations (
-      id TEXT PRIMARY KEY,
-      project_id TEXT NOT NULL,
-      title TEXT,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL,
-      FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
-    );
+      CREATE TABLE IF NOT EXISTS conversations (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        title TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+      );
 
-    CREATE INDEX IF NOT EXISTS idx_conv_project
-      ON conversations(project_id, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_conv_project
+        ON conversations(project_id, updated_at DESC);
 
-    CREATE TABLE IF NOT EXISTS messages (
-      id TEXT PRIMARY KEY,
-      conversation_id TEXT NOT NULL,
-      role TEXT NOT NULL,
-      content TEXT NOT NULL,
-      agent_id TEXT,
-      agent_name TEXT,
-      events_json TEXT,
-      attachments_json TEXT,
-      produced_files_json TEXT,
-      feedback_json TEXT,
-      pre_turn_file_names_json TEXT,
-      started_at INTEGER,
-      ended_at INTEGER,
-      position INTEGER NOT NULL,
-      created_at INTEGER NOT NULL,
-      FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
-    );
+      CREATE TABLE IF NOT EXISTS messages (
+        id TEXT PRIMARY KEY,
+        conversation_id TEXT NOT NULL,
+        role TEXT NOT NULL,
+        content TEXT NOT NULL,
+        agent_id TEXT,
+        agent_name TEXT,
+        events_json TEXT,
+        attachments_json TEXT,
+        produced_files_json TEXT,
+        feedback_json TEXT,
+        pre_turn_file_names_json TEXT,
+        started_at INTEGER,
+        ended_at INTEGER,
+        position INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+      );
 
-    CREATE INDEX IF NOT EXISTS idx_messages_conv
-      ON messages(conversation_id, position);
+      CREATE INDEX IF NOT EXISTS idx_messages_conv
+        ON messages(conversation_id, position);
 
-    CREATE TABLE IF NOT EXISTS preview_comments (
-      id TEXT PRIMARY KEY,
-      project_id TEXT NOT NULL,
-      conversation_id TEXT NOT NULL,
-      file_path TEXT NOT NULL,
-      element_id TEXT NOT NULL,
-      selector TEXT NOT NULL,
-      label TEXT NOT NULL,
-      text TEXT NOT NULL,
-      position_json TEXT NOT NULL,
-      html_hint TEXT NOT NULL,
-      note TEXT NOT NULL,
-      status TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL,
-      UNIQUE(project_id, conversation_id, file_path, element_id),
-      FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
-      FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
-    );
+      CREATE TABLE IF NOT EXISTS preview_comments (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        conversation_id TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        element_id TEXT NOT NULL,
+        selector TEXT NOT NULL,
+        label TEXT NOT NULL,
+        text TEXT NOT NULL,
+        position_json TEXT NOT NULL,
+        html_hint TEXT NOT NULL,
+        note TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        UNIQUE(project_id, conversation_id, file_path, element_id),
+        FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+      );
 
-    CREATE INDEX IF NOT EXISTS idx_preview_comments_conversation
-      ON preview_comments(project_id, conversation_id, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_preview_comments_conversation
+        ON preview_comments(project_id, conversation_id, updated_at DESC);
 
-    CREATE TABLE IF NOT EXISTS tabs (
-      project_id TEXT NOT NULL,
-      name TEXT NOT NULL,
-      position INTEGER NOT NULL,
-      is_active INTEGER NOT NULL DEFAULT 0,
-      PRIMARY KEY(project_id, name),
-      FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
-    );
+      CREATE TABLE IF NOT EXISTS tabs (
+        project_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        is_active INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY(project_id, name),
+        FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+      );
 
-    CREATE INDEX IF NOT EXISTS idx_tabs_project
-      ON tabs(project_id, position);
+      CREATE INDEX IF NOT EXISTS idx_tabs_project
+        ON tabs(project_id, position);
 
-    CREATE TABLE IF NOT EXISTS deployments (
-      id TEXT PRIMARY KEY,
-      project_id TEXT NOT NULL,
-      file_name TEXT NOT NULL,
-      provider_id TEXT NOT NULL,
-      url TEXT NOT NULL,
-      deployment_id TEXT,
-      deployment_count INTEGER NOT NULL DEFAULT 1,
-      target TEXT NOT NULL DEFAULT 'preview',
-      status TEXT NOT NULL DEFAULT 'ready',
-      status_message TEXT,
-      reachable_at INTEGER,
-      provider_metadata_json TEXT,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL,
-      UNIQUE(project_id, file_name, provider_id),
-      FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
-    );
+      CREATE TABLE IF NOT EXISTS deployments (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        provider_id TEXT NOT NULL,
+        url TEXT NOT NULL,
+        deployment_id TEXT,
+        deployment_count INTEGER NOT NULL DEFAULT 1,
+        target TEXT NOT NULL DEFAULT 'preview',
+        status TEXT NOT NULL DEFAULT 'ready',
+        status_message TEXT,
+        reachable_at INTEGER,
+        provider_metadata_json TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        UNIQUE(project_id, file_name, provider_id),
+        FOREIGN KEY(project_id) REFERENCES projects(id) ON DELETE CASCADE
+      );
 
-    CREATE INDEX IF NOT EXISTS idx_deployments_project
-      ON deployments(project_id, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_deployments_project
+        ON deployments(project_id, updated_at DESC);
 
-    CREATE TABLE IF NOT EXISTS routines (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      prompt TEXT NOT NULL,
-      schedule_kind TEXT NOT NULL,
-      schedule_value TEXT NOT NULL,
-      schedule_json TEXT,
-      project_mode TEXT NOT NULL,
-      project_id TEXT,
-      skill_id TEXT,
-      agent_id TEXT,
-      context_json TEXT,
-      enabled INTEGER NOT NULL DEFAULT 1,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    );
+      CREATE TABLE IF NOT EXISTS routines (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        prompt TEXT NOT NULL,
+        schedule_kind TEXT NOT NULL,
+        schedule_value TEXT NOT NULL,
+        schedule_json TEXT,
+        project_mode TEXT NOT NULL,
+        project_id TEXT,
+        skill_id TEXT,
+        agent_id TEXT,
+        context_json TEXT,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
 
-    CREATE TABLE IF NOT EXISTS routine_runs (
-      id TEXT PRIMARY KEY,
-      routine_id TEXT NOT NULL,
-      trigger TEXT NOT NULL,
-      status TEXT NOT NULL,
-      project_id TEXT NOT NULL,
-      conversation_id TEXT NOT NULL,
-      agent_run_id TEXT NOT NULL,
-      started_at INTEGER NOT NULL,
-      completed_at INTEGER,
-      summary TEXT,
-      error TEXT,
-      error_code TEXT,
-      FOREIGN KEY(routine_id) REFERENCES routines(id) ON DELETE CASCADE
-    );
+      CREATE TABLE IF NOT EXISTS routine_runs (
+        id TEXT PRIMARY KEY,
+        routine_id TEXT NOT NULL,
+        trigger TEXT NOT NULL,
+        status TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        conversation_id TEXT NOT NULL,
+        agent_run_id TEXT NOT NULL,
+        started_at INTEGER NOT NULL,
+        completed_at INTEGER,
+        summary TEXT,
+        error TEXT,
+        error_code TEXT,
+        FOREIGN KEY(routine_id) REFERENCES routines(id) ON DELETE CASCADE
+      );
 
-    CREATE INDEX IF NOT EXISTS idx_routine_runs_routine
-      ON routine_runs(routine_id, started_at DESC);
-  `);
-  // Forward-compatible column add for databases created before metadata_json.
-  // SQLite has no IF NOT EXISTS for ALTER, so we check pragma_table_info.
-  const cols = db.prepare(`PRAGMA table_info(projects)`).all() as DbRow[];
-  if (!cols.some((c: DbRow) => c.name === 'metadata_json')) {
-    db.exec(`ALTER TABLE projects ADD COLUMN metadata_json TEXT`);
-  }
-  if (!cols.some((c: DbRow) => c.name === 'custom_instructions')) {
-    db.exec(`ALTER TABLE projects ADD COLUMN custom_instructions TEXT`);
-  }
-  const messageCols = db.prepare(`PRAGMA table_info(messages)`).all() as DbRow[];
-  if (!messageCols.some((c: DbRow) => c.name === 'agent_id')) {
-    db.exec(`ALTER TABLE messages ADD COLUMN agent_id TEXT`);
-  }
-  if (!messageCols.some((c: DbRow) => c.name === 'agent_name')) {
-    db.exec(`ALTER TABLE messages ADD COLUMN agent_name TEXT`);
-  }
-  if (!messageCols.some((c: DbRow) => c.name === 'run_id')) {
-    db.exec(`ALTER TABLE messages ADD COLUMN run_id TEXT`);
-  }
-  if (!messageCols.some((c: DbRow) => c.name === 'run_status')) {
-    db.exec(`ALTER TABLE messages ADD COLUMN run_status TEXT`);
-  }
-  if (!messageCols.some((c: DbRow) => c.name === 'last_run_event_id')) {
-    db.exec(`ALTER TABLE messages ADD COLUMN last_run_event_id TEXT`);
-  }
-  if (!messageCols.some((c: DbRow) => c.name === 'comment_attachments_json')) {
-    db.exec(`ALTER TABLE messages ADD COLUMN comment_attachments_json TEXT`);
-  }
-  if (!messageCols.some((c: DbRow) => c.name === 'feedback_json')) {
-    db.exec(`ALTER TABLE messages ADD COLUMN feedback_json TEXT`);
-  }
-  if (!messageCols.some((c: DbRow) => c.name === 'pre_turn_file_names_json')) {
-    db.exec(`ALTER TABLE messages ADD COLUMN pre_turn_file_names_json TEXT`);
-  }
-  const routineRunCols = db.prepare(`PRAGMA table_info(routine_runs)`).all() as DbRow[];
-  if (!routineRunCols.some((c: DbRow) => c.name === 'error_code')) {
-    db.exec(`ALTER TABLE routine_runs ADD COLUMN error_code TEXT`);
-  }
+      CREATE INDEX IF NOT EXISTS idx_routine_runs_routine
+        ON routine_runs(routine_id, started_at DESC);
+    `);
+    // Forward-compatible column add for databases created before metadata_json.
+    // SQLite has no IF NOT EXISTS for ALTER, so we check pragma_table_info.
+    const cols = db.prepare(`PRAGMA table_info(projects)`).all() as DbRow[];
+    if (!cols.some((c: DbRow) => c.name === 'metadata_json')) {
+      db.exec(`ALTER TABLE projects ADD COLUMN metadata_json TEXT`);
+    }
+    if (!cols.some((c: DbRow) => c.name === 'custom_instructions')) {
+      db.exec(`ALTER TABLE projects ADD COLUMN custom_instructions TEXT`);
+    }
+    const messageCols = db.prepare(`PRAGMA table_info(messages)`).all() as DbRow[];
+    if (!messageCols.some((c: DbRow) => c.name === 'agent_id')) {
+      db.exec(`ALTER TABLE messages ADD COLUMN agent_id TEXT`);
+    }
+    if (!messageCols.some((c: DbRow) => c.name === 'agent_name')) {
+      db.exec(`ALTER TABLE messages ADD COLUMN agent_name TEXT`);
+    }
+    if (!messageCols.some((c: DbRow) => c.name === 'run_id')) {
+      db.exec(`ALTER TABLE messages ADD COLUMN run_id TEXT`);
+    }
+    if (!messageCols.some((c: DbRow) => c.name === 'run_status')) {
+      db.exec(`ALTER TABLE messages ADD COLUMN run_status TEXT`);
+    }
+    if (!messageCols.some((c: DbRow) => c.name === 'last_run_event_id')) {
+      db.exec(`ALTER TABLE messages ADD COLUMN last_run_event_id TEXT`);
+    }
+    if (!messageCols.some((c: DbRow) => c.name === 'comment_attachments_json')) {
+      db.exec(`ALTER TABLE messages ADD COLUMN comment_attachments_json TEXT`);
+    }
+    if (!messageCols.some((c: DbRow) => c.name === 'feedback_json')) {
+      db.exec(`ALTER TABLE messages ADD COLUMN feedback_json TEXT`);
+    }
+    if (!messageCols.some((c: DbRow) => c.name === 'pre_turn_file_names_json')) {
+      db.exec(`ALTER TABLE messages ADD COLUMN pre_turn_file_names_json TEXT`);
+    }
+    const routineRunCols = db.prepare(`PRAGMA table_info(routine_runs)`).all() as DbRow[];
+    if (!routineRunCols.some((c: DbRow) => c.name === 'error_code')) {
+      db.exec(`ALTER TABLE routine_runs ADD COLUMN error_code TEXT`);
+    }
 
-  const previewCommentCols = db.prepare(`PRAGMA table_info(preview_comments)`).all() as DbRow[];
-  if (!previewCommentCols.some((c: DbRow) => c.name === 'selection_kind')) {
-    db.exec(`ALTER TABLE preview_comments ADD COLUMN selection_kind TEXT`);
-  }
-  if (!previewCommentCols.some((c: DbRow) => c.name === 'member_count')) {
-    db.exec(`ALTER TABLE preview_comments ADD COLUMN member_count INTEGER`);
-  }
-  if (!previewCommentCols.some((c: DbRow) => c.name === 'pod_members_json')) {
-    db.exec(`ALTER TABLE preview_comments ADD COLUMN pod_members_json TEXT`);
-  }
-  const deploymentCols = db.prepare(`PRAGMA table_info(deployments)`).all() as DbRow[];
-  if (!deploymentCols.some((c: DbRow) => c.name === 'status')) {
-    db.exec(`ALTER TABLE deployments ADD COLUMN status TEXT NOT NULL DEFAULT 'ready'`);
-  }
-  if (!deploymentCols.some((c: DbRow) => c.name === 'status_message')) {
-    db.exec(`ALTER TABLE deployments ADD COLUMN status_message TEXT`);
-  }
-  if (!deploymentCols.some((c: DbRow) => c.name === 'reachable_at')) {
-    db.exec(`ALTER TABLE deployments ADD COLUMN reachable_at INTEGER`);
-  }
-  if (!deploymentCols.some((c: DbRow) => c.name === 'provider_metadata_json')) {
-    db.exec(`ALTER TABLE deployments ADD COLUMN provider_metadata_json TEXT`);
-  }
-  // schedule_json holds the full RoutineSchedule object (kind discriminator
-  // plus kind-specific fields like time/timezone/weekday). The legacy
-  // schedule_kind/schedule_value columns are kept populated for query
-  // convenience and as a fallback when reading rows written before this
-  // column existed.
-  const routineCols = db.prepare(`PRAGMA table_info(routines)`).all() as DbRow[];
-  if (routineCols.length > 0 && !routineCols.some((c: DbRow) => c.name === 'schedule_json')) {
-    db.exec(`ALTER TABLE routines ADD COLUMN schedule_json TEXT`);
-  }
-  if (routineCols.length > 0 && !routineCols.some((c: DbRow) => c.name === 'context_json')) {
-    db.exec(`ALTER TABLE routines ADD COLUMN context_json TEXT`);
-  }
-  migrateCritique(db);
-  migrateMediaTasks(db);
-  migratePlugins(db);
+    const previewCommentCols = db.prepare(`PRAGMA table_info(preview_comments)`).all() as DbRow[];
+    if (!previewCommentCols.some((c: DbRow) => c.name === 'selection_kind')) {
+      db.exec(`ALTER TABLE preview_comments ADD COLUMN selection_kind TEXT`);
+    }
+    if (!previewCommentCols.some((c: DbRow) => c.name === 'member_count')) {
+      db.exec(`ALTER TABLE preview_comments ADD COLUMN member_count INTEGER`);
+    }
+    if (!previewCommentCols.some((c: DbRow) => c.name === 'pod_members_json')) {
+      db.exec(`ALTER TABLE preview_comments ADD COLUMN pod_members_json TEXT`);
+    }
+    const deploymentCols = db.prepare(`PRAGMA table_info(deployments)`).all() as DbRow[];
+    if (!deploymentCols.some((c: DbRow) => c.name === 'status')) {
+      db.exec(`ALTER TABLE deployments ADD COLUMN status TEXT NOT NULL DEFAULT 'ready'`);
+    }
+    if (!deploymentCols.some((c: DbRow) => c.name === 'status_message')) {
+      db.exec(`ALTER TABLE deployments ADD COLUMN status_message TEXT`);
+    }
+    if (!deploymentCols.some((c: DbRow) => c.name === 'reachable_at')) {
+      db.exec(`ALTER TABLE deployments ADD COLUMN reachable_at INTEGER`);
+    }
+    if (!deploymentCols.some((c: DbRow) => c.name === 'provider_metadata_json')) {
+      db.exec(`ALTER TABLE deployments ADD COLUMN provider_metadata_json TEXT`);
+    }
+    // schedule_json holds the full RoutineSchedule object (kind discriminator
+    // plus kind-specific fields like time/timezone/weekday). The legacy
+    // schedule_kind/schedule_value columns are kept populated for query
+    // convenience and as a fallback when reading rows written before this
+    // column existed.
+    const routineCols = db.prepare(`PRAGMA table_info(routines)`).all() as DbRow[];
+    if (routineCols.length > 0 && !routineCols.some((c: DbRow) => c.name === 'schedule_json')) {
+      db.exec(`ALTER TABLE routines ADD COLUMN schedule_json TEXT`);
+    }
+    if (routineCols.length > 0 && !routineCols.some((c: DbRow) => c.name === 'context_json')) {
+      db.exec(`ALTER TABLE routines ADD COLUMN context_json TEXT`);
+    }
+    migrateCritique(db);
+    migrateMediaTasks(db);
+    migratePlugins(db);
+  })();
 }
 
 // ---------- deployments ----------
