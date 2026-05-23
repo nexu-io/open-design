@@ -8826,6 +8826,8 @@ export async function startServer({
           typeof req.body?.duration === 'number'
             ? req.body.duration
             : undefined,
+        resolution:
+          typeof req.body?.resolution === 'string' ? req.body.resolution : undefined,
         voice: req.body?.voice,
         audioKind: req.body?.audioKind,
         language: typeof req.body?.language === 'string' ? req.body.language : undefined,

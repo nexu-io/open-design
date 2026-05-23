@@ -937,7 +937,7 @@ function renderMetadataBlock(
     }
     lines.push('');
     lines.push(
-      'This is a **video** project. Plan the shotlist and motion, then dispatch via the **media generation contract** using `"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model <videoModel> --length <seconds> --aspect <ratio>`. Do NOT emit `<artifact>` HTML.',
+      'This is a **video** project. Plan the shotlist and motion, then dispatch via the **media generation contract** using `"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model <videoModel> --length <seconds> --aspect <ratio>` (optionally `--resolution 480p|720p|1080p`, default 720p). Do NOT emit `<artifact>` HTML.',
     );
     if (metadata.videoModel === 'hyperframes-html') {
       lines.push(

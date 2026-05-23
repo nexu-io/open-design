@@ -178,6 +178,12 @@ export const BYOK_MEDIA_TOOLS = [
             maximum: VIDEO_DURATION_MAX,
             description: `Video length in seconds (integer ${VIDEO_DURATION_MIN}–${VIDEO_DURATION_MAX}; defaults to ${VIDEO_DURATION_DEFAULT}).`,
           },
+          resolution: {
+            type: 'string',
+            enum: ['480p', '720p', '1080p'],
+            description:
+              'Optional output resolution for SenseAudio/Seedance video. Defaults to 720p; only set it when the user asked for a specific resolution.',
+          },
           model: {
             type: 'string',
             enum: [...BYOK_VIDEO_MODEL_IDS],
@@ -349,7 +355,7 @@ export async function executeGenerateImage(
 /** Execute `generate_video`. Async (the renderer polls); generateMedia owns
  *  the poll loop and project write. */
 export async function executeGenerateVideo(
-  args: { prompt?: unknown; aspect_ratio?: unknown; duration?: unknown; model?: unknown },
+  args: { prompt?: unknown; aspect_ratio?: unknown; duration?: unknown; resolution?: unknown; model?: unknown },
   ctx: BYOKToolContext,
 ): Promise<MediaToolResult> {
   const prompt = trimmedPrompt(args.prompt);
@@ -371,6 +377,9 @@ export async function executeGenerateVideo(
       prompt,
       aspect: sanitizeVideoAspect(args.aspect_ratio),
       length: sanitizeVideoDuration(args.duration),
+      ...(typeof args.resolution === 'string' && args.resolution.trim()
+        ? { resolution: args.resolution.trim() }
+        : {}),
       allowStub: false,
     });
     return { ok: true, url: fileUrl(ctx.projectId, file.name), kind: 'video' };

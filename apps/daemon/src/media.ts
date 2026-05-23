@@ -101,6 +101,9 @@ type MediaContext = {
   aspect: string | undefined;
   length: number | undefined;
   duration: number | undefined;
+  /** Video output resolution (e.g. '480p' | '720p' | '1080p'); provider-
+   *  validated. Undefined falls back to the provider's default. */
+  resolution: string | undefined;
   voice: string;
   audioKind: AudioKind | undefined;
   language: string;
@@ -284,6 +287,7 @@ function clampWithWarning(value: unknown, allowed: number[], flagName: string): 
 export async function generateMedia(args: {
   projectRoot: string; projectsRoot: string; projectId: string; surface: MediaSurface; model: string;
   prompt?: string; output?: string; aspect?: string; length?: number; duration?: number; voice?: string;
+  resolution?: string;
   audioKind?: AudioKind; language?: string; loop?: boolean; promptInfluence?: number;
   compositionDir?: string; image?: string; onProgress?: ProgressFn;
   // When false, the stub fallback is disabled even if OD_MEDIA_ALLOW_STUBS is
@@ -305,6 +309,7 @@ export async function generateMedia(args: {
     length,
     duration,
     voice,
+    resolution,
     audioKind,
     language,
     loop,
@@ -407,6 +412,7 @@ export async function generateMedia(args: {
     aspect: aspect || defaultAspectFor(surface),
     length: clampedLength,
     duration: clampedDuration,
+    resolution: typeof resolution === 'string' && resolution.trim() ? resolution.trim() : undefined,
     voice: voice || '',
     audioKind: resolvedAudioKind,
     language: language || '',
@@ -2448,6 +2454,16 @@ const SENSEAUDIO_VIDEO_DURATION_MIN = 4;
 const SENSEAUDIO_VIDEO_DURATION_MAX = 15;
 const SENSEAUDIO_VIDEO_DURATION_DEFAULT = 5;
 const SENSEAUDIO_VIDEO_RESOLUTION_DEFAULT = '720p';
+const SENSEAUDIO_VIDEO_RESOLUTIONS = new Set(['480p', '720p', '1080p']);
+
+/** Validate the requested video resolution against the gateway's allowed set,
+ *  falling back to 720p for anything unset or unrecognized. */
+function senseAudioVideoResolution(raw: string | undefined): string {
+  const value = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  return SENSEAUDIO_VIDEO_RESOLUTIONS.has(value)
+    ? value
+    : SENSEAUDIO_VIDEO_RESOLUTION_DEFAULT;
+}
 
 function senseAudioVideoDuration(raw: number | undefined): number {
   if (typeof raw !== 'number' || !Number.isFinite(raw)) return SENSEAUDIO_VIDEO_DURATION_DEFAULT;
@@ -2475,14 +2491,17 @@ async function renderSenseAudioVideo(
       : promptRaw;
   const ratio = volcengineRatioFor(ctx.aspect);
   const duration = senseAudioVideoDuration(ctx.length ?? ctx.duration);
+  const resolution = senseAudioVideoResolution(ctx.resolution);
 
-  // Content array mirrors volcengine's identical Seedance model: a text
-  // entry, plus an optional first-frame image_url for i2v when the caller
-  // supplied a reference image.
+  // Content array per the SenseAudio video doc: a text entry, plus an optional
+  // first-frame image for i2v when the caller supplied a reference. The doc's
+  // image content shape is { type:'image', url, role } — NOT the OpenAI-style
+  // { type:'image_url', image_url:{ url } }, so use the documented form so the
+  // reference frame is actually honored.
   const content: Array<Record<string, unknown>> = [{ type: 'text', text: prompt }];
   const reference = ctx.imageRef?.dataUrl;
   if (reference) {
-    content.push({ type: 'image_url', image_url: { url: reference } });
+    content.push({ type: 'image', url: reference, role: 'first_frame' });
   }
 
   // Step 1: create the async task.
@@ -2498,8 +2517,11 @@ async function renderSenseAudioVideo(
         model: SENSEAUDIO_VIDEO_WIRE_MODEL,
         content,
         duration,
-        resolution: SENSEAUDIO_VIDEO_RESOLUTION_DEFAULT,
+        resolution,
         ratio,
+        // The gateway defaults watermark to true; suppress it so generated
+        // clips aren't stamped unless the caller opts back in later.
+        watermark: false,
       }),
     });
     const text = await resp.text();
@@ -2589,7 +2611,7 @@ async function renderSenseAudioVideo(
 
   return {
     bytes,
-    providerNote: `senseaudio/${SENSEAUDIO_VIDEO_WIRE_MODEL} · ${ratio} · ${duration}s${reference ? ' · i2v' : ''} · ${bytes.length} bytes`,
+    providerNote: `senseaudio/${SENSEAUDIO_VIDEO_WIRE_MODEL} · ${ratio} · ${resolution} · ${duration}s${reference ? ' · i2v' : ''} · ${bytes.length} bytes`,
     suggestedExt: '.mp4',
   };
 }

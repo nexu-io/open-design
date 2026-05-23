@@ -92,6 +92,9 @@ describe('senseaudio video generation', () => {
         expect(body.content).toEqual([{ type: 'text', text: 'A drone shot over a coastline.' }]);
         expect(body.ratio).toBe('16:9');
         expect(body.duration).toBe(5);
+        // Defaults: 720p resolution, watermark suppressed.
+        expect(body.resolution).toBe('720p');
+        expect(body.watermark).toBe(false);
         return createResponse();
       }
       if (urlStr.startsWith(`${TEST_SENSEAUDIO_BASE_URL}/v1/video/status`)) {
@@ -123,6 +126,89 @@ describe('senseaudio video generation', () => {
 
     const bytes = await readFile(path.join(projectsRoot, 'project-1', 'sa-clip.mp4'));
     expect(bytes.equals(TEST_VIDEO_BYTES)).toBe(true);
+  });
+
+  it('honors an explicit resolution on the create body', async () => {
+    await writeConfig({
+      providers: {
+        senseaudio: { apiKey: 'sense-test-key', baseUrl: TEST_SENSEAUDIO_BASE_URL },
+      },
+    });
+    let createBody: any;
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const urlStr = String(input);
+      if (urlStr === `${TEST_SENSEAUDIO_BASE_URL}/v1/video/create`) {
+        createBody = JSON.parse(String(init?.body));
+        return createResponse();
+      }
+      if (urlStr.startsWith(`${TEST_SENSEAUDIO_BASE_URL}/v1/video/status`)) {
+        return statusResponse({ status: 'completed', video_url: TEST_VIDEO_URL });
+      }
+      if (urlStr === TEST_VIDEO_URL) return videoFetchResponse(TEST_VIDEO_BYTES);
+      throw new Error(`unexpected fetch: ${urlStr}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'video',
+      model: CATALOG_ID,
+      aspect: '9:16',
+      prompt: 'Vertical clip.',
+      resolution: '1080p',
+      output: 'sa-vert.mp4',
+    });
+    expect(createBody.resolution).toBe('1080p');
+    expect(createBody.ratio).toBe('9:16');
+    expect(createBody.watermark).toBe(false);
+  });
+
+  it('sends an i2v first-frame image content block in the documented shape', async () => {
+    await writeConfig({
+      providers: {
+        senseaudio: { apiKey: 'sense-test-key', baseUrl: TEST_SENSEAUDIO_BASE_URL },
+      },
+    });
+    // A reference image under the project folder drives image-to-video.
+    const pngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    await mkdir(path.join(projectsRoot, 'project-1'), { recursive: true });
+    await writeFile(path.join(projectsRoot, 'project-1', 'ref.png'), pngBytes);
+
+    let createBody: any;
+    const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const urlStr = String(input);
+      if (urlStr === `${TEST_SENSEAUDIO_BASE_URL}/v1/video/create`) {
+        createBody = JSON.parse(String(init?.body));
+        return createResponse();
+      }
+      if (urlStr.startsWith(`${TEST_SENSEAUDIO_BASE_URL}/v1/video/status`)) {
+        return statusResponse({ status: 'completed', video_url: TEST_VIDEO_URL });
+      }
+      if (urlStr === TEST_VIDEO_URL) return videoFetchResponse(TEST_VIDEO_BYTES);
+      throw new Error(`unexpected fetch: ${urlStr}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await generateMedia({
+      projectRoot,
+      projectsRoot,
+      projectId: 'project-1',
+      surface: 'video',
+      model: CATALOG_ID,
+      aspect: '16:9',
+      prompt: 'Animate this frame.',
+      image: 'ref.png',
+      output: 'sa-i2v.mp4',
+    });
+    // Per the SenseAudio doc the image content block is { type:'image', url,
+    // role } — NOT the OpenAI { type:'image_url', image_url:{ url } } shape.
+    expect(createBody.content[0]).toEqual({ type: 'text', text: 'Animate this frame.' });
+    expect(createBody.content[1]).toMatchObject({ type: 'image', role: 'first_frame' });
+    expect(typeof createBody.content[1].url).toBe('string');
+    expect(createBody.content[1].url.startsWith('data:image/png;base64,')).toBe(true);
+    expect(createBody.content[1].image_url).toBeUndefined();
   });
 
   it('throws when the job reports a failed status', async () => {

@@ -43,6 +43,7 @@ const MEDIA_GENERATE_STRING_FLAGS = new Set([
   'aspect',
   'length',
   'duration',
+  'resolution',
   'prompt-influence',
   'voice',
   'audio-kind',
@@ -506,6 +507,7 @@ async function runMediaGenerate(rawArgs) {
     prompt: flags.prompt,
     output: flags.output,
     aspect: flags.aspect,
+    resolution: flags.resolution,
     voice: flags.voice,
     audioKind: flags['audio-kind'],
     compositionDir: flags['composition-dir'],
@@ -779,6 +781,8 @@ Common options:
   --output <filename>       File to write under the project. Auto-named if omitted.
   --aspect 1:1|16:9|9:16|4:3|3:4
   --length <seconds>        Video length.
+  --resolution 480p|720p|1080p
+                            Video output resolution (SenseAudio/Seedance video; defaults to 720p).
   --duration <seconds>      Audio duration.
   --prompt-influence <0-1>  ElevenLabs SFX prompt adherence. Higher values follow the prompt more closely.
   --loop                    ElevenLabs SFX only: request a seamless loop.
