@@ -1,4 +1,4 @@
-import { mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 
 import { rebuild, type RebuildOptions } from "@electron/rebuild";
