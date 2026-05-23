@@ -13,6 +13,13 @@ import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 
+export interface DesignFilesNavState {
+  kindFilter: Set<ProjectFileKind>;
+  currentDir: string;
+  page: number;
+  pageSize: number | 'all';
+}
+
 interface Props {
   projectId: string;
   files: ProjectFile[];
@@ -35,6 +42,10 @@ interface Props {
   ) => Promise<{ message?: string; url?: string } | void> | { message?: string; url?: string } | void;
   activePluginActionPaths?: Set<string>;
   hiddenPluginActionPaths?: Set<string>;
+  /** Initial navigation state restored after a tab switch. */
+  navState?: DesignFilesNavState;
+  /** Called whenever navigation state changes so the parent can preserve it. */
+  onNavStateChange?: (state: DesignFilesNavState) => void;
 }
 
 interface ActionNotice {
@@ -128,6 +139,8 @@ export function DesignFilesPanel({
   onPluginFolderAgentAction,
   activePluginActionPaths = new Set(),
   hiddenPluginActionPaths = new Set(),
+  navState,
+  onNavStateChange,
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
@@ -153,14 +166,19 @@ export function DesignFilesPanel({
   >(new Set());
   const [renaming, setRenaming] = useState<{ name: string; draft: string; saving: boolean } | null>(null);
   const [dayBoundary, setDayBoundary] = useState(() => Date.now());
-  const [kindFilter, setKindFilter] = useState<Set<ProjectFileKind>>(() => new Set());
+  const [kindFilter, setKindFilter] = useState<Set<ProjectFileKind>>(() => navState?.kindFilter ?? new Set());
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const filterMenuRef = useRef<HTMLDivElement | null>(null);
-  const [currentDir, setCurrentDir] = useState<string>('');
+  const [currentDir, setCurrentDir] = useState<string>(() => navState?.currentDir ?? '');
 
   // Derive immediate subdirectories and files at the current directory level
   // from the flat files list. Files with names like "a/b/c.html" contribute
   // "a" as a directory when currentDir is '' and "b" when currentDir is "a".
+  //
+  // At the root level (currentDir === '') all files are included in the flat
+  // list so that pagination works across the entire project. Directory rows
+  // still appear as navigation shortcuts. Inside a subdirectory only that
+  // directory's direct files are shown.
   const { dirsAtCurrentDir, filesAtCurrentDir } = useMemo(() => {
     const prefix = currentDir === '' ? '' : `${currentDir}/`;
     const dirs = new Set<string>();
@@ -173,6 +191,7 @@ export function DesignFilesPanel({
         localFiles.push(f);
       } else {
         dirs.add(remainder.slice(0, slashIdx));
+        if (currentDir === '') localFiles.push(f);
       }
     }
     return {
@@ -227,8 +246,8 @@ export function DesignFilesPanel({
     });
   }, [filteredFiles, sortKey, sortDir]);
 
-  const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState<number | 'all'>(30);
+  const [page, setPage] = useState(() => navState?.page ?? 0);
+  const [pageSize, setPageSize] = useState<number | 'all'>(() => navState?.pageSize ?? 30);
 
   const effectivePageSize = pageSize === 'all' ? Math.max(1, sortedFiles.length) : pageSize;
   const totalPages = Math.max(1, Math.ceil(sortedFiles.length / effectivePageSize));
@@ -268,6 +287,11 @@ export function DesignFilesPanel({
   useEffect(() => {
     setPage(0);
   }, [pageSize]);
+
+  // Sync navigation state back to the parent so it survives tab switches.
+  useEffect(() => {
+    onNavStateChange?.({ kindFilter, currentDir, page: safePage, pageSize });
+  }, [kindFilter, currentDir, safePage, pageSize, onNavStateChange]);
 
   // Reset to the first page when the filter changes — the previous page
   // index may no longer exist (or may now sit past the new totalPages).

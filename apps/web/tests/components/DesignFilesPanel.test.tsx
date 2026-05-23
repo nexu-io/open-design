@@ -610,4 +610,23 @@ describe('DesignFilesPanel directory navigation', () => {
     const headerCheck = document.querySelector('.df-th-check .df-row-check');
     expect(headerCheck?.textContent).toBe('☐');
   });
+
+  it('includes subdirectory files in the flat root-level list so pagination covers them', () => {
+    const rootFiles = generateFiles(5);
+    const subFiles = Array.from({ length: 30 }, (_, i) =>
+      file({ name: `subfolder/sub-${i + 1}.html`, kind: 'html' }),
+    );
+    const { container } = renderPanel([...rootFiles, ...subFiles]);
+
+    // Default page size 30: should show 30 file rows (excludes the 1 dir row)
+    const fileRows = () =>
+      container.querySelectorAll('.df-file-row:not(.df-dir-row)').length;
+    expect(fileRows()).toBe(30);
+
+    const selects = getSelects(container);
+    fireEvent.change(selects[0]!, { target: { value: 'all' } });
+
+    // "All" must expose every file including those in subdirectories
+    expect(fileRows()).toBe(35);
+  });
 });

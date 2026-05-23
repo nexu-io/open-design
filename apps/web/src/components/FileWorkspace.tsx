@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -43,6 +44,7 @@ import {
   type ProjectFile,
 } from '../types';
 import { DesignFilesPanel } from './DesignFilesPanel';
+import type { DesignFilesNavState } from './DesignFilesPanel';
 import type { PluginFolderAgentAction } from './design-files/pluginFolderActions';
 import { FileViewer, LiveArtifactViewer } from './FileViewer';
 import { Icon } from './Icon';
@@ -249,6 +251,21 @@ export function FileWorkspace({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const tabsBarRef = useRef<HTMLDivElement | null>(null);
   const draggedTabNameRef = useRef<string | null>(null);
+  const designFilesNavRef = useRef<DesignFilesNavState>({
+    kindFilter: new Set(),
+    currentDir: '',
+    page: 0,
+    pageSize: 30,
+  });
+  const onDesignFilesNavStateChange = useCallback(
+    (state: DesignFilesNavState) => { designFilesNavRef.current = state; },
+    [],
+  );
+  // Reset preserved nav state when the project changes so the panel starts
+  // fresh (the key={projectId} on the panel already remounts it).
+  useEffect(() => {
+    designFilesNavRef.current = { kindFilter: new Set(), currentDir: '', page: 0, pageSize: 30 };
+  }, [projectId]);
 
   const visibleFiles = useMemo(
     () => files.filter((file) => !isLiveArtifactImplementationPath(file.name)),
@@ -943,24 +960,7 @@ export function FileWorkspace({
             </button>
           </div>
         ) : null}
-        {activeTab === DESIGN_SYSTEM_TAB && designSystemProject ? (
-          <DesignSystemProjectPanel
-            projectId={projectId}
-            system={designSystemProject}
-            files={visibleFiles}
-            streaming={Boolean(streaming)}
-            activityEvents={designSystemActivityEvents}
-            onOpenFile={openFile}
-            onUploadAssets={() => fileInputRef.current?.click()}
-            defaultDesignSystemId={defaultDesignSystemId}
-            onSetDefaultDesignSystem={onSetDefaultDesignSystem}
-            onDesignSystemsRefresh={onDesignSystemsRefresh}
-            onNeedsWork={onDesignSystemNeedsWork}
-            designSystemReview={designSystemReview}
-            onReviewDecision={onDesignSystemReviewDecision}
-            onUseDesignSystem={onUseDesignSystem}
-          />
-        ) : activeTab === DESIGN_FILES_TAB ? (
+        {activeTab === DESIGN_FILES_TAB ? (
           <DesignFilesPanel
             key={projectId}
             projectId={projectId}
@@ -1016,6 +1016,25 @@ export function FileWorkspace({
             onPluginFolderAgentAction={onPluginFolderAgentAction}
             activePluginActionPaths={activePluginActionPaths}
             hiddenPluginActionPaths={hiddenPluginActionPaths}
+            navState={designFilesNavRef.current}
+            onNavStateChange={onDesignFilesNavStateChange}
+          />
+        ) : activeTab === DESIGN_SYSTEM_TAB && designSystemProject ? (
+          <DesignSystemProjectPanel
+            projectId={projectId}
+            system={designSystemProject}
+            files={visibleFiles}
+            streaming={Boolean(streaming)}
+            activityEvents={designSystemActivityEvents}
+            onOpenFile={openFile}
+            onUploadAssets={() => fileInputRef.current?.click()}
+            defaultDesignSystemId={defaultDesignSystemId}
+            onSetDefaultDesignSystem={onSetDefaultDesignSystem}
+            onDesignSystemsRefresh={onDesignSystemsRefresh}
+            onNeedsWork={onDesignSystemNeedsWork}
+            designSystemReview={designSystemReview}
+            onReviewDecision={onDesignSystemReviewDecision}
+            onUseDesignSystem={onUseDesignSystem}
           />
         ) : isActiveSketch && activeSketch && activeFile ? (
           activeSketch.loaded ? (
